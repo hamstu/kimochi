@@ -1,0 +1,121 @@
+:root {
+  font:
+    14px -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  color: #e8eae6;
+  background: #202620;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  padding: 12px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  user-select: none;
+  cursor: grab;
+}
+header strong {
+  flex: 1;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+  background: #333c32;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px;
+  min-height: 40px;
+}
+button {
+  cursor: pointer;
+}
+button.native-hover {
+  background: #465442;
+}
+button:active {
+  transform: scale(0.96);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+.primary {
+  background: #b8d9a8;
+  color: #19321c;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+select {
+  width: 100%;
+}
+p {
+  line-height: 1.5;
+  color: #b3beb0;
+  margin: 8px 0;
+}
+.status {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+h2 {
+  font-size: 17px;
+}
+label {
+  display: block;
+  margin: 10px 0;
+}
+input[type='url'] {
+  width: 100%;
+}
+input[type='number'] {
+  width: 88px;
+}
+#preview {
+  max-width: 100%;
+  max-height: 265px;
+  object-fit: contain;
+  outline: 1px solid rgba(255, 255, 255, 0.1);
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    12px ui-monospace,
+    monospace;
+}
+#entries {
+  overflow: auto;
+  height: calc(100vh - 70px);
+}
+.entry {
+  padding: 8px 0;
+  border-bottom: 1px solid #ffffff15;
+}
+.entry .text {
+  font-size: 19px;
+  color: #f0f3ed;
+}
+small {
+  color: #a1b59d;
+}
+a {
+  color: #c2e6ae;
+}

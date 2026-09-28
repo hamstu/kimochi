@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <meta charset="utf-8" /><title>Kimochi Japanese Fixture</title
+  ><style>
+    body {
+      margin: 0;
+      background: white;
+      color: #162824;
+      font: 24px -apple-system;
+    }
+    header {
+      background: #153c32;
+      color: white;
+      padding: 16px;
+      font-size: 16px;
+      cursor: grab;
+    }
+    main {
+      padding: 25px;
+    }
+    p {
+      font-size: 38px;
+      line-height: 1.6;
+      margin: 8px 0;
+    }
+    button {
+      font: 18px -apple-system;
+      padding: 10px;
+    }
+    footer {
+      font-size: 14px;
+      color: #666;
+      margin-top: 20px;
+    }
+  </style>
+  <body>
+    <header>Controlled Japanese OCR fixture · drag to another display</header>
+    <main>
+      <p>猫が好きです。</p>
+      <p>日本語を勉強しています。</p>
+      <p>食べました。</p>
+      <button id="counter">Source clicks: 0</button>
+      <footer>640 × 400 logical points · no personal content</footer>
+    </main>
+    <script>
+      let n = 0
+      document.querySelector('#counter').onclick = () => {
+        document.querySelector('#counter').textContent = 'Source clicks: ' + ++n
+        window.__TAURI__.core.invoke('report', {
+          value: { check: 'source-native-click', count: n }
+        })
+      }
+      document.querySelector('header').onmousedown = () =>
+        window.__TAURI__.core.invoke('panel', { label: 'fixture', action: 'drag', rect: null })
+    </script>
+  </body>
+</html>

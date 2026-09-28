@@ -1,0 +1,39 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: transparent !important;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* make all text not user-selectable */
+  user-select: none;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  app-region: drag;
+}
+
+body {
+  app-region: drag;
+}
+
+button, a {
+  app-region: no-drag !important;
+  cursor: default !important;
+}
+
+a.external {
+  cursor: pointer !important;
+}

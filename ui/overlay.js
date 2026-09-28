@@ -1,0 +1,1563 @@
+/* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
+/**
+ * The overlay window: Yomitan host, text renderer and scan orchestrator.
+ *
+ * This is the only window that is always open, so it carries two jobs Electron
+ * split between a hidden background window and the overlay renderer: hosting the
+ * original Yomitan extension — backend, scanner, popup, importer and IndexedDB,
+ * as the single owner of the dictionary database — and running the scan pipeline
+ * that draws recognised text, detects change and publishes results.
+ *
+ * Native owns capture, the cloud endpoint, settings, window placement, global
+ * shortcuts, the gamepad and action dispatch. This file must never repeat an
+ * action native has already performed, so the `hotkey` handler below deliberately
+ * ignores every action whose effect Rust applied before emitting it.
+ *
+ * Startup order matters: the scan pipeline is wired up first and the Yomitan host
+ * is brought up behind it, without blocking. A dictionary or backend failure then
+ * costs lookups and says so, instead of leaving the user with no OCR at all.
+ */
+
+import { sourceDisplay, toOverlayLocal } from './geometry.js'
+import { scanPointerInit } from './scan-input.js'
+import { visibleAnnotations } from './annotations.js'
+import { AutoScanner } from './autoscan.js'
+import { ScanTrace } from './scan-trace.js'
+import { annotationsInLines } from './current-lines.js'
+import { TextOverlayRenderer } from './render.js'
+import { HoverOverlay } from './hover.js'
+import { forgetFrame } from './frames.js'
+import { recognize, terminateLocalOcr } from './ocr.js'
+import { publishScan, addHistoryEntry, listHistory } from './output.js'
+import { speak } from './tts.js'
+import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
+import { isOverlayTextVisible, nextOverlayToggle, overlayTextChange } from './settings.js'
+import { popupHitRects } from './regions.js'
+import { Generation, PipelineLock } from './pipeline.js'
+import * as native from './native.js'
+
+const hub = window.__extensionHost
+const log = (value) => {
+  if (hub?.log) hub.log(value)
+  else void native.report(value)
+}
+
+const scanTrace = new ScanTrace((records) => native.writeScanTrace(records))
+const trace = (kind, data) => {
+  try {
+    scanTrace.record(kind, data)
+  } catch {
+    /* diagnostic only */
+  }
+}
+trace('session', { instrumentation: 'first-pass-v1' })
+
+const wordsContainer = document.querySelector('#words')
+const hoverContainer = document.querySelector('#hover')
+const pagesSection = document.querySelector('.pages')
+const foreground = new ForegroundTracker()
+
+const state = {
+  revision: -1,
+  dismiss: -1,
+  dictionaryOpen: false,
+  scanning: false,
+  origin: null,
+  info: null,
+  annotations: [],
+  geometry: true,
+  scannedApp: null,
+  source: null,
+  /** The native scan id already rendered and already published. */
+  appliedScanId: null,
+  // Session view flags live on the shared native view, so the controller and the
+  // overlay can never disagree about what is switched on.
+  flags: {
+    autoOcrEnabled: false,
+    textOverlayVisible: true,
+    overlayVisible: true,
+    debugOverlayVisible: false
+  },
+  /** Live bounds of the captured source, tracked natively between scans. */
+  sourceBounds: null,
+  /**
+   * Whether the captured window is still in front and still there, from native.
+   * Null until the first answer arrives; unknown shows text rather than hiding it.
+   */
+  sourceFocus: null,
+  crop: null,
+  hover: { selectRegion: false, source: false, isWindow: false },
+  /** While true the overlay claims the whole display so a drag can be seen. */
+  regionSelecting: false,
+  yomitan: { ready: false, error: null }
+}
+
+const setting = (key) => native.getSetting(key)
+
+// ---------------------------------------------------------------------------
+// 1. Rendering
+// ---------------------------------------------------------------------------
+
+const hover = new HoverOverlay(hoverContainer)
+
+const renderer = new TextOverlayRenderer(wordsContainer, {
+  // Keep cloud requests from disrupting lookup, while local observations still
+  // notice when the game removes the words underneath the pointer.
+  onActivity: () => holdAutoScan(),
+  onLookupStart: () => holdAutoScan()
+})
+
+function holdAutoScan() {
+  if (!scanner.isRunning) return
+  scanner.pauseRecognitionFor(3000)
+}
+
+let lastVisibilityTrace = null
+function draw() {
+  const visible =
+    isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) &&
+    shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp)
+
+  const reason = !isOverlayTextVisible(
+    setting('liveOverlayEnabled'),
+    state.flags.textOverlayVisible
+  )
+    ? 'disabled'
+    : !visible
+      ? 'source-inactive'
+      : !state.geometry
+        ? 'no-geometry'
+        : state.annotations.length
+          ? 'visible'
+          : 'no-text'
+  const visibility = { reason, annotations: state.annotations.length, frameId: state.appliedScanId }
+  const signature = JSON.stringify(visibility)
+  if (signature !== lastVisibilityTrace) {
+    lastVisibilityTrace = signature
+    trace('overlay-visibility', visibility)
+  }
+
+  if (!visible || !state.geometry) {
+    // Clearing takes the click targets with it: `hitRects` reads the rendered
+    // elements, so text that is not on screen cannot still be catching the mouse.
+    renderer.clear()
+    return
+  }
+  const renderChange = renderer.render({
+    annotations: state.annotations,
+    info: state.info,
+    origin: state.origin,
+    // Where the source is now, not where it was when the frame was captured, so
+    // text follows a window that has since moved or been resized.
+    bounds: state.sourceBounds ?? state.info?.source_bounds ?? null,
+    grouping: setting('textOverlayGrouping'),
+    opacity: setting('overlayOpacity'),
+    scanning: state.scanning
+  })
+  if (renderChange && (renderChange.created || renderChange.removed))
+    trace('overlay-dom-change', renderChange)
+}
+
+function drawHover() {
+  hover.update({
+    visible: state.hover.selectRegion || state.hover.source,
+    showWindowOutline: state.hover.source && state.hover.isWindow,
+    showCropRegion: state.hover.selectRegion,
+    bounds: state.sourceBounds,
+    crop: state.crop,
+    origin: state.origin
+  })
+}
+
+/**
+ * Reflect scan progress locally and on the shared view.
+ *
+ * The controller lives in another window and reads `isScanning` and `status`
+ * from the native view, so a scan driven from here has to publish both or the
+ * controller shows nothing happening while an OCR request is in flight. A
+ * failure to publish must never fail the scan, so it is reported and swallowed.
+ */
+function setScanning(scanning, status) {
+  if (state.scanning !== scanning) {
+    state.scanning = scanning
+    draw()
+  }
+  publish({ scanning, ...(status === undefined ? {} : { status }) })
+}
+
+/** Publishing must never fail a scan, so a failure is reported and swallowed. */
+function publish(update) {
+  void native
+    .publishScanState(update)
+    .catch((error) => log({ check: 'scan-state-error', error: String(error?.message ?? error) }))
+}
+
+/**
+ * Publish an accepted result to the shared view.
+ *
+ * Called only once the staleness guard has passed, so the shared view — and with
+ * it the capture and debug panels and the controller's status — never shows a
+ * result belonging to a source the user has already moved away from. Native
+ * dedupes by frame id, so a cloud frame that `ocr_frame` already published is
+ * not published twice; that call only clears the busy flag.
+ */
+function publishAccepted(frame, result) {
+  if (!frame?.id) return
+  state.appliedScanId = frame.id
+  return native.publishScanState({
+    publish: true,
+    scanning: false,
+    scan: {
+      id: frame.id,
+      info: frame.info ?? null,
+      ocr: {
+        fullText: result.fullText ?? '',
+        textAnnotations: result.geometry ? (result.textAnnotations ?? []) : []
+      }
+    },
+    // Local and WebSocket OCR return no geometry, and the status line is where
+    // that is explained rather than letting it look like a scan that found
+    // nothing.
+    ...(result.geometry
+      ? {}
+      : {
+          status: result.fullText
+            ? 'Scan ready \u00b7 text only, this engine returns no positions'
+            : 'Scan ready \u00b7 no text recognized'
+        })
+  })
+}
+
+/**
+ * Frames whose results were rejected as stale.
+ *
+ * `ocr_frame` publishes its result to the shared view before this window judges
+ * it, so a late cloud result from a source the user has left would arrive back
+ * as a view update and be rendered after all. Remembering the rejected ids stops
+ * that echo, alongside asking native to stop self-publishing from `ocr_frame`.
+ */
+const rejectedFrameIds = new Set()
+function rejectFrame(id) {
+  if (id === null || id === undefined) return
+  rejectedFrameIds.add(id)
+  // Ids increase monotonically, so only the newest few can still be echoed.
+  if (rejectedFrameIds.size > 32) {
+    rejectedFrameIds.delete(rejectedFrameIds.values().next().value)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. The scan pipeline
+// ---------------------------------------------------------------------------
+
+const generation = new Generation()
+const pipeline = new PipelineLock()
+
+/**
+ * Snapshot everything a scan depends on, once, before any await.
+ *
+ * The source descriptor and crop are captured here rather than read back after
+ * the endpoint answers, so a result is always attributed to the selection that
+ * produced it even if the user picks a different window mid-request.
+ */
+async function beginJob() {
+  const sourceId = await native.selectedSource()
+  if (!sourceId) return null
+  const prefs = await native.preferences().catch(() => null)
+  return {
+    generation: generation.current,
+    sourceId,
+    source: prefs?.source ?? null,
+    request: { source_id: sourceId, crop: prefs?.crop ?? null }
+  }
+}
+
+/**
+ * Keep native tracking whichever source is selected.
+ *
+ * `watch_source` polls the window's bounds natively and emits `source-bounds`,
+ * which is what lets the overlay follow a source that moves or changes display
+ * between scans — Electron did this with its window-position watcher.
+ */
+let watchedSourceId = null
+async function followSource(source) {
+  const id = source?.sourceId ?? source?.id ?? null
+  if (id === watchedSourceId) return
+  watchedSourceId = id
+  state.sourceBounds = null
+  await native.watchSource(id ?? null)
+}
+
+/** Place the overlay over the display that holds the captured source. */
+async function positionFor(info) {
+  if (!info?.source_bounds) return state.origin
+  const origin = sourceDisplay(info.source_bounds, await native.desktop())
+  const moved =
+    !state.origin ||
+    state.origin.x !== origin.x ||
+    state.origin.y !== origin.y ||
+    state.origin.width !== origin.width ||
+    state.origin.height !== origin.height
+  if (moved) await native.placeOverlay(origin)
+  return origin
+}
+
+/**
+ * Apply one OCR result: reposition, redraw, publish.
+ *
+ * The published string is the filtered reading-order text, not the endpoint's
+ * `fullText`, so history, clipboard, texthooker and TTS all agree with what the
+ * overlay actually shows.
+ */
+async function applyResult(result, frame, job, outcome = { publish: true }) {
+  // The selection moved on while this was in flight: these pixels describe a
+  // source the user is no longer looking at, so they must not be rendered and
+  // must not reach the history, the clipboard or the texthooker.
+  if (!job || generation.isStale(job)) {
+    const staleId = result.nativeScanId ?? frame?.id ?? null
+    rejectFrame(staleId)
+    log({
+      check: 'overlay-scan-discarded',
+      reason: 'selection changed while the scan was in flight',
+      frameId: staleId,
+      jobGeneration: job?.generation ?? null,
+      current: generation.current
+    })
+    publish({ scanning: false, status: 'Scan discarded: the source changed while it was running.' })
+    return ''
+  }
+
+  const info = frame?.info ?? null
+  state.info = info
+  state.geometry = result.geometry !== false
+  state.annotations = state.geometry ? (result.textAnnotations ?? []) : []
+  state.source = job.source
+  const kind = state.source?.kind ?? state.source?.type
+  state.scannedApp =
+    kind === 'window' ? (state.source.app ?? state.source.appName ?? null) : foreground.current
+  // Whichever native scan produced this is now accounted for, so the poll loop
+  // does not treat its revision as new work and publish the same text twice.
+  state.appliedScanId = result.nativeScanId ?? frame?.id ?? null
+
+  // The native published owner must exist before AutoScanner releases its pin.
+  await publishAccepted(frame, result)
+
+  if (state.geometry && info) state.origin = await positionFor(info)
+  draw()
+
+  const grouping = setting('textOverlayGrouping')
+  // Redrawing and publishing are separate. The accurate recogniser returning the
+  // same sentence again — because the reader has not moved on, and the box has
+  // only shifted a little — must still move the word boxes, and must not put a
+  // second copy in the history, the clipboard and the texthooker.
+  const published =
+    outcome.publish === false
+      ? ''
+      : state.geometry
+        ? await publishScan(state.annotations, grouping)
+        : await publishPlainText(result.fullText)
+
+  log({
+    check: 'overlay-scan-applied',
+    mode: setting('ocrMode'),
+    geometry: state.geometry,
+    words: state.geometry ? visibleAnnotations(state.annotations, grouping).length : 0,
+    published: published.length,
+    refreshedOnly: outcome.publish === false
+  })
+  return published
+}
+
+/** Text-only backends still feed the clipboard, the texthooker and history. */
+async function publishPlainText(text) {
+  const trimmed = (text ?? '').trim()
+  if (!trimmed) return ''
+  await native.publishText(trimmed)
+  await addHistoryEntry(trimmed)
+  return trimmed
+}
+
+/** A manual scan: capture, recognise, apply. Skipped while the loop holds the lock. */
+async function performScan() {
+  trace('manual-scan', { generation: generation.current })
+  const ran = await pipeline.run(async () => {
+    setScanning(true, 'Capturing\u2026')
+    try {
+      const job = await beginJob()
+      if (!job) {
+        log({ check: 'overlay-scan-skipped', reason: 'no source selected' })
+        setScanning(false, 'Choose a source before scanning.')
+        return
+      }
+      forgetFrame()
+      const frame = await native.captureFrame(
+        job.request,
+        scanner.isRunning,
+        setting('autoOCRSettings').observerMode
+      )
+      const result = await recognize(frame, {
+        ocrMode: setting('ocrMode'),
+        owocrWebSocketUrl: setting('owocrWebSocketUrl')
+      })
+      if (!result) {
+        setScanning(false, 'No result from the OCR engine.')
+        return
+      }
+      const published = await applyResult(result, frame, job)
+      // Keep the auto loop from immediately republishing what we just showed —
+      // but only if the result was actually accepted.
+      // Tell the loop what has just been spent and shown, so it does not
+      // immediately make the same request again — and so its minimum spacing
+      // starts from this scan, not from its own last one.
+      if (published !== '' || !generation.isStale(job))
+        scanner.noteExternalScan(result.fullText, observationFrom(frame)?.lines)
+    } catch (error) {
+      // Capture permission, a stale source and an unreachable endpoint all land
+      // here, and the user's only view of them is the controller's status line.
+      const message = String(error?.message ?? error)
+      log({ check: 'overlay-scan-error', error: message })
+      state.scanning = false
+      draw()
+      publish({ scanning: false, status: message })
+      return
+    } finally {
+      if (state.scanning) setScanning(false)
+    }
+  })
+  if (ran === null) log({ check: 'overlay-scan-skipped', reason: 'a scan is already running' })
+}
+
+/**
+ * The automatic loop.
+ *
+ * Every dependency is injected, which is what lets `scripts/autoscan.test.mjs`
+ * exercise the whole policy with a fake clock and no app. What this file supplies
+ * is the real versions: one native call that captures, hashes and locally reads a
+ * frame; the configured accurate recogniser; the shared pipeline lock; and the
+ * same `applyResult` the manual path uses, so a result reaches the overlay by one
+ * route whichever path produced it.
+ */
+/**
+ * The job the most recent automatic capture belongs to.
+ *
+ * Only used as a fallback. A recognition outlives the tick that started it, so by
+ * the time a result lands this may already describe a later capture — which is
+ * why each frame carries its own job below, and why the result is attributed to
+ * that one rather than to whatever the loop is looking at now.
+ */
+let autoJob = null
+const scanner = new AutoScanner({
+  generation: () => generation.current,
+  // Held by the *other* path. The loop's own request takes this lock too, so it
+  // cannot overlap a manual scan and a manual scan cannot overlap it.
+  isBusy: () => pipeline.isHeld,
+  tryAcquire: () => pipeline.acquire(),
+  releaseLock: () => pipeline.release(),
+  captureFrame: async () => {
+    const selectionStarted = performance.now()
+    autoJob = await beginJob()
+    const selectionMs = performance.now() - selectionStarted
+    if (!autoJob) throw new Error('No source selected')
+    forgetFrame()
+    const started = performance.now()
+    trace('capture-start', { generation: autoJob.generation })
+    let captured
+    try {
+      captured = await native.captureFrame(
+        autoJob.request,
+        true,
+        setting('autoOCRSettings').observerMode
+      )
+    } catch (error) {
+      trace('capture-failed', { durationMs: performance.now() - started })
+      throw error
+    }
+    try {
+      scanTrace.observation({
+        frameId: captured.id,
+        generation: autoJob.generation,
+        fingerprint: captured.contentFingerprint ?? null,
+        observation: observationFrom(captured),
+        captureMs: captured.info?.total_ms,
+        resolveMs: captured.info?.resolve_ms,
+        acquisitionMs: captured.info?.acquisition_ms,
+        pixelsMs: captured.info?.pixels_ms,
+        observerMs: captured.observation?.duration_ms,
+        roundTripMs: performance.now() - started,
+        selectionMs,
+        width: captured.info?.width,
+        height: captured.info?.height
+      })
+    } catch {
+      /* diagnostic only */
+    }
+    // The job travels with the frame. `applyResult` needs the source and the
+    // generation *this* capture was made under, and a slow request can easily
+    // outlive several later captures.
+    const frame = { ...captured, job: autoJob }
+    return {
+      frame,
+      generation: autoJob.generation,
+      hash: captured?.hash ?? null,
+      contentFingerprint: captured?.contentFingerprint ?? null,
+      observation: observationFrom(captured),
+      observerError: captured?.observerError ?? null,
+      observerUnsupported: !!captured?.observerUnsupported
+    }
+  },
+  recognize: async (frame) => {
+    const started = performance.now()
+    trace('second-pass-start', { frameId: frame.id, mode: setting('ocrMode') })
+    try {
+      const result = await recognize(frame, {
+        ocrMode: setting('ocrMode'),
+        owocrWebSocketUrl: setting('owocrWebSocketUrl')
+      })
+      try {
+        scanTrace.result(frame.id, result?.fullText ?? '', performance.now() - started)
+      } catch {
+        /* diagnostic only */
+      }
+      return result
+    } catch (error) {
+      trace('second-pass-failed', { frameId: frame.id, durationMs: performance.now() - started })
+      throw error
+    }
+  },
+  retainFrame: (frame) => native.retainFrame(frame?.id, true),
+  releaseFrame: (frame) => native.retainFrame(frame?.id, false),
+  onResult: async (result, frame, outcome) => {
+    const started = performance.now()
+    trace('apply-start', { frameId: frame?.id, publish: outcome.publish })
+    try {
+      const applied = await applyResult(result, frame, frame?.job ?? autoJob, outcome)
+      trace('apply-end', {
+        frameId: frame?.id,
+        durationMs: performance.now() - started,
+        publishedChars: applied.length,
+        geometry: result.geometry !== false
+      })
+      return applied
+    } catch (error) {
+      trace('apply-failed', { frameId: frame?.id, durationMs: performance.now() - started })
+      throw error
+    }
+  },
+  onDiagnostic: (event, frame, counters, context) => {
+    // Free-form messages/details may carry service content. Keep only structured
+    // decision fields; the existing operational error log remains separate.
+    const safe = Object.fromEntries(
+      Object.entries(event).filter(([key]) => !['message', 'detail', 'layout'].includes(key))
+    )
+    trace('decision', { event: safe, frameId: frame?.id ?? null, counters, ...context })
+  },
+  onScanStart: () => setScanning(true, 'Auto scan\u2026'),
+  onScanEnd: () => setScanning(false),
+  onEvent: onAutoScanEvent
+})
+
+/**
+ * Turn the native observation into the shape the policy compares.
+ *
+ * Line boxes arrive in the frame's own pixels with a top-left origin — see
+ * `TextLine` in capture-core — which is the same space the box tolerance is
+ * expressed in, so nothing is converted here.
+ */
+function observationFrom(frame) {
+  const observation = frame?.observation
+  if (!observation || typeof observation.text !== 'string') return null
+  return {
+    text: observation.text,
+    lines: (observation.lines ?? []).map((line) => ({
+      text: line.text ?? '',
+      box: { x: line.x ?? 0, y: line.y ?? 0, width: line.width ?? 0, height: line.height ?? 0 }
+    }))
+  }
+}
+
+/**
+ * Report what the loop is doing, without ever reporting what it read.
+ *
+ * Every event carries counts, reasons, lengths and coarse geometry and no
+ * recognised text, so the diagnostics stay safe to read and to send. `status` is
+ * the one the user has to see: automatic scanning turning itself off, whether
+ * because this platform has no observer or because it has failed too often, is
+ * not something to leave in a log file.
+ */
+function onAutoScanEvent(event) {
+  switch (event.type) {
+    case 'visual-invalidated':
+      // Local observation controls visual freshness; never wait for the cloud
+      // to tell us that text which disappeared is no longer on screen.
+      state.annotations = event.keepBoxes
+        ? annotationsInLines(state.annotations, event.keepBoxes)
+        : []
+      draw()
+      void publishRegions()
+      log({
+        check: 'auto-scan-visual-cleared',
+        reason: event.reason,
+        retained: state.annotations.length
+      })
+      return
+    case 'status':
+      if (event.state === 'running') {
+        const settings = setting('autoOCRSettings')
+        trace('auto-start', {
+          mode: setting('ocrMode'),
+          observerMode: settings.observerMode,
+          settings: Object.fromEntries(
+            Object.entries(settings).filter(
+              ([, value]) => typeof value === 'number' || typeof value === 'boolean'
+            )
+          )
+        })
+      }
+      if (event.state === 'idle') {
+        trace('auto-stop')
+        void scanTrace.flush()
+      }
+      log({ check: 'auto-scan-status', state: event.state, message: event.message })
+      if (event.state === 'unavailable' || event.state === 'suspended') {
+        state.scanning = false
+        draw()
+        publish({ scanning: false, status: event.message })
+      }
+      return
+    case 'error':
+      log({
+        check: 'auto-scan-error',
+        stage: event.stage,
+        error: event.message,
+        backoffMs: event.backoffMs
+      })
+      // A capture or endpoint failure belongs on the controller, not only in the
+      // log; an observer that has simply not answered yet does not, because it
+      // retries on its own and the status line would flicker.
+      if (event.stage !== 'observer') publish({ scanning: false, status: event.message })
+      return
+    case 'skip':
+      return log({ check: 'auto-scan-skip', reason: event.reason, detail: event.detail ?? null })
+    case 'request':
+      return log({
+        check: 'auto-scan-request',
+        reason: event.reason,
+        queued: event.queued,
+        replaced: event.replaced
+      })
+    case 'result':
+      return log({
+        check: 'auto-scan-result',
+        published: event.published,
+        reason: event.reason,
+        chars: event.chars
+      })
+    default:
+      return undefined
+  }
+}
+
+/** Counters, for the debug panel and for answering "is it still scanning?". */
+export function autoScanStats() {
+  return { state: scanner.state, reason: scanner.stateReason, ...scanner.stats() }
+}
+
+function syncAutoScanner() {
+  scanner.updateSettings(setting('autoOCRSettings'))
+  if (state.flags.autoOcrEnabled && !scanner.isRunning) {
+    scanner.reset()
+    scanner.start()
+  } else if (!state.flags.autoOcrEnabled && scanner.isRunning) {
+    scanner.stop()
+  }
+}
+
+/**
+ * Say once, at startup, whether automatic scanning can work here at all.
+ *
+ * Better than finding out one failed tick at a time, and much better than the
+ * alternative it replaces: a platform with no local observer used to mean every
+ * captured frame went to the remote recogniser.
+ */
+async function reportObserver() {
+  const status = await native.observerStatus().catch(() => null)
+  if (!status) return
+  log({
+    check: 'auto-scan-observer',
+    engine: status.engine,
+    supported: status.supported,
+    privateApi: status.private_api ?? status.privateApi ?? false,
+    minimumOs: status.minimum_os ?? status.minimumOs ?? '',
+    detail: status.detail
+  })
+}
+
+// ---------------------------------------------------------------------------
+// 3. Actions
+// ---------------------------------------------------------------------------
+
+/**
+ * Actions native dispatches to every window.
+ *
+ * `actions::dispatch` in Rust applies everything it owns before emitting: it
+ * toggles and shows or hides the overlay window itself, and the source picker
+ * owns crop editing and select-and-scan. Only the two actions whose work belongs
+ * in this window are handled here — handling any other would apply it twice.
+ */
+async function onAction(name) {
+  switch (name) {
+    case 'triggerScan':
+      return performScan()
+    case 'playAudio':
+      return playLatest()
+    // The controller reads these back from the shared view, so this window owns
+    // the flip. Native must pass these names through without touching the flag,
+    // or the switch would toggle twice and appear dead.
+    case 'selectAndScan':
+      return selectAndScan()
+    case 'setCropArea':
+      // The picker owns crop editing for the current source, window or display.
+      return native
+        .openSourcePicker(true)
+        .catch((error) =>
+          log({ check: 'crop-editor-error', error: String(error?.message ?? error) })
+        )
+    case 'toggleAutoOcr':
+      return native.setViewFlags({ autoOcrEnabled: !state.flags.autoOcrEnabled })
+    case 'toggleTextOverlay':
+      return toggleOverlayText()
+    case 'toggleDebugOverlay':
+      return native.setViewFlags({ debugOverlayVisible: !state.flags.debugOverlayVisible })
+    // Cosmetic, and deliberately silent about failure: a hover must never put an
+    // error on screen.
+    case 'hoverSelectRegionOn':
+    case 'hoverSelectRegionOff':
+      state.hover.selectRegion = name.endsWith('On')
+      return drawHover()
+    case 'hoverSourceOn':
+    case 'hoverSourceOff':
+      state.hover.source = name.endsWith('On')
+      return drawHover()
+    default:
+      // Everything else native has already applied before emitting.
+      return undefined
+  }
+}
+
+/**
+ * Drag a region over the captured display, save it as the crop, scan it.
+ *
+ * The drag surface itself is `ui/region-select.js`, which reports a rectangle in
+ * this window's CSS pixels. Everything that has to be right lives here: the
+ * overlay must accept every click while selecting (it is click-through by
+ * default, so a full-window hit region is published for the duration), and the
+ * rectangle has to be committed in the source's own full-capture pixel space,
+ * which is what `reference_width`/`reference_height` mean to capture-core.
+ */
+async function selectAndScan() {
+  if (state.regionSelecting) return
+  const sourceId = await native.selectedSource()
+  if (!sourceId) {
+    log({ check: 'select-and-scan-skipped', reason: 'no source selected' })
+    return
+  }
+
+  let select
+  try {
+    ;({ selectRegion: select } = await import('./region-select.js'))
+  } catch (error) {
+    log({
+      check: 'select-and-scan-unavailable',
+      error: String(error?.message ?? error),
+      note: 'ui/region-select.js is missing from the build; the region drag cannot be shown.'
+    })
+    return
+  }
+
+  state.regionSelecting = true
+  try {
+    await native.panel('overlay', 'show')
+    const rect = await select(document.body)
+    if (!rect || rect.width < 2 || rect.height < 2) {
+      log({ check: 'select-and-scan-cancelled' })
+      return
+    }
+
+    const bounds = state.sourceBounds ?? state.origin
+    const origin = state.origin
+    if (!bounds || !origin) {
+      log({ check: 'select-and-scan-skipped', reason: 'source bounds unknown' })
+      return
+    }
+
+    // Points to capture pixels. A display captures at its backing scale, so the
+    // scale factor of the display holding the source converts one to the other.
+    const display = (await native.displays()).find(
+      (d) =>
+        bounds.x >= d.bounds.x &&
+        bounds.y >= d.bounds.y &&
+        bounds.x < d.bounds.x + d.bounds.width &&
+        bounds.y < d.bounds.y + d.bounds.height
+    )
+    const scale = display?.scale_factor ?? display?.scaleFactor ?? 1
+
+    const crop = {
+      x: Math.max(0, Math.round((rect.x + origin.x - bounds.x) * scale)),
+      y: Math.max(0, Math.round((rect.y + origin.y - bounds.y) * scale)),
+      width: Math.round(rect.width * scale),
+      height: Math.round(rect.height * scale),
+      reference_width: Math.round(bounds.width * scale),
+      reference_height: Math.round(bounds.height * scale)
+    }
+    if (crop.width <= 0 || crop.height <= 0) {
+      log({ check: 'select-and-scan-skipped', reason: 'empty region' })
+      return
+    }
+
+    await native.commitSource(sourceId, crop)
+    // Committing changes the selection, so the scan must start from the new one.
+    generation.bump()
+    await performScan()
+  } catch (error) {
+    log({ check: 'select-and-scan-error', error: String(error?.message ?? error) })
+  } finally {
+    // Whatever happened, the overlay must stop swallowing clicks.
+    state.regionSelecting = false
+  }
+}
+
+/**
+ * One control for "is the OCR overlay on".
+ *
+ * Both gates have to move together or the control is decorative: the persisted
+ * `liveOverlayEnabled` defaults to off, so flipping only the session flag would
+ * leave a switch that reads as on while nothing is drawn, and would send the
+ * user hunting for a second switch in Settings. Turning off touches only the
+ * session flag, leaving the persisted preference the Settings panel shows.
+ */
+async function toggleOverlayText() {
+  const next = nextOverlayToggle({
+    liveOverlayEnabled: setting('liveOverlayEnabled'),
+    textOverlayVisible: state.flags.textOverlayVisible
+  })
+  if (next.liveOverlayEnabled !== setting('liveOverlayEnabled')) {
+    await native.setSetting('liveOverlayEnabled', next.liveOverlayEnabled)
+  }
+  await native.setViewFlags({ textOverlayVisible: next.textOverlayVisible })
+  // The view flag round-trips through the shared state event, but the local draw
+  // must not wait for it: the user pressed a switch and expects the text now.
+  state.flags = { ...state.flags, textOverlayVisible: next.textOverlayVisible }
+  draw()
+}
+
+async function playLatest() {
+  const latest = listHistory()[0]?.text ?? ''
+  if (!latest) return
+  try {
+    await speak(latest, {
+      audioSettings: setting('audioSettings'),
+      serverSettings: setting('serverSettings')
+    })
+  } catch (error) {
+    log({ check: 'tts-error', error: String(error?.message ?? error) })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Yomitan host, brought up without blocking the pipeline
+// ---------------------------------------------------------------------------
+
+const relayTargets = new Set()
+let extensionApi = null
+let openInIframe = null
+
+/** Relayed windows share this window's extension storage rather than forking it. */
+function relayStorage({ area, action, keys, values }) {
+  const store = chrome.storage[area === 'session' ? 'session' : 'local']
+  switch (action) {
+    case 'get':
+      return store.get(keys ?? null)
+    case 'set':
+      return store.set(values)
+    case 'remove':
+      return store.remove(keys)
+    case 'clear':
+      return store.clear()
+    case 'getBytesInUse':
+      return store.getBytesInUse()
+    default:
+      throw Error(`Unsupported storage action: ${action}`)
+  }
+}
+
+/**
+ * Answer extension messages for windows that have no backend of their own.
+ *
+ * The log panel and the Yomitan settings window run the original frontend but
+ * must not stand up a second backend: two owners of one IndexedDB dictionary
+ * database is a corruption risk. Only JSON crosses, which suffices because
+ * Yomitan's dictionary API is entirely `sendMessage`-based.
+ */
+async function handleRelay(from, payload) {
+  if (!payload || typeof payload !== 'object') return
+  if (payload.kind === 'hello') {
+    relayTargets.add(from)
+    await native.relay(from, { kind: 'ready', backend: state.yomitan.ready })
+    return
+  }
+  if (payload.kind === 'open') {
+    void openYomitan(payload.url)
+    return
+  }
+  if (payload.kind !== 'request') return
+  relayTargets.add(from)
+  try {
+    if (!state.yomitan.ready) throw Error(state.yomitan.error ?? 'Dictionary backend is not ready')
+    const result =
+      payload.message?.action === '__storage'
+        ? await relayStorage(payload.message.params)
+        : await hub.message(
+            { id: `relay:${from}`, win: window, events: { onMessage: { listeners: new Set() } } },
+            [...hub.contexts.values()].filter((c) => c.background),
+            payload.message
+          )
+    await native.relay(from, { kind: 'response', id: payload.id, result })
+  } catch (error) {
+    await native.relay(from, {
+      kind: 'response',
+      id: payload.id,
+      error: String(error?.message ?? error)
+    })
+  }
+}
+
+/**
+ * Prefer a real native settings window, as Electron has, and fall back to the
+ * in-overlay iframe when that window does not exist. Either way the single
+ * backend in this realm serves it.
+ */
+async function openYomitan(url) {
+  try {
+    await native.panel('yomitan', 'show')
+    await native.relay('yomitan', { kind: 'navigate', url })
+    return
+  } catch {
+    // No native window for the extension pages; present them here instead.
+  }
+  void native.setDictionaryOpen(true)
+  openInIframe?.(url)
+}
+
+async function startYomitan() {
+  if (!hub) throw Error('Extension host shim did not install')
+
+  await import('/spike/network-bundle.js')
+  hub.manifest = await fetch('/manifest.json').then((r) => r.json())
+  hub.local = await native.invoke('storage_load')
+  if (!hub.local.options) {
+    const { OptionsUtil } = await import('/js/data/options-util.js')
+    const util = new OptionsUtil()
+    await util.prepare()
+    const options = util.getDefault()
+    options.profiles[0].options.general.showGuide = false
+    await util.save(options)
+  }
+
+  const api = async (action, params) => {
+    const response = await chrome.runtime.sendMessage({ action, params })
+    if (response?.error) throw Error(JSON.stringify(response.error))
+    return response?.result
+  }
+
+  const ready = new Promise((resolve, reject) => {
+    const listener = (message) => {
+      if (message.action !== 'applicationBackendReady') return
+      chrome.runtime.onMessage.removeListener(listener)
+      resolve()
+    }
+    chrome.runtime.onMessage.addListener(listener)
+    setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(listener)
+      reject(Error('Dictionary backend did not signal readiness within 30s'))
+    }, 30000)
+  })
+  const backend = document.createElement('iframe')
+  backend.id = 'backend'
+  backend.src = '/spike/background.html'
+  document.body.append(backend)
+  await ready
+  // Before the frontend exists, so no popup can be built without being seen.
+  await capturePopups()
+  await import('/js/app/content-script-wrapper.js')
+
+  extensionApi = api
+  window.pocApi = api
+  openInIframe = hub.open.bind(hub)
+  hub.open = (url) => {
+    void openYomitan(url)
+    return { id: 1, windowId: 1, url }
+  }
+
+  // Backend broadcasts (readiness, database updates) must reach relayed windows
+  // too, or their frontends never finish starting up.
+  chrome.runtime.onMessage.addListener((message) => {
+    for (const target of relayTargets) void native.relay(target, { kind: 'broadcast', message })
+  })
+
+  // Extension storage changes are broadcast the same way. Relayed windows read
+  // and write through this one store, so without this a profile or option
+  // changed in the settings window would be invisible to code watching for it
+  // in the log window.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    for (const target of relayTargets) {
+      void native.relay(target, { kind: 'storage-changed', changes, area })
+    }
+  })
+
+  state.yomitan.ready = true
+  log({
+    check: 'yomitan-ready',
+    dictionaries: (await api('getDictionaryInfo')).map((d) => d.title)
+  })
+}
+
+/**
+ * Import the authored three-entry fixture archive.
+ *
+ * Diagnostics only, never called during normal startup: a reader's dictionary
+ * list belongs to them, and an app that silently installs a synthetic dictionary
+ * on first run is doing something they did not ask for. `ui/checks.js` and manual
+ * verification call this explicitly.
+ */
+async function importFixtureDictionary() {
+  if (!extensionApi) throw Error('Dictionary backend is not ready')
+  const title = 'Tauri Spike Fixture v2'
+  const existing = await extensionApi('getDictionaryInfo')
+  if (existing.some((d) => d.title === title)) return { alreadyInstalled: true, title }
+
+  const { DictionaryWorker } = await import('/js/dictionary/dictionary-worker.js')
+  const imported = await new DictionaryWorker().importDictionary(
+    await fetch('/spike/fixture.zip').then((r) => r.arrayBuffer()),
+    { prefixWildcardsSupported: false },
+    null
+  )
+  if (imported.errors.length) throw Error(JSON.stringify(imported.errors))
+
+  const options = await extensionApi('optionsGetFull')
+  const profile = options.profiles[options.profileCurrent].options
+  if (!profile.dictionaries.some((d) => d.name === title)) {
+    profile.dictionaries.push({
+      name: title,
+      alias: '',
+      partsOfSpeechFilter: true,
+      useDeinflections: true,
+      enabled: true,
+      allowSecondarySearches: false,
+      definitionsCollapsible: 'not-collapsible'
+    })
+    await extensionApi('setAllSettings', { value: options, source: 'kimochi-fixture' })
+    await extensionApi('triggerDatabaseUpdated', { type: 'dictionary', cause: 'import' })
+  }
+  log({ check: 'fixture-dictionary-imported', summary: imported.result })
+  return imported.result
+}
+
+/** Yomitan closes its popup on a pointerdown outside the popup's own frame. */
+function dismissPopup() {
+  window.dispatchEvent(
+    new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true })
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 4b. Where the dictionary popup actually is
+// ---------------------------------------------------------------------------
+
+/**
+ * The popups the original factory has built in this window.
+ *
+ * They cannot be found from the DOM — see host/popup-bridge.js — and without
+ * their rectangles the overlay is click-through over its own dictionary.
+ */
+let livePopups = new Set()
+
+async function capturePopups() {
+  const { observePopups } = await import('/spike/popup-bridge.js')
+  ;({ popups: livePopups } = await observePopups({
+    log,
+    window: 'overlay',
+    // A popup opens and closes between two ticks of the region loop; 100 ms of
+    // missing rectangle is 100 ms in which its first click is thrown away and
+    // counted as a dismissal.
+    onChange: () => void publishRegions()
+  }))
+}
+
+/** Desktop rectangles for the visible popup chain; see ui/regions.ts. */
+const popupRects = () => popupHitRects(livePopups, state.origin)
+
+// ---------------------------------------------------------------------------
+// 5. Hit regions and the shared view
+// ---------------------------------------------------------------------------
+
+/**
+ * The rectangles where this window takes the mouse, in desktop points.
+ *
+ * `focus` marks the ones that are worth taking the keyboard for, and scanned
+ * words are not among them: the keyboard belongs to whatever the reader is
+ * reading, and a lookup no longer needs it (see `feedScanner`). What is marked
+ * is this window's own interface — the dictionary page and the extension frames
+ * — which a reader has deliberately opened and has to be able to type into.
+ */
+function hitRects() {
+  if (!state.origin) return []
+  // Selecting a region needs every event on the display, not just the parts of
+  // it that happen to have text under them.
+  if (state.regionSelecting) return [{ ...state.origin, focus: false }]
+  const rects = renderer.hitRects(state.origin)
+  const add = (rect, focus) => {
+    if (rect.width > 0 && rect.height > 0) {
+      rects.push({
+        x: state.origin.x + rect.x,
+        y: state.origin.y + rect.y,
+        width: rect.width,
+        height: rect.height,
+        focus
+      })
+    }
+  }
+  for (const frame of document.querySelectorAll('iframe')) {
+    if (frame.id === 'backend') continue
+    if (frame.id === 'extension-page' && !state.dictionaryOpen) continue
+    add(frame.getBoundingClientRect(), true)
+  }
+  if (state.dictionaryOpen) add(pagesSection.getBoundingClientRect(), true)
+  // The popup is not in the light DOM; see popupRects().
+  rects.push(...popupRects())
+  return rects
+}
+
+let handling = false
+let lastSelection = null
+
+/**
+ * React to the shared native view.
+ *
+ * Driven by the `state` event, which native emits only when a fingerprint of the
+ * view changes, with one snapshot at startup to establish the baseline. An event
+ * arriving while the previous one is still being applied replaces the pending
+ * one rather than queueing behind it — intermediate states are not worth
+ * replaying, but the latest must never be dropped, or a missed transition would
+ * persist until something else happened to change the view.
+ */
+let pendingView = null
+async function processView(view) {
+  if (!view) return
+  if (handling) {
+    pendingView = view
+    return
+  }
+  handling = true
+  try {
+    // A native click outside any interactive region dismisses the popup.
+    if (state.dismiss !== view.dismiss) {
+      state.dismiss = view.dismiss
+      dismissPopup()
+    }
+
+    if (view.revision !== state.revision) {
+      state.revision = view.revision
+      const scanId = view.scan?.id ?? null
+      // Our own scans rendered and published on the way through; re-applying
+      // here would duplicate the history entry and rewrite the clipboard.
+      const alreadyApplied = scanId !== null && scanId === state.appliedScanId
+      if (!alreadyApplied) {
+        dismissPopup()
+        window.getSelection()?.removeAllRanges()
+        if (view.scan?.ocr) {
+          await applyResult(
+            {
+              fullText: view.scan.ocr.fullText ?? '',
+              textAnnotations: view.scan.ocr.textAnnotations ?? [],
+              geometry: true,
+              nativeScanId: scanId
+            },
+            view.scan,
+            {
+              generation: generation.current,
+              sourceId: view.source?.sourceId ?? view.source?.id ?? null,
+              source: view.source ?? null,
+              request: { source_id: null, crop: view.crop ?? null }
+            }
+          )
+          scanner.noteExternalText(view.scan.ocr.fullText ?? '')
+        } else if (!view.scan && !pipeline.isHeld && !state.scanning) {
+          // An explicit clear. A scan in flight has not produced its frame yet
+          // and must not wipe what is currently readable.
+          state.annotations = []
+          state.info = null
+          state.appliedScanId = null
+          renderer.clear()
+        }
+      }
+    }
+
+    const flags = {
+      autoOcrEnabled: view.autoOcrEnabled ?? state.flags.autoOcrEnabled,
+      textOverlayVisible: view.textOverlayVisible ?? state.flags.textOverlayVisible,
+      overlayVisible: view.overlayVisible ?? state.flags.overlayVisible,
+      debugOverlayVisible: view.debugOverlayVisible ?? state.flags.debugOverlayVisible
+    }
+    const autoChanged = flags.autoOcrEnabled !== state.flags.autoOcrEnabled
+    state.flags = flags
+    if (autoChanged) syncAutoScanner()
+    syncOverlayText()
+    document.body.classList.toggle('debug', flags.debugOverlayVisible)
+
+    if (typeof view.frontmostApp === 'string') foreground.note(view.frontmostApp)
+    // Also carried on the view, so a window that starts up mid-session begins with the
+    // current answer instead of waiting for the next change.
+    if (view.sourceFocus) state.sourceFocus = view.sourceFocus
+
+    // Crop and source identity come from the shared view, so a commit in the
+    // picker reaches the hover markings without a scan in between.
+    const selection = {
+      sourceId: view.source?.sourceId ?? view.source?.id ?? null,
+      crop: view.crop ?? null
+    }
+    if (generation.bumpIfChanged(lastSelection, selection)) {
+      // A different source or crop invalidates anything in flight, and the
+      // text on screen belongs to the previous selection.
+      if (lastSelection !== null) {
+        state.annotations = []
+        state.info = null
+        state.appliedScanId = null
+        renderer.clear()
+        scanner.reset()
+      }
+      lastSelection = selection
+    }
+    state.crop = view.crop ?? null
+    const kind = view.source?.kind ?? view.source?.type
+    state.hover.isWindow = kind === 'window'
+    await followSource(view.source)
+    drawHover()
+
+    if (view.dictionary !== state.dictionaryOpen) {
+      state.dictionaryOpen = view.dictionary
+      pagesSection.hidden = !state.dictionaryOpen
+      if (state.dictionaryOpen) {
+        if (!state.origin) {
+          state.origin = (await native.desktop())[0]
+          await native.placeOverlay(state.origin)
+        }
+        if (!document.querySelector('#extension-page').getAttribute('src')) {
+          openInIframe?.('/settings.html')
+        }
+        await native.panel('overlay', 'show')
+      }
+    }
+  } catch (error) {
+    log({ check: 'overlay-error', error: String(error?.message ?? error) })
+  } finally {
+    handling = false
+    const next = pendingView
+    pendingView = null
+    if (next) void processView(next)
+  }
+}
+
+/**
+ * React to the overlay's text being switched on or off.
+ *
+ * Two inputs decide whether scanned text is drawn — a persisted preference and a
+ * session flag — and they arrive on two different channels: a settings change and a
+ * view broadcast. Both call this, and it compares the *combined* answer against the
+ * last one, so flipping one input cannot look like two transitions and start two
+ * scans.
+ *
+ * Switching it on scans, because otherwise it switches on to nothing: the overlay
+ * draws the last scan, and if there was not one, or it belonged to a source that has
+ * since changed, the reader gets an empty screen and has to ask for a scan by hand.
+ * Switching it off never scans. The scan itself is the ordinary one — same capture,
+ * same source, same generation and busy guards — so a scan already running satisfies
+ * the transition and a failure is reported on the status line like any other.
+ */
+let overlayTextShown = null
+function syncOverlayText() {
+  const shown = isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)
+  const was = overlayTextShown
+  overlayTextShown = shown
+  draw()
+  switch (overlayTextChange(was, shown, pipeline.isHeld || state.scanning)) {
+    case 'scan':
+      log({ check: 'overlay-enabled-scan' })
+      void performScan()
+      break
+    case 'scan-pending':
+      log({ check: 'overlay-enabled-scan-pending' })
+      break
+  }
+}
+
+/**
+ * Publish the interactive rectangles on a timer rather than on view changes:
+ * they move whenever the DOM does — a popup opening, a hover scaling a box —
+ * which the native view knows nothing about.
+ */
+let publishing = false
+let republish = false
+
+async function publishRegions() {
+  if (publishing) {
+    // Coalesce: the next publish must reflect the DOM as it is when it runs, not
+    // queue a stale snapshot behind the one in flight.
+    republish = true
+    return
+  }
+  publishing = true
+  try {
+    do {
+      republish = false
+      await native.setRegions(hitRects())
+    } while (republish)
+  } catch (error) {
+    log({ check: 'overlay-regions-error', error: String(error?.message ?? error) })
+  } finally {
+    publishing = false
+  }
+}
+
+function startRegionLoop() {
+  setInterval(() => void publishRegions(), 100)
+}
+
+// ---------------------------------------------------------------------------
+// 6. Startup
+// ---------------------------------------------------------------------------
+
+native.onCapabilityGap((command) =>
+  log({
+    check: 'native-capability-missing',
+    command,
+    note: 'Feature degraded; see PARITY_CONTRACT.md for the fallback.'
+  })
+)
+
+await native.loadSettings()
+await native.watchSettings((key) => {
+  if (key === 'autoOCRSettings') syncAutoScanner()
+  if (key === 'ocrMode' && setting('ocrMode') !== 'local') void terminateLocalOcr()
+  syncOverlayText()
+})
+
+// The raw name, ours included: "Kimochi is frontmost" and "no signal yet" are
+// different states, and only the tracker may collapse them.
+await native.listen('frontmost-app', ({ payload }) =>
+  foreground.note(typeof payload === 'string' ? payload : payload?.appName)
+)
+await native.listen('hotkey', ({ payload }) => {
+  if (payload?.name) void onAction(payload.name)
+})
+/**
+ * Follow the captured source as it moves.
+ *
+ * Two different things can change and they are independent. The overlay *window*
+ * only has to move when the source crosses onto another display, because it is
+ * placed over a whole display rather than over the source. The rendered *text*
+ * has to move whenever the source moves at all, including within one display,
+ * because each box is positioned from the source's current bounds.
+ *
+ * Getting only the first right is what left text stranded: the window stayed put
+ * — correctly — and nothing redrew.
+ */
+await native.listen('source-bounds', async ({ payload }) => {
+  if (!payload?.bounds) return
+  // Bounds for a source we are no longer watching are stale by definition: a
+  // late event from the previous window must not drag the current one's text.
+  if (payload.sourceId && watchedSourceId && payload.sourceId !== watchedSourceId) return
+
+  const previous = state.sourceBounds
+  const bounds = payload.bounds
+  if (previous && !movedOrResized(previous, bounds)) return
+  state.sourceBounds = bounds
+
+  try {
+    const origin = sourceDisplay(bounds, await native.desktop())
+    if (!sameRect(state.origin, origin)) {
+      state.origin = origin
+      await native.placeOverlay(origin)
+    }
+  } catch {
+    // A source whose centre is off every display: leave the overlay where it is
+    // and still redraw, so text tracks the part of the source that is visible.
+  }
+  draw()
+  drawHover()
+
+  // Recorded so a move can be checked without a screenshot: these windows are
+  // capture-protected, so the rendered position is only observable as a number.
+  if (state.annotations.length) {
+    log({
+      check: 'overlay-follow-source',
+      bounds,
+      origin: state.origin,
+      first: renderer.firstBox()
+    })
+  }
+})
+
+function sameRect(a, b) {
+  return !!a && !!b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+}
+
+function movedOrResized(a, b) {
+  return !sameRect(a, b)
+}
+// Gamepad input is polled natively (src-tauri/src/gamepad.rs) and dispatched
+// through that same action path, so this window must not poll it as well.
+await native.listen('ext-relay', ({ payload }) => {
+  // A webview's JS listener takes every emit regardless of target, so the address in
+  // the message is the only filter. Untargeted relays are still delivered to everyone
+  // on purpose; nothing sends one today.
+  if (!payload?.from || payload.from === 'overlay') return
+  if (typeof payload.to === 'string' && payload.to !== 'overlay') return
+  void handleRelay(payload.from, payload.payload)
+})
+
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return
+  dismissPopup()
+  void native.setDictionaryOpen(false)
+})
+document.querySelector('#close').onclick = () => native.setDictionaryOpen(false)
+
+// The captured window's focus, answered immediately rather than at the next view
+// broadcast: text that belongs to a window the reader just left should go at once,
+// and its click targets with it.
+await native.listen('source-focus', ({ payload }) => {
+  trace('source-focus', {
+    focused: payload?.focused,
+    present: payload?.present,
+    held: payload?.held
+  })
+  if (!payload || typeof payload.focused !== 'boolean') return
+  const was = state.sourceFocus
+  state.sourceFocus = payload
+  draw()
+  // On change only. These windows are capture-protected, so whether the text went when
+  // the reader left the captured window is otherwise unobservable.
+  log({
+    check: 'overlay-source-focus',
+    focused: payload.focused,
+    present: payload.present,
+    held: payload.held ?? false,
+    // Which two windows were compared. Ids only, never a title: an application can
+    // order an auxiliary window in front of the one being read, and that is the only
+    // thing that distinguishes it from the reader genuinely leaving.
+    front: payload.frontWindow ?? payload.front_window ?? null,
+    source: payload.sourceWindow ?? payload.source_window ?? null,
+    words: renderer.hitRects(state.origin).length
+  })
+  // Not at the next tick of the region loop: an invisible rectangle that still takes
+  // the mouse is worse than a visible one, so the click targets go with the text.
+  void publishRegions()
+  if (was && !(payload.focused && payload.present)) {
+    // The words are gone; a dictionary popup about one of them has nothing left to
+    // point at.
+    dismissPopup()
+  }
+})
+
+/**
+ * The last pointer event this window received on its own.
+ *
+ * The overlay is click-through except over the words themselves, so real events
+ * arrive only while the pointer is already on one and this window has the mouse.
+ * When they do, they are the better source, and the native feed steps aside
+ * rather than searching the same point twice.
+ */
+let lastRealPointer = -Infinity
+window.addEventListener(
+  'pointermove',
+  (event) => {
+    if (event.isTrusted) lastRealPointer = performance.now()
+  },
+  true
+)
+
+let notedModifier = false
+let notedFeed = false
+function noteScanFeed(payload, dispatched) {
+  if (dispatched && !notedFeed) {
+    notedFeed = true
+    log({ check: 'overlay-scan-feed-started' })
+  }
+  const held = !!(payload.shift || payload.ctrl || payload.alt || payload.meta)
+  if (!held || notedModifier) return
+  notedModifier = true
+  log({
+    check: 'overlay-modifier-seen',
+    shift: !!payload.shift,
+    ctrl: !!payload.ctrl,
+    alt: !!payload.alt,
+    meta: !!payload.meta
+  })
+}
+
+// The pointer, including where this window cannot see it: it drives the proximity
+// effect on scanned words, and the scan itself. See ui/scan-input.ts for why the
+// scan arrives this way rather than from an event addressed to this window.
+await native.listen('pointer', ({ payload }) => {
+  if (!state.origin || typeof payload?.x !== 'number') return
+  const local = toOverlayLocal(payload, state.origin)
+  if (payload.over === false || !local) {
+    renderer.clearPointer()
+    return
+  }
+  renderer.setPointer(local.x, local.y)
+  if (!state.yomitan.ready) return
+  const init = scanPointerInit(payload, local, performance.now() - lastRealPointer)
+  if (init) window.dispatchEvent(new PointerEvent('pointermove', init))
+  // Once each, then never again. Whether a modifier can be read at all from a window
+  // that does not have the keyboard is the one thing this window cannot find out for
+  // itself, and "Shift does nothing" has two completely different causes depending on
+  // the answer. Names of keys only.
+  noteScanFeed(payload, init !== null)
+})
+
+await native.listen('state', ({ payload }) => void processView(payload))
+
+syncAutoScanner()
+void reportObserver()
+startRegionLoop()
+// One baseline read, in case the first `state` event predates this listener.
+void native.snapshot().then(processView)
+
+// Scanning and rendering are live from here. The dictionary comes up behind them:
+// if it fails, lookups are unavailable and say so, but OCR still works.
+startYomitan().catch((error) => {
+  state.yomitan.error = String(error?.message ?? error)
+  log({
+    check: 'yomitan-unavailable',
+    error: state.yomitan.error,
+    note: 'Scanning and text output still work; dictionary lookup does not.'
+  })
+})
+
+log({
+  check: 'overlay-ready',
+  ocrMode: setting('ocrMode'),
+  liveOverlay: setting('liveOverlayEnabled'),
+  missingCommands: native.unavailableCommands()
+})
+
+// Exposed for ui/checks.js, which drives a scan and asserts against the result.
+window.kimochiOverlay = {
+  performScan,
+  onAction,
+  importFixtureDictionary,
+  renderer,
+  scanner,
+  state
+}

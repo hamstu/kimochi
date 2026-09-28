@@ -1,0 +1,227 @@
+/**
+ * Region selection is the "Select Region" branch for a screen source — Electron's select-and-scan.
+ * Its geometry cannot be checked by running the app from here, but the parts that silently go wrong
+ * (the minimum drag, the local/desktop mapping, Escape, and click-through cleanup) are pure logic
+ * over a DOM, so they are pinned here against a minimal DOM stub.
+ */
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+
+function createElement(tag) {
+  const listeners = new Map()
+  const element = {
+    tag,
+    // Real elements always have this; the module uses it to tell an element from an options object.
+    nodeType: 1,
+    style: {},
+    dataset: {},
+    children: [],
+    parent: null,
+    captured: new Set(),
+    textContent: '',
+    append: (...nodes) => {
+      for (const node of nodes) {
+        if (typeof node === 'object') node.parent = element
+        element.children.push(node)
+      }
+    },
+    remove: () => {
+      if (element.parent) {
+        element.parent.children = element.parent.children.filter((child) => child !== element)
+        element.parent = null
+      }
+    },
+    addEventListener: (type, handler) => {
+      if (!listeners.has(type)) listeners.set(type, new Set())
+      listeners.get(type).add(handler)
+    },
+    removeEventListener: (type, handler) => listeners.get(type)?.delete(handler),
+    dispatch: (type, event = {}) => {
+      for (const handler of listeners.get(type) ?? []) handler({ preventDefault() {}, ...event })
+    },
+    listenerCount: () => [...listeners.values()].reduce((total, set) => total + set.size, 0),
+    setPointerCapture: (id) => element.captured.add(id),
+    hasPointerCapture: (id) => element.captured.has(id),
+    releasePointerCapture: (id) => element.captured.delete(id),
+    // The surface covers the window exactly: no offset, no scaling.
+    getBoundingClientRect: () => ({ left: 0, top: 0 })
+  }
+  return element
+}
+
+const documentListeners = new Map()
+const doc = {
+  createElement,
+  body: createElement('body'),
+  addEventListener: (type, handler) => {
+    if (!documentListeners.has(type)) documentListeners.set(type, new Set())
+    documentListeners.get(type).add(handler)
+  },
+  removeEventListener: (type, handler) => documentListeners.get(type)?.delete(handler),
+  dispatch: (type, event) => {
+    for (const handler of documentListeners.get(type) ?? []) {
+      handler({ preventDefault() {}, ...event })
+    }
+  }
+}
+globalThis.document = doc
+
+const { RegionSelect, selectRegion, MINIMUM_DRAG } = (await import('../ui/region-select.js')).default
+
+const BOUNDS = { x: -1920, y: 240, width: 1920, height: 1080 }
+const surface = () => doc.body.children.at(-1)
+
+function drag(element, from, to, pointerId = 1) {
+  element.dispatch('pointerdown', { button: 0, pointerId, clientX: from.x, clientY: from.y })
+  element.dispatch('pointermove', { pointerId, clientX: to.x, clientY: to.y })
+  element.dispatch('pointerup', { pointerId, clientX: to.x, clientY: to.y })
+}
+
+test('a drag resolves in overlay-local AND desktop points, with no DPR or menu-bar offset', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  drag(surface(), { x: 100, y: 50 }, { x: 340, y: 210 })
+  const result = await pending
+
+  // Local is exactly the client coordinates: this overlay covers the full display, so the
+  // Electron original's menu-bar offset is deliberately absent.
+  assert.deepEqual(result.local, { x: 100, y: 50, width: 240, height: 160 })
+  // Desktop adds the display origin, including a negative one on a secondary display.
+  assert.deepEqual(result.desktop, { x: -1820, y: 290, width: 240, height: 160 })
+  assert.deepEqual(result.bounds, BOUNDS)
+})
+
+test('a drag in any direction normalises to a positive rectangle', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  drag(surface(), { x: 400, y: 300 }, { x: 100, y: 100 })
+  const result = await pending
+  assert.deepEqual(result.local, { x: 100, y: 100, width: 300, height: 200 })
+})
+
+test(`a drag under ${MINIMUM_DRAG} points is discarded and selection stays open`, async () => {
+  const selector = new RegionSelect()
+  let settled = false
+  const pending = selector.start({ bounds: BOUNDS }).then((value) => {
+    settled = true
+    return value
+  })
+  const element = surface()
+  drag(element, { x: 10, y: 10 }, { x: 10 + MINIMUM_DRAG - 1, y: 400 })
+  await Promise.resolve()
+
+  assert.equal(settled, false, 'a misclick must not resolve')
+  assert.equal(selector.active, true, 'the surface stays up for another attempt')
+
+  // A real drag afterwards still works.
+  drag(element, { x: 0, y: 0 }, { x: 200, y: 200 })
+  assert.deepEqual((await pending).local, { x: 0, y: 0, width: 200, height: 200 })
+})
+
+test('Escape cancels with null', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  doc.dispatch('keydown', { key: 'a' })
+  doc.dispatch('keydown', { key: 'Escape' })
+  assert.equal(await pending, null)
+  assert.equal(selector.active, false)
+})
+
+test('hit rectangles cover the display in desktop points, and clear on teardown', async () => {
+  const published = []
+  const selector = new RegionSelect({ onHitRects: (rects) => published.push(rects) })
+  assert.deepEqual(selector.hitRects, [], 'nothing is interactive before starting')
+
+  const pending = selector.start({ bounds: BOUNDS })
+  assert.deepEqual(selector.hitRects, [BOUNDS], 'the whole display is interactive while selecting')
+  assert.deepEqual(published.at(0), [BOUNDS])
+
+  drag(surface(), { x: 5, y: 5 }, { x: 105, y: 105 })
+  await pending
+
+  // The caller needs the empty set to restore click-through.
+  assert.deepEqual(published.at(-1), [])
+  assert.deepEqual(selector.hitRects, [])
+})
+
+test('teardown removes the surface and every listener it added', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  assert.ok(element.listenerCount() > 0)
+  assert.equal(doc.body.children.includes(element), true)
+
+  selector.cancel()
+  assert.equal(await pending, null)
+  assert.equal(element.listenerCount(), 0, 'listeners must not outlive the surface')
+  assert.equal(doc.body.children.includes(element), false)
+
+  selector.destroy()
+  selector.cancel()
+})
+
+test('an abort signal cancels, including one already aborted', async () => {
+  const controller = new AbortController()
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS, signal: controller.signal })
+  controller.abort()
+  assert.equal(await pending, null)
+
+  const aborted = AbortSignal.abort()
+  assert.equal(await new RegionSelect().start({ bounds: BOUNDS, signal: aborted }), null)
+})
+
+test('starting again supersedes the previous run instead of stacking surfaces', async () => {
+  const selector = new RegionSelect()
+  const first = selector.start({ bounds: BOUNDS })
+  const before = doc.body.children.length
+  const second = selector.start({ bounds: BOUNDS })
+
+  assert.equal(await first, null, 'the superseded run resolves as cancelled')
+  assert.equal(doc.body.children.length, before, 'only one surface is ever mounted')
+
+  drag(surface(), { x: 0, y: 0 }, { x: 50, y: 50 })
+  assert.deepEqual((await second).local, { x: 0, y: 0, width: 50, height: 50 })
+})
+
+test('malformed bounds are refused rather than producing a meaningless rectangle', async () => {
+  await assert.rejects(
+    () => new RegionSelect().start({ bounds: { x: 0, y: 0, width: 0, height: 100 } }),
+    /display bounds/
+  )
+  await assert.rejects(
+    () => new RegionSelect().start({ bounds: { x: 0, y: 0, width: 10 } }),
+    /display bounds/
+  )
+})
+
+test('the element call shape resolves overlay-local pixels and never rejects', async () => {
+  const container = doc.createElement('div')
+  const pending = selectRegion(container)
+  // The surface mounts into the given element, not the document body.
+  const element = container.children.at(-1)
+  drag(element, { x: 20, y: 30 }, { x: 220, y: 130 })
+  assert.deepEqual(await pending, { x: 20, y: 30, width: 200, height: 100 })
+
+  const cancelled = selectRegion(container)
+  doc.dispatch('keydown', { key: 'Escape' })
+  assert.equal(await cancelled, null)
+})
+
+test('a misclick keeps the surface up by default, and cancels only when asked', async () => {
+  // Default: Electron's behaviour — a stray click must not abandon the scan the user asked for.
+  const container = doc.createElement('div')
+  const selector = new RegionSelect({ container })
+  const pending = selector.start({})
+  drag(container.children.at(-1), { x: 0, y: 0 }, { x: 2, y: 2 })
+  await Promise.resolve()
+  assert.equal(selector.active, true)
+  selector.cancel()
+  assert.equal(await pending, null)
+
+  // Opt-in: resolve null on a misclick, for a caller that wants every gesture to settle.
+  const eager = new RegionSelect({ container, cancelOnMisclick: true })
+  const settles = eager.start({})
+  drag(container.children.at(-1), { x: 0, y: 0 }, { x: 2, y: 2 })
+  assert.equal(await settles, null)
+})

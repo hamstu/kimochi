@@ -1,0 +1,2005 @@
+use base64::Engine;
+
+mod actions;
+mod gamepad;
+mod hotkeys;
+mod native;
+mod panels;
+mod scan_trace;
+mod settings;
+mod sources;
+mod state;
+mod texthooker;
+mod tray;
+mod watcher;
+
+use kimochi_capture::*;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use settings::Settings;
+use state::{
+    classify_pointer, dismissed, source_focus, window_id_of, Image, Modifiers, PointerHistory,
+    Region, Service, Shared, SourceFocus, View,
+};
+use std::{
+    collections::HashMap,
+    sync::{atomic::AtomicBool, atomic::Ordering, Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tauri::{Emitter, Manager, State};
+
+type Reply<T> = std::result::Result<T, String>;
+
+/// The POC's preference shape, retained so its existing UI keeps working. It is a
+/// typed view over the generic settings store, not a second source of truth.
+#[derive(Clone, Serialize, Deserialize)]
+struct Prefs {
+    endpoint: String,
+    source: Option<Value>,
+    crop: Option<Crop>,
+    controller_pin: bool,
+    log_pin: bool,
+}
+
+fn err(e: CaptureError) -> String {
+    sources::err(e)
+}
+
+fn path(app: &tauri::AppHandle, name: &str) -> Reply<std::path::PathBuf> {
+    let d = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    Ok(d.join(name))
+}
+
+fn save(app: &tauri::AppHandle, name: &str, v: &impl Serialize) -> Reply<()> {
+    let p = path(app, name)?;
+    let tmp = p.with_extension("tmp");
+    std::fs::write(&tmp, serde_json::to_vec(v).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    std::fs::rename(tmp, p).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------- settings
+
+#[tauri::command]
+fn settings_get(state: State<Shared>, key: String) -> Reply<Option<Value>> {
+    state.settings.get(&key)
+}
+
+#[tauri::command]
+fn settings_set(
+    app: tauri::AppHandle,
+    state: State<Shared>,
+    key: String,
+    value: Value,
+) -> Reply<()> {
+    state.settings.set(&key, value.clone())?;
+    let _ = app.emit("settings:changed", json!({ "key": key, "value": value }));
+    if key.starts_with("texthookerSettings") {
+        if let Some(texthooker) = app.try_state::<Arc<texthooker::Texthooker>>() {
+            texthooker.settings_changed();
+        }
+    }
+    if key.starts_with("hotkeys") {
+        hotkeys::apply(&app, &state.settings);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn settings_all(state: State<Shared>) -> Value {
+    state.settings.all()
+}
+
+// ---------------------------------------------------------------- POC compat
+
+#[tauri::command]
+fn preferences(state: State<Shared>) -> Prefs {
+    let s = &state.settings;
+    Prefs {
+        // The resolved endpoint, so the POC UI shows what a scan will actually use.
+        endpoint: settings::resolve_endpoint(s),
+        source: s.get("lastSelectedSource").ok().flatten(),
+        crop: current_crop(&state),
+        controller_pin: s.get_or("nativeWindowPinned.controller", true),
+        log_pin: s.get_or("nativeWindowPinned.log", true),
+    }
+}
+
+/// Rules shared by every service URL, whoever configured it: an `http`/`https` scheme,
+/// no credentials, and no query string — a query is how an API key ends up in a URL,
+/// and nothing here has a reason to put one there.
+fn validate_url_basics(raw: &str) -> Reply<reqwest::Url> {
+    let url = reqwest::Url::parse(raw).map_err(|_| "invalid: not a URL")?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("invalid: use an http:// or https:// URL".into());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("invalid: remove the credentials from the URL".into());
+    }
+    if url.query().is_some() {
+        return Err("invalid: remove the query string from the URL".into());
+    }
+    if url.host_str().is_none() {
+        return Err("invalid: the URL has no host".into());
+    }
+    Ok(url)
+}
+
+/// The OCR endpoint, which the app will call on its own schedule during auto-OCR.
+/// Plain HTTP is confined to loopback so a background scan cannot ship captured pixels
+/// across a network in the clear.
+fn validate_service_url(raw: &str) -> Reply<reqwest::Url> {
+    let url = validate_url_basics(raw)?;
+    let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1"));
+    if url.scheme() == "http" && !loopback {
+        return Err("invalid: use HTTPS, or HTTP on localhost".into());
+    }
+    Ok(url)
+}
+
+/// A dictionary API address the user typed into the Dictionary tab.
+///
+/// Plain HTTP to any host is allowed here, including a LAN address, which is what the
+/// Electron build did. This is the user pointing the app at their own server, not
+/// unsolicited outbound browsing: it is reachable only from our own panels, carries no
+/// captured pixels, and only ever sends the term being looked up.
+fn validate_configured_api_url(raw: &str) -> Reply<reqwest::Url> {
+    validate_url_basics(raw)
+}
+
+#[tauri::command]
+fn save_preferences(app: tauri::AppHandle, state: State<Shared>, prefs: Prefs) -> Reply<()> {
+    validate_service_url(&prefs.endpoint)
+        .map_err(|e| e.replace("invalid: ", "invalid: OCR endpoint — "))?;
+    state.settings.set_many(&[
+        (&["endpoint"], json!(prefs.endpoint)),
+        (
+            &["nativeWindowPinned", "controller"],
+            json!(prefs.controller_pin),
+        ),
+        (&["nativeWindowPinned", "log"], json!(prefs.log_pin)),
+    ])?;
+    if let Some(crop) = prefs.crop {
+        if let Some((kind, name, app_name)) = selected_descriptor(&state) {
+            let key = state::descriptor_key(&kind, &name, app_name.as_deref());
+            state
+                .settings
+                .set_path(&["cropRegions", &key], serde_json::to_value(crop).unwrap())?;
+        }
+    }
+    for (label, pinned) in [("controller", prefs.controller_pin), ("log", prefs.log_pin)] {
+        let _ = panels::act(
+            &app,
+            &state.settings,
+            label,
+            if pinned { "pin" } else { "unpin" },
+            None,
+        );
+    }
+    Ok(())
+}
+
+fn selected_descriptor(service: &Service) -> Option<(String, String, Option<String>)> {
+    let record = service.settings.get("lastSelectedSource").ok().flatten()?;
+    Some((
+        // Records written before this normalisation may still say "display".
+        state::descriptor_type(record.get("type")?.as_str()?).to_string(),
+        record.get("name")?.as_str()?.to_string(),
+        record
+            .get("appName")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+    ))
+}
+
+fn current_crop(service: &Service) -> Option<Crop> {
+    let (kind, name, app) = selected_descriptor(service)?;
+    sources::saved_crop(service, &kind, &name, app.as_deref())
+}
+
+// ---------------------------------------------------------------- view state
+
+#[tauri::command]
+fn report(app: tauri::AppHandle, state: State<Shared>, value: Value) {
+    record(&app, &state, value);
+}
+
+/// Put one diagnostic in the in-memory log *and* on disk.
+///
+/// Extension diagnostics contain dictionary metadata; OCR/user screen text is never
+/// logged by scan, and captured pixels are never logged at all. Native callers use
+/// this rather than `Service::log`, which only feeds the Debug panel and so cannot
+/// record anything that happens before a window is there to read it.
+fn record(app: &tauri::AppHandle, service: &Shared, value: Value) {
+    use std::io::Write;
+    service.log(value.clone());
+    if let Ok(p) = path(app, "evidence.jsonl") {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(p)
+        {
+            let _ = writeln!(f, "{value}");
+        }
+    }
+}
+
+#[tauri::command]
+fn storage_load(app: tauri::AppHandle) -> Reply<Value> {
+    match std::fs::read(path(&app, "chrome-local.json")?) {
+        Ok(b) => serde_json::from_slice(&b).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+fn storage_save(app: tauri::AppHandle, value: Value) -> Reply<()> {
+    save(&app, "chrome-local.json", &value)
+}
+
+/// The always-present window that owns the Yomitan backend and the OCR text.
+const OVERLAY: &str = "overlay";
+
+/// The window the original dictionary popup is rendered in.
+///
+/// Borderless, transparent and always on top, sized to the popup rather than to a
+/// display: the popup is a small floating thing, and a screen-sized invisible window
+/// that swallowed clicks whenever its hit regions were wrong would be a much worse
+/// failure than a misplaced popup.
+const POPUP_HOST: &str = "popup-host";
+
+fn snapshot_value(service: &Service) -> Value {
+    let v = service.view.lock().unwrap();
+    json!({
+        "revision": v.revision,
+        "scan": v.scan,
+        "status": v.status,
+        "logs": v.logs,
+        "interactive": v.interactive,
+        "regions": v.regions,
+        "sourceFocus": v.source_focus,
+        "origin": v.origin,
+        "dictionary": v.dictionary,
+        "dismiss": v.dismiss,
+        "source": service.settings.get("lastSelectedSource").ok().flatten(),
+        "crop": current_crop(service),
+        "cropEnabled": current_crop(service).is_some(),
+        "isScanning": v.scanning,
+        "autoOcrEnabled": v.auto_ocr,
+        "overlayVisible": v.overlay_visible,
+        "textOverlayVisible": v.text_overlay_visible,
+        "debugOverlayVisible": v.debug_overlay_visible,
+        // Raw and unfiltered: consumers decide what our own windows mean.
+        "frontmostApp": v.frontmost_app,
+        "accessibility": v.accessibility,
+        "action": v.last_action.as_ref().map(|name| json!({"name": name, "seq": v.action_seq})),
+    })
+}
+
+#[tauri::command]
+fn snapshot(state: State<Shared>) -> Value {
+    snapshot_value(&state)
+}
+
+#[tauri::command]
+fn select_source(state: State<Shared>, id: String) {
+    let mut selection = state.selection.lock().unwrap();
+    if selection.as_ref() != Some(&id) {
+        let mut v = state.view.lock().unwrap();
+        v.scan = None;
+        v.regions.clear();
+        v.revision += 1;
+    }
+    *selection = Some(id);
+}
+
+#[tauri::command]
+fn selected_source(state: State<Shared>) -> Option<String> {
+    state.selection.lock().unwrap().clone()
+}
+
+/// Publish the calling window's interactive rectangles, replacing its previous set.
+///
+/// Keyed by the caller rather than global: the overlay owns the words it drew and the
+/// popup host owns the dictionary, and a press has to be attributable to one of them.
+#[tauri::command]
+fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region>) {
+    let usable: Vec<Region> = rects
+        .into_iter()
+        .filter(Region::usable)
+        .take(2000)
+        .collect();
+    let mut v = state.view.lock().unwrap();
+    if usable.is_empty() {
+        v.regions.remove(window.label());
+    } else {
+        v.regions.insert(window.label().to_string(), usable);
+    }
+}
+
+#[tauri::command]
+fn dictionary(state: State<Shared>, open: bool) {
+    state.view.lock().unwrap().dictionary = open;
+}
+
+#[tauri::command]
+fn view_flags(state: State<Shared>, flags: HashMap<String, bool>) {
+    let mut v = state.view.lock().unwrap();
+    for (name, value) in flags {
+        match name.as_str() {
+            "autoOcrEnabled" => v.auto_ocr = value,
+            "textOverlayVisible" => v.text_overlay_visible = value,
+            "debugOverlayVisible" => v.debug_overlay_visible = value,
+            "overlayVisible" => v.overlay_visible = value,
+            _ => {}
+        }
+    }
+}
+
+#[tauri::command]
+fn clear(state: State<Shared>) {
+    let mut v = state.view.lock().unwrap();
+    v.revision += 1;
+    v.scan = None;
+    v.regions.clear();
+    drop(v);
+    state.images.lock().unwrap().clear();
+}
+
+// ---------------------------------------------------------------- windows
+
+#[tauri::command]
+fn panel_pointer(window: tauri::WebviewWindow) -> Reply<Option<(f64, f64)>> {
+    native::panel_pointer(&window)
+}
+
+#[tauri::command]
+fn panel_cursor(window: tauri::WebviewWindow, kind: String) -> Reply<()> {
+    native::panel_cursor(&window, &kind)
+}
+
+#[tauri::command]
+fn panel(
+    app: tauri::AppHandle,
+    state: State<Shared>,
+    label: String,
+    action: String,
+    rect: Option<Rect>,
+) -> Reply<Value> {
+    panels::act(&app, &state.settings, &label, &action, rect)
+}
+
+#[tauri::command]
+fn panel_content_height(
+    app: tauri::AppHandle,
+    state: State<Shared>,
+    label: String,
+    height: f64,
+) -> Reply<()> {
+    panels::set_content_height(&app, &state.settings, &label, height)
+}
+
+#[tauri::command]
+fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Reply<()> {
+    native::place(
+        &app.get_webview_window(OVERLAY)
+            .ok_or("native: overlay missing")?,
+        rect,
+    )?;
+    state.view.lock().unwrap().origin = Some(rect);
+    Ok(())
+}
+
+#[tauri::command]
+fn desktop() -> Vec<Rect> {
+    native::displays()
+}
+
+/// The calling window's own bounds, in desktop points.
+///
+/// The dictionary bridge needs this to translate one window's client coordinates
+/// into the desktop, which is the only space two native windows share.
+#[tauri::command]
+fn window_bounds(window: tauri::WebviewWindow) -> Reply<Rect> {
+    native::bounds(&window)
+}
+
+/// Move, size and show the popup window, in desktop points.
+///
+/// Driven by the popup host itself, from the geometry the original `Popup` computed:
+/// Yomitan decides where the popup goes and how big it is, and this is how that
+/// decision reaches a window instead of an absolutely positioned iframe. Placement is
+/// not clamped here — the original code has already clamped it to the work area of
+/// the display the scanned text is on, and clamping again against a different display
+/// would fight it.
+#[tauri::command]
+fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Reply<()> {
+    let window = app
+        .get_webview_window(POPUP_HOST)
+        .ok_or("native: the popup window is missing")?;
+    if let Some(rect) = rect {
+        if rect.width > 0. && rect.height > 0. {
+            native::place(&window, rect)?;
+        }
+    }
+    let shown = window.is_visible().unwrap_or(false);
+    if visible && !shown {
+        // Ordered front rather than shown: Tauri's `show` is `makeKeyAndOrderFront:`,
+        // which would take the keyboard away from the window the reader is scanning
+        // the moment a popup opened, and stop them moving to the next word.
+        native::order_front(&window)?;
+    } else if !visible && shown {
+        window.hide().map_err(|e| format!("native: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn displays() -> Vec<native::DisplayInfo> {
+    native::display_infos()
+}
+
+#[tauri::command]
+fn app_quit(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+/// Relays JSON between window labels. Deliberately generic: no Yomitan knowledge
+/// lives in Rust, and the extension host builds its RPC on top of this.
+#[tauri::command]
+fn ext_relay(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<Shared>,
+    target: Option<String>,
+    payload: Value,
+) -> Reply<()> {
+    // A sequence per sender, so a receiver can tell a resend from a new message.
+    // Event delivery is not guaranteed to be exactly-once, and the extension host's
+    // cross-frame ports are not idempotent: a duplicated acknowledgement fails the
+    // whole invocation with "already acknowledged".
+    let seq = {
+        let mut counters = state.relay_seq.lock().unwrap();
+        let counter = counters.entry(window.label().to_string()).or_insert(0);
+        *counter += 1;
+        *counter
+    };
+    // The address travels in the message, and every receiver checks it.
+    //
+    // A webview's JS `listen` registers for *any* target, so `emit_to` is not the
+    // filter it looks like: every window receives every relay. That was invisible
+    // while the only traffic was request/response with the overlay — an answer for
+    // another window matched no pending request and was dropped — and became fatal
+    // the moment two windows carried a stateful port between them, because each end
+    // received its own messages back and answered them.
+    let message = json!({
+        "from": window.label(),
+        "to": target,
+        "seq": seq,
+        "payload": payload,
+    });
+    app.emit("ext-relay", message)
+        .map_err(|e| format!("native: {e}"))
+}
+
+// ---------------------------------------------------------------- source picker
+
+#[tauri::command]
+async fn source_catalog(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Vec<Value>> {
+    let started = Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(sources::catalog)
+        .await
+        .map_err(|e| e.to_string())??;
+    report(
+        app,
+        state,
+        json!({"check":"source-catalog", "sources":result.len(), "metadataMs":started.elapsed().as_secs_f64()*1000.}),
+    );
+    Ok(result)
+}
+
+#[tauri::command]
+async fn source_icon(state: State<'_, Shared>, app_name: String) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sources::icon(&service, &app_name))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn source_thumbnail(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sources::thumbnail(&service, &source_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn source_preview(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sources::preview(&service, &source_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn commit_source(
+    state: State<'_, Shared>,
+    source_id: String,
+    crop: Option<Crop>,
+) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sources::commit(&service, &source_id, crop))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn open_source_picker(
+    app: tauri::AppHandle,
+    state: State<Shared>,
+    edit_current: bool,
+) -> Reply<Value> {
+    state
+        .picker_edit_current
+        .store(edit_current, Ordering::SeqCst);
+    let info = panels::act(&app, &state.settings, "source-picker", "show", None)?;
+    // Emitted on every open so a mounted picker resets rather than showing the
+    // previous session's selection.
+    let _ = app.emit("source-picker-open", json!({ "editCurrent": edit_current }));
+    Ok(info)
+}
+
+#[tauri::command]
+fn source_picker_state(state: State<Shared>) -> Value {
+    json!({
+        "sourceId": state.selection.lock().unwrap().clone(),
+        "crop": current_crop(&state),
+        "editCurrent": state.picker_edit_current.load(Ordering::SeqCst),
+    })
+}
+
+// ---------------------------------------------------------------- capture
+
+#[tauri::command]
+async fn enumerate(state: State<'_, Shared>) -> Reply<Vec<Source>> {
+    let s = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        s.backend
+            .try_lock()
+            .map_err(|_| "busy: a capture is already running".to_string())?
+            .enumerate()
+            .map_err(err)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn permission(state: State<'_, Shared>) -> Reply<bool> {
+    let s = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(s.backend
+            .try_lock()
+            .map_err(|_| "busy: a capture is already running")?
+            .request_permission())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// How long one local observation may take before it is abandoned.
+///
+/// Warm observations measure about 35ms on rendered fixtures; this is a fence
+/// against a wedged engine, not a working budget. On expiry the analysis is
+/// cancelled for real, not merely stopped being waited for.
+const OBSERVE_TIMEOUT: Duration = Duration::from_millis(1500);
+
+/// A native capture with no network, no OCR and no view-state mutation.
+///
+/// This is the primitive the overlay's OCR orchestrator builds on. It deliberately
+/// does not touch `revision`, `scan` or `regions`: it runs as often as twice a second
+/// and bumping the revision would force the overlay to re-render every word box.
+///
+/// With `observe`, the same pixels are also hashed and read by the local text
+/// observer before this returns, so one round trip answers every question the
+/// scheduler has about a frame. That matters for more than speed: the browser
+/// side used to fetch the frame's PNG back over the `capture:` protocol to hash
+/// it, and something in that fetch-decode-canvas sequence threw `Load failed`,
+/// which took change detection with it. The failing step was never identified,
+/// so the sequence is gone rather than fixed.
+#[tauri::command]
+async fn capture_frame(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    request: CaptureRequest,
+    observe: Option<bool>,
+    observer_mode: Option<String>,
+) -> Reply<Value> {
+    if state.scanning.swap(true, Ordering::SeqCst) {
+        return Err("busy: a capture is already running; retry shortly".into());
+    }
+    let _guard = ScanGuard(state.inner().clone());
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut backend = service
+            .backend
+            .try_lock()
+            .map_err(|_| "busy: a capture is already running".to_string())?;
+        let frame = backend.capture(&request).map_err(|error| {
+            let error = err(error);
+            service.images.lock().unwrap().capture_error = Some(error.clone());
+            error
+        })?;
+        // Release the capture lock before observing: an observation must not hold
+        // up the next capture, and the frame owns its own pixels from here.
+        drop(backend);
+
+        let mut observation = Value::Null;
+        let mut observer_error = Value::Null;
+        let mut observer_unsupported = false;
+        let mut hash = Value::Null;
+        let mut fingerprint = Value::Null;
+        if observe.unwrap_or(false) {
+            fingerprint = Value::from(kimochi_capture::hash::content_fingerprint(&frame));
+            if observer_mode.as_deref() == Some("image") {
+                hash =
+                    kimochi_capture::dhash_rgba(&frame.pixels, frame.info.width, frame.info.height)
+                        .map_or(Value::Null, Value::from);
+            } else {
+                let mut observer = service
+                    .observer
+                    .lock()
+                    .map_err(|_| "busy: the local observer is poisoned".to_string())?;
+                match observer.observe(&frame, OBSERVE_TIMEOUT) {
+                    Ok(read) => {
+                        observation = serde_json::to_value(&read).map_err(|e| e.to_string())?
+                    }
+                    Err(error) => {
+                        // Two of these codes are standing facts about this session
+                        // rather than transient failures, and the scheduler treats
+                        // the two kinds very differently: one turns automatic mode
+                        // off with an explanation, the other backs off and retries.
+                        //
+                        // "unsupported" means there is no engine here. "stalled"
+                        // means the engine took a request and never gave it back, so
+                        // nothing more can safely be started on this observer until
+                        // the app restarts — retrying would only report the same
+                        // refusal every tick.
+                        observer_unsupported = matches!(error.code, "unsupported" | "stalled");
+                        observer_error = Value::from(error.message);
+                    }
+                }
+            }
+        }
+
+        let info = serde_json::to_value(&frame.info).map_err(|e| e.to_string())?;
+        // One id space shared with `scan`, so `ocr_frame` can pick this exact frame up.
+        let id = service
+            .images
+            .lock()
+            .unwrap()
+            .put_latest(Image::captured(frame, info.clone()));
+        if std::env::var_os("KIMOCHI_CAPTURE_AUDIT").is_some() {
+            record(
+                &app,
+                &service,
+                json!({"type":"capture-audit", "id":id,
+                "at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default().as_millis() as u64,
+                "captureMs":info["total_ms"], "width":info["width"], "height":info["height"],
+                "observerMs":observation["duration_ms"], "observerError":observer_error}),
+            );
+        }
+        Ok(json!({
+            "id": id,
+            "info": info,
+            "url": format!("capture://localhost/{id}"),
+            "hash": hash,
+            "contentFingerprint": fingerprint,
+            "observation": observation,
+            "observerError": observer_error,
+            "observerUnsupported": observer_unsupported,
+        }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Read the latest real capture, independent of whether OCR accepted its text.
+/// Hidden panels do not retain/encode preview frames and never initiate captures.
+#[tauri::command]
+fn capture_preview(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Value> {
+    if !app
+        .get_webview_window("capture")
+        .is_some_and(|w| w.is_visible().unwrap_or(false))
+    {
+        return Ok(Value::Null);
+    }
+    let mut images = state.images.lock().map_err(|e| e.to_string())?;
+    let error = images.capture_error.clone();
+    let frame = images.live_preview().map(|(id, image)| {
+        json!({
+            "id": id, "info": image.info, "url": format!("capture://localhost/live/{id}")
+        })
+    });
+    Ok(json!({"frame":frame, "error":error}))
+}
+
+/// Keep a settling candidate's frame alive, or let it go.
+///
+/// The scheduler pins the frame a candidate is settling on and releases it once
+/// the recogniser has answered — never before, because the overlay pins what it
+/// publishes and an early release would let the next probe evict the image the
+/// published scan points at.
+#[tauri::command]
+async fn retain_frame(state: State<'_, Shared>, id: u64, retain: bool) -> Reply<bool> {
+    let mut images = state
+        .images
+        .lock()
+        .map_err(|_| "busy: the image store is poisoned".to_string())?;
+    Ok(if retain {
+        images.pin_candidate(id)
+    } else {
+        images.release_candidate(id)
+    })
+}
+
+/// What the local text observer can do on this machine.
+///
+/// Read once at startup so the overlay can say "automatic scanning is not
+/// available here" in plain words, instead of discovering it one failed tick at a
+/// time.
+#[tauri::command]
+async fn observer_status(state: State<'_, Shared>) -> Reply<Value> {
+    let status = state
+        .observer
+        .lock()
+        .map_err(|_| "busy: the local observer is poisoned".to_string())?
+        .status();
+    serde_json::to_value(&status).map_err(|e| e.to_string())
+}
+
+struct ScanGuard(Shared);
+impl Drop for ScanGuard {
+    fn drop(&mut self) {
+        self.0.scanning.store(false, Ordering::SeqCst);
+        self.0.view.lock().unwrap().scanning = false;
+    }
+}
+
+/// POST one PNG to the configured OCR endpoint. Shared by `scan` and `ocr_frame` so
+/// both go through the same validation and the same error vocabulary.
+fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
+    let endpoint = settings::resolve_endpoint(settings);
+    let image = base64::engine::general_purpose::STANDARD.encode(png);
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("Kimochi-POC/0.1")
+        .timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|_| "native: could not initialize OCR HTTP client")?;
+    let response = client
+        .post(endpoint)
+        .json(&json!({ "imageBase64": image }))
+        .send()
+        .map_err(|_| "native: OCR network request failed (connection/TLS/timeout)")?;
+    if !response.status().is_success() {
+        return Err(format!("native: OCR HTTP {}", response.status().as_u16()));
+    }
+    let value: Value = response
+        .json()
+        .map_err(|_| "native: OCR endpoint returned invalid JSON")?;
+    if !value.get("textAnnotations").is_some_and(Value::is_array) {
+        return Err("native: OCR response missing textAnnotations".into());
+    }
+    Ok(value)
+}
+
+/// OCR a frame that has already been captured, by id.
+///
+/// This is what the change-detection loop must use: recapturing after the gate has
+/// passed would OCR a *different* image than the one that was compared, and would pair
+/// the returned text with geometry it does not belong to.
+#[tauri::command]
+async fn ocr_frame(state: State<'_, Shared>, id: u64) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let image = {
+            let images = service.images.lock().unwrap();
+            let image = images
+                .frame(id)
+                .ok_or("gone: that frame has been replaced; capture again before running OCR")?;
+            image.clone()
+        };
+        // Encoding is outside the frame-store lock so observations can continue.
+        let png = image.png()?;
+        let info = image.info.clone();
+        let value = post_ocr(&service.settings, &png)?;
+        let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
+        let result = json!({ "id": id, "info": info, "ocr": value });
+        service.log(json!({
+            "check": "ocr-frame",
+            "id": id,
+            "annotations": count,
+        }));
+        // Deliberately does NOT publish. A result that arrives after the source
+        // changed has to be dropped by the caller's freshness guard, and self-
+        // publishing here would resurrect it through the snapshot even when the
+        // caller correctly discarded the direct return value.
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Human status line for a finished scan, matching the Rust `scan` path's wording so
+/// the controller reads the same whichever backend produced the text.
+fn ready_status(count: usize) -> String {
+    format!("Scan ready · {count} text annotations")
+}
+
+/// A result for a frame already published is a no-op: the overlay may publish more
+/// than once for one frame, and bumping the revision would tear down and re-render
+/// every word box for no change.
+fn should_publish(published: Option<u64>, frame_id: u64) -> bool {
+    published != Some(frame_id)
+}
+
+/// Publish scan lifecycle state. The caller that ran the scan owns this.
+///
+/// `capture_frame` and `ocr_frame` are both pure, and the browser-side backends
+/// (Tesseract, OwOCR) never reach `ocr_frame` at all, so without this the controller's
+/// `isScanning` and `status` and the capture/debug panels' `snapshot().scan` would
+/// never reflect a normal migrated scan. Rust does no OCR here, writes no history and
+/// re-runs nothing.
+///
+/// Publication is the caller's job precisely because only the caller knows whether an
+/// OCR followed and whether the result is still current: a result that arrives after
+/// the source changed must be dropped by the caller's freshness guard, and it cannot be
+/// dropped if Rust already published it.
+///
+/// Every field is optional and an omitted field leaves its state untouched:
+/// - `scanning` — sets the busy flag.
+/// - `status` — sets the status line. Separate from `publish`, so a mid-scan status
+///   update does not bump the revision and force every window to re-render.
+/// - `publish` — when true, replaces `view.scan` with `scan` and bumps the revision.
+///   `scan: null` with `publish: true` clears the result, like `clear`.
+///
+/// `scan` is validated loosely: text-only engines legitimately send
+/// `{id, info, ocr: {fullText, textAnnotations: []}}` with no geometry. When it carries
+/// a numeric `id`, that frame is pinned so the Capture Preview keeps resolving it, and
+/// a repeated publish of the same frame is ignored rather than re-rendering.
+#[tauri::command]
+fn scan_state(
+    state: State<Shared>,
+    scanning: Option<bool>,
+    status: Option<String>,
+    scan: Option<Value>,
+    publish: Option<bool>,
+) -> Reply<Value> {
+    let frame_id = scan
+        .as_ref()
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_u64);
+    if publish == Some(true) {
+        if let Some(id) = frame_id {
+            // Pin before publishing: the Capture Preview resolves `scan.id` through the
+            // `capture:` protocol long after later probe frames have arrived.
+            if !state.images.lock().unwrap().pin_published(id) {
+                return Err("gone: cannot publish an evicted capture frame".into());
+            }
+        }
+    }
+    let mut view = state.view.lock().unwrap();
+    let mut published = false;
+    if let Some(scanning) = scanning {
+        view.scanning = scanning;
+    }
+    if let Some(status) = status {
+        view.status = status;
+    }
+    if publish == Some(true) {
+        let fresh = frame_id.is_none_or(|id| should_publish(view.published_frame, id));
+        if fresh {
+            view.published_frame = frame_id;
+            match scan {
+                Some(Value::Null) | None => {
+                    view.scan = None;
+                    view.regions.clear();
+                }
+                Some(value) => view.scan = Some(value),
+            }
+            view.revision += 1;
+            published = true;
+        }
+    }
+    Ok(json!({ "revision": view.revision, "published": published }))
+}
+
+/// Read-only permission check. Unlike `permission()`, this never prompts, so the
+/// welcome flow can render the real state without triggering a system dialog.
+#[tauri::command]
+fn permission_status(state: State<Shared>) -> Reply<String> {
+    let backend = state
+        .backend
+        .try_lock()
+        .map_err(|_| "busy: a capture is already running")?;
+    Ok(backend.permission().to_string())
+}
+
+#[tauri::command]
+async fn scan(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    request: CaptureRequest,
+    ocr: bool,
+) -> Reply<Value> {
+    if state.scanning.swap(true, Ordering::SeqCst) {
+        return Err("busy: a capture is already running; retry shortly".into());
+    }
+    let _guard = ScanGuard(state.inner().clone());
+    let s = state.inner().clone();
+    {
+        let mut v = s.view.lock().unwrap();
+        v.scanning = true;
+        v.status = if ocr {
+            "Capturing → OCR…"
+        } else {
+            "Capturing preview…"
+        }
+        .into();
+        v.regions.clear();
+    }
+    let _ = &app;
+    let result = tauri::async_runtime::spawn_blocking(move || -> Reply<Value> {
+        {
+            let mut backend = s
+                .backend
+                .try_lock()
+                .map_err(|_| "busy: a capture is already running".to_string())?;
+            let start = Instant::now();
+            let frame = backend.capture(&request).map_err(err)?;
+            let png = frame.png().map_err(err)?;
+            let info = serde_json::to_value(&frame.info).map_err(|e| e.to_string())?;
+            let id = s
+                .images
+                .lock()
+                .unwrap()
+                .put_latest(Image::encoded(png, info.clone()));
+            let mut result = json!({"id": id, "info": info, "ocr": null});
+            if ocr {
+                result["ocr"] = post_ocr(
+                    &s.settings,
+                    &s.images
+                        .lock()
+                        .unwrap()
+                        .frame(id)
+                        .ok_or("gone: the captured frame was replaced mid-scan")?
+                        .png()?,
+                )?;
+            }
+            let count = result["ocr"]["textAnnotations"]
+                .as_array()
+                .map_or(0, Vec::len);
+            s.log(json!({
+                "check": "native-capture-ocr",
+                "id": id,
+                "info": result["info"],
+                "ocr": ocr,
+                "annotations": count,
+                "elapsed_ms": start.elapsed().as_secs_f64() * 1000.,
+            }));
+            s.images.lock().unwrap().pin_published(id);
+            let mut v = s.view.lock().unwrap();
+            v.revision += 1;
+            v.published_frame = Some(id);
+            v.scan = Some(result.clone());
+            v.status = if ocr {
+                ready_status(count)
+            } else {
+                "Preview ready · OCR not requested".into()
+            };
+            Ok(result)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    if let Err(e) = &result {
+        let mut v = state.view.lock().unwrap();
+        v.status = e.clone();
+        v.scan = None;
+        v.revision += 1;
+        v.published_frame = None;
+        v.regions.clear();
+    }
+    result
+}
+
+/// Track a source's geometry so the overlay can follow it across moves and displays.
+#[tauri::command]
+fn watch_source(app: tauri::AppHandle, state: State<Shared>, source_id: Option<String>) {
+    *state.watching.lock().unwrap() = source_id;
+    let _ = app.emit(
+        "source-watch",
+        json!({"watching": state.watching.lock().unwrap().clone()}),
+    );
+}
+
+// ---------------------------------------------------------------- output
+
+#[tauri::command]
+fn texthooker_send(app: tauri::AppHandle, text: String) -> Reply<()> {
+    app.try_state::<Arc<texthooker::Texthooker>>()
+        .ok_or("native: texthooker unavailable")?
+        .publish(&text);
+    Ok(())
+}
+
+#[tauri::command]
+fn trigger_action(app: tauri::AppHandle, state: State<Shared>, name: String) -> Reply<()> {
+    if !actions::ACTIONS.contains(&name.as_str()) {
+        return Err(format!("invalid: unknown action {name:?}"));
+    }
+    actions::dispatch(&app, state.inner(), &name);
+    Ok(())
+}
+
+#[tauri::command]
+fn tray_action(app: tauri::AppHandle, state: State<Shared>, action: String) -> Reply<()> {
+    tray::dispatch(&app, state.inner(), &action)
+}
+
+const HISTORY_LIMIT: usize = 50;
+const HISTORY_KEY: [&str; 1] = ["scannedTextHistory"];
+
+/// Monotonic within a run; combined with the launch timestamp and pid it stays unique
+/// across restarts too. Wall-clock alone is not enough: two entries added in the same
+/// millisecond would collide, and a colliding id makes `history_delete` remove more
+/// than the entry the user clicked.
+static HISTORY_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn now_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+}
+
+fn history_id() -> String {
+    let seq = HISTORY_SEQ.fetch_add(1, Ordering::SeqCst);
+    format!("{}-{}-{seq}", std::process::id(), now_millis())
+}
+
+/// Add, delete and clear all edit the list inside one held settings lock, so the
+/// overlay and the Log panel cannot lose each other's writes to a read-modify-write
+/// window.
+fn edit_history(
+    app: &tauri::AppHandle,
+    service: &Service,
+    edit: impl FnOnce(&mut Vec<Value>),
+) -> Reply<Value> {
+    let value = service.settings.update_path(&HISTORY_KEY, |current| {
+        let mut list = current
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        edit(&mut list);
+        list.truncate(HISTORY_LIMIT);
+        Value::Array(list)
+    })?;
+    let _ = app.emit(
+        "settings:changed",
+        json!({ "key": "scannedTextHistory", "value": value }),
+    );
+    Ok(value)
+}
+
+#[tauri::command]
+fn history_add(app: tauri::AppHandle, state: State<Shared>, text: String) -> Reply<Value> {
+    if text.trim().is_empty() {
+        return Err("invalid: history entries cannot be empty".into());
+    }
+    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis() });
+    let inserted = entry.clone();
+    edit_history(&app, &state, move |list| list.insert(0, inserted))?;
+    Ok(entry)
+}
+
+#[tauri::command]
+fn history_delete(app: tauri::AppHandle, state: State<Shared>, id: String) -> Reply<()> {
+    edit_history(&app, &state, |list| {
+        list.retain(|entry| entry.get("id").and_then(Value::as_str) != Some(id.as_str()));
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+fn history_clear(app: tauri::AppHandle, state: State<Shared>) -> Reply<()> {
+    edit_history(&app, &state, Vec::clear)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn hotkeys_load(state: State<Shared>) -> Value {
+    Value::Object(settings::merged_hotkeys(&state.settings))
+}
+
+#[tauri::command]
+fn hotkeys_save(app: tauri::AppHandle, state: State<Shared>, hotkeys: Value) -> Reply<Value> {
+    state.settings.set("hotkeys", hotkeys)?;
+    Ok(hotkeys::apply(&app, &state.settings))
+}
+
+#[tauri::command]
+fn hotkeys_reapply(app: tauri::AppHandle, state: State<Shared>) -> Value {
+    hotkeys::apply(&app, &state.settings)
+}
+
+/// POST JSON to a user-configured Yomitan-compatible API and return its JSON.
+///
+/// Electron fetched these from the main process, so any address worked. Routing them
+/// through the HTTP plugin instead would force the capability file to enumerate ports,
+/// and the Dictionary tab's URL field is free text. Validation lives here, next to the
+/// OCR endpoint's, rather than in an allow-list that cannot express "whatever the user
+/// configured".
+///
+/// Not callable from `overlay`: that window hosts the Yomitan extension's own code, and
+/// a general outbound-request command does not belong to third-party script. That
+/// panel-only boundary is what makes the permissive URL rule safe — the caller is
+/// always our own UI acting on an address the user configured.
+#[tauri::command]
+async fn yomitan_request(window: tauri::WebviewWindow, url: String, body: Value) -> Reply<Value> {
+    if window.label() == OVERLAY {
+        return Err("invalid: yomitan_request is not available to the extension host".into());
+    }
+    let url = validate_configured_api_url(&url)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("Kimochi/0.1")
+            .timeout(Duration::from_secs(15))
+            .build()
+            .map_err(|_| "native: could not initialize HTTP client")?;
+        let response = client
+            .post(url)
+            .json(&body)
+            .send()
+            .map_err(|e| format!("native: request failed ({e})"))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!(
+                "native: HTTP {} {}",
+                status.as_u16(),
+                status.canonical_reason().unwrap_or("")
+            ));
+        }
+        response
+            .json()
+            .map_err(|_| "native: endpoint returned invalid JSON".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn system_state(state: State<Shared>) -> Value {
+    let view = state.view.lock().unwrap();
+    json!({
+        "frontmostApp": view.frontmost_app,
+        "accessibility": view.accessibility,
+        "displays": native::display_infos(),
+    })
+}
+
+/// Opens the Screen Recording pane. Requesting permission is an explicit user
+/// action; nothing in this app probes or prompts on its own.
+#[tauri::command]
+fn open_screen_capture_preferences() -> Reply<()> {
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("native: {e}"))
+}
+
+#[tauri::command]
+fn open_accessibility_preferences() -> Reply<()> {
+    std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("native: {e}"))
+}
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .register_uri_scheme_protocol("capture", move |ctx, request| {
+            let Some(service) = ctx.app_handle().try_state::<Shared>() else {
+                return tauri::http::Response::builder()
+                    .status(503)
+                    .body(Vec::new())
+                    .unwrap();
+            };
+            let path = request.uri().path().trim_start_matches('/').to_string();
+            let images = service.images.lock().unwrap();
+            let found = match path.strip_prefix("preview/") {
+                Some(token) => token.parse().ok().and_then(|t| images.preview(t)),
+                None => match path.strip_prefix("live/") {
+                    Some(id) => id.parse().ok().and_then(|id| images.live_image(id)),
+                    None => path.parse().ok().and_then(|id| images.frame(id)),
+                },
+            };
+            let found = found.cloned();
+            drop(images);
+            match found.and_then(|image| image.png().ok()) {
+                Some(png) => tauri::http::Response::builder()
+                    .header("Content-Type", "image/png")
+                    .header("Cache-Control", "no-store")
+                    .body(png)
+                    .unwrap(),
+                None => tauri::http::Response::builder()
+                    .status(404)
+                    .body(Vec::new())
+                    .unwrap(),
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            report,
+            scan_trace::scan_trace,
+            storage_load,
+            storage_save,
+            snapshot,
+            panel_pointer,
+            panel_cursor,
+            select_source,
+            selected_source,
+            preferences,
+            save_preferences,
+            enumerate,
+            permission,
+            regions,
+            place_overlay,
+            desktop,
+            displays,
+            panel,
+            panel_content_height,
+            dictionary,
+            view_flags,
+            clear,
+            scan,
+            capture_frame,
+            capture_preview,
+            retain_frame,
+            observer_status,
+            ocr_frame,
+            scan_state,
+            permission_status,
+            watch_source,
+            settings_get,
+            settings_set,
+            settings_all,
+            source_catalog,
+            source_thumbnail,
+            source_icon,
+            source_preview,
+            commit_source,
+            open_source_picker,
+            source_picker_state,
+            hotkeys_load,
+            hotkeys_save,
+            hotkeys_reapply,
+            trigger_action,
+            tray_action,
+            texthooker_send,
+            history_add,
+            history_delete,
+            history_clear,
+            ext_relay,
+            window_bounds,
+            popup_window,
+            yomitan_request,
+            system_state,
+            app_quit,
+            open_screen_capture_preferences,
+            open_accessibility_preferences,
+        ])
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
+            let service: Shared = Arc::new(Service {
+                backend: Mutex::new(platform_backend().expect("macOS 14+ required")),
+                observer: Mutex::new(Box::new(kimochi_capture::text::CachedObserver::new(
+                    kimochi_capture::platform_observer(),
+                ))),
+                images: Mutex::new(Default::default()),
+                settings: store.clone(),
+                selection: Mutex::new(None),
+                picker_edit_current: AtomicBool::new(false),
+                watching: Mutex::new(None),
+                relay_seq: Mutex::new(HashMap::new()),
+                scanning: AtomicBool::new(false),
+                thumbnails: Mutex::new(HashMap::new()),
+                icons: Mutex::new(HashMap::new()),
+                view: Mutex::new(View {
+                    status: "Choose a source; preview before sending to OCR.".into(),
+                    overlay_visible: true,
+                    text_overlay_visible: true,
+                    accessibility: native::accessibility_trusted(),
+                    frontmost_app: native::frontmost_app(),
+                    ..View::default()
+                }),
+            });
+            app.manage(service.clone());
+
+            let logger = {
+                let service = service.clone();
+                Arc::new(move |value: Value| service.log(value)) as Arc<dyn Fn(Value) + Send + Sync>
+            };
+            let hooker = Arc::new(texthooker::Texthooker::new(store.clone(), logger));
+            hooker.start();
+            app.manage(hooker);
+
+            spawn_source_restore(service.clone());
+
+            for spec in panels::PANELS.iter().filter(|spec| spec.eager) {
+                panels::ensure(&handle, &store, spec.label)?;
+            }
+            for label in ["controller", "log"] {
+                panels::act(&handle, &store, label, "show_inactive", None)?;
+            }
+
+            let overlay = tauri::WebviewWindowBuilder::new(
+                app,
+                OVERLAY,
+                tauri::WebviewUrl::App("ui/overlay.html".into()),
+            )
+            .title("Kimochi OCR Overlay")
+            // This WebView owns the automatic observer and dictionary backend even
+            // when the reader is in another app. macOS 14+ supports this policy.
+            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+            .decorations(false)
+            .transparent(true)
+            .accept_first_mouse(true)
+            .resizable(false)
+            .shadow(false)
+            .always_on_top(true)
+            .content_protected(true)
+            .focused(false)
+            .inner_size(1728., 1117.)
+            // Only the overlay hosts the Yomitan backend. Panels get the relay shim
+            // instead, so there is never a second writer on the same IndexedDB.
+            .initialization_script_for_all_frames(include_str!("../../host/shim.js"))
+            .on_navigation(|u| {
+                u.as_str() == "about:blank"
+                    || (u.scheme() == "tauri" && u.host_str() == Some("localhost"))
+            })
+            .build()?;
+            overlay.set_ignore_cursor_events(true)?;
+            // Pointing at a word must not rearrange the reader's desktop, and clicking
+            // one must not take the keyboard out of their game. See `native::make_panel`.
+            make_panel(&handle, &service, &overlay);
+
+            // The dictionary popup's own window. Small, borderless and always on top,
+            // so the original popup renders as a floating native window instead of an
+            // iframe clipped to whichever panel happened to own the scanned text.
+            //
+            // It is a real window and takes the mouse normally — there is no invisible
+            // surface over the desktop to get wrong. It never takes focus on its own:
+            // the reader is pointing at a word in another window.
+            {
+                let asset = app
+                    .asset_resolver()
+                    .get("/spike/panel-shim.js".into())
+                    .ok_or_else(|| {
+                        std::io::Error::other("popup host needs /spike/panel-shim.js")
+                    })?;
+                let shim = String::from_utf8(asset.bytes)
+                    .map_err(|_| std::io::Error::other("panel-shim.js is not valid UTF-8"))?;
+                let window = tauri::WebviewWindowBuilder::new(
+                    app,
+                    POPUP_HOST,
+                    tauri::WebviewUrl::App("ui/popup-host.html".into()),
+                )
+                .title("Dictionary")
+                .decorations(false)
+                .transparent(true)
+                .accept_first_mouse(true)
+                .resizable(false)
+                .shadow(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .focused(false)
+                .visible(false)
+                .inner_size(400., 250.)
+                .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim)
+                .build()?;
+                let _ = window.set_content_protected(true);
+                // The dictionary is hovered and clicked while the reader stays in their
+                // game; a panel is what lets it be used without activating this app.
+                make_panel(&handle, &service, &window);
+            }
+
+            let menu = tauri::menu::Menu::default(app.handle())?;
+            let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
+                .text("controller", "Controller")
+                .text("source-picker", "Select Source")
+                .text("settings", "Settings")
+                .text("log", "Log")
+                .text("yomitan", "Yomitan")
+                .text("fixture", "Japanese Fixture")
+                .build()?;
+            menu.append(&panel_menu)?;
+            app.set_menu(menu)?;
+            {
+                let store = store.clone();
+                app.on_menu_event(move |app, event| {
+                    let label = event.id().as_ref();
+                    if panels::spec(label).is_some() {
+                        let _ = panels::act(app, &store, label, "show", None);
+                    }
+                });
+            }
+
+            tray::setup(&handle, &store).map_err(std::io::Error::other)?;
+            hotkeys::apply(&handle, &store);
+            watcher::start(&handle, &service);
+            gamepad::start(&handle, &service);
+
+            {
+                // Sleep and wake: the macOS equivalent of Electron's powerMonitor.
+                let sleep_handle = handle.clone();
+                let wake_handle = handle.clone();
+                let activate_handle = handle.clone();
+                let activate_service = service.clone();
+                native::observe_workspace(
+                    move || {
+                        let _ = sleep_handle.emit("system-suspend", json!({}));
+                    },
+                    move || {
+                        let _ = wake_handle.emit("system-resume", json!({}));
+                    },
+                    move |name| {
+                        activate_service.view.lock().unwrap().frontmost_app = Some(name.clone());
+                        let _ = activate_handle.emit("frontmost-app", json!({ "appName": name }));
+                    },
+                );
+            }
+
+            spawn_state_broadcast(handle.clone(), service.clone());
+            spawn_cursor_poll(handle.clone(), service.clone());
+            spawn_source_watch(handle.clone(), service.clone());
+            spawn_focus_watch(handle.clone(), service.clone());
+            spawn_display_watch(handle.clone(), store.clone());
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("Kimochi runtime");
+}
+
+/// Resolve the previously selected source against a fresh enumeration, off the UI
+/// thread.
+///
+/// Capture source ids are session-scoped, so the persisted id is a hint, not an
+/// address. Copying it straight into the selection would claim a restore that has not
+/// happened, and on a recycled id it would silently point at a different window. When
+/// the description cannot be resolved unambiguously the app stays unselected and says
+/// so, which is the honest outcome.
+///
+/// Enumeration needs Screen Recording, but does not prompt for it: capture-core
+/// preflights the permission and returns an error instead of opening a dialog.
+fn spawn_source_restore(service: Shared) {
+    std::thread::spawn(move || {
+        let Some(saved) = service
+            .settings
+            .get("lastSelectedSource")
+            .ok()
+            .flatten()
+            .filter(|v| v.is_object())
+        else {
+            return;
+        };
+        let live = match service.backend.lock() {
+            Ok(mut backend) => match backend.enumerate() {
+                Ok(live) => live,
+                Err(e) => {
+                    service.set_status(format!(
+                        "Could not restore the previous source ({}). Choose a source.",
+                        e.message
+                    ));
+                    return;
+                }
+            },
+            Err(_) => return,
+        };
+        let name = saved
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("the previous source")
+            .to_string();
+        match sources::resolve_saved_source(&saved, &live) {
+            sources::Restored::Exact(id) | sources::Restored::Matched(id) => {
+                *service.selection.lock().unwrap() = Some(id.clone());
+                // Persist the live id so the next launch starts from a current hint.
+                let _ = service
+                    .settings
+                    .set_path(&["lastSelectedSource", "sourceId"], json!(id));
+                service.set_status(format!("Restored source · {name}"));
+            }
+            sources::Restored::Ambiguous => service.set_status(format!(
+                "Several sources match {name}; choose the one you want."
+            )),
+            sources::Restored::Gone => {
+                service.set_status(format!("{name} is no longer available; choose a source."))
+            }
+        }
+    });
+}
+
+/// Re-class a finished window as a non-activating panel, and record the outcome.
+///
+/// Recorded rather than silently attempted: whether this window activates the app when
+/// it is clicked is the difference between a reader's window order staying still and
+/// being rewritten under them, and the failure is invisible from the outside.
+fn make_panel(app: &tauri::AppHandle, service: &Shared, window: &tauri::WebviewWindow) {
+    let value = match native::make_panel(window) {
+        Ok(converted) => json!({
+            "check": "window-panel",
+            "window": window.label(),
+            "panel": converted,
+        }),
+        Err(error) => json!({
+            "check": "window-panel-failed",
+            "window": window.label(),
+            "error": error,
+            "note": "Clicking this window will activate the app, which reorders every window it owns.",
+        }),
+    };
+    record(app, service, value);
+}
+
+/// Emits `state` (the full snapshot) whenever anything a panel renders has changed.
+///
+/// Panels would otherwise poll `snapshot()` on a timer; a cheap fingerprint means the
+/// payload is only built and sent when it would actually differ.
+fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
+    std::thread::spawn(move || {
+        let mut previous = String::new();
+        loop {
+            std::thread::sleep(Duration::from_millis(100));
+            let fingerprint = {
+                let v = service.view.lock().unwrap();
+                format!(
+                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}",
+                    v.revision,
+                    v.action_seq,
+                    v.scanning,
+                    v.auto_ocr,
+                    v.overlay_visible,
+                    v.text_overlay_visible,
+                    v.debug_overlay_visible,
+                    v.dictionary,
+                    v.dismiss,
+                    v.logs.len(),
+                    v.accessibility,
+                    (&v.status, &v.frontmost_app),
+                    v.source_focus,
+                )
+            };
+            if fingerprint == previous {
+                continue;
+            }
+            previous = fingerprint;
+            let _ = handle.emit("state", snapshot_value(&service));
+        }
+    });
+}
+
+/// 16 ms native cursor poll driving overlay click-through. It does not test pixel
+/// alpha and does not wait for an unrelated foreground-app event, which is what keeps
+/// capture alive through a mouse drag.
+fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
+    std::thread::spawn(move || {
+        let mut history: HashMap<String, PointerHistory> = HashMap::new();
+        let mut was_down = false;
+        let mut last_point: Option<(f64, f64)> = None;
+        let mut was_over_overlay = false;
+        let mut noted_focus: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut last_modifiers = Modifiers::default();
+        let mut last_buttons = false;
+        let mut ticks: u64 = 0;
+        loop {
+            std::thread::sleep(Duration::from_millis(16));
+            ticks = ticks.wrapping_add(1);
+            if handle.get_webview_window(OVERLAY).is_none() {
+                break;
+            }
+            if let Some((x, y, down, flags)) = native::cursor() {
+                let moved = last_point.is_none_or(|(px, py)| px != x || py != y);
+                last_point = Some((x, y));
+                let mut changed: Vec<(String, bool)> = Vec::new();
+                let mut focus: Vec<String> = Vec::new();
+                {
+                    let mut v = service.view.lock().unwrap();
+                    // The overlay is the one window whose regions survive being
+                    // hidden, because hiding it is a view flag rather than a close.
+                    let hidden: Vec<&str> = if v.overlay_visible {
+                        vec![]
+                    } else {
+                        vec![OVERLAY]
+                    };
+                    if dismissed(&v.regions, &hidden, x, y, down, was_down) {
+                        v.dismiss += 1;
+                    }
+                    let mut interactive_anywhere = false;
+                    for (label, rects) in &v.regions {
+                        let was = *history.get(label).unwrap_or(&PointerHistory::default());
+                        let verdict = classify_pointer(
+                            rects,
+                            !hidden.contains(&label.as_str()),
+                            x,
+                            y,
+                            down,
+                            moved,
+                            was,
+                        );
+                        interactive_anywhere |= verdict.interactive;
+                        if verdict.interactive != was.interactive {
+                            changed.push((label.clone(), verdict.interactive));
+                        }
+                        if verdict.take_focus {
+                            focus.push(label.clone());
+                        }
+                        history.insert(
+                            label.clone(),
+                            PointerHistory {
+                                interactive: verdict.interactive,
+                                down,
+                                over_target: verdict.over_target,
+                            },
+                        );
+                    }
+                    // A window that stopped publishing rectangles has no claim left —
+                    // and has to be told, or it keeps the mouse it was last granted.
+                    // The dictionary's window does exactly this between two lookups:
+                    // it stays on screen with nothing in it, and an empty window that
+                    // still swallows clicks is worse than one that is merely there.
+                    for (label, was) in history.iter() {
+                        if was.interactive && !v.regions.contains_key(label) {
+                            changed.push((label.clone(), false));
+                        }
+                    }
+                    history.retain(|label, _| v.regions.contains_key(label));
+                    v.interactive = interactive_anywhere;
+                }
+                was_down = down;
+                // What the overlay cannot see for itself: where the pointer is, and
+                // which modifiers are held.
+                //
+                // The reader's own application owns both while they read. The overlay
+                // is click-through everywhere except over the words, so it sees no
+                // `mousemove`, and it is not the key window, so it sees no `keydown` —
+                // which is the whole reason a scan used to need a click first. Sent
+                // here instead, the original scanner behaves exactly as it does in a
+                // browser and no window has to take focus to make a lookup happen.
+                //
+                // Bounded rather than streamed: only while the overlay has something
+                // to light up, only over the display it covers, and at half the poll's
+                // rate while merely moving. A modifier or a button going up or down is
+                // sent at once — holding Shift without moving is how a reader asks for
+                // the word already under the pointer.
+                let modifiers = Modifiers::from_flags(flags);
+                let due = (moved && ticks.is_multiple_of(2))
+                    || modifiers != last_modifiers
+                    || down != last_buttons;
+                if due {
+                    last_modifiers = modifiers;
+                    last_buttons = down;
+                    let (wanted, over, blocked) = {
+                        let v = service.view.lock().unwrap();
+                        (
+                            v.regions.contains_key(OVERLAY) && v.overlay_visible,
+                            v.origin.is_some_and(|o| {
+                                x >= o.x && y >= o.y && x < o.x + o.width && y < o.y + o.height
+                            }),
+                            // The dictionary floats above the overlay, so a point
+                            // inside it is over the popup's own text, not over the word
+                            // underneath. Scanning through it would look up whatever
+                            // the popup happens to be covering.
+                            v.regions.iter().any(|(label, rects)| {
+                                label != OVERLAY && rects.iter().any(|r| r.contains(x, y))
+                            }),
+                        )
+                    };
+                    if wanted && (over || was_over_overlay) {
+                        let _ = handle.emit(
+                            "pointer",
+                            json!({
+                                "x": x,
+                                "y": y,
+                                "over": over,
+                                "blocked": blocked,
+                                "down": down,
+                                "shift": modifiers.shift,
+                                "ctrl": modifiers.ctrl,
+                                "alt": modifiers.alt,
+                                "meta": modifiers.meta,
+                            }),
+                        );
+                    }
+                    was_over_overlay = over;
+                }
+                for (label, interactive) in changed {
+                    if let Some(window) = handle.get_webview_window(&label) {
+                        let _ = window.set_ignore_cursor_events(!interactive);
+                    }
+                }
+                // Arriving on the dictionary is what takes the keyboard — a reader
+                // whose pointer has reached it has reached for it. Resting on it does
+                // not, scanned text does not ask for focus at all, and nothing else on
+                // the transparent desktop does either.
+                for label in focus {
+                    let app = handle.clone();
+                    let service = service.clone();
+                    let first = noted_focus.insert(label.clone());
+                    let _ = handle.run_on_main_thread(move || {
+                        let Some(w) = app.get_webview_window(&label) else {
+                            return;
+                        };
+                        let taken = native::promote_to_key(&w);
+                        // Once per window per session. Whether a non-activating panel
+                        // can be given the keyboard while another application stays
+                        // active is AppKit's answer, not ours, and "the dictionary
+                        // ignores the keyboard" reads identically either way.
+                        if first {
+                            record(
+                                &app,
+                                &service,
+                                json!({
+                                    "check": "window-took-focus",
+                                    "window": w.label(),
+                                    "taken": taken.as_ref().ok(),
+                                    "error": taken.err(),
+                                }),
+                            );
+                        }
+                    });
+                }
+            }
+        }
+    });
+}
+
+/// Watches whether the captured window is still the one in front, and still there.
+///
+/// Separate from `spawn_source_watch`, which follows where a window *is*: this follows
+/// whether its text should be on screen at all. Both are polls because macOS has no
+/// notification for "a different window of the same application came forward" — the
+/// workspace notification fires per *application*, and a reader with two windows of one
+/// app open would keep seeing text from the wrong one.
+///
+/// Changes are announced immediately rather than waiting for the next view broadcast:
+/// text that belongs to a window the reader just left should go at once, and its click
+/// targets with it.
+fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
+    std::thread::spawn(move || {
+        let own_pid = std::process::id() as i32;
+        let mut previous: Option<SourceFocus> = None;
+        loop {
+            let watching = service.watching.lock().unwrap().clone();
+            let bounds = watching
+                .as_deref()
+                .and_then(window_id_of)
+                .and_then(native::window_bounds);
+            let current = source_focus(
+                watching.as_deref(),
+                native::front_window(),
+                own_pid,
+                bounds,
+                previous.unwrap_or_default(),
+            );
+            if previous != Some(current) {
+                previous = Some(current);
+                service.view.lock().unwrap().source_focus = current;
+                let _ = handle.emit("source-focus", current);
+            }
+            std::thread::sleep(Duration::from_millis(150));
+        }
+    });
+}
+
+/// Pulls panels back onto a live display when the screen layout changes, so
+/// unplugging a monitor cannot strand a window offscreen. AppKit placement has to run
+/// on the main thread, hence the hop.
+fn spawn_display_watch(handle: tauri::AppHandle, settings: Arc<Settings>) {
+    std::thread::spawn(move || {
+        let layout = || {
+            native::displays()
+                .iter()
+                .map(|r| format!("{},{},{},{}", r.x, r.y, r.width, r.height))
+                .collect::<Vec<_>>()
+                .join(";")
+        };
+        let mut previous = layout();
+        loop {
+            std::thread::sleep(Duration::from_millis(1000));
+            let current = layout();
+            if current == previous {
+                continue;
+            }
+            previous = current;
+            // The popup's window belongs to the work area of the display the scanned
+            // text is on, so a rearranged desktop changes where it may be placed.
+            let _ = handle.emit("display-layout", json!({}));
+            let handle_for_main = handle.clone();
+            let settings = settings.clone();
+            let _ = handle.run_on_main_thread(move || {
+                panels::recover_bounds(&handle_for_main, &settings);
+            });
+        }
+    });
+}
+
+/// Follows the tracked window's geometry. Polls CoreGraphics for one window id
+/// rather than re-enumerating shareable content, which would be far too expensive at
+/// this cadence.
+fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
+    std::thread::spawn(move || {
+        let mut last: Option<(Rect, bool)> = None;
+        loop {
+            std::thread::sleep(Duration::from_millis(250));
+            let watching = service.watching.lock().unwrap().clone();
+            let Some(source_id) = watching else {
+                last = None;
+                continue;
+            };
+            let Some(window_id) = window_id_of(&source_id) else {
+                continue;
+            };
+            let Some((rect, on_screen)) = native::window_bounds(window_id) else {
+                continue;
+            };
+            let changed = last.is_none_or(|(prev, was_on)| {
+                was_on != on_screen
+                    || (prev.x - rect.x).abs() > 0.5
+                    || (prev.y - rect.y).abs() > 0.5
+                    || (prev.width - rect.width).abs() > 0.5
+                    || (prev.height - rect.height).abs() > 0.5
+            });
+            if changed {
+                last = Some((rect, on_screen));
+                let _ = handle.emit(
+                    "source-bounds",
+                    json!({ "sourceId": source_id, "bounds": rect, "onScreen": on_screen }),
+                );
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_repeated_result_for_one_frame_is_not_republished() {
+        // The overlay may publish more than once for a frame; only the first counts,
+        // so an echo cannot bump the revision and force a full re-render.
+        assert!(should_publish(None, 7));
+        assert!(should_publish(Some(6), 7));
+        assert!(!should_publish(Some(7), 7));
+    }
+
+    #[test]
+    fn a_result_without_a_frame_id_always_publishes() {
+        // Text-only engines may send a result with no id; dedup must not swallow it.
+        let no_id: Option<u64> = None;
+        assert!(no_id.is_none_or(|id| should_publish(Some(7), id)));
+    }
+
+    #[test]
+    fn ready_status_matches_the_rust_scan_wording() {
+        assert_eq!(ready_status(18), "Scan ready · 18 text annotations");
+        assert_eq!(ready_status(0), "Scan ready · 0 text annotations");
+    }
+
+    #[test]
+    fn history_ids_are_distinct_even_within_one_millisecond() {
+        let ids: std::collections::HashSet<String> = (0..2000).map(|_| history_id()).collect();
+        // A colliding id would make history_delete remove more than one entry.
+        assert_eq!(ids.len(), 2000);
+    }
+
+    #[test]
+    fn concurrent_history_edits_are_all_preserved() {
+        let settings = Arc::new(Settings::load(
+            std::env::temp_dir().join(format!("kimochi-history-test-{}.json", std::process::id())),
+        ));
+        settings.set("scannedTextHistory", json!([])).unwrap();
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let settings = settings.clone();
+                std::thread::spawn(move || {
+                    for i in 0..5 {
+                        settings
+                            .update_path(&HISTORY_KEY, |current| {
+                                let mut list = current
+                                    .and_then(Value::as_array)
+                                    .cloned()
+                                    .unwrap_or_default();
+                                list.insert(0, json!({"id": format!("{t}-{i}")}));
+                                list.truncate(HISTORY_LIMIT);
+                                Value::Array(list)
+                            })
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+        let list = settings.get("scannedTextHistory").unwrap().unwrap();
+        // 40 writes, none lost to another thread's read-modify-write window.
+        assert_eq!(list.as_array().unwrap().len(), 40);
+    }
+
+    #[test]
+    fn history_is_capped_and_keeps_the_newest() {
+        let settings = Arc::new(Settings::load(
+            std::env::temp_dir().join(format!("kimochi-history-cap-{}.json", std::process::id())),
+        ));
+        for i in 0..HISTORY_LIMIT + 10 {
+            settings
+                .update_path(&HISTORY_KEY, |current| {
+                    let mut list = current
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    list.insert(0, json!({"id": i.to_string()}));
+                    list.truncate(HISTORY_LIMIT);
+                    Value::Array(list)
+                })
+                .unwrap();
+        }
+        let list = settings.get("scannedTextHistory").unwrap().unwrap();
+        let list = list.as_array().unwrap();
+        assert_eq!(list.len(), HISTORY_LIMIT);
+        assert_eq!(list[0]["id"], (HISTORY_LIMIT + 9).to_string());
+    }
+
+    #[test]
+    fn ocr_endpoint_confines_plain_http_to_loopback() {
+        // Auto-OCR calls this on a timer and it carries captured pixels, so plain HTTP
+        // off-host stays refused.
+        assert!(validate_service_url("https://example.test/detect-text").is_ok());
+        assert!(validate_service_url("http://localhost:3000/detect-text").is_ok());
+        assert!(validate_service_url("http://127.0.0.1:3000/detect-text").is_ok());
+        assert!(validate_service_url("http://192.168.1.50:3000/detect-text").is_err());
+        assert!(validate_service_url("https://192.168.1.50:3000/detect-text").is_ok());
+    }
+
+    #[test]
+    fn configured_dictionary_api_accepts_plain_http_including_lan() {
+        // Electron parity: the user is pointing the app at their own server.
+        assert!(validate_configured_api_url("http://192.168.1.50:8765/tokenize").is_ok());
+        assert!(validate_configured_api_url("http://my-nas.local:19633/tokenize").is_ok());
+        assert!(validate_configured_api_url("http://10.0.0.7:5000/termEntries").is_ok());
+        assert!(validate_configured_api_url("http://localhost:19633/tokenize").is_ok());
+        assert!(validate_configured_api_url("https://dict.example.test/tokenize").is_ok());
+    }
+
+    #[test]
+    fn every_service_url_rejects_credentials_query_and_odd_schemes() {
+        for check in [validate_service_url, validate_configured_api_url] {
+            assert!(check("https://user:pw@example.test/x").is_err());
+            assert!(check("https://example.test/x?key=secret").is_err());
+            assert!(check("ftp://example.test/x").is_err());
+            assert!(check("file:///etc/passwd").is_err());
+            assert!(check("not a url").is_err());
+        }
+    }
+}

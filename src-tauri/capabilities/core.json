@@ -1,0 +1,27 @@
+{
+  "identifier": "kimochi-core",
+  "description": "Event listening and the window queries the React panels actually use, plus the dictionary popup's own window. Scoped to our own window labels; no filesystem, shell or process access is granted to any webview.",
+  "windows": [
+    "controller",
+    "log",
+    "source-picker",
+    "settings",
+    "capture",
+    "debug",
+    "stream",
+    "welcome",
+    "tray-popover",
+    "fixture",
+    "yomitan",
+    "overlay",
+    "popup-host"
+  ],
+  "permissions": [
+    "core:event:default",
+    "core:window:allow-is-visible",
+    "core:window:allow-is-focused",
+    "core:window:allow-is-minimized",
+    "core:window:allow-scale-factor",
+    "core:webview:allow-webview-close"
+  ]
+}

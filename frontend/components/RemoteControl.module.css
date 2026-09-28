@@ -1,0 +1,135 @@
+.wrapper {
+  width: 100%;
+  user-select: none;
+}
+.container {
+  width: 100%;
+  padding: 4px 0;
+}
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sourceName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Divider between button groups */
+.divider {
+  height: 1px;
+  margin: 4px 12px;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+
+  @media (prefers-color-scheme: light) {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Button styling */
+.button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  min-height: 34px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+
+  @media (prefers-color-scheme: dark) {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  @media (prefers-color-scheme: light) {
+    color: rgba(0, 0, 0, 0.75);
+  }
+}
+
+.buttonIcon {
+  flex-shrink: 0;
+}
+
+.buttonLabel {
+  flex: 1;
+  text-align: left;
+}
+
+.button:hover {
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  @media (prefers-color-scheme: light) {
+    background-color: rgba(0, 0, 0, 0.08);
+  }
+}
+
+.button:active {
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+
+  @media (prefers-color-scheme: light) {
+    background-color: rgba(0, 0, 0, 0.12);
+  }
+}
+
+.button:disabled,
+.buttonDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.button:disabled:hover,
+.buttonDisabled:hover {
+  background: transparent;
+}
+
+/* Active state for auto OCR button when running */
+.buttonActive {
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(255, 100, 100, 0.2);
+    color: #ff8080;
+  }
+
+  @media (prefers-color-scheme: light) {
+    background-color: rgba(200, 50, 50, 0.15);
+    color: #c03030;
+  }
+}
+
+/* Faded state for toggle buttons when not active */
+.buttonFaded {
+  opacity: 0.5;
+}
+
+/* Danger/quit button */
+.buttonDanger:hover {
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(255, 80, 80, 0.25);
+    color: #ff6666;
+  }
+
+  @media (prefers-color-scheme: light) {
+    background-color: rgba(220, 50, 50, 0.15);
+    color: #cc3333;
+  }
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: -2px;
+}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <meta charset="utf-8" /><title>Kimochi Dictionary</title
+  ><style>
+    /* Nothing of this page is ever seen. It exists to hold the original Yomitan
+       popup's iframe, which positions itself; the window is then moved to it. The
+       transparent background matters: a chain of nested popups is hosted by one
+       window sized to their bounding box, and the gaps between them must not paint. */
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent !important;
+    }
+  </style>
+  <body>
+    <script type="module" src="popup-host.js"></script>
+  </body>
+</html>

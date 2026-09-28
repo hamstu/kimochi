@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <meta charset="utf-8" /><title>Kimochi Source & Crop</title
+  ><link rel="stylesheet" href="style.css" />
+  <body data-panel="sources">
+    <header><strong>Source & crop</strong><button id="close">×</button></header>
+    <div class="row">
+      <button id="refresh">Refresh sources</button><button id="permission">Screen access</button
+      ><button id="fixture">Japanese fixture</button><button id="checks">Run fixture checks</button
+      ><button id="inspect">Native state</button>
+    </div>
+    <select id="source">
+      <option>Refresh to choose a source</option>
+    </select>
+    <div class="row">
+      <button id="preview-button">Preview locally</button
+      ><button class="primary" id="scan">Scan → OCR</button
+      ><label><input type="checkbox" id="periodic" /> Every 2 sec</label>
+    </div>
+    <img id="preview" hidden alt="Local capture preview" />
+    <p>
+      Crop uses pixels from the last full preview. It scales on both axes when the source moves
+      between displays.
+    </p>
+    <div class="row">
+      <label>X <input id="x" type="number" min="0" value="0" /></label
+      ><label>Y <input id="y" type="number" min="0" value="0" /></label
+      ><label>W <input id="width" type="number" min="1" value="320" /></label
+      ><label>H <input id="height" type="number" min="1" value="200" /></label
+      ><button id="crop">Save crop</button><button id="uncrop">Full source</button>
+    </div>
+    <label>OCR endpoint<input id="endpoint" type="url" /></label>
+    <div class="row">
+      <button id="save-endpoint">Save endpoint</button
+      ><label><input id="debug" type="checkbox" /> Show hit regions</label>
+    </div>
+    <p>
+      Scan sends the selected capture to this endpoint. Preview stays local. The fixture contains
+      only authored test text. Credentials are not needed by the default endpoint; key-bearing URLs
+      are rejected.
+    </p>
+    <div class="status" id="status"></div>
+    <script type="module" src="panel.js"></script>
+  </body>
+</html>

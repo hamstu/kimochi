@@ -1,0 +1,503 @@
+//! Native window lifecycle, pinning, placement and bounds recovery.
+//! Mirrors the semantics of the Electron build's `src/main/native-windows.ts`.
+use crate::native;
+use crate::settings::Settings;
+use kimochi_capture::Rect;
+use serde_json::{json, Value};
+use std::sync::Arc;
+use tauri::{Emitter, Manager, WebviewWindow};
+
+/// One label-parameterised React page backs every ordinary panel, matching the
+/// Electron build's single `panel.html` that switched on the snapshot kind.
+const PANEL_PAGE: &str = "app/panel.html";
+
+pub struct PanelSpec {
+    pub label: &'static str,
+    pub title: &'static str,
+    /// Path inside `dist/`. Every window is same-origin at `tauri://localhost`.
+    pub url: &'static str,
+    pub width: f64,
+    pub height: f64,
+    pub min_width: f64,
+    pub min_height: f64,
+    pub resizable: bool,
+    /// Electron starts controls and Log pinned; every other panel unpinned.
+    pub pinned: bool,
+    /// Built during setup rather than on first show.
+    pub eager: bool,
+    /// Kimochi's own panels draw their own title bars; a hosted third-party page
+    /// (Yomitan settings) keeps the system frame.
+    pub decorated: bool,
+    /// Embedded asset injected at document start, for all frames. Resolved through
+    /// Tauri's asset resolver at creation time, so this crate does not have to
+    /// compile against a file another workstream owns.
+    pub init_asset: Option<&'static str>,
+}
+
+const fn panel(
+    label: &'static str,
+    title: &'static str,
+    url: &'static str,
+    width: f64,
+    height: f64,
+) -> PanelSpec {
+    PanelSpec {
+        label,
+        title,
+        url,
+        width,
+        height,
+        min_width: 320.,
+        min_height: 240.,
+        resizable: true,
+        pinned: false,
+        eager: false,
+        decorated: false,
+        init_asset: None,
+    }
+}
+
+/// Sizes come from Electron's `panels` table so a first launch looks the same.
+pub static PANELS: &[PanelSpec] = &[
+    PanelSpec {
+        min_width: 410.,
+        // The controller is fixed-width and sizes to its menu rows.
+        min_height: 28.,
+        resizable: false,
+        pinned: true,
+        eager: true,
+        ..panel("controller", "Kimochi", PANEL_PAGE, 410., 150.)
+    },
+    PanelSpec {
+        pinned: true,
+        eager: true,
+        // The Log runs the original Yomitan frontend over its scanned text. That
+        // frontend builds a real `Popup`, whose iframe navigates to the extension's
+        // own `popup.html`; the `Display` inside it needs `chrome.*` from its very
+        // first script. Importing the shim from the page only reaches the top frame,
+        // so without this the popup frame throws, the FrameClient handshake never
+        // completes, and lookup fails silently while the window still reports the
+        // backend as reachable.
+        init_asset: Some("/spike/panel-shim.js"),
+        ..panel("log", "Log", PANEL_PAGE, 720., 440.)
+    },
+    // Crop editing lives inside the picker (`open_source_picker({editCurrent:true})`),
+    // so there is no separate crop window as there was in Electron.
+    panel(
+        "source-picker",
+        "Select Source",
+        "app/source-picker.html",
+        680.,
+        720.,
+    ),
+    panel("settings", "Settings", PANEL_PAGE, 720., 650.),
+    panel("capture", "Capture Preview", PANEL_PAGE, 480., 420.),
+    panel("debug", "Debug Info", PANEL_PAGE, 380., 620.),
+    panel("stream", "Capture Debug", PANEL_PAGE, 640., 740.),
+    panel(
+        "welcome",
+        "Welcome to Kimochi",
+        "app/welcome.html",
+        800.,
+        640.,
+    ),
+    PanelSpec {
+        resizable: false,
+        ..panel(
+            "tray-popover",
+            "Kimochi",
+            "app/tray-popover.html",
+            150.,
+            460.,
+        )
+    },
+    PanelSpec {
+        // The real distributed Yomitan settings page at the dist root, in its own
+        // native window like Electron's `createYomitanWindow`. It gets the panel
+        // shim, never the overlay's backend-hosting `host/shim.js`: a second backend
+        // on the same IndexedDB is the one thing that must not happen.
+        decorated: true,
+        init_asset: Some("/spike/panel-shim.js"),
+        ..panel("yomitan", "Yomitan", "settings.html", 1100., 700.)
+    },
+    // The POC's `ui/sources.html` is deliberately NOT registered. Its file is kept for
+    // history, but there is exactly one source UX now — `source-picker` — and offering
+    // the old screen as a second, stale path would be worse than removing it.
+    PanelSpec {
+        eager: true,
+        ..panel(
+            "fixture",
+            "Kimochi Japanese Fixture",
+            "ui/fixture.html",
+            640.,
+            400.,
+        )
+    },
+];
+
+pub fn spec(label: &str) -> Option<&'static PanelSpec> {
+    PANELS.iter().find(|p| p.label == label)
+}
+
+fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
+    let key = format!("nativeWindowBounds.{}", spec.label);
+    let saved: Option<Rect> = settings
+        .get(&key)
+        .ok()
+        .flatten()
+        .and_then(|v| serde_json::from_value(v).ok());
+    let rect = match saved {
+        // The controller's width is owned by the spec, never by a stale saved value.
+        Some(mut rect) if spec.label == "controller" => {
+            rect.width = spec.width;
+            rect
+        }
+        Some(rect) => rect,
+        None => {
+            let area = native::display_infos()
+                .first()
+                .map(|d| d.work_area)
+                .unwrap_or(Rect {
+                    x: 0.,
+                    y: 0.,
+                    width: spec.width,
+                    height: spec.height,
+                });
+            Rect {
+                x: area.x
+                    + if spec.label == "controller" {
+                        40.
+                    } else {
+                        260.
+                    },
+                y: area.y + 40.,
+                width: spec.width,
+                height: spec.height,
+            }
+        }
+    };
+    native::clamp_to_visible(rect)
+}
+
+fn pinned_default(settings: &Settings, spec: &PanelSpec) -> bool {
+    settings.get_or(&format!("nativeWindowPinned.{}", spec.label), spec.pinned)
+}
+
+/// Returns the window, creating it on first use. Panels are hidden when created;
+/// `show` is a separate action, matching Electron's create-then-sync flow.
+/// Frame-id bands, one per window that runs the original extension.
+///
+/// Yomitan addresses a frame by a bare number — `crossFrame.invoke(frameId, ...)` —
+/// with the tab implied. That is fine inside one browser tab and useless across
+/// native windows, where every window would otherwise start numbering at zero and
+/// "frame 0" would name three different documents. Giving each window a band makes a
+/// frame id name exactly one frame on the whole desktop, so the bridge can route it.
+///
+/// The overlay is deliberately absent: it hosts the real backend with its own
+/// numbering, and it is a popup *client* at most, never addressed by id from outside.
+pub const FRAME_BANDS: &[(&str, u32)] = &[("log", 1000), ("yomitan", 2000), ("popup-host", 3000)];
+
+pub const FRAME_BAND_SIZE: u32 = 1000;
+
+/// Windows whose dictionary popup is rendered in the popup window instead of inside
+/// themselves.
+///
+/// The Log is the case this exists for: its popup was clipped to a 720-point-wide
+/// window, and a nested lookup was pinned flat against its top edge. The Yomitan
+/// settings page is deliberately absent — its popup preview is *meant* to be inside
+/// the page it is previewing.
+fn popup_host_for(label: &str) -> Option<&'static str> {
+    matches!(label, "log").then_some("popup-host")
+}
+
+/// Publishes what the extension host has to know before it evaluates.
+///
+/// The host derives this window's tab identity from the label, and its frame numbering
+/// from the band, and it does so while it is evaluating. A page that sets those itself
+/// is already too late for an injected host, and every panel shares one URL — so
+/// without this every window would fall back to the same pathname and collide.
+/// Emitting it for subframes too keeps a popup frame on its opener's identity.
+pub fn label_prelude(label: &str) -> String {
+    let bands: Vec<_> = FRAME_BANDS.iter().map(|(l, b)| (*l, *b)).collect();
+    format!(
+        ";(function(){{try{{\
+window.__kimochiPanelLabel={};\
+window.__kimochiFrameBase={};\
+window.__kimochiFrameBands={};\
+window.__kimochiFrameBandSize={};\
+window.__kimochiPopupHost={};\
+}}catch(e){{}}}})();\n",
+        serde_json::to_string(label).unwrap_or_else(|_| "\"panel\"".into()),
+        frame_base(label),
+        serde_json::to_string(
+            &bands
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>()
+        )
+        .unwrap_or_else(|_| "{}".into()),
+        FRAME_BAND_SIZE,
+        serde_json::to_string(&popup_host_for(label)).unwrap_or_else(|_| "null".into()),
+    )
+}
+
+/// The first frame id this window may use. Zero for windows outside the bridge.
+pub fn frame_base(label: &str) -> u32 {
+    FRAME_BANDS
+        .iter()
+        .find(|(l, _)| *l == label)
+        .map_or(0, |(_, base)| *base)
+}
+
+pub fn ensure(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    label: &str,
+) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window(label) {
+        return Ok(window);
+    }
+    let spec = spec(label).ok_or_else(|| format!("invalid: unknown panel {label:?}"))?;
+    let bounds = saved_bounds(settings, spec);
+    let pinned = pinned_default(settings, spec);
+    // Deliberately never sets a data store identifier: every webview must share one
+    // WKWebsiteDataStore so `tauri://localhost` resolves to the same IndexedDB in
+    // every window. A per-window store would silently split the Yomitan dictionary
+    // database between the overlay's backend and the settings window.
+    let mut builder =
+        tauri::WebviewWindowBuilder::new(app, spec.label, tauri::WebviewUrl::App(spec.url.into()))
+            .title(spec.title)
+            .inner_size(spec.width, spec.height)
+            .min_inner_size(spec.min_width, spec.min_height)
+            .decorations(spec.decorated)
+            .background_color(tauri::window::Color(0x19, 0x19, 0x19, 0xff))
+            // Deliver the activating click to the WKWebView too, including the header
+            // mousedown that starts a native window drag.
+            .accept_first_mouse(true)
+            .resizable(spec.resizable)
+            .maximizable(spec.resizable)
+            .always_on_top(pinned)
+            .visible(false);
+    if let Some(path) = spec.init_asset {
+        let asset = app.asset_resolver().get(path.into()).ok_or_else(|| {
+            format!(
+                "invalid: {} needs {path}, which is not in the bundle",
+                spec.label
+            )
+        })?;
+        let script = String::from_utf8(asset.bytes)
+            .map_err(|_| format!("invalid: {path} is not valid UTF-8"))?;
+        builder = builder.initialization_script_for_all_frames(label_prelude(spec.label) + &script);
+    }
+    let window = builder.build().map_err(|e| format!("native: {e}"))?;
+    // Keep Kimochi's own panels out of captures of the display they sit on, where the
+    // OS honours it. This is the same mechanism as Electron's setContentProtection.
+    let _ = window.set_content_protected(true);
+    native::place(&window, bounds)?;
+    attach_events(app, settings, &window, spec);
+    Ok(window)
+}
+
+fn attach_events(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    window: &WebviewWindow,
+    spec: &'static PanelSpec,
+) {
+    let handle = app.clone();
+    let store = settings.clone();
+    let owned = window.clone();
+    window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+            save_bounds(&store, &owned, spec);
+        }
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            // Closing hides; only Quit exits. Reopening restores native bounds.
+            api.prevent_close();
+            save_bounds(&store, &owned, spec);
+            let _ = owned.hide();
+            let _ = handle.emit("panel:closed", json!({ "label": spec.label }));
+        }
+        _ => {}
+    });
+}
+
+fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpec) {
+    if window.is_minimized().unwrap_or(false) {
+        return;
+    }
+    if let Ok(rect) = native::bounds(window) {
+        let _ = settings.set(
+            &format!("nativeWindowBounds.{}", spec.label),
+            json!({"x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height}),
+        );
+    }
+}
+
+pub fn info(window: &WebviewWindow) -> Result<Value, String> {
+    Ok(json!({
+        "label": window.label(),
+        "native": native::inspect(window)?,
+        "bounds": native::bounds(window)?,
+        "scale": window.scale_factor().map_err(|e| e.to_string())?,
+        "pinned": window.is_always_on_top().map_err(|e| e.to_string())?,
+        "focused": window.is_focused().map_err(|e| e.to_string())?,
+        "resizable": window.is_resizable().map_err(|e| e.to_string())?,
+        "visible": window.is_visible().map_err(|e| e.to_string())?,
+    }))
+}
+
+pub fn act(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    label: &str,
+    action: &str,
+    rect: Option<Rect>,
+) -> Result<Value, String> {
+    let window = ensure(app, settings, label)?;
+    let native_err = |e: tauri::Error| format!("native: {e}");
+    match action {
+        "show" => {
+            window.show().map_err(native_err)?;
+            window.set_focus().map_err(native_err)?;
+        }
+        // Passive updates must never steal focus from the source application.
+        "show_inactive" => window.show().map_err(native_err)?,
+        "hide" => window.hide().map_err(native_err)?,
+        "drag" => window.start_dragging().map_err(native_err)?,
+        "place" => {
+            let rect = rect.ok_or("invalid: place requires bounds")?;
+            native::place(&window, native::clamp_to_visible(rect))?;
+            // Reassert the flag: programmatic placement has been observed to turn
+            // resizing back on for windows that must stay fixed.
+            let resizable = spec(label).is_some_and(|s| s.resizable);
+            window.set_resizable(resizable).map_err(native_err)?;
+            save_bounds(settings, &window, spec(label).unwrap());
+        }
+        "minimize" => window.minimize().map_err(native_err)?,
+        "restore" => {
+            window.unminimize().map_err(native_err)?;
+            window.show().map_err(native_err)?;
+        }
+        "pin" | "unpin" => {
+            let pinned = action == "pin";
+            window.set_always_on_top(pinned).map_err(native_err)?;
+            settings.set(&format!("nativeWindowPinned.{label}"), json!(pinned))?;
+        }
+        "inspect" => {}
+        _ => return Err(format!("invalid: unknown window action {action:?}")),
+    }
+    let state = info(&window)?;
+    if action != "inspect" {
+        let _ = app.emit(
+            "panel:state",
+            json!({
+                "label": label,
+                "visible": state["visible"],
+                "pinned": state["pinned"],
+                "bounds": state["bounds"],
+            }),
+        );
+    }
+    Ok(state)
+}
+
+/// The controller is fixed-width and grows to fit its menu rows.
+pub fn set_content_height(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    label: &str,
+    height: f64,
+) -> Result<(), String> {
+    let spec = spec(label).ok_or_else(|| format!("invalid: unknown panel {label:?}"))?;
+    if spec.resizable || !height.is_finite() {
+        return Ok(());
+    }
+    let window = ensure(app, settings, label)?;
+    let current = native::bounds(&window)?;
+    let next = native::clamp_to_visible(Rect {
+        width: spec.width,
+        height: height.max(spec.min_height).ceil(),
+        ..current
+    });
+    if (next.width - current.width).abs() > 0.5
+        || (next.height - current.height).abs() > 0.5
+        || (next.y - current.y).abs() > 0.5
+    {
+        native::place(&window, next)?;
+    }
+    Ok(())
+}
+
+/// Pull every open panel back onto a live display. Called when the display layout
+/// changes, so unplugging a monitor cannot leave a window unreachable.
+pub fn recover_bounds(app: &tauri::AppHandle, settings: &Arc<Settings>) {
+    for spec in PANELS {
+        let Some(window) = app.get_webview_window(spec.label) else {
+            continue;
+        };
+        if window.is_minimized().unwrap_or(false) {
+            continue;
+        }
+        if let Ok(rect) = native::bounds(&window) {
+            let clamped = native::clamp_to_visible(rect);
+            if (clamped.x - rect.x).abs() > 0.5 || (clamped.y - rect.y).abs() > 0.5 {
+                let _ = native::place(&window, clamped);
+                save_bounds(settings, &window, spec);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn electron_pin_defaults_are_preserved() {
+        assert!(spec("controller").unwrap().pinned);
+        assert!(spec("log").unwrap().pinned);
+        assert!(!spec("settings").unwrap().pinned);
+        assert!(!spec("source-picker").unwrap().pinned);
+    }
+
+    #[test]
+    fn only_the_controller_and_popover_are_fixed_size() {
+        for spec in PANELS {
+            let expected = !matches!(spec.label, "controller" | "tray-popover");
+            assert_eq!(spec.resizable, expected, "{} resizable", spec.label);
+        }
+    }
+
+    #[test]
+    fn react_panels_do_not_collide_with_yomitan_paths() {
+        // Yomitan owns the dist root, so our own pages must stay under a prefix. The
+        // `yomitan` window is the one intentional exception: it hosts Yomitan's own
+        // distributed settings page, which must be loaded at its real path.
+        for spec in PANELS {
+            if spec.label == "yomitan" {
+                assert_eq!(spec.url, "settings.html");
+                continue;
+            }
+            assert!(
+                spec.url.starts_with("ui/") || spec.url.starts_with("app/"),
+                "{} escapes its prefix: {}",
+                spec.label,
+                spec.url
+            );
+        }
+    }
+
+    #[test]
+    fn only_the_yomitan_window_keeps_a_system_frame_and_a_shim() {
+        for spec in PANELS {
+            assert_eq!(spec.decorated, spec.label == "yomitan", "{}", spec.label);
+            // Exactly the windows that run the original extension in a subframe.
+            assert_eq!(
+                spec.init_asset.is_some(),
+                matches!(spec.label, "yomitan" | "log"),
+                "{}",
+                spec.label
+            );
+        }
+    }
+}

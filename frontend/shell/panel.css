@@ -1,0 +1,119 @@
+/* COPY of `src/renderer/src/windows/panel/panel.css` (Electron native panel shell).
+ * Delta: the crop-panel rule is dropped (crop editing moved to the source picker) and a
+ * `.native-panel-stream` rule is added for the capture-diagnostics panel, which uses the same dark
+ * terminal ground as the debug panel.
+ */
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+html,
+body,
+#root,
+#root > .radix-themes {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.native-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-background);
+}
+.native-titlebar {
+  app-region: drag;
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  height: 40px;
+  padding-left: 12px;
+  user-select: none;
+  font-size: 12px;
+  color: var(--gray-11);
+  border-bottom: 1px solid var(--gray-a4);
+}
+.native-window-actions {
+  display: flex;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+.native-window-actions button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.native-window-actions button:hover {
+  background: var(--gray-a4);
+}
+.native-window-actions button:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: -3px;
+}
+.native-window-actions button:last-child:hover {
+  background: var(--red-9);
+  color: white;
+}
+.native-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: auto;
+}
+.native-content > div {
+  height: 100%;
+}
+.native-panel-controller {
+  height: auto;
+}
+.native-panel-controller .native-content {
+  flex: none;
+  overflow: visible;
+}
+.native-panel-controller .native-content > div {
+  height: auto;
+}
+.native-titlebar-mini {
+  height: 28px;
+  font-size: 11px;
+  padding-left: 10px;
+}
+.native-titlebar-mini .native-window-actions button {
+  width: 26px;
+  height: 28px;
+}
+.native-panel-debug .native-content {
+  background: #191919;
+}
+.native-panel-stream .native-content {
+  background: #191919;
+}
+/* The native pointer bridge marks the hovered chain; `hoverMirror` re-emits every `:hover` rule
+   against this attribute so inactive windows still show hover feedback. */
+.native-window-actions button[data-native-hover] {
+  background: var(--gray-a4);
+}
+.native-window-actions button:last-child[data-native-hover] {
+  background: var(--red-9);
+  color: white;
+}
+/* Native window-action failures are shown rather than swallowed. */
+.native-panel-error {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--red-11);
+  background: var(--red-a3);
+  overflow-wrap: anywhere;
+}

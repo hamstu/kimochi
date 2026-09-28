@@ -1,0 +1,48 @@
+{
+  "identifier": "kimochi-network",
+  "description": "Outbound HTTP for the configured OCR/TTS server, the local Yomitan API, and the dictionary hosts Yomitan itself downloads from \u2014 the last of which the yomitan settings window needs for imports. Deliberately not a general internet grant.",
+  "windows": [
+    "overlay",
+    "log",
+    "settings",
+    "yomitan",
+    "popup-host"
+  ],
+  "permissions": [
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://kimochi-server.hamish.workers.dev/**"
+        },
+        {
+          "url": "http://localhost:3000/**"
+        },
+        {
+          "url": "http://127.0.0.1:3000/**"
+        },
+        {
+          "url": "http://localhost:19633/**"
+        },
+        {
+          "url": "http://127.0.0.1:19633/**"
+        },
+        {
+          "url": "http://localhost:8765/**"
+        },
+        {
+          "url": "http://127.0.0.1:8765/**"
+        },
+        {
+          "url": "https://github.com/**"
+        },
+        {
+          "url": "https://*.githubusercontent.com/**"
+        },
+        {
+          "url": "https://api.jiten.moe/**"
+        }
+      ]
+    }
+  ]
+}

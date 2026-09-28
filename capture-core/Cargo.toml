@@ -1,0 +1,45 @@
+[package]
+name = "kimochi-capture"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+png = "0.18"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+screencapturekit = { version = "=10.0.3", features = ["macos_14_0"] }
+objc2 = "0.6"
+# The local text observer builds an NSImage straight from captured pixels and
+# drives VisionKitCore's analyzer, which is reached by dlopen and runtime lookup
+# rather than by linking: see src/text/livetext.rs.
+objc2-app-kit = { version = "0.3", features = [
+  "NSBitmapImageRep",
+  "NSImage",
+  "NSImageRep",
+  "NSGraphics",
+  # Only the tests use these: they render Japanese fixtures with the system's own
+  # fonts, so the observer can be proved against real glyphs without downloading
+  # an asset or shipping one.
+  "NSStringDrawing",
+  "NSGraphicsContext",
+  "NSFont",
+  "NSColor",
+  "NSParagraphStyle",
+  "NSAttributedString",
+] }
+objc2-foundation = { version = "0.3", features = [
+  "NSArray",
+  "NSString",
+  "NSValue",
+  "NSDictionary",
+  "NSAttributedString",
+  "NSGeometry",
+] }
+block2 = "0.6"
+
+# A main-thread harness: VisionKit delivers its completion to the main queue, so a
+# test that runs on a spawned harness thread can never see it.
+[[test]]
+name = "livetext"
+harness = false
