@@ -31,10 +31,10 @@ body,
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  height: 40px;
-  padding-left: 12px;
+  height: 28px;
+  padding-left: 10px;
   user-select: none;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--gray-11);
   border-bottom: 1px solid var(--gray-a4);
 }
@@ -46,13 +46,15 @@ body,
 .native-window-actions button {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 26px;
+  height: 28px;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
+  transition-property: background-color, color;
+  transition-duration: 120ms;
 }
 .native-window-actions button:hover {
   background: var(--gray-a4);
@@ -83,15 +85,6 @@ body,
 }
 .native-panel-controller .native-content > div {
   height: auto;
-}
-.native-titlebar-mini {
-  height: 28px;
-  font-size: 11px;
-  padding-left: 10px;
-}
-.native-titlebar-mini .native-window-actions button {
-  width: 26px;
-  height: 28px;
 }
 .native-panel-debug .native-content {
   background: #191919;

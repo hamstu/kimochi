@@ -22,13 +22,7 @@
   height: 1px;
   margin: 4px 12px;
 
-  @media (prefers-color-scheme: dark) {
-    background-color: rgba(255, 255, 255, 0.15);
-  }
-
-  @media (prefers-color-scheme: light) {
-    background-color: rgba(0, 0, 0, 0.1);
-  }
+  background-color: var(--gray-a5);
 }
 
 /* Button styling */
@@ -44,18 +38,13 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition-property: background-color, color, transform;
+  transition-duration: 120ms;
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 
-  @media (prefers-color-scheme: dark) {
-    color: rgba(255, 255, 255, 0.85);
-  }
-
-  @media (prefers-color-scheme: light) {
-    color: rgba(0, 0, 0, 0.75);
-  }
+  color: var(--gray-12);
 }
 
 .buttonIcon {
@@ -68,23 +57,12 @@
 }
 
 .button:hover {
-  @media (prefers-color-scheme: dark) {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-
-  @media (prefers-color-scheme: light) {
-    background-color: rgba(0, 0, 0, 0.08);
-  }
+  background-color: var(--gray-a4);
 }
 
 .button:active {
-  @media (prefers-color-scheme: dark) {
-    background-color: rgba(255, 255, 255, 0.15);
-  }
-
-  @media (prefers-color-scheme: light) {
-    background-color: rgba(0, 0, 0, 0.12);
-  }
+  background-color: var(--gray-a5);
+  transform: scale(0.96);
 }
 
 .button:disabled,
@@ -118,15 +96,8 @@
 
 /* Danger/quit button */
 .buttonDanger:hover {
-  @media (prefers-color-scheme: dark) {
-    background-color: rgba(255, 80, 80, 0.25);
-    color: #ff6666;
-  }
-
-  @media (prefers-color-scheme: light) {
-    background-color: rgba(220, 50, 50, 0.15);
-    color: #cc3333;
-  }
+  background-color: var(--red-a4);
+  color: var(--red-11);
 }
 
 .button:focus-visible {

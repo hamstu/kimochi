@@ -90,7 +90,16 @@ pub static PANELS: &[PanelSpec] = &[
         680.,
         720.,
     ),
-    panel("settings", "Settings", PANEL_PAGE, 720., 650.),
+    PanelSpec {
+        min_width: 820.,
+        min_height: 560.,
+        ..panel("settings", "Settings", PANEL_PAGE, 1000., 760.)
+    },
+    PanelSpec {
+        min_width: 600.,
+        min_height: 440.,
+        ..panel("notebook", "Notebook", PANEL_PAGE, 820., 700.)
+    },
     panel("capture", "Capture Preview", PANEL_PAGE, 480., 420.),
     panel("debug", "Debug Info", PANEL_PAGE, 380., 620.),
     panel("stream", "Capture Debug", PANEL_PAGE, 640., 740.),
@@ -146,7 +155,7 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
         .ok()
         .flatten()
         .and_then(|v| serde_json::from_value(v).ok());
-    let rect = match saved {
+    let mut rect = match saved {
         // The controller's width is owned by the spec, never by a stale saved value.
         Some(mut rect) if spec.label == "controller" => {
             rect.width = spec.width;
@@ -176,6 +185,10 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
             }
         }
     };
+    // Tauri's minimum constrains later user resizes, but does not repair a smaller
+    // frame restored from settings. Apply the current spec before display clamping.
+    rect.width = rect.width.max(spec.min_width);
+    rect.height = rect.height.max(spec.min_height);
     native::clamp_to_visible(rect)
 }
 
@@ -266,6 +279,7 @@ pub fn ensure(
     let mut builder =
         tauri::WebviewWindowBuilder::new(app, spec.label, tauri::WebviewUrl::App(spec.url.into()))
             .title(spec.title)
+            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
             .inner_size(spec.width, spec.height)
             .min_inner_size(spec.min_width, spec.min_height)
             .decorations(spec.decorated)
@@ -457,7 +471,20 @@ mod tests {
         assert!(spec("controller").unwrap().pinned);
         assert!(spec("log").unwrap().pinned);
         assert!(!spec("settings").unwrap().pinned);
+        assert!(!spec("notebook").unwrap().pinned);
         assert!(!spec("source-picker").unwrap().pinned);
+    }
+
+    #[test]
+    fn settings_and_notebook_have_content_sized_defaults_and_minimums() {
+        let settings = spec("settings").unwrap();
+        assert_eq!((settings.width, settings.height), (1000., 760.));
+        assert_eq!((settings.min_width, settings.min_height), (820., 560.));
+
+        let notebook = spec("notebook").unwrap();
+        assert_eq!((notebook.width, notebook.height), (820., 700.));
+        assert_eq!((notebook.min_width, notebook.min_height), (600., 440.));
+        assert!(!notebook.eager, "Notebook should be created only when opened");
     }
 
     #[test]

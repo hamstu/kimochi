@@ -1,0 +1,496 @@
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+@source "./**/*.{ts,tsx}";
+@theme {
+  --font-jp: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Meiryo", sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.radix-themes {
+  --color-accent: var(--accent-9);
+  --color-accent-text: var(--accent-11);
+  --color-accent-soft: var(--accent-a3);
+  --color-danger: var(--red-9);
+  --color-ok: var(--green-9);
+  --color-warn: var(--amber-9);
+  --color-bg: var(--color-panel-solid);
+  --color-bg-elev: var(--gray-2);
+  --color-bg-elev-2: var(--gray-3);
+  --color-border: var(--gray-a5);
+  --color-text: var(--gray-12);
+  --color-text-dim: var(--gray-11);
+  --color-text-muted: var(--gray-10);
+  --shadow-pop: var(--shadow-4);
+}
+
+/* Shared controls use explicit geometry rather than generated utilities. This keeps Radix
+   primitives stable in panel roots, portals, and the controller despite scoped reader resets. */
+.kimochi-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 1.125rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-dim);
+  background: var(--color-bg-elev-2);
+  cursor: pointer;
+  transition-property: background-color, border-color;
+  transition-duration: 120ms;
+}
+.kimochi-switch[data-state="checked"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.kimochi-switch:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.kimochi-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.kimochi-switch-thumb {
+  display: block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: var(--shadow-1);
+  pointer-events: none;
+  transform: translateX(0.125rem);
+  transition-property: color, transform;
+  transition-duration: 120ms;
+}
+.kimochi-switch-thumb[data-state="checked"] {
+  color: var(--color-accent);
+  transform: translateX(1rem);
+}
+.kimochi-button {
+  transition-property: background-color, border-color, color, transform;
+  transition-duration: 120ms;
+}
+.kimochi-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.kimochi-input {
+  min-height: 1.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  background: var(--color-bg-elev);
+  color: var(--color-text);
+  cursor: text;
+  font: inherit;
+  outline: none;
+  transition-property: border-color, box-shadow;
+  transition-duration: 120ms;
+}
+.texthooker textarea {
+  cursor: text;
+}
+.kimochi-input:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+.kimochi-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.texthooker {
+  font-family: var(--default-font-family);
+  color: var(--gray-12);
+}
+.texthooker-settings input {
+  max-width: 100%;
+}
+.reader-error {
+  color: var(--red-11);
+  background: var(--red-a3);
+  padding: 8px;
+  font-size: 12px;
+}
+.reader-error button {
+  margin-left: 12px;
+}
+/* Shift-hover scan mode — global cursor + suppress token button hover/click. */
+body.scan-mode,
+body.scan-mode * {
+  cursor: crosshair !important;
+}
+body.scan-mode .jp-text button {
+  background-color: transparent !important;
+  color: inherit !important;
+}
+
+/* Scan highlight: overlay boxes positioned by the scan hook over the matched
+   range's client rects. Below the text (mix-blend so the chars stay readable). */
+#scan-highlight-layer {
+  pointer-events: none;
+}
+.scan-highlight-box {
+  background-color: var(--color-accent-soft);
+  border-radius: 3px;
+}
+
+/* Japanese text-friendly typography for line content */
+.jp-text {
+  font-family: var(--font-jp);
+  line-height: 1.85;
+  font-feature-settings: "palt";
+  letter-spacing: 0.01em;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Translated (English) lines. The JP font's Latin metrics clip descenders
+   (Hiragino Sans reserves almost no descent), and Latin reads oversized next
+   to kana at the same px size — so use the UI font scaled to 0.75em, drop the
+   CJK feature settings, and keep a roomy line box. */
+.line-translated {
+  font-family: var(--font-ui);
+  font-size: 0.75em;
+  line-height: 1.7;
+  font-feature-settings: normal;
+  letter-spacing: 0;
+}
+
+/* Per-line three-dot actions trigger. Hidden until the line is hovered or the
+   menu is open (the component flips the inline opacity class when open). */
+.line .line-actions-trigger {
+  opacity: 0;
+  transition: opacity 120ms ease;
+  vertical-align: 0.1em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.line:hover .line-actions-trigger,
+.line .line-actions-trigger:focus-visible {
+  opacity: 0.7;
+}
+.line:hover .line-actions-trigger:hover {
+  opacity: 1;
+}
+/* When scan mode is active, hide the trigger so it doesn't compete with the
+   crosshair / scan highlight. */
+body.scan-mode .line-actions-trigger {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+ruby rt {
+  font-size: 0.5em;
+  color: var(--color-text-dim);
+  font-feature-settings: normal;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Notebook match chip — clickable avatar + name pair rendered inline in the
+   transcript when a notebook entry's name appears in a line. The cue is the
+   accent-colored text (theme-aware for contrast), not an underline. */
+.notebook-chip {
+  position: relative;
+  color: var(--color-accent-text);
+}
+
+.notebook-chip-avatar {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: -0.12em;
+  margin-right: 0.28em;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.notebook-chip-glyph {
+  /* Sized/aligned to mirror .notebook-chip-avatar exactly. inline-block with
+     overflow:hidden moves the baseline to the box's bottom edge — the same
+     reference a replaced <img> uses — so vertical-align lines up with the
+     avatar version. (inline-flex aligned by the inner glyph's text baseline
+     instead, which floated the circle above the avatars.) */
+  display: inline-block;
+  overflow: hidden;
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  vertical-align: -0.12em;
+  margin-right: 0.28em;
+  text-align: center;
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.notebook-chip-glyph > * {
+  display: block;
+  font-size: 0.7em;
+  /* Line box exactly as tall as the 1em circle (1 / 0.7 in local em units),
+     centering the character vertically without flex. */
+  line-height: calc(1em / 0.7);
+}
+
+.notebook-chip-name {
+  /* Keep name styling neutral; the underline on .notebook-chip is the cue. */
+}
+
+/* Wrapper so a small Edit button can float above the chip on hover without
+   shifting the surrounding line text. */
+.notebook-chip-wrap {
+  position: relative;
+  display: inline;
+}
+
+.notebook-chip-edit {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+  padding: 0.125rem 0.4375rem;
+  font-size: 0.625rem;
+  font-family: var(--font-sans, system-ui);
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--color-text-dim);
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  z-index: 10;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.notebook-chip-wrap:hover .notebook-chip-edit,
+.notebook-chip-edit:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notebook-chip-edit:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* Floating "Add to notebook" pill shown above a text selection in the
+   transcript. Fixed-position; coordinates set inline from the selection rect.
+   The ::after triangle points down at the selected text. */
+.selection-add-btn {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 0.5625rem));
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.6875rem;
+  font-family: var(--font-sans, system-ui);
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--color-text);
+  background: var(--color-bg-elev);
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  box-shadow: var(--shadow-pop, 0 4px 12px rgba(0, 0, 0, 0.25));
+  cursor: pointer;
+  z-index: 60;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.selection-add-btn:hover {
+  background: var(--color-accent-soft);
+}
+
+.selection-add-btn::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 0.3125rem solid transparent;
+  border-top-color: var(--color-accent);
+}
+
+/* Yomitan-rendered HTML inside the definition popover gets passthrough styling. */
+.yomitan-html ul,
+.yomitan-html ol {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+
+.yomitan-html li {
+  margin: 0.125rem 0;
+}
+
+.yomitan-html [data-sc-content="example-sentence-a"] {
+  font-size: 1.05em;
+  border-left: 3px solid var(--color-accent);
+  padding-left: 0.5rem;
+  margin: 0.25rem 0;
+}
+
+.yomitan-html [data-sc-content="example-sentence-b"] {
+  font-size: 0.9em;
+  color: var(--color-text-dim);
+  border-left: 3px solid var(--color-border);
+  padding-left: 0.5rem;
+  margin: 0.25rem 0;
+}
+
+.yomitan-html [data-sc-content="example-keyword"] {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.yomitan-html i {
+  color: var(--color-text-dim);
+  font-style: normal;
+  font-size: 0.85em;
+  margin-right: 0.25rem;
+}
+
+/* Yomitan cross-reference links (redirect entries like `⟶ 取り憑く`, and
+   "see also" headwords) render as `<a href="#" lang="ja">`. Style them as
+   real links; .yomitan-xref marks the glossary as having a click handler that
+   resolves the target, so only then do we show the interactive affordance. */
+.yomitan-html a[lang="ja"] {
+  color: var(--color-accent-text);
+  text-decoration: none;
+}
+.yomitan-html.yomitan-xref a[lang="ja"] {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.yomitan-html.yomitan-xref a[lang="ja"]:hover {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  text-decoration-style: solid;
+}
+
+/* Custom scrollbar. rem so it grows with the UI scale — a hairline scrollbar
+   next to 1.5x-scaled content is hard to grab. */
+
+/* Explain modal markdown */
+.explain-markdown h1,
+.explain-markdown h2,
+.explain-markdown h3,
+.explain-markdown h4 {
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 1em 0 0.4em;
+}
+.explain-markdown h1 {
+  font-size: 1.15em;
+}
+.explain-markdown h2 {
+  font-size: 1.1em;
+}
+.explain-markdown h3,
+.explain-markdown h4 {
+  font-size: 1em;
+}
+.explain-markdown p {
+  margin: 0.5em 0;
+}
+.explain-markdown ul,
+.explain-markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.explain-markdown ul {
+  list-style: disc;
+}
+.explain-markdown ol {
+  list-style: decimal;
+}
+.explain-markdown li {
+  margin: 0.3em 0;
+}
+.explain-markdown strong {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.explain-markdown code {
+  background: var(--color-bg-elev-2);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+.explain-markdown pre {
+  background: var(--color-bg-elev-2);
+  border-radius: 6px;
+  padding: 0.6em 0.8em;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.explain-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.explain-markdown blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 0.7em;
+  color: var(--color-text-dim);
+  margin: 0.5em 0;
+}
+.explain-markdown hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+.explain-markdown table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.92em;
+}
+.explain-markdown th,
+.explain-markdown td {
+  border: 1px solid var(--color-border);
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+
+@layer base {
+  :where(.texthooker, .reader-ui, .popover-shell),
+  :where(.texthooker, .reader-ui, .popover-shell) * {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+  }
+  :where(.texthooker, .reader-ui, .popover-shell) button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    background: transparent;
+  }
+  :where(.texthooker, .reader-ui, .popover-shell) input,
+  :where(.texthooker, .reader-ui, .popover-shell) textarea {
+    font: inherit;
+    color: inherit;
+  }
+  :where(.texthooker, .reader-ui, .popover-shell) p,
+  :where(.texthooker, .reader-ui, .popover-shell) h2 {
+    margin: 0;
+  }
+}

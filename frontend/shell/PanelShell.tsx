@@ -1,8 +1,8 @@
 /**
  * ADAPTED from `src/renderer/src/windows/panel/PanelApp.tsx`.
  *
- * Reproduces the native title bar exactly: title, pin / minimize / close, the compact 28 px "mini"
- * variant for the controller, and the controller's content-height autosize.
+ * Reproduces the native title bar: title, pin / minimize / close, a compact 28 px frame for every
+ * panel, and the controller's content-height autosize.
  *
  * Deltas:
  *  - the snapshot-over-IPC plumbing is gone; each window renders its own panel directly and reads
@@ -20,7 +20,7 @@ import { useNativeHover } from './useNativeHover'
 interface PanelShellProps {
   label: string
   title: string
-  /** The controller uses the compact title bar and sizes itself to its content. */
+  /** The controller alone sizes itself to its content. All panels use compact window chrome. */
   mini?: boolean
   children: ReactNode
 }
@@ -98,7 +98,7 @@ export default function PanelShell({
   return (
     <div ref={panelRef} className={`native-panel native-panel-${label}`}>
       <header
-        className={`native-titlebar${mini ? ' native-titlebar-mini' : ''}`}
+        className="native-titlebar"
         onMouseDown={(event) => {
           if ((event.target as HTMLElement).closest('button')) return
           run('drag')
@@ -111,17 +111,13 @@ export default function PanelShell({
             aria-label={pinned ? 'Unpin window' : 'Keep on top'}
             onClick={() => run(pinned ? 'unpin' : 'pin')}
           >
-            {pinned ? <Pin size={mini ? 12 : 14} /> : <PinOff size={mini ? 12 : 14} />}
+            {pinned ? <Pin size={12} /> : <PinOff size={12} />}
           </button>
-          <button
-            aria-label="Minimize window"
-            title="Minimize"
-            onClick={() => run('minimize')}
-          >
-            <Minus size={mini ? 12 : 16} />
+          <button aria-label="Minimize window" title="Minimize" onClick={() => run('minimize')}>
+            <Minus size={12} />
           </button>
           <button aria-label="Close window" title="Close" onClick={() => run('hide')}>
-            <X size={mini ? 12 : 16} />
+            <X size={12} />
           </button>
         </div>
       </header>

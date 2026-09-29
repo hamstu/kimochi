@@ -10,65 +10,86 @@
  * It also mirrors the element's computed `cursor` to AppKit. It never focuses or raises the window
  * and never dispatches synthetic mouse events.
  */
-import { useEffect } from 'react'
-import { MIRROR_ATTRIBUTE, installHoverMirror } from './hoverMirror'
-import { panelCursor, panelPointer } from '../bridge/tauri'
+import { useEffect } from "react";
+import { MIRROR_ATTRIBUTE, installHoverMirror } from "./hoverMirror";
+import { panelCursor, panelPointer } from "../bridge/tauri";
+import { resolveNativeCursor } from "./nativeCursor";
 
-const POLL_MS = 50
+const POLL_MS = 50;
 
 export function useNativeHover(enabled = true): void {
   useEffect(() => {
-    if (!enabled) return
-    const uninstallMirror = installHoverMirror()
+    if (!enabled) return;
+    const uninstallMirror = installHoverMirror();
 
-    let hovered: Element[] = []
-    let pending = false
-    let stopped = false
+    let hovered: Element[] = [];
+    let pending = false;
+    let stopped = false;
 
     const clear = (): void => {
-      for (const element of hovered) element.removeAttribute(MIRROR_ATTRIBUTE)
-      hovered = []
-    }
+      for (const element of hovered) element.removeAttribute(MIRROR_ATTRIBUTE);
+      hovered = [];
+    };
 
     const apply = (target: Element | null): void => {
-      const chain: Element[] = []
-      for (let node: Element | null = target; node; node = node.parentElement) chain.push(node)
-      if (chain.length === hovered.length && chain.every((node, i) => node === hovered[i])) return
-      clear()
-      for (const element of chain) element.setAttribute(MIRROR_ATTRIBUTE, '')
-      hovered = chain
-    }
+      const chain: Element[] = [];
+      for (let node: Element | null = target; node; node = node.parentElement)
+        chain.push(node);
+      if (
+        chain.length === hovered.length &&
+        chain.every((node, i) => node === hovered[i])
+      )
+        return;
+      clear();
+      for (const element of chain) element.setAttribute(MIRROR_ATTRIBUTE, "");
+      hovered = chain;
+    };
 
     const tick = async (): Promise<void> => {
-      if (pending || stopped) return
-      pending = true
+      if (pending || stopped) return;
+      pending = true;
       try {
-        const point = await panelPointer()
-        if (stopped) return
-        const target = point ? document.elementFromPoint(point[0], point[1]) : null
-        apply(target)
+        const point = await panelPointer();
+        if (stopped) return;
+        const target = point
+          ? document.elementFromPoint(point[0], point[1])
+          : null;
+        apply(target);
         if (target) {
-          const control = target.closest('button, [role="button"], input, select, textarea, a')
-          const disabled = control instanceof HTMLElement && control.hasAttribute('disabled')
+          const control = target.closest(
+            'button, [role="button"], input, select, textarea, a',
+          );
+          const disabled =
+            control instanceof HTMLElement && control.hasAttribute("disabled");
+          // `auto` means selectable text only for the transcript body. Nested controls may also
+          // compute to `auto`; keep their existing arrow rather than turning them into I-beams.
+          const transcriptText =
+            control === null && target.closest(".scan-region .line") !== null;
           // Sent every tick, as ui/panel.js does: the native side re-checks pointer ownership, so
           // an unchanged keyword still has to be reasserted after focus or edge changes.
-          await panelCursor(disabled ? 'default' : getComputedStyle(target).cursor)
+          await panelCursor(
+            resolveNativeCursor(
+              getComputedStyle(target).cursor,
+              disabled,
+              transcriptText,
+            ),
+          );
         }
       } catch {
         // The native pointer is unavailable (no backend yet, or the window is gone): drop the
         // highlight rather than leaving a stale one behind.
-        clear()
+        clear();
       } finally {
-        pending = false
+        pending = false;
       }
-    }
+    };
 
-    const timer = setInterval(() => void tick(), POLL_MS)
+    const timer = setInterval(() => void tick(), POLL_MS);
     return () => {
-      stopped = true
-      clearInterval(timer)
-      clear()
-      uninstallMirror()
-    }
-  }, [enabled])
+      stopped = true;
+      clearInterval(timer);
+      clear();
+      uninstallMirror();
+    };
+  }, [enabled]);
 }

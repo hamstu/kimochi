@@ -4,6 +4,7 @@
   "windows": [
     "controller",
     "log",
+    "notebook",
     "source-picker",
     "settings",
     "capture",

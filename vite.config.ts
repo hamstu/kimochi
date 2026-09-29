@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url))
 
@@ -14,7 +15,8 @@ export default defineConfig({
   resolve: {
     alias: {
       // Plain-ESM modules owned by the overlay agent, shared rather than duplicated.
-      '@ui': here('ui')
+      '@ui': here('ui'),
+      '@texthooker': here('frontend/texthooker')
     }
   },
   build: {
@@ -25,11 +27,12 @@ export default defineConfig({
     rollupOptions: {
       input: {
         panel: here('frontend/panel.html'),
+        'reader-popup': here('frontend/reader-popup.html'),
         'source-picker': here('frontend/source-picker.html'),
         welcome: here('frontend/welcome.html'),
         'tray-popover': here('frontend/tray-popover.html')
       }
     }
   },
-  plugins: [react()]
+  plugins: [react(), tailwindcss()]
 })

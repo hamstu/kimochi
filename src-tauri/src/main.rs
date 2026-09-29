@@ -1,3 +1,4 @@
+mod reader;
 use base64::Engine;
 
 mod actions;
@@ -57,6 +58,59 @@ fn save(app: &tauri::AppHandle, name: &str, v: &impl Serialize) -> Reply<()> {
     std::fs::write(&tmp, serde_json::to_vec(v).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     std::fs::rename(tmp, p).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reader_settings_patch(app: tauri::AppHandle, state: State<Shared>, patch: Value) -> Reply<()> {
+    let mut patch = patch.as_object().ok_or("invalid: expected settings object")?.clone();
+    // Dictionary settings are authoritative; legacy reader presets cannot replace them.
+    patch.remove("yomitanApiUrl");
+    patch.remove("dictionaryMode");
+    let value = state.settings.update_path(&["superTexthooker"], |old| {
+        let mut value = old.and_then(Value::as_object).cloned().unwrap_or_default();
+        value.remove("yomitanApiUrl");
+        value.remove("dictionaryMode");
+        value.extend(patch.clone()); Value::Object(value)
+    })?;
+    app.emit("settings:changed", json!({"key":"superTexthooker", "value":value})).map_err(|e|e.to_string())?;
+    if let Some(pinned) = patch.get("alwaysOnTop").and_then(Value::as_bool) {
+        panels::act(&app, &state.settings, "log", if pinned { "pin" } else { "unpin" }, None)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn reader_notebook_ack(
+    app: tauri::AppHandle,
+    state: State<Shared>,
+    request_id: String,
+) -> Reply<bool> {
+    let matched = acknowledge_notebook_request(&state.settings, &request_id)?;
+    if matched {
+        app.emit(
+            "settings:changed",
+            json!({"key":"notebookEditRequest", "value": Value::Null}),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(matched)
+}
+
+fn acknowledge_notebook_request(settings: &Settings, request_id: &str) -> Reply<bool> {
+    let mut matched = false;
+    settings.update_path(&["notebookEditRequest"], |stored| {
+        if stored
+            .and_then(|value| value.get("requestId"))
+            .and_then(Value::as_str)
+            == Some(request_id)
+        {
+            matched = true;
+            Value::Null
+        } else {
+            stored.cloned().unwrap_or(Value::Null)
+        }
+    })?;
+    Ok(matched)
 }
 
 // ---------------------------------------------------------------- settings
@@ -1102,7 +1156,7 @@ fn history_add(app: tauri::AppHandle, state: State<Shared>, text: String) -> Rep
     if text.trim().is_empty() {
         return Err("invalid: history entries cannot be empty".into());
     }
-    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis() });
+    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis(), "source": state.settings.get("lastSelectedSource").ok().flatten() });
     let inserted = entry.clone();
     edit_history(&app, &state, move |list| list.insert(0, inserted))?;
     Ok(entry)
@@ -1215,6 +1269,10 @@ fn open_accessibility_preferences() -> Reply<()> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .register_uri_scheme_protocol("capture", move |ctx, request| {
@@ -1248,6 +1306,30 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            reader_settings_patch,
+            reader_notebook_ack,
+            reader::vndb::vndb_search_vns,
+            reader::vndb::vndb_characters_by_vn,
+            reader::vndb::vndb_fetch_image,
+            reader::yomitan::yomitan_tokenize,
+            reader::yomitan::yomitan_ankifields,
+            reader::yomitan::yomitan_probe,
+            reader::translate::deepl_translate,
+            reader::explain::explain_cancel,
+            reader::explain::explain_run,
+            reader::yomitan_install::install_yomitan_native_host,
+            reader::popover::show_popover,
+            reader::popover::reader_popup_ready,
+            reader::popover::reader_popup_focus,
+            reader::popover::hide_popover,
+            reader::ankiconnect::anki_probe,
+            reader::ankiconnect::anki_deck_names,
+            reader::ankiconnect::anki_model_names,
+            reader::ankiconnect::anki_model_field_names,
+            reader::ankiconnect::anki_find_notes,
+            reader::ankiconnect::anki_gui_browse,
+            reader::ankiconnect::anki_store_media_file,
+            reader::ankiconnect::anki_add_note,
             report,
             scan_trace::scan_trace,
             storage_load,
@@ -1335,6 +1417,23 @@ fn main() {
             });
             app.manage(service.clone());
 
+            let reader_popup = tauri::WebviewWindowBuilder::new(app, "reader-popup", tauri::WebviewUrl::App("app/reader-popup.html".into()))
+                .title("Dictionary").decorations(false).transparent(true).always_on_top(true)
+                .visible(false).focused(false).accept_first_mouse(true).skip_taskbar(true)
+                .inner_size(500., 380.).content_protected(true).build()?;
+            make_panel(&handle, &service, &reader_popup);
+            // Opt-in native regression: only the API popup, no source restore or OCR.
+            #[cfg(debug_assertions)]
+            if std::env::var_os("KIMOCHI_READER_POPUP_SMOKE").is_some() {
+                let smoke_app = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = reader::popover::smoke(smoke_app.clone()).await;
+                    eprintln!("reader-popup-smoke: {result:?}");
+                    smoke_app.exit(if result.is_ok() { 0 } else { 1 });
+                });
+                return Ok(());
+            }
+
             let logger = {
                 let service = service.clone();
                 Arc::new(move |value: Value| service.log(value)) as Arc<dyn Fn(Value) + Send + Sync>
@@ -1342,6 +1441,7 @@ fn main() {
             let hooker = Arc::new(texthooker::Texthooker::new(store.clone(), logger));
             hooker.start();
             app.manage(hooker);
+
 
             spawn_source_restore(service.clone());
 
@@ -1618,6 +1718,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 break;
             }
             if let Some((x, y, down, flags)) = native::cursor() {
+                if down && !was_down { reader::popover::pointer_down(&handle, x, y); }
                 let moved = last_point.is_none_or(|(px, py)| px != x || py != y);
                 last_point = Some((x, y));
                 let mut changed: Vec<(String, bool)> = Vec::new();
@@ -1883,6 +1984,20 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notebook_ack_cannot_clear_a_newer_request() {
+        let path = std::env::temp_dir().join(format!("kimochi-notebook-ack-{}.json", std::process::id()));
+        let settings = Settings::load(path.clone());
+        settings.set("notebookEditRequest", json!({"requestId":"new", "entryId":"cat", "sessionId":"game"})).unwrap();
+        assert!(!acknowledge_notebook_request(&settings, "old").unwrap());
+        assert_eq!(settings.get("notebookEditRequest").unwrap().unwrap()["requestId"], "new");
+        assert!(acknowledge_notebook_request(&settings, "new").unwrap());
+        assert_eq!(settings.get("notebookEditRequest").unwrap(), Some(Value::Null));
+        assert!(!acknowledge_notebook_request(&settings, "new").unwrap());
+        let _ = std::fs::remove_file(path);
+    }
+
 
     #[test]
     fn a_repeated_result_for_one_frame_is_not_republished() {

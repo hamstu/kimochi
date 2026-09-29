@@ -1,3 +1,5 @@
+import TexthookerSettingsTab from '../texthooker/SettingsTab'
+import { listen } from '@tauri-apps/api/event'
 /**
  * FORK of `src/renderer/src/components/SettingsDialog.tsx` for the native settings window.
  *
@@ -25,8 +27,7 @@ import {
   AutoScanSettings,
   TextOverlayGroupingSettings,
   ServerSettings,
-  AutoOCRSettings,
-  TexthookerSettings
+  AutoOCRSettings
 } from '../vendor/shared-types'
 import {
   Flex,
@@ -41,7 +42,7 @@ import {
   Slider,
   Callout
 } from '@radix-ui/themes'
-import { Gamepad2, TriangleAlert } from 'lucide-react'
+import { BookOpen, Gamepad2, Keyboard, ScanText, ScrollText, TriangleAlert, Volume2 } from 'lucide-react'
 import WindowFrame from '../components/WindowFrame'
 import { Z_INDEX_MODAL } from '../vendor/zIndex'
 import { useGamepad, getButtonName } from '../bridge/useGamepad'
@@ -66,42 +67,7 @@ import {
 } from '../bridge/tauri'
 import { useViewState } from '../bridge/state'
 import { describeUrlRestriction, testApiConnection } from '../bridge/yomitan'
-
-function WebSocketUrlInput({
-  value,
-  onCommit
-}: {
-  value: string
-  onCommit: (url: string) => void
-}): JSX.Element {
-  const [localValue, setLocalValue] = useState(value)
-
-  useEffect(() => {
-    // Verbatim from the Electron component: re-sync the draft when the stored value changes
-    // elsewhere. Kept as-is so the input behaves identically.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLocalValue(value)
-  }, [value])
-
-  const commit = useCallback(() => {
-    if (localValue !== value) {
-      onCommit(localValue)
-    }
-  }, [localValue, value, onCommit])
-
-  return (
-    <TextField.Root
-      value={localValue}
-      onChange={(e) => setLocalValue(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') commit()
-      }}
-      placeholder="ws://localhost:6677"
-      style={{ width: '100%' }}
-    />
-  )
-}
+import './settings-panel.css'
 
 interface SettingsPanelProps {
   /** Kept so the Done button and the Yomitan handoff can close the native window. */
@@ -109,6 +75,12 @@ interface SettingsPanelProps {
 }
 
 function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
+  const [activeTab, setActiveTab] = useSetting('settingsActiveTab', 'mode')
+  useEffect(() => {
+    const pending = listen('reader:open-settings', () => setActiveTab('texthooker'))
+    return () => { void pending.then(off => off()) }
+  }, [setActiveTab])
+
   // Use the new hooks for settings management
   const [hotkeys, setHotkeys, hotkeyFailures] = useHotkeys()
   const [yomitanSettings, setYomitanSettings] = useSetting<YomitanSettings>('yomitanSettings', {
@@ -148,14 +120,7 @@ function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   // whether it has been granted, so the Trigger Keys field can say what is actually true.
   const { state: viewState } = useViewState()
   const accessibilityGranted = Boolean(viewState.accessibility)
-  const [texthookerSettings, setTexthookerSettings] = useSetting<TexthookerSettings>(
-    'texthookerSettings',
-    {
-      copyToClipboard: false,
-      sendToWebSocket: false,
-      webSocketUrl: 'ws://localhost:6677'
-    }
-  )
+
 
   // Gamepad hook
   const {
@@ -293,18 +258,20 @@ function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
   return (
     <div style={{ height: '100%' }}>
       <WindowFrame>
-        <Flex direction="column" style={{ height: '100%', minHeight: 0, padding: '16px' }}>
+        <Flex direction="column" className="settings-window-layout">
           <Tabs.Root
-            defaultValue="mode"
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
+            orientation="vertical"
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="settings-shell"
           >
-            <Tabs.List style={{ flexShrink: 0, overflowX: 'auto' }}>
-              <Tabs.Trigger value="mode">OCR</Tabs.Trigger>
-              <Tabs.Trigger value="shortcuts">Shortcuts</Tabs.Trigger>
-              <Tabs.Trigger value="gamepad">Gamepad</Tabs.Trigger>
-              <Tabs.Trigger value="yomitan">Dictionary</Tabs.Trigger>
-              <Tabs.Trigger value="audio">Audio</Tabs.Trigger>
-              <Tabs.Trigger value="texthooker">Texthooker</Tabs.Trigger>
+            <Tabs.List className="settings-sidebar" aria-label="Settings categories">
+              <Tabs.Trigger value="mode"><ScanText size={16} />OCR</Tabs.Trigger>
+              <Tabs.Trigger value="shortcuts"><Keyboard size={16} />Shortcuts</Tabs.Trigger>
+              <Tabs.Trigger value="gamepad"><Gamepad2 size={16} />Gamepad</Tabs.Trigger>
+              <Tabs.Trigger value="yomitan"><BookOpen size={16} />Dictionary</Tabs.Trigger>
+              <Tabs.Trigger value="audio"><Volume2 size={16} />Audio</Tabs.Trigger>
+              <Tabs.Trigger value="texthooker"><ScrollText size={16} />Texthooker</Tabs.Trigger>
             </Tabs.List>
 
             <Tabs.Content value="mode" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -1052,73 +1019,7 @@ function SettingsPanel({ onClose }: SettingsPanelProps): JSX.Element {
               </Flex>
             </Tabs.Content>
 
-            <Tabs.Content value="texthooker" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-              <Flex direction="column" gap="4" mt="4">
-                {/* Copy to Clipboard */}
-                <Flex direction="column" gap="2">
-                  <Flex align="center" gap="2">
-                    <Checkbox
-                      checked={texthookerSettings.copyToClipboard}
-                      onCheckedChange={(checked) =>
-                        setTexthookerSettings({
-                          ...texthookerSettings,
-                          copyToClipboard: Boolean(checked)
-                        })
-                      }
-                    />
-                    <Text size="2" weight="bold">
-                      Copy to Clipboard
-                    </Text>
-                  </Flex>
-                  <Text size="1" color="gray">
-                    Automatically copy scanned text to the system clipboard after each scan.
-                  </Text>
-                </Flex>
-
-                {/* Send to WebSocket */}
-                <Flex direction="column" gap="2">
-                  <Flex align="center" gap="2">
-                    <Checkbox
-                      checked={texthookerSettings.sendToWebSocket}
-                      onCheckedChange={(checked) =>
-                        setTexthookerSettings({
-                          ...texthookerSettings,
-                          sendToWebSocket: Boolean(checked)
-                        })
-                      }
-                    />
-                    <Text size="2" weight="bold">
-                      Send to WebSocket
-                    </Text>
-                  </Flex>
-                  <Text size="1" color="gray">
-                    Send scanned text to a WebSocket server for use with texthooker pages like
-                    texthooker-ui.
-                  </Text>
-
-                  {texthookerSettings.sendToWebSocket && (
-                    <Flex direction="column" gap="1" ml="4" mt="2">
-                      <Text size="2" weight="medium">
-                        WebSocket URL
-                      </Text>
-                      <WebSocketUrlInput
-                        value={texthookerSettings.webSocketUrl}
-                        onCommit={(url) =>
-                          setTexthookerSettings({
-                            ...texthookerSettings,
-                            webSocketUrl: url
-                          })
-                        }
-                      />
-                      <Text size="1" color="gray">
-                        URL for the WebSocket server. Texthooker pages connect to this address.
-                        Press Enter or click away to apply.
-                      </Text>
-                    </Flex>
-                  )}
-                </Flex>
-              </Flex>
-            </Tabs.Content>
+            <Tabs.Content value="texthooker" forceMount style={{ flex: 1, minHeight: 0, overflow: 'auto', display: activeTab === 'texthooker' ? undefined : 'none' }}><TexthookerSettingsTab /></Tabs.Content>
           </Tabs.Root>
 
           <Flex justify="end" gap="3" mt="4" style={{ flexShrink: 0 }}>

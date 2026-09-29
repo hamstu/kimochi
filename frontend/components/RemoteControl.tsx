@@ -30,7 +30,8 @@ import {
   AppWindow,
   ScanSearch
 } from 'lucide-react'
-import { Switch, Tooltip } from '@radix-ui/themes'
+import { Tooltip } from '@radix-ui/themes'
+import { Switch } from '../texthooker/components/ui/switch'
 import clsx from 'clsx'
 import styles from './RemoteControl.module.css'
 import { isOverlayTextVisible } from '../../ui/settings'
@@ -159,7 +160,7 @@ function RemoteControl({
           >
             <ScanSearch width="16" height="16" className={styles.buttonIcon} />
             <span className={styles.buttonLabel}>Auto OCR</span>
-            <Switch size="1" checked={isAutoOCREnabled} tabIndex={-1} />
+            <Switch checked={isAutoOCREnabled} tabIndex={-1} />
           </div>
 
           {/* Manual scan */}
@@ -189,7 +190,6 @@ function RemoteControl({
               <Eye width="16" height="16" className={styles.buttonIcon} />
               <span className={styles.buttonLabel}>Overlay</span>
               <Switch
-                size="1"
                 checked={
                   isOverlayTextVisible(isOverlayModeEnabled, isTextOverlayVisible) &&
                   isSourceInForeground
@@ -210,7 +210,7 @@ function RemoteControl({
           >
             <Bug width="16" height="16" className={styles.buttonIcon} />
             <span className={styles.buttonLabel}>Debug</span>
-            <Switch size="1" checked={showDebugOverlay} tabIndex={-1} />
+            <Switch checked={showDebugOverlay} tabIndex={-1} />
           </div>
 
           <div className={styles.divider} />

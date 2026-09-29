@@ -1,0 +1,19 @@
+{
+  "identifier": "reader-popup",
+  "description": "API dictionary popup events and explicit external links; no filesystem access.",
+  "windows": [
+    "reader-popup"
+  ],
+  "permissions": [
+    "core:event:default",
+    "shell:default",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        {
+          "url": "https://**"
+        }
+      ]
+    }
+  ]
+}

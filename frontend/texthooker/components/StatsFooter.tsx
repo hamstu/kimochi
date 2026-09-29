@@ -1,0 +1,54 @@
+import { useStats } from "@texthooker/hooks/useStats";
+import { getSettings } from "@texthooker/lib/settings";
+
+function formatTime(ms: number): string {
+  if (ms < 0) ms = 0;
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = m.toString().padStart(2, "0");
+  const ss = s.toString().padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
+function formatNumber(n: number): string {
+  return n.toLocaleString();
+}
+
+function formatSpeed(chars: number, ms: number): string {
+  if (ms < 1000) return "—";
+  const hours = ms / 3_600_000;
+  if (hours <= 0) return "—";
+  const cph = Math.round(chars / hours);
+  return formatNumber(cph);
+}
+
+interface Props {
+  lineCount: number;
+}
+
+/** Compact reading-stats strip. Lives inline in the footer. */
+export function StatsFooter({ lineCount }: Props) {
+  const { stats, elapsedMs } = useStats();
+  const s = getSettings();
+
+  const bits: string[] = [];
+  if (s.statsShowTime) bits.push(`⏱ ${formatTime(elapsedMs)}`);
+  if (s.statsShowLines) bits.push(`${formatNumber(lineCount)} lines`);
+  if (s.statsShowChars) bits.push(`${formatNumber(stats.totalChars)} chars`);
+  if (s.statsShowSpeed)
+    bits.push(`${formatSpeed(stats.totalChars, elapsedMs)} c/h`);
+
+  return (
+    <span
+      style={{
+        fontFamily: "var(--font-mono)",
+        fontVariantNumeric: "tabular-nums",
+        letterSpacing: "0.01em",
+      }}
+    >
+      {bits.join("  ·  ")}
+    </span>
+  );
+}

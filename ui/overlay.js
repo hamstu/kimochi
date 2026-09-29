@@ -1,3 +1,4 @@
+import { installApiLookup } from './api-lookup.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -988,6 +989,7 @@ async function startYomitan() {
   await ready
   // Before the frontend exists, so no popup can be built without being seen.
   await capturePopups()
+  await installApiLookup()
   await import('/js/app/content-script-wrapper.js')
 
   extensionApi = api

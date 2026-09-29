@@ -1,3 +1,4 @@
+import { setEmbeddedEnabled } from '/spike/frontend-mode.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * Dictionary lookup for a panel window.
@@ -93,4 +94,5 @@ export async function start({ timeoutMs = DEFAULT_PROBE_TIMEOUT_MS } = {}) {
   }
 }
 
-export default { start, isBackendReachable, hub, label }
+export { setEmbeddedEnabled }
+export default { start, isBackendReachable, hub, label, setEmbeddedEnabled }

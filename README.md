@@ -4,7 +4,7 @@ A macOS Tauri version of Kimochi, built from the working Electron UI and the act
 
 ## Location
 
-This project now lives beside the Electron repository at `../kimochi-tauri`, outside its Git working tree. All existing files, uncommitted changes and build artifacts were moved intact. Historical reports retain their original paths. No new Git repository has been initialized here.
+This project now lives beside the Electron repository at `../kimochi-tauri`, outside its Git working tree. All existing files, uncommitted changes and build artifacts were moved intact. Historical reports retain their original paths. A standalone Git repository now contains baseline commit `c4724e7`, made before the Texthooker integration.
 
 Build/runtime assets (`yomitan/`, macOS `bin/keytrigger-*`, and the tray icon in `resources/`) are local copies from Kimochi. Two parity tests still read `../kimochi/src/main/` to compare against the Electron implementation; keep that sibling checkout available when running the full test suite.
 
@@ -24,6 +24,12 @@ npm start
 Requires macOS 14+, Node/npm, Rust and Command Line Tools. `npm start` (also `npm run dev`) opens the **already-built** `src-tauri/target/debug/bundle/macos/Kimochi Next POC.app`; rebuild after changes. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries.
 
 The runner sets `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for this host. It uses an installed Apple Development signing identity when available, or `APPLE_SIGNING_IDENTITY`. `KIMOCHI_ADHOC=1` opts out. This is a local development bundle, not a notarized release; no signing keys are stored here.
+
+## Integrated Texthooker
+
+The **Log** window now hosts Super Texthooker: sessions, transcript actions, reading statistics, notebooks and dictionary lookups. Settings → **Texthooker** contains OCR/Clipboard/WebSocket input cards, optional OCR outputs and reading tools. **Notebook** opens characters, places, notes and VNDB import in its own window. Main settings use a sidebar; all panel title bars share compact chrome. Window captures can resume a matching session; manually choosing or creating a session overrides the association. Display captures keep the manually selected session.
+
+See [TEXTHOOKER_INTEGRATION.md](TEXTHOOKER_INTEGRATION.md) for architecture, reused code, validation and the short integration checklist.
 
 ## Main workflow
 

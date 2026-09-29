@@ -281,6 +281,9 @@ pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> 
         match kind {
             "pointer" => NSCursor::pointingHandCursor(),
             "grab" => NSCursor::openHandCursor(),
+            "grabbing" => NSCursor::closedHandCursor(),
+            "crosshair" => NSCursor::crosshairCursor(),
+            "not-allowed" => NSCursor::operationNotAllowedCursor(),
             "text" => NSCursor::IBeamCursor(),
             _ => NSCursor::arrowCursor(),
         }
@@ -340,6 +343,7 @@ pub fn inspect(w: &tauri::WebviewWindow) -> Result<serde_json::Value, String> {
 /// where it is; `promote_to_key` takes it later, when the pointer actually arrives on
 /// the popup.
 pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
+    objc2::MainThreadMarker::new().ok_or("order_front requires the main thread")?;
     unsafe {
         let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
         (*p).orderFrontRegardless();
@@ -369,6 +373,7 @@ pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
 /// Returns whether focus actually had to be taken, so a caller can log a transition
 /// rather than a poll.
 pub fn promote_to_key(w: &tauri::WebviewWindow) -> Result<bool, String> {
+    objc2::MainThreadMarker::new().ok_or("promote_to_key requires the main thread")?;
     unsafe {
         let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
         if (*p).isKeyWindow() || !(*p).isVisible() || !(*p).canBecomeKeyWindow() {

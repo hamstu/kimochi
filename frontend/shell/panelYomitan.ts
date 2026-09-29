@@ -28,6 +28,7 @@ interface StartResult {
 }
 
 interface PanelYomitan {
+  setEmbeddedEnabled: (enabled: boolean) => void
   /** Resolves with a status rather than rejecting, so it can never block the render. */
   start: (options?: { timeoutMs?: number }) => Promise<StartResult>
   isBackendReachable: (timeoutMs?: number) => Promise<StartResult>
@@ -75,6 +76,7 @@ export function usePanelYomitan(enabled = true): LookupState {
   })
 
   useEffect(() => {
+    if (relay) void relay.then(module => module.setEmbeddedEnabled(enabled)).catch(() => undefined)
     if (!enabled) return
     let live = true
 
