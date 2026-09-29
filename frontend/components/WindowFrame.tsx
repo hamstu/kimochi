@@ -1,5 +1,10 @@
-/** COPY of `src/renderer/src/components/WindowFrame.tsx`. No changes. */
-import { Flex } from '@radix-ui/themes'
+/**
+ * Content layout inside a native window. Movement and bounds belong to the native side.
+ *
+ * `windowType="app"` is the framed look of the transparent onboarding window: a rounded window
+ * ground inset from the transparent edge so its shadow has room. Every other window uses the
+ * plain full-height column.
+ */
 import style from './WindowFrame.module.css'
 import type { JSX, ReactNode } from 'react'
 
@@ -9,7 +14,6 @@ interface WindowFrameProps {
   show?: boolean
 }
 
-/** Content layout inside a native window. Movement and bounds belong to Electron. */
 export default function WindowFrame({
   children,
   show = true,
@@ -19,23 +23,8 @@ export default function WindowFrame({
   if (windowType === 'app')
     return (
       <div className={style.frameWrapper}>
-        <div className={style.container}>
-          <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            gap="4"
-            style={{ flexGrow: 1 }}
-            asChild
-          >
-            {children}
-          </Flex>
-        </div>
+        <div className={style.container}>{children}</div>
       </div>
     )
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {children}
-    </div>
-  )
+  return <div className={style.column}>{children}</div>
 }

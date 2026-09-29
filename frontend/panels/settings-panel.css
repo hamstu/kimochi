@@ -1,54 +1,83 @@
-.settings-window-layout {
-  height: 100%;
-  min-height: 0;
-  padding: 16px;
-}
+/*
+ * Settings pages. Layout comes from settings/settings-shell.css and the kit's settings pattern;
+ * these are the few page-specific pieces (field widths, notes inside groups, the gamepad test).
+ */
 
-.settings-shell {
+/* Field widths for controls on the right of a row. */
+.settings-field { width: 13rem; max-width: 100%; }
+.settings-field-num { width: 4.5rem; text-align: right; }
+/* Shortcut key caps; click to record a new combination. */
+.shortcut-recorder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--k-space-0-5);
+  min-width: 5.5rem;
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-1-5);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  cursor: default;
+  transition: background-color var(--k-fast);
+}
+.shortcut-recorder:hover { background: var(--k-hover); }
+.shortcut-recorder:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 1px; }
+.shortcut-recorder[data-recording] { justify-content: center; box-shadow: inset 0 0 0 1px var(--k-accent); background: transparent; }
+.shortcut-recorder-prompt { font-size: var(--k-text-sm); color: var(--k-accent-text); }
+.shortcut-row .k-settings-row-control { flex-shrink: 1; max-width: 72%; }
+
+/* A value readout next to a slider. */
+.settings-slider { display: flex; align-items: center; gap: var(--k-space-2); width: 11rem; }
+.settings-slider-value { flex: none; min-width: 2.5rem; text-align: right; font-size: var(--k-text-sm); color: var(--k-text-2); }
+
+/* A notice or free content block inside a settings group, divided like a row. Callouts inside a
+   group lose their filled box and read as an inline row: tone icon, text, then the action. */
+.settings-note { padding: var(--k-space-2-5) var(--k-space-3); }
+.k-settings-row + .settings-note,
+.settings-note + .k-settings-row,
+.settings-note + .settings-note { border-top: 1px solid var(--k-line); }
+.k-settings-sub > .settings-note + .k-settings-row,
+.k-settings-sub > .k-settings-row + .settings-note { border-top-color: var(--gray-a3); }
+.settings-note > .k-callout { width: 100%; padding: 0; border-radius: 0; background: transparent; }
+.settings-note > .k-callout > .k-callout-body { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--k-space-3); }
+.settings-note > .k-callout > .k-callout-body > .k-button { flex: none; }
+
+/* URL field with a connection status dot. */
+.settings-url { display: flex; align-items: center; gap: var(--k-space-2); width: 100%; }
+.settings-url > .k-field { flex: 1; min-width: 0; }
+
+/* Page-level callout above the first section. */
+.settings-page-callout { margin-top: calc(var(--k-space-2) * -1); }
+
+/* Gamepad button test: a grid of key caps that light up while held. */
+.gamepad-test {
   display: grid;
-  grid-template-columns: 10.5rem minmax(0, 1fr);
-  gap: 1.25rem;
-  flex: 1;
-  min-height: 0;
+  grid-template-columns: repeat(auto-fill, minmax(3rem, 1fr));
+  gap: var(--k-space-1-5);
+  padding: var(--k-space-3);
 }
-
-.settings-sidebar.rt-TabsList {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  align-self: stretch;
-  gap: .25rem;
-  padding: .5rem;
-  border-radius: .875rem;
-  background: #17191d;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 6%), 0 10px 30px rgb(0 0 0 / 18%);
-}
-
-.settings-sidebar.rt-TabsList::before { display: none; }
-
-.settings-sidebar .rt-TabsTrigger {
-  justify-content: flex-start;
-  gap: .625rem;
-  min-height: 40px;
-  padding-inline: .75rem;
-  border-radius: .5rem;
-  color: #a9adb6;
-  transition-property: color, background-color, transform;
-  transition-duration: 140ms;
-}
-
-.settings-sidebar .rt-TabsTrigger:hover { color: white; background: rgb(255 255 255 / 6%); }
-.settings-sidebar .rt-TabsTrigger:active { transform: scale(.96); }
-.settings-sidebar .rt-TabsTrigger[data-state='active'] { color: white; background: rgb(255 255 255 / 11%); }
-.settings-sidebar .rt-TabsTrigger::before { display: none; }
-
-.settings-shell > .rt-TabsContent { min-width: 0; padding-right: .25rem; }
-
-/* Themes places each label in an inner span; align its icon and text there. */
-.settings-sidebar .rt-TabsTriggerInner,
-.settings-sidebar .rt-TabsTriggerInnerHidden {
+.gamepad-key {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: .625rem;
+  justify-content: center;
+  height: var(--k-control-h);
+  border-radius: var(--k-radius-md);
+  background: var(--gray-a3);
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  transition-property: background-color, color;
+  transition-duration: var(--k-fast);
 }
+.gamepad-key[data-pressed] { background: var(--k-accent); color: var(--k-accent-contrast); }
+
+/* The gamepad capture control: a button with an optional clear button. */
+.gamepad-capture { display: inline-flex; align-items: center; gap: var(--k-space-0-5); }
+.gamepad-capture .k-button[data-assigned] { color: var(--k-text); }
+.gamepad-capture .k-button[data-capturing] { box-shadow: inset 0 0 0 1px var(--k-accent); color: var(--k-accent-text); }
+/* The kit cap inherits the UA monospace face from <kbd>; shortcut caps use the UI face (Figtree
+   has no slashed zero) with the platform symbols at a legible size. */
+.shortcut-recorder .k-kbd { justify-content: center; font-family: var(--k-font-ui); font-size: var(--k-text-sm); }

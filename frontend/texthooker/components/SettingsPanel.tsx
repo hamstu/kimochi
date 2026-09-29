@@ -1,17 +1,19 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useState } from "react";
-import { Button } from "@texthooker/components/ui/button";
-import { Switch } from "@texthooker/components/ui/switch";
-import { Input } from "@texthooker/components/ui/input";
+import { useEffect, useState, type ReactNode } from "react";
+import { Camera, Check, Clipboard, Radio } from "lucide-react";
+import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import {
+  Button,
+  Callout,
+  Input,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@texthooker/components/ui/select";
-import { Badge } from "@texthooker/components/ui/badge";
-import { Camera, Clipboard, Radio } from "lucide-react";
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+  SettingsSubgroup,
+  Slider,
+  Switch,
+} from "@kit";
 import { AnkiSetup } from "@texthooker/components/AnkiSetup";
 import { ExplainSettingsModal } from "@texthooker/components/ExplainSettingsModal";
 import { ReplacementsEditor } from "@texthooker/components/ReplacementsEditor";
@@ -26,50 +28,111 @@ import { useSetting } from "../../bridge/useSetting";
 interface Props {
   open: boolean;
   settings: Settings;
+  /** An unhandled error from the texthooker client, shown above the page. */
+  error?: string;
 }
 
-function Group({
-  title,
-  children,
+type InputSource = Settings["inputSource"];
+
+const INPUT_SOURCES = [
+  {
+    value: "ocr",
+    label: "OCR",
+    icon: <Camera />,
+    detail: "Screen captures and manual scans appear automatically.",
+  },
+  {
+    value: "clipboard",
+    label: "Clipboard",
+    icon: <Clipboard />,
+    detail: "Picks up text copied to the clipboard.",
+  },
+  {
+    value: "websocket",
+    label: "WebSocket",
+    icon: <Radio />,
+    detail: "Receives plain-text messages from a text source.",
+  },
+] as const satisfies readonly { value: InputSource; label: string; icon: ReactNode; detail: string }[];
+
+const CLIPBOARD_POLL = [
+  { value: "100", label: "100 ms" },
+  { value: "200", label: "200 ms" },
+  { value: "500", label: "500 ms" },
+  { value: "1000", label: "1 s" },
+];
+
+/** A clamped integer field on the right of a settings row. */
+function NumberField({
+  id,
+  value,
+  min,
+  max,
+  step,
+  fallback,
+  disabled,
+  onCommit,
+  "aria-label": ariaLabel,
 }: {
-  title: string;
-  children: React.ReactNode;
+  id?: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  fallback: number;
+  disabled?: boolean;
+  onCommit: (value: number) => void;
+  "aria-label"?: string;
 }) {
   return (
-    <div className="border-t border-(--color-border) pt-3 mb-4 first:border-t-0 first:pt-0">
-      <h2 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-(--color-text-dim) mb-2">
-        {title}
-      </h2>
-      <div className="space-y-2.5">{children}</div>
-    </div>
+    <Input
+      id={id}
+      type="number"
+      className="settings-field-num k-num"
+      aria-label={ariaLabel}
+      min={min}
+      max={max}
+      step={step}
+      disabled={disabled}
+      value={value}
+      onChange={(e) =>
+        onCommit(Math.max(min, Math.min(max, parseInt(e.target.value, 10) || fallback)))
+      }
+    />
   );
 }
 
-function Field({
+/** A destructive action that needs a second click to confirm. */
+function ArmedButton({
+  armed,
+  onArm,
+  onCancel,
+  onConfirm,
   label,
-  children,
-  hint,
+  confirmLabel,
 }: {
+  armed: boolean;
+  onArm: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
   label: string;
-  children: React.ReactNode;
-  hint?: string;
+  confirmLabel: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-      <label className="text-(--color-text) shrink-0">{label}</label>
-      <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
-        {children}
-      </div>
-      {hint ? (
-        <div className="basis-full text-[0.625rem] text-(--color-text-muted) text-right">
-          {hint}
-        </div>
+    <>
+      {armed ? (
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
       ) : null}
-    </div>
+      <Button variant="danger" size="sm" onClick={armed ? onConfirm : onArm}>
+        {armed ? confirmLabel : label}
+      </Button>
+    </>
   );
 }
 
-export function SettingsPanel({ open, settings }: Props) {
+export function SettingsPanel({ open, settings, error }: Props) {
   const [, setActiveSettingsTab] = useSetting("settingsActiveTab", "mode");
   const [linesCount, setLinesCount] = useState(lineCount());
   const [deeplDraft, setDeeplDraft] = useState(settings.deeplApiKey);
@@ -98,11 +161,6 @@ export function SettingsPanel({ open, settings }: Props) {
   };
 
   const handleClearLines = () => {
-    if (!clearArmed) {
-      console.log("[settings] arming clear");
-      setClearArmed(true);
-      return;
-    }
     console.log("[settings] CONFIRMING clear, calling clearLines()");
     clearLines();
     console.log("[settings] clearLines() returned, lineCount =", lineCount());
@@ -111,481 +169,419 @@ export function SettingsPanel({ open, settings }: Props) {
   };
 
   const handleResetSettings = async () => {
-    if (!resetArmed) {
-      setResetArmed(true);
-      return;
-    }
     await resetSettings();
     setResetArmed(false);
   };
 
+  const volume = Math.round(settings.audioVolume * 100);
+  const explainSummary =
+    settings.explainProvider === "claude"
+      ? `Claude CLI · ${settings.explainClaudeModel}`
+      : `Codex CLI${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ""}`;
+
   return (
-    <>
-      <div className="texthooker-settings">
-        <Group title="Kimochi integration">
-          <Field label="Match sessions to window names">
-            <Switch
-              checked={settings.autoMatchSource}
-              onCheckedChange={(value) =>
-                void updateSettings({ autoMatchSource: value })
-              }
-            />
-          </Field>
-          <p className="text-xs text-(--color-text-muted)">
-            Window pinning uses the Log title bar.
-          </p>
-          <Button variant="default" size="sm" onClick={() => void setActiveSettingsTab("yomitan")}>
-            Configure dictionary mode and API address in Dictionary
-          </Button>
-        </Group>
+    <SettingsPage
+      title="Texthooker"
+      description="Where lines come from, how the Log shows them, and what you can do with them."
+    >
+      {error ? (
+        <Callout tone="danger" className="settings-page-callout">
+          {error}
+        </Callout>
+      ) : null}
 
-        <Group title="Input source">
-          <fieldset className="grid grid-cols-3 gap-2 reader-source-choices" aria-label="Input source">
-            {([
-              ["ocr", "OCR", Camera],
-              ["clipboard", "Clipboard", Clipboard],
-              ["websocket", "WebSocket", Radio],
-            ] as const).map(([value, label, Icon]) => (
-              <label
-                key={value}
-                className={`source-card ${settings.inputSource === value ? "source-card-selected" : ""}`}
-              >
-                <input
-                  type="radio"
-                  name="input-source"
-                  value={value}
-                  checked={settings.inputSource === value}
-                  onChange={() => void updateSettings({ inputSource: value })}
-                />
-                <Icon size={18} strokeWidth={1.8} />
-                <span>{label}</span>
-              </label>
-            ))}
-          </fieldset>
-          {settings.inputSource === "ocr" ? (
-            <p className="source-detail">Screen captures and manual scans appear here automatically.</p>
-          ) : null}
-          {settings.inputSource === "clipboard" ? <Field label="Poll interval">
+      <SettingsSection title="Input source">
+        <ToggleGroup.Root
+          type="single"
+          value={settings.inputSource}
+          onValueChange={(value) => value && void updateSettings({ inputSource: value as InputSource })}
+          className="input-source-list"
+          aria-label="Input source"
+        >
+          {INPUT_SOURCES.map((option) => (
+            <ToggleGroup.Item key={option.value} value={option.value} className="input-source-row">
+              <span className="input-source-icon" aria-hidden>
+                {option.icon}
+              </span>
+              <span className="input-source-text">
+                <span className="input-source-label">{option.label}</span>
+                <span className="input-source-detail">{option.detail}</span>
+              </span>
+              {settings.inputSource === option.value ? (
+                <Check className="input-source-check" aria-hidden />
+              ) : null}
+            </ToggleGroup.Item>
+          ))}
+        </ToggleGroup.Root>
+        {settings.inputSource === "clipboard" ? (
+          <SettingsRow label="Poll interval" description="How often the clipboard is checked.">
             <Select
+              aria-label="Poll interval"
               value={String(settings.clipboardPollMs)}
-              onValueChange={(v) =>
-                updateSettings({ clipboardPollMs: Number(v) })
-              }
-            >
-              <SelectTrigger className="w-[6.875rem]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="100">100 ms</SelectItem>
-                <SelectItem value="200">200 ms</SelectItem>
-                <SelectItem value="500">500 ms</SelectItem>
-                <SelectItem value="1000">1 s</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field> : null}
-          {settings.inputSource === "websocket" ? (
-            <Field label="WebSocket URL" hint="Connect to a text source that sends plain-text messages">
-              <Input
-                type="url"
-                value={settings.websocketUrl}
-                onChange={(event) => void updateSettings({ websocketUrl: event.target.value })}
-                placeholder="ws://localhost:6677"
-                className="w-full max-w-[13rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs"
+              onValueChange={(v) => void updateSettings({ clipboardPollMs: Number(v) })}
+              options={CLIPBOARD_POLL}
+            />
+          </SettingsRow>
+        ) : null}
+        {settings.inputSource === "websocket" ? (
+          <SettingsRow
+            label="WebSocket URL"
+            controlId="texthooker-ws-url"
+            description="A text source that sends plain-text messages."
+          >
+            <Input
+              id="texthooker-ws-url"
+              type="url"
+              mono
+              className="settings-field"
+              value={settings.websocketUrl}
+              onChange={(event) => void updateSettings({ websocketUrl: event.target.value })}
+              placeholder="ws://localhost:6677"
+            />
+          </SettingsRow>
+        ) : null}
+      </SettingsSection>
+
+      <SettingsSection title="Kimochi integration" footnote="Window pinning uses the Log title bar.">
+        <SettingsRow label="Match sessions to window names" controlId="texthooker-auto-match">
+          <Switch
+            id="texthooker-auto-match"
+            checked={settings.autoMatchSource}
+            onCheckedChange={(value) => void updateSettings({ autoMatchSource: value })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Dictionary" description="Dictionary mode and API address are set in Dictionary.">
+          <Button size="sm" onClick={() => void setActiveSettingsTab("yomitan")}>
+            Open Dictionary
+          </Button>
+        </SettingsRow>
+      </SettingsSection>
+
+      <OutputSettings />
+
+      <SettingsSection title="Reading">
+        <SettingsRow label="Font size" controlId="texthooker-font-size" description="Log text size in pixels, 12 to 48.">
+          <NumberField
+            id="texthooker-font-size"
+            value={settings.fontSizePx}
+            min={12}
+            max={48}
+            step={1}
+            fallback={22}
+            onCommit={(v) => void updateSettings({ fontSizePx: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Show furigana" controlId="texthooker-furigana">
+          <Switch
+            id="texthooker-furigana"
+            checked={settings.showFurigana}
+            onCheckedChange={(v) => void updateSettings({ showFurigana: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Always on top" controlId="texthooker-on-top">
+          <Switch
+            id="texthooker-on-top"
+            checked={settings.alwaysOnTop}
+            onCheckedChange={(v) => void handleAlwaysOnTop(v)}
+          />
+        </SettingsRow>
+        <SettingsRow label="Tokenize on arrival" controlId="texthooker-tokenize">
+          <Switch
+            id="texthooker-tokenize"
+            checked={settings.tokenizeOnArrival}
+            onCheckedChange={(v) => void updateSettings({ tokenizeOnArrival: v })}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Disable click-to-define"
+          controlId="texthooker-no-click"
+          description="Tokens become selectable text. Shift-hover still shows definitions."
+        >
+          <Switch
+            id="texthooker-no-click"
+            checked={settings.disableClickToDefine}
+            onCheckedChange={(v) => void updateSettings({ disableClickToDefine: v })}
+          />
+        </SettingsRow>
+      </SettingsSection>
+
+      <AnkiSetup settings={settings} />
+
+      <SettingsSection title="Audio">
+        <SettingsRow
+          label="Fetch audio"
+          controlId="texthooker-audio"
+          description="Pulls audio from Yomitan with each lookup."
+        >
+          <Switch
+            id="texthooker-audio"
+            checked={settings.audioEnabled}
+            onCheckedChange={(v) => {
+              if (!v) clearAudioCache();
+              void updateSettings({ audioEnabled: v });
+            }}
+          />
+        </SettingsRow>
+        {settings.audioEnabled ? (
+          <SettingsSubgroup>
+            <SettingsRow label="Autoplay on lookup" controlId="texthooker-autoplay">
+              <Switch
+                id="texthooker-autoplay"
+                checked={settings.audioAutoplay}
+                onCheckedChange={(v) => void updateSettings({ audioAutoplay: v })}
               />
-            </Field>
-          ) : null}
-        </Group>
+            </SettingsRow>
+            <SettingsRow label="Volume">
+              <div className="settings-slider">
+                <Slider
+                  aria-label="Volume"
+                  value={[volume]}
+                  min={0}
+                  max={100}
+                  step={5}
+                  onValueChange={(values) => void updateSettings({ audioVolume: values[0] / 100 })}
+                />
+                <span className="settings-slider-value k-num">{volume}%</span>
+              </div>
+            </SettingsRow>
+          </SettingsSubgroup>
+        ) : null}
+      </SettingsSection>
 
-        <OutputSettings />
-
-        <Group title="Reading">
-          <Field label="Font size">
-            <Input
-              type="number"
-              min={12}
-              max={48}
-              step={1}
-              value={settings.fontSizePx}
-              onChange={(e) => {
-                const v = Math.max(
-                  12,
-                  Math.min(48, parseInt(e.target.value, 10) || 22),
-                );
-                updateSettings({ fontSizePx: v });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right"
-            />
-          </Field>
-
-          <Field label="Show furigana">
-            <Switch
-              checked={settings.showFurigana}
-              onCheckedChange={(v) => updateSettings({ showFurigana: v })}
-            />
-          </Field>
-
-          <Field label="Always on top">
-            <Switch
-              checked={settings.alwaysOnTop}
-              onCheckedChange={handleAlwaysOnTop}
-            />
-          </Field>
-
-          <Field label="Tokenize on arrival">
-            <Switch
-              checked={settings.tokenizeOnArrival}
-              onCheckedChange={(v) => updateSettings({ tokenizeOnArrival: v })}
-            />
-          </Field>
-
-          <Field
-            label="Disable click-to-define"
-            hint="Tokens become selectable text. Shift-hover still shows definitions."
-          >
-            <Switch
-              checked={settings.disableClickToDefine}
-              onCheckedChange={(v) =>
-                updateSettings({ disableClickToDefine: v })
+      <SettingsSection title="Translation">
+        <SettingsRow
+          label="DeepL API key"
+          controlId="texthooker-deepl"
+          description={
+            settings.deeplApiKey.trim()
+              ? "Key set. Translate is available in each line's menu."
+              : "Required for Translate. Stored locally in settings.json, never bundled."
+          }
+        >
+          <Input
+            id="texthooker-deepl"
+            type="password"
+            mono
+            autoComplete="off"
+            className="settings-field"
+            value={deeplDraft}
+            onChange={(e) => setDeeplDraft(e.target.value)}
+            onBlur={() => {
+              const next = deeplDraft.trim();
+              if (next !== settings.deeplApiKey) {
+                void updateSettings({ deeplApiKey: next });
               }
-            />
-          </Field>
-        </Group>
+            }}
+            placeholder="xxxxxxxx-…-xxxxxxxx:fx"
+          />
+        </SettingsRow>
+      </SettingsSection>
 
-        <Group title="Anki">
-          <AnkiSetup settings={settings} />
-        </Group>
+      <SettingsSection title="Explain (LLM)">
+        <SettingsRow
+          label="Provider, model and prompt"
+          description={`${explainSummary}. Explain is in each line's menu and on the E key.`}
+        >
+          <Button size="sm" onClick={() => setExplainSettingsOpen(true)}>
+            Configure…
+          </Button>
+        </SettingsRow>
+      </SettingsSection>
 
-        <Group title="Audio">
-          <Field
-            label="Fetch audio"
-            hint="Pulls audio bytes from Yomitan with each lookup"
-          >
-            <Switch
-              checked={settings.audioEnabled}
-              onCheckedChange={(v) => {
-                if (!v) clearAudioCache();
-                void updateSettings({ audioEnabled: v });
-              }}
-            />
-          </Field>
+      <ReplacementsEditor />
 
-          <Field label="Autoplay on lookup">
-            <Switch
-              checked={settings.audioAutoplay}
-              disabled={!settings.audioEnabled}
-              onCheckedChange={(v) => updateSettings({ audioAutoplay: v })}
-            />
-          </Field>
+      <SettingsSection title="Lookup popover">
+        <SettingsRow label="Width" controlId="texthooker-pop-w" description="In pixels, 280 to 900.">
+          <NumberField
+            id="texthooker-pop-w"
+            value={settings.popoverWidth}
+            min={280}
+            max={900}
+            step={10}
+            fallback={480}
+            onCommit={(v) => void updateSettings({ popoverWidth: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Height" controlId="texthooker-pop-h" description="In pixels, 200 to 800.">
+          <NumberField
+            id="texthooker-pop-h"
+            value={settings.popoverHeight}
+            min={200}
+            max={800}
+            step={10}
+            fallback={360}
+            onCommit={(v) => void updateSettings({ popoverHeight: v })}
+          />
+        </SettingsRow>
+      </SettingsSection>
 
-          <Field label="Volume">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              step={5}
-              value={Math.round(settings.audioVolume * 100)}
-              onChange={(e) => {
-                const pct = Math.max(
-                  0,
-                  Math.min(100, parseInt(e.target.value, 10) || 0),
-                );
-                updateSettings({ audioVolume: pct / 100 });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right"
-            />
-          </Field>
-        </Group>
+      <SettingsSection title="Lines">
+        <SettingsRow
+          label="Dedupe depth"
+          controlId="texthooker-dedupe"
+          description="Drop incoming lines that match any of the last N lines."
+        >
+          <NumberField
+            id="texthooker-dedupe"
+            value={settings.dedupeDepth}
+            min={1}
+            max={20}
+            step={1}
+            fallback={1}
+            onCommit={(v) => void updateSettings({ dedupeDepth: v })}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Japanese only"
+          controlId="texthooker-cjk"
+          description="Silently drop lines with no Japanese characters."
+        >
+          <Switch
+            id="texthooker-cjk"
+            checked={settings.cjkOnly}
+            onCheckedChange={(v) => void updateSettings({ cjkOnly: v })}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Merge streamed lines"
+          controlId="texthooker-merge"
+          description="Replace the previous line when its first N characters match."
+        >
+          <Switch
+            id="texthooker-merge"
+            checked={settings.startMergeEnabled}
+            onCheckedChange={(v) => void updateSettings({ startMergeEnabled: v })}
+          />
+        </SettingsRow>
+        {settings.startMergeEnabled ? (
+          <SettingsSubgroup>
+            <SettingsRow label="Merge prefix length" controlId="texthooker-merge-len" description="N, in characters.">
+              <NumberField
+                id="texthooker-merge-len"
+                value={settings.startMergePrefixLen}
+                min={1}
+                max={20}
+                step={1}
+                fallback={4}
+                onCommit={(v) => void updateSettings({ startMergePrefixLen: v })}
+              />
+            </SettingsRow>
+          </SettingsSubgroup>
+        ) : null}
+        <SettingsRow
+          label="Max lines"
+          controlId="texthooker-max-lines"
+          description="Oldest lines are dropped past this cap."
+        >
+          <NumberField
+            id="texthooker-max-lines"
+            value={settings.maxLines}
+            min={100}
+            max={50000}
+            step={100}
+            fallback={5000}
+            onCommit={(v) => void updateSettings({ maxLines: v })}
+          />
+        </SettingsRow>
+      </SettingsSection>
 
-        <Group title="Translation">
-          <Field
-            label="DeepL API key"
-            hint={
-              settings.deeplApiKey.trim()
-                ? "Key set — Translate is available in each line's menu"
-                : "Stored locally in settings.json, never bundled. Required to enable Translate."
-            }
-          >
-            <Input
-              type="password"
-              autoComplete="off"
-              value={deeplDraft}
-              onChange={(e) => setDeeplDraft(e.target.value)}
-              onBlur={() => {
-                const next = deeplDraft.trim();
-                if (next !== settings.deeplApiKey) {
-                  void updateSettings({ deeplApiKey: next });
-                }
-              }}
-              placeholder="xxxxxxxx-…-xxxxxxxx:fx"
-              className="w-full max-w-[12.5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs"
-            />
-          </Field>
-        </Group>
+      <SettingsSection title="Stats">
+        <SettingsRow
+          label="AFK pause after"
+          controlId="texthooker-afk"
+          description="Seconds idle before the reading timer pauses."
+        >
+          <NumberField
+            id="texthooker-afk"
+            value={settings.afkThresholdSec}
+            min={10}
+            max={600}
+            step={5}
+            fallback={60}
+            onCommit={(v) => void updateSettings({ afkThresholdSec: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Show timer" controlId="texthooker-stat-time">
+          <Switch
+            id="texthooker-stat-time"
+            checked={settings.statsShowTime}
+            onCheckedChange={(v) => void updateSettings({ statsShowTime: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Show line count" controlId="texthooker-stat-lines">
+          <Switch
+            id="texthooker-stat-lines"
+            checked={settings.statsShowLines}
+            onCheckedChange={(v) => void updateSettings({ statsShowLines: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Show character count" controlId="texthooker-stat-chars">
+          <Switch
+            id="texthooker-stat-chars"
+            checked={settings.statsShowChars}
+            onCheckedChange={(v) => void updateSettings({ statsShowChars: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Show speed" controlId="texthooker-stat-speed" description="Characters per hour.">
+          <Switch
+            id="texthooker-stat-speed"
+            checked={settings.statsShowSpeed}
+            onCheckedChange={(v) => void updateSettings({ statsShowSpeed: v })}
+          />
+        </SettingsRow>
+        <SettingsRow label="Reset stats">
+          <ArmedButton
+            armed={statsResetArmed}
+            onArm={() => setStatsResetArmed(true)}
+            onCancel={() => setStatsResetArmed(false)}
+            onConfirm={() => {
+              resetStats();
+              setStatsResetArmed(false);
+            }}
+            label="Reset stats"
+            confirmLabel="Confirm reset"
+          />
+        </SettingsRow>
+      </SettingsSection>
 
-        <Group title="Explain (LLM)">
-          <Field
-            label="Provider, model & prompt"
-            hint={`Currently: ${
-              settings.explainProvider === "claude"
-                ? `Claude CLI · ${settings.explainClaudeModel}`
-                : `Codex CLI${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ""}`
-            }. Explain is in each line's menu and on the E key.`}
-          >
-            <Button
-              variant="default"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setExplainSettingsOpen(true)}
-            >
-              Configure…
-            </Button>
-          </Field>
-        </Group>
-
-        <Group title="Text processing">
-          <ReplacementsEditor />
-        </Group>
-
-        <Group title="Popover">
-          <Field label="Width">
-            <Input
-              type="number"
-              min={280}
-              max={900}
-              step={10}
-              value={settings.popoverWidth}
-              onChange={(e) => {
-                const v = Math.max(
-                  280,
-                  Math.min(900, parseInt(e.target.value, 10) || 480),
-                );
-                updateSettings({ popoverWidth: v });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right"
-            />
-          </Field>
-          <Field label="Height">
-            <Input
-              type="number"
-              min={200}
-              max={800}
-              step={10}
-              value={settings.popoverHeight}
-              onChange={(e) => {
-                const v = Math.max(
-                  200,
-                  Math.min(800, parseInt(e.target.value, 10) || 360),
-                );
-                updateSettings({ popoverHeight: v });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right"
-            />
-          </Field>
-        </Group>
-
-        <Group title="Lines">
-          <Field
-            label="Dedupe depth"
-            hint="Drop incoming lines matching any of the last N lines"
-          >
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              step={1}
-              value={settings.dedupeDepth}
-              onChange={(e) => {
-                const v = Math.max(
-                  1,
-                  Math.min(20, parseInt(e.target.value, 10) || 1),
-                );
-                updateSettings({ dedupeDepth: v });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right"
-            />
-          </Field>
-
-          <Field
-            label="CJK-only filter"
-            hint="Silently drop lines with no Japanese characters"
-          >
-            <Switch
-              checked={settings.cjkOnly}
-              onCheckedChange={(v) => updateSettings({ cjkOnly: v })}
-            />
-          </Field>
-
-          <Field
-            label="Merge streamed lines"
-            hint="Replace previous line when first N chars match"
-          >
-            <Switch
-              checked={settings.startMergeEnabled}
-              onCheckedChange={(v) => updateSettings({ startMergeEnabled: v })}
-            />
-          </Field>
-
-          <Field label="Merge prefix length">
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              step={1}
-              disabled={!settings.startMergeEnabled}
-              value={settings.startMergePrefixLen}
-              onChange={(e) => {
-                const v = Math.max(
-                  1,
-                  Math.min(20, parseInt(e.target.value, 10) || 4),
-                );
-                updateSettings({ startMergePrefixLen: v });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right disabled:opacity-50"
-            />
-          </Field>
-
-          <Field label="Max lines" hint="FIFO cap on the line buffer">
-            <Input
-              type="number"
-              min={100}
-              max={50000}
-              step={100}
-              value={settings.maxLines}
-              onChange={(e) => {
-                const v = Math.max(
-                  100,
-                  Math.min(50000, parseInt(e.target.value, 10) || 5000),
-                );
-                updateSettings({ maxLines: v });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right"
-            />
-          </Field>
-        </Group>
-
-        <Group title="Stats">
-          <Field
-            label="AFK pause after"
-            hint="Pause the reading timer after this many idle seconds"
-          >
-            <Input
-              type="number"
-              min={10}
-              max={600}
-              step={5}
-              value={settings.afkThresholdSec}
-              onChange={(e) => {
-                const v = Math.max(
-                  10,
-                  Math.min(600, parseInt(e.target.value, 10) || 60),
-                );
-                updateSettings({ afkThresholdSec: v });
-              }}
-              className="w-[5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-right"
-            />
-          </Field>
-
-          <Field label="Show timer">
-            <Switch
-              checked={settings.statsShowTime}
-              onCheckedChange={(v) => updateSettings({ statsShowTime: v })}
-            />
-          </Field>
-
-          <Field label="Show line count">
-            <Switch
-              checked={settings.statsShowLines}
-              onCheckedChange={(v) => updateSettings({ statsShowLines: v })}
-            />
-          </Field>
-
-          <Field label="Show char count">
-            <Switch
-              checked={settings.statsShowChars}
-              onCheckedChange={(v) => updateSettings({ statsShowChars: v })}
-            />
-          </Field>
-
-          <Field label="Show speed (c/h)">
-            <Switch
-              checked={settings.statsShowSpeed}
-              onCheckedChange={(v) => updateSettings({ statsShowSpeed: v })}
-            />
-          </Field>
-
-          <div className="flex justify-end gap-2">
-            {statsResetArmed ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setStatsResetArmed(false)}
-              >
-                Cancel
-              </Button>
-            ) : null}
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                if (!statsResetArmed) {
-                  setStatsResetArmed(true);
-                  return;
-                }
-                resetStats();
-                setStatsResetArmed(false);
-              }}
-            >
-              {statsResetArmed ? "Confirm reset" : "Reset stats"}
-            </Button>
-          </div>
-        </Group>
-
-        <Group title="Data">
-          <Field label="Lines stored">
-            <Badge>{linesCount}</Badge>
-          </Field>
-
-          <div className="flex justify-end gap-2">
-            {clearArmed ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setClearArmed(false)}
-              >
-                Cancel
-              </Button>
-            ) : null}
-            <Button variant="danger" size="sm" onClick={handleClearLines}>
-              {clearArmed ? "Confirm clear" : "Clear all lines"}
-            </Button>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            {resetArmed ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setResetArmed(false)}
-              >
-                Cancel
-              </Button>
-            ) : null}
-            <Button variant="danger" size="sm" onClick={handleResetSettings}>
-              {resetArmed ? "Confirm reset" : "Reset settings"}
-            </Button>
-          </div>
-        </Group>
-
-        <div className="mt-auto pt-3 border-t border-(--color-border) text-[0.625rem] text-(--color-text-muted)">
-          Kimochi Texthooker
-        </div>
-      </div>
+      <SettingsSection title="Data">
+        <SettingsRow
+          label="Clear all lines"
+          description={
+            <>
+              <span className="k-num">{linesCount}</span> {linesCount === 1 ? "line" : "lines"} stored.
+            </>
+          }
+        >
+          <ArmedButton
+            armed={clearArmed}
+            onArm={() => {
+              console.log("[settings] arming clear");
+              setClearArmed(true);
+            }}
+            onCancel={() => setClearArmed(false)}
+            onConfirm={handleClearLines}
+            label="Clear all lines"
+            confirmLabel="Confirm clear"
+          />
+        </SettingsRow>
+        <SettingsRow label="Reset settings" description="Restores the Texthooker defaults.">
+          <ArmedButton
+            armed={resetArmed}
+            onArm={() => setResetArmed(true)}
+            onCancel={() => setResetArmed(false)}
+            onConfirm={() => void handleResetSettings()}
+            label="Reset settings"
+            confirmLabel="Confirm reset"
+          />
+        </SettingsRow>
+      </SettingsSection>
 
       <ExplainSettingsModal
         open={explainSettingsOpen}
         onOpenChange={setExplainSettingsOpen}
         settings={settings}
       />
-    </>
+    </SettingsPage>
   );
 }

@@ -16,14 +16,15 @@
  *    lives in the overlay's `ui/annotations.ts`; this panel does not reimplement it.
  */
 import { useEffect, useMemo, useState, type JSX } from 'react'
+import { Bar, BarSpacer } from '@kit'
 import WindowFrame from '../components/WindowFrame'
+import './diagnostics.css'
 import { useViewState } from '../bridge/state'
 import { displays as nativeDisplays, nativeError, panel, systemState } from '../bridge/tauri'
 import type { DisplayInfo, PanelInfo, Rect, SystemState, TextAnnotation } from '../bridge/types'
 
 const REFRESH_MS = 1000
 
-const heading = { fontWeight: 'bold', marginBottom: 8, color: 'cyan' } as const
 const label = { color: 'yellow' } as const
 
 function Section({ title, children }: { title: string; children: JSX.Element | JSX.Element[] }) {
@@ -103,17 +104,12 @@ export default function DebugPanel(): JSX.Element {
 
   return (
     <WindowFrame>
-      <div
-        style={{
-          color: 'white',
-          padding: 12,
-          fontSize: 11,
-          fontFamily: 'monospace',
-          overflow: 'auto',
-          flex: 1
-        }}
-      >
-        <div style={heading}>Debug Coordinates</div>
+      <Bar position="top" className="diag-bar diag-bar-text">
+        <span className="k-medium">Debug coordinates</span>
+        <BarSpacer />
+        <span className="k-num">Refreshes every {REFRESH_MS / 1000}s</span>
+      </Bar>
+      <div className="diag-terminal diag-scroll">
 
         {(error || probeError) && (
           <div style={{ color: '#ff8080', marginBottom: 8 }}>{error ?? probeError}</div>

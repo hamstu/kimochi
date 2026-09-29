@@ -1473,9 +1473,21 @@ fn main() {
             // Only the overlay hosts the Yomitan backend. Panels get the relay shim
             // instead, so there is never a second writer on the same IndexedDB.
             .initialization_script_for_all_frames(include_str!("../../host/shim.js"))
-            .on_navigation(|u| {
-                u.as_str() == "about:blank"
-                    || (u.scheme() == "tauri" && u.host_str() == Some("localhost"))
+            .on_navigation({
+                // `tauri dev` serves `dist/` from the CLI's own dev server rather than the
+                // `tauri://` protocol, so a dev build must also accept that origin or the
+                // overlay's own page is blocked and the dictionary backend never starts.
+                // Bundles (custom-protocol) stay locked to `tauri://localhost`.
+                let dev_origin = if cfg!(dev) {
+                    app.config().build.dev_url.as_ref().map(|u| u.origin())
+                } else {
+                    None
+                };
+                move |u| {
+                    u.as_str() == "about:blank"
+                        || (u.scheme() == "tauri" && u.host_str() == Some("localhost"))
+                        || dev_origin.as_ref().is_some_and(|origin| &u.origin() == origin)
+                }
             })
             .build()?;
             overlay.set_ignore_cursor_events(true)?;

@@ -1,11 +1,10 @@
+/** Adapter: re-exports the Kimochi kit Input. New code imports `@kit`. */
 import * as React from "react";
-import { cn } from "@texthooker/lib/utils";
+import { Input as KitInput } from "@kit/TextField";
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, ...props }, ref) => (
-    <input ref={ref} className={cn("kimochi-input", className)} {...props} />
-  ),
+  (props, ref) => <KitInput ref={ref} {...(props as object)} />,
 );
 Input.displayName = "Input";

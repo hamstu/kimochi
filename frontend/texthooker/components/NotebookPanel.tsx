@@ -1,226 +1,657 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useMemo, useState } from "react";
-import { Download, Pencil, Plus } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
+import {
+  BookOpen,
+  Download,
+  EyeOff,
+  NotebookPen,
+  Plus,
+  Search,
+  SearchX,
+  StickyNote,
+  X,
+} from "lucide-react";
+import {
+  Bar,
+  BarSpacer,
+  Button,
+  Callout,
+  EmptyState,
+  IconButton,
+  Input,
+  Kbd,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Row,
+  Segmented,
+  SelectContent,
+  SelectItem,
+  SelectRoot,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+} from "@kit";
 import { VndbImportDialog } from "./VndbImportDialog";
-import { Button } from "@texthooker/components/ui/button";
-import { Input } from "@texthooker/components/ui/input";
+import { EditEntryModal } from "./EditEntryModal";
+import { EntryAvatar } from "./notebookParts";
+import {
+  KIND_META,
+  KIND_ORDER,
+  entryHaystack,
+  entryName,
+  entryReading,
+} from "./notebookEntry";
 import {
   createPerson,
   createPlace,
   createThing,
   getNotebook,
-  readImageAsObjectURL,
   subscribeNotebook,
 } from "@texthooker/lib/notebook";
 import { openEditModal } from "@texthooker/lib/editModal";
 import {
   getActiveSession,
+  listSessions,
   renameSession,
   subscribeSessions,
+  switchSession,
   updateSessionDescription,
 } from "@texthooker/lib/sessions";
 import type {
   NotebookEntry,
   NotebookFile,
-  PersonEntry,
-  PlaceOrThingEntry,
+  NotebookKind,
   SessionMeta,
 } from "@texthooker/lib/types";
+import "../notebook.css";
 
-function Group({
-  title,
-  trailing,
-  children,
-}: {
-  title: string;
-  trailing?: React.ReactNode;
-  children: React.ReactNode;
-}) {
+type Filter = "all" | NotebookKind;
+
+const CREATE: Record<NotebookKind, () => Promise<NotebookEntry>> = {
+  person: createPerson,
+  place: createPlace,
+  thing: createThing,
+};
+
+interface Props {
+  /** Entry open in the editor pane, or null. */
+  editingId: string | null;
+  onEdit: (entryId: string) => void;
+  onCloseEditor: () => void;
+  /** A problem opening an edit request from another window. */
+  notice?: string;
+  onDismissNotice?: () => void;
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
   return (
-    <div className="border-t border-(--color-border) pt-3 mb-4 first:border-t-0 first:pt-0">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-(--color-text-dim)">
-          {title}
-        </h2>
-        {trailing}
-      </div>
-      <div className="space-y-1.5">{children}</div>
-    </div>
+    target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
   );
 }
 
-function Field({
-  label,
-  children,
-  stacked,
-}: {
-  label: string;
-  children: React.ReactNode;
-  stacked?: boolean;
-}) {
-  if (stacked) {
-    return (
-      <div className="text-xs">
-        <label className="block text-(--color-text) mb-1">{label}</label>
-        {children}
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-      <label className="text-(--color-text) shrink-0">{label}</label>
-      <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-const inputClass =
-  "rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-(--color-text) outline-none focus:border-(--color-accent)";
-const textInputClass = `${inputClass} w-full`;
-const textareaClass = `${inputClass} w-full min-h-[3.75rem] resize-y leading-snug`;
-
-export function NotebookPanel() {
+export function NotebookPanel({
+  editingId,
+  onEdit,
+  onCloseEditor,
+  notice,
+  onDismissNotice,
+}: Props) {
   const [nb, setNb] = useState<NotebookFile>(() => getNotebook());
   const [vndbOpen, setVndbOpen] = useState(false);
-  const [session, setSession] = useState<SessionMeta | null>(() => {
-    try {
-      return getActiveSession();
-    } catch {
-      return null;
-    }
-  });
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    return subscribeNotebook((next) => setNb(next));
+  useEffect(() => subscribeNotebook((next) => setNb(next)), []);
+
+  const counts = useMemo(() => {
+    const c: Record<NotebookKind, number> = { person: 0, place: 0, thing: 0 };
+    for (const entry of nb.entries) c[entry.kind] += 1;
+    return c;
+  }, [nb]);
+
+  const haystacks = useMemo(
+    () => new Map(nb.entries.map((e) => [e.id, entryHaystack(e)])),
+    [nb],
+  );
+
+  const needle = query.trim().toLowerCase();
+  const groups = useMemo(() => {
+    const kinds = filter === "all" ? KIND_ORDER : [filter];
+    return kinds
+      .map((kind) => ({
+        kind,
+        entries: nb.entries.filter(
+          (e) =>
+            e.kind === kind &&
+            (!needle || (haystacks.get(e.id) ?? "").includes(needle)),
+        ),
+      }))
+      .filter((group) => group.entries.length > 0);
+  }, [nb, filter, needle, haystacks]);
+  const visible = useMemo(() => groups.flatMap((g) => g.entries), [groups]);
+
+  const focusRow = useCallback((id: string) => {
+    const row = listRef.current?.querySelector<HTMLElement>(
+      `[data-entry-id="${CSS.escape(id)}"]`,
+    );
+    row?.focus({ preventScroll: true });
+    row?.scrollIntoView({ block: "nearest" });
   }, []);
 
+  // The row being edited is the current row; requests from the Log bring it into view.
   useEffect(() => {
-    return subscribeSessions((m) => {
-      const a = m.sessions.find((s) => s.id === m.activeId);
-      if (a) setSession(a);
+    if (!editingId) return;
+    setActiveId(editingId);
+    requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector(`[data-entry-id="${CSS.escape(editingId)}"]`)
+        ?.scrollIntoView({ block: "nearest" });
     });
+  }, [editingId]);
+
+  // "/" or ⌘F / Ctrl+F jumps to search from anywhere in the window.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (
+        (event.key === "/" && !mod && !isTypingTarget(event.target)) ||
+        (mod && event.key.toLowerCase() === "f")
+      ) {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const people = useMemo(
-    () => nb.entries.filter((e): e is PersonEntry => e.kind === "person"),
-    [nb],
-  );
-  const places = useMemo(
-    () => nb.entries.filter((e): e is PlaceOrThingEntry => e.kind === "place"),
-    [nb],
-  );
-  const things = useMemo(
-    () => nb.entries.filter((e): e is PlaceOrThingEntry => e.kind === "thing"),
-    [nb],
-  );
+  const current =
+    activeId && visible.some((e) => e.id === activeId)
+      ? activeId
+      : (visible[0]?.id ?? null);
 
-  const addAndEdit = (create: () => Promise<NotebookEntry>) => {
-    void create().then((entry) => openEditModal(entry.id));
+  const move = (id: string | undefined) => {
+    if (!id) return;
+    setActiveId(id);
+    focusRow(id);
+    if (editingId) onEdit(id);
   };
 
-  return (
-    <>
-      <div className="reader-notebook">
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold">
-              Characters, places & things
-            </h2>
-          </div>
+  const onListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const index = visible.findIndex((e) => e.id === current);
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      move(visible[Math.min(visible.length - 1, index + 1)]?.id);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (index <= 0) searchRef.current?.focus();
+      else move(visible[index - 1]?.id);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      move(visible[0]?.id);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      move(visible[visible.length - 1]?.id);
+    } else if (event.key === "Escape" && editingId) {
+      event.preventDefault();
+      onCloseEditor();
+    }
+  };
 
-          {session ? (
-            <SessionGroup
-              session={session}
-              onOpenVndbImport={() => setVndbOpen(true)}
-            />
+  const onSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" && current) {
+      event.preventDefault();
+      move(current);
+    } else if (event.key === "Enter" && current) {
+      event.preventDefault();
+      setActiveId(current);
+      onEdit(current);
+    } else if (event.key === "Escape") {
+      if (query) {
+        event.preventDefault();
+        setQuery("");
+      } else {
+        searchRef.current?.blur();
+      }
+    }
+  };
+
+  const add = (kind: NotebookKind) => {
+    setQuery("");
+    if (filter !== "all" && filter !== kind) setFilter(kind);
+    void CREATE[kind]().then((entry) => {
+      setActiveId(entry.id);
+      openEditModal(entry.id);
+    });
+  };
+
+  const closeEditor = () => {
+    const id = editingId;
+    onCloseEditor();
+    if (id) requestAnimationFrame(() => focusRow(id));
+  };
+
+  const total = nb.entries.length;
+  const filterOptions = [
+    { value: "all" as const, label: <FilterLabel label="All" count={total} /> },
+    ...KIND_ORDER.map((kind) => ({
+      value: kind,
+      label: <FilterLabel label={KIND_META[kind].many} count={counts[kind]} />,
+    })),
+  ];
+
+  return (
+    <div className="nb">
+      <Bar position="top" className="nb-bar">
+        <SessionSelect />
+        <SessionDetails />
+        <BarSpacer />
+        <Button variant="ghost" size="sm" onClick={() => setVndbOpen(true)}>
+          <Download />
+          Import from VNDB
+        </Button>
+        <AddMenu onAdd={add} />
+      </Bar>
+
+      <div className="nb-body">
+        <div className="nb-main">
+          {notice ? (
+            <Callout tone="danger" className="nb-callout">
+              <span>{notice}</span>
+              {onDismissNotice ? (
+                <Button variant="ghost" size="sm" onClick={onDismissNotice}>
+                  Dismiss
+                </Button>
+              ) : null}
+            </Callout>
           ) : null}
 
-          <Group
-            title="People"
-            trailing={
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => addAndEdit(createPerson)}
-                title="Add person"
-              >
-                <Plus className="h-3 w-3" />
-                Add
-              </Button>
-            }
-          >
-            {people.length === 0 ? (
-              <EmptyHint label="No people yet." />
-            ) : (
-              people.map((p) => <EntryListItem key={p.id} entry={p} />)
-            )}
-          </Group>
+          {total === 0 ? (
+            <EmptyState
+              className="nb-empty"
+              icon={<BookOpen />}
+              title="This notebook is empty"
+              actions={
+                <>
+                  <Button variant="primary" onClick={() => setVndbOpen(true)}>
+                    <Download />
+                    Import from VNDB
+                  </Button>
+                  <Button onClick={() => add("person")}>
+                    <Plus />
+                    Add character
+                  </Button>
+                </>
+              }
+            >
+              Keep the cast, places and things of this session here. Names you
+              add are recognised in the Log as you read.
+            </EmptyState>
+          ) : (
+            <>
+              <div className="nb-filter">
+                <div className="nb-search">
+                  <Search />
+                  <Input
+                    ref={searchRef}
+                    size="sm"
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={onSearchKeyDown}
+                    placeholder="Search"
+                    aria-label="Search the notebook"
+                    aria-controls="nb-list"
+                  />
+                  <span className="nb-search-end">
+                    {query ? (
+                      <IconButton
+                        label="Clear search"
+                        size="sm"
+                        onClick={() => {
+                          setQuery("");
+                          searchRef.current?.focus();
+                        }}
+                      >
+                        <X />
+                      </IconButton>
+                    ) : (
+                      <Kbd>/</Kbd>
+                    )}
+                  </span>
+                </div>
+                <Segmented
+                  aria-label="Show"
+                  value={filter}
+                  onValueChange={setFilter}
+                  options={filterOptions}
+                />
+              </div>
 
-          <Group
-            title="Places"
-            trailing={
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => addAndEdit(createPlace)}
-                title="Add place"
-              >
-                <Plus className="h-3 w-3" />
-                Add
-              </Button>
-            }
-          >
-            {places.length === 0 ? (
-              <EmptyHint label="No places yet." />
-            ) : (
-              places.map((p) => <EntryListItem key={p.id} entry={p} />)
-            )}
-          </Group>
+              {visible.length === 0 ? (
+                needle ? (
+                  <EmptyState
+                    className="nb-empty"
+                    icon={<SearchX />}
+                    title={`Nothing matches “${query.trim()}”`}
+                    actions={
+                      <Button size="sm" onClick={() => setQuery("")}>
+                        Clear search
+                      </Button>
+                    }
+                  >
+                    Search looks at names, readings, aliases, descriptions and
+                    notes
+                    {filter !== "all"
+                      ? ` in ${KIND_META[filter].many.toLowerCase()}`
+                      : ""}
+                    .
+                  </EmptyState>
+                ) : filter !== "all" ? (
+                  <EmptyState
+                    className="nb-empty"
+                    icon={KIND_META[filter].icon}
+                    title={`No ${KIND_META[filter].many.toLowerCase()} yet`}
+                    actions={
+                      <Button size="sm" onClick={() => add(filter)}>
+                        <Plus />
+                        Add {KIND_META[filter].one.toLowerCase()}
+                      </Button>
+                    }
+                  />
+                ) : null
+              ) : (
+                <div
+                  id="nb-list"
+                  ref={listRef}
+                  className="nb-list"
+                  role="listbox"
+                  aria-label="Notebook entries"
+                  onKeyDown={onListKeyDown}
+                >
+                  {groups.map((group) => (
+                    <GroupRows
+                      key={group.kind}
+                      kind={group.kind}
+                      showLabel={filter === "all"}
+                      entries={group.entries}
+                      current={current}
+                      highlight={activeId !== null || editingId !== null}
+                      editingId={editingId}
+                      onPick={(id) => {
+                        setActiveId(id);
+                        onEdit(id);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
 
-          <Group
-            title="Things"
-            trailing={
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => addAndEdit(createThing)}
-                title="Add thing"
-              >
-                <Plus className="h-3 w-3" />
-                Add
-              </Button>
-            }
-          >
-            {things.length === 0 ? (
-              <EmptyHint label="No things yet." />
-            ) : (
-              things.map((t) => <EntryListItem key={t.id} entry={t} />)
-            )}
-          </Group>
+              <Bar position="bottom" className="nb-foot">
+                <span className="k-num">
+                  {visible.length === total
+                    ? `${total} ${total === 1 ? "entry" : "entries"}`
+                    : `${visible.length} of ${total}`}
+                </span>
+                <BarSpacer />
+                <span className="nb-hints">
+                  <span>
+                    <Kbd>↑</Kbd>
+                    <Kbd>↓</Kbd>
+                    Move
+                  </span>
+                  <span>
+                    <Kbd>↵</Kbd>
+                    Edit
+                  </span>
+                  <span>
+                    <Kbd>/</Kbd>
+                    Search
+                  </span>
+                </span>
+              </Bar>
+            </>
+          )}
         </div>
+
+        <EditEntryModal
+          presentation="pane"
+          entryId={editingId}
+          onClose={closeEditor}
+        />
       </div>
+
       <VndbImportDialog open={vndbOpen} onOpenChange={setVndbOpen} />
+    </div>
+  );
+}
+
+function FilterLabel({ label, count }: { label: string; count: number }) {
+  return (
+    <>
+      {label}
+      <span className="nb-count">{count}</span>
     </>
   );
 }
 
-function EmptyHint({ label }: { label: string }) {
+function GroupRows({
+  kind,
+  showLabel,
+  entries,
+  current,
+  highlight,
+  editingId,
+  onPick,
+}: {
+  kind: NotebookKind;
+  showLabel: boolean;
+  entries: NotebookEntry[];
+  current: string | null;
+  highlight: boolean;
+  editingId: string | null;
+  onPick: (id: string) => void;
+}) {
   return (
-    <div className="text-[0.6875rem] text-(--color-text-muted) italic">
-      {label}
-    </div>
+    <>
+      {showLabel ? (
+        <div className="nb-group" role="presentation">
+          {KIND_META[kind].many}
+          <span className="k-num">{entries.length}</span>
+        </div>
+      ) : null}
+      {entries.map((entry) => (
+        <EntryRow
+          key={entry.id}
+          entry={entry}
+          current={entry.id === current}
+          selected={highlight && entry.id === current}
+          editing={entry.id === editingId}
+          onPick={() => onPick(entry.id)}
+        />
+      ))}
+    </>
   );
 }
 
-function SessionGroup({
-  session,
-  onOpenVndbImport,
+function EntryRow({
+  entry,
+  current,
+  selected,
+  editing,
+  onPick,
 }: {
-  session: SessionMeta;
-  onOpenVndbImport: () => void;
+  entry: NotebookEntry;
+  /** Holds the list's tab stop. */
+  current: boolean;
+  /** Shown as the keyboard/edit selection. */
+  selected: boolean;
+  editing: boolean;
+  onPick: () => void;
 }) {
+  const name = entryName(entry);
+  const reading = entryReading(entry);
+  const description = entry.description.trim().replace(/\s+/g, " ");
+  const firstNote = entry.notes?.[0]?.text.trim().replace(/\s+/g, " ");
+  const preview = description || firstNote || "";
+  const noteCount = entry.notes?.length ?? 0;
+
+  return (
+    <Row
+      role="option"
+      aria-selected={selected}
+      tabIndex={current ? 0 : -1}
+      data-entry-id={entry.id}
+      data-editing={editing ? "" : undefined}
+      className="nb-row"
+      icon={<EntryAvatar entry={entry} />}
+      onClick={onPick}
+      trailing={
+        <span className="nb-trail">
+          {!entry.matchEnabled ? (
+            <span
+              className="nb-meta"
+              aria-label="Not matched in the Log"
+              title="Not matched in the Log"
+            >
+              <EyeOff />
+            </span>
+          ) : null}
+          {noteCount > 0 ? (
+            <span
+              className="nb-meta"
+              aria-label={`${noteCount} note${noteCount === 1 ? "" : "s"}`}
+              title={`${noteCount} note${noteCount === 1 ? "" : "s"}`}
+            >
+              <StickyNote />
+              {noteCount}
+            </span>
+          ) : null}
+        </span>
+      }
+    >
+      <span className="nb-row-title">
+        {name ? (
+          <span className="nb-name" lang="ja" translate="no">
+            {name}
+          </span>
+        ) : (
+          <span className="nb-name nb-name-empty">
+            New {KIND_META[entry.kind].one.toLowerCase()}
+          </span>
+        )}
+        {reading ? (
+          <span className="nb-reading" lang="ja" translate="no">
+            {reading}
+          </span>
+        ) : null}
+        {entry.aliases.length > 0 ? (
+          <span className="nb-aliases" lang="ja" translate="no">
+            {entry.aliases.join("、")}
+          </span>
+        ) : null}
+      </span>
+      <span className={preview ? "nb-sub" : "nb-sub nb-sub-empty"}>
+        {preview || "No description"}
+      </span>
+    </Row>
+  );
+}
+
+function AddMenu({ onAdd }: { onAdd: (kind: NotebookKind) => void }) {
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button size="sm">
+          <Plus />
+          Add
+        </Button>
+      </MenuTrigger>
+      <MenuContent align="end">
+        {KIND_ORDER.map((kind) => (
+          <MenuItem
+            key={kind}
+            icon={KIND_META[kind].icon}
+            onSelect={() => onAdd(kind)}
+          >
+            {KIND_META[kind].one}
+          </MenuItem>
+        ))}
+      </MenuContent>
+    </Menu>
+  );
+}
+
+/* ── Session context ───────────────────────────────────────────────────── */
+
+function useActiveSession(): [SessionMeta, SessionMeta[]] {
+  const [active, setActive] = useState<SessionMeta>(() => getActiveSession());
+  const [sessions, setSessions] = useState<SessionMeta[]>(() => listSessions());
+  useEffect(
+    () =>
+      subscribeSessions((manifest) => {
+        const next = manifest.sessions.find(
+          (session) => session.id === manifest.activeId,
+        );
+        if (next) setActive(next);
+        setSessions(manifest.sessions.slice());
+      }),
+    [],
+  );
+  return [active, sessions];
+}
+
+function SessionSelect(): ReactNode {
+  const [active, sessions] = useActiveSession();
+  return (
+    <SelectRoot
+      value={active.id}
+      onValueChange={(id) => {
+        if (id !== active.id) void switchSession(id);
+      }}
+    >
+      <SelectTrigger
+        variant="ghost"
+        size="sm"
+        className="nb-session-trigger"
+        aria-label="Session"
+      >
+        <SelectValue>{active.name}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {sessions.map((session) => (
+          <SelectItem key={session.id} value={session.id}>
+            {session.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </SelectRoot>
+  );
+}
+
+function SessionDetails(): ReactNode {
+  const [session] = useActiveSession();
   const [name, setName] = useState(session.name);
   const [desc, setDesc] = useState(session.description);
 
@@ -244,163 +675,43 @@ function SessionGroup({
   };
 
   return (
-    <Group title="Session">
-      <Field label="Name" stacked>
-        <Input
-          className={textInputClass}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={commitName}
-          spellCheck={false}
-        />
-      </Field>
-      <div className="flex justify-start">
-        <Button
-          variant="default"
-          size="sm"
-          onClick={onOpenVndbImport}
-          title="Import characters from VNDB"
-        >
-          <Download className="h-3 w-3" />
-          Import from VNDB
-        </Button>
-      </div>
-      <Field label="Description" stacked>
-        <textarea
-          className={textareaClass}
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          onBlur={commitDesc}
-          spellCheck={false}
-          placeholder="What is this session about?"
-        />
-      </Field>
-    </Group>
-  );
-}
-
-/* ── Entry list ────────────────────────────────────────────────────────── */
-
-/** Name with per-part ruby (hiragana) when readings are available. */
-function EntryName({ entry }: { entry: NotebookEntry }) {
-  if (entry.kind === "person") {
-    const fam = entry.family.trim();
-    const giv = entry.given.trim();
-    if (!fam && !giv) {
-      return <span className="text-(--color-text-muted)">(new person)</span>;
-    }
-    return (
-      <>
-        {fam ? <RubyPart text={fam} reading={entry.familyReading} /> : null}
-        {fam && giv ? " " : null}
-        {giv ? <RubyPart text={giv} reading={entry.givenReading} /> : null}
-      </>
-    );
-  }
-  const name = entry.name.trim();
-  if (!name) {
-    return (
-      <span className="text-(--color-text-muted)">(new {entry.kind})</span>
-    );
-  }
-  return <RubyPart text={name} reading={entry.reading} />;
-}
-
-function RubyPart({ text, reading }: { text: string; reading?: string }) {
-  const r = reading?.trim();
-  if (!r || r === text) return <>{text}</>;
-  return (
-    <ruby>
-      {text}
-      <rt>{r}</rt>
-    </ruby>
-  );
-}
-
-function EntryListItem({ entry }: { entry: NotebookEntry }) {
-  const snippet = entry.description.trim().replace(/\s+/g, " ");
-
-  return (
-    <div
-      data-entry-id={entry.id}
-      className="group flex items-center gap-2.5 rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1.5"
+    <Popover
+      onOpenChange={(open) => {
+        if (!open) {
+          commitName();
+          commitDesc();
+        }
+      }}
     >
-      <EntryAvatar entry={entry} />
-      <button
-        type="button"
-        onClick={() => openEditModal(entry.id)}
-        className="min-w-0 flex-1 text-left"
-        title="Edit entry"
-      >
-        <div
-          className="truncate text-[1rem] leading-[1.6] text-(--color-text)"
-          style={{ fontFamily: "var(--font-jp)" }}
-          translate="no"
-          lang="ja"
-        >
-          <EntryName entry={entry} />
-          {!entry.matchEnabled ? (
-            <span className="ml-1.5 align-middle text-[0.625rem] font-sans text-(--color-text-muted)">
-              muted
-            </span>
-          ) : null}
-        </div>
-        {snippet ? (
-          <div className="truncate text-[0.6875rem] text-(--color-text-muted)">
-            {snippet}
-          </div>
-        ) : null}
-      </button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-        onClick={() => openEditModal(entry.id)}
-        title="Edit entry"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  );
-}
-
-function EntryAvatar({ entry }: { entry: NotebookEntry }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let revoked = false;
-    let u: string | null = null;
-    const first = entry.images[0];
-    if (!first) {
-      setUrl(null);
-      return;
-    }
-    void readImageAsObjectURL(first).then((next) => {
-      if (revoked) {
-        URL.revokeObjectURL(next);
-        return;
-      }
-      u = next;
-      setUrl(next);
-    });
-    return () => {
-      revoked = true;
-      if (u) URL.revokeObjectURL(u);
-    };
-  }, [entry.images]);
-
-  if (url) {
-    return (
-      <img
-        src={url}
-        alt=""
-        className="h-9 w-9 shrink-0 rounded-full object-cover border border-(--color-border)"
-        draggable={false}
-      />
-    );
-  }
-  return (
-    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-(--color-accent-soft) text-[0.875rem] text-(--color-accent)">
-      {entry.kind === "person" ? "人" : entry.kind === "place" ? "地" : "物"}
-    </span>
+      <PopoverTrigger asChild>
+        <IconButton label="Session details" size="sm">
+          <NotebookPen />
+        </IconButton>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="nb-session-pop">
+        <p className="k-title">Session</p>
+        <label className="nb-field">
+          <span className="nb-label">Name</span>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+          />
+        </label>
+        <label className="nb-field">
+          <span className="nb-label">Description</span>
+          <Textarea
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            onBlur={commitDesc}
+            spellCheck={false}
+            placeholder="What is this session about?"
+          />
+        </label>
+      </PopoverContent>
+    </Popover>
   );
 }

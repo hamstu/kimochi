@@ -2,16 +2,16 @@
 import { useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
-import { Button } from "@texthooker/components/ui/button";
-import { Input } from "@texthooker/components/ui/input";
-import { Switch } from "@texthooker/components/ui/switch";
 import {
+  Button,
+  Callout,
+  ChoiceGroup,
+  Input,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@texthooker/components/ui/select";
+  SettingsRow,
+  SettingsSection,
+  Switch,
+} from "@kit";
 import {
   listDecks,
   listModelFields,
@@ -35,30 +35,6 @@ import {
 
 interface Props {
   settings: Settings;
-}
-
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-      <label className="text-(--color-text) shrink-0">{label}</label>
-      <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
-        {children}
-      </div>
-      {hint ? (
-        <div className="basis-full text-[0.625rem] text-(--color-text-muted) text-right">
-          {hint}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 export function AnkiSetup({ settings }: Props) {
@@ -291,200 +267,161 @@ export function AnkiSetup({ settings }: Props) {
   const disconnected = status === "err";
 
   return (
-    <div className="space-y-2.5">
-      <Field label="AnkiConnect URL">
-        <Input
-          type="text"
-          value={urlDraft}
-          onChange={(e) => setUrlDraft(e.target.value)}
-          onBlur={handleUrlBlur}
-          placeholder="http://127.0.0.1:8765"
-          className="w-full max-w-[12.5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs"
-        />
-      </Field>
-
-      <div className="flex justify-end items-center gap-2">
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleTest}
-          disabled={probeBusy}
+    <>
+      <SettingsSection title="Anki">
+        <SettingsRow
+          label="Enable mining"
+          controlId="anki-enabled"
+          description="Shows Add to Anki in the lookup popover."
         >
-          {probeBusy ? "Testing…" : "Test"}
-        </Button>
-        {probeMsg ? (
-          <span
-            className={
-              probeMsg.ok
-                ? "text-[0.625rem] text-(--color-ok)"
-                : "text-[0.625rem] text-(--color-danger)"
-            }
-          >
-            {probeMsg.text}
-          </span>
+          <Switch
+            id="anki-enabled"
+            checked={settings.ankiEnabled}
+            onCheckedChange={(v) => void updateSettings({ ankiEnabled: v })}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="AnkiConnect URL"
+          controlId="anki-url"
+          description={
+            probeMsg ? (
+              <span
+                className="anki-probe"
+                data-ok={probeMsg.ok ? "" : undefined}
+                data-failed={probeMsg.ok ? undefined : ""}
+              >
+                {probeMsg.text}
+              </span>
+            ) : undefined
+          }
+        >
+          <Input
+            id="anki-url"
+            mono
+            className="settings-field"
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onBlur={() => void handleUrlBlur()}
+            placeholder="http://127.0.0.1:8765"
+          />
+          <Button size="sm" onClick={() => void handleTest()} disabled={probeBusy}>
+            {probeBusy ? "Testing…" : "Test"}
+          </Button>
+        </SettingsRow>
+        {disconnected ? (
+          <div className="settings-note">
+            <Callout tone="warn">
+              <span>
+                Could not reach AnkiConnect. Make sure Anki is running with the AnkiConnect
+                add-on installed.
+              </span>
+              <Button size="sm" onClick={() => setRefreshTick((n) => n + 1)}>
+                Retry
+              </Button>
+            </Callout>
+          </div>
         ) : null}
-      </div>
-
-      <Field label="Enable mining" hint="Show + Add to Anki button in popover">
-        <Switch
-          checked={settings.ankiEnabled}
-          onCheckedChange={(v) => updateSettings({ ankiEnabled: v })}
-        />
-      </Field>
-
-      {disconnected ? (
-        <div className="rounded-md border border-(--color-danger) bg-(--color-bg-elev-2) px-2.5 py-2 text-[0.6875rem] text-(--color-text)">
-          Could not reach AnkiConnect. Make sure Anki is running with the
-          AnkiConnect add-on installed.
-          <div className="mt-1.5 flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setRefreshTick((n) => n + 1)}
-            >
-              Retry
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      <Field label="Deck">
-        <Select
-          value={settings.ankiDeckName ?? ""}
-          onValueChange={(v) =>
-            updateSettings({ ankiDeckName: v === "" ? null : v })
-          }
-          disabled={decks.length === 0}
+        <SettingsRow label="Deck">
+          <Select
+            aria-label="Deck"
+            value={settings.ankiDeckName ?? ""}
+            onValueChange={(v) => void updateSettings({ ankiDeckName: v === "" ? null : v })}
+            disabled={decks.length === 0}
+            placeholder="Select deck"
+            options={decks.map((d) => ({ value: d, label: d }))}
+          />
+        </SettingsRow>
+        <SettingsRow label="Note type">
+          <Select
+            aria-label="Note type"
+            value={settings.ankiModelName ?? ""}
+            onValueChange={(v) =>
+              void updateSettings({
+                ankiModelName: v === "" ? null : v,
+                ankiFieldMappings: [],
+                ankiModelFields: [],
+              })
+            }
+            disabled={models.length === 0}
+            placeholder="Select note type"
+            options={models.map((m) => ({ value: m, label: m }))}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Tags"
+          controlId="anki-tags"
+          description="Comma-separated, added to every card."
         >
-          <SelectTrigger className="w-[11.25rem]">
-            <SelectValue placeholder="Select deck" />
-          </SelectTrigger>
-          <SelectContent>
-            {decks.map((d) => (
-              <SelectItem key={d} value={d}>
-                {d}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <Field label="Note type">
-        <Select
-          value={settings.ankiModelName ?? ""}
-          onValueChange={(v) =>
-            updateSettings({
-              ankiModelName: v === "" ? null : v,
-              ankiFieldMappings: [],
-              ankiModelFields: [],
-            })
-          }
-          disabled={models.length === 0}
+          <Input
+            id="anki-tags"
+            className="settings-field"
+            value={tagsDraft}
+            onChange={(e) => setTagsDraft(e.target.value)}
+            onBlur={() => void handleTagsBlur()}
+            placeholder="super-texthooker"
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Import from Yomitan"
+          description="Deck, note type, tags and field mappings from a Yomitan settings export."
         >
-          <SelectTrigger className="w-[11.25rem]">
-            <SelectValue placeholder="Select note type" />
-          </SelectTrigger>
-          <SelectContent>
-            {models.map((m) => (
-              <SelectItem key={m} value={m}>
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <div className="flex justify-end items-center gap-2">
-        <Button variant="default" size="sm" onClick={handleImportClick}>
-          Import from Yomitan…
-        </Button>
-      </div>
-
-      {importError ? (
-        <div className="rounded-md border border-(--color-danger) bg-(--color-bg-elev-2) px-2.5 py-2 text-[0.6875rem] text-(--color-text)">
-          {importError}
-          <div className="mt-1.5 flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setImportError(null)}
-            >
-              Dismiss
-            </Button>
+          <Button size="sm" onClick={() => void handleImportClick()}>
+            Import…
+          </Button>
+        </SettingsRow>
+        {importError ? (
+          <div className="settings-note">
+            <Callout tone="danger">
+              <span>{importError}</span>
+              <Button size="sm" onClick={() => setImportError(null)}>
+                Dismiss
+              </Button>
+            </Callout>
           </div>
-        </div>
-      ) : null}
-
-      {importPreview ? (
-        <div className="rounded-md border border-(--color-accent) bg-(--color-bg-elev-2) p-2.5 space-y-2">
-          <div className="text-[0.625rem] uppercase tracking-wider text-(--color-text-dim)">
-            Preview import
-          </div>
-
-          {importOptions.length > 1 ? (
-            <div className="space-y-1">
-              <div className="text-[0.625rem] text-(--color-text-muted)">
-                Multiple Yomitan profiles found:
-              </div>
-              {importOptions.map((o, i) => (
-                <label
-                  key={i}
-                  className="flex items-center gap-2 text-[0.6875rem] cursor-pointer"
-                >
-                  <input
-                    type="radio"
-                    name="yomitan-import-profile"
-                    checked={importIndex === i}
-                    onChange={() => handleImportSelectIndex(i)}
+        ) : null}
+        {importPreview ? (
+          <SettingsRow stacked label="Preview import">
+            <div className="anki-preview">
+              {importOptions.length > 1 ? (
+                <>
+                  <p className="k-description">Multiple Yomitan profiles found:</p>
+                  <ChoiceGroup
+                    aria-label="Yomitan profile"
+                    value={String(importIndex)}
+                    onValueChange={(v) => handleImportSelectIndex(Number(v))}
+                    options={importOptions.map((o, i) => ({
+                      value: String(i),
+                      label: o.profileName,
+                      detail: o.cardFormat.model,
+                    }))}
                   />
-                  <span>
-                    {o.profileName}{" "}
-                    <span className="text-(--color-text-muted)">
-                      ({o.cardFormat.model})
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="text-[0.6875rem] space-y-0.5">
-            <div>
-              <span className="text-(--color-text-dim)">Deck:</span>{" "}
-              {importPreview.deckName}
-            </div>
-            <div>
-              <span className="text-(--color-text-dim)">Note type:</span>{" "}
-              {importPreview.modelName}
-            </div>
-            {importPreview.tags.length > 0 ? (
-              <div>
-                <span className="text-(--color-text-dim)">Tags:</span>{" "}
-                {importPreview.tags.join(", ")}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="text-[0.625rem] text-(--color-text-dim) uppercase tracking-wider">
-            Field mappings ({importPreview.fieldMappings.length})
-          </div>
-          <div className="max-h-32 overflow-y-auto rounded border border-(--color-border) bg-(--color-bg-elev)">
-            {importPreview.fieldMappings.length === 0 ? (
-              <div className="px-2 py-1.5 text-[0.6875rem] text-(--color-text-muted) italic">
-                No mappings detected.
-              </div>
-            ) : (
-              <table className="w-full text-[0.6875rem]">
-                <tbody>
-                  {importPreview.fieldMappings.map((m) => (
-                    <tr
-                      key={m.ankiField}
-                      className="border-b border-(--color-border) last:border-0"
-                    >
-                      <td className="px-2 py-0.5 text-(--color-text)">
-                        {m.ankiField}
-                      </td>
-                      <td className="px-2 py-0.5 text-(--color-text-dim)">
+                </>
+              ) : null}
+              <dl className="anki-preview-meta">
+                <dt>Deck</dt>
+                <dd>{importPreview.deckName}</dd>
+                <dt>Note type</dt>
+                <dd>{importPreview.modelName}</dd>
+                {importPreview.tags.length > 0 ? (
+                  <>
+                    <dt>Tags</dt>
+                    <dd>{importPreview.tags.join(", ")}</dd>
+                  </>
+                ) : null}
+              </dl>
+              <p className="k-description">
+                Field mappings (<span className="k-num">{importPreview.fieldMappings.length}</span>)
+              </p>
+              <dl className="anki-preview-map">
+                {importPreview.fieldMappings.length === 0 ? (
+                  <div>
+                    <dd>No mappings detected.</dd>
+                  </div>
+                ) : (
+                  importPreview.fieldMappings.map((m) => (
+                    <div key={m.ankiField}>
+                      <dt>{m.ankiField}</dt>
+                      <dd className="k-mono">
                         {m.mappingType === "sentence"
                           ? "(sentence)"
                           : m.mappingType === "marker"
@@ -492,81 +429,64 @@ export function AnkiSetup({ settings }: Props) {
                             : m.mappingType === "literal"
                               ? `"${m.literal ?? ""}"`
                               : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={resetImport}>
-              Cancel
-            </Button>
-            <Button variant="default" size="sm" onClick={handleImportConfirm}>
-              Apply
-            </Button>
-          </div>
-        </div>
-      ) : null}
+                      </dd>
+                    </div>
+                  ))
+                )}
+              </dl>
+              <div className="anki-preview-actions">
+                <Button variant="ghost" size="sm" onClick={resetImport}>
+                  Cancel
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => void handleImportConfirm()}>
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </SettingsRow>
+        ) : null}
+      </SettingsSection>
 
       {modelFields.length > 0 ? (
-        <div className="mt-1.5 rounded-md border border-(--color-border) bg-(--color-bg-elev) p-2">
-          <div className="text-[0.625rem] uppercase tracking-wider text-(--color-text-dim) mb-1.5">
-            Field mapping
-          </div>
-          <p className="text-[0.625rem] text-(--color-text-muted) mb-2">
-            Type a Yomitan marker, <code>(sentence)</code>, or literal text.
-          </p>
+        <SettingsSection
+          title="Field mapping"
+          description={
+            <>
+              Type a Yomitan marker, <span className="k-mono">(sentence)</span>, or literal text.
+            </>
+          }
+        >
           <datalist id="anki-mapping-options">
             <option value="(sentence)" />
             {YOMITAN_MARKERS.map((mk) => (
               <option key={mk} value={mk} />
             ))}
           </datalist>
-          <div className="space-y-1.5">
-            {modelFields.map((f) => {
-              const m = getMapping(f);
-              const display = mappingToValue(m);
-              return (
-                <div
-                  key={f}
-                  className="flex items-center gap-2 text-[0.6875rem]"
-                >
-                  <div className="min-w-[6.25rem] shrink-0 truncate text-(--color-text-dim)">
-                    {f}
-                  </div>
-                  <Input
-                    type="text"
-                    list="anki-mapping-options"
-                    defaultValue={display}
-                    placeholder="(unmapped)"
-                    onBlur={(e) => {
-                      const next = valueToMapping(f, e.target.value);
-                      const before = mappingToValue(m);
-                      if (e.target.value === before) return;
-                      setMapping(f, next);
-                    }}
-                    className="flex-1 rounded-md border border-(--color-border) bg-(--color-bg-elev-2) px-2 py-1 text-[0.6875rem]"
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
+          {modelFields.map((f) => {
+            const m = getMapping(f);
+            const display = mappingToValue(m);
+            return (
+              <SettingsRow key={f} label={f} controlId={`anki-map-${f}`}>
+                <Input
+                  id={`anki-map-${f}`}
+                  size="sm"
+                  mono
+                  className="anki-mapping-field"
+                  list="anki-mapping-options"
+                  defaultValue={display}
+                  placeholder="(unmapped)"
+                  onBlur={(e) => {
+                    const next = valueToMapping(f, e.target.value);
+                    const before = mappingToValue(m);
+                    if (e.target.value === before) return;
+                    setMapping(f, next);
+                  }}
+                />
+              </SettingsRow>
+            );
+          })}
+        </SettingsSection>
       ) : null}
-
-      <Field label="Tags" hint="Comma-separated tags added to every card">
-        <Input
-          type="text"
-          value={tagsDraft}
-          onChange={(e) => setTagsDraft(e.target.value)}
-          onBlur={handleTagsBlur}
-          placeholder="super-texthooker"
-          className="w-full max-w-[12.5rem] rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs"
-        />
-      </Field>
-    </div>
+    </>
   );
 }

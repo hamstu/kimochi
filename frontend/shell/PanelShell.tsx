@@ -104,20 +104,21 @@ export default function PanelShell({
           run('drag')
         }}
       >
-        <span>{title}</span>
+        <span className="native-titlebar-title">{title}</span>
         <div className="native-window-actions">
           <button
             title={pinned ? 'Unpin window' : 'Keep on top'}
             aria-label={pinned ? 'Unpin window' : 'Keep on top'}
+            aria-pressed={pinned}
             onClick={() => run(pinned ? 'unpin' : 'pin')}
           >
-            {pinned ? <Pin size={12} /> : <PinOff size={12} />}
+            {pinned ? <Pin /> : <PinOff />}
           </button>
           <button aria-label="Minimize window" title="Minimize" onClick={() => run('minimize')}>
-            <Minus size={12} />
+            <Minus />
           </button>
           <button aria-label="Close window" title="Close" onClick={() => run('hide')}>
-            <X size={12} />
+            <X />
           </button>
         </div>
       </header>

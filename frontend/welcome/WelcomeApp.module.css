@@ -1,34 +1,110 @@
-/* .iconWrapper {
-  border-radius: 100%;
-  width: 200px;
-  height: 200px;
+/* Onboarding steps inside the framed transparent window. Kit tokens only. */
+.bar {
+  padding: 0 var(--k-space-3);
+}
+.bar:has(a) {
+  padding-left: var(--k-space-1);
+}
+.barTitle {
+  font-weight: var(--k-weight-medium);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.content {
   display: flex;
+  flex: 1;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 0;
+  padding: var(--k-space-6) var(--k-space-8);
+  overflow-y: auto;
+}
+.content > div {
+  width: 100%;
+}
 
-  @media (prefers-color-scheme: dark) {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  @media (prefers-color-scheme: light) {
-    background-color: #f8fcff77;
-    border: 1px solid #ccdce9;
-  }
-
-  img {
-    width: 120px;
-  }
-} */
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--k-space-3);
+  width: 100%;
+  max-width: 28rem;
+  margin: 0 auto;
+  text-align: center;
+}
+.wide {
+  max-width: 40rem;
+}
+.art {
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--k-space-3);
+}
+.art:empty {
+  display: none;
+}
+.art img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.screenshot {
+  border-radius: var(--k-radius-lg);
+  box-shadow: 0 0 0 1px var(--k-line);
+}
+.title {
+  margin: 0;
+  font-size: var(--k-text-xl);
+  line-height: var(--k-leading-xl);
+  font-weight: var(--k-weight-semibold);
+  text-wrap: balance;
+}
+.body {
+  margin: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-lg);
+  text-wrap: pretty;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--k-space-2);
+  margin-top: var(--k-space-3);
+}
+.external {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--k-space-0-5);
+}
+.external svg {
+  align-self: center;
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
 
 .kimochiDoneWrapper {
   position: relative;
-  .checkboxIcon {
-    position: absolute;
-    top: -10px;
-    right: -20px;
-    background: #fff;
-    border-radius: 100%;
-    padding: 4px;
-    box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.5);
-  }
+}
+.checkboxIcon {
+  position: absolute;
+  top: calc(var(--k-space-2) * -1);
+  right: calc(var(--k-space-4) * -1);
+  width: calc(var(--k-space-8) * 1.5);
+  height: calc(var(--k-space-8) * 1.5);
+  padding: var(--k-space-1);
+  border-radius: 999px;
+  background: var(--k-raised);
+  color: var(--k-ok);
+  box-shadow: var(--k-shadow-pop);
+}
+
+/* Router links rendered as kit buttons (`asChild`) must not inherit the anchor underline. */
+.actions a,
+.bar a {
+  text-decoration: none;
 }

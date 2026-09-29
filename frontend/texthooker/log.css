@@ -1,0 +1,614 @@
+/*
+ * Log window: session bar, transcript, footer and the Log's dialogs. Built on the kit
+ * (`frontend/kit`); everything visual comes from `--k-*` tokens. The transcript's Japanese keeps
+ * its own px size (the `fontSizePx` setting on `.jp-text`), so line geometry below is in em.
+ */
+
+/* ------------------------------------------------------------------ frame */
+.log-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--k-bg);
+  color: var(--k-text);
+}
+
+/* Session picker: a ghost trigger with the name and chevrons, inset from the window edge. */
+.log-session-trigger.k-button {
+  max-width: min(18rem, 60vw);
+  gap: var(--k-space-1-5);
+  padding: 0 var(--k-space-1-5) 0 var(--k-space-2);
+  color: var(--k-text);
+  font-weight: var(--k-weight-medium);
+}
+.log-session-trigger.k-button > svg {
+  color: var(--k-text-3);
+}
+.log-session-trigger.k-button:hover > svg,
+.log-session-trigger.k-button[data-state="open"] > svg {
+  color: var(--k-text-2);
+}
+.log-session-menu {
+  min-width: 13rem;
+}
+
+/* Footer stats: UI face, tabular numerals, quiet dot separators. */
+.log-stats {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--k-space-1-5);
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.log-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+}
+.log-stat + .log-stat::before {
+  content: "";
+  width: 0.1875rem;
+  height: 0.1875rem;
+  margin: 0 var(--k-space-2);
+  border-radius: 999px;
+  background: var(--gray-a7);
+}
+.log-stat > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.log-stat-value {
+  color: var(--k-text-2);
+  font-weight: var(--k-weight-medium);
+}
+.log-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-0-5);
+}
+.log-bar-divider {
+  width: 1px;
+  height: var(--k-icon-sm);
+  margin: 0 var(--k-space-1);
+  background: var(--k-line);
+}
+
+/* Status strips under the session bar. */
+.log-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-height: 1.5rem;
+  padding: var(--k-space-1) var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.log-status > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-callouts {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--k-space-1-5);
+  padding: var(--k-space-2) var(--k-space-3) 0;
+}
+.log-callout-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+  width: 100%;
+}
+.log-callout-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.log-callout-row .k-button {
+  margin: calc(var(--k-space-1) * -1) calc(var(--k-space-1) * -1) calc(var(--k-space-1) * -1) 0;
+}
+
+.log-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--k-space-2);
+  height: 100%;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+}
+.log-loading-error {
+  padding: var(--k-space-3);
+}
+
+/* ------------------------------------------------------------------ transcript */
+.log-transcript {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--k-space-2) 0 var(--k-space-3);
+}
+.log-empty {
+  height: 100%;
+}
+.log-earlier {
+  display: flex;
+  justify-content: center;
+  padding: var(--k-space-1) 0 var(--k-space-2);
+}
+
+.log-lines ::selection {
+  background: var(--accent-a5);
+}
+
+/* A transcript line is a full-bleed row (the remote's grammar): hover lifts the whole row,
+   hairlines are inset to the text column, and the actions trigger sits at the row's end. */
+.log-lines .line {
+  position: relative;
+  padding: 0.3em calc(var(--k-control-h-sm) + var(--k-space-5)) 0.3em var(--k-space-4);
+  overflow-wrap: anywhere;
+  transition: background-color var(--k-fast);
+}
+.log-lines .line + .line::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--k-space-4);
+  right: var(--k-space-4);
+  height: 1px;
+  background: var(--k-line);
+  pointer-events: none;
+}
+.log-lines .line:hover,
+.log-lines .line:has(.line-actions-trigger[data-state="open"]) {
+  background: var(--k-hover);
+}
+.log-lines .line:hover::before,
+.log-lines .line:hover + .line::before,
+.log-lines .line:has(.line-actions-trigger[data-state="open"])::before,
+.log-lines .line:has(.line-actions-trigger[data-state="open"]) + .line::before {
+  opacity: 0;
+}
+body.scan-mode .log-lines .line:hover {
+  background: transparent;
+}
+
+/* Actions slot: the height of the row's first text line, so the trigger centres on it at any
+   transcript size. */
+.line-actions {
+  position: absolute;
+  top: 0.3em;
+  right: var(--k-space-2);
+  display: flex;
+  align-items: center;
+  height: 1.85em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.line-translated .line-actions {
+  height: 1.7em;
+}
+.line-actions-trigger.k-button {
+  opacity: 0;
+  transition: opacity var(--k-fast), background-color var(--k-fast), color var(--k-fast);
+}
+.line:hover .line-actions-trigger.k-button,
+.line-actions-trigger.k-button:focus-visible,
+.line-actions-trigger.k-button[data-state="open"] {
+  opacity: 1;
+}
+body.scan-mode .line-actions-trigger.k-button {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+/* Transient per-line notes (translating, translation failed). */
+.line-pending {
+  opacity: 0.5;
+  animation: log-pulse 1.4s ease-in-out infinite;
+}
+.line-note {
+  margin-left: var(--k-space-2);
+  color: var(--k-text-3);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  font-style: italic;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.line-note-danger {
+  color: var(--k-danger-text);
+  font-style: normal;
+}
+@keyframes log-pulse {
+  50% { opacity: 0.3; }
+}
+
+/* Tokens: clickable dictionary words get a soft accent wash on hover; non-dictionary tokens
+   read a step quieter. */
+.log-token {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--k-fast);
+}
+.log-token:hover,
+.log-token:focus-visible {
+  background: var(--k-accent-soft);
+  outline: none;
+}
+.log-token-dim {
+  color: var(--k-text-2);
+}
+
+/* ------------------------------------------------------------------ notebook match chip */
+.notebook-chip {
+  position: relative;
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-accent-text);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--k-fast);
+}
+.notebook-chip:hover,
+.notebook-chip:focus-visible {
+  background: var(--k-accent-soft);
+  outline: none;
+}
+.notebook-chip-avatar {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.28em;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: -0.12em;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+/* Mirrors the avatar box exactly. inline-block with overflow:hidden puts the baseline at the
+   box's bottom edge (the same reference an <img> uses), so both variants align. */
+.notebook-chip-glyph {
+  display: inline-block;
+  overflow: hidden;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.28em;
+  border-radius: 50%;
+  vertical-align: -0.12em;
+  text-align: center;
+  color: var(--k-accent-text);
+  background: var(--k-accent-soft);
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+.notebook-chip-glyph > * {
+  display: block;
+  font-size: 0.7em;
+  line-height: calc(1em / 0.7);
+}
+.notebook-chip-wrap {
+  position: relative;
+  display: inline;
+}
+/* Small Edit pill floating above the chip on hover, on the raised plane. */
+.notebook-chip-edit {
+  position: absolute;
+  bottom: calc(100% + 0.125rem);
+  left: 50%;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  height: 1.25rem;
+  padding: 0 var(--k-space-1-5);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: var(--k-raised);
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  color: var(--k-text-2);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity var(--k-fast), color var(--k-fast);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.notebook-chip-edit > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.notebook-chip-wrap:hover .notebook-chip-edit,
+.notebook-chip-edit:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.notebook-chip-edit:hover {
+  color: var(--k-text);
+}
+.notebook-chip-edit:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------ selection pill */
+/* Fixed-position "Add to notebook" pill above a transcript selection; coordinates are set
+   inline from the selection rect. The ::after nub points at the selected text. */
+.selection-add-btn {
+  position: fixed;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-2);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: var(--k-raised);
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  color: var(--k-text);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translate(-50%, calc(-100% - 0.5rem));
+  animation: k-pop-in var(--k-base) var(--k-ease-out);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.selection-add-btn > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-text-2);
+}
+.selection-add-btn:hover {
+  background: var(--gray-3);
+}
+.selection-add-btn:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+.selection-add-btn::after {
+  content: "";
+  position: absolute;
+  top: calc(100% - 0.25rem);
+  left: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: inherit;
+  box-shadow: inset -1px -1px 0 var(--gray-a5);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+/* ------------------------------------------------------------------ line actions menu */
+.log-line-menu {
+  min-width: 11rem;
+}
+/* Read aloud hosts the shared AudioPlayer button in the icon slot. */
+.log-audio-slot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.log-audio-slot button {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  margin: 0 !important;
+  color: var(--k-text-2);
+}
+.log-audio-slot svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+
+/* ------------------------------------------------------------------ session manager */
+.log-sessions {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(var(--k-space-4) * -1);
+}
+.log-session-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  min-height: var(--k-row-h);
+  padding: var(--k-space-0-5) var(--k-space-3) var(--k-space-0-5) var(--k-space-2);
+  transition: opacity var(--k-fast), background-color var(--k-fast);
+}
+.log-session-row + .log-session-row::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--k-space-4);
+  right: var(--k-space-4);
+  height: 1px;
+  background: var(--k-line);
+}
+.log-session-row:hover {
+  background: var(--k-hover);
+}
+.log-session-row[data-dragging] {
+  opacity: 0.4;
+}
+.log-session-row[data-drop="before"]::before,
+.log-session-row[data-drop="after"]::before {
+  content: "";
+  position: absolute;
+  left: var(--k-space-2);
+  right: var(--k-space-2);
+  z-index: 1;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--k-accent);
+}
+.log-session-row[data-drop="before"]::before { top: -1px; }
+.log-session-row[data-drop="after"]::before { bottom: -1px; }
+.log-session-grip.k-button {
+  cursor: grab;
+  color: var(--k-text-3);
+}
+.log-session-grip.k-button:active {
+  cursor: grabbing;
+}
+/* Inline rename: reads as plain text until hovered or focused. */
+.log-session-name.k-field {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.log-session-name.k-field:hover {
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+}
+.log-session-name.k-field:focus {
+  background: var(--k-field);
+}
+.log-session-delete.k-button:hover {
+  color: var(--k-danger-text);
+  background: var(--k-danger-soft);
+}
+.log-dialog-error {
+  margin-top: var(--k-space-3);
+}
+.log-footer-count {
+  margin-right: auto;
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+}
+
+/* ------------------------------------------------------------------ add to notebook */
+.log-add-term {
+  padding: var(--k-space-2) var(--k-space-3);
+  border-radius: var(--k-radius-lg);
+  background: var(--k-sunken);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+  font-family: var(--k-font-jp);
+  font-size: var(--k-text-xl);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.log-add-label {
+  margin: var(--k-space-3) 0 var(--k-space-1);
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+}
+.log-kinds {
+  margin: 0 calc(var(--k-space-4) * -1);
+  padding: 0;
+}
+.log-kinds .k-row {
+  padding-left: var(--k-space-4);
+  padding-right: var(--k-space-4);
+}
+.log-kind-glyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+  font-family: var(--k-font-jp);
+  font-size: var(--k-text-sm);
+  line-height: 1;
+}
+
+/* ------------------------------------------------------------------ explain */
+/* Centred with inset + margin:auto rather than translate(-50%) so the box sits on whole pixels
+   and long Japanese/markdown text stays crisp. */
+.log-explain.k-dialog {
+  inset: 0;
+  width: min(48rem, calc(100vw - 2rem));
+  height: min(40rem, calc(100vh - 2rem));
+  max-height: none;
+  margin: auto;
+  transform: none;
+  animation: k-fade-in var(--k-base) var(--k-ease-out);
+}
+.log-explain .k-dialog-header {
+  padding-bottom: var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+}
+.log-explain .k-title {
+  font-weight: var(--k-weight-regular);
+  letter-spacing: 0;
+}
+.log-explain-sentence {
+  display: block;
+  font-size: var(--k-text-xl);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.log-explain-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.log-explain .k-dialog-body {
+  padding: var(--k-space-4) var(--k-space-5) var(--k-space-5);
+}
+.log-explain-body {
+  font-size: var(--k-text-md);
+  line-height: 1.65;
+}
+.log-explain-waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+}
+.log-explain-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.log-explain-caret {
+  display: inline-block;
+  width: 0.5rem;
+  height: 1rem;
+  margin-top: var(--k-space-1);
+  background: var(--k-text-3);
+  animation: log-pulse 1s ease-in-out infinite;
+}
+.log-spin {
+  animation: k-spin 900ms linear infinite;
+}

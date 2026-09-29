@@ -83,13 +83,19 @@ pub static PANELS: &[PanelSpec] = &[
     },
     // Crop editing lives inside the picker (`open_source_picker({editCurrent:true})`),
     // so there is no separate crop window as there was in Electron.
-    panel(
-        "source-picker",
-        "Select Source",
-        "app/source-picker.html",
-        680.,
-        720.,
-    ),
+    // Compact: a three-column tile grid and a crop preview. It opens beside the
+    // controller (see `place_source_picker`), so it must not dwarf it.
+    PanelSpec {
+        min_width: 440.,
+        min_height: 400.,
+        ..panel(
+            "source-picker",
+            "Select Source",
+            "app/source-picker.html",
+            520.,
+            560.,
+        )
+    },
     PanelSpec {
         min_width: 820.,
         min_height: 560.,
@@ -112,22 +118,28 @@ pub static PANELS: &[PanelSpec] = &[
     ),
     PanelSpec {
         resizable: false,
+        // The width is also what `tray.rs` centres under the tray icon, so the minimum must
+        // not exceed it or the popover sits off-centre.
+        min_width: 280.,
         ..panel(
             "tray-popover",
             "Kimochi",
             "app/tray-popover.html",
-            150.,
+            280.,
             460.,
         )
     },
     PanelSpec {
-        // The real distributed Yomitan settings page at the dist root, in its own
-        // native window like Electron's `createYomitanWindow`. It gets the panel
-        // shim, never the overlay's backend-hosting `host/shim.js`: a second backend
-        // on the same IndexedDB is the one thing that must not happen.
-        decorated: true,
+        // The real distributed Yomitan settings page, in its own native window like
+        // Electron's `createYomitanWindow`, framed by Kimochi's own panel chrome: the
+        // React panel draws the title bar and loads `/settings.html` in an iframe.
+        // Every frame gets the panel shim (as in the Log), never the overlay's
+        // backend-hosting `host/shim.js`: a second backend on the same IndexedDB is
+        // the one thing that must not happen.
+        min_width: 720.,
+        min_height: 480.,
         init_asset: Some("/spike/panel-shim.js"),
-        ..panel("yomitan", "Yomitan", "settings.html", 1100., 700.)
+        ..panel("yomitan", "Yomitan settings", PANEL_PAGE, 960., 680.)
     },
     // The POC's `ui/sources.html` is deliberately NOT registered. Its file is kept for
     // history, but there is exactly one source UX now — `source-picker` — and offering
@@ -367,10 +379,17 @@ pub fn act(
     action: &str,
     rect: Option<Rect>,
 ) -> Result<Value, String> {
+    let existed = app.get_webview_window(label).is_some();
     let window = ensure(app, settings, label)?;
     let native_err = |e: tauri::Error| format!("native: {e}");
     match action {
         "show" => {
+            if label == SOURCE_PICKER && !window.is_visible().unwrap_or(false) {
+                place_source_picker(app, &window, existed)?;
+            }
+            if label == YOMITAN && !window.is_visible().unwrap_or(false) {
+                place_on_controller_display(app, &window, existed, YOMITAN)?;
+            }
             window.show().map_err(native_err)?;
             window.set_focus().map_err(native_err)?;
         }
@@ -413,6 +432,138 @@ pub fn act(
         );
     }
     Ok(state)
+}
+
+const SOURCE_PICKER: &str = "source-picker";
+/// Space between the controller and the source picker that pops out beside it.
+const PICKER_GAP: f64 = 8.;
+
+/// Positions the source picker as it opens, from every path (controller, tray
+/// popover, app menu):
+///
+/// - controller on screen: beside it, on the side with room (right first), top-aligned
+///   with it, on the controller's display;
+/// - otherwise: centred on the display under the cursor.
+///
+/// Either way the frame is kept inside that display's work area. A picker the user
+/// has resized this session keeps its size; a newly created one uses the compact
+/// spec size rather than a larger frame restored from an older build.
+fn place_source_picker(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    existed: bool,
+) -> Result<(), String> {
+    let spec = spec(SOURCE_PICKER).ok_or("invalid: source picker spec")?;
+    let (width, height) = match native::bounds(window) {
+        Ok(current) if existed => (current.width, current.height),
+        _ => (spec.width, spec.height),
+    };
+    let displays = native::display_infos();
+    let controller = app
+        .get_webview_window("controller")
+        .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+        .and_then(|w| native::bounds(&w).ok());
+    let rect = if let Some(anchor) = controller {
+        let (cx, cy) = (anchor.x + anchor.width / 2., anchor.y + anchor.height / 2.);
+        let Some(area) = work_area_at(&displays, cx, cy) else {
+            return Ok(());
+        };
+        beside(anchor, width, height, area, PICKER_GAP)
+    } else {
+        let (x, y) = native::cursor().map_or((0., 0.), |(x, y, _, _)| (x, y));
+        let Some(area) = work_area_at(&displays, x, y) else {
+            return Ok(());
+        };
+        centred(width, height, area)
+    };
+    native::place(window, rect)
+}
+
+const YOMITAN: &str = "yomitan";
+
+/// Centres a large panel (Yomitan settings) on the display the controller is on, or
+/// the display under the cursor when the controller is hidden, clamped to its work
+/// area. As with the picker, a window resized this session keeps its size and a new
+/// one starts at the spec size, not a frame restored from an older build.
+fn place_on_controller_display(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    existed: bool,
+    label: &str,
+) -> Result<(), String> {
+    let spec = spec(label).ok_or("invalid: unknown panel spec")?;
+    let (width, height) = match native::bounds(window) {
+        Ok(current) if existed => (current.width, current.height),
+        _ => (spec.width, spec.height),
+    };
+    let displays = native::display_infos();
+    let (x, y) = app
+        .get_webview_window("controller")
+        .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+        .and_then(|w| native::bounds(&w).ok())
+        .map(|r| (r.x + r.width / 2., r.y + r.height / 2.))
+        .or_else(|| native::cursor().map(|(x, y, _, _)| (x, y)))
+        .unwrap_or((0., 0.));
+    let Some(area) = work_area_at(&displays, x, y) else {
+        return Ok(());
+    };
+    native::place(window, centred(width, height, area))
+}
+
+/// The work area of the display containing a desktop point (top-left points), or the
+/// nearest display when the point is in a gap between them.
+fn work_area_at(displays: &[native::DisplayInfo], x: f64, y: f64) -> Option<Rect> {
+    let distance = |r: &Rect| {
+        let dx = (r.x - x).max(0.).max(x - (r.x + r.width));
+        let dy = (r.y - y).max(0.).max(y - (r.y + r.height));
+        dx * dx + dy * dy
+    };
+    displays
+        .iter()
+        .min_by(|a, b| {
+            distance(&a.bounds)
+                .partial_cmp(&distance(&b.bounds))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|d| d.work_area)
+}
+
+/// A `width` × `height` frame next to `anchor`: to its right when that fits in
+/// `area`, else to its left, else against whichever edge has more room. Top-aligned
+/// with the anchor and clamped vertically, so it is never clipped.
+fn beside(anchor: Rect, width: f64, height: f64, area: Rect, gap: f64) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let right = anchor.x + anchor.width + gap;
+    let room_right = area.x + area.width - right;
+    let room_left = anchor.x - gap - area.x;
+    let x = if room_right >= width {
+        right
+    } else if room_left >= width {
+        anchor.x - gap - width
+    } else if room_right >= room_left {
+        area.x + area.width - width
+    } else {
+        area.x
+    };
+    let y = anchor.y.max(area.y).min(area.y + area.height - height);
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+fn centred(width: f64, height: f64, area: Rect) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    Rect {
+        x: (area.x + (area.width - width) / 2.).round(),
+        y: (area.y + (area.height - height) / 2.).round(),
+        width,
+        height,
+    }
 }
 
 /// The controller is fixed-width and grows to fit its menu rows.
@@ -466,6 +617,64 @@ pub fn recover_bounds(app: &tauri::AppHandle, settings: &Arc<Settings>) {
 mod tests {
     use super::*;
 
+    const AREA: Rect = Rect {
+        x: 0.,
+        y: 25.,
+        width: 1440.,
+        height: 875.,
+    };
+    const fn at(x: f64, y: f64) -> Rect {
+        Rect {
+            x,
+            y,
+            width: 410.,
+            height: 150.,
+        }
+    }
+
+    #[test]
+    fn source_picker_opens_to_the_right_of_the_controller_when_it_fits() {
+        let r = beside(at(40., 65.), 520., 560., AREA, 8.);
+        assert_eq!((r.x, r.y, r.width, r.height), (458., 65., 520., 560.));
+    }
+
+    #[test]
+    fn source_picker_flips_left_near_the_right_edge() {
+        let r = beside(at(1000., 65.), 520., 560., AREA, 8.);
+        assert_eq!((r.x, r.y), (472., 65.));
+    }
+
+    #[test]
+    fn source_picker_is_clamped_to_the_work_area() {
+        // Low on the display: top-aligned would clip, so it moves up.
+        let r = beside(at(40., 800.), 520., 560., AREA, 8.);
+        assert_eq!(r.y, AREA.y + AREA.height - 560.);
+        // No room either side: pinned to the edge with more room, still inside.
+        let narrow = Rect {
+            width: 800.,
+            ..AREA
+        };
+        let r = beside(at(100., 65.), 520., 560., narrow, 8.);
+        assert_eq!(r.x, 800. - 520.);
+        // A display on the left of the primary (negative x) works the same way.
+        let left = Rect { x: -1440., ..AREA };
+        let r = beside(at(-1400., 65.), 520., 560., left, 8.);
+        assert_eq!(r.x, -1400. + 410. + 8.);
+    }
+
+    #[test]
+    fn source_picker_centres_without_a_controller_and_fits_small_displays() {
+        let r = centred(520., 560., AREA);
+        assert_eq!((r.x, r.y), (460., 183.));
+        let tiny = Rect {
+            width: 400.,
+            height: 300.,
+            ..AREA
+        };
+        let r = centred(520., 560., tiny);
+        assert_eq!((r.x, r.y, r.width, r.height), (0., 25., 400., 300.));
+    }
+
     #[test]
     fn electron_pin_defaults_are_preserved() {
         assert!(spec("controller").unwrap().pinned);
@@ -498,13 +707,9 @@ mod tests {
     #[test]
     fn react_panels_do_not_collide_with_yomitan_paths() {
         // Yomitan owns the dist root, so our own pages must stay under a prefix. The
-        // `yomitan` window is the one intentional exception: it hosts Yomitan's own
-        // distributed settings page, which must be loaded at its real path.
+        // `yomitan` window is a panel too; it loads Yomitan's settings page (at its real
+        // path) in an iframe.
         for spec in PANELS {
-            if spec.label == "yomitan" {
-                assert_eq!(spec.url, "settings.html");
-                continue;
-            }
             assert!(
                 spec.url.starts_with("ui/") || spec.url.starts_with("app/"),
                 "{} escapes its prefix: {}",
@@ -515,9 +720,9 @@ mod tests {
     }
 
     #[test]
-    fn only_the_yomitan_window_keeps_a_system_frame_and_a_shim() {
+    fn panels_draw_their_own_frame_and_only_extension_hosts_get_a_shim() {
         for spec in PANELS {
-            assert_eq!(spec.decorated, spec.label == "yomitan", "{}", spec.label);
+            assert!(!spec.decorated, "{} should use Kimochi's own chrome", spec.label);
             // Exactly the windows that run the original extension in a subframe.
             assert_eq!(
                 spec.init_asset.is_some(),

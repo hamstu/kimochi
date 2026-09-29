@@ -1,5 +1,6 @@
+import { CircleAlert, SearchX } from "lucide-react";
+import { Badge, EmptyState, Spinner, Tooltip } from "@kit";
 import { displayHtml } from "../lib/html";
-import { Badge } from "@texthooker/components/ui/badge";
 import { parseInflectionChains } from "@texthooker/lib/inflection";
 import type { YomitanAnkiFields } from "@texthooker/lib/types";
 
@@ -63,20 +64,51 @@ export function TermDefinition({
   onCrossRef,
 }: Props) {
   if (state === "loading") {
-    return <div className="text-xs text-(--color-text-muted)">Looking up…</div>;
+    return (
+      <div className="popover-status" role="status">
+        <Spinner label="Looking up" />
+        <span>
+          Looking up{" "}
+          {term ? (
+            <span className="popover-status-term" lang="ja">
+              {term}
+            </span>
+          ) : null}
+          …
+        </span>
+      </div>
+    );
   }
   if (state === "error") {
     return (
-      <div className="text-xs italic text-(--color-text-muted)">
-        {errorMessage || "Lookup failed."}
-      </div>
+      <EmptyState
+        className="popover-empty"
+        icon={<CircleAlert />}
+        title="Lookup failed"
+      >
+        {errorMessage || "The dictionary did not answer."}
+      </EmptyState>
     );
   }
   if (state === "empty" || !fields) {
     return (
-      <div className="text-xs italic text-(--color-text-muted)">
-        No entries.
-      </div>
+      <EmptyState
+        className="popover-empty"
+        icon={<SearchX />}
+        title="No entries"
+      >
+        {term ? (
+          <>
+            No dictionary has an entry for{" "}
+            <span className="popover-status-term" lang="ja">
+              {term}
+            </span>
+            .
+          </>
+        ) : (
+          "No dictionary has an entry for this word."
+        )}
+      </EmptyState>
     );
   }
 
@@ -91,44 +123,41 @@ export function TermDefinition({
   const inflectionChains = parseInflectionChains(fields.conjugation);
 
   return (
-    <div className="text-sm leading-relaxed">
+    <article className="popover-term">
       {/* Headword */}
-      <div className="jp-text flex items-baseline gap-1.5 flex-wrap border-b border-(--color-border) pb-1.5 mb-2">
-        <span className="text-[1.375rem] font-bold">{expression}</span>
-        {reading && reading !== expression ? (
-          <span className="text-sm font-normal text-(--color-text-dim)">
-            【{reading}】
-          </span>
-        ) : null}
-        {actions ? (
-          <span className="ml-auto flex items-center gap-1 self-center">
-            {actions}
-          </span>
-        ) : null}
-      </div>
+      <header className="popover-headword">
+        <div className="popover-headword-text jp-text" lang="ja">
+          <span className="popover-expression k-selectable">{expression}</span>
+          {reading && reading !== expression ? (
+            <span className="popover-reading k-selectable">{reading}</span>
+          ) : null}
+        </div>
+        {actions ? <div className="popover-actions">{actions}</div> : null}
+      </header>
 
       {/* Inflection chains (multiple = alternative deinflection paths) */}
       {inflectionChains.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-1 mb-2 text-[0.6875rem] text-(--color-text-dim)">
-          <span className="opacity-60">inflected:</span>
+        <div className="popover-inflection">
+          <span className="popover-meta-label">Inflected</span>
           {inflectionChains.map((chain, ci) => (
-            <span key={ci} className="inline-flex items-center gap-1">
-              {ci > 0 ? (
-                <span className="opacity-50 italic px-0.5">or</span>
-              ) : null}
+            <span key={ci} className="popover-inflection-chain">
+              {ci > 0 ? <span className="popover-meta-label">or</span> : null}
               {chain.map((step, i) => (
                 <span
                   key={`${step.rule}-${i}`}
-                  className="inline-flex items-center gap-1"
+                  className="popover-inflection-chain"
                 >
-                  <span
-                    title={step.description ?? "Yomitan deinflection rule"}
-                    className="inline-flex items-center rounded border border-(--color-border) bg-(--color-bg-elev-2) px-1.5 py-[1px] font-mono text-[0.625rem] text-(--color-text) cursor-help"
+                  <Tooltip
+                    content={step.description ?? "Yomitan deinflection rule"}
                   >
-                    {step.rule}
-                  </span>
+                    <span tabIndex={0}>
+                      <Badge>{step.rule}</Badge>
+                    </span>
+                  </Tooltip>
                   {i < chain.length - 1 ? (
-                    <span className="opacity-50">«</span>
+                    <span className="popover-meta-sep" aria-hidden>
+                      «
+                    </span>
                   ) : null}
                 </span>
               ))}
@@ -140,15 +169,18 @@ export function TermDefinition({
       {/* Pitch accents — trusted HTML from local Yomitan host */}
       {fields["pitch-accents"] ? (
         <div
-          className="my-1.5"
-          dangerouslySetInnerHTML={{ __html: displayHtml(fields["pitch-accents"]) }}
+          className="popover-pitch yomitan-html jp-text"
+          lang="ja"
+          dangerouslySetInnerHTML={{
+            __html: displayHtml(fields["pitch-accents"]),
+          }}
         />
       ) : null}
 
       {/* Badges */}
       {(dictionary || partsOfSpeech.length > 0 || tags.length > 0) && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {dictionary ? <Badge variant="accent">{dictionary}</Badge> : null}
+        <div className="popover-badges">
+          {dictionary ? <Badge tone="accent">{dictionary}</Badge> : null}
           {partsOfSpeech.map((p) => (
             <Badge key={`pos-${p}`}>{p}</Badge>
           ))}
@@ -161,7 +193,7 @@ export function TermDefinition({
       {/* Glossary */}
       {fields.glossary ? (
         <div
-          className={`yomitan-html jp-text text-[0.9375rem]${
+          className={`popover-glossary yomitan-html k-selectable${
             onCrossRef ? " yomitan-xref" : ""
           }`}
           onClick={
@@ -182,10 +214,10 @@ export function TermDefinition({
       {/* Frequencies */}
       {fields.frequencies ? (
         <div
-          className="yomitan-html mt-2 text-[0.6875rem] text-(--color-text-muted)"
+          className="popover-frequencies yomitan-html k-num"
           dangerouslySetInnerHTML={{ __html: displayHtml(fields.frequencies) }}
         />
       ) : null}
-    </div>
+    </article>
   );
 }

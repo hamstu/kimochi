@@ -2,102 +2,30 @@
 @import "tailwindcss/utilities.css";
 @source "./**/*.{ts,tsx}";
 @theme {
-  --font-jp: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", "Meiryo", sans-serif;
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --font-jp: var(--k-font-jp);
+  --font-ui: var(--k-font-ui);
+  --font-mono: var(--k-font-mono);
 }
+/* Legacy Texthooker colour names, mapped onto the kit's roles so every window shares one palette. */
 .radix-themes {
-  --color-accent: var(--accent-9);
-  --color-accent-text: var(--accent-11);
-  --color-accent-soft: var(--accent-a3);
-  --color-danger: var(--red-9);
-  --color-ok: var(--green-9);
+  --color-accent: var(--k-accent);
+  --color-accent-text: var(--k-accent-text);
+  --color-accent-soft: var(--k-accent-soft);
+  --color-danger: var(--k-danger);
+  --color-ok: var(--k-ok);
   --color-warn: var(--amber-9);
-  --color-bg: var(--color-panel-solid);
-  --color-bg-elev: var(--gray-2);
-  --color-bg-elev-2: var(--gray-3);
-  --color-border: var(--gray-a5);
-  --color-text: var(--gray-12);
-  --color-text-dim: var(--gray-11);
-  --color-text-muted: var(--gray-10);
-  --shadow-pop: var(--shadow-4);
+  --color-bg: var(--k-bg);
+  --color-bg-elev: var(--k-raised);
+  --color-bg-elev-2: var(--k-press);
+  --color-border: var(--k-line-strong);
+  --color-text: var(--k-text);
+  --color-text-dim: var(--k-text-2);
+  --color-text-muted: var(--k-text-3);
+  --shadow-pop: var(--k-shadow-pop);
 }
 
-/* Shared controls use explicit geometry rather than generated utilities. This keeps Radix
-   primitives stable in panel roots, portals, and the controller despite scoped reader resets. */
-.kimochi-switch {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  width: 2rem;
-  height: 1.125rem;
-  padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  color: var(--color-text-dim);
-  background: var(--color-bg-elev-2);
-  cursor: pointer;
-  transition-property: background-color, border-color;
-  transition-duration: 120ms;
-}
-.kimochi-switch[data-state="checked"] {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-}
-.kimochi-switch:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-.kimochi-switch:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-.kimochi-switch-thumb {
-  display: block;
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: var(--shadow-1);
-  pointer-events: none;
-  transform: translateX(0.125rem);
-  transition-property: color, transform;
-  transition-duration: 120ms;
-}
-.kimochi-switch-thumb[data-state="checked"] {
-  color: var(--color-accent);
-  transform: translateX(1rem);
-}
-.kimochi-button {
-  transition-property: background-color, border-color, color, transform;
-  transition-duration: 120ms;
-}
-.kimochi-button:active:not(:disabled) {
-  transform: scale(0.96);
-}
-.kimochi-input {
-  min-height: 1.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.375rem;
-  background: var(--color-bg-elev);
-  color: var(--color-text);
-  cursor: text;
-  font: inherit;
-  outline: none;
-  transition-property: border-color, box-shadow;
-  transition-duration: 120ms;
-}
 .texthooker textarea {
   cursor: text;
-}
-.kimochi-input:focus-visible {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
-}
-.kimochi-input:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 .texthooker {
   font-family: var(--default-font-family);
@@ -105,15 +33,6 @@
 }
 .texthooker-settings input {
   max-width: 100%;
-}
-.reader-error {
-  color: var(--red-11);
-  background: var(--red-a3);
-  padding: 8px;
-  font-size: 12px;
-}
-.reader-error button {
-  margin-left: 12px;
 }
 /* Shift-hover scan mode — global cursor + suppress token button hover/click. */
 body.scan-mode,
@@ -157,29 +76,6 @@ body.scan-mode .jp-text button {
   letter-spacing: 0;
 }
 
-/* Per-line three-dot actions trigger. Hidden until the line is hovered or the
-   menu is open (the component flips the inline opacity class when open). */
-.line .line-actions-trigger {
-  opacity: 0;
-  transition: opacity 120ms ease;
-  vertical-align: 0.1em;
-  -webkit-user-select: none;
-  user-select: none;
-}
-.line:hover .line-actions-trigger,
-.line .line-actions-trigger:focus-visible {
-  opacity: 0.7;
-}
-.line:hover .line-actions-trigger:hover {
-  opacity: 1;
-}
-/* When scan mode is active, hide the trigger so it doesn't compete with the
-   crosshair / scan highlight. */
-body.scan-mode .line-actions-trigger {
-  opacity: 0 !important;
-  pointer-events: none;
-}
-
 ruby rt {
   font-size: 0.5em;
   color: var(--color-text-dim);
@@ -187,143 +83,6 @@ ruby rt {
   -webkit-user-select: none;
   user-select: none;
   pointer-events: none;
-}
-
-/* Notebook match chip — clickable avatar + name pair rendered inline in the
-   transcript when a notebook entry's name appears in a line. The cue is the
-   accent-colored text (theme-aware for contrast), not an underline. */
-.notebook-chip {
-  position: relative;
-  color: var(--color-accent-text);
-}
-
-.notebook-chip-avatar {
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  border-radius: 50%;
-  object-fit: cover;
-  vertical-align: -0.12em;
-  margin-right: 0.28em;
-  -webkit-user-select: none;
-  user-select: none;
-  pointer-events: none;
-}
-
-.notebook-chip-glyph {
-  /* Sized/aligned to mirror .notebook-chip-avatar exactly. inline-block with
-     overflow:hidden moves the baseline to the box's bottom edge — the same
-     reference a replaced <img> uses — so vertical-align lines up with the
-     avatar version. (inline-flex aligned by the inner glyph's text baseline
-     instead, which floated the circle above the avatars.) */
-  display: inline-block;
-  overflow: hidden;
-  width: 1em;
-  height: 1em;
-  border-radius: 50%;
-  vertical-align: -0.12em;
-  margin-right: 0.28em;
-  text-align: center;
-  color: var(--color-accent);
-  background: var(--color-accent-soft);
-  -webkit-user-select: none;
-  user-select: none;
-  pointer-events: none;
-}
-
-.notebook-chip-glyph > * {
-  display: block;
-  font-size: 0.7em;
-  /* Line box exactly as tall as the 1em circle (1 / 0.7 in local em units),
-     centering the character vertically without flex. */
-  line-height: calc(1em / 0.7);
-}
-
-.notebook-chip-name {
-  /* Keep name styling neutral; the underline on .notebook-chip is the cue. */
-}
-
-/* Wrapper so a small Edit button can float above the chip on hover without
-   shifting the surrounding line text. */
-.notebook-chip-wrap {
-  position: relative;
-  display: inline;
-}
-
-.notebook-chip-edit {
-  position: absolute;
-  bottom: calc(100% + 2px);
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-  padding: 0.125rem 0.4375rem;
-  font-size: 0.625rem;
-  font-family: var(--font-sans, system-ui);
-  line-height: 1.4;
-  white-space: nowrap;
-  color: var(--color-text-dim);
-  background: var(--color-bg-elev);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
-  z-index: 10;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.notebook-chip-wrap:hover .notebook-chip-edit,
-.notebook-chip-edit:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.notebook-chip-edit:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-/* Floating "Add to notebook" pill shown above a text selection in the
-   transcript. Fixed-position; coordinates set inline from the selection rect.
-   The ::after triangle points down at the selected text. */
-.selection-add-btn {
-  position: fixed;
-  transform: translate(-50%, calc(-100% - 0.5625rem));
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3125rem;
-  padding: 0.25rem 0.625rem;
-  font-size: 0.6875rem;
-  font-family: var(--font-sans, system-ui);
-  line-height: 1.4;
-  white-space: nowrap;
-  color: var(--color-text);
-  background: var(--color-bg-elev);
-  border: 1px solid var(--color-accent);
-  border-radius: 999px;
-  box-shadow: var(--shadow-pop, 0 4px 12px rgba(0, 0, 0, 0.25));
-  cursor: pointer;
-  z-index: 60;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.selection-add-btn:hover {
-  background: var(--color-accent-soft);
-}
-
-.selection-add-btn::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 0.3125rem solid transparent;
-  border-top-color: var(--color-accent);
 }
 
 /* Yomitan-rendered HTML inside the definition popover gets passthrough styling. */
@@ -339,7 +98,7 @@ ruby rt {
 
 .yomitan-html [data-sc-content="example-sentence-a"] {
   font-size: 1.05em;
-  border-left: 3px solid var(--color-accent);
+  border-left: 1px solid var(--k-accent-line);
   padding-left: 0.5rem;
   margin: 0.25rem 0;
 }
@@ -347,7 +106,7 @@ ruby rt {
 .yomitan-html [data-sc-content="example-sentence-b"] {
   font-size: 0.9em;
   color: var(--color-text-dim);
-  border-left: 3px solid var(--color-border);
+  border-left: 1px solid var(--k-line-strong);
   padding-left: 0.5rem;
   margin: 0.25rem 0;
 }
@@ -449,7 +208,7 @@ ruby rt {
   padding: 0;
 }
 .explain-markdown blockquote {
-  border-left: 3px solid var(--color-border);
+  border-left: 1px solid var(--k-line-strong);
   padding-left: 0.7em;
   color: var(--color-text-dim);
   margin: 0.5em 0;

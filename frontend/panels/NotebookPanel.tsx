@@ -5,25 +5,11 @@ import {
   onSettingsChange as onNativeSettingChange,
 } from "../bridge/settings";
 import { initializeClient } from "../texthooker/bridge";
-import { EditEntryModal } from "../texthooker/components/EditEntryModal";
 import { NotebookPanel as NotebookContent } from "../texthooker/components/NotebookPanel";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../texthooker/components/ui/select";
 import { onEditModalRequest } from "../texthooker/lib/editModal";
 import { getEntry } from "../texthooker/lib/notebook";
 import { loadSettings } from "../texthooker/lib/settings";
-import {
-  getActiveSession,
-  listSessions,
-  subscribeSessions,
-  switchSession,
-} from "../texthooker/lib/sessions";
-import type { SessionMeta } from "../texthooker/lib/types";
+import { getActiveSession } from "../texthooker/lib/sessions";
 
 interface NotebookEditRequest {
   entryId: string;
@@ -137,67 +123,19 @@ export default function NotebookPanel(): JSX.Element {
 
   if (!ready) {
     return (
-      <div role="status" className="p-4 text-xs">
+      <div role="status" className="nb-status">
         {error || "Loading notebook…"}
       </div>
     );
   }
 
   return (
-    <div className="texthooker flex h-full min-h-0 flex-col">
-      <NotebookSessionSelect />
-      {requestError ? (
-        <div
-          role="alert"
-          className="mx-4 mt-3 rounded-md bg-(--color-danger)/10 px-3 py-2 text-xs text-(--color-danger)"
-        >
-          {requestError}
-        </div>
-      ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <NotebookContent />
-      </div>
-      <EditEntryModal entryId={edit} onClose={() => setEdit(null)} />
-    </div>
-  );
-}
-
-function NotebookSessionSelect(): JSX.Element {
-  const [active, setActive] = useState<SessionMeta>(() => getActiveSession());
-  const [sessions, setSessions] = useState<SessionMeta[]>(() => listSessions());
-
-  useEffect(
-    () =>
-      subscribeSessions((manifest) => {
-        const next = manifest.sessions.find(
-          (session) => session.id === manifest.activeId,
-        );
-        if (next) setActive(next);
-        setSessions(manifest.sessions.slice());
-      }),
-    [],
-  );
-
-  return (
-    <div className="flex flex-none items-center gap-3 border-b border-(--color-border) bg-(--color-bg-elev) px-4 py-2">
-      <span className="text-xs text-(--color-text-dim)">Session</span>
-      <Select
-        value={active.id}
-        onValueChange={(id) => {
-          if (id !== active.id) void switchSession(id);
-        }}
-      >
-        <SelectTrigger className="w-full max-w-[24rem]">
-          <SelectValue>{active.name}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {sessions.map((session) => (
-            <SelectItem key={session.id} value={session.id}>
-              {session.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <NotebookContent
+      editingId={edit}
+      onEdit={setEdit}
+      onCloseEditor={() => setEdit(null)}
+      notice={requestError}
+      onDismissNotice={() => setRequestError("")}
+    />
   );
 }

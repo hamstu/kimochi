@@ -5,6 +5,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { EditEntryModal } from "./components/EditEntryModal";
 import { onEditModalRequest } from "./lib/editModal";
 import { SETTINGS_DEFAULTS } from "./lib/types";
+import { Callout } from "@kit";
 import "./settings.css";
 export default function TexthookerSettingsTab() {
   const [ready, setReady] = useState(false);
@@ -43,14 +44,19 @@ export default function TexthookerSettingsTab() {
   }, []);
   if (!ready)
     return (
-      <div role="status" className="p-4">
-        {error || "Loading Texthooker settings…"}
+      <div className="texthooker-settings-status">
+        {error ? (
+          <Callout tone="danger">{error}</Callout>
+        ) : (
+          <span role="status" className="k-description">
+            Loading Texthooker settings…
+          </span>
+        )}
       </div>
     );
   return (
-    <div className="texthooker texthooker-settings-page p-4">
-      <div role="alert">{error}</div>
-      <SettingsPanel open settings={settings} />
+    <div className="texthooker texthooker-settings-page">
+      <SettingsPanel open settings={settings} error={error} />
       <EditEntryModal entryId={edit} onClose={() => setEdit(null)} />
     </div>
   );

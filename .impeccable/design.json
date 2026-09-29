@@ -1,0 +1,420 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-29T22:06:07+00:00",
+  "title": "Design System: Kimochi",
+  "extensions": {
+    "colorMeta": {
+      "indigo-accent": {
+        "role": "primary",
+        "displayName": "Kimochi Indigo",
+        "canonical": "var(--k-accent) = Radix indigo-9",
+        "tonalRamp": [
+          "#1f2d5c",
+          "#3a5bc7",
+          "#3358d4",
+          "#3e63dd",
+          "#8da4ef",
+          "#abbdf9",
+          "#d2deff",
+          "#edf2fe"
+        ]
+      },
+      "indigo-accent-text": {
+        "role": "primary",
+        "displayName": "Indigo Ink",
+        "canonical": "var(--k-accent-text) = indigo-11 (dark #9eb1ff)",
+        "tonalRamp": [
+          "#1f2d5c",
+          "#3a5bc7",
+          "#3358d4",
+          "#3e63dd",
+          "#8da4ef",
+          "#abbdf9",
+          "#d2deff",
+          "#edf2fe"
+        ]
+      },
+      "indigo-accent-soft": {
+        "role": "primary",
+        "displayName": "Indigo Wash",
+        "canonical": "var(--k-accent-soft) = indigo-a3"
+      },
+      "indigo-focus": {
+        "role": "primary",
+        "displayName": "Focus Indigo",
+        "canonical": "var(--k-focus) = indigo-8"
+      },
+      "window-ground": {
+        "role": "neutral",
+        "displayName": "Window Ground",
+        "canonical": "var(--k-bg) = --color-background (white / slate-1 #111113)",
+        "tonalRamp": [
+          "#1c2024",
+          "#60646c",
+          "#80838d",
+          "#b9bbc6",
+          "#d9d9e0",
+          "#e8e8ec",
+          "#f9f9fb",
+          "#fcfcfd"
+        ]
+      },
+      "bar-plane": {
+        "role": "neutral",
+        "displayName": "Bar Plane",
+        "canonical": "var(--k-bar) = slate-2",
+        "tonalRamp": [
+          "#1c2024",
+          "#60646c",
+          "#80838d",
+          "#b9bbc6",
+          "#d9d9e0",
+          "#e8e8ec",
+          "#f9f9fb",
+          "#fcfcfd"
+        ]
+      },
+      "raised-plane": {
+        "role": "neutral",
+        "displayName": "Raised Plane",
+        "canonical": "var(--k-raised) = --color-panel-solid (white / slate-2)"
+      },
+      "sunken-well": {
+        "role": "neutral",
+        "displayName": "Sunken Well",
+        "canonical": "var(--k-sunken) = slate-a2"
+      },
+      "field-ground": {
+        "role": "neutral",
+        "displayName": "Field Ground",
+        "canonical": "var(--k-field) = --color-surface"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "var(--k-text) = slate-12",
+        "tonalRamp": [
+          "#1c2024",
+          "#60646c",
+          "#80838d",
+          "#b9bbc6",
+          "#d9d9e0",
+          "#e8e8ec",
+          "#f9f9fb",
+          "#fcfcfd"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Ink",
+        "canonical": "var(--k-text-2) = slate-11"
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Faint Ink",
+        "canonical": "var(--k-text-3) = slate-10"
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "var(--k-line) = gray-a4"
+      },
+      "control-line": {
+        "role": "neutral",
+        "displayName": "Control Line",
+        "canonical": "var(--k-line-strong) = gray-a6"
+      },
+      "track": {
+        "role": "neutral",
+        "displayName": "Track",
+        "canonical": "var(--gray-a5)"
+      },
+      "hover-wash": {
+        "role": "neutral",
+        "displayName": "Hover Wash",
+        "canonical": "var(--k-hover) = gray-a3"
+      },
+      "press-wash": {
+        "role": "neutral",
+        "displayName": "Press Wash",
+        "canonical": "var(--k-press) / var(--k-selected) = gray-a4"
+      },
+      "danger": {
+        "role": "status",
+        "displayName": "Danger",
+        "canonical": "var(--k-danger) = red-9"
+      },
+      "danger-soft": {
+        "role": "status",
+        "displayName": "Danger Wash",
+        "canonical": "var(--k-danger-soft) = red-a3"
+      },
+      "ok": {
+        "role": "status",
+        "displayName": "OK",
+        "canonical": "var(--k-ok) = green-9"
+      },
+      "warn-text": {
+        "role": "status",
+        "displayName": "Warn",
+        "canonical": "var(--k-warn-text) = amber-11"
+      }
+    },
+    "typographyMeta": {
+      "heading-xl": {
+        "displayName": "Heading XL",
+        "purpose": "First-run and empty-state headings only (18px)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Settings page and dialog titles (15px semibold)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Row labels, setting labels, button text (13px medium)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI text, fields, selects, menu items (13px)."
+      },
+      "description": {
+        "displayName": "Description",
+        "purpose": "Setting descriptions, tooltips, small buttons (12px, secondary ink)."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Title bars, bars, badges, menu labels, footer stats (11px, tabular)."
+      },
+      "japanese": {
+        "displayName": "Japanese",
+        "purpose": "Transcript and dictionary text; transcript keeps its own px size (fontSizePx 12-48), outside the interface scale."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Code, URLs, keys and file paths only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "k-shadow-pop",
+        "value": "0 1px 2px rgb(15 17 26 / 0.08), 0 10px 28px -8px rgb(15 17 26 / 0.22)",
+        "dark": "0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6)",
+        "purpose": "Menus, selects, popovers; always paired with inset 0 0 0 1px gray-a5 (dark gray-a6)."
+      },
+      {
+        "name": "k-shadow-dialog",
+        "value": "0 2px 6px rgb(15 17 26 / 0.1), 0 24px 56px -12px rgb(15 17 26 / 0.3)",
+        "dark": "0 2px 8px rgb(0 0 0 / 0.35), 0 28px 64px -12px rgb(0 0 0 / 0.7)",
+        "purpose": "Dialogs and sheets over a rgb(8 9 14 / 0.36) scrim (dark rgb(0 0 0 / 0.5))."
+      },
+      {
+        "name": "popover-shadow",
+        "value": "0 1px 2px rgb(15 17 26 / 0.08), 0 6px 14px -4px rgb(15 17 26 / 0.22)",
+        "dark": "0 1px 2px rgb(0 0 0 / 0.3), 0 6px 14px -4px rgb(0 0 0 / 0.55)",
+        "purpose": "Dictionary popup window: the pop shadow tightened to fit its 16px window pad."
+      },
+      {
+        "name": "control-lift",
+        "value": "0 1px 1px rgb(0 0 0 / 0.04)",
+        "purpose": "Under secondary buttons and select triggers, light only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "k-ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Default ease for pops, switches, dialogs."
+      },
+      {
+        "name": "k-fast",
+        "value": "100ms",
+        "purpose": "Hover and colour state changes."
+      },
+      {
+        "name": "k-base",
+        "value": "160ms",
+        "purpose": "Menu/popover pop-in (scale 0.97 to 1), switch thumb."
+      },
+      {
+        "name": "dialog-in",
+        "value": "200ms",
+        "purpose": "Dialog rise (translateY 0.5rem, scale 0.98)."
+      },
+      {
+        "name": "sheet-in",
+        "value": "220ms",
+        "purpose": "Sheet slide from 12% right."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "1ms",
+        "purpose": "All animation and transition durations under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [],
+    "appearance": {
+      "setting": "appearance: light | dark | system (default system); resolved class .light/.dark on <html>; native window background set to #ffffff / #111113; cached in localStorage kimochi.appearance.v1 and applied before render.",
+      "interfaceScale": {
+        "setting": "interfaceScale (default medium)",
+        "rootFontSize": "16px x factor",
+        "factors": {
+          "small": 0.92,
+          "medium": 1,
+          "large": 1.1,
+          "xlarge": 1.22
+        },
+        "note": "Everything in rem scales; transcript Japanese keeps its own px size (fontSizePx)."
+      },
+      "radix": {
+        "accentColor": "indigo",
+        "grayColor": "slate",
+        "radius": "medium",
+        "panelBackground": "solid"
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Row",
+      "kind": "custom",
+      "refersTo": "row",
+      "description": "The remote's full-bleed 2rem row: the system's signature for actions and navigation.",
+      "html": "<div class=\"ds-rows\"><button class=\"ds-row\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/><path d=\"M7 8h8\"/><path d=\"M7 12h10\"/><path d=\"M7 16h6\"/></svg><span class=\"ds-row-label\">Capture now</span><span class=\"ds-row-meta\">⌘⇧O</span></button><button class=\"ds-row\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 19v3\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><rect x=\"9\" y=\"2\" width=\"6\" height=\"13\" rx=\"3\"/></svg><span class=\"ds-row-label\">Auto OCR</span><span class=\"ds-row-meta\">On</span></button></div>",
+      "css": ".ds-rows{display:flex;flex-direction:column;padding:0.25rem 0;width:16rem;background:var(--k-bg,#fff);}.ds-row{display:flex;align-items:center;gap:0.5rem;width:100%;min-height:2rem;padding:0.375rem 0.75rem;border:0;border-radius:0;background:transparent;color:var(--k-text,#1c2024);font-family:var(--k-font-ui);font-size:0.8125rem;line-height:1.25rem;font-weight:520;text-align:left;cursor:default;transition:background-color 100ms;}.ds-row svg{flex:none;width:1rem;height:1rem;color:var(--k-text-2,#60646c);}.ds-row-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}.ds-row-meta{color:var(--k-text-3,#80838d);font-size:0.75rem;font-weight:430;font-variant-numeric:tabular-nums;}.ds-row:hover{background:var(--k-press,#00002d17);}.ds-row:active{background:var(--gray-a5,#0009321f);}.ds-row[aria-current=page]{background:var(--k-selected,#00002d17);}.ds-row[aria-current=page] svg{color:var(--k-accent-text,#3a5bc7);}.ds-row:focus-visible{outline:2px solid var(--k-focus,#8da4ef);outline-offset:-2px;}"
+    },
+    {
+      "name": "Bar",
+      "kind": "nav",
+      "refersTo": "bar",
+      "description": "28px title/tool/footer strip on the bar plane with a hairline edge.",
+      "html": "<div class=\"ds-bar\"><button class=\"ds-bar-btn\">Steins;Gate <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m7 15 5 5 5-5\"/><path d=\"m7 9 5-5 5 5\"/></svg></button><span class=\"ds-bar-spacer\"></span><span class=\"ds-bar-stat\">15 lines</span></div>",
+      "css": ".ds-bar{display:flex;align-items:center;gap:0.25rem;height:1.75rem;padding:0 0.375rem;background:var(--k-bar,#f9f9fb);border-bottom:1px solid var(--k-line,#00002d17);color:var(--k-text-2,#60646c);font-family:var(--k-font-ui);font-size:0.6875rem;width:20rem;}.ds-bar-spacer{flex:1;}.ds-bar-stat{color:var(--k-text-3,#80838d);font-variant-numeric:tabular-nums;}.ds-bar-btn{display:inline-flex;align-items:center;gap:0.375rem;height:1.375rem;padding:0 0.375rem 0 0.5rem;border:0;border-radius:0.375rem;background:transparent;color:var(--k-text,#1c2024);font:inherit;font-size:0.75rem;font-weight:520;cursor:default;transition:background-color 100ms;}.ds-bar-btn svg{width:0.75rem;height:0.75rem;color:var(--k-text-3,#80838d);}.ds-bar-btn:hover{background:var(--k-hover,#0000330f);}.ds-bar-btn:focus-visible{outline:2px solid var(--k-focus,#8da4ef);outline-offset:1px;}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single indigo action on a surface.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Save to Anki</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:0.375rem;height:1.75rem;padding:0 0.625rem;border:0;border-radius:0.375rem;font-family:var(--k-font-ui);font-size:0.8125rem;line-height:1;font-weight:520;white-space:nowrap;cursor:default;transition:background-color 100ms,color 100ms,transform 100ms;}.ds-btn svg{width:0.875rem;height:0.875rem;}.ds-btn:active{transform:scale(0.97);}.ds-btn:focus-visible{outline:2px solid var(--k-focus,#8da4ef);outline-offset:1px;}.ds-btn-primary{background:var(--k-accent,#3e63dd);color:var(--k-accent-contrast,#fff);}.ds-btn-primary:hover{background:var(--k-accent-hover,#3358d4);}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Default button: field ground with an inset control line.",
+      "html": "<button class=\"ds-btn ds-btn-secondary\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>Add entry</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:0.375rem;height:1.75rem;padding:0 0.625rem;border:0;border-radius:0.375rem;font-family:var(--k-font-ui);font-size:0.8125rem;line-height:1;font-weight:520;white-space:nowrap;cursor:default;transition:background-color 100ms,color 100ms,transform 100ms;}.ds-btn svg{width:0.875rem;height:0.875rem;}.ds-btn:active{transform:scale(0.97);}.ds-btn:focus-visible{outline:2px solid var(--k-focus,#8da4ef);outline-offset:1px;}.ds-btn-secondary{background:var(--k-field,rgba(255,255,255,0.85));color:var(--k-text,#1c2024);box-shadow:inset 0 0 0 1px var(--k-line-strong,#00002f26),0 1px 1px rgb(0 0 0 / 0.04);}.ds-btn-secondary:hover{background:var(--gray-3,#f0f0f3);}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet button for bars and toolbars; indigo wash only when pressed/active.",
+      "html": "<button class=\"ds-btn ds-btn-ghost\">Notebook</button> <button class=\"ds-btn ds-btn-ghost\" aria-pressed=\"true\">Pinned</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:0.375rem;height:1.75rem;padding:0 0.625rem;border:0;border-radius:0.375rem;font-family:var(--k-font-ui);font-size:0.8125rem;line-height:1;font-weight:520;white-space:nowrap;cursor:default;transition:background-color 100ms,color 100ms,transform 100ms;}.ds-btn svg{width:0.875rem;height:0.875rem;}.ds-btn:active{transform:scale(0.97);}.ds-btn:focus-visible{outline:2px solid var(--k-focus,#8da4ef);outline-offset:1px;}.ds-btn-ghost{background:transparent;color:var(--k-text-2,#60646c);}.ds-btn-ghost:hover{background:var(--k-hover,#0000330f);color:var(--k-text,#1c2024);}.ds-btn-ghost[aria-pressed=true]{background:var(--k-accent-soft,#0047f112);color:var(--k-accent-text,#3a5bc7);}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive action; soft red at rest, solid on hover.",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Delete session</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:0.375rem;height:1.75rem;padding:0 0.625rem;border:0;border-radius:0.375rem;font-family:var(--k-font-ui);font-size:0.8125rem;line-height:1;font-weight:520;white-space:nowrap;cursor:default;transition:background-color 100ms,color 100ms,transform 100ms;}.ds-btn svg{width:0.875rem;height:0.875rem;}.ds-btn:active{transform:scale(0.97);}.ds-btn:focus-visible{outline:2px solid var(--k-focus,#8da4ef);outline-offset:1px;}.ds-btn-danger{background:var(--k-danger-soft,#f3000d14);color:var(--k-danger-text,#ce2c31);}.ds-btn-danger:hover{background:var(--k-danger,#e5484d);color:#fff;}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Inset-bordered field; indigo line plus halo on focus.",
+      "html": "<input class=\"ds-field\" placeholder=\"http://127.0.0.1:8765\">",
+      "css": ".ds-field{display:block;width:16rem;height:1.75rem;padding:0 0.5rem;border:0;border-radius:0.375rem;background:var(--k-field,rgba(255,255,255,0.85));box-shadow:inset 0 0 0 1px var(--k-line-strong,#00002f26);color:var(--k-text,#1c2024);font-family:var(--k-font-ui);font-size:0.8125rem;line-height:1.25rem;outline:none;transition:box-shadow 100ms;}.ds-field::placeholder{color:var(--k-text-3,#80838d);}.ds-field:hover{box-shadow:inset 0 0 0 1px var(--gray-a8,#00083046);}.ds-field:focus,.ds-field:focus-visible{box-shadow:inset 0 0 0 1px var(--k-focus,#8da4ef),0 0 0 2px var(--accent-a4,#0044ff1e);}"
+    },
+    {
+      "name": "Switch",
+      "kind": "chip",
+      "refersTo": "switch",
+      "description": "On/off control for every boolean setting.",
+      "html": "<button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\"><span></span></button> <button class=\"ds-switch\" role=\"switch\" aria-checked=\"false\"><span></span></button>",
+      "css": ".ds-switch{position:relative;display:inline-flex;align-items:center;width:1.875rem;height:1.125rem;padding:0;border:0;border-radius:999px;background:var(--gray-a5,#0009321f);box-shadow:inset 0 0 0 1px var(--gray-a3,#0000330f);cursor:default;transition:background-color 160ms cubic-bezier(0.16,1,0.3,1);}.ds-switch span{display:block;width:0.875rem;height:0.875rem;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / 0.25),0 0 0 0.5px rgb(0 0 0 / 0.06);transform:translateX(0.125rem);transition:transform 160ms cubic-bezier(0.16,1,0.3,1);}.ds-switch[aria-checked=true]{background:var(--k-accent,#3e63dd);box-shadow:none;}.ds-switch[aria-checked=true] span{transform:translateX(0.875rem);}.ds-switch:focus-visible{outline:2px solid var(--k-focus,#8da4ef);outline-offset:2px;}"
+    },
+    {
+      "name": "Settings Group",
+      "kind": "card",
+      "refersTo": "settings-group",
+      "description": "One hairline-bordered sunken group per settings section; label left, control right, hairlines between rows.",
+      "html": "<div class=\"ds-set\"><div class=\"ds-set-row\"><div class=\"ds-set-text\"><div class=\"ds-set-label\">Auto OCR</div><div class=\"ds-set-desc\">Recognise text whenever the source changes.</div></div><button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\"><span></span></button></div><div class=\"ds-set-row\"><div class=\"ds-set-text\"><div class=\"ds-set-label\">Interval</div><div class=\"ds-set-desc\">How often to check for new text.</div></div><span class=\"ds-set-val\">1.5 s</span></div></div>",
+      "css": ".ds-set{display:flex;flex-direction:column;width:28rem;overflow:hidden;border-radius:0.5rem;background:var(--k-sunken,#00005506);box-shadow:inset 0 0 0 1px var(--k-line,#00002d17);font-family:var(--k-font-ui);}.ds-set-row{display:flex;align-items:center;gap:1rem;min-height:2.75rem;padding:0.5rem 0.75rem;}.ds-set-row+.ds-set-row{border-top:1px solid var(--k-line,#00002d17);}.ds-set-text{flex:1;display:flex;flex-direction:column;gap:0.125rem;min-width:0;}.ds-set-label{font-size:0.8125rem;line-height:1.25rem;font-weight:520;color:var(--k-text,#1c2024);}.ds-set-desc{font-size:0.75rem;line-height:1.125rem;color:var(--k-text-2,#60646c);}.ds-set-val{font-size:0.8125rem;color:var(--k-text-2,#60646c);font-variant-numeric:tabular-nums;}.ds-switch{position:relative;display:inline-flex;align-items:center;width:1.875rem;height:1.125rem;padding:0;border:0;border-radius:999px;background:var(--gray-a5,#0009321f);cursor:default;}.ds-switch span{display:block;width:0.875rem;height:0.875rem;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / 0.25);transform:translateX(0.125rem);transition:transform 160ms cubic-bezier(0.16,1,0.3,1);}.ds-switch[aria-checked=true]{background:var(--k-accent,#3e63dd);}.ds-switch[aria-checked=true] span{transform:translateX(0.875rem);}"
+    },
+    {
+      "name": "Menu",
+      "kind": "custom",
+      "refersTo": "menu",
+      "description": "Raised-plane menu: inset items, neutral highlight, indigo check.",
+      "html": "<div class=\"ds-menu\" role=\"menu\"><div class=\"ds-menu-label\">Session</div><div class=\"ds-menu-item\" role=\"menuitem\">Rename<span class=\"ds-menu-kbd\">⌘R</span></div><div class=\"ds-menu-item\" role=\"menuitemradio\" aria-checked=\"true\">Steins;Gate<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 6 9 17l-5-5\"/></svg></div><div class=\"ds-menu-sep\"></div><div class=\"ds-menu-item ds-menu-danger\" role=\"menuitem\">Delete</div></div>",
+      "css": ".ds-menu{width:13rem;padding:0.25rem;border-radius:0.5rem;background:var(--k-raised,#fff);box-shadow:var(--k-shadow-pop,0 1px 2px rgb(15 17 26 / 0.08),0 10px 28px -8px rgb(15 17 26 / 0.22)),inset 0 0 0 1px var(--gray-a5,#0009321f);color:var(--k-text,#1c2024);font-family:var(--k-font-ui);font-size:0.8125rem;}.ds-menu-label{padding:0.375rem 0.5rem 0.25rem;color:var(--k-text-3,#80838d);font-size:0.6875rem;font-weight:520;}.ds-menu-item{display:flex;align-items:center;gap:0.5rem;min-height:1.75rem;padding:0 0.5rem;border-radius:0.375rem;cursor:default;}.ds-menu-item:hover,.ds-menu-item:focus-visible{background:var(--k-press,#00002d17);outline:none;}.ds-menu-item[aria-checked=true]{font-weight:520;}.ds-menu-item svg{margin-left:auto;width:0.875rem;height:0.875rem;color:var(--k-accent-text,#3a5bc7);}.ds-menu-kbd{margin-left:auto;padding-left:1rem;color:var(--k-text-3,#80838d);font-size:0.75rem;font-variant-numeric:tabular-nums;}.ds-menu-sep{height:1px;margin:0.25rem -0.25rem;background:var(--k-line,#00002d17);}.ds-menu-danger{color:var(--k-danger-text,#ce2c31);}.ds-menu-danger:hover{background:var(--k-danger-soft,#f3000d14);}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Instrument Panel",
+    "overview": "**Creative North Star: \"The Quiet Instrument Panel\"**\n\nKimochi is a set of small windows that float beside a game while the learner reads. Every window is built from one element: the Controller remote's row, full-bleed and aligned, 32px tall (2rem), highlighted by a neutral wash instead of colour. Title bars, tool bars and footers are one 28px strip (1.75rem) on a quieter bar plane. Menus, popovers and dialogs sit one plane up with a soft offset shadow. Nothing else adds depth.\n\nThe system is dense on purpose. The default UI text is 13px (0.8125rem), controls are 28px, and a hairline marks every separation. The palette is Radix slate neutrals with a single Radix indigo accent. Indigo means one of these things only: on, checked, current, focus, the single primary action on a surface, or a notebook-match word in the transcript. Japanese text is the only thing allowed to be large. The chrome recedes so the transcript and dictionary can carry the window.\n\nThe build rejects the web-app card grid. There are no floating cards, glows or nested panels. Settings sections are hairline-bordered groups of rows, and nothing is boxed inside a group.",
+    "keyCharacteristics": [
+      "One row grammar everywhere: full-bleed 2rem rows with a 1rem icon, a medium-weight label and faint tabular meta on the right.",
+      "Three planes (window ground, bar plane, raised plane) plus a sunken well for previews, empty states and settings groups.",
+      "Neutral hover and selection. Accent only for state, focus, primary action and notebook matches.",
+      "Everything is sized in rem, so the Interface size setting scales type, spacing and controls together.",
+      "Light, dark and system appearance. Both themes resolve from the same role tokens.",
+      "App-drawn, platform-neutral chrome with a bundled UI face (Figtree)."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Indigo appears only for on, checked, current, focus, the single primary action per surface, and notebook-match words. A neutral item never gets an accent hover.",
+        "section": "colors"
+      },
+      {
+        "name": "The Role-Not-Value Rule",
+        "body": "Component code uses `--k-*` roles, never hex values or `prefers-color-scheme` queries. The appearance controller puts `.light` or `.dark` on `<html>`, and the roles resolve from there.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Data Rule",
+        "body": "Counts, times, rates and shortcuts use tabular numerals (`k-num`, `tnum`) in the UI face. Mono is never decorative.",
+        "section": "typography"
+      },
+      {
+        "name": "The Five-Step Ramp Rule",
+        "body": "UI text uses 11, 12, 13, 15 or 18 and nothing in between. Only Japanese content leaves the ramp.",
+        "section": "typography"
+      },
+      {
+        "name": "The Three Planes Rule",
+        "body": "Every surface is one of four things: ground, bar, raised or sunken well. A new surface picks one of those and never invents a fifth.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Paired-Line Rule",
+        "body": "Every raised surface carries its shadow together with an inset hairline, so it holds its edge in dark mode.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** build lists of actions and navigation from full-bleed 2rem rows with a neutral press-wash highlight.",
+      "**Do** keep every title bar, tool bar and footer at exactly 1.75rem on the bar plane, with a hairline on the inner edge.",
+      "**Do** size everything in rem from `--k-*` tokens so the interface scale moves type, spacing and controls together. Leave transcript Japanese at its own `fontSizePx`.",
+      "**Do** group each settings section's rows in one hairline-bordered sunken group, with the label on the left and the control on the right.",
+      "**Do** put shadows only on the raised plane, always paired with an inset hairline, and check both light and dark.",
+      "**Do** use tabular numerals in the UI face for counts, times and stats, and lucide icons at 16 / 14 / 12px.",
+      "**Do** mirror hover rules to `[data-native-hover]` by keeping them in plain `:hover` stylesheet rules, so inactive windows still respond."
+    ],
+    "donts": [
+      "**Don't** use indigo for hover on a neutral item, or for anything except on, checked, current, focus, the single primary action or notebook matches.",
+      "**Don't** put more than one primary button on a surface.",
+      "**Don't** use floating cards, glows or nested bordered boxes. Nothing nests inside a settings group.",
+      "**Don't** hard-code hex colours, px sizes or ad-hoc shadows in component code, or branch on `prefers-color-scheme`.",
+      "**Don't** add UI type sizes outside 11 / 12 / 13 / 15 / 18, or use mono for decoration.",
+      "**Don't** use emoji or unicode glyphs as icons. Arrows inside `Kbd` keycaps are key labels, not icons.",
+      "**Don't** depend on macOS-only fonts, vibrancy or native chrome. The chrome is app-drawn and platform-neutral."
+    ]
+  }
+}

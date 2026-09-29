@@ -10,10 +10,12 @@ const POPOVER_LABEL: &str = "reader-popup";
 const GAP: f64 = 14.0; // px from cursor to popover edge
 
 /// Transparent margin baked into the window around the visible card so the
-/// drop-shadow doesn't get clipped by the OS window bounds. The CSS card uses
-/// `popover-shell` which already has `padding: SHADOW_PAD` so the shadow lives
-/// inside the window. Shadow is 6px tall + faint, so a small pad is enough.
-const SHADOW_PAD: f64 = 10.0;
+/// card's CSS drop-shadow is not clipped by the window bounds. It must equal
+/// `--popover-pad` in `frontend/texthooker/popover.css`: the shell pads the
+/// card by exactly this much, so the card is the caller's `width` × `height`
+/// and its shadow (which reaches 16px down, 10px sideways) lives in the margin.
+/// A clipped shadow shows up as a hard grey band under the card.
+const SHADOW_PAD: f64 = 16.0;
 
 /// Used by the desktop pointer poll to avoid work while the popup is hidden.
 static POPOVER_VISIBLE: AtomicBool = AtomicBool::new(false);
@@ -25,7 +27,16 @@ static POPOVER_VISIBLE: AtomicBool = AtomicBool::new(false);
 static READY: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
-pub async fn reader_popup_ready() {
+pub async fn reader_popup_ready(app: AppHandle) {
+    // The card and its shadow are drawn by CSS inside a transparent window.
+    // A native window shadow on top of that is computed by the window server
+    // from the window's alpha and cached; it goes stale as the window is
+    // resized and the card fades in, and outlines the card a second time
+    // (a doubled bottom edge and odd translucent fringes). Turn it off before
+    // the first show; `show_popover` waits for this command.
+    if let Some(window) = app.get_webview_window(POPOVER_LABEL) {
+        let _ = window.set_shadow(false);
+    }
     READY.store(true, Ordering::SeqCst);
 }
 
@@ -135,8 +146,10 @@ pub async fn show_popover(
         return Err("Dictionary popup is still loading; retry shortly".into());
     }
     let gen = LOOKUP_GEN.fetch_add(1, Ordering::Relaxed) + 1;
-    let width = width.clamp(240., 1200.);
-    let height = height.clamp(180., 1000.);
+    // Whole logical pixels, so the card's 1px ring lands on the pixel grid
+    // instead of straddling two device pixels (which reads as a double line).
+    let width = width.clamp(240., 1200.).round();
+    let height = height.clamp(180., 1000.).round();
     let window = app
         .get_webview_window(POPOVER_LABEL)
         .ok_or_else(|| "popover window missing".to_string())?;
@@ -204,7 +217,10 @@ pub async fn show_popover(
     // (x, y) above target the CARD's top-left. Subtract SHADOW_PAD so the
     // window's transparent margin sits behind the card. Tauri converts logical
     // → physical using the destination monitor's scale factor.
-    let _ = window.set_position(LogicalPosition::new(x - SHADOW_PAD, y - SHADOW_PAD));
+    let _ = window.set_position(LogicalPosition::new(
+        (x - SHADOW_PAD).round(),
+        (y - SHADOW_PAD).round(),
+    ));
 
     let is_notebook = kind.as_deref() == Some("notebook");
 

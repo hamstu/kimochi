@@ -1,45 +1,31 @@
+/** Adapter: the Texthooker's button API over the Kimochi kit Button. New code imports `@kit`. */
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "@texthooker/lib/utils";
+import { Button as KitButton, type ButtonVariant } from "@kit/Button";
 
-const buttonVariants = cva(
-  "kimochi-button inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
-  {
-    variants: {
-      variant: {
-        default:
-          "bg-(--color-bg-elev) text-(--color-text) hover:border-(--color-accent) hover:text-(--color-accent) border border-(--color-border)",
-        ghost:
-          "bg-transparent text-(--color-text-dim) hover:bg-(--color-bg-elev-2) hover:text-(--color-text)",
-        active: "bg-(--color-accent-soft) text-(--color-accent)",
-        danger:
-          "bg-(--color-bg-elev) text-(--color-text) border border-(--color-border) hover:border-(--color-danger) hover:text-(--color-danger)",
-        close:
-          "bg-transparent text-(--color-text-dim) hover:bg-(--color-danger) hover:text-white",
-      },
-      size: {
-        default: "h-7 px-2",
-        icon: "h-7 w-7",
-        sm: "h-6 px-2 text-xs",
-      },
-    },
-    defaultVariants: {
-      variant: "ghost",
-      size: "default",
-    },
-  },
-);
+type LegacyVariant = "default" | "ghost" | "active" | "danger" | "close";
 
 export interface ButtonProps
-  extends
-    React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: LegacyVariant | null;
+  size?: "default" | "icon" | "sm" | null;
+}
+
+const VARIANTS: Record<LegacyVariant, ButtonVariant> = {
+  default: "secondary",
+  ghost: "ghost",
+  active: "ghost",
+  danger: "danger",
+  close: "ghost",
+};
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => (
-    <button
+  ({ variant, size, ...props }, ref) => (
+    <KitButton
       ref={ref}
-      className={cn(buttonVariants({ variant, size }), className)}
+      variant={VARIANTS[variant ?? "ghost"]}
+      size={size === "sm" ? "sm" : "md"}
+      icon={size === "icon"}
+      data-active={variant === "active" ? "" : undefined}
       {...props}
     />
   ),

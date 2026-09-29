@@ -1,0 +1,139 @@
+/*
+ * Kimochi design tokens. The one source of type, spacing, size, radius, colour role, depth and
+ * motion for every window.
+ *
+ * Sizes are rem: the appearance controller sets the root font size to 16px × the UI scale, so
+ * type, spacing and control heights all move together (Tailwind utilities are rem too). Colour
+ * roles are drawn from Radix Themes' slate + indigo scales, which already carry light and dark.
+ */
+@import "@fontsource-variable/figtree/wght.css";
+@import "@fontsource-variable/noto-sans-jp/wght.css";
+
+:root {
+  --ui-scale: 1;
+
+  /* Type */
+  --k-font-ui: "Figtree Variable", "Figtree", system-ui, sans-serif;
+  --k-font-jp: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP Variable",
+    "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  --k-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+
+  --k-text-xs: 0.6875rem; /* 11: title bars, badges, meta */
+  --k-text-sm: 0.75rem; /* 12: descriptions, secondary rows, menus */
+  --k-text-md: 0.8125rem; /* 13: default UI text, rows, controls */
+  --k-text-lg: 0.9375rem; /* 15: page and dialog titles */
+  --k-text-xl: 1.125rem; /* 18: first-run and empty-state headings */
+  --k-leading-xs: 1rem;
+  --k-leading-sm: 1.125rem;
+  --k-leading-md: 1.25rem;
+  --k-leading-lg: 1.375rem;
+  --k-leading-xl: 1.625rem;
+  --k-weight-regular: 430;
+  --k-weight-medium: 520;
+  --k-weight-semibold: 620;
+
+  /* Space: a 4px grid */
+  --k-space-0-5: 0.125rem;
+  --k-space-1: 0.25rem;
+  --k-space-1-5: 0.375rem;
+  --k-space-2: 0.5rem;
+  --k-space-2-5: 0.625rem;
+  --k-space-3: 0.75rem;
+  --k-space-4: 1rem;
+  --k-space-5: 1.25rem;
+  --k-space-6: 1.5rem;
+  --k-space-8: 2rem;
+
+  /* Sizes */
+  --k-bar-h: 1.75rem; /* title bars, tool bars and footers: one height everywhere */
+  --k-row-h: 2rem; /* full-bleed list rows (the remote's grammar) */
+  --k-item-h: 1.75rem; /* menu and select items */
+  --k-control-h: 1.75rem; /* buttons, inputs, select triggers */
+  --k-control-h-sm: 1.5rem;
+  --k-icon: 1rem;
+  --k-icon-sm: 0.875rem;
+  --k-icon-xs: 0.75rem;
+
+  /* Radius */
+  --k-radius-sm: 0.25rem;
+  --k-radius-md: 0.375rem;
+  --k-radius-lg: 0.5rem;
+  --k-radius-xl: 0.75rem;
+
+  /* Motion */
+  --k-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --k-fast: 100ms;
+  --k-base: 160ms;
+}
+
+/* Colour roles. Declared on both the root (for body, scrollbars and portals) and on the Radix
+   theme element so that nested `.radix-themes` roots resolve against the same scales. */
+:root,
+.radix-themes {
+  --k-bg: var(--color-background); /* window ground */
+  --k-bar: var(--gray-2); /* title/tool/footer strips, sidebars */
+  --k-sunken: var(--gray-a2); /* wells: previews, empty states, code */
+  --k-raised: var(--color-panel-solid); /* menus, popovers, dialogs */
+  --k-field: var(--color-surface); /* inputs, select triggers */
+
+  --k-text: var(--gray-12);
+  --k-text-2: var(--gray-11); /* descriptions, secondary labels */
+  --k-text-3: var(--gray-10); /* meta, icons, placeholders (large or non-essential only) */
+
+  --k-line: var(--gray-a4); /* hairline dividers */
+  --k-line-strong: var(--gray-a6); /* control borders */
+
+  --k-hover: var(--gray-a3);
+  --k-press: var(--gray-a4);
+  --k-selected: var(--gray-a4);
+
+  --k-accent: var(--accent-9);
+  --k-accent-hover: var(--accent-10);
+  --k-accent-contrast: var(--accent-contrast);
+  --k-accent-text: var(--accent-11);
+  --k-accent-soft: var(--accent-a3);
+  --k-accent-line: var(--accent-a7);
+  --k-focus: var(--accent-8);
+
+  --k-danger: var(--red-9);
+  --k-danger-text: var(--red-11);
+  --k-danger-soft: var(--red-a3);
+  --k-warn-text: var(--amber-11);
+  --k-warn-soft: var(--amber-a3);
+  --k-ok: var(--green-9);
+  --k-ok-text: var(--green-11);
+  --k-ok-soft: var(--green-a3);
+
+  --k-shadow-pop: 0 1px 2px rgb(15 17 26 / 0.08), 0 10px 28px -8px rgb(15 17 26 / 0.22);
+  --k-shadow-dialog: 0 2px 6px rgb(15 17 26 / 0.1), 0 24px 56px -12px rgb(15 17 26 / 0.3);
+}
+
+.dark,
+.dark .radix-themes,
+.radix-themes.dark {
+  --k-bar: var(--gray-2);
+  --k-raised: var(--gray-2);
+  --k-shadow-pop: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+  --k-shadow-dialog: 0 2px 8px rgb(0 0 0 / 0.35), 0 28px 64px -12px rgb(0 0 0 / 0.7);
+}
+
+/* Radix Themes components still present during migration follow the same face, scale and sizes. */
+.radix-themes {
+  --scaling: var(--ui-scale);
+  --default-font-family: var(--k-font-ui);
+  --heading-font-family: var(--k-font-ui);
+  --font-size-1: var(--k-text-sm);
+  --font-size-2: var(--k-text-md);
+  --font-size-3: var(--k-text-lg);
+  --line-height-1: var(--k-leading-sm);
+  --line-height-2: var(--k-leading-md);
+  --line-height-3: var(--k-leading-lg);
+  --font-weight-medium: var(--k-weight-medium);
+  --font-weight-bold: var(--k-weight-semibold);
+  --cursor-button: default;
+  --cursor-checkbox: default;
+  --cursor-menu-item: default;
+  --cursor-radio: default;
+  --cursor-switch: default;
+  font-family: var(--k-font-ui);
+}

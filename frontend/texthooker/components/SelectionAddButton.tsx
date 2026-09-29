@@ -91,7 +91,7 @@ export function SelectionAddButton({ containerRef, enabled, onAdd }: Props) {
         onAdd(text);
       }}
     >
-      <NotebookPen size={12} />
+      <NotebookPen aria-hidden />
       Add to notebook
     </button>
   );

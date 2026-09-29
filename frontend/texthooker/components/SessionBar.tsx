@@ -1,13 +1,18 @@
-import { useEffect, useState } from "react";
-import { NotebookText, Plus, Settings2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronsUpDown, NotebookText, Plus, Settings2 } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@texthooker/components/ui/select";
-import { Button } from "@texthooker/components/ui/button";
+  Bar,
+  BarSpacer,
+  Button,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "@kit";
+import { closeAutoFocusFromKeyboardOnly } from "@kit/focus";
 import { SessionManagerModal } from "@texthooker/components/SessionManagerModal";
 import {
   createSession,
@@ -22,13 +27,13 @@ interface Props {
   onOpenNotebook: () => void;
 }
 
-const NEW_SENTINEL = "__new__";
-const MANAGE_SENTINEL = "__manage__";
-
+/** The Log's 28px tool bar: session picker on the left, Notebook on the right. */
 export function SessionBar({ onOpenNotebook }: Props) {
   const [active, setActive] = useState<SessionMeta>(() => getActiveSession());
   const [sessions, setSessions] = useState<SessionMeta[]>(() => listSessions());
   const [managerOpen, setManagerOpen] = useState(false);
+  // Opening the manager from the menu: skip returning focus to the trigger so the dialog keeps it.
+  const openingManager = useRef(false);
 
   useEffect(() => {
     return subscribeSessions((m) => {
@@ -38,59 +43,66 @@ export function SessionBar({ onOpenNotebook }: Props) {
     });
   }, []);
 
-  const handleChange = async (value: string) => {
-    if (value === NEW_SENTINEL) {
-      await createSession();
-      return;
-    }
-    if (value === MANAGE_SENTINEL) {
-      setManagerOpen(true);
-      return;
-    }
-    if (value === active.id) return;
-    await switchSession(value);
+  const handleSwitch = (id: string) => {
+    if (id === active.id) return;
+    void switchSession(id);
   };
 
   return (
-    <div className="flex h-[1.75rem] flex-none items-center justify-between border-b border-(--color-border) bg-(--color-bg-elev) px-2.5 text-xs">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Select value={active.id} onValueChange={handleChange}>
-          <SelectTrigger className="h-6 max-w-[17.5rem] min-w-[10rem] truncate">
-            <SelectValue>
-              <span className="truncate" title={active.name}>
-                {active.name}
-              </span>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
+    <Bar position="top">
+      <Menu>
+        <MenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="log-session-trigger"
+            aria-label={`Session: ${active.name}`}
+          >
+            <span className="k-truncate" title={active.name}>
+              {active.name}
+            </span>
+            <ChevronsUpDown />
+          </Button>
+        </MenuTrigger>
+        <MenuContent
+          align="start"
+          className="log-session-menu"
+          onCloseAutoFocus={(e) => {
+            if (openingManager.current) {
+              e.preventDefault();
+              openingManager.current = false;
+              return;
+            }
+            closeAutoFocusFromKeyboardOnly(e);
+          }}
+        >
+          <MenuRadioGroup value={active.id} onValueChange={handleSwitch}>
             {sessions.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
+              <MenuRadioItem key={s.id} value={s.id}>
                 {s.name}
-              </SelectItem>
+              </MenuRadioItem>
             ))}
-            <SelectItem value={NEW_SENTINEL}>
-              <span className="inline-flex items-center gap-1">
-                <Plus className="h-3 w-3" />
-                New session…
-              </span>
-            </SelectItem>
-            <SelectItem value={MANAGE_SENTINEL}>
-              <span className="inline-flex items-center gap-1">
-                <Settings2 className="h-3 w-3" />
-                Manage sessions…
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          </MenuRadioGroup>
+          <MenuSeparator />
+          <MenuItem icon={<Plus />} onSelect={() => void createSession()}>
+            New session
+          </MenuItem>
+          <MenuItem
+            icon={<Settings2 />}
+            onSelect={() => {
+              openingManager.current = true;
+              setManagerOpen(true);
+            }}
+          >
+            Manage sessions…
+          </MenuItem>
+        </MenuContent>
+      </Menu>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onOpenNotebook}
-        title="Open notebook"
-      >
-        <NotebookText className="h-3.5 w-3.5" />
+      <BarSpacer />
+
+      <Button variant="ghost" size="sm" onClick={onOpenNotebook}>
+        <NotebookText />
         Notebook
       </Button>
 
@@ -100,6 +112,6 @@ export function SessionBar({ onOpenNotebook }: Props) {
         onOpenChange={setManagerOpen}
         sessions={sessions}
       />
-    </div>
+    </Bar>
   );
 }

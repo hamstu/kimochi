@@ -9,7 +9,6 @@ import {
 } from "@texthooker/lib/notebook";
 import { openEditModal } from "@texthooker/lib/editModal";
 import { useNotebookEntry } from "@texthooker/hooks/useNotebookEntry";
-import { cn } from "@texthooker/lib/utils";
 
 interface Props {
   entryId: string;
@@ -82,11 +81,7 @@ export function NotebookMatchChip({ entryId, text, sentence }: Props) {
         translate="no"
         onMouseDown={(e) => e.preventDefault()}
         onClick={handleClick}
-        className={cn(
-          "notebook-chip inline cursor-pointer rounded px-0 py-0 border-0 bg-transparent font-inherit transition-colors",
-          "hover:bg-(--color-accent-soft)",
-          "focus-visible:outline-none focus-visible:bg-(--color-accent-soft)",
-        )}
+        className="notebook-chip"
         title={entry ? `Notebook: ${entry.kind}` : "Notebook"}
       >
         {avatarUrl ? (
@@ -115,7 +110,7 @@ export function NotebookMatchChip({ entryId, text, sentence }: Props) {
           }}
           title="Edit notebook entry"
         >
-          <Pencil size={10} />
+          <Pencil aria-hidden />
           Edit
         </button>
       ) : null}

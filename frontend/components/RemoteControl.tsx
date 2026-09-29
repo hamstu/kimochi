@@ -30,8 +30,7 @@ import {
   AppWindow,
   ScanSearch
 } from 'lucide-react'
-import { Tooltip } from '@radix-ui/themes'
-import { Switch } from '../texthooker/components/ui/switch'
+import { Switch, Tooltip } from '@kit'
 import clsx from 'clsx'
 import styles from './RemoteControl.module.css'
 import { isOverlayTextVisible } from '../../ui/settings'
@@ -177,7 +176,11 @@ function RemoteControl({
 
           {/* Toggle the OCR text overlay. Always available: turning it on enables overlay
               mode as well, so this is the only switch needed to see scanned text. */}
-          <Tooltip content="Selected source is not in the foreground" hidden={isSourceInForeground}>
+          <Tooltip
+            content="Bring the selected source to the front to show its overlay"
+            hidden={isSourceInForeground}
+            side="left"
+          >
             <div
               className={clsx(styles.button, !isSourceInForeground && styles.buttonDisabled)}
               onClick={isSourceInForeground ? onToggleTextOverlayVisibility : undefined}

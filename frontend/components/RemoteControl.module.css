@@ -1,106 +1,83 @@
+/* The Controller remote. Its row grammar is the kit's `.k-row`; this file maps the component's
+   class names onto the same tokens so both stay identical. */
 .wrapper {
   width: 100%;
   user-select: none;
 }
 .container {
   width: 100%;
-  padding: 4px 0;
+  padding: var(--k-space-1) 0;
 }
 .buttons {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 .sourceName {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* Divider between button groups */
 .divider {
   height: 1px;
-  margin: 4px 12px;
-
-  background-color: var(--gray-a5);
+  margin: var(--k-space-1) var(--k-space-3);
+  background-color: var(--k-line);
 }
-
-/* Button styling */
 .button {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: var(--k-space-2);
   width: 100%;
-  padding: 6px 12px;
-  min-height: 34px;
+  min-height: var(--k-row-h);
+  padding: var(--k-space-1-5) var(--k-space-3);
+  border: 0;
   border-radius: 0;
-  border: none;
   background: transparent;
-  cursor: pointer;
-  transition-property: background-color, color, transform;
-  transition-duration: 120ms;
-  font-size: 13px;
-  font-weight: 500;
+  color: var(--k-text);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  font-weight: var(--k-weight-medium);
   white-space: nowrap;
-
-  color: var(--gray-12);
+  cursor: default;
+  transition-property: background-color, color, transform;
+  transition-duration: var(--k-fast);
 }
-
 .buttonIcon {
   flex-shrink: 0;
+  width: var(--k-icon);
+  height: var(--k-icon);
+  color: var(--k-text-2);
 }
-
 .buttonLabel {
   flex: 1;
   text-align: left;
 }
-
 .button:hover {
-  background-color: var(--gray-a4);
+  background-color: var(--k-press);
 }
-
+.button:hover .buttonIcon {
+  color: var(--k-text);
+}
 .button:active {
   background-color: var(--gray-a5);
-  transform: scale(0.96);
 }
-
 .button:disabled,
 .buttonDisabled {
   opacity: 0.4;
-  cursor: not-allowed;
 }
-
 .button:disabled:hover,
 .buttonDisabled:hover {
   background: transparent;
 }
-
-/* Active state for auto OCR button when running */
-.buttonActive {
-  @media (prefers-color-scheme: dark) {
-    background-color: rgba(255, 100, 100, 0.2);
-    color: #ff8080;
-  }
-
-  @media (prefers-color-scheme: light) {
-    background-color: rgba(200, 50, 50, 0.15);
-    color: #c03030;
-  }
-}
-
-/* Faded state for toggle buttons when not active */
-.buttonFaded {
-  opacity: 0.5;
-}
-
-/* Danger/quit button */
 .buttonDanger:hover {
   background-color: var(--red-a4);
   color: var(--red-11);
 }
-
+.buttonDanger:hover .buttonIcon {
+  color: var(--red-11);
+}
 .button:focus-visible {
-  outline: 2px solid var(--accent-9);
+  outline: 2px solid var(--k-focus);
   outline-offset: -2px;
 }

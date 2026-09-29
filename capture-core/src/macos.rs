@@ -24,7 +24,7 @@ fn native_error(e: impl ToString) -> CaptureError {
 fn content() -> Result<SCShareableContent> {
     // Explicit permission check avoids unexpectedly opening a prompt during polling.
     if !unsafe { CGPreflightScreenCaptureAccess() } {
-        return Err(CaptureError::new("permission", "Allow Screen Recording for Kimochi Next POC in System Settings, then relaunch if macOS requests it."));
+        return Err(CaptureError::new("permission", "Allow Screen Recording for Kimochi in System Settings, then relaunch if macOS requests it."));
     }
     SCShareableContent::create()
         .with_exclude_desktop_windows(true)

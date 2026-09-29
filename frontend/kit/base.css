@@ -1,0 +1,92 @@
+/* Document basics every Kimochi window shares: face, smoothing, selection, scrollbars, focus. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  font-size: 16px; /* × UI scale, set by the appearance controller */
+  color-scheme: light dark;
+}
+html.light {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  font-weight: var(--k-weight-regular);
+  color: var(--k-text);
+  background: var(--k-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  /* Desktop app: chrome text is not selectable unless a surface opts in. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+input,
+textarea,
+[contenteditable="true"],
+.k-selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+::selection {
+  background: var(--accent-a5);
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+::placeholder {
+  color: var(--k-text-3);
+  opacity: 1;
+}
+
+/* Scrollbars: thin, rem-sized so they grow with the scale, and themed from the neutrals. */
+::-webkit-scrollbar {
+  width: 0.625rem;
+  height: 0.625rem;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gray-a5);
+  border: 0.1875rem solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-a7);
+  background-clip: padding-box;
+  border: 0.1875rem solid transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

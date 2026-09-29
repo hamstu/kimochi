@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kimochi UI Preview</title>
+    <style>
+      :root { color-scheme: light dark; --bg: #fafafa; --fg: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --link: #3e63dd; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #151517; --fg: #f2f2f7; --muted: #98989f; --line: #2c2c30; --link: #9eb1ff; } }
+      body { margin: 0; padding: 32px 16px; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; }
+      main { max-width: 720px; margin: 0 auto; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p { color: var(--muted); margin: 0 0 24px; }
+      table { width: 100%; border-collapse: collapse; }
+      td { padding: 8px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+      td:last-child { color: var(--muted); font-size: 12px; white-space: nowrap; }
+      a { color: var(--link); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code { font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Kimochi UI preview</h1>
+      <p>Dev-only. Every window rendered against mocked Tauri IPC with demo data. Light/dark follows
+        <code>prefers-color-scheme</code>; resize the viewport to the listed window size.</p>
+      <table>
+        <tr><td><a href="./panel.html?window=controller">Controller</a></td><td>260 × 400</td></tr>
+        <tr><td><a href="./panel.html?window=log">Log (texthooker)</a></td><td>728 × 490</td></tr>
+        <tr><td><a href="./panel.html?window=notebook">Notebook</a></td><td>720 × 560</td></tr>
+        <tr><td>Settings:
+          <a href="./panel.html?window=settings&amp;tab=mode">OCR</a> ·
+          <a href="./panel.html?window=settings&amp;tab=shortcuts">Shortcuts</a> ·
+          <a href="./panel.html?window=settings&amp;tab=gamepad">Gamepad</a> ·
+          <a href="./panel.html?window=settings&amp;tab=yomitan">Dictionary</a> ·
+          <a href="./panel.html?window=settings&amp;tab=audio">Audio</a> ·
+          <a href="./panel.html?window=settings&amp;tab=texthooker">Texthooker</a></td><td>900 × 640</td></tr>
+        <tr><td><a href="./panel.html?window=capture">Capture preview</a> ·
+          <a href="./panel.html?window=debug">Debug info</a> ·
+          <a href="./panel.html?window=stream">Capture debug</a></td><td>—</td></tr>
+        <tr><td><a href="./source-picker.html">Source picker</a> ·
+          <a href="./source-picker.html?edit=1">(crop editor)</a></td><td>720 × 520</td></tr>
+        <tr><td><a href="./tray-popover.html">Tray popover</a></td><td>320 × 420</td></tr>
+        <tr><td><a href="./reader-popup.html">Reader popup (dictionary)</a></td><td>480 × 360</td></tr>
+        <tr><td><a href="./welcome.html">Welcome</a></td><td>—</td></tr>
+      </table>
+      <p style="margin-top: 24px">Add <code>&amp;empty=1</code> to any panel URL for the first-run (no data) state.</p>
+    </main>
+  </body>
+</html>

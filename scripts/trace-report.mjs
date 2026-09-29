@@ -98,7 +98,7 @@ async function main() {
       : process.platform === 'win32'
         ? (process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'))
         : (process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'))
-  const directory = join(base, 'dev.kimochi.next-poc')
+  const directory = join(base, 'dev.kimochi.app')
   const records = []
   let malformed = 0
   for (const name of ['auto-ocr-trace.1.jsonl', 'auto-ocr-trace.jsonl']) {

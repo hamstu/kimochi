@@ -1,11 +1,4 @@
-import { X } from "lucide-react";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogTitle,
-} from "@texthooker/components/ui/dialog";
-import { Button } from "@texthooker/components/ui/button";
+import { Dialog, DialogContent, Row, RowList } from "@kit";
 import {
   createPerson,
   createPlace,
@@ -21,6 +14,7 @@ interface Props {
   onClose: () => void;
 }
 
+// The kanji marks match the notebook chips in the transcript (人 person, 地 place, 物 thing).
 const KINDS: {
   kind: NotebookKind;
   glyph: string;
@@ -50,52 +44,29 @@ export function AddToNotebookModal({ text, onClose }: Props) {
   return (
     <Dialog open={text !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        className="left-1/2 right-auto top-1/2 bottom-auto -translate-x-1/2 -translate-y-1/2 w-[22.5rem] max-w-[calc(100vw-48px)] max-h-[80vh] border border-(--color-border) rounded-lg shadow-[var(--shadow-pop)]"
-        aria-describedby={undefined}
+        title="Add to notebook"
+        style={{ width: "min(22rem, calc(100vw - 2rem))" }}
       >
-        <div className="flex items-center justify-between mb-3">
-          <DialogTitle className="text-sm font-semibold">
-            Add to notebook
-          </DialogTitle>
-          <DialogClose asChild>
-            <Button variant="ghost" size="icon" aria-label="Close">
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogClose>
-        </div>
-
-        <div
-          className="mb-3 rounded-md border border-(--color-border) bg-(--color-bg-elev) px-3 py-2 text-[1rem] text-(--color-text)"
-          style={{ fontFamily: "var(--font-jp)" }}
-          translate="no"
-          lang="ja"
-        >
+        <div className="log-add-term" translate="no" lang="ja">
           {text}
         </div>
-
-        <div className="text-[0.6875rem] text-(--color-text-muted) mb-2">
-          What is it?
-        </div>
-        <div className="grid grid-cols-3 gap-2">
+        <p className="log-add-label">What is it?</p>
+        <RowList className="log-kinds">
           {KINDS.map(({ kind, glyph, label, hint }) => (
-            <button
+            <Row
               key={kind}
-              type="button"
+              icon={
+                <span className="log-kind-glyph" aria-hidden lang="ja">
+                  {glyph}
+                </span>
+              }
+              trailing={<span className="k-row-meta">{hint}</span>}
               onClick={() => void handlePick(kind)}
-              className="flex flex-col items-center gap-1 rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-3 hover:border-(--color-accent) hover:bg-(--color-accent-soft)"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-(--color-accent-soft) text-[0.9375rem] text-(--color-accent)">
-                {glyph}
-              </span>
-              <span className="text-xs font-medium text-(--color-text)">
-                {label}
-              </span>
-              <span className="text-[0.625rem] text-(--color-text-muted)">
-                {hint}
-              </span>
-            </button>
+              {label}
+            </Row>
           ))}
-        </div>
+        </RowList>
       </DialogContent>
     </Dialog>
   );

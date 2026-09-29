@@ -1,12 +1,11 @@
-/* Window reset for the source picker.
- * The picker's own stylesheet is scoped to `.source-picker`, so the window still needs the same
- * full-height, zero-margin ground every other Kimochi window has — without it the browser's 8px
- * body margin shows and the flex crop area has no definite height to fill. */
+/* Window reset for the source picker: the same full-height, zero-margin ground every Kimochi
+ * window has, so the flex crop area has a definite height to fill. */
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
+  background: var(--k-bg);
   -webkit-font-smoothing: antialiased;
 }
 html,

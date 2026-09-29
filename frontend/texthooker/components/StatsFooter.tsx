@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { Clock } from "lucide-react";
 import { useStats } from "@texthooker/hooks/useStats";
 import { getSettings } from "@texthooker/lib/settings";
 
@@ -28,27 +30,36 @@ interface Props {
   lineCount: number;
 }
 
-/** Compact reading-stats strip. Lives inline in the footer. */
+/** Compact reading-stats strip for the Log footer: UI face, tabular numerals. */
 export function StatsFooter({ lineCount }: Props) {
   const { stats, elapsedMs } = useStats();
   const s = getSettings();
 
-  const bits: string[] = [];
-  if (s.statsShowTime) bits.push(`⏱ ${formatTime(elapsedMs)}`);
-  if (s.statsShowLines) bits.push(`${formatNumber(lineCount)} lines`);
-  if (s.statsShowChars) bits.push(`${formatNumber(stats.totalChars)} chars`);
-  if (s.statsShowSpeed)
-    bits.push(`${formatSpeed(stats.totalChars, elapsedMs)} c/h`);
-
-  return (
-    <span
-      style={{
-        fontFamily: "var(--font-mono)",
-        fontVariantNumeric: "tabular-nums",
-        letterSpacing: "0.01em",
-      }}
-    >
-      {bits.join("  ·  ")}
+  const stat = (key: string, value: string, unit?: string, icon?: ReactNode) => (
+    <span key={key} className="log-stat">
+      {icon}
+      <span className="log-stat-value">{value}</span>
+      {unit ? <span>{unit}</span> : null}
     </span>
   );
+
+  const bits: ReactNode[] = [];
+  if (s.statsShowTime)
+    bits.push(
+      stat("time", formatTime(elapsedMs), undefined, (
+        <Clock aria-label="Reading time" />
+      )),
+    );
+  if (s.statsShowLines)
+    bits.push(
+      stat("lines", formatNumber(lineCount), lineCount === 1 ? "line" : "lines"),
+    );
+  if (s.statsShowChars)
+    bits.push(stat("chars", formatNumber(stats.totalChars), "chars"));
+  if (s.statsShowSpeed)
+    bits.push(
+      stat("speed", formatSpeed(stats.totalChars, elapsedMs), "chars/h"),
+    );
+
+  return <span className="log-stats k-num">{bits}</span>;
 }

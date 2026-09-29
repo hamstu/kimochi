@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { GripVertical, Plus, X } from "lucide-react";
-import { Button } from "@texthooker/components/ui/button";
-import { Input } from "@texthooker/components/ui/input";
-import { Switch } from "@texthooker/components/ui/switch";
+import { Button, IconButton, Input, SettingsRow, SettingsSection, Switch } from "@kit";
 import {
   addReplacement,
   getReplacements,
@@ -13,7 +11,6 @@ import {
   updateReplacement,
 } from "@texthooker/lib/replacements";
 import type { Replacement } from "@texthooker/lib/types";
-import { cn } from "@texthooker/lib/utils";
 
 export function ReplacementsEditor() {
   const [rules, setRules] = useState<Replacement[]>(getReplacements());
@@ -42,12 +39,20 @@ export function ReplacementsEditor() {
   };
 
   return (
-    <div className="space-y-1.5">
+    <SettingsSection
+      title="Text replacements"
+      description="Pattern rules applied to incoming lines, top to bottom. Drag to reorder."
+      actions={
+        <Button variant="ghost" size="sm" onClick={() => void addReplacement()}>
+          <Plus /> Add replacement
+        </Button>
+      }
+    >
       {rules.length === 0 ? (
-        <div className="text-[0.625rem] text-(--color-text-muted) italic">
-          No replacements. Add one to strip stage directions, normalize quotes,
-          etc.
-        </div>
+        <SettingsRow
+          label="No replacements"
+          description="Add one to strip stage directions, normalize quotes, etc."
+        />
       ) : null}
 
       {rules.map((r, idx) => {
@@ -60,70 +65,50 @@ export function ReplacementsEditor() {
             onDragOver={onDragOver}
             onDrop={onDrop(idx)}
             onDragEnd={() => setDragId(null)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md border border-(--color-border) bg-(--color-bg-elev) px-1.5 py-1",
-              dragId === r.id && "opacity-50",
-              errored && "border-(--color-danger)",
-            )}
+            className="k-settings-row replacement-row"
+            data-dragging={dragId === r.id ? "" : undefined}
           >
-            <GripVertical className="h-3.5 w-3.5 cursor-grab text-(--color-text-muted) shrink-0" />
+            <GripVertical className="replacement-grip" aria-hidden />
             <Switch
+              size="sm"
+              aria-label="Enabled"
               checked={r.enabled}
-              onCheckedChange={(v) => updateReplacement(r.id, { enabled: v })}
+              onCheckedChange={(v) => void updateReplacement(r.id, { enabled: v })}
             />
             <Input
-              type="text"
-              spellCheck={false}
+              size="sm"
+              mono
+              aria-label="Pattern"
+              aria-invalid={errored || undefined}
               value={r.pattern}
-              onChange={(e) =>
-                updateReplacement(r.id, { pattern: e.target.value })
-              }
+              onChange={(e) => void updateReplacement(r.id, { pattern: e.target.value })}
               placeholder="pattern"
-              className={cn(
-                "flex-1 min-w-0 rounded border border-(--color-border) bg-(--color-bg) px-1.5 py-0.5 font-mono text-[0.6875rem]",
-                errored && "text-(--color-danger)",
-              )}
+              className="replacement-pattern"
             />
             <Input
-              type="text"
-              spellCheck={false}
+              size="sm"
+              mono
+              aria-label="Flags"
               value={r.flags}
-              onChange={(e) =>
-                updateReplacement(r.id, { flags: e.target.value })
-              }
+              onChange={(e) => void updateReplacement(r.id, { flags: e.target.value })}
               placeholder="g"
-              className="w-[2.75rem] rounded border border-(--color-border) bg-(--color-bg) px-1.5 py-0.5 font-mono text-[0.6875rem]"
+              className="replacement-flags"
             />
             <Input
-              type="text"
-              spellCheck={false}
+              size="sm"
+              mono
+              aria-label="Replacement"
               value={r.replacement}
-              onChange={(e) =>
-                updateReplacement(r.id, { replacement: e.target.value })
-              }
+              onChange={(e) => void updateReplacement(r.id, { replacement: e.target.value })}
               placeholder="replacement"
-              className="flex-1 min-w-0 rounded border border-(--color-border) bg-(--color-bg) px-1.5 py-0.5 font-mono text-[0.6875rem]"
+              className="replacement-pattern"
             />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => removeReplacement(r.id)}
-              title="Remove"
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+            <IconButton label="Remove" size="sm" onClick={() => void removeReplacement(r.id)}>
+              <X />
+            </IconButton>
           </div>
         );
       })}
-
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => addReplacement()}
-        className="w-full justify-center"
-      >
-        <Plus className="h-3.5 w-3.5" /> Add replacement
-      </Button>
-    </div>
+    </SettingsSection>
   );
 }

@@ -1,15 +1,28 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Check, ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
+  Bar,
+  BarSpacer,
+  Button,
+  ConfirmDialog,
   Dialog,
   DialogClose,
   DialogContent,
-  DialogTitle,
-} from "@texthooker/components/ui/dialog";
-import { Button } from "@texthooker/components/ui/button";
-import { Input } from "@texthooker/components/ui/input";
-import { Switch } from "@texthooker/components/ui/switch";
+  IconButton,
+  Input,
+  Switch,
+  Textarea,
+} from "@kit";
 import {
   addNote,
   attachImage,
@@ -17,7 +30,6 @@ import {
   deleteEntry,
   deleteNote,
   detachImage,
-  readImageAsObjectURL,
   updateEntry,
   updateNote,
 } from "@texthooker/lib/notebook";
@@ -30,244 +42,429 @@ import type {
   PersonEntry,
   PlaceOrThingEntry,
 } from "@texthooker/lib/types";
+import { EntryAvatar } from "./notebookParts";
+import {
+  KIND_META,
+  entryName,
+  entryReading,
+  useImageUrl,
+} from "./notebookEntry";
+import "../notebook.css";
 
 interface Props {
   /** Entry to edit, or null when closed. */
   entryId: string | null;
   onClose: () => void;
+  /**
+   * `dialog` (default) is a centred modal. `pane` renders inline as the Notebook window's side
+   * editor, so the list stays visible and another entry can be picked while editing.
+   */
+  presentation?: "dialog" | "pane";
 }
 
-const KIND_TITLE = {
-  person: "person",
-  place: "place",
-  thing: "thing",
-} as const;
+/** IME composition (Japanese input) must never commit a field on Enter. */
+const composing = (event: ReactKeyboardEvent): boolean =>
+  event.nativeEvent.isComposing || event.keyCode === 229;
 
-const inputClass =
-  "rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1 text-xs text-(--color-text) outline-none focus:border-(--color-accent)";
-const textInputClass = `${inputClass} w-full`;
-const textareaClass = `${inputClass} w-full min-h-[3.75rem] resize-y leading-snug`;
-
-function Field({
-  label,
-  children,
-  stacked,
-}: {
-  label: string;
-  children: React.ReactNode;
-  stacked?: boolean;
-}) {
-  if (stacked) {
-    return (
-      <div className="text-xs">
-        <label className="block text-(--color-text) mb-1">{label}</label>
-        {children}
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
-      <label className="text-(--color-text) shrink-0">{label}</label>
-      <div className="flex items-center justify-end gap-2 flex-1 min-w-0">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-export function EditEntryModal({ entryId, onClose }: Props) {
+export function EditEntryModal({
+  entryId,
+  onClose,
+  presentation = "dialog",
+}: Props) {
   const entry = useNotebookEntry(entryId ?? "");
   const open = entryId !== null && entry !== undefined;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  useEffect(() => setConfirmOpen(false), [entryId]);
+
+  const title = entry
+    ? entryName(entry) || `New ${KIND_META[entry.kind].one.toLowerCase()}`
+    : "";
+  const reading = entry ? entryReading(entry) : "";
+
+  const confirm = entry ? (
+    <ConfirmDialog
+      open={confirmOpen}
+      onOpenChange={setConfirmOpen}
+      title={`Delete ${title}?`}
+      description="Its notes and images are removed from this session’s notebook. This can’t be undone."
+      confirmLabel="Delete"
+      tone="danger"
+      onConfirm={() => {
+        setConfirmOpen(false);
+        void deleteEntry(entry.id);
+        onClose();
+      }}
+    />
+  ) : null;
+
+  if (presentation === "pane") {
+    if (!open || !entry) return null;
+    return (
+      <aside
+        className="nb-editor"
+        aria-label={`Edit ${title}`}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !confirmOpen && !event.defaultPrevented) {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      >
+        <header className="nb-editor-head">
+          <EntryAvatar entry={entry} large />
+          <div>
+            <h2 className="nb-editor-title" lang="ja" translate="no">
+              {title}
+            </h2>
+            <span className="nb-editor-kind">
+              {KIND_META[entry.kind].one}
+              {reading ? (
+                <span lang="ja" translate="no">
+                  {" · "}
+                  {reading}
+                </span>
+              ) : null}
+            </span>
+          </div>
+          <IconButton label="Close editor" size="sm" onClick={onClose}>
+            <X />
+          </IconButton>
+        </header>
+        <div className="nb-editor-body">
+          <EntryForm key={entry.id} entry={entry} />
+        </div>
+        <Bar position="bottom" className="nb-editor-foot">
+          <Mentions entry={entry} />
+          <BarSpacer />
+          <Button variant="ghost" size="sm" onClick={() => setConfirmOpen(true)}>
+            <Trash2 />
+            Delete
+          </Button>
+        </Bar>
+        {confirm}
+      </aside>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent
-        className="left-1/2 right-auto top-1/2 bottom-auto -translate-x-1/2 -translate-y-1/2 w-[28.75rem] max-w-[calc(100vw-48px)] max-h-[85vh] border border-(--color-border) rounded-lg shadow-[var(--shadow-pop)]"
-        aria-describedby={undefined}
-      >
-        {entry ? (
-          <>
-            <div className="flex items-center justify-between mb-3">
-              <DialogTitle className="text-sm font-semibold">
-                Edit {KIND_TITLE[entry.kind]}
-              </DialogTitle>
+      {entry ? (
+        <DialogContent
+          title={
+            <span className="nb-dialog-title">
+              <EntryAvatar entry={entry} />
+              <span lang="ja" translate="no">
+                {title}
+              </span>
+            </span>
+          }
+          description={KIND_META[entry.kind].one}
+          footer={
+            <>
+              <span className="k-dialog-footer-start nb-hint">
+                <Mentions entry={entry} />
+              </span>
+              <Button variant="ghost" onClick={() => setConfirmOpen(true)}>
+                <Trash2 />
+                Delete
+              </Button>
               <DialogClose asChild>
-                <Button variant="ghost" size="icon" aria-label="Close">
-                  <X className="h-4 w-4" />
-                </Button>
+                <Button variant="primary">Done</Button>
               </DialogClose>
-            </div>
-            <div className="space-y-2.5">
-              {entry.kind === "person" ? (
-                <PersonFields entry={entry} />
-              ) : (
-                <PlaceThingFields entry={entry} />
-              )}
-              <CommonFields entry={entry} />
-              <NotesSection entry={entry} />
-              <ImageStrip entry={entry} />
-              <EntryFooter entry={entry} onDeleted={onClose} />
-            </div>
-          </>
-        ) : null}
-      </DialogContent>
+            </>
+          }
+        >
+          <EntryForm key={entry.id} entry={entry} />
+          {confirm}
+        </DialogContent>
+      ) : null}
     </Dialog>
   );
 }
 
-function PersonFields({ entry }: { entry: PersonEntry }) {
-  const commitPatch = (patch: Partial<PersonEntry>) =>
-    void updateEntry(entry.id, patch);
-
+function Mentions({ entry }: { entry: NotebookEntry }) {
+  const [count, setCount] = useState<number | null>(null);
+  useEffect(() => {
+    setCount(computeMentions(entry.id, snapshotLines()).length);
+  }, [entry.id, entry.matchEnabled, entry]);
+  if (count === null) return null;
   return (
-    <>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="姓 (family)" stacked>
-          <Input
-            className={textInputClass}
-            value={entry.family}
-            onChange={(e) => commitPatch({ family: e.target.value })}
-            spellCheck={false}
-            placeholder="田中"
-          />
-        </Field>
-        <Field label="名 (given)" stacked>
-          <Input
-            className={textInputClass}
-            value={entry.given}
-            onChange={(e) => commitPatch({ given: e.target.value })}
-            spellCheck={false}
-            placeholder="太郎"
-          />
-        </Field>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="姓 reading" stacked>
-          <Input
-            className={textInputClass}
-            value={entry.familyReading ?? ""}
-            onChange={(e) =>
-              commitPatch({ familyReading: e.target.value || undefined })
-            }
-            spellCheck={false}
-            placeholder="たなか"
-          />
-        </Field>
-        <Field label="名 reading" stacked>
-          <Input
-            className={textInputClass}
-            value={entry.givenReading ?? ""}
-            onChange={(e) =>
-              commitPatch({ givenReading: e.target.value || undefined })
-            }
-            spellCheck={false}
-            placeholder="たろう"
-          />
-        </Field>
-      </div>
-      <Field label="Match given alone">
-        <Switch
-          checked={entry.matchGivenAlone}
-          onCheckedChange={(v) => commitPatch({ matchGivenAlone: v })}
-        />
-      </Field>
-      <AliasesField
-        value={entry.aliases}
-        onChange={(aliases) => commitPatch({ aliases })}
-      />
-    </>
+    <span className="k-num">
+      {count === 0
+        ? "No mentions in this session"
+        : `${count} mention${count === 1 ? "" : "s"} in this session`}
+    </span>
   );
 }
 
-function PlaceThingFields({ entry }: { entry: PlaceOrThingEntry }) {
-  const commitPatch = (patch: Partial<PlaceOrThingEntry>) =>
-    void updateEntry(entry.id, patch);
+/* ── Form ──────────────────────────────────────────────────────────────── */
 
-  return (
-    <>
-      <Field label="Name" stacked>
-        <Input
-          className={textInputClass}
-          value={entry.name}
-          onChange={(e) => commitPatch({ name: e.target.value })}
-          spellCheck={false}
-          placeholder={entry.kind === "place" ? "東京" : "天使の指輪"}
-        />
-      </Field>
-      <Field label="Reading" stacked>
-        <Input
-          className={textInputClass}
-          value={entry.reading ?? ""}
-          onChange={(e) =>
-            commitPatch({ reading: e.target.value || undefined })
-          }
-          spellCheck={false}
-        />
-      </Field>
-      <AliasesField
-        value={entry.aliases}
-        onChange={(aliases) => commitPatch({ aliases })}
-      />
-    </>
-  );
-}
-
-function AliasesField({
-  value,
-  onChange,
+function Field({
+  label,
+  hint,
+  children,
+  htmlFor,
 }: {
-  value: string[];
-  onChange: (next: string[]) => void;
+  label: string;
+  hint?: ReactNode;
+  children: ReactNode;
+  htmlFor?: string;
 }) {
-  const [draft, setDraft] = useState(value.join(", "));
-  useEffect(() => setDraft(value.join(", ")), [value]);
   return (
-    <Field label="Aliases" stacked>
-      <Input
-        className={textInputClass}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const parsed = draft
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          if (
-            parsed.length !== value.length ||
-            parsed.some((p, i) => p !== value[i])
-          ) {
-            onChange(parsed);
-          }
-        }}
-        placeholder="comma, separated"
-        spellCheck={false}
-      />
-    </Field>
+    <div className="nb-field">
+      <label className="nb-label" htmlFor={htmlFor}>
+        <span>{label}</span>
+        {hint ? <span className="nb-label-hint">{hint}</span> : null}
+      </label>
+      {children}
+    </div>
   );
 }
 
-function CommonFields({ entry }: { entry: NotebookEntry }) {
+function EntryForm({ entry }: { entry: NotebookEntry }) {
+  const id = useId();
   return (
-    <>
-      <Field label="Description" stacked>
-        <textarea
-          className={textareaClass}
+    <div className="nb-form">
+      {entry.kind === "person" ? (
+        <PersonFields entry={entry} />
+      ) : (
+        <PlaceThingFields entry={entry} />
+      )}
+      <AliasesField
+        id={`${id}-aliases`}
+        value={entry.aliases}
+        onChange={(aliases) => void updateEntry(entry.id, { aliases })}
+      />
+      <MatchToggles entry={entry} />
+      <div className="nb-section-rule" role="presentation" />
+      <Field label="Description" htmlFor={`${id}-desc`}>
+        <Textarea
+          id={`${id}-desc`}
           value={entry.description}
           onChange={(e) =>
             void updateEntry(entry.id, { description: e.target.value })
           }
           spellCheck={false}
+          placeholder="Who or what this is"
         />
       </Field>
-      <Field label="Match this entry">
+      <NotesSection entry={entry} />
+      <ImageStrip entry={entry} />
+    </div>
+  );
+}
+
+function PersonFields({ entry }: { entry: PersonEntry }) {
+  const id = useId();
+  const commitPatch = (patch: Partial<PersonEntry>) =>
+    void updateEntry(entry.id, patch);
+
+  return (
+    <div className="nb-form-grid">
+      <Field label="Family name" hint="姓" htmlFor={`${id}-fam`}>
+        <Input
+          id={`${id}-fam`}
+          className="nb-jp"
+          lang="ja"
+          value={entry.family}
+          onChange={(e) => commitPatch({ family: e.target.value })}
+          placeholder="田中"
+        />
+      </Field>
+      <Field label="Given name" hint="名" htmlFor={`${id}-giv`}>
+        <Input
+          id={`${id}-giv`}
+          className="nb-jp"
+          lang="ja"
+          value={entry.given}
+          onChange={(e) => commitPatch({ given: e.target.value })}
+          placeholder="太郎"
+        />
+      </Field>
+      <Field label="Reading" htmlFor={`${id}-famr`}>
+        <Input
+          id={`${id}-famr`}
+          className="nb-jp"
+          lang="ja"
+          value={entry.familyReading ?? ""}
+          onChange={(e) =>
+            commitPatch({ familyReading: e.target.value || undefined })
+          }
+          placeholder="たなか"
+        />
+      </Field>
+      <Field label="Reading" htmlFor={`${id}-givr`}>
+        <Input
+          id={`${id}-givr`}
+          className="nb-jp"
+          lang="ja"
+          value={entry.givenReading ?? ""}
+          onChange={(e) =>
+            commitPatch({ givenReading: e.target.value || undefined })
+          }
+          placeholder="たろう"
+        />
+      </Field>
+    </div>
+  );
+}
+
+function PlaceThingFields({ entry }: { entry: PlaceOrThingEntry }) {
+  const id = useId();
+  const commitPatch = (patch: Partial<PlaceOrThingEntry>) =>
+    void updateEntry(entry.id, patch);
+
+  return (
+    <div className="nb-form-grid">
+      <Field label="Name" htmlFor={`${id}-name`}>
+        <Input
+          id={`${id}-name`}
+          className="nb-jp"
+          lang="ja"
+          value={entry.name}
+          onChange={(e) => commitPatch({ name: e.target.value })}
+          placeholder={entry.kind === "place" ? "東京" : "天使の指輪"}
+        />
+      </Field>
+      <Field label="Reading" htmlFor={`${id}-reading`}>
+        <Input
+          id={`${id}-reading`}
+          className="nb-jp"
+          lang="ja"
+          value={entry.reading ?? ""}
+          onChange={(e) =>
+            commitPatch({ reading: e.target.value || undefined })
+          }
+          placeholder={entry.kind === "place" ? "とうきょう" : "てんしのゆびわ"}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function MatchToggles({ entry }: { entry: NotebookEntry }) {
+  const given = entry.kind === "person" ? entry.given.trim() : "";
+  return (
+    <div className="nb-toggles">
+      <label className="nb-toggle">
+        <div>
+          <span className="nb-toggle-label">Match this entry</span>
+          <span className="nb-toggle-desc">
+            Recognise its name and aliases in the Log
+          </span>
+        </div>
         <Switch
           checked={entry.matchEnabled}
           onCheckedChange={(v) =>
             void updateEntry(entry.id, { matchEnabled: v })
           }
         />
-      </Field>
-    </>
+      </label>
+      {entry.kind === "person" ? (
+        <label className="nb-toggle">
+          <div>
+            <span className="nb-toggle-label">Match given name alone</span>
+            <span className="nb-toggle-desc">
+              Also match{" "}
+              {given ? (
+                <span className="nb-jp" lang="ja">
+                  {given}
+                </span>
+              ) : (
+                "the given name"
+              )}{" "}
+              on its own
+            </span>
+          </div>
+          <Switch
+            checked={entry.matchGivenAlone}
+            onCheckedChange={(v) =>
+              void updateEntry(entry.id, { matchGivenAlone: v })
+            }
+          />
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+/* ── Aliases: removable chips ─────────────────────────────────────────── */
+
+const ALIAS_SPLIT = /[,、，]/;
+
+function AliasesField({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const commit = (text: string) => {
+    const next = [...value];
+    for (const part of text.split(ALIAS_SPLIT)) {
+      const alias = part.trim();
+      if (alias && !next.includes(alias)) next.push(alias);
+    }
+    if (next.length !== value.length) onChange(next);
+    setDraft("");
+  };
+
+  return (
+    <Field label="Aliases" hint="Enter or comma to add" htmlFor={id}>
+      <div
+        className="k-field nb-chips"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }
+        }}
+      >
+        {value.map((alias, i) => (
+          <span key={`${alias}-${i}`} className="nb-chip" lang="ja">
+            {alias}
+            <button
+              type="button"
+              aria-label={`Remove ${alias}`}
+              title="Remove alias"
+              onClick={() => onChange(value.filter((_, j) => j !== i))}
+            >
+              <X />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          id={id}
+          value={draft}
+          lang="ja"
+          spellCheck={false}
+          placeholder={value.length ? "" : "オカリン, 助手"}
+          onChange={(e) => {
+            const next = e.target.value;
+            if (ALIAS_SPLIT.test(next)) commit(next);
+            else setDraft(next);
+          }}
+          onKeyDown={(e) => {
+            if (composing(e)) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit(draft);
+            } else if (e.key === "Backspace" && !draft && value.length > 0) {
+              e.preventDefault();
+              onChange(value.slice(0, -1));
+            }
+          }}
+          onBlur={() => commit(draft)}
+        />
+      </div>
+    </Field>
   );
 }
 
@@ -275,6 +472,7 @@ function CommonFields({ entry }: { entry: NotebookEntry }) {
 
 function NotesSection({ entry }: { entry: NotebookEntry }) {
   const [draft, setDraft] = useState("");
+  const id = useId();
 
   const commitDraft = () => {
     const t = draft.trim();
@@ -286,35 +484,41 @@ function NotesSection({ entry }: { entry: NotebookEntry }) {
   const notes = entry.notes ?? [];
 
   return (
-    <Field label="Notes" stacked>
-      <div className="space-y-1">
-        {notes.map((note) => (
-          <NoteRow key={note.id} entryId={entry.id} note={note} />
-        ))}
-        <div className="flex items-center gap-1.5">
-          <Input
-            className={textInputClass}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commitDraft();
-              }
-            }}
-            placeholder="Add a quick note…"
-            spellCheck={false}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={commitDraft}
-            disabled={!draft.trim()}
-            title="Add note"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
+    <Field
+      label="Notes"
+      hint={notes.length ? <span className="k-num">{notes.length}</span> : null}
+      htmlFor={id}
+    >
+      {notes.length > 0 ? (
+        <div className="nb-notes">
+          {notes.map((note) => (
+            <NoteRow key={note.id} entryId={entry.id} note={note} />
+          ))}
         </div>
+      ) : null}
+      <div className="nb-note-add">
+        <Input
+          id={id}
+          size="sm"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (composing(e)) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitDraft();
+            }
+          }}
+          placeholder="Add a quick note…"
+        />
+        <IconButton
+          label="Add note"
+          size="sm"
+          onClick={commitDraft}
+          disabled={!draft.trim()}
+        >
+          <Plus />
+        </IconButton>
       </div>
     </Field>
   );
@@ -333,62 +537,68 @@ function NoteRow({ entryId, note }: { entryId: string; note: NotebookNote }) {
 
   if (editing) {
     return (
-      <div className="flex items-center gap-1.5">
+      <div className="nb-note">
         <Input
           autoFocus
-          className={textInputClass}
+          size="sm"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
+            if (composing(e)) return;
             if (e.key === "Enter") {
               e.preventDefault();
               commit();
             } else if (e.key === "Escape") {
+              e.preventDefault();
               e.stopPropagation();
               setDraft(note.text);
               setEditing(false);
             }
           }}
           onBlur={commit}
-          spellCheck={false}
         />
-        <Button
-          variant="ghost"
-          size="icon"
+        <IconButton
+          label="Save note"
+          size="sm"
           onMouseDown={(e) => e.preventDefault()}
           onClick={commit}
-          title="Save note"
         >
-          <Check className="h-3.5 w-3.5" />
-        </Button>
+          <Check />
+        </IconButton>
       </div>
     );
   }
 
   return (
-    <div className="group flex items-start gap-1.5 rounded-md border border-(--color-border) bg-(--color-bg-elev) px-2 py-1">
-      <span className="flex-1 min-w-0 text-xs leading-snug text-(--color-text) break-words whitespace-pre-wrap">
-        {note.text}
-      </span>
-      <button
-        type="button"
-        onClick={() => {
+    <div className="nb-note">
+      <span
+        className="nb-note-text"
+        onDoubleClick={() => {
           setDraft(note.text);
           setEditing(true);
         }}
-        className="shrink-0 mt-0.5 text-(--color-text-muted) opacity-0 group-hover:opacity-100 hover:text-(--color-accent)"
-        title="Edit note"
       >
-        <Pencil className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        onClick={() => deleteNote(entryId, note.id)}
-        className="shrink-0 mt-0.5 text-(--color-text-muted) opacity-0 group-hover:opacity-100 hover:text-(--color-danger)"
-        title="Delete note"
-      >
-        <X className="h-3 w-3" />
-      </button>
+        {note.text}
+      </span>
+      <span className="nb-note-actions">
+        <IconButton
+          label="Edit note"
+          size="sm"
+          onClick={() => {
+            setDraft(note.text);
+            setEditing(true);
+          }}
+        >
+          <Pencil />
+        </IconButton>
+        <IconButton
+          label="Delete note"
+          size="sm"
+          onClick={() => deleteNote(entryId, note.id)}
+        >
+          <X />
+        </IconButton>
+      </span>
     </div>
   );
 }
@@ -412,7 +622,7 @@ function ImageStrip({ entry }: { entry: NotebookEntry }) {
   );
 
   const handlePaste = useCallback(
-    async (e: React.ClipboardEvent<HTMLDivElement>) => {
+    async (e: ReactClipboardEvent<HTMLDivElement>) => {
       const items = e.clipboardData?.items;
       if (!items) return;
       const blobs: { blob: Blob; ext: string }[] = [];
@@ -435,7 +645,14 @@ function ImageStrip({ entry }: { entry: NotebookEntry }) {
   );
 
   return (
-    <Field label="Images" stacked>
+    <Field
+      label="Images"
+      hint={
+        entry.images.length ? (
+          <span className="k-num">{entry.images.length}</span>
+        ) : null
+      }
+    >
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -449,11 +666,9 @@ function ImageStrip({ entry }: { entry: NotebookEntry }) {
         }}
         onPaste={handlePaste}
         tabIndex={0}
-        className={`flex flex-wrap gap-1.5 rounded-md border border-dashed p-1.5 ${
-          dragOver
-            ? "border-(--color-accent) bg-(--color-accent-soft)"
-            : "border-(--color-border)"
-        }`}
+        aria-label="Images. Paste or drop images here."
+        data-drag-over={dragOver ? "" : undefined}
+        className="nb-images"
       >
         {entry.images.map((img) => (
           <ImageThumb key={img.id} entry={entry} image={img} />
@@ -461,17 +676,18 @@ function ImageStrip({ entry }: { entry: NotebookEntry }) {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex h-12 w-12 items-center justify-center rounded border border-dashed border-(--color-border) text-(--color-text-muted) hover:border-(--color-accent) hover:text-(--color-accent)"
+          className="nb-thumb-add"
+          aria-label="Add image"
           title="Add image"
         >
-          <ImagePlus className="h-4 w-4" />
+          <ImagePlus />
         </button>
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
           multiple
-          className="hidden"
+          hidden
           onChange={(e) => {
             void handleFiles(e.target.files);
             // Allow re-selecting the same file later.
@@ -479,9 +695,9 @@ function ImageStrip({ entry }: { entry: NotebookEntry }) {
           }}
         />
       </div>
-      <div className="mt-1 text-[0.625rem] text-(--color-text-muted)">
-        Paste or drop images here. First image becomes the chip avatar.
-      </div>
+      <span className="nb-hint">
+        Paste or drop images here. The first image is the entry’s avatar.
+      </span>
     </Field>
   );
 }
@@ -493,96 +709,19 @@ function ImageThumb({
   entry: NotebookEntry;
   image: NotebookImage;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let revoked = false;
-    let u: string | null = null;
-    void readImageAsObjectURL(image).then((next) => {
-      if (revoked) {
-        URL.revokeObjectURL(next);
-        return;
-      }
-      u = next;
-      setUrl(next);
-    });
-    return () => {
-      revoked = true;
-      if (u) URL.revokeObjectURL(u);
-    };
-  }, [image]);
-
+  const url = useImageUrl(image);
   return (
-    <div className="relative h-12 w-12 overflow-hidden rounded border border-(--color-border) bg-(--color-bg)">
-      {url ? (
-        <img
-          src={url}
-          alt=""
-          className="h-full w-full object-cover"
-          draggable={false}
-        />
-      ) : null}
+    <div className="nb-thumb">
+      {url ? <img src={url} alt="" draggable={false} /> : null}
       <button
         type="button"
         onClick={() => void detachImage(entry.id, image.id)}
-        className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/50 text-white hover:bg-(--color-danger)"
+        className="nb-thumb-remove"
+        aria-label="Remove image"
         title="Remove image"
       >
-        <X className="h-2.5 w-2.5" />
+        <X />
       </button>
-    </div>
-  );
-}
-
-function EntryFooter({
-  entry,
-  onDeleted,
-}: {
-  entry: NotebookEntry;
-  onDeleted: () => void;
-}) {
-  const [armed, setArmed] = useState(false);
-  const [mentionCount, setMentionCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    setMentionCount(computeMentions(entry.id, snapshotLines()).length);
-  }, [entry.id, entry.matchEnabled, entry]);
-
-  return (
-    <div className="flex items-center justify-between pt-1 text-[0.6875rem]">
-      <span className="text-(--color-text-muted)">
-        {mentionCount === null
-          ? ""
-          : mentionCount === 0
-            ? "No mentions in this session"
-            : `${mentionCount} mention${mentionCount === 1 ? "" : "s"}`}
-      </span>
-      {armed ? (
-        <span className="inline-flex items-center gap-1">
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => {
-              void deleteEntry(entry.id);
-              onDeleted();
-            }}
-          >
-            Confirm delete
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setArmed(false)}>
-            Cancel
-          </Button>
-        </span>
-      ) : (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setArmed(true)}
-          title="Delete entry"
-        >
-          <Trash2 className="h-3 w-3" />
-          Delete
-        </Button>
-      )}
     </div>
   );
 }

@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 /* eslint react-hooks/preserve-manual-memoization: "off" -- The imported popup derives mutable display locals; this build does not enable React Compiler. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@kit";
 import { PopoverAudio } from "@texthooker/components/PopoverAudio";
 import {
   PopoverAddToAnki,
@@ -309,14 +311,16 @@ function PopoverApp() {
               {/* Cross-reference breadcrumb: shown once the user has followed a
                   glossary link, so they can return to the scanned term. */}
               {activeXref ? (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="popover-xref-back"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={goBackCrossRef}
                 >
-                  <span aria-hidden>←</span> back
-                </button>
+                  <ArrowLeft aria-hidden />
+                  Back
+                </Button>
               ) : null}
               {state === "loaded" ? (
                 entries.map((f, i) => (

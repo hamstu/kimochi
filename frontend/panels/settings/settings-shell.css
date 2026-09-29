@@ -1,0 +1,35 @@
+.settings-shell {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+.settings-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--k-space-2) 0;
+  overflow-y: auto;
+  background: var(--k-bar);
+  border-right: 1px solid var(--k-line);
+}
+.settings-rail-row[data-state="active"] {
+  background: var(--k-selected);
+  color: var(--k-text);
+}
+.settings-rail-row[data-state="inactive"] {
+  color: var(--k-text-2);
+}
+.settings-rail-row[data-state="inactive"]:hover {
+  color: var(--k-text);
+}
+.settings-page-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+  scrollbar-gutter: stable;
+}
+.settings-page-scroll[hidden] {
+  display: none;
+}

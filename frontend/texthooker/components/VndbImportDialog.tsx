@@ -1,14 +1,34 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Download, Loader2, Search, X } from "lucide-react";
 import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
+import {
+  ChevronRight,
+  Download,
+  ImageOff,
+  Search,
+  SearchX,
+  UserRound,
+  X,
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Callout,
   Dialog,
   DialogClose,
   DialogContent,
-  DialogTitle,
-} from "@texthooker/components/ui/dialog";
-import { Button } from "@texthooker/components/ui/button";
-import { Input } from "@texthooker/components/ui/input";
+  EmptyState,
+  IconButton,
+  Input,
+  Row,
+  Spinner,
+} from "@kit";
 import {
   bestJapaneseTitle,
   getVndbCharactersForVn,
@@ -21,6 +41,7 @@ import {
   importVndbCharacter,
   type ImportResult,
 } from "@texthooker/lib/vndbImport";
+import "../notebook.css";
 
 interface Props {
   open: boolean;
@@ -147,42 +168,81 @@ export function VndbImportDialog({ open, onOpenChange }: Props) {
     setStage("done");
   };
 
+  const resetToSearch = () => {
+    setStage("pick-vn");
+    setChosenVn(null);
+    setChars([]);
+    setImportResults(null);
+    setProgress({ done: 0, total: 0 });
+  };
+
+  const title =
+    stage === "pick-vn"
+      ? "Import characters from VNDB"
+      : stage === "confirm"
+        ? "Confirm import"
+        : "Import complete";
+  const description =
+    stage === "pick-vn"
+      ? "Pick the visual novel you are reading. Its characters become notebook entries."
+      : stage === "confirm"
+        ? "Re-importing is safe: existing characters are updated in place."
+        : undefined;
+
+  let footer: ReactNode;
+  if (stage === "pick-vn") {
+    footer = (
+      <DialogClose asChild>
+        <Button>Cancel</Button>
+      </DialogClose>
+    );
+  } else if (stage === "confirm") {
+    footer = (
+      <>
+        <span className="nb-vndb-foot-note">
+          {importing ? `Importing ${progress.done} of ${progress.total}…` : ""}
+        </span>
+        <Button onClick={handleBack} disabled={importing}>
+          Back
+        </Button>
+        <Button
+          variant="primary"
+          disabled={loadingChars || importing || chars.length === 0}
+          onClick={handleImport}
+        >
+          {importing ? <Spinner label="Importing" /> : <Download />}
+          {chars.length > 0
+            ? `Import ${chars.length} character${chars.length === 1 ? "" : "s"}`
+            : "Import"}
+        </Button>
+      </>
+    );
+  } else {
+    footer = (
+      <>
+        <Button onClick={resetToSearch}>Import another</Button>
+        <Button variant="primary" onClick={() => onOpenChange(false)}>
+          Done
+        </Button>
+      </>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="left-1/2 right-auto top-1/2 bottom-auto -translate-x-1/2 -translate-y-1/2 w-[35rem] max-w-[calc(100vw-48px)] max-h-[80vh] border border-(--color-border) rounded-lg shadow-[var(--shadow-pop)]"
+        size="lg"
+        className="nb-vndb"
+        title={title}
+        description={description}
+        footer={footer}
         onInteractOutside={(e) => {
           if (importing) e.preventDefault();
         }}
-        aria-describedby={undefined}
+        onEscapeKeyDown={(e) => {
+          if (importing) e.preventDefault();
+        }}
       >
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            {stage === "confirm" && !importing ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleBack}
-                title="Back to search"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            ) : null}
-            <DialogTitle className="text-sm font-semibold">
-              {stage === "pick-vn"
-                ? "Import characters from VNDB"
-                : stage === "confirm"
-                  ? "Confirm import"
-                  : "Import complete"}
-            </DialogTitle>
-          </div>
-          <DialogClose asChild>
-            <Button variant="ghost" size="icon" aria-label="Close">
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogClose>
-        </div>
-
         {stage === "pick-vn" ? (
           <PickVnStage
             query={query}
@@ -198,27 +258,71 @@ export function VndbImportDialog({ open, onOpenChange }: Props) {
             chars={chars}
             loading={loadingChars}
             error={charsErr}
-            importing={importing}
-            progress={progress}
-            onImport={handleImport}
-            onBack={handleBack}
           />
         ) : stage === "done" && importResults ? (
-          <ImportSummary
-            results={importResults}
-            onDone={() => onOpenChange(false)}
-            onSearchAgain={() => {
-              setStage("pick-vn");
-              setChosenVn(null);
-              setChars([]);
-              setImportResults(null);
-              setProgress({ done: 0, total: 0 });
-            }}
-          />
+          <ImportSummary results={importResults} />
         ) : null}
       </DialogContent>
     </Dialog>
   );
+}
+
+/* ── Shared bits ───────────────────────────────────────────────────────── */
+
+type VndbImage = { url: string; sexual: number } | null;
+
+function Cover({ image, round }: { image: VndbImage; round?: boolean }) {
+  const safe = image && image.sexual < 1 ? image : null;
+  return (
+    <span
+      className={round ? "nb-cover nb-cover-char" : "nb-cover"}
+      title={image && !safe ? "Image hidden (NSFW)" : undefined}
+    >
+      {safe ? (
+        <img src={safe.url} alt="" draggable={false} />
+      ) : image ? (
+        <ImageOff aria-label="Image hidden (NSFW)" />
+      ) : round ? (
+        <UserRound aria-hidden />
+      ) : null}
+    </span>
+  );
+}
+
+function SkeletonRows({ count, round }: { count: number; round?: boolean }) {
+  return (
+    <div aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="nb-skel">
+          <span
+            className="nb-skel-block"
+            style={round ? { height: "2.25rem", borderRadius: "999px" } : undefined}
+          />
+          <div>
+            <span className="nb-skel-line" />
+            <span className="nb-skel-line" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Arrow keys move between result rows; ArrowUp from the first row returns to search. */
+function onRowsKeyDown(
+  event: ReactKeyboardEvent<HTMLElement>,
+  onTop?: () => void,
+) {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  const rows = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>("button.k-row"),
+  );
+  const index = rows.indexOf(document.activeElement as HTMLButtonElement);
+  if (index === -1) return;
+  event.preventDefault();
+  if (event.key === "ArrowDown") rows[Math.min(rows.length - 1, index + 1)]?.focus();
+  else if (index === 0) onTop?.();
+  else rows[index - 1]?.focus();
 }
 
 /* ── Stage: pick a VN ──────────────────────────────────────────────────── */
@@ -238,63 +342,100 @@ function PickVnStage({
   searchErr: string | null;
   onPick: (vn: VndbVn) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const trimmed = query.trim();
+
   return (
     <>
-      <div className="relative">
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--color-text-muted)" />
+      <div className="nb-search">
+        <Search />
         <Input
+          ref={inputRef}
           autoFocus
-          type="text"
+          type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search VNDB for a visual novel (English or 日本語)…"
-          className="w-full rounded-md border border-(--color-border) bg-(--color-bg-elev) pl-7 pr-2 py-1.5 text-xs text-(--color-text) outline-none focus:border-(--color-accent)"
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "ArrowDown") {
+              const first = listRef.current?.querySelector<HTMLElement>("button.k-row");
+              if (first) {
+                e.preventDefault();
+                first.focus();
+              }
+            } else if (e.key === "Enter" && results[0] && !searching) {
+              e.preventDefault();
+              onPick(results[0]);
+            }
+          }}
+          placeholder="Title in English or 日本語"
+          aria-label="Search VNDB"
         />
-      </div>
-
-      <div className="mt-3 flex items-center justify-between text-[0.6875rem] text-(--color-text-muted)">
-        <span>
-          {searching
-            ? "Searching…"
-            : searchErr
-              ? "Search failed"
-              : results.length > 0
-                ? `${results.length} result${results.length === 1 ? "" : "s"}`
-                : query
-                  ? "No matching visual novels"
-                  : "Type to search visual novels"}
-        </span>
-        {searchErr ? (
-          <span className="text-(--color-danger)">{searchErr}</span>
+        {query ? (
+          <span className="nb-search-end">
+            <IconButton
+              label="Clear search"
+              size="sm"
+              onClick={() => {
+                setQuery("");
+                inputRef.current?.focus();
+              }}
+            >
+              <X />
+            </IconButton>
+          </span>
         ) : null}
       </div>
 
-      <div className="mt-2 max-h-[55vh] overflow-y-auto rounded-md border border-(--color-border) bg-(--color-bg-elev)/50">
-        {results.length === 0 ? (
-          <div className="p-4 text-center text-[0.6875rem] text-(--color-text-muted) italic">
-            {searching ? (
-              <Loader2 className="mx-auto h-4 w-4 animate-spin opacity-60" />
-            ) : query ? (
-              "No matches"
-            ) : (
-              "Results will appear here"
-            )}
-          </div>
+      <div className="nb-vndb-status" aria-live="polite">
+        {searching ? (
+          <>
+            <Spinner label="Searching" />
+            Searching VNDB…
+          </>
+        ) : searchErr ? (
+          "Search failed"
+        ) : results.length > 0 ? (
+          <span className="k-num">
+            {results.length} result{results.length === 1 ? "" : "s"}
+          </span>
+        ) : trimmed ? (
+          "No matching visual novels"
         ) : (
-          <ul className="divide-y divide-(--color-border)">
-            {results.map((vn) => (
-              <VnRow key={vn.id} vn={vn} onPick={() => onPick(vn)} />
-            ))}
-          </ul>
+          "Type to search visual novels"
         )}
       </div>
 
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <DialogClose asChild>
-          <Button variant="ghost" size="sm">
-            Cancel
-          </Button>
-        </DialogClose>
+      {searchErr ? <Callout tone="danger">{searchErr}</Callout> : null}
+
+      <div
+        ref={listRef}
+        className="nb-vndb-list"
+        onKeyDown={(e) => onRowsKeyDown(e, () => inputRef.current?.focus())}
+      >
+        {results.length > 0 ? (
+          results.map((vn) => <VnRow key={vn.id} vn={vn} onPick={() => onPick(vn)} />)
+        ) : searching ? (
+          <SkeletonRows count={4} />
+        ) : trimmed && !searchErr ? (
+          <EmptyState
+            className="nb-vndb-empty"
+            icon={<SearchX />}
+            title={`No results for “${trimmed}”`}
+          >
+            Try the original Japanese title, or fewer words.
+          </EmptyState>
+        ) : !searchErr ? (
+          <EmptyState
+            className="nb-vndb-empty"
+            icon={<Search />}
+            title="Find your visual novel"
+          >
+            Results show the cover, title and release date. Pick one to review
+            its characters before importing.
+          </EmptyState>
+        ) : null}
       </div>
     </>
   );
@@ -303,71 +444,42 @@ function PickVnStage({
 function VnRow({ vn, onPick }: { vn: VndbVn; onPick: () => void }) {
   const primary = bestJapaneseTitle(vn);
   const secondary = primary !== romanizedTitle(vn) ? romanizedTitle(vn) : null;
-  const safeImage = vn.image && vn.image.sexual < 1 ? vn.image : null;
 
   return (
-    <li>
-      <button
-        type="button"
-        onClick={onPick}
-        className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-(--color-bg-elev-2)"
-      >
-        {safeImage ? (
-          <img
-            src={safeImage.url}
-            alt=""
-            className="h-16 w-12 shrink-0 rounded-md object-cover border border-(--color-border)"
-            draggable={false}
-          />
-        ) : (
-          <div className="h-16 w-12 shrink-0 rounded-md border border-(--color-border) bg-(--color-bg) flex items-center justify-center text-[0.625rem] text-(--color-text-muted)">
-            {vn.image ? "NSFW" : "—"}
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div
-            className="text-xs font-medium text-(--color-text) truncate"
-            translate="no"
-            lang="ja"
-          >
-            {primary}
-          </div>
-          {secondary ? (
-            <div className="text-[0.6875rem] text-(--color-text-dim) truncate">
-              {secondary}
-            </div>
-          ) : null}
-          {vn.released ? (
-            <div className="text-[0.625rem] text-(--color-text-muted) mt-0.5">
-              {vn.released}
-            </div>
-          ) : null}
-        </div>
-      </button>
-    </li>
+    <Row
+      className="nb-vndb-row"
+      icon={<Cover image={vn.image} />}
+      onClick={onPick}
+      trailing={<ChevronRight className="nb-vndb-chevron" aria-hidden />}
+    >
+      <span className="nb-vndb-title" lang="ja" translate="no">
+        {primary}
+      </span>
+      {secondary ? <span className="nb-vndb-sub">{secondary}</span> : null}
+      {vn.released ? <span className="nb-vndb-meta">{vn.released}</span> : null}
+    </Row>
   );
 }
 
 /* ── Stage: confirm + import ───────────────────────────────────────────── */
+
+const ROLE_LABEL: Record<string, string> = {
+  main: "Protagonist",
+  primary: "Main",
+  side: "Side",
+  appears: "Appears",
+};
 
 function ConfirmStage({
   vn,
   chars,
   loading,
   error,
-  importing,
-  progress,
-  onImport,
-  onBack,
 }: {
   vn: VndbVn;
   chars: VndbCharacter[];
   loading: boolean;
   error: string | null;
-  importing: boolean;
-  progress: { done: number; total: number };
-  onImport: () => void;
-  onBack: () => void;
 }) {
   const counts = useMemo(() => {
     const c = { main: 0, primary: 0, side: 0, appears: 0 };
@@ -381,109 +493,66 @@ function ConfirmStage({
   const primaryTitle = bestJapaneseTitle(vn);
   const secondaryTitle =
     primaryTitle !== romanizedTitle(vn) ? romanizedTitle(vn) : null;
-  const safeImage = vn.image && vn.image.sexual < 1 ? vn.image : null;
 
   return (
     <>
-      <div className="flex items-start gap-3 rounded-md border border-(--color-border) bg-(--color-bg-elev) p-2.5">
-        {safeImage ? (
-          <img
-            src={safeImage.url}
-            alt=""
-            className="h-16 w-12 shrink-0 rounded-md object-cover border border-(--color-border)"
-            draggable={false}
-          />
-        ) : (
-          <div className="h-16 w-12 shrink-0 rounded-md border border-(--color-border) bg-(--color-bg) flex items-center justify-center text-[0.625rem] text-(--color-text-muted)">
-            {vn.image ? "NSFW" : "—"}
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div
-            className="text-xs font-medium text-(--color-text) truncate"
-            translate="no"
-            lang="ja"
-          >
+      <div className="nb-vndb-head">
+        <Cover image={vn.image} />
+        <div>
+          <span className="nb-vndb-title" lang="ja" translate="no">
             {primaryTitle}
-          </div>
+          </span>
           {secondaryTitle ? (
-            <div className="text-[0.6875rem] text-(--color-text-dim) truncate">
-              {secondaryTitle}
-            </div>
+            <span className="nb-vndb-sub">{secondaryTitle}</span>
           ) : null}
           {vn.released ? (
-            <div className="text-[0.625rem] text-(--color-text-muted) mt-0.5">
-              Released {vn.released}
-            </div>
+            <span className="nb-vndb-meta">Released {vn.released}</span>
           ) : null}
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[0.6875rem] text-(--color-text-muted)">
+      <div className="nb-vndb-status" aria-live="polite">
         {loading ? (
-          <span className="inline-flex items-center gap-1.5">
-            <Loader2 className="h-3 w-3 animate-spin" /> Loading characters…
-          </span>
+          <>
+            <Spinner label="Loading characters" />
+            Loading characters…
+          </>
         ) : error ? (
-          <span className="text-(--color-danger)">{error}</span>
+          "Could not load characters"
         ) : (
-          <span>
-            {chars.length} character{chars.length === 1 ? "" : "s"}
+          <>
+            <span className="k-num">
+              {chars.length} character{chars.length === 1 ? "" : "s"}
+            </span>
             {chars.length > 0
-              ? `  ·  ${counts.main}/${counts.primary}/${counts.side}/${counts.appears} main/primary/side/appears`
-              : ""}
-          </span>
+              ? (Object.keys(counts) as (keyof typeof counts)[])
+                  .filter((role) => counts[role] > 0)
+                  .map((role) => (
+                    <Badge key={role}>
+                      {ROLE_LABEL[role]} {counts[role]}
+                    </Badge>
+                  ))
+              : null}
+          </>
         )}
       </div>
 
-      <div className="mt-2 max-h-[45vh] overflow-y-auto rounded-md border border-(--color-border) bg-(--color-bg-elev)/50">
+      {error ? <Callout tone="danger">{error}</Callout> : null}
+
+      <div className="nb-vndb-list" onKeyDown={(e) => onRowsKeyDown(e)}>
         {loading ? (
-          <div className="p-6 text-center">
-            <Loader2 className="mx-auto h-5 w-5 animate-spin opacity-60" />
-          </div>
+          <SkeletonRows count={5} round />
         ) : chars.length === 0 && !error ? (
-          <div className="p-4 text-center text-[0.6875rem] text-(--color-text-muted) italic">
+          <EmptyState
+            className="nb-vndb-empty"
+            icon={<UserRound />}
+            title="No characters listed"
+          >
             VNDB has no character entries for this title.
-          </div>
+          </EmptyState>
         ) : (
-          <ul className="divide-y divide-(--color-border)">
-            {chars.map((c) => (
-              <CharRow key={c.id} char={c} vnId={vn.id} />
-            ))}
-          </ul>
+          chars.map((c) => <CharRow key={c.id} char={c} vnId={vn.id} />)
         )}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="text-[0.6875rem] text-(--color-text-muted)">
-          {importing
-            ? `Importing… ${progress.done} / ${progress.total}`
-            : "Re-importing is safe — existing characters are updated in place."}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onBack}
-            disabled={importing}
-          >
-            Back
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            disabled={loading || importing || chars.length === 0}
-            onClick={onImport}
-          >
-            {importing ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Download className="h-3 w-3" />
-            )}
-            Import {chars.length || ""} character
-            {chars.length === 1 ? "" : "s"}
-          </Button>
-        </div>
       </div>
     </>
   );
@@ -494,82 +563,61 @@ function CharRow({ char, vnId }: { char: VndbCharacter; vnId: string }) {
   const secondary =
     char.original?.trim() && char.name !== char.original ? char.name : null;
   const role = char.vns?.find((v) => v.id === vnId)?.role;
-  const safeImage = char.image && char.image.sexual < 1 ? char.image : null;
 
   return (
-    <li className="flex items-start gap-3 px-3 py-2">
-      {safeImage ? (
-        <img
-          src={safeImage.url}
-          alt=""
-          className="h-12 w-12 shrink-0 rounded-md object-cover border border-(--color-border)"
-          draggable={false}
-        />
-      ) : (
-        <div className="h-12 w-12 shrink-0 rounded-md border border-(--color-border) bg-(--color-bg) flex items-center justify-center text-[0.625rem] text-(--color-text-muted)">
-          {char.image ? "NSFW" : "—"}
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div
-          className="text-xs font-medium text-(--color-text) truncate"
-          translate="no"
-          lang="ja"
-        >
+    <div className="k-row nb-vndb-row nb-vndb-row-static" role="listitem">
+      <Cover image={char.image} round />
+      <span className="k-row-label">
+        <span className="nb-vndb-title" lang="ja" translate="no">
           {primaryName}
-        </div>
-        {secondary ? (
-          <div className="text-[0.6875rem] text-(--color-text-dim) truncate">
-            {secondary}
-          </div>
-        ) : null}
-        {role ? (
-          <div className="text-[0.625rem] text-(--color-text-muted) mt-0.5 uppercase tracking-wider">
-            {role}
-          </div>
-        ) : null}
-      </div>
-    </li>
+        </span>
+        {secondary ? <span className="nb-vndb-sub">{secondary}</span> : null}
+      </span>
+      {role ? (
+        <Badge tone={role === "main" ? "accent" : "neutral"}>
+          {ROLE_LABEL[role] ?? role}
+        </Badge>
+      ) : null}
+    </div>
   );
 }
 
 /* ── Stage: done summary ───────────────────────────────────────────────── */
 
-function ImportSummary({
-  results,
-  onDone,
-  onSearchAgain,
-}: {
-  results: ImportResult[];
-  onDone: () => void;
-  onSearchAgain: () => void;
-}) {
+function ImportSummary({ results }: { results: ImportResult[] }) {
   const created = results.filter((r) => r.status === "created").length;
   const updated = results.filter((r) => r.status === "updated").length;
   const unchanged = results.filter((r) => r.status === "unchanged").length;
   const imagesAttached = results.filter((r) => r.imageAttached).length;
 
+  const rows: [string, number][] = [
+    ["Created", created],
+    ["Updated in place", updated],
+    ["Already up to date", unchanged],
+    [`Image${imagesAttached === 1 ? "" : "s"} attached`, imagesAttached],
+  ];
+
   return (
-    <div className="text-xs text-(--color-text)">
-      <div className="rounded-md border border-(--color-border) bg-(--color-bg-elev) p-3">
-        <div className="font-medium mb-2">Done — imported {results.length}</div>
-        <ul className="space-y-1 text-[0.6875rem] text-(--color-text-muted)">
-          <li>{created} created</li>
-          <li>{updated} updated in place</li>
-          <li>{unchanged} already up to date</li>
-          <li>
-            {imagesAttached} image{imagesAttached === 1 ? "" : "s"} attached
-          </li>
-        </ul>
+    <>
+      <Callout>
+        Imported{" "}
+        <span className="k-num">
+          {results.length} character{results.length === 1 ? "" : "s"}
+        </span>{" "}
+        into this session’s notebook.
+      </Callout>
+      <div className="nb-vndb-summary" role="list">
+        {rows.map(([label, value]) => (
+          <div
+            key={label}
+            role="listitem"
+            className="k-row nb-vndb-row nb-vndb-row-static"
+          >
+            <span className="k-row-label">{label}</span>
+            <span className="k-row-meta">{value}</span>
+          </div>
+        ))}
       </div>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onSearchAgain}>
-          Import another
-        </Button>
-        <Button variant="default" size="sm" onClick={onDone}>
-          Done
-        </Button>
-      </div>
-    </div>
+    </>
   );
 }

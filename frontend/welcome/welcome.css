@@ -3,14 +3,16 @@
 *::after {
   box-sizing: border-box;
   margin: 0;
-  font-weight: normal;
 }
 
 body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
+  /* The window is transparent; the frame draws the ground. */
   background: transparent !important;
+  color: var(--k-text);
+  font-family: var(--k-font-ui);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

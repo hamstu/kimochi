@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
-import { Button } from "@texthooker/components/ui/button";
+import { ExternalLink } from "lucide-react";
+import { Button, Callout, IconButton, SettingsRow, Spinner, StatusDot } from "@kit";
 import { probe } from "@texthooker/lib/yomitan";
 import { getSettings } from "@texthooker/lib/settings";
 
@@ -13,8 +13,8 @@ interface Props {
 }
 
 /**
- * Compact embedded version of remoki's YomitanSetupWizard. Lives inside the
- * Sources group of SettingsPanel. Polls the Yomitan API once a second so the
+ * Compact embedded version of remoki's YomitanSetupWizard, rendered as settings
+ * rows inside a SettingsSection (not currently mounted). Polls the Yomitan API once a second so the
  * "connected" badge reflects reality without the user lifting a finger.
  */
 export function YomitanSetup({ yomitanUrl }: Props) {
@@ -62,167 +62,114 @@ export function YomitanSetup({ yomitanUrl }: Props) {
   };
 
   return (
-    <div className="rounded-md border border-(--color-border) bg-(--color-bg-elev)/40 p-2.5">
-      {/* Status row */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-xs">
-          {connected === null ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-(--color-text-muted)" />
-          ) : connected ? (
-            <CheckCircle2 className="h-3.5 w-3.5 text-(--color-ok)" />
-          ) : (
-            <XCircle className="h-3.5 w-3.5 text-(--color-danger)" />
-          )}
-          <span>
+    <>
+      <SettingsRow
+        label={
+          <>
+            {connected === null ? (
+              <Spinner label="Checking" />
+            ) : (
+              <StatusDot tone={connected ? "ok" : "danger"} />
+            )}
             {connected === null
               ? "Checking…"
               : connected
                 ? "API connected"
                 : "API not reachable"}
-          </span>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-(--color-accent)"
-        >
+          </>
+        }
+      >
+        <Button variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
           {expanded ? "Hide setup" : connected ? "Setup details" : "Set up"}
         </Button>
-      </div>
+      </SettingsRow>
 
       {expanded ? (
-        <div className="mt-3 space-y-3 text-xs text-(--color-text-dim)">
-          {/* Step 1 — enable in Yomitan */}
-          <div>
-            <div className="mb-1 font-medium text-(--color-text)">
-              1. Enable the API in Yomitan
-            </div>
-            <ol className="ml-4 list-decimal space-y-1">
-              <li>Open the Yomitan extension settings in your browser.</li>
-              <li>
-                Toggle <span className="text-(--color-text)">Advanced</span> on
-                (bottom left).
-              </li>
-              <li>
-                Under <span className="text-(--color-text)">General</span>,
-                enable <span className="text-(--color-text)">Yomitan API</span>.
-              </li>
-            </ol>
-          </div>
+        <>
+          <SettingsRow
+            stacked
+            label="1. Enable the API in Yomitan"
+            description={
+              <>
+                Open the Yomitan extension settings in your browser, turn on{" "}
+                <b>Advanced</b> (bottom left), then under <b>General</b> enable{" "}
+                <b>Yomitan API</b>.
+              </>
+            }
+          />
 
-          {/* Step 2 — install native host */}
-          <div>
-            <div className="mb-1 font-medium text-(--color-text)">
-              2. Install native messaging host
-            </div>
-            <p className="mb-2">
-              The host bridges the Yomitan browser extension to apps on your
-              computer. Auto-installs from{" "}
-              <span className="font-mono text-[0.625rem]">
-                hamstu/go-yomitan-native-messaging-host
-              </span>
-              .
-            </p>
-
+          <SettingsRow
+            stacked
+            label="2. Install native messaging host"
+            description={
+              <>
+                The host bridges the Yomitan browser extension to apps on your computer.
+                Auto-installs from{" "}
+                <span className="k-mono">hamstu/go-yomitan-native-messaging-host</span>.
+              </>
+            }
+          >
             {installStatus === "idle" && (
-              <div className="flex gap-2">
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleInstall}
-                  className="flex-1"
-                >
+              <>
+                <Button size="sm" onClick={() => void handleInstall()}>
                   Install
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleOpenGithub}
-                  title="Open GitHub for manual install"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                </Button>
-              </div>
+                <IconButton label="Open GitHub for manual install" size="sm" onClick={handleOpenGithub}>
+                  <ExternalLink />
+                </IconButton>
+              </>
             )}
 
             {installStatus === "installing" && (
-              <div className="flex items-center gap-2 text-(--color-text-muted)">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Downloading & installing…
-              </div>
+              <span className="k-description">
+                <Spinner label="Installing" /> Downloading and installing…
+              </span>
             )}
 
             {installStatus === "success" && (
-              <div className="space-y-2">
-                <div className="flex items-start gap-1.5 rounded-sm bg-(--color-ok)/10 px-2 py-1.5 text-[0.6875rem] text-(--color-ok)">
-                  <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0" />
-                  <div>
-                    Installed.
-                    {installOutput && installOutput !== "Installed." ? (
-                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-[0.625rem] opacity-80">
-                        {installOutput}
-                      </pre>
-                    ) : null}
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setInstallStatus("idle")}
-                >
+              <>
+                <Callout tone="ok">
+                  <span>Installed.</span>
+                  {installOutput && installOutput !== "Installed." ? (
+                    <pre className="texthooker-pre">{installOutput}</pre>
+                  ) : null}
+                </Callout>
+                <Button variant="ghost" size="sm" onClick={() => setInstallStatus("idle")}>
                   Reinstall
                 </Button>
-              </div>
+              </>
             )}
 
             {installStatus === "error" && (
-              <div className="space-y-2">
-                <div className="rounded-sm bg-(--color-danger)/10 px-2 py-1.5 text-[0.6875rem] text-(--color-danger)">
-                  <div className="font-medium">Install failed</div>
-                  {installError ? (
-                    <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-[0.625rem] opacity-80">
-                      {installError}
-                    </pre>
-                  ) : null}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setInstallStatus("idle");
-                      setInstallError(null);
-                    }}
-                  >
-                    Try again
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleOpenGithub}
-                    title="Manual install instructions"
-                  >
-                    Manual install <ExternalLink className="ml-1 h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
+              <>
+                <Callout tone="danger">
+                  <span className="k-medium">Install failed</span>
+                  {installError ? <pre className="texthooker-pre">{installError}</pre> : null}
+                </Callout>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setInstallStatus("idle");
+                    setInstallError(null);
+                  }}
+                >
+                  Try again
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handleOpenGithub}>
+                  Manual install <ExternalLink />
+                </Button>
+              </>
             )}
-          </div>
+          </SettingsRow>
 
-          {/* Step 3 — restart browser */}
-          <div>
-            <div className="mb-1 font-medium text-(--color-text)">
-              3. Restart your browser
-            </div>
-            <p>
-              Fully quit and reopen your browser so Yomitan picks up the
-              newly-installed host. The status above turns green when the
-              connection is ready.
-            </p>
-          </div>
-        </div>
+          <SettingsRow
+            stacked
+            label="3. Restart your browser"
+            description="Fully quit and reopen your browser so Yomitan picks up the newly installed host. The status above turns green when the connection is ready."
+          />
+        </>
       ) : null}
-    </div>
+    </>
   );
 }

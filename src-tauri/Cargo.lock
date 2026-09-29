@@ -2213,20 +2213,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "kimochi-capture"
-version = "0.1.0"
-dependencies = [
- "block2",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "png 0.18.1",
- "screencapturekit",
- "serde",
-]
-
-[[package]]
-name = "kimochi-tauri-poc"
+name = "kimochi"
 version = "0.1.0"
 dependencies = [
  "arboard",
@@ -2253,6 +2240,19 @@ dependencies = [
  "tokio",
  "tower-http",
  "tungstenite",
+]
+
+[[package]]
+name = "kimochi-capture"
+version = "0.1.0"
+dependencies = [
+ "block2",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "png 0.18.1",
+ "screencapturekit",
+ "serde",
 ]
 
 [[package]]

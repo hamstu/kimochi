@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Volume2 } from "lucide-react";
+import { IconButton, Tooltip } from "@kit";
 import { getOrCacheAudio, playAudio } from "@texthooker/lib/audio";
 import type { AnkiMediaItem } from "@texthooker/lib/types";
 
@@ -27,13 +28,15 @@ export function PopoverAudio({ item, autoplay, volume }: Props) {
   if (!url) return null;
 
   return (
-    <button
-      type="button"
-      onClick={() => playAudio(url, volume)}
-      title="Play audio"
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-(--color-border) bg-(--color-bg-elev) text-(--color-text-dim) hover:text-(--color-text) hover:bg-(--color-bg-elev-2) cursor-pointer"
-    >
-      <Volume2 className="h-3.5 w-3.5" />
-    </button>
+    <Tooltip content="Play audio" side="left">
+      <IconButton
+        size="sm"
+        label="Play audio"
+        title={undefined}
+        onClick={() => playAudio(url, volume)}
+      >
+        <Volume2 />
+      </IconButton>
+    </Tooltip>
   );
 }

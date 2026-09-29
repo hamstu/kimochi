@@ -1,8 +1,10 @@
 /** Live native capture preview. OCR publication has a separate lifetime. */
 import { useEffect, useState, type JSX } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { Bar, Callout } from '@kit'
 import CapturePreview from '../components/CapturePreview'
 import { nativeError } from '../bridge/tauri'
+import './diagnostics.css'
 
 interface Preview {
   id: number
@@ -43,14 +45,20 @@ export default function CapturePanel(): JSX.Element {
   }, [])
   const age = preview ? Math.max(0, (now - preview.info.capturedAt) / 1000) : 0
   return (
-    <div>
-      <p style={{ margin: '8px 12px', fontSize: 12 }}>
-        {preview
-          ? `Captured ${age.toFixed(1)}s ago · ${preview.info.width} × ${preview.info.height} · frame ${preview.id}`
-          : 'Waiting for a capture. Enable Auto OCR or trigger a scan.'}
-        {age > 3 && ' — No recent capture; this image is stale.'}
-      </p>
-      {error && <p role="alert">Capture preview unavailable: {error}</p>}
+    <div className="capture-panel">
+      <Bar position="top" className="diag-bar-text">
+        <span className="k-num k-truncate">
+          {preview
+            ? `Captured ${age.toFixed(1)}s ago · ${preview.info.width} × ${preview.info.height} · frame ${preview.id}`
+            : 'Waiting for a capture. Enable Auto OCR or trigger a scan.'}
+        </span>
+        {age > 3 && <span className="capture-panel-stale">No recent capture; this image is stale.</span>}
+      </Bar>
+      {error && (
+        <Callout tone="danger" className="capture-panel-error">
+          Capture preview unavailable: {error}
+        </Callout>
+      )}
       <CapturePreview visible imageData={preview?.url ?? null} />
     </div>
   )

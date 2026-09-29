@@ -16,7 +16,8 @@ export default defineConfig({
     alias: {
       // Plain-ESM modules owned by the overlay agent, shared rather than duplicated.
       '@ui': here('ui'),
-      '@texthooker': here('frontend/texthooker')
+      '@texthooker': here('frontend/texthooker'),
+      '@kit': here('frontend/kit')
     }
   },
   build: {

@@ -1,0 +1,56 @@
+/* Diagnostic panels (Capture Preview, Debug Info, Capture Debug). Their bars and controls are the
+ * kit's; the Debug and Capture Debug windows keep their dark terminal ground (panel.css), with the
+ * log type on the kit's mono face and scale. */
+.diag-terminal {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  color: #f8f8f2;
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+.diag-scroll {
+  display: block;
+  overflow: auto;
+  padding: var(--k-space-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.diag-bar {
+  font-family: var(--k-font-ui);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.diag-bar .k-button { flex: none; padding: 0 var(--k-space-1-5); }
+/* Text-only bars align with the title bar's label. */
+.diag-bar-text { padding: 0 var(--k-space-3); }
+.diag-note { padding: var(--k-space-2) var(--k-space-2-5) var(--k-space-1-5); }
+.diag-preview { padding: 0 var(--k-space-2-5) var(--k-space-2); }
+.diag-preview img { max-width: 100%; max-height: 13.75rem; object-fit: contain; }
+.diag-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 var(--k-space-2-5) var(--k-space-2-5);
+}
+
+/* Capture Preview */
+.capture-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.capture-panel-stale { flex: none; color: var(--k-warn-text); }
+.capture-panel-error { margin: var(--k-space-2) var(--k-space-3) 0; }
+.capture-preview {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+  padding: var(--k-space-3);
+}
+.capture-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.capture-preview-error { color: var(--k-danger-text); }

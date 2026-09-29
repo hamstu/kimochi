@@ -21,7 +21,9 @@ npm run bundle
 npm start
 ```
 
-Requires macOS 14+, Node/npm, Rust and Command Line Tools. `npm start` (also `npm run dev`) opens the **already-built** `src-tauri/target/debug/bundle/macos/Kimochi Next POC.app`; rebuild after changes. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries.
+`npm run release` builds the optimised, signed app at `src-tauri/target/release/bundle/macos/Kimochi.app` (install by copying it to `/Applications`). `npm run preview:ui` renders every window in Chrome against mocked native commands for design work.
+
+Requires macOS 14+, Node/npm, Rust and Command Line Tools. `npm start` (also `npm run dev`) opens the **already-built** `src-tauri/target/debug/bundle/macos/Kimochi.app`; rebuild after changes. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries.
 
 The runner sets `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for this host. It uses an installed Apple Development signing identity when available, or `APPLE_SIGNING_IDENTITY`. `KIMOCHI_ADHOC=1` opts out. This is a local development bundle, not a notarized release; no signing keys are stored here.
 
@@ -61,7 +63,7 @@ Keyboard-triggered automatic scans use the existing keytrigger helper and may re
 
 Geometry uses desktop points and the **current full capture dimensions**, with crop origin and saved reference dimensions kept separate. Each axis scales independently; the Controller WebView's DPR is never the capture scale. Full previews and the latest frame are held in bounded native memory and served through the local `capture:` protocol.
 
-Settings/history/window state live under `~/Library/Application Support/dev.kimochi.next-poc/`. Kimochi settings are in `settings.json`, extension preferences in `chrome-local.json`, and dictionaries in WebKit IndexedDB. The app is intended to run as one instance.
+Settings/history/window state live under `~/Library/Application Support/dev.kimochi.app/`. Kimochi settings are in `settings.json`, extension preferences in `chrome-local.json`, and dictionaries in WebKit IndexedDB. The app is intended to run as one instance.
 
 ## Validation and remaining work
 

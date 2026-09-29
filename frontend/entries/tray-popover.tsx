@@ -4,6 +4,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@radix-ui/themes/styles.css'
+import '../kit/kit.css'
 import '../shell/panel.css'
 import Providers from './providers'
 import TrayPopover from '../panels/TrayPopover'

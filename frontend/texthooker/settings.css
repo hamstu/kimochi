@@ -1,18 +1,73 @@
-.texthooker-settings-page { max-width: 52rem; margin-inline: auto; }
-.reader-source-choices { margin: 0; padding: 0; border: 0; }
-.source-card > input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.source-card {
-  display: flex; min-height: 4.5rem; align-items: center; justify-content: center; gap: .5rem;
-  border: 0; border-radius: .625rem; color: var(--color-text-muted); background: var(--color-bg-elev);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-border) 75%, transparent);
-  cursor: pointer; transition-property: color, background-color, box-shadow, transform; transition-duration: 140ms;
+/*
+ * Settings → Texthooker. The page follows the kit settings pattern; shared field widths, notes and
+ * slider readouts come from panels/settings-panel.css (this tab only renders in the settings window).
+ */
+.texthooker-settings-status { padding: var(--k-space-5) var(--k-space-6); }
+
+/* Text replacements: one editable rule per row. */
+.replacement-row { gap: var(--k-space-2); min-height: var(--k-row-h); padding-block: var(--k-space-1-5); padding-left: var(--k-space-2); }
+.replacement-row[data-dragging] { opacity: 0.5; }
+.replacement-grip { flex: none; width: var(--k-icon-sm); height: var(--k-icon-sm); color: var(--k-text-3); cursor: grab; }
+.replacement-pattern { flex: 1; min-width: 0; }
+.replacement-flags { flex: none; width: 2.75rem; }
+
+/* Anki: field mapping rows and the Yomitan import preview. */
+.anki-mapping-field { width: 13rem; max-width: 100%; }
+.anki-probe { font-size: var(--k-text-sm); }
+.anki-probe[data-ok] { color: var(--k-ok-text); }
+.anki-probe[data-failed] { color: var(--k-danger-text); }
+.anki-preview { display: flex; flex-direction: column; gap: var(--k-space-2); width: 100%; }
+.anki-preview-meta { display: grid; grid-template-columns: auto 1fr; gap: var(--k-space-0-5) var(--k-space-3); margin: 0; font-size: var(--k-text-sm); }
+.anki-preview-meta dt { color: var(--k-text-2); }
+.anki-preview-meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.anki-preview-map {
+  max-height: 8rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  border-block: 1px solid var(--k-line);
+  font-size: var(--k-text-sm);
 }
-.source-card:hover { color: var(--color-text); }
-.source-card:active { transform: scale(.96); }
-.source-card:has(input:focus-visible) { outline: 2px solid var(--accent-9); outline-offset: 2px; }
-.source-card-selected {
-  color: var(--accent-11); background: color-mix(in srgb, var(--accent-9) 13%, var(--color-bg-elev));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-9) 65%, transparent), 0 4px 14px rgb(0 0 0 / 12%);
+.anki-preview-map > div { display: flex; justify-content: space-between; gap: var(--k-space-3); padding-block: var(--k-space-0-5); }
+.anki-preview-map > div + div { border-top: 1px solid var(--k-line); }
+.anki-preview-map dt { color: var(--k-text); }
+.anki-preview-map dd { margin: 0; color: var(--k-text-2); }
+.anki-preview-actions { display: flex; justify-content: flex-end; gap: var(--k-space-2); width: 100%; }
+
+/* Explain settings dialog. */
+.explain-settings { display: flex; flex-direction: column; gap: var(--k-space-3); }
+.explain-prompt { min-height: 18rem; line-height: var(--k-leading-sm); }
+.explain-prompt-head { display: flex; align-items: center; justify-content: space-between; gap: var(--k-space-2); }
+
+/* Command output inside a callout. */
+.texthooker-pre { margin: 0; overflow-x: auto; white-space: pre-wrap; font-family: var(--k-font-mono); font-size: var(--k-text-xs); }
+.preset-actions { display: inline-flex; gap: var(--k-space-1); }
+
+/* Input source: a single-select list of Controller-style rows inside the group. */
+.input-source-list { display: flex; flex-direction: column; }
+.input-source-row {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--k-space-2) var(--k-space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--k-text);
+  text-align: left;
+  cursor: default;
+  transition: background-color var(--k-fast);
 }
-.source-detail { margin: 0; color: var(--color-text-muted); font-size: .6875rem; text-wrap: pretty; }
-.texthooker-output { border-top: 1px solid var(--color-border); margin-top: .75rem; padding-top: .75rem; }
+.input-source-row + .input-source-row,
+.input-source-list + .k-settings-row { border-top: 1px solid var(--k-line); }
+.input-source-row:hover { background: var(--k-press); }
+.input-source-row[data-state="on"] { background: var(--k-selected); }
+.input-source-row:focus-visible { outline: 2px solid var(--k-focus); outline-offset: -2px; }
+.input-source-icon { display: flex; flex: none; color: var(--k-text-2); }
+.input-source-icon > svg { width: var(--k-icon); height: var(--k-icon); }
+.input-source-text { display: flex; flex: 1; flex-direction: column; gap: var(--k-space-0-5); min-width: 0; }
+.input-source-label { font-size: var(--k-text-md); line-height: var(--k-leading-md); font-weight: var(--k-weight-medium); }
+.input-source-detail { font-size: var(--k-text-sm); line-height: var(--k-leading-sm); color: var(--k-text-2); }
+.input-source-check { flex: none; width: var(--k-icon); height: var(--k-icon); color: var(--k-accent-text); }

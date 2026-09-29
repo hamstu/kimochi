@@ -8,7 +8,26 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Minus, Plus, Settings as SettingsIcon } from "lucide-react";
+import {
+  AArrowDown,
+  AArrowUp,
+  ChevronUp,
+  ScrollText,
+  Settings as SettingsIcon,
+} from "lucide-react";
+import {
+  Bar,
+  BarSpacer,
+  Button,
+  Callout,
+  EmptyState,
+  IconButton,
+  Spinner,
+  StatusDot,
+  Tooltip,
+  type Tone,
+} from "@kit";
+import "./log.css";
 import { LineRow } from "./components/LineRow";
 import { SessionBar } from "./components/SessionBar";
 import { ExplainModal } from "./components/ExplainModal";
@@ -65,9 +84,14 @@ export default function ReaderApp() {
     };
   }, []);
   if (!ready)
-    return (
-      <div role="status" className="p-4">
-        {error || "Loading Texthooker…"}
+    return error ? (
+      <div className="log-loading-error">
+        <Callout tone="danger">{error}</Callout>
+      </div>
+    ) : (
+      <div role="status" className="log-loading">
+        <Spinner label="Loading" />
+        Loading Texthooker…
       </div>
     );
   return <Transcript />;
@@ -131,30 +155,40 @@ function Transcript() {
     void updateSettings({
       fontSizePx: Math.max(12, Math.min(48, settings.fontSizePx + delta)),
     });
+  const statusTone: Record<SocketStatus["state"], Tone> = {
+    connected: "ok",
+    connecting: "warn",
+    retrying: "warn",
+    invalid: "danger",
+  };
   return (
-    <div className="texthooker app-root flex h-full min-h-0 flex-col">
+    <div className="texthooker app-root log-root">
       <SessionBar
         onOpenNotebook={() =>
           void openNotebook().catch((e) => setError(String(e)))
         }
       />
       {inputStatus && (
-        <div
-          role="status"
-          className="px-3 py-1 text-xs text-(--color-text-muted)"
-        >
-          {inputStatus.message}
+        <div role="status" className="log-status">
+          <StatusDot tone={statusTone[inputStatus.state]} />
+          <span>{inputStatus.message}</span>
         </div>
       )}
-      {error && (
-        <div role="alert" className="reader-error">
-          {error}
-          <button onClick={() => setError("")}>Dismiss</button>
-        </div>
-      )}
-      {!apiMode && lookup.status === "unavailable" && (
-        <div role="status" className="reader-error">
-          Dictionary: {lookup.message}
+      {(error || (!apiMode && lookup.status === "unavailable")) && (
+        <div className="log-callouts">
+          {error && (
+            <Callout tone="danger">
+              <span className="log-callout-row">
+                <span>{error}</span>
+                <Button variant="ghost" size="sm" onClick={() => setError("")}>
+                  Dismiss
+                </Button>
+              </span>
+            </Callout>
+          )}
+          {!apiMode && lookup.status === "unavailable" && (
+            <Callout tone="warn">Dictionary: {lookup.message}</Callout>
+          )}
         </div>
       )}
       <main
@@ -164,24 +198,38 @@ function Transcript() {
           if (e)
             follow.current = e.scrollHeight - e.scrollTop - e.clientHeight < 32;
         }}
-        className="relative flex-1 min-h-0 overflow-y-auto px-4 py-3"
+        className="log-transcript"
       >
         {!snap.lines.length && (
-          <p className="text-xs text-(--color-text-muted)">
+          <EmptyState
+            className="log-empty"
+            icon={<ScrollText />}
+            title="No lines yet"
+            actions={
+              <Button size="sm" onClick={() => void openReaderSettings()}>
+                <SettingsIcon />
+                Texthooker settings
+              </Button>
+            }
+          >
             Choose OCR, Clipboard or WebSocket in Texthooker settings to start
             reading.
-          </p>
+          </EmptyState>
         )}
         {snap.lines.length > shown && (
-          <button
-            onClick={() => setShown((n) => n + 100)}
-            className="text-xs mb-3"
-          >
-            Show earlier lines
-          </button>
+          <div className="log-earlier">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShown((n) => n + 100)}
+            >
+              <ChevronUp />
+              Show earlier lines
+            </Button>
+          </div>
         )}
         <div
-          className="jp-text scan-region"
+          className="jp-text scan-region log-lines"
           translate="no"
           lang="ja"
           style={{ fontSize: settings.fontSizePx }}
@@ -198,23 +246,42 @@ function Transcript() {
           ))}
         </div>
       </main>
-      <footer className="flex flex-none items-center justify-between border-t border-(--color-border) px-3 py-2 text-xs">
+      <Bar position="bottom">
         <StatsFooter lineCount={snap.lines.length} />
-        <div className="flex gap-2">
-          <button title="Smaller text" onClick={() => changeFont(-1)}>
-            <Minus size={14} />
-          </button>
-          <button title="Larger text" onClick={() => changeFont(1)}>
-            <Plus size={14} />
-          </button>
-          <button
-            title="Texthooker settings"
-            onClick={() => void openReaderSettings()}
-          >
-            <SettingsIcon size={14} />
-          </button>
+        <BarSpacer />
+        <div className="log-bar-actions">
+          <Tooltip content="Smaller text">
+            <IconButton
+              label="Smaller text"
+              size="sm"
+              disabled={settings.fontSizePx <= 12}
+              onClick={() => changeFont(-1)}
+            >
+              <AArrowDown />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Larger text">
+            <IconButton
+              label="Larger text"
+              size="sm"
+              disabled={settings.fontSizePx >= 48}
+              onClick={() => changeFont(1)}
+            >
+              <AArrowUp />
+            </IconButton>
+          </Tooltip>
+          <span className="log-bar-divider" aria-hidden />
+          <Tooltip content="Texthooker settings">
+            <IconButton
+              label="Texthooker settings"
+              size="sm"
+              onClick={() => void openReaderSettings()}
+            >
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
         </div>
-      </footer>
+      </Bar>
       <SelectionAddButton containerRef={scroll} enabled onAdd={setAddText} />
       <AddToNotebookModal text={addText} onClose={() => setAddText(null)} />
       <ExplainModal />

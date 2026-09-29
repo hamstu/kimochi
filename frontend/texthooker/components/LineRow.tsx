@@ -139,12 +139,12 @@ function LineRowInner({
   if (translateStatus?.state === "loading") {
     return (
       <div
-        className="line py-1 border-b border-white/5 break-words"
+        className="line"
         data-line-id={line.id}
         data-line-text={line.text}
       >
-        <span className="opacity-50 animate-pulse">{line.text}</span>
-        <span className="ml-2 text-[0.6875rem] italic text-(--color-text-muted) animate-pulse">
+        <span className="line-pending">{line.text}</span>
+        <span className="line-note line-pending" role="status">
           translating…
         </span>
       </div>
@@ -154,7 +154,7 @@ function LineRowInner({
   // Transient inline failure note (auto-clears after a few seconds).
   const translateNote =
     translateStatus?.state === "error" ? (
-      <span className="ml-2 text-[0.625rem] text-(--color-danger)">
+      <span className="line-note line-note-danger" role="alert">
         translation failed: {translateStatus.message}
       </span>
     ) : null;
@@ -164,7 +164,7 @@ function LineRowInner({
   if (line.showTranslation && line.translation) {
     return (
       <div
-        className="line line-translated py-1 border-b border-white/5 break-words"
+        className="line line-translated"
         lang="en"
         data-line-id={line.id}
         data-line-text={line.translation}
@@ -184,7 +184,7 @@ function LineRowInner({
   if (matches.length === 0 && (!line.tokens || line.tokens.length === 0)) {
     return (
       <div
-        className="line py-1 border-b border-white/5 break-words"
+        className="line"
         data-line-id={line.id}
         data-line-text={line.text}
       >
@@ -204,7 +204,7 @@ function LineRowInner({
   if (matches.length === 0 && line.tokens && line.tokens.length > 0) {
     return (
       <div
-        className="line py-1 border-b border-white/5 break-words"
+        className="line"
         data-line-id={line.id}
         data-line-text={line.text}
       >
@@ -233,7 +233,7 @@ function LineRowInner({
 
   return (
     <div
-      className="line py-1 border-b border-white/5 break-words"
+      className="line"
       data-line-id={line.id}
       data-line-text={line.text}
     >

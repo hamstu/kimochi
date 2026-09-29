@@ -1,16 +1,18 @@
 /**
  * COPY of `src/renderer/src/components/GamepadButtonCapture.tsx`.
- * Delta: `useGamepad` imports from the bridge (same exported shape). Markup unchanged.
+ * Deltas: `useGamepad` imports from the bridge (same exported shape); rendered with kit buttons.
+ * Behaviour unchanged: click to capture, press a gamepad button to assign, Escape cancels.
  */
 import { useState, useEffect, useCallback, type JSX } from 'react'
-import { Button, Flex, Text } from '@radix-ui/themes'
 import { Gamepad2, X } from 'lucide-react'
+import { Button, IconButton } from '@kit'
 import { useGamepad, getButtonName } from '../bridge/useGamepad'
 
 interface GamepadButtonCaptureProps {
   value?: number
   onChange: (buttonIndex: number | undefined) => void
   disabled?: boolean
+  /** '1' is the small control size; '2' and '3' the default. */
   size?: '1' | '2' | '3'
 }
 
@@ -21,6 +23,7 @@ export function GamepadButtonCapture({
   size = '2'
 }: GamepadButtonCaptureProps): JSX.Element {
   const [capturing, setCapturing] = useState(false)
+  const buttonSize = size === '1' ? 'sm' : 'md'
 
   const handleButtonPress = useCallback(
     (buttonIndex: number) => {
@@ -64,53 +67,49 @@ export function GamepadButtonCapture({
     onChange(undefined)
   }
 
-  // Show different states
   if (capturing) {
     return (
-      <Button size={size} variant="soft" color="blue" onClick={() => setCapturing(false)}>
-        <Gamepad2 size={14} />
-        <Text size="1">Press button...</Text>
-      </Button>
+      <span className="gamepad-capture">
+        <Button size={buttonSize} data-capturing="" onClick={() => setCapturing(false)}>
+          <Gamepad2 />
+          Press a button…
+        </Button>
+      </span>
     )
   }
 
-  if (!settings.enabled) {
+  if (!settings.enabled || !hasGamepad) {
     return (
-      <Button size={size} variant="soft" color="gray" disabled>
-        <Gamepad2 size={14} />
-        <Text size="1">Disabled</Text>
-      </Button>
-    )
-  }
-
-  if (!hasGamepad) {
-    return (
-      <Button size={size} variant="soft" color="gray" disabled>
-        <Gamepad2 size={14} />
-        <Text size="1">No gamepad</Text>
-      </Button>
+      <span className="gamepad-capture">
+        <Button size={buttonSize} disabled>
+          <Gamepad2 />
+          {!settings.enabled ? 'Disabled' : 'No gamepad'}
+        </Button>
+      </span>
     )
   }
 
   if (value !== undefined) {
     return (
-      <Flex align="center" gap="1">
-        <Button size={size} variant="soft" color="green" onClick={handleStartCapture}>
-          <Gamepad2 size={14} />
-          <Text size="1">{getButtonName(value)}</Text>
+      <span className="gamepad-capture">
+        <Button size={buttonSize} data-assigned="" onClick={handleStartCapture}>
+          <Gamepad2 />
+          {getButtonName(value)}
         </Button>
-        <Button size={size} variant="ghost" color="gray" onClick={handleClear}>
-          <X size={12} />
-        </Button>
-      </Flex>
+        <IconButton label="Clear gamepad button" size="sm" onClick={handleClear}>
+          <X />
+        </IconButton>
+      </span>
     )
   }
 
   return (
-    <Button size={size} variant="soft" color="gray" onClick={handleStartCapture}>
-      <Gamepad2 size={14} />
-      <Text size="1">Set</Text>
-    </Button>
+    <span className="gamepad-capture">
+      <Button size={buttonSize} onClick={handleStartCapture} disabled={disabled}>
+        <Gamepad2 />
+        Set
+      </Button>
+    </span>
   )
 }
 

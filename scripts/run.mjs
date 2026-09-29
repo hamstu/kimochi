@@ -10,7 +10,7 @@ const task = process.argv[2]
 // Use an installed local development certificate when available. Never store key material.
 if (
   process.platform === 'darwin' &&
-  task === 'bundle' &&
+  (task === 'bundle' || task === 'release') &&
   !env.APPLE_SIGNING_IDENTITY &&
   !env.KIMOCHI_ADHOC
 ) {
@@ -25,7 +25,7 @@ if (
 }
 
 if (task === 'launch') {
-  const r = spawnSync('open', ['src-tauri/target/debug/bundle/macos/Kimochi Next POC.app'], {
+  const r = spawnSync('open', ['src-tauri/target/debug/bundle/macos/Kimochi.app'], {
     stdio: 'inherit',
     env
   })
@@ -57,8 +57,13 @@ const r =
         ],
         { stdio: 'inherit', env }
       )
-    : spawnSync('node_modules/.bin/tauri', ['build', '--debug', '--bundles', 'app'], {
-        stdio: 'inherit',
-        env
-      })
+    : spawnSync(
+        'node_modules/.bin/tauri',
+        // `release` is the optimised, installable app; `bundle` is the faster debug build.
+        task === 'release' ? ['build', '--bundles', 'app'] : ['build', '--debug', '--bundles', 'app'],
+        {
+          stdio: 'inherit',
+          env
+        }
+      )
 process.exit(r.status ?? 1)

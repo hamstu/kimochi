@@ -1,5 +1,5 @@
 import { AudioPlayer } from "../../components/AudioPlayer";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Copy,
   Languages,
@@ -9,10 +9,13 @@ import {
   Undo2,
 } from "lucide-react";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@texthooker/components/ui/popover";
+  IconButton,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "@kit";
 import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
 import { deleteLine } from "@texthooker/lib/store";
 import { openExplain } from "@texthooker/lib/explain";
@@ -35,10 +38,7 @@ export function LineActionsMenu({
   translateEnabled,
 }: Props) {
   const [open, setOpen] = useState(false);
-
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-  };
+  const audioSlot = useRef<HTMLSpanElement>(null);
 
   const handleCopy = async () => {
     try {
@@ -46,97 +46,77 @@ export function LineActionsMenu({
     } catch (err) {
       console.warn("copy failed", err);
     }
-    setOpen(false);
   };
-
-  const handleTranslate = () => {
-    // Fire and forget: the row itself shows the interim "translating…" state
-    // (and any failure note), matching the T hotkey behavior.
-    void showTranslation(line);
-    setOpen(false);
-  };
-
-  const handleShowOriginal = () => {
-    showOriginal(line.id);
-    setOpen(false);
-  };
-
-  const handleExplain = () => {
-    openExplain(line);
-    setOpen(false);
-  };
-
-  const handleDelete = () => {
-    deleteLine(line.id);
-    setOpen(false);
-  };
-
-  const itemClass =
-    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-(--color-text) hover:bg-(--color-bg-elev-2)";
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label="Line actions"
-          // Suppress the parent .line hover dismiss when interacting.
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          className={[
-            "line-actions-trigger",
-            "ml-1 inline-flex h-[1em] w-[1em] items-center justify-center align-baseline",
-            "rounded text-(--color-text-muted) opacity-0 transition-opacity",
-            "hover:bg-(--color-bg-elev-2) hover:text-(--color-text)",
-            "focus-visible:outline-none focus-visible:opacity-100",
-            open ? "opacity-100" : "",
-          ].join(" ")}
-        >
-          <MoreHorizontal className="h-[0.7em] w-[0.7em]" strokeWidth={2.25} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={4}
-        className="line-actions-menu w-[10rem] p-1"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <div className={itemClass}>
-          <AudioPlayer text={line.text} />
-          <span>Read aloud</span>
-        </div>
-        <button type="button" onClick={handleCopy} className={itemClass}>
-          <Copy className="h-3 w-3 text-(--color-text-muted)" />
-          Copy text
-        </button>
-        {isTranslated ? (
-          <button
-            type="button"
-            onClick={handleShowOriginal}
-            className={itemClass}
+    <span className="line-actions">
+      <Menu open={open} onOpenChange={setOpen}>
+        <MenuTrigger asChild>
+          <IconButton
+            label="Line actions"
+            size="sm"
+            className="line-actions-trigger"
+            // Keep the row's selection / scan handling out of trigger clicks.
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
-            <Undo2 className="h-3 w-3 text-(--color-text-muted)" />
-            Show original
-          </button>
-        ) : translateEnabled ? (
-          <button type="button" onClick={handleTranslate} className={itemClass}>
-            <Languages className="h-3 w-3 text-(--color-text-muted)" />
-            Translate
-          </button>
-        ) : null}
-        <button type="button" onClick={handleExplain} className={itemClass}>
-          <Sparkles className="h-3 w-3 text-(--color-text-muted)" />
-          Explain
-        </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          className={`${itemClass} hover:text-(--color-danger)`}
+            <MoreHorizontal />
+          </IconButton>
+        </MenuTrigger>
+        <MenuContent
+          align="end"
+          className="log-line-menu"
         >
-          <Trash2 className="h-3 w-3 text-(--color-text-muted)" />
-          Delete line
-        </button>
-      </PopoverContent>
-    </Popover>
+          {/* Read aloud: the row activates the shared AudioPlayer button, which keeps its own
+              playing state and error tooltip. The menu stays open while it plays. */}
+          <MenuItem
+            icon={
+              <span
+                ref={audioSlot}
+                className="log-audio-slot"
+                // A direct click on the speaker plays it; don't also select the row.
+                onClick={(e) => e.stopPropagation()}
+              >
+                <AudioPlayer text={line.text} />
+              </span>
+            }
+            onSelect={(e) => {
+              e.preventDefault();
+              audioSlot.current?.querySelector("button")?.click();
+            }}
+          >
+            Read aloud
+          </MenuItem>
+          <MenuItem icon={<Copy />} onSelect={() => void handleCopy()}>
+            Copy text
+          </MenuItem>
+          {isTranslated ? (
+            <MenuItem icon={<Undo2 />} onSelect={() => showOriginal(line.id)}>
+              Show original
+            </MenuItem>
+          ) : translateEnabled ? (
+            // Fire and forget: the row shows the interim "translating…" state (and any failure
+            // note), matching the T hotkey.
+            <MenuItem
+              icon={<Languages />}
+              onSelect={() => void showTranslation(line)}
+            >
+              Translate
+            </MenuItem>
+          ) : null}
+          <MenuItem icon={<Sparkles />} onSelect={() => openExplain(line)}>
+            Explain
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem
+            icon={<Trash2 />}
+            tone="danger"
+            onSelect={() => deleteLine(line.id)}
+          >
+            Delete line
+          </MenuItem>
+        </MenuContent>
+      </Menu>
+    </span>
   );
 }

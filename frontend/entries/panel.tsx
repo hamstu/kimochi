@@ -9,6 +9,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@radix-ui/themes/styles.css";
+import "../kit/kit.css";
 import "../texthooker/App.css";
 import "../shell/panel.css";
 import Providers from "./providers";
@@ -20,6 +21,7 @@ import NotebookPanel from "../panels/NotebookPanel";
 import CapturePanel from "../panels/CapturePanel";
 import DebugPanel from "../panels/DebugPanel";
 import CaptureDebugPanel from "../panels/CaptureDebugPanel";
+import YomitanSettingsPanel from "../panels/YomitanSettingsPanel";
 import { preloadPanelYomitan } from "../shell/panelYomitan";
 
 /** Titles and components, matching `PanelApp.tsx`'s `titles` / `components` maps. */
@@ -31,6 +33,7 @@ const PANELS = {
   capture: { title: "Capture Preview", Component: CapturePanel, mini: false },
   debug: { title: "Debug Info", Component: DebugPanel, mini: false },
   stream: { title: "Capture Debug", Component: CaptureDebugPanel, mini: false },
+  yomitan: { title: "Yomitan settings", Component: YomitanSettingsPanel, mini: false },
 } as const;
 
 type KnownLabel = keyof typeof PANELS;

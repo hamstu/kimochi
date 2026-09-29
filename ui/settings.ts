@@ -22,6 +22,16 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 export type ServerMode = 'cloud' | 'local'
 /** Cloud OCR is the only backend that returns geometry; see OCR_MODES below. */
 export type OcrMode = 'cloud' | 'local' | 'websocket'
+/** Window appearance. `system` follows the OS light/dark setting. */
+export type Appearance = 'system' | 'light' | 'dark'
+/** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
+export type InterfaceScale = 'small' | 'medium' | 'large' | 'xlarge'
+export const INTERFACE_SCALES: Record<InterfaceScale, { label: string; factor: number }> = {
+  small: { label: 'Small', factor: 0.92 },
+  medium: { label: 'Medium', factor: 1 },
+  large: { label: 'Large', factor: 1.1 },
+  xlarge: { label: 'Extra large', factor: 1.22 }
+}
 
 export interface ScanHistoryEntry {
   id: string
@@ -53,6 +63,8 @@ export interface Settings {
   owocrWebSocketUrl: string
   scannedTextHistory: ScanHistoryEntry[]
   scannedTextFontSize: number
+  appearance: Appearance
+  interfaceScale: InterfaceScale
 }
 
 export const DEFAULT_VOICE_ID = 'j210dv0vWm7fCknyQpbA'
@@ -80,7 +92,9 @@ export const SETTINGS_DEFAULTS: Settings = {
   ocrMode: 'cloud',
   owocrWebSocketUrl: 'ws://localhost:7331',
   scannedTextHistory: [],
-  scannedTextFontSize: 14
+  scannedTextFontSize: 14,
+  appearance: 'system',
+  interfaceScale: 'medium'
 }
 
 /**

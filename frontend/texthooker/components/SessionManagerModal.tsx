@@ -1,22 +1,23 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
 import { useEffect, useState } from "react";
-import { GripVertical, Trash2, X } from "lucide-react";
-import { Button } from "@texthooker/components/ui/button";
-import { Input } from "@texthooker/components/ui/input";
+import { GripVertical, Trash2 } from "lucide-react";
 import {
+  Badge,
+  Button,
+  Callout,
+  ConfirmDialog,
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@texthooker/components/ui/dialog";
+  IconButton,
+  Input,
+} from "@kit";
 import {
   deleteSession,
   renameSession,
   reorderSessions,
 } from "@texthooker/lib/sessions";
 import type { SessionMeta } from "@texthooker/lib/types";
-import { cn } from "@texthooker/lib/utils";
 
 interface Props {
   activeId: string;
@@ -134,6 +135,8 @@ export function SessionManagerModal({
       await deleteSession(deleteId);
       setDeleteId(null);
     } catch (err) {
+      // Close the confirmation so the error shows in the manager.
+      setDeleteId(null);
       setError(errorMessage(err, "Couldn't delete the session."));
     } finally {
       setDeleting(false);
@@ -143,48 +146,34 @@ export function SessionManagerModal({
   const deletingSession = sessions.find((session) => session.id === deleteId);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="left-1/2 right-auto top-1/2 bottom-auto w-[31rem] max-w-[calc(100vw-3rem)] max-h-[85vh] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-(--color-border) p-0 shadow-[var(--shadow-pop)]">
-        <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
-          <div className="min-w-0">
-            <DialogTitle className="text-sm font-semibold text-(--color-text) [text-wrap:balance]">
-              Manage sessions
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-xs leading-relaxed text-(--color-text-muted) [text-wrap:pretty]">
-              Drag a handle to reorder. Focus a handle and use the arrow keys
-              for precise moves.
-            </DialogDescription>
-          </div>
-          <DialogClose asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 flex-none active:scale-[0.96] transition-transform"
-              aria-label="Close session manager"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogClose>
-        </div>
-
-        <div className="min-h-0 overflow-y-auto px-3 pb-3">
-          <div className="space-y-1.5">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          title="Manage sessions"
+          description="Drag a handle to reorder, or focus it and use the arrow keys. Click a name to rename it."
+          footer={
+            <>
+              <span className="log-footer-count k-num">
+                {sessions.length} session{sessions.length === 1 ? "" : "s"}
+              </span>
+              <DialogClose asChild>
+                <Button>Done</Button>
+              </DialogClose>
+            </>
+          }
+        >
+          <div className="log-sessions" role="list">
             {ordered.map((session, index) => {
               const isActive = session.id === activeId;
-              const isDropTarget = dropTarget?.id === session.id;
+              const drop =
+                dropTarget?.id === session.id ? dropTarget.position : undefined;
               return (
                 <div
                   key={session.id}
-                  className={cn(
-                    "relative flex items-center gap-2 rounded-xl bg-(--color-bg-elev) p-1.5 shadow-[0_1px_0_rgba(0,0,0,0.08)] transition-[opacity,transform] duration-150",
-                    draggedId === session.id && "opacity-40",
-                    isDropTarget &&
-                      dropTarget.position === "before" &&
-                      "before:absolute before:inset-x-2 before:-top-1 before:h-0.5 before:rounded-full before:bg-(--color-accent)",
-                    isDropTarget &&
-                      dropTarget.position === "after" &&
-                      "after:absolute after:inset-x-2 after:-bottom-1 after:h-0.5 after:rounded-full after:bg-(--color-accent)",
-                  )}
+                  role="listitem"
+                  className="log-session-row"
+                  data-dragging={draggedId === session.id ? "" : undefined}
+                  data-drop={drop}
                   onDragOver={(event) => {
                     if (!draggedId || draggedId === session.id) return;
                     event.preventDefault();
@@ -204,10 +193,12 @@ export function SessionManagerModal({
                     );
                   }}
                 >
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon
                     draggable
-                    className="flex h-10 w-10 flex-none cursor-grab items-center justify-center rounded-md text-(--color-text-muted) transition-colors hover:bg-(--color-bg-elev-2) hover:text-(--color-text) focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-(--color-accent) active:cursor-grabbing active:scale-[0.96]"
+                    className="log-session-grip"
                     aria-label={`Move ${session.name}. Position ${index + 1} of ${ordered.length}. Use up and down arrow keys to reorder.`}
                     onDragStart={(event) => {
                       event.dataTransfer.effectAllowed = "move";
@@ -229,138 +220,86 @@ export function SessionManagerModal({
                       }
                     }}
                   >
-                    <GripVertical className="h-4 w-4" />
-                  </button>
+                    <GripVertical />
+                  </Button>
 
-                  <div className="min-w-0 flex-1">
-                    <label
-                      className="sr-only"
-                      htmlFor={`session-name-${session.id}`}
-                    >
-                      Session name
-                    </label>
-                    <Input
-                      id={`session-name-${session.id}`}
-                      value={draftNames[session.id] ?? session.name}
-                      onChange={(event) =>
+                  <Input
+                    size="sm"
+                    className="log-session-name"
+                    aria-label={`Session name${isActive ? " (active session)" : ""}`}
+                    value={draftNames[session.id] ?? session.name}
+                    onChange={(event) =>
+                      setDraftNames((current) => ({
+                        ...current,
+                        [session.id]: event.target.value,
+                      }))
+                    }
+                    onBlur={(event) =>
+                      void commitName(session, event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                      if (event.key === "Escape") {
+                        // Revert the draft without closing the dialog.
+                        event.stopPropagation();
+                        event.preventDefault();
+                        event.currentTarget.value = session.name;
                         setDraftNames((current) => ({
                           ...current,
-                          [session.id]: event.target.value,
-                        }))
+                          [session.id]: session.name,
+                        }));
+                        event.currentTarget.blur();
                       }
-                      onBlur={(event) =>
-                        void commitName(session, event.target.value)
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") event.currentTarget.blur();
-                        if (event.key === "Escape") {
-                          event.currentTarget.value = session.name;
-                          setDraftNames((current) => ({
-                            ...current,
-                            [session.id]: session.name,
-                          }));
-                          event.currentTarget.blur();
-                        }
-                      }}
-                      className="h-10 w-full min-w-0 rounded-md border border-(--color-border) bg-(--color-bg) px-2 text-xs text-(--color-text) outline-none transition-[background-color,border-color] hover:border-(--color-text-muted) focus:border-(--color-accent)"
-                      aria-describedby={
-                        isActive ? `active-session-${session.id}` : undefined
-                      }
-                      spellCheck={false}
-                    />
-                    {isActive ? (
-                      <span
-                        id={`active-session-${session.id}`}
-                        className="sr-only"
-                      >
-                        Active session
-                      </span>
-                    ) : null}
-                  </div>
+                    }}
+                  />
 
-                  {isActive ? (
-                    <span className="flex-none rounded-full bg-(--color-accent-soft) px-2 py-0.5 text-[0.625rem] font-medium text-(--color-accent)">
-                      Active
-                    </span>
-                  ) : null}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-10 w-10 flex-none text-(--color-text-muted) hover:text-(--color-danger) active:scale-[0.96] transition-[color,background-color,transform]"
+                  {isActive ? <Badge tone="accent">Active</Badge> : null}
+                  <IconButton
+                    label={
+                      sessions.length === 1
+                        ? "Create another session before deleting this one"
+                        : `Delete ${session.name}`
+                    }
+                    size="sm"
+                    className="log-session-delete"
                     onClick={() => {
                       setDeleteId(session.id);
                       setError(null);
                     }}
                     disabled={sessions.length === 1 || deleting}
-                    aria-label={`Delete ${session.name}`}
-                    title={
-                      sessions.length === 1
-                        ? "Create another session before deleting this one"
-                        : `Delete ${session.name}`
-                    }
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Trash2 />
+                  </IconButton>
                 </div>
               );
             })}
           </div>
-        </div>
 
-        {deletingSession ? (
-          <div className="mx-3 mb-3 rounded-lg bg-(--color-danger)/10 p-3 text-xs shadow-[inset_0_0_0_1px_rgba(248,81,73,0.28)]">
-            <p className="font-medium text-(--color-text)">
-              Delete “{deletingSession.name}”?
-            </p>
-            <p className="mt-1 leading-relaxed text-(--color-text-dim) [text-wrap:pretty]">
-              Its transcript, notebook, and images will be permanently deleted.
-              {deletingSession.id === activeId
-                ? " A nearby session will become active."
-                : ""}
-            </p>
-            <div className="mt-3 flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                className="h-10 px-3 active:scale-[0.96] transition-transform"
-                onClick={() => setDeleteId(null)}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                className="h-10 px-3 active:scale-[0.96] transition-transform"
-                onClick={() => void confirmDelete()}
-                disabled={deleting}
-              >
-                <Trash2 className="h-4 w-4" />
-                {deleting ? "Deleting…" : "Delete session"}
-              </Button>
-            </div>
-          </div>
-        ) : null}
+          {error ? (
+            <Callout tone="danger" className="log-dialog-error">
+              {error}
+            </Callout>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
-        {error ? (
-          <p className="px-5 pb-3 text-xs text-(--color-danger)" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="flex items-center justify-between bg-(--color-bg-elev) px-5 py-3 text-[0.6875rem] text-(--color-text-muted)">
-          <span className="tabular-nums">
-            {sessions.length} session{sessions.length === 1 ? "" : "s"}
-          </span>
-          <DialogClose asChild>
-            <Button
-              variant="default"
-              className="h-10 px-3 active:scale-[0.96] transition-transform"
-            >
-              Done
-            </Button>
-          </DialogClose>
-        </div>
-      </DialogContent>
-    </Dialog>
+      <ConfirmDialog
+        open={Boolean(deletingSession)}
+        onOpenChange={(next) => {
+          if (!next && !deleting) setDeleteId(null);
+        }}
+        title={`Delete “${deletingSession?.name ?? ""}”?`}
+        description={`Its transcript, notebook and images will be permanently deleted.${
+          deletingSession?.id === activeId
+            ? " A nearby session will become active."
+            : ""
+        }`}
+        confirmLabel={deleting ? "Deleting…" : "Delete session"}
+        tone="danger"
+        busy={deleting}
+        onConfirm={() => void confirmDelete()}
+      />
+    </>
   );
 }
 

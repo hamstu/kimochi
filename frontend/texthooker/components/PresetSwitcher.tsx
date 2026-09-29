@@ -12,16 +12,21 @@ import {
 } from "@texthooker/lib/presets";
 import { onSettingsChange } from "@texthooker/lib/settings";
 import { subscribeReplacements } from "@texthooker/lib/replacements";
-import { Button } from "@texthooker/components/ui/button";
-import { Input } from "@texthooker/components/ui/input";
 import {
-  Select,
+  Button,
+  Callout,
+  IconButton,
+  Input,
   SelectContent,
   SelectItem,
+  SelectRoot,
   SelectTrigger,
   SelectValue,
-} from "@texthooker/components/ui/select";
+  SettingsRow,
+  SettingsSection,
+} from "@kit";
 
+/** Named snapshots of settings + replacements (not currently mounted). */
 export function PresetSwitcher() {
   const [active, setActive] = useState("Default");
   const [names, setNames] = useState<string[]>(["Default"]);
@@ -92,19 +97,41 @@ export function PresetSwitcher() {
   };
 
   return (
-    <div className="border-b border-(--color-border) mb-3 pb-3 space-y-2">
-      <div className="flex items-center gap-1.5">
-        <span className="text-[0.6875rem] uppercase tracking-wider text-(--color-text-dim) shrink-0">
-          Preset
+    <SettingsSection
+      title="Preset"
+      actions={
+        <span className="preset-actions">
+          <IconButton label="Import preset from JSON" size="sm" onClick={() => void handleImport()}>
+            <Upload />
+          </IconButton>
+          <IconButton label="Export this preset to JSON" size="sm" onClick={() => void handleExport()}>
+            <Download />
+          </IconButton>
+          <IconButton
+            label={
+              names.length <= 1
+                ? "Can't delete the only preset"
+                : armed === "delete"
+                  ? `Confirm delete "${active}"`
+                  : "Delete this preset"
+            }
+            variant={armed === "delete" ? "danger" : "ghost"}
+            size="sm"
+            onClick={() => void handleDelete()}
+            disabled={names.length <= 1}
+          >
+            <Trash2 />
+          </IconButton>
         </span>
-        <Select value={active} onValueChange={handleSelect}>
-          <SelectTrigger className="flex-1">
-            <SelectValue>
-              {active}
-              {dirty ? (
-                <span className="ml-1 text-(--color-warn)">*</span>
-              ) : null}
-            </SelectValue>
+      }
+    >
+      <SettingsRow
+        label="Active preset"
+        description={dirty ? "Unsaved changes." : undefined}
+      >
+        <SelectRoot value={active} onValueChange={(v) => void handleSelect(v)}>
+          <SelectTrigger aria-label="Preset">
+            <SelectValue>{active}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {names.map((n) => (
@@ -113,95 +140,58 @@ export function PresetSwitcher() {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
-      </div>
+        </SelectRoot>
+        <Button
+          size="sm"
+          onClick={() => void handleSaveOver()}
+          disabled={!dirty}
+          title="Save current settings + replacements into this preset"
+        >
+          <Save /> Save
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setNewNameMode(true);
+            setNewName(active);
+          }}
+          title="Save as a new preset"
+        >
+          <Plus /> Save as…
+        </Button>
+      </SettingsRow>
 
       {armed === "switch" && pendingSwitch ? (
-        <div className="flex items-center justify-between gap-2 rounded-sm bg-(--color-warn)/10 px-2 py-1.5 text-[0.6875rem] text-(--color-warn)">
-          <span>
-            Unsaved changes to <b>{active}</b>. Switch to <b>{pendingSwitch}</b>
-            ?
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setArmed(null);
-                setPendingSwitch(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="danger" size="sm" onClick={confirmSwitch}>
-              Discard
-            </Button>
-          </div>
+        <div className="settings-note">
+          <Callout tone="warn">
+            <span>
+              Unsaved changes to <b>{active}</b>. Switch to <b>{pendingSwitch}</b>?
+            </span>
+            <span className="preset-actions">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setArmed(null);
+                  setPendingSwitch(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => void confirmSwitch()}>
+                Discard
+              </Button>
+            </span>
+          </Callout>
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-1.5">
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleSaveOver}
-            disabled={!dirty}
-            title="Save current settings + replacements into this preset"
-          >
-            <Save className="h-3 w-3" /> Save
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setNewNameMode(true);
-              setNewName(active);
-            }}
-            title="Save as a new preset"
-          >
-            <Plus className="h-3 w-3" /> Save as…
-          </Button>
-        </div>
-        <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleImport}
-            title="Import preset from JSON"
-          >
-            <Upload className="h-3 w-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleExport}
-            title="Export this preset to JSON"
-          >
-            <Download className="h-3 w-3" />
-          </Button>
-          <Button
-            variant={armed === "delete" ? "danger" : "ghost"}
-            size="sm"
-            onClick={handleDelete}
-            disabled={names.length <= 1}
-            title={
-              names.length <= 1
-                ? "Can't delete the only preset"
-                : armed === "delete"
-                  ? `Confirm delete "${active}"`
-                  : "Delete this preset"
-            }
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-
       {newNameMode ? (
-        <div className="flex items-center gap-1.5">
+        <SettingsRow label="New preset name" controlId="preset-new-name">
           <Input
-            type="text"
+            id="preset-new-name"
+            className="settings-field"
             value={newName}
             placeholder="Preset name"
             autoFocus
@@ -213,14 +203,8 @@ export function PresetSwitcher() {
                 setNewName("");
               }
             }}
-            className="flex-1 rounded border border-(--color-border) bg-(--color-bg-elev) px-1.5 py-0.5 text-xs"
           />
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleSaveAs}
-            disabled={!newName.trim()}
-          >
+          <Button variant="primary" size="sm" onClick={() => void handleSaveAs()} disabled={!newName.trim()}>
             Save
           </Button>
           <Button
@@ -233,8 +217,8 @@ export function PresetSwitcher() {
           >
             Cancel
           </Button>
-        </div>
+        </SettingsRow>
       ) : null}
-    </div>
+    </SettingsSection>
   );
 }

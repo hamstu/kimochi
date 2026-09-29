@@ -6,7 +6,7 @@ if (process.platform !== 'darwin') {
   throw new Error('This native popup regression currently requires macOS')
 }
 const executable = fileURLToPath(new URL(
-  '../src-tauri/target/debug/bundle/macos/Kimochi Next POC.app/Contents/MacOS/kimochi-tauri-poc',
+  '../src-tauri/target/debug/bundle/macos/Kimochi.app/Contents/MacOS/kimochi',
   import.meta.url
 ))
 const result = spawnSync(executable, [], {

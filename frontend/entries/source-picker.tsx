@@ -10,6 +10,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@radix-ui/themes/styles.css'
+import '../kit/kit.css'
 import './source-picker.css'
 import Providers from './providers'
 import SourcePicker from '../source-picker/SourcePicker'

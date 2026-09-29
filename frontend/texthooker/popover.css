@@ -1,5 +1,13 @@
-/* Popover window-only styles. Body must be transparent so the rounded card
-   sits on a true alpha background (window has transparent:true in tauri.conf). */
+/* Dictionary popup window (reader-popup). The native window is transparent and
+   borderless with NO native shadow (see src-tauri/src/reader/popover.rs); the
+   visible card, its hairline ring and its drop shadow are all drawn here.
+
+   Geometry contract with popover.rs:
+     window = card + 2 × SHADOW_PAD on every side (logical px)
+     .popover-shell padding = SHADOW_PAD, so the card is exactly the size the
+     caller asked for and its shadow stays inside the transparent margin.
+   The pad is in px, not rem: it has to match the native window size whatever
+   the UI scale is. Keep --popover-pad and SHADOW_PAD in step. */
 
 html,
 body,
@@ -11,19 +19,39 @@ body,
   overflow: hidden;
 }
 
-/* Window is grown by 2 * SHADOW_PAD (10px) on the Rust side. Match the
-   padding here so the visible card sits inside a transparent margin where
-   the drop-shadow can spread without being clipped by the OS window edge. */
+/* Radix Themes' root would otherwise paint the page ground and add its own
+   min-height; the popup needs real alpha around the card. */
+#root > .radix-themes {
+  background: transparent;
+  min-height: 0;
+  height: 100%;
+}
+
+:root {
+  --popover-pad: 16px; /* = SHADOW_PAD in popover.rs */
+  /* The kit's --k-shadow-pop reaches ~30px below its box and would be cut off
+     by the window edge (a clipped shadow reads as a hard second border). This
+     is the same two-layer pop shadow, tightened to fit inside --popover-pad:
+     it reaches 16px down, 10px sideways and 4px up. */
+  --popover-shadow: 0 1px 2px rgb(15 17 26 / 0.08), 0 6px 14px -4px rgb(15 17 26 / 0.22);
+  /* The headword is the hero; like the transcript, Japanese display text gets
+     its own size above the UI scale (still rem, so it follows the UI scale). */
+  --popover-headword: 1.5rem;
+}
+:root.dark {
+  --popover-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 14px -4px rgb(0 0 0 / 0.55);
+}
+
 .popover-shell {
   width: 100vw;
   height: 100vh;
-  padding: 10px;
+  padding: var(--popover-pad);
   box-sizing: border-box;
   opacity: 0;
   transform: translateY(2px);
   transition:
-    opacity 140ms ease,
-    transform 140ms ease;
+    opacity 140ms var(--k-ease-out),
+    transform 140ms var(--k-ease-out);
 }
 
 .popover-shell.visible {
@@ -31,221 +59,388 @@ body,
   transform: translateY(0);
 }
 
+/* The raised plane. One ring, drawn inset like the kit's .k-popover, so there
+   is never a border plus an outer ring/shadow stacking into a double edge. */
 .popover-card {
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--color-bg-elev);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  box-shadow: 0 6px 0 0 rgba(0, 0, 0, 0.18);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-raised);
+  color: var(--k-text);
+  box-shadow: var(--popover-shadow), inset 0 0 0 1px var(--gray-a5);
+}
+.dark .popover-card {
+  box-shadow: var(--popover-shadow), inset 0 0 0 1px var(--gray-a6);
 }
 
 .popover-scroll {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 12px 14px;
+  padding: var(--k-space-3) var(--k-space-4) var(--k-space-4);
+  /* Keep the inset ring visible above scrolled content at the rounded corners. */
+  border-radius: inherit;
 }
 
-/* One matched entry (longest match first, Yomitan-style). Action buttons live
-   inline in each entry's headword row. */
-.popover-entry + .popover-entry {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border);
+/* ------------------------------------------------------------------ states */
+.popover-status {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-height: var(--k-control-h);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+}
+.popover-status-term {
+  font-family: var(--k-font-jp);
+  color: var(--k-text);
+}
+.popover-empty {
+  height: 100%;
+  padding: var(--k-space-6) var(--k-space-4);
 }
 
-/* "← back" affordance shown after following a glossary cross-reference link,
-   returning to the previously-displayed (eventually the scanned) term. */
+/* "Back" after following a glossary cross-reference link. */
 .popover-xref-back {
+  margin: calc(-1 * var(--k-space-1)) 0 var(--k-space-2) calc(-1 * var(--k-space-2));
+}
+
+/* ------------------------------------------------------------------ entry */
+/* One matched entry (longest match first, Yomitan-style). */
+.popover-entry + .popover-entry {
+  margin-top: var(--k-space-4);
+  padding-top: var(--k-space-3);
+  border-top: 1px solid var(--k-line);
+}
+
+.popover-term {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+}
+
+.popover-headword {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-3);
+}
+.popover-headword-text {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--k-space-2);
+  min-width: 0;
+  line-height: 1.25;
+}
+.popover-expression {
+  font-size: var(--popover-headword);
+  font-weight: var(--k-weight-semibold);
+  color: var(--k-text);
+}
+.popover-reading {
+  font-size: var(--k-text-lg);
+  color: var(--k-text-2);
+}
+.popover-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--k-space-0-5);
+  /* Centre the small buttons on the headword's first line. */
+  margin-top: 0.125rem;
+}
+.popover-action[aria-disabled="true"] { cursor: default; }
+.popover-action-ok { color: var(--k-ok-text); }
+.popover-action-warn { color: var(--k-warn-text); }
+.popover-action-danger { color: var(--k-danger-text); }
+.popover-action .k-spinner { width: var(--k-icon-xs); height: var(--k-icon-xs); }
+/* Add to Anki: the popup's primary action. Toned states colour only the icon. */
+.popover-anki.popover-action-ok,
+.popover-anki.popover-action-warn,
+.popover-anki.popover-action-danger { color: var(--k-text); }
+.popover-anki.popover-action-ok > svg { color: var(--k-ok-text); }
+.popover-anki.popover-action-warn > svg { color: var(--k-warn-text); }
+.popover-anki.popover-action-danger > svg { color: var(--k-danger-text); }
+.popover-anki.k-button-primary .k-spinner { border-color: var(--white-a6); border-top-color: var(--k-accent-contrast); }
+.popover-anki.k-button-primary[aria-disabled="true"] { opacity: 0.85; }
+
+/* Inflection chain and tag rows */
+.popover-inflection,
+.popover-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-1);
+}
+.popover-inflection-chain {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 10px;
-  padding: 2px 8px 2px 6px;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--color-text-muted);
-  background: var(--color-bg-elev-2);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition:
-    background-color 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
+  gap: var(--k-space-1);
 }
-.popover-xref-back:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
+.popover-inflection [tabindex] { display: inline-flex; border-radius: var(--k-radius-sm); }
+.popover-meta-label {
+  font-size: var(--k-text-xs);
+  line-height: 1.125rem; /* the badge height, so labels sit on the badges' line */
+  color: var(--k-text-3);
+}
+.popover-meta-label:first-child { margin-right: var(--k-space-0-5); }
+.popover-meta-sep {
+  font-size: var(--k-text-xs);
+  line-height: 1.125rem;
+  color: var(--k-text-3);
 }
 
+/* ------------------------------------------------------------------ Yomitan HTML */
+/* Passthrough overrides for the glossary HTML inside the popup only. The shared
+   .yomitan-html rules live in App.css; these tune them to the kit's scale. */
+
+/* Pitch accents: Yomitan sends an <ol> of readings with overline spans. */
+.popover-pitch {
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  color: var(--k-text-2);
+}
+.popover-pitch ol,
+.popover-pitch ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--k-space-1) var(--k-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.popover-pitch li { margin: 0; }
+
+.popover-glossary {
+  font-family: "Figtree Variable", var(--k-font-jp);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  color: var(--k-text);
+  overflow-wrap: anywhere;
+}
+.popover-glossary :is(ol, ul) {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.popover-glossary > :first-child :is(ol, ul),
+.popover-glossary > :is(ol, ul) {
+  margin: 0;
+}
+.popover-glossary li {
+  margin: 0 0 var(--k-space-1);
+  padding-left: var(--k-space-0-5);
+}
+.popover-glossary li::marker {
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.popover-glossary i {
+  margin-right: var(--k-space-1);
+  font-size: var(--k-text-sm);
+  font-style: normal;
+  color: var(--k-text-2);
+}
+.popover-glossary [lang="ja"] {
+  font-family: var(--k-font-jp);
+}
+.popover-glossary [data-sc-content="example-sentence-a"] {
+  font-size: var(--k-text-md);
+  border-left-width: 2px;
+}
+.popover-glossary [data-sc-content="example-sentence-b"] {
+  font-size: var(--k-text-sm);
+  color: var(--k-text-2);
+  border-left-width: 2px;
+  border-left-color: var(--k-line-strong);
+}
+.popover-glossary img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Frequencies: a quiet single line of "source: rank" pairs. */
+.popover-frequencies {
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  color: var(--k-text-3);
+}
+.popover-frequencies :is(ul, ol) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--k-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.popover-frequencies li { margin: 0; }
+
+/* ------------------------------------------------------------------ notebook card */
 /* Notebook entry card inside the popover. Typography is em-based off the
    card's root font-size (13px nominal) so the A+/A- controls scale everything
    uniformly; the root size is set inline from the persisted scale. */
 .notebook-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--color-text);
+  gap: var(--k-space-2-5);
+  color: var(--k-text);
 }
 
 .notebook-card-header {
   display: flex;
-  gap: 12px;
+  gap: var(--k-space-3);
   align-items: flex-start;
 }
 
-.notebook-card-image {
-  width: 120px;
-  height: 120px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  flex-shrink: 0;
+/* Avatar: matches the Notebook window's .nb-avatar (notebook.css) at the popup's
+   larger header size. Fixed UI size; not part of the card's text scaling. */
+.notebook-card-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--k-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--gray-a3);
+  color: var(--k-accent-text);
+  font-family: var(--k-font-jp);
+  font-size: var(--k-text-xl);
+  font-weight: var(--k-weight-medium);
 }
-
-.notebook-card-image-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 44px;
-  line-height: 1;
-  color: var(--color-text-muted);
-}
+.notebook-card-avatar[data-kind="place"],
+.notebook-card-avatar[data-kind="thing"] { border-radius: var(--k-radius-lg); background: var(--gray-a3); color: var(--k-text-2); }
+.notebook-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.notebook-card-avatar svg { width: var(--k-icon); height: var(--k-icon); }
 
 .notebook-card-heading {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--k-space-0-5);
   min-width: 0;
 }
 
 .notebook-card-name {
-  font-size: 1.31em;
-  font-weight: 600;
+  font-size: 1.4em;
+  font-weight: var(--k-weight-semibold);
   line-height: 1.25;
-  font-family: var(--font-jp);
+  font-family: var(--k-font-jp);
 }
 
 .notebook-card-reading {
   font-size: 0.92em;
-  color: var(--color-text-dim);
-  font-family: var(--font-jp);
+  color: var(--k-text-2);
+  font-family: var(--k-font-jp);
 }
 
 .notebook-card-kind {
-  margin-top: 4px;
-  font-size: 0.77em;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  margin-top: var(--k-space-1);
+  font-size: 0.85em;
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text-3);
 }
 
 .notebook-card-description {
   font-size: 1em;
   line-height: 1.5;
-  color: var(--color-text);
+  color: var(--k-text);
   white-space: pre-wrap;
   word-wrap: break-word;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .notebook-card-description-empty {
-  color: var(--color-text-muted);
-  font-style: italic;
+  color: var(--k-text-3);
 }
 
 .notebook-card-aliases {
-  margin-top: 2px;
+  margin-top: var(--k-space-0-5);
   font-size: 0.85em;
-  color: var(--color-text-muted);
-  font-family: var(--font-jp);
+  color: var(--k-text-2);
+  font-family: var(--k-font-jp);
 }
 
-/* Header controls (font scale + edit) — fixed size, not part of text scaling. */
+/* Header controls (font scale + edit): fixed UI size, not part of text scaling.
+   Drawn as kit ghost buttons (the component markup is shared, so the look is
+   reproduced here from the kit's tokens). */
 .notebook-card-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--k-space-0-5);
   margin-left: auto;
   flex-shrink: 0;
 }
 
-.notebook-card-edit {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 3px 8px;
-  font-size: 11px;
-  color: var(--color-text-dim);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.notebook-card-edit:hover {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
+.notebook-card-edit,
 .notebook-card-scale-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  color: var(--color-text-dim);
+  gap: var(--k-space-1);
+  flex-shrink: 0;
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-2);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text-2);
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
+  border: 0;
+  border-radius: var(--k-radius-md);
+  cursor: default;
+  transition:
+    background-color var(--k-fast),
+    color var(--k-fast);
+}
+.notebook-card-scale-btn {
+  width: var(--k-control-h-sm);
+  padding: 0;
+}
+.notebook-card-edit svg,
+.notebook-card-scale-btn svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
 }
 
+.notebook-card-edit:hover,
 .notebook-card-scale-btn:hover:not(:disabled) {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
+  color: var(--k-text);
+  background: var(--k-hover);
 }
 
 .notebook-card-scale-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
+  opacity: 0.45;
 }
 
-/* Personal notes — compact bulleted list under the description. */
+/* Personal notes: a plain list under the description, split by hairlines. */
 .notebook-card-notes {
   margin: 0;
-  padding: 8px 10px;
+  padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  border-top: 1px solid var(--k-line);
   font-size: 0.92em;
   line-height: 1.45;
-  color: var(--color-text);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  color: var(--k-text);
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .notebook-card-notes li {
-  padding-left: 14px;
-  position: relative;
+  padding: var(--k-space-1-5) 0;
 }
 
-.notebook-card-notes li::before {
-  content: "·";
-  position: absolute;
-  left: 4px;
-  color: var(--color-accent);
+.notebook-card-notes li + li {
+  border-top: 1px solid var(--k-line);
 }
-
-/* Preserve real alpha around the native popup card. */
-#root > .radix-themes { background: transparent; min-height: 100%; }

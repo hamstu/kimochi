@@ -2,7 +2,7 @@
  * The onboarding window's three side effects, which were Electron IPC sends.
  * Each failure is logged with the native message rather than being swallowed.
  */
-import { nativeError, openDictionary, panel } from '../bridge/tauri'
+import { nativeError, panel } from '../bridge/tauri'
 import { setSetting } from '../bridge/settings'
 
 const report = (what: string) => (error: unknown) =>
@@ -18,9 +18,11 @@ export async function resizeWelcome(height: number): Promise<void> {
   }
 }
 
-/** Electron's `yomitan-settings-backup`: the Yomitan settings UI lives in the overlay WebView. */
+/** Electron's `yomitan-settings-backup`: opens Yomitan's settings in its own panel window. */
 export const openYomitanBackup = (): Promise<void> =>
-  openDictionary(true).catch(report('Open Yomitan settings'))
+  panel('yomitan', 'show')
+    .then(() => undefined)
+    .catch(report('Open Yomitan settings'))
 
 /**
  * Electron's `complete-onboarding`: record it, show the controller, close onboarding.

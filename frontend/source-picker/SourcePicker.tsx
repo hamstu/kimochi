@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState, type JSX, type PointerEvent }
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { AppWindow, ArrowLeft, Check, Crop as CropIcon, Monitor, RefreshCw, X } from 'lucide-react'
+import { AppWindow, ArrowLeft, Maximize, Monitor, RefreshCw, X } from 'lucide-react'
+import { Badge, Bar, BarSpacer, Button, Callout, EmptyState, IconButton, Spinner } from '@kit'
 import { cropFromDrag, scaleCrop, type Crop, type Point } from './crop'
 import { useNativeHover } from '../shell/useNativeHover'
+import '../shell/panel.css'
 import './source-picker.css'
 
 interface Source {
@@ -29,6 +31,11 @@ const describeError = (error: unknown): string =>
 const isDisplay = (source: Source): boolean => source.kind === 'display' || source.kind === 'screen'
 const close = (): Promise<unknown> =>
   invoke('panel', { label: 'source-picker', action: 'hide', rect: null })
+// The picker is undecorated; its title bar starts a native drag like every panel's does.
+const startDrag = (): void => {
+  void invoke('panel', { label: 'source-picker', action: 'drag', rect: null }).catch(() => undefined)
+}
+const sourceTitle = (source: Source): string => source.app || source.name || 'Untitled window'
 
 async function loadPreview(sourceId: string, live: () => boolean): Promise<Preview | null> {
   // A thumbnail already in flight can briefly own the capture backend when a
@@ -76,14 +83,18 @@ function thumbnail(id: string, live: () => boolean): Promise<{ url: string }> {
   })
 }
 
-function SourceCard({
+function SourceTile({
   source,
-  selected,
-  onSelect
+  picked,
+  current,
+  onPick,
+  onOpen
 }: {
   source: Source
-  selected: boolean
-  onSelect: () => void
+  picked: boolean
+  current: boolean
+  onPick: () => void
+  onOpen: () => void
 }): JSX.Element {
   const ref = useRef<HTMLButtonElement>(null)
   const [url, setUrl] = useState<string | null>(null)
@@ -120,14 +131,18 @@ function SourceCard({
     }
   }, [source.id, source.app])
   const Icon = isDisplay(source) ? Monitor : AppWindow
+  const detail = source.app ? source.name || 'Untitled window' : null
   return (
     <button
       ref={ref}
-      className={`source-card${selected ? ' selected' : ''}`}
-      onClick={onSelect}
+      type="button"
+      className="sp-tile"
+      aria-pressed={picked}
+      onClick={onPick}
+      onDoubleClick={onOpen}
       title={[source.app, source.name].filter(Boolean).join(' — ')}
     >
-      <span className="source-thumbnail">
+      <span className="sp-thumb">
         {url ? (
           <img
             src={url}
@@ -139,26 +154,41 @@ function SourceCard({
             }}
           />
         ) : (
-          <span className="source-placeholder">
-            <Icon size={28} />
-            <span>{failed ? 'Preview unavailable' : 'Loading preview…'}</span>
+          <span className="sp-thumb-placeholder">
+            <Icon />
+            <span>{failed ? 'No preview' : 'Loading…'}</span>
           </span>
         )}
-        {selected && (
-          <span className="source-current">
-            <Check size={13} />
-            Current
-          </span>
-        )}
+        {current && <Badge className="sp-current">Current</Badge>}
       </span>
-      <span className="source-caption">
-        {icon ? <img className="source-icon" src={icon} alt="" /> : <Icon size={18} />}
-        <span>
-          <strong>{source.app || source.name || 'Untitled window'}</strong>
-          {source.app && <small>{source.name || 'Untitled window'}</small>}
+      <span className="sp-caption">
+        {icon ? <img className="sp-app-icon" src={icon} alt="" /> : <Icon className="sp-app-icon" />}
+        <span className="sp-caption-text">
+          <span className="sp-caption-title">{sourceTitle(source)}</span>
+          {detail && <span className="sp-caption-detail">{detail}</span>}
         </span>
       </span>
     </button>
+  )
+}
+
+function Section({
+  title,
+  count,
+  children
+}: {
+  title: string
+  count?: number
+  children: JSX.Element[]
+}): JSX.Element {
+  return (
+    <section className="sp-section" aria-label={title}>
+      <h2 className="sp-section-title">
+        {title}
+        {count !== undefined && <span className="k-num">{count}</span>}
+      </h2>
+      <div className="sp-grid">{children}</div>
+    </section>
   )
 }
 
@@ -166,8 +196,11 @@ export default function SourcePicker(): JSX.Element {
   const [active, setActive] = useState(false)
   useNativeHover(active)
   const [sources, setSources] = useState<Source[]>([])
+  // `picked` is the highlighted tile in the list; `selected` is the source being cropped.
+  const [picked, setPicked] = useState<Source | null>(null)
   const [selected, setSelected] = useState<Source | null>(null)
   const [currentId, setCurrentId] = useState<string | null>(null)
+  const currentCrop = useRef<Crop | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [crop, setCrop] = useState<Crop | null>(null)
   const savedCrop = useRef<Crop | null>(null)
@@ -199,6 +232,7 @@ export default function SourcePicker(): JSX.Element {
       visibilityReceived.current = true
       setActive(true)
       request.current.value++
+      setPicked(null)
       setSelected(null)
       setPreview(null)
       setCrop(null)
@@ -241,6 +275,7 @@ export default function SourcePicker(): JSX.Element {
       setCropEdited(false)
       setCropInvalid(false)
       drag.current = null
+      setPicked(source)
       setSelected(source)
       setPreview(null)
       setCrop(null)
@@ -273,6 +308,14 @@ export default function SourcePicker(): JSX.Element {
     []
   )
 
+  // Continuing with the source that is already in use keeps its saved crop to edit.
+  const open = useCallback(
+    (source: Source): void => {
+      void choose(source, source.id === currentId ? currentCrop.current : null)
+    },
+    [choose, currentId]
+  )
+
   useEffect(() => {
     if (!active) return
     let live = true
@@ -285,8 +328,12 @@ export default function SourcePicker(): JSX.Element {
         if (!live) return
         setSources(catalog)
         setCurrentId(state.sourceId)
+        currentCrop.current = state.crop
         setLoading(false)
         const source = catalog.find((item) => item.id === state.sourceId)
+        setPicked((previous) =>
+          previous && catalog.some((item) => item.id === previous.id) ? previous : (source ?? null)
+        )
         if ((editCurrent.current ?? state.editCurrent) && source) void choose(source, state.crop)
       },
       (e: unknown) => {
@@ -325,13 +372,22 @@ export default function SourcePicker(): JSX.Element {
   }, [])
   useEffect(() => {
     const key = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || saving) return
-      if (selected) back()
-      else void close()
+      if (saving) return
+      if (event.key === 'Escape') {
+        if (selected) back()
+        else void close()
+      } else if (
+        event.key === 'Enter' &&
+        !selected &&
+        picked &&
+        !(event.target instanceof HTMLButtonElement)
+      ) {
+        open(picked)
+      }
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [selected, saving, back])
+  }, [selected, picked, saving, back, open])
 
   const point = (event: PointerEvent<HTMLDivElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -369,177 +425,176 @@ export default function SourcePicker(): JSX.Element {
       setError(`Source and crop saved. Could not close the picker: ${describeError(e)}`)
     }
   }
+  const retry = (): void => {
+    if (errorKind === 'save') void save()
+    else if (errorKind === 'close')
+      void close().catch((e: unknown) =>
+        setError(`Source and crop saved. Could not close the picker: ${describeError(e)}`)
+      )
+    else if (errorKind === 'preview' && selected) void choose(selected, savedCrop.current)
+    else refresh()
+  }
   const displays = sources.filter(isDisplay)
   const windows = sources.filter((source) => !isDisplay(source))
+  const tile = (source: Source): JSX.Element => (
+    <SourceTile
+      key={`${generation}-${source.id}`}
+      source={source}
+      picked={picked?.id === source.id}
+      current={source.id === currentId}
+      onPick={() => setPicked(source)}
+      onOpen={() => open(source)}
+    />
+  )
 
-  if (!active) return <section className="source-picker" />
+  if (!active) return <div className="source-picker" />
+
+  const title = selected ? `Crop · ${sourceTitle(selected)}` : 'Select source'
+  const errorBlock = error && (
+    <Callout tone="danger" className="sp-error">
+      <span>{error}</span>
+      {errorKind !== 'crop' && (
+        <button type="button" className="k-link sp-retry" onClick={retry}>
+          Try again
+        </button>
+      )}
+    </Callout>
+  )
 
   return (
-    <section className="source-picker">
-      <header className="source-picker-header">
-        {selected && (
+    <div className="source-picker">
+      <header
+        className="native-titlebar"
+        onMouseDown={(event) => {
+          if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+          startDrag()
+        }}
+      >
+        <span className="native-titlebar-title">{title}</span>
+        <div className="native-window-actions">
           <button
-            className="source-icon-button"
-            title="Choose another source"
+            type="button"
+            aria-label="Close source picker"
+            title="Close"
             disabled={saving}
-            onClick={back}
+            onClick={() => void close()}
           >
-            <ArrowLeft size={18} />
+            <X />
           </button>
-        )}
-        <div>
-          <h1>{selected ? selected.app || selected.name : 'Select a source'}</h1>
-          <p>
-            {selected
-              ? 'Drag to crop, or continue with the full source.'
-              : 'Choose a screen or an app window.'}
-          </p>
         </div>
-        <button
-          className="source-icon-button"
-          title="Close source picker"
-          disabled={saving}
-          onClick={() => void close()}
-        >
-          <X size={18} />
-        </button>
       </header>
-      {error && (
-        <div className="source-error" role="alert">
-          {error}
-          {errorKind !== 'crop' && (
-            <button
-              onClick={() => {
-                if (errorKind === 'save') void save()
-                else if (errorKind === 'close')
-                  void close().catch((e: unknown) =>
-                    setError(
-                      `Source and crop saved. Could not close the picker: ${describeError(e)}`
-                    )
-                  )
-                else if (errorKind === 'preview' && selected)
-                  void choose(selected, savedCrop.current)
-                else refresh()
-              }}
-            >
-              Try again
-            </button>
-          )}
-        </div>
-      )}
+
       {!selected ? (
-        <div className="source-picker-scroll">
-          {loading && (
-            <p className="source-empty" role="status">
+        <div className="sp-scroll">
+          {errorBlock}
+          {loading && sources.length === 0 && (
+            <div className="sp-status" role="status">
+              <Spinner label="Finding sources" />
               Finding available sources…
-            </p>
+            </div>
           )}
-          {displays.length > 0 && (
-            <>
-              <h2>Screens</h2>
-              <div className="source-grid screens">
-                {displays.map((source) => (
-                  <SourceCard
-                    key={`${generation}-${source.id}`}
-                    source={source}
-                    selected={source.id === currentId}
-                    onSelect={() => void choose(source)}
-                  />
-                ))}
-              </div>
-            </>
-          )}
+          {displays.length > 0 && <Section title="Screens">{displays.map(tile)}</Section>}
           {windows.length > 0 && (
-            <>
-              <h2>
-                App windows <span>{windows.length}</span>
-              </h2>
-              <div className="source-grid">
-                {windows.map((source) => (
-                  <SourceCard
-                    key={`${generation}-${source.id}`}
-                    source={source}
-                    selected={source.id === currentId}
-                    onSelect={() => void choose(source)}
-                  />
-                ))}
-              </div>
-            </>
+            <Section title="App windows" count={windows.length}>
+              {windows.map(tile)}
+            </Section>
           )}
           {!loading && !error && sources.length === 0 && (
-            <p className="source-empty">
-              No sources available. Enable Screen Recording for Kimochi, then refresh.
-            </p>
+            <EmptyState
+              icon={<Monitor />}
+              title="No sources available"
+              actions={
+                <Button size="sm" onClick={refresh}>
+                  <RefreshCw />
+                  Refresh
+                </Button>
+              }
+            >
+              Enable Screen Recording for Kimochi, then refresh.
+            </EmptyState>
           )}
         </div>
       ) : (
-        <div className="source-crop-viewport" ref={viewport}>
-          {loading && <p role="status">Loading full preview…</p>}
-          {preview && (
-            <div
-              className="source-crop-surface"
-              style={fit}
-              onPointerDown={(event) => {
-                if (event.button !== 0 || saving || drag.current) return
-                event.preventDefault()
-                event.currentTarget.setPointerCapture(event.pointerId)
-                drag.current = { start: point(event), pointerId: event.pointerId, previous: crop }
-                setCrop(null)
-              }}
-              onPointerMove={updateCrop}
-              onPointerUp={(event) => {
-                if (!drag.current || drag.current.pointerId !== event.pointerId) return
-                const next = cropFromDrag(
-                  drag.current.start,
-                  point(event),
-                  preview.width,
-                  preview.height
-                )
-                setCrop(next ?? drag.current.previous)
-                if (next) {
-                  setCropEdited(true)
-                  setCropInvalid(false)
-                  setError(null)
-                }
-                drag.current = null
-                event.currentTarget.releasePointerCapture(event.pointerId)
-              }}
-              onPointerCancel={(event) => {
-                if (drag.current?.pointerId !== event.pointerId) return
-                setCrop(drag.current.previous)
-                drag.current = null
-              }}
-              onLostPointerCapture={(event) => {
-                if (drag.current?.pointerId !== event.pointerId) return
-                setCrop(drag.current.previous)
-                drag.current = null
-              }}
-            >
-              <img src={preview.url} alt={`Preview of ${selected.name}`} draggable={false} />
-              {crop && (
-                <div
-                  className="source-crop-rect"
-                  style={{
-                    left: `${(100 * crop.x) / preview.width}%`,
-                    top: `${(100 * crop.y) / preview.height}%`,
-                    width: `${(100 * crop.width) / preview.width}%`,
-                    height: `${(100 * crop.height) / preview.height}%`
-                  }}
-                >
-                  <span>
-                    {crop.width} × {crop.height}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+        <div className="sp-crop">
+          {errorBlock}
+          <div className="sp-crop-viewport" ref={viewport}>
+            {loading && (
+              <div className="sp-status" role="status">
+                <Spinner label="Loading preview" />
+                Loading full preview…
+              </div>
+            )}
+            {preview && (
+              <div
+                className="sp-crop-surface"
+                style={fit}
+                onPointerDown={(event) => {
+                  if (event.button !== 0 || saving || drag.current) return
+                  event.preventDefault()
+                  event.currentTarget.setPointerCapture(event.pointerId)
+                  drag.current = { start: point(event), pointerId: event.pointerId, previous: crop }
+                  setCrop(null)
+                }}
+                onPointerMove={updateCrop}
+                onPointerUp={(event) => {
+                  if (!drag.current || drag.current.pointerId !== event.pointerId) return
+                  const next = cropFromDrag(
+                    drag.current.start,
+                    point(event),
+                    preview.width,
+                    preview.height
+                  )
+                  setCrop(next ?? drag.current.previous)
+                  if (next) {
+                    setCropEdited(true)
+                    setCropInvalid(false)
+                    setError(null)
+                  }
+                  drag.current = null
+                  event.currentTarget.releasePointerCapture(event.pointerId)
+                }}
+                onPointerCancel={(event) => {
+                  if (drag.current?.pointerId !== event.pointerId) return
+                  setCrop(drag.current.previous)
+                  drag.current = null
+                }}
+                onLostPointerCapture={(event) => {
+                  if (drag.current?.pointerId !== event.pointerId) return
+                  setCrop(drag.current.previous)
+                  drag.current = null
+                }}
+              >
+                <img src={preview.url} alt={`Preview of ${selected.name}`} draggable={false} />
+                {crop && (
+                  <div
+                    className="sp-crop-rect"
+                    style={{
+                      left: `${(100 * crop.x) / preview.width}%`,
+                      top: `${(100 * crop.y) / preview.height}%`,
+                      width: `${(100 * crop.width) / preview.width}%`,
+                      height: `${(100 * crop.height) / preview.height}%`
+                    }}
+                  >
+                    <span className="k-num">
+                      {crop.width} × {crop.height}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
-      <footer className="source-picker-footer">
+
+      <Bar position="bottom" className="sp-footer">
         {selected ? (
           <>
-            <button
-              className="source-secondary"
+            <Button variant="ghost" disabled={saving} onClick={back}>
+              <ArrowLeft />
+              Sources
+            </Button>
+            <Button
+              variant="ghost"
               disabled={(!crop && !cropInvalid) || saving}
               onClick={() => {
                 setCrop(null)
@@ -548,35 +603,41 @@ export default function SourcePicker(): JSX.Element {
                 setError(null)
               }}
             >
-              <CropIcon size={15} />
+              <Maximize />
               Full source
-            </button>
-            <span>
+            </Button>
+            <span className="sp-footer-note k-num">
               {crop
                 ? `${crop.width} × ${crop.height} px crop`
                 : preview
-                  ? `${preview.width} × ${preview.height} px`
+                  ? `Drag to crop · ${preview.width} × ${preview.height} px`
                   : ''}
             </span>
-            <button
-              className="source-primary"
+            <BarSpacer />
+            <Button
+              variant="primary"
               disabled={!preview || saving || cropInvalid}
               onClick={() => void save()}
             >
-              {saving ? 'Saving…' : crop ? 'Save crop' : 'Continue'}
-              <Check size={15} />
-            </button>
+              {saving ? 'Saving…' : crop ? 'Save crop' : 'Use full source'}
+            </Button>
           </>
         ) : (
           <>
-            <span>Previews stay on this device.</span>
-            <button className="source-secondary" disabled={loading} onClick={refresh}>
-              <RefreshCw size={14} />
-              Refresh
-            </button>
+            <IconButton label="Refresh sources" disabled={loading} onClick={refresh}>
+              <RefreshCw />
+            </IconButton>
+            <span className="sp-footer-note">Previews stay on this device.</span>
+            <BarSpacer />
+            <Button variant="ghost" onClick={() => void close()}>
+              Cancel
+            </Button>
+            <Button variant="primary" disabled={!picked} onClick={() => picked && open(picked)}>
+              Continue
+            </Button>
           </>
         )}
-      </footer>
-    </section>
+      </Bar>
+    </div>
   )
 }

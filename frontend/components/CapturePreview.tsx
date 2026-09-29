@@ -4,6 +4,7 @@
  * capture through its own protocol instead of pushing base64 over IPC.
  */
 import { useState, type JSX } from 'react'
+import '../panels/diagnostics.css'
 
 interface CapturePreviewProps {
   visible: boolean
@@ -23,18 +24,21 @@ export default function CapturePreview({
   const [failed, setFailed] = useState<string | null>(null)
   if (!visible) return null
   return (
-    <div style={{ display: 'grid', placeItems: 'center', padding: 12 }}>
-      {failed === imageData && imageData && <p role="alert">Could not load this capture image.</p>}
+    <div className="capture-preview">
+      {failed === imageData && imageData && (
+        <p role="alert" className="k-description capture-preview-error">
+          Could not load this capture image.
+        </p>
+      )}
       {imageData ? (
         <img
           src={sourceUrl(imageData)}
           alt="Capture preview"
           onError={() => setFailed(imageData)}
           onLoad={() => setFailed(null)}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
         />
       ) : (
-        <p>No capture yet. Trigger a scan to see a preview.</p>
+        <p className="k-description">No capture yet. Trigger a scan to see a preview.</p>
       )}
     </div>
   )

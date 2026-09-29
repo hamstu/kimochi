@@ -26,6 +26,12 @@
       ],
       "@texthooker/*": [
         "./frontend/texthooker/*"
+      ],
+      "@kit": [
+        "./frontend/kit/index.ts"
+      ],
+      "@kit/*": [
+        "./frontend/kit/*"
       ]
     }
   },

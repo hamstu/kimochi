@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { buildAnkiConfigForPopover } from "@texthooker/lib/ankiConfig";
 import type { Token } from "@texthooker/lib/types";
 import { getSettings } from "@texthooker/lib/settings";
-import { cn } from "@texthooker/lib/utils";
 
 interface Props {
   token: Token;
@@ -64,7 +63,7 @@ export function TokenSpan({
     // tokens; when click-to-define is off, keep dictionary tokens at the
     // regular color so the transcript reads as ordinary text.
     return (
-      <span className={token.clickable ? undefined : "text-(--color-text-dim)"}>
+      <span className={token.clickable ? undefined : "log-token-dim"}>
         {display}
       </span>
     );
@@ -100,11 +99,7 @@ export function TokenSpan({
       translate="no"
       onMouseDown={(e) => e.preventDefault()}
       onClick={handleClick}
-      className={cn(
-        "inline cursor-pointer rounded px-0 py-0 border-0 bg-transparent text-inherit font-inherit transition-colors",
-        "hover:bg-(--color-accent-soft)",
-        "focus-visible:outline-none focus-visible:bg-(--color-accent-soft)",
-      )}
+      className="log-token"
     >
       {display}
     </button>

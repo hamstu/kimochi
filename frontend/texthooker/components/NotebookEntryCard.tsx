@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { AArrowDown, AArrowUp, Pencil } from "lucide-react";
+import type { ReactNode } from "react";
+import { AArrowDown, AArrowUp, Box, MapPin, Pencil, UserRound } from "lucide-react";
 import type { SerializedNotebookEntry } from "@texthooker/lib/types";
 
 interface Props {
@@ -8,10 +9,15 @@ interface Props {
   onEdit?: (entryId: string) => void;
 }
 
-const KIND_LABEL: Record<SerializedNotebookEntry["kind"], string> = {
-  person: "Person",
-  place: "Place",
-  thing: "Thing",
+/* Same words and icons as the Notebook window (notebookEntry.tsx KIND_META); kept
+   local so the popup does not pull in the notebook store bridge. */
+const KIND_META: Record<
+  SerializedNotebookEntry["kind"],
+  { label: string; icon: ReactNode }
+> = {
+  person: { label: "Character", icon: <UserRound /> },
+  place: { label: "Place", icon: <MapPin /> },
+  thing: { label: "Thing", icon: <Box /> },
 };
 
 /* Card-wide font scale, persisted across launches. The card's CSS is em-based,
@@ -53,22 +59,22 @@ export function NotebookEntryCard({ entry, onEdit }: Props) {
       style={{ fontSize: `${BASE_FONT_PX * scale}px` }}
     >
       <div className="notebook-card-header">
-        {entry.imageDataUrl ? (
-          <img
-            className="notebook-card-image"
-            src={entry.imageDataUrl}
-            alt=""
-            draggable={false}
-          />
-        ) : (
-          <div className="notebook-card-image notebook-card-image-fallback">
-            {entry.kind === "person"
-              ? "人"
-              : entry.kind === "place"
-                ? "地"
-                : "物"}
-          </div>
-        )}
+        {/* Avatar as in the Notebook window: a round image, a monogram in
+            accent-soft (characters), or the kind icon (places, things). */}
+        <span
+          aria-hidden
+          className="notebook-card-avatar"
+          data-kind={entry.imageDataUrl ? undefined : entry.kind}
+          lang="ja"
+        >
+          {entry.imageDataUrl ? (
+            <img src={entry.imageDataUrl} alt="" draggable={false} />
+          ) : entry.kind === "person" && entry.displayName.trim() ? (
+            Array.from(entry.displayName.trim())[0]
+          ) : (
+            KIND_META[entry.kind].icon
+          )}
+        </span>
         <div className="notebook-card-heading">
           <div className="notebook-card-name" translate="no" lang="ja">
             {entry.displayName}
@@ -78,7 +84,7 @@ export function NotebookEntryCard({ entry, onEdit }: Props) {
               {entry.reading}
             </div>
           ) : null}
-          <div className="notebook-card-kind">{KIND_LABEL[entry.kind]}</div>
+          <div className="notebook-card-kind">{KIND_META[entry.kind].label}</div>
           {entry.aliases.length > 0 ? (
             <div className="notebook-card-aliases" translate="no" lang="ja">
               {entry.aliases.join(" · ")}

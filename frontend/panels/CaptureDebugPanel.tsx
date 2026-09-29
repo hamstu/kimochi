@@ -19,7 +19,9 @@
  * The OCR probe is the only one that sends pixels anywhere; its button says so.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
+import { Bar, BarSpacer, Button } from '@kit'
 import WindowFrame from '../components/WindowFrame'
+import './diagnostics.css'
 import { useViewState } from '../bridge/state'
 import {
   captureFrame,
@@ -214,77 +216,54 @@ export default function CaptureDebugPanel(): JSX.Element {
     )
   }, [logs, addLog])
 
-  const buttonStyle: React.CSSProperties = {
-    padding: '6px 10px',
-    fontSize: 12,
-    borderRadius: 6,
-    border: '1px solid #ffffff22',
-    background: '#282a36',
-    color: '#f8f8f2',
-    cursor: isRunning ? 'wait' : 'pointer'
-  }
-
   return (
     <WindowFrame>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          minHeight: 0,
-          color: '#f8f8f2',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: 12
-        }}
-      >
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 10 }}>
-          <button style={buttonStyle} disabled={isRunning} onClick={() => void testPermission()}>
+      <div className="diag-terminal">
+        <Bar position="top" className="diag-bar" aria-busy={isRunning}>
+          <Button variant="ghost" disabled={isRunning} onClick={() => void testPermission()}>
             Permission
-          </button>
-          <button style={buttonStyle} disabled={isRunning} onClick={() => void testCatalog()}>
+          </Button>
+          <Button variant="ghost" disabled={isRunning} onClick={() => void testCatalog()}>
             Sources
-          </button>
-          <button style={buttonStyle} disabled={isRunning} onClick={() => void testCapture()}>
+          </Button>
+          <Button variant="ghost" disabled={isRunning} onClick={() => void testCapture()}>
             Capture (local)
-          </button>
-          <button style={buttonStyle} disabled={isRunning} onClick={() => void testCropScaling()}>
+          </Button>
+          <Button variant="ghost" disabled={isRunning} onClick={() => void testCropScaling()}>
             Crop scaling
-          </button>
-          <button style={buttonStyle} disabled={isRunning} onClick={() => void testNativeState()}>
+          </Button>
+          <Button variant="ghost" disabled={isRunning} onClick={() => void testNativeState()}>
             Native state
-          </button>
-          <button
-            style={{ ...buttonStyle, borderColor: '#ff5555' }}
+          </Button>
+          <Button
+            variant="danger"
             disabled={isRunning}
             title="Sends the current capture to the configured OCR endpoint"
             onClick={() => void testOcr()}
           >
             OCR round-trip
-          </button>
-          <button style={buttonStyle} onClick={copyLogs}>
+          </Button>
+          <BarSpacer />
+          <Button variant="ghost" onClick={copyLogs}>
             {copied ? 'Copied' : 'Copy log'}
-          </button>
-          <button style={buttonStyle} onClick={clearLogs}>
+          </Button>
+          <Button variant="ghost" onClick={clearLogs}>
             Clear
-          </button>
-        </div>
+          </Button>
+        </Bar>
 
-        <div style={{ padding: '0 10px 6px', color: '#8be9fd' }}>
+        <div className="diag-note" style={{ color: '#8be9fd' }}>
           Source: {state.source ? `${state.source.name}` : 'none selected'} · capture is local;
           only the OCR round-trip leaves this machine.
         </div>
 
         {previewUrl && (
-          <div style={{ padding: '0 10px 8px' }}>
-            <img
-              src={previewUrl}
-              alt="Last local capture"
-              style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }}
-            />
+          <div className="diag-preview">
+            <img src={previewUrl} alt="Last local capture" />
           </div>
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 10px 10px' }}>
+        <div className="diag-log">
           {logs.length === 0 ? (
             <div style={{ color: '#6272a4' }}>Run a probe to see native capture diagnostics.</div>
           ) : (

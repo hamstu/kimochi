@@ -1,0 +1,54 @@
+/* Kit styling for YomitanDictionaryPopup (the Electron copy's inline Radix layout). */
+.ydp {
+  max-width: 37.5rem;
+  max-height: 17.5rem;
+  overflow: auto;
+  padding: var(--k-space-3);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  color: var(--k-text);
+}
+.ydp-entry + .ydp-entry { margin-top: var(--k-space-4); }
+.ydp-headword {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--k-space-2);
+  margin-bottom: var(--k-space-3);
+  padding-bottom: var(--k-space-2);
+  border-bottom: 1px solid var(--k-line);
+  font-family: var(--k-font-jp);
+}
+.ydp-term { font-size: 1.5rem; line-height: 1.25; font-weight: var(--k-weight-semibold); }
+.ydp-reading { font-size: var(--k-text-lg); color: var(--k-text-2); }
+.ydp-rules { font-family: var(--k-font-ui); font-size: var(--k-text-sm); color: var(--k-text-3); }
+.ydp-definition + .ydp-definition { margin-top: var(--k-space-3); }
+.ydp-badges { display: flex; flex-wrap: wrap; gap: var(--k-space-1); margin-bottom: var(--k-space-2); }
+.ydp-gloss + .ydp-gloss { margin-top: var(--k-space-2); }
+.ydp-sc + .ydp-sc { margin-top: var(--k-space-1); }
+.ydp-examples { margin: var(--k-space-2) 0; }
+.ydp-example-a {
+  margin-top: var(--k-space-2);
+  padding: var(--k-space-1) var(--k-space-2);
+  border-left: 2px solid var(--k-accent);
+  font-family: var(--k-font-jp);
+  font-size: var(--k-text-lg);
+}
+.ydp-example-b {
+  margin-bottom: var(--k-space-2);
+  padding: var(--k-space-1) var(--k-space-2);
+  border-left: 2px solid var(--k-line-strong);
+  font-size: var(--k-text-sm);
+  color: var(--k-text-2);
+}
+.ydp-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--k-space-2);
+  min-width: 18.75rem;
+  padding: var(--k-space-4);
+  font-size: var(--k-text-sm);
+  color: var(--k-text-2);
+}
+.ydp-state-error { justify-content: flex-start; color: var(--k-danger-text); }

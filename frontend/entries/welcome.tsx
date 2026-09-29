@@ -4,21 +4,19 @@
  */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ThemeProvider } from 'next-themes'
-import { Theme } from '@radix-ui/themes'
+import Providers from './providers'
 import { HashRouter } from 'react-router'
 import '@radix-ui/themes/styles.css'
+import '../kit/kit.css'
 import '../welcome/welcome.css'
 import WelcomeApp from '../welcome/WelcomeApp'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider attribute="class">
-      <Theme style={{ background: 'transparent' }} accentColor="indigo">
-        <HashRouter>
-          <WelcomeApp />
-        </HashRouter>
-      </Theme>
-    </ThemeProvider>
+    <Providers transparent>
+      <HashRouter>
+        <WelcomeApp />
+      </HashRouter>
+    </Providers>
   </StrictMode>
 )

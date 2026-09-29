@@ -445,7 +445,7 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     objc2::rc::autoreleasepool(|_| unsafe {
         if !CGPreflightScreenCaptureAccess() {
             return Err(
-                "permission: Allow Screen Recording for Kimochi Next POC in System Settings."
+                "permission: Allow Screen Recording for Kimochi in System Settings."
                     .into(),
             );
         }
