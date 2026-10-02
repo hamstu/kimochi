@@ -16,6 +16,8 @@ use std::time::{Duration, Instant};
 /// Retina row, small enough that the base64 payload stays a few kilobytes.
 const THUMBNAIL_EDGE: u32 = 320;
 const THUMBNAIL_TTL: Duration = Duration::from_secs(10);
+/// Long edge of the main window's live source preview: sharp at 2x across the widest sidebar.
+const LIVE_THUMBNAIL_EDGE: u32 = 640;
 const ICON_EDGE: isize = 64;
 
 pub fn err(e: CaptureError) -> String {
@@ -240,6 +242,31 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
         "width": width,
         "height": height,
         "scaleFactor": scale,
+    }))
+}
+
+/// A fresh, uncached thumbnail of the chosen source for the main window's sidebar, which
+/// refreshes it every few seconds. Like `hover_preview` it never queues behind a scan: a
+/// `busy:` error just means "keep the last frame".
+pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
+    if service.scanning.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err("busy: a scan is running".into());
+    }
+    let frame = capture_isolated(service, source_id)?;
+    let (small, width, height) = downscale(
+        &frame.pixels,
+        frame.info.width,
+        frame.info.height,
+        LIVE_THUMBNAIL_EDGE,
+    );
+    let png = encode_png(&small, width, height)?;
+    Ok(json!({
+        "url": format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(&png)
+        ),
+        "width": width,
+        "height": height,
     }))
 }
 

@@ -12,6 +12,10 @@
  *   ?theme=light|dark|system  seeds the `appearance` setting (default: system, i.e. the browser's
  *                    prefers-color-scheme; emulate it in DevTools for CSS that reads the media query)
  *   ?scale=small|medium|large|xlarge  seeds the `interfaceScale` setting
+ *   ?input=ocr|clipboard|websocket  main window: the Log's input source
+ *   ?quickshot=1     main window: Quick Shot (with input=ocr)
+ *   ?nosource=1      main window: no window or screen chosen yet
+ *   ?crop=1          main window: the chosen source has a crop region
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
@@ -76,6 +80,7 @@ const settings: Record<string, unknown> = {
   },
   settingsActiveTab: params.get('tab') ?? 'general',
   mainSidebarOpen: params.get('sidebar') !== '0',
+  quickShotEnabled: params.get('quickshot') === '1',
   ...(params.get('theme') ? { appearance: params.get('theme') } : {}),
   ...(params.get('scale') ? { interfaceScale: params.get('scale') } : {})
 }
@@ -100,15 +105,28 @@ function viewState(label: string): Record<string, unknown> {
     interactive: false,
     dictionary: false,
     dismiss: 0,
-    source: {
-      sourceId: CURRENT_SOURCE.id,
-      type: 'window',
-      name: CURRENT_SOURCE.name,
-      appName: CURRENT_SOURCE.app,
-      icon: appIcon(CURRENT_SOURCE.app)
-    },
-    crop: null,
-    cropEnabled: false,
+    source:
+      params.get('nosource') === '1'
+        ? null
+        : {
+            sourceId: CURRENT_SOURCE.id,
+            type: 'window',
+            name: CURRENT_SOURCE.name,
+            appName: CURRENT_SOURCE.app,
+            icon: appIcon(CURRENT_SOURCE.app)
+          },
+    crop:
+      params.get('crop') === '1'
+        ? {
+            x: 40,
+            y: CURRENT_SOURCE.bounds.height - 140,
+            width: CURRENT_SOURCE.bounds.width - 80,
+            height: 116,
+            reference_width: CURRENT_SOURCE.bounds.width,
+            reference_height: CURRENT_SOURCE.bounds.height
+          }
+        : null,
+    cropEnabled: params.get('crop') === '1',
     isScanning: false,
     autoOcrEnabled: true,
     overlayVisible: true,
@@ -149,6 +167,8 @@ function panelInfo(label: string): Record<string, unknown> {
 }
 
 // ---------------------------------------------------------------- IPC
+
+let liveTick = 0
 
 type Args = Record<string, unknown> | undefined
 type Handler = (args: Args, label: string) => unknown
@@ -210,6 +230,13 @@ const HANDLERS: Record<string, Handler> = {
     const { width, height } = s.bounds
     const scale = Math.min(1, THUMBNAIL_EDGE / Math.max(width, height))
     return { url: thumbnailSvg(s.name, s.hue, s.kind, width, height, scale) }
+  },
+  // Each call a slightly different frame, so the sidebar's crossfade is visible.
+  source_live_thumbnail: (a) => {
+    const s = SOURCES.find((x) => x.id === a?.sourceId) ?? CURRENT_SOURCE
+    const { width, height } = s.bounds
+    const hue = (s.hue + (liveTick++ % 6) * 24) % 360
+    return { url: thumbnailSvg(s.name, hue, s.kind, width, height, 0.5), width, height }
   },
   source_preview: (a) => {
     const s = SOURCES.find((x) => x.id === a?.sourceId) ?? CURRENT_SOURCE

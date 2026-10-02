@@ -139,6 +139,11 @@ export const clearScan = (): Promise<void> => invoke('clear')
 export const sourceCatalog = (): Promise<NativeSource[]> => invoke<NativeSource[]>('source_catalog')
 export const sourceThumbnail = (sourceId: string): Promise<{ url: string }> =>
   invoke<{ url: string }>('source_thumbnail', { sourceId })
+/** The chosen source as it looks right now, uncached; `busy:` while a scan holds the capture. */
+export const sourceLiveThumbnail = (
+  sourceId: string
+): Promise<{ url: string; width: number; height: number }> =>
+  invoke('source_live_thumbnail', { sourceId })
 /** An application's icon as a data URL, or null when it has none. Natively cached per app. */
 export const sourceIcon = (appName: string): Promise<{ icon: string | null }> =>
   invoke<{ icon: string | null }>('source_icon', { appName })

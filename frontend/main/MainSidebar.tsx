@@ -1,16 +1,20 @@
 /**
- * The main window's sidebar: where text comes from (Source) and which session it goes into
- * (Session), each labelled, with Settings pinned to the bottom. The views (Log, Notebook) are tabs
+ * The main window's sidebar: where text comes from (Source, with its live preview and controls),
+ * how OCR reads it (OCR model, for the OCR sources) and which session it goes into (Session), each
+ * labelled, with Settings pinned to the bottom. The views (Log, Notebook) are tabs
  * across the top of the content. In the Settings view the same column lists the settings pages,
  * with a way back. Resizable from its right edge.
  */
-import { useRef, useState, type JSX, type PointerEvent } from 'react'
-import { ArrowLeft, Settings } from 'lucide-react'
-import { Row } from '@kit'
+import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
+import { ArrowLeft, ArrowUpRight, Settings } from 'lucide-react'
+import { Row, Select } from '@kit'
+import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
+import { OCR_MODES, type OcrMode } from '../bridge/settings'
+import { useSetting } from '../bridge/useSetting'
 import { SETTINGS_NAV } from '../panels/settings/settingsNav'
 import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
-import { SourceMenu } from './SourceMenu'
+import { SourcePanel } from './SourcePanel'
 import { SessionMenu } from './SessionMenu'
 
 export type MainView = 'log' | 'notebook' | 'settings'
@@ -70,6 +74,43 @@ function ResizeHandle({
   )
 }
 
+const OCR_MODE_OPTIONS = (Object.keys(OCR_MODES) as OcrMode[]).map((value) => ({
+  value,
+  label: OCR_MODES[value].label
+}))
+
+/** The same engine choice as Settings → OCR, with a way there for the engine's own settings. */
+function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
+  const [ocrMode, setOcrMode] = useSetting<OcrMode>('ocrMode', 'cloud')
+  return (
+    <div className="sb-group">
+      <div className="sb-label" id="sb-ocr-label">
+        OCR model
+      </div>
+      <div className="sb-field">
+        <Select
+          aria-label="OCR model"
+          className="sb-select"
+          value={ocrMode}
+          onValueChange={(value) => void setOcrMode(value)}
+          options={OCR_MODE_OPTIONS}
+        />
+        <button type="button" className="sb-link" onClick={onOpenSettings}>
+          OCR settings
+          <ArrowUpRight />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** The OCR model only matters while the Log reads the screen. */
+function useReadsScreen(): boolean {
+  const [input, setInput] = useState(() => getSettings().inputSource)
+  useEffect(() => onSettingsChange((next) => setInput(next.inputSource)), [])
+  return input === 'ocr'
+}
+
 export function MainSidebar({
   width,
   onResize,
@@ -92,6 +133,7 @@ export function MainSidebar({
   // The width while a drag is in progress; the saved width otherwise.
   const [live, setLive] = useState<number | null>(null)
   const style = { width: live ?? width }
+  const readsScreen = useReadsScreen()
   const handle = <ResizeHandle width={live ?? width} onLive={setLive} onCommit={onResize} />
 
   if (view === 'settings') {
@@ -122,14 +164,21 @@ export function MainSidebar({
   return (
     <aside className="main-sidebar" aria-label="Sidebar" style={style}>
       <div className="sb-scroll">
-        <div className="sb-label" id="sb-source-label">
-          Source
+        <div className="sb-group">
+          <div className="sb-label" id="sb-source-label">
+            Source
+          </div>
+          <SourcePanel controller={controller} onOpenSettings={onOpenSourceSettings} />
         </div>
-        <SourceMenu controller={controller} onOpenSettings={onOpenSourceSettings} />
-        <div className="sb-label" id="sb-session-label">
-          Session
+        {readsScreen && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} />}
+        <div className="sb-group">
+          <div className="sb-label" id="sb-session-label">
+            Session
+          </div>
+          <div className="sb-field">
+            <SessionMenu />
+          </div>
         </div>
-        <SessionMenu />
       </div>
       <div className="sb-footer">
         <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>

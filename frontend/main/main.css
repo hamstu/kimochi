@@ -146,7 +146,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Sidebar pickers: a labelled field each, full width. */
+/* Sidebar groups: a label, then a full-width field or card. */
+.sb-group {
+  display: flex;
+  flex-direction: column;
+}
 .sb-label {
   padding: var(--k-space-3) var(--k-space-3) var(--k-space-1);
   color: var(--k-text-3);
@@ -155,72 +159,6 @@
   line-height: var(--k-leading-xs);
   letter-spacing: 0.02em;
   text-transform: uppercase;
-}
-.sb-scroll > .main-picker {
-  margin: 0 var(--k-space-2);
-  max-width: none;
-  height: var(--k-row-h);
-  padding: 0 var(--k-space-2);
-  border: 1px solid var(--k-line);
-  background: var(--k-field);
-}
-.sb-scroll > .main-picker .main-picker-chevron {
-  margin-left: auto;
-}
-.main-picker {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--k-space-1-5);
-  min-width: 0;
-  max-width: 18rem;
-  height: calc(var(--k-bar-h) - 0.375rem);
-  padding: 0 var(--k-space-1-5);
-  border: 0;
-  border-radius: var(--k-radius-sm);
-  background: transparent;
-  color: var(--k-text);
-  font: inherit;
-  font-size: var(--k-text-sm);
-  font-weight: var(--k-weight-medium);
-  cursor: default;
-}
-.main-picker:hover,
-.main-picker[data-native-hover] {
-  background: var(--k-hover);
-}
-.main-picker[data-state="open"] {
-  background: var(--k-press);
-}
-.main-picker:focus-visible {
-  outline: 2px solid var(--k-focus);
-  outline-offset: -2px;
-}
-.main-picker-icon {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: var(--k-icon-sm);
-  height: var(--k-icon-sm);
-  color: var(--k-text-2);
-}
-.main-picker-icon > svg,
-.main-picker-icon > span,
-.main-picker-icon > img {
-  width: 100%;
-  height: 100%;
-}
-.main-picker-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.main-picker-chevron {
-  flex: none;
-  width: var(--k-icon-xs);
-  height: var(--k-icon-xs);
-  color: var(--k-text-3);
 }
 .main-session-menu {
   min-width: 14rem;
@@ -245,54 +183,26 @@
   flex: none;
   flex-direction: column;
   /* The same height as the Log footer (--main-foot-h, border included), so their top edges line
-     up; the space under the row keeps its hover off the window's bottom edge. */
+     up. */
   box-sizing: border-box;
   height: var(--main-foot-h);
-  padding-bottom: var(--main-foot-pad);
   border-top: 1px solid var(--k-line);
 }
+/* The row fills the foot down to the window's edge; its extra bottom padding keeps the label on
+   the same line as the Log footer's controls. */
+.sb-footer > .k-row {
+  flex: 1;
+  padding-bottom: calc(var(--k-space-1-5) + var(--main-foot-pad));
+}
+/* Back meets the title bar: it takes over the column's top padding, so its label stays put. */
 .sb-back {
+  margin-top: calc(var(--k-space-1) * -1);
+  padding-top: calc(var(--k-space-1-5) + var(--k-space-1));
+  min-height: calc(var(--k-row-h) + var(--k-space-1));
   color: var(--k-text-2);
 }
 .main-settings {
   height: 100%;
-}
-
-/* Source menu: single-line options; Screen opens a submenu. */
-.main-source-menu {
-  min-width: 13rem;
-}
-.main-source-menu .k-menu-item-check {
-  order: 1;
-}
-.main-source-menu .k-menu-sub-chevron {
-  order: 2;
-}
-.main-source-menu .k-menu-item-shortcut {
-  order: 2;
-  padding-left: 0;
-}
-.main-source-pad {
-  display: block;
-  width: calc(var(--k-icon-xs) + var(--k-space-1));
-}
-.main-source-sub {
-  min-width: 14rem;
-}
-.main-source-current {
-  display: flex;
-  align-items: center;
-  gap: var(--k-space-2);
-  padding: var(--k-space-1-5) var(--k-space-2) var(--k-space-2);
-  margin-bottom: var(--k-space-1);
-  border-bottom: 1px solid var(--k-line);
-  font-weight: var(--k-weight-medium);
-}
-.main-source-current-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Dialog content shared by the session actions. */
@@ -322,4 +232,507 @@
   box-sizing: border-box;
   height: var(--main-foot-h);
   padding-bottom: var(--main-foot-pad);
+}
+
+/* OCR model: the engine select, full width, with a quiet way to its settings under it. */
+.sb-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--k-space-1);
+  padding: 0 var(--k-space-2);
+}
+.sb-select {
+  width: 100%;
+  height: var(--k-row-h);
+}
+.sb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-0-5);
+  padding: var(--k-space-0-5) var(--k-space-0-5);
+  margin-left: calc(var(--k-space-0-5) * -1);
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-text-3);
+  font: inherit;
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-leading-xs);
+  cursor: default;
+  transition: color var(--k-fast);
+}
+.sb-link > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.sb-link:hover,
+.sb-link[data-native-hover] {
+  color: var(--k-accent-text);
+}
+.sb-link:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------- Source card */
+.src-panel {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  padding: 0 var(--k-space-2);
+}
+.src-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-field);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong), 0 1px 2px rgb(0 0 0 / 0.05);
+  color: var(--k-text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: box-shadow var(--k-fast), background-color var(--k-fast);
+}
+.dark .src-card {
+  background: var(--gray-a3);
+  box-shadow: inset 0 0 0 1px var(--gray-a5);
+}
+.src-card:hover,
+.src-card[data-native-hover],
+.src-card[data-state="open"] {
+  box-shadow: inset 0 0 0 1px var(--gray-a8), 0 1px 2px rgb(0 0 0 / 0.05);
+}
+.src-card:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+
+/* Nothing chosen: a dashed, empty well that asks for a source. */
+.src-empty {
+  align-items: center;
+  justify-content: center;
+  gap: var(--k-space-1);
+  aspect-ratio: 16 / 10;
+  max-height: 9rem;
+  padding: var(--k-space-3);
+  border: 1.5px dashed var(--gray-a7);
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+}
+.dark .src-empty {
+  background: transparent;
+  box-shadow: none;
+}
+.src-empty:hover,
+.src-empty[data-native-hover],
+.src-empty[data-state="open"] {
+  border-color: var(--k-accent-line);
+  background: var(--k-accent-soft);
+  box-shadow: none;
+}
+.src-empty-plus {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-bottom: var(--k-space-1);
+  border-radius: 999px;
+  background: var(--k-hover);
+  color: var(--k-text-2);
+  transition: background-color var(--k-fast), color var(--k-fast);
+}
+.src-empty-plus > svg {
+  width: var(--k-icon);
+  height: var(--k-icon);
+}
+.src-empty:hover .src-empty-plus,
+.src-empty[data-native-hover] .src-empty-plus,
+.src-empty[data-state="open"] .src-empty-plus {
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+}
+.src-empty-title {
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-semibold);
+  line-height: var(--k-leading-md);
+}
+.src-empty-detail {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+
+/* The live picture. The stage has the frame's own shape so the region lines up with it. */
+.src-shot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  overflow: hidden;
+  border-bottom: 1px solid var(--k-line);
+  background: var(--gray-a3);
+}
+.src-stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+}
+.src-stage-tall {
+  width: auto;
+  height: 100%;
+}
+.src-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 700ms var(--k-ease-out);
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.src-frame[data-ready] {
+  opacity: 1;
+}
+/* The region: everything outside it dimmed, the area itself outlined in the accent. */
+.src-region {
+  position: absolute;
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1.5px var(--k-accent),
+    0 0 0 999px rgb(0 0 0 / 0.42);
+  pointer-events: none;
+  transition:
+    left var(--k-base) var(--k-ease-out),
+    top var(--k-base) var(--k-ease-out),
+    width var(--k-base) var(--k-ease-out),
+    height var(--k-base) var(--k-ease-out);
+}
+.src-shot-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--k-text-3);
+  background: linear-gradient(100deg, transparent 30%, var(--gray-a2) 50%, transparent 70%) 0 0 / 200% 100%;
+  animation: src-shimmer 1.6s linear infinite;
+}
+.src-shot-wait > svg,
+.src-shot-wait > span,
+.src-shot-wait > img {
+  width: 1.5rem;
+  height: 1.5rem;
+  opacity: 0.6;
+}
+@keyframes src-shimmer {
+  to { background-position: -200% 0; }
+}
+/* "Auto" while Auto OCR is watching the source. */
+.src-live {
+  position: absolute;
+  top: var(--k-space-1-5);
+  left: var(--k-space-1-5);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  height: 1.125rem;
+  padding: 0 var(--k-space-1-5) 0 var(--k-space-1);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: 0.02em;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.src-live-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--green-9);
+  box-shadow: 0 0 0 0 var(--green-a8);
+  animation: src-pulse 2s var(--k-ease-out) infinite;
+}
+@keyframes src-pulse {
+  0% { box-shadow: 0 0 0 0 var(--green-a8); }
+  70%, 100% { box-shadow: 0 0 0 0.3rem transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .src-live-dot,
+  .src-shot-wait { animation: none; }
+  .src-frame { transition: none; }
+}
+
+/* The card's caption: icon, name, what it is, and the change affordance. */
+.src-head {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-width: 0;
+  padding: var(--k-space-2) var(--k-space-2) var(--k-space-2) var(--k-space-2-5);
+}
+.src-head-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--k-radius-md);
+  background: var(--k-hover);
+  color: var(--k-text-2);
+}
+.src-head-icon > svg {
+  width: var(--k-icon);
+  height: var(--k-icon);
+}
+.src-head-icon > span,
+.src-head-icon > img {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.src-card-live .src-head-icon {
+  background: transparent;
+}
+.src-card-live .src-head-icon > span,
+.src-card-live .src-head-icon > img {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.src-head-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.src-head-title,
+.src-head-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.src-head-title {
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-semibold);
+  line-height: var(--k-leading-md);
+}
+.src-head-detail {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.src-head-chevron {
+  flex: none;
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+  color: var(--k-text-3);
+}
+
+/* Controls for the chosen source: the scan button, then switch rows inset in a well. */
+.src-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+}
+.src-scan {
+  width: 100%;
+  height: var(--k-row-h);
+  justify-content: flex-start;
+  gap: var(--k-space-2);
+  padding: 0 var(--k-space-1-5) 0 var(--k-space-2-5);
+}
+.src-scan > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.src-scan-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.src-scan-key {
+  flex: none;
+  padding: 0 var(--k-space-1);
+  border-radius: var(--k-radius-sm);
+  background: rgb(255 255 255 / 0.18);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: 1.125rem;
+  letter-spacing: 0.04em;
+}
+.k-button-secondary.src-scan .src-scan-key {
+  background: var(--gray-a3);
+}
+.src-scan .k-spinner {
+  border-color: rgb(255 255 255 / 0.35);
+  border-top-color: currentColor;
+}
+/* No padding on the well itself: a hovered row's background meets its edges. The end rows carry
+   the well's inset instead, so the items keep their spacing. A real border rather than an inset
+   shadow, so a row's background stops at it instead of painting over it. */
+.src-rows {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-lg);
+  background: var(--k-sunken);
+}
+.src-row {
+  min-height: var(--k-item-h);
+  padding: var(--k-space-1) var(--k-space-2-5);
+}
+.src-row:first-child {
+  min-height: calc(var(--k-item-h) + var(--k-space-0-5));
+  padding-top: calc(var(--k-space-1) + var(--k-space-0-5));
+}
+.src-row:last-child {
+  min-height: calc(var(--k-item-h) + var(--k-space-0-5));
+  padding-bottom: calc(var(--k-space-1) + var(--k-space-0-5));
+}
+.src-row:only-child {
+  min-height: calc(var(--k-item-h) + var(--k-space-1));
+}
+.src-row > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.src-row-meta {
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-xs);
+  letter-spacing: -0.01em;
+}
+.src-switch {
+  pointer-events: none;
+}
+
+/* The type popover: one row per source type, with what it does. */
+.src-popover {
+  width: 17rem;
+  padding: var(--k-space-1);
+}
+.src-types {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.src-type {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2-5);
+  width: 100%;
+  padding: var(--k-space-1-5) var(--k-space-2);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: transparent;
+  color: var(--k-text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: background-color var(--k-fast);
+}
+.src-type:hover,
+.src-type[data-native-hover] {
+  background: var(--k-hover);
+}
+.src-type:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
+.src-type-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--k-radius-md);
+  background: var(--k-sunken);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+  color: var(--k-text-2);
+  transition: background-color var(--k-fast), color var(--k-fast);
+}
+.src-type-icon > svg {
+  width: var(--k-icon);
+  height: var(--k-icon);
+}
+.src-type[aria-selected="true"] .src-type-icon {
+  background: var(--k-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--k-accent-line);
+  color: var(--k-accent-text);
+}
+.src-type-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.src-type-label {
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-leading-md);
+}
+.src-type-detail {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  text-wrap: pretty;
+}
+.src-type-check {
+  flex: none;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-accent-text);
+}
+.src-popover-foot {
+  margin: var(--k-space-1) calc(var(--k-space-1) * -1) calc(var(--k-space-1) * -1);
+  padding: var(--k-space-1);
+  border-top: 1px solid var(--k-line);
+}
+.src-popover-link {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  width: 100%;
+  height: var(--k-item-h);
+  padding: 0 var(--k-space-2);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-size: var(--k-text-sm);
+  cursor: default;
+}
+.src-popover-link > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.src-popover-link:hover,
+.src-popover-link[data-native-hover] {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+
+/* A narrow sidebar keeps the labels and lets the shortcut and region size go. */
+@container (max-width: 11.5rem) {
+  .src-scan-key,
+  .src-row-meta { display: none; }
 }

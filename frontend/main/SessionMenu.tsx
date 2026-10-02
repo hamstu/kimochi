@@ -5,7 +5,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   ChevronsUpDown,
-  Layers,
   Eraser,
   ListOrdered,
   PencilLine,
@@ -46,12 +45,10 @@ export function SessionMenu(): ReactNode {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <button type="button" className="main-picker" aria-label={`Session: ${name}`}>
-          <span className="main-picker-icon">
-            <Layers />
-          </span>
-          <span className="main-picker-label">{name}</span>
-          <ChevronsUpDown className="main-picker-chevron" />
+        {/* Drawn as a select field, like the OCR model above it. */}
+        <button type="button" className="k-select-trigger sb-select" aria-label={`Session: ${name}`}>
+          <span>{name}</span>
+          <ChevronsUpDown className="k-select-trigger-icon" />
         </button>
       </MenuTrigger>
       <MenuContent align="start" className="main-session-menu">

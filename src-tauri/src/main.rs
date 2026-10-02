@@ -599,6 +599,15 @@ async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Re
         .map_err(|e| e.to_string())?
 }
 
+/// The chosen source's current pixels for the sidebar's live preview. See `sources::live_thumbnail`.
+#[tauri::command]
+async fn source_live_thumbnail(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sources::live_thumbnail(&service, &source_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn source_preview(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
     let service = state.inner().clone();
@@ -1520,6 +1529,7 @@ fn main() {
             source_icon,
             source_preview,
             source_hover_preview,
+            source_live_thumbnail,
             commit_source,
             open_source_picker,
             source_picker_state,
