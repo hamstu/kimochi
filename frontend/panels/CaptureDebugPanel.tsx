@@ -49,7 +49,7 @@ const LOG_COLORS: Record<LogEntry['level'], string> = {
   success: '#50fa7b'
 }
 
-const INSPECTED: PanelLabel[] = ['controller', 'log', 'settings', 'overlay']
+const INSPECTED: PanelLabel[] = ['log', 'settings', 'overlay']
 
 export default function CaptureDebugPanel(): JSX.Element {
   const { state } = useViewState()
@@ -259,7 +259,9 @@ export default function CaptureDebugPanel(): JSX.Element {
 
         {previewUrl && (
           <div className="diag-preview">
-            <img src={previewUrl} alt="Last local capture" />
+            <div className="capture-preview-frame">
+              <img src={previewUrl} alt="Last local capture" />
+            </div>
           </div>
         )}
 

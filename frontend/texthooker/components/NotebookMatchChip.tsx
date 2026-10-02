@@ -1,13 +1,12 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Pencil } from "lucide-react";
 import { getSettings } from "@texthooker/lib/settings";
 import {
   readImageAsObjectURL,
   serializeEntryForPopover,
 } from "@texthooker/lib/notebook";
-import { openEditModal } from "@texthooker/lib/editModal";
+import { notebookCardSize } from "@texthooker/lib/notebookCardSize";
 import { useNotebookEntry } from "@texthooker/hooks/useNotebookEntry";
 
 interface Props {
@@ -54,14 +53,18 @@ export function NotebookMatchChip({ entryId, text, sentence }: Props) {
     if (!entry) return;
     const settings = getSettings();
     try {
+      // A fixed size like the dictionary pop-up's, whatever the Log's text size.
       const serialized = await serializeEntryForPopover(entry);
+      const size = notebookCardSize(serialized);
       await invoke("show_popover", {
         kind: "notebook",
         term: text,
         cursorX: e.screenX,
         cursorY: e.screenY,
-        width: settings.popoverWidth,
-        height: settings.popoverHeight,
+        // A fixed card width and the content's own height (measured here, before the window
+        // opens), so short entries get a compact popover.
+        width: size.width,
+        height: size.height,
         baseUrl: settings.yomitanApiUrl,
         focus: true,
         sentence,
@@ -82,7 +85,7 @@ export function NotebookMatchChip({ entryId, text, sentence }: Props) {
         onMouseDown={(e) => e.preventDefault()}
         onClick={handleClick}
         className="notebook-chip"
-        title={entry ? `Notebook: ${entry.kind}` : "Notebook"}
+        aria-label={entry ? `${text}: open notebook entry` : text}
       >
         {avatarUrl ? (
           <img
@@ -98,22 +101,6 @@ export function NotebookMatchChip({ entryId, text, sentence }: Props) {
         )}
         <span className="notebook-chip-name">{text}</span>
       </button>
-      {entry ? (
-        <button
-          type="button"
-          className="notebook-chip-edit"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openEditModal(entry.id);
-          }}
-          title="Edit notebook entry"
-        >
-          <Pencil aria-hidden />
-          Edit
-        </button>
-      ) : null}
     </span>
   );
 }

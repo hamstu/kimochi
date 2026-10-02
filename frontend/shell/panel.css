@@ -28,11 +28,47 @@ body,
   background: var(--k-bar);
   border-bottom: 1px solid var(--k-line);
   color: var(--k-text-2);
-  font-size: var(--k-text-xs);
-  line-height: var(--k-leading-xs);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
   font-weight: var(--k-weight-medium);
   -webkit-user-select: none;
   user-select: none;
+}
+.native-titlebar-slot {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--k-space-1);
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--k-space-1);
+}
+.native-titlebar-slot:empty {
+  padding: 0;
+}
+/* Controls in the title bar use the tool-bar sizes, and never start a window drag. */
+.native-titlebar-slot :is(button, [role="button"], input) {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+.native-titlebar-slot .k-button {
+  height: calc(var(--k-bar-h) - 0.375rem);
+  padding: 0 var(--k-space-2);
+  font-size: var(--k-text-sm);
+}
+.native-titlebar-slot .k-button-icon {
+  width: calc(var(--k-bar-h) - 0.375rem);
+  padding: 0;
+}
+.native-titlebar-slot .k-segmented {
+  height: calc(var(--k-bar-h) - 0.375rem);
+}
+.native-titlebar-slot .k-segmented-item {
+  padding: 0 var(--k-space-2);
+  font-size: var(--k-text-sm);
+}
+.native-titlebar:has(> .native-titlebar-slot:first-child) {
+  padding-left: 0;
 }
 .native-titlebar-title {
   min-width: 0;
@@ -50,7 +86,7 @@ body,
 .native-window-actions button {
   display: grid;
   place-items: center;
-  width: 1.75rem;
+  width: var(--k-bar-h);
   height: 100%;
   padding: 0;
   border: 0;
@@ -61,8 +97,8 @@ body,
   transition-duration: var(--k-fast);
 }
 .native-window-actions button svg {
-  width: var(--k-icon-xs);
-  height: var(--k-icon-xs);
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
 }
 .native-window-actions button:hover,
 .native-window-actions button[data-native-hover] {
@@ -89,20 +125,6 @@ body,
 }
 .native-content > div {
   height: 100%;
-}
-.native-panel-controller {
-  height: auto;
-}
-.native-panel-controller .native-content {
-  flex: none;
-  overflow: visible;
-}
-.native-panel-controller .native-content > div {
-  height: auto;
-}
-.native-panel-debug .native-content,
-.native-panel-stream .native-content {
-  background: #191919;
 }
 /* Native window-action failures are shown rather than swallowed. */
 .native-panel-error {

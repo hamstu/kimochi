@@ -23,7 +23,7 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
     let icon = tauri::image::Image::from_bytes(TEMPLATE_ICON).map_err(|e| e.to_string())?;
     let menu = MenuBuilder::new(app)
         .items(&[
-            &MenuItemBuilder::with_id("showControls", "Show Controls")
+            &MenuItemBuilder::with_id("showControls", "Show Kimochi")
                 .build(app)
                 .map_err(|e| e.to_string())?,
             &MenuItemBuilder::with_id("openSettings", "Settings")
@@ -52,13 +52,14 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
                 "showControls" => {
                     if let Some(service) = app.try_state::<Shared>() {
                         let settings = service.settings.clone();
-                        let _ = panels::act(app, &settings, "controller", "show", None);
+                        let _ = panels::act(app, &settings, panels::MAIN, "show", None);
                     }
                 }
                 "openSettings" => {
                     if let Some(service) = app.try_state::<Shared>() {
                         let settings = service.settings.clone();
-                        let _ = panels::act(app, &settings, "settings", "show", None);
+                        let _ = panels::act(app, &settings, panels::MAIN, "show", None);
+                        let _ = app.emit("main:show-settings", serde_json::json!({}));
                     }
                 }
                 _ => {}
@@ -141,10 +142,12 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, action: &str) -> Resul
     let settings = service.settings.clone();
     match action {
         "showControls" => {
-            panels::act(app, &settings, "controller", "show", None)?;
+            panels::act(app, &settings, panels::MAIN, "show", None)?;
         }
         "openSettings" => {
-            panels::act(app, &settings, "settings", "show", None)?;
+            // Settings is a view of the main window.
+            panels::act(app, &settings, panels::MAIN, "show", None)?;
+            let _ = app.emit("main:show-settings", serde_json::json!({}));
         }
         "openLog" => {
             panels::act(app, &settings, "log", "show", None)?;

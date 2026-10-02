@@ -76,6 +76,20 @@ body,
 .dark .popover-card {
   box-shadow: var(--popover-shadow), inset 0 0 0 1px var(--gray-a6);
 }
+/* The ring again, above the content, so full-bleed content (a notebook hero image) keeps the
+   card's edge. */
+.popover-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--gray-a5);
+  pointer-events: none;
+}
+.dark .popover-card::after {
+  box-shadow: inset 0 0 0 1px var(--gray-a6);
+}
 
 .popover-scroll {
   flex: 1 1 auto;
@@ -283,164 +297,8 @@ body,
 }
 .popover-frequencies li { margin: 0; }
 
-/* ------------------------------------------------------------------ notebook card */
-/* Notebook entry card inside the popover. Typography is em-based off the
-   card's root font-size (13px nominal) so the A+/A- controls scale everything
-   uniformly; the root size is set inline from the persisted scale. */
-.notebook-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--k-space-2-5);
-  color: var(--k-text);
-}
-
-.notebook-card-header {
-  display: flex;
-  gap: var(--k-space-3);
-  align-items: flex-start;
-}
-
-/* Avatar: matches the Notebook window's .nb-avatar (notebook.css) at the popup's
-   larger header size. Fixed UI size; not part of the card's text scaling. */
-.notebook-card-avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 3.5rem;
-  height: 3.5rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--k-accent-soft);
-  box-shadow: inset 0 0 0 1px var(--gray-a3);
-  color: var(--k-accent-text);
-  font-family: var(--k-font-jp);
-  font-size: var(--k-text-xl);
-  font-weight: var(--k-weight-medium);
-}
-.notebook-card-avatar[data-kind="place"],
-.notebook-card-avatar[data-kind="thing"] { border-radius: var(--k-radius-lg); background: var(--gray-a3); color: var(--k-text-2); }
-.notebook-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.notebook-card-avatar svg { width: var(--k-icon); height: var(--k-icon); }
-
-.notebook-card-heading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--k-space-0-5);
-  min-width: 0;
-}
-
-.notebook-card-name {
-  font-size: 1.4em;
-  font-weight: var(--k-weight-semibold);
-  line-height: 1.25;
-  font-family: var(--k-font-jp);
-}
-
-.notebook-card-reading {
-  font-size: 0.92em;
-  color: var(--k-text-2);
-  font-family: var(--k-font-jp);
-}
-
-.notebook-card-kind {
-  margin-top: var(--k-space-1);
-  font-size: 0.85em;
-  font-weight: var(--k-weight-medium);
-  color: var(--k-text-3);
-}
-
-.notebook-card-description {
-  font-size: 1em;
-  line-height: 1.5;
-  color: var(--k-text);
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.notebook-card-description-empty {
-  color: var(--k-text-3);
-}
-
-.notebook-card-aliases {
-  margin-top: var(--k-space-0-5);
-  font-size: 0.85em;
-  color: var(--k-text-2);
-  font-family: var(--k-font-jp);
-}
-
-/* Header controls (font scale + edit): fixed UI size, not part of text scaling.
-   Drawn as kit ghost buttons (the component markup is shared, so the look is
-   reproduced here from the kit's tokens). */
-.notebook-card-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--k-space-0-5);
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.notebook-card-edit,
-.notebook-card-scale-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--k-space-1);
-  flex-shrink: 0;
-  height: var(--k-control-h-sm);
-  padding: 0 var(--k-space-2);
-  font-family: var(--k-font-ui);
-  font-size: var(--k-text-sm);
-  font-weight: var(--k-weight-medium);
-  color: var(--k-text-2);
-  background: transparent;
-  border: 0;
-  border-radius: var(--k-radius-md);
-  cursor: default;
-  transition:
-    background-color var(--k-fast),
-    color var(--k-fast);
-}
-.notebook-card-scale-btn {
-  width: var(--k-control-h-sm);
+/* Notebook entries render full-bleed (their hero reaches the card edges); the card's own styles
+   live in notebook-card.css, imported by NotebookEntryCard. */
+.popover-scroll-flush {
   padding: 0;
-}
-.notebook-card-edit svg,
-.notebook-card-scale-btn svg {
-  width: var(--k-icon-sm);
-  height: var(--k-icon-sm);
-}
-
-.notebook-card-edit:hover,
-.notebook-card-scale-btn:hover:not(:disabled) {
-  color: var(--k-text);
-  background: var(--k-hover);
-}
-
-.notebook-card-scale-btn:disabled {
-  opacity: 0.45;
-}
-
-/* Personal notes: a plain list under the description, split by hairlines. */
-.notebook-card-notes {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--k-line);
-  font-size: 0.92em;
-  line-height: 1.45;
-  color: var(--k-text);
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.notebook-card-notes li {
-  padding: var(--k-space-1-5) 0;
-}
-
-.notebook-card-notes li + li {
-  border-top: 1px solid var(--k-line);
 }

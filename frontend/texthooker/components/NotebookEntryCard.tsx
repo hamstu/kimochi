@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { ArrowRight, Box, MapPin, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { AArrowDown, AArrowUp, Box, MapPin, Pencil, UserRound } from "lucide-react";
+import { Button } from "@kit/Button";
 import type { SerializedNotebookEntry } from "@texthooker/lib/types";
+import { NotebookHero } from "./NotebookHero";
+import "../notebook-card.css";
 
 interface Props {
   entry: SerializedNotebookEntry;
-  /** When provided, renders an Edit button that hands off to the main window. */
-  onEdit?: (entryId: string) => void;
+  /** When provided, renders a "Notebook" button that opens the entry there. */
+  onOpen?: (entryId: string) => void;
 }
 
 /* Same words and icons as the Notebook window (notebookEntry.tsx KIND_META); kept
@@ -20,123 +22,67 @@ const KIND_META: Record<
   thing: { label: "Thing", icon: <Box /> },
 };
 
-/* Card-wide font scale, persisted across launches. The card's CSS is em-based,
-   so scaling the root font-size scales everything inside. */
-const SCALE_KEY = "notebookCardFontScale";
-const SCALE_MIN = 0.7;
-const SCALE_MAX = 1.6;
-const SCALE_STEP = 0.1;
-const BASE_FONT_PX = 13;
-
-function loadScale(): number {
-  try {
-    const v = Number(localStorage.getItem(SCALE_KEY));
-    if (Number.isFinite(v) && v >= SCALE_MIN && v <= SCALE_MAX) return v;
-  } catch {
-    // localStorage unavailable — fall through to default
-  }
-  return 1;
-}
-
-export function NotebookEntryCard({ entry, onEdit }: Props) {
-  const [scale, setScale] = useState<number>(loadScale);
-
-  const adjustScale = (delta: number) => {
-    const next =
-      Math.round(Math.min(SCALE_MAX, Math.max(SCALE_MIN, scale + delta)) * 10) /
-      10;
-    setScale(next);
-    try {
-      localStorage.setItem(SCALE_KEY, String(next));
-    } catch {
-      // best-effort
-    }
-  };
-
+export function NotebookEntryCard({ entry, onOpen }: Props) {
+  const kind = KIND_META[entry.kind];
   return (
-    <div
-      className="notebook-card"
-      style={{ fontSize: `${BASE_FONT_PX * scale}px` }}
-    >
-      <div className="notebook-card-header">
-        {/* Avatar as in the Notebook window: a round image, a monogram in
-            accent-soft (characters), or the kind icon (places, things). */}
-        <span
-          aria-hidden
-          className="notebook-card-avatar"
-          data-kind={entry.imageDataUrl ? undefined : entry.kind}
-          lang="ja"
-        >
-          {entry.imageDataUrl ? (
-            <img src={entry.imageDataUrl} alt="" draggable={false} />
-          ) : entry.kind === "person" && entry.displayName.trim() ? (
-            Array.from(entry.displayName.trim())[0]
-          ) : (
-            KIND_META[entry.kind].icon
-          )}
-        </span>
-        <div className="notebook-card-heading">
-          <div className="notebook-card-name" translate="no" lang="ja">
-            {entry.displayName}
-          </div>
-          {entry.reading ? (
-            <div className="notebook-card-reading" translate="no" lang="ja">
-              {entry.reading}
-            </div>
-          ) : null}
-          <div className="notebook-card-kind">{KIND_META[entry.kind].label}</div>
-          {entry.aliases.length > 0 ? (
-            <div className="notebook-card-aliases" translate="no" lang="ja">
-              {entry.aliases.join(" · ")}
-            </div>
-          ) : null}
-        </div>
-        <div className="notebook-card-actions">
-          <button
-            type="button"
-            className="notebook-card-scale-btn"
-            onClick={() => adjustScale(-SCALE_STEP)}
-            disabled={scale <= SCALE_MIN}
-            title="Smaller text"
-          >
-            <AArrowDown size={13} />
-          </button>
-          <button
-            type="button"
-            className="notebook-card-scale-btn"
-            onClick={() => adjustScale(SCALE_STEP)}
-            disabled={scale >= SCALE_MAX}
-            title="Larger text"
-          >
-            <AArrowUp size={13} />
-          </button>
-          {onEdit ? (
-            <button
-              type="button"
-              className="notebook-card-edit"
-              onClick={() => onEdit(entry.id)}
-              title="Edit in notebook"
+    <article className="notebook-card">
+      <NotebookHero
+        imageUrl={entry.imageDataUrl}
+        kind={entry.kind}
+        name={entry.displayName}
+        reading={entry.reading || undefined}
+        actions={
+          onOpen ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onOpen(entry.id)}
+              aria-label="Open in Notebook"
             >
-              <Pencil size={12} />
-              Edit
-            </button>
+              Notebook
+              <ArrowRight />
+            </Button>
+          ) : null
+        }
+      />
+      <div className="notebook-card-body">
+        <dl className="notebook-card-meta">
+          <div>
+            <dt>Type</dt>
+            <dd>
+              <span className="notebook-card-kind">
+                {kind.icon}
+                {kind.label}
+              </span>
+            </dd>
+          </div>
+          {entry.aliases.length > 0 ? (
+            <div>
+              <dt>Nicknames</dt>
+              <dd translate="no" lang="ja" className="notebook-card-alias">
+                {entry.aliases.join("、")}
+              </dd>
+            </div>
           ) : null}
-        </div>
+        </dl>
+        {entry.description ? (
+          <p className="notebook-card-description">{entry.description}</p>
+        ) : (
+          <p className="notebook-card-description notebook-card-description-empty">
+            No description yet.
+          </p>
+        )}
+        {entry.notes.length > 0 ? (
+          <section className="notebook-card-notes">
+            <h3 className="notebook-card-label">Notes</h3>
+            <ul>
+              {entry.notes.map((note, i) => (
+                <li key={i}>{note}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
-      {entry.description ? (
-        <div className="notebook-card-description">{entry.description}</div>
-      ) : (
-        <div className="notebook-card-description notebook-card-description-empty">
-          No description.
-        </div>
-      )}
-      {entry.notes.length > 0 ? (
-        <ul className="notebook-card-notes">
-          {entry.notes.map((note, i) => (
-            <li key={i}>{note}</li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    </article>
   );
 }

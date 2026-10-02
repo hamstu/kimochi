@@ -31,12 +31,14 @@ export default function CapturePreview({
         </p>
       )}
       {imageData ? (
-        <img
-          src={sourceUrl(imageData)}
-          alt="Capture preview"
-          onError={() => setFailed(imageData)}
-          onLoad={() => setFailed(null)}
-        />
+        <div className="capture-preview-frame">
+          <img
+            src={sourceUrl(imageData)}
+            alt="Capture preview"
+            onError={() => setFailed(imageData)}
+            onLoad={() => setFailed(null)}
+          />
+        </div>
       ) : (
         <p className="k-description">No capture yet. Trigger a scan to see a preview.</p>
       )}

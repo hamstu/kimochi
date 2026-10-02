@@ -35,7 +35,7 @@ export function acceptSnapshot(value: ReaderSnapshot): void {
   for (const fn of subs) fn(value);
 }
 export function getSnapshot(): ReaderSnapshot {
-  if (!snapshot) throw new Error("Texthooker is still loading");
+  if (!snapshot) throw new Error("The log is still loading");
   return snapshot;
 }
 export function subscribe(fn: (value: ReaderSnapshot) => void): () => void {
@@ -75,7 +75,7 @@ export async function call<T>(
     const timeout = setTimeout(() => {
       pending.delete(id);
       reject(
-        new Error("Texthooker did not respond. Open the Log window and retry."),
+        new Error("The log did not respond. Show the Kimochi window and retry."),
       );
     }, timeoutMs);
     pending.set(id, {

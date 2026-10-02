@@ -1,0 +1,325 @@
+/* Main window: sidebar + view, below the app-drawn title bar. */
+.main-frame {
+  --main-foot-pad: var(--k-space-1);
+  --main-foot-h: calc(var(--k-row-h) + var(--main-foot-pad) + 1px);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.main-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.main-sidebar {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+  /* Not clipped: the resize handle straddles the right border. Rows clip their own labels. */
+  border-right: 1px solid var(--k-line);
+  background: var(--k-bar);
+}
+.main-view {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.main-view > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Title bar: the sidebar toggle, then "Kimochi · <where you are>". */
+.main-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: var(--k-space-1);
+  color: var(--k-text);
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The sidebar's right edge. A wide, invisible grab area over the border; the line lights up on
+   hover and while dragging. */
+.main-sidebar-resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 2;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.main-sidebar-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color var(--k-fast);
+}
+.main-sidebar-resize:hover::after,
+.main-sidebar-resize[data-native-hover]::after,
+.main-sidebar-resize:active::after {
+  background: var(--k-accent-line);
+}
+
+/* View tabs: Log and Notebook across the top of the content, sharing its width. The strip is a
+   bar; the active tab takes the content's ground and an accent underline. */
+.main-view > .main-tabs {
+  display: flex;
+  flex: none;
+  height: var(--k-bar-h);
+  border-bottom: 1px solid var(--k-line);
+  background: var(--k-bar);
+}
+.main-tab {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--k-space-1-5);
+  min-width: 0;
+  padding: 0 var(--k-space-3);
+  border: 0;
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-medium);
+  cursor: default;
+  transition-property: background-color, color;
+  transition-duration: var(--k-fast);
+}
+.main-tab + .main-tab {
+  border-left: 1px solid var(--k-line);
+}
+.main-tab > svg {
+  flex: none;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.main-tab:hover,
+.main-tab[data-native-hover] {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.main-tab[aria-selected="true"] {
+  /* One pixel taller than the strip, so it covers the strip's bottom line and joins the page. */
+  margin-bottom: -1px;
+  background: var(--k-bg);
+  color: var(--k-text);
+}
+.main-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--k-accent);
+}
+.main-tab[aria-selected="true"] > svg {
+  color: var(--k-accent-text);
+}
+.main-tab:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
+.main-tab-count {
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sidebar pickers: a labelled field each, full width. */
+.sb-label {
+  padding: var(--k-space-3) var(--k-space-3) var(--k-space-1);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-leading-xs);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.sb-scroll > .main-picker {
+  margin: 0 var(--k-space-2);
+  max-width: none;
+  height: var(--k-row-h);
+  padding: 0 var(--k-space-2);
+  border: 1px solid var(--k-line);
+  background: var(--k-field);
+}
+.sb-scroll > .main-picker .main-picker-chevron {
+  margin-left: auto;
+}
+.main-picker {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  min-width: 0;
+  max-width: 18rem;
+  height: calc(var(--k-bar-h) - 0.375rem);
+  padding: 0 var(--k-space-1-5);
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-text);
+  font: inherit;
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+  cursor: default;
+}
+.main-picker:hover,
+.main-picker[data-native-hover] {
+  background: var(--k-hover);
+}
+.main-picker[data-state="open"] {
+  background: var(--k-press);
+}
+.main-picker:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
+.main-picker-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-text-2);
+}
+.main-picker-icon > svg,
+.main-picker-icon > span,
+.main-picker-icon > img {
+  width: 100%;
+  height: 100%;
+}
+.main-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.main-picker-chevron {
+  flex: none;
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+  color: var(--k-text-3);
+}
+.main-session-menu {
+  min-width: 14rem;
+  max-width: 20rem;
+}
+
+/* Sidebar: flush rows, Settings pinned to the foot. */
+.sb-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--k-space-1) 0 var(--k-space-2);
+}
+.sb-nav {
+  display: flex;
+  flex-direction: column;
+}
+.sb-footer {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  /* The same height as the Log footer (--main-foot-h, border included), so their top edges line
+     up; the space under the row keeps its hover off the window's bottom edge. */
+  box-sizing: border-box;
+  height: var(--main-foot-h);
+  padding-bottom: var(--main-foot-pad);
+  border-top: 1px solid var(--k-line);
+}
+.sb-back {
+  color: var(--k-text-2);
+}
+.main-settings {
+  height: 100%;
+}
+
+/* Source menu: single-line options; Screen opens a submenu. */
+.main-source-menu {
+  min-width: 13rem;
+}
+.main-source-menu .k-menu-item-check {
+  order: 1;
+}
+.main-source-menu .k-menu-sub-chevron {
+  order: 2;
+}
+.main-source-menu .k-menu-item-shortcut {
+  order: 2;
+  padding-left: 0;
+}
+.main-source-pad {
+  display: block;
+  width: calc(var(--k-icon-xs) + var(--k-space-1));
+}
+.main-source-sub {
+  min-width: 14rem;
+}
+.main-source-current {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  padding: var(--k-space-1-5) var(--k-space-2) var(--k-space-2);
+  margin-bottom: var(--k-space-1);
+  border-bottom: 1px solid var(--k-line);
+  font-weight: var(--k-weight-medium);
+}
+.main-source-current-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dialog content shared by the session actions. */
+.main-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+}
+.main-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+}
+.main-form-label {
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+}
+.main-dialog-error {
+  display: block;
+  margin-top: var(--k-space-2);
+  color: var(--k-danger-text);
+}
+
+/* The Log footer: the sidebar foot's height, its controls centred on the same line. */
+.main-view .log-root > .k-bar-bottom {
+  box-sizing: border-box;
+  height: var(--main-foot-h);
+  padding-bottom: var(--main-foot-pad);
+}

@@ -1,12 +1,15 @@
 /**
  * COPY of `src/renderer/src/components/GamepadButtonCapture.tsx`.
  * Deltas: `useGamepad` imports from the bridge (same exported shape); rendered with kit buttons.
- * Behaviour unchanged: click to capture, press a gamepad button to assign, Escape cancels.
+ * Behaviour: click to capture, press a gamepad button to assign, Escape cancels. Delta: shortcuts
+ * and gamepad actions are paused while capturing (the native poller still reports the press, so
+ * it can be assigned without firing), and leaving the window cancels the capture.
  */
 import { useState, useEffect, useCallback, type JSX } from 'react'
 import { Gamepad2, X } from 'lucide-react'
 import { Button, IconButton } from '@kit'
 import { useGamepad, getButtonName } from '../bridge/useGamepad'
+import { useSuspendHotkeys } from '../bridge/useHotkeys'
 
 interface GamepadButtonCaptureProps {
   value?: number
@@ -39,18 +42,29 @@ export function GamepadButtonCapture({
     onButtonPress: handleButtonPress
   })
 
-  // Cancel capture on escape key
+  useSuspendHotkeys(capturing)
+
+  // Cancel capture on escape key, or when the window loses focus or is hidden, so the paused
+  // shortcuts never stay paused behind a capture nobody can see.
   useEffect(() => {
     if (!capturing) return
 
+    const cancel = (): void => setCapturing(false)
     const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        setCapturing(false)
-      }
+      if (e.key === 'Escape') cancel()
+    }
+    const handleVisibility = (): void => {
+      if (document.hidden) cancel()
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('blur', cancel)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('blur', cancel)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [capturing])
 
   const hasGamepad = state.gamepads.length > 0

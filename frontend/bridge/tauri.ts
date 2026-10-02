@@ -8,7 +8,7 @@
  * Shared with the overlay workstream — do not fork this file.
  */
 import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
   CaptureFrame,
   DisplayInfo,
@@ -99,6 +99,17 @@ export const panel = (
   action: PanelAction,
   rect: Rect | null = null
 ): Promise<PanelInfo> => invoke<PanelInfo>('panel', { label, action, rect })
+/** Settings pages, in rail order. Older builds stored other names; see `settingsTabOf`. */
+export type SettingsTabName =
+  'general' | 'sources' | 'ocr' | 'log' | 'dictionary' | 'assist' | 'controls'
+
+/** Shows Settings, on one page when given: a view of the main window. */
+export async function openSettings(tab?: SettingsTabName): Promise<void> {
+  if (tab) await settingsSet('settingsActiveTab', tab)
+  await panel('log', 'show')
+  await emit('main:show-settings', {})
+}
+
 export const panelContentHeight = (label: string, height: number): Promise<void> =>
   invoke('panel_content_height', { label, height })
 export const panelPointer = (): Promise<[number, number] | null> =>
@@ -128,6 +139,9 @@ export const clearScan = (): Promise<void> => invoke('clear')
 export const sourceCatalog = (): Promise<NativeSource[]> => invoke<NativeSource[]>('source_catalog')
 export const sourceThumbnail = (sourceId: string): Promise<{ url: string }> =>
   invoke<{ url: string }>('source_thumbnail', { sourceId })
+/** An application's icon as a data URL, or null when it has none. Natively cached per app. */
+export const sourceIcon = (appName: string): Promise<{ icon: string | null }> =>
+  invoke<{ icon: string | null }>('source_icon', { appName })
 export const openSourcePicker = (editCurrent: boolean): Promise<void> =>
   invoke('open_source_picker', { editCurrent })
 
@@ -160,10 +174,18 @@ export const historyClear = (): Promise<void> => invoke('history_clear')
 export const hotkeysLoad = (): Promise<HotkeysSettings> => invoke<HotkeysSettings>('hotkeys_load')
 export const hotkeysSave = (hotkeys: HotkeysSettings): Promise<void> =>
   invoke('hotkeys_save', { hotkeys })
-export const hotkeysReapply = (): Promise<{
+export interface HotkeysApplyResult {
   registered: string[]
   failed: { name: string; accelerator: string; error: string }[]
-}> => invoke('hotkeys_reapply')
+  /** True while recording has the shortcuts paused; `failed` is then not meaningful. */
+  suspended?: boolean
+  /** Set when a restore found nothing paused, so the report says nothing about the set. */
+  unchanged?: boolean
+}
+export const hotkeysReapply = (): Promise<HotkeysApplyResult> => invoke('hotkeys_reapply')
+/** Pause (or restore) every global shortcut and gamepad action while a new binding is recorded. */
+export const hotkeysSuspend = (suspended: boolean): Promise<HotkeysApplyResult | undefined> =>
+  invoke('hotkeys_suspend', { suspended })
 
 // ---------------------------------------------------------------------------- events
 

@@ -59,18 +59,14 @@ const fn panel(
 
 /// Sizes come from Electron's `panels` table so a first launch looks the same.
 pub static PANELS: &[PanelSpec] = &[
-    PanelSpec {
-        min_width: 410.,
-        // The controller is fixed-width and sizes to its menu rows.
-        min_height: 28.,
-        resizable: false,
-        pinned: true,
-        eager: true,
-        ..panel("controller", "Kimochi", PANEL_PAGE, 410., 150.)
-    },
+    // The main window: the Log, with the Controller's rows as a collapsible sidebar and the
+    // Notebook as a second view. It keeps the `log` label because that label is also its
+    // texthooker ownership, its Yomitan frame band and its popup host.
     PanelSpec {
         pinned: true,
         eager: true,
+        min_width: 480.,
+        min_height: 280.,
         // The Log runs the original Yomitan frontend over its scanned text. That
         // frontend builds a real `Popup`, whose iframe navigates to the extension's
         // own `popup.html`; the `Display` inside it needs `chrome.*` from its very
@@ -79,12 +75,12 @@ pub static PANELS: &[PanelSpec] = &[
         // completes, and lookup fails silently while the window still reports the
         // backend as reachable.
         init_asset: Some("/spike/panel-shim.js"),
-        ..panel("log", "Log", PANEL_PAGE, 720., 440.)
+        ..panel("log", "Kimochi", PANEL_PAGE, 900., 560.)
     },
     // Crop editing lives inside the picker (`open_source_picker({editCurrent:true})`),
     // so there is no separate crop window as there was in Electron.
     // Compact: a three-column tile grid and a crop preview. It opens beside the
-    // controller (see `place_source_picker`), so it must not dwarf it.
+    // main window (see `place_source_picker`), so it must not dwarf it.
     PanelSpec {
         min_width: 440.,
         min_height: 400.,
@@ -101,14 +97,12 @@ pub static PANELS: &[PanelSpec] = &[
         min_height: 560.,
         ..panel("settings", "Settings", PANEL_PAGE, 1000., 760.)
     },
+    // Capture preview, debug info and the capture debugger, one tab each.
     PanelSpec {
-        min_width: 600.,
-        min_height: 440.,
-        ..panel("notebook", "Notebook", PANEL_PAGE, 820., 700.)
+        min_width: 480.,
+        min_height: 420.,
+        ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.)
     },
-    panel("capture", "Capture Preview", PANEL_PAGE, 480., 420.),
-    panel("debug", "Debug Info", PANEL_PAGE, 380., 620.),
-    panel("stream", "Capture Debug", PANEL_PAGE, 640., 740.),
     panel(
         "welcome",
         "Welcome to Kimochi",
@@ -168,11 +162,6 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
         .flatten()
         .and_then(|v| serde_json::from_value(v).ok());
     let mut rect = match saved {
-        // The controller's width is owned by the spec, never by a stale saved value.
-        Some(mut rect) if spec.label == "controller" => {
-            rect.width = spec.width;
-            rect
-        }
         Some(rect) => rect,
         None => {
             let area = native::display_infos()
@@ -185,12 +174,7 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
                     height: spec.height,
                 });
             Rect {
-                x: area.x
-                    + if spec.label == "controller" {
-                        40.
-                    } else {
-                        260.
-                    },
+                x: area.x + if spec.label == MAIN { 40. } else { 260. },
                 y: area.y + 40.,
                 width: spec.width,
                 height: spec.height,
@@ -336,10 +320,18 @@ fn attach_events(
         tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
             save_bounds(&store, &owned, spec);
         }
-        tauri::WindowEvent::CloseRequested { api, .. } => {
-            // Closing hides; only Quit exits. Reopening restores native bounds.
+        tauri::WindowEvent::CloseRequested { api, .. } if spec.label == MAIN => {
+            // The main window is the app: closing it quits, like any single-window Mac app.
             api.prevent_close();
             save_bounds(&store, &owned, spec);
+            handle.exit(0);
+        }
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            // Closing hides; only the main window quits. Reopening restores native bounds.
+            api.prevent_close();
+            save_bounds(&store, &owned, spec);
+            // A hidden Settings window can no longer finish recording a shortcut.
+            crate::hotkeys::resume(&handle, &store);
             let _ = owned.hide();
             let _ = handle.emit("panel:closed", json!({ "label": spec.label }));
         }
@@ -388,7 +380,7 @@ pub fn act(
                 place_source_picker(app, &window, existed)?;
             }
             if label == YOMITAN && !window.is_visible().unwrap_or(false) {
-                place_on_controller_display(app, &window, existed, YOMITAN)?;
+                place_on_main_display(app, &window, existed, YOMITAN)?;
             }
             window.show().map_err(native_err)?;
             window.set_focus().map_err(native_err)?;
@@ -419,7 +411,12 @@ pub fn act(
         "inspect" => {}
         _ => return Err(format!("invalid: unknown window action {action:?}")),
     }
-    let state = info(&window)?;
+    let mut state = info(&window)?;
+    // `is_always_on_top` reads back the old level until AppKit has applied the new one, so
+    // report what was asked for; otherwise the pin button shows the previous state.
+    if action == "pin" || action == "unpin" {
+        state["pinned"] = json!(action == "pin");
+    }
     if action != "inspect" {
         let _ = app.emit(
             "panel:state",
@@ -434,15 +431,17 @@ pub fn act(
     Ok(state)
 }
 
+/// The main window (the Log with its Controller sidebar).
+pub const MAIN: &str = "log";
 const SOURCE_PICKER: &str = "source-picker";
-/// Space between the controller and the source picker that pops out beside it.
+/// Space between the main window and the source picker that pops out beside it.
 const PICKER_GAP: f64 = 8.;
 
-/// Positions the source picker as it opens, from every path (controller, tray
+/// Positions the source picker as it opens, from every path (sidebar, tray
 /// popover, app menu):
 ///
-/// - controller on screen: beside it, on the side with room (right first), top-aligned
-///   with it, on the controller's display;
+/// - main window on screen: beside it, on the side with room (right first), top-aligned
+///   with it, on the main window's display;
 /// - otherwise: centred on the display under the cursor.
 ///
 /// Either way the frame is kept inside that display's work area. A picker the user
@@ -459,11 +458,11 @@ fn place_source_picker(
         _ => (spec.width, spec.height),
     };
     let displays = native::display_infos();
-    let controller = app
-        .get_webview_window("controller")
+    let main = app
+        .get_webview_window(MAIN)
         .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
         .and_then(|w| native::bounds(&w).ok());
-    let rect = if let Some(anchor) = controller {
+    let rect = if let Some(anchor) = main {
         let (cx, cy) = (anchor.x + anchor.width / 2., anchor.y + anchor.height / 2.);
         let Some(area) = work_area_at(&displays, cx, cy) else {
             return Ok(());
@@ -481,11 +480,11 @@ fn place_source_picker(
 
 const YOMITAN: &str = "yomitan";
 
-/// Centres a large panel (Yomitan settings) on the display the controller is on, or
-/// the display under the cursor when the controller is hidden, clamped to its work
+/// Centres a large panel (Yomitan settings) on the display the main window is on, or
+/// the display under the cursor when it is hidden, clamped to its work
 /// area. As with the picker, a window resized this session keeps its size and a new
 /// one starts at the spec size, not a frame restored from an older build.
-fn place_on_controller_display(
+fn place_on_main_display(
     app: &tauri::AppHandle,
     window: &WebviewWindow,
     existed: bool,
@@ -498,7 +497,7 @@ fn place_on_controller_display(
     };
     let displays = native::display_infos();
     let (x, y) = app
-        .get_webview_window("controller")
+        .get_webview_window(MAIN)
         .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
         .and_then(|w| native::bounds(&w).ok())
         .map(|r| (r.x + r.width / 2., r.y + r.height / 2.))
@@ -566,7 +565,7 @@ fn centred(width: f64, height: f64, area: Rect) -> Rect {
     }
 }
 
-/// The controller is fixed-width and grows to fit its menu rows.
+/// A fixed-size panel (the tray popover) grows to fit its rows.
 pub fn set_content_height(
     app: &tauri::AppHandle,
     settings: &Arc<Settings>,
@@ -677,29 +676,34 @@ mod tests {
 
     #[test]
     fn electron_pin_defaults_are_preserved() {
-        assert!(spec("controller").unwrap().pinned);
         assert!(spec("log").unwrap().pinned);
         assert!(!spec("settings").unwrap().pinned);
-        assert!(!spec("notebook").unwrap().pinned);
+        assert!(!spec("diagnostics").unwrap().pinned);
         assert!(!spec("source-picker").unwrap().pinned);
     }
 
     #[test]
-    fn settings_and_notebook_have_content_sized_defaults_and_minimums() {
+    fn settings_and_main_have_content_sized_defaults_and_minimums() {
         let settings = spec("settings").unwrap();
         assert_eq!((settings.width, settings.height), (1000., 760.));
         assert_eq!((settings.min_width, settings.min_height), (820., 560.));
 
-        let notebook = spec("notebook").unwrap();
-        assert_eq!((notebook.width, notebook.height), (820., 700.));
-        assert_eq!((notebook.min_width, notebook.min_height), (600., 440.));
-        assert!(!notebook.eager, "Notebook should be created only when opened");
+        let main = spec(MAIN).unwrap();
+        assert!(main.eager, "the main window opens at launch");
+        assert!(!spec("diagnostics").unwrap().eager, "Diagnostics opens only on demand");
     }
 
     #[test]
-    fn only_the_controller_and_popover_are_fixed_size() {
+    fn retired_windows_are_gone() {
+        for label in ["controller", "notebook", "capture", "debug", "stream"] {
+            assert!(spec(label).is_none(), "{label} should be part of another window");
+        }
+    }
+
+    #[test]
+    fn only_the_tray_popover_is_fixed_size() {
         for spec in PANELS {
-            let expected = !matches!(spec.label, "controller" | "tray-popover");
+            let expected = !matches!(spec.label, "tray-popover");
             assert_eq!(spec.resizable, expected, "{} resizable", spec.label);
         }
     }

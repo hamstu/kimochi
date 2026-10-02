@@ -1,7 +1,8 @@
 /**
  * A keyboard shortcut shown as key caps; click to record a new one. While recording, the next key
  * combination with a modifier (or a function key) is saved, Escape cancels and Backspace / Delete
- * clears the shortcut.
+ * clears the shortcut. Every global shortcut and gamepad action is paused while recording, so a
+ * combination that is already bound is captured instead of firing; leaving the window ends it.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Kbd } from '@kit'
@@ -13,6 +14,7 @@ import {
   heldModifierCaps,
   isModifierOnly
 } from './accelerator'
+import { useSuspendHotkeys } from '../../bridge/useHotkeys'
 
 const PLATFORM = detectKeyPlatform()
 
@@ -29,6 +31,8 @@ export function ShortcutRecorder({
   const [recording, setRecording] = useState(false)
   const [held, setHeld] = useState<string[]>([])
   const buttonRef = useRef<HTMLButtonElement>(null)
+
+  useSuspendHotkeys(recording)
 
   useEffect(() => {
     if (!recording) return
@@ -69,8 +73,13 @@ export function ShortcutRecorder({
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('keyup', onKeyUp, true)
     window.addEventListener('pointerdown', onPointerDown, true)
+    const onVisibility = (): void => {
+      if (document.hidden) stop()
+    }
     window.addEventListener('blur', stop)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keyup', onKeyUp, true)
       window.removeEventListener('pointerdown', onPointerDown, true)

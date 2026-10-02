@@ -54,12 +54,10 @@ export interface CaptureRequest {
 }
 
 export type PanelLabel =
-  | 'controller'
   | 'log'
   | 'settings'
-  | 'capture'
-  | 'debug'
-  | 'stream'
+  | 'diagnostics'
+  | 'yomitan'
   | 'source-picker'
   | 'tray-popover'
   | 'welcome'

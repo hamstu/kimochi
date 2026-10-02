@@ -45,7 +45,7 @@
   --k-space-8: 2rem;
 
   /* Sizes */
-  --k-bar-h: 1.75rem; /* title bars, tool bars and footers: one height everywhere */
+  --k-bar-h: 2rem; /* title bars, tool bars and footers: one height everywhere, = a row */
   --k-row-h: 2rem; /* full-bleed list rows (the remote's grammar) */
   --k-item-h: 1.75rem; /* menu and select items */
   --k-control-h: 1.75rem; /* buttons, inputs, select triggers */

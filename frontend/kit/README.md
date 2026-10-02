@@ -13,7 +13,7 @@ The shared design system for every Kimochi window. Import components from `@kit`
   (default UI) · lg 15 (page and dialog titles) · xl 18 (first-run and empty headings). Weights:
   regular / medium / semibold. Use `k-num` (tabular numerals) for counts, times and stats. Mono is
   only for code, URLs, keys and file paths, never for decoration.
-- **Planes:** window ground `--k-bg`; bars, rails and footers `--k-bar` (always `--k-bar-h`, 28px);
+- **Planes:** window ground `--k-bg`; bars, rails and footers `--k-bar` (always `--k-bar-h`, 32px, the height of a row);
   wells `--k-sunken`; menus, popovers and dialogs `--k-raised` with `--k-shadow-pop`/`-dialog`.
 - **States:** hover `--k-hover` (rows and menu items use `--k-press`), selected `--k-selected`.
   Accent (`--k-accent*`) only means on / checked / current / primary / focus. Never an accent

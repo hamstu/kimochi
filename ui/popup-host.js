@@ -164,6 +164,14 @@ const markNewest = (popup) => {
  * to is `hideDelay` in their own scanning settings, and that is theirs to set.
  */
 const HIDE_GRACE_MS = 220
+
+/**
+ * Transparent margin around the popups, for their drop shadow (the frame style in
+ * host/popup-bridge.js). The window is that much larger on every side and the frames sit that
+ * far in; the margin is not published as a region, so clicks on it pass through. Matches the
+ * built-in pop-up's `--popup-pad` / `SHADOW_PAD`.
+ */
+const SHADOW_PAD = 16
 let hideTimer = null
 
 function cancelHide() {
@@ -216,11 +224,17 @@ async function relayout() {
     if (container !== whole && popup !== newest) continue
     const { left, top } = insetIn(container, rect)
     const frame = frameOf(popup)
-    frame.style.left = `${left}px`
-    frame.style.top = `${top}px`
+    frame.style.left = `${left + SHADOW_PAD}px`
+    frame.style.top = `${top + SHADOW_PAD}px`
+  }
+  const padded = {
+    x: container.x - SHADOW_PAD,
+    y: container.y - SHADOW_PAD,
+    width: container.width + SHADOW_PAD * 2,
+    height: container.height + SHADOW_PAD * 2
   }
   try {
-    await invoke('popup_window', { rect: container, visible: true })
+    await invoke('popup_window', { rect: padded, visible: true })
     await invoke('regions', {
       // `focus: true` asks native to make this window key when the pointer arrives on
       // it, and only then. That is the whole bargain: the popup does not take the
@@ -338,7 +352,8 @@ Popup.prototype.hide = function (changeFocus) {
 // The Display's own resize handle. Original code all the way down: the popup asks its
 // parent frame to resize it, which is this window.
 // Build the popup's frame ahead of the first lookup rather than during it.
-const { prewarmPopups } = await import('/spike/popup-bridge.js')
+const { prewarmPopups, stylePopupFrames } = await import('/spike/popup-bridge.js')
+stylePopupFrames(Popup)
 prewarmPopups(Popup, report)
 
 const setFrameSize = Popup.prototype.setFrameSize

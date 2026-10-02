@@ -1,9 +1,9 @@
-/** Settings → Gamepad: enable gamepad input, pick the primary controller and test its buttons. */
+/** Settings → Shortcuts & Controls, second half: enable gamepad input, pick the primary controller, test it. */
 import type { ReactNode } from 'react'
-import { Badge, Button, Callout, SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
+import { Badge, Button, Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
 
-export function GamepadTab(): ReactNode {
+export function GamepadSections(): ReactNode {
   const {
     state: gamepadState,
     settings: gamepadSettings,
@@ -16,8 +16,8 @@ export function GamepadTab(): ReactNode {
   const gamepads = gamepadState.gamepads
 
   return (
-    <SettingsPage title="Gamepad" description="Trigger shortcuts and scans from a game controller.">
-      <SettingsSection>
+    <>
+      <SettingsSection title="Gamepad">
         <SettingsRow
           label="Enable gamepad support"
           controlId="gamepad-enabled"
@@ -87,6 +87,6 @@ export function GamepadTab(): ReactNode {
           </div>
         </SettingsSection>
       )}
-    </SettingsPage>
+    </>
   )
 }

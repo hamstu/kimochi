@@ -1,6 +1,6 @@
 import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { Check } from 'lucide-react'
+import { Check, ChevronRight } from 'lucide-react'
 import { cn, portalRoot } from './cn'
 import { closeAutoFocusFromKeyboardOnly } from './focus'
 
@@ -8,6 +8,7 @@ export const Menu = MenuPrimitive.Root
 export const MenuTrigger = MenuPrimitive.Trigger
 export const MenuGroup = MenuPrimitive.Group
 export const MenuRadioGroup = MenuPrimitive.RadioGroup
+export const MenuSub = MenuPrimitive.Sub
 
 export const MenuContent = forwardRef<
   ElementRef<typeof MenuPrimitive.Content>,
@@ -86,3 +87,48 @@ export const MenuSeparator = (): ReactNode => <MenuPrimitive.Separator className
 export const MenuLabel = ({ children }: { children: ReactNode }): ReactNode => (
   <MenuPrimitive.Label className="k-menu-label">{children}</MenuPrimitive.Label>
 )
+
+/**
+ * A row that opens a submenu. `checked` shows the same check as a radio item, for an option that
+ * is both a choice and a group of further actions (the source menu's Screen).
+ */
+export const MenuSubTrigger = forwardRef<
+  ElementRef<typeof MenuPrimitive.SubTrigger>,
+  ComponentPropsWithoutRef<typeof MenuPrimitive.SubTrigger> & { icon?: ReactNode; checked?: boolean }
+>(function MenuSubTrigger({ className, icon, checked, children, ...props }, ref) {
+  return (
+    <MenuPrimitive.SubTrigger
+      ref={ref}
+      className={cn('k-menu-item k-menu-sub-trigger', className)}
+      data-checked={checked ? '' : undefined}
+      {...props}
+    >
+      {icon}
+      <span className="k-menu-item-label">{children}</span>
+      {checked && (
+        <span className="k-menu-item-check">
+          <Check />
+        </span>
+      )}
+      <ChevronRight className="k-menu-sub-chevron" />
+    </MenuPrimitive.SubTrigger>
+  )
+})
+
+export const MenuSubContent = forwardRef<
+  ElementRef<typeof MenuPrimitive.SubContent>,
+  ComponentPropsWithoutRef<typeof MenuPrimitive.SubContent>
+>(function MenuSubContent({ className, sideOffset = 6, collisionPadding = 8, ...props }, ref) {
+  return (
+    <MenuPrimitive.Portal container={portalRoot()}>
+      <MenuPrimitive.SubContent
+        ref={ref}
+        sideOffset={sideOffset}
+        alignOffset={-4}
+        collisionPadding={collisionPadding}
+        className={cn('k-menu', className)}
+        {...props}
+      />
+    </MenuPrimitive.Portal>
+  )
+})

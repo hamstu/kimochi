@@ -109,6 +109,22 @@
         0 0 40px rgba(59, 130, 246, 0.25),
         inset 0 0 30px rgba(59, 130, 246, 0.1);
     }
+    /* The hovered window's own pixels, at its exact on-screen box (beneath the
+       outline, whose border sits just outside it). Fades in once decoded. */
+    #hover > .hover-window-image {
+      position: absolute;
+      display: block;
+      box-sizing: border-box;
+      border-radius: 5px;
+      object-fit: fill;
+      pointer-events: none;
+      user-select: none;
+      opacity: 0;
+      transition: opacity 0.18s ease-out;
+    }
+    #hover > .hover-window-image.loaded {
+      opacity: 1;
+    }
     .hover-crop {
       border: 3px solid #22c55e;
       background: rgba(34, 197, 94, 0.06);

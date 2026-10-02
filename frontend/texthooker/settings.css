@@ -47,7 +47,8 @@
 .input-source-list { display: flex; flex-direction: column; }
 .input-source-row {
   display: flex;
-  align-items: center;
+  /* Icon and check sit on the label's line, not centred on label + detail. */
+  align-items: flex-start;
   gap: var(--k-space-3);
   width: 100%;
   min-height: 2.75rem;
@@ -65,9 +66,9 @@
 .input-source-row:hover { background: var(--k-press); }
 .input-source-row[data-state="on"] { background: var(--k-selected); }
 .input-source-row:focus-visible { outline: 2px solid var(--k-focus); outline-offset: -2px; }
-.input-source-icon { display: flex; flex: none; color: var(--k-text-2); }
+.input-source-icon { display: flex; flex: none; align-items: center; height: var(--k-leading-md); color: var(--k-text-2); }
 .input-source-icon > svg { width: var(--k-icon); height: var(--k-icon); }
 .input-source-text { display: flex; flex: 1; flex-direction: column; gap: var(--k-space-0-5); min-width: 0; }
 .input-source-label { font-size: var(--k-text-md); line-height: var(--k-leading-md); font-weight: var(--k-weight-medium); }
 .input-source-detail { font-size: var(--k-text-sm); line-height: var(--k-leading-sm); color: var(--k-text-2); }
-.input-source-check { flex: none; width: var(--k-icon); height: var(--k-icon); color: var(--k-accent-text); }
+.input-source-check { flex: none; width: var(--k-icon); height: var(--k-icon); margin-top: calc((var(--k-leading-md) - var(--k-icon)) / 2); color: var(--k-accent-text); }

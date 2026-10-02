@@ -43,6 +43,7 @@ import type {
   PlaceOrThingEntry,
 } from "@texthooker/lib/types";
 import { EntryAvatar } from "./notebookParts";
+import { NotebookHero } from "./NotebookHero";
 import {
   KIND_META,
   entryName,
@@ -111,26 +112,7 @@ export function EditEntryModal({
           }
         }}
       >
-        <header className="nb-editor-head">
-          <EntryAvatar entry={entry} large />
-          <div>
-            <h2 className="nb-editor-title" lang="ja" translate="no">
-              {title}
-            </h2>
-            <span className="nb-editor-kind">
-              {KIND_META[entry.kind].one}
-              {reading ? (
-                <span lang="ja" translate="no">
-                  {" · "}
-                  {reading}
-                </span>
-              ) : null}
-            </span>
-          </div>
-          <IconButton label="Close editor" size="sm" onClick={onClose}>
-            <X />
-          </IconButton>
-        </header>
+        <EditorHero entry={entry} title={title} reading={reading} onClose={onClose} />
         <div className="nb-editor-body">
           <EntryForm key={entry.id} entry={entry} />
         </div>
@@ -723,5 +705,35 @@ function ImageThumb({
         <X />
       </button>
     </div>
+  );
+}
+
+/** The pane's header: the entry's picture as a hero, name in its lower third, close at top right. */
+function EditorHero({
+  entry,
+  title,
+  reading,
+  onClose,
+}: {
+  entry: NotebookEntry;
+  title: string;
+  reading: string;
+  onClose: () => void;
+}) {
+  const imageUrl = useImageUrl(entry.images[0]);
+  return (
+    <NotebookHero
+      size="editor"
+      imageUrl={imageUrl}
+      kind={entry.kind}
+      name={title}
+      reading={reading || undefined}
+      caption={KIND_META[entry.kind].one}
+      actions={
+        <IconButton label="Close editor" size="sm" onClick={onClose}>
+          <X />
+        </IconButton>
+      }
+    />
   );
 }

@@ -248,6 +248,9 @@ pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, Str
     }
 }
 
+// The plain left-right and up-down resize cursors are deprecated in favour of directional
+// ones, but they are still the ones a CSS `col-resize`/`row-resize` should look like.
+#[allow(deprecated)]
 pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> {
     // Recheck ownership after the DOM round trip. Never set another app's cursor.
     let Some((x, y)) = panel_pointer(w)? else {
@@ -285,6 +288,8 @@ pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> 
             "crosshair" => NSCursor::crosshairCursor(),
             "not-allowed" => NSCursor::operationNotAllowedCursor(),
             "text" => NSCursor::IBeamCursor(),
+            "col-resize" | "ew-resize" => NSCursor::resizeLeftRightCursor(),
+            "row-resize" | "ns-resize" => NSCursor::resizeUpDownCursor(),
             _ => NSCursor::arrowCursor(),
         }
         .set();

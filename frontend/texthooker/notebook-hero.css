@@ -1,0 +1,118 @@
+/* Notebook entry hero: shared by the reader popover card and the Notebook editor pane. */
+.nb-hero {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  /* em-based off its font size, so the popover card can scale it with the Log's text size. */
+  font-size: var(--k-text-md);
+  height: 6.75em;
+  overflow: hidden;
+  padding: 0.92em 1.23em;
+  background: var(--gray-a3);
+  color: var(--k-text);
+}
+.nb-hero[data-kind="person"]:not([data-image]) {
+  background: var(--k-accent-soft);
+}
+.notebook-card .nb-hero { font-size: 1em; }
+.nb-hero[data-size="editor"] { height: 8em; }
+/* The popover's picture hero is near-square, so a portrait's face fits; the editor's keeps a
+   fixed height to leave room for the form. */
+.nb-hero[data-image] { height: auto; aspect-ratio: 5 / 4; color: white; background: #0b0c10; }
+.nb-hero[data-image][data-size="editor"] { height: 16em; aspect-ratio: auto; }
+
+.nb-hero-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+/* Scrim for the name: dark at the base, clear above the lower third. */
+.nb-hero[data-image]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgb(8 9 14 / 0.78) 0%,
+    rgb(8 9 14 / 0.42) 30%,
+    rgb(8 9 14 / 0) 58%
+  );
+  pointer-events: none;
+}
+/* Without a picture: a large, faint monogram (characters) or kind icon at the right. */
+.nb-hero-mark {
+  position: absolute;
+  bottom: -0.08em;
+  right: 0.9em;
+  display: grid;
+  place-items: center;
+  font-family: var(--k-font-jp);
+  font-size: 5.5em;
+  font-weight: var(--k-weight-semibold);
+  line-height: 1;
+  color: var(--accent-a4);
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.nb-hero:not([data-kind="person"]) .nb-hero-mark { color: var(--gray-a5); }
+.nb-hero-mark svg { width: 0.62em; height: 0.62em; margin-bottom: 0.14em; stroke-width: 1.5; }
+
+.nb-hero-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+  padding-right: 6em;
+}
+.nb-hero[data-image] .nb-hero-text { padding-right: 0; }
+.nb-hero-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--k-font-jp);
+  font-size: 1.85em;
+  line-height: 1.25;
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: 0.01em;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.nb-hero[data-image] .nb-hero-name { text-shadow: 0 1px 12px rgb(0 0 0 / 0.35); }
+.nb-hero-sub {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.923em;
+  line-height: 1.5;
+  color: var(--k-text-2);
+}
+.nb-hero-sub [lang="ja"] { font-family: var(--k-font-jp); }
+.nb-hero[data-image] .nb-hero-sub { color: rgb(255 255 255 / 0.82); }
+
+.nb-hero-actions {
+  position: absolute;
+  top: 0.62em;
+  right: 0.62em;
+  z-index: 2;
+  display: flex;
+  gap: var(--k-space-1);
+}
+/* Controls over a picture get a solid dark chip so they read on any image. */
+.nb-hero[data-image] .nb-hero-actions .k-button {
+  color: white;
+  background: rgb(8 9 14 / 0.5);
+}
+.nb-hero[data-image] .nb-hero-actions .k-button:hover,
+.nb-hero[data-image] .nb-hero-actions .k-button[data-native-hover] {
+  background: rgb(8 9 14 / 0.72);
+}

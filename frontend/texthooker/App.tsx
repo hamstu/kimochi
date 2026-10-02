@@ -1,20 +1,18 @@
-/** Super Texthooker transcript inside Kimochi's native PanelShell. */
+/**
+ * The Log: Super Texthooker's transcript, and the host gate that starts its session owner. The
+ * main window (`frontend/main/MainPanel.tsx`) composes these with its sidebar and the Notebook.
+ */
 import {
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import {
-  AArrowDown,
-  AArrowUp,
-  ChevronUp,
-  ScrollText,
-  Settings as SettingsIcon,
-} from "lucide-react";
+import { AArrowDown, AArrowUp, ChevronUp, ScrollText } from "lucide-react";
 import {
   Bar,
   BarSpacer,
@@ -29,11 +27,11 @@ import {
 } from "@kit";
 import "./log.css";
 import { LineRow } from "./components/LineRow";
-import { SessionBar } from "./components/SessionBar";
 import { ExplainModal } from "./components/ExplainModal";
 import { SelectionAddButton } from "./components/SelectionAddButton";
 import { AddToNotebookModal } from "./components/AddToNotebookModal";
 import { StatsFooter } from "./components/StatsFooter";
+import { LogMoreMenu } from "./components/LogMoreMenu";
 import { onEditModalRequest } from "./lib/editModal";
 import { getSettings, onSettingsChange, updateSettings } from "./lib/settings";
 import { getSnapshot, subscribe } from "./bridge";
@@ -44,23 +42,10 @@ import type { SocketStatus } from "./websocket-input";
 import { useScanMode } from "./hooks/useScanMode";
 import { useLineHotkeys } from "./hooks/useLineHotkeys";
 import { usePanelYomitan } from "../shell/panelYomitan";
-import { panel } from "../bridge/tauri";
-import { setSetting } from "../bridge/settings";
+import { openSettings } from "../bridge/tauri";
 
-async function openReaderSettings(): Promise<void> {
-  await setSetting("settingsActiveTab", "texthooker");
-  await panel("settings", "show");
-}
-async function openNotebook(entryId?: string): Promise<void> {
-  if (entryId)
-    await setSetting("notebookEditRequest", {
-      entryId,
-      sessionId: getSnapshot().sessions.activeId,
-      requestId: crypto.randomUUID(),
-    });
-  await panel("notebook", "show");
-}
-export default function ReaderApp() {
+/** Starts the session owner, then renders its children; shows progress or the failure meanwhile. */
+export function ReaderHost({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -91,12 +76,20 @@ export default function ReaderApp() {
     ) : (
       <div role="status" className="log-loading">
         <Spinner label="Loading" />
-        Loading Texthooker…
+        Loading the log…
       </div>
     );
-  return <Transcript />;
+  return children;
 }
-function Transcript() {
+
+interface TranscriptProps {
+  /** Shows the Notebook, with one entry open when an id is given. */
+  onOpenNotebook: (entryId?: string) => void;
+  /** False while another view covers the Log; its intake and lookups keep running. */
+  visible: boolean;
+}
+
+export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   const [snap, setSnap] = useState(getSnapshot);
   const [settings, setSettings] = useState(getSettings);
   const [error, setError] = useState("");
@@ -115,11 +108,12 @@ function Transcript() {
   const lookup = usePanelYomitan(!apiMode);
   useEffect(() => subscribe(setSnap), []);
   useEffect(() => onSettingsChange(setSettings), []);
+  const openNotebook = useRef(onOpenNotebook);
+  useLayoutEffect(() => {
+    openNotebook.current = onOpenNotebook;
+  });
   useEffect(
-    () =>
-      onEditModalRequest((entryId) => {
-        void openNotebook(entryId).catch((e) => setError(String(e)));
-      }),
+    () => onEditModalRequest((entryId) => openNotebook.current(entryId)),
     [],
   );
   useEffect(() => {
@@ -129,9 +123,7 @@ function Transcript() {
       ),
       listen<{ entryId: string }>("notebook:edit-request", (e) => {
         void invoke("hide_popover");
-        void openNotebook(e.payload.entryId).catch((error) =>
-          setError(String(error)),
-        );
+        openNotebook.current(e.payload.entryId);
       }),
     ];
     return () => {
@@ -162,12 +154,7 @@ function Transcript() {
     invalid: "danger",
   };
   return (
-    <div className="texthooker app-root log-root">
-      <SessionBar
-        onOpenNotebook={() =>
-          void openNotebook().catch((e) => setError(String(e)))
-        }
-      />
+    <div className="texthooker app-root log-root" hidden={!visible}>
       {inputStatus && (
         <div role="status" className="log-status">
           <StatusDot tone={statusTone[inputStatus.state]} />
@@ -206,14 +193,13 @@ function Transcript() {
             icon={<ScrollText />}
             title="No lines yet"
             actions={
-              <Button size="sm" onClick={() => void openReaderSettings()}>
-                <SettingsIcon />
-                Texthooker settings
+              <Button size="sm" onClick={() => void openSettings("sources")}>
+                Source settings
               </Button>
             }
           >
-            Choose OCR, Clipboard or WebSocket in Texthooker settings to start
-            reading.
+            Lines from your source appear here. Choose the screen, the
+            clipboard or a WebSocket with the source menu in the sidebar.
           </EmptyState>
         )}
         {snap.lines.length > shown && (
@@ -271,15 +257,7 @@ function Transcript() {
             </IconButton>
           </Tooltip>
           <span className="log-bar-divider" aria-hidden />
-          <Tooltip content="Texthooker settings">
-            <IconButton
-              label="Texthooker settings"
-              size="sm"
-              onClick={() => void openReaderSettings()}
-            >
-              <SettingsIcon />
-            </IconButton>
-          </Tooltip>
+          <LogMoreMenu />
         </div>
       </Bar>
       <SelectionAddButton containerRef={scroll} enabled onAdd={setAddText} />

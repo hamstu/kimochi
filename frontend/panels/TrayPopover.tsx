@@ -25,7 +25,7 @@ export default function TrayPopover(): JSX.Element {
           {error}
         </div>
       )}
-      <RemoteControl {...props} />
+      <RemoteControl {...props} openMainLabel="Show Kimochi" />
     </div>
   )
 }

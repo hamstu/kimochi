@@ -324,8 +324,16 @@ export async function seedFilesystem(): Promise<void> {
 
 const svgUri = (svg: string): string => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 
-/** A fake screenshot: title bar, text box, coloured scene. */
-export function thumbnailSvg(name: string, hue: number, kind: 'display' | 'window', w = 640, h = 400): string {
+/** A fake screenshot: title bar, text box, coloured scene. `scale` sizes the rendered image (e.g. a
+ * thumbnail's downscale) without changing the drawn layout. */
+export function thumbnailSvg(
+  name: string,
+  hue: number,
+  kind: 'display' | 'window',
+  w = 640,
+  h = 400,
+  scale = 1
+): string {
   const bar =
     kind === 'window'
       ? `<rect width="${w}" height="28" fill="hsl(${hue} 10% 22%)"/>
@@ -339,7 +347,7 @@ export function thumbnailSvg(name: string, hue: number, kind: 'display' | 'windo
       : `<rect x="60" y="70" width="240" height="160" rx="8" fill="rgba(255,255,255,0.8)"/>
          <rect x="330" y="110" width="250" height="200" rx="8" fill="rgba(255,255,255,0.65)"/>
          <rect x="${w / 2 - 150}" y="${h - 34}" width="300" height="26" rx="8" fill="rgba(255,255,255,0.5)"/>`
-  return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  return svgUri(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w * scale)}" height="${Math.round(h * scale)}" viewBox="0 0 ${w} ${h}">
     <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="hsl(${hue} 60% 55%)"/><stop offset="1" stop-color="hsl(${(hue + 50) % 360} 50% 25%)"/>
     </linearGradient></defs>
@@ -372,8 +380,14 @@ export const SOURCES: DemoSource[] = [
   { id: 'window:102', kind: 'window', name: '逆転裁判123 成歩堂セレクション', app: 'Ace Attorney Trilogy', hue: 30, on_screen: true, bounds: { x: 200, y: 120, width: 1280, height: 720 } },
   { id: 'window:103', kind: 'window', name: 'YouTube — Google Chrome', app: 'Google Chrome', hue: 5, on_screen: true, bounds: { x: 0, y: 25, width: 1440, height: 900 } },
   { id: 'window:104', kind: 'window', name: 'mpv — 葬送のフリーレン 第12話.mkv', app: 'mpv', hue: 280, on_screen: true, bounds: { x: 300, y: 100, width: 1280, height: 720 } },
-  { id: 'window:105', kind: 'window', name: 'Kindle — よつばと！ 1', app: 'Kindle', hue: 45, on_screen: false, bounds: { x: 400, y: 60, width: 900, height: 1200 } }
+  { id: 'window:105', kind: 'window', name: 'Kindle — よつばと！ 1', app: 'Kindle', hue: 45, on_screen: false, bounds: { x: 400, y: 60, width: 900, height: 1200 } },
+  // Awkward shapes: a tall, thin sidebar and a tiny utility window (smaller than a tile).
+  { id: 'window:106', kind: 'window', name: '縦書きリーダー', app: 'Vertical Reader', hue: 190, on_screen: true, bounds: { x: 20, y: 40, width: 180, height: 900 } },
+  { id: 'window:107', kind: 'window', name: 'Mini timer', app: 'Timer', hue: 120, on_screen: true, bounds: { x: 900, y: 600, width: 96, height: 60 } }
 ]
+
+/** Long edge of a catalog thumbnail, matching the native `THUMBNAIL_EDGE` (never upscaled). */
+export const THUMBNAIL_EDGE = 320
 
 const APP_GLYPHS: Record<string, [string, number]> = {
   'STEINS;GATE': ['S', 350],

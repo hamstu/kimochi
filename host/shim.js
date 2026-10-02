@@ -311,8 +311,12 @@
     declarativeNetRequest: {
       getDynamicRules: api(() => []),
       getSessionRules: api(() => []),
-      updateDynamicRules: unsupported('declarativeNetRequest.updateDynamicRules'),
-      updateSessionRules: unsupported('declarativeNetRequest.updateSessionRules')
+      // Yomitan sets header rules around `fetchAnonymous` (strip cookies, set Origin). The
+      // backend's cross-origin requests go through native code instead (audio-bridge.js),
+      // which sends no cookies and no page Origin, so the rules have nothing left to do;
+      // refusing them made every such request fail before it was sent.
+      updateDynamicRules: api(() => {}),
+      updateSessionRules: api(() => {})
     },
     extension: {
       isAllowedFileSchemeAccess: api(() => false),
@@ -349,6 +353,23 @@
       }
     }
   }
+  // Dictionary audio the way an extension gets it: see /spike/audio-bridge.js.
+  const audioBridge = () => import(new URL('/spike/audio-bridge.js', root.location.href).href)
+  const audioBridgeFailed = (error) =>
+    hub.log({ check: 'audio-bridge-failed', error: String(error?.message ?? error) })
+  if (ctx.background)
+    void audioBridge()
+      .then((m) =>
+        m.installBackendFetch(
+          (command, args) => root.__TAURI__.core.invoke(command, args),
+          (value) => hub.log(value)
+        )
+      )
+      .catch(audioBridgeFailed)
+  if (['/popup.html', '/search.html', '/settings.html'].includes(location.pathname))
+    void audioBridge()
+      .then((m) => m.installAudioValidity(new URL('/js/media/audio-system.js', location.href).href))
+      .catch(audioBridgeFailed)
   window.addEventListener('pagehide', () => {
     for (const port of [...ctx.ports]) port.disconnect()
     hub.contexts.delete(ctx.id)

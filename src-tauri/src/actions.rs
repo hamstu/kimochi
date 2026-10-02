@@ -72,9 +72,6 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
                 // Hidden overlays must not keep swallowing clicks.
                 let _ = overlay.set_ignore_cursor_events(true);
             }
-            if name == "selectAndScan" && visible {
-                let _ = overlay.set_focus();
-            }
         }
     }
     let seq = service.view.lock().unwrap().action_seq;

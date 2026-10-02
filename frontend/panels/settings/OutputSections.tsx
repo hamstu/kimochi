@@ -1,8 +1,8 @@
 import { Input, SettingsRow, SettingsSection, SettingsSubgroup, Switch } from "@kit";
-import { useSetting } from "../bridge/useSetting";
-import type { TexthookerSettings } from "../vendor/shared-types";
+import { useSetting } from "../../bridge/useSetting";
+import type { TexthookerSettings } from "../../vendor/shared-types";
 /** Existing Kimochi output bridges remain opt-in; intake no longer depends on either. */
-export default function OutputSettings() {
+export function OutputSections() {
   const [settings, save] = useSetting<TexthookerSettings>(
     "texthookerSettings",
     {

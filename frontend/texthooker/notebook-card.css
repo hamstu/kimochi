@@ -1,0 +1,92 @@
+/* Notebook entry card in the reader popover. Imported by NotebookEntryCard, so the Log window,
+   which measures the card before opening the popover, gets exactly the same metrics. */
+.notebook-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* Everything inside is em-based off this size: the dictionary pop-up's body size, fixed, so
+     the two pop-ups read alike whatever the Log's text size. */
+  font-size: var(--k-text-md);
+  line-height: 1.54;
+  color: var(--k-text);
+}
+.notebook-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.92em;
+  padding: 1.23em;
+}
+.notebook-card-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: 0.92em;
+  margin: 0;
+}
+.notebook-card-meta > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-0-5);
+  min-width: 0;
+}
+.notebook-card-meta dt,
+.notebook-card-label {
+  margin: 0;
+  font-size: 0.846em;
+  line-height: 1.45;
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text-3);
+}
+.notebook-card-meta dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  margin: 0;
+  font-size: 0.923em;
+  line-height: 1.5;
+}
+.notebook-card-meta dd svg {
+  width: 1em;
+  height: 1em;
+  color: var(--k-text-2);
+}
+.notebook-card-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+}
+.notebook-card-alias {
+  font-family: var(--k-font-jp);
+}
+.notebook-card-description {
+  margin: 0;
+  color: var(--k-text);
+  text-wrap: pretty;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.notebook-card-description-empty {
+  color: var(--k-text-3);
+  font-size: 0.923em;
+}
+.notebook-card-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+.notebook-card-notes ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.notebook-card-notes li {
+  padding: 0.5em 0;
+  font-size: 0.923em;
+  line-height: 1.5;
+  color: var(--k-text-2);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.notebook-card-notes li + li {
+  border-top: 1px solid var(--k-line);
+}

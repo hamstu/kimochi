@@ -1,7 +1,7 @@
 /**
- * Region selection is the "Select Region" branch for a screen source — Electron's select-and-scan.
- * Its geometry cannot be checked by running the app from here, but the parts that silently go wrong
- * (the minimum drag, the local/desktop mapping, Escape, and click-through cleanup) are pure logic
+ * The region editor behind "Select region" on a screen source and Quick Shot. Its look cannot be
+ * checked from here, but the parts that silently go wrong (the minimum drag, confirm-not-release,
+ * moving and resizing, the local/desktop mapping, Escape, and click-through cleanup) are pure logic
  * over a DOM, so they are pinned here against a minimal DOM stub.
  */
 import { test } from 'node:test'
@@ -77,10 +77,16 @@ function drag(element, from, to, pointerId = 1) {
   element.dispatch('pointerup', { pointerId, clientX: to.x, clientY: to.y })
 }
 
+/** Draw a box and confirm it with Return, as a reader would. */
+function select(element, from, to) {
+  drag(element, from, to)
+  doc.dispatch('keydown', { key: 'Enter' })
+}
+
 test('a drag resolves in overlay-local AND desktop points, with no DPR or menu-bar offset', async () => {
   const selector = new RegionSelect()
   const pending = selector.start({ bounds: BOUNDS })
-  drag(surface(), { x: 100, y: 50 }, { x: 340, y: 210 })
+  select(surface(), { x: 100, y: 50 }, { x: 340, y: 210 })
   const result = await pending
 
   // Local is exactly the client coordinates: this overlay covers the full display, so the
@@ -94,7 +100,7 @@ test('a drag resolves in overlay-local AND desktop points, with no DPR or menu-b
 test('a drag in any direction normalises to a positive rectangle', async () => {
   const selector = new RegionSelect()
   const pending = selector.start({ bounds: BOUNDS })
-  drag(surface(), { x: 400, y: 300 }, { x: 100, y: 100 })
+  select(surface(), { x: 400, y: 300 }, { x: 100, y: 100 })
   const result = await pending
   assert.deepEqual(result.local, { x: 100, y: 100, width: 300, height: 200 })
 })
@@ -114,7 +120,7 @@ test(`a drag under ${MINIMUM_DRAG} points is discarded and selection stays open`
   assert.equal(selector.active, true, 'the surface stays up for another attempt')
 
   // A real drag afterwards still works.
-  drag(element, { x: 0, y: 0 }, { x: 200, y: 200 })
+  select(element, { x: 0, y: 0 }, { x: 200, y: 200 })
   assert.deepEqual((await pending).local, { x: 0, y: 0, width: 200, height: 200 })
 })
 
@@ -136,7 +142,7 @@ test('hit rectangles cover the display in desktop points, and clear on teardown'
   assert.deepEqual(selector.hitRects, [BOUNDS], 'the whole display is interactive while selecting')
   assert.deepEqual(published.at(0), [BOUNDS])
 
-  drag(surface(), { x: 5, y: 5 }, { x: 105, y: 105 })
+  select(surface(), { x: 5, y: 5 }, { x: 105, y: 105 })
   await pending
 
   // The caller needs the empty set to restore click-through.
@@ -180,7 +186,7 @@ test('starting again supersedes the previous run instead of stacking surfaces', 
   assert.equal(await first, null, 'the superseded run resolves as cancelled')
   assert.equal(doc.body.children.length, before, 'only one surface is ever mounted')
 
-  drag(surface(), { x: 0, y: 0 }, { x: 50, y: 50 })
+  select(surface(), { x: 0, y: 0 }, { x: 50, y: 50 })
   assert.deepEqual((await second).local, { x: 0, y: 0, width: 50, height: 50 })
 })
 
@@ -200,7 +206,7 @@ test('the element call shape resolves overlay-local pixels and never rejects', a
   const pending = selectRegion(container)
   // The surface mounts into the given element, not the document body.
   const element = container.children.at(-1)
-  drag(element, { x: 20, y: 30 }, { x: 220, y: 130 })
+  select(element, { x: 20, y: 30 }, { x: 220, y: 130 })
   assert.deepEqual(await pending, { x: 20, y: 30, width: 200, height: 100 })
 
   const cancelled = selectRegion(container)
@@ -224,4 +230,63 @@ test('a misclick keeps the surface up by default, and cancels only when asked', 
   const settles = eager.start({})
   drag(container.children.at(-1), { x: 0, y: 0 }, { x: 2, y: 2 })
   assert.equal(await settles, null)
+})
+
+test('letting go does not commit: the box waits to be adjusted and confirmed', async () => {
+  const selector = new RegionSelect()
+  let settled = false
+  const pending = selector.start({ bounds: BOUNDS }).then((value) => {
+    settled = true
+    return value
+  })
+  drag(surface(), { x: 100, y: 100 }, { x: 300, y: 200 })
+  await Promise.resolve()
+  assert.equal(settled, false)
+  assert.deepEqual(selector.rect, { x: 100, y: 100, width: 200, height: 100 })
+  selector.confirm()
+  assert.deepEqual((await pending).local, { x: 100, y: 100, width: 200, height: 100 })
+})
+
+test('dragging inside moves the box, and dragging an edge or corner resizes it', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  drag(element, { x: 100, y: 100 }, { x: 300, y: 200 })
+
+  drag(element, { x: 200, y: 150 }, { x: 230, y: 170 })
+  assert.deepEqual(selector.rect, { x: 130, y: 120, width: 200, height: 100 }, 'moved')
+
+  drag(element, { x: 330, y: 170 }, { x: 400, y: 170 })
+  assert.deepEqual(selector.rect, { x: 130, y: 120, width: 270, height: 100 }, 'right edge')
+
+  drag(element, { x: 130, y: 120 }, { x: 100, y: 90 })
+  assert.deepEqual(selector.rect, { x: 100, y: 90, width: 300, height: 130 }, 'top-left corner')
+
+  // Past the opposite edge flips rather than inverting.
+  drag(element, { x: 100, y: 150 }, { x: 450, y: 150 })
+  assert.deepEqual(selector.rect, { x: 400, y: 90, width: 50, height: 130 }, 'flipped')
+
+  doc.dispatch('keydown', { key: 'Enter' })
+  assert.deepEqual((await pending).local, { x: 400, y: 90, width: 50, height: 130 })
+})
+
+test('dragging outside the box starts a new one', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  drag(element, { x: 10, y: 10 }, { x: 60, y: 60 })
+  select(element, { x: 500, y: 500 }, { x: 600, y: 550 })
+  assert.deepEqual((await pending).local, { x: 500, y: 500, width: 100, height: 50 })
+})
+
+test('Return before a box exists does nothing; arrow keys nudge the box', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  doc.dispatch('keydown', { key: 'Enter' })
+  assert.equal(selector.active, true)
+  drag(surface(), { x: 100, y: 100 }, { x: 200, y: 200 })
+  doc.dispatch('keydown', { key: 'ArrowRight' })
+  doc.dispatch('keydown', { key: 'ArrowDown', shiftKey: true })
+  doc.dispatch('keydown', { key: 'Enter' })
+  assert.deepEqual((await pending).local, { x: 101, y: 110, width: 100, height: 100 })
 })

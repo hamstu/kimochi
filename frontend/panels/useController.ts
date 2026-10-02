@@ -1,6 +1,6 @@
 /**
- * Controller wiring shared by the controller window and the tray popover — the two places Electron
- * mounts `RemoteControl` (`OverlayApp.tsx` and `TrayPopoverApp.tsx`).
+ * Controller wiring shared by the main window's sidebar and the tray popover — the two places
+ * `RemoteControl` is mounted (in Electron, `OverlayApp.tsx` and `TrayPopoverApp.tsx`).
  *
  * In Electron the callbacks ran inside OverlayApp, which owned the session. Here each action is a
  * single `trigger_action` call so that the overlay (which owns capture and OCR orchestration) is
@@ -12,6 +12,7 @@ import { useViewState } from '../bridge/state'
 import { useSetting } from '../bridge/useSetting'
 import {
   nativeError,
+  openSettings,
   openSourcePicker,
   panel,
   quitApp,
@@ -62,8 +63,6 @@ interface RemoteControlProps {
   onSourceHover: (hovered: boolean) => void
 }
 
-/** The three debug windows Electron showed together with the overlay's debug markings. */
-const DEBUG_PANELS = ['debug', 'capture', 'stream'] as const
 
 export function useController(): ControllerWiring {
   const { state } = useViewState()
@@ -108,9 +107,8 @@ export function useController(): ControllerWiring {
     // controller opens and closes them here exactly as OverlayApp's `showDebugOverlay` did.
     const next = !showDebugOverlay
     attempt('Toggle debug overlay', () => triggerAction('toggleDebugOverlay'))
-    for (const label of DEBUG_PANELS) {
-      panel(label, next ? 'show' : 'hide').catch(report(`Debug panel ${label}`))
-    }
+    // Electron showed three debug windows here; they are the Diagnostics window's tabs now.
+    panel('diagnostics', next ? 'show' : 'hide').catch(report('Diagnostics window'))
   }, [showDebugOverlay, attempt, report])
 
   const props: RemoteControlProps = {
@@ -129,11 +127,11 @@ export function useController(): ControllerWiring {
     onTriggerScan: () => attempt('Scan', () => triggerAction('triggerScan')),
     onSelectAndScan: () => attempt('Select and scan', () => triggerAction('selectAndScan')),
     onEditCropArea: () => attempt('Open crop editor', () => openSourcePicker(true)),
-    onOpenLog: () => attempt('Open log', () => panel('log', 'show')),
+    onOpenLog: () => attempt('Show Kimochi', () => panel('log', 'show')),
     onToggleTextOverlayVisibility: () =>
       attempt('Toggle overlay text', () => triggerAction('toggleTextOverlay')),
     onToggleDebugOverlay,
-    onOpenSettings: () => attempt('Open settings', () => panel('settings', 'show')),
+    onOpenSettings: () => attempt('Open settings', () => openSettings()),
     onOpenSource: () => attempt('Open source picker', () => openSourcePicker(false)),
     onCloseApp: () => attempt('Quit', () => quitApp()),
     // Hover hints are cosmetic: a failure here must not put an error strip on screen.

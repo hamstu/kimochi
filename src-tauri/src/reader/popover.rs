@@ -149,7 +149,7 @@ pub async fn show_popover(
     // Whole logical pixels, so the card's 1px ring lands on the pixel grid
     // instead of straddling two device pixels (which reads as a double line).
     let width = width.clamp(240., 1200.).round();
-    let height = height.clamp(180., 1000.).round();
+    let height = height.clamp(120., 1000.).round();
     let window = app
         .get_webview_window(POPOVER_LABEL)
         .ok_or_else(|| "popover window missing".to_string())?;

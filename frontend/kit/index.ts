@@ -27,7 +27,10 @@ export {
   MenuCheckboxItem,
   MenuGroup,
   MenuLabel,
-  MenuSeparator
+  MenuSeparator,
+  MenuSub,
+  MenuSubTrigger,
+  MenuSubContent
 } from './Menu'
 export { Popover, PopoverTrigger, PopoverAnchor, PopoverClose, PopoverContent } from './Popover'
 export { Tooltip, TooltipProvider } from './Tooltip'

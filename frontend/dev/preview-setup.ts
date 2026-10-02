@@ -5,12 +5,16 @@
  * entry (`../entries/*.tsx`), so the mocks are in place before any app module evaluates.
  *
  * URL parameters:
- *   ?window=<label>  panel window label (controller, settings, log, notebook, capture, debug, stream)
- *   ?tab=<id>        settings tab (mode, shortcuts, gamepad, yomitan, audio, texthooker)
+ *   ?window=<label>  panel window label (log, settings, diagnostics, yomitan)
+ *   ?tab=<id>        settings tab (general, sources, ocr, log, dictionary, assist, controls)
+ *   ?view=notebook   main window: start on the Notebook view
+ *   ?sidebar=0       main window: sidebar hidden
  *   ?theme=light|dark|system  seeds the `appearance` setting (default: system, i.e. the browser's
  *                    prefers-color-scheme; emulate it in DevTools for CSS that reads the media query)
  *   ?scale=small|medium|large|xlarge  seeds the `interfaceScale` setting
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
+ *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
+ *                    one, or window:107, the tiny one) to the Preview and Capture test views
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
@@ -20,6 +24,7 @@ import {
   POPOVER_SAMPLE,
   SESSION_IDS,
   SOURCES,
+  THUMBNAIL_EDGE,
   appIcon,
   seedFilesystem,
   thumbnailSvg
@@ -38,11 +43,28 @@ const PAGE_LABELS: Record<Exclude<PreviewPage, 'panel'>, string> = {
 
 const CURRENT_SOURCE = SOURCES.find((s) => s.id === 'window:101')!
 
+/** `?capture=<source id>`: a fake last capture of that source; otherwise none yet. */
+function demoCapture(): unknown {
+  const s = SOURCES.find((x) => x.id === params.get('capture'))
+  if (!s) return null
+  const { width, height } = s.bounds
+  const info = { source_id: s.id, width, height, full_width: width, full_height: height }
+  return {
+    id: 1,
+    url: thumbnailSvg(s.name, s.hue, s.kind, width, height),
+    info: { ...info, capturedAt: Date.now() }
+  }
+}
+
 // ---------------------------------------------------------------- settings store
 
 const settings: Record<string, unknown> = {
   ...structuredClone(SETTINGS_DEFAULTS),
-  superTexthooker: { inputSource: 'ocr', deeplApiKey: 'preview-demo-key', fontSizePx: 16 },
+  superTexthooker: {
+    inputSource: params.get('input') ?? 'ocr',
+    deeplApiKey: 'preview-demo-key',
+    fontSizePx: 16
+  },
   nativeWindowPinned: { log: true },
   texthookerSourceSessions: { 'steins;gate': SESSION_IDS.steinsGate },
   texthookerIngestedHistory: [],
@@ -52,7 +74,8 @@ const settings: Record<string, unknown> = {
     appName: CURRENT_SOURCE.app,
     sourceId: CURRENT_SOURCE.id
   },
-  settingsActiveTab: params.get('tab') ?? 'mode',
+  settingsActiveTab: params.get('tab') ?? 'general',
+  mainSidebarOpen: params.get('sidebar') !== '0',
   ...(params.get('theme') ? { appearance: params.get('theme') } : {}),
   ...(params.get('scale') ? { interfaceScale: params.get('scale') } : {})
 }
@@ -90,7 +113,7 @@ function viewState(label: string): Record<string, unknown> {
     autoOcrEnabled: true,
     overlayVisible: true,
     textOverlayVisible: true,
-    debugOverlayVisible: label === 'debug' || label === 'stream' || label === 'capture',
+    debugOverlayVisible: label === 'diagnostics',
     permission: 'granted',
     frontmostApp: CURRENT_SOURCE.app,
     accessibility: true,
@@ -121,7 +144,7 @@ function panelInfo(label: string): Record<string, unknown> {
     scale: devicePixelRatio,
     pinned: label === 'log',
     focused: true,
-    resizable: label !== 'controller'
+    resizable: label !== 'tray-popover'
   }
 }
 
@@ -165,7 +188,15 @@ const HANDLERS: Record<string, Handler> = {
 
   // sources / capture
   enumerate: () =>
-    SOURCES.map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon, bounds: s.bounds, on_screen: s.on_screen })),
+    SOURCES.map((s) => ({
+      id: s.id,
+      kind: s.kind,
+      name: s.name,
+      app: s.app,
+      icon: s.icon,
+      bounds: s.bounds,
+      on_screen: s.on_screen
+    })),
   source_catalog: () =>
     SOURCES.map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon })),
   source_picker_state: () => ({
@@ -175,11 +206,15 @@ const HANDLERS: Record<string, Handler> = {
   }),
   source_thumbnail: (a) => {
     const s = SOURCES.find((x) => x.id === a?.sourceId)
-    return { url: s ? thumbnailSvg(s.name, s.hue, s.kind) : '' }
+    if (!s) return { url: '' }
+    const { width, height } = s.bounds
+    const scale = Math.min(1, THUMBNAIL_EDGE / Math.max(width, height))
+    return { url: thumbnailSvg(s.name, s.hue, s.kind, width, height, scale) }
   },
   source_preview: (a) => {
     const s = SOURCES.find((x) => x.id === a?.sourceId) ?? CURRENT_SOURCE
-    return { url: thumbnailSvg(s.name, s.hue, s.kind, 1280, 800), width: 1280, height: 800 }
+    const { width, height } = s.bounds
+    return { url: thumbnailSvg(s.name, s.hue, s.kind, width, height), width, height }
   },
   source_icon: (a) => ({ icon: appIcon(a?.appName as string) }),
   commit_source: ok,
@@ -188,8 +223,8 @@ const HANDLERS: Record<string, Handler> = {
   open_source_picker: ok,
   permission: () => true,
   permission_status: () => 'granted',
-  capture_preview: () => ({ frame: null, error: null }),
-  capture_frame: () => null,
+  capture_preview: () => ({ frame: demoCapture(), error: null }),
+  capture_frame: () => demoCapture(),
   scan: () => null,
   clear: ok,
 
@@ -208,6 +243,7 @@ const HANDLERS: Record<string, Handler> = {
   hotkeys_load: () => mergeHotkeysWithOverrides({}),
   hotkeys_save: ok,
   hotkeys_reapply: () => ({ registered: [], failed: [] }),
+  hotkeys_suspend: ok,
 
   // reader / popover
   show_popover: (a) => note('show_popover', a),
@@ -277,8 +313,8 @@ function installIpc(label: string): void {
 // ---------------------------------------------------------------- entry point
 
 export async function setupPreview(page: PreviewPage): Promise<string> {
-  const label = page === 'panel' ? (params.get('window') ?? 'controller') : PAGE_LABELS[page]
-  mockWindows(label, 'controller', 'log', 'settings', 'notebook')
+  const label = page === 'panel' ? (params.get('window') ?? 'log') : PAGE_LABELS[page]
+  mockWindows(label, 'log', 'settings', 'diagnostics')
   installIpc(label)
   document.documentElement.dataset.preview = label
 
@@ -286,9 +322,12 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
 
   // The Log window is the texthooker host (sole owner of session files). Every other window that
   // reads reader data is a client of it over events, so run a host in-page for those windows.
-  if (page === 'panel' && (label === 'notebook' || label === 'settings')) {
-    const { startHost } = await import('../texthooker/host')
-    await startHost()
+  // Started late, as in the app, where the Log is another window: a page must render (and wait)
+  // before the host's first snapshot arrives.
+  if (page === 'panel' && label === 'settings') {
+    setTimeout(() => {
+      void import('../texthooker/host').then(({ startHost }) => startHost())
+    }, 600)
   }
   return label
 }

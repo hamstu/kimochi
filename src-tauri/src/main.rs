@@ -222,15 +222,13 @@ fn save_preferences(app: tauri::AppHandle, state: State<Shared>, prefs: Prefs) -
                 .set_path(&["cropRegions", &key], serde_json::to_value(crop).unwrap())?;
         }
     }
-    for (label, pinned) in [("controller", prefs.controller_pin), ("log", prefs.log_pin)] {
-        let _ = panels::act(
-            &app,
-            &state.settings,
-            label,
-            if pinned { "pin" } else { "unpin" },
-            None,
-        );
-    }
+    let _ = panels::act(
+        &app,
+        &state.settings,
+        panels::MAIN,
+        if prefs.log_pin { "pin" } else { "unpin" },
+        None,
+    );
     Ok(())
 }
 
@@ -451,6 +449,28 @@ fn desktop() -> Vec<Rect> {
     native::displays()
 }
 
+/// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
+#[tauri::command]
+fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
+    hotkeys::set_region_keys(&app, on)
+}
+
+/// The display under the pointer, for Quick Shot: the region is drawn where the
+/// reader is looking, not on whichever display holds the chosen source.
+#[tauri::command]
+fn pointer_display() -> Option<native::DisplayInfo> {
+    let (x, y, _, _) = native::cursor()?;
+    let displays = native::display_infos();
+    displays
+        .iter()
+        .find(|d| {
+            let b = &d.bounds;
+            x >= b.x && y >= b.y && x < b.x + b.width && y < b.y + b.height
+        })
+        .or_else(|| displays.first())
+        .cloned()
+}
+
 /// The calling window's own bounds, in desktop points.
 ///
 /// The dictionary bridge needs this to translate one window's client coordinates
@@ -566,6 +586,15 @@ async fn source_icon(state: State<'_, Shared>, app_name: String) -> Reply<Value>
 async fn source_thumbnail(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
     let service = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || sources::thumbnail(&service, &source_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The selected window's pixels for the overlay's hover outline. See `sources::hover_preview`.
+#[tauri::command]
+async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sources::hover_preview(&service, &source_id))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -767,7 +796,7 @@ async fn capture_frame(
 #[tauri::command]
 fn capture_preview(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Value> {
     if !app
-        .get_webview_window("capture")
+        .get_webview_window("diagnostics")
         .is_some_and(|w| w.is_visible().unwrap_or(false))
     {
         return Ok(Value::Null);
@@ -840,7 +869,17 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
         .send()
         .map_err(|_| "native: OCR network request failed (connection/TLS/timeout)")?;
     if !response.status().is_success() {
-        return Err(format!("native: OCR HTTP {}", response.status().as_u16()));
+        let status = response.status().as_u16();
+        // The server's own explanation (a Vision quota error, say) is the only
+        // useful part; the bare status code alone reads as a mystery.
+        let detail = response
+            .json::<Value>()
+            .ok()
+            .and_then(|body| body.get("error").and_then(Value::as_str).map(str::to_string));
+        return Err(match detail {
+            Some(detail) => format!("native: OCR HTTP {status}: {detail}"),
+            None => format!("native: OCR HTTP {status}"),
+        });
     }
     let value: Value = response
         .json()
@@ -857,7 +896,7 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
 /// passed would OCR a *different* image than the one that was compared, and would pair
 /// the returned text with geometry it does not belong to.
 #[tauri::command]
-async fn ocr_frame(state: State<'_, Shared>, id: u64) -> Reply<Value> {
+async fn ocr_frame(app: tauri::AppHandle, state: State<'_, Shared>, id: u64) -> Reply<Value> {
     let service = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let image = {
@@ -870,8 +909,19 @@ async fn ocr_frame(state: State<'_, Shared>, id: u64) -> Reply<Value> {
         // Encoding is outside the frame-store lock so observations can continue.
         let png = image.png()?;
         let info = image.info.clone();
+        if let Ok(p) = path(&app, "last-ocr-frame.png") {
+            let _ = std::fs::write(p, &png);
+        }
+        let started = std::time::Instant::now();
         let value = post_ocr(&service.settings, &png)?;
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
+        record(&app, &service, json!({
+            "check": "ocr-debug", "id": id, "info": info,
+            "pngBytes": png.len(),
+            "ms": started.elapsed().as_millis() as u64, "annotations": count,
+            "fullTextLen": value["fullText"].as_str().map_or(0, |t| t.chars().count()),
+            "keys": value.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()),
+        }));
         let result = json!({ "id": id, "info": info, "ocr": value });
         service.log(json!({
             "check": "ocr-frame",
@@ -1152,11 +1202,23 @@ fn edit_history(
 }
 
 #[tauri::command]
-fn history_add(app: tauri::AppHandle, state: State<Shared>, text: String) -> Reply<Value> {
+fn history_add(
+    app: tauri::AppHandle,
+    state: State<Shared>,
+    text: String,
+    detached: Option<bool>,
+) -> Reply<Value> {
     if text.trim().is_empty() {
         return Err("invalid: history entries cannot be empty".into());
     }
-    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis(), "source": state.settings.get("lastSelectedSource").ok().flatten() });
+    // A Quick Shot is not from the chosen source, so it must not carry that source's
+    // name: the reader would switch sessions to match a window nobody scanned.
+    let source = if detached.unwrap_or(false) {
+        Value::Null
+    } else {
+        state.settings.get("lastSelectedSource").ok().flatten().unwrap_or(Value::Null)
+    };
+    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis(), "source": source });
     let inserted = entry.clone();
     edit_history(&app, &state, move |list| list.insert(0, inserted))?;
     Ok(entry)
@@ -1190,6 +1252,14 @@ fn hotkeys_save(app: tauri::AppHandle, state: State<Shared>, hotkeys: Value) -> 
 #[tauri::command]
 fn hotkeys_reapply(app: tauri::AppHandle, state: State<Shared>) -> Value {
     hotkeys::apply(&app, &state.settings)
+}
+
+/// Pause the action shortcuts and gamepad actions while Settings records a new binding, so
+/// pressing a combination that is already bound is captured instead of firing; `false`
+/// restores them and returns the registration report. See `hotkeys::suspend`.
+#[tauri::command]
+fn hotkeys_suspend(app: tauri::AppHandle, state: State<Shared>, suspended: bool) -> Value {
+    hotkeys::suspend(&app, &state.settings, suspended)
 }
 
 /// POST JSON to a user-configured Yomitan-compatible API and return its JSON.
@@ -1232,6 +1302,84 @@ async fn yomitan_request(window: tauri::WebviewWindow, url: String, body: Value)
         response
             .json()
             .map_err(|_| "native: endpoint returned invalid JSON".to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Largest response `extension_fetch` will hand back: well above any word's audio.
+const EXTENSION_FETCH_LIMIT: u64 = 32 * 1024 * 1024;
+
+/// A cross-origin read for the Yomitan backend, as a browser grants an extension's own
+/// background page (see `host/audio-bridge.js`): dictionary audio from a local audio server,
+/// a custom URL or a custom JSON list, none of which send CORS headers.
+///
+/// Deliberately narrow. Only the overlay — the one window hosting the backend — may call it.
+/// Only GET and HEAD, so it reads and never acts. Anonymous: no cookie store, no credentials
+/// in the URL, no page Origin. Bounded in time and size. Unlike `yomitan_request`, any host:
+/// an audio source is whatever URL the reader configured in Yomitan, and its query string is
+/// the term being looked up.
+#[tauri::command]
+async fn extension_fetch(
+    window: tauri::WebviewWindow,
+    url: String,
+    method: Option<String>,
+) -> Reply<Value> {
+    if window.label() != OVERLAY {
+        return Err("invalid: extension_fetch belongs to the extension host".into());
+    }
+    let url = reqwest::Url::parse(&url).map_err(|_| "invalid: not a URL")?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("invalid: use an http:// or https:// URL".into());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("invalid: remove the credentials from the URL".into());
+    }
+    let head = match method.as_deref().unwrap_or("GET") {
+        "GET" => false,
+        "HEAD" => true,
+        other => return Err(format!("invalid: {other} is not a read")),
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        use base64::Engine as _;
+        use std::io::Read as _;
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("Kimochi/0.1")
+            .timeout(Duration::from_secs(15))
+            .build()
+            .map_err(|_| "native: could not initialize HTTP client")?;
+        let request = if head { client.head(url) } else { client.get(url) };
+        let response = request
+            .send()
+            .map_err(|e| format!("native: request failed ({e})"))?;
+        let status = response.status();
+        let headers: Vec<(String, String)> = response
+            .headers()
+            .iter()
+            .filter_map(|(name, value)| {
+                // Set-Cookie never reaches the page: the request was anonymous.
+                if name == reqwest::header::SET_COOKIE {
+                    return None;
+                }
+                Some((name.to_string(), value.to_str().ok()?.to_string()))
+            })
+            .collect();
+        let mut body = Vec::new();
+        if !head {
+            response
+                .take(EXTENSION_FETCH_LIMIT + 1)
+                .read_to_end(&mut body)
+                .map_err(|e| format!("native: could not read the response ({e})"))?;
+            if body.len() as u64 > EXTENSION_FETCH_LIMIT {
+                return Err("native: the response is too large".into());
+            }
+        }
+        Ok(json!({
+            "status": status.as_u16(),
+            "statusText": status.canonical_reason().unwrap_or(""),
+            "headers": headers,
+            "body": base64::engine::general_purpose::STANDARD.encode(&body),
+        }))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1288,7 +1436,10 @@ fn main() {
                 Some(token) => token.parse().ok().and_then(|t| images.preview(t)),
                 None => match path.strip_prefix("live/") {
                     Some(id) => id.parse().ok().and_then(|id| images.live_image(id)),
-                    None => path.parse().ok().and_then(|id| images.frame(id)),
+                    None => match path.strip_prefix("hover/") {
+                        Some(token) => token.parse().ok().and_then(|t| images.hover_image(t)),
+                        None => path.parse().ok().and_then(|id| images.frame(id)),
+                    },
                 },
             };
             let found = found.cloned();
@@ -1368,12 +1519,17 @@ fn main() {
             source_thumbnail,
             source_icon,
             source_preview,
+            source_hover_preview,
             commit_source,
             open_source_picker,
             source_picker_state,
+            pointer_display,
+            extension_fetch,
+            region_keys,
             hotkeys_load,
             hotkeys_save,
             hotkeys_reapply,
+            hotkeys_suspend,
             trigger_action,
             tray_action,
             texthooker_send,
@@ -1448,9 +1604,7 @@ fn main() {
             for spec in panels::PANELS.iter().filter(|spec| spec.eager) {
                 panels::ensure(&handle, &store, spec.label)?;
             }
-            for label in ["controller", "log"] {
-                panels::act(&handle, &store, label, "show_inactive", None)?;
-            }
+            panels::act(&handle, &store, panels::MAIN, "show_inactive", None)?;
 
             let overlay = tauri::WebviewWindowBuilder::new(
                 app,
@@ -1537,11 +1691,11 @@ fn main() {
 
             let menu = tauri::menu::Menu::default(app.handle())?;
             let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
-                .text("controller", "Controller")
+                .text("log", "Kimochi")
                 .text("source-picker", "Select Source")
                 .text("settings", "Settings")
-                .text("log", "Log")
                 .text("yomitan", "Yomitan")
+                .text("diagnostics", "Diagnostics")
                 .text("fixture", "Japanese Fixture")
                 .build()?;
             menu.append(&panel_menu)?;
@@ -1557,7 +1711,8 @@ fn main() {
             }
 
             tray::setup(&handle, &store).map_err(std::io::Error::other)?;
-            hotkeys::apply(&handle, &store);
+            let shortcuts = hotkeys::apply(&handle, &store);
+            record(&handle, &service, json!({ "check": "hotkeys-applied", "result": shortcuts }));
             watcher::start(&handle, &service);
             gamepad::start(&handle, &service);
 

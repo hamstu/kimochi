@@ -261,8 +261,10 @@
        *
        * A round trip that returns dictionary info proves the whole chain: the relay
        * command, the overlay window, its extension host and its backend. The retry is
-       * for one specific transient — panels are created before the overlay, so an
-       * early caller can find a backend that exists but is still importing.
+       * for the startup transients — panels are created before the overlay, so an early
+       * caller can find a backend that is still importing, or an overlay that is not
+       * listening yet and drops the request. Each attempt is short so a dropped request
+       * is retried promptly instead of consuming the whole deadline.
        */
       async waitForBackend(timeoutMs = 6000) {
         const within = (promise, ms, message) =>
@@ -277,16 +279,17 @@
             try {
               const reply = await within(
                 hub.toBackend({ action: 'getDictionaryInfo', params: {} }),
-                Math.max(1, deadline - Date.now()),
+                Math.max(1, Math.min(1500, deadline - Date.now())),
                 'The overlay did not answer'
               )
               if (reply?.error) throw Error(reply.error.message ?? 'Dictionary lookup failed')
               return { ready: true }
             } catch (error) {
               const message = String(error?.message ?? error)
-              if (!message.includes('Dictionary backend is not ready') || Date.now() >= deadline) {
-                throw error
-              }
+              const transient =
+                message.includes('Dictionary backend is not ready') ||
+                message.includes('The overlay did not answer')
+              if (!transient || Date.now() >= deadline) throw error
               await new Promise((resolve) => setTimeout(resolve, 100))
             }
           }
@@ -752,8 +755,9 @@
     declarativeNetRequest: {
       getDynamicRules: api(() => []),
       getSessionRules: api(() => []),
-      updateDynamicRules: unsupported('declarativeNetRequest.updateDynamicRules'),
-      updateSessionRules: unsupported('declarativeNetRequest.updateSessionRules')
+      // Backend-scoped: the overlay's backend makes the requests (see host/shim.js).
+      updateDynamicRules: api(() => {}),
+      updateSessionRules: api(() => {})
     },
     extension: {
       isAllowedFileSchemeAccess: api(() => false),
@@ -798,6 +802,15 @@
       }
     }
   }
+
+  // The popup plays its audio here; the "not available" clip check is WebKit's to fix
+  // (see /spike/audio-bridge.js). Fetching is the backend's, in the overlay.
+  if (['/popup.html', '/search.html', '/settings.html'].includes(location.pathname))
+    void import(asset('/spike/audio-bridge.js'))
+      .then((m) => m.installAudioValidity(new URL('/js/media/audio-system.js', location.href).href))
+      .catch((error) =>
+        hub.log({ check: 'audio-bridge-failed', error: String(error?.message ?? error) })
+      )
 
   window.addEventListener('pagehide', () => {
     for (const port of [...ctx.ports]) port.disconnect()

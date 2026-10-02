@@ -1,6 +1,6 @@
-/** Settings → Shortcuts: global keyboard shortcuts and their gamepad buttons. */
+/** Settings → Shortcuts & Controls, first half: global keyboard shortcuts and their gamepad buttons. */
 import { useCallback, type ReactNode } from 'react'
-import { Callout, SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
+import { Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useHotkeys } from '../../bridge/useHotkeys'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { detectKeyPlatform, formatAccelerator } from './accelerator'
@@ -8,7 +8,7 @@ import { ShortcutRecorder } from './ShortcutRecorder'
 
 const KEY_PLATFORM = detectKeyPlatform()
 
-export function ShortcutsTab(): ReactNode {
+export function ShortcutsSections(): ReactNode {
   const [hotkeys, setHotkeys, hotkeyFailures] = useHotkeys()
 
   const updateHotkeyField = useCallback(
@@ -32,21 +32,32 @@ export function ShortcutsTab(): ReactNode {
   const entries = Object.entries(hotkeys)
 
   return (
-    <SettingsPage
-      title="Shortcuts"
-      description="Global keyboard shortcuts, each with an optional gamepad button."
-    >
+    <>
       {hotkeyFailures.length > 0 && (
         <Callout tone="danger" className="settings-page-callout">
-          {hotkeyFailures.length === 1 ? 'This shortcut' : 'These shortcuts'} could not be registered,
-          usually because another application already owns the combination:{' '}
-          {hotkeyFailures.map((failure) => `${failure.name} (${formatAccelerator(failure.accelerator, KEY_PLATFORM)})`).join(', ')}
+          {hotkeyFailures.length === 1 ? 'This shortcut' : 'These shortcuts'} could not be
+          registered, usually because another application already owns the combination:{' '}
+          {hotkeyFailures
+            .map(
+              (failure) =>
+                `${failure.name} (${formatAccelerator(failure.accelerator, KEY_PLATFORM)})`
+            )
+            .join(', ')}
         </Callout>
       )}
-      <SettingsSection>
+      <SettingsSection
+        title="Shortcuts"
+        description="Work while another app is in front. Each can also have a gamepad button."
+      >
         {entries.length === 0 && <SettingsRow label="No hotkeys configured." />}
         {entries.map(([name, def]) => (
-          <SettingsRow key={name} className="shortcut-row" label={def.name} description={def.description} controlId={`hotkey-${name}`}>
+          <SettingsRow
+            key={name}
+            className="shortcut-row"
+            label={def.name}
+            description={def.description}
+            controlId={`hotkey-${name}`}
+          >
             <ShortcutRecorder
               label={def.name ?? name}
               value={def.accelerator || ''}
@@ -66,6 +77,6 @@ export function ShortcutsTab(): ReactNode {
           </SettingsRow>
         ))}
       </SettingsSection>
-    </SettingsPage>
+    </>
   )
 }

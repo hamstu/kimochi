@@ -38,9 +38,9 @@ function newEntry(text) {
  * add/delete race Electron already has when the log panel edits history while a
  * scan lands.
  */
-export async function addHistoryEntry(text) {
+export async function addHistoryEntry(text, { detached = false } = {}) {
   const entry = newEntry(text)
-  const native = await optional('history_add', { text }, null)
+  const native = await optional('history_add', { text, detached }, null)
   if (native) return native
   await setSetting('scannedTextHistory', pushHistory(getSetting('scannedTextHistory'), entry))
   return entry
@@ -72,11 +72,11 @@ export async function clearHistory() {
  * an empty string when the capture produced nothing worth recording — an empty
  * scan must not push a blank entry onto the history or wipe the clipboard.
  */
-export async function publishScan(annotations, grouping) {
+export async function publishScan(annotations, grouping, options = {}) {
   const text = publishableText(annotations, grouping)
   if (!text.trim()) return ''
   await publishText(text)
-  await addHistoryEntry(text)
+  await addHistoryEntry(text, options)
   return text
 }
 

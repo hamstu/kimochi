@@ -25,7 +25,7 @@ export const openYomitanBackup = (): Promise<void> =>
     .catch(report('Open Yomitan settings'))
 
 /**
- * Electron's `complete-onboarding`: record it, show the controller, close onboarding.
+ * Electron's `complete-onboarding`: record it, show the main window, close onboarding.
  *
  * If the flag cannot be persisted this throws instead of closing: silently hiding the window would
  * send the user back through onboarding on the next launch with no explanation.
@@ -39,6 +39,6 @@ export async function completeOnboarding(): Promise<void> {
       `Could not save your setup: ${nativeError(error).message}. Nothing has been lost — try again.`
     )
   }
-  await panel('controller', 'show').catch(report('Show controller'))
+  await panel('log', 'show').catch(report('Show Kimochi'))
   await panel('welcome', 'hide').catch(report('Close onboarding'))
 }

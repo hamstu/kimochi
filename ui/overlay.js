@@ -26,7 +26,7 @@ import { AutoScanner } from './autoscan.js'
 import { ScanTrace } from './scan-trace.js'
 import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
-import { HoverOverlay } from './hover.js'
+import { HoverOverlay, HoverPreview } from './hover.js'
 import { forgetFrame } from './frames.js'
 import { recognize, terminateLocalOcr } from './ocr.js'
 import { publishScan, addHistoryEntry, listHistory } from './output.js'
@@ -90,6 +90,11 @@ const state = {
   hover: { selectRegion: false, source: false, isWindow: false },
   /** While true the overlay claims the whole display so a drag can be seen. */
   regionSelecting: false,
+  /**
+   * The text on screen came from a Quick Shot: a display region, not the chosen source. It stays
+   * where it was captured instead of following the source window around.
+   */
+  detached: false,
   yomitan: { ready: false, error: null }
 }
 
@@ -100,6 +105,20 @@ const setting = (key) => native.getSetting(key)
 // ---------------------------------------------------------------------------
 
 const hover = new HoverOverlay(hoverContainer)
+// A picture of the hovered window inside its outline, so it can be recognised
+// even when other windows cover it. Silent on failure, like the outline itself:
+// `busy:` (a scan is capturing) and a closed window both just mean no picture.
+const hoverPreview = new HoverPreview({
+  capture: async ({ reusable }) => {
+    const sourceId = await native.selectedSource()
+    if (!sourceId) return null
+    const recent = reusable(sourceId)
+    if (recent) return { key: sourceId, url: recent, reused: true }
+    const preview = await native.sourceHoverPreview(sourceId)
+    return preview?.url ? { key: sourceId, url: preview.url } : null
+  },
+  onChange: () => drawHover()
+})
 
 const renderer = new TextOverlayRenderer(wordsContainer, {
   // Keep cloud requests from disrupting lookup, while local observations still
@@ -150,7 +169,9 @@ function draw() {
     origin: state.origin,
     // Where the source is now, not where it was when the frame was captured, so
     // text follows a window that has since moved or been resized.
-    bounds: state.sourceBounds ?? state.info?.source_bounds ?? null,
+    bounds: state.detached
+      ? (state.info?.source_bounds ?? null)
+      : (state.sourceBounds ?? state.info?.source_bounds ?? null),
     grouping: setting('textOverlayGrouping'),
     opacity: setting('overlayOpacity'),
     scanning: state.scanning
@@ -164,6 +185,7 @@ function drawHover() {
     visible: state.hover.selectRegion || state.hover.source,
     showWindowOutline: state.hover.source && state.hover.isWindow,
     showCropRegion: state.hover.selectRegion,
+    windowImage: state.hover.source && state.hover.isWindow ? hoverPreview.url : null,
     bounds: state.sourceBounds,
     crop: state.crop,
     origin: state.origin
@@ -330,6 +352,7 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
 
   const info = frame?.info ?? null
   state.info = info
+  state.detached = !!job.detached
   state.geometry = result.geometry !== false
   state.annotations = state.geometry ? (result.textAnnotations ?? []) : []
   state.source = job.source
@@ -355,8 +378,8 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
     outcome.publish === false
       ? ''
       : state.geometry
-        ? await publishScan(state.annotations, grouping)
-        : await publishPlainText(result.fullText)
+        ? await publishScan(state.annotations, grouping, { detached: !!job.detached })
+        : await publishPlainText(result.fullText, { detached: !!job.detached })
 
   log({
     check: 'overlay-scan-applied',
@@ -370,21 +393,26 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
 }
 
 /** Text-only backends still feed the clipboard, the texthooker and history. */
-async function publishPlainText(text) {
+async function publishPlainText(text, options = {}) {
   const trimmed = (text ?? '').trim()
   if (!trimmed) return ''
   await native.publishText(trimmed)
-  await addHistoryEntry(trimmed)
+  await addHistoryEntry(trimmed, options)
   return trimmed
 }
 
-/** A manual scan: capture, recognise, apply. Skipped while the loop holds the lock. */
-async function performScan() {
+/**
+ * A manual scan: capture, recognise, apply. Skipped while the loop holds the lock.
+ *
+ * `explicit` is a ready-made job (a Quick Shot's display region) to run instead of the chosen
+ * source's.
+ */
+async function performScan(explicit = null) {
   trace('manual-scan', { generation: generation.current })
   const ran = await pipeline.run(async () => {
     setScanning(true, 'Capturing\u2026')
     try {
-      const job = await beginJob()
+      const job = explicit ?? (await beginJob())
       if (!job) {
         log({ check: 'overlay-scan-skipped', reason: 'no source selected' })
         setScanning(false, 'Choose a source before scanning.')
@@ -426,6 +454,7 @@ async function performScan() {
     }
   })
   if (ran === null) log({ check: 'overlay-scan-skipped', reason: 'a scan is already running' })
+  return ran !== null
 }
 
 /**
@@ -665,10 +694,12 @@ export function autoScanStats() {
 
 function syncAutoScanner() {
   scanner.updateSettings(setting('autoOCRSettings'))
-  if (state.flags.autoOcrEnabled && !scanner.isRunning) {
+  // Quick Shot has no source to watch, so there is nothing for the loop to scan.
+  const wanted = state.flags.autoOcrEnabled && !setting('quickShotEnabled')
+  if (wanted && !scanner.isRunning) {
     scanner.reset()
     scanner.start()
-  } else if (!state.flags.autoOcrEnabled && scanner.isRunning) {
+  } else if (!wanted && scanner.isRunning) {
     scanner.stop()
   }
 }
@@ -708,7 +739,7 @@ async function reportObserver() {
 async function onAction(name) {
   switch (name) {
     case 'triggerScan':
-      return performScan()
+      return setting('quickShotEnabled') ? quickShot() : performScan()
     case 'playAudio':
       return playLatest()
     // The controller reads these back from the shared view, so this window owns
@@ -738,6 +769,8 @@ async function onAction(name) {
     case 'hoverSourceOn':
     case 'hoverSourceOff':
       state.hover.source = name.endsWith('On')
+      if (state.hover.source && state.hover.isWindow) hoverPreview.start()
+      else hoverPreview.stop()
       return drawHover()
     default:
       // Everything else native has already applied before emitting.
@@ -746,14 +779,72 @@ async function onAction(name) {
 }
 
 /**
- * Drag a region over the captured display, save it as the crop, scan it.
+ * Run the region editor over the display the overlay covers and return what was confirmed.
  *
- * The drag surface itself is `ui/region-select.js`, which reports a rectangle in
- * this window's CSS pixels. Everything that has to be right lives here: the
- * overlay must accept every click while selecting (it is click-through by
- * default, so a full-window hit region is published for the duration), and the
- * rectangle has to be committed in the source's own full-capture pixel space,
- * which is what `reference_width`/`reference_height` mean to capture-core.
+ * The editor itself is `ui/region-select.js`, shared by "Select region" and Quick Shot; it
+ * reports a rectangle in this window's CSS points. What has to be right lives here: the overlay is
+ * click-through by default, so it claims the whole display for the duration (`regionSelecting`
+ * feeds `hitRects`). It never takes the keyboard — it cannot, and activating the app to get it
+ * would bring every Kimochi window in front of the game — so Escape and Return arrive as global
+ * shortcuts held for the editor's lifetime and are replayed to it as key presses.
+ *
+ * @returns {Promise<{x:number,y:number,width:number,height:number}|null>}
+ */
+async function editRegion(confirmLabel) {
+  let select
+  try {
+    ;({ selectRegion: select } = await import('./region-select.js'))
+  } catch (error) {
+    log({
+      check: 'region-editor-unavailable',
+      error: String(error?.message ?? error),
+      note: 'ui/region-select.js is missing from the build; the region drag cannot be shown.'
+    })
+    return null
+  }
+
+  state.regionSelecting = true
+  const stopKeys = await native.listen('region-key', ({ payload }) => {
+    if (payload?.key)
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: payload.key, bubbles: true }))
+  })
+  try {
+    await native.regionKeys(true)
+    const appearance = setting('appearance')
+    const theme =
+      appearance === 'light' || appearance === 'dark'
+        ? appearance
+        : matchMedia('(prefers-color-scheme: light)').matches
+          ? 'light'
+          : 'dark'
+    const rect = await select(document.body, { confirmLabel, theme })
+    return rect && rect.width >= 2 && rect.height >= 2 ? rect : null
+  } finally {
+    // Whatever happened, the overlay must stop swallowing clicks, and the game gets its
+    // Escape and Return back.
+    state.regionSelecting = false
+    stopKeys()
+    await native.regionKeys(false)
+  }
+}
+
+/** Points in the overlay to capture pixels of a display or source with `bounds` at `scale`. */
+function cropFor(rect, origin, bounds, scale) {
+  return {
+    x: Math.max(0, Math.round((rect.x + origin.x - bounds.x) * scale)),
+    y: Math.max(0, Math.round((rect.y + origin.y - bounds.y) * scale)),
+    width: Math.round(rect.width * scale),
+    height: Math.round(rect.height * scale),
+    reference_width: Math.round(bounds.width * scale),
+    reference_height: Math.round(bounds.height * scale)
+  }
+}
+
+/**
+ * Draw a region over the captured display, save it as the source's crop, scan it.
+ *
+ * The rectangle is committed in the source's own full-capture pixel space, which is what
+ * `reference_width`/`reference_height` mean to capture-core.
  */
 async function selectAndScan() {
   if (state.regionSelecting) return
@@ -763,23 +854,9 @@ async function selectAndScan() {
     return
   }
 
-  let select
   try {
-    ;({ selectRegion: select } = await import('./region-select.js'))
-  } catch (error) {
-    log({
-      check: 'select-and-scan-unavailable',
-      error: String(error?.message ?? error),
-      note: 'ui/region-select.js is missing from the build; the region drag cannot be shown.'
-    })
-    return
-  }
-
-  state.regionSelecting = true
-  try {
-    await native.panel('overlay', 'show')
-    const rect = await select(document.body)
-    if (!rect || rect.width < 2 || rect.height < 2) {
+    const rect = await editRegion('Scan')
+    if (!rect) {
       log({ check: 'select-and-scan-cancelled' })
       return
     }
@@ -802,14 +879,7 @@ async function selectAndScan() {
     )
     const scale = display?.scale_factor ?? display?.scaleFactor ?? 1
 
-    const crop = {
-      x: Math.max(0, Math.round((rect.x + origin.x - bounds.x) * scale)),
-      y: Math.max(0, Math.round((rect.y + origin.y - bounds.y) * scale)),
-      width: Math.round(rect.width * scale),
-      height: Math.round(rect.height * scale),
-      reference_width: Math.round(bounds.width * scale),
-      reference_height: Math.round(bounds.height * scale)
-    }
+    const crop = cropFor(rect, origin, bounds, scale)
     if (crop.width <= 0 || crop.height <= 0) {
       log({ check: 'select-and-scan-skipped', reason: 'empty region' })
       return
@@ -821,9 +891,53 @@ async function selectAndScan() {
     await performScan()
   } catch (error) {
     log({ check: 'select-and-scan-error', error: String(error?.message ?? error) })
-  } finally {
-    // Whatever happened, the overlay must stop swallowing clicks.
-    state.regionSelecting = false
+  }
+}
+
+/**
+ * Quick Shot: draw a region on the display under the pointer, scan it, show the Log.
+ *
+ * Nothing is chosen or saved: the region is captured from that display directly as a one-off job,
+ * so the reader's chosen source and its crop are untouched, and the text is published detached
+ * from them (no source name on the history entry, so no session switch).
+ */
+async function quickShot() {
+  if (state.regionSelecting) return
+  try {
+    const display = await native.pointerDisplay()
+    if (!display?.bounds) {
+      log({ check: 'quick-shot-skipped', reason: 'no display under the pointer' })
+      return
+    }
+    const bounds = display.bounds
+    if (!sameRect(state.origin, bounds)) {
+      await native.placeOverlay(bounds)
+      state.origin = bounds
+      // Text from an earlier scan was positioned for the display the overlay left.
+      draw()
+    }
+
+    const rect = await editRegion('Scan')
+    if (!rect) {
+      log({ check: 'quick-shot-cancelled' })
+      return
+    }
+    const crop = cropFor(rect, bounds, bounds, display.scale_factor ?? 1)
+    const sourceId = `macos:display:${display.id}`
+    log({ check: 'quick-shot', display: display.id, crop })
+
+    // The Log comes forward first, so the result is seen arriving.
+    void native.panel('log', 'show').catch(() => undefined)
+    await performScan({
+      generation: generation.current,
+      sourceId,
+      source: { sourceId, kind: 'display', name: 'Quick Shot' },
+      request: { source_id: sourceId, crop },
+      detached: true
+    })
+  } catch (error) {
+    log({ check: 'quick-shot-error', error: String(error?.message ?? error) })
+    publish({ scanning: false, status: `Quick Shot failed: ${error?.message ?? error}` })
   }
 }
 
@@ -899,6 +1013,28 @@ function relayStorage({ area, action, keys, values }) {
  * database is a corruption risk. Only JSON crosses, which suffices because
  * Yomitan's dictionary API is entirely `sendMessage`-based.
  */
+/**
+ * Settles when the dictionary backend is up (or has failed to start). Windows come up in an
+ * order nobody controls, so a relayed request that arrives while the backend is still starting
+ * waits for it here instead of being rejected, which used to surface in the Log as "Dictionary
+ * backend is not ready" on launch.
+ */
+let settleBackend
+const backendSettled = new Promise((resolve) => (settleBackend = resolve))
+/** Bounded like the startup itself: the backend signals readiness within 30s or fails. */
+const BACKEND_WAIT_MS = 35000
+
+async function whenBackendReady() {
+  if (state.yomitan.ready) return
+  if (!state.yomitan.error) {
+    await Promise.race([
+      backendSettled,
+      new Promise((resolve) => setTimeout(resolve, BACKEND_WAIT_MS))
+    ])
+  }
+  if (!state.yomitan.ready) throw Error(state.yomitan.error ?? 'Dictionary backend is not ready')
+}
+
 async function handleRelay(from, payload) {
   if (!payload || typeof payload !== 'object') return
   if (payload.kind === 'hello') {
@@ -913,7 +1049,7 @@ async function handleRelay(from, payload) {
   if (payload.kind !== 'request') return
   relayTargets.add(from)
   try {
-    if (!state.yomitan.ready) throw Error(state.yomitan.error ?? 'Dictionary backend is not ready')
+    await whenBackendReady()
     const result =
       payload.message?.action === '__storage'
         ? await relayStorage(payload.message.params)
@@ -1017,6 +1153,7 @@ async function startYomitan() {
   })
 
   state.yomitan.ready = true
+  settleBackend()
   log({
     check: 'yomitan-ready',
     dictionaries: (await api('getDictionaryInfo')).map((d) => d.title)
@@ -1234,6 +1371,7 @@ async function processView(view) {
         state.annotations = []
         state.info = null
         state.appliedScanId = null
+        state.detached = false
         renderer.clear()
         scanner.reset()
       }
@@ -1348,7 +1486,7 @@ native.onCapabilityGap((command) =>
 
 await native.loadSettings()
 await native.watchSettings((key) => {
-  if (key === 'autoOCRSettings') syncAutoScanner()
+  if (key === 'autoOCRSettings' || key === 'quickShotEnabled') syncAutoScanner()
   if (key === 'ocrMode' && setting('ocrMode') !== 'local') void terminateLocalOcr()
   syncOverlayText()
 })
@@ -1359,6 +1497,7 @@ await native.listen('frontmost-app', ({ payload }) =>
   foreground.note(typeof payload === 'string' ? payload : payload?.appName)
 )
 await native.listen('hotkey', ({ payload }) => {
+  if (payload?.name && !payload.name.startsWith('hover')) log({ check: 'overlay-action', name: payload.name })
   if (payload?.name) void onAction(payload.name)
 })
 /**
@@ -1383,6 +1522,8 @@ await native.listen('source-bounds', async ({ payload }) => {
   const bounds = payload.bounds
   if (previous && !movedOrResized(previous, bounds)) return
   state.sourceBounds = bounds
+  // Quick Shot text belongs to the display region it was read from, not to this window.
+  if (state.detached) return
 
   try {
     const origin = sourceDisplay(bounds, await native.desktop())
@@ -1540,6 +1681,7 @@ void native.snapshot().then(processView)
 // if it fails, lookups are unavailable and say so, but OCR still works.
 startYomitan().catch((error) => {
   state.yomitan.error = String(error?.message ?? error)
+  settleBackend()
   log({
     check: 'yomitan-unavailable',
     error: state.yomitan.error,

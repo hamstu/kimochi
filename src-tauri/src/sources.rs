@@ -215,6 +215,34 @@ pub fn preview(service: &Shared, source_id: &str) -> Result<Value, String> {
     }))
 }
 
+/// The whole selected window, full resolution, for the overlay's hover marking.
+///
+/// Built for being cheap to get wrong-footed by: it never touches the latest,
+/// published or retained frames, never allocates a frame id, never runs the text
+/// observer, and refuses outright while a scan or auto-OCR capture holds the
+/// `scanning` flag rather than queueing behind it. Pixels stay raw until the
+/// `capture:` protocol is asked for them, so the PNG encode happens off this call
+/// and only if the overlay actually loads the image.
+pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String> {
+    if service.scanning.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err("busy: a scan is running".into());
+    }
+    let frame = capture_isolated(service, source_id)?;
+    let (width, height, scale) = (frame.info.width, frame.info.height, frame.info.scale_factor);
+    let info = serde_json::to_value(&frame.info).unwrap_or(Value::Null);
+    let token = service
+        .images
+        .lock()
+        .unwrap()
+        .put_hover(Image::captured(frame, info));
+    Ok(json!({
+        "url": format!("capture://localhost/hover/{token}"),
+        "width": width,
+        "height": height,
+        "scaleFactor": scale,
+    }))
+}
+
 /// Selection and crop change together or not at all.
 ///
 /// All three persisted keys go through a single settings transaction, so a failed

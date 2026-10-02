@@ -1,7 +1,9 @@
-/** Settings → General: appearance and interface size for every Kimochi window. */
+/** Settings → General: appearance and interface size for every Kimochi window, and the welcome guide. */
 import type { ReactNode } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
-import { Segmented, SettingsPage, SettingsRow, SettingsSection } from '@kit'
+import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
+import { useController } from '../useController'
+import { panel } from '../../bridge/tauri'
 import { useSetting } from '../../bridge/useSetting'
 import { INTERFACE_SCALES, type Appearance, type InterfaceScale } from '@ui/settings'
 
@@ -19,9 +21,10 @@ const SCALES = (Object.keys(INTERFACE_SCALES) as InterfaceScale[]).map((value) =
 export function GeneralTab(): ReactNode {
   const [appearance, setAppearance] = useSetting<Appearance>('appearance', 'system')
   const [scale, setScale] = useSetting<InterfaceScale>('interfaceScale', 'medium')
+  const { props: controller } = useController()
 
   return (
-    <SettingsPage title="General" description="How Kimochi's windows look on this computer.">
+    <SettingsPage title="General" description="How Kimochi looks on this computer.">
       <SettingsSection title="Appearance">
         <SettingsRow
           label="Theme"
@@ -48,6 +51,29 @@ export function GeneralTab(): ReactNode {
             onValueChange={(value) => void setScale(value)}
             options={SCALES}
           />
+        </SettingsRow>
+      </SettingsSection>
+      <SettingsSection title="Diagnostics">
+        <SettingsRow
+          label="Debug overlay"
+          controlId="general-debug"
+          description="Marks the scanned text boxes over the source and opens the Diagnostics window."
+        >
+          <Switch
+            id="general-debug"
+            checked={controller.showDebugOverlay}
+            onCheckedChange={() => controller.onToggleDebugOverlay()}
+          />
+        </SettingsRow>
+      </SettingsSection>
+      <SettingsSection title="Help">
+        <SettingsRow
+          label="Welcome guide"
+          description="The first-run walkthrough: screen recording permission, a source and the dictionary."
+        >
+          <Button size="sm" onClick={() => void panel('welcome', 'show').catch(() => undefined)}>
+            Open
+          </Button>
         </SettingsRow>
       </SettingsSection>
     </SettingsPage>

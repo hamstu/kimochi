@@ -166,7 +166,7 @@ export function startHost(): Promise<void> {
                   "Session changed; please retry in the current session",
                 );
               if (!allowed[module]?.includes(method))
-                throw new Error("Unsupported Texthooker operation");
+                throw new Error("Unsupported log operation");
               const target = modules[
                 module as keyof typeof modules
               ] as unknown as Record<string, (...values: unknown[]) => unknown>;

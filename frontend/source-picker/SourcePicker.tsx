@@ -354,7 +354,12 @@ export default function SourcePicker(): JSX.Element {
     const el = viewport.current
     if (!el || !preview) return
     const observer = new ResizeObserver(() => {
-      const scale = Math.min(el.clientWidth / preview.width, el.clientHeight / preview.height)
+      // Contain within the content box, but never upscale a small window into a blur.
+      const style = getComputedStyle(el)
+      const width = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      const height =
+        el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      const scale = Math.max(0, Math.min(1, width / preview.width, height / preview.height))
       setFit({ width: preview.width * scale, height: preview.height * scale })
     })
     observer.observe(el)

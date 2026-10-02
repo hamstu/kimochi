@@ -14,25 +14,6 @@
   color: var(--k-text);
 }
 
-/* Session picker: a ghost trigger with the name and chevrons, inset from the window edge. */
-.log-session-trigger.k-button {
-  max-width: min(18rem, 60vw);
-  gap: var(--k-space-1-5);
-  padding: 0 var(--k-space-1-5) 0 var(--k-space-2);
-  color: var(--k-text);
-  font-weight: var(--k-weight-medium);
-}
-.log-session-trigger.k-button > svg {
-  color: var(--k-text-3);
-}
-.log-session-trigger.k-button:hover > svg,
-.log-session-trigger.k-button[data-state="open"] > svg {
-  color: var(--k-text-2);
-}
-.log-session-menu {
-  min-width: 13rem;
-}
-
 /* Footer stats: UI face, tabular numerals, quiet dot separators. */
 .log-stats {
   display: flex;
@@ -42,7 +23,7 @@
   overflow: hidden;
   white-space: nowrap;
   color: var(--k-text-3);
-  font-size: var(--k-text-xs);
+  font-size: var(--k-text-md);
 }
 .log-stat {
   display: inline-flex;
@@ -58,8 +39,8 @@
   background: var(--gray-a7);
 }
 .log-stat > svg {
-  width: var(--k-icon-xs);
-  height: var(--k-icon-xs);
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
 }
 .log-stat-value {
   color: var(--k-text-2);
@@ -315,53 +296,6 @@ body.scan-mode .line-actions-trigger.k-button {
   position: relative;
   display: inline;
 }
-/* Small Edit pill floating above the chip on hover, on the raised plane. */
-.notebook-chip-edit {
-  position: absolute;
-  bottom: calc(100% + 0.125rem);
-  left: 50%;
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--k-space-1);
-  height: 1.25rem;
-  padding: 0 var(--k-space-1-5);
-  border: 0;
-  border-radius: var(--k-radius-md);
-  background: var(--k-raised);
-  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
-  color: var(--k-text-2);
-  font-family: var(--k-font-ui);
-  font-size: var(--k-text-xs);
-  font-weight: var(--k-weight-medium);
-  line-height: 1;
-  letter-spacing: 0;
-  white-space: nowrap;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-50%);
-  transition: opacity var(--k-fast), color var(--k-fast);
-  -webkit-user-select: none;
-  user-select: none;
-}
-.notebook-chip-edit > svg {
-  width: var(--k-icon-xs);
-  height: var(--k-icon-xs);
-}
-.notebook-chip-wrap:hover .notebook-chip-edit,
-.notebook-chip-edit:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-.notebook-chip-edit:hover {
-  color: var(--k-text);
-}
-.notebook-chip-edit:focus-visible {
-  outline: 2px solid var(--k-focus);
-  outline-offset: 1px;
-}
-
 /* ------------------------------------------------------------------ selection pill */
 /* Fixed-position "Add to notebook" pill above a transcript selection; coordinates are set
    inline from the selection rect. The ::after nub points at the selected text. */
@@ -510,7 +444,7 @@ body.scan-mode .line-actions-trigger.k-button {
 .log-footer-count {
   margin-right: auto;
   color: var(--k-text-3);
-  font-size: var(--k-text-sm);
+  font-size: var(--k-text-md);
 }
 
 /* ------------------------------------------------------------------ add to notebook */
@@ -611,4 +545,11 @@ body.scan-mode .line-actions-trigger.k-button {
 }
 .log-spin {
   animation: k-spin 900ms linear infinite;
+}
+
+.log-root[hidden] {
+  display: none;
+}
+.log-more-menu {
+  min-width: 12rem;
 }

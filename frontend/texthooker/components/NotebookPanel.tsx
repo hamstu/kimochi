@@ -6,13 +6,11 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
 } from "react";
 import {
   BookOpen,
   Download,
   EyeOff,
-  NotebookPen,
   Plus,
   Search,
   SearchX,
@@ -32,17 +30,9 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
   Row,
   Segmented,
-  SelectContent,
-  SelectItem,
-  SelectRoot,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
+  Tooltip,
 } from "@kit";
 import { VndbImportDialog } from "./VndbImportDialog";
 import { EditEntryModal } from "./EditEntryModal";
@@ -62,19 +52,10 @@ import {
   subscribeNotebook,
 } from "@texthooker/lib/notebook";
 import { openEditModal } from "@texthooker/lib/editModal";
-import {
-  getActiveSession,
-  listSessions,
-  renameSession,
-  subscribeSessions,
-  switchSession,
-  updateSessionDescription,
-} from "@texthooker/lib/sessions";
 import type {
   NotebookEntry,
   NotebookFile,
   NotebookKind,
-  SessionMeta,
 } from "@texthooker/lib/types";
 import "../notebook.css";
 
@@ -263,17 +244,6 @@ export function NotebookPanel({
 
   return (
     <div className="nb">
-      <Bar position="top" className="nb-bar">
-        <SessionSelect />
-        <SessionDetails />
-        <BarSpacer />
-        <Button variant="ghost" size="sm" onClick={() => setVndbOpen(true)}>
-          <Download />
-          Import from VNDB
-        </Button>
-        <AddMenu onAdd={add} />
-      </Bar>
-
       <div className="nb-body">
         <div className="nb-main">
           {notice ? (
@@ -347,6 +317,13 @@ export function NotebookPanel({
                   onValueChange={setFilter}
                   options={filterOptions}
                 />
+                <span className="nb-filter-divider" aria-hidden />
+                <Tooltip content="Import from VNDB">
+                  <IconButton label="Import from VNDB" size="sm" onClick={() => setVndbOpen(true)}>
+                    <Download />
+                  </IconButton>
+                </Tooltip>
+                <AddMenu onAdd={add} />
               </div>
 
               {visible.length === 0 ? (
@@ -600,118 +577,5 @@ function AddMenu({ onAdd }: { onAdd: (kind: NotebookKind) => void }) {
         ))}
       </MenuContent>
     </Menu>
-  );
-}
-
-/* ── Session context ───────────────────────────────────────────────────── */
-
-function useActiveSession(): [SessionMeta, SessionMeta[]] {
-  const [active, setActive] = useState<SessionMeta>(() => getActiveSession());
-  const [sessions, setSessions] = useState<SessionMeta[]>(() => listSessions());
-  useEffect(
-    () =>
-      subscribeSessions((manifest) => {
-        const next = manifest.sessions.find(
-          (session) => session.id === manifest.activeId,
-        );
-        if (next) setActive(next);
-        setSessions(manifest.sessions.slice());
-      }),
-    [],
-  );
-  return [active, sessions];
-}
-
-function SessionSelect(): ReactNode {
-  const [active, sessions] = useActiveSession();
-  return (
-    <SelectRoot
-      value={active.id}
-      onValueChange={(id) => {
-        if (id !== active.id) void switchSession(id);
-      }}
-    >
-      <SelectTrigger
-        variant="ghost"
-        size="sm"
-        className="nb-session-trigger"
-        aria-label="Session"
-      >
-        <SelectValue>{active.name}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {sessions.map((session) => (
-          <SelectItem key={session.id} value={session.id}>
-            {session.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </SelectRoot>
-  );
-}
-
-function SessionDetails(): ReactNode {
-  const [session] = useActiveSession();
-  const [name, setName] = useState(session.name);
-  const [desc, setDesc] = useState(session.description);
-
-  useEffect(() => setName(session.name), [session.id, session.name]);
-  useEffect(
-    () => setDesc(session.description),
-    [session.id, session.description],
-  );
-
-  const commitName = () => {
-    if (name.trim() && name !== session.name) {
-      void renameSession(session.id, name.trim());
-    } else if (!name.trim()) {
-      setName(session.name);
-    }
-  };
-  const commitDesc = () => {
-    if (desc !== session.description) {
-      void updateSessionDescription(session.id, desc);
-    }
-  };
-
-  return (
-    <Popover
-      onOpenChange={(open) => {
-        if (!open) {
-          commitName();
-          commitDesc();
-        }
-      }}
-    >
-      <PopoverTrigger asChild>
-        <IconButton label="Session details" size="sm">
-          <NotebookPen />
-        </IconButton>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="nb-session-pop">
-        <p className="k-title">Session</p>
-        <label className="nb-field">
-          <span className="nb-label">Name</span>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={commitName}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-            }}
-          />
-        </label>
-        <label className="nb-field">
-          <span className="nb-label">Description</span>
-          <Textarea
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            onBlur={commitDesc}
-            spellCheck={false}
-            placeholder="What is this session about?"
-          />
-        </label>
-      </PopoverContent>
-    </Popover>
   );
 }

@@ -66,6 +66,11 @@ pub struct Images {
     /// so browsing a long source list cannot grow memory without limit.
     previews: Vec<(u64, Arc<Image>)>,
     live_previews: Vec<(u64, Arc<Image>)>,
+    /// The overlay's hover preview of the selected window, served at
+    /// `capture://localhost/hover/{id}`. One slot of its own, so a hover can never
+    /// evict a picker preview, the latest frame, the published frame or a frame a
+    /// settling candidate holds — and never becomes an auto-OCR observation.
+    hover: Option<(u64, Arc<Image>)>,
     next_token: u64,
     /// One monotonic id space shared by `scan` and `capture_frame`, so a frame can be
     /// captured by one and OCR'd by the other without ambiguity.
@@ -96,6 +101,22 @@ impl Images {
             self.previews.remove(0);
         }
         token
+    }
+
+    /// Replace the hover preview. Shares the preview token space, so a stale URL
+    /// for a replaced hover image 404s instead of resolving to the new one.
+    pub fn put_hover(&mut self, image: Image) -> u64 {
+        self.next_token += 1;
+        let token = self.next_token;
+        self.hover = Some((token, Arc::new(image)));
+        token
+    }
+
+    pub fn hover_image(&self, token: u64) -> Option<&Arc<Image>> {
+        self.hover
+            .as_ref()
+            .filter(|(known, _)| *known == token)
+            .map(|(_, image)| image)
     }
 
     /// Pin a frame against eviction because its result is now on screen. Shares the
@@ -188,6 +209,7 @@ impl Images {
         self.retained.clear();
         self.previews.clear();
         self.live_previews.clear();
+        self.hover = None;
     }
 }
 
@@ -1323,6 +1345,32 @@ mod tests {
         images.pin_published(id);
         images.clear();
         assert!(images.frame(id).is_none());
+    }
+
+    #[test]
+    fn hover_preview_is_isolated_from_scan_frames() {
+        let mut images = Images::default();
+        let latest = images.put_latest(image());
+        let picker = images.put_preview(image());
+        let first = images.put_hover(image());
+        let second = images.put_hover(image());
+        assert!(
+            images.hover_image(first).is_none(),
+            "a replaced hover image must 404"
+        );
+        assert!(images.hover_image(second).is_some());
+        assert!(
+            images.frame(latest).is_some(),
+            "a hover must not evict the latest frame"
+        );
+        assert!(
+            images.preview(picker).is_some(),
+            "a hover must not evict a picker preview"
+        );
+        assert_eq!(
+            images.next_frame, latest,
+            "a hover must not consume a frame id"
+        );
     }
 
     #[test]

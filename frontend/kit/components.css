@@ -190,8 +190,8 @@
   padding: 0 var(--k-space-1-5);
   background: var(--k-bar);
   color: var(--k-text-2);
-  font-size: var(--k-text-xs);
-  line-height: var(--k-leading-xs);
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
 }
 .k-bar-top { border-bottom: 1px solid var(--k-line); }
 .k-bar-bottom { border-top: 1px solid var(--k-line); }
@@ -377,7 +377,12 @@
 .k-menu-item-shortcut { margin-left: auto; padding-left: var(--k-space-4); color: var(--k-text-3); font-size: var(--k-text-sm); font-variant-numeric: tabular-nums; }
 .k-menu-item-check { flex: none; display: grid; place-items: center; width: var(--k-icon-sm); height: var(--k-icon-sm); margin-left: auto; color: var(--k-accent-text); }
 .k-menu-item-check svg { width: var(--k-icon-sm); height: var(--k-icon-sm); }
-.k-menu-item[data-state="checked"] { font-weight: var(--k-weight-medium); }
+.k-menu-item[data-state="checked"],
+.k-menu-sub-trigger[data-checked] { font-weight: var(--k-weight-medium); }
+.k-menu-sub-trigger[data-state="open"] { background: var(--k-press); }
+.k-menu-sub-trigger .k-menu-item-check { margin-left: auto; }
+.k-menu-sub-chevron { flex: none; width: var(--k-icon-xs); height: var(--k-icon-xs); margin-left: var(--k-space-1); color: var(--k-text-3); }
+.k-menu-sub-trigger:not([data-checked]) .k-menu-sub-chevron { margin-left: auto; }
 .k-menu-label { padding: var(--k-space-1-5) var(--k-space-2) var(--k-space-1); color: var(--k-text-3); font-size: var(--k-text-xs); font-weight: var(--k-weight-medium); }
 .k-menu-separator { height: 1px; margin: var(--k-space-1) calc(var(--k-space-1) * -1); background: var(--k-line); }
 
@@ -550,7 +555,8 @@
 .k-choice:hover,
 .k-choice[data-native-hover] { background: var(--gray-a3); }
 .k-choice[data-state="on"],
-.k-choice[data-state="checked"] { background: var(--k-accent-soft); box-shadow: inset 0 0 0 1.5px var(--k-accent); }
+/* 1px like the resting border: a fractional ring lands unevenly on the pixel grid (heavier top-left). */
+.k-choice[data-state="checked"] { background: var(--k-accent-soft); box-shadow: inset 0 0 0 1px var(--k-accent); }
 .k-choice-head { display: flex; align-items: center; gap: var(--k-space-1-5); width: 100%; font-size: var(--k-text-md); font-weight: var(--k-weight-medium); }
 .k-choice-head svg { flex: none; width: var(--k-icon-sm); height: var(--k-icon-sm); color: var(--k-text-2); }
 .k-choice[data-state="on"] .k-choice-head svg,

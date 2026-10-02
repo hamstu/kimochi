@@ -294,11 +294,11 @@ function PopoverApp() {
   return (
     <div className={`popover-shell ${visible ? "visible" : ""}`}>
       <div className="popover-card">
-        <div className="popover-scroll">
+        <div className={`popover-scroll${isNotebook ? " popover-scroll-flush" : ""}`}>
           {isNotebook && notebookEntry ? (
             <NotebookEntryCard
               entry={notebookEntry}
-              onEdit={(entryId) => {
+              onOpen={(entryId) => {
                 // Hand off to the main window: it opens the edit modal (and
                 // the notebook drawer) and focuses itself; we just disappear.
                 void emit("notebook:edit-request", { entryId });

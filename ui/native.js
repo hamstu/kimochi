@@ -180,7 +180,22 @@ export const commitSource = (sourceId, crop) => invoke('commit_source', { source
 export const openSourcePicker = (editCurrent) => invoke('open_source_picker', { editCurrent })
 export const preferences = () => invoke('preferences')
 export const selectedSource = () => optional('selected_source', undefined, null)
+/**
+ * The whole window, full resolution, from a slot of its own (`{url, width, height,
+ * scaleFactor}`), for the hover outline. Never a scan frame: it cannot evict or
+ * replace anything a scan or the auto loop holds, and it refuses with `busy:`
+ * while one is capturing.
+ */
+export const sourceHoverPreview = (sourceId) =>
+  optional('source_hover_preview', { sourceId }, null)
 export const placeOverlay = (rect) => invoke('place_overlay', { rect })
+/** The display under the pointer (`{id, bounds, scale_factor}`), where a Quick Shot is drawn. */
+export const pointerDisplay = () => invoke('pointer_display')
+/**
+ * Escape and Return as global shortcuts while the region editor is open (`region-key` events):
+ * the overlay never holds the keyboard, so this is how they reach it.
+ */
+export const regionKeys = (on) => optional('region_keys', { on })
 export const setRegions = (rects) => invoke('regions', { rects })
 export const snapshot = () => invoke('snapshot')
 export const panel = (label, action, rect = null) => invoke('panel', { label, action, rect })

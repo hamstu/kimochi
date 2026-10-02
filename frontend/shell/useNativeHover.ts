@@ -13,7 +13,7 @@
 import { useEffect } from "react";
 import { MIRROR_ATTRIBUTE, installHoverMirror } from "./hoverMirror";
 import { panelCursor, panelPointer } from "../bridge/tauri";
-import { resolveNativeCursor } from "./nativeCursor";
+import { isPointOverText, resolveNativeCursor } from "./nativeCursor";
 
 const POLL_MS = 50;
 
@@ -61,15 +61,23 @@ export function useNativeHover(enabled = true): void {
           );
           const disabled =
             control instanceof HTMLElement && control.hasAttribute("disabled");
-          // `auto` means selectable text only for the transcript body. Nested controls may also
-          // compute to `auto`; keep their existing arrow rather than turning them into I-beams.
+          // `auto` means an I-beam only over actual selectable text, which is WebKit's own rule:
+          // over a line's padding, the empty space beside it or any unselectable chrome WebKit
+          // shows the arrow, and so must the bridge, or the two alternate every tick. Nested
+          // controls may also compute to `auto`; they keep the arrow.
+          const style = getComputedStyle(target);
+          const selectable =
+            (style.webkitUserSelect || style.userSelect) !== "none";
           const transcriptText =
-            control === null && target.closest(".scan-region .line") !== null;
+            control === null &&
+            point !== null &&
+            selectable &&
+            isPointOverText(point[0], point[1]);
           // Sent every tick, as ui/panel.js does: the native side re-checks pointer ownership, so
           // an unchanged keyword still has to be reasserted after focus or edge changes.
           await panelCursor(
             resolveNativeCursor(
-              getComputedStyle(target).cursor,
+              style.cursor,
               disabled,
               transcriptText,
             ),

@@ -26,7 +26,11 @@ import { setEmbeddedEnabled } from '/spike/frontend-mode.js'
  */
 
 const LABEL_ATTRIBUTE = 'data-kimochi-panel'
-const DEFAULT_PROBE_TIMEOUT_MS = 6000
+// The overlay holds relayed requests until its backend is up, so this returns as soon as it is;
+// the bound only matters if the backend never starts. It matches the popup host and the backend's
+// own 30s readiness limit, so a slow cold start (large dictionary database) is not reported as a
+// failure.
+const DEFAULT_PROBE_TIMEOUT_MS = 30000
 
 function resolveLabel() {
   return (

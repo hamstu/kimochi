@@ -105,9 +105,12 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                     "axisStates": axes,
                 }),
             );
-            // Rising edge only: holding a button must not repeat the action.
+            // Rising edge only: holding a button must not repeat the action. While Settings
+            // records a binding the press is still emitted above, so it can be assigned, but
+            // it does not fire whatever the button is bound to now.
+            let suspended = crate::hotkeys::suspended();
             for (index, pressed) in buttons.iter().enumerate() {
-                if *pressed && !previous[index] {
+                if *pressed && !previous[index] && !suspended {
                     dispatch_for_button(&app, &service, index);
                 }
             }

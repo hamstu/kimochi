@@ -27,6 +27,51 @@
 
 const OBSERVED = Symbol.for('kimochi.popupBridge.observed')
 const PREWARMED = Symbol.for('kimochi.popupBridge.prewarmed')
+const STYLED = Symbol.for('kimochi.popupBridge.styled')
+
+/**
+ * The popup frame in Kimochi's own pop-up style: the built-in dictionary pop-up's radius, hairline
+ * ring and two-layer shadow (frontend/texthooker/popover.css), instead of Yomitan's grey 1em border
+ * and wide glow. The ring is a 1px border here because an inset shadow would sit under the frame's
+ * content; its colours are the kit's slate ring over the pop-up's ground, light and dark.
+ * `data-theme` is the popup's own resolved theme, so the ring matches the page inside it.
+ */
+export const POPUP_FRAME_CSS = `
+iframe.yomitan-popup,
+iframe.yomitan-popup[data-theme] {
+  border: 1px solid #e0e1e6;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(15 17 26 / 0.08), 0 6px 14px -4px rgb(15 17 26 / 0.22);
+}
+iframe.yomitan-popup[data-theme=dark] {
+  border-color: #363a3f;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 14px -4px rgb(0 0 0 / 0.55);
+}
+`
+
+/**
+ * Restyle every popup frame this realm builds, by adding {@link POPUP_FRAME_CSS} right after
+ * Yomitan's own outer stylesheet — in the same place, which may be the popup's closed shadow
+ * root, held on the instance as `_shadow`. The reader's own "custom popup outer CSS" is applied
+ * after both, so it still wins. Idempotent.
+ */
+export function stylePopupFrames(Popup) {
+  if (Popup.prototype[STYLED]) return
+  Popup.prototype[STYLED] = true
+  const inject = Popup.prototype._injectPopupOuterStylesheet
+  if (typeof inject !== 'function') return
+  Popup.prototype._injectPopupOuterStylesheet = async function (...args) {
+    const result = await inject.apply(this, args)
+    const parent = this._shadow ?? document.head
+    if (parent && !parent.querySelector?.('style[data-kimochi-popup-frame]')) {
+      const style = document.createElement('style')
+      style.dataset.kimochiPopupFrame = ''
+      style.textContent = POPUP_FRAME_CSS
+      parent.append(style)
+    }
+    return result
+  }
+}
 
 /**
  * Render this window's popup in another window instead of inside itself.
@@ -64,6 +109,7 @@ export async function observePopups({ log, onChange, window: label, remote } = {
 
   const popups = new Set()
   const note = (value) => log?.({ window: label, ...value })
+  stylePopupFrames(Popup)
 
   // One realm, one set of wrappers, however many callers ask.
   if (PopupFactory.prototype[OBSERVED]) {
