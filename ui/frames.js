@@ -4,7 +4,7 @@
  *
  * Rust owns capture and keeps the latest PNG, serving it over the `capture:`
  * protocol. What is left here is the bytes themselves, for the two OCR backends
- * that run in this window: Tesseract and the OwOCR socket.
+ * that run in this window: the OwOCR socket.
  *
  * Change detection used to come through here too — fetch the PNG, decode it,
  * draw it into a 9x8 canvas, hash the pixels — and somewhere in that sequence a

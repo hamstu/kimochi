@@ -30,7 +30,8 @@ const GROUP_LINE_HEIGHT = 1.3
 const CHAR_ASPECT_RATIO = 0.85
 
 /** Shrink to fit the box, then use letter spacing for the remainder. */
-function calculateFontSize(text, width, height) {
+function calculateFontSize(text, width, height, vertical = false) {
+  if (vertical) [width, height] = [height, width]
   let fontSize = height * 0.7
   const charWidth = fontSize * 0.6
   if (text.length * charWidth > width) fontSize = (width / text.length) * 1.4
@@ -325,14 +326,25 @@ export class TextOverlayRenderer {
         return
       }
 
-      element.className = 'ocr-word'
-      const { fontSize, letterSpacing } = calculateFontSize(box.text, box.width, box.height)
+      const vertical = box.orientation === 'vertical' || box.isVertical === true
+      const block = box.granularity === 'block' || box.text.includes('\n')
+      element.className = `ocr-word${vertical ? ' ocr-vertical' : ''}${block ? ' ocr-block' : ''}`
+      const { fontSize, letterSpacing } = calculateFontSize(box.text, box.width, box.height, vertical)
       Object.assign(element.style, {
         fontSize: `${fontSize}px`,
         letterSpacing: `${letterSpacing}px`,
         lineHeight: `${box.height}px`
       })
 
+      if (vertical || block) {
+        const columns = box.text.split('\n')
+        const longest = Math.max(1, ...columns.map(line => [...line].length))
+        // An unbroken bubble wraps into as many columns/rows as its aspect allows.
+        const size = block && columns.length === 1
+          ? Math.sqrt(box.width * box.height / Math.max(1, [...box.text].length) / 1.3)
+          : Math.min((vertical ? box.width : box.height) / (columns.length * 1.3), (vertical ? box.height : box.width) / longest)
+        Object.assign(element.style, { fontSize: `${Math.max(1, Math.min(48, size))}px`, lineHeight: '1.3', letterSpacing: '0px', height: `${box.height}px`, width: `${box.width}px` })
+      }
       // The visible word, then the following words: present in the DOM for a lookup
       // to run into, and never seen.
       //
@@ -353,17 +365,19 @@ export class TextOverlayRenderer {
         height: `${box.height + 10}px`,
         lineHeight: `${box.height}px`
       })
+      if (vertical || block) Object.assign(current.style, { height: `${box.height}px`, lineHeight: '1.3', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' })
       current.textContent = box.text
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
       lookahead.textContent = mapped
         .slice(index + 1, index + 1 + LOOKAHEAD)
+        .filter(next => !box.groupId || next.groupId === box.groupId)
         .map((next) => next.text)
         .join('')
       text.append(current, lookahead)
       element.append(text)
 
-      element.renderKey = JSON.stringify([this.mode, box.text, box.x, box.y, box.width, box.height])
+      element.renderKey = JSON.stringify([this.mode, box.text, box.x, box.y, box.width, box.height, box.orientation, box.groupId])
       element.renderText = box.text
       element.renderBox = { x: box.x, y: box.y, width: box.width, height: box.height }
       this.attachInteraction(element, index)
@@ -402,21 +416,25 @@ export class TextOverlayRenderer {
         bounds
       )
 
+      const vertical = group.orientation === 'vertical'
       const lines = text.split('\n')
       const longest = Math.max(...lines.map((line) => line.length))
+      const semanticBlock = group.annotations.some(a => a.granularity === 'block')
       const fontSize = Math.max(
-        8,
+        1,
         Math.min(
-          Math.min(
-            rect.height / (lines.length * GROUP_LINE_HEIGHT),
-            rect.width / (longest * CHAR_ASPECT_RATIO)
-          ),
+          semanticBlock && lines.length === 1
+            ? Math.sqrt(rect.width * rect.height / Math.max(1, [...text].length) / GROUP_LINE_HEIGHT)
+            : Math.min(
+                (vertical ? rect.width : rect.height) / (lines.length * GROUP_LINE_HEIGHT),
+                (vertical ? rect.height : rect.width) / (longest * CHAR_ASPECT_RATIO)
+              ),
           48
         )
       )
 
       const element = document.createElement('div')
-      element.className = 'ocr-group'
+      element.className = `ocr-group${vertical ? ' ocr-vertical' : ''}`
       element.dataset.ocrWordBox = 'true'
       Object.assign(element.style, {
         left: `${rect.x - GROUP_PADDING_X}px`,
@@ -448,17 +466,15 @@ export class TextOverlayRenderer {
       }
 
       const body = document.createElement('span')
+      if (semanticBlock) Object.assign(body.style, { width: `${rect.width}px`, height: `${rect.height}px`, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' })
       body.append(document.createTextNode(text))
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
-      lookahead.textContent = groups
-        .slice(index + 1, index + 1 + LOOKAHEAD)
-        .map((next) => next.text)
-        .join('')
+      lookahead.textContent = '' // Semantic groups must not extend a lookup into another bubble.
       body.append(lookahead)
       element.append(body)
 
-      element.renderKey = JSON.stringify([this.mode, text, rect, fontSize, opacity])
+      element.renderKey = JSON.stringify([this.mode, text, rect, fontSize, opacity, group.orientation])
       element.renderText = text
       element.renderBox = rect
       this.attachInteraction(element, index)
@@ -512,7 +528,9 @@ export class TextOverlayRenderer {
           this.mouse.y >= box.y &&
           this.mouse.y <= box.y + box.height)
       const style = proximityStyle(this.mouse, word.centerX, word.centerY, hovering)
-      word.element.style.borderBottom = style.borderBottom
+      const vertical = box.orientation === 'vertical' || box.isVertical === true
+      word.element.style.borderBottom = vertical ? 'none' : style.borderBottom
+      word.element.style.borderRight = vertical ? style.borderBottom : 'none'
       word.element.style.backgroundColor = style.backgroundColor
       word.element.style.borderRadius = hovering ? '6px' : '6px 6px 0 0'
       word.element.style.transform = hovering ? 'scale(1.2)' : 'scale(1)'

@@ -553,3 +553,18 @@ body.scan-mode .line-actions-trigger.k-button {
 .log-more-menu {
   min-width: 12rem;
 }
+
+/* Each OCR capture is a section; its semantic units retain their own actions. */
+.line[data-ocr-index="0"]:not([data-ocr-count="1"]) { margin-top: 1.25rem; }
+.log-lines .line[data-group-label] { padding-right: calc(var(--k-control-h-sm) + var(--k-space-5) + 3rem); }
+.line[data-group-label]::after {
+  content: attr(data-group-label);
+  position: absolute;
+  top: 0.75rem;
+  right: calc(var(--k-control-h-sm) + var(--k-space-4));
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--k-text-3);
+  opacity: 0.6;
+  pointer-events: none;
+}

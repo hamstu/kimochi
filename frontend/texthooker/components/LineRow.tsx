@@ -134,12 +134,20 @@ function LineRowInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [line.id, line.text, line.tokens, cacheVersion]);
 
+  const groupProps = line.ocr ? {
+    'data-ocr-scan': line.ocr.scanId,
+    'data-ocr-index': line.ocr.groupIndex,
+    'data-ocr-count': line.ocr.groupCount,
+    'data-group-label': line.ocr.groupCount > 1 ? `${line.ocr.groupIndex + 1} / ${line.ocr.groupCount}` : undefined
+  } : {};
+
   // Interim state while DeepL is in flight: the row itself signals progress
   // (the menu closes immediately and the T hotkey has no other UI).
   if (translateStatus?.state === "loading") {
     return (
       <div
         className="line"
+        {...groupProps}
         data-line-id={line.id}
         data-line-text={line.text}
       >
@@ -166,6 +174,7 @@ function LineRowInner({
       <div
         className="line line-translated"
         lang="en"
+        {...groupProps}
         data-line-id={line.id}
         data-line-text={line.translation}
       >
@@ -185,6 +194,7 @@ function LineRowInner({
     return (
       <div
         className="line"
+        {...groupProps}
         data-line-id={line.id}
         data-line-text={line.text}
       >
@@ -205,6 +215,7 @@ function LineRowInner({
     return (
       <div
         className="line"
+        {...groupProps}
         data-line-id={line.id}
         data-line-text={line.text}
       >
@@ -234,7 +245,8 @@ function LineRowInner({
   return (
     <div
       className="line"
-      data-line-id={line.id}
+      {...groupProps}
+        data-line-id={line.id}
       data-line-text={line.text}
     >
       {pieces.map((piece, i) => {

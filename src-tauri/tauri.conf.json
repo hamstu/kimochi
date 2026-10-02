@@ -24,7 +24,9 @@
     },
     "resources": {
       "../bin/keytrigger-darwin-arm64": "bin/keytrigger-darwin-arm64",
-      "../bin/keytrigger-darwin-amd64": "bin/keytrigger-darwin-amd64"
+      "../bin/keytrigger-darwin-amd64": "bin/keytrigger-darwin-amd64",
+      "resources/meikiocr/": "meikiocr/",
+      "resources/mangaocr/": "mangaocr/"
     },
     "icon": [
       "icons/icon.icns",

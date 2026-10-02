@@ -32,6 +32,31 @@ if (task === 'launch') {
   process.exit(r.status ?? 1)
 }
 await import('./prepare.mjs')
+if (task === 'bundle' || task === 'release') {
+  await import('./prepare-meikiocr.mjs')
+  await import('./prepare-mangaocr.mjs')
+  if (process.platform === 'darwin') {
+    // Hardened-runtime library validation requires the bundled dylib to carry
+    // the same signing identity as the app, rather than Microsoft's signature.
+    const { readdir } = await import('node:fs/promises')
+    const runtime = 'src-tauri/resources/meikiocr/runtime'
+    for (const name of await readdir(runtime)) {
+      if (!name.endsWith('.dylib')) continue
+      const signed = spawnSync(
+        'codesign',
+        [
+          '--force',
+          '--sign',
+          env.APPLE_SIGNING_IDENTITY ?? '-',
+          '--timestamp=none',
+          `${runtime}/${name}`
+        ],
+        { stdio: 'inherit', env }
+      )
+      if (signed.status !== 0) process.exit(signed.status ?? 1)
+    }
+  }
+}
 
 // The React panels build into `dist/app/`, after prepare.mjs has rebuilt `dist/` from `yomitan/`
 // (it wipes the directory first). `dist/app` exists in neither `yomitan/` nor `ui/`, so the

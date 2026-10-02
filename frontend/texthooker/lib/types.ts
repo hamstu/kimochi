@@ -10,6 +10,7 @@ export interface Token {
 }
 
 export interface Line {
+  ocr?: { scanId: string; groupId: string; groupIndex: number; groupCount: number; engine?: string; orientation: "horizontal" | "vertical" };
   /** Durable OCR replay IDs; separate from optional text-based deduplication. */
   ingestIds?: string[];
   id: number;

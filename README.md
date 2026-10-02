@@ -37,12 +37,12 @@ See [TEXTHOOKER_INTEGRATION.md](TEXTHOOKER_INTEGRATION.md) for architecture, reu
 
 - **Controller → Source:** a separate native popover lists screens first, then app windows with local thumbnails and icons. Select one to fill the preview area, drag an optional crop, then Continue. Changes apply only on save.
 - **Select Region:** screen sources use desktop region selection followed by an immediate scan; window sources edit their crop in the picker.
-- **Scan / automatic OCR:** use the existing Kimochi cloud service or local server, with optional change detection, local OCR gating and adaptive polling. Settings also exposes local Tesseract and OwOCR modes. Tesseract downloads Japanese language data on first use; OwOCR requires its separate WebSocket service.
+- **Scan / automatic OCR:** use the existing Kimochi cloud service or local server, with optional change detection, local OCR gating and adaptive polling. Settings also exposes MeikiOCR, Manga OCR and OwOCR modes. MeikiOCR reads Japanese game text locally and returns selectable overlay boxes. Manga OCR detects page text blocks and recognizes each group locally; OwOCR requires its separate WebSocket service.
 - **Settings:** OCR, Shortcuts, Gamepad, Dictionary, Audio and Texthooker retain the Electron controls. Source selection has moved out of Settings.
 - **Log:** scan history, font size, opacity, selection, dictionary lookup, per-entry audio/delete and clear-all. Controller, Log, Settings and diagnostic views are independent native windows with the original title bars and controls.
 - **Dictionary:** Open Yomitan Settings reaches the original extension settings/import UI. Import your dictionaries there; dictionary contents live in IndexedDB. The extension compatibility adapter is not native browser-extension support.
 
-Source previews stay local. A cloud/server OCR scan sends the selected capture or crop to that service. Local Tesseract processes pixels in the app. No user screenshots are written to this experiment's reports.
+Source previews stay local. A cloud/server OCR scan sends the selected capture or crop to that service. MeikiOCR and Manga OCR process pixels in the app. No user screenshots are written to this experiment's reports.
 
 ## macOS access
 
@@ -117,3 +117,39 @@ See [CAPTURE_RELIABILITY.md](CAPTURE_RELIABILITY.md) for frame ownership and liv
 ### Gameplay diagnostic logging
 
 Auto OCR now records a bounded, content-free change/timing timeline automatically. See [AUTO_OCR_DIAGNOSTICS.md](AUTO_OCR_DIAGNOSTICS.md) for the test-run steps, optional timestamp markers and `npm run trace:summary`.
+
+## Local MeikiOCR
+
+Select **Settings → OCR → OCR engine → Local (MeikiOCR)**. Both manual and automatic scans use the same retained capture and publication/freshness guards. Japanese text and line boxes feed the overlay, log, texthooker and audio. Sessions load on the first scan and are then reused. Cloud OCR remains the default.
+
+`npm run bundle` and `npm run release` automatically stage three pinned, SHA-256-verified ONNX models and a pinned ONNX Runtime (1.30.0 on Apple Silicon; 1.22.0 on other targets) under `src-tauri/resources/meikiocr/`, then include them in the app bundle. `npm run prepare:meikiocr` prepares these assets separately. The first build requires internet access; ordinary scans are offline and end users need no Python, Node, model downloader or separate server. The Rust library lives in the sibling `../kimochi-meikiocr` checkout, which must be available when building.
+
+The default native runtime includes Core ML on macOS and DirectML on Windows. Linux builds use CPU by default; `MEIKIOCR_RUNTIME_FLAVOR=cuda npm run prepare:meikiocr` stages the CUDA runtime on Linux/Windows x64. CUDA drivers and the runtime's matching CUDA/cuDNN dependencies must be installed on the target PC. `MEIKIOCR_RUNTIME_DIR=/path/to/native/runtime` supplies an alternative runtime directory (include all native dependencies and licenses). `MEIKIOCR_ARCH=x64` or `arm64` selects asset architecture for a cross-build; match it to the Rust/Tauri target. Runtime selection tries supported accelerators and falls back to CPU; unsupported operations may still run on CPU.
+
+Prepared binary assets are ignored by Git. Source and runtime licenses/notices travel with the bundle. The macOS build runner signs native runtime libraries with the same identity as the app, satisfying hardened-runtime library validation. Runtime archives come from Microsoft's version-pinned GitHub release; their SHA-256 is recorded in the prepared assets. Model hashes are verified against pinned Hugging Face repository revisions. Native asset downloads run in the build process, never inside the app.
+
+Validation includes the JavaScript routing tests and Rust annotation-contract test. The real-model test uses the bundled runtime and upstream Japanese example:
+
+```sh
+MEIKIOCR_TEST_IMAGE=/path/to/meikiocr-example.jpg cargo test \
+  --manifest-path src-tauri/Cargo.toml meiki_ocr -- --include-ignored
+```
+
+
+## Local Manga OCR
+
+Select **Settings → OCR → OCR engine → Local (Manga OCR)**. Choose a Japanese manga text bubble or small text region; this model recognizes whole crops and does not detect text blocks on full pages. Manual, Quick Shot and automatic scans use the retained capture and the existing freshness guards. Text feeds the log, texthooker, clipboard and audio; this backend has no selectable overlay boxes.
+
+`npm run bundle` and `npm run release` stage the pinned, SHA-256-verified Manga OCR weights (about 424 MiB), vocabulary, config and licenses under `src-tauri/resources/mangaocr/` and bundle them with the app. `npm run prepare:mangaocr` stages assets separately. The script reuses verified files from `../kimochi-mangaocr/models` or `MANGAOCR_MODEL_DIR` before downloading. The sibling `../kimochi-mangaocr` checkout is required to build. Model setup is build-time only; inference is offline and needs no Python or native inference runtime.
+
+The model loads lazily and is reused on a blocking worker. macOS builds enable Metal GPU acceleration automatically; other platforms use CPU. NVIDIA builds can enable the Rust feature `mangaocr-cuda` (with a compatible CUDA toolkit and drivers); CUDA is not validated on this Mac. Cloud remains the default. Backend/device and generation metadata are returned in native diagnostics.
+
+```sh
+npm run prepare:mangaocr
+MANGAOCR_TEST_IMAGE=../kimochi-mangaocr/tests/fixtures/images/00.jpg cargo test \
+  --manifest-path src-tauri/Cargo.toml manga_ocr -- --include-ignored --nocapture
+```
+
+OCR results share an engine-independent group contract in `ui/ocr-result.ts`. Manga OCR supplies semantic text blocks; fragmented cloud results are grouped by glyph-relative proximity and direction. Direction metadata takes priority over aspect/neighbor inference. Vertical overlays use Japanese vertical layout and a right-edge blue marker; transcript rows remain horizontal, one row per group, with capture boundaries and group counters. Group IDs survive history persistence/replay. Existing text-only engines remain supported. Tesseract is removed; saved `local` OCR preferences migrate to MeikiOCR.
+
+Manga assets are checksum-pinned and staged by `npm run prepare:mangaocr`, including the Comic Text Detector ONNX file. Its graph runs in Rust via Candle (Metal on macOS), without Python or ONNX Runtime. The combined app is GPL-3.0-only; see `LICENSE` and the detector/recognizer provenance in `NOTICE`.

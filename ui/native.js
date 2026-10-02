@@ -165,8 +165,8 @@ export const observerStatus = () =>
  * different image than the one compared, and pair the returned text with
  * geometry belonging to a frame nobody looked at.
  */
-export async function ocrFrame(frame) {
-  const result = await invoke('ocr_frame', { id: frame?.id })
+export async function ocrFrame(frame, engine = 'cloud') {
+  const result = await invoke('ocr_frame', { id: frame?.id, engine })
   return result ? { ocr: result.ocr ?? null, id: result.id ?? frame?.id ?? null } : null
 }
 

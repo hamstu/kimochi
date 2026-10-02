@@ -37,44 +37,6 @@ if (!process.argv.includes('--verify')) {
       target: 'safari17'
     })
   }
-  // `ui/local-ocr-worker.js` is the one module in `ui/` with a node_modules dependency
-  // (tesseract.js). The plain copy above leaves a bare specifier that no browser can resolve, so
-  // it is re-emitted bundled, overwriting that copy.
-  await build({
-    entryPoints: ['ui/local-ocr-worker.js'],
-    outfile: 'dist/ui/local-ocr-worker.js',
-    bundle: true,
-    format: 'esm',
-    platform: 'browser',
-    target: 'safari17',
-    allowOverwrite: true
-  })
-
-  // tesseract.js loads its worker and wasm core at runtime, from a CDN unless told otherwise.
-  // Ship them next to the module so local OCR has no network dependency; the overlay points
-  // `createWorker` at these paths. Language data is not vendored — see below.
-  await mkdir('dist/ui/tesseract', { recursive: true })
-  for (const [from, to] of [
-    ['node_modules/tesseract.js/dist/worker.min.js', 'dist/ui/tesseract/worker.min.js'],
-    // tesseract.js v7's getCore.js picks one of these three at runtime by feature detection
-    // (relaxed SIMD, then SIMD, then the baseline); all three must be present when corePath is a
-    // directory. Each .wasm.js embeds its binary, so no separate .wasm file is needed.
-    [
-      'node_modules/tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js',
-      'dist/ui/tesseract/tesseract-core-relaxedsimd-lstm.wasm.js'
-    ],
-    [
-      'node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js',
-      'dist/ui/tesseract/tesseract-core-simd-lstm.wasm.js'
-    ],
-    [
-      'node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js',
-      'dist/ui/tesseract/tesseract-core-lstm.wasm.js'
-    ]
-  ]) {
-    await cp(from, to)
-  }
-
   await build({
     entryPoints: ['host/network-entry.js'],
     outfile: 'dist/spike/network-bundle.js',

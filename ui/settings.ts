@@ -1,3 +1,4 @@
+import type { OcrGroup } from './ocr-result.js'
 /**
  * The settings schema, shared by the overlay and the React panels.
  *
@@ -20,8 +21,8 @@ import {
 import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
-/** Cloud OCR is the only backend that returns geometry; see OCR_MODES below. */
-export type OcrMode = 'cloud' | 'local' | 'websocket'
+/** Backends available to both manual and automatic scanning. */
+export type OcrMode = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
@@ -34,6 +35,8 @@ export const INTERFACE_SCALES: Record<InterfaceScale, { label: string; factor: n
 }
 
 export interface ScanHistoryEntry {
+  groups?: OcrGroup[]
+  engine?: string
   id: string
   text: string
   timestamp: number
@@ -58,7 +61,10 @@ export interface Settings {
   audioSettings: { voiceId: string }
   serverSettings: { mode: ServerMode }
   gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number }
-  yomitanSettings: { popupType: 'builtin' | 'custom-api'; customApiUrl: string }
+  yomitanSettings: {
+    popupType: 'builtin' | 'custom-api'
+    customApiUrl: string
+  }
   ocrMode: OcrMode
   owocrWebSocketUrl: string
   scannedTextHistory: ScanHistoryEntry[]
@@ -97,22 +103,24 @@ export const SETTINGS_DEFAULTS: Settings = {
   interfaceScale: 'medium'
 }
 
-/**
- * What each OCR backend can actually do. Only the cloud endpoint returns
- * bounding boxes, so the other two feed history, the texthooker and TTS but
- * cannot position overlay text. Surfacing this rather than hiding it is the
- * point: a mode that silently renders nothing would look broken.
- */
+/** Capabilities and descriptions shared by Settings and the overlay. */
 export const OCR_MODES: Record<OcrMode, { label: string; geometry: boolean; detail: string }> = {
   cloud: {
     label: 'Cloud OCR',
     geometry: true,
     detail: 'Returns word positions, so scanned text can be selected and looked up in place.'
   },
-  local: {
-    label: 'Local (Tesseract)',
-    geometry: false,
-    detail: 'Runs on this machine. Returns text only — no selectable overlay boxes.'
+  meikiocr: {
+    label: 'Local (MeikiOCR)',
+    geometry: true,
+    detail:
+      'Reads Japanese game text on this machine, with selectable text boxes. No server required.'
+  },
+  mangaocr: {
+    label: 'Local (Manga OCR)',
+    geometry: true,
+    detail:
+      'Detects manga text blocks and reads each group on this machine, with vertical overlay support.'
   },
   websocket: {
     label: 'WebSocket (OwOCR)',
@@ -134,6 +142,7 @@ export function serverUrls(mode: ServerMode): { ocr: string; tts: string } {
  * a complete value instead of undefined properties reaching the render path.
  */
 export function withDefaults<K extends keyof Settings>(key: K, stored: unknown): Settings[K] {
+  if (key === 'ocrMode' && stored === 'local') return 'meikiocr' as Settings[K]
   // Automatic OCR is the one key whose stored shape changed meaning rather than
   // only gaining fields, so it gets a real migration instead of a shallow merge.
   if (key === 'autoOCRSettings') return migrateAutoScanSettings(stored) as Settings[K]

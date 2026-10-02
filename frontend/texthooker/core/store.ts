@@ -134,6 +134,7 @@ export async function flushLines(): Promise<void> {
 }
 
 export function appendLine(opts: {
+  ocr?: Line["ocr"];
   text: string;
   source: LineSource;
   ts?: number;
@@ -146,6 +147,7 @@ export function appendLine(opts: {
     text,
     tokens: opts.tokens ?? null,
     source: opts.source,
+    ...(opts.ocr ? { ocr: opts.ocr } : {}),
     ts: opts.ts ?? Date.now(),
   };
   lines.push(line);

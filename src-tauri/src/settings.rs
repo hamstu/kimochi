@@ -24,7 +24,7 @@ pub fn defaults() -> Value {
             "pollInterval": 2000,
             "imageHashThreshold": 5,
             "localOCRSimilarityThreshold": 0.85,
-            // Disabled by default: Tesseract is less reliable for Japanese.
+            // Disabled by default: The native observer gate is configured independently.
             "localOCRGateEnabled": false,
             "adaptivePollingEnabled": true,
             "adaptivePollMin": 500,

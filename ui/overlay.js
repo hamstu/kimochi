@@ -28,8 +28,9 @@ import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
 import { HoverOverlay, HoverPreview } from './hover.js'
 import { forgetFrame } from './frames.js'
-import { recognize, terminateLocalOcr } from './ocr.js'
-import { publishScan, addHistoryEntry, listHistory } from './output.js'
+import { recognize } from './ocr.js'
+import { normalizeOcrResult } from './ocr-result.js'
+import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
 import { isOverlayTextVisible, nextOverlayToggle, overlayTextChange } from './settings.js'
@@ -234,8 +235,12 @@ function publishAccepted(frame, result) {
       id: frame.id,
       info: frame.info ?? null,
       ocr: {
+        groups: result.groups ?? [],
+        engine: result.engine,
+        schemaVersion: 1,
         fullText: result.fullText ?? '',
-        textAnnotations: result.geometry ? (result.textAnnotations ?? []) : []
+        textAnnotations: result.geometry ? (result.textAnnotations ?? []) : [],
+        geometry: result.geometry !== false
       }
     },
     // Local and WebSocket OCR return no geometry, and the status line is where
@@ -377,9 +382,7 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
   const published =
     outcome.publish === false
       ? ''
-      : state.geometry
-        ? await publishScan(state.annotations, grouping, { detached: !!job.detached })
-        : await publishPlainText(result.fullText, { detached: !!job.detached })
+      : await publishOcrResult(result, { detached: !!job.detached, grouping })
 
   log({
     check: 'overlay-scan-applied',
@@ -390,15 +393,6 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
     refreshedOnly: outcome.publish === false
   })
   return published
-}
-
-/** Text-only backends still feed the clipboard, the texthooker and history. */
-async function publishPlainText(text, options = {}) {
-  const trimmed = (text ?? '').trim()
-  if (!trimmed) return ''
-  await native.publishText(trimmed)
-  await addHistoryEntry(trimmed, options)
-  return trimmed
 }
 
 /**
@@ -1316,9 +1310,7 @@ async function processView(view) {
         if (view.scan?.ocr) {
           await applyResult(
             {
-              fullText: view.scan.ocr.fullText ?? '',
-              textAnnotations: view.scan.ocr.textAnnotations ?? [],
-              geometry: true,
+              ...normalizeOcrResult(view.scan.ocr, view.scan.ocr.engine ?? setting('ocrMode')),
               nativeScanId: scanId
             },
             view.scan,
@@ -1487,7 +1479,6 @@ native.onCapabilityGap((command) =>
 await native.loadSettings()
 await native.watchSettings((key) => {
   if (key === 'autoOCRSettings' || key === 'quickShotEnabled') syncAutoScanner()
-  if (key === 'ocrMode' && setting('ocrMode') !== 'local') void terminateLocalOcr()
   syncOverlayText()
 })
 

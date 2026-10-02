@@ -321,3 +321,17 @@ test("Dictionary is authoritative across reader updates and resets", async () =>
   assert.equal(h.api.readerSettings.getSettings().dictionaryMode, "builtin");
   await h.call("stats", "resetStats");
 });
+
+test('semantic OCR groups remain separate with independent durable replay IDs', async () => {
+  const scan={...entry('page-1','Manga','同じ台詞\n同じ台詞\n同じ台詞の続き'),engine:'mangaocr',groups:[
+    {id:'bubble-1',text:'同じ台詞',bbox:[0,0,20,80],orientation:'vertical'},
+    {id:'bubble-2',text:'同じ台詞',bbox:[50,0,70,80],orientation:'vertical'},
+    {id:'bubble-3',text:'同じ台詞の続き',bbox:[100,0,120,80],orientation:'vertical'}
+  ]}
+  const h=await harness({scannedTextHistory:[scan],superTexthooker:{inputSource:'ocr',startMergeEnabled:true,startMergePrefixLen:2,dedupeDepth:100,cjkOnly:true,tokenizeOnArrival:false}})
+  assert.deepEqual(h.snapshot().lines.map(l=>l.text),scan.groups.map(g=>g.text))
+  assert.deepEqual(h.snapshot().lines.map(l=>l.ocr.groupIndex),[0,1,2])
+  assert.equal(h.snapshot().lines[0].ocr.groupCount,3)
+  const replay=await harness({...h.settings,texthookerIngestedHistory:[]},h.files)
+  assert.equal(replay.snapshot().lines.length,3)
+})

@@ -19,7 +19,9 @@
     "check:rust": "node scripts/run.mjs check",
     "trace:summary": "node scripts/trace-report.mjs",
     "trace:mark": "node scripts/trace-report.mjs --mark",
-    "test:native:reader-popup": "node scripts/test-reader-popup-native.mjs"
+    "test:native:reader-popup": "node scripts/test-reader-popup-native.mjs",
+    "prepare:meikiocr": "node scripts/prepare-meikiocr.mjs",
+    "prepare:mangaocr": "node scripts/prepare-mangaocr.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -74,7 +76,7 @@
     "react-dom": "^19.3.0",
     "react-router": "^8.3.1",
     "tailwind-merge": "^3.7.0",
-    "tesseract.js": "^7.0.0",
     "wanakana": "^5.3.1"
-  }
+  },
+  "license": "GPL-3.0-only"
 }

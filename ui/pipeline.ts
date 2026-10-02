@@ -65,7 +65,7 @@ export class Generation {
  * A skip-if-held mutex shared by the manual and automatic paths.
  *
  * Both drive the same single-threaded resources — one native capture mutex, one
- * Tesseract worker — so overlapping them produces duplicate work and interleaved
+ * recognition worker — so overlapping them produces duplicate work and interleaved
  * results rather than more throughput. Skipping is the right failure mode here:
  * the automatic loop will come round again in well under a second.
  */

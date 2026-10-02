@@ -12,6 +12,10 @@ export interface FrameInfo {
 }
 export interface Annotation {
   description: string
+  isVertical?: boolean
+  orientation?: 'horizontal' | 'vertical'
+  granularity?: string
+  groupId?: string
   boundingPoly: { vertices: { x?: number; y?: number }[] }
 }
 /**
@@ -59,7 +63,7 @@ export function mapAnnotations(
   annotations: Annotation[],
   origin: Rect,
   bounds?: Rect
-): (Rect & { text: string })[] {
+): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string })[] {
   return annotations.flatMap((a) => {
     const vertices = a.boundingPoly?.vertices
     if (!vertices?.length || !a.description) return []
@@ -79,7 +83,7 @@ export function mapAnnotations(
       mapped.height <= 0
     )
       return []
-    return [{ ...mapped, text: a.description }]
+    return [{ ...mapped, text: a.description, ...(a.orientation !== undefined ? { orientation: a.orientation } : {}), ...(a.isVertical !== undefined ? { isVertical: a.isVertical } : {}), ...(a.granularity !== undefined ? { granularity: a.granularity } : {}), ...(a.groupId !== undefined ? { groupId: a.groupId } : {}) }]
   })
 }
 /** Convenience wrapper that drops the full-text annotation at index 0. */
@@ -88,7 +92,7 @@ export function boxes(
   annotations: Annotation[],
   origin: Rect,
   bounds?: Rect
-): (Rect & { text: string })[] {
+): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string })[] {
   return mapAnnotations(
     info,
     annotations.length > 1 ? annotations.slice(1) : annotations,

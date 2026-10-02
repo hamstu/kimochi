@@ -10,7 +10,8 @@
  * overlay actually shows after furigana filtering.
  */
 
-import { buildFilteredText } from './annotations.js'
+import { buildFilteredText, visibleAnnotations } from './annotations.js'
+import { logicalGroups } from './ocr-result.js'
 import { pushHistory, MAX_HISTORY_ENTRIES } from './settings.js'
 import { optional, getSetting, setSetting, publishText } from './native.js'
 
@@ -38,9 +39,9 @@ function newEntry(text) {
  * add/delete race Electron already has when the log panel edits history while a
  * scan lands.
  */
-export async function addHistoryEntry(text, { detached = false } = {}) {
-  const entry = newEntry(text)
-  const native = await optional('history_add', { text, detached }, null)
+export async function addHistoryEntry(text, { detached = false, groups, engine } = {}) {
+  const entry = { ...newEntry(text), ...(groups ? { groups, engine } : {}) }
+  const native = await optional('history_add', { text, detached, groups: groups ?? null, engine: engine ?? null }, null)
   if (native) return native
   await setSetting('scannedTextHistory', pushHistory(getSetting('scannedTextHistory'), entry))
   return entry
@@ -81,3 +82,17 @@ export async function publishScan(annotations, grouping, options = {}) {
 }
 
 export { MAX_HISTORY_ENTRIES }
+
+/** Publish a capture once while preserving independently readable OCR units. */
+export async function publishOcrResult(result, options = {}) {
+  let groups = result.groups ?? []
+  if (result.geometry && !result.textAnnotations.some(a => a.granularity === 'block')) {
+    groups = logicalGroups(visibleAnnotations(result.textAnnotations, options.grouping ?? {})).groups
+    if (!groups.length) return ''
+  }
+  const text = groups.map(group => group.text).join('\n') || result.fullText || ''
+  if (!text.trim()) return ''
+  await publishText(text)
+  await addHistoryEntry(text, { ...options, groups, engine: result.engine })
+  return text
+}

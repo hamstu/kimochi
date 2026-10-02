@@ -12,7 +12,7 @@ import { applyReplacements } from "./replacements";
 import { recordCharDelta, recordLine } from "./stats";
 import { hasCJK } from "@texthooker/lib/utils";
 import { acceptsInput } from "../input-source";
-import type { LineSource } from "@texthooker/lib/types";
+import type { Line, LineSource } from "@texthooker/lib/types";
 
 /**
  * Returns a stable ingest function that runs incoming text through the
@@ -35,6 +35,7 @@ export const ingestText = async (
   source: LineSource,
   ts?: number,
   ingestId?: string,
+  ocr?: Line["ocr"],
 ) => {
   const settings = getSettings();
   if (!acceptsInput(settings, source)) return;
@@ -57,7 +58,7 @@ export const ingestText = async (
   if (settings.cjkOnly && !hasCJK(value)) return;
 
   // 7 — start-merge: streaming-VN-style continuation
-  if (settings.startMergeEnabled && lastLineText()) {
+  if (!ocr && settings.startMergeEnabled && lastLineText()) {
     const prev = lastLineText() as string;
     const len = Math.max(1, settings.startMergePrefixLen);
     if (value !== prev && value.slice(0, len) === prev.slice(0, len)) {
@@ -83,10 +84,10 @@ export const ingestText = async (
   }
 
   // 8 — dedupe over last N
-  if (isDuplicateInRecent(value, settings.dedupeDepth)) return;
+  if (!ocr && isDuplicateInRecent(value, settings.dedupeDepth)) return;
 
   // 9 — append + stats
-  const line = appendLine({ text: value, source, ts });
+  const line = appendLine({ text: value, source, ts, ocr });
   if (!line) return;
   if (ingestId) line.ingestIds = [ingestId];
   recordLine(value.length);

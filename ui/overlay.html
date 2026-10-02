@@ -225,7 +225,16 @@
       width: 100%;
       height: calc(100% - 44px);
     }
-  </style>
+  
+      .ocr-vertical, .ocr-vertical .ocr-word-current {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+      }
+      .ocr-word.ocr-vertical { padding: 0; align-items: stretch; }
+      .ocr-vertical .ocr-word-text { width: 100%; height: 100%; }
+      .ocr-word.ocr-block .ocr-word-current { white-space: pre-wrap; overflow-wrap: anywhere; }
+      .ocr-group.ocr-vertical { white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>
   <body>
     <div id="words"></div>
     <div id="hover"></div>

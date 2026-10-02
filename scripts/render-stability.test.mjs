@@ -187,3 +187,23 @@ test('even a one-point actual source movement bypasses OCR jitter tolerance', ()
   assert.notEqual(host.children[0], stable)
   assert.equal(host.children[0].style.left, '11px')
 })
+
+test('vertical words retain direction through geometry mapping and use a side marker', () => {
+  const host=element(), renderer=new TextOverlayRenderer(host)
+  renderer.render(view([{...word('縦書き',20),isVertical:true,orientation:'vertical',groupId:'v'}]))
+  assert.match(host.children[0].className,/ocr-vertical/)
+  renderer.setPointer(25,10)
+  renderer.updateProximity()
+  assert.equal(host.children[0].style.borderBottom,'none')
+  assert.ok(host.children[0].style.borderRight)
+  renderer.destroy()
+})
+
+test('grouped overlay never merges separately identified bubbles or extends lookup across them', () => {
+  const host=element(), renderer=new TextOverlayRenderer(host)
+  renderer.render(view([{...word('泡一',10),groupId:'a',granularity:'block',isVertical:true},{...word('泡二',42),groupId:'b',granularity:'block',isVertical:true}],{grouping:{enabled:true,filterSmallText:true,proximityThreshold:1000}}))
+  assert.equal(host.children.length,2)
+  assert.match(host.children[0].className,/ocr-vertical/)
+  assert.equal(host.children[0].querySelector('.ocr-lookahead').textContent,'')
+  renderer.destroy()
+})

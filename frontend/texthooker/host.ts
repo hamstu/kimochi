@@ -1,3 +1,4 @@
+import type { OcrGroup } from "../../ui/ocr-result";
 /** Always-loaded Log realm: sole owner of session files, serialized RPC and OCR intake. */
 import { emit, listen } from "@tauri-apps/api/event";
 import { getSetting, setSetting, onSettingsChange } from "../bridge/settings";
@@ -61,6 +62,8 @@ async function selectSource(
   await setSetting("texthookerSourceSessions", bindings);
 }
 interface ScanEntry {
+  groups?: OcrGroup[] | null;
+  engine?: string;
   id: string;
   text: string;
   timestamp: number;
@@ -71,7 +74,15 @@ async function ingestHistory(entries: ScanEntry[]): Promise<void> {
     if (seen.includes(entry.id)) continue;
     if (getSettings().inputSource === "ocr") {
       if (entry.source) await selectSource(entry.source);
-      await ingestText(entry.text, "ocr", entry.timestamp, entry.id);
+      const groups = entry.groups?.filter(group => group.text?.trim());
+      if (groups?.length) {
+        for (const [index, group] of groups.entries()) {
+          await ingestText(group.text, "ocr", entry.timestamp, `${entry.id}:group:${group.id}`, {
+            scanId: entry.id, groupId: group.id, groupIndex: index, groupCount: groups.length,
+            engine: entry.engine, orientation: group.orientation
+          });
+        }
+      } else await ingestText(entry.text, "ocr", entry.timestamp, entry.id);
       await flush();
     }
     // Consume IDs even with another input selected: switching back must not replay

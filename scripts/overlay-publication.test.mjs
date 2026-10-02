@@ -30,7 +30,7 @@ test('the real overlay application awaits native publication before releasing it
       drawn++
     },
     setting: () => null,
-    publishPlainText: async () => {
+    publishOcrResult: async () => {
       history++
       return 'text'
     },
@@ -64,7 +64,7 @@ test('a refused native publication is not presented as a successful overlay resu
     generation: { isStale: () => false },
     foreground: { current: null },
     draw: () => assert.fail('must not draw'),
-    publishPlainText: () => assert.fail('must not publish')
+    publishOcrResult: () => assert.fail('must not publish')
   })
   vm.runInContext(functions, context)
   await assert.rejects(

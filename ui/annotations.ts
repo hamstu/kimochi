@@ -21,6 +21,10 @@ export interface Vertex {
 
 export interface Annotation {
   description: string
+  orientation?: 'horizontal' | 'vertical'
+  isVertical?: boolean
+  groupId?: string
+  granularity?: 'aggregate' | 'block' | 'line' | 'fragment'
   boundingPoly: { vertices: Vertex[] }
 }
 
@@ -39,6 +43,7 @@ export interface TextGroup {
   annotations: Annotation[]
   boundingBox: BoundingBox
   text: string
+  orientation?: 'horizontal' | 'vertical'
 }
 
 export interface GroupingSettings {
@@ -102,9 +107,9 @@ export function filterSmallTextAnnotations(
   if (annotations.length <= 1) return annotations
 
   const boxed = annotations.map((annotation) => ({ annotation, box: getBoundingBox(annotation) }))
-  const medianHeight = median(boxed.map((a) => a.box.height))
+  const medianHeight = median(boxed.map(({ annotation, box }) => annotation.isVertical ? box.width : box.height))
   const medianCharacterWidth = median(
-    boxed.map(({ annotation, box }) => box.width / Math.max(1, [...annotation.description].length))
+    boxed.map(({ annotation, box }) => (annotation.isVertical ? box.height : box.width) / Math.max(1, [...annotation.description].length))
   )
 
   const minHeight = medianHeight * threshold
@@ -114,13 +119,13 @@ export function filterSmallTextAnnotations(
   return boxed
     .filter(({ annotation, box }) => {
       // 1: small text (furigana)
-      if (box.height <= minHeight) return false
+      if ((annotation.isVertical ? box.width : box.height) <= minHeight) return false
       // 2: very thin annotations (vertical line artifacts)
-      if (box.width < minWidth) return false
+      if ((annotation.isVertical ? box.height : box.width) < minWidth) return false
       // 3: real text needs plausible width per character; several "characters"
       // crammed into a narrow box is OCR hallucinating from noise.
       const charCount = [...annotation.description].length
-      if (charCount > 1 && box.width / charCount < minWidthPerChar) return false
+      if (charCount > 1 && (annotation.isVertical ? box.height : box.width) / charCount < minWidthPerChar) return false
       return true
     })
     .map(({ annotation }) => annotation)
@@ -143,7 +148,7 @@ export function buildFilteredText(
   if (filtered.length === 0) return ''
 
   const boxed = filtered.map((annotation) => ({ annotation, box: getBoundingBox(annotation) }))
-  const medianHeight = median(boxed.map((a) => a.box.height))
+  const medianHeight = median(boxed.map(({ annotation, box }) => annotation.isVertical ? box.width : box.height))
   const lineTolerance = medianHeight * 0.5
   const spaceThreshold = medianHeight * 1.5
 
@@ -197,6 +202,9 @@ export function groupTextAnnotations(
 
   for (let i = 0; i < boxed.length; i++) {
     for (let j = i + 1; j < boxed.length; j++) {
+      const a=boxed[i].annotation, b=boxed[j].annotation
+      if (a.groupId || b.groupId) { if (a.groupId && a.groupId===b.groupId) union(i,j); continue }
+      if ((a.isVertical??false)!==(b.isVertical??false)) continue
       if (areBoxesNearby(boxed[i].box, boxed[j].box, proximityThreshold)) union(i, j)
     }
   }
@@ -219,9 +227,11 @@ export function groupTextAnnotations(
     const height = maxY - minY
 
     // Reading order within the group: 5px tolerance decides "same line".
+    const vertical=groupAnnotations[0].isVertical===true
     const sortedAnnotations = [...groupAnnotations].sort((a, b) => {
       const aBox = getBoundingBox(a)
       const bBox = getBoundingBox(b)
+      if (vertical) return Math.abs(aBox.centerX-bBox.centerX)<Math.min(aBox.width,bBox.width)*0.7 ? aBox.minY-bBox.minY : bBox.centerX-aBox.centerX
       const yDiff = aBox.minY - bBox.minY
       return Math.abs(yDiff) > 5 ? yDiff : aBox.minX - bBox.minX
     })
@@ -229,9 +239,11 @@ export function groupTextAnnotations(
     let text = ''
     let lastCenterY = -1
     let lastMaxX = -1
+    let lastBox: BoundingBox | null=null
     sortedAnnotations.forEach((annotation, index) => {
       const box = getBoundingBox(annotation)
-      if (index > 0 && lastCenterY !== -1) {
+      if (vertical && lastBox && Math.abs(lastBox.centerX-box.centerX)>Math.min(lastBox.width,box.width)*0.7) text+='\n'
+      if (!vertical && index > 0 && lastCenterY !== -1) {
         if (box.centerY - lastCenterY > box.height * 0.5) {
           text += '\n'
           lastMaxX = -1
@@ -242,12 +254,14 @@ export function groupTextAnnotations(
         }
       }
       text += annotation.description
+      lastBox=box
       lastCenterY = box.centerY
       lastMaxX = box.maxX
     })
 
     return {
       annotations: sortedAnnotations,
+      orientation: vertical?'vertical':'horizontal',
       boundingBox: {
         minX,
         minY,
@@ -270,5 +284,6 @@ export function visibleAnnotations(
 ): Annotation[] {
   const words = wordAnnotations(annotations)
   if (!grouping.filterSmallText || words.length <= 1) return words
+  if (words.some(a=>a.granularity==='block')) return words
   return filterSmallTextAnnotations(words, grouping.filterSmallTextThreshold)
 }

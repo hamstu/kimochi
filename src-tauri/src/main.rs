@@ -4,6 +4,9 @@ use base64::Engine;
 mod actions;
 mod gamepad;
 mod hotkeys;
+mod manga_ocr;
+mod ocr_result;
+mod meiki_ocr;
 mod native;
 mod panels;
 mod scan_trace;
@@ -62,7 +65,10 @@ fn save(app: &tauri::AppHandle, name: &str, v: &impl Serialize) -> Reply<()> {
 
 #[tauri::command]
 fn reader_settings_patch(app: tauri::AppHandle, state: State<Shared>, patch: Value) -> Reply<()> {
-    let mut patch = patch.as_object().ok_or("invalid: expected settings object")?.clone();
+    let mut patch = patch
+        .as_object()
+        .ok_or("invalid: expected settings object")?
+        .clone();
     // Dictionary settings are authoritative; legacy reader presets cannot replace them.
     patch.remove("yomitanApiUrl");
     patch.remove("dictionaryMode");
@@ -70,11 +76,22 @@ fn reader_settings_patch(app: tauri::AppHandle, state: State<Shared>, patch: Val
         let mut value = old.and_then(Value::as_object).cloned().unwrap_or_default();
         value.remove("yomitanApiUrl");
         value.remove("dictionaryMode");
-        value.extend(patch.clone()); Value::Object(value)
+        value.extend(patch.clone());
+        Value::Object(value)
     })?;
-    app.emit("settings:changed", json!({"key":"superTexthooker", "value":value})).map_err(|e|e.to_string())?;
+    app.emit(
+        "settings:changed",
+        json!({"key":"superTexthooker", "value":value}),
+    )
+    .map_err(|e| e.to_string())?;
     if let Some(pinned) = patch.get("alwaysOnTop").and_then(Value::as_bool) {
-        panels::act(&app, &state.settings, "log", if pinned { "pin" } else { "unpin" }, None)?;
+        panels::act(
+            &app,
+            &state.settings,
+            "log",
+            if pinned { "pin" } else { "unpin" },
+            None,
+        )?;
     }
     Ok(())
 }
@@ -862,8 +879,19 @@ impl Drop for ScanGuard {
     }
 }
 
-/// POST one PNG to the configured OCR endpoint. Shared by `scan` and `ocr_frame` so
-/// both go through the same validation and the same error vocabulary.
+/// The legacy native scan path also honors local native OCR selections.
+fn native_ocr(app: &tauri::AppHandle, settings: &Settings, png: &[u8]) -> Reply<Value> {
+    match settings
+        .get_or::<String>("ocrMode", "cloud".into())
+        .as_str()
+    {
+        "meikiocr" | "local" => meiki_ocr::recognize(app, png),
+        "mangaocr" => manga_ocr::recognize(app, png),
+        _ => post_ocr(settings, png),
+    }
+}
+
+/// POST one PNG using the shared cloud endpoint validation.
 fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
     let endpoint = settings::resolve_endpoint(settings);
     let image = base64::engine::general_purpose::STANDARD.encode(png);
@@ -881,10 +909,11 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
         let status = response.status().as_u16();
         // The server's own explanation (a Vision quota error, say) is the only
         // useful part; the bare status code alone reads as a mystery.
-        let detail = response
-            .json::<Value>()
-            .ok()
-            .and_then(|body| body.get("error").and_then(Value::as_str).map(str::to_string));
+        let detail = response.json::<Value>().ok().and_then(|body| {
+            body.get("error")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
         return Err(match detail {
             Some(detail) => format!("native: OCR HTTP {status}: {detail}"),
             None => format!("native: OCR HTTP {status}"),
@@ -905,7 +934,16 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
 /// passed would OCR a *different* image than the one that was compared, and would pair
 /// the returned text with geometry it does not belong to.
 #[tauri::command]
-async fn ocr_frame(app: tauri::AppHandle, state: State<'_, Shared>, id: u64) -> Reply<Value> {
+async fn ocr_frame(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    id: u64,
+    engine: Option<String>,
+) -> Reply<Value> {
+    let engine = engine.unwrap_or_else(|| "cloud".into());
+    if !matches!(engine.as_str(), "cloud" | "meikiocr" | "mangaocr") {
+        return Err(format!("invalid: unknown native OCR engine {engine}"));
+    }
     let service = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let image = {
@@ -922,20 +960,30 @@ async fn ocr_frame(app: tauri::AppHandle, state: State<'_, Shared>, id: u64) -> 
             let _ = std::fs::write(p, &png);
         }
         let started = std::time::Instant::now();
-        let value = post_ocr(&service.settings, &png)?;
+        let value = match engine.as_str() {
+            "meikiocr" | "local" => meiki_ocr::recognize(&app, &png)?,
+            "mangaocr" => manga_ocr::recognize(&app, &png)?,
+            _ => post_ocr(&service.settings, &png)?,
+        };
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
-        record(&app, &service, json!({
-            "check": "ocr-debug", "id": id, "info": info,
-            "pngBytes": png.len(),
-            "ms": started.elapsed().as_millis() as u64, "annotations": count,
-            "fullTextLen": value["fullText"].as_str().map_or(0, |t| t.chars().count()),
-            "keys": value.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()),
-        }));
+        record(
+            &app,
+            &service,
+            json!({
+                "check": "ocr-debug", "id": id, "info": info,
+                "pngBytes": png.len(),
+                "ms": started.elapsed().as_millis() as u64, "annotations": count,
+                "fullTextLen": value["fullText"].as_str().map_or(0, |t| t.chars().count()),
+                "keys": value.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()),
+            }),
+        );
         let result = json!({ "id": id, "info": info, "ocr": value });
         service.log(json!({
             "check": "ocr-frame",
             "id": id,
             "annotations": count,
+            "engine": engine,
+            "backend": result["ocr"]["backend"],
         }));
         // Deliberately does NOT publish. A result that arrives after the source
         // changed has to be dropped by the caller's freshness guard, and self-
@@ -963,7 +1011,7 @@ fn should_publish(published: Option<u64>, frame_id: u64) -> bool {
 /// Publish scan lifecycle state. The caller that ran the scan owns this.
 ///
 /// `capture_frame` and `ocr_frame` are both pure, and the browser-side backends
-/// (Tesseract, OwOCR) never reach `ocr_frame` at all, so without this the controller's
+/// (OwOCR) never reach `ocr_frame` at all, so without this the controller's
 /// `isScanning` and `status` and the capture/debug panels' `snapshot().scan` would
 /// never reflect a normal migrated scan. Rust does no OCR here, writes no history and
 /// re-runs nothing.
@@ -1065,7 +1113,7 @@ async fn scan(
         .into();
         v.regions.clear();
     }
-    let _ = &app;
+    let a = app.clone();
     let result = tauri::async_runtime::spawn_blocking(move || -> Reply<Value> {
         {
             let mut backend = s
@@ -1083,7 +1131,8 @@ async fn scan(
                 .put_latest(Image::encoded(png, info.clone()));
             let mut result = json!({"id": id, "info": info, "ocr": null});
             if ocr {
-                result["ocr"] = post_ocr(
+                result["ocr"] = native_ocr(
+                    &a,
                     &s.settings,
                     &s.images
                         .lock()
@@ -1109,7 +1158,16 @@ async fn scan(
             v.revision += 1;
             v.published_frame = Some(id);
             v.scan = Some(result.clone());
-            v.status = if ocr {
+            v.status = if ocr && result["ocr"]["geometry"] == false {
+                if result["ocr"]["fullText"]
+                    .as_str()
+                    .is_some_and(|t| !t.is_empty())
+                {
+                    "Scan ready · text only, this engine returns no positions".into()
+                } else {
+                    "Scan ready · no text recognized".into()
+                }
+            } else if ocr {
                 ready_status(count)
             } else {
                 "Preview ready · OCR not requested".into()
@@ -1216,18 +1274,31 @@ fn history_add(
     state: State<Shared>,
     text: String,
     detached: Option<bool>,
+    groups: Option<Vec<ocr_result::OcrGroup>>,
+    engine: Option<String>,
 ) -> Reply<Value> {
     if text.trim().is_empty() {
         return Err("invalid: history entries cannot be empty".into());
+    }
+    if let Some(groups) = &groups {
+        let mut ids = std::collections::HashSet::new();
+        if groups.len() > 1024 || groups.iter().any(|g| !g.validate() || !ids.insert(&g.id)) {
+            return Err("invalid: OCR groups need unique IDs, text and valid boxes".into());
+        }
     }
     // A Quick Shot is not from the chosen source, so it must not carry that source's
     // name: the reader would switch sessions to match a window nobody scanned.
     let source = if detached.unwrap_or(false) {
         Value::Null
     } else {
-        state.settings.get("lastSelectedSource").ok().flatten().unwrap_or(Value::Null)
+        state
+            .settings
+            .get("lastSelectedSource")
+            .ok()
+            .flatten()
+            .unwrap_or(Value::Null)
     };
-    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis(), "source": source });
+    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis(), "source": source, "groups": groups, "engine": engine });
     let inserted = entry.clone();
     edit_history(&app, &state, move |list| list.insert(0, inserted))?;
     Ok(entry)
@@ -1357,7 +1428,11 @@ async fn extension_fetch(
             .timeout(Duration::from_secs(15))
             .build()
             .map_err(|_| "native: could not initialize HTTP client")?;
-        let request = if head { client.head(url) } else { client.get(url) };
+        let request = if head {
+            client.head(url)
+        } else {
+            client.get(url)
+        };
         let response = request
             .send()
             .map_err(|e| format!("native: request failed ({e})"))?;
@@ -1582,11 +1657,25 @@ fn main() {
                 }),
             });
             app.manage(service.clone());
+            app.manage(meiki_ocr::MeikiState::default());
+            app.manage(manga_ocr::MangaState::default());
 
-            let reader_popup = tauri::WebviewWindowBuilder::new(app, "reader-popup", tauri::WebviewUrl::App("app/reader-popup.html".into()))
-                .title("Dictionary").decorations(false).transparent(true).always_on_top(true)
-                .visible(false).focused(false).accept_first_mouse(true).skip_taskbar(true)
-                .inner_size(500., 380.).content_protected(true).build()?;
+            let reader_popup = tauri::WebviewWindowBuilder::new(
+                app,
+                "reader-popup",
+                tauri::WebviewUrl::App("app/reader-popup.html".into()),
+            )
+            .title("Dictionary")
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .visible(false)
+            .focused(false)
+            .accept_first_mouse(true)
+            .skip_taskbar(true)
+            .inner_size(500., 380.)
+            .content_protected(true)
+            .build()?;
             make_panel(&handle, &service, &reader_popup);
             // Opt-in native regression: only the API popup, no source restore or OCR.
             #[cfg(debug_assertions)]
@@ -1607,7 +1696,6 @@ fn main() {
             let hooker = Arc::new(texthooker::Texthooker::new(store.clone(), logger));
             hooker.start();
             app.manage(hooker);
-
 
             spawn_source_restore(service.clone());
 
@@ -1650,7 +1738,9 @@ fn main() {
                 move |u| {
                     u.as_str() == "about:blank"
                         || (u.scheme() == "tauri" && u.host_str() == Some("localhost"))
-                        || dev_origin.as_ref().is_some_and(|origin| &u.origin() == origin)
+                        || dev_origin
+                            .as_ref()
+                            .is_some_and(|origin| &u.origin() == origin)
                 }
             })
             .build()?;
@@ -1722,7 +1812,11 @@ fn main() {
 
             tray::setup(&handle, &store).map_err(std::io::Error::other)?;
             let shortcuts = hotkeys::apply(&handle, &store);
-            record(&handle, &service, json!({ "check": "hotkeys-applied", "result": shortcuts }));
+            record(
+                &handle,
+                &service,
+                json!({ "check": "hotkeys-applied", "result": shortcuts }),
+            );
             watcher::start(&handle, &service);
             gamepad::start(&handle, &service);
 
@@ -1895,7 +1989,9 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 break;
             }
             if let Some((x, y, down, flags)) = native::cursor() {
-                if down && !was_down { reader::popover::pointer_down(&handle, x, y); }
+                if down && !was_down {
+                    reader::popover::pointer_down(&handle, x, y);
+                }
                 let moved = last_point.is_none_or(|(px, py)| px != x || py != y);
                 last_point = Some((x, y));
                 let mut changed: Vec<(String, bool)> = Vec::new();
@@ -2164,17 +2260,28 @@ mod tests {
 
     #[test]
     fn notebook_ack_cannot_clear_a_newer_request() {
-        let path = std::env::temp_dir().join(format!("kimochi-notebook-ack-{}.json", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("kimochi-notebook-ack-{}.json", std::process::id()));
         let settings = Settings::load(path.clone());
-        settings.set("notebookEditRequest", json!({"requestId":"new", "entryId":"cat", "sessionId":"game"})).unwrap();
+        settings
+            .set(
+                "notebookEditRequest",
+                json!({"requestId":"new", "entryId":"cat", "sessionId":"game"}),
+            )
+            .unwrap();
         assert!(!acknowledge_notebook_request(&settings, "old").unwrap());
-        assert_eq!(settings.get("notebookEditRequest").unwrap().unwrap()["requestId"], "new");
+        assert_eq!(
+            settings.get("notebookEditRequest").unwrap().unwrap()["requestId"],
+            "new"
+        );
         assert!(acknowledge_notebook_request(&settings, "new").unwrap());
-        assert_eq!(settings.get("notebookEditRequest").unwrap(), Some(Value::Null));
+        assert_eq!(
+            settings.get("notebookEditRequest").unwrap(),
+            Some(Value::Null)
+        );
         assert!(!acknowledge_notebook_request(&settings, "new").unwrap());
         let _ = std::fs::remove_file(path);
     }
-
 
     #[test]
     fn a_repeated_result_for_one_frame_is_not_republished() {
