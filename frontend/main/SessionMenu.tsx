@@ -46,7 +46,11 @@ export function SessionMenu(): ReactNode {
     <Menu>
       <MenuTrigger asChild>
         {/* Drawn as a select field, like the OCR model above it. */}
-        <button type="button" className="k-select-trigger sb-select" aria-label={`Session: ${name}`}>
+        <button
+          type="button"
+          className="k-select-trigger sb-select"
+          aria-label={`Session: ${name}`}
+        >
           <span>{name}</span>
           <ChevronsUpDown className="k-select-trigger-icon" />
         </button>

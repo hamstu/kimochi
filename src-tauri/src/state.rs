@@ -505,7 +505,6 @@ pub struct Service {
     /// The committed source id. Session-scoped and never persisted directly; a
     /// descriptive record is persisted instead and resolved on restart.
     pub selection: Mutex<Option<String>>,
-    pub picker_edit_current: AtomicBool,
     /// The source id whose geometry is currently being tracked, if any.
     pub watching: Mutex<Option<String>>,
     /// Per-sender relay sequence, so a receiver can drop a redelivered message.

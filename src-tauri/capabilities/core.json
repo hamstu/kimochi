@@ -3,7 +3,6 @@
   "description": "Event listening and the window queries the React panels actually use, plus the dictionary popup's own window. Scoped to our own window labels; no filesystem, shell or process access is granted to any webview.",
   "windows": [
     "log",
-    "source-picker",
     "settings",
     "diagnostics",
     "welcome",

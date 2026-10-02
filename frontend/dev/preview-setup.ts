@@ -16,6 +16,7 @@
  *   ?quickshot=1     main window: Quick Shot (with input=ocr)
  *   ?nosource=1      main window: no window or screen chosen yet
  *   ?crop=1          main window: the chosen source has a crop region
+ *   ?source=<id>     main window: the chosen demo source (e.g. window:106, a tall one)
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
@@ -34,18 +35,18 @@ import {
   thumbnailSvg
 } from './demo-data'
 
-export type PreviewPage = 'panel' | 'reader-popup' | 'source-picker' | 'welcome' | 'tray-popover'
+export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
 const params = new URLSearchParams(location.search)
 
 const PAGE_LABELS: Record<Exclude<PreviewPage, 'panel'>, string> = {
   'reader-popup': 'reader-popup',
-  'source-picker': 'source-picker',
   welcome: 'welcome',
   'tray-popover': 'tray-popover'
 }
 
-const CURRENT_SOURCE = SOURCES.find((s) => s.id === 'window:101')!
+const CURRENT_SOURCE =
+  SOURCES.find((s) => s.id === params.get('source')) ?? SOURCES.find((s) => s.id === 'window:101')!
 
 /** `?capture=<source id>`: a fake last capture of that source; otherwise none yet. */
 function demoCapture(): unknown {
@@ -219,11 +220,6 @@ const HANDLERS: Record<string, Handler> = {
     })),
   source_catalog: () =>
     SOURCES.map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon })),
-  source_picker_state: () => ({
-    sourceId: CURRENT_SOURCE.id,
-    crop: null,
-    editCurrent: params.get('edit') === '1'
-  }),
   source_thumbnail: (a) => {
     const s = SOURCES.find((x) => x.id === a?.sourceId)
     if (!s) return { url: '' }
@@ -245,6 +241,7 @@ const HANDLERS: Record<string, Handler> = {
   },
   source_icon: (a) => ({ icon: appIcon(a?.appName as string) }),
   commit_source: ok,
+  activate_source: (a) => note('activate_source', a?.sourceId),
   select_source: ok,
   selected_source: () => ({ sourceId: CURRENT_SOURCE.id }),
   open_source_picker: ok,

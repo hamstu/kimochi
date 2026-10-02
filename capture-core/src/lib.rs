@@ -1,5 +1,6 @@
 //! Synchronous, UI-independent capture API. Call on a worker, never the UI thread.
-//! Frames own their bytes; dropping a frame releases them. No persistent video session.
+//! Frames own their bytes; dropping a frame releases them. A backend may keep a
+//! source's capture session running between calls, so later captures are a copy.
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -117,12 +118,21 @@ pub trait CaptureBackend: Send {
     fn request_permission(&self) -> bool;
     fn enumerate(&mut self) -> Result<Vec<Source>>;
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame>;
+    /// The whole source, scaled so its longest edge is at most `edge` pixels. Backends
+    /// that can scale while capturing should, rather than capture full size and shrink.
+    fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
+        let _ = edge;
+        self.capture(&CaptureRequest {
+            source_id: source_id.to_string(),
+            crop: None,
+        })
+    }
     fn close(&mut self) {}
 }
 pub fn platform_backend() -> Result<Box<dyn CaptureBackend>> {
     #[cfg(target_os = "macos")]
     {
-        Ok(Box::new(MacCapture))
+        Ok(Box::new(MacCapture::new()))
     }
     #[cfg(not(target_os = "macos"))]
     {

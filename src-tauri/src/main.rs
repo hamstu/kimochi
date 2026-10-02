@@ -5,9 +5,9 @@ mod actions;
 mod gamepad;
 mod hotkeys;
 mod manga_ocr;
-mod ocr_result;
 mod meiki_ocr;
 mod native;
+mod ocr_result;
 mod panels;
 mod scan_trace;
 mod settings;
@@ -488,6 +488,37 @@ fn pointer_display() -> Option<native::DisplayInfo> {
         .cloned()
 }
 
+/// Bring a window source's application to the front. Window ids carry the owning process
+/// (`macos:window:<window>:<pid>`); a display has nothing to bring forward.
+#[tauri::command]
+async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> {
+    let pid = source_id
+        .strip_prefix("macos:window:")
+        .and_then(|rest| rest.split(':').nth(1))
+        .and_then(|pid| pid.parse::<i32>().ok())
+        .filter(|pid| *pid > 0)
+        .ok_or("invalid: only a window source can be brought to the front")?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(native::activate_process(pid));
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv().map_err(|e| e.to_string())?
+}
+
+/// Where the pointer is, in desktop points, and the display it is on. Quick Shot polls this to
+/// keep its hint beside the cursor and to follow the cursor onto another display: the overlay
+/// covers one display and sees no pointer events outside it.
+#[tauri::command]
+fn pointer_location() -> Option<Value> {
+    let (x, y, _, _) = native::cursor()?;
+    let display = native::display_infos().into_iter().find(|d| {
+        let b = &d.bounds;
+        x >= b.x && y >= b.y && x < b.x + b.width && y < b.y + b.height
+    });
+    Some(json!({ "x": x, "y": y, "display": display }))
+}
+
 /// The calling window's own bounds, in desktop points.
 ///
 /// The dictionary bridge needs this to translate one window's client coordinates
@@ -638,36 +669,33 @@ async fn commit_source(
     state: State<'_, Shared>,
     source_id: String,
     crop: Option<Crop>,
+    keep_crop: Option<bool>,
 ) -> Reply<Value> {
     let service = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || sources::commit(&service, &source_id, crop))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-fn open_source_picker(
-    app: tauri::AppHandle,
-    state: State<Shared>,
-    edit_current: bool,
-) -> Reply<Value> {
-    state
-        .picker_edit_current
-        .store(edit_current, Ordering::SeqCst);
-    let info = panels::act(&app, &state.settings, "source-picker", "show", None)?;
-    // Emitted on every open so a mounted picker resets rather than showing the
-    // previous session's selection.
-    let _ = app.emit("source-picker-open", json!({ "editCurrent": edit_current }));
-    Ok(info)
-}
-
-#[tauri::command]
-fn source_picker_state(state: State<Shared>) -> Value {
-    json!({
-        "sourceId": state.selection.lock().unwrap().clone(),
-        "crop": current_crop(&state),
-        "editCurrent": state.picker_edit_current.load(Ordering::SeqCst),
+    let keep = keep_crop.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || {
+        if keep && crop.is_none() {
+            sources::select_keeping_crop(&service, &source_id)
+        } else {
+            sources::commit(&service, &source_id, crop)
+        }
     })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Choose a new source: the main window comes forward with its sidebar's Change source menu
+/// open on the grid of windows and displays. There is no separate picker window; regions are
+/// drawn over the source itself (the overlay's `setCropArea`).
+#[tauri::command]
+fn open_source_picker(app: tauri::AppHandle, state: State<Shared>) -> Reply<Value> {
+    choose_source(&app, &state.settings)
+}
+
+pub fn choose_source(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Reply<Value> {
+    let info = panels::act(app, settings, panels::MAIN, "show", None)?;
+    let _ = app.emit("main:choose-source", json!({}));
+    Ok(info)
 }
 
 // ---------------------------------------------------------------- capture
@@ -677,8 +705,8 @@ async fn enumerate(state: State<'_, Shared>) -> Reply<Vec<Source>> {
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         s.backend
-            .try_lock()
-            .map_err(|_| "busy: a capture is already running".to_string())?
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .enumerate()
             .map_err(err)
     })
@@ -691,8 +719,8 @@ async fn permission(state: State<'_, Shared>) -> Reply<bool> {
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         Ok(s.backend
-            .try_lock()
-            .map_err(|_| "busy: a capture is already running")?
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .request_permission())
     })
     .await
@@ -735,8 +763,8 @@ async fn capture_frame(
     tauri::async_runtime::spawn_blocking(move || {
         let mut backend = service
             .backend
-            .try_lock()
-            .map_err(|_| "busy: a capture is already running".to_string())?;
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let frame = backend.capture(&request).map_err(|error| {
             let error = err(error);
             service.images.lock().unwrap().capture_error = Some(error.clone());
@@ -1085,8 +1113,8 @@ fn scan_state(
 fn permission_status(state: State<Shared>) -> Reply<String> {
     let backend = state
         .backend
-        .try_lock()
-        .map_err(|_| "busy: a capture is already running")?;
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     Ok(backend.permission().to_string())
 }
 
@@ -1118,10 +1146,13 @@ async fn scan(
         {
             let mut backend = s
                 .backend
-                .try_lock()
-                .map_err(|_| "busy: a capture is already running".to_string())?;
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let start = Instant::now();
             let frame = backend.capture(&request).map_err(err)?;
+            // The frame owns its pixels: release the backend before encoding and OCR,
+            // which take far longer than the capture, so previews are not held up.
+            drop(backend);
             let png = frame.png().map_err(err)?;
             let info = serde_json::to_value(&frame.info).map_err(|e| e.to_string())?;
             let id = s
@@ -1507,38 +1538,57 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .register_uri_scheme_protocol("capture", move |ctx, request| {
-            let Some(service) = ctx.app_handle().try_state::<Shared>() else {
-                return tauri::http::Response::builder()
-                    .status(503)
-                    .body(Vec::new())
-                    .unwrap();
-            };
-            let path = request.uri().path().trim_start_matches('/').to_string();
-            let images = service.images.lock().unwrap();
-            let found = match path.strip_prefix("preview/") {
-                Some(token) => token.parse().ok().and_then(|t| images.preview(t)),
-                None => match path.strip_prefix("live/") {
-                    Some(id) => id.parse().ok().and_then(|id| images.live_image(id)),
-                    None => match path.strip_prefix("hover/") {
-                        Some(token) => token.parse().ok().and_then(|t| images.hover_image(t)),
-                        None => path.parse().ok().and_then(|id| images.frame(id)),
-                    },
-                },
-            };
-            let found = found.cloned();
-            drop(images);
-            match found.and_then(|image| image.png().ok()) {
-                Some(png) => tauri::http::Response::builder()
-                    .header("Content-Type", "image/png")
-                    .header("Cache-Control", "no-store")
-                    .body(png)
-                    .unwrap(),
-                None => tauri::http::Response::builder()
-                    .status(404)
-                    .body(Vec::new())
-                    .unwrap(),
-            }
+        // Asynchronous, and answered from a worker thread: a captured image is PNG-encoded on
+        // request, which for a full-size window takes long enough to stall every window if it
+        // ran on the main thread (a region drag stuttered each time the picture refreshed).
+        .register_asynchronous_uri_scheme_protocol("capture", move |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            std::thread::spawn(move || {
+                let not_found = || {
+                    tauri::http::Response::builder()
+                        .status(404)
+                        .body(Vec::new())
+                        .unwrap()
+                };
+                let Some(service) = app.try_state::<Shared>() else {
+                    responder.respond(
+                        tauri::http::Response::builder()
+                            .status(503)
+                            .body(Vec::new())
+                            .unwrap(),
+                    );
+                    return;
+                };
+                let path = request.uri().path().trim_start_matches('/').to_string();
+                let found = {
+                    let images = service.images.lock().unwrap();
+                    match path.strip_prefix("preview/") {
+                        Some(token) => token.parse().ok().and_then(|t| images.preview(t)),
+                        None => match path.strip_prefix("live/") {
+                            Some(id) => id.parse().ok().and_then(|id| images.live_image(id)),
+                            None => match path.strip_prefix("hover/") {
+                                Some(token) => {
+                                    token.parse().ok().and_then(|t| images.hover_image(t))
+                                }
+                                None => path.parse().ok().and_then(|id| images.frame(id)),
+                            },
+                        },
+                    }
+                    .cloned()
+                };
+                let response = match found.and_then(|image| image.png().ok()) {
+                    Some(png) => tauri::http::Response::builder()
+                        .header("Content-Type", "image/png")
+                        .header("Cache-Control", "no-store")
+                        // Kimochi's own pages are another origin to this scheme; without this
+                        // an `<img>` still loads but `fetch` (to keep a copy) is refused.
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(png)
+                        .unwrap(),
+                    None => not_found(),
+                };
+                responder.respond(response);
+            });
         })
         .invoke_handler(tauri::generate_handler![
             reader_settings_patch,
@@ -1607,8 +1657,9 @@ fn main() {
             source_live_thumbnail,
             commit_source,
             open_source_picker,
-            source_picker_state,
             pointer_display,
+            pointer_location,
+            activate_source,
             extension_fetch,
             region_keys,
             hotkeys_load,
@@ -1641,7 +1692,6 @@ fn main() {
                 images: Mutex::new(Default::default()),
                 settings: store.clone(),
                 selection: Mutex::new(None),
-                picker_edit_current: AtomicBool::new(false),
                 watching: Mutex::new(None),
                 relay_seq: Mutex::new(HashMap::new()),
                 scanning: AtomicBool::new(false),
@@ -1792,7 +1842,7 @@ fn main() {
             let menu = tauri::menu::Menu::default(app.handle())?;
             let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
                 .text("log", "Kimochi")
-                .text("source-picker", "Select Source")
+                .text("choose-source", "Select Source")
                 .text("settings", "Settings")
                 .text("yomitan", "Yomitan")
                 .text("diagnostics", "Diagnostics")
@@ -1804,7 +1854,9 @@ fn main() {
                 let store = store.clone();
                 app.on_menu_event(move |app, event| {
                     let label = event.id().as_ref();
-                    if panels::spec(label).is_some() {
+                    if label == "choose-source" {
+                        let _ = choose_source(app, &store);
+                    } else if panels::spec(label).is_some() {
                         let _ = panels::act(app, &store, label, "show", None);
                     }
                 });

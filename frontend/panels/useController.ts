@@ -11,6 +11,9 @@ import type { CaptureSource } from '../vendor/shared-types'
 import { useViewState } from '../bridge/state'
 import { useSetting } from '../bridge/useSetting'
 import {
+  activateSource,
+  clearSourceCrop,
+  selectSource,
   nativeError,
   openSettings,
   openSourcePicker,
@@ -61,8 +64,13 @@ interface RemoteControlProps {
   onCloseApp: () => void
   onSelectRegionHover: (hovered: boolean) => void
   onSourceHover: (hovered: boolean) => void
+  /** Bring the current window source's application to the front. */
+  onActivateSource: () => void
+  /** Read this window or display, keeping its saved region. */
+  onSelectSource: (sourceId: string) => void
+  /** Forget the current source's region. */
+  onClearCrop: () => void
 }
-
 
 export function useController(): ControllerWiring {
   const { state } = useViewState()
@@ -126,19 +134,32 @@ export function useController(): ControllerWiring {
     onToggleAutoOCR: () => attempt('Toggle auto OCR', () => triggerAction('toggleAutoOcr')),
     onTriggerScan: () => attempt('Scan', () => triggerAction('triggerScan')),
     onSelectAndScan: () => attempt('Select and scan', () => triggerAction('selectAndScan')),
-    onEditCropArea: () => attempt('Open crop editor', () => openSourcePicker(true)),
+    // Drawn over the source itself by the overlay, window or screen alike.
+    onEditCropArea: () => attempt('Edit region', () => triggerAction('setCropArea')),
     onOpenLog: () => attempt('Show Kimochi', () => panel('log', 'show')),
     onToggleTextOverlayVisibility: () =>
       attempt('Toggle overlay text', () => triggerAction('toggleTextOverlay')),
     onToggleDebugOverlay,
     onOpenSettings: () => attempt('Open settings', () => openSettings()),
-    onOpenSource: () => attempt('Open source picker', () => openSourcePicker(false)),
+    onOpenSource: () => attempt('Open source picker', () => openSourcePicker()),
     onCloseApp: () => attempt('Quit', () => quitApp()),
     // Hover hints are cosmetic: a failure here must not put an error strip on screen.
     onSelectRegionHover: (hovered) =>
       void triggerAction(hovered ? 'hoverSelectRegionOn' : 'hoverSelectRegionOff').catch(
         () => undefined
       ),
+    onActivateSource: () => {
+      const sourceId = state.source?.sourceId
+      if (!sourceId) return
+      // The outline lets go at once, so the window it covered is what comes forward.
+      void triggerAction('hoverSourceDismiss').catch(() => undefined)
+      attempt('Bring the window to the front', () => activateSource(sourceId))
+    },
+    onSelectSource: (sourceId) => attempt('Choose source', () => selectSource(sourceId)),
+    onClearCrop: () => {
+      const sourceId = state.source?.sourceId
+      if (sourceId) attempt('Clear crop area', () => clearSourceCrop(sourceId))
+    },
     onSourceHover: (hovered) =>
       void triggerAction(hovered ? 'hoverSourceOn' : 'hoverSourceOff').catch(() => undefined)
   }

@@ -14,6 +14,24 @@
  * arrow keys nudge it — and Return, a double-click inside, or the foot's confirm button commits.
  * Escape cancels at any point. Dragging outside an existing box starts a new one.
  *
+ * ## Limits and a picture
+ *
+ * `area` limits drawing, moving and resizing to one rectangle of the surface (a window's bounds),
+ * and presses outside it do nothing. `initial` opens with an existing box, ready to adjust.
+ * `picture` dims everything and shows an image at that rectangle — a recent screenshot of the
+ * window being edited, refreshed with `setPicture`, crossfading — so the window stands out even
+ * when other windows cover it.
+ *
+ * While drawing, holding Space moves the box with the pointer instead of resizing it; letting go
+ * carries on drawing from where the box now is.
+ *
+ * Any size of box is kept — it can be adjusted afterwards — except a plain click, which draws
+ * nothing.
+ *
+ * Until a box exists, a small bubble rides just above the cursor saying what to do. It follows the
+ * container's own pointer events, and `pointerAt` for callers that track the pointer themselves (a
+ * non-key panel sees no hover events). Drawing hides it.
+ *
  * The frame sits *outside* the selected area, so it never covers what is being chosen.
  *
  * ## Coordinates
@@ -39,8 +57,17 @@
 
 const Z_INDEX_OVERLAY = 6000
 
-/** A drawn box smaller than this in either axis is a misclick, not a selection. */
-const MINIMUM_DRAG = 10
+/** A box needs some size in both axes: a plain click draws nothing. */
+const MINIMUM_DRAG = 1
+
+/** The cursor bubble: its gap above the cursor, and how quickly it catches up (0–1 per frame). */
+const BUBBLE_GAP = 16
+const BUBBLE_EASE = 0.3
+
+const nextFrame = (callback) =>
+  globalThis.requestAnimationFrame?.(callback) ?? setTimeout(callback, 16)
+const cancelFrame = (id) =>
+  globalThis.cancelAnimationFrame ? globalThis.cancelAnimationFrame(id) : clearTimeout(id)
 
 /** Frame geometry, in points: the ring around the box and the thick edge holding the controls. */
 const RING = 4
@@ -55,8 +82,11 @@ const THEMES = {
     lift: '0 10px 28px rgba(0, 0, 0, 0.45)',
     highlight: 'rgba(255, 255, 255, 0.38)',
     shade: 'rgba(0, 0, 0, 0.45)',
-    hint: 'rgba(24, 25, 27, 0.92)',
-    hintText: '#edeef0'
+    hint: 'rgba(24, 25, 27, 0.94)',
+    hintText: '#edeef0',
+    hintEdge: 'rgba(255, 255, 255, 0.1)',
+    keyBg: 'rgba(255, 255, 255, 0.1)',
+    keyEdge: 'rgba(255, 255, 255, 0.22)'
   },
   light: {
     accent: '#3e63dd',
@@ -64,8 +94,11 @@ const THEMES = {
     lift: '0 10px 28px rgba(0, 0, 0, 0.22)',
     highlight: 'rgba(255, 255, 255, 0.5)',
     shade: 'rgba(0, 0, 0, 0.3)',
-    hint: 'rgba(255, 255, 255, 0.95)',
-    hintText: '#1c2024'
+    hint: 'rgba(255, 255, 255, 0.97)',
+    hintText: '#1c2024',
+    hintEdge: 'rgba(0, 0, 0, 0.1)',
+    keyBg: 'rgba(0, 0, 0, 0.04)',
+    keyEdge: 'rgba(0, 0, 0, 0.18)'
   }
 }
 
@@ -140,15 +173,28 @@ function zoneOf(point, rect) {
 export class RegionSelect {
   /**
    * @param {{onHitRects?: Function, container?: HTMLElement, cancelOnMisclick?: boolean,
-   *   confirmLabel?: string, theme?: 'light' | 'dark'}} options
+   *   confirmLabel?: string, theme?: 'light' | 'dark', area?: object, initial?: object,
+   *   picture?: object}} options `area`, `initial` and `picture` are rectangles in surface
+   *   points; see above.
    */
   constructor({
     onHitRects,
     container,
     cancelOnMisclick = false,
     confirmLabel = 'Confirm',
-    theme
+    theme,
+    area = null,
+    initial = null,
+    picture = null
   } = {}) {
+    this._area = isRect(area) ? { ...area } : null
+    this._initial = isRect(initial) ? { ...initial } : null
+    this._picture = isRect(picture) ? { ...picture } : null
+    this._pictureUrl = null
+    this._pristine = false
+    this._pointer = null
+    this._bubble = null
+    this._frame = 0
     this._onHitRects = onHitRects
     this._mount = container ?? null
     this._cancelOnMisclick = cancelOnMisclick
@@ -167,6 +213,86 @@ export class RegionSelect {
   /** True while the editor is on screen. */
   get active() {
     return this._container !== null
+  }
+
+  /** True while a box is being drawn, moved or resized: callers hold off background work. */
+  get dragging() {
+    return this._gesture !== null
+  }
+
+  /** True while the box is still the `initial` one (or `reset`'s), untouched. */
+  get pristine() {
+    return this.active && this._pristine && !this._gesture
+  }
+
+  /**
+   * Start over with `initial` (or no box), as if just opened: for a caller that moved the surface
+   * to another display, where the old box means nothing.
+   */
+  reset(initial = null) {
+    if (!this._els) return
+    this._gesture = null
+    this._rect = isRect(initial) ? this._clampMove({ ...initial }) : null
+    this._editing = this._rect !== null
+    this._pristine = this._rect !== null
+    this._draw()
+  }
+
+  /**
+   * Show `url` in the picture rectangle, fading in over the previous image. The image is decoded
+   * before it is added, off the main thread where the engine allows: a full-size screenshot
+   * decoded in place would stall a drag in progress.
+   */
+  async setPicture(url) {
+    const els = this._els
+    if (!els?.stage || !url || url === this._pictureUrl) return
+    this._pictureUrl = url
+    const image = assign(document.createElement('img'), {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      opacity: '0',
+      transition: 'opacity 500ms ease-out'
+    })
+    image.alt = ''
+    image.draggable = false
+    image.decoding = 'async'
+    image.src = url
+    try {
+      await image.decode()
+    } catch {
+      return
+    }
+    // Superseded or closed while decoding.
+    if (this._els !== els || this._pictureUrl !== url) return
+    els.stage.append(image)
+    // Two paints at opacity 0 first, or the fade would be skipped.
+    nextFrame(() =>
+      nextFrame(() => {
+        image.style.opacity = '1'
+        setTimeout(() => {
+          for (const old of [...els.stage.children]) if (old !== image) old.remove()
+        }, 560)
+      })
+    )
+  }
+
+  /** True while there is no box and nothing being dragged: the cursor bubble is up. */
+  get idle() {
+    return this.active && !this._rect && !this._gesture
+  }
+
+  /**
+   * Where the pointer is, in this surface's points, or null when it is off the surface. For
+   * callers that track the pointer natively; the surface's own pointer events also feed this.
+   * `snap` moves the bubble there at once instead of easing (after the surface itself moved).
+   */
+  pointerAt(point, { snap = false } = {}) {
+    if (!this._els) return
+    this._pointer = point && Number.isFinite(point.x) && Number.isFinite(point.y) ? point : null
+    if (snap) this._bubble = null
+    this._drawBubble()
   }
 
   /** The current box in overlay-local points, or null. */
@@ -203,7 +329,9 @@ export class RegionSelect {
     this._bounds = bounds ? { ...bounds } : null
     this._rect = null
     this._editing = false
+    this._pristine = false
     this._render()
+    if (this._initial) this.reset(this._initial)
     this._publishHitRects()
 
     return new Promise((resolve) => {
@@ -219,6 +347,7 @@ export class RegionSelect {
       }
 
       this._listen(document, 'keydown', (event) => this._key(event))
+      this._listen(document, 'keyup', (event) => this._keyUp(event))
       this._listen(this._container, 'pointerdown', (event) => this._begin(event))
       this._listen(this._container, 'pointermove', (event) => this._update(event))
       this._listen(this._container, 'pointerup', (event) => this._finish(event))
@@ -280,7 +409,14 @@ export class RegionSelect {
   }
 
   _key(event) {
-    if (event.key === 'Escape') {
+    if (event.key === ' ') {
+      event.preventDefault()
+      // Held while drawing: the box moves with the pointer until Space is let go.
+      if (this._gesture?.kind === 'draw') {
+        this._gesture.spacing = true
+        this._container.style.cursor = 'move'
+      }
+    } else if (event.key === 'Escape') {
       event.preventDefault()
       this._settle?.(null)
     } else if (event.key === 'Enter') {
@@ -288,6 +424,7 @@ export class RegionSelect {
       this.confirm()
     } else if (this._editing && !this._gesture && event.key.startsWith('Arrow')) {
       event.preventDefault()
+      this._pristine = false
       const step = event.shiftKey ? 10 : 1
       const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0
       const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
@@ -296,11 +433,23 @@ export class RegionSelect {
     }
   }
 
+  _keyUp(event) {
+    if (event.key !== ' ') return
+    event.preventDefault()
+    if (this._gesture?.kind === 'draw') {
+      this._gesture.spacing = false
+      this._container.style.cursor = CURSORS.outside
+    }
+  }
+
   _begin(event) {
     if (event.button !== 0 || this._gesture) return
     event.preventDefault()
     const point = this._point(event)
     const zone = this._editing ? zoneOf(point, this._rect) : 'outside'
+    // Outside the area there is nothing to select.
+    if (zone === 'outside' && !this._inArea(point)) return
+    this._pristine = false
     this._container.setPointerCapture(event.pointerId)
     if (zone === 'outside') {
       this._editing = false
@@ -323,6 +472,7 @@ export class RegionSelect {
     if (event.button !== 0 || this._gesture || !this._editing) return
     // Over the box's edge (the handles draw above the foot), let the surface start a resize.
     if (zoneOf(this._point(event), this._rect) !== 'outside') return
+    this._pristine = false
     event.preventDefault()
     event.stopPropagation()
     this._container.setPointerCapture(event.pointerId)
@@ -336,15 +486,25 @@ export class RegionSelect {
 
   _update(event) {
     const gesture = this._gesture
+    if (!gesture) this.pointerAt(this._point(event))
     if (!gesture) {
-      if (this._editing) {
-        this._container.style.cursor = CURSORS[zoneOf(this._point(event), this._rect)]
-      }
+      const point = this._point(event)
+      const zone = this._editing ? zoneOf(point, this._rect) : 'outside'
+      this._container.style.cursor =
+        zone === 'outside' && !this._inArea(point) ? 'default' : CURSORS[zone]
       return
     }
     if (gesture.pointerId !== event.pointerId) return
     const point = this._clampPoint(this._point(event))
     if (gesture.kind === 'draw') {
+      // With Space held the start travels with the pointer, so the whole box moves.
+      if (gesture.spacing && gesture.last) {
+        gesture.start = this._clampPoint({
+          x: gesture.start.x + point.x - gesture.last.x,
+          y: gesture.start.y + point.y - gesture.last.y
+        })
+      }
+      gesture.last = point
       this._rect = rectangleFrom(gesture.start, point)
     } else if (gesture.kind === 'move') {
       const { from, start } = gesture
@@ -379,11 +539,19 @@ export class RegionSelect {
     if (gesture.kind === 'draw') {
       this._rect = rectangleFrom(gesture.start, this._clampPoint(this._point(event)))
     }
-    // Too small is a misclick: clear it and stay open for another attempt rather than leaving a
-    // sliver to confirm.
+    // An edit that collapses the box to nothing is undone; the box stays as it was.
+    if (gesture.kind !== 'draw' && !bigEnough(this._rect)) {
+      this._rect = gesture.from
+      this._draw()
+      return
+    }
+    // A click without a drag draws nothing: stay open for another attempt, bubble back at the
+    // cursor.
     if (!bigEnough(this._rect)) {
       this._rect = null
       this._editing = false
+      this._pointer = this._point(event)
+      this._bubble = null
       this._draw()
       if (this._cancelOnMisclick) this._settle?.(null)
       return
@@ -405,20 +573,36 @@ export class RegionSelect {
     this._draw()
   }
 
-  _clampPoint(point) {
+  /** The rectangle boxes must stay inside: the area, or the whole surface. */
+  _limits() {
+    if (this._area) return this._area
     const { width, height } = this._viewport()
+    return { x: 0, y: 0, width, height }
+  }
+
+  _inArea(point) {
+    const { x, y, width, height } = this._limits()
+    return point.x >= x && point.y >= y && point.x <= x + width && point.y <= y + height
+  }
+
+  _clampPoint(point) {
+    const { x, y, width, height } = this._limits()
     return {
-      x: Math.min(Math.max(point.x, 0), width),
-      y: Math.min(Math.max(point.y, 0), height)
+      x: Math.min(Math.max(point.x, x), x + width),
+      y: Math.min(Math.max(point.y, y), y + height)
     }
   }
 
   _clampMove(rect) {
-    const { width, height } = this._viewport()
+    const { x, y, width, height } = this._limits()
+    const w = Math.min(rect.width, width)
+    const h = Math.min(rect.height, height)
     return {
       ...rect,
-      x: Math.round(Math.min(Math.max(rect.x, 0), Math.max(0, width - rect.width))),
-      y: Math.round(Math.min(Math.max(rect.y, 0), Math.max(0, height - rect.height)))
+      width: w,
+      height: h,
+      x: Math.round(Math.min(Math.max(rect.x, x), Math.max(x, x + width - w))),
+      y: Math.round(Math.min(Math.max(rect.y, y), Math.max(y, y + height - h)))
     }
   }
 
@@ -428,7 +612,7 @@ export class RegionSelect {
     const els = this._els
     if (!els) return
     const rect = this._rect
-    els.hint.style.display = rect || this._gesture ? 'none' : 'block'
+    this._drawBubble()
     if (!isRect(rect)) {
       els.frame.style.display = 'none'
       els.foot.style.display = 'none'
@@ -460,7 +644,9 @@ export class RegionSelect {
 
     const editing = this._editing && !this._gesture
     els.size.textContent = `${rect.width} × ${rect.height}`
-    els.origin.textContent = `${rect.x}, ${rect.y}`
+    // Within an area (a window), the position counts from its corner.
+    const corner = this._area ?? { x: 0, y: 0 }
+    els.origin.textContent = `${rect.x - corner.x}, ${rect.y - corner.y}`
     els.actions.style.display = this._editing ? 'flex' : 'none'
     assign(els.grips, {
       display: editing ? 'block' : 'none',
@@ -489,6 +675,51 @@ export class RegionSelect {
     els.foot.style.left = `${left}px`
   }
 
+  /**
+   * The cursor bubble: shown while idle with the pointer on the surface, centred just above the
+   * cursor (below it near the top edge), kept inside the surface, and eased toward the cursor so it
+   * glides rather than jumps.
+   */
+  _drawBubble() {
+    const els = this._els
+    if (!els) return
+    const showing = this.idle && this._pointer !== null
+    els.hint.style.opacity = showing ? '1' : '0'
+    els.hint.style.scale = showing ? '1' : '0.92'
+    els.message.textContent = 'Drag to select an area'
+    if (!showing) return
+    if (!this._frame) this._frame = nextFrame(() => this._stepBubble())
+  }
+
+  _bubbleTarget() {
+    const { width, height } = this._viewport()
+    const box = this._els.hint
+    const w = box.offsetWidth || 0
+    const h = box.offsetHeight || 0
+    const { x, y } = this._pointer
+    const below = y - BUBBLE_GAP - h < 4
+    return {
+      x: Math.min(Math.max(x - w / 2, 4), Math.max(4, width - w - 4)),
+      y: Math.min(below ? y + BUBBLE_GAP + 12 : y - BUBBLE_GAP - h, Math.max(4, height - h - 4))
+    }
+  }
+
+  _stepBubble() {
+    this._frame = 0
+    const els = this._els
+    if (!els || !this._pointer || !this.idle) return
+    const target = this._bubbleTarget()
+    const from = this._bubble ?? target
+    const next = {
+      x: from.x + (target.x - from.x) * BUBBLE_EASE,
+      y: from.y + (target.y - from.y) * BUBBLE_EASE
+    }
+    const settled = Math.abs(target.x - next.x) < 0.3 && Math.abs(target.y - next.y) < 0.3
+    this._bubble = settled ? target : next
+    els.hint.style.transform = `translate3d(${this._bubble.x}px, ${this._bubble.y}px, 0)`
+    if (!settled) this._frame = nextFrame(() => this._stepBubble())
+  }
+
   _render() {
     const theme = THEMES[this._theme ?? systemTheme()] ?? THEMES.dark
     const container = assign(document.createElement('div'), {
@@ -502,6 +733,43 @@ export class RegionSelect {
       webkitUserSelect: 'none'
     })
     container.dataset.kimochiRegionSelect = 'true'
+
+    // The picture: everything dimmed, and the image of what is being edited at its own place.
+    let shade = null
+    let stage = null
+    if (this._picture) {
+      shade = assign(document.createElement('div'), {
+        position: 'absolute',
+        inset: '0',
+        backgroundColor: 'rgba(0, 0, 0, 0.62)',
+        pointerEvents: 'none',
+        opacity: '0',
+        transition: 'opacity 200ms ease-out'
+      })
+      const { x, y, width, height } = this._picture
+      stage = assign(document.createElement('div'), {
+        position: 'absolute',
+        left: `${x}px`,
+        top: `${y}px`,
+        width: `${width}px`,
+        height: `${height}px`,
+        overflow: 'hidden',
+        borderRadius: '10px',
+        backgroundColor: 'rgba(0, 0, 0, 0.35)',
+        boxShadow: '0 0 0 1px rgba(255, 255, 255, 0.14), 0 24px 64px rgba(0, 0, 0, 0.55)',
+        pointerEvents: 'none',
+        opacity: '0',
+        transform: 'scale(0.985)',
+        transition: 'opacity 220ms ease-out, transform 260ms cubic-bezier(0.16, 1, 0.3, 1)'
+      })
+      nextFrame(() =>
+        nextFrame(() => {
+          shade.style.opacity = '1'
+          stage.style.opacity = '1'
+          stage.style.transform = 'none'
+        })
+      )
+    }
 
     // The ring: the box's border, drawn outside the selected area. Its inner 1px line is the
     // shadow side of a raised edge; the bevel child carries the lit top and shaded bottom.
@@ -615,28 +883,59 @@ export class RegionSelect {
     foot.append(size, origin, spacer, actions)
     foot.addEventListener('pointerdown', (event) => this._beginMove(event))
 
+    // The cursor bubble. Positioned by transform from the top-left; fades and scales in place.
     const hint = assign(document.createElement('div'), {
       position: 'fixed',
-      bottom: '24px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      padding: '8px 14px',
+      left: '0',
+      top: '0',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '6px 9px 6px 11px',
       borderRadius: '8px',
       backgroundColor: theme.hint,
       color: theme.hintText,
-      boxShadow: theme.lift,
-      font: `500 12px/1.2 ${UI}`,
-      pointerEvents: 'none'
+      boxShadow: `0 0 0 1px ${theme.hintEdge}, ${theme.lift}`,
+      font: `500 12px/16px ${UI}`,
+      whiteSpace: 'nowrap',
+      pointerEvents: 'none',
+      opacity: '0',
+      scale: '0.92',
+      transformOrigin: '50% 100%',
+      transition: 'opacity 140ms ease-out, scale 180ms cubic-bezier(0.16, 1, 0.3, 1)',
+      willChange: 'transform'
     })
-    hint.append('Drag to select an area · ')
-    const key = assign(document.createElement('span'), { font: `600 11px ${MONO}` })
-    key.textContent = 'Esc'
-    hint.append(key, ' to cancel')
+    const message = document.createElement('span')
+    const divider = assign(document.createElement('span'), {
+      width: '1px',
+      height: '12px',
+      margin: '0 3px',
+      backgroundColor: theme.hintEdge
+    })
+    // Escape drawn as a key cap: a raised face with a heavier bottom edge.
+    const key = assign(document.createElement('kbd'), {
+      display: 'inline-flex',
+      alignItems: 'center',
+      height: '18px',
+      padding: '0 5px',
+      boxSizing: 'border-box',
+      borderRadius: '4px',
+      backgroundColor: theme.keyBg,
+      boxShadow: `inset 0 0 0 1px ${theme.keyEdge}, inset 0 -1.5px 0 ${theme.keyEdge}`,
+      font: `600 10px/1 ${UI}`,
+      letterSpacing: '0.02em'
+    })
+    key.textContent = 'esc'
+    const cancel = assign(document.createElement('span'), { opacity: '0.7' })
+    cancel.textContent = 'to cancel'
+    hint.append(message, divider, key, cancel)
 
+    if (shade) container.append(shade, stage)
     container.append(frame, foot, grips, hint)
     ;(this._mount ?? document.body).append(container)
     this._container = container
-    this._els = { frame, bevel, foot, size, origin, actions, grips, hint }
+    this._els = { frame, bevel, foot, size, origin, actions, grips, hint, message, stage }
+    this._drawBubble()
   }
 
   _publishHitRects() {
@@ -648,6 +947,12 @@ export class RegionSelect {
     this._gesture = null
     this._editing = false
     this._rect = null
+    cancelFrame(this._frame)
+    this._frame = 0
+    this._pointer = null
+    this._bubble = null
+    this._pictureUrl = null
+    this._pristine = false
     this._container?.remove()
     this._container = null
     this._els = null

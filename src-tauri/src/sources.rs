@@ -35,8 +35,8 @@ pub fn err(e: CaptureError) -> String {
 fn capture_isolated(service: &Service, source_id: &str) -> Result<kimochi_capture::Frame, String> {
     let mut backend = service
         .backend
-        .try_lock()
-        .map_err(|_| "busy: a capture is already running; retry shortly".to_string())?;
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     backend
         .capture(&CaptureRequest {
             source_id: source_id.to_string(),
@@ -173,16 +173,15 @@ pub fn thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
             return Ok(json!({ "url": cached.data_uri }));
         }
     }
-    let frame = capture_isolated(service, source_id)?;
-    // Downscale the captured pixels directly: encoding a full 5K frame to PNG only to
-    // decode it again would cost far more than the thumbnail itself.
-    let (small, small_w, small_h) = downscale(
-        &frame.pixels,
-        frame.info.width,
-        frame.info.height,
-        THUMBNAIL_EDGE,
-    );
-    let png = encode_png(&small, small_w, small_h)?;
+    // Captured at thumbnail size: the capture scales on the GPU, so a 5K display is
+    // never copied or shrunk at full size just to show 320 pixels of it.
+    let frame = service
+        .backend
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .thumbnail(source_id, THUMBNAIL_EDGE)
+        .map_err(err)?;
+    let png = encode_png(&frame.pixels, frame.info.width, frame.info.height)?;
     let data_uri: Arc<str> = Arc::from(format!(
         "data:image/png;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(&png)
@@ -220,15 +219,12 @@ pub fn preview(service: &Shared, source_id: &str) -> Result<Value, String> {
 /// The whole selected window, full resolution, for the overlay's hover marking.
 ///
 /// Built for being cheap to get wrong-footed by: it never touches the latest,
-/// published or retained frames, never allocates a frame id, never runs the text
-/// observer, and refuses outright while a scan or auto-OCR capture holds the
-/// `scanning` flag rather than queueing behind it. Pixels stay raw until the
-/// `capture:` protocol is asked for them, so the PNG encode happens off this call
-/// and only if the overlay actually loads the image.
+/// published or retained frames, never allocates a frame id and never runs the text
+/// observer. It does not wait out a scan either: the scan releases the backend once
+/// it has its frame, and a capture from the source's running stream is a copy. Pixels
+/// stay raw until the `capture:` protocol is asked for them, so the PNG encode happens
+/// off this call and only if the overlay actually loads the image.
 pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String> {
-    if service.scanning.load(std::sync::atomic::Ordering::SeqCst) {
-        return Err("busy: a scan is running".into());
-    }
     let frame = capture_isolated(service, source_id)?;
     let (width, height, scale) = (frame.info.width, frame.info.height, frame.info.scale_factor);
     let info = serde_json::to_value(&frame.info).unwrap_or(Value::Null);
@@ -246,12 +242,9 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
 }
 
 /// A fresh, uncached thumbnail of the chosen source for the main window's sidebar, which
-/// refreshes it every few seconds. Like `hover_preview` it never queues behind a scan: a
-/// `busy:` error just means "keep the last frame".
+/// refreshes it every few seconds. It shares the source's running stream with scans and
+/// the hover preview, so it is a copy and a shrink rather than a capture of its own.
 pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
-    if service.scanning.load(std::sync::atomic::Ordering::SeqCst) {
-        return Err("busy: a scan is running".into());
-    }
     let frame = capture_isolated(service, source_id)?;
     let (small, width, height) = downscale(
         &frame.pixels,
@@ -270,6 +263,26 @@ pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String
     }))
 }
 
+/// Select a source and keep the region saved for it, if any: what picking a source in the source
+/// picker means now that regions are drawn over the source itself rather than in the picker.
+pub fn select_keeping_crop(service: &Shared, source_id: &str) -> Result<Value, String> {
+    let source = {
+        let mut backend = service
+            .backend
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        backend
+            .enumerate()
+            .map_err(err)?
+            .into_iter()
+            .find(|s| s.id == source_id)
+            .ok_or("gone: that source has closed; refresh the list and pick again")?
+    };
+    let key = descriptor_key(source.kind, &source.name, source.app.as_deref());
+    let saved = saved_crop_for_key(service, &key);
+    commit(service, source_id, saved)
+}
+
 /// Selection and crop change together or not at all.
 ///
 /// All three persisted keys go through a single settings transaction, so a failed
@@ -278,8 +291,8 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
     let source = {
         let mut backend = service
             .backend
-            .try_lock()
-            .map_err(|_| "busy: a capture is already running; retry shortly".to_string())?;
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         backend
             .enumerate()
             .map_err(err)?

@@ -28,6 +28,7 @@ pub const ACTIONS: &[&str] = &[
     "hoverSelectRegionOff",
     "hoverSourceOn",
     "hoverSourceOff",
+    "hoverSourceDismiss",
 ];
 
 /// The subset that can be bound to a shortcut or a gamepad button.

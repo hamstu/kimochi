@@ -90,3 +90,58 @@ test('a failed or busy capture leaves the outline alone', async () => {
   await preview.start()
   assert.equal(preview.url, null)
 })
+
+test('a later hover shows the last picture at once, then the fresh one, releasing the old', async () => {
+  let clock = 0
+  const released = []
+  const calls = []
+  const seen = []
+  const preview = new HoverPreview({
+    now: () => clock,
+    release: (url) => released.push(url),
+    onChange: () => seen.push(preview.url),
+    capture: ({ reusable, show }) => {
+      const recent = reusable('win-1')
+      if (recent) return { key: 'win-1', url: recent, reused: true }
+      show('win-1')
+      const pending = deferred()
+      calls.push(pending)
+      return pending.promise
+    }
+  })
+  const first = preview.start()
+  calls[0].resolve({ key: 'win-1', url: 'blob:1' })
+  await first
+  preview.stop()
+
+  clock = 5000
+  const second = preview.start()
+  assert.equal(preview.url, 'blob:1', 'the stale picture shows while the new capture runs')
+  calls[1].resolve({ key: 'win-1', url: 'blob:2' })
+  await second
+  assert.equal(preview.url, 'blob:2')
+  assert.deepEqual(released, ['blob:1'])
+  assert.ok(!seen.includes(null) || seen.lastIndexOf(null) < seen.indexOf('blob:1', 1))
+})
+
+test('show() is ignored for another source and after the hover ends', async () => {
+  const calls = []
+  const preview = new HoverPreview({
+    capture: ({ show }) => {
+      calls.push(show)
+      const pending = deferred()
+      calls.push(pending)
+      return pending.promise
+    }
+  })
+  const first = preview.start()
+  calls[1].resolve({ key: 'win-1', url: 'blob:1' })
+  await first
+  preview.stop()
+  void preview.start()
+  calls[2]('win-2')
+  assert.equal(preview.url, null, 'no picture of another source')
+  preview.stop()
+  calls[2]('win-1')
+  assert.equal(preview.url, null, 'nothing once the hover has ended')
+})

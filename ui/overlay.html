@@ -125,6 +125,19 @@
     #hover > .hover-window-image.loaded {
       opacity: 1;
     }
+    /* Bringing the window to the front: the markings zoom, blur and fade about the
+       window's centre (each element is placed at the window's box). */
+    #hover > .dissipate {
+      transform-origin: center;
+      animation: hover-dissipate 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+    @keyframes hover-dissipate {
+      to {
+        opacity: 0;
+        transform: scale(1.07);
+        filter: blur(12px);
+      }
+    }
     .hover-crop {
       border: 3px solid #22c55e;
       background: rgba(34, 197, 94, 0.06);

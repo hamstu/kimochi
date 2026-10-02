@@ -1,18 +1,22 @@
 /**
- * The sidebar's Source: one card that says where the Log's text comes from, opening a popover of
- * source types, and under it the controls that apply to that source.
+ * The sidebar's Source: one card that says where the Log's text comes from, a menu of source types
+ * to change it, and under it the controls that apply to that source.
  *
- * Nothing chosen yet is a dashed card. Choosing "Window or screen" opens the source picker at once;
- * once a window or display is chosen the card shows it live (a fresh frame every few seconds,
- * crossfaded in) with its region marked, and the scan, Auto OCR, region and overlay controls sit
- * underneath. Quick Shot keeps a scan button and the overlay but has nothing to watch; Clipboard
- * and WebSocket need no controls at all.
+ * Nothing chosen yet is a dashed card. The menu's "Window or screen" opens a submenu of every
+ * window and display, as thumbnails, to choose from. Once one is chosen the card shows it live (a
+ * fresh frame every few seconds, crossfaded in) with its region marked; clicking the picture brings
+ * a window to the front, and the card's foot holds Crop area and Change source. The scan, Auto OCR
+ * and overlay controls sit underneath. Quick Shot keeps a scan button and the overlay but has
+ * nothing to watch; Clipboard and WebSocket need no controls at all.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Aperture,
   AppWindow,
+  ArrowLeftRight,
+  ArrowUpRight,
   Check,
+  ChevronRight,
   ChevronsUpDown,
   Clipboard,
   Crop,
@@ -22,9 +26,23 @@ import {
   Radio,
   ScanSearch,
   ScanText,
-  Settings
+  Settings,
+  SquareDashed,
+  X
 } from 'lucide-react'
-import { Button, Popover, PopoverContent, PopoverTrigger, Spinner, cn } from '@kit'
+import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
+import {
+  Button,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuSub,
+  MenuSubContent,
+  MenuTrigger,
+  Spinner
+} from '@kit'
+import { SourceGrid } from './SourceGrid'
 import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
 import type { InputSource } from '@texthooker/input-source'
 import { SourceIcon } from '../components/RemoteControl'
@@ -184,23 +202,28 @@ function useLiveFrames(sourceId: string): {
           setTimeout(() => drop(id), FADE_MS + 50)
         })
       )
-  }}
+  }
+}
 
 function LivePreview({
   sourceId,
   crop,
   live,
-  placeholder
+  placeholder,
+  hint
 }: {
   sourceId: string
   crop: NativeCrop | null
   live: boolean
   placeholder: ReactNode
+  /** Shown over the picture while the card is hovered. */
+  hint?: ReactNode
 }): ReactNode {
   const { frames, size, onLoad } = useLiveFrames(sourceId)
   const ratio = size ? size.width / size.height : 16 / 9
-  // Wide frames set the card's shape; tall ones sit in a square, pillarboxed.
-  const boxRatio = Math.min(Math.max(ratio, 1), 3)
+  // The well follows the frame's shape within limits; the frame sits inside it, fitted, with
+  // room around it — a tall window stands in the middle of a wide well.
+  const boxRatio = Math.min(Math.max(ratio, 1.3), 2.4)
   const region =
     crop && crop.reference_width > 0 && crop.reference_height > 0
       ? {
@@ -213,10 +236,7 @@ function LivePreview({
 
   return (
     <span className="src-shot" style={{ aspectRatio: boxRatio }}>
-      <span
-        className={cn('src-stage', ratio < 1 && 'src-stage-tall')}
-        style={{ aspectRatio: ratio }}
-      >
+      <span className="src-stage" style={{ '--src-ratio': ratio } as CSSProperties}>
         {frames.map((frame) => (
           <img
             key={frame.id}
@@ -231,6 +251,7 @@ function LivePreview({
         {region && <span className="src-region" style={region} />}
       </span>
       {frames.length === 0 && <span className="src-shot-wait">{placeholder}</span>}
+      {hint}
       {live && (
         <span className="src-live">
           <span className="src-live-dot" />
@@ -246,11 +267,13 @@ function LivePreview({
 function CardHead({
   icon,
   title,
-  detail
+  detail,
+  chevron = true
 }: {
   icon: ReactNode
   title: ReactNode
   detail?: ReactNode
+  chevron?: boolean
 }): ReactNode {
   return (
     <span className="src-head">
@@ -259,55 +282,111 @@ function CardHead({
         <span className="src-head-title">{title}</span>
         {detail && <span className="src-head-detail">{detail}</span>}
       </span>
-      <ChevronsUpDown className="src-head-chevron" />
+      {chevron && <ChevronsUpDown className="src-head-chevron" />}
     </span>
   )
 }
 
-function TypeList({
-  mode,
-  onChoose
+/** One source type in the Change source menu: an icon tile, its name and what it does. */
+function TypeBody({
+  type,
+  selected,
+  sub
 }: {
-  mode: Mode | null
-  onChoose: (mode: Mode) => void
+  type: (typeof TYPES)[number]
+  selected: boolean
+  sub?: boolean
 }): ReactNode {
   return (
-    <div className="src-types" role="listbox" aria-label="Source type">
-      {TYPES.map((type) => {
-        const selected = type.mode === mode
-        return (
-          <button
-            key={type.mode}
-            type="button"
-            role="option"
-            aria-selected={selected}
-            className="src-type"
-            onClick={() => onChoose(type.mode)}
-          >
-            <span className="src-type-icon">{type.icon}</span>
-            <span className="src-type-text">
-              <span className="src-type-label">{type.label}</span>
-              <span className="src-type-detail">{type.detail}</span>
-            </span>
-            {selected && <Check className="src-type-check" />}
-          </button>
-        )
-      })}
-    </div>
+    <>
+      <span className="src-type-icon">{type.icon}</span>
+      <span className="src-type-text">
+        <span className="src-type-label">{type.label}</span>
+        <span className="src-type-detail">{type.detail}</span>
+      </span>
+      {selected && <Check className="src-type-check" />}
+      {sub && <ChevronRight className="src-type-chevron" />}
+    </>
   )
 }
+
+/**
+ * The Change source menu. "Window or screen" opens the grid of windows and displays; the other
+ * types are chosen directly.
+ */
+function SourceMenuContent({
+  mode,
+  currentId,
+  gridOpen,
+  onGridOpen,
+  onChooseType,
+  onChooseSource,
+  onOpenSettings
+}: {
+  mode: Mode | null
+  currentId: string | null
+  gridOpen: boolean
+  onGridOpen: (open: boolean) => void
+  onChooseType: (mode: Mode) => void
+  onChooseSource: (sourceId: string) => void
+  onOpenSettings: () => void
+}): ReactNode {
+  const [windowType, ...others] = TYPES
+  return (
+    <MenuContent align="start" className="src-menu">
+      <MenuSub open={gridOpen} onOpenChange={onGridOpen}>
+        <MenuPrimitive.SubTrigger className="src-type">
+          <TypeBody type={windowType} selected={mode === 'ocr'} sub />
+        </MenuPrimitive.SubTrigger>
+        <MenuSubContent className="src-grid-menu">
+          <SourceGrid currentId={currentId} onChoose={(source) => onChooseSource(source.id)} />
+        </MenuSubContent>
+      </MenuSub>
+      {others.map((type) => (
+        <MenuPrimitive.Item
+          key={type.mode}
+          className="src-type"
+          onSelect={() => onChooseType(type.mode)}
+        >
+          <TypeBody type={type} selected={type.mode === mode} />
+        </MenuPrimitive.Item>
+      ))}
+      <MenuSeparator />
+      <MenuItem icon={<Settings />} onSelect={onOpenSettings}>
+        Source settings
+      </MenuItem>
+    </MenuContent>
+  )
+}
+
+/** Requests from elsewhere (the tray, a shortcut) to open the menu on the window grid. */
+let handledChooseRequest = 0
 
 // ---------------------------------------------------------------------------- panel
 
 export function SourcePanel({
   controller,
-  onOpenSettings
+  onOpenSettings,
+  chooseRequest = 0
 }: {
   controller: Controller
   onOpenSettings: () => void
+  /** Bumped to open the menu on the window grid. */
+  chooseRequest?: number
 }): ReactNode {
   const [mode, choose] = useInputSource()
   const [open, setOpen] = useState(false)
+  const [gridOpen, setGridOpen] = useState(false)
+  // A request is handled once, even if the sidebar is remounted after it.
+  const [seenRequest, setSeenRequest] = useState(() => handledChooseRequest)
+  if (chooseRequest > seenRequest) {
+    setSeenRequest(chooseRequest)
+    setOpen(true)
+    setGridOpen(true)
+  }
+  useEffect(() => {
+    handledChooseRequest = Math.max(handledChooseRequest, seenRequest)
+  }, [seenRequest])
   const [hotkeys] = useHotkeys()
   const { state } = useViewState()
   const [websocketUrl, setWebsocketUrl] = useState(() => getSettings().websocketUrl)
@@ -325,11 +404,34 @@ export function SourcePanel({
   )
   const crop = state.crop ?? null
 
-  const pick = (next: Mode): void => {
+  const closeMenu = (): void => {
     setOpen(false)
-    choose(next)
-    // A window or screen is chosen straight away, in the picker.
-    if (next === 'ocr') controller.onOpenSource()
+    setGridOpen(false)
+  }
+  const menu = (
+    <SourceMenuContent
+      mode={empty ? null : mode}
+      currentId={source?.sourceId ?? null}
+      gridOpen={gridOpen}
+      onGridOpen={setGridOpen}
+      onChooseType={(next) => {
+        closeMenu()
+        choose(next)
+      }}
+      onChooseSource={(sourceId) => {
+        closeMenu()
+        choose('ocr')
+        controller.onSelectSource(sourceId)
+      }}
+      onOpenSettings={() => {
+        closeMenu()
+        onOpenSettings()
+      }}
+    />
+  )
+  const onMenuOpen = (next: boolean): void => {
+    setOpen(next)
+    if (!next) setGridOpen(false)
   }
 
   let card: ReactNode
@@ -351,16 +453,8 @@ export function SourcePanel({
       : source.name && source.name !== title
         ? source.name
         : 'Window'
-    card = (
-      <button
-        type="button"
-        className="src-card src-card-live"
-        aria-label={`Source: ${title}. Change source`}
-        onMouseEnter={() => {
-          if (source.type === 'window') controller.onSourceHover(true)
-        }}
-        onMouseLeave={() => controller.onSourceHover(false)}
-      >
+    const preview = (
+      <>
         <LivePreview
           // A new source starts from a clean slate rather than fading from the old one.
           key={source.sourceId}
@@ -368,13 +462,73 @@ export function SourcePanel({
           crop={crop}
           live={controller.isAutoOCREnabled}
           placeholder={isScreen ? <Monitor /> : <SourceIcon source={source} />}
+          hint={
+            isScreen ? undefined : (
+              <span className="src-front" aria-hidden>
+                <ArrowUpRight />
+                Bring to front
+              </span>
+            )
+          }
         />
         <CardHead
           icon={isScreen ? <Monitor /> : <SourceIcon source={source} />}
           title={title}
           detail={detail}
+          chevron={false}
         />
-      </button>
+      </>
+    )
+    // The card is the source: clicking a window brings it forward (it may be behind others).
+    // Its foot holds what changes it: the region, and the source itself.
+    card = (
+      <div className="src-card src-card-live">
+        {isScreen ? (
+          <div className="src-card-body">{preview}</div>
+        ) : (
+          <button
+            type="button"
+            className="src-card-body"
+            aria-label={`Bring ${title} to the front`}
+            onClick={() => controller.onActivateSource()}
+            onMouseEnter={() => controller.onSourceHover(true)}
+            onMouseLeave={() => controller.onSourceHover(false)}
+          >
+            {preview}
+          </button>
+        )}
+        <div className="src-actions">
+          <Menu>
+            <MenuTrigger asChild>
+              <button type="button" className="src-action" data-on={crop ? '' : undefined}>
+                <Crop />
+                <span className="src-action-label">Crop area</span>
+              </button>
+            </MenuTrigger>
+            <MenuContent align="start" className="src-crop-menu">
+              <MenuItem
+                icon={<SquareDashed />}
+                disabled={!controller.hasSource}
+                onSelect={() => controller.onEditCropArea()}
+              >
+                {crop ? 'Change crop area…' : 'Set crop area…'}
+              </MenuItem>
+              <MenuItem icon={<X />} disabled={!crop} onSelect={() => controller.onClearCrop()}>
+                Clear crop area
+              </MenuItem>
+            </MenuContent>
+          </Menu>
+          <Menu open={open} onOpenChange={onMenuOpen}>
+            <MenuTrigger asChild>
+              <button type="button" className="src-action">
+                <ArrowLeftRight />
+                <span className="src-action-label">Change source</span>
+              </button>
+            </MenuTrigger>
+            {menu}
+          </Menu>
+        </div>
+      </div>
     )
   } else {
     const type = TYPES.find((entry) => entry.mode === mode) ?? TYPES[0]
@@ -397,9 +551,6 @@ export function SourcePanel({
     )
   }
 
-  const regionDisabled =
-    !controller.hasSource ||
-    (controller.isScreenSource && (controller.isAutoOCREnabled || controller.isScanning))
   const scanDisabled =
     mode === 'quickshot'
       ? controller.isScanning
@@ -443,25 +594,14 @@ export function SourcePanel({
 
   return (
     <div className="src-panel">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>{card}</PopoverTrigger>
-        <PopoverContent align="start" className="src-popover">
-          <TypeList mode={empty ? null : mode} onChoose={pick} />
-          <div className="src-popover-foot">
-            <button
-              type="button"
-              className="src-popover-link"
-              onClick={() => {
-                setOpen(false)
-                onOpenSettings()
-              }}
-            >
-              <Settings />
-              Source settings
-            </button>
-          </div>
-        </PopoverContent>
-      </Popover>
+      {mode === 'ocr' && source ? (
+        card
+      ) : (
+        <Menu open={open} onOpenChange={onMenuOpen}>
+          <MenuTrigger asChild>{card}</MenuTrigger>
+          {menu}
+        </Menu>
+      )}
 
       {mode === 'ocr' && source && (
         <div className="src-controls">
@@ -477,21 +617,6 @@ export function SourcePanel({
               <ScanSearch />
               <span className="k-row-label">Auto OCR</span>
               <SwitchMark on={controller.isAutoOCREnabled} />
-            </button>
-            <button
-              type="button"
-              className="k-row src-row"
-              disabled={regionDisabled}
-              onClick={() => {
-                if (controller.isScreenSource) controller.onSelectAndScan()
-                else controller.onEditCropArea()
-              }}
-            >
-              <Crop />
-              <span className="k-row-label">Region</span>
-              <span className="k-row-meta src-row-meta">
-                {crop ? `${Math.round(crop.width)} × ${Math.round(crop.height)}` : 'Whole'}
-              </span>
             </button>
             {overlayRow}
           </div>

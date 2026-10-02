@@ -61,6 +61,17 @@ export default function MainPanel(): JSX.Element {
     return () => void pending.then((stop) => stop())
   }, [])
 
+  // ...and for a new source: the sidebar's Change source menu, opened on its window grid.
+  const [chooseRequest, setChooseRequest] = useState(0)
+  useEffect(() => {
+    const pending = listen('main:choose-source', () => {
+      void setSidebar(true)
+      setViewState((current) => (current === 'settings' ? lastView.current : current))
+      setChooseRequest((count) => count + 1)
+    })
+    return () => void pending.then((stop) => stop())
+  }, [setSidebar])
+
   // ⌘1, ⌘2 and ⌘, switch views.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -110,6 +121,7 @@ export default function MainPanel(): JSX.Element {
                 view={view}
                 controller={controller}
                 onOpenSourceSettings={() => openSettings('sources')}
+                chooseRequest={chooseRequest}
                 settingsTab={settingsTab}
                 onSettingsTab={openSettings}
                 onBack={() => setView(lastView.current)}

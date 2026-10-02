@@ -147,8 +147,17 @@ export const sourceLiveThumbnail = (
 /** An application's icon as a data URL, or null when it has none. Natively cached per app. */
 export const sourceIcon = (appName: string): Promise<{ icon: string | null }> =>
   invoke<{ icon: string | null }>('source_icon', { appName })
-export const openSourcePicker = (editCurrent: boolean): Promise<void> =>
-  invoke('open_source_picker', { editCurrent })
+/** Read this window or display, keeping the region saved for it. */
+export const selectSource = (sourceId: string): Promise<void> =>
+  invoke('commit_source', { sourceId, crop: null, keepCrop: true })
+/** Forget the source's region: the whole window or display is read. */
+export const clearSourceCrop = (sourceId: string): Promise<void> =>
+  invoke('commit_source', { sourceId, crop: null, keepCrop: false })
+/** Bring a window source's application to the front. */
+export const activateSource = (sourceId: string): Promise<void> =>
+  invoke('activate_source', { sourceId })
+/** The main window, with its source menu open on the grid of windows and displays. */
+export const openSourcePicker = (): Promise<void> => invoke('open_source_picker')
 
 // ---------------------------------------------------------------------------- actions
 

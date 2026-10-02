@@ -101,6 +101,15 @@ const state = {
 
 const setting = (key) => native.getSetting(key)
 
+/**
+ * Quick Shot is the Log reading OCR with no chosen source. The flag alone is not enough: the
+ * sidebar shows Quick Shot only while the input is OCR, so the scan shortcut follows the same
+ * rule rather than drawing a region under a Clipboard or WebSocket source.
+ */
+const isQuickShot = () =>
+  Boolean(setting('quickShotEnabled')) &&
+  (setting('superTexthooker')?.inputSource ?? 'ocr') === 'ocr'
+
 // ---------------------------------------------------------------------------
 // 1. Rendering
 // ---------------------------------------------------------------------------
@@ -109,16 +118,37 @@ const hover = new HoverOverlay(hoverContainer)
 // A picture of the hovered window inside its outline, so it can be recognised
 // even when other windows cover it. Silent on failure, like the outline itself:
 // `busy:` (a scan is capturing) and a closed window both just mean no picture.
+let hoverCopyFailed = false
+// The picture is kept as an object url: the `capture:` hover slot holds only the newest
+// capture (the region editor's refresh replaces it too), so its url cannot be shown again later.
 const hoverPreview = new HoverPreview({
-  capture: async ({ reusable }) => {
+  capture: async ({ reusable, show }) => {
     const sourceId = await native.selectedSource()
     if (!sourceId) return null
     const recent = reusable(sourceId)
     if (recent) return { key: sourceId, url: recent, reused: true }
+    // The last picture now; the fresh one replaces it when it lands.
+    show(sourceId)
     const preview = await native.sourceHoverPreview(sourceId)
-    return preview?.url ? { key: sourceId, url: preview.url } : null
+    if (!preview?.url) return null
+    try {
+      const response = await fetch(preview.url)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return { key: sourceId, url: URL.createObjectURL(await response.blob()) }
+    } catch (error) {
+      // Without a copy the picture still shows now; it just cannot be shown again later.
+      if (!hoverCopyFailed) {
+        hoverCopyFailed = true
+        log({ check: 'hover-preview-copy-failed', error: String(error?.message ?? error) })
+      }
+      return { key: sourceId, url: preview.url }
+    }
   },
-  onChange: () => drawHover()
+  onChange: () => drawHover(),
+  // Revoked late: an image fading out may still be drawing it.
+  release: (url) => {
+    if (url.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(url), 2000)
+  }
 })
 
 const renderer = new TextOverlayRenderer(wordsContainer, {
@@ -688,8 +718,10 @@ export function autoScanStats() {
 
 function syncAutoScanner() {
   scanner.updateSettings(setting('autoOCRSettings'))
-  // Quick Shot has no source to watch, so there is nothing for the loop to scan.
-  const wanted = state.flags.autoOcrEnabled && !setting('quickShotEnabled')
+  // Quick Shot has no source to watch, so there is nothing for the loop to scan. Nor while a
+  // region is being edited: the old region is about to be replaced, and the loop's frame checks
+  // run on this page, where they would stutter the drag.
+  const wanted = state.flags.autoOcrEnabled && !isQuickShot() && !state.regionSelecting
   if (wanted && !scanner.isRunning) {
     scanner.reset()
     scanner.start()
@@ -733,21 +765,16 @@ async function reportObserver() {
 async function onAction(name) {
   switch (name) {
     case 'triggerScan':
-      return setting('quickShotEnabled') ? quickShot() : performScan()
+      return isQuickShot() ? quickShot() : performScan()
     case 'playAudio':
       return playLatest()
     // The controller reads these back from the shared view, so this window owns
     // the flip. Native must pass these names through without touching the flag,
     // or the switch would toggle twice and appear dead.
+    // Both edit the current source's region over the source itself; see editSourceRegion.
     case 'selectAndScan':
-      return selectAndScan()
     case 'setCropArea':
-      // The picker owns crop editing for the current source, window or display.
-      return native
-        .openSourcePicker(true)
-        .catch((error) =>
-          log({ check: 'crop-editor-error', error: String(error?.message ?? error) })
-        )
+      return editSourceRegion()
     case 'toggleAutoOcr':
       return native.setViewFlags({ autoOcrEnabled: !state.flags.autoOcrEnabled })
     case 'toggleTextOverlay':
@@ -759,6 +786,13 @@ async function onAction(name) {
     case 'hoverSelectRegionOn':
     case 'hoverSelectRegionOff':
       state.hover.selectRegion = name.endsWith('On')
+      return drawHover()
+    // The window was brought to the front: its markings dissipate instead of waiting for the
+    // pointer to leave the card.
+    case 'hoverSourceDismiss':
+      state.hover.source = false
+      hoverPreview.stop()
+      hover.dissipate()
       return drawHover()
     case 'hoverSourceOn':
     case 'hoverSourceOff':
@@ -772,6 +806,59 @@ async function onAction(name) {
   }
 }
 
+/** How often the pointer is read while the region editor is up. */
+const POINTER_POLL_MS = 30
+
+/**
+ * Feed the editor the pointer's position for as long as it is on screen, and, when `onDisplay` is
+ * given, carry the overlay to whichever display the cursor moves to while the editor is idle (no
+ * box, no drag) or still showing the box it opened with. A box the reader has drawn or touched
+ * keeps the overlay where it is. `onDisplay` returns the box to open with on the new display.
+ */
+async function followPointer(selector, onDisplay) {
+  while (selector.active) {
+    // Mid-drag the editor has the pointer itself and nothing here can change; stay out of the
+    // way of its frames.
+    if (selector.dragging) {
+      await new Promise((done) => setTimeout(done, POINTER_POLL_MS))
+      continue
+    }
+    let at = null
+    try {
+      at = await native.pointerLocation()
+    } catch {
+      at = null
+    }
+    if (!selector.active) return
+    const display = at?.display
+    const movable = selector.idle || selector.pristine
+    if (onDisplay && display?.bounds && movable && !sameRect(display.bounds, state.origin)) {
+      try {
+        await native.placeOverlay(display.bounds)
+        state.origin = display.bounds
+        draw()
+        log({ check: 'region-display-moved', display: display.id })
+        if (!selector.active) return
+        // The box on the display left behind means nothing here; start with this one's own.
+        selector.reset(onDisplay(display) ?? null)
+      } catch (error) {
+        log({ check: 'region-display-move-failed', error: String(error?.message ?? error) })
+      }
+      if (!selector.active) return
+      selector.pointerAt({ x: at.x - state.origin.x, y: at.y - state.origin.y }, { snap: true })
+    } else if (at && state.origin) {
+      const local = { x: at.x - state.origin.x, y: at.y - state.origin.y }
+      const inside =
+        local.x >= 0 &&
+        local.y >= 0 &&
+        local.x < state.origin.width &&
+        local.y < state.origin.height
+      selector.pointerAt(inside ? local : null)
+    }
+    await new Promise((done) => setTimeout(done, POINTER_POLL_MS))
+  }
+}
+
 /**
  * Run the region editor over the display the overlay covers and return what was confirmed.
  *
@@ -782,12 +869,22 @@ async function onAction(name) {
  * would bring every Kimochi window in front of the game — so Escape and Return arrive as global
  * shortcuts held for the editor's lifetime and are replayed to it as key presses.
  *
+ * For the same reason it sees no hover events, so the pointer is polled natively to keep the
+ * editor's cursor bubble beside the cursor. With `onDisplay` (Quick Shot), the overlay also follows
+ * the cursor onto another display while nothing is drawn yet, and `onDisplay` is told where it went.
+ *
+ * `area`, `initial` and `picture` pass through to the editor (see ui/region-select.js); `onStart`
+ * gets the running editor, for a caller that keeps its picture fresh.
+ *
+ * @param {string} confirmLabel
+ * @param {{onDisplay?: (display: object) => object|null|void, area?: object, initial?: object,
+ *   picture?: object, onStart?: (selector: object) => void}} [options]
  * @returns {Promise<{x:number,y:number,width:number,height:number}|null>}
  */
-async function editRegion(confirmLabel) {
-  let select
+async function editRegion(confirmLabel, { onDisplay, area, initial, picture, onStart } = {}) {
+  let RegionSelect
   try {
-    ;({ selectRegion: select } = await import('./region-select.js'))
+    ;({ RegionSelect } = await import('./region-select.js'))
   } catch (error) {
     log({
       check: 'region-editor-unavailable',
@@ -798,9 +895,15 @@ async function editRegion(confirmLabel) {
   }
 
   state.regionSelecting = true
+  syncAutoScanner()
   const stopKeys = await native.listen('region-key', ({ payload }) => {
     if (payload?.key)
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: payload.key, bubbles: true }))
+      document.dispatchEvent(
+        new KeyboardEvent(payload.type === 'keyup' ? 'keyup' : 'keydown', {
+          key: payload.key,
+          bubbles: true
+        })
+      )
   })
   try {
     await native.regionKeys(true)
@@ -811,12 +914,26 @@ async function editRegion(confirmLabel) {
         : matchMedia('(prefers-color-scheme: light)').matches
           ? 'light'
           : 'dark'
-    const rect = await select(document.body, { confirmLabel, theme })
-    return rect && rect.width >= 2 && rect.height >= 2 ? rect : null
+    const selector = new RegionSelect({
+      container: document.body,
+      confirmLabel,
+      theme,
+      area,
+      initial,
+      picture
+    })
+    const running = selector.start()
+    onStart?.(selector)
+    void followPointer(selector, onDisplay)
+    const result = await running.catch(() => null)
+    selector.destroy()
+    const rect = result?.local
+    return rect && rect.width >= 1 && rect.height >= 1 ? rect : null
   } finally {
     // Whatever happened, the overlay must stop swallowing clicks, and the game gets its
     // Escape and Return back.
     state.regionSelecting = false
+    syncAutoScanner()
     stopKeys()
     await native.regionKeys(false)
   }
@@ -834,58 +951,179 @@ function cropFor(rect, origin, bounds, scale) {
   }
 }
 
+/** How often the window's picture is refreshed while its region is being edited. */
+const REGION_PICTURE_MS = 1500
+
+const displaySourceId = (display) => `macos:display:${display.id}`
+const scaleOf = (display) => display?.scale_factor ?? display?.scaleFactor ?? 1
+
+/** A saved crop (capture pixels of `bounds`) as a rectangle in overlay points over `origin`. */
+function cropToLocal(crop, origin, bounds) {
+  if (!crop?.reference_width || !crop?.reference_height) return null
+  const sx = bounds.width / crop.reference_width
+  const sy = bounds.height / crop.reference_height
+  return {
+    x: Math.round(bounds.x - origin.x + crop.x * sx),
+    y: Math.round(bounds.y - origin.y + crop.y * sy),
+    width: Math.round(crop.width * sx),
+    height: Math.round(crop.height * sy)
+  }
+}
+
+/** The display holding most of `bounds` (its centre), from `native.displays()`. */
+function displayHolding(bounds, displays) {
+  const cx = bounds.x + bounds.width / 2
+  const cy = bounds.y + bounds.height / 2
+  return (
+    displays.find(
+      (d) =>
+        cx >= d.bounds.x &&
+        cy >= d.bounds.y &&
+        cx < d.bounds.x + d.bounds.width &&
+        cy < d.bounds.y + d.bounds.height
+    ) ?? displays[0]
+  )
+}
+
+async function placeOverlayOn(bounds) {
+  if (sameRect(state.origin, bounds)) return
+  await native.placeOverlay(bounds)
+  state.origin = bounds
+  // Text from an earlier scan was positioned for the display the overlay left.
+  draw()
+}
+
 /**
- * Draw a region over the captured display, save it as the source's crop, scan it.
+ * Edit the current source's region over the source itself — the one region editor, shared with
+ * Quick Shot — then save it, and scan it unless Auto OCR is already reading.
  *
- * The rectangle is committed in the source's own full-capture pixel space, which is what
- * `reference_width`/`reference_height` mean to capture-core.
+ * A screen is edited in place and is not a fixed choice: the editor follows the cursor to any
+ * display, and the display the region is drawn on becomes the source. A window is shown as its
+ * latest screenshot, kept fresh, over a dimmed screen — the real window may be covered — and the
+ * region is limited to it.
  */
-async function selectAndScan() {
+async function editSourceRegion() {
   if (state.regionSelecting) return
   const sourceId = await native.selectedSource()
   if (!sourceId) {
-    log({ check: 'select-and-scan-skipped', reason: 'no source selected' })
+    log({ check: 'region-edit-skipped', reason: 'no source selected' })
     return
   }
-
   try {
-    const rect = await editRegion('Scan')
-    if (!rect) {
-      log({ check: 'select-and-scan-cancelled' })
+    const saved = sourceId.startsWith('macos:window:')
+      ? await editWindowRegion(sourceId)
+      : await editScreenRegion(sourceId)
+    if (!saved) {
+      log({ check: 'region-edit-cancelled' })
       return
     }
-
-    const bounds = state.sourceBounds ?? state.origin
-    const origin = state.origin
-    if (!bounds || !origin) {
-      log({ check: 'select-and-scan-skipped', reason: 'source bounds unknown' })
-      return
-    }
-
-    // Points to capture pixels. A display captures at its backing scale, so the
-    // scale factor of the display holding the source converts one to the other.
-    const display = (await native.displays()).find(
-      (d) =>
-        bounds.x >= d.bounds.x &&
-        bounds.y >= d.bounds.y &&
-        bounds.x < d.bounds.x + d.bounds.width &&
-        bounds.y < d.bounds.y + d.bounds.height
-    )
-    const scale = display?.scale_factor ?? display?.scaleFactor ?? 1
-
-    const crop = cropFor(rect, origin, bounds, scale)
-    if (crop.width <= 0 || crop.height <= 0) {
-      log({ check: 'select-and-scan-skipped', reason: 'empty region' })
-      return
-    }
-
-    await native.commitSource(sourceId, crop)
-    // Committing changes the selection, so the scan must start from the new one.
+    // Committing changes the selection, so anything in flight belongs to the old one.
     generation.bump()
-    await performScan()
+    if (!state.flags.autoOcrEnabled) await performScan()
   } catch (error) {
-    log({ check: 'select-and-scan-error', error: String(error?.message ?? error) })
+    log({ check: 'region-edit-error', error: String(error?.message ?? error) })
+    publish({ status: `Editing the region failed: ${error?.message ?? error}` })
   }
+}
+
+async function editScreenRegion(sourceId) {
+  const displays = await native.displays()
+  const current = displays.find((d) => displaySourceId(d) === sourceId) ?? null
+  const start = (await native.pointerDisplay()) ?? current ?? displays[0]
+  if (!start?.bounds) return false
+  await placeOverlayOn(start.bounds)
+
+  // The saved region shows on its own display only.
+  const initialFor = (display) =>
+    display && displaySourceId(display) === sourceId && state.crop
+      ? cropToLocal(state.crop, display.bounds, display.bounds)
+      : null
+  let target = start
+  const rect = await editRegion('Save', {
+    initial: initialFor(start),
+    onDisplay: (next) => {
+      target = next
+      return initialFor(next)
+    }
+  })
+  if (!rect) return false
+  const crop = cropFor(rect, target.bounds, target.bounds, scaleOf(target))
+  if (crop.width <= 0 || crop.height <= 0) return false
+  const chosen = displaySourceId(target)
+  await native.commitSource(chosen, crop)
+  log({ check: 'region-saved', kind: 'display', sourceId: chosen, switched: chosen !== sourceId, crop })
+  return true
+}
+
+async function editWindowRegion(sourceId) {
+  const bounds = state.sourceBounds ?? state.info?.source_bounds ?? null
+  if (!bounds) {
+    log({ check: 'region-edit-skipped', reason: 'window bounds unknown' })
+    publish({ status: 'Could not find the window to edit its region. Try again in a moment.' })
+    return false
+  }
+  const display = displayHolding(bounds, await native.displays())
+  if (!display?.bounds) return false
+  const origin = display.bounds
+  await placeOverlayOn(origin)
+
+  const picture = {
+    x: bounds.x - origin.x,
+    y: bounds.y - origin.y,
+    width: bounds.width,
+    height: bounds.height
+  }
+  // The part of the window on this display.
+  const left = Math.max(0, picture.x)
+  const top = Math.max(0, picture.y)
+  const area = {
+    x: left,
+    y: top,
+    width: Math.min(origin.width, picture.x + picture.width) - left,
+    height: Math.min(origin.height, picture.y + picture.height) - top
+  }
+  if (area.width <= 0 || area.height <= 0) return false
+
+  // The capture's own size, once known, is the crop's reference; until then, points × scale.
+  let frame = null
+  const refresh = async (selector) => {
+    while (selector.active) {
+      // A new picture is a full-size capture and decode: never while the box is being dragged.
+      if (selector.dragging) {
+        await new Promise((done) => setTimeout(done, 200))
+        continue
+      }
+      try {
+        const preview = await native.sourceHoverPreview(sourceId)
+        if (!selector.active) return
+        if (preview?.url && !selector.dragging) {
+          frame = preview
+          void selector.setPicture(preview.url)
+        }
+      } catch {
+        // Busy behind a scan, or the window is briefly unavailable: keep the last picture.
+      }
+      await new Promise((done) => setTimeout(done, REGION_PICTURE_MS))
+    }
+  }
+
+  const rect = await editRegion('Save', {
+    area,
+    picture,
+    initial: state.crop ? cropToLocal(state.crop, origin, bounds) : null,
+    onStart: (selector) => void refresh(selector)
+  })
+  if (!rect) return false
+  const scale = frame?.width ? frame.width / bounds.width : scaleOf(display)
+  const crop = cropFor(rect, origin, bounds, scale)
+  if (frame?.width && frame?.height) {
+    crop.reference_width = frame.width
+    crop.reference_height = frame.height
+  }
+  if (crop.width <= 0 || crop.height <= 0) return false
+  await native.commitSource(sourceId, crop)
+  log({ check: 'region-saved', kind: 'window', sourceId, crop })
+  return true
 }
 
 /**
@@ -911,14 +1149,20 @@ async function quickShot() {
       draw()
     }
 
-    const rect = await editRegion('Scan')
+    // The overlay follows the cursor across displays until a box is drawn; read on the one used.
+    let target = display
+    const rect = await editRegion('Scan', {
+      onDisplay: (next) => {
+        target = next
+      }
+    })
     if (!rect) {
       log({ check: 'quick-shot-cancelled' })
       return
     }
-    const crop = cropFor(rect, bounds, bounds, display.scale_factor ?? 1)
-    const sourceId = `macos:display:${display.id}`
-    log({ check: 'quick-shot', display: display.id, crop })
+    const crop = cropFor(rect, target.bounds, target.bounds, target.scale_factor ?? 1)
+    const sourceId = `macos:display:${target.id}`
+    log({ check: 'quick-shot', display: target.id, crop })
 
     // The Log comes forward first, so the result is seen arriving.
     void native.panel('log', 'show').catch(() => undefined)
@@ -1478,7 +1722,8 @@ native.onCapabilityGap((command) =>
 
 await native.loadSettings()
 await native.watchSettings((key) => {
-  if (key === 'autoOCRSettings' || key === 'quickShotEnabled') syncAutoScanner()
+  if (key === 'autoOCRSettings' || key === 'quickShotEnabled' || key === 'superTexthooker')
+    syncAutoScanner()
   syncOverlayText()
 })
 

@@ -450,8 +450,7 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     objc2::rc::autoreleasepool(|_| unsafe {
         if !CGPreflightScreenCaptureAccess() {
             return Err(
-                "permission: Allow Screen Recording for Kimochi in System Settings."
-                    .into(),
+                "permission: Allow Screen Recording for Kimochi in System Settings.".into(),
             );
         }
         let mut ids = [0; 16];
@@ -899,5 +898,35 @@ mod tests {
         let r = rect(10., 20., 30., 40.);
         let clamped = clamp_to_visible(r);
         assert_eq!((clamped.width, clamped.height), (30., 40.));
+    }
+}
+
+/// Bring the application owning process `pid` to the front, with all its windows: what clicking a
+/// window source in the sidebar does, since it may be behind other windows.
+///
+/// Kimochi is the active app when this is asked for (the reader just clicked it), so under macOS
+/// 14's cooperative activation it yields first; older systems take the activation flags alone.
+pub fn activate_process(pid: i32) -> Result<(), String> {
+    unsafe {
+        let app: *mut AnyObject = msg_send![
+            objc2::class!(NSRunningApplication),
+            runningApplicationWithProcessIdentifier: pid
+        ];
+        if app.is_null() {
+            return Err("gone: that application is no longer running".into());
+        }
+        let shared: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+        let yields: bool =
+            msg_send![shared, respondsToSelector: objc2::sel!(yieldActivationToApplication:)];
+        if yields {
+            let _: () = msg_send![shared, yieldActivationToApplication: app];
+        }
+        // NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps.
+        let activated: bool = msg_send![app, activateWithOptions: 3usize];
+        if activated {
+            Ok(())
+        } else {
+            Err("native: the application did not come to the front".into())
+        }
     }
 }

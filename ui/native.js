@@ -175,9 +175,9 @@ export const desktop = () => invoke('desktop')
 /** Displays with their backing scale, which converts points to capture pixels. */
 export const displays = () => invoke('displays')
 /** Atomic selection + crop, keyed per source descriptor by native. */
-export const commitSource = (sourceId, crop) => invoke('commit_source', { sourceId, crop })
-/** The coordinator's picker; `editCurrent` opens it straight on the current crop. */
-export const openSourcePicker = (editCurrent) => invoke('open_source_picker', { editCurrent })
+export const commitSource = (sourceId, crop) => invoke('commit_source', { sourceId, crop, keepCrop: false })
+/** The main window, with its source menu open on the grid of windows and displays. */
+export const openSourcePicker = () => invoke('open_source_picker')
 export const preferences = () => invoke('preferences')
 export const selectedSource = () => optional('selected_source', undefined, null)
 /**
@@ -191,6 +191,8 @@ export const sourceHoverPreview = (sourceId) =>
 export const placeOverlay = (rect) => invoke('place_overlay', { rect })
 /** The display under the pointer (`{id, bounds, scale_factor}`), where a Quick Shot is drawn. */
 export const pointerDisplay = () => invoke('pointer_display')
+/** The pointer in desktop points and the display under it: `{x, y, display}`, or null. */
+export const pointerLocation = () => optional('pointer_location', {}, null)
 /**
  * Escape and Return as global shortcuts while the region editor is open (`region-key` events):
  * the overlay never holds the keyboard, so this is how they reach it.

@@ -148,12 +148,13 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
 /// Escape and Return for the region editor, as global shortcuts while it is open.
 ///
 /// The overlay is a borderless non-activating panel, which AppKit will not make key, so
-/// it never receives the keyboard; the reader's game keeps it. Registering these two keys
+/// it never receives the keyboard; the reader's game keeps it. Registering these keys
 /// for the editor's lifetime delivers them anyway, without activating anything, and
-/// releasing them afterwards hands them straight back to the game.
+/// releasing them afterwards hands them straight back to the game. Space reports both
+/// press and release (held, it moves a box being drawn); the others only presses.
 pub fn set_region_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
     let shortcuts = app.global_shortcut();
-    for key in ["Escape", "Enter"] {
+    for key in ["Escape", "Enter", "Space"] {
         let parsed = Shortcut::from_str(key).map_err(|e| e.to_string())?;
         if !on {
             let _ = shortcuts.unregister(parsed);
@@ -164,9 +165,14 @@ pub fn set_region_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
         }
         shortcuts
             .on_shortcut(parsed, move |app, _shortcut, event| {
-                if event.state == ShortcutState::Pressed {
-                    let _ = app.emit("region-key", json!({ "key": key }));
+                let pressed = event.state == ShortcutState::Pressed;
+                if !pressed && key != "Space" {
+                    return;
                 }
+                // The DOM's names: the editor replays these as keyboard events.
+                let name = if key == "Space" { " " } else { key };
+                let kind = if pressed { "keydown" } else { "keyup" };
+                let _ = app.emit("region-key", json!({ "key": name, "type": kind }));
             })
             .map_err(|e| e.to_string())?;
     }

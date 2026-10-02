@@ -22,7 +22,7 @@ export type MainView = 'log' | 'notebook' | 'settings'
 /** Narrowest and widest the sidebar can be dragged, in CSS pixels. */
 const MIN_WIDTH = 160
 const MAX_WIDTH = 360
-export const DEFAULT_WIDTH = 216
+export const DEFAULT_WIDTH = 240
 
 /** The sidebar's right edge: drag to resize, double-click to reset. */
 function ResizeHandle({
@@ -119,7 +119,8 @@ export function MainSidebar({
   onOpenSourceSettings,
   settingsTab,
   onSettingsTab,
-  onBack
+  onBack,
+  chooseRequest
 }: {
   width: number
   onResize: (width: number) => void
@@ -129,6 +130,8 @@ export function MainSidebar({
   settingsTab: SettingsTabName
   onSettingsTab: (tab: SettingsTabName) => void
   onBack: () => void
+  /** Bumped to open the source menu on its window grid. */
+  chooseRequest: number
 }): JSX.Element {
   // The width while a drag is in progress; the saved width otherwise.
   const [live, setLive] = useState<number | null>(null)
@@ -168,7 +171,11 @@ export function MainSidebar({
           <div className="sb-label" id="sb-source-label">
             Source
           </div>
-          <SourcePanel controller={controller} onOpenSettings={onOpenSourceSettings} />
+          <SourcePanel
+            controller={controller}
+            onOpenSettings={onOpenSourceSettings}
+            chooseRequest={chooseRequest}
+          />
         </div>
         {readsScreen && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} />}
         <div className="sb-group">

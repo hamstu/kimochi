@@ -58,7 +58,6 @@ export type PanelLabel =
   | 'settings'
   | 'diagnostics'
   | 'yomitan'
-  | 'source-picker'
   | 'tray-popover'
   | 'welcome'
   | 'overlay'

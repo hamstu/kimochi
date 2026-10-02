@@ -77,21 +77,6 @@ pub static PANELS: &[PanelSpec] = &[
         init_asset: Some("/spike/panel-shim.js"),
         ..panel("log", "Kimochi", PANEL_PAGE, 900., 560.)
     },
-    // Crop editing lives inside the picker (`open_source_picker({editCurrent:true})`),
-    // so there is no separate crop window as there was in Electron.
-    // Compact: a three-column tile grid and a crop preview. It opens beside the
-    // main window (see `place_source_picker`), so it must not dwarf it.
-    PanelSpec {
-        min_width: 440.,
-        min_height: 400.,
-        ..panel(
-            "source-picker",
-            "Select Source",
-            "app/source-picker.html",
-            520.,
-            560.,
-        )
-    },
     PanelSpec {
         min_width: 820.,
         min_height: 560.,
@@ -135,9 +120,9 @@ pub static PANELS: &[PanelSpec] = &[
         init_asset: Some("/spike/panel-shim.js"),
         ..panel("yomitan", "Yomitan settings", PANEL_PAGE, 960., 680.)
     },
-    // The POC's `ui/sources.html` is deliberately NOT registered. Its file is kept for
-    // history, but there is exactly one source UX now — `source-picker` — and offering
-    // the old screen as a second, stale path would be worse than removing it.
+    // The POC's `ui/sources.html` is deliberately NOT registered: sources are chosen in the
+    // main window's sidebar, and offering the old screen as a second, stale path would be
+    // worse than removing it.
     PanelSpec {
         eager: true,
         ..panel(
@@ -376,9 +361,6 @@ pub fn act(
     let native_err = |e: tauri::Error| format!("native: {e}");
     match action {
         "show" => {
-            if label == SOURCE_PICKER && !window.is_visible().unwrap_or(false) {
-                place_source_picker(app, &window, existed)?;
-            }
             if label == YOMITAN && !window.is_visible().unwrap_or(false) {
                 place_on_main_display(app, &window, existed, YOMITAN)?;
             }
@@ -433,56 +415,11 @@ pub fn act(
 
 /// The main window (the Log with its Controller sidebar).
 pub const MAIN: &str = "log";
-const SOURCE_PICKER: &str = "source-picker";
-/// Space between the main window and the source picker that pops out beside it.
-const PICKER_GAP: f64 = 8.;
-
-/// Positions the source picker as it opens, from every path (sidebar, tray
-/// popover, app menu):
-///
-/// - main window on screen: beside it, on the side with room (right first), top-aligned
-///   with it, on the main window's display;
-/// - otherwise: centred on the display under the cursor.
-///
-/// Either way the frame is kept inside that display's work area. A picker the user
-/// has resized this session keeps its size; a newly created one uses the compact
-/// spec size rather than a larger frame restored from an older build.
-fn place_source_picker(
-    app: &tauri::AppHandle,
-    window: &WebviewWindow,
-    existed: bool,
-) -> Result<(), String> {
-    let spec = spec(SOURCE_PICKER).ok_or("invalid: source picker spec")?;
-    let (width, height) = match native::bounds(window) {
-        Ok(current) if existed => (current.width, current.height),
-        _ => (spec.width, spec.height),
-    };
-    let displays = native::display_infos();
-    let main = app
-        .get_webview_window(MAIN)
-        .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
-        .and_then(|w| native::bounds(&w).ok());
-    let rect = if let Some(anchor) = main {
-        let (cx, cy) = (anchor.x + anchor.width / 2., anchor.y + anchor.height / 2.);
-        let Some(area) = work_area_at(&displays, cx, cy) else {
-            return Ok(());
-        };
-        beside(anchor, width, height, area, PICKER_GAP)
-    } else {
-        let (x, y) = native::cursor().map_or((0., 0.), |(x, y, _, _)| (x, y));
-        let Some(area) = work_area_at(&displays, x, y) else {
-            return Ok(());
-        };
-        centred(width, height, area)
-    };
-    native::place(window, rect)
-}
-
 const YOMITAN: &str = "yomitan";
 
 /// Centres a large panel (Yomitan settings) on the display the main window is on, or
 /// the display under the cursor when it is hidden, clamped to its work
-/// area. As with the picker, a window resized this session keeps its size and a new
+/// area. A window resized this session keeps its size and a new
 /// one starts at the spec size, not a frame restored from an older build.
 fn place_on_main_display(
     app: &tauri::AppHandle,
@@ -525,33 +462,6 @@ fn work_area_at(displays: &[native::DisplayInfo], x: f64, y: f64) -> Option<Rect
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
         .map(|d| d.work_area)
-}
-
-/// A `width` × `height` frame next to `anchor`: to its right when that fits in
-/// `area`, else to its left, else against whichever edge has more room. Top-aligned
-/// with the anchor and clamped vertically, so it is never clipped.
-fn beside(anchor: Rect, width: f64, height: f64, area: Rect, gap: f64) -> Rect {
-    let width = width.min(area.width);
-    let height = height.min(area.height);
-    let right = anchor.x + anchor.width + gap;
-    let room_right = area.x + area.width - right;
-    let room_left = anchor.x - gap - area.x;
-    let x = if room_right >= width {
-        right
-    } else if room_left >= width {
-        anchor.x - gap - width
-    } else if room_right >= room_left {
-        area.x + area.width - width
-    } else {
-        area.x
-    };
-    let y = anchor.y.max(area.y).min(area.y + area.height - height);
-    Rect {
-        x,
-        y,
-        width,
-        height,
-    }
 }
 
 fn centred(width: f64, height: f64, area: Rect) -> Rect {
@@ -632,37 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn source_picker_opens_to_the_right_of_the_controller_when_it_fits() {
-        let r = beside(at(40., 65.), 520., 560., AREA, 8.);
-        assert_eq!((r.x, r.y, r.width, r.height), (458., 65., 520., 560.));
-    }
-
-    #[test]
-    fn source_picker_flips_left_near_the_right_edge() {
-        let r = beside(at(1000., 65.), 520., 560., AREA, 8.);
-        assert_eq!((r.x, r.y), (472., 65.));
-    }
-
-    #[test]
-    fn source_picker_is_clamped_to_the_work_area() {
-        // Low on the display: top-aligned would clip, so it moves up.
-        let r = beside(at(40., 800.), 520., 560., AREA, 8.);
-        assert_eq!(r.y, AREA.y + AREA.height - 560.);
-        // No room either side: pinned to the edge with more room, still inside.
-        let narrow = Rect {
-            width: 800.,
-            ..AREA
-        };
-        let r = beside(at(100., 65.), 520., 560., narrow, 8.);
-        assert_eq!(r.x, 800. - 520.);
-        // A display on the left of the primary (negative x) works the same way.
-        let left = Rect { x: -1440., ..AREA };
-        let r = beside(at(-1400., 65.), 520., 560., left, 8.);
-        assert_eq!(r.x, -1400. + 410. + 8.);
-    }
-
-    #[test]
-    fn source_picker_centres_without_a_controller_and_fits_small_displays() {
+    fn a_large_panel_centres_on_its_display_and_fits_small_displays() {
         let r = centred(520., 560., AREA);
         assert_eq!((r.x, r.y), (460., 183.));
         let tiny = Rect {
@@ -679,7 +559,6 @@ mod tests {
         assert!(spec("log").unwrap().pinned);
         assert!(!spec("settings").unwrap().pinned);
         assert!(!spec("diagnostics").unwrap().pinned);
-        assert!(!spec("source-picker").unwrap().pinned);
     }
 
     #[test]
@@ -690,13 +569,19 @@ mod tests {
 
         let main = spec(MAIN).unwrap();
         assert!(main.eager, "the main window opens at launch");
-        assert!(!spec("diagnostics").unwrap().eager, "Diagnostics opens only on demand");
+        assert!(
+            !spec("diagnostics").unwrap().eager,
+            "Diagnostics opens only on demand"
+        );
     }
 
     #[test]
     fn retired_windows_are_gone() {
         for label in ["controller", "notebook", "capture", "debug", "stream"] {
-            assert!(spec(label).is_none(), "{label} should be part of another window");
+            assert!(
+                spec(label).is_none(),
+                "{label} should be part of another window"
+            );
         }
     }
 
@@ -726,7 +611,11 @@ mod tests {
     #[test]
     fn panels_draw_their_own_frame_and_only_extension_hosts_get_a_shim() {
         for spec in PANELS {
-            assert!(!spec.decorated, "{} should use Kimochi's own chrome", spec.label);
+            assert!(
+                !spec.decorated,
+                "{} should use Kimochi's own chrome",
+                spec.label
+            );
             // Exactly the windows that run the original extension in a subframe.
             assert_eq!(
                 spec.init_asset.is_some(),

@@ -27,11 +27,23 @@ export const HOVER_PREVIEW_REUSE_MS = 2000
  *
  * `capture()` resolves to `{key, url}` (key: the source id) or null, and may
  * reject; either way the outline is unaffected — no picture is the fallback.
+ *
+ * The last picture of each source is kept: `capture` calls `show(key)` as soon
+ * as it knows the source, so the outline gets the last picture at once and the
+ * new one replaces it when it lands, instead of waiting through every capture.
+ * A url that is replaced is handed to `release` (an object url to revoke).
  */
 export class HoverPreview {
-  constructor({ capture, onChange, now = () => Date.now(), reuseMs = HOVER_PREVIEW_REUSE_MS }) {
+  constructor({
+    capture,
+    onChange,
+    release,
+    now = () => Date.now(),
+    reuseMs = HOVER_PREVIEW_REUSE_MS
+  }) {
     this.capture = capture
     this.onChange = onChange
+    this.release = release
     this.now = now
     this.reuseMs = reuseMs
     this.generation = 0
@@ -48,13 +60,25 @@ export class HoverPreview {
         reusable: (key) =>
           this.cached?.key === key && this.now() - this.cached.at < this.reuseMs
             ? this.cached.url
-            : null
+            : null,
+        show: (key) => {
+          if (generation === this.generation && this.cached?.key === key) {
+            this.setUrl(this.cached.url)
+          }
+        }
       })
     } catch {
       result = null
     }
     if (generation !== this.generation || !result?.url) return
-    if (!result.reused) this.cached = { key: result.key, url: result.url, at: this.now() }
+    if (!result.reused) {
+      const previous = this.cached?.url
+      this.cached = { key: result.key, url: result.url, at: this.now() }
+      this.setUrl(result.url)
+      // After the switch, so the outline never holds a released url.
+      if (previous && previous !== result.url) this.release?.(previous)
+      return
+    }
     this.setUrl(result.url)
   }
 
@@ -85,11 +109,34 @@ export class HoverOverlay {
     return element
   }
 
+  /** Removes the markings. Ones dissipating (see `dissipate`) finish on their own. */
   clear() {
-    this.container.replaceChildren()
+    for (const element of [this.windowImage, this.windowOutline, this.cropOutline]) element?.remove()
+    for (const element of this.container.querySelectorAll('.hover-window-image.leaving')) {
+      element.remove()
+    }
     this.windowImage = null
     this.windowOutline = null
     this.cropOutline = null
+  }
+
+  /**
+   * Let the window's markings go at once with a quick zoom, blur and fade about
+   * the window's centre — what bringing the window to the front looks like —
+   * rather than snapping off. The next `update` starts afresh.
+   */
+  dissipate() {
+    const leaving = [this.windowImage, this.windowOutline, this.cropOutline].filter(Boolean)
+    this.windowImage = null
+    this.windowOutline = null
+    this.cropOutline = null
+    for (const element of leaving) {
+      element.classList.add('dissipate')
+      const done = () => element.remove()
+      element.addEventListener('animationend', done, { once: true })
+      // In case the animation never runs (a hidden window): never leave one behind.
+      setTimeout(done, 600)
+    }
   }
 
   /**
@@ -145,11 +192,17 @@ export class HoverOverlay {
   updateWindowImage(url, left, top, bounds) {
     if (!url) {
       this.windowImage?.remove()
+      for (const element of this.container.querySelectorAll('.hover-window-image.leaving')) {
+        element.remove()
+      }
       this.windowImage = null
       return
     }
     if (this.windowImage?.dataset.src !== url) {
-      this.windowImage?.remove()
+      // The previous picture stays underneath until the new one has loaded, so a fresher
+      // picture replaces an older one without a blank frame between them.
+      const previous = this.windowImage
+      previous?.classList.add('leaving')
       const image = document.createElement('img')
       image.className = 'hover-window-image'
       image.alt = ''
@@ -160,20 +213,25 @@ export class HoverOverlay {
         'load',
         () => {
           // A replaced or removed image may still finish loading; ignore it.
-          if (this.windowImage === image) image.classList.add('loaded')
+          if (this.windowImage !== image) return
+          image.classList.add('loaded')
+          setTimeout(() => previous?.remove(), 200)
         },
         { once: true }
       )
       image.src = url
-      this.container.prepend(image)
+      if (previous?.isConnected) previous.after(image)
+      else this.container.prepend(image)
       this.windowImage = image
     }
-    Object.assign(this.windowImage.style, {
-      left: `${left}px`,
-      top: `${top}px`,
-      width: `${bounds.width}px`,
-      height: `${bounds.height}px`
-    })
+    for (const image of this.container.querySelectorAll('.hover-window-image')) {
+      Object.assign(image.style, {
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${bounds.width}px`,
+        height: `${bounds.height}px`
+      })
+    }
   }
 }
 
