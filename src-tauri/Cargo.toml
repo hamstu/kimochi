@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 [dependencies]
+libc = "0.2"
 meikiocr = { path = "../../kimochi-meikiocr" }
 mangaocr = { path = "../../kimochi-mangaocr" }
 image = { version = "0.25", default-features = false, features = ["png"] }

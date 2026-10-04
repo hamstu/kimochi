@@ -68,10 +68,20 @@ interface ScanEntry {
   text: string;
   timestamp: number;
   source?: SourceName | null;
+  /** Earlier entries this fuller reading replaced in the history; see history_merge.rs. */
+  replaces?: string[];
 }
 async function ingestHistory(entries: ScanEntry[]): Promise<void> {
   for (const entry of [...entries].reverse()) {
     if (seen.includes(entry.id)) continue;
+    // A fuller reading of text already logged: its fragments' lines give way to it.
+    if (entry.replaces?.length) {
+      for (const line of store.snapshotLines()) {
+        const from = line.ingestIds ?? [];
+        if (from.some((key) => entry.replaces!.some((id) => key === id || key.startsWith(`${id}:group:`))))
+          store.deleteLine(line.id);
+      }
+    }
     if (getSettings().inputSource === "ocr") {
       if (entry.source) await selectSource(entry.source);
       const groups = entry.groups?.filter(group => group.text?.trim());

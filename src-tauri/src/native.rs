@@ -901,6 +901,31 @@ mod tests {
     }
 }
 
+/// The process id of the frontmost application, whoever it is.
+pub fn frontmost_pid() -> Option<i32> {
+    NSWorkspace::sharedWorkspace()
+        .frontmostApplication()
+        .map(|a| a.processIdentifier())
+}
+
+/// Make Kimochi the active application without raising the rest of its windows.
+///
+/// For the controller menu: a game reads its controller only while it is the active
+/// application, so taking activation is what stops the menu's stick and button presses
+/// from also steering the game. `activateIgnoringOtherApps:` is used rather than
+/// `NSRunningApplication`'s `ActivateAllWindows`, which would put the main window and the
+/// Log in front of the game as well. It is deprecated from macOS 14 in favour of
+/// cooperative activation, but a background app asking for itself has nobody to yield to
+/// it, and the old call still takes effect. Must run on the main thread.
+pub fn activate_self() -> Result<(), String> {
+    objc2::MainThreadMarker::new().ok_or("activate_self requires the main thread")?;
+    unsafe {
+        let shared: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
+        let _: () = msg_send![shared, activateIgnoringOtherApps: true];
+    }
+    Ok(())
+}
+
 /// Bring the application owning process `pid` to the front, with all its windows: what clicking a
 /// window source in the sidebar does, since it may be behind other windows.
 ///

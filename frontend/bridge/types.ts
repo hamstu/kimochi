@@ -192,12 +192,8 @@ export type TrayAction =
   | 'toggleDebugOverlay'
   | 'quit'
 
-export type HotkeyName =
-  | 'triggerScan'
-  | 'toggleOverlay'
-  | 'setCropArea'
-  | 'playAudio'
-  | 'selectAndScan'
+/** The bindable actions; `HOTKEY_ACTIONS` in `src-tauri/src/actions.rs`. */
+export type HotkeyName = 'triggerScan' | 'openControllerMenu'
 
 /** Declared once in the shared schema module; re-exported here for convenience. */
 export type { OcrMode } from '@ui/settings'

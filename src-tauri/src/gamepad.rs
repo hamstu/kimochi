@@ -8,9 +8,11 @@
 use crate::actions;
 use crate::state::Shared;
 use gilrs::{Button, Gilrs};
-use serde_json::json;
+use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 /// W3C "standard" gamepad mapping order, so `gamepadButton` indices stored by the
 /// Electron build keep pointing at the same physical buttons.
@@ -50,6 +52,8 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
     let service = service.clone();
     std::thread::spawn(move || {
         let mut previous: Vec<bool> = vec![false; STANDARD.len()];
+        // The stick positions last sent in a `controller-nav` event.
+        let mut reported = [(0.0, 0.0); 2];
         loop {
             std::thread::sleep(Duration::from_millis(16));
             // Drain the queue so connect/disconnect and button state stay current.
@@ -105,35 +109,230 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                     "axisStates": axes,
                 }),
             );
+            // While the controller menu is open the controller drives the menu instead: the
+            // overlay gets every change and nothing is dispatched, the menu's own chord
+            // included (the overlay sees it pressed and closes itself).
+            if navigating() {
+                let sticks = [stick(axes[0], axes[1]), stick(axes[2], axes[3])];
+                if let Some(payload) = nav_report(&previous, &buttons, &mut reported, sticks) {
+                    let _ = app.emit("controller-nav", payload);
+                }
+                previous = buttons;
+                continue;
+            }
+            reported = [(0.0, 0.0); 2];
             // Rising edge only: holding a button must not repeat the action. While Settings
             // records a binding the press is still emitted above, so it can be assigned, but
             // it does not fire whatever the button is bound to now.
-            let suspended = crate::hotkeys::suspended();
-            for (index, pressed) in buttons.iter().enumerate() {
-                if *pressed && !previous[index] && !suspended {
-                    dispatch_for_button(&app, &service, index);
-                }
+            let rising: Vec<bool> = buttons
+                .iter()
+                .zip(&previous)
+                .map(|(now, before)| *now && !*before)
+                .collect();
+            if rising.contains(&true) && !crate::hotkeys::suspended() {
+                dispatch_for_buttons(&app, &service, &buttons, &rising);
             }
             previous = buttons;
         }
     });
 }
 
-fn dispatch_for_button(app: &tauri::AppHandle, service: &Shared, index: usize) {
-    let index = index as u64;
-    for name in actions::HOTKEY_ACTIONS {
-        let bound: Option<u64> = service
-            .settings
-            .get_or(&format!("hotkeys.{name}.gamepadButton"), None);
-        if bound == Some(index) {
-            actions::dispatch(app, service, name);
-            return;
+/// Controller navigation: the overlay's radial menu is open and the controller drives it.
+static NAV: AtomicBool = AtomicBool::new(false);
+/// The application that was in front when the menu took activation, to hand it back.
+static NAV_RETURN: Mutex<Option<i32>> = Mutex::new(None);
+
+pub fn navigating() -> bool {
+    NAV.load(Ordering::SeqCst)
+}
+
+/// Turn controller navigation on or off; the `controller_nav` command. Idempotent both ways.
+///
+/// On: gamepad input is reported as `controller-nav` instead of dispatching, the arrows,
+/// Return and Escape arrive as `controller-key`, and — with `take_focus` — Kimochi takes
+/// activation from the game so the game stops reading the same controller, with the overlay
+/// made key so the keys land there. The application that was in front is remembered.
+///
+/// Off: all of that is undone, and the remembered application is reactivated.
+///
+/// Returns the remembered process id. Activation is scheduled on the main thread rather
+/// than waited for, so this is safe to call from anywhere, including that thread.
+pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) -> Option<i32> {
+    let mut remembered = NAV_RETURN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let was = NAV.swap(active, Ordering::SeqCst);
+    if active {
+        if !was {
+            if let Err(e) = crate::hotkeys::set_nav_keys(app, true) {
+                log(
+                    app,
+                    json!({ "check": "controller-nav", "keys": "failed", "detail": e }),
+                );
+            }
+        }
+        if take_focus {
+            let ours = std::process::id() as i32;
+            if let Some(pid) = crate::native::frontmost_pid().filter(|pid| *pid != ours) {
+                *remembered = Some(pid);
+            }
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                let _ = crate::native::activate_self();
+                if let Some(overlay) = handle.get_webview_window("overlay") {
+                    let _ = crate::native::promote_to_key(&overlay);
+                }
+            });
+        }
+        return *remembered;
+    }
+    if was {
+        let _ = crate::hotkeys::set_nav_keys(app, false);
+    }
+    let previous = remembered.take();
+    if let Some(pid) = previous {
+        let _ = app.run_on_main_thread(move || {
+            let _ = crate::native::activate_process(pid);
+        });
+    }
+    previous
+}
+
+/// Controller navigation belongs to the game and to Kimochi, and to nothing else.
+///
+/// While it is on, the arrows, Return and Escape are global shortcuts, which swallow those
+/// keys in every application. So the moment some other application comes to the front — the
+/// reader switched away — navigation ends on its own: the keys are given back, the app it
+/// would have returned to is forgotten (they went somewhere else on purpose), and the overlay
+/// is told with `controller-nav-cancel` so it closes the menu or read-along mode.
+///
+/// `front` is the frontmost application's pid, `source` the pid owning the selected window.
+pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<i32>, source: Option<i32>) {
+    if !navigating() {
+        return;
+    }
+    let Some(front) = front else { return };
+    let returning_to = *NAV_RETURN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if front == std::process::id() as i32 || Some(front) == returning_to || Some(front) == source {
+        return;
+    }
+    NAV_RETURN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    set_navigation(app, false, false);
+    log(
+        app,
+        json!({ "check": "controller-nav", "cancelled": "another application came to the front", "frontmost": front }),
+    );
+    let _ = app.emit("controller-nav-cancel", json!({ "frontmost": front }));
+}
+
+fn log(app: &tauri::AppHandle, entry: Value) {
+    app.state::<Shared>().inner().log(entry);
+}
+
+/// Inside this radius a stick reads as centred; worn sticks rarely rest at exactly zero.
+const DEADZONE: f64 = 0.25;
+/// The smallest stick movement worth an event.
+const STICK_STEP: f64 = 0.02;
+
+/// A stick position in [-1, 1] on both axes, rounded to two places, with a radial deadzone.
+/// `y` is positive *up*, as gilrs reports it — the opposite of screen coordinates.
+fn stick(x: f64, y: f64) -> (f64, f64) {
+    if x.hypot(y) < DEADZONE {
+        return (0.0, 0.0);
+    }
+    let round = |v: f64| (v.clamp(-1.0, 1.0) * 100.0).round() / 100.0;
+    (round(x), round(y))
+}
+
+/// The `controller-nav` payload for this tick, or `None` when nothing worth reporting
+/// changed: no button edge, and neither stick moved by `STICK_STEP` since it was last
+/// reported (a stick returning to centre is always reported). `reported` holds the stick
+/// positions last sent and is updated when this returns a payload.
+fn nav_report(
+    previous: &[bool],
+    buttons: &[bool],
+    reported: &mut [(f64, f64); 2],
+    sticks: [(f64, f64); 2],
+) -> Option<Value> {
+    let indices = |test: &dyn Fn(bool, bool) -> bool| -> Vec<usize> {
+        buttons
+            .iter()
+            .zip(previous)
+            .enumerate()
+            .filter(|(_, (now, before))| test(**now, **before))
+            .map(|(index, _)| index)
+            .collect()
+    };
+    let pressed = indices(&|now, before| now && !before);
+    let released = indices(&|now, before| !now && before);
+    let moved = sticks.iter().zip(reported.iter()).any(|(now, last)| {
+        let centred = *now == (0.0, 0.0) && *last != (0.0, 0.0);
+        centred || (now.0 - last.0).abs() >= STICK_STEP || (now.1 - last.1).abs() >= STICK_STEP
+    });
+    if pressed.is_empty() && released.is_empty() && !moved {
+        return None;
+    }
+    *reported = sticks;
+    let held = indices(&|now, _| now);
+    let [(x, y), (rx, ry)] = sticks;
+    Some(json!({
+        "pressed": pressed,
+        "released": released,
+        "held": held,
+        "stick": { "x": x, "y": y },
+        "rstick": { "x": rx, "y": ry },
+    }))
+}
+
+/// Which binding a tick's presses fire: among the chords that are fully held and include a
+/// button pressed this tick, the one with the most buttons, so LS + RS beats a binding on
+/// LS alone. Ties go to the earliest binding, which callers list in `HOTKEY_ACTIONS` order.
+fn chord_to_fire<'a>(
+    bindings: &[(&'a str, Vec<usize>)],
+    held: &[bool],
+    rising: &[bool],
+) -> Option<&'a str> {
+    let is = |states: &[bool], index: &usize| states.get(*index).copied().unwrap_or(false);
+    let mut best: Option<(&str, usize)> = None;
+    for (name, chord) in bindings {
+        if chord.is_empty()
+            || !chord.iter().all(|b| is(held, b))
+            || !chord.iter().any(|b| is(rising, b))
+        {
+            continue;
+        }
+        if best.is_none_or(|(_, size)| chord.len() > size) {
+            best = Some((name, chord.len()));
         }
     }
-    let auto: Option<u64> = service
+    best.map(|(name, _)| name)
+}
+
+fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool], rising: &[bool]) {
+    let hotkeys = crate::settings::merged_hotkeys(&service.settings);
+    let bindings: Vec<(&str, Vec<usize>)> = actions::HOTKEY_ACTIONS
+        .iter()
+        .filter_map(|name| {
+            let definition = hotkeys.get(*name)?;
+            if definition.get("enabled") == Some(&Value::Bool(false)) {
+                return None;
+            }
+            Some((*name, crate::settings::gamepad_chord(definition)))
+        })
+        .collect();
+    if let Some(name) = chord_to_fire(&bindings, held, rising) {
+        actions::dispatch(app, service, name);
+        return;
+    }
+    let auto: Option<usize> = service
         .settings
         .get_or("autoScanSettings.gamepadButton", None);
-    if auto == Some(index) {
+    if auto.is_some_and(|index| rising.get(index).copied().unwrap_or(false)) {
         let delay = service
             .settings
             .get_or::<f64>("autoScanSettings.scanDelay", 500.0)
@@ -158,5 +357,87 @@ mod tests {
         assert_eq!(STANDARD[9], Button::Start);
         assert_eq!(STANDARD[12], Button::DPadUp);
         assert_eq!(STANDARD.len(), 17);
+    }
+
+    fn states(indices: &[usize]) -> Vec<bool> {
+        (0..STANDARD.len()).map(|i| indices.contains(&i)).collect()
+    }
+
+    #[test]
+    fn the_largest_fully_held_chord_fires() {
+        let bindings = [
+            ("triggerScan", vec![10]),
+            ("openControllerMenu", vec![10, 11]),
+        ];
+        // RS joins a held LS: both chords include the new press, the larger one wins.
+        assert_eq!(
+            chord_to_fire(&bindings, &states(&[10, 11]), &states(&[11])),
+            Some("openControllerMenu")
+        );
+        // LS alone fires the single-button binding.
+        assert_eq!(
+            chord_to_fire(&bindings, &states(&[10]), &states(&[10])),
+            Some("triggerScan")
+        );
+        // Holding a chord without a new press fires nothing.
+        assert_eq!(
+            chord_to_fire(&bindings, &states(&[10, 11]), &states(&[])),
+            None
+        );
+        // A partly held chord fires nothing on its own.
+        let menu_only = [("openControllerMenu", vec![10, 11])];
+        assert_eq!(
+            chord_to_fire(&menu_only, &states(&[11]), &states(&[11])),
+            None
+        );
+        // A press unrelated to a held chord does not fire it.
+        assert_eq!(
+            chord_to_fire(&menu_only, &states(&[0, 10, 11]), &states(&[0])),
+            None
+        );
+    }
+
+    #[test]
+    fn chord_ties_go_to_the_first_binding_and_empty_chords_never_fire() {
+        let bindings = [
+            ("triggerScan", vec![]),
+            ("openControllerMenu", vec![4, 5]),
+            ("later", vec![5, 6]),
+        ];
+        assert_eq!(
+            chord_to_fire(&bindings, &states(&[4, 5, 6]), &states(&[5])),
+            Some("openControllerMenu")
+        );
+    }
+
+    #[test]
+    fn sticks_have_a_radial_deadzone_and_two_decimals() {
+        assert_eq!(stick(0.2, 0.1), (0.0, 0.0));
+        assert_eq!(stick(0.0, 0.3), (0.0, 0.3));
+        assert_eq!(stick(0.123_456, -0.987_654), (0.12, -0.99));
+        assert_eq!(stick(1.5, 0.0), (1.0, 0.0));
+    }
+
+    #[test]
+    fn nav_reports_edges_and_stick_movement_only() {
+        let mut reported = [(0.0, 0.0); 2];
+        let still = [(0.0, 0.0); 2];
+        assert!(nav_report(&states(&[]), &states(&[]), &mut reported, still).is_none());
+
+        let report = nav_report(&states(&[10]), &states(&[0, 10]), &mut reported, still).unwrap();
+        assert_eq!(report["pressed"], json!([0]));
+        assert_eq!(report["released"], json!([]));
+        assert_eq!(report["held"], json!([0, 10]));
+
+        let tilted = [(0.5, 0.0), (0.0, 0.0)];
+        let report = nav_report(&states(&[]), &states(&[]), &mut reported, tilted).unwrap();
+        assert_eq!(report["stick"], json!({"x": 0.5, "y": 0.0}));
+        // Less than a step since the last report: nothing.
+        let nudged = [(0.51, 0.0), (0.0, 0.0)];
+        assert!(nav_report(&states(&[]), &states(&[]), &mut reported, nudged).is_none());
+        // Back to centre is always reported.
+        let report = nav_report(&states(&[]), &states(&[]), &mut reported, still).unwrap();
+        assert_eq!(report["stick"], json!({"x": 0.0, "y": 0.0}));
+        assert_eq!(report["released"], json!([]));
     }
 }

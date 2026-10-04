@@ -15,6 +15,8 @@ export interface Annotation {
   isVertical?: boolean
   orientation?: 'horizontal' | 'vertical'
   granularity?: string
+  /** For a block: the lines found inside it, as polygons of [x, y] points in capture pixels. */
+  linePolygons?: number[][][]
   groupId?: string
   boundingPoly: { vertices: { x?: number; y?: number }[] }
 }
@@ -63,7 +65,7 @@ export function mapAnnotations(
   annotations: Annotation[],
   origin: Rect,
   bounds?: Rect
-): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string })[] {
+): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string; lines?: Rect[] })[] {
   return annotations.flatMap((a) => {
     const vertices = a.boundingPoly?.vertices
     if (!vertices?.length || !a.description) return []
@@ -83,7 +85,17 @@ export function mapAnnotations(
       mapped.height <= 0
     )
       return []
-    return [{ ...mapped, text: a.description, ...(a.orientation !== undefined ? { orientation: a.orientation } : {}), ...(a.isVertical !== undefined ? { isVertical: a.isVertical } : {}), ...(a.granularity !== undefined ? { granularity: a.granularity } : {}), ...(a.groupId !== undefined ? { groupId: a.groupId } : {}) }]
+    // The lines found inside a block, mapped the same way, for placing its characters.
+    const lines = (a.linePolygons ?? [])
+      .map((polygon) => {
+        const px = polygon.map((point) => point[0])
+        const py = polygon.map((point) => point[1])
+        const x = Math.min(...px)
+        const y = Math.min(...py)
+        return mapRect(info, origin, { x, y, width: Math.max(...px) - x, height: Math.max(...py) - y }, bounds)
+      })
+      .filter((line) => [line.x, line.y, line.width, line.height].every(Number.isFinite) && line.width > 0 && line.height > 0)
+    return [{ ...mapped, text: a.description, ...(a.orientation !== undefined ? { orientation: a.orientation } : {}), ...(a.isVertical !== undefined ? { isVertical: a.isVertical } : {}), ...(a.granularity !== undefined ? { granularity: a.granularity } : {}), ...(a.groupId !== undefined ? { groupId: a.groupId } : {}), ...(lines.length ? { lines } : {}) }]
   })
 }
 /** Convenience wrapper that drops the full-text annotation at index 0. */
@@ -92,7 +104,7 @@ export function boxes(
   annotations: Annotation[],
   origin: Rect,
   bounds?: Rect
-): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string })[] {
+): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string; lines?: Rect[] })[] {
   return mapAnnotations(
     info,
     annotations.length > 1 ? annotations.slice(1) : annotations,

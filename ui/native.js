@@ -198,6 +198,15 @@ export const pointerLocation = () => optional('pointer_location', {}, null)
  * the overlay never holds the keyboard, so this is how they reach it.
  */
 export const regionKeys = (on) => optional('region_keys', { on })
+/**
+ * Controller mode on or off. On: native stops dispatching gamepad bindings and reports raw
+ * input as `controller-nav` events, reports the arrow keys, Return and Escape as
+ * `controller-key` events, and takes focus from the game. Off: all of that is undone and the
+ * game gets its focus back.
+ */
+export const controllerNav = (active) => invoke('controller_nav', { active })
+/** Every action's shortcut and gamepad binding, defaults merged with the user's. */
+export const hotkeysLoad = () => optional('hotkeys_load', undefined, null)
 export const setRegions = (rects) => invoke('regions', { rects })
 export const snapshot = () => invoke('snapshot')
 export const panel = (label, action, rect = null) => invoke('panel', { label, action, rect })

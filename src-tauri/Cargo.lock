@@ -2738,6 +2738,7 @@ dependencies = [
  "gilrs",
  "image",
  "kimochi-capture",
+ "libc",
  "mangaocr",
  "meikiocr",
  "objc2",

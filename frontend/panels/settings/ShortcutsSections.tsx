@@ -1,12 +1,22 @@
-/** Settings → Shortcuts & Controls, first half: global keyboard shortcuts and their gamepad buttons. */
+/** Settings → Shortcuts & Controls, first half: global keyboard shortcuts and their gamepad chords. */
 import { useCallback, type ReactNode } from 'react'
 import { Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useHotkeys } from '../../bridge/useHotkeys'
+import type { HotkeyName } from '../../bridge/types'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
+import { gamepadChord } from '../../vendor/shared-defaults'
 import { detectKeyPlatform, formatAccelerator } from './accelerator'
 import { ShortcutRecorder } from './ShortcutRecorder'
 
 const KEY_PLATFORM = detectKeyPlatform()
+
+/** Display order. The native side returns the bindings keyed alphabetically. */
+const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu']
+
+/** Extra guidance under a row, where a binding is easy to get wrong. */
+const HINTS: Partial<Record<HotkeyName, string>> = {
+  openControllerMenu: "Pick a button combination your game doesn't use."
+}
 
 export function ShortcutsSections(): ReactNode {
   const [hotkeys, setHotkeys, hotkeyFailures] = useHotkeys()
@@ -14,22 +24,21 @@ export function ShortcutsSections(): ReactNode {
   const updateHotkeyField = useCallback(
     (
       name: string,
-      field: 'accelerator' | 'enabled' | 'gamepadButton',
-      value: string | boolean | number | undefined
+      field: 'accelerator' | 'enabled' | 'gamepadButtons',
+      value: string | boolean | number[]
     ): void => {
-      const updated = {
-        ...hotkeys,
-        [name]: {
-          ...hotkeys[name],
-          [field]: value as never
-        }
-      }
+      const binding = { ...hotkeys[name], [field]: value as never }
+      // A chord supersedes the legacy single button, so never store both.
+      if (field === 'gamepadButtons') delete binding.gamepadButton
+      const updated = { ...hotkeys, [name]: binding }
       void setHotkeys(updated)
     },
     [hotkeys, setHotkeys]
   )
 
-  const entries = Object.entries(hotkeys)
+  const entries = ORDER.filter((name) => hotkeys[name]).map(
+    (name) => [name, hotkeys[name]] as const
+  )
 
   return (
     <>
@@ -47,7 +56,7 @@ export function ShortcutsSections(): ReactNode {
       )}
       <SettingsSection
         title="Shortcuts"
-        description="Work while another app is in front. Each can also have a gamepad button."
+        description="Work while another app is in front. Each can also have a gamepad button or combination."
       >
         {entries.length === 0 && <SettingsRow label="No hotkeys configured." />}
         {entries.map(([name, def]) => (
@@ -55,7 +64,16 @@ export function ShortcutsSections(): ReactNode {
             key={name}
             className="shortcut-row"
             label={def.name}
-            description={def.description}
+            description={
+              HINTS[name] ? (
+                <>
+                  {def.description}
+                  <span className="shortcut-hint">{HINTS[name]}</span>
+                </>
+              ) : (
+                def.description
+              )
+            }
             controlId={`hotkey-${name}`}
           >
             <ShortcutRecorder
@@ -64,8 +82,9 @@ export function ShortcutsSections(): ReactNode {
               onChange={(accelerator) => updateHotkeyField(name, 'accelerator', accelerator)}
             />
             <GamepadButtonCapture
-              value={def.gamepadButton}
-              onChange={(btn) => updateHotkeyField(name, 'gamepadButton', btn)}
+              chord
+              value={gamepadChord(def)}
+              onChange={(buttons) => updateHotkeyField(name, 'gamepadButtons', buttons)}
               size="1"
             />
             <Switch

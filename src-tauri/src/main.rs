@@ -3,7 +3,9 @@ use base64::Engine;
 
 mod actions;
 mod gamepad;
+mod history_merge;
 mod hotkeys;
+mod instance;
 mod manga_ocr;
 mod meiki_ocr;
 mod native;
@@ -472,6 +474,15 @@ fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
     hotkeys::set_region_keys(&app, on)
 }
 
+/// Open (`true`) or close the controller menu's navigation mode; see
+/// `gamepad::set_navigation`. `take_focus` (default on) takes activation from the game so it
+/// stops reading the controller; the application that had it is reactivated on close.
+#[tauri::command]
+fn controller_nav(app: tauri::AppHandle, active: bool, take_focus: Option<bool>) -> Value {
+    let previous = gamepad::set_navigation(&app, active, take_focus.unwrap_or(true));
+    json!({ "previousPid": previous })
+}
+
 /// The display under the pointer, for Quick Shot: the region is drawn where the
 /// reader is looking, not on whichever display holds the chosen source.
 #[tauri::command]
@@ -792,7 +803,16 @@ async fn capture_frame(
                     .map_err(|_| "busy: the local observer is poisoned".to_string())?;
                 match observer.observe(&frame, OBSERVE_TIMEOUT) {
                     Ok(read) => {
-                        observation = serde_json::to_value(&read).map_err(|e| e.to_string())?
+                        observation = serde_json::to_value(&read).map_err(|e| e.to_string())?;
+                        // Per line, how strongly its text stands out: what tells text that is
+                        // still fading or drawing in from text that has settled.
+                        if let Some(lines) = observation["lines"].as_array_mut() {
+                            for (value, line) in lines.iter_mut().zip(&read.lines) {
+                                value["ink"] = Value::from(ink_signature(
+                                    &frame, line.x, line.y, line.width, line.height,
+                                ));
+                            }
+                        }
                     }
                     Err(error) => {
                         // Two of these codes are standing facts about this session
@@ -843,6 +863,52 @@ async fn capture_frame(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Cells along a line in its ink signature.
+const INK_CELLS: usize = 8;
+
+/// How strongly the text in a box stands out, cell by cell along the line: the spread of
+/// brightness in each cell, rounded to whole levels. A fade-in raises it, a typewriter fills
+/// cells one by one, and settled text holds it still, whatever the words read as. Sampled on
+/// every other pixel; a line costs microseconds.
+fn ink_signature(frame: &kimochi_capture::Frame, x: f64, y: f64, w: f64, h: f64) -> Vec<u8> {
+    let (fw, fh) = (frame.info.width as f64, frame.info.height as f64);
+    let left = x.max(0.0).min(fw) as usize;
+    let top = y.max(0.0).min(fh) as usize;
+    let right = (x + w).max(0.0).min(fw) as usize;
+    let bottom = (y + h).max(0.0).min(fh) as usize;
+    if right <= left || bottom <= top {
+        return Vec::new();
+    }
+    let vertical = (bottom - top) as f64 > (right - left) as f64 * 1.5;
+    let stride = frame.info.stride;
+    let mut sums = [(0f64, 0f64, 0u32); INK_CELLS];
+    for row in (top..bottom).step_by(2) {
+        for column in (left..right).step_by(2) {
+            let i = row * stride + column * 4;
+            let Some(p) = frame.pixels.get(i..i + 3) else { continue };
+            let luma = 0.299 * f64::from(p[0]) + 0.587 * f64::from(p[1]) + 0.114 * f64::from(p[2]);
+            let along = if vertical {
+                (row - top) * INK_CELLS / (bottom - top)
+            } else {
+                (column - left) * INK_CELLS / (right - left)
+            };
+            let cell = &mut sums[along.min(INK_CELLS - 1)];
+            cell.0 += luma;
+            cell.1 += luma * luma;
+            cell.2 += 1;
+        }
+    }
+    sums.iter()
+        .map(|&(sum, squares, n)| {
+            if n == 0 {
+                return 0;
+            }
+            let mean = sum / f64::from(n);
+            (squares / f64::from(n) - mean * mean).max(0.0).sqrt().round().min(255.0) as u8
+        })
+        .collect()
 }
 
 /// Read the latest real capture, independent of whether OCR accepted its text.
@@ -1307,6 +1373,7 @@ fn history_add(
     detached: Option<bool>,
     groups: Option<Vec<ocr_result::OcrGroup>>,
     engine: Option<String>,
+    merge: Option<bool>,
 ) -> Reply<Value> {
     if text.trim().is_empty() {
         return Err("invalid: history entries cannot be empty".into());
@@ -1329,9 +1396,35 @@ fn history_add(
             .flatten()
             .unwrap_or(Value::Null)
     };
-    let entry = json!({ "id": history_id(), "text": text, "timestamp": now_millis(), "source": source, "groups": groups, "engine": engine });
-    let inserted = entry.clone();
-    edit_history(&app, &state, move |list| list.insert(0, inserted))?;
+    let now = now_millis();
+    let mut entry = json!({ "id": history_id(), "text": text, "timestamp": now, "source": source, "groups": groups, "engine": engine });
+    // Merging is decided inside the history lock, against the list as it is now; see
+    // history_merge.rs. A replaced entry is named on the new one so the reader's log can
+    // swap its lines rather than keep the fragment.
+    let mut skipped = false;
+    edit_history(&app, &state, |list| {
+        if merge.unwrap_or(false) {
+            match history_merge::decide(&text, &entry["source"], now as u64, list) {
+                history_merge::Merge::Skip => {
+                    skipped = true;
+                    return;
+                }
+                history_merge::Merge::Replace(ids) => {
+                    list.retain(|old| {
+                        !old.get("id")
+                            .and_then(Value::as_str)
+                            .is_some_and(|id| ids.iter().any(|gone| gone == id))
+                    });
+                    entry["replaces"] = json!(ids);
+                }
+                history_merge::Merge::Add => {}
+            }
+        }
+        list.insert(0, entry.clone());
+    })?;
+    if skipped {
+        entry["skipped"] = json!(true);
+    }
     Ok(entry)
 }
 
@@ -1531,6 +1624,9 @@ fn open_accessibility_preferences() -> Reply<()> {
 }
 
 fn main() {
+    // Before anything claims a shortcut, the gamepad or a capture stream: any other copy
+    // of Kimochi, of any build, is asked to quit first. See instance.rs.
+    instance::take_over();
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
@@ -1662,6 +1758,7 @@ fn main() {
             activate_source,
             extension_fetch,
             region_keys,
+            controller_nav,
             hotkeys_load,
             hotkeys_save,
             hotkeys_reapply,
@@ -1707,6 +1804,9 @@ fn main() {
                 }),
             });
             app.manage(service.clone());
+            if let Some(report) = instance::report() {
+                service.log(report);
+            }
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
 
@@ -2232,6 +2332,13 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
                 service.view.lock().unwrap().source_focus = current;
                 let _ = handle.emit("source-focus", current);
             }
+            // Controller mode's keys are global; switching to any other app ends it.
+            let source_pid = watching
+                .as_deref()
+                .and_then(|id| id.rsplit(':').next())
+                .and_then(|pid| pid.parse::<i32>().ok())
+                .filter(|_| watching.as_deref().is_some_and(|id| id.starts_with("macos:window:")));
+            gamepad::release_if_elsewhere(&handle, native::frontmost_pid(), source_pid);
             std::thread::sleep(Duration::from_millis(150));
         }
     });

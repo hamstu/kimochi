@@ -20,6 +20,15 @@ pub fn defaults() -> Value {
         "audioSettings": { "voiceId": "j210dv0vWm7fCknyQpbA" },
         "autoScanSettings": { "enabled": false, "triggerKeys": "", "scanDelay": 500 },
         "gamepadSettings": { "enabled": true },
+        // Standard button indices for the buttons of the overlay's controller menu and word
+        // mode: A, B, Y, LB, RB. `null` unbinds one.
+        "controllerButtons": {
+            "confirm": 0,
+            "back": 1,
+            "backAlt": 3,
+            "previousDefinition": 4,
+            "nextDefinition": 5
+        },
         "autoOCRSettings": {
             "pollInterval": 2000,
             "imageHashThreshold": 5,
@@ -325,57 +334,68 @@ fn merge(target: &mut Value, source: Value) {
     }
 }
 
-/// Electron's default hotkeys, from `src/shared/defaults.ts`.
+/// The default hotkeys. Electron shipped five; only Scan and the controller menu remain
+/// bindable, since the menu now reaches the others. Mirrored by `DEFAULT_HOTKEYS` in
+/// `frontend/vendor/shared-defaults.ts`.
+///
+/// `gamepadButtons` is a chord of W3C standard button indices that must all be held; the
+/// controller menu defaults to both stick clicks (LS + RS), which few games use together.
 pub fn default_hotkeys() -> Map<String, Value> {
-    let rows = [
-        (
-            "triggerScan",
-            "Trigger Scan",
-            "CommandOrControl+Shift+8",
-            "Trigger OCR scan on current source",
-        ),
-        (
-            "toggleOverlay",
-            "Toggle Overlay",
-            "CommandOrControl+Shift+9",
-            "Show or hide the overlay window",
-        ),
-        (
-            "setCropArea",
-            "Set Crop Area",
-            "CommandOrControl+Shift+0",
-            "Set a new crop area for the current source",
-        ),
-        (
-            "playAudio",
-            "Play Audio",
-            "CommandOrControl+Shift+7",
-            "Play audio of scanned text",
-        ),
-        (
-            "selectAndScan",
-            "Select and Scan",
-            "CommandOrControl+Shift+6",
-            "Select a screen region and scan immediately",
-        ),
-    ];
-    rows.iter()
-        .map(|(key, name, accelerator, description)| {
-            (
-                (*key).to_string(),
-                json!({
-                    "name": name,
-                    "accelerator": accelerator,
-                    "description": description,
-                    "enabled": true
-                }),
-            )
-        })
-        .collect()
+    let mut hotkeys = Map::new();
+    hotkeys.insert(
+        "triggerScan".into(),
+        json!({
+            "name": "Scan",
+            "accelerator": "CommandOrControl+Shift+8",
+            "description": "Trigger OCR scan on current source",
+            "enabled": true,
+            "gamepadButtons": []
+        }),
+    );
+    hotkeys.insert(
+        "openControllerMenu".into(),
+        json!({
+            "name": "Controller menu",
+            "accelerator": "CommandOrControl+Shift+Space",
+            "description": "Open the radial menu over the game",
+            "enabled": true,
+            "gamepadButtons": [10, 11]
+        }),
+    );
+    hotkeys
+}
+
+/// A binding's gamepad chord: `gamepadButtons`, or the legacy single `gamepadButton` read
+/// as a chord of one. A `gamepadButtons` key that is present always wins, even as `null`, so
+/// clearing a chord cannot resurrect an old single button. Anything that is not a button
+/// index is dropped; sorted and
+/// de-duplicated so two spellings of one chord compare equal.
+pub fn gamepad_chord(definition: &Value) -> Vec<usize> {
+    let mut chord: Vec<usize> = match definition.get("gamepadButtons") {
+        Some(Value::Array(buttons)) => buttons
+            .iter()
+            .filter_map(Value::as_u64)
+            .map(|b| b as usize)
+            .collect(),
+        Some(_) => Vec::new(),
+        None => definition
+            .get("gamepadButton")
+            .and_then(Value::as_u64)
+            .map(|b| vec![b as usize])
+            .unwrap_or_default(),
+    };
+    chord.sort_unstable();
+    chord.dedup();
+    chord
 }
 
 /// Defaults merged with the user's `hotkeys` overrides, matching
-/// `mergeHotkeysWithOverrides`. Unknown override keys are ignored, as in Electron.
+/// `mergeHotkeysWithOverrides`. Unknown override keys are ignored, as in Electron, which
+/// is also what retires the bindings for actions that are no longer bindable.
+///
+/// The gamepad binding always comes out as `gamepadButtons`. An override's own
+/// `gamepadButtons` wins (an empty array or `null` clears the default); failing that a
+/// legacy `gamepadButton` is carried over as a chord of one.
 pub fn merged_hotkeys(settings: &Settings) -> Map<String, Value> {
     let overrides = settings
         .get("hotkeys")
@@ -388,10 +408,14 @@ pub fn merged_hotkeys(settings: &Settings) -> Map<String, Value> {
         let Some(over) = overrides.get(name).and_then(Value::as_object) else {
             continue;
         };
-        for field in ["accelerator", "enabled", "gamepadButton"] {
+        for field in ["accelerator", "enabled"] {
             if let Some(value) = over.get(field) {
                 entry[field] = value.clone();
             }
+        }
+        if over.contains_key("gamepadButtons") || over.contains_key("gamepadButton") {
+            let chord = gamepad_chord(&Value::Object(over.clone()));
+            entry["gamepadButtons"] = json!(chord);
         }
     }
     merged
@@ -561,10 +585,55 @@ mod tests {
         assert_eq!(merged["triggerScan"]["accelerator"], "Alt+1");
         assert_eq!(merged["triggerScan"]["enabled"], false);
         // Description comes from the default, not the override.
-        assert_eq!(merged["triggerScan"]["name"], "Trigger Scan");
+        assert_eq!(merged["triggerScan"]["name"], "Scan");
         assert_eq!(
-            merged["playAudio"]["accelerator"],
-            "CommandOrControl+Shift+7"
+            merged["openControllerMenu"]["accelerator"],
+            "CommandOrControl+Shift+Space"
+        );
+        assert_eq!(
+            merged["openControllerMenu"]["gamepadButtons"],
+            json!([10, 11])
+        );
+    }
+
+    #[test]
+    fn retired_actions_are_no_longer_bindable() {
+        let s = store();
+        s.doc.lock().unwrap()["hotkeys"] =
+            json!({"playAudio": {"accelerator": "Alt+7", "gamepadButton": 2}});
+        let merged = merged_hotkeys(&s);
+        let names: Vec<&String> = merged.keys().collect();
+        assert_eq!(names, ["openControllerMenu", "triggerScan"]);
+    }
+
+    #[test]
+    fn gamepad_chords_merge_and_read_the_legacy_single_button() {
+        let s = store();
+        s.doc.lock().unwrap()["hotkeys"] = json!({
+            "triggerScan": {"gamepadButton": 3},
+            "openControllerMenu": {"gamepadButtons": [9, 8, 9]}
+        });
+        let merged = merged_hotkeys(&s);
+        assert_eq!(merged["triggerScan"]["gamepadButtons"], json!([3]));
+        assert!(merged["triggerScan"].get("gamepadButton").is_none());
+        assert_eq!(
+            merged["openControllerMenu"]["gamepadButtons"],
+            json!([8, 9])
+        );
+
+        // The chord wins over a stale single button, and empty or null clears the default.
+        for cleared in [json!([]), Value::Null] {
+            s.doc.lock().unwrap()["hotkeys"] = json!({
+                "openControllerMenu": {"gamepadButtons": cleared, "gamepadButton": 4}
+            });
+            let merged = merged_hotkeys(&s);
+            assert_eq!(merged["openControllerMenu"]["gamepadButtons"], json!([]));
+        }
+        s.doc.lock().unwrap()["hotkeys"] = json!({"openControllerMenu": {"accelerator": "Alt+M"}});
+        let merged = merged_hotkeys(&s);
+        assert_eq!(
+            merged["openControllerMenu"]["gamepadButtons"],
+            json!([10, 11])
         );
     }
 }

@@ -478,7 +478,7 @@ function emptyCounters(): AutoScanCounters {
  *    reported, and remembered, so its matching release is skipped instead of
  *    being sent for a frame that was never pinned.
  */
-class FrameKeeper<Frame> {
+export class FrameKeeper<Frame> {
   private counts = new Map<Frame, number>()
   /** Frames whose retain the native side refused: nothing to release later. */
   private unpinned = new Set<Frame>()
@@ -1636,6 +1636,14 @@ export class AutoScanner<Frame = unknown> {
         return
       }
 
+      if (this.paused) {
+        // Paused while it was out: nothing may change under the reader. Still owed, so the
+        // candidate settles again once the loop resumes.
+        this.counters.staleDiscarded++
+        this.emit({ type: 'skip', reason: 'held', detail: 'paused while recognising' }, job.frame)
+        this.allowRetry(job)
+        return
+      }
       if (result) await this.accept(result, job, reason, epoch)
       else this.counters.emptyResults++
     } catch (error) {

@@ -2,6 +2,38 @@
 import type { ReactNode } from 'react'
 import { Badge, Button, Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
+import { useSetting } from '../../bridge/useSetting'
+import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
+import { DEFAULT_CONTROLLER_BUTTONS, type ControllerButtons } from '@ui/settings'
+
+/** The controller menu's command buttons, in the order the rows show them. */
+const MENU_BUTTONS: { key: keyof ControllerButtons; label: string; description: string }[] = [
+  {
+    key: 'confirm',
+    label: 'Select',
+    description: 'Choose a menu item, or look the word up again.'
+  },
+  {
+    key: 'back',
+    label: 'Back',
+    description: 'Close the menu, or leave the dictionary for the game.'
+  },
+  {
+    key: 'backAlt',
+    label: 'Back (second button)',
+    description: 'Another button that does the same.'
+  },
+  {
+    key: 'previousDefinition',
+    label: 'Previous definition',
+    description: 'Jump up the dictionary pop-up to the definition before.'
+  },
+  {
+    key: 'nextDefinition',
+    label: 'Next definition',
+    description: 'Jump down the dictionary pop-up to the next definition.'
+  }
+]
 
 export function GamepadSections(): ReactNode {
   const {
@@ -11,6 +43,11 @@ export function GamepadSections(): ReactNode {
     setPreferredGamepad,
     source: gamepadSource
   } = useGamepad()
+
+  const [menuButtons, setMenuButtons] = useSetting<ControllerButtons>(
+    'controllerButtons',
+    DEFAULT_CONTROLLER_BUTTONS
+  )
 
   const enabled = gamepadSettings.enabled
   const gamepads = gamepadState.gamepads
@@ -39,6 +76,25 @@ export function GamepadSections(): ReactNode {
           </div>
         )}
       </SettingsSection>
+
+      {enabled && (
+        <SettingsSection
+          title="Controller menu"
+          description="Buttons used while the controller menu or the dictionary is open. The D-pad and left stick move between items and words; the right stick scrolls the dictionary pop-up."
+        >
+          {MENU_BUTTONS.map(({ key, label, description }) => (
+            <SettingsRow key={key} label={label} description={description}>
+              <GamepadButtonCapture
+                value={menuButtons[key] ?? undefined}
+                onChange={(button) =>
+                  void setMenuButtons({ ...menuButtons, [key]: button ?? null })
+                }
+                size="1"
+              />
+            </SettingsRow>
+          ))}
+        </SettingsSection>
+      )}
 
       {enabled && (
         <SettingsSection title="Connected gamepads">

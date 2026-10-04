@@ -44,6 +44,12 @@ export interface TextBox {
 export interface ObservedLine {
   text: string
   box: TextBox
+  /**
+   * How strongly each part of the line stands out from its background, from native: a
+   * few cells along the line, each the spread of its pixels' brightness. Text that is
+   * still fading or drawing in changes this while its words read the same.
+   */
+  ink?: number[]
 }
 
 /** One local first-pass result. `text` is the lines joined in reading order. */

@@ -8,6 +8,7 @@ use crate::settings::{merged_hotkeys, Settings};
 use crate::state::Shared;
 use serde_json::{json, Value};
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
@@ -53,6 +54,9 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Value {
     let mut registry = lock();
     let _ = app.global_shortcut().unregister_all();
     registry.active.clear();
+    // That also took the region editor's and the controller menu's keys; put back any
+    // still in use.
+    let _ = sync_keys(app);
     if registry.suspended {
         return json!({ "registered": [], "failed": [], "suspended": true });
     }
@@ -145,6 +149,17 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
     json!({ "registered": registered, "failed": failed })
 }
 
+/// Whether the region editor's keys and the controller menu's keys are wanted. Atomics, not
+/// a lock: the key handlers read these on the main thread while `sync_keys` may be waiting
+/// on that same thread to register a key.
+static REGION_KEYS: AtomicBool = AtomicBool::new(false);
+static NAV_KEYS: AtomicBool = AtomicBool::new(false);
+/// Serialises `sync_keys`, so two callers cannot both decide to register the same key.
+static KEYS_SYNC: Mutex<()> = Mutex::new(());
+
+const REGION_KEY_NAMES: [&str; 3] = ["Escape", "Enter", "Space"];
+const NAV_KEY_NAMES: [&str; 6] = ["Up", "Down", "Left", "Right", "Enter", "Escape"];
+
 /// Escape and Return for the region editor, as global shortcuts while it is open.
 ///
 /// The overlay is a borderless non-activating panel, which AppKit will not make key, so
@@ -153,11 +168,35 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
 /// releasing them afterwards hands them straight back to the game. Space reports both
 /// press and release (held, it moves a box being drawn); the others only presses.
 pub fn set_region_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
+    REGION_KEYS.store(on, Ordering::SeqCst);
+    sync_keys(app)
+}
+
+/// The arrows, Return and Escape for the controller menu, as global shortcuts while it is
+/// open, delivered as `controller-key` events. The same bargain as `set_region_keys`, and
+/// like those keys they are not action shortcuts, so `suspend` never touches them. The
+/// arrows report release as well, so the overlay can stop its key repeat.
+pub fn set_nav_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
+    NAV_KEYS.store(on, Ordering::SeqCst);
+    sync_keys(app)
+}
+
+/// Register exactly the keys that the region editor and the controller menu want between
+/// them. Escape and Return are shared, so one handler serves both owners and decides at
+/// press time who hears about it; releasing one owner's keys never takes the other's.
+fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
+    let _serial = KEYS_SYNC
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let shortcuts = app.global_shortcut();
-    for key in ["Escape", "Enter", "Space"] {
+    for key in ["Escape", "Enter", "Space", "Up", "Down", "Left", "Right"] {
         let parsed = Shortcut::from_str(key).map_err(|e| e.to_string())?;
-        if !on {
-            let _ = shortcuts.unregister(parsed);
+        let wanted = (REGION_KEYS.load(Ordering::SeqCst) && REGION_KEY_NAMES.contains(&key))
+            || (NAV_KEYS.load(Ordering::SeqCst) && NAV_KEY_NAMES.contains(&key));
+        if !wanted {
+            if shortcuts.is_registered(parsed) {
+                let _ = shortcuts.unregister(parsed);
+            }
             continue;
         }
         if shortcuts.is_registered(parsed) {
@@ -166,13 +205,27 @@ pub fn set_region_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
         shortcuts
             .on_shortcut(parsed, move |app, _shortcut, event| {
                 let pressed = event.state == ShortcutState::Pressed;
-                if !pressed && key != "Space" {
-                    return;
-                }
-                // The DOM's names: the editor replays these as keyboard events.
-                let name = if key == "Space" { " " } else { key };
                 let kind = if pressed { "keydown" } else { "keyup" };
-                let _ = app.emit("region-key", json!({ "key": name, "type": kind }));
+                if REGION_KEYS.load(Ordering::SeqCst)
+                    && REGION_KEY_NAMES.contains(&key)
+                    && (pressed || key == "Space")
+                {
+                    // The DOM's names: the editor replays these as keyboard events.
+                    let name = if key == "Space" { " " } else { key };
+                    let _ = app.emit("region-key", json!({ "key": name, "type": kind }));
+                }
+                if NAV_KEYS.load(Ordering::SeqCst) && NAV_KEY_NAMES.contains(&key) {
+                    let name = match key {
+                        "Up" => "ArrowUp",
+                        "Down" => "ArrowDown",
+                        "Left" => "ArrowLeft",
+                        "Right" => "ArrowRight",
+                        other => other,
+                    };
+                    if pressed || name.starts_with("Arrow") {
+                        let _ = app.emit("controller-key", json!({ "key": name, "type": kind }));
+                    }
+                }
             })
             .map_err(|e| e.to_string())?;
     }

@@ -20,6 +20,7 @@
 
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
+import { layoutGroup, characterCells } from './text-layout.js'
 
 const LOOKAHEAD = 10
 const PROXIMITY_MAX_DISTANCE = 300
@@ -28,6 +29,36 @@ const GROUP_PADDING_Y = 6
 const GROUP_LINE_HEIGHT = 1.3
 /** Japanese glyphs are close to square; 0.85 leaves room without clipping. */
 const CHAR_ASPECT_RATIO = 0.85
+/** The card's own border: its runs are placed against the padding box inside it. */
+const GROUP_BORDER = 1
+/**
+ * Grouped text is set in the platform's Japanese gothic, whose kana and kanji all advance one
+ * em, so a run's cells are even and spacing alone can stretch it over the original.
+ */
+export const GROUP_FONT =
+  "'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif"
+
+let measurer = null
+const advances = new Map()
+/**
+ * A run's natural advance in ems, in the font it is drawn in. Without a canvas (tests) it falls
+ * back to one em per full-width character and a little over half for the rest.
+ */
+export function measureEms(text) {
+  const cached = advances.get(text)
+  if (cached !== undefined) return cached
+  let ems = 0
+  if (measurer === null && typeof document !== 'undefined') {
+    measurer = document.createElement('canvas').getContext?.('2d') ?? false
+    if (measurer) measurer.font = `bold 100px ${GROUP_FONT}`
+  }
+  if (measurer) ems = measurer.measureText(text).width / 100
+  else
+    for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
+  if (advances.size > 2000) advances.clear()
+  advances.set(text, ems)
+  return ems
+}
 
 /** Shrink to fit the box, then use letter spacing for the remainder. */
 function calculateFontSize(text, width, height, vertical = false) {
@@ -105,6 +136,8 @@ export class TextOverlayRenderer {
     this.words = []
     this.lastLookupIndex = null
     this.selectionIndices = new Set()
+    /** While the controller reads word by word, boxes stay dark: its outline is the only mark. */
+    this.quiet = false
     this.mode = 'words'
     this.frame = null
 
@@ -130,6 +163,38 @@ export class TextOverlayRenderer {
     if (this.mouse.x === x && this.mouse.y === y) return
     this.mouse = { x, y }
     this.scheduleProximityUpdate()
+  }
+
+  /** Hold every box unlit and unmarked (true), or let hovering and selection show again. */
+  setQuiet(quiet) {
+    if (this.quiet === quiet) return
+    this.quiet = quiet
+    this.updateProximity()
+  }
+
+  /**
+   * Where each character of a word-mode box is on the source, one cell per code unit of its text
+   * (see `characterCells`), from the box OCR found and the lines found inside it, fitted the way
+   * grouped text is. Null for anything but a word-mode box.
+   */
+  charRects(element) {
+    const word = this.words.find((candidate) => candidate.element === element)
+    if (!word) return null
+    const { box } = word
+    const vertical = box.orientation === 'vertical' || box.isVertical === true
+    const runs = layoutGroup(
+      [
+        {
+          text: box.text,
+          rect: { x: box.x, y: box.y, width: box.width, height: box.height },
+          lines: word.lines ?? [],
+          block: box.granularity === 'block'
+        }
+      ],
+      vertical,
+      measureEms
+    )
+    return characterCells(box.text, runs, vertical, measureEms)
   }
 
   /** The pointer has gone somewhere this window cannot see; let the effect fade. */
@@ -280,6 +345,7 @@ export class TextOverlayRenderer {
           text: previous.text,
           current: previous.current,
           box: previous.box,
+          lines: previous.lines,
           centerX: previous.centerX,
           centerY: previous.centerY
         })
@@ -385,6 +451,8 @@ export class TextOverlayRenderer {
         element,
         text,
         current,
+        // The lines the engine found inside the box, if any, for placing characters on the source.
+        lines: box.lines ?? [],
         index,
         centerX: box.x + box.width / 2,
         centerY: box.y + box.height / 2,
@@ -465,16 +533,55 @@ export class TextOverlayRenderer {
         return
       }
 
+      // Each line or word goes where OCR found it, fitted along its length; see text-layout.js.
+      const parts = group.annotations.map((annotation) => {
+        const box = getBoundingBox(annotation)
+        const lines = (annotation.linePolygons ?? [])
+          .map((polygon) => {
+            const xs = polygon.map((point) => point[0])
+            const ys = polygon.map((point) => point[1])
+            const x = Math.min(...xs)
+            const y = Math.min(...ys)
+            return mapRect(info, origin, { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }, bounds)
+          })
+          .filter((line) => line.width > 0 && line.height > 0)
+        return {
+          text: annotation.description,
+          rect: mapRect(info, origin, { x: box.minX, y: box.minY, width: box.width, height: box.height }, bounds),
+          lines,
+          block: annotation.granularity === 'block'
+        }
+      })
+      const runs = layoutGroup(parts, vertical, measureEms)
       const body = document.createElement('span')
-      if (semanticBlock) Object.assign(body.style, { width: `${rect.width}px`, height: `${rect.height}px`, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' })
-      body.append(document.createTextNode(text))
+      body.className = 'ocr-runs'
+      const left = rect.x - GROUP_PADDING_X + GROUP_BORDER
+      const top = rect.y - GROUP_PADDING_Y + GROUP_BORDER
+      for (const run of runs) {
+        const span = document.createElement('span')
+        span.className = 'ocr-run'
+        const across = vertical ? run.rect.width : run.rect.height
+        Object.assign(span.style, {
+          left: `${run.rect.x - left}px`,
+          top: `${run.rect.y - top}px`,
+          width: `${run.rect.width}px`,
+          height: `${run.rect.height}px`,
+          fontSize: `${run.fontSize}px`,
+          letterSpacing: `${run.spacing}px`,
+          lineHeight: `${across}px`,
+          [vertical ? 'paddingTop' : 'paddingLeft']: `${Math.max(0, run.lead)}px`
+        })
+        span.append(document.createTextNode(run.text))
+        body.append(span)
+      }
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
       lookahead.textContent = '' // Semantic groups must not extend a lookup into another bubble.
       body.append(lookahead)
       element.append(body)
 
-      element.renderKey = JSON.stringify([this.mode, text, rect, fontSize, opacity, group.orientation])
+      const layout = runs.map((run) => [run.text, run.rect.x, run.rect.y, run.rect.width, run.rect.height])
+      element.renderKey = JSON.stringify([this.mode, text, rect, layout, opacity, group.orientation])
       element.renderText = text
       element.renderBox = rect
       this.attachInteraction(element, index)
@@ -522,12 +629,14 @@ export class TextOverlayRenderer {
     for (const word of this.words) {
       const { box } = word
       const hovering =
-        this.selectionIndices.has(word.index) ||
-        (this.mouse.x >= box.x &&
-          this.mouse.x <= box.x + box.width &&
-          this.mouse.y >= box.y &&
-          this.mouse.y <= box.y + box.height)
-      const style = proximityStyle(this.mouse, word.centerX, word.centerY, hovering)
+        !this.quiet &&
+        (this.selectionIndices.has(word.index) ||
+          (this.mouse.x >= box.x &&
+            this.mouse.x <= box.x + box.width &&
+            this.mouse.y >= box.y &&
+            this.mouse.y <= box.y + box.height))
+      const far = { x: -100000, y: -100000 }
+      const style = proximityStyle(this.quiet ? far : this.mouse, word.centerX, word.centerY, hovering)
       const vertical = box.orientation === 'vertical' || box.isVertical === true
       word.element.style.borderBottom = vertical ? 'none' : style.borderBottom
       word.element.style.borderRight = vertical ? style.borderBottom : 'none'

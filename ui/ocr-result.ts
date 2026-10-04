@@ -232,6 +232,10 @@ export function normalizeOcrResult(
         granularity: "block",
         orientation: g.orientation,
         isVertical: g.orientation === "vertical",
+        // Where the engine found each line inside the block; grouped text is laid out on them.
+        ...(Array.isArray(g.linePolygons) && g.linePolygons.length
+          ? { linePolygons: g.linePolygons }
+          : {}),
         boundingPoly: {
           vertices: [
             { x: g.bbox![0], y: g.bbox![1] },

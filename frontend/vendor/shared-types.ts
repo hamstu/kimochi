@@ -1,6 +1,7 @@
 /**
  * VERBATIM COPY of `src/shared/types.ts` from the Electron app (do not hand-edit).
- * Kept byte-identical apart from this header and relative import paths.
+ * Kept byte-identical apart from this header and relative import paths, except one delta:
+ * hotkeys gained gamepad chords (`gamepadButtons`) to stay in step with the native settings.
  */
 export interface NativeScreen {
   id: number
@@ -62,7 +63,10 @@ export type HotkeyDefinition = {
   accelerator: string
   enabled?: boolean
   description?: string
-  gamepadButton?: number // Optional gamepad button index (0-16)
+  /** Gamepad chord: W3C standard button indices (0-16) that must all be held. */
+  gamepadButtons?: number[]
+  /** Legacy single button, read as a chord of one; superseded by `gamepadButtons`. */
+  gamepadButton?: number
 }
 
 export type HotkeysSettings = {
@@ -74,6 +78,7 @@ export type HotkeyOverrides = {
   [hotkeyName: string]: {
     accelerator?: string
     enabled?: boolean
+    gamepadButtons?: number[] | null
     gamepadButton?: number
   }
 }

@@ -1,3 +1,12 @@
+/** Opens the Kimochi pop-up for a term at a desktop point, once installed. */
+let showTerm = null;
+
+/** The controller's word cursor: look `term` up as if it had been clicked at (x, y). */
+export async function lookupTerm(term, x, y, sentence) {
+  if (!showTerm) throw Error("The Kimochi pop-up is not ready");
+  await showTerm(term, x, y, sentence, false);
+}
+
 /** Reuses Super Texthooker's native popup for overlay API lookups. */
 export async function installApiLookup() {
   const { setEmbeddedEnabled } = await import("/spike/frontend-mode.js");
@@ -29,16 +38,19 @@ export async function installApiLookup() {
       target.textContent;
     if (!term?.trim()) return;
     event.stopPropagation();
+    await open(term, event.screenX, event.screenY, term, event.type === "click");
+  }
+  async function open(term, cursorX, cursorY, sentence, focus) {
     try {
       await invoke("show_popover", {
         term: term.trim(),
-        cursorX: event.screenX,
-        cursorY: event.screenY,
+        cursorX,
+        cursorY,
         width: reader.popoverWidth || 480,
         height: reader.popoverHeight || 360,
         baseUrl: settings.customApiUrl ?? "http://localhost:8765",
-        focus: event.type === "click",
-        sentence: term,
+        focus,
+        sentence,
         includeMedia: Boolean(reader.audioEnabled || reader.ankiEnabled),
         audioAutoplay: Boolean(reader.audioEnabled && reader.audioAutoplay),
         audioVolume: reader.audioVolume ?? 0.9,
@@ -57,6 +69,7 @@ export async function installApiLookup() {
       console.error("API dictionary popup:", error);
     }
   }
+  showTerm = open;
   document.addEventListener("click", show);
   document.addEventListener("mousemove", show);
   document.addEventListener("keyup", (event) => {

@@ -1,4 +1,5 @@
-import { installApiLookup } from './api-lookup.js'
+import { installApiLookup, lookupTerm } from './api-lookup.js'
+import { createController } from './controller.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -23,6 +24,7 @@ import { sourceDisplay, toOverlayLocal } from './geometry.js'
 import { scanPointerInit } from './scan-input.js'
 import { visibleAnnotations } from './annotations.js'
 import { AutoScanner } from './autoscan.js'
+import { SceneScanner } from './scene-scanner.js'
 import { ScanTrace } from './scan-trace.js'
 import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
@@ -153,10 +155,104 @@ const hoverPreview = new HoverPreview({
 
 const renderer = new TextOverlayRenderer(wordsContainer, {
   // Keep cloud requests from disrupting lookup, while local observations still
-  // notice when the game removes the words underneath the pointer.
-  onActivity: () => holdAutoScan(),
-  onLookupStart: () => holdAutoScan()
+  // notice when the game removes the words underneath the pointer. Touching the text with the
+  // mouse also takes word mode back from the controller.
+  onActivity: () => {
+    holdAutoScan()
+    controller?.mouseActivity()
+  },
+  onLookupStart: () => {
+    holdAutoScan()
+    controller?.mouseUsed()
+  }
 })
+
+/**
+ * Controller mode: the radial menu and word-by-word dictionary navigation. It holds the scan's
+ * text on screen while it steps through it, even once native has moved focus off the game,
+ * which would otherwise hide the text as belonging to an app that is no longer in front.
+ */
+let controller = null
+controller = createController({
+  host: document.querySelector('#controller'),
+  words: wordsContainer,
+  native,
+  status: () => {
+    const origin = state.origin
+    const bounds = state.sourceBounds ?? state.info?.source_bounds ?? null
+    const area =
+      origin && bounds
+        ? { x: bounds.x - origin.x, y: bounds.y - origin.y, width: bounds.width, height: bounds.height }
+        : null
+    return {
+      hasText: state.annotations.length > 0 && Boolean(state.geometry),
+      autoOcr: Boolean(state.flags.autoOcrEnabled),
+      autoAvailable: !isQuickShot(),
+      textVisible: isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible),
+      origin,
+      area,
+      scanId: state.appliedScanId,
+      center: area ? { x: area.x + area.width / 2, y: area.y + area.height / 2 } : null
+    }
+  },
+  run: (id) => {
+    if (id === 'auto') return void onAction('toggleAutoOcr')
+  },
+  // With automatic OCR on, Scan catches the loop up at once instead of a separate scan;
+  // either way it resolves once the text on screen is current.
+  scan: async () => {
+    if (scanner === sceneScanner && scanner.isRunning) return sceneScanner.refresh()
+    await onAction('triggerScan')
+    return false
+  },
+  popupControl: (control) => controlPopup(control),
+  redraw: () => draw(),
+  dictionary: () => extensionApi,
+  popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
+  buttons: () => setting('controllerButtons'),
+  lookupRange: async (range) => (await import('/spike/frontend-mode.js')).lookupRange(range),
+  lookupTerm,
+  charRects: (element) => (renderer.mode === 'words' ? renderer.charRects(element) : null),
+  quietText: (quiet) => renderer.setQuiet(quiet),
+  setText: (visible) => setOverlayText(visible),
+  nearText: (x, y) => {
+    const reach = 32
+    for (const element of wordsContainer.children) {
+      const rect = element.getBoundingClientRect()
+      if (
+        x >= rect.left - reach &&
+        x <= rect.right + reach &&
+        y >= rect.top - reach &&
+        y <= rect.bottom + reach
+      )
+        return true
+    }
+    return false
+  },
+  dismiss: () => {
+    dismissPopup()
+    void native.optional('hide_popover')
+  },
+  log: (record) => log(record),
+  modeChanged: (mode) => holdForController(mode !== 'idle')
+})
+/** The scan the controller last saw drawn, so it can follow a new one in word mode. */
+let controllerScanId = null
+
+/**
+ * Automatic OCR stands still while the controller menu is open or the reader is stepping
+ * through words: nothing is captured, nothing new is drawn under the cursor, and a recognition
+ * already out is set aside rather than applied. Leaving controller mode picks it straight back
+ * up, with a fresh look at the screen.
+ */
+let controllerHold = false
+function holdForController(hold) {
+  if (hold === controllerHold) return
+  controllerHold = hold
+  if (hold) scanner.pause()
+  else scanner.resume()
+  log({ check: 'auto-scan-controller-hold', hold, running: scanner.isRunning })
+}
 
 function holdAutoScan() {
   if (!scanner.isRunning) return
@@ -166,8 +262,9 @@ function holdAutoScan() {
 let lastVisibilityTrace = null
 function draw() {
   const visible =
-    isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) &&
-    shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp)
+    controller.holdsText ||
+    (isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) &&
+      shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp))
 
   const reason = !isOverlayTextVisible(
     setting('liveOverlayEnabled'),
@@ -209,6 +306,10 @@ function draw() {
   })
   if (renderChange && (renderChange.created || renderChange.removed))
     trace('overlay-dom-change', renderChange)
+  if (state.appliedScanId !== controllerScanId) {
+    controllerScanId = state.appliedScanId
+    controller.scanChanged(state.annotations.length > 0)
+  }
 }
 
 function drawHover() {
@@ -412,7 +513,12 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
   const published =
     outcome.publish === false
       ? ''
-      : await publishOcrResult(result, { detached: !!job.detached, grouping })
+      : await publishOcrResult(outcome.publishResult ?? result, {
+          detached: !!job.detached,
+          grouping,
+          // A scan of text that is already in the history does not add it again.
+          merge: true
+        })
 
   log({
     check: 'overlay-scan-applied',
@@ -463,7 +569,7 @@ async function performScan(explicit = null) {
       // immediately make the same request again — and so its minimum spacing
       // starts from this scan, not from its own last one.
       if (published !== '' || !generation.isStale(job))
-        scanner.noteExternalScan(result.fullText, observationFrom(frame)?.lines)
+        scanner.noteExternalScan(result.fullText, observationFrom(frame)?.lines, result)
     } catch (error) {
       // Capture permission, a stale source and an unreachable endpoint all land
       // here, and the user's only view of them is the controller's status line.
@@ -500,7 +606,7 @@ async function performScan(explicit = null) {
  * that one rather than to whatever the loop is looking at now.
  */
 let autoJob = null
-const scanner = new AutoScanner({
+const scanDeps = {
   generation: () => generation.current,
   // Held by the *other* path. The loop's own request takes this lock too, so it
   // cannot overlap a manual scan and a manual scan cannot overlap it.
@@ -580,6 +686,25 @@ const scanner = new AutoScanner({
   },
   retainFrame: (frame) => native.retainFrame(frame?.id, true),
   releaseFrame: (frame) => native.retainFrame(frame?.id, false),
+  onDiagnostic: (event, frame, counters, context) => {
+    // Free-form messages/details may carry service content. Keep only structured
+    // decision fields; the existing operational error log remains separate.
+    const safe = Object.fromEntries(
+      Object.entries(event).filter(([key]) => !['message', 'detail', 'layout'].includes(key))
+    )
+    trace('decision', { event: safe, frameId: frame?.id ?? null, counters, ...context })
+  },
+  onScanStart: () => setScanning(true, 'Auto scan\u2026'),
+  onScanEnd: () => setScanning(false),
+  onEvent: onAutoScanEvent
+}
+
+/**
+ * Image mode: the whole-crop hash decides, so the original single-candidate loop drives it.
+ * Text mode — the default — runs on the scene memory instead; see scene-scanner.ts.
+ */
+const imageScanner = new AutoScanner({
+  ...scanDeps,
   onResult: async (result, frame, outcome) => {
     const started = performance.now()
     trace('apply-start', { frameId: frame?.id, publish: outcome.publish })
@@ -596,19 +721,62 @@ const scanner = new AutoScanner({
       trace('apply-failed', { frameId: frame?.id, durationMs: performance.now() - started })
       throw error
     }
-  },
-  onDiagnostic: (event, frame, counters, context) => {
-    // Free-form messages/details may carry service content. Keep only structured
-    // decision fields; the existing operational error log remains separate.
-    const safe = Object.fromEntries(
-      Object.entries(event).filter(([key]) => !['message', 'detail', 'layout'].includes(key))
-    )
-    trace('decision', { event: safe, frameId: frame?.id ?? null, counters, ...context })
-  },
-  onScanStart: () => setScanning(true, 'Auto scan\u2026'),
-  onScanEnd: () => setScanning(false),
-  onEvent: onAutoScanEvent
+  }
 })
+
+const sceneScanner = new SceneScanner({ ...scanDeps, onScene: applyScene })
+
+/** Whichever loop the observer mode calls for; `syncAutoScanner` keeps it current. */
+let scanner = sceneScanner
+
+/**
+ * Draw what the scene memory holds, and publish what it says is new.
+ *
+ * An update with a frame comes from a recognition and goes through `applyResult` like any
+ * scan, so the reader, the controller and the published scan state all see it. One without
+ * is the drawing catching up with the screen — a line went, or came back with a reading the
+ * memory already had — and only redraws.
+ */
+async function applyScene(update) {
+  const grouping = setting('textOverlayGrouping')
+  if (update.frame) {
+    const started = performance.now()
+    trace('apply-start', { frameId: update.frame.id, publish: update.publish.length })
+    await applyResult(update.result, update.frame, update.frame.job ?? autoJob, { publish: false })
+    trace('apply-end', {
+      frameId: update.frame.id,
+      durationMs: performance.now() - started,
+      geometry: update.result.geometry !== false
+    })
+  } else {
+    if (update.generation !== generation.current) return
+    state.annotations = update.result.geometry ? update.result.textAnnotations : []
+    if (state.annotations.length) state.geometry = true
+    draw()
+    void publishRegions()
+  }
+  let published = 0
+  for (const passage of update.publish) {
+    published += (await publishPassage(passage, grouping)).length
+  }
+  log({
+    check: 'auto-scan-scene',
+    reason: update.reason,
+    annotations: Math.max(0, state.annotations.length - 1),
+    passages: update.publish.length,
+    corrections: update.publish.filter((passage) => passage.replaces).length,
+    published
+  })
+}
+
+/**
+ * Publish one passage from automatic OCR. Merged into the history rather than appended: a
+ * passage that is the same sentence as one just written, or a piece of it, adds nothing, and
+ * one that completes an earlier fragment replaces it.
+ */
+async function publishPassage(passage, grouping) {
+  return publishOcrResult(passage.result, { detached: state.detached, grouping, merge: true })
+}
 
 /**
  * Turn the native observation into the shape the policy compares.
@@ -624,7 +792,8 @@ function observationFrom(frame) {
     text: observation.text,
     lines: (observation.lines ?? []).map((line) => ({
       text: line.text ?? '',
-      box: { x: line.x ?? 0, y: line.y ?? 0, width: line.width ?? 0, height: line.height ?? 0 }
+      box: { x: line.x ?? 0, y: line.y ?? 0, width: line.width ?? 0, height: line.height ?? 0 },
+      ...(Array.isArray(line.ink) ? { ink: line.ink } : {})
     }))
   }
 }
@@ -717,7 +886,15 @@ export function autoScanStats() {
 }
 
 function syncAutoScanner() {
-  scanner.updateSettings(setting('autoOCRSettings'))
+  const settings = setting('autoOCRSettings')
+  const wantedScanner = settings?.observerMode === 'image' ? imageScanner : sceneScanner
+  if (wantedScanner !== scanner) {
+    if (scanner.isRunning) scanner.stop()
+    scanner.resume()
+    scanner = wantedScanner
+    if (controllerHold) scanner.pause()
+  }
+  scanner.updateSettings(settings)
   // Quick Shot has no source to watch, so there is nothing for the loop to scan. Nor while a
   // region is being edited: the old region is about to be replaced, and the loop's frame checks
   // run on this page, where they would stutter the drag.
@@ -766,6 +943,8 @@ async function onAction(name) {
   switch (name) {
     case 'triggerScan':
       return isQuickShot() ? quickShot() : performScan()
+    case 'openControllerMenu':
+      return controller.toggle()
     case 'playAudio':
       return playLatest()
     // The controller reads these back from the shared view, so this window owns
@@ -1203,6 +1382,18 @@ async function toggleOverlayText() {
   draw()
 }
 
+/**
+ * Turn the overlay's text on or off, through the same switch the main window shows. On needs
+ * both gates, as the toggle does; off only lowers the session flag, so the persisted setting
+ * keeps the reader's choice.
+ */
+async function setOverlayText(visible) {
+  if (visible && !setting('liveOverlayEnabled')) await native.setSetting('liveOverlayEnabled', true)
+  if (state.flags.textOverlayVisible !== visible) await native.setViewFlags({ textOverlayVisible: visible })
+  state.flags = { ...state.flags, textOverlayVisible: visible }
+  draw()
+}
+
 async function playLatest() {
   const latest = listHistory()[0]?.text ?? ''
   if (!latest) return
@@ -1470,6 +1661,173 @@ async function capturePopups() {
   }))
 }
 
+/**
+ * Scroll the open dictionary popup, or jump between its definitions, for the controller's right
+ * stick and shoulder buttons.
+ *
+ * Yomitan's popup is a same-origin frame in this window, so it is scrolled directly: its
+ * definitions are the per-dictionary `.definition-item`s, or whole `.entry`s when no entry
+ * holds more than one. The Kimochi pop-up is its own window and is asked by event.
+ */
+function controlPopup(control) {
+  if ((setting('yomitanSettings')?.popupType ?? 'builtin') === 'custom-api') {
+    void globalThis.__TAURI__?.event?.emit('popover:control', control)
+    return
+  }
+  const popup = [...(livePopups ?? [])].find((candidate) => candidate.isVisibleSync?.())
+  let doc = null
+  try {
+    doc = popup?._frame?.contentDocument ?? null
+  } catch {
+    // A cross-origin frame: nothing to scroll from here. Reported below.
+  }
+  const scroller = doc?.getElementById('content-scroll')
+  if (control.step || !scroller) {
+    // Each jump, and any scroll that finds no popup, says how far it got: a jump that does
+    // nothing visible is otherwise impossible to tell apart from one that never arrived.
+    const report = {
+      check: 'controller-popup-control',
+      step: control.step ?? null,
+      popups: livePopups?.size ?? 0,
+      visible: Boolean(popup),
+      frame: Boolean(popup?._frame),
+      document: Boolean(doc),
+      scroller: Boolean(scroller),
+      scrollTop: scroller?.scrollTop ?? null,
+      scrollHeight: scroller?.scrollHeight ?? null,
+      clientHeight: scroller?.clientHeight ?? null
+    }
+    if (control.step || Date.now() - lastPopupReport > 2000) {
+      lastPopupReport = Date.now()
+      log(report)
+    }
+  }
+  if (!scroller) return
+  if (control.scroll) {
+    if (jump) cancelAnimationFrame(jump.frame)
+    jump = null
+    scroller.scrollTop += control.scroll
+  }
+  if (control.step) void stepEntry(popup._frame, scroller, control.step)
+}
+
+/**
+ * Move to the next or previous entry with Yomitan's own entry navigation — the `nextEntry` and
+ * `previousEntry` hotkeys (Alt+↓ / Alt+↑ by default) — by sending the popup the keystroke the
+ * reader's options bind to it. Yomitan then scrolls, marks the current entry and handles its
+ * sticky header itself, exactly as it does from the keyboard. Only when no such hotkey is
+ * bound does the overlay scroll the entries itself.
+ */
+async function stepEntry(frame, scroller, step) {
+  const before = scroller.scrollTop
+  const hotkey = await entryHotkey(step > 0 ? 'nextEntry' : 'previousEntry')
+  const win = frame.contentWindow
+  let handled = false
+  if (hotkey && win) {
+    const event = new win.KeyboardEvent('keydown', {
+      key: hotkey.key.replace(/^Key/, '').toLowerCase(),
+      code: hotkey.key,
+      altKey: hotkey.modifiers.includes('alt'),
+      ctrlKey: hotkey.modifiers.includes('ctrl'),
+      shiftKey: hotkey.modifiers.includes('shift'),
+      metaKey: hotkey.modifiers.includes('meta'),
+      bubbles: true,
+      cancelable: true
+    })
+    win.document.dispatchEvent(event)
+    // Yomitan prevents the default of a keystroke it acted on.
+    handled = event.defaultPrevented
+  }
+  if (!handled) {
+    const doc = frame.contentDocument
+    jumpDefinition(
+      scroller,
+      doc.getElementById('content-body') ?? scroller,
+      [...doc.querySelectorAll('.entry')],
+      step
+    )
+  }
+  setTimeout(() => {
+    log({
+      check: 'controller-entry-step',
+      step,
+      hotkey: hotkey ? `${hotkey.modifiers.join('+')}+${hotkey.key}` : null,
+      handled,
+      before,
+      after: scroller.scrollTop
+    })
+  }, 400)
+}
+
+/** The reader's popup hotkey for an entry action, from the current Yomitan profile. */
+async function entryHotkey(action) {
+  try {
+    const options = await extensionApi?.('optionsGetFull')
+    const profile = options?.profiles?.[options.profileCurrent]?.options
+    const hotkey = profile?.inputs?.hotkeys?.find(
+      (entry) =>
+        entry.action === action &&
+        entry.enabled !== false &&
+        typeof entry.key === 'string' &&
+        (entry.scopes ?? []).includes('popup')
+    )
+    return hotkey ? { key: hotkey.key, modifiers: hotkey.modifiers ?? [] } : null
+  } catch {
+    return null
+  }
+}
+let lastPopupReport = 0
+
+/** A definition jump in progress: where it is headed, so a quick second press continues from there. */
+let jump = null
+const JUMP_MS = 220
+
+/**
+ * Scroll `scroller` so the next (`step` 1) or previous (-1) of `targets` is at its top.
+ *
+ * Positions are measured against `body`, the scrolled content, the way Yomitan measures its own
+ * entry navigation: the popup's content is scaled, so a rectangle and `scrollTop` are not in the
+ * same units, and mixing them sent every jump the wrong way. The scroll is animated here rather
+ * than with `scrollTo({behavior: 'smooth'})`, which the popup frame cut short after a few
+ * points.
+ */
+function jumpDefinition(scroller, body, targets, step) {
+  if (!targets.length) return
+  const bodyTop = body.getBoundingClientRect().top
+  const offsets = targets.map((target) => target.getBoundingClientRect().top - bodyTop)
+  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+  // Where the popup is, or is about to be: a press during a jump counts from its destination.
+  const from = jump?.scroller === scroller ? jump.to : scroller.scrollTop
+  let current = 0
+  offsets.forEach((offset, index) => {
+    if (offset <= from + 8) current = index
+  })
+  // At the bottom, the last definitions cannot reach the top; step past whichever is showing.
+  if (step > 0 && from >= max - 1) return
+  const next = Math.max(0, Math.min(targets.length - 1, current + step))
+  const to = Math.min(max, next === 0 ? 0 : Math.max(0, offsets[next] - 6))
+  animateScroll(scroller, to)
+  targets[next].animate?.(
+    [{ backgroundColor: 'rgba(125, 211, 252, 0.2)' }, { backgroundColor: 'transparent' }],
+    { duration: 700, easing: 'ease-out' }
+  )
+}
+
+function animateScroll(scroller, to) {
+  if (jump) cancelAnimationFrame(jump.frame)
+  const start = performance.now()
+  const from = scroller.scrollTop
+  const current = { scroller, to, frame: 0 }
+  jump = current
+  const tick = (now) => {
+    const t = Math.min(1, (now - start) / JUMP_MS)
+    scroller.scrollTop = from + (to - from) * (1 - (1 - t) ** 3)
+    if (t < 1 && jump === current) current.frame = requestAnimationFrame(tick)
+    else if (jump === current) jump = null
+  }
+  current.frame = requestAnimationFrame(tick)
+}
+
 /** Desktop rectangles for the visible popup chain; see ui/regions.ts. */
 const popupRects = () => popupHitRects(livePopups, state.origin)
 
@@ -1511,6 +1869,7 @@ function hitRects() {
   if (state.dictionaryOpen) add(pagesSection.getBoundingClientRect(), true)
   // The popup is not in the light DOM; see popupRects().
   rects.push(...popupRects())
+  for (const rect of controller.hitRects()) add(rect, false)
   return rects
 }
 
@@ -1552,11 +1911,9 @@ async function processView(view) {
         dismissPopup()
         window.getSelection()?.removeAllRanges()
         if (view.scan?.ocr) {
+          const ocr = normalizeOcrResult(view.scan.ocr, view.scan.ocr.engine ?? setting('ocrMode'))
           await applyResult(
-            {
-              ...normalizeOcrResult(view.scan.ocr, view.scan.ocr.engine ?? setting('ocrMode')),
-              nativeScanId: scanId
-            },
+            { ...ocr, nativeScanId: scanId },
             view.scan,
             {
               generation: generation.current,
@@ -1565,7 +1922,7 @@ async function processView(view) {
               request: { source_id: null, crop: view.crop ?? null }
             }
           )
-          scanner.noteExternalText(view.scan.ocr.fullText ?? '')
+          scanner.noteExternalScan(ocr.fullText ?? '', null, ocr)
         } else if (!view.scan && !pipeline.isHeld && !state.scanning) {
           // An explicit clear. A scan in flight has not produced its frame yet
           // and must not wipe what is currently readable.
@@ -1895,7 +2252,10 @@ await native.listen('pointer', ({ payload }) => {
     return
   }
   renderer.setPointer(local.x, local.y)
-  if (!state.yomitan.ready) return
+  controller.pointer(local.x, local.y)
+  // While the controller is reading, the pointer must not steer Yomitan: an idle mouse resting
+  // somewhere else would otherwise close the controller's popup.
+  if (!state.yomitan.ready || controller.drivesLookups) return
   const init = scanPointerInit(payload, local, performance.now() - lastRealPointer)
   if (init) window.dispatchEvent(new PointerEvent('pointermove', init))
   // Once each, then never again. Whether a modifier can be read at all from a window

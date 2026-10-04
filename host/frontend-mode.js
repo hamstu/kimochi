@@ -13,3 +13,16 @@ export function setEmbeddedEnabled(value) {
   enabled = value;
   for (const frontend of frontends) frontend.setDisabledOverride(!value);
 }
+
+/**
+ * Look up the text a range starts, as if the reader had pointed at it: the controller's word
+ * cursor uses this to open the popup on the word it has selected. Resolves false when no
+ * frontend is running here yet.
+ */
+export async function lookupRange(range) {
+  const frontend = [...frontends][0];
+  if (!frontend || !enabled) return false;
+  const { TextSourceRange } = await import("/js/dom/text-source-range.js");
+  await frontend.setTextSource(TextSourceRange.create(range));
+  return true;
+}

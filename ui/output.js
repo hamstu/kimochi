@@ -39,9 +39,13 @@ function newEntry(text) {
  * add/delete race Electron already has when the log panel edits history while a
  * scan lands.
  */
-export async function addHistoryEntry(text, { detached = false, groups, engine } = {}) {
+export async function addHistoryEntry(text, { detached = false, groups, engine, merge = false } = {}) {
   const entry = { ...newEntry(text), ...(groups ? { groups, engine } : {}) }
-  const native = await optional('history_add', { text, detached, groups: groups ?? null, engine: engine ?? null }, null)
+  const native = await optional(
+    'history_add',
+    { text, detached, groups: groups ?? null, engine: engine ?? null, merge },
+    null
+  )
   if (native) return native
   await setSetting('scannedTextHistory', pushHistory(getSetting('scannedTextHistory'), entry))
   return entry
@@ -92,7 +96,16 @@ export async function publishOcrResult(result, options = {}) {
   }
   const text = groups.map(group => group.text).join('\n') || result.fullText || ''
   if (!text.trim()) return ''
+  // History first: with `merge`, a reading already in the history (the same sentence again,
+  // or a piece of one) is skipped there, and then is not sent to the clipboard either. A fuller
+  // reading replaces the fragments it contains; see history_merge.rs.
+  const entry = await addHistoryEntry(text, {
+    detached: options.detached,
+    groups,
+    engine: result.engine,
+    merge: !!options.merge
+  })
+  if (entry?.skipped) return ''
   await publishText(text)
-  await addHistoryEntry(text, { ...options, groups, engine: result.engine })
   return text
 }

@@ -26,6 +26,8 @@ export interface Annotation {
   groupId?: string
   granularity?: 'aggregate' | 'block' | 'line' | 'fragment'
   boundingPoly: { vertices: Vertex[] }
+  /** For a block: the lines found inside it, each a polygon of [x, y] points, in capture pixels. */
+  linePolygons?: number[][][]
 }
 
 export interface BoundingBox {

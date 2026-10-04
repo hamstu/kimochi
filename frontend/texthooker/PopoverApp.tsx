@@ -66,6 +66,22 @@ type ShowPayload =
       sentence: string | null;
     };
 
+/** Scroll so the next (`step` 1) or previous (-1) entry sits at the top of the card. */
+function jumpEntry(scroller: HTMLElement, step: number): void {
+  const entries = [...scroller.querySelectorAll<HTMLElement>(".popover-entry")];
+  if (!entries.length) return;
+  const top = scroller.getBoundingClientRect().top;
+  const offsets = entries.map(
+    (entry) => entry.getBoundingClientRect().top - top + scroller.scrollTop,
+  );
+  let current = 0;
+  offsets.forEach((offset, index) => {
+    if (offset <= scroller.scrollTop + 8) current = index;
+  });
+  const next = Math.max(0, Math.min(entries.length - 1, current + step));
+  scroller.scrollTo({ top: next === 0 ? 0 : offsets[next], behavior: "smooth" });
+}
+
 function PopoverApp() {
   const [payload, setPayload] = useState<ShowPayload | null>(null);
   const [visible, setVisible] = useState(false);
@@ -117,6 +133,15 @@ function PopoverApp() {
 
     void register<unknown>("popover:hide", () => {
       setVisible(false);
+    });
+
+    // The overlay's controller mode: the right stick scrolls, the shoulder buttons jump from
+    // one definition to the next.
+    void register<{ scroll?: number; step?: number }>("popover:control", (e) => {
+      const scroller = document.querySelector<HTMLElement>(".popover-scroll");
+      if (!scroller) return;
+      if (e.payload.scroll) scroller.scrollTop += e.payload.scroll;
+      if (e.payload.step) jumpEntry(scroller, e.payload.step);
     });
 
     // Mirror the main window's resolved theme onto our document root.

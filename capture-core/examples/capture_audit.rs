@@ -136,6 +136,13 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
 }
 
 fn main() {
+    // Window streams need the window server connection an app has; a bare process
+    // asserts in CGS_REQUIRE_INIT without it.
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let _: *mut objc2::runtime::AnyObject =
+            objc2::msg_send![objc2::class!(NSApplication), sharedApplication];
+    }
     let source = std::env::var("KIMOCHI_SOURCE").unwrap_or_default();
     let frames: usize = std::env::var("KIMOCHI_FRAMES")
         .ok()

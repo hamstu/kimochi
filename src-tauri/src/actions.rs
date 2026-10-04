@@ -11,8 +11,10 @@ use tauri::{Emitter, Manager};
 /// frontend actually calls, so a button cannot ship against an action that does not
 /// exist.
 pub const ACTIONS: &[&str] = &[
-    // Commands, bindable to a shortcut or a gamepad button.
+    // Commands. Only `triggerScan` and `openControllerMenu` are bindable now; the rest are
+    // still reached from the tray, the panels and the overlay's radial menu.
     "triggerScan",
+    "openControllerMenu",
     "toggleOverlay",
     "setCropArea",
     "playAudio",
@@ -31,20 +33,21 @@ pub const ACTIONS: &[&str] = &[
     "hoverSourceDismiss",
 ];
 
-/// The subset that can be bound to a shortcut or a gamepad button.
-pub const HOTKEY_ACTIONS: &[&str] = &[
-    "triggerScan",
-    "toggleOverlay",
-    "setCropArea",
-    "playAudio",
-    "selectAndScan",
-];
+/// The subset that can be bound to a shortcut or a gamepad button. The order also breaks
+/// ties between gamepad chords of the same size: the earlier action wins.
+pub const HOTKEY_ACTIONS: &[&str] = &["triggerScan", "openControllerMenu"];
 
 /// Commands that bring the overlay back if it is hidden, so a shortcut never appears
 /// to do nothing. Deliberately excludes the toggles and the hover affordances: forcing
 /// the overlay open because the pointer crossed the controller's Source button would be
 /// a worse bug than the one this behaviour fixes.
-const RESTORES_OVERLAY: &[&str] = &["triggerScan", "setCropArea", "playAudio", "selectAndScan"];
+const RESTORES_OVERLAY: &[&str] = &[
+    "triggerScan",
+    "openControllerMenu",
+    "setCropArea",
+    "playAudio",
+    "selectAndScan",
+];
 
 pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
     let visibility = {
@@ -72,6 +75,15 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
             if !visible {
                 // Hidden overlays must not keep swallowing clicks.
                 let _ = overlay.set_ignore_cursor_events(true);
+                // Nor keep the controller and the arrow keys away from the game. Off this
+                // thread: a keyboard shortcut runs us inside the shortcut plugin's handler,
+                // which holds the lock that unregistering the navigation keys needs.
+                if crate::gamepad::navigating() {
+                    let app = app.clone();
+                    std::thread::spawn(move || {
+                        crate::gamepad::set_navigation(&app, false, false);
+                    });
+                }
             }
         }
     }
@@ -88,6 +100,8 @@ mod tests {
         for name in HOTKEY_ACTIONS {
             assert!(ACTIONS.contains(name), "{name}");
         }
+        // The controller menu lives in the overlay, so opening it must show the overlay.
+        assert!(RESTORES_OVERLAY.contains(&"openControllerMenu"));
     }
 
     #[test]

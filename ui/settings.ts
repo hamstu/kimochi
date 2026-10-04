@@ -34,6 +34,30 @@ export const INTERFACE_SCALES: Record<InterfaceScale, { label: string; factor: n
   xlarge: { label: 'Extra large', factor: 1.22 }
 }
 
+/**
+ * The buttons of the overlay's controller menu and word mode, as standard (W3C) button indices;
+ * `null` leaves an action unbound. The D-pad and sticks are fixed: they are how the menu and the
+ * word cursor are steered, not commands.
+ */
+export interface ControllerButtons {
+  /** Choose the menu item; in word mode, look the word up again. */
+  confirm: number | null
+  /** Close the menu, or leave word mode and return to the game. */
+  back: number | null
+  backAlt: number | null
+  /** Jump to the previous or next definition in the dictionary popup. */
+  previousDefinition: number | null
+  nextDefinition: number | null
+}
+
+export const DEFAULT_CONTROLLER_BUTTONS: ControllerButtons = {
+  confirm: 0,
+  back: 1,
+  backAlt: 3,
+  previousDefinition: 4,
+  nextDefinition: 5
+}
+
 export interface ScanHistoryEntry {
   groups?: OcrGroup[]
   engine?: string
@@ -61,6 +85,7 @@ export interface Settings {
   audioSettings: { voiceId: string }
   serverSettings: { mode: ServerMode }
   gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number }
+  controllerButtons: ControllerButtons
   yomitanSettings: {
     popupType: 'builtin' | 'custom-api'
     customApiUrl: string
@@ -94,6 +119,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   audioSettings: { voiceId: DEFAULT_VOICE_ID },
   serverSettings: { mode: 'cloud' },
   gamepadSettings: { enabled: true, preferredGamepadIndex: undefined },
+  controllerButtons: DEFAULT_CONTROLLER_BUTTONS,
   yomitanSettings: { popupType: 'builtin', customApiUrl: '' },
   ocrMode: 'cloud',
   owocrWebSocketUrl: 'ws://localhost:7331',

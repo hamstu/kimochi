@@ -30,6 +30,7 @@
 .shortcut-recorder[data-recording] { min-width: 5.5rem; padding: 0 var(--k-space-1-5); box-shadow: inset 0 0 0 1px var(--k-accent); background: transparent; }
 .shortcut-recorder-prompt { font-size: var(--k-text-sm); color: var(--k-accent-text); }
 .shortcut-row .k-settings-row-control { flex-shrink: 1; max-width: 72%; }
+.shortcut-hint { display: block; }
 
 /* A value readout next to a slider. */
 .settings-slider { display: flex; align-items: center; gap: var(--k-space-2); width: 11rem; }
