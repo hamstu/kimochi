@@ -10,8 +10,10 @@ mod macos;
 pub use macos::MacCapture;
 
 pub mod hash;
+pub mod ids;
 pub mod text;
 pub use hash::{dhash_rgba, hamming};
+pub use ids::{Platform, SourceId};
 pub use text::{platform_observer, Observation, ObserverStatus, TextLine, TextObserver};
 
 #[derive(Debug, Clone, Serialize)]
