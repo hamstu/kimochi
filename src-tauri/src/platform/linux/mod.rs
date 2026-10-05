@@ -42,7 +42,7 @@ pub use keytrigger::{key_trigger_status, start_key_trigger, stop_key_trigger};
 use rules::{Backend, Session};
 pub use window::{
     activate_process, activate_self, bounds, inspect, make_panel, order_front, panel_cursor,
-    panel_pointer, place, promote_to_key,
+    panel_pointer, place, promote_to_key, set_input_regions,
 };
 pub use workspace::observe_workspace;
 
@@ -255,9 +255,16 @@ pub fn capabilities() -> Value {
         },
         "overlay": {
             "passive": x11,
-            // Native XShape input regions are a Phase 6 follow-up; until then the
-            // shared cursor poll toggles click-through, as on macOS and Windows.
-            "inputRegions": if x11 { "poll" } else { "wholeWindowOnly" },
+            // X11 with SHAPE: `set_input_regions` installs an XShape input region and
+            // the cursor poll stops toggling click-through. Without SHAPE the shared
+            // poll toggles it, as on macOS and Windows.
+            "inputRegions": if !x11 {
+                "wholeWindowOnly"
+            } else if x11::has_input_shape() {
+                "native"
+            } else {
+                "poll"
+            },
             "nonActivating": x11,
             "nativeHoverWorkaround": false,
         },

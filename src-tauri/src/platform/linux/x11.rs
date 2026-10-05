@@ -319,6 +319,88 @@ pub fn pointer_in(window: Window) -> Option<(f64, f64)> {
     Some((x / s, y / s))
 }
 
+// ---------------------------------------------------------------- input shapes
+
+/// Whether the X server has the SHAPE extension (version 1.1+, which added input
+/// shapes; every server of the last twenty years). Asked once.
+pub fn has_input_shape() -> bool {
+    use x11rb::connection::RequestConnection as _;
+    use x11rb::protocol::shape::ConnectionExt as _;
+    static HAS: OnceLock<bool> = OnceLock::new();
+    *HAS.get_or_init(|| {
+        let Some(d) = desktop() else {
+            return false;
+        };
+        let present = d
+            .conn
+            .extension_information(x11rb::protocol::shape::X11_EXTENSION_NAME)
+            .ok()
+            .flatten()
+            .is_some();
+        present
+            && d.conn
+                .shape_query_version()
+                .ok()
+                .and_then(|c| c.reply().ok())
+                .is_some_and(|v| (v.major_version, v.minor_version) >= (1, 1))
+    })
+}
+
+/// Replace `window`'s input shape: with the union of `regions` (window-local CSS
+/// pixels, converted with GDK's scale and clamped to the window's current size), or,
+/// for `None`, with the default (the whole window takes input). The bounding shape,
+/// which is what is painted, is never touched.
+///
+/// Checked rather than fire-and-forget, so a bad window id is an `Err` here instead of
+/// an asynchronous error nobody reads; it costs one round trip per change.
+pub fn set_input_shape(window: Window, regions: Option<&[Rect]>) -> Result<(), String> {
+    use x11rb::protocol::shape::{ConnectionExt as _, SK, SO};
+    use x11rb::protocol::xproto::{ClipOrdering, Rectangle};
+    let d = desktop().ok_or("native: no X server")?;
+    let cookie = match regions {
+        None => d
+            .conn
+            .shape_mask(SO::SET, SK::INPUT, window, 0, 0, x11rb::NONE)
+            .map_err(|e| e.to_string())?,
+        Some(regions) => {
+            let geometry = d
+                .conn
+                .get_geometry(window)
+                .map_err(|e| e.to_string())?
+                .reply()
+                .map_err(|e| e.to_string())?;
+            let css: Vec<[f64; 4]> = regions
+                .iter()
+                .map(|r| [r.x, r.y, r.width, r.height])
+                .collect();
+            let rects: Vec<Rectangle> =
+                rules::input_shape(&css, scale(), (geometry.width, geometry.height))
+                    .into_iter()
+                    .map(|r| Rectangle {
+                        x: r.x,
+                        y: r.y,
+                        width: r.width,
+                        height: r.height,
+                    })
+                    .collect();
+            d.conn
+                .shape_rectangles(
+                    SO::SET,
+                    SK::INPUT,
+                    ClipOrdering::UNSORTED,
+                    window,
+                    0,
+                    0,
+                    &rects,
+                )
+                .map_err(|e| e.to_string())?
+        }
+    };
+    cookie
+        .check()
+        .map_err(|e| format!("native: input shape: {e}"))
+}
+
 /// Names of a window's `_NET_WM_STATE` and `_NET_WM_WINDOW_TYPE` atoms, its WM_HINTS
 /// input flag and map state, for `inspect`.
 pub fn describe(window: Window) -> serde_json::Value {

@@ -299,6 +299,102 @@ pub fn inside(x: f64, y: f64, width: f64, height: f64) -> bool {
     x >= 0. && y >= 0. && x < width && y < height
 }
 
+// ---------------------------------------------------------------- input shapes
+
+/// One rectangle of an X input shape: window-local X pixels, the request's own types.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShapeRect {
+    pub x: i16,
+    pub y: i16,
+    pub width: u16,
+    pub height: u16,
+}
+
+/// Window-local CSS rectangles (`[x, y, width, height]`) as the rectangles of an X
+/// input shape for a window `size` X pixels big, at `scale` X pixels per CSS pixel (the
+/// GDK window scale; anything not finite and positive counts as 1).
+///
+/// Each rectangle is scaled and snapped *outward* (floor the near edges, ceil the far
+/// ones), so rounding never takes a pixel away from something the UI made clickable;
+/// clamped to the window (X coordinates are 16-bit, and the server would clip anyway,
+/// but a clamped list compares equal across frames); and dropped when nothing is left
+/// of it or it is not finite. The survivors are merged (`merge_edges`), which only
+/// shortens the request: the shape is their union whatever the overlap.
+pub fn input_shape(rects: &[[f64; 4]], scale: f64, size: (u16, u16)) -> Vec<ShapeRect> {
+    let scale = if scale.is_finite() && scale > 0. {
+        scale
+    } else {
+        1.
+    };
+    let limit = |v: u16| f64::from(v.min(i16::MAX as u16));
+    let (max_x, max_y) = (limit(size.0), limit(size.1));
+    let edges: Vec<[i32; 4]> = rects
+        .iter()
+        .filter(|r| r.iter().all(|v| v.is_finite()) && r[2] > 0. && r[3] > 0.)
+        .filter_map(|&[x, y, w, h]| {
+            let x0 = (x * scale).floor().clamp(0., max_x);
+            let y0 = (y * scale).floor().clamp(0., max_y);
+            let x1 = ((x + w) * scale).ceil().clamp(0., max_x);
+            let y1 = ((y + h) * scale).ceil().clamp(0., max_y);
+            (x1 > x0 && y1 > y0).then_some([x0 as i32, y0 as i32, x1 as i32, y1 as i32])
+        })
+        .collect();
+    merge_edges(edges)
+        .into_iter()
+        .map(|[x0, y0, x1, y1]| ShapeRect {
+            x: x0 as i16,
+            y: y0 as i16,
+            width: (x1 - x0) as u16,
+            height: (y1 - y0) as u16,
+        })
+        .collect()
+}
+
+/// Shorten a list of rectangles (`[left, top, right, bottom]`, right/bottom exclusive)
+/// without changing their union: drop every rectangle another one contains, and join
+/// two that line up exactly and touch or overlap (same columns stacked vertically, or
+/// same rows side by side — a line of words, or the boxes of one word), repeatedly,
+/// until nothing changes. The X request is sent `UNSORTED`, so order does not matter.
+pub fn merge_edges(rects: Vec<[i32; 4]>) -> Vec<[i32; 4]> {
+    let contains =
+        |a: &[i32; 4], b: &[i32; 4]| a[0] <= b[0] && a[1] <= b[1] && a[2] >= b[2] && a[3] >= b[3];
+    let joined = |a: &[i32; 4], b: &[i32; 4]| -> Option<[i32; 4]> {
+        let columns = a[0] == b[0] && a[2] == b[2] && a[1] <= b[3] && b[1] <= a[3];
+        let rows = a[1] == b[1] && a[3] == b[3] && a[0] <= b[2] && b[0] <= a[2];
+        (columns || rows).then(|| {
+            [
+                a[0].min(b[0]),
+                a[1].min(b[1]),
+                a[2].max(b[2]),
+                a[3].max(b[3]),
+            ]
+        })
+    };
+    let mut out: Vec<[i32; 4]> = Vec::with_capacity(rects.len());
+    for rect in rects {
+        let mut current = rect;
+        // Absorb into the list until `current` neither fits in nor joins anything; a
+        // join can make it contain or line up with rectangles kept earlier.
+        loop {
+            if out.iter().any(|kept| contains(kept, &current)) {
+                break;
+            }
+            out.retain(|kept| !contains(&current, kept));
+            match out.iter().position(|kept| joined(kept, &current).is_some()) {
+                Some(i) => {
+                    let kept = out.remove(i);
+                    current = joined(&kept, &current).unwrap_or(current);
+                }
+                None => {
+                    out.push(current);
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
 // ---------------------------------------------------------------- icons
 
 /// Pick one icon out of a `_NET_WM_ICON` property (`width, height, width*height ARGB
@@ -625,5 +721,93 @@ mod tests {
         assert!(inside(0., 0., 10., 10.));
         assert!(!inside(10., 5., 10., 10.));
         assert!(!inside(-0.5, 5., 10., 10.));
+    }
+
+    fn shape(x: i16, y: i16, width: u16, height: u16) -> ShapeRect {
+        ShapeRect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn input_shape_scales_and_snaps_outward() {
+        // Fractional CSS edges never lose a pixel.
+        assert_eq!(
+            input_shape(&[[10.4, 20.6, 5.2, 3.0]], 1., (100, 100)),
+            vec![shape(10, 20, 6, 4)]
+        );
+        // GDK scale 2: device pixels are twice the CSS pixels.
+        assert_eq!(
+            input_shape(&[[10., 20., 5., 3.]], 2., (100, 100)),
+            vec![shape(20, 40, 10, 6)]
+        );
+        // A nonsensical scale is 1.
+        assert_eq!(
+            input_shape(&[[1., 1., 2., 2.]], 0., (100, 100)),
+            vec![shape(1, 1, 2, 2)]
+        );
+    }
+
+    #[test]
+    fn input_shape_clamps_to_the_window_and_drops_the_rest() {
+        let rects = [
+            [-5., -5., 10., 10.],          // straddles the top-left corner
+            [95., 90., 20., 20.],          // straddles the bottom-right corner
+            [200., 10., 10., 10.],         // entirely outside
+            [10., 10., 0., 10.],           // empty
+            [f64::NAN, 10., 10., 10.],     // not finite
+            [10., 10., f64::INFINITY, 1.], // not finite
+        ];
+        assert_eq!(
+            input_shape(&rects, 1., (100, 100)),
+            vec![shape(0, 0, 5, 5), shape(95, 90, 5, 10)]
+        );
+        // X coordinates are 16-bit.
+        assert_eq!(
+            input_shape(&[[0., 0., 1e9, 1.]], 1., (u16::MAX, 10)),
+            vec![shape(0, 0, i16::MAX as u16, 1)]
+        );
+        assert!(input_shape(&[], 1., (100, 100)).is_empty());
+    }
+
+    #[test]
+    fn merge_drops_contained_and_joins_aligned() {
+        // Contained either way round, and duplicates.
+        assert_eq!(
+            merge_edges(vec![[0, 0, 10, 10], [2, 2, 5, 5], [0, 0, 10, 10]]),
+            vec![[0, 0, 10, 10]]
+        );
+        assert_eq!(
+            merge_edges(vec![[2, 2, 5, 5], [0, 0, 10, 10]]),
+            vec![[0, 0, 10, 10]]
+        );
+        // A line of words: same rows, touching.
+        assert_eq!(
+            merge_edges(vec![[0, 0, 10, 20], [10, 0, 25, 20], [25, 0, 30, 20]]),
+            vec![[0, 0, 30, 20]]
+        );
+        // Stacked in the same columns, overlapping.
+        assert_eq!(
+            merge_edges(vec![[0, 0, 10, 10], [0, 5, 10, 30]]),
+            vec![[0, 0, 10, 30]]
+        );
+        // A join that makes the result line up with an earlier rectangle.
+        assert_eq!(
+            merge_edges(vec![[0, 10, 20, 20], [0, 0, 10, 10], [10, 0, 20, 10]]),
+            vec![[0, 0, 20, 20]]
+        );
+    }
+
+    #[test]
+    fn merge_keeps_what_does_not_line_up() {
+        // Overlapping but misaligned: both stay (X unions them).
+        let rects = vec![[0, 0, 10, 10], [5, 5, 15, 15]];
+        assert_eq!(merge_edges(rects.clone()), rects);
+        // Same rows with a gap: both stay.
+        let gap = vec![[0, 0, 10, 10], [11, 0, 20, 10]];
+        assert_eq!(merge_edges(gap.clone()), gap);
     }
 }

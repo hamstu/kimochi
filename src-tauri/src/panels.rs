@@ -177,8 +177,6 @@ fn pinned_default(settings: &Settings, spec: &PanelSpec) -> bool {
     settings.get_or(&format!("nativeWindowPinned.{}", spec.label), spec.pinned)
 }
 
-/// Returns the window, creating it on first use. Panels are hidden when created;
-/// `show` is a separate action, matching Electron's create-then-sync flow.
 /// Frame-id bands, one per window that runs the original extension.
 ///
 /// Yomitan addresses a frame by a bare number — `crossFrame.invoke(frameId, ...)` —
@@ -242,7 +240,112 @@ pub fn frame_base(label: &str) -> u32 {
         .map_or(0, |(_, base)| *base)
 }
 
-pub fn ensure(
+/// Proof that the holder runs in a main-thread event-loop turn of its own (or in `setup`),
+/// never inside a synchronous command or an event callback. Only this module makes one, and
+/// creating a window takes one, so the compiler keeps window creation off the paths where
+/// WebView2 deadlocks.
+///
+/// Tauri documents that building a webview window from a synchronous command or event
+/// handler deadlocks on Windows: WebView2 finishes creating a controller by pumping messages,
+/// which cannot happen while the IPC (or event) callback that asked for it is still on the
+/// stack. A job enqueued with `run_on_main_thread` runs from a later loop turn, after that
+/// callback returned, which is also exactly where Tauri itself builds a window requested from
+/// another thread.
+pub struct MainTurn(());
+
+/// How a request that may need to create `label` has to run.
+#[derive(Debug, PartialEq, Eq)]
+enum Dispatch {
+    /// Nothing will be created: run in the caller's own turn, as before.
+    Inline,
+    /// Creation is needed: run in a later main-thread turn.
+    Deferred,
+}
+
+fn dispatch_for(is_panel: bool, exists: bool) -> Dispatch {
+    if is_panel && !exists {
+        Dispatch::Deferred
+    } else {
+        Dispatch::Inline
+    }
+}
+
+/// Runs `job` with `label` ready, from an event callback (tray, menu, single instance).
+///
+/// When the panel already exists nothing is created, so the job runs inline exactly as it
+/// always has. Otherwise it is enqueued on the main thread and runs once the callback returns.
+pub fn with_panel(
+    app: &tauri::AppHandle,
+    label: &str,
+    job: impl FnOnce(&tauri::AppHandle, &MainTurn) + Send + 'static,
+) {
+    let exists = app.get_webview_window(label).is_some();
+    match dispatch_for(spec(label).is_some(), exists) {
+        Dispatch::Inline => job(app, &MainTurn(())),
+        Dispatch::Deferred => {
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || job(&handle, &MainTurn(())));
+        }
+    }
+}
+
+/// Runs `job` on the main thread in its own loop turn and returns its result. This is the
+/// path for async commands: they run on a Tokio worker, the job then gets the main thread
+/// that the platform helpers (direct AppKit calls) and window creation need.
+pub async fn on_main_turn<T: Send + 'static>(
+    app: &tauri::AppHandle,
+    job: impl FnOnce(&tauri::AppHandle, &MainTurn) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let handle = app.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(job(&handle, &MainTurn(())));
+    })
+    .map_err(|e| format!("native: {e}"))?;
+    rx.await.map_err(|e| format!("native: {e}"))?
+}
+
+/// `act` from an async command.
+pub async fn act_async(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    label: String,
+    action: String,
+    rect: Option<Rect>,
+) -> Result<Value, String> {
+    let store = settings.clone();
+    on_main_turn(app, move |app, turn| act(turn, app, &store, &label, &action, rect)).await
+}
+
+/// `set_content_height` from an async command.
+pub async fn set_content_height_async(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    label: String,
+    height: f64,
+) -> Result<(), String> {
+    let store = settings.clone();
+    on_main_turn(app, move |app, turn| {
+        set_content_height(turn, app, &store, &label, height)
+    })
+    .await
+}
+
+/// Builds the panels marked `eager`. For `setup` only, which runs before the event loop and
+/// outside any command or callback.
+pub fn create_eager(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), String> {
+    let turn = MainTurn(());
+    for spec in PANELS.iter().filter(|spec| spec.eager) {
+        ensure(&turn, app, settings, spec.label)?;
+    }
+    Ok(())
+}
+
+/// Returns the window, creating it on first use. Panels are hidden when created;
+/// `show` is a separate action, matching Electron's create-then-sync flow. Creation needs a
+/// `MainTurn`; see there for why.
+fn ensure(
+    _turn: &MainTurn,
     app: &tauri::AppHandle,
     settings: &Arc<Settings>,
     label: &str,
@@ -350,7 +453,9 @@ pub fn info(window: &WebviewWindow) -> Result<Value, String> {
     }))
 }
 
+/// Applies a window action, creating the panel first if it is not built yet.
 pub fn act(
+    turn: &MainTurn,
     app: &tauri::AppHandle,
     settings: &Arc<Settings>,
     label: &str,
@@ -358,12 +463,40 @@ pub fn act(
     rect: Option<Rect>,
 ) -> Result<Value, String> {
     let existed = app.get_webview_window(label).is_some();
-    let window = ensure(app, settings, label)?;
+    let window = ensure(turn, app, settings, label)?;
+    apply(app, settings, &window, existed, label, action, rect)
+}
+
+/// Applies a window action to a panel that must already exist, and never creates one. For
+/// synchronous commands and event callbacks that address an eager window (the main window
+/// is built in `setup` and is never destroyed: closing it quits).
+pub fn act_existing(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    label: &str,
+    action: &str,
+    rect: Option<Rect>,
+) -> Result<Value, String> {
+    let window = app
+        .get_webview_window(label)
+        .ok_or_else(|| format!("native: {label} window is not open yet"))?;
+    apply(app, settings, &window, true, label, action, rect)
+}
+
+fn apply(
+    app: &tauri::AppHandle,
+    settings: &Arc<Settings>,
+    window: &WebviewWindow,
+    existed: bool,
+    label: &str,
+    action: &str,
+    rect: Option<Rect>,
+) -> Result<Value, String> {
     let native_err = |e: tauri::Error| format!("native: {e}");
     match action {
         "show" => {
             if label == YOMITAN && !window.is_visible().unwrap_or(false) {
-                place_on_main_display(app, &window, existed, YOMITAN)?;
+                place_on_main_display(app, window, existed, YOMITAN)?;
             }
             window.show().map_err(native_err)?;
             window.set_focus().map_err(native_err)?;
@@ -374,12 +507,12 @@ pub fn act(
         "drag" => window.start_dragging().map_err(native_err)?,
         "place" => {
             let rect = rect.ok_or("invalid: place requires bounds")?;
-            platform::desktop_place(&window, platform::clamp_to_visible(rect))?;
+            platform::desktop_place(window, platform::clamp_to_visible(rect))?;
             // Reassert the flag: programmatic placement has been observed to turn
             // resizing back on for windows that must stay fixed.
             let resizable = spec(label).is_some_and(|s| s.resizable);
             window.set_resizable(resizable).map_err(native_err)?;
-            save_bounds(settings, &window, spec(label).unwrap());
+            save_bounds(settings, window, spec(label).unwrap());
         }
         "minimize" => window.minimize().map_err(native_err)?,
         "restore" => {
@@ -394,7 +527,7 @@ pub fn act(
         "inspect" => {}
         _ => return Err(format!("invalid: unknown window action {action:?}")),
     }
-    let mut state = info(&window)?;
+    let mut state = info(window)?;
     // `is_always_on_top` reads back the old level until AppKit has applied the new one, so
     // report what was asked for; otherwise the pin button shows the previous state.
     if action == "pin" || action == "unpin" {
@@ -477,7 +610,8 @@ fn centred(width: f64, height: f64, area: Rect) -> Rect {
 }
 
 /// A fixed-size panel (the tray popover) grows to fit its rows.
-pub fn set_content_height(
+fn set_content_height(
+    turn: &MainTurn,
     app: &tauri::AppHandle,
     settings: &Arc<Settings>,
     label: &str,
@@ -487,7 +621,7 @@ pub fn set_content_height(
     if spec.resizable || !height.is_finite() {
         return Ok(());
     }
-    let window = ensure(app, settings, label)?;
+    let window = ensure(turn, app, settings, label)?;
     let current = platform::desktop_bounds(&window)?;
     let next = platform::clamp_to_visible(Rect {
         width: spec.width,
@@ -553,6 +687,18 @@ mod tests {
         };
         let r = centred(520., 560., tiny);
         assert_eq!((r.x, r.y, r.width, r.height), (0., 25., 400., 300.));
+    }
+
+    #[test]
+    fn only_a_missing_panel_defers_to_a_later_main_thread_turn() {
+        // An existing window is acted on in the caller's turn, exactly as before; only a
+        // panel that has to be built waits for the callback to return.
+        assert_eq!(dispatch_for(true, true), Dispatch::Inline);
+        assert_eq!(dispatch_for(true, false), Dispatch::Deferred);
+        // Not a panel (the overlay, or an unknown label): nothing to create, so `act`
+        // answers (or errors) immediately.
+        assert_eq!(dispatch_for(false, true), Dispatch::Inline);
+        assert_eq!(dispatch_for(false, false), Dispatch::Inline);
     }
 
     #[test]

@@ -1,5 +1,6 @@
-//! Linux capture: an X11 backend over the pure-Rust `x11rb` protocol crate, and a
-//! placeholder for Wayland's portal backend (plan Phase 6 / Phase 7).
+//! Linux capture: an X11 backend over the pure-Rust `x11rb` protocol crate (plan
+//! Phase 6). Wayland's portal backend is `linux_portal.rs` (Phase 7); the session rule
+//! that picks between them lives here.
 //!
 //! **Why not `xcap`.** `xcap` links libxcb, libwayland, PipeWire and D-Bus system
 //! libraries for *every* Linux build, including the Wayland recorder this tier does not
@@ -38,7 +39,7 @@
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
 #[cfg(target_os = "linux")]
-pub use backend::{PortalCapture, X11Capture};
+pub use backend::X11Capture;
 
 /// Smallest window worth listing, in root pixels. Same thresholds as macOS and Windows.
 pub(crate) const MIN_WINDOW: (i32, i32) = (80, 60);
@@ -1152,51 +1153,6 @@ mod backend {
         }
         fn close(&mut self) {
             self.desktop = None;
-        }
-    }
-
-    /// Wayland placeholder: the xdg-desktop-portal ScreenCast backend arrives in
-    /// Phase 7. Until then the app boots in reader-only mode with honest capabilities:
-    /// the system picker is required, there is no inventory, and capture says why.
-    #[derive(Default)]
-    pub struct PortalCapture;
-
-    impl PortalCapture {
-        pub fn new() -> Self {
-            Self
-        }
-    }
-
-    impl CaptureBackend for PortalCapture {
-        fn capabilities(&self) -> Capabilities {
-            Capabilities {
-                backend: "xdg-portal",
-                enumeration: false,
-                system_picker_required: true,
-                retained_session: false,
-            }
-        }
-        fn permission(&self) -> &'static str {
-            "promptOnSelect"
-        }
-        fn request_permission(&self) -> bool {
-            false
-        }
-        fn enumerate(&mut self) -> Result<Vec<Source>> {
-            // Wayland gives no inventory; sources are chosen in the system picker.
-            Ok(Vec::new())
-        }
-        fn capture(&mut self, _request: &CaptureRequest) -> Result<Frame> {
-            Err(CaptureError::new(
-                "unsupported",
-                "Wayland capture uses the system picker (portal) — Phase 7",
-            ))
-        }
-        fn thumbnail(&mut self, _source_id: &str, _edge: u32) -> Result<Frame> {
-            Err(CaptureError::new(
-                "unsupported",
-                "Wayland capture uses the system picker (portal) — Phase 7",
-            ))
         }
     }
 }

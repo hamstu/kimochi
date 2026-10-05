@@ -13,12 +13,18 @@ pub use macos::MacCapture;
 mod windows;
 #[cfg(target_os = "windows")]
 pub use windows::WgcCapture;
-// Compiled everywhere for the same reason; the X11 backend, the Wayland placeholder and
-// the shared X11 desktop queries inside it are Linux-only.
+// Compiled everywhere for the same reason; the X11 backend and the shared X11 desktop
+// queries inside it are Linux-only.
 mod linux_x11;
-pub use linux_x11::{is_wayland_session, wayland_session_now};
 #[cfg(target_os = "linux")]
-pub use linux_x11::{desktop as x11, PortalCapture, X11Capture};
+pub use linux_x11::{desktop as x11, X11Capture};
+pub use linux_x11::{is_wayland_session, wayland_session_now};
+// Wayland: xdg-desktop-portal ScreenCast + PipeWire. Its ids, stride-aware conversion
+// and restore-token store compile everywhere; the backend is Linux-only.
+mod linux_portal;
+#[cfg(target_os = "linux")]
+pub use linux_portal::PortalCapture;
+pub use linux_portal::{set_portal_token_store, MemoryTokenStore, TokenStore, PICKER_TIMEOUT};
 
 pub mod hash;
 pub mod ids;
@@ -129,7 +135,9 @@ impl Frame {
     }
 }
 /// Platform implementations may retain a consent/session handle internally.
-/// A future portal backend should add a picker/selection adapter, not invent an inventory.
+/// Picker-based backends (`system_picker_required`, the Wayland portal) open the system
+/// picker from `request_permission` and list only what the user shared; they never
+/// invent an inventory.
 pub trait CaptureBackend: Send {
     fn capabilities(&self) -> Capabilities;
     fn permission(&self) -> &'static str;

@@ -63,6 +63,22 @@ pub use window::{
 };
 pub use workspace::observe_workspace;
 
+// ---------------------------------------------------------------- input regions
+
+/// No native input regions on Windows (yet): `Ok(false)`, and the shared cursor poll
+/// keeps toggling click-through. `WS_EX_TRANSPARENT` (what Tauri's
+/// `set_ignore_cursor_events` sets) is all-or-nothing for the whole window, and a
+/// window region (`SetWindowRgn`) would clip painting as well as hit-testing. Answering
+/// `WM_NCHITTEST` with `HTTRANSPARENT` outside the regions would be the per-region
+/// route, but WebView2 hosts its content in a child HWND of another process's
+/// composition, which takes the hit test before the top-level window is asked.
+pub fn set_input_regions(
+    _w: &tauri::WebviewWindow,
+    _regions: Option<&[Rect]>,
+) -> Result<bool, String> {
+    Ok(false)
+}
+
 // ---------------------------------------------------------------- pointer
 
 /// Where the pointer is, whether the primary button is down, and which modifiers are

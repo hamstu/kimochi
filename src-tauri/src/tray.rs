@@ -54,13 +54,13 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
                 "showControls" => {
                     if let Some(service) = app.try_state::<Shared>() {
                         let settings = service.settings.clone();
-                        let _ = panels::act(app, &settings, panels::MAIN, "show", None);
+                        let _ = panels::act_existing(app, &settings, panels::MAIN, "show", None);
                     }
                 }
                 "openSettings" => {
                     if let Some(service) = app.try_state::<Shared>() {
                         let settings = service.settings.clone();
-                        let _ = panels::act(app, &settings, panels::MAIN, "show", None);
+                        let _ = panels::act_existing(app, &settings, panels::MAIN, "show", None);
                         let _ = app.emit("main:show-settings", serde_json::json!({}));
                     }
                 }
@@ -204,25 +204,30 @@ fn toggle_popover(
 ) {
     if let Some(window) = app.get_webview_window(POPOVER) {
         if window.is_visible().unwrap_or(false) {
-            let _ = panels::act(app, settings, POPOVER, "hide", None);
+            let _ = panels::act_existing(app, settings, POPOVER, "hide", None);
             return;
         }
     }
     let spec = panels::spec(POPOVER).expect("tray popover panel");
     let bounds = popover_bounds(x, y, width, height, (spec.width, spec.height));
-    let _ = panels::act(app, settings, POPOVER, "place", Some(bounds));
-    let _ = panels::act(app, settings, POPOVER, "show", None);
-    if let Some(window) = app.get_webview_window(POPOVER) {
-        // Dismiss on click-outside, like the Electron popover's blur handler. The
-        // panel:state event that `hide` emits is what tells the UI it closed.
-        let handle = app.clone();
-        let store = settings.clone();
-        window.on_window_event(move |event| {
-            if matches!(event, tauri::WindowEvent::Focused(false)) {
-                let _ = panels::act(&handle, &store, POPOVER, "hide", None);
-            }
-        });
-    }
+    // The first click builds the popover, which must not happen inside this callback (it
+    // deadlocks on WebView2); every later click runs inline as before.
+    let settings = settings.clone();
+    panels::with_panel(app, POPOVER, move |app, turn| {
+        let _ = panels::act(turn, app, &settings, POPOVER, "place", Some(bounds));
+        let _ = panels::act(turn, app, &settings, POPOVER, "show", None);
+        if let Some(window) = app.get_webview_window(POPOVER) {
+            // Dismiss on click-outside, like the Electron popover's blur handler. The
+            // panel:state event that `hide` emits is what tells the UI it closed.
+            let handle = app.clone();
+            let store = settings.clone();
+            window.on_window_event(move |event| {
+                if matches!(event, tauri::WindowEvent::Focused(false)) {
+                    let _ = panels::act_existing(&handle, &store, POPOVER, "hide", None);
+                }
+            });
+        }
+    });
 }
 
 /// Tray actions that a panel may also trigger, kept in one list so the tray and the
@@ -231,15 +236,15 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, action: &str) -> Resul
     let settings = service.settings.clone();
     match action {
         "showControls" => {
-            panels::act(app, &settings, panels::MAIN, "show", None)?;
+            panels::act_existing(app, &settings, panels::MAIN, "show", None)?;
         }
         "openSettings" => {
             // Settings is a view of the main window.
-            panels::act(app, &settings, panels::MAIN, "show", None)?;
+            panels::act_existing(app, &settings, panels::MAIN, "show", None)?;
             let _ = app.emit("main:show-settings", serde_json::json!({}));
         }
         "openLog" => {
-            panels::act(app, &settings, "log", "show", None)?;
+            panels::act_existing(app, &settings, panels::MAIN, "show", None)?;
         }
         "quit" => app.exit(0),
         name if actions::ACTIONS.contains(&name) => actions::dispatch(app, service, name),

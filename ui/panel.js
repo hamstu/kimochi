@@ -59,7 +59,7 @@ setInterval(async () => {
 }, 50)
 document.querySelector('header').onmousedown = (e) => {
   if (e.target.closest('button')) return
-  void invoke('panel', { label, action: 'drag', rect: null })
+  void invoke('panel_drag', { label })
 }
 on('close', () => invoke('panel', { label, action: 'hide', rect: null }))
 if ($('pin')) {

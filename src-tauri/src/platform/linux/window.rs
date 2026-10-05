@@ -100,6 +100,34 @@ pub fn panel_cursor(_w: &tauri::WebviewWindow, _kind: &str) -> Result<(), String
     Ok(())
 }
 
+/// Native click-through on X11: an XShape *input* region (`ShapeRectangles`,
+/// `SK::INPUT`, `SO::SET`) on the window's X window, so the server itself sends the
+/// pointer to us inside `regions` (window-local CSS pixels) and to whatever is
+/// underneath everywhere else, with no polling latency. The bounding (painted) shape
+/// is untouched. `None` restores the default input shape (the whole window).
+///
+/// `Ok(true)` means the shape is now the input shape and the caller must leave the
+/// window's `set_ignore_cursor_events` alone from then on: tao implements that setter
+/// with a GDK input shape too (a 1x1 region for "ignore", GDK's default for "don't"),
+/// sent on GDK's own connection, so calling it would overwrite this one, in an order
+/// neither connection controls. A `SET` here replaces whatever GDK last installed.
+///
+/// A reparenting window manager puts the window in a frame; Mutter, KWin, Xfwm and
+/// the compositors copy the client's input shape to the frame (they must, for tao's
+/// own click-through to work), which is the same reliance `set_ignore_cursor_events`
+/// has. `Ok(false)` on Wayland and on a server without SHAPE 1.1: the caller keeps
+/// polling.
+pub fn set_input_regions(
+    w: &tauri::WebviewWindow,
+    regions: Option<&[Rect]>,
+) -> Result<bool, String> {
+    if session().backend != Backend::X11 || !x11::has_input_shape() {
+        return Ok(false);
+    }
+    x11::set_input_shape(xid(w)?, regions)?;
+    Ok(true)
+}
+
 pub fn inspect(w: &tauri::WebviewWindow) -> Result<Value, String> {
     let s = session();
     let mut value = json!({

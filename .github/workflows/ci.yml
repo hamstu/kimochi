@@ -81,7 +81,10 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            libpipewire-0.3-dev \
+            libspa-0.2-dev \
+            libclang-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -180,7 +183,10 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            libpipewire-0.3-dev \
+            libspa-0.2-dev \
+            libclang-dev
 
       - uses: actions/setup-node@v4
         with:

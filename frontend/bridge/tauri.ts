@@ -99,7 +99,12 @@ export const panel = (
   label: PanelLabel | string,
   action: PanelAction,
   rect: Rect | null = null
-): Promise<PanelInfo> => invoke<PanelInfo>('panel', { label, action, rect })
+): Promise<PanelInfo> =>
+  // Dragging has its own synchronous command: the native drag must start inside the
+  // mouse-down's IPC turn, which the deferred window-creating `panel` path cannot promise.
+  action === 'drag'
+    ? invoke<PanelInfo>('panel_drag', { label })
+    : invoke<PanelInfo>('panel', { label, action, rect })
 /** Settings pages, in rail order. Older builds stored other names; see `settingsTabOf`. */
 export type SettingsTabName =
   'general' | 'sources' | 'ocr' | 'log' | 'dictionary' | 'assist' | 'controls'

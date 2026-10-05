@@ -299,6 +299,10 @@ const HANDLERS: Record<string, Handler> = {
     console.info(`[preview] panel(${String(a?.label)}, ${String(a?.action)})`)
     return panelInfo(String(a?.label))
   },
+  panel_drag: (a) => {
+    console.info(`[preview] panel_drag(${String(a?.label)})`)
+    return panelInfo(String(a?.label))
+  },
   panel_content_height: ok,
   panel_pointer: () => null,
   panel_cursor: ok,

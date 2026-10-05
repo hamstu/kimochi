@@ -75,6 +75,14 @@ pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
     w.show().map_err(|e| e.to_string())
 }
 
+/// No native input regions: the shared cursor poll toggles click-through.
+pub fn set_input_regions(
+    _w: &tauri::WebviewWindow,
+    _regions: Option<&[Rect]>,
+) -> Result<bool, String> {
+    Ok(false)
+}
+
 pub fn promote_to_key(_w: &tauri::WebviewWindow) -> Result<bool, String> {
     Ok(false)
 }

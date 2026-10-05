@@ -53,10 +53,16 @@ windows = { version = "0.62", features = [
 ] }
 
 # X11 capture and desktop metadata over the pure-Rust protocol crate: no libxcb, no
-# pkg-config, so Linux builds and cross-checks need no X11 -dev packages. Wayland
-# (portal + PipeWire) is Phase 7 and adds its own dependencies then.
+# pkg-config. Wayland capture is the ScreenCast portal (ashpd, on zbus's async-io
+# runtime like the app's own zbus, so no tokio context is needed) plus a PipeWire
+# stream; `pipewire` generates bindings at build time, so Linux builds need
+# libpipewire-0.3-dev (and libspa-0.2-dev) plus libclang.
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "0.13", features = ["randr"] }
+ashpd = { version = "0.13", default-features = false, features = ["screencast", "async-io"] }
+pipewire = "0.10"
+async-io = "2"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 # A main-thread harness: VisionKit delivers its completion to the main queue, so a
 # test that runs on a spawned harness thread can never see it.

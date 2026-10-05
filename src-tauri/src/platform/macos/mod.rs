@@ -247,6 +247,16 @@ pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, Str
     }
 }
 
+/// No native input regions on macOS: `Ok(false)`, so the shared cursor poll keeps
+/// toggling `ignoresMouseEvents` exactly as before. AppKit has no per-region
+/// click-through for a window; `ignoresMouseEvents` is whole-window.
+pub fn set_input_regions(
+    _w: &tauri::WebviewWindow,
+    _regions: Option<&[Rect]>,
+) -> Result<bool, String> {
+    Ok(false)
+}
+
 // The plain left-right and up-down resize cursors are deprecated in favour of directional
 // ones, but they are still the ones a CSS `col-resize`/`row-resize` should look like.
 #[allow(deprecated)]

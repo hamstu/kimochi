@@ -6,7 +6,7 @@
 [target.'cfg(target_os = "linux")'.dependencies]
 # Pure-Rust X11 protocol (no libxcb, no pkg-config). Same major as capture-core's, so
 # one copy is compiled and `kimochi_capture::x11::Desktop` speaks these types.
-x11rb = { version = "0.13", features = ["randr", "xinput"] }
+x11rb = { version = "0.13", features = ["randr", "xinput", "shape"] }
 # logind PrepareForSleep. Already in the tree through tauri-plugin-single-instance
 # (same default features), so nothing new is compiled.
 zbus = "5.9"
@@ -46,9 +46,12 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
   `picker_sources`/`make_panel`/`start_key_trigger`/`activate_*` are
   `Err("unsupported on Wayland: …")`, `promote_to_key` is `Ok(false)`, `order_front`
   is a plain `show()`. `observe_workspace` still reports sleep/wake (logind), never
-  activation. capture-core returns `PortalCapture`: backend `xdg-portal`,
-  `system_picker_required: true`, permission `promptOnSelect`, empty `enumerate`,
-  `capture` fails with code `unsupported`. The app boots as a detached reader.
+  activation. capture-core returns `PortalCapture` (backend `xdg-portal-pipewire`,
+  `system_picker_required: true`): permission is `promptOnSelect` until
+  `request_permission()` has run the system picker, then `granted` while that session
+  lives; `enumerate` lists only the picked stream(s) as `portal:display:{node}` /
+  `portal:window:{node}`. The app boots as a detached reader and the UI must offer
+  "Choose in system picker" (plan Phase 7).
 - **Ids.** `x11:window:{xid}:{pid}` (decimal xid), `x11:window:{xid}` for clients
   without `_NET_WM_PID`; `x11:display:{first RandR output XID}` (0 = whole root when
   RandR is missing). Minted only by `kimochi_capture::x11`, shared with the capture
@@ -83,11 +86,23 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
   same limit `WindowFromPoint` has on Windows. **`panel_cursor`** is a no-op `Ok`:
   X11 sends motion to unfocused windows, so WebKitGTK maintains the cursor itself
   (`nativeHoverWorkaround: false`).
-- **Input regions.** `inputRegions: "poll"` for now (the shared cursor poll toggles
-  click-through). Native XShape input regions (`gdk_window_input_shape_combine_region`,
-  true per-region click-through, plan Phase 6) are a follow-up; they would need the
-  `gtk`/`gdk` crates or an x11rb `shape` request on the window, and a new contract
-  function to set regions.
+- **Input regions (`set_input_regions`, X11).** An XShape *input* region on the
+  window's X window (`ShapeRectangles`, `SK::INPUT`, `SO::SET`, unsorted), so the server
+  routes the pointer to the window only inside the published rectangles, with no poll
+  latency; the bounding (painted) shape is untouched. Rects arrive window-local in CSS
+  pixels and are scaled by the GDK scale, snapped outward, clamped to the window's X
+  geometry and merged (`rules::input_shape`). `None` restores the default shape
+  (`ShapeMask` with no pixmap). Requests are `check()`ed (one round trip per change).
+  `Ok(true)` only with SHAPE >= 1.1 on X11 (`capabilities().overlay.inputRegions` is then
+  `"native"`, else `"poll"`; Wayland `"wholeWindowOnly"` and `Ok(false)`).
+  The cursor poll (`main.rs` `sync_input_shapes`) probes each of the overlay and popup
+  host once, then keeps their shapes in step with their regions (rewritten on change,
+  and every ~2 s regardless) and never calls `set_ignore_cursor_events` on them again:
+  tao implements that setter with a GDK input shape on GDK's own connection (1x1 region
+  for "ignore", the default shape for "don't"), which would race and overwrite ours. A
+  `SET` replaces whatever GDK last installed, so the overlay's initial "ignore" needs no
+  undoing. Reparenting window managers must propagate the client's input shape to the
+  frame; the mainstream ones do (tao's own click-through relies on it too).
 - **`start_key_trigger`** (X11): XInput 2 raw key events on the root (`XI_RawKeyPress`/
   `Release`, all master devices) on a dedicated thread with its own connection. Lines:
   `{"key","keyCode","action","repeat"}` (Windows module's key names; `keyCode` is the

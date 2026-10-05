@@ -22,6 +22,7 @@
 //! inspect(&WebviewWindow) -> Result<Value, String>
 //! order_front(&WebviewWindow) -> Result<(), String>
 //! promote_to_key(&WebviewWindow) -> Result<bool, String>
+//! set_input_regions(&WebviewWindow, Option<&[Rect]>) -> Result<bool, String>  // optional, see below
 //! make_panel(&WebviewWindow) -> Result<bool, String>
 //! picker_sources() -> Result<Vec<Source>, String>
 //! window_bounds(&SourceId) -> Option<(Rect, bool)>
@@ -39,6 +40,14 @@
 //! run_cli(program, args, stdin, cwd) -> Result<Child, String>
 //! capabilities() -> Value
 //! ```
+//!
+//! `set_input_regions` is an optional capability: native per-region click-through.
+//! `Some(rects)` (window-local CSS pixels) makes the window take the pointer only inside
+//! their union, `None` restores whole-window input, and the result says whether the OS
+//! applied a native region. `Ok(true)` (X11 with SHAPE) hands hit-testing to the
+//! window server: the cursor poll then stops toggling `set_ignore_cursor_events` for
+//! that window. `Ok(false)` (macOS, Windows, Wayland, unsupported) changes nothing and
+//! the poll keeps toggling click-through, as before.
 //!
 //! Geometry in that contract is in the OS's *raw* desktop units (points on macOS,
 //! physical pixels on Windows). The rest of the app calls the `desktop_*` wrappers

@@ -56,8 +56,19 @@ impl Platform {
         } else if cfg!(target_os = "windows") {
             Platform::Windows
         } else {
-            // The Linux backend decides at runtime; X11 is the inventory-capable one.
-            Platform::X11
+            // Linux decides at runtime: a Wayland session captures through the portal,
+            // anything else through X11. Read once; the session does not change.
+            static LINUX: std::sync::OnceLock<Platform> = std::sync::OnceLock::new();
+            *LINUX.get_or_init(|| {
+                let session = std::env::var("XDG_SESSION_TYPE").ok();
+                let wayland = std::env::var("WAYLAND_DISPLAY").ok();
+                if crate::linux_x11::is_wayland_session(session.as_deref(), wayland.as_deref())
+                {
+                    Platform::Portal
+                } else {
+                    Platform::X11
+                }
+            })
         }
     }
 }

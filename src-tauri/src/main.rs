@@ -56,6 +56,23 @@ fn err(e: CaptureError) -> String {
     sources::err(e)
 }
 
+/// Settings-backed store for the xdg-desktop-portal ScreenCast restore token.
+struct PortalTokens(Arc<Settings>);
+
+const PORTAL_TOKEN_KEY: &str = "capture.portalRestoreToken";
+
+impl kimochi_capture::TokenStore for PortalTokens {
+    fn get(&self) -> Option<String> {
+        Some(self.0.get_or::<String>(PORTAL_TOKEN_KEY, String::new())).filter(|t| !t.is_empty())
+    }
+
+    fn set(&self, token: Option<&str>) {
+        let _ = self
+            .0
+            .set(PORTAL_TOKEN_KEY, token.map_or(Value::Null, |t| json!(t)));
+    }
+}
+
 fn path(app: &tauri::AppHandle, name: &str) -> Reply<std::path::PathBuf> {
     let d = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
@@ -92,10 +109,10 @@ fn reader_settings_patch(app: tauri::AppHandle, state: State<Shared>, patch: Val
     )
     .map_err(|e| e.to_string())?;
     if let Some(pinned) = patch.get("alwaysOnTop").and_then(Value::as_bool) {
-        panels::act(
+        panels::act_existing(
             &app,
             &state.settings,
-            "log",
+            panels::MAIN,
             if pinned { "pin" } else { "unpin" },
             None,
         )?;
@@ -246,7 +263,7 @@ fn save_preferences(app: tauri::AppHandle, state: State<Shared>, prefs: Prefs) -
                 .set_path(&["cropRegions", &key], serde_json::to_value(crop).unwrap())?;
         }
     }
-    let _ = panels::act(
+    let _ = panels::act_existing(
         &app,
         &state.settings,
         panels::MAIN,
@@ -444,25 +461,39 @@ fn panel_cursor(window: tauri::WebviewWindow, kind: String) -> Reply<()> {
     platform::panel_cursor(&window, &kind)
 }
 
+// Async, so a panel built on first use is never created inside the IPC callback that asked
+// for it (WebView2 deadlocks there). The work itself still runs on the main thread, in a
+// loop turn of its own; see `panels::MainTurn`.
 #[tauri::command]
-fn panel(
+async fn panel(
     app: tauri::AppHandle,
-    state: State<Shared>,
+    state: State<'_, Shared>,
     label: String,
     action: String,
     rect: Option<Rect>,
 ) -> Reply<Value> {
-    panels::act(&app, &state.settings, &label, &action, rect)
+    let settings = state.settings.clone();
+    panels::act_async(&app, &settings, label, action, rect).await
+}
+
+/// Start a native window drag. Synchronous on purpose: tao's macOS `drag_window` turns
+/// `NSApp.currentEvent` into the drag, and that is only the title-bar mouse-down while
+/// this IPC callback is still running. Dragging never creates a window, so it does not
+/// need the deferred creation path that `panel` uses.
+#[tauri::command]
+fn panel_drag(app: tauri::AppHandle, state: State<'_, Shared>, label: String) -> Reply<Value> {
+    panels::act_existing(&app, &state.settings, &label, "drag", None)
 }
 
 #[tauri::command]
-fn panel_content_height(
+async fn panel_content_height(
     app: tauri::AppHandle,
-    state: State<Shared>,
+    state: State<'_, Shared>,
     label: String,
     height: f64,
 ) -> Reply<()> {
-    panels::set_content_height(&app, &state.settings, &label, height)
+    let settings = state.settings.clone();
+    panels::set_content_height_async(&app, &settings, label, height).await
 }
 
 #[tauri::command]
@@ -718,7 +749,7 @@ fn open_source_picker(app: tauri::AppHandle, state: State<Shared>) -> Reply<Valu
 }
 
 pub fn choose_source(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Reply<Value> {
-    let info = panels::act(app, settings, panels::MAIN, "show", None)?;
+    let info = panels::act_existing(app, settings, panels::MAIN, "show", None)?;
     let _ = app.emit("main:choose-source", json!({}));
     Ok(info)
 }
@@ -1744,7 +1775,7 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
         if let Some(service) = app.try_state::<Shared>() {
             let settings = service.settings.clone();
-            let _ = panels::act(app, &settings, panels::MAIN, "show", None);
+            let _ = panels::act_existing(app, &settings, panels::MAIN, "show", None);
         }
     }));
     builder
@@ -1849,6 +1880,7 @@ fn main() {
             desktop,
             displays,
             panel,
+            panel_drag,
             panel_content_height,
             dictionary,
             view_flags,
@@ -1902,6 +1934,9 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
+            // The Wayland portal's restore token lives in settings so the picker is not
+            // shown again on every launch. A no-op store everywhere else.
+            kimochi_capture::set_portal_token_store(Box::new(PortalTokens(store.clone())));
             // Capture may be unavailable (an OS without a backend yet): the reader,
             // dictionary, texthooker and settings still start, and the UI is told why.
             let (backend, capture_unavailable) = match platform_backend() {
@@ -1986,10 +2021,8 @@ fn main() {
 
             spawn_source_restore(service.clone());
 
-            for spec in panels::PANELS.iter().filter(|spec| spec.eager) {
-                panels::ensure(&handle, &store, spec.label)?;
-            }
-            panels::act(&handle, &store, panels::MAIN, "show_inactive", None)?;
+            panels::create_eager(&handle, &store)?;
+            panels::act_existing(&handle, &store, panels::MAIN, "show_inactive", None)?;
 
             let overlay = tauri::WebviewWindowBuilder::new(
                 app,
@@ -2102,7 +2135,12 @@ fn main() {
                     if label == "choose-source" {
                         let _ = choose_source(app, &store);
                     } else if panels::spec(label).is_some() {
-                        let _ = panels::act(app, &store, label, "show", None);
+                        // A lazy panel is built in a later main-thread turn, never inside
+                        // this callback; an existing one is shown at once, as before.
+                        let (store, target) = (store.clone(), label.to_string());
+                        panels::with_panel(app, label, move |app, turn| {
+                            let _ = panels::act(turn, app, &store, &target, "show", None);
+                        });
                     }
                 });
             }
@@ -2270,9 +2308,132 @@ fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
     });
 }
 
+/// The windows whose published regions can become a native input region.
+const NATIVE_INPUT_WINDOWS: [&str; 2] = [OVERLAY, POPUP_HOST];
+
+/// Whether one window's click-through is a native input region or the poll's toggle.
+#[derive(Debug)]
+enum InputShape {
+    /// Not asked yet: the window did not exist when the poll last looked.
+    Unknown,
+    /// The OS has no native regions (macOS, Windows, Wayland): the poll toggles
+    /// `set_ignore_cursor_events`, as it always has.
+    Polled,
+    /// The window server hit-tests the published regions itself (X11 SHAPE). The poll
+    /// never calls `set_ignore_cursor_events` on it: on X11 that setter is an input
+    /// shape too, sent on GDK's connection, and would overwrite this one.
+    Native {
+        /// Window bounds then local rectangles, as last applied, so the shape is only
+        /// rewritten when one of them changes.
+        applied: Option<Vec<[f64; 4]>>,
+        /// The last attempt failed (already logged once).
+        failing: bool,
+    },
+}
+
+/// Bring every native-region window's input shape up to date with what its window
+/// published, and return the windows that just turned out to have no native regions
+/// after all (the caller hands them back to the poll).
+///
+/// The poll thread is the only writer, on purpose: regions are replaced by the
+/// `regions` command but also cleared from several other places (a new source, `clear`,
+/// a lost capture), and the overlay's input also depends on its visibility flag. Reading
+/// the settled state here once per frame covers all of them, and one writer cannot apply
+/// two updates out of order. Hit-testing itself is native, so the only latency left is
+/// up to one frame after the rectangles change.
+///
+/// `refresh` rewrites the shapes even when unchanged, in case GTK reset a window's
+/// input shape behind our back (it does not today; this keeps a wrong shape short-lived).
+fn sync_input_shapes(
+    handle: &tauri::AppHandle,
+    service: &Service,
+    shapes: &mut HashMap<&'static str, InputShape>,
+    refresh: bool,
+) -> Vec<&'static str> {
+    let mut fell_back = Vec::new();
+    for label in NATIVE_INPUT_WINDOWS {
+        let state = shapes.entry(label).or_insert(InputShape::Unknown);
+        if matches!(state, InputShape::Polled) {
+            continue;
+        }
+        let Some(window) = handle.get_webview_window(label) else {
+            continue;
+        };
+        if matches!(state, InputShape::Unknown) {
+            // Probing with "nothing is interactive" is harmless everywhere: where it is
+            // applied, the real regions follow below in the same frame.
+            *state = match platform::set_input_regions(&window, Some(&[])) {
+                Ok(true) => InputShape::Native {
+                    applied: None,
+                    failing: false,
+                },
+                Ok(false) => InputShape::Polled,
+                Err(e) => {
+                    eprintln!("input regions: {label}: {e}; polling instead");
+                    InputShape::Polled
+                }
+            };
+        }
+        let InputShape::Native { applied, failing } = state else {
+            continue;
+        };
+        let wanted: Vec<Region> = {
+            let v = service.view.lock().unwrap();
+            if label == OVERLAY && !v.overlay_visible {
+                Vec::new()
+            } else {
+                v.regions.get(label).cloned().unwrap_or_default()
+            }
+        };
+        // Regions are desktop points; the shape is window-local CSS pixels, which are
+        // the same size as desktop points.
+        let Ok(bounds) = platform::desktop_bounds(&window) else {
+            continue;
+        };
+        let local: Vec<Rect> = wanted
+            .iter()
+            .map(|r| Rect {
+                x: r.x - bounds.x,
+                y: r.y - bounds.y,
+                width: r.width,
+                height: r.height,
+            })
+            .collect();
+        let key: Vec<[f64; 4]> = std::iter::once(bounds)
+            .chain(local.iter().copied())
+            .map(|r| [r.x, r.y, r.width, r.height])
+            .collect();
+        if !refresh && applied.as_ref() == Some(&key) {
+            continue;
+        }
+        match platform::set_input_regions(&window, Some(&local)) {
+            Ok(true) => {
+                *applied = Some(key);
+                *failing = false;
+            }
+            Ok(false) => {
+                *state = InputShape::Polled;
+                fell_back.push(label);
+            }
+            Err(e) => {
+                // Retried on the next change or refresh; logged once per failing run.
+                if !*failing {
+                    eprintln!("input regions: {label}: {e}");
+                }
+                *failing = true;
+            }
+        }
+    }
+    fell_back
+}
+
 /// 16 ms native cursor poll driving overlay click-through. It does not test pixel
 /// alpha and does not wait for an unrelated foreground-app event, which is what keeps
 /// capture alive through a mouse drag.
+///
+/// Where the OS supports native input regions (`sync_input_shapes`), the poll keeps the
+/// window's shape in step with its regions instead of toggling click-through, and still
+/// does everything else: dismissal, focus, and the `pointer` event.
 fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut history: HashMap<String, PointerHistory> = HashMap::new();
@@ -2283,11 +2444,22 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut last_modifiers = Modifiers::default();
         let mut last_buttons = false;
         let mut ticks: u64 = 0;
+        let mut shapes: HashMap<&'static str, InputShape> = HashMap::new();
         loop {
             std::thread::sleep(Duration::from_millis(16));
             ticks = ticks.wrapping_add(1);
             if handle.get_webview_window(OVERLAY).is_none() {
                 break;
+            }
+            // About every two seconds, rewrite native shapes even when unchanged.
+            let refresh = ticks.is_multiple_of(125);
+            for label in sync_input_shapes(&handle, &service, &mut shapes, refresh) {
+                // Handed back to the poll: click-through until a verdict says otherwise,
+                // and no history, so the next interactive verdict counts as a change.
+                history.remove(label);
+                if let Some(window) = handle.get_webview_window(label) {
+                    let _ = window.set_ignore_cursor_events(true);
+                }
             }
             if let Some(platform::PointerSample {
                 x,
@@ -2413,6 +2585,11 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     was_over_overlay = over;
                 }
                 for (label, interactive) in changed {
+                    // A native input region already routes the pointer; toggling here
+                    // would overwrite it (see `InputShape::Native`).
+                    if matches!(shapes.get(label.as_str()), Some(InputShape::Native { .. })) {
+                        continue;
+                    }
                     if let Some(window) = handle.get_webview_window(&label) {
                         let _ = window.set_ignore_cursor_events(!interactive);
                     }
