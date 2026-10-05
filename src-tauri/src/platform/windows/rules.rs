@@ -8,6 +8,19 @@
 //! The listing rule itself and handle spelling live in `kimochi_capture::win_rules`.
 use std::path::{Path, PathBuf};
 
+/// Fullscreen coverage in physical pixels, including windows spanning monitors.
+/// A maximized window ending at the work area (above the taskbar) is not fullscreen.
+pub fn covers_display(window: kimochi_capture::Rect, display: kimochi_capture::Rect) -> bool {
+    window.width > 0.
+        && window.height > 0.
+        && display.width > 0.
+        && display.height > 0.
+        && window.x <= display.x
+        && window.y <= display.y
+        && window.x + window.width >= display.x + display.width
+        && window.y + window.height >= display.y + display.height
+}
+
 // Which windows are sources and how handles are spelled are capture-core's rules, shared
 // with the WGC backend so the picker and `enumerate` cannot disagree.
 pub use kimochi_capture::win_rules::{
@@ -271,6 +284,40 @@ pub fn power_transition(suspended: bool, event: PowerEvent) -> (Option<bool>, bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fullscreen_covers_physical_monitor_not_just_work_area() {
+        use kimochi_capture::Rect;
+        let monitor = Rect {
+            x: -1920.,
+            y: 0.,
+            width: 1920.,
+            height: 1080.,
+        };
+        assert!(covers_display(monitor, monitor));
+        assert!(covers_display(
+            Rect {
+                width: 3840.,
+                ..monitor
+            },
+            monitor
+        ));
+        assert!(!covers_display(
+            Rect {
+                height: 1040.,
+                ..monitor
+            },
+            monitor
+        ));
+        assert!(!covers_display(Rect { x: 0., ..monitor }, monitor));
+        assert!(!covers_display(
+            Rect {
+                width: 0.,
+                ..monitor
+            },
+            monitor
+        ));
+    }
 
     #[test]
     fn on_screen_excludes_minimised_and_cloaked() {

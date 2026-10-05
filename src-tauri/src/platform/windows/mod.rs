@@ -61,7 +61,7 @@ pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use sources::{front_window, frontmost_app, frontmost_pid, picker_sources, window_bounds};
 pub use window::{
     activate_process, activate_self, bounds, inspect, make_panel, order_front, panel_cursor,
-    panel_pointer, place, promote_to_key,
+    panel_pointer, place, promote_to_key, start_fullscreen_watch,
 };
 pub use workspace::observe_workspace;
 

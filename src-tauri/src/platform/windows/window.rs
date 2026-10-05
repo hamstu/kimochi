@@ -45,7 +45,11 @@
 use super::{cursor, rect_of, rules, window_pid};
 use kimochi_capture::Rect;
 use serde_json::{json, Value};
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
+use tauri::Manager;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
@@ -272,6 +276,108 @@ pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
         )
     }
     .map_err(|e| format!("native: {e}"))
+}
+
+/// Fullscreen games can enter the topmost band ahead of an already-topmost
+/// overlay. Repair only that ordering, without showing hidden windows, pinning
+/// unpinned panels, changing our windows' relative order, or activating them.
+pub fn start_fullscreen_watch(app: &tauri::AppHandle, service: crate::state::Shared) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let pending = Arc::new(AtomicBool::new(false));
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            if app.get_webview_window("overlay").is_none() {
+                break;
+            }
+            if fullscreen_foreground().is_none() || pending.swap(true, Ordering::Relaxed) {
+                continue;
+            }
+            let handle = app.clone();
+            let service = service.clone();
+            let finished = pending.clone();
+            if app
+                .run_on_main_thread(move || {
+                    repair_fullscreen_order(&handle, &service);
+                    finished.store(false, Ordering::Relaxed);
+                })
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+}
+
+fn fullscreen_foreground() -> Option<HWND> {
+    let foreground = unsafe { GetForegroundWindow() };
+    if foreground.is_invalid()
+        || window_pid(foreground) == std::process::id()
+        || ex_style(foreground) & WS_EX_TOPMOST.0 == 0
+        || rules::is_tool_window(ex_style(foreground))
+        || !unsafe { IsWindowVisible(foreground) }.as_bool()
+        || unsafe { IsIconic(foreground) }.as_bool()
+    {
+        return None;
+    }
+    let bounds = window_rect(foreground).ok()?;
+    super::displays()
+        .into_iter()
+        .any(|display| rules::covers_display(bounds, display))
+        .then_some(foreground)
+}
+
+fn repair_fullscreen_order(app: &tauri::AppHandle, service: &crate::state::Service) {
+    let Some(foreground) = fullscreen_foreground() else {
+        return;
+    };
+    let order = super::sources::top_level_windows();
+    let Some(source_rank) = order.iter().position(|h| *h == foreground) else {
+        return;
+    };
+    let windows = app.webview_windows();
+    let pinned: Vec<_> = order
+        .iter()
+        .enumerate()
+        .filter_map(|(rank, hwnd)| {
+            if ex_style(*hwnd) & WS_EX_TOPMOST.0 == 0
+                || !unsafe { IsWindowVisible(*hwnd) }.as_bool()
+                || unsafe { IsIconic(*hwnd) }.as_bool()
+            {
+                return None;
+            }
+            windows
+                .values()
+                .find(|w| w.hwnd().ok() == Some(*hwnd))
+                .map(|w| (rank, *hwnd, w.label().to_owned()))
+        })
+        .collect();
+    if !pinned.iter().any(|(rank, _, _)| *rank > source_rank) {
+        return;
+    }
+    let mut raised = Vec::new();
+    let mut errors = Vec::new();
+    // Raise back-to-front so dictionary popups stay ahead of their own panels.
+    for (_, hwnd, label) in pinned.into_iter().rev() {
+        match unsafe {
+            SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE,
+            )
+        } {
+            Ok(()) => raised.push(label),
+            Err(error) => errors.push(format!("{label}: {error}")),
+        }
+    }
+    service.log(
+        json!({"check": "fullscreen-order", "sourceHwnd": foreground.0 as usize,
+        "raised": raised, "errors": errors}),
+    );
 }
 
 /// Enter editing mode: give this window the keyboard, deliberately.

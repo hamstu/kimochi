@@ -2230,6 +2230,8 @@ fn main() {
             spawn_cursor_poll(handle.clone(), service.clone());
             spawn_source_watch(handle.clone(), service.clone());
             spawn_focus_watch(handle.clone(), service.clone());
+            #[cfg(target_os = "windows")]
+            platform::start_fullscreen_watch(&handle, service.clone());
             spawn_display_watch(handle.clone(), store.clone());
             spawn_capabilities_watch(handle.clone(), service.clone());
             Ok(())
