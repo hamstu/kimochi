@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 const compiled = await build({
   stdin: {
     contents: `export * from './frontend/texthooker/input-source'; export * from './frontend/texthooker/websocket-input';`,
-    resolveDir: new URL("../", import.meta.url).pathname,
+    resolveDir: fileURLToPath(new URL("../", import.meta.url)),
   },
   bundle: true,
   write: false,

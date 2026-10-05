@@ -19,6 +19,7 @@ import type {
   PanelAction,
   PanelInfo,
   PanelLabel,
+  PlatformCapabilities,
   Rect,
   ScanResult,
   SystemState,
@@ -123,6 +124,9 @@ export const systemState = (): Promise<SystemState> => invoke<SystemState>('syst
 export const desktop = (): Promise<Rect[]> => invoke<Rect[]>('desktop')
 /** Richer than `desktop()`: carries each display's id, work area and scale factor. */
 export const displays = (): Promise<DisplayInfo[]> => invoke<DisplayInfo[]>('displays')
+/** What this machine can do; prefer `loadCapabilities()`, which caches and never rejects. */
+export const platformCapabilities = (): Promise<PlatformCapabilities> =>
+  invoke<PlatformCapabilities>('platform_capabilities')
 
 // ---------------------------------------------------------------------------- capture / OCR
 

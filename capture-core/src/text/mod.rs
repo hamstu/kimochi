@@ -154,7 +154,7 @@ impl TextObserver for UnsupportedObserver {
 ///  - Meiki is Python with ONNX Runtime and downloaded model weights. Shipping it
 ///    means either a Python sidecar or an ONNX runtime bound directly from Rust,
 ///    plus model licensing checked per artifact.
-pub const WINDOWS_DETAIL: &str = "Automatic scanning needs a local text observer, and there is not one on Windows yet (the intended engine, Meiki, still needs its recognition head and model packaging). Manual scanning works normally.";
+pub const WINDOWS_DETAIL: &str = "Automatic scanning needs a local text observer, and there is not one on Windows yet: a local MeikiOCR observer is planned. Manual scanning works normally.";
 
 pub const OTHER_DETAIL: &str = "Automatic scanning needs a local text observer, which this platform does not have. Manual scanning works normally.";
 

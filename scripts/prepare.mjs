@@ -12,8 +12,9 @@ async function hashes(dir, prefix = '') {
   for (const e of await readdir(path.join(dir, prefix), { withFileTypes: true })) {
     const name = path.join(prefix, e.name)
     if (e.isDirectory()) Object.assign(result, await hashes(dir, name))
+    // Keys are POSIX paths so the committed evidence file is identical on every OS.
     else
-      result[name] = createHash('sha256')
+      result[name.split(path.sep).join('/')] = createHash('sha256')
         .update(await readFile(path.join(dir, name)))
         .digest('hex')
   }

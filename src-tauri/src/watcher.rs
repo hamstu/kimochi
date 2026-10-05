@@ -1,44 +1,18 @@
 //! The `keytrigger` sidecar from the Electron tree: line-delimited JSON on stdout,
 //! carrying key events and frontmost-window changes.
 //!
+//! The platform layer owns the process (`platform::start_key_trigger`); this module owns
+//! what the events mean.
+//!
 //! Key events need macOS Accessibility permission. That state is reported honestly
 //! through `snapshot()` rather than the feature quietly doing nothing, and this module
 //! never triggers a permission prompt — asking is an explicit user action.
 use crate::actions;
-use crate::native;
+use crate::platform;
 use crate::state::Shared;
 use serde_json::{json, Value};
-use std::io::{BufRead, BufReader};
-use std::process::{Command, Stdio};
 use std::time::Duration;
-use tauri::{Emitter, Manager};
-
-fn binary_name() -> &'static str {
-    if cfg!(target_arch = "aarch64") {
-        "keytrigger-darwin-arm64"
-    } else {
-        "keytrigger-darwin-amd64"
-    }
-}
-
-/// Bundled resource first, then this project’s bin directory for development.
-fn binary_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
-    let name = binary_name();
-    let bundled = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|dir| dir.join("bin").join(name));
-    let repo = Some(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../bin")
-            .join(name),
-    );
-    [bundled, repo]
-        .into_iter()
-        .flatten()
-        .find(|path| path.exists())
-}
+use tauri::Emitter;
 
 /// Keys the user listed in `autoScanSettings.triggerKeys`, lowercased.
 fn trigger_keys(service: &Shared) -> Vec<String> {
@@ -52,42 +26,20 @@ fn trigger_keys(service: &Shared) -> Vec<String> {
 }
 
 pub fn start(app: &tauri::AppHandle, service: &Shared) {
-    service.view.lock().unwrap().accessibility = native::accessibility_trusted();
-    let Some(path) = binary_path(app) else {
+    // The view keeps its historical name: on macOS this is the Accessibility grant.
+    service.view.lock().unwrap().accessibility = platform::key_trigger_status().permission == "granted";
+    let on_line = {
+        let app = app.clone();
+        let service = service.clone();
+        Box::new(move |event: Value| handle(&app, &service, &event))
+    };
+    if let Err(detail) = platform::start_key_trigger(app, on_line) {
         service.log(json!({
             "check": "watcher",
             "status": "unavailable",
-            "detail": format!("{} was not found; keyboard auto-scan and focus tracking are off", binary_name()),
+            "detail": detail,
         }));
-        return;
-    };
-    let app = app.clone();
-    let service = service.clone();
-    std::thread::spawn(move || {
-        let child = Command::new(&path)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn();
-        let mut child = match child {
-            Ok(child) => child,
-            Err(e) => {
-                service
-                    .log(json!({"check": "watcher", "status": "failed", "detail": e.to_string()}));
-                return;
-            }
-        };
-        let Some(stdout) = child.stdout.take() else {
-            return;
-        };
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            let Ok(event) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
-            handle(&app, &service, &event);
-        }
-        let _ = child.wait();
-        service.log(json!({"check": "watcher", "status": "exited"}));
-    });
+    }
 }
 
 fn handle(app: &tauri::AppHandle, service: &Shared, event: &Value) {
@@ -105,6 +57,7 @@ fn handle(app: &tauri::AppHandle, service: &Shared, event: &Value) {
             "frontmost-app",
             json!({
                 "appName": name,
+                "pid": platform::frontmost_pid(),
                 "windowTitle": event.get("windowTitle"),
                 "appPath": event.get("appPath"),
             }),
@@ -112,6 +65,12 @@ fn handle(app: &tauri::AppHandle, service: &Shared, event: &Value) {
         return;
     }
     if event.get("action").and_then(Value::as_str) != Some("down") {
+        return;
+    }
+    // The in-process Windows hook reports key repeat as further "down" events tagged
+    // `repeat`; a held trigger key is one press, not a scan per repeat. The macOS
+    // sidecar never sets the field.
+    if event.get("repeat").and_then(Value::as_bool) == Some(true) {
         return;
     }
     let Some(key) = event.get("key").and_then(Value::as_str) else {

@@ -43,7 +43,7 @@ pub async fn reader_popup_ready(app: AppHandle) {
 #[tauri::command]
 pub async fn reader_popup_focus(app: AppHandle) -> Result<(), String> {
     on_popup_main(&app, |window| {
-        crate::native::promote_to_key(&window).map(|_| ())
+        crate::platform::promote_to_key(&window).map(|_| ())
     })
     .await
 }
@@ -165,7 +165,7 @@ pub async fn show_popover(
     // same physical display the user is reading on.
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
-        let _ = tx.send(crate::native::display_infos());
+        let _ = tx.send(crate::platform::display_infos());
     })
     .map_err(|e| e.to_string())?;
     let displays = rx.await.map_err(|e| e.to_string())?;
@@ -251,10 +251,10 @@ pub async fn show_popover(
         if LOOKUP_GEN.load(Ordering::Relaxed) != gen {
             return Ok(());
         }
-        crate::native::order_front(&window)?;
+        crate::platform::order_front(&window)?;
         POPOVER_VISIBLE.store(true, Ordering::Relaxed);
         if focus.unwrap_or(false) {
-            crate::native::promote_to_key(&window)?;
+            crate::platform::promote_to_key(&window)?;
         }
         Ok(())
     })
@@ -410,7 +410,7 @@ pub fn pointer_down(app: &AppHandle, x: f64, y: f64) {
             if LOOKUP_GEN.load(Ordering::Relaxed) != generation {
                 return Ok(());
             }
-            let b = crate::native::bounds(&window)?;
+            let b = crate::platform::bounds(&window)?;
             if x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height {
                 return Ok(());
             }
@@ -433,7 +433,7 @@ pub async fn smoke(app: AppHandle) -> Result<(), String> {
         .get_webview_window(POPOVER_LABEL)
         .ok_or("missing window")?;
     // The helpers must fail safely if a future caller forgets the dispatcher.
-    if crate::native::order_front(&window).is_ok() || crate::native::promote_to_key(&window).is_ok()
+    if crate::platform::order_front(&window).is_ok() || crate::platform::promote_to_key(&window).is_ok()
     {
         return Err("native helpers accepted a worker-thread call".into());
     }
@@ -463,7 +463,7 @@ pub async fn smoke(app: AppHandle) -> Result<(), String> {
         if !window.is_visible().map_err(|e| e.to_string())? {
             return Err("popup did not become visible".into());
         }
-        let b = on_popup_main(&app, |w| crate::native::bounds(&w)).await?;
+        let b = on_popup_main(&app, |w| crate::platform::bounds(&w)).await?;
         pointer_down(&app, b.x + b.width / 2., b.y + b.height / 2.);
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         if !window.is_visible().map_err(|e| e.to_string())? {

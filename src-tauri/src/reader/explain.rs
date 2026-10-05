@@ -1,10 +1,10 @@
 // explain.rs — run a local LLM CLI (codex or claude) to explain a sentence,
 // streaming output back to the frontend as events.
 //
-// Commands are spawned through `zsh -ilc` so the user's interactive shell
-// PATH applies (fnm/nvm shims and ~/.local/bin live in .zshrc, which plain
-// login shells don't read). The prompt is passed via stdin, never argv, so
-// no shell-quoting of user text is needed.
+// Commands are spawned through `platform::run_cli`, which on macOS goes through
+// `zsh -ilc` so the user's interactive shell PATH applies (fnm/nvm shims and
+// ~/.local/bin live in .zshrc, which plain login shells don't read). The prompt
+// is passed via stdin, never argv, so no shell-quoting of user text is needed.
 //
 // Events (all carry the requestId they belong to so stale runs are ignored):
 //   explain:chunk { requestId, text }  — incremental text (claude streams
@@ -14,11 +14,11 @@
 
 use serde::Serialize;
 use serde_json::Value;
-use std::process::Stdio;
+use std::process::Child;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, Command};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::process::{ChildStderr, ChildStdout};
 use tokio::sync::Mutex;
 
 /// The requestId of the run whose events are still wanted. A new run (or a
@@ -39,6 +39,15 @@ fn emit(app: &AppHandle, event: &str, request_id: u64, text: String) {
     let _ = app.emit(event, ExplainEvent { request_id, text });
 }
 
+/// Kill a CLI and reap it off the async runtime, so a cancelled run never
+/// lingers as a zombie.
+fn stop(mut child: Child) {
+    let _ = child.kill();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+}
+
 /// Model names are interpolated into a shell string, so restrict them to
 /// characters that can never escape quoting.
 fn validate_model(model: &str) -> Result<(), String> {
@@ -54,8 +63,8 @@ fn validate_model(model: &str) -> Result<(), String> {
 
 async fn kill_current() {
     let mut guard = CHILD.lock().await;
-    if let Some((_, mut child)) = guard.take() {
-        let _ = child.start_kill();
+    if let Some((_, child)) = guard.take() {
+        stop(child);
     }
 }
 
@@ -63,9 +72,7 @@ async fn kill_current() {
 async fn kill_own(request_id: u64) {
     let mut guard = CHILD.lock().await;
     match guard.take() {
-        Some((id, mut child)) if id == request_id => {
-            let _ = child.start_kill();
-        }
+        Some((id, child)) if id == request_id => stop(child),
         other => *guard = other,
     }
 }
@@ -90,30 +97,42 @@ pub async fn explain_run(
         validate_model(&model)?;
     }
 
-    let shell_cmd = match provider.as_str() {
+    let (program, args): (&str, Vec<&str>) = match provider.as_str() {
         "codex" => {
             // --json: JSONL events; the answer arrives as item.completed /
             // agent_message. `-` reads the prompt from stdin. read-only
             // sandbox: this is a pure text task, the agent needs no writes.
-            let mut s =
-                String::from("codex exec --skip-git-repo-check -s read-only --color never --json");
+            let mut args = vec![
+                "exec",
+                "--skip-git-repo-check",
+                "-s",
+                "read-only",
+                "--color",
+                "never",
+                "--json",
+            ];
             if !model.is_empty() {
-                s.push_str(&format!(" -m {model}"));
+                args.extend(["-m", model.as_str()]);
             }
-            s.push_str(" -");
-            s
+            args.push("-");
+            ("codex", args)
         }
         "claude" => {
             // stream-json + partial messages gives token-level deltas.
             // --strict-mcp-config skips the user's MCP servers (slow startup,
             // irrelevant here). --verbose is required for stream-json in -p.
-            let mut s = String::from(
-                "claude -p --verbose --output-format stream-json --include-partial-messages --strict-mcp-config",
-            );
+            let mut args = vec![
+                "-p",
+                "--verbose",
+                "--output-format",
+                "stream-json",
+                "--include-partial-messages",
+                "--strict-mcp-config",
+            ];
             if !model.is_empty() {
-                s.push_str(&format!(" --model {model}"));
+                args.extend(["--model", model.as_str()]);
             }
-            s
+            ("claude", args)
         }
         other => return Err(format!("unknown explain provider: {other}")),
     };
@@ -122,38 +141,43 @@ pub async fn explain_run(
     // we claim the child slot below.
     ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
 
-    let mut child = Command::new("/bin/zsh")
-        .arg("-ilc")
-        .arg(&shell_cmd)
-        // Neutral cwd: keeps claude from loading a project's CLAUDE.md/hooks
-        // and codex from scanning a repo.
-        .current_dir(std::env::temp_dir())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| format!("failed to spawn {provider}: {e}"))?;
+    // The prompt is fed on stdin, which is closed afterwards so the CLI starts.
+    // Neutral cwd: keeps claude from loading a project's CLAUDE.md/hooks and
+    // codex from scanning a repo.
+    let mut child = crate::platform::run_cli(
+        program,
+        &args,
+        Some(&prompt),
+        Some(&std::env::temp_dir()),
+    )
+    .map_err(|e| format!("failed to spawn {provider}: {e}"))?;
 
-    let mut stdin = child.stdin.take().ok_or("stdin unavailable")?;
-    let stdout = child.stdout.take().ok_or("stdout unavailable")?;
-    let mut stderr = child.stderr.take().ok_or("stderr unavailable")?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("stdout unavailable")
+        .and_then(|out| ChildStdout::from_std(out).map_err(|_| "stdout unavailable"));
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("stderr unavailable")
+        .and_then(|err| ChildStderr::from_std(err).map_err(|_| "stderr unavailable"));
+    let (stdout, mut stderr) = match (stdout, stderr) {
+        (Ok(stdout), Ok(stderr)) => (stdout, stderr),
+        (Err(e), _) | (_, Err(e)) => {
+            stop(child);
+            return Err(e.into());
+        }
+    };
 
     {
         // Atomically replace (and kill) whatever was running before.
         let mut guard = CHILD.lock().await;
-        if let Some((_, mut old)) = guard.take() {
-            let _ = old.start_kill();
+        if let Some((_, old)) = guard.take() {
+            stop(old);
         }
         *guard = Some((request_id, child));
     }
-
-    // Feed the prompt and close stdin so the CLI starts.
-    stdin
-        .write_all(prompt.as_bytes())
-        .await
-        .map_err(|e| e.to_string())?;
-    drop(stdin);
 
     let is_current = || ACTIVE_REQUEST.load(Ordering::SeqCst) == request_id;
 
@@ -260,7 +284,10 @@ pub async fn explain_run(
         }
     };
     let status = match own_child {
-        Some(mut child) => child.wait().await.ok(),
+        Some(mut child) => tokio::task::spawn_blocking(move || child.wait())
+            .await
+            .ok()
+            .and_then(Result::ok),
         None => None, // killed by a newer run / cancel
     };
 

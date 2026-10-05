@@ -1,7 +1,14 @@
 //! macOS desktop points throughout: never use a WebView's DPR.
 //! Everything here is macOS 14+ only; no cross-platform behaviour is implied.
+//!
+//! This is the macOS half of `crate::platform`: every public item here is part of the
+//! per-OS contract described in `platform/mod.rs`, and the shared types it returns live
+//! there.
+pub mod instance;
+
+use super::{AppIdentity, DisplayInfo, FrontWindow, KeyTriggerStatus, Modifiers, PointerSample};
 use block2::RcBlock;
-use kimochi_capture::Rect;
+use kimochi_capture::{Platform, Rect, SourceId};
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{msg_send, AllocAnyThread, ClassType};
@@ -15,7 +22,8 @@ use objc2_app_kit::{
 use objc2_foundation::{
     ns_string, NSDictionary, NSNotification, NSPoint, NSRect, NSSize, NSString,
 };
-use serde::Serialize;
+use serde_json::{json, Value};
+use std::path::Path;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -75,7 +83,7 @@ const WINDOW_LIST_INCLUDING_WINDOW: u32 = 1 << 3;
 /// game is their game. Reading it from the event rather than from
 /// `CGEventSourceFlagsState` also keeps this to the one call already proven to work
 /// without any additional macOS grant.
-pub fn cursor() -> Option<(f64, f64, bool, u64)> {
+pub fn cursor() -> Option<PointerSample> {
     unsafe {
         let e = CGEventCreate(std::ptr::null());
         if e.is_null() {
@@ -84,8 +92,38 @@ pub fn cursor() -> Option<(f64, f64, bool, u64)> {
         let p = CGEventGetLocation(e);
         let flags = CGEventGetFlags(e);
         CFRelease(e);
-        Some((p.x, p.y, CGEventSourceButtonState(0, 0), flags))
+        Some(PointerSample {
+            x: p.x,
+            y: p.y,
+            down: CGEventSourceButtonState(0, 0),
+            modifiers: Modifiers::from_flags(flags),
+        })
     }
+}
+
+impl Modifiers {
+    /// Decode `CGEventFlags`. Caps Lock (`0x10000`) is deliberately not a modifier
+    /// here: it is a lock rather than a held key, and Yomitan has no input for it.
+    pub fn from_flags(flags: u64) -> Self {
+        Self {
+            shift: flags & 0x0002_0000 != 0,
+            ctrl: flags & 0x0004_0000 != 0,
+            alt: flags & 0x0008_0000 != 0,
+            meta: flags & 0x0010_0000 != 0,
+        }
+    }
+}
+
+/// The opaque id the UI uses for a display: a CoreGraphics display id, minted by the
+/// one codec so the UI never builds `macos:` strings itself.
+pub fn display_source_id(display_id: u32) -> String {
+    SourceId::display(Platform::MacOs, display_id).to_string()
+}
+
+/// Run `f` inside an autorelease pool, so AppKit objects created by a worker thread are
+/// released when it returns rather than accumulating for the life of the thread.
+pub fn with_pool<R>(f: impl FnOnce() -> R) -> R {
+    objc2::rc::autoreleasepool(|_| f())
 }
 
 pub fn displays() -> Vec<Rect> {
@@ -114,15 +152,6 @@ fn primary_height() -> f64 {
     unsafe { CGDisplayBounds(CGMainDisplayID()).size.height }
 }
 
-#[derive(Serialize, Clone)]
-pub struct DisplayInfo {
-    pub id: u32,
-    pub bounds: Rect,
-    /// Excludes the menu bar and Dock, like Electron's `workArea`.
-    pub work_area: Rect,
-    pub scale_factor: f64,
-}
-
 /// NSScreen owns the work area and backing scale; CoreGraphics owns the display id.
 /// Both are read here and converted to top-left desktop points in one place.
 pub fn display_infos() -> Vec<DisplayInfo> {
@@ -133,6 +162,7 @@ pub fn display_infos() -> Vec<DisplayInfo> {
             .into_iter()
             .map(|bounds| DisplayInfo {
                 id: 0,
+                source_id: display_source_id(0),
                 bounds,
                 work_area: bounds,
                 scale_factor: 1.0,
@@ -156,44 +186,13 @@ pub fn display_infos() -> Vec<DisplayInfo> {
                 .unwrap_or(0u32);
             DisplayInfo {
                 id,
+                source_id: display_source_id(id),
                 bounds: to_top_left(screen.frame()),
                 work_area: to_top_left(screen.visibleFrame()),
                 scale_factor: screen.backingScaleFactor(),
             }
         })
         .collect()
-}
-
-/// Keep a rectangle inside a live display's work area, shrinking it first if the
-/// display is smaller. Mirrors Electron's `clampBounds`, so an unplugged monitor can
-/// never strand a saved window offscreen.
-pub fn clamp_to_visible(rect: Rect) -> Rect {
-    let screens = display_infos();
-    if screens.is_empty() {
-        return rect;
-    }
-    let overlap = |a: &Rect, b: &Rect| {
-        let w = (a.x + a.width).min(b.x + b.width) - a.x.max(b.x);
-        let h = (a.y + a.height).min(b.y + b.height) - a.y.max(b.y);
-        w.max(0.0) * h.max(0.0)
-    };
-    let area = screens
-        .iter()
-        .max_by(|a, b| {
-            overlap(&rect, &a.work_area)
-                .partial_cmp(&overlap(&rect, &b.work_area))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .map(|s| s.work_area)
-        .unwrap();
-    let width = rect.width.min(area.width);
-    let height = rect.height.min(area.height);
-    Rect {
-        width,
-        height,
-        x: rect.x.max(area.x).min(area.x + area.width - width),
-        y: rect.y.max(area.y).min(area.y + area.height - height),
-    }
 }
 
 // Called by synchronous Tauri commands / setup on the main thread.
@@ -229,7 +228,7 @@ pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
 // Read-only hit testing also works while WKWebView suppresses inactive mouse events.
 // Respect occlusion by other windows instead of highlighting through them.
 pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, String> {
-    let Some((x, y, _, _)) = cursor() else {
+    let Some(PointerSample { x, y, .. }) = cursor() else {
         return Ok(None);
     };
     let r = bounds(w)?;
@@ -256,7 +255,7 @@ pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> 
     let Some((x, y)) = panel_pointer(w)? else {
         return Ok(());
     };
-    if cursor().is_some_and(|(_, _, down, _)| down) {
+    if cursor().is_some_and(|p| p.down) {
         return Ok(()); // Leave native dragging/resizing cursor tracking alone.
     }
     let r = bounds(w)?;
@@ -463,7 +462,7 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
             .map(|id| {
                 let b = CGDisplayBounds(*id);
                 kimochi_capture::Source {
-                    id: format!("macos:display:{id}"),
+                    id: SourceId::display(Platform::MacOs, id).to_string(),
                     kind: "display",
                     name: format!("Display {id}"),
                     app: None,
@@ -521,7 +520,7 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
             // documents. They remain capturable by ID, but do not belong in the picker.
             let Some(name) = name else { continue };
             sources.push(kimochi_capture::Source {
-                id: format!("macos:window:{id}:{pid}"),
+                id: SourceId::window(Platform::MacOs, id, pid).to_string(),
                 kind: "window",
                 name,
                 app: string(ns_string!("kCGWindowOwnerName")),
@@ -565,7 +564,13 @@ fn readable_window(layer: u32, alpha: f64, width: f64, height: f64) -> bool {
 /// This exists so source tracking can poll at a UI cadence: re-running a full
 /// `SCShareableContent` enumeration per tick would be far too expensive, and this
 /// needs no Screen Recording permission because it reads geometry, never pixels.
-pub fn window_bounds(window_number: u32) -> Option<(Rect, bool)> {
+///
+/// `None` for anything that is not a local window id with a numeric `CGWindowID`.
+pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
+    if !id.is_window() || !id.is_local() {
+        return None;
+    }
+    let window_number = id.handle_u32()?;
     unsafe {
         let ptr = CGWindowListCopyWindowInfo(WINDOW_LIST_INCLUDING_WINDOW, window_number);
         if ptr.is_null() {
@@ -620,16 +625,25 @@ pub fn window_bounds(window_number: u32) -> Option<(Rect, bool)> {
 /// never what the reader is reading.
 ///
 /// A frontmost application with no ordinary window on screen — a menu-bar agent, or an
-/// app whose windows are all minimised — answers with window `0`, which matches no real
-/// window. That is deliberate: it is still an answer about *who has focus*, and the
+/// app whose windows are all minimised — answers with no window (what used to be window
+/// `0`), which matches no real window. That is deliberate: it is still an answer about *who has focus*, and the
 /// caller needs the process id to recognise our own windows.
 ///
 /// `None` only when there is no frontmost application at all, which the caller treats
 /// as "do not change what is shown".
-pub fn front_window() -> Option<(u32, i32)> {
+pub fn front_window() -> Option<FrontWindow> {
     let pid = NSWorkspace::sharedWorkspace()
         .frontmostApplication()?
         .processIdentifier();
+    let (window, pid) = front_window_number(pid)?;
+    let owner = u32::try_from(pid).unwrap_or(0);
+    Some(FrontWindow {
+        window: (window != 0).then(|| SourceId::window(Platform::MacOs, window, owner)),
+        pid: owner,
+    })
+}
+
+fn front_window_number(pid: i32) -> Option<(u32, i32)> {
     objc2::rc::autoreleasepool(|_| unsafe {
         // kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, in
         // front-to-back order.
@@ -702,10 +716,10 @@ pub fn front_window() -> Option<(u32, i32)> {
 ///
 /// Resolution is by running-application localized name, which is the same identity
 /// Electron matches on. It is in-process AppKit: no `PlistBuddy`/`sips` subprocess per
-/// app, unlike the current Electron path.
-pub fn app_icon_png(app_name: &str, target: isize) -> Option<Vec<u8>> {
+/// app, unlike the current Electron path. The pid in `AppIdentity` is not used here.
+pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
     let workspace = NSWorkspace::sharedWorkspace();
-    let wanted = NSString::from_str(app_name);
+    let wanted = NSString::from_str(&app.name);
     let running = workspace.runningApplications();
     let app = running
         .iter()
@@ -771,8 +785,29 @@ pub fn frontmost_app() -> Option<String> {
 
 /// Read-only Accessibility check. Used to render an honest "Accessibility required"
 /// state; it deliberately does not prompt.
-pub fn accessibility_trusted() -> bool {
+fn accessibility_trusted() -> bool {
     unsafe { AXIsProcessTrusted() }
+}
+
+/// Whether global key events can be watched. On macOS that is the Accessibility grant
+/// the `keytrigger` sidecar needs; it is read passively and never prompts.
+pub fn key_trigger_status() -> KeyTriggerStatus {
+    if accessibility_trusted() {
+        KeyTriggerStatus {
+            available: true,
+            permission: "granted",
+            reason: None,
+            remediation: None,
+        }
+    } else {
+        KeyTriggerStatus {
+            available: false,
+            permission: "denied",
+            // The UI has its own Accessibility copy and settings button for macOS.
+            reason: None,
+            remediation: None,
+        }
+    }
 }
 
 /// System sleep/wake and application-activation notifications — the macOS equivalent of
@@ -858,15 +893,6 @@ mod window_tests {
 mod tests {
     use super::*;
 
-    fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
-        Rect {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
     #[test]
     fn picker_rejects_helper_surfaces_but_keeps_normal_windows() {
         assert!(picker_window_eligible(0, 2, 1, 800., 600.));
@@ -891,21 +917,13 @@ mod tests {
             Some(NSCursorFrameResizePosition::Right)
         ));
     }
-
-    #[test]
-    fn clamp_is_identity_without_displays() {
-        // display_infos() is empty off a real window server; the rect must survive.
-        let r = rect(10., 20., 30., 40.);
-        let clamped = clamp_to_visible(r);
-        assert_eq!((clamped.width, clamped.height), (30., 40.));
-    }
 }
 
 /// The process id of the frontmost application, whoever it is.
-pub fn frontmost_pid() -> Option<i32> {
+pub fn frontmost_pid() -> Option<u32> {
     NSWorkspace::sharedWorkspace()
         .frontmostApplication()
-        .map(|a| a.processIdentifier())
+        .and_then(|a| u32::try_from(a.processIdentifier()).ok())
 }
 
 /// Make Kimochi the active application without raising the rest of its windows.
@@ -931,7 +949,8 @@ pub fn activate_self() -> Result<(), String> {
 ///
 /// Kimochi is the active app when this is asked for (the reader just clicked it), so under macOS
 /// 14's cooperative activation it yields first; older systems take the activation flags alone.
-pub fn activate_process(pid: i32) -> Result<(), String> {
+pub fn activate_process(pid: u32) -> Result<(), String> {
+    let pid = i32::try_from(pid).map_err(|_| "invalid: process id out of range".to_string())?;
     unsafe {
         let app: *mut AnyObject = msg_send![
             objc2::class!(NSRunningApplication),
@@ -953,5 +972,250 @@ pub fn activate_process(pid: i32) -> Result<(), String> {
         } else {
             Err("native: the application did not come to the front".into())
         }
+    }
+}
+
+// ---------------------------------------------------------------- key trigger
+
+fn keytrigger_binary_name() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "keytrigger-darwin-arm64"
+    } else {
+        "keytrigger-darwin-amd64"
+    }
+}
+
+/// Bundled resource first, then this project’s bin directory for development.
+fn keytrigger_binary_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    use tauri::Manager;
+    let name = keytrigger_binary_name();
+    let bundled = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|dir| dir.join("bin").join(name));
+    let repo = Some(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../bin")
+            .join(name),
+    );
+    [bundled, repo]
+        .into_iter()
+        .flatten()
+        .find(|path| path.exists())
+}
+
+/// Start the `keytrigger` sidecar from the Electron tree: line-delimited JSON on stdout,
+/// carrying key events and frontmost-window changes. Every JSON line is handed to
+/// `on_line` unchanged; anything else on stdout is ignored.
+///
+/// Key events need Accessibility permission (see `key_trigger_status`); this never
+/// triggers a permission prompt.
+pub fn start_key_trigger(
+    app: &tauri::AppHandle,
+    on_line: Box<dyn Fn(Value) + Send + Sync + 'static>,
+) -> Result<(), String> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use tauri::Manager;
+    let Some(path) = keytrigger_binary_path(app) else {
+        return Err(format!(
+            "{} was not found; keyboard auto-scan and focus tracking are off",
+            keytrigger_binary_name()
+        ));
+    };
+    let mut child = Command::new(&path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let Some(stdout) = child.stdout.take() else {
+            return;
+        };
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            let Ok(event) = serde_json::from_str::<Value>(&line) else {
+                continue;
+            };
+            on_line(event);
+        }
+        let _ = child.wait();
+        if let Some(service) = app.try_state::<crate::state::Shared>() {
+            service.log(json!({"check": "watcher", "status": "exited"}));
+        }
+    });
+    Ok(())
+}
+
+// ---------------------------------------------------------------- system links
+
+fn open_url(url: &str) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("native: {e}"))
+}
+
+/// Opens the Screen Recording pane. Requesting permission is an explicit user
+/// action; nothing in this app probes or prompts on its own.
+pub fn open_capture_settings() -> Result<(), String> {
+    open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+}
+
+/// Opens the Accessibility pane, which the key trigger needs.
+pub fn open_input_settings() -> Result<(), String> {
+    open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+}
+
+// ---------------------------------------------------------------- command runner
+
+/// One word for `zsh -c`, quoted only when it has to be, so ordinary flags and model
+/// names reach the shell exactly as they always have.
+fn shell_word(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/' | '=' | ':' | ',' | '@' | '+' | '%')
+        });
+    if plain {
+        word.to_string()
+    } else {
+        format!("'{}'", word.replace('\'', r"'\''"))
+    }
+}
+
+/// Spawn a user-installed CLI with stdout and stderr piped.
+///
+/// Spawned through `zsh -ilc` so the user's interactive shell PATH applies (fnm/nvm
+/// shims and ~/.local/bin live in .zshrc, which plain login shells don't read). Text
+/// for the program goes through `stdin`, never argv, so no shell-quoting of user text is
+/// needed; the arguments themselves are quoted where necessary.
+pub fn run_cli(
+    program: &str,
+    args: &[&str],
+    stdin: Option<&str>,
+    cwd: Option<&Path>,
+) -> Result<std::process::Child, String> {
+    let line = std::iter::once(program)
+        .chain(args.iter().copied())
+        .map(shell_word)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut command = std::process::Command::new("/bin/zsh");
+    command.arg("-ilc").arg(line);
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    super::spawn_cli(command, stdin)
+}
+
+// ---------------------------------------------------------------- capabilities
+
+fn os_version() -> String {
+    let v = objc2_foundation::NSProcessInfo::processInfo().operatingSystemVersion();
+    format!("{}.{}.{}", v.majorVersion, v.minorVersion, v.patchVersion)
+}
+
+/// The macOS-specific part of `platform_capabilities`; see `platform::capabilities_payload`
+/// for how it is combined with capture, key-trigger, OCR and observer state.
+pub fn capabilities() -> Value {
+    json!({
+        "os": "macos",
+        "osVersion": os_version(),
+        "arch": std::env::consts::ARCH,
+        "keys": {"primaryModifier": "meta", "labels": "symbols", "superName": "Command"},
+        "capture": {
+            "canOpenSettings": true,
+            "restartAfterGrant": true,
+            "pickerRequired": false,
+            "windowCapture": true,
+            "excludesOwnWindows": true,
+        },
+        "sources": {
+            "catalog": true,
+            "thumbnails": true,
+            "icons": true,
+            "followWindowBounds": true,
+            "foregroundTracking": true,
+        },
+        "overlay": {
+            "passive": true,
+            "inputRegions": "poll",
+            "nonActivating": true,
+            "nativeHoverWorkaround": true,
+        },
+        "input": {"globalShortcuts": true},
+        "ownAppNames": ["Kimochi", "Kimochi Next", "Kimochi Next POC"],
+        "tray": true,
+        "gamepad": true,
+        "ocrAccelerators": {"meikiocr": "coreml", "mangaocr": "metal"},
+    })
+}
+
+#[cfg(test)]
+mod modifier_tests {
+    use super::Modifiers;
+
+    // The values are `CGEventFlags`, as the window server reports them.
+    const SHIFT: u64 = 0x0002_0000;
+    const CONTROL: u64 = 0x0004_0000;
+    const OPTION: u64 = 0x0008_0000;
+    const COMMAND: u64 = 0x0010_0000;
+    const CAPS_LOCK: u64 = 0x0001_0000;
+    /// Every sample also carries the keyboard's device state in the low bits.
+    const DEVICE_NOISE: u64 = 0x0000_0102;
+
+    #[test]
+    fn nothing_held_is_no_modifiers() {
+        assert_eq!(Modifiers::from_flags(0), Modifiers::default());
+    }
+
+    #[test]
+    fn shift_is_the_trigger_and_is_read_alone() {
+        let held = Modifiers::from_flags(SHIFT | DEVICE_NOISE);
+        assert!(held.shift);
+        assert!(!held.ctrl && !held.alt && !held.meta);
+    }
+
+    #[test]
+    fn each_modifier_maps_to_the_name_the_dom_uses() {
+        assert!(Modifiers::from_flags(CONTROL).ctrl);
+        assert!(Modifiers::from_flags(OPTION).alt);
+        assert!(Modifiers::from_flags(COMMAND).meta);
+    }
+
+    #[test]
+    fn several_at_once_are_all_reported() {
+        let held = Modifiers::from_flags(SHIFT | COMMAND);
+        assert!(held.shift && held.meta);
+        assert!(!held.ctrl && !held.alt);
+    }
+
+    #[test]
+    fn caps_lock_is_not_a_held_key() {
+        // It is a lock rather than something a reader is holding down, and Yomitan has
+        // no input for it: reporting it would make a trigger fire for as long as it
+        // stayed on.
+        assert_eq!(Modifiers::from_flags(CAPS_LOCK), Modifiers::default());
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::shell_word;
+
+    #[test]
+    fn ordinary_words_reach_the_shell_unchanged() {
+        for w in ["claude", "-p", "--output-format", "stream-json", "gpt-5.1", "-"] {
+            assert_eq!(shell_word(w), w);
+        }
+    }
+
+    #[test]
+    fn anything_else_is_single_quoted() {
+        assert_eq!(shell_word("a b"), "'a b'");
+        assert_eq!(shell_word("it's"), r"'it'\''s'");
+        assert_eq!(shell_word(""), "''");
     }
 }

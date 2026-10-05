@@ -24,12 +24,14 @@ import yomitanIcon from './assets/yomitan-icon.svg'
 import svgLogo from './assets/kimochi-logo.svg'
 import style from './WelcomeApp.module.css'
 
-import { useHasScreenRecordingPermission } from './useHasScreenRecordingPermission'
+import { useCaptureStep, useHasScreenRecordingPermission } from './useHasScreenRecordingPermission'
+import { useCapabilities } from '../bridge/capabilities'
 import { completeOnboarding, openYomitanBackup, resizeWelcome } from './welcome-actions'
 
 /** Where each step's back button goes (unchanged from the original screens). */
 const BACK: Record<string, string> = {
   '/screen-recording-permission': '/',
+  '/system-picker': '/',
   '/yomitan': '/',
   '/yomitan-setup': '/yomitan',
   '/yomitan-import': '/yomitan',
@@ -88,7 +90,13 @@ function InitialScreen(): JSX.Element {
   useEffect(() => {
     resizeWelcome(500)
   }, [])
-  const hasPermission = useHasScreenRecordingPermission()
+  const captureStep = useCaptureStep()
+  const next =
+    captureStep === 'permission'
+      ? '/screen-recording-permission'
+      : captureStep === 'picker'
+        ? '/system-picker'
+        : '/yomitan'
   return (
     <Step
       art={
@@ -99,7 +107,7 @@ function InitialScreen(): JSX.Element {
       title="Welcome to Kimochi"
       actions={
         <Button variant="primary" asChild>
-          <Link to={hasPermission ? '/yomitan' : '/screen-recording-permission'}>Get Started</Link>
+          <Link to={next}>Get Started</Link>
         </Button>
       }
     >
@@ -111,6 +119,7 @@ function InitialScreen(): JSX.Element {
 
 function ScreenPermissionScreen(): JSX.Element {
   const hasPermission = useHasScreenRecordingPermission()
+  const { restartAfterGrant } = useCapabilities().capture
   useEffect(() => {
     resizeWelcome(800)
   }, [])
@@ -144,8 +153,31 @@ function ScreenPermissionScreen(): JSX.Element {
       }
     >
       Kimochi needs screen recording permission to capture and OCR text from your screen. Please
-      click the button below to open your system settings and grant access. On macOS, you may need
-      to restart Kimochi after granting the permission.
+      click the button below to open your system settings and grant access.
+      {restartAfterGrant
+        ? ' On macOS, you may need to restart Kimochi after granting the permission.'
+        : ''}
+    </Step>
+  )
+}
+
+/** Where the system asks what to share each time (a portal picker): nothing to grant up front. */
+function SystemPickerScreen(): JSX.Element {
+  useEffect(() => {
+    resizeWelcome(500)
+  }, [])
+  return (
+    <Step
+      art={<img src={svgLogo} alt="Kimochi" width={160} />}
+      title="Choosing What to Read"
+      actions={
+        <Button variant="primary" asChild>
+          <Link to="/yomitan">Continue</Link>
+        </Button>
+      }
+    >
+      You will choose what to share in the system picker. When you pick a window or screen for
+      Kimochi to read, your system asks you to confirm it; choose the game or app you want to read.
     </Step>
   )
 }
@@ -323,6 +355,7 @@ function Welcome(): JSX.Element {
           <Route element={<AnimationLayout />}>
             <Route index element={<InitialScreen />} />
             <Route path="/screen-recording-permission" element={<ScreenPermissionScreen />} />
+            <Route path="/system-picker" element={<SystemPickerScreen />} />
             <Route path="/yomitan" element={<YomitanSetupScreen />} />
             <Route path="/yomitan-setup" element={<YomitanHelpScreen />} />
             <Route path="/yomitan-import" element={<YomitanExportScreen />} />

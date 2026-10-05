@@ -1,0 +1,245 @@
+name: CI
+
+# Native compile, lint and test gates on every OS, plus unsigned-or-signed debug bundles.
+# No release/publish job yet (CROSS_PLATFORM_PLAN.md Phase 5).
+#
+# Sibling repositories: src-tauri depends on `../../kimochi-meikiocr` and `../../kimochi-mangaocr`
+# by path, and the OCR staging scripts read their LICENSE/NOTICE and model manifest. This repo is
+# therefore checked out into `kimochi-tauri/` with the siblings beside it.
+# TODO(ci): the sibling crates are not on GitHub yet. Push them (private is fine), then set the
+# repository variables KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if they are not
+# `<owner>/kimochi-meikiocr` / `<owner>/kimochi-mangaocr`, and add a SIBLING_REPOS_TOKEN secret
+# (fine-grained PAT with read access to contents) if they are private. Until then every job fails
+# at the sibling checkout. The alternative is vendoring both crates into this repository.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Prevent macOS tar from adding ._* AppleDouble files to anything we archive.
+  COPYFILE_DISABLE: '1'
+
+jobs:
+  checks:
+    name: Checks (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Windows x64
+            os: windows-latest
+          - name: Windows ARM64
+            os: windows-11-arm
+          - name: Linux x64
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: kimochi-tauri
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: kimochi-tauri
+      - name: Check out kimochi-meikiocr
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
+          path: kimochi-meikiocr
+      - name: Check out kimochi-mangaocr
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
+          path: kimochi-mangaocr
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kimochi-tauri/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            kimochi-tauri/src-tauri -> target
+            kimochi-tauri/capture-core -> target
+          shared-key: checks
+
+      # `npm ci` runs the `prepare` lifecycle script (scripts/prepare.mjs), which builds dist/.
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      # cargo clippy -D warnings for src-tauri. Creates empty OCR resource directories so
+      # tauri-build's resource copy succeeds without downloading models.
+      - run: npm run check:rust
+      - name: Test capture-core
+        run: cargo test --manifest-path capture-core/Cargo.toml
+        env:
+          # Swift-backed crates link @rpath/libswift_*.dylib from the OS.
+          DYLD_LIBRARY_PATH: ${{ runner.os == 'macOS' && '/usr/lib/swift' || '' }}
+
+  bundle:
+    name: Bundle (${{ matrix.name }})
+    needs: checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            target: aarch64-apple-darwin
+            artifacts: kimochi-tauri/src-tauri/target/debug/bundle/macos/Kimochi.app.zip
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifacts: kimochi-tauri/src-tauri/target/debug/bundle/nsis/*-setup.exe
+          - name: Windows ARM64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            artifacts: kimochi-tauri/src-tauri/target/debug/bundle/nsis/*-setup.exe
+          - name: Linux x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifacts: |
+              kimochi-tauri/src-tauri/target/debug/bundle/deb/*.deb
+              kimochi-tauri/src-tauri/target/debug/bundle/appimage/*.AppImage
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: kimochi-tauri
+    env:
+      KIMOCHI_TARGET: ${{ matrix.target }}
+      # macOS: no Apple identity in CI; ad-hoc sign the app and the bundled dylib.
+      KIMOCHI_ADHOC: '1'
+      # Step-level env is not visible to a step's own `if`, so expose the gate at job level.
+      HAS_WINDOWS_SIGNING: ${{ secrets.AZURE_TENANT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: kimochi-tauri
+      - name: Check out kimochi-meikiocr
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
+          path: kimochi-meikiocr
+      - name: Check out kimochi-mangaocr
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
+          path: kimochi-mangaocr
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kimochi-tauri/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: kimochi-tauri/src-tauri -> target
+          shared-key: bundle-${{ matrix.target }}
+
+      # Downloaded OCR models and runtimes are hash-verified by the staging scripts, so a cache
+      # hit only saves bandwidth; a stale or wrong-target runtime is detected and replaced.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            kimochi-tauri/src-tauri/resources/meikiocr
+            kimochi-tauri/src-tauri/resources/mangaocr
+          key: ocr-${{ matrix.target }}-${{ hashFiles('kimochi-tauri/scripts/prepare-meikiocr.mjs', 'kimochi-mangaocr/scripts/model-manifest.json') }}
+          restore-keys: ocr-${{ matrix.target }}-
+
+      - name: Install Windows signing CLI
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
+        run: cargo install --locked artifact-signing-cli
+
+      - run: npm ci
+      - name: Bundle
+        run: npm run bundle
+        env:
+          # Windows: scripts/sign-windows.mjs (signCommand) signs when these are present and
+          # skips with a warning otherwise. KIMOCHI_REQUIRE_SIGNING makes a partial secret set
+          # an error rather than a silently unsigned installer.
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          KIMOCHI_SIGNING_ENDPOINT: ${{ vars.KIMOCHI_SIGNING_ENDPOINT }}
+          KIMOCHI_SIGNING_ACCOUNT: ${{ vars.KIMOCHI_SIGNING_ACCOUNT }}
+          KIMOCHI_SIGNING_PROFILE: ${{ vars.KIMOCHI_SIGNING_PROFILE }}
+          KIMOCHI_REQUIRE_SIGNING: ${{ secrets.AZURE_TENANT_ID != '' && '1' || '' }}
+
+      - name: Verify Windows signature
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
+        shell: pwsh
+        run: |
+          Get-ChildItem src-tauri/target/debug/bundle/nsis/*-setup.exe | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            Write-Host "$($_.Name): $($sig.Status) $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne 'Valid') { exit 1 }
+          }
+
+      # upload-artifact drops file modes, so the .app is archived with ditto first.
+      - name: Archive macOS app
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent src-tauri/target/debug/bundle/macos/Kimochi.app src-tauri/target/debug/bundle/macos/Kimochi.app.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kimochi-${{ matrix.target }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error

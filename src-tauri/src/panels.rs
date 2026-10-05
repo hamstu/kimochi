@@ -1,6 +1,6 @@
 //! Native window lifecycle, pinning, placement and bounds recovery.
 //! Mirrors the semantics of the Electron build's `src/main/native-windows.ts`.
-use crate::native;
+use crate::platform;
 use crate::settings::Settings;
 use kimochi_capture::Rect;
 use serde_json::{json, Value};
@@ -149,7 +149,7 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
     let mut rect = match saved {
         Some(rect) => rect,
         None => {
-            let area = native::display_infos()
+            let area = platform::display_infos()
                 .first()
                 .map(|d| d.work_area)
                 .unwrap_or(Rect {
@@ -170,7 +170,7 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
     // frame restored from settings. Apply the current spec before display clamping.
     rect.width = rect.width.max(spec.min_width);
     rect.height = rect.height.max(spec.min_height);
-    native::clamp_to_visible(rect)
+    platform::clamp_to_visible(rect)
 }
 
 fn pinned_default(settings: &Settings, spec: &PanelSpec) -> bool {
@@ -271,7 +271,8 @@ pub fn ensure(
             .resizable(spec.resizable)
             .maximizable(spec.resizable)
             .always_on_top(pinned)
-            .visible(false);
+            .visible(false)
+            .initialization_script_for_all_frames(platform::platform_prelude());
     if let Some(path) = spec.init_asset {
         let asset = app.asset_resolver().get(path.into()).ok_or_else(|| {
             format!(
@@ -287,7 +288,7 @@ pub fn ensure(
     // Keep Kimochi's own panels out of captures of the display they sit on, where the
     // OS honours it. This is the same mechanism as Electron's setContentProtection.
     let _ = window.set_content_protected(true);
-    native::place(&window, bounds)?;
+    platform::place(&window, bounds)?;
     attach_events(app, settings, &window, spec);
     Ok(window)
 }
@@ -328,7 +329,7 @@ fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpe
     if window.is_minimized().unwrap_or(false) {
         return;
     }
-    if let Ok(rect) = native::bounds(window) {
+    if let Ok(rect) = platform::bounds(window) {
         let _ = settings.set(
             &format!("nativeWindowBounds.{}", spec.label),
             json!({"x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height}),
@@ -339,8 +340,8 @@ fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpe
 pub fn info(window: &WebviewWindow) -> Result<Value, String> {
     Ok(json!({
         "label": window.label(),
-        "native": native::inspect(window)?,
-        "bounds": native::bounds(window)?,
+        "native": platform::inspect(window)?,
+        "bounds": platform::bounds(window)?,
         "scale": window.scale_factor().map_err(|e| e.to_string())?,
         "pinned": window.is_always_on_top().map_err(|e| e.to_string())?,
         "focused": window.is_focused().map_err(|e| e.to_string())?,
@@ -373,7 +374,7 @@ pub fn act(
         "drag" => window.start_dragging().map_err(native_err)?,
         "place" => {
             let rect = rect.ok_or("invalid: place requires bounds")?;
-            native::place(&window, native::clamp_to_visible(rect))?;
+            platform::place(&window, platform::clamp_to_visible(rect))?;
             // Reassert the flag: programmatic placement has been observed to turn
             // resizing back on for windows that must stay fixed.
             let resizable = spec(label).is_some_and(|s| s.resizable);
@@ -428,27 +429,27 @@ fn place_on_main_display(
     label: &str,
 ) -> Result<(), String> {
     let spec = spec(label).ok_or("invalid: unknown panel spec")?;
-    let (width, height) = match native::bounds(window) {
+    let (width, height) = match platform::bounds(window) {
         Ok(current) if existed => (current.width, current.height),
         _ => (spec.width, spec.height),
     };
-    let displays = native::display_infos();
+    let displays = platform::display_infos();
     let (x, y) = app
         .get_webview_window(MAIN)
         .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
-        .and_then(|w| native::bounds(&w).ok())
+        .and_then(|w| platform::bounds(&w).ok())
         .map(|r| (r.x + r.width / 2., r.y + r.height / 2.))
-        .or_else(|| native::cursor().map(|(x, y, _, _)| (x, y)))
+        .or_else(|| platform::cursor().map(|p| (p.x, p.y)))
         .unwrap_or((0., 0.));
     let Some(area) = work_area_at(&displays, x, y) else {
         return Ok(());
     };
-    native::place(window, centred(width, height, area))
+    platform::place(window, centred(width, height, area))
 }
 
 /// The work area of the display containing a desktop point (top-left points), or the
 /// nearest display when the point is in a gap between them.
-fn work_area_at(displays: &[native::DisplayInfo], x: f64, y: f64) -> Option<Rect> {
+fn work_area_at(displays: &[platform::DisplayInfo], x: f64, y: f64) -> Option<Rect> {
     let distance = |r: &Rect| {
         let dx = (r.x - x).max(0.).max(x - (r.x + r.width));
         let dy = (r.y - y).max(0.).max(y - (r.y + r.height));
@@ -487,8 +488,8 @@ pub fn set_content_height(
         return Ok(());
     }
     let window = ensure(app, settings, label)?;
-    let current = native::bounds(&window)?;
-    let next = native::clamp_to_visible(Rect {
+    let current = platform::bounds(&window)?;
+    let next = platform::clamp_to_visible(Rect {
         width: spec.width,
         height: height.max(spec.min_height).ceil(),
         ..current
@@ -497,7 +498,7 @@ pub fn set_content_height(
         || (next.height - current.height).abs() > 0.5
         || (next.y - current.y).abs() > 0.5
     {
-        native::place(&window, next)?;
+        platform::place(&window, next)?;
     }
     Ok(())
 }
@@ -512,10 +513,10 @@ pub fn recover_bounds(app: &tauri::AppHandle, settings: &Arc<Settings>) {
         if window.is_minimized().unwrap_or(false) {
             continue;
         }
-        if let Ok(rect) = native::bounds(&window) {
-            let clamped = native::clamp_to_visible(rect);
+        if let Ok(rect) = platform::bounds(&window) {
+            let clamped = platform::clamp_to_visible(rect);
             if (clamped.x - rect.x).abs() > 0.5 || (clamped.y - rect.y).abs() > 0.5 {
-                let _ = native::place(&window, clamped);
+                let _ = platform::place(&window, clamped);
                 save_bounds(settings, &window, spec);
             }
         }

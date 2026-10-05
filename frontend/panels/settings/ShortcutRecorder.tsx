@@ -9,14 +9,13 @@ import { Button, Kbd } from '@kit'
 import {
   acceleratorCaps,
   acceleratorFromEvent,
-  detectKeyPlatform,
   formatAccelerator,
   heldModifierCaps,
-  isModifierOnly
+  isModifierOnly,
+  keyPlatformOf
 } from './accelerator'
 import { useSuspendHotkeys } from '../../bridge/useHotkeys'
-
-const PLATFORM = detectKeyPlatform()
+import { useCapabilities } from '../../bridge/capabilities'
 
 export function ShortcutRecorder({
   value,
@@ -31,6 +30,7 @@ export function ShortcutRecorder({
   const [recording, setRecording] = useState(false)
   const [held, setHeld] = useState<string[]>([])
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const platform = keyPlatformOf(useCapabilities())
 
   useSuspendHotkeys(recording)
 
@@ -55,17 +55,17 @@ export function ShortcutRecorder({
         return stop()
       }
       if (isModifierOnly(event)) {
-        setHeld(heldModifierCaps(event, PLATFORM))
+        setHeld(heldModifierCaps(event, platform))
         return
       }
-      const accelerator = acceleratorFromEvent(event, PLATFORM)
+      const accelerator = acceleratorFromEvent(event, platform)
       if (accelerator) {
         onChange(accelerator)
         stop()
       }
     }
     const onKeyUp = (event: KeyboardEvent): void => {
-      if (isModifierOnly(event)) setHeld(heldModifierCaps(event, PLATFORM))
+      if (isModifierOnly(event)) setHeld(heldModifierCaps(event, platform))
     }
     const onPointerDown = (event: PointerEvent): void => {
       if (!buttonRef.current?.contains(event.target as Node)) stop()
@@ -85,9 +85,9 @@ export function ShortcutRecorder({
       window.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('blur', stop)
     }
-  }, [recording, onChange])
+  }, [recording, onChange, platform])
 
-  const caps = value ? acceleratorCaps(value, PLATFORM) : []
+  const caps = value ? acceleratorCaps(value, platform) : []
 
   if (!recording && caps.length === 0) {
     return (
@@ -106,7 +106,7 @@ export function ShortcutRecorder({
       aria-label={
         recording
           ? `Recording ${label} shortcut. Press keys, Escape to cancel, Delete to clear.`
-          : `${label} shortcut: ${formatAccelerator(value, PLATFORM)}. Click to change.`
+          : `${label} shortcut: ${formatAccelerator(value, platform)}. Click to change.`
       }
       onClick={() => {
         setHeld([])

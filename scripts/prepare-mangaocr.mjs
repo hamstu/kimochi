@@ -8,6 +8,14 @@ import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
+// Accepted for symmetry with prepare-meikiocr.mjs (`--target <rust-triple>` or KIMOCHI_TARGET).
+// The Manga OCR models are platform-neutral safetensors, so the target only labels the output.
+const argv = process.argv.slice(2)
+const flag = argv.findIndex((arg) => arg === '--target' || arg.startsWith('--target='))
+const target =
+  (flag < 0 ? undefined : argv[flag].includes('=') ? argv[flag].split('=')[1] : argv[flag + 1]) ??
+  process.env.KIMOCHI_TARGET ??
+  'host'
 const library = path.resolve(root, '../kimochi-mangaocr')
 const manifest = JSON.parse(
   await readFile(path.join(library, 'scripts/model-manifest.json'), 'utf8')
@@ -62,4 +70,4 @@ await cp(
   path.join(library, 'scripts/model-manifest.json'),
   path.join(destination, 'model-manifest.json')
 )
-console.log('Manga OCR verified models ready for offline bundling.')
+console.log(`Manga OCR verified models ready for offline bundling (target: ${target}).`)

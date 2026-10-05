@@ -35,6 +35,13 @@ fn assets(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
     Err("Manga OCR assets are missing. Run npm run prepare:mangaocr or rebuild with npm run bundle.".into())
 }
+/// Whether the models are present, without loading them. For `platform_capabilities`.
+pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
+    match assets(app) {
+        Ok(_) => (true, None),
+        Err(e) => (false, Some(e)),
+    }
+}
 pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
     let image = mangaocr::decode_image(png).map_err(|e| format!("Manga OCR image: {e}"))?;
     let state = app.state::<MangaState>();

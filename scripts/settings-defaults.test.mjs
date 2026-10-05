@@ -93,8 +93,20 @@ test('serverSettings is an object, never a flat scalar', () => {
   assert.equal(SETTINGS_DEFAULTS.serverSettings.mode, 'cloud')
 })
 
-test('the Electron store defaults that carry over are unchanged', async () => {
-  const electron = await readFile(new URL('../../kimochi/src/main/settings.ts', import.meta.url), 'utf8')
+test('the Electron store defaults that carry over are unchanged', async (t) => {
+  // The Electron app is a sibling checkout (`../kimochi`), absent on CI and fresh clones. Skip
+  // rather than pass silently, and only when the file is missing: any other failure still fails.
+  const electron = await readFile(
+    new URL('../../kimochi/src/main/settings.ts', import.meta.url),
+    'utf8'
+  ).catch((error) => {
+    if (error.code === 'ENOENT') return null
+    throw error
+  })
+  if (electron === null) {
+    t.skip('sibling ../kimochi checkout not found; Electron store parity not checked')
+    return
+  }
   // Spot-check the values this experiment re-declares against their Electron source of truth.
   for (const [pattern, label] of [
     [/scannedTextFontSize:\s*14/, 'scannedTextFontSize'],

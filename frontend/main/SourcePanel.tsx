@@ -52,7 +52,8 @@ import { useViewState } from '../bridge/state'
 import { useHotkeys } from '../bridge/useHotkeys'
 import { nativeError, sourceLiveThumbnail } from '../bridge/tauri'
 import type { NativeCrop } from '../bridge/types'
-import { detectKeyPlatform, formatAccelerator } from '../panels/settings/accelerator'
+import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
+import { useCapabilities } from '../bridge/capabilities'
 import type { ControllerWiring } from '../panels/useController'
 
 type Controller = ControllerWiring['props']
@@ -64,8 +65,6 @@ const REFRESH_MS = 2500
 const BUSY_RETRY_MS = 900
 /** The crossfade; matches `.src-frame`'s opacity transition. */
 const FADE_MS = 700
-
-const KEY_PLATFORM = detectKeyPlatform()
 
 const TYPES = [
   {
@@ -388,6 +387,7 @@ export function SourcePanel({
     handledChooseRequest = Math.max(handledChooseRequest, seenRequest)
   }, [seenRequest])
   const [hotkeys] = useHotkeys()
+  const keyPlatform = keyPlatformOf(useCapabilities())
   const { state } = useViewState()
   const [websocketUrl, setWebsocketUrl] = useState(() => getSettings().websocketUrl)
   useEffect(() => onSettingsChange((next) => setWebsocketUrl(next.websocketUrl)), [])
@@ -396,7 +396,7 @@ export function SourcePanel({
   // A window or screen that has not been picked yet reads as no source at all.
   const empty = mode === 'ocr' && !source
   const scanKey = hotkeys.triggerScan?.enabled
-    ? formatAccelerator(hotkeys.triggerScan.accelerator, KEY_PLATFORM)
+    ? formatAccelerator(hotkeys.triggerScan.accelerator, keyPlatform)
     : null
   const overlayOn = isOverlayTextVisible(
     controller.isOverlayModeEnabled,

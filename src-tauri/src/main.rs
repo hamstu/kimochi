@@ -1,14 +1,15 @@
 mod reader;
 use base64::Engine;
+use capture_unavailable::UnavailableBackend;
 
 mod actions;
+mod capture_unavailable;
 mod gamepad;
 mod history_merge;
 mod hotkeys;
-mod instance;
 mod manga_ocr;
 mod meiki_ocr;
-mod native;
+mod platform;
 mod ocr_result;
 mod panels;
 mod scan_trace;
@@ -24,8 +25,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use settings::Settings;
 use state::{
-    classify_pointer, dismissed, source_focus, window_id_of, Image, Modifiers, PointerHistory,
-    Region, Service, Shared, SourceFocus, View,
+    classify_pointer, dismissed, source_focus, Image, Modifiers, PointerHistory, Region, Service,
+    Shared, SourceFocus, View,
 };
 use std::{
     collections::HashMap,
@@ -334,7 +335,12 @@ fn snapshot_value(service: &Service) -> Value {
         "origin": v.origin,
         "dictionary": v.dictionary,
         "dismiss": v.dismiss,
-        "source": service.settings.get("lastSelectedSource").ok().flatten(),
+        "source": service
+            .settings
+            .get("lastSelectedSource")
+            .ok()
+            .flatten()
+            .map(with_source_kind),
         "crop": current_crop(service),
         "cropEnabled": current_crop(service).is_some(),
         "isScanning": v.scanning,
@@ -423,12 +429,12 @@ fn clear(state: State<Shared>) {
 
 #[tauri::command]
 fn panel_pointer(window: tauri::WebviewWindow) -> Reply<Option<(f64, f64)>> {
-    native::panel_pointer(&window)
+    platform::panel_pointer(&window)
 }
 
 #[tauri::command]
 fn panel_cursor(window: tauri::WebviewWindow, kind: String) -> Reply<()> {
-    native::panel_cursor(&window, &kind)
+    platform::panel_cursor(&window, &kind)
 }
 
 #[tauri::command]
@@ -454,7 +460,7 @@ fn panel_content_height(
 
 #[tauri::command]
 fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Reply<()> {
-    native::place(
+    platform::place(
         &app.get_webview_window(OVERLAY)
             .ok_or("native: overlay missing")?,
         rect,
@@ -465,7 +471,7 @@ fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Rep
 
 #[tauri::command]
 fn desktop() -> Vec<Rect> {
-    native::displays()
+    platform::displays()
 }
 
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
@@ -486,9 +492,9 @@ fn controller_nav(app: tauri::AppHandle, active: bool, take_focus: Option<bool>)
 /// The display under the pointer, for Quick Shot: the region is drawn where the
 /// reader is looking, not on whichever display holds the chosen source.
 #[tauri::command]
-fn pointer_display() -> Option<native::DisplayInfo> {
-    let (x, y, _, _) = native::cursor()?;
-    let displays = native::display_infos();
+fn pointer_display() -> Option<platform::DisplayInfo> {
+    let platform::PointerSample { x, y, .. } = platform::cursor()?;
+    let displays = platform::display_infos();
     displays
         .iter()
         .find(|d| {
@@ -503,15 +509,14 @@ fn pointer_display() -> Option<native::DisplayInfo> {
 /// (`macos:window:<window>:<pid>`); a display has nothing to bring forward.
 #[tauri::command]
 async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> {
-    let pid = source_id
-        .strip_prefix("macos:window:")
-        .and_then(|rest| rest.split(':').nth(1))
-        .and_then(|pid| pid.parse::<i32>().ok())
+    let pid = SourceId::parse(&source_id)
+        .filter(|id| id.is_window() && id.is_local())
+        .and_then(|id| id.pid())
         .filter(|pid| *pid > 0)
         .ok_or("invalid: only a window source can be brought to the front")?;
     let (tx, rx) = std::sync::mpsc::channel();
     app.run_on_main_thread(move || {
-        let _ = tx.send(native::activate_process(pid));
+        let _ = tx.send(platform::activate_process(pid));
     })
     .map_err(|e| e.to_string())?;
     rx.recv().map_err(|e| e.to_string())?
@@ -522,8 +527,8 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
 /// covers one display and sees no pointer events outside it.
 #[tauri::command]
 fn pointer_location() -> Option<Value> {
-    let (x, y, _, _) = native::cursor()?;
-    let display = native::display_infos().into_iter().find(|d| {
+    let platform::PointerSample { x, y, .. } = platform::cursor()?;
+    let display = platform::display_infos().into_iter().find(|d| {
         let b = &d.bounds;
         x >= b.x && y >= b.y && x < b.x + b.width && y < b.y + b.height
     });
@@ -536,7 +541,7 @@ fn pointer_location() -> Option<Value> {
 /// into the desktop, which is the only space two native windows share.
 #[tauri::command]
 fn window_bounds(window: tauri::WebviewWindow) -> Reply<Rect> {
-    native::bounds(&window)
+    platform::bounds(&window)
 }
 
 /// Move, size and show the popup window, in desktop points.
@@ -554,7 +559,7 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
         .ok_or("native: the popup window is missing")?;
     if let Some(rect) = rect {
         if rect.width > 0. && rect.height > 0. {
-            native::place(&window, rect)?;
+            platform::place(&window, rect)?;
         }
     }
     let shown = window.is_visible().unwrap_or(false);
@@ -562,7 +567,7 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
         // Ordered front rather than shown: Tauri's `show` is `makeKeyAndOrderFront:`,
         // which would take the keyboard away from the window the reader is scanning
         // the moment a popup opened, and stop them moving to the next word.
-        native::order_front(&window)?;
+        platform::order_front(&window)?;
     } else if !visible && shown {
         window.hide().map_err(|e| format!("native: {e}"))?;
     }
@@ -570,8 +575,8 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
 }
 
 #[tauri::command]
-fn displays() -> Vec<native::DisplayInfo> {
-    native::display_infos()
+fn displays() -> Vec<platform::DisplayInfo> {
+    platform::display_infos()
 }
 
 #[tauri::command]
@@ -853,7 +858,7 @@ async fn capture_frame(
         Ok(json!({
             "id": id,
             "info": info,
-            "url": format!("capture://localhost/{id}"),
+            "url": platform::capture_url(&id.to_string()),
             "hash": hash,
             "contentFingerprint": fingerprint,
             "observation": observation,
@@ -925,7 +930,7 @@ fn capture_preview(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Val
     let error = images.capture_error.clone();
     let frame = images.live_preview().map(|(id, image)| {
         json!({
-            "id": id, "info": image.info, "url": format!("capture://localhost/live/{id}")
+            "id": id, "info": image.info, "url": platform::capture_url(&format!("live/{id}"))
         })
     });
     Ok(json!({"frame":frame, "error":error}))
@@ -1176,12 +1181,105 @@ fn scan_state(
 /// Read-only permission check. Unlike `permission()`, this never prompts, so the
 /// welcome flow can render the real state without triggering a system dialog.
 #[tauri::command]
-fn permission_status(state: State<Shared>) -> Reply<String> {
-    let backend = state
+fn permission_status(app: tauri::AppHandle, state: State<Shared>) -> Reply<String> {
+    let permission = state
         .backend
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    Ok(backend.permission().to_string())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .permission()
+        .to_string();
+    // The UI polls this; a Screen Recording or Accessibility grant or revocation is
+    // what changes the capabilities.
+    let now = (permission.clone(), platform::key_trigger_status().permission);
+    let changed = {
+        let mut last = LAST_PERMISSION.lock().unwrap_or_else(|p| p.into_inner());
+        let changed = last.as_ref().is_some_and(|was| *was != now);
+        *last = Some(now);
+        changed
+    };
+    if changed {
+        let _ = app.emit("platform-capabilities", capabilities_value(&app, &state));
+    }
+    Ok(permission)
+}
+
+/// The capture and key-trigger permissions last reported, so a change is announced once.
+static LAST_PERMISSION: Mutex<Option<(String, &'static str)>> = Mutex::new(None);
+
+/// Why the capture backend could not be created, if it could not.
+static CAPTURE_UNAVAILABLE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The persisted source descriptor, plus `kind` ("window" | "display") from its id,
+/// so the UI never parses a source id itself.
+fn with_source_kind(mut source: Value) -> Value {
+    let kind = source
+        .get("sourceId")
+        .and_then(Value::as_str)
+        .and_then(SourceId::parse)
+        .map(|id| if id.is_window() { "window" } else { "display" })
+        .or_else(|| {
+            source.get("type").and_then(Value::as_str).map(|t| match t {
+                "window" => "window",
+                _ => "display",
+            })
+        });
+    if let (Some(object), Some(kind)) = (source.as_object_mut(), kind) {
+        object.insert("kind".into(), json!(kind));
+    }
+    source
+}
+
+/// What this OS and build can do, for the UI to render honestly instead of sniffing
+/// the user agent. See CROSS_PLATFORM_PLAN.md §3.3 and `platform::capabilities_payload`.
+fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
+    let (capture_permission, capture) = {
+        let backend = service
+            .backend
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (backend.permission().to_string(), backend.capabilities())
+    };
+    let observer = service
+        .observer
+        .lock()
+        .ok()
+        .and_then(|observer| serde_json::to_value(observer.status()).ok())
+        .unwrap_or(Value::Null);
+    platform::capabilities_payload(platform::DynamicCapabilities {
+        capture_permission,
+        capture,
+        capture_reason: CAPTURE_UNAVAILABLE.get().cloned(),
+        observer,
+        meikiocr: meiki_ocr::availability(app),
+        mangaocr: manga_ocr::availability(app),
+    })
+}
+
+#[tauri::command]
+async fn platform_capabilities(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || capabilities_value(&app, &service))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Announce the capabilities once the app is up. Later changes are announced by
+/// `permission_status` as the UI polls it.
+fn spawn_capabilities_watch(handle: tauri::AppHandle, service: Shared) {
+    std::thread::spawn(move || {
+        let permission = service
+            .backend
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .permission()
+            .to_string();
+        LAST_PERMISSION
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_or_insert((permission, platform::key_trigger_status().permission));
+        let payload = capabilities_value(&handle, &service);
+        let _ = handle.emit("platform-capabilities", payload);
+    });
 }
 
 #[tauri::command]
@@ -1599,7 +1697,7 @@ fn system_state(state: State<Shared>) -> Value {
     json!({
         "frontmostApp": view.frontmost_app,
         "accessibility": view.accessibility,
-        "displays": native::display_infos(),
+        "displays": platform::display_infos(),
     })
 }
 
@@ -1607,27 +1705,31 @@ fn system_state(state: State<Shared>) -> Value {
 /// action; nothing in this app probes or prompts on its own.
 #[tauri::command]
 fn open_screen_capture_preferences() -> Reply<()> {
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("native: {e}"))
+    platform::open_capture_settings()
 }
 
+/// Opens the settings that let the key trigger see global keys (Accessibility on macOS).
 #[tauri::command]
 fn open_accessibility_preferences() -> Reply<()> {
-    std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("native: {e}"))
+    platform::open_input_settings()
 }
 
 fn main() {
     // Before anything claims a shortcut, the gamepad or a capture stream: any other copy
-    // of Kimochi, of any build, is asked to quit first. See instance.rs.
-    instance::take_over();
-    tauri::Builder::default()
+    // of Kimochi, of any build, is asked to quit first. See platform/macos/instance.rs.
+    #[cfg(target_os = "macos")]
+    platform::instance::take_over();
+    let builder = tauri::Builder::default();
+    // Elsewhere the first instance wins and a second launch just brings back its main
+    // panel. Registered before every other plugin, as the plugin requires.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        if let Some(service) = app.try_state::<Shared>() {
+            let settings = service.settings.clone();
+            let _ = panels::act(app, &settings, panels::MAIN, "show", None);
+        }
+    }));
+    builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -1777,12 +1879,22 @@ fn main() {
             app_quit,
             open_screen_capture_preferences,
             open_accessibility_preferences,
+            platform_capabilities,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
+            // Capture may be unavailable (an OS without a backend yet): the reader,
+            // dictionary, texthooker and settings still start, and the UI is told why.
+            let (backend, capture_unavailable) = match platform_backend() {
+                Ok(backend) => (backend, None),
+                Err(e) => (
+                    Box::new(UnavailableBackend::new(e.message.clone())) as Box<dyn CaptureBackend>,
+                    Some(e.message),
+                ),
+            };
             let service: Shared = Arc::new(Service {
-                backend: Mutex::new(platform_backend().expect("macOS 14+ required")),
+                backend: Mutex::new(backend),
                 observer: Mutex::new(Box::new(kimochi_capture::text::CachedObserver::new(
                     kimochi_capture::platform_observer(),
                 ))),
@@ -1798,14 +1910,22 @@ fn main() {
                     status: "Choose a source; preview before sending to OCR.".into(),
                     overlay_visible: true,
                     text_overlay_visible: true,
-                    accessibility: native::accessibility_trusted(),
-                    frontmost_app: native::frontmost_app(),
+                    accessibility: platform::key_trigger_status().permission == "granted",
+                    frontmost_app: platform::frontmost_app(),
                     ..View::default()
                 }),
             });
             app.manage(service.clone());
-            if let Some(report) = instance::report() {
+            if let Some(report) = platform::instance_report() {
                 service.log(report);
+            }
+            if let Some(reason) = capture_unavailable {
+                let _ = CAPTURE_UNAVAILABLE.set(reason.clone());
+                service.log(json!({
+                    "check": "capture-backend",
+                    "status": "unavailable",
+                    "detail": reason,
+                }));
             }
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
@@ -1825,6 +1945,7 @@ fn main() {
             .skip_taskbar(true)
             .inner_size(500., 380.)
             .content_protected(true)
+            .initialization_script_for_all_frames(platform::platform_prelude())
             .build()?;
             make_panel(&handle, &service, &reader_popup);
             // Opt-in native regression: only the API popup, no source restore or OCR.
@@ -1874,12 +1995,14 @@ fn main() {
             .inner_size(1728., 1117.)
             // Only the overlay hosts the Yomitan backend. Panels get the relay shim
             // instead, so there is never a second writer on the same IndexedDB.
+            .initialization_script_for_all_frames(platform::platform_prelude())
             .initialization_script_for_all_frames(include_str!("../../host/shim.js"))
             .on_navigation({
                 // `tauri dev` serves `dist/` from the CLI's own dev server rather than the
                 // `tauri://` protocol, so a dev build must also accept that origin or the
                 // overlay's own page is blocked and the dictionary backend never starts.
-                // Bundles (custom-protocol) stay locked to `tauri://localhost`.
+                // Bundles (custom-protocol) stay locked to the app origin
+                // (`tauri://localhost` on macOS; see `platform::app_origin`).
                 let dev_origin = if cfg!(dev) {
                     app.config().build.dev_url.as_ref().map(|u| u.origin())
                 } else {
@@ -1887,7 +2010,7 @@ fn main() {
                 };
                 move |u| {
                     u.as_str() == "about:blank"
-                        || (u.scheme() == "tauri" && u.host_str() == Some("localhost"))
+                        || platform::is_app_url(u)
                         || dev_origin
                             .as_ref()
                             .is_some_and(|origin| &u.origin() == origin)
@@ -1896,7 +2019,7 @@ fn main() {
             .build()?;
             overlay.set_ignore_cursor_events(true)?;
             // Pointing at a word must not rearrange the reader's desktop, and clicking
-            // one must not take the keyboard out of their game. See `native::make_panel`.
+            // one must not take the keyboard out of their game. See `platform::make_panel`.
             make_panel(&handle, &service, &overlay);
 
             // The dictionary popup's own window. Small, borderless and always on top,
@@ -1931,6 +2054,7 @@ fn main() {
                 .focused(false)
                 .visible(false)
                 .inner_size(400., 250.)
+                .initialization_script_for_all_frames(platform::platform_prelude())
                 .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim)
                 .build()?;
                 let _ = window.set_content_protected(true);
@@ -1939,17 +2063,22 @@ fn main() {
                 make_panel(&handle, &service, &window);
             }
 
-            let menu = tauri::menu::Menu::default(app.handle())?;
-            let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
-                .text("log", "Kimochi")
-                .text("choose-source", "Select Source")
-                .text("settings", "Settings")
-                .text("yomitan", "Yomitan")
-                .text("diagnostics", "Diagnostics")
-                .text("fixture", "Japanese Fixture")
-                .build()?;
-            menu.append(&panel_menu)?;
-            app.set_menu(menu)?;
+            // The app menu belongs in the macOS menu bar. Elsewhere a window menu would be
+            // attached to every window, including the transparent overlay.
+            #[cfg(target_os = "macos")]
+            {
+                let menu = tauri::menu::Menu::default(app.handle())?;
+                let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
+                    .text("log", "Kimochi")
+                    .text("choose-source", "Select Source")
+                    .text("settings", "Settings")
+                    .text("yomitan", "Yomitan")
+                    .text("diagnostics", "Diagnostics")
+                    .text("fixture", "Japanese Fixture")
+                    .build()?;
+                menu.append(&panel_menu)?;
+                app.set_menu(menu)?;
+            }
             {
                 let store = store.clone();
                 app.on_menu_event(move |app, event| {
@@ -1978,7 +2107,7 @@ fn main() {
                 let wake_handle = handle.clone();
                 let activate_handle = handle.clone();
                 let activate_service = service.clone();
-                native::observe_workspace(
+                platform::observe_workspace(
                     move || {
                         let _ = sleep_handle.emit("system-suspend", json!({}));
                     },
@@ -1987,7 +2116,10 @@ fn main() {
                     },
                     move |name| {
                         activate_service.view.lock().unwrap().frontmost_app = Some(name.clone());
-                        let _ = activate_handle.emit("frontmost-app", json!({ "appName": name }));
+                        let _ = activate_handle.emit(
+                            "frontmost-app",
+                            json!({ "appName": name, "pid": platform::frontmost_pid() }),
+                        );
                     },
                 );
             }
@@ -1997,6 +2129,7 @@ fn main() {
             spawn_source_watch(handle.clone(), service.clone());
             spawn_focus_watch(handle.clone(), service.clone());
             spawn_display_watch(handle.clone(), store.clone());
+            spawn_capabilities_watch(handle.clone(), service.clone());
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -2068,7 +2201,7 @@ fn spawn_source_restore(service: Shared) {
 /// it is clicked is the difference between a reader's window order staying still and
 /// being rewritten under them, and the failure is invisible from the outside.
 fn make_panel(app: &tauri::AppHandle, service: &Shared, window: &tauri::WebviewWindow) {
-    let value = match native::make_panel(window) {
+    let value = match platform::make_panel(window) {
         Ok(converted) => json!({
             "check": "window-panel",
             "window": window.label(),
@@ -2140,7 +2273,13 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             if handle.get_webview_window(OVERLAY).is_none() {
                 break;
             }
-            if let Some((x, y, down, flags)) = native::cursor() {
+            if let Some(platform::PointerSample {
+                x,
+                y,
+                down,
+                modifiers,
+            }) = platform::cursor()
+            {
                 if down && !was_down {
                     reader::popover::pointer_down(&handle, x, y);
                 }
@@ -2217,7 +2356,6 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 // rate while merely moving. A modifier or a button going up or down is
                 // sent at once — holding Shift without moving is how a reader asks for
                 // the word already under the pointer.
-                let modifiers = Modifiers::from_flags(flags);
                 let due = (moved && ticks.is_multiple_of(2))
                     || modifiers != last_modifiers
                     || down != last_buttons;
@@ -2275,7 +2413,15 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                         let Some(w) = app.get_webview_window(&label) else {
                             return;
                         };
-                        let taken = native::promote_to_key(&w);
+                        // On macOS a non-activating panel can take the keyboard while
+                        // the game stays active, so arriving is enough. Elsewhere taking
+                        // the keyboard activates Kimochi, which must stay an explicit
+                        // editing action (reader_popup_focus), never a hover.
+                        let taken = if platform::HOVER_PROMOTES_KEY {
+                            platform::promote_to_key(&w)
+                        } else {
+                            Ok(false)
+                        };
                         // Once per window per session. Whether a non-activating panel
                         // can be given the keyboard while another application stays
                         // active is AppKit's answer, not ours, and "the dictionary
@@ -2312,17 +2458,18 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
 /// targets with it.
 fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
-        let own_pid = std::process::id() as i32;
+        let own_pid = std::process::id();
         let mut previous: Option<SourceFocus> = None;
         loop {
             let watching = service.watching.lock().unwrap().clone();
-            let bounds = watching
+            let watched = watching
                 .as_deref()
-                .and_then(window_id_of)
-                .and_then(native::window_bounds);
+                .and_then(SourceId::parse)
+                .filter(|id| id.is_window() && id.is_local());
+            let bounds = watched.as_ref().and_then(platform::window_bounds);
             let current = source_focus(
                 watching.as_deref(),
-                native::front_window(),
+                platform::front_window(),
                 own_pid,
                 bounds,
                 previous.unwrap_or_default(),
@@ -2333,12 +2480,8 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
                 let _ = handle.emit("source-focus", current);
             }
             // Controller mode's keys are global; switching to any other app ends it.
-            let source_pid = watching
-                .as_deref()
-                .and_then(|id| id.rsplit(':').next())
-                .and_then(|pid| pid.parse::<i32>().ok())
-                .filter(|_| watching.as_deref().is_some_and(|id| id.starts_with("macos:window:")));
-            gamepad::release_if_elsewhere(&handle, native::frontmost_pid(), source_pid);
+            let source_pid = watched.as_ref().and_then(SourceId::pid);
+            gamepad::release_if_elsewhere(&handle, platform::frontmost_pid(), source_pid);
             std::thread::sleep(Duration::from_millis(150));
         }
     });
@@ -2350,7 +2493,7 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
 fn spawn_display_watch(handle: tauri::AppHandle, settings: Arc<Settings>) {
     std::thread::spawn(move || {
         let layout = || {
-            native::displays()
+            platform::displays()
                 .iter()
                 .map(|r| format!("{},{},{},{}", r.x, r.y, r.width, r.height))
                 .collect::<Vec<_>>()
@@ -2389,10 +2532,10 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
                 last = None;
                 continue;
             };
-            let Some(window_id) = window_id_of(&source_id) else {
+            let Some(window) = SourceId::parse(&source_id).filter(|id| id.is_window()) else {
                 continue;
             };
-            let Some((rect, on_screen)) = native::window_bounds(window_id) else {
+            let Some((rect, on_screen)) = platform::window_bounds(&window) else {
                 continue;
             };
             let changed = last.is_none_or(|(prev, was_on)| {
@@ -2416,6 +2559,16 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_selected_source_carries_its_kind() {
+        let window = with_source_kind(json!({"sourceId": "macos:window:1:2", "type": "window"}));
+        assert_eq!(window["kind"], "window");
+        let display = with_source_kind(json!({"sourceId": "macos:display:1", "type": "screen"}));
+        assert_eq!(display["kind"], "display");
+        let legacy = with_source_kind(json!({"type": "screen"}));
+        assert_eq!(legacy["kind"], "display");
+    }
 
     #[test]
     fn notebook_ack_cannot_clear_a_newer_request() {

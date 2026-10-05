@@ -5,10 +5,9 @@ import { useHotkeys } from '../../bridge/useHotkeys'
 import type { HotkeyName } from '../../bridge/types'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { gamepadChord } from '../../vendor/shared-defaults'
-import { detectKeyPlatform, formatAccelerator } from './accelerator'
+import { formatAccelerator, keyPlatformOf } from './accelerator'
+import { useCapabilities } from '../../bridge/capabilities'
 import { ShortcutRecorder } from './ShortcutRecorder'
-
-const KEY_PLATFORM = detectKeyPlatform()
 
 /** Display order. The native side returns the bindings keyed alphabetically. */
 const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu']
@@ -20,6 +19,7 @@ const HINTS: Partial<Record<HotkeyName, string>> = {
 
 export function ShortcutsSections(): ReactNode {
   const [hotkeys, setHotkeys, hotkeyFailures] = useHotkeys()
+  const keyPlatform = keyPlatformOf(useCapabilities())
 
   const updateHotkeyField = useCallback(
     (
@@ -49,7 +49,7 @@ export function ShortcutsSections(): ReactNode {
           {hotkeyFailures
             .map(
               (failure) =>
-                `${failure.name} (${formatAccelerator(failure.accelerator, KEY_PLATFORM)})`
+                `${failure.name} (${formatAccelerator(failure.accelerator, keyPlatform)})`
             )
             .join(', ')}
         </Callout>

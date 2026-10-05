@@ -11,6 +11,7 @@
  */
 
 import { SETTINGS_DEFAULTS, withDefaults } from './settings.js'
+import { fallbackCapabilities, normalizeCapabilities } from './capabilities.js'
 
 const tauri = globalThis.__TAURI__
 const core = tauri?.core
@@ -111,6 +112,39 @@ export async function watchSettings(onChange) {
 
 export function settingsKeys() {
   return Object.keys(SETTINGS_DEFAULTS)
+}
+
+// --- platform capabilities -------------------------------------------------
+
+let capabilitiesRequest = null
+
+/**
+ * What this machine can do (`platform_capabilities`), asked once and cached.
+ *
+ * Never rejects: a backend without the command, or no backend at all, yields
+ * the macOS default — today's behaviour — so nothing regresses while native
+ * catches up. `watchCapabilities` follows later re-emits.
+ */
+export function capabilities() {
+  capabilitiesRequest ??= optional('platform_capabilities', undefined, null)
+    .catch(() => null)
+    .then((raw) => normalizeCapabilities(raw, fallbackCapabilities()))
+  return capabilitiesRequest
+}
+
+/** Call `onChange` with the capabilities now and again whenever native re-sends them. */
+export async function watchCapabilities(onChange) {
+  let pushed = false
+  const stop = await listen('platform-capabilities', ({ payload }) => {
+    const next = normalizeCapabilities(payload, fallbackCapabilities())
+    capabilitiesRequest = Promise.resolve(next)
+    pushed = true
+    onChange(next)
+  })
+  const initial = await capabilities()
+  // A re-emit that landed while the first answer was in flight is newer.
+  if (!pushed) onChange(initial)
+  return stop
 }
 
 // --- capture and OCR --------------------------------------------------------

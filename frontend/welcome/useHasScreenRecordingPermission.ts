@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { useCapabilities } from '../bridge/capabilities'
 
 async function hasScreenRecordingPermission(): Promise<boolean> {
   try {
@@ -19,10 +20,11 @@ async function hasScreenRecordingPermission(): Promise<boolean> {
   }
 }
 
-function useHasScreenRecordingPermission(): boolean {
+function useHasScreenRecordingPermission(enabled = true): boolean {
   const [hasPermission, setHasPermission] = useState(false)
 
   useEffect(() => {
+    if (!enabled) return
     let active = true
     const check = (): void => {
       hasScreenRecordingPermission().then((result) => {
@@ -35,9 +37,26 @@ function useHasScreenRecordingPermission(): boolean {
       active = false
       clearInterval(interval)
     }
-  }, [])
+  }, [enabled])
 
   return hasPermission
 }
 
-export { useHasScreenRecordingPermission }
+/**
+ * Which capture step onboarding needs, from `capture.authorization`:
+ *  - `permission`: macOS-style Screen Recording, granted in System Settings (polled live);
+ *  - `picker`: the system asks what to share each time a source is chosen (Wayland portals);
+ *  - `none`: nothing to grant — already granted, not required, or capture is unavailable here.
+ */
+export type CaptureStep = 'permission' | 'picker' | 'none'
+
+function useCaptureStep(): CaptureStep {
+  const { capture } = useCapabilities()
+  const needsGrant = capture.authorization === 'granted' || capture.authorization === 'denied'
+  const polled = useHasScreenRecordingPermission(needsGrant)
+  if (capture.authorization === 'promptOnSelect') return 'picker'
+  if (!needsGrant) return 'none'
+  return polled || capture.authorization === 'granted' ? 'none' : 'permission'
+}
+
+export { useCaptureStep, useHasScreenRecordingPermission }

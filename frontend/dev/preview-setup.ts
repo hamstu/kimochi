@@ -20,10 +20,12 @@
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
+ *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS)
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
 import { SETTINGS_DEFAULTS } from '@ui/settings'
+import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
 import {
   POPOVER_SAMPLE,
@@ -92,6 +94,98 @@ function publish(key: string, value: unknown): void {
   void emit('settings:changed', { key, value })
 }
 
+// ---------------------------------------------------------------- platform
+
+/** `?platform=`: macOS by default; Windows and Linux shaped as their backends will report. */
+function previewCapabilities(): PlatformCapabilities {
+  const mac: PlatformCapabilities = {
+    ...DEFAULT_CAPABILITIES_MACOS,
+    osVersion: '15.5',
+    arch: 'aarch64',
+    capture: { ...DEFAULT_CAPABILITIES_MACOS.capture, authorization: 'granted' },
+    input: {
+      ...DEFAULT_CAPABILITIES_MACOS.input,
+      keyTrigger: { ...DEFAULT_CAPABILITIES_MACOS.input.keyTrigger, permission: 'granted' }
+    },
+    ownPids: [4242]
+  }
+  const platform = params.get('platform')
+  if (platform === 'windows') {
+    return {
+      ...mac,
+      os: 'windows',
+      osVersion: '10.0.26100',
+      arch: 'x86_64',
+      keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win' },
+      capture: {
+        authorization: 'notRequired',
+        canOpenSettings: false,
+        restartAfterGrant: false,
+        pickerRequired: false,
+        windowCapture: true,
+        excludesOwnWindows: true
+      },
+      overlay: { passive: true, inputRegions: 'native', nonActivating: true, nativeHoverWorkaround: false },
+      input: {
+        globalShortcuts: true,
+        keyTrigger: {
+          available: false,
+          permission: 'unsupported',
+          reason: 'Watching key presses in other applications is not available on Windows yet.',
+          remediation: 'Use the gamepad trigger or the scan shortcut instead.'
+        }
+      },
+      ocrEngines: {
+        cloud: { available: true },
+        websocket: { available: true },
+        meikiocr: { available: true, accelerator: 'directml' },
+        mangaocr: { available: false, reason: 'Not available on Windows yet' }
+      },
+      ownAppNames: ['Kimochi', 'kimochi.exe']
+    }
+  }
+  if (platform === 'linux') {
+    return {
+      ...mac,
+      os: 'linux',
+      osVersion: '6.8',
+      arch: 'x86_64',
+      session: { backend: 'wayland', compositor: 'gnome', layerShell: false },
+      keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Super' },
+      capture: {
+        authorization: 'promptOnSelect',
+        canOpenSettings: false,
+        restartAfterGrant: false,
+        pickerRequired: true,
+        windowCapture: false,
+        excludesOwnWindows: false
+      },
+      sources: { catalog: false, thumbnails: false, icons: false, followWindowBounds: false, foregroundTracking: false },
+      overlay: { passive: false, inputRegions: 'wholeWindowOnly', nonActivating: false, nativeHoverWorkaround: false },
+      input: {
+        globalShortcuts: false,
+        keyTrigger: {
+          available: false,
+          permission: 'unsupported',
+          reason: 'Wayland does not let applications watch key presses in other windows.',
+          remediation: null
+        }
+      },
+      ocrEngines: {
+        cloud: { available: true },
+        websocket: { available: true },
+        meikiocr: { available: true, accelerator: 'cpu' },
+        mangaocr: { available: true, accelerator: 'cpu' }
+      },
+      ownAppNames: ['kimochi'],
+      tray: false
+    }
+  }
+  return mac
+}
+
+const CAPABILITIES = previewCapabilities()
+
 // ---------------------------------------------------------------- view state
 
 function viewState(label: string): Record<string, unknown> {
@@ -143,12 +237,14 @@ function viewState(label: string): Record<string, unknown> {
 const DISPLAYS = [
   {
     id: 1,
+    source_id: 'macos:display:1',
     bounds: { x: 0, y: 0, width: 1512, height: 982 },
     workArea: { x: 0, y: 25, width: 1512, height: 957 },
     scaleFactor: 2
   },
   {
     id: 2,
+    source_id: 'macos:display:2',
     bounds: { x: 1512, y: 0, width: 2560, height: 1440 },
     workArea: { x: 1512, y: 25, width: 2560, height: 1415 },
     scaleFactor: 1
@@ -196,6 +292,7 @@ const HANDLERS: Record<string, Handler> = {
   system_state: () => ({ frontmostApp: CURRENT_SOURCE.app, displays: DISPLAYS, awake: true }),
   desktop: () => DISPLAYS.map((d) => d.bounds),
   displays: () => DISPLAYS,
+  platform_capabilities: () => CAPABILITIES,
 
   // panels
   panel: (a) => {

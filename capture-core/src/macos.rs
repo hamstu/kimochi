@@ -12,6 +12,7 @@
 //! The one-shot path remains for thumbnails, which are scaled on the GPU rather than
 //! captured at full size, and as the fallback when a stream cannot produce a frame.
 use super::*;
+use crate::pixels::{bgra_crop_to_rgba, crop_pixels, unpremultiply};
 use screencapturekit::{
     cm::{CMSampleBufferSCExt, SCFrameStatus},
     cv::CVPixelBufferLockFlags,
@@ -86,11 +87,16 @@ fn content() -> Result<SCShareableContent> {
         .map_err(native_error)
 }
 fn window_id(w: &SCWindow) -> String {
-    format!(
-        "macos:window:{}:{}",
-        w.window_id(),
-        w.owning_application().map(|a| a.process_id()).unwrap_or(0)
-    )
+    let pid = w
+        .owning_application()
+        .map(|a| a.process_id())
+        .unwrap_or(0);
+    // `process_id` is a pid_t; the wire format has always printed it unsigned-looking
+    // decimal, and real pids are never negative.
+    SourceId::window(Platform::MacOs, w.window_id(), pid as u32).to_string()
+}
+fn display_id(d: &SCDisplay) -> String {
+    SourceId::display(Platform::MacOs, d.display_id()).to_string()
 }
 fn window_source(w: &SCWindow) -> Source {
     Source {
@@ -104,7 +110,7 @@ fn window_source(w: &SCWindow) -> Source {
 }
 fn display_source(d: &SCDisplay) -> Source {
     Source {
-        id: format!("macos:display:{}", d.display_id()),
+        id: display_id(d),
         kind: "display",
         name: format!("Display {}", d.display_id()),
         app: None,
@@ -129,10 +135,22 @@ struct Resolved {
 /// controls — by excluding the application rather than its current windows, so a
 /// window opened after a display stream starts is left out too.
 fn resolve(c: &SCShareableContent, source_id: &str) -> Result<Option<Resolved>> {
-    let (source, filter) = if let Some(d) = c
-        .displays()
-        .into_iter()
-        .find(|d| display_source(d).id == source_id)
+    let Some(parsed) = SourceId::parse(source_id).filter(|p| p.platform() == Platform::MacOs)
+    else {
+        return Ok(None);
+    };
+    // CoreGraphics ids are canonical decimal ("01" never named display 1); anything
+    // else names no source here.
+    let Some(number) = parsed
+        .handle_u32()
+        .filter(|n| n.to_string() == parsed.handle())
+    else {
+        return Ok(None);
+    };
+    let (source, filter) = if let Some(d) = parsed
+        .is_display()
+        .then(|| c.displays().into_iter().find(|d| d.display_id() == number))
+        .flatten()
     {
         let process_id = std::process::id() as i32;
         let apps = c.applications();
@@ -152,10 +170,17 @@ fn resolve(c: &SCShareableContent, source_id: &str) -> Result<Option<Resolved>> 
                 .build()
         };
         (display_source(&d), filter)
-    } else if let Some(w) = c
-        .windows()
-        .into_iter()
-        .find(|w| window_id(w) == source_id)
+    } else if let Some(w) = parsed
+        .is_window()
+        .then(|| {
+            c.windows().into_iter().find(|w| {
+                let pid = w.owning_application().map(|a| a.process_id()).unwrap_or(0);
+                // A window number can be reused by another process: the pid must
+                // match too, exactly as it did when ids were compared as whole strings.
+                w.window_id() == number && parsed.pid() == Some(pid as u32)
+            })
+        })
+        .flatten()
     {
         if !w.is_on_screen() {
             return Err(CaptureError::new("unavailable", "Window is minimized, hidden, or on another Space; restore it before capturing. Occluded on-screen windows are supported."));
@@ -611,183 +636,5 @@ impl CaptureBackend for MacCapture {
         for (_, live) in self.streams.drain() {
             live.stop();
         }
-    }
-}
-
-/// Copy a rectangle out of a BGRA buffer with `stride` bytes per row, as RGBA.
-fn bgra_crop_to_rgba(source: &[u8], stride: usize, crop: [u32; 4]) -> Vec<u8> {
-    let [x, y, w, h] = crop;
-    let row_bytes = w as usize * 4;
-    let mut out = vec![0u8; row_bytes * h as usize];
-    for (row, target) in (y..y + h).zip(out.chunks_exact_mut(row_bytes)) {
-        let from = row as usize * stride + x as usize * 4;
-        for (p, q) in source[from..from + row_bytes]
-            .chunks_exact(4)
-            .zip(target.chunks_exact_mut(4))
-        {
-            // One word per pixel: swap the red and blue bytes, keep green and alpha.
-            let v = u32::from_le_bytes([p[0], p[1], p[2], p[3]]);
-            let swapped = (v & 0xFF00_FF00) | ((v >> 16) & 0xFF) | ((v & 0xFF) << 16);
-            q.copy_from_slice(&swapped.to_le_bytes());
-        }
-    }
-    out
-}
-
-/// Straight alpha from premultiplied, in place.
-///
-/// Fully opaque and fully transparent pixels are already equal in both
-/// representations, which is every pixel of an ordinary screen capture, so the
-/// division is only paid where there is real translucency.
-fn unpremultiply(pixels: &mut [u8]) {
-    for p in pixels.chunks_exact_mut(4) {
-        let a = u32::from(p[3]);
-        if a > 0 && a < 255 {
-            for v in &mut p[..3] {
-                *v = ((u32::from(*v) * 255 + a / 2) / a).min(255) as u8;
-            }
-        }
-    }
-}
-
-/// Copy a rectangle out of a tightly packed RGBA buffer.
-///
-/// The caller has already established, via `crop_rect`, that the rectangle lies
-/// inside the image, and that `source` holds `width * height * 4` bytes.
-fn crop_pixels(source: &[u8], width: u32, crop: [u32; 4]) -> Vec<u8> {
-    let [x, y, w, h] = crop;
-    let row_bytes = w as usize * 4;
-    let mut out = Vec::with_capacity(row_bytes * h as usize);
-    for row in y..y + h {
-        let from = (row as usize * width as usize + x as usize) * 4;
-        out.extend_from_slice(&source[from..from + row_bytes]);
-    }
-    out
-}
-
-#[cfg(test)]
-mod pixel_tests {
-    use super::*;
-
-    /// Deterministic stand-in for captured pixels, including real translucency
-    /// so the conversion has something to do.
-    fn buffer(width: u32, height: u32) -> Vec<u8> {
-        let mut seed = 0x2545_f491_4f6c_dd1du64;
-        let mut out = Vec::with_capacity((width * height * 4) as usize);
-        for _ in 0..width * height {
-            let mut next = || {
-                seed ^= seed << 13;
-                seed ^= seed >> 7;
-                seed ^= seed << 17;
-                (seed & 0xff) as u8
-            };
-            let a = next();
-            // Premultiplied means no channel may exceed alpha.
-            let clamp = |v: u8| if a == 0 { 0 } else { v.min(a) };
-            let (r, g, b) = (clamp(next()), clamp(next()), clamp(next()));
-            out.extend_from_slice(&[r, g, b, a]);
-        }
-        out
-    }
-
-    /// The property the reordering rests on.
-    #[test]
-    fn crop_then_convert_matches_convert_then_crop() {
-        let (width, height) = (64u32, 48u32);
-        let source = buffer(width, height);
-        for crop in [
-            [0, 0, 64, 48],
-            [0, 0, 1, 1],
-            [10, 20, 17, 9],
-            [63, 47, 1, 1],
-            [32, 0, 32, 48],
-        ] {
-            // Old order: convert everything, then take the rectangle.
-            let mut whole = source.clone();
-            unpremultiply(&mut whole);
-            let old = crop_pixels(&whole, width, crop);
-
-            // New order: take the rectangle, then convert it.
-            let mut new = crop_pixels(&source, width, crop);
-            unpremultiply(&mut new);
-
-            assert_eq!(old, new, "crop {crop:?}");
-            assert_eq!(new.len(), (crop[2] * crop[3] * 4) as usize);
-        }
-    }
-
-    /// Stream frames arrive BGRA with padded rows; the copy honours the stride,
-    /// swaps red and blue, and takes exactly the rectangle asked for.
-    #[test]
-    fn stream_frames_are_cropped_through_their_stride_into_rgba() {
-        let (width, height, stride) = (5usize, 4usize, 32usize);
-        let mut source = vec![0xEEu8; stride * height];
-        for y in 0..height {
-            for x in 0..width {
-                let i = y * stride + x * 4;
-                source[i..i + 4].copy_from_slice(&[x as u8, y as u8, 200, 255]);
-            }
-        }
-        let out = bgra_crop_to_rgba(&source, stride, [1, 2, 3, 2]);
-        assert_eq!(out.len(), 3 * 2 * 4);
-        for row in 0..2usize {
-            for column in 0..3usize {
-                let i = (row * 3 + column) * 4;
-                assert_eq!(&out[i..i + 4], &[200, 2 + row as u8, 1 + column as u8, 255]);
-            }
-        }
-    }
-
-    #[test]
-    fn a_full_frame_crop_is_the_whole_buffer_unchanged() {
-        let source = buffer(16, 8);
-        assert_eq!(crop_pixels(&source, 16, [0, 0, 16, 8]), source);
-    }
-
-    #[test]
-    fn the_rectangle_taken_is_the_rectangle_asked_for() {
-        // Each pixel carries its own coordinates, so a misplaced row or column
-        // is visible rather than merely different.
-        let (width, height) = (8u32, 6u32);
-        let mut source = Vec::new();
-        for y in 0..height {
-            for x in 0..width {
-                source.extend_from_slice(&[x as u8, y as u8, 0, 255]);
-            }
-        }
-        let out = crop_pixels(&source, width, [3, 2, 4, 3]);
-        assert_eq!(out.len(), 4 * 3 * 4);
-        for row in 0..3usize {
-            for column in 0..4usize {
-                let i = (row * 4 + column) * 4;
-                assert_eq!(out[i], 3 + column as u8, "x at {row},{column}");
-                assert_eq!(out[i + 1], 2 + row as u8, "y at {row},{column}");
-            }
-        }
-    }
-
-    #[test]
-    fn opaque_and_transparent_pixels_are_left_exactly_as_they_are() {
-        let mut pixels = vec![
-            10, 20, 30, 255, // opaque: already straight
-            0, 0, 0, 0, // transparent: nothing to recover
-        ];
-        let before = pixels.clone();
-        unpremultiply(&mut pixels);
-        assert_eq!(pixels, before);
-    }
-
-    #[test]
-    fn translucent_pixels_are_scaled_back_up_and_never_overflow() {
-        // Half alpha: a premultiplied 64 came from a straight 128.
-        let mut pixels = vec![64, 32, 0, 128];
-        unpremultiply(&mut pixels);
-        assert_eq!(pixels, vec![128, 64, 0, 128]);
-
-        // A channel equal to alpha is fully saturated and must clamp at 255,
-        // not wrap.
-        let mut saturated = vec![7, 7, 7, 7];
-        unpremultiply(&mut saturated);
-        assert_eq!(saturated, vec![255, 255, 255, 7]);
     }
 }

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import vm from 'node:vm'
 import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 const shimSource = await readFile(new URL('../host/panel-shim.js', import.meta.url), 'utf8')
 const shim = shimSource.replace("import(asset('/spike/network-bundle.js'))", '__loadNetwork()')
 const { outputFiles } = await build({
-  entryPoints: [new URL('../host/network-entry.js', import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL('../host/network-entry.js', import.meta.url))],
   bundle: true,
   write: false,
   format: 'iife',

@@ -3,14 +3,34 @@
  * accelerators. Pure functions so `scripts/accelerator.test.mjs` can exercise them.
  */
 
-export type KeyPlatform = 'mac' | 'other'
+export type KeyPlatform = 'mac' | 'windows' | 'linux'
 
-/** Platform for key labels: macOS gets ⌘ ⇧ ⌥ ⌃ symbols, everything else Ctrl / Shift / Alt words. */
-export function detectKeyPlatform(
-  nav: { platform?: string; userAgent?: string } | undefined = typeof navigator === 'undefined' ? undefined : navigator
-): KeyPlatform {
-  const hint = `${nav?.platform ?? ''} ${nav?.userAgent ?? ''}`
-  return /Mac|iPhone|iPad|iPod/i.test(hint) ? 'mac' : 'other'
+/** The parts of `PlatformCapabilities` key handling reads; structural so this module stays pure. */
+export interface KeyCapabilities {
+  os: 'macos' | 'windows' | 'linux'
+  keys: { primaryModifier: 'meta' | 'ctrl' }
+}
+
+/**
+ * Platform for key labels and recording, from the platform capabilities: macOS gets ⌘ ⇧ ⌥ ⌃
+ * symbols, Windows Ctrl / Shift / Alt / Win and Linux Ctrl / Shift / Alt / Super words.
+ */
+export function keyPlatformOf(capabilities: Pick<KeyCapabilities, 'os'>): KeyPlatform {
+  return capabilities.os === 'macos' ? 'mac' : capabilities.os === 'windows' ? 'windows' : 'linux'
+}
+
+/**
+ * True when only the platform's primary modifier is held: ⌘ on macOS (Ctrl does not count), Ctrl
+ * elsewhere. App shortcuts such as ⌘1 / Ctrl+1 use it.
+ */
+export function isPrimaryModifier(
+  event: Pick<KeyComboEvent, 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
+  capabilities: KeyCapabilities
+): boolean {
+  if (event.altKey || event.shiftKey) return false
+  return capabilities.keys.primaryModifier === 'meta'
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey
 }
 
 type Modifier = 'control' | 'alt' | 'shift' | 'command' | 'commandOrControl' | 'altGr'
@@ -32,13 +52,16 @@ const MODIFIER_TOKENS: Record<string, Modifier> = {
 
 const MODIFIER_LABELS: Record<KeyPlatform, Record<Modifier, string>> = {
   mac: { control: '⌃', alt: '⌥', shift: '⇧', command: '⌘', commandOrControl: '⌘', altGr: '⌥' },
-  other: { control: 'Ctrl', alt: 'Alt', shift: 'Shift', command: 'Super', commandOrControl: 'Ctrl', altGr: 'AltGr' }
+  windows: { control: 'Ctrl', alt: 'Alt', shift: 'Shift', command: 'Win', commandOrControl: 'Ctrl', altGr: 'AltGr' },
+  linux: { control: 'Ctrl', alt: 'Alt', shift: 'Shift', command: 'Super', commandOrControl: 'Ctrl', altGr: 'AltGr' }
 }
 
-/** Display order: macOS's ⌃⌥⇧⌘; elsewhere Ctrl, Super, Alt, Shift. */
+/** Display order: macOS's ⌃⌥⇧⌘; elsewhere Ctrl, Win/Super, Alt, Shift. */
+const WORD_ORDER: Modifier[] = ['commandOrControl', 'control', 'command', 'alt', 'altGr', 'shift']
 const MODIFIER_ORDER: Record<KeyPlatform, Modifier[]> = {
   mac: ['control', 'alt', 'altGr', 'shift', 'command', 'commandOrControl'],
-  other: ['commandOrControl', 'control', 'command', 'alt', 'altGr', 'shift']
+  windows: WORD_ORDER,
+  linux: WORD_ORDER
 }
 
 const KEY_LABELS: Record<string, { mac: string; other: string }> = {
@@ -83,7 +106,7 @@ function tokens(accelerator: string): string[] {
 function keyLabel(token: string, platform: KeyPlatform): string {
   const lower = token.toLowerCase()
   const known = KEY_LABELS[lower]
-  if (known) return known[platform]
+  if (known) return known[platform === 'mac' ? 'mac' : 'other']
   const letter = /^key([a-z])$/i.exec(token)
   if (letter) return letter[1].toUpperCase()
   const digit = /^(?:digit|num|numpad)(\d)$/i.exec(token)

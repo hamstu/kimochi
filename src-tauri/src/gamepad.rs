@@ -140,7 +140,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
 /// Controller navigation: the overlay's radial menu is open and the controller drives it.
 static NAV: AtomicBool = AtomicBool::new(false);
 /// The application that was in front when the menu took activation, to hand it back.
-static NAV_RETURN: Mutex<Option<i32>> = Mutex::new(None);
+static NAV_RETURN: Mutex<Option<u32>> = Mutex::new(None);
 
 pub fn navigating() -> bool {
     NAV.load(Ordering::SeqCst)
@@ -157,7 +157,7 @@ pub fn navigating() -> bool {
 ///
 /// Returns the remembered process id. Activation is scheduled on the main thread rather
 /// than waited for, so this is safe to call from anywhere, including that thread.
-pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) -> Option<i32> {
+pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) -> Option<u32> {
     let mut remembered = NAV_RETURN
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -172,15 +172,15 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
             }
         }
         if take_focus {
-            let ours = std::process::id() as i32;
-            if let Some(pid) = crate::native::frontmost_pid().filter(|pid| *pid != ours) {
+            let ours = std::process::id();
+            if let Some(pid) = crate::platform::frontmost_pid().filter(|pid| *pid != ours) {
                 *remembered = Some(pid);
             }
             let handle = app.clone();
             let _ = app.run_on_main_thread(move || {
-                let _ = crate::native::activate_self();
+                let _ = crate::platform::activate_self();
                 if let Some(overlay) = handle.get_webview_window("overlay") {
-                    let _ = crate::native::promote_to_key(&overlay);
+                    let _ = crate::platform::promote_to_key(&overlay);
                 }
             });
         }
@@ -192,7 +192,7 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
     let previous = remembered.take();
     if let Some(pid) = previous {
         let _ = app.run_on_main_thread(move || {
-            let _ = crate::native::activate_process(pid);
+            let _ = crate::platform::activate_process(pid);
         });
     }
     previous
@@ -207,7 +207,7 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
 /// is told with `controller-nav-cancel` so it closes the menu or read-along mode.
 ///
 /// `front` is the frontmost application's pid, `source` the pid owning the selected window.
-pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<i32>, source: Option<i32>) {
+pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<u32>, source: Option<u32>) {
     if !navigating() {
         return;
     }
@@ -215,7 +215,7 @@ pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<i32>, source: 
     let returning_to = *NAV_RETURN
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if front == std::process::id() as i32 || Some(front) == returning_to || Some(front) == source {
+    if front == std::process::id() || Some(front) == returning_to || Some(front) == source {
         return;
     }
     NAV_RETURN

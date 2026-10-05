@@ -12,6 +12,7 @@ import { AppWindow, Monitor } from 'lucide-react'
 import { Spinner } from '@kit'
 import { invoke } from '@tauri-apps/api/core'
 import { nativeError } from '../bridge/tauri'
+import { useCapabilities } from '../bridge/capabilities'
 
 export interface CatalogSource {
   id: string
@@ -157,6 +158,13 @@ export function SourceGrid({
   const [sources, setSources] = useState<CatalogSource[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const capabilities = useCapabilities()
+  // Only a platform with a settings page to send the user to gets told to go there.
+  const emptyHint = !capabilities.capture.canOpenSettings
+    ? 'No windows to read.'
+    : capabilities.os === 'macos'
+      ? 'No windows to read. Enable Screen Recording for Kimochi in System Settings.'
+      : 'No windows to read. Allow screen capture for Kimochi in your system settings.'
 
   // A fresh list each time the submenu opens: windows come and go.
   useEffect(() => {
@@ -196,9 +204,7 @@ export function SourceGrid({
         </div>
       )}
       {sources && sources.length === 0 && (
-        <div className="sg-status">
-          No windows to read. Enable Screen Recording for Kimochi in System Settings.
-        </div>
+        <div className="sg-status">{emptyHint}</div>
       )}
       {root && displays.length > 0 && (
         <section className="sg-section" aria-label="Screens">

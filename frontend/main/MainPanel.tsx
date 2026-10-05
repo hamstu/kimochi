@@ -14,6 +14,8 @@ import { ReaderHost, Transcript } from '@texthooker/App'
 import { NotebookPanel as Notebook } from '@texthooker/components/NotebookPanel'
 import { TitleBarPortal } from '../shell/TitleBarPortal'
 import { useSetting } from '../bridge/useSetting'
+import { useCapabilities } from '../bridge/capabilities'
+import { isPrimaryModifier } from '../panels/settings/accelerator'
 import type { SettingsTabName } from '../bridge/tauri'
 import { ReaderSettingsProvider } from '../panels/settings/ReaderSettingsProvider'
 import { SettingsPageFor } from '../panels/settings/SettingsPageFor'
@@ -72,10 +74,11 @@ export default function MainPanel(): JSX.Element {
     return () => void pending.then((stop) => stop())
   }, [setSidebar])
 
-  // ⌘1, ⌘2 and ⌘, switch views.
+  // ⌘1, ⌘2 and ⌘, switch views (Ctrl+1, Ctrl+2 and Ctrl+, off macOS).
+  const capabilities = useCapabilities()
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (!event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return
+      if (!isPrimaryModifier(event, capabilities)) return
       if (event.key === '1') setView('log')
       else if (event.key === '2') setView('notebook')
       else if (event.key === ',') setView('settings')
@@ -84,7 +87,7 @@ export default function MainPanel(): JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [capabilities])
 
   return (
     <ReaderHost>

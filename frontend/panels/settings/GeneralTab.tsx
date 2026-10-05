@@ -5,6 +5,7 @@ import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, Switch }
 import { useController } from '../useController'
 import { panel } from '../../bridge/tauri'
 import { useSetting } from '../../bridge/useSetting'
+import { useCapabilities } from '../../bridge/capabilities'
 import { INTERFACE_SCALES, type Appearance, type InterfaceScale } from '@ui/settings'
 
 const APPEARANCES = [
@@ -22,6 +23,9 @@ export function GeneralTab(): ReactNode {
   const [appearance, setAppearance] = useSetting<Appearance>('appearance', 'system')
   const [scale, setScale] = useSetting<InterfaceScale>('interfaceScale', 'medium')
   const { props: controller } = useController()
+  const { capture } = useCapabilities()
+  // Screen recording is a step only where it is granted in the system's settings.
+  const grantsCapture = capture.authorization === 'granted' || capture.authorization === 'denied'
 
   return (
     <SettingsPage title="General" description="How Kimochi looks on this computer.">
@@ -69,7 +73,11 @@ export function GeneralTab(): ReactNode {
       <SettingsSection title="Help">
         <SettingsRow
           label="Welcome guide"
-          description="The first-run walkthrough: screen recording permission, a source and the dictionary."
+          description={
+            grantsCapture
+              ? 'The first-run walkthrough: screen recording permission, a source and the dictionary.'
+              : 'The first-run walkthrough: a source and the dictionary.'
+          }
         >
           <Button size="sm" onClick={() => void panel('welcome', 'show').catch(() => undefined)}>
             Open

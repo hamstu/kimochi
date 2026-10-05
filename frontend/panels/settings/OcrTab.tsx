@@ -25,13 +25,28 @@ import { DEFAULT_SERVER_MODE, SERVER_URLS, type ServerMode } from '../../vendor/
 import { OCR_MODES, type OcrMode } from '../../bridge/settings'
 import { useSetting } from '../../bridge/useSetting'
 import { useViewState } from '../../bridge/state'
+import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
 import { nativeError, openAccessibilityPreferences, quitApp } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 
-const OCR_MODE_OPTIONS = (Object.keys(OCR_MODES) as OcrMode[]).map((value) => ({
-  value,
-  label: OCR_MODES[value].label
-}))
+/** The engines, with those this machine cannot run disabled and the reason beside them. */
+const ocrModeOptions = (
+  engines: PlatformCapabilities['ocrEngines']
+): { value: OcrMode; label: string; disabled?: boolean; detail?: string }[] =>
+  (Object.keys(OCR_MODES) as OcrMode[]).map((value) => {
+    const engine = engines[value]
+    if (!engine || engine.available) return { value, label: OCR_MODES[value].label }
+    return {
+      value,
+      label: OCR_MODES[value].label,
+      disabled: true,
+      detail: engine.reason || 'Not available on this computer'
+    }
+  })
+
+/** The Trigger Keys warning on macOS when the backend gives no wording of its own. */
+const MAC_KEY_TRIGGER_REASON =
+  'Watching key presses in another application needs macOS Accessibility permission for Kimochi. Until it is granted these keys will not start a scan; the gamepad trigger is unaffected.'
 
 const SERVER_OPTIONS = [
   { value: 'cloud', label: 'Cloud (recommended)' },
@@ -101,8 +116,24 @@ export function OcrTab(): ReactNode {
   )
   // Watching keys inside another application needs macOS Accessibility; the backend reports
   // whether it has been granted, so the Trigger Keys field can say what is actually true.
+  // On macOS the view state's `accessibility` flag is live, so it decides; elsewhere (and before
+  // the flag arrives) the platform capabilities' `input.keyTrigger` does.
   const { state: viewState } = useViewState()
-  const accessibilityGranted = Boolean(viewState.accessibility)
+  const capabilities = useCapabilities()
+  const keyTrigger = capabilities.input.keyTrigger
+  const keyTriggerPermission =
+    capabilities.os === 'macos' && typeof viewState.accessibility === 'boolean'
+      ? viewState.accessibility
+        ? 'granted'
+        : 'denied'
+      : keyTrigger.permission
+  const keyTriggerWarning = keyTriggerPermission !== 'granted' && keyTriggerPermission !== 'notRequired'
+  const keyTriggerReason =
+    keyTrigger.reason ||
+    (capabilities.os === 'macos'
+      ? MAC_KEY_TRIGGER_REASON
+      : 'Watching key presses in another application is not available on this computer, so these keys will not start a scan; the gamepad trigger is unaffected.')
+  const ocrModes = ocrModeOptions(capabilities.ocrEngines)
 
   // Changing the server needs a restart, so it is confirmed first (local UI state, not persisted).
   const [pendingServerMode, setPendingServerMode] = useState<ServerMode | null>(null)
@@ -148,7 +179,7 @@ export function OcrTab(): ReactNode {
             aria-label="OCR engine"
             value={ocrMode}
             onValueChange={(value) => void setOcrMode(value)}
-            options={OCR_MODE_OPTIONS}
+            options={ocrModes}
           />
         </SettingsRow>
         <SettingsRow
@@ -258,24 +289,25 @@ export function OcrTab(): ReactNode {
                 placeholder="e.g. space, enter, z"
               />
             </SettingsRow>
-            {!accessibilityGranted && (
+            {keyTriggerWarning && (
               <div className="settings-note">
                 <Callout tone="warn">
                   <span>
-                    Watching key presses in another application needs macOS Accessibility
-                    permission for Kimochi. Until it is granted these keys will not start a scan;
-                    the gamepad trigger is unaffected.
+                    {keyTriggerReason}
+                    {keyTrigger.remediation ? ` ${keyTrigger.remediation}` : ''}
                   </span>
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      void openAccessibilityPreferences().catch((error) =>
-                        console.error('Open Accessibility settings failed:', nativeError(error).message)
-                      )
-                    }
-                  >
-                    Open Accessibility settings
-                  </Button>
+                  {capabilities.os === 'macos' && (
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        void openAccessibilityPreferences().catch((error) =>
+                          console.error('Open Accessibility settings failed:', nativeError(error).message)
+                        )
+                      }
+                    >
+                      Open Accessibility settings
+                    </Button>
+                  )}
                 </Callout>
               </div>
             )}

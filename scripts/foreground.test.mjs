@@ -52,3 +52,37 @@ test('both source shapes are understood, native and Electron', () => {
   assert.equal(getScannedAppName({ type: 'window', appName: 'Safari' }, null), 'Safari')
   assert.equal(isSourceInForeground({ type: 'screen' }, 'Terminal'), true)
 })
+
+test('our own windows are recognised by pid when the event carries one', () => {
+  const tracker = new ForegroundTracker()
+  tracker.configure({ pids: [4242], names: ['Kimochi'] })
+  tracker.note('Safari', 100)
+  assert.equal(tracker.current, 'Safari')
+  // A pid decides: ours is neutral whatever the name says...
+  tracker.note('kimochi.exe', 4242)
+  assert.equal(tracker.current, 'Safari')
+  // ...and a foreign process is foreign even if its name collides with ours.
+  tracker.note('Kimochi', 7)
+  assert.equal(tracker.current, 'Kimochi')
+})
+
+test('without a pid, or before the platform names its pids, app names decide', () => {
+  const tracker = new ForegroundTracker()
+  tracker.note('Safari')
+  tracker.note('Kimochi Next POC', 4242)
+  assert.equal(tracker.current, 'Safari', 'no own pids known yet: the default names apply')
+
+  tracker.configure({ pids: [4242], names: ['kimochi.exe'] })
+  tracker.note('kimochi.exe')
+  assert.equal(tracker.current, 'Safari')
+  tracker.note('Kimochi Next POC')
+  assert.equal(tracker.current, 'Kimochi Next POC', 'configured names replace the defaults')
+})
+
+test('an empty name list from the platform keeps the default names', () => {
+  const tracker = new ForegroundTracker()
+  tracker.configure({ pids: [], names: [] })
+  tracker.note('Safari')
+  tracker.note('Kimochi')
+  assert.equal(tracker.current, 'Safari')
+})

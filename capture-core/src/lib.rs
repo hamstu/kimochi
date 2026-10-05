@@ -8,9 +8,15 @@ use std::time::Instant;
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::MacCapture;
+// Compiled everywhere so its pure catalog logic is tested on every machine; the
+// WGC backend inside it is Windows-only. Inside, the `windows` crate is `::windows`.
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::WgcCapture;
 
 pub mod hash;
 pub mod ids;
+pub mod pixels;
 pub mod text;
 pub use hash::{dhash_rgba, hamming};
 pub use ids::{Platform, SourceId};
@@ -51,8 +57,10 @@ pub struct Source {
     pub kind: &'static str,
     pub name: String,
     pub app: Option<String>,
-    /// Global macOS desktop points, top-left origin. Can be negative.
-    /// Other backends may not disclose global coordinates (e.g. Wayland).
+    /// The platform's global desktop coordinates, top-left origin. Can be negative.
+    /// macOS: desktop points. Windows: physical virtual-screen pixels (the app is
+    /// Per-Monitor-V2 DPI aware under tao), the visible frame without the invisible
+    /// resize borders. Other backends may not disclose global coordinates (e.g. Wayland).
     pub bounds: Option<Rect>,
     pub on_screen: Option<bool>,
 }
@@ -136,11 +144,22 @@ pub fn platform_backend() -> Result<Box<dyn CaptureBackend>> {
     {
         Ok(Box::new(MacCapture::new()))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        Ok(Box::new(WgcCapture::new()))
+    }
+    #[cfg(target_os = "linux")]
     {
         Err(CaptureError::new(
             "unsupported",
-            "Only the macOS 14+ backend is implemented",
+            "Linux capture backend arrives in Phase 6",
+        ))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err(CaptureError::new(
+            "unsupported",
+            "No capture backend exists for this platform",
         ))
     }
 }

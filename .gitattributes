@@ -1,0 +1,16 @@
+# LF everywhere, including Windows checkouts: scripts, configs and fixtures are byte-compared
+# (prepare.mjs hashes, test fixtures) and must be identical on every OS.
+* text=auto eol=lf
+
+# Binary assets: never normalised or diffed as text.
+*.png binary
+*.icns binary
+*.ico binary
+*.onnx binary
+*.bin binary
+*.safetensors binary
+*.dylib binary
+*.dll binary
+*.so binary
+*.exe binary
+bin/keytrigger-* binary

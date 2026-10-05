@@ -176,6 +176,8 @@ export interface SystemState {
 
 export interface DisplayInfo {
   id?: number
+  /** The display's complete source id, minted natively (never built in JavaScript). */
+  source_id?: string
   bounds: Rect
   workArea?: Rect
   scaleFactor?: number
@@ -200,3 +202,13 @@ export type { OcrMode } from '@ui/settings'
 
 /** Error prefixes defined in COMMANDS.md. `busy:` is always safe to retry. */
 export type NativeErrorKind = 'busy' | 'permission' | 'gone' | 'invalid' | 'native' | 'unknown'
+
+/** Declared once beside its macOS default (`ui/capabilities.ts`); re-exported for the panels. */
+export type {
+  CaptureAuthorization,
+  KeyTriggerPermission,
+  OcrEngineCapability,
+  OcrEngineKey,
+  PlatformCapabilities,
+  PlatformOs
+} from '@ui/capabilities'

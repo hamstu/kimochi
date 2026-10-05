@@ -26,23 +26,38 @@ fn assets(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Err("MeikiOCR assets are missing. Rebuild Kimochi with npm run bundle.".into())
 }
 
+/// The ONNX Runtime library this OS loads, inside the asset root.
+fn runtime_library(root: &std::path::Path) -> PathBuf {
+    let name = if cfg!(target_os = "macos") {
+        "libonnxruntime.dylib"
+    } else if cfg!(target_os = "windows") {
+        "onnxruntime.dll"
+    } else {
+        "libonnxruntime.so"
+    };
+    root.join("runtime").join(name)
+}
+
+const RUNTIME_MISSING: &str =
+    "MeikiOCR native runtime is missing. Rebuild Kimochi with npm run bundle.";
+
+/// Whether the models and native runtime are present, without loading either.
+/// For `platform_capabilities`; a present runtime can still fail to load at scan time.
+pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
+    match assets(app) {
+        Ok(root) if runtime_library(&root).is_file() => (true, None),
+        Ok(_) => (false, Some(RUNTIME_MISSING.into())),
+        Err(e) => (false, Some(e)),
+    }
+}
+
 fn initialize_runtime(root: &std::path::Path) -> Result<(), String> {
     static INITIALIZED: OnceLock<Result<(), String>> = OnceLock::new();
     INITIALIZED
         .get_or_init(|| {
-            let name = if cfg!(target_os = "macos") {
-                "libonnxruntime.dylib"
-            } else if cfg!(target_os = "windows") {
-                "onnxruntime.dll"
-            } else {
-                "libonnxruntime.so"
-            };
-            let library = root.join("runtime").join(name);
+            let library = runtime_library(root);
             if !library.is_file() {
-                return Err(
-                    "MeikiOCR native runtime is missing. Rebuild Kimochi with npm run bundle."
-                        .into(),
-                );
+                return Err(RUNTIME_MISSING.into());
             }
             // ort's dynamic loader panics for absent dependencies or incompatible APIs.
             // Turn those deployment failures into a scan error instead of poisoning the engine lock.

@@ -11,6 +11,9 @@ meikiocr = { path = "../../kimochi-meikiocr" }
 mangaocr = { path = "../../kimochi-mangaocr" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
+# `macos-private-api` stays in this common block: tauri-build requires the common
+# declaration's features to match tauri.conf.json (`macOSPrivateApi: true`), so it
+# cannot move to a macOS-only block. Off macOS the feature compiles to nothing.
 tauri = { version = "=2.11.5", features = [
   "devtools",
   "macos-private-api",
@@ -41,6 +44,28 @@ objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSPanel", "NSApplication", "NSResponder"] }
 objc2-foundation = "0.3"
 block2 = "0.6"
+[target.'cfg(target_os = "windows")'.dependencies]
+# The same major as tauri/tao, so one copy of the bindings is compiled.
+windows = { version = "0.61", features = [
+  "Wdk_System_SystemServices",
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_Storage_FileSystem",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Power",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_UI_Accessibility",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+# macOS coordinates instances itself (platform/macos/instance.rs).
+tauri-plugin-single-instance = "2"
+
 [features]
 mangaocr-cuda = ["mangaocr/cuda"]
 custom-protocol = ["tauri/custom-protocol"]

@@ -4,7 +4,7 @@
 //! Reads never mutate selection, crop, scan or revision: opening the picker must not
 //! disturb a running scan. Thumbnails and previews are local only — they are never
 //! sent to OCR and never written to the evidence log.
-use crate::native;
+use crate::platform;
 use crate::state::{descriptor_key, descriptor_type, Image, Service, Shared, Thumbnail};
 use base64::Engine;
 use kimochi_capture::{crop_rect, CaptureError, CaptureRequest, Crop, Source};
@@ -119,7 +119,11 @@ fn icon_for(service: &Service, app: Option<&str>) -> Option<Arc<str>> {
     if let Some(cached) = service.icons.lock().unwrap().get(app) {
         return cached.clone();
     }
-    let encoded = native::app_icon_png(app, ICON_EDGE).map(|png| {
+    let identity = platform::AppIdentity {
+        name: app.to_string(),
+        pid: None,
+    };
+    let encoded = platform::app_icon_png(&identity, ICON_EDGE).map(|png| {
         Arc::from(format!(
             "data:image/png;base64,{}",
             base64::engine::general_purpose::STANDARD.encode(&png)
@@ -151,7 +155,7 @@ fn entry(source: &Source) -> Value {
 /// Kimochi's own windows are excluded: selecting the picker or the overlay would
 /// capture our own interface, and scanning it would feed OCR its own output.
 pub fn catalog() -> Result<Vec<Value>, String> {
-    let mut sources = native::picker_sources()?;
+    let mut sources = platform::picker_sources()?;
     sources.sort_by(|a, b| {
         let rank = |s: &Source| u8::from(s.kind != "display");
         rank(a)
@@ -164,7 +168,7 @@ pub fn catalog() -> Result<Vec<Value>, String> {
 }
 
 pub fn icon(service: &Shared, app: &str) -> Value {
-    objc2::rc::autoreleasepool(|_| json!({"icon": icon_for(service, Some(app))}))
+    platform::with_pool(|| json!({"icon": icon_for(service, Some(app))}))
 }
 
 pub fn thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
@@ -210,7 +214,7 @@ pub fn preview(service: &Shared, source_id: &str) -> Result<Value, String> {
     );
     let token = service.images.lock().unwrap().put_preview(image);
     Ok(json!({
-        "url": format!("capture://localhost/preview/{token}"),
+        "url": platform::capture_url(&format!("preview/{token}")),
         "width": width,
         "height": height,
     }))
@@ -234,7 +238,7 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
         .unwrap()
         .put_hover(Image::captured(frame, info));
     Ok(json!({
-        "url": format!("capture://localhost/hover/{token}"),
+        "url": platform::capture_url(&format!("hover/{token}")),
         "width": width,
         "height": height,
         "scaleFactor": scale,

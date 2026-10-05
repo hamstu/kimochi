@@ -50,11 +50,20 @@ test('the Yomitan API client goes through the native command, not the plugin sco
   assert.ok(!yomitan.includes('httpFetch'), 'the Yomitan client must not use the scoped plugin')
 })
 
-test('the Yomitan requests match the Electron handlers exactly', async () => {
+test('the Yomitan requests match the Electron handlers exactly', async (t) => {
+  // The Electron app is a sibling checkout (`../kimochi`), absent on CI and fresh clones. Skip
+  // rather than pass silently, and only when the file is missing: any other failure still fails.
   const electron = await readFile(
     new URL('../../kimochi/src/main/index.ts', import.meta.url),
     'utf8'
-  )
+  ).catch((error) => {
+    if (error.code === 'ENOENT') return null
+    throw error
+  })
+  if (electron === null) {
+    t.skip('sibling ../kimochi checkout not found; Electron parity not checked')
+    return
+  }
   const yomitan = await readFile(
     fileURLToPath(new URL('../frontend/bridge/yomitan.ts', import.meta.url)),
     'utf8'

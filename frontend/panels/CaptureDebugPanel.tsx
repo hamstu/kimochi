@@ -23,6 +23,7 @@ import { Bar, BarSpacer, Button } from '@kit'
 import WindowFrame from '../components/WindowFrame'
 import './diagnostics.css'
 import { useViewState } from '../bridge/state'
+import { useCapabilities } from '../bridge/capabilities'
 import {
   captureFrame,
   desktop,
@@ -53,6 +54,7 @@ const INSPECTED: PanelLabel[] = ['log', 'settings', 'overlay']
 
 export default function CaptureDebugPanel(): JSX.Element {
   const { state } = useViewState()
+  const capabilities = useCapabilities()
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isRunning, setIsRunning] = useState(false)
@@ -101,13 +103,28 @@ export default function CaptureDebugPanel(): JSX.Element {
   }
 
   const testPermission = (): Promise<void> =>
-    run('Screen Recording permission', async () => {
+    run(capabilities.os === 'macos' ? 'Screen Recording permission' : 'Screen capture permission', async () => {
+      const { os, capture } = capabilities
+      if (os !== 'macos') addLog('info', `Platform ${os}: capture authorization is "${capture.authorization}"`)
+      if (os !== 'macos' && capture.authorization !== 'granted' && capture.authorization !== 'denied') {
+        addLog(
+          capture.authorization === 'unsupported' ? 'warn' : 'success',
+          capture.authorization === 'notRequired'
+            ? 'Screen capture needs no permission on this system'
+            : capture.authorization === 'promptOnSelect'
+              ? 'The system asks what to share when a source is chosen'
+              : 'Screen capture is not available on this system'
+        )
+        return
+      }
       const granted = await requestPermission()
+      const name = os === 'macos' ? 'Screen Recording' : 'Screen capture'
+      const settings = os === 'macos' ? 'System Settings' : 'the system settings'
       addLog(
         granted ? 'success' : 'error',
         granted
-          ? 'Screen Recording is granted for this bundle'
-          : 'Screen Recording is NOT granted; capture will fail until it is enabled in System Settings'
+          ? `${name} is granted for this bundle`
+          : `${name} is NOT granted; capture will fail until it is enabled in ${settings}`
       )
     })
 

@@ -1,7 +1,8 @@
 //! Shared application state: the capture backend, the in-memory image store that backs
 //! the `capture:` protocol, and the view snapshot panels read.
+use crate::platform::FrontWindow;
 use crate::settings::Settings;
-use kimochi_capture::{CaptureBackend, Rect, TextObserver};
+use kimochi_capture::{CaptureBackend, Rect, SourceId, TextObserver};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -308,33 +309,8 @@ pub fn classify_pointer(
     }
 }
 
-/// The modifier keys held while a cursor sample was taken.
-///
-/// Yomitan's scan trigger is a modifier, and a modifier is only ever reported to the
-/// window that has the keyboard — which, while somebody is reading their game, is
-/// their game. Carrying the modifiers alongside the pointer is what lets the scanner
-/// behave exactly as it does in a browser without any window having to take focus
-/// first. Named as the DOM names them, because that is where they are going.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct Modifiers {
-    pub shift: bool,
-    pub ctrl: bool,
-    pub alt: bool,
-    pub meta: bool,
-}
-
-impl Modifiers {
-    /// Decode `CGEventFlags`. Caps Lock (`0x10000`) is deliberately not a modifier
-    /// here: it is a lock rather than a held key, and Yomitan has no input for it.
-    pub fn from_flags(flags: u64) -> Self {
-        Self {
-            shift: flags & 0x0002_0000 != 0,
-            ctrl: flags & 0x0004_0000 != 0,
-            alt: flags & 0x0008_0000 != 0,
-            meta: flags & 0x0010_0000 != 0,
-        }
-    }
-}
+/// Moved to `platform` with the per-OS samplers; re-exported for existing callers.
+pub use crate::platform::Modifiers;
 
 /// Whether a press at this point is a click *away* from everything the app owns.
 ///
@@ -398,21 +374,23 @@ impl Default for SourceFocus {
     }
 }
 
-/// The window-server id inside a source id, when the source is a window at all.
+/// The window-server id inside a source id, when the source is a window of this
+/// platform with a numeric handle at all.
+#[allow(dead_code)] // Callers now parse with `SourceId`; kept as the documented helper.
 pub fn window_id_of(source_id: &str) -> Option<u32> {
-    source_id
-        .strip_prefix("macos:window:")
-        .and_then(|rest| rest.split(':').next())
-        .and_then(|id| id.parse::<u32>().ok())
+    kimochi_capture::ids::local_window_number(source_id)
 }
 
 /// Decide whether the captured window is in front, from one window-server sample.
 ///
-/// Three rules, and each exists because of a way the naive version is wrong:
+/// Four rules, and each exists because of a way the naive version is wrong:
 ///
 ///  - **a display capture is always in front.** A screen capture is of whatever is on
 ///    that screen, so there is no window whose focus could be lost, and applying
 ///    window rules to it would blank text for no reason;
+///  - **an id this build cannot resolve is unknown, not a display.** A malformed id, or
+///    one minted by another platform's backend, points at nothing here: it is neither
+///    focused nor present, rather than being waved through as "a screen";
 ///  - **our own windows hold the answer.** Hovering the scanned text focuses the
 ///    overlay, and clicking the dictionary focuses the popup — both make Kimochi
 ///    frontmost. Recomputing then would decide the source had lost focus and hide the
@@ -423,39 +401,60 @@ pub fn window_id_of(source_id: &str) -> Option<u32> {
 ///    window server has nothing to say, and the last answer is better than a guess.
 ///
 /// `front` is the frontmost window *of the frontmost application*, not the topmost
-/// window on the desktop — see `native::front_window`. Kimochi's own windows are
+/// window on the desktop — see `platform::front_window`. Kimochi's own windows are
 /// ordinary layer-0 windows that float above everything, so by z-order alone the
 /// captured window would never be in front once the overlay was up, and its text would
 /// never come back.
 pub fn source_focus(
     source_id: Option<&str>,
-    front: Option<(u32, i32)>,
-    own_pid: i32,
+    front: Option<FrontWindow>,
+    own_pid: u32,
     bounds: Option<(Rect, bool)>,
     previous: SourceFocus,
 ) -> SourceFocus {
-    let Some(window) = source_id.and_then(window_id_of) else {
-        return SourceFocus {
-            focused: true,
-            present: true,
-            held: false,
-            front_window: front.map_or(0, |(id, _)| id),
-            source_window: 0,
-        };
+    let front_window = front
+        .as_ref()
+        .and_then(|f| f.window.as_ref())
+        .and_then(SourceId::handle_u32)
+        .unwrap_or(0);
+    let shown = SourceFocus {
+        focused: true,
+        present: true,
+        held: false,
+        front_window,
+        source_window: 0,
+    };
+    // No source chosen: nothing to hide.
+    let Some(source_id) = source_id else {
+        return shown;
+    };
+    let window = match SourceId::parse(source_id).filter(SourceId::is_local) {
+        Some(id) if id.is_display() => return shown,
+        Some(id) => id,
+        None => {
+            return SourceFocus {
+                focused: false,
+                present: false,
+                ..shown
+            }
+        }
     };
     let present = bounds.is_some_and(|(_, on_screen)| on_screen);
     let seen = SourceFocus {
         focused: previous.focused,
         present,
         held: false,
-        front_window: front.map_or(0, |(id, _)| id),
-        source_window: window,
+        front_window,
+        source_window: window.handle_u32().unwrap_or(0),
     };
     match front {
         None => seen,
-        Some((_, pid)) if pid == own_pid => SourceFocus { held: true, ..seen },
-        Some((front_window, _)) => SourceFocus {
-            focused: front_window == window,
+        Some(front) if front.pid == own_pid => SourceFocus { held: true, ..seen },
+        Some(front) => SourceFocus {
+            focused: front
+                .window
+                .as_ref()
+                .is_some_and(|w| w.platform() == window.platform() && w.handle() == window.handle()),
             ..seen
         },
     }
@@ -558,10 +557,30 @@ pub fn descriptor_key(kind: &str, name: &str, app: Option<&str>) -> String {
 #[cfg(test)]
 mod focus_tests {
     use super::*;
+    use kimochi_capture::Platform;
 
-    const SOURCE: &str = "macos:window:15970:56963";
     const SOURCE_WINDOW: u32 = 15970;
-    const OWN_PID: i32 = 4242;
+    const SOURCE_PID: u32 = 56963;
+    const OWN_PID: u32 = 4242;
+
+    /// A window id as this build's backend mints it (`macos:window:15970:56963` on
+    /// macOS), so the focus rules are exercised on every OS.
+    fn source() -> String {
+        SourceId::window(Platform::current(), SOURCE_WINDOW, SOURCE_PID).to_string()
+    }
+
+    fn display() -> String {
+        SourceId::display(Platform::current(), 1).to_string()
+    }
+
+    /// The front window of the frontmost application; window `0` is "no ordinary
+    /// window on screen".
+    fn front(window: u32, pid: u32) -> Option<FrontWindow> {
+        Some(FrontWindow {
+            window: (window != 0).then(|| SourceId::window(Platform::current(), window, pid)),
+            pid,
+        })
+    }
 
     fn on_screen() -> Option<(Rect, bool)> {
         Some((
@@ -585,8 +604,8 @@ mod focus_tests {
 
     #[test]
     fn a_window_id_is_read_out_of_the_source_id() {
-        assert_eq!(window_id_of(SOURCE), Some(SOURCE_WINDOW));
-        assert_eq!(window_id_of("macos:display:1"), None);
+        assert_eq!(window_id_of(&source()), Some(SOURCE_WINDOW));
+        assert_eq!(window_id_of(&display()), None);
         assert_eq!(window_id_of("macos:window:"), None);
         assert_eq!(window_id_of("macos:window:not-a-number:1"), None);
     }
@@ -594,8 +613,8 @@ mod focus_tests {
     #[test]
     fn the_captured_window_in_front_is_focused() {
         let focus = source_focus(
-            Some(SOURCE),
-            Some((SOURCE_WINDOW, 9001)),
+            Some(source().as_str()),
+            front(SOURCE_WINDOW, 9001),
             OWN_PID,
             on_screen(),
             SourceFocus::default(),
@@ -610,8 +629,8 @@ mod focus_tests {
         // The reason this asks the window server rather than comparing application
         // names: the owner is identical and the text still has to go.
         let focus = source_focus(
-            Some(SOURCE),
-            Some((SOURCE_WINDOW + 1, 9001)),
+            Some(source().as_str()),
+            front(SOURCE_WINDOW + 1, 9001),
             OWN_PID,
             on_screen(),
             shown(),
@@ -631,8 +650,8 @@ mod focus_tests {
             false,
         ));
         let focus = source_focus(
-            Some(SOURCE),
-            Some((SOURCE_WINDOW, 9001)),
+            Some(source().as_str()),
+            front(SOURCE_WINDOW, 9001),
             OWN_PID,
             minimised,
             shown(),
@@ -642,7 +661,7 @@ mod focus_tests {
 
     #[test]
     fn a_window_that_has_gone_is_not_present() {
-        let focus = source_focus(Some(SOURCE), Some((7777, 9001)), OWN_PID, None, shown());
+        let focus = source_focus(Some(source().as_str()), front(7777, 9001), OWN_PID, None, shown());
         assert!(!focus.present);
         assert!(!focus.focused);
     }
@@ -653,8 +672,8 @@ mod focus_tests {
         // focuses the popup. Recomputing then would decide the source had lost focus,
         // hide the text being read, and close the popup that took the focus.
         let focus = source_focus(
-            Some(SOURCE),
-            Some((1234, OWN_PID)),
+            Some(source().as_str()),
+            front(1234, OWN_PID),
             OWN_PID,
             on_screen(),
             shown(),
@@ -671,8 +690,8 @@ mod focus_tests {
             ..SourceFocus::default()
         };
         let focus = source_focus(
-            Some(SOURCE),
-            Some((1234, OWN_PID)),
+            Some(source().as_str()),
+            front(1234, OWN_PID),
             OWN_PID,
             on_screen(),
             hidden,
@@ -688,7 +707,7 @@ mod focus_tests {
             held: true,
             ..SourceFocus::default()
         };
-        let focus = source_focus(Some(SOURCE), Some((555, 9001)), OWN_PID, on_screen(), held);
+        let focus = source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, on_screen(), held);
         assert!(!focus.focused);
         assert!(!focus.held);
     }
@@ -700,8 +719,8 @@ mod focus_tests {
         let mut focus = shown();
         for _ in 0..50 {
             focus = source_focus(
-                Some(SOURCE),
-                Some((1234, OWN_PID)),
+                Some(source().as_str()),
+                front(1234, OWN_PID),
                 OWN_PID,
                 on_screen(),
                 focus,
@@ -713,7 +732,7 @@ mod focus_tests {
     #[test]
     fn no_frontmost_application_keeps_the_last_answer() {
         // The window server has nothing to say, and a guess would blink the text.
-        let focus = source_focus(Some(SOURCE), None, OWN_PID, on_screen(), shown());
+        let focus = source_focus(Some(source().as_str()), None, OWN_PID, on_screen(), shown());
         assert!(focus.focused);
         assert!(!focus.held);
     }
@@ -728,8 +747,8 @@ mod focus_tests {
         // the reader is in the captured app, that is the captured window, whatever is
         // floating over it.
         let focus = source_focus(
-            Some(SOURCE),
-            Some((SOURCE_WINDOW, 56963)),
+            Some(source().as_str()),
+            front(SOURCE_WINDOW, 56963),
             OWN_PID,
             on_screen(),
             SourceFocus {
@@ -745,12 +764,12 @@ mod focus_tests {
     fn an_application_with_no_ordinary_window_on_screen_is_not_the_source() {
         // A menu-bar agent, or an app whose windows are all minimised: window 0 matches
         // nothing, which is the right answer, and the pid still identifies the owner.
-        let focus = source_focus(Some(SOURCE), Some((0, 9001)), OWN_PID, on_screen(), shown());
+        let focus = source_focus(Some(source().as_str()), front(0, 9001), OWN_PID, on_screen(), shown());
         assert!(!focus.focused);
 
         let ours = source_focus(
-            Some(SOURCE),
-            Some((0, OWN_PID)),
+            Some(source().as_str()),
+            front(0, OWN_PID),
             OWN_PID,
             on_screen(),
             shown(),
@@ -763,16 +782,35 @@ mod focus_tests {
     fn a_display_capture_is_always_in_front() {
         // A screen capture is of whatever is on that screen: there is no window whose
         // focus could be lost, and window rules would blank it for no reason.
-        for front in [None, Some((1, 9001)), Some((2, OWN_PID))] {
-            let focus = source_focus(Some("macos:display:1"), front, OWN_PID, None, shown());
+        for front in [None, front(1, 9001), front(2, OWN_PID)] {
+            let focus = source_focus(Some(display().as_str()), front, OWN_PID, None, shown());
             assert!(focus.focused);
             assert!(focus.present);
         }
     }
 
     #[test]
+    fn an_id_this_build_cannot_resolve_is_unknown_not_a_display() {
+        // A malformed id used to fall through to the display rule and count as
+        // "focused, present". It points at nothing, so it is neither.
+        let foreign = if Platform::current() == Platform::MacOs {
+            "windows:window:0x000A0B2C:4242"
+        } else {
+            "macos:window:15970:56963"
+        };
+        for id in ["", "macos:window:", "nonsense", "amiga:display:1", foreign] {
+            for front in [None, front(SOURCE_WINDOW, 9001), front(1, OWN_PID)] {
+                let focus = source_focus(Some(id), front, OWN_PID, on_screen(), shown());
+                assert!(!focus.focused, "{id:?}");
+                assert!(!focus.present, "{id:?}");
+                assert!(!focus.held, "{id:?}");
+            }
+        }
+    }
+
+    #[test]
     fn no_source_at_all_shows_rather_than_hides() {
-        let focus = source_focus(None, Some((1, 9001)), OWN_PID, None, SourceFocus::default());
+        let focus = source_focus(None, front(1, 9001), OWN_PID, None, SourceFocus::default());
         assert!(focus.focused);
         assert!(focus.present);
     }
@@ -785,54 +823,6 @@ mod focus_tests {
         let unknown = SourceFocus::default();
         assert!(unknown.focused);
         assert!(unknown.present);
-    }
-}
-
-#[cfg(test)]
-mod modifier_tests {
-    use super::*;
-
-    // The values are `CGEventFlags`, as the window server reports them.
-    const SHIFT: u64 = 0x0002_0000;
-    const CONTROL: u64 = 0x0004_0000;
-    const OPTION: u64 = 0x0008_0000;
-    const COMMAND: u64 = 0x0010_0000;
-    const CAPS_LOCK: u64 = 0x0001_0000;
-    /// Every sample also carries the keyboard's device state in the low bits.
-    const DEVICE_NOISE: u64 = 0x0000_0102;
-
-    #[test]
-    fn nothing_held_is_no_modifiers() {
-        assert_eq!(Modifiers::from_flags(0), Modifiers::default());
-    }
-
-    #[test]
-    fn shift_is_the_trigger_and_is_read_alone() {
-        let held = Modifiers::from_flags(SHIFT | DEVICE_NOISE);
-        assert!(held.shift);
-        assert!(!held.ctrl && !held.alt && !held.meta);
-    }
-
-    #[test]
-    fn each_modifier_maps_to_the_name_the_dom_uses() {
-        assert!(Modifiers::from_flags(CONTROL).ctrl);
-        assert!(Modifiers::from_flags(OPTION).alt);
-        assert!(Modifiers::from_flags(COMMAND).meta);
-    }
-
-    #[test]
-    fn several_at_once_are_all_reported() {
-        let held = Modifiers::from_flags(SHIFT | COMMAND);
-        assert!(held.shift && held.meta);
-        assert!(!held.ctrl && !held.alt);
-    }
-
-    #[test]
-    fn caps_lock_is_not_a_held_key() {
-        // It is a lock rather than something a reader is holding down, and Yomitan has
-        // no input for it: reporting it would make a trigger fire for as long as it
-        // stayed on.
-        assert_eq!(Modifiers::from_flags(CAPS_LOCK), Modifiers::default());
     }
 }
 

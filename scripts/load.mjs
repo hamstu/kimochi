@@ -1,4 +1,5 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS test helper. */
+import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 /**
@@ -10,7 +11,7 @@ import { build } from 'esbuild'
  */
 export async function load(entry) {
   const { outputFiles } = await build({
-    entryPoints: [new URL(`../ui/${entry}`, import.meta.url).pathname],
+    entryPoints: [fileURLToPath(new URL(`../ui/${entry}`, import.meta.url))],
     bundle: true,
     write: false,
     format: 'esm',

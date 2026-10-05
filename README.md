@@ -21,11 +21,39 @@ npm run bundle
 npm start
 ```
 
-`npm run release` builds the optimised, signed app at `src-tauri/target/release/bundle/macos/Kimochi.app` (install by copying it to `/Applications`). `npm run preview:ui` renders every window in Chrome against mocked native commands for design work.
+The two OCR crates are path dependencies: `kimochi-meikiocr` and `kimochi-mangaocr` must be checked out beside this repository (`../kimochi-meikiocr`, `../kimochi-mangaocr`). Two parity tests also read the Electron app at `../kimochi`; without it they are reported as skipped.
 
-Requires macOS 14+, Node/npm, Rust and Command Line Tools. `npm start` (also `npm run dev`) opens the **already-built** `src-tauri/target/debug/bundle/macos/Kimochi.app`; rebuild after changes. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries.
+| Command | What it does |
+| --- | --- |
+| `npm run bundle` | Debug bundle for this OS: `.app` (macOS), NSIS `-setup.exe` (Windows), `.deb` + `.AppImage` (Linux), under `src-tauri/target/debug/bundle/`. Stages the OCR runtimes and models first. |
+| `npm run release` | Optimised bundle for this OS, under `src-tauri/target/release/bundle/`. |
+| `npm start` | Launches the **already-built** debug output: `open`s `Kimochi.app` on macOS, starts `target/debug/kimochi(.exe)` elsewhere. Rebuild after changes. |
+| `npm run dev` | Rebuilds `dist/` (`prepare.mjs` + `vite build`), then `tauri dev`. Dev mode serves the built `dist/`, so rerun it after frontend changes. Stages OCR assets only if they have never been staged. |
+| `npm run check:rust` | `cargo clippy -D warnings` for `src-tauri`. |
+| `npm run check:all` | `check:rust`, plus `cargo check` of `capture-core` for `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc` and `x86_64-unknown-linux-gnu` (each skipped with a hint unless `rustup target add` has been run). A convenience only: native CI on each OS is the real compile gate. |
+| `npm run prepare:meikiocr -- --target <triple>` | Stage the ONNX Runtime for another Rust target (also `KIMOCHI_TARGET`); `MEIKIOCR_DEST` stages into another directory. `prepare:mangaocr` accepts the same flag (its models are platform-neutral). |
 
-The runner sets `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for this host. It uses an installed Apple Development signing identity when available, or `APPLE_SIGNING_IDENTITY`. `KIMOCHI_ADHOC=1` opts out. This is a local development bundle, not a notarized release; no signing keys are stored here.
+`npm run bundle -- --target <triple>` cross-builds when the toolchain allows it and stages the matching OCR runtime. `npm run preview:ui` renders every window in Chrome against mocked native commands for design work.
+
+### Prerequisites per OS
+
+- **macOS** (the implementation target): macOS 14+, Node 22+, Rust stable and the Command Line Tools. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries. `npm run release` produces `src-tauri/target/release/bundle/macos/Kimochi.app`; install by copying it to `/Applications`.
+- **Windows** 10 22H2 or 11, x64 or ARM64: Node 22+, Rust stable (MSVC toolchain) and the Visual Studio Build Tools "Desktop development with C++" workload. The installer embeds the WebView2 bootstrapper and installs per user (no admin). Capture, overlay and input are not implemented yet (see [CROSS_PLATFORM_PLAN.md](CROSS_PLATFORM_PLAN.md)).
+- **Linux** (Ubuntu 22.04 or newer): Node 22+, Rust stable and `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf`. Same caveats as Windows.
+
+### Configuration split
+
+`src-tauri/tauri.conf.json` is the shared base. Tauri merges `tauri.macos.conf.json`, `tauri.windows.conf.json` or `tauri.linux.conf.json` over it for the platform being built (JSON Merge Patch: objects merge key by key, arrays are replaced whole). The macOS file carries the `app` bundle target, `minimumSystemVersion` and the darwin keytrigger binaries, and the merged macOS result is identical to the former single file. The Windows file carries NSIS (`currentUser`, English and Japanese), the WebView2 bootstrapper, `.ico`-first icons and the signing hook. The Linux file carries `deb`/`appimage` and the runtime package dependencies. `app.macOSPrivateApi` stays in the base on every platform: tauri-build requires the config to match the `macos-private-api` feature declared in `Cargo.toml`, and the flag has no effect off macOS.
+
+### Signing
+
+macOS: the runner sets `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for builds (not for `npm run dev`). It uses an installed Apple Development signing identity when available, or `APPLE_SIGNING_IDENTITY`. `KIMOCHI_ADHOC=1` opts out. This is a local development bundle, not a notarized release; no signing keys are stored here.
+
+Windows: `bundle.windows.signCommand` runs `node ../scripts/sign-windows.mjs %1` for each binary. It signs with Azure Artifact Signing through `artifact-signing-cli` (`cargo install artifact-signing-cli`) when `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `KIMOCHI_SIGNING_ENDPOINT`, `KIMOCHI_SIGNING_ACCOUNT` and `KIMOCHI_SIGNING_PROFILE` are set. Without them it leaves the file unsigned with a warning, unless `KIMOCHI_REQUIRE_SIGNING=1`.
+
+### CI
+
+`.github/workflows/ci.yml` runs tests, typecheck, lint, clippy and the `capture-core` tests on macOS, Windows x64, Windows ARM64 and Ubuntu 22.04, then builds a debug bundle on each and uploads it. macOS bundles are ad-hoc signed. Windows bundles are signed only when the Azure secrets exist. CI checks the sibling OCR crates out beside this repository, so they need to be pushed to GitHub first (see the TODO at the top of the workflow).
 
 ## Integrated Texthooker
 
@@ -124,9 +152,9 @@ Select **Settings → OCR → OCR engine → Local (MeikiOCR)**. Both manual and
 
 `npm run bundle` and `npm run release` automatically stage three pinned, SHA-256-verified ONNX models and a pinned ONNX Runtime (1.30.0 on Apple Silicon; 1.22.0 on other targets) under `src-tauri/resources/meikiocr/`, then include them in the app bundle. `npm run prepare:meikiocr` prepares these assets separately. The first build requires internet access; ordinary scans are offline and end users need no Python, Node, model downloader or separate server. The Rust library lives in the sibling `../kimochi-meikiocr` checkout, which must be available when building.
 
-The default native runtime includes Core ML on macOS and DirectML on Windows. Linux builds use CPU by default; `MEIKIOCR_RUNTIME_FLAVOR=cuda npm run prepare:meikiocr` stages the CUDA runtime on Linux/Windows x64. CUDA drivers and the runtime's matching CUDA/cuDNN dependencies must be installed on the target PC. `MEIKIOCR_RUNTIME_DIR=/path/to/native/runtime` supplies an alternative runtime directory (include all native dependencies and licenses). `MEIKIOCR_ARCH=x64` or `arm64` selects asset architecture for a cross-build; match it to the Rust/Tauri target. Runtime selection tries supported accelerators and falls back to CPU; unsupported operations may still run on CPU.
+The default native runtime includes Core ML on macOS and DirectML on Windows. Linux builds use CPU by default; `MEIKIOCR_RUNTIME_FLAVOR=cuda npm run prepare:meikiocr` stages the CUDA runtime on Linux/Windows x64. CUDA drivers and the runtime's matching CUDA/cuDNN dependencies must be installed on the target PC. `MEIKIOCR_RUNTIME_DIR=/path/to/native/runtime` supplies an alternative runtime directory (include all native dependencies and licenses). `--target <rust-triple>` (or `KIMOCHI_TARGET`) selects the runtime for a cross-build; `npm run bundle -- --target <triple>` passes it through. The staged `runtime/build.json` records the triple, so a runtime staged for another target is replaced automatically. On Windows the DirectML runtime ships `onnxruntime.dll`, `onnxruntime_providers_shared.dll` and the `DirectML.dll` version the ORT package declares, from Microsoft's NuGet package, with its licences. (`MEIKIOCR_ARCH` still selects the architecture on the host OS.) Runtime selection tries supported accelerators and falls back to CPU; unsupported operations may still run on CPU.
 
-Prepared binary assets are ignored by Git. Source and runtime licenses/notices travel with the bundle. The macOS build runner signs native runtime libraries with the same identity as the app, satisfying hardened-runtime library validation. Runtime archives come from Microsoft's version-pinned GitHub release; their SHA-256 is recorded in the prepared assets. Model hashes are verified against pinned Hugging Face repository revisions. Native asset downloads run in the build process, never inside the app.
+Prepared binary assets are ignored by Git. Source and runtime licenses/notices travel with the bundle. The macOS build runner signs native runtime libraries with the same identity as the app, satisfying hardened-runtime library validation. Runtime archives come from Microsoft's version-pinned GitHub release and NuGet, are checked against the SHA-256 table in `scripts/prepare-meikiocr.mjs` (only opt-in CUDA archives are unpinned, with a warning), and are extracted in-process with no `tar`/`unzip` dependency. Model hashes are verified against pinned Hugging Face repository revisions. Native asset downloads run in the build process, never inside the app.
 
 Validation includes the JavaScript routing tests and Rust annotation-contract test. The real-model test uses the bundled runtime and upstream Japanese example:
 

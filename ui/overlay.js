@@ -35,6 +35,7 @@ import { normalizeOcrResult } from './ocr-result.js'
 import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
+import { parseSourceId } from './source-id.js'
 import { isOverlayTextVisible, nextOverlayToggle, overlayTextChange } from './settings.js'
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
@@ -72,6 +73,8 @@ const state = {
   geometry: true,
   scannedApp: null,
   source: null,
+  /** The selection as the shared view describes it (`{sourceId, type, ...}`). */
+  viewSource: null,
   /** The native scan id already rendered and already published. */
   appliedScanId: null,
   // Session view flags live on the shared native view, so the controller and the
@@ -1133,7 +1136,11 @@ function cropFor(rect, origin, bounds, scale) {
 /** How often the window's picture is refreshed while its region is being edited. */
 const REGION_PICTURE_MS = 1500
 
-const displaySourceId = (display) => `macos:display:${display.id}`
+/**
+ * A display's source id, as native minted it. The constructed form is only for a
+ * backend that predates `source_id` on `DisplayInfo`, which was always macOS.
+ */
+const displaySourceId = (display) => display?.source_id ?? `macos:display:${display.id}`
 const scaleOf = (display) => display?.scale_factor ?? display?.scaleFactor ?? 1
 
 /** A saved crop (capture pixels of `bounds`) as a rectangle in overlay points over `origin`. */
@@ -1189,7 +1196,11 @@ async function editSourceRegion() {
     return
   }
   try {
-    const saved = sourceId.startsWith('macos:window:')
+    // The view's own description of the selection says what it is; the id is read
+    // (never pattern-matched on a platform name) only when the view has not caught up.
+    const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
+    const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
+    const saved = kind === 'window'
       ? await editWindowRegion(sourceId)
       : await editScreenRegion(sourceId)
     if (!saved) {
@@ -1340,7 +1351,7 @@ async function quickShot() {
       return
     }
     const crop = cropFor(rect, target.bounds, target.bounds, target.scale_factor ?? 1)
-    const sourceId = `macos:display:${target.id}`
+    const sourceId = displaySourceId(target)
     log({ check: 'quick-shot', display: target.id, crop })
 
     // The Log comes forward first, so the result is seen arriving.
@@ -1971,6 +1982,7 @@ async function processView(view) {
       lastSelection = selection
     }
     state.crop = view.crop ?? null
+    state.viewSource = view.source ?? null
     const kind = view.source?.kind ?? view.source?.type
     state.hover.isWindow = kind === 'window'
     await followSource(view.source)
@@ -2087,7 +2099,14 @@ await native.watchSettings((key) => {
 // The raw name, ours included: "Kimochi is frontmost" and "no signal yet" are
 // different states, and only the tracker may collapse them.
 await native.listen('frontmost-app', ({ payload }) =>
-  foreground.note(typeof payload === 'string' ? payload : payload?.appName)
+  typeof payload === 'string'
+    ? foreground.note(payload)
+    : foreground.note(payload?.appName, typeof payload?.pid === 'number' ? payload.pid : null)
+)
+// Which pids and app names are ours, so our own windows are recognised by process
+// where the platform can tell; the default names stand until it says.
+await native.watchCapabilities((caps) =>
+  foreground.configure({ pids: caps.ownPids, names: caps.ownAppNames })
 )
 await native.listen('hotkey', ({ payload }) => {
   if (payload?.name && !payload.name.startsWith('hover')) log({ check: 'overlay-action', name: payload.name })

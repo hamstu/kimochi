@@ -13,6 +13,8 @@
  *    would blank the overlay exactly at startup.
  */
 
+import { DEFAULT_OWN_APP_NAMES } from './capabilities.js'
+
 export interface SourceDescriptor {
   kind?: string
   type?: string
@@ -27,28 +29,48 @@ const isScreen = (source: SourceDescriptor | undefined | null): boolean =>
 const appOf = (source: SourceDescriptor | undefined | null): string | null =>
   source?.appName ?? source?.app ?? null
 
+export { DEFAULT_OWN_APP_NAMES }
+
+/** Which processes and application names are Kimochi itself (`ownPids` / `ownAppNames`). */
+export interface OwnIdentity {
+  pids?: readonly number[]
+  names?: readonly string[]
+}
+
 /**
  * Remembers which foreign application is in front, ignoring our own windows.
  *
  * `note` is fed every frontmost-app change the native layer reports, including
  * ours — the caller must not filter, because "Kimochi is frontmost" and "we have
  * had no signal yet" have to stay distinguishable.
+ *
+ * Our own windows are recognised by process id when the event carries one and
+ * the platform has said which pids are ours; an app name is only the fallback,
+ * since names are neither unique nor stable across platforms.
  */
 export class ForegroundTracker {
   private lastForeign: string | null = null
   private ownNames: string[]
+  private ownPids: Set<number> = new Set()
 
-  constructor(ownNames: string[] = ['Kimochi', 'Kimochi Next', 'Kimochi Next POC']) {
+  constructor(ownNames: readonly string[] = DEFAULT_OWN_APP_NAMES) {
     this.ownNames = ownNames.map((n) => n.toLowerCase())
   }
 
-  isOwn(appName: string | null | undefined): boolean {
+  /** Adopt the platform's answer; an empty or missing list keeps what is known. */
+  configure({ pids, names }: OwnIdentity): void {
+    if (pids) this.ownPids = new Set(pids.filter((pid) => Number.isInteger(pid)))
+    if (names && names.length) this.ownNames = names.map((n) => n.toLowerCase())
+  }
+
+  isOwn(appName: string | null | undefined, pid?: number | null): boolean {
+    if (typeof pid === 'number' && this.ownPids.size > 0) return this.ownPids.has(pid)
     if (!appName) return false
     return this.ownNames.includes(appName.toLowerCase())
   }
 
-  note(appName: string | null | undefined): void {
-    if (!appName || this.isOwn(appName)) return
+  note(appName: string | null | undefined, pid?: number | null): void {
+    if (!appName || this.isOwn(appName, pid)) return
     this.lastForeign = appName
   }
 

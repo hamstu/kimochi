@@ -13,6 +13,33 @@
     return
   }
   window.__yomitanShim = true
+
+  /**
+   * `chrome.runtime.getPlatformInfo()`, from the platform the native side injects as
+   * `__KIMOCHI_PLATFORM__` (`{os: 'macos' | 'windows' | 'linux', arch}`), else sniffed.
+   */
+  const platformInfo = () => {
+    let injected = window.__KIMOCHI_PLATFORM__
+    try {
+      injected ??= root.__KIMOCHI_PLATFORM__
+    } catch {
+      // A detached root keeps the sniffed answer.
+    }
+    const OS = { macos: 'mac', mac: 'mac', windows: 'win', win: 'win', linux: 'linux' }
+    const ARCH = {
+      aarch64: 'arm64',
+      arm64: 'arm64',
+      x86_64: 'x86-64',
+      'x86-64': 'x86-64',
+      x86: 'x86-32',
+      'x86-32': 'x86-32',
+      arm: 'arm'
+    }
+    const os =
+      OS[injected?.os] ??
+      (/Mac/.test(navigator.platform) ? 'mac' : /Win/.test(navigator.platform) ? 'win' : 'linux')
+    return { os, arch: ARCH[injected?.arch] ?? 'arm64' }
+  }
   class ChromeEvent {
     listeners = new Set()
     addListener = (f) => this.listeners.add(f)
@@ -226,14 +253,7 @@
       onInstalled: event(),
       getURL: (p) => new URL(p.replace(/^\//, ''), new URL('/', root.location.href).href).href,
       getManifest: () => clone(hub.manifest),
-      getPlatformInfo: api(() => ({
-        os: /Mac/.test(navigator.platform)
-          ? 'mac'
-          : /Win/.test(navigator.platform)
-            ? 'win'
-            : 'linux',
-        arch: 'arm64'
-      })),
+      getPlatformInfo: api(() => platformInfo()),
       sendMessage: api((message) =>
         hub.message(
           ctx,

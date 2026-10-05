@@ -38,6 +38,20 @@ objc2-foundation = { version = "0.3", features = [
 ] }
 block2 = "0.6"
 
+# Windows Graphics Capture through `windows-capture`, plus the Win32 calls the source
+# catalog makes itself (window styles, DWM cloaking and frame bounds, monitor rects,
+# process image names). `windows` is pinned to the minor `windows-capture` builds on,
+# so HWND/HMONITOR are the same types on both sides.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-capture = "2"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Threading",
+] }
+
 # A main-thread harness: VisionKit delivers its completion to the main queue, so a
 # test that runs on a spawned harness thread can never see it.
 [[test]]
