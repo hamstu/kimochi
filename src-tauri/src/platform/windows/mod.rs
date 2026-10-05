@@ -48,6 +48,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 mod cli;
 mod icon;
 mod keytrigger;
+mod mouseguard;
 mod rules;
 mod sources;
 mod window;
@@ -56,6 +57,7 @@ mod workspace;
 pub use cli::run_cli;
 pub use icon::app_icon_png;
 pub use keytrigger::{key_trigger_status, start_key_trigger, stop_key_trigger};
+pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use sources::{front_window, frontmost_app, frontmost_pid, picker_sources, window_bounds};
 pub use window::{
     activate_process, activate_self, bounds, inspect, make_panel, order_front, panel_cursor,
@@ -109,7 +111,7 @@ pub fn cursor() -> Option<PointerSample> {
     Some(PointerSample {
         x: f64::from(p.x),
         y: f64::from(p.y),
-        down: held(primary),
+        down: mouseguard::primary_down().unwrap_or_else(|| held(primary)),
         modifiers: Modifiers {
             shift: held(VK_SHIFT),
             ctrl: held(VK_CONTROL),

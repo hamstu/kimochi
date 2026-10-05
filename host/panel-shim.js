@@ -919,11 +919,15 @@
         // the only record of whether a lookup produced a popup: these windows are
         // capture-protected, so a screenshot cannot answer it.
         const { observePopups } = await import(asset('/spike/popup-bridge.js'))
-        await observePopups({
+        const observed = await observePopups({
           log: (value) => hub.log(value),
           window: hub.label,
           remote: remotePopup
         })
+        if (platformInfo().os === 'win') {
+          const { installWindowsPointer } = await import(asset('/spike/windows-pointer.js'))
+          await installWindowsPointer(root, () => observed.popups)
+        }
         if (remotePopup && !(await hub.waitForWindow(popupHost, 30000))) {
           // Yomitan caches which popup a frontend uses, so starting before the host
           // can answer would settle for a popup inside this window for the rest of

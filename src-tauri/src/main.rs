@@ -622,7 +622,10 @@ fn displays() -> Vec<platform::DisplayInfo> {
 #[tauri::command]
 fn app_quit(app: tauri::AppHandle) {
     #[cfg(target_os = "windows")]
-    platform::stop_key_trigger();
+    {
+        platform::stop_mouse_guard();
+        platform::stop_key_trigger();
+    }
     app.exit(0);
 }
 
@@ -2219,6 +2222,11 @@ fn main() {
             }
 
             spawn_state_broadcast(handle.clone(), service.clone());
+            #[cfg(target_os = "windows")]
+            match platform::start_mouse_guard(&handle) {
+                Ok(()) => service.log(json!({"check": "overlay-click-guard", "installed": true})),
+                Err(error) => service.log(json!({"check": "overlay-click-guard", "error": error})),
+            }
             spawn_cursor_poll(handle.clone(), service.clone());
             spawn_source_watch(handle.clone(), service.clone());
             spawn_focus_watch(handle.clone(), service.clone());
@@ -2491,6 +2499,8 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             if handle.get_webview_window(OVERLAY).is_none() {
                 break;
             }
+            #[cfg(target_os = "windows")]
+            platform::update_mouse_guard(&handle, &service);
             // About every two seconds, rewrite native shapes even when unchanged.
             let refresh = ticks.is_multiple_of(125);
             for label in sync_input_shapes(&handle, &service, &mut shapes, refresh) {

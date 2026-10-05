@@ -2105,9 +2105,13 @@ await native.listen('frontmost-app', ({ payload }) =>
 )
 // Which pids and app names are ours, so our own windows are recognised by process
 // where the platform can tell; the default names stand until it says.
-await native.watchCapabilities((caps) =>
+await native.watchCapabilities((caps) => {
+  if (caps.os === 'windows')
+    void import('/spike/windows-pointer.js').then(({ installWindowsPointer }) =>
+      installWindowsPointer(window, () => livePopups)
+    )
   foreground.configure({ pids: caps.ownPids, names: caps.ownAppNames })
-)
+})
 await native.listen('hotkey', ({ payload }) => {
   if (payload?.name && !payload.name.startsWith('hover')) log({ check: 'overlay-action', name: payload.name })
   if (payload?.name) void onAction(payload.name)
