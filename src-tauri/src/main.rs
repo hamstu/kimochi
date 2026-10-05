@@ -621,6 +621,8 @@ fn displays() -> Vec<platform::DisplayInfo> {
 
 #[tauri::command]
 fn app_quit(app: tauri::AppHandle) {
+    #[cfg(target_os = "windows")]
+    platform::stop_key_trigger();
     app.exit(0);
 }
 

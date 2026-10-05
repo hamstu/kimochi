@@ -246,6 +246,10 @@
     return port
   }
   window.chrome = {
+    // Tauri's Windows IPC uses WebView2's native chrome.webview bridge.
+    ...(platformInfo().os === 'win' && window.chrome?.webview
+      ? { webview: window.chrome.webview }
+      : {}),
     runtime: {
       id: 'yomitan-spike',
       onMessage: events.onMessage,

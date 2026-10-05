@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
 const directory = await mkdtemp(path.join(tmpdir(), "kimochi-meiki-routing-"));
@@ -30,7 +31,7 @@ globalThis.__TAURI__ = {
     },
   },
 };
-const { recognize } = await import(outfile);
+const { recognize } = await import(pathToFileURL(outfile).href);
 after(async () => {
   delete globalThis.__TAURI__;
   await rm(directory, { recursive: true, force: true });

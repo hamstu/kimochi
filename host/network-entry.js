@@ -11,9 +11,18 @@ hub.installNetwork = (win) => {
   observeFrame(win, hub)
   const nativeFetch = win.__spikeNativeFetch ?? win.fetch.bind(win)
   const NativeXHR = win.XMLHttpRequest
-  const remote = (url) =>
-    /^https?:$/.test(new URL(url, win.location.href).protocol) &&
-    new URL(url, win.location.href).origin !== win.location.origin
+  const remote = (url) => {
+    const parsed = new URL(url, win.location.href)
+    // Windows maps Tauri's native protocols to HTTP origins. Routing IPC through
+    // plugin-http would invoke plugin-http through itself, recursively.
+    if (
+      win.__KIMOCHI_PLATFORM__?.os === 'windows' &&
+      parsed.protocol === 'http:' &&
+      ['ipc.localhost', 'capture.localhost'].includes(parsed.hostname)
+    )
+      return false
+    return /^https?:$/.test(parsed.protocol) && parsed.origin !== win.location.origin
+  }
   win.fetch = (input, init) => {
     const url = typeof input === 'string' || input instanceof win.URL ? String(input) : input.url
     return remote(url) ? hub.fetchRemote(input, init) : nativeFetch(input, init)

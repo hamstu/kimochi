@@ -32,6 +32,34 @@ const { outputFiles } = await build({
 })
 const adapter = outputFiles[0].text
 
+test('Windows IPC and capture use native fetch while external URLs use the scoped HTTP plugin', () => {
+  const context = vm.createContext(
+    { URL, EventTarget, Event, console, structuredClone },
+    { microtaskMode: 'afterEvaluate' }
+  )
+  vm.runInContext(`
+    window = globalThis; top = window;
+    location = {href:'http://tauri.localhost/app/panel.html',origin:'http://tauri.localhost'};
+    __KIMOCHI_PLATFORM__ = {os:'windows',arch:'x86_64'};
+    __extensionHost = {};
+    XMLHttpRequest = class {};
+    localCalls = []; remoteCalls = [];
+    fetch = async (input) => { localCalls.push(input); return {local:true} };
+  `, context)
+  vm.runInContext(adapter, context)
+  vm.runInContext(`
+    __extensionHost.installNetwork(window);
+    fetch('http://ipc.localhost/settings_all');
+    fetch('http://capture.localhost/live/1');
+    fetch('https://example.test/dictionary.zip');
+  `, context, { timeout: 500 })
+  assert.deepEqual(Array.from(context.localCalls), [
+    'http://ipc.localhost/settings_all', 'http://capture.localhost/live/1'
+  ])
+  assert.equal(context.remoteCalls.length, 1)
+  assert.equal(context.remoteCalls[0][0], 'https://example.test/dictionary.zip')
+})
+
 test('panel startup keeps native local fetch when the deferred network adapter installs', () => {
   const context = vm.createContext(
     { URL, EventTarget, Event, console, structuredClone },

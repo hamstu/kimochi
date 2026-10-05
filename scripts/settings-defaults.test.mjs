@@ -7,7 +7,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, mkdtemp, rm } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { build } from 'esbuild'
@@ -24,7 +24,7 @@ await build({
   platform: 'neutral',
   target: 'es2022'
 })
-const { SETTINGS_DEFAULTS, DEFAULT_VOICE_ID } = await import(outfile)
+const { SETTINGS_DEFAULTS, DEFAULT_VOICE_ID } = await import(pathToFileURL(outfile).href)
 process.on('exit', () => {
   rm(outDir, { recursive: true, force: true }).catch(() => {})
 })
