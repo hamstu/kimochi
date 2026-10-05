@@ -13,7 +13,7 @@ import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { Link, Route, Routes, useLocation } from 'react-router'
 import { CheckCircle2Icon, ChevronLeft, ExternalLinkIcon } from 'lucide-react'
 import { Bar, Button, IconButton } from '@kit'
-import { openScreenCapturePreferences } from '../bridge/tauri'
+import { openScreenCapturePreferences, useSystemPick } from '../bridge/tauri'
 import { motion } from 'motion/react'
 
 import AnimationLayout from './AnimationLayout'
@@ -26,6 +26,7 @@ import style from './WelcomeApp.module.css'
 
 import { useCaptureStep, useHasScreenRecordingPermission } from './useHasScreenRecordingPermission'
 import { useCapabilities } from '../bridge/capabilities'
+import { SystemPickerButton } from '../main/SourceGrid'
 import { completeOnboarding, openYomitanBackup, resizeWelcome } from './welcome-actions'
 
 /** Where each step's back button goes (unchanged from the original screens). */
@@ -161,23 +162,32 @@ function ScreenPermissionScreen(): JSX.Element {
   )
 }
 
-/** Where the system asks what to share each time (a portal picker): nothing to grant up front. */
+/**
+ * Where the system asks what to share (a portal picker): nothing to grant up front, but the
+ * screen or window can be chosen here already, through the same button the sidebar offers.
+ */
 function SystemPickerScreen(): JSX.Element {
   useEffect(() => {
-    resizeWelcome(500)
+    resizeWelcome(560)
   }, [])
+  const { picked } = useSystemPick()
+  const pickedName = picked ? picked.app || picked.name || 'your screen' : null
   return (
     <Step
       art={<img src={svgLogo} alt="Kimochi" width={160} />}
       title="Choosing What to Read"
       actions={
-        <Button variant="primary" asChild>
-          <Link to="/yomitan">Continue</Link>
-        </Button>
+        <>
+          {!picked && <SystemPickerButton />}
+          <Button variant={picked ? 'primary' : 'secondary'} asChild>
+            <Link to="/yomitan">{picked ? 'Continue' : 'Choose later'}</Link>
+          </Button>
+        </>
       }
     >
-      You will choose what to share in the system picker. When you pick a window or screen for
-      Kimochi to read, your system asks you to confirm it; choose the game or app you want to read.
+      {pickedName
+        ? `Kimochi will read ${pickedName}. You can choose again at any time from the sidebar's Change source menu.`
+        : 'You choose what Kimochi reads in the system picker: your desktop asks you to confirm the screen or window to share. Choose the game or app you want to read now, or later from the sidebar.'}
     </Step>
   )
 }

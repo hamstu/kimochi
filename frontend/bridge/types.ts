@@ -200,6 +200,23 @@ export type HotkeyName = 'triggerScan' | 'openControllerMenu'
 /** Declared once in the shared schema module; re-exported here for convenience. */
 export type { OcrMode } from '@ui/settings'
 
+/**
+ * `capture_pick_source`: the system picker's outcome. Picked means the shared source is already
+ * selected (as choosing a grid tile would), so `source` is for display only.
+ */
+export type PickSourceResult =
+  | {
+      picked: true
+      source: NativeSource
+      selection: { sourceId: string; crop: NativeCrop | null; key: string }
+    }
+  | {
+      picked: false
+      /** `cancelled` also covers a picker that timed out or could not open. */
+      reason: 'cancelled' | 'busy' | 'ambiguous'
+      message: string
+    }
+
 /** Error prefixes defined in COMMANDS.md. `busy:` is always safe to retry. */
 export type NativeErrorKind = 'busy' | 'permission' | 'gone' | 'invalid' | 'native' | 'unknown'
 

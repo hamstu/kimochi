@@ -8,6 +8,10 @@
  * a window to the front, and the card's foot holds Crop area and Change source. The scan, Auto OCR
  * and overlay controls sit underneath. Quick Shot keeps a scan button and the overlay but has
  * nothing to watch; Clipboard and WebSocket need no controls at all.
+ *
+ * Where the system chooses what is shared (`capture.pickerRequired`), "Window or screen" opens the
+ * system picker instead of the grid, and the card is followed by the picker's progress, or by a
+ * "Choose in system picker" button again once the shared source has closed.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
@@ -25,6 +29,7 @@ import {
   Plus,
   Radio,
   ScanSearch,
+  ScreenShare,
   ScanText,
   Settings,
   SquareDashed,
@@ -42,7 +47,7 @@ import {
   MenuTrigger,
   Spinner
 } from '@kit'
-import { SourceGrid } from './SourceGrid'
+import { SourceGrid, SystemPickerButton } from './SourceGrid'
 import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
 import type { InputSource } from '@texthooker/input-source'
 import { SourceIcon } from '../components/RemoteControl'
@@ -50,7 +55,12 @@ import { isOverlayTextVisible } from '../../ui/settings'
 import { useSetting } from '../bridge/useSetting'
 import { useViewState } from '../bridge/state'
 import { useHotkeys } from '../bridge/useHotkeys'
-import { nativeError, sourceLiveThumbnail } from '../bridge/tauri'
+import {
+  nativeError,
+  sourceLiveThumbnail,
+  startSystemPick,
+  useSystemPick
+} from '../bridge/tauri'
 import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
 import { useCapabilities } from '../bridge/capabilities'
@@ -130,7 +140,10 @@ interface Frame {
  * stacked over the last and faded in; the old one goes once the fade ends. A failed or busy capture
  * keeps the last frame, so the card never flashes empty.
  */
-function useLiveFrames(sourceId: string): {
+function useLiveFrames(
+  sourceId: string,
+  onStale?: (message: string | null) => void
+): {
   frames: Frame[]
   size: { width: number; height: number } | null
   onLoad: (id: number) => void
@@ -138,6 +151,10 @@ function useLiveFrames(sourceId: string): {
   const [frames, setFrames] = useState<Frame[]>([])
   const [size, setSize] = useState<{ width: number; height: number } | null>(null)
   const next = useRef(0)
+  const staleRef = useRef(onStale)
+  useEffect(() => {
+    staleRef.current = onStale
+  })
 
   useEffect(() => {
     let alive = true
@@ -154,6 +171,7 @@ function useLiveFrames(sourceId: string): {
       try {
         const frame = await sourceLiveThumbnail(sourceId)
         if (!alive) return
+        staleRef.current?.(null)
         if (frame.url) {
           setSize({ width: frame.width, height: frame.height })
           setFrames((current) => [
@@ -164,7 +182,9 @@ function useLiveFrames(sourceId: string): {
         schedule(REFRESH_MS)
       } catch (error) {
         if (!alive) return
-        const { message } = nativeError(error)
+        const { message, pickAgain } = nativeError(error)
+        // A system-picker source that closed comes back only through the picker.
+        if (pickAgain) staleRef.current?.(message)
         schedule(message.startsWith('busy:') ? BUSY_RETRY_MS : REFRESH_MS * 2)
       }
     }
@@ -209,7 +229,8 @@ function LivePreview({
   crop,
   live,
   placeholder,
-  hint
+  hint,
+  onStale
 }: {
   sourceId: string
   crop: NativeCrop | null
@@ -217,8 +238,10 @@ function LivePreview({
   placeholder: ReactNode
   /** Shown over the picture while the card is hovered. */
   hint?: ReactNode
+  /** Why the source must be chosen in the system picker again, or null once it reads again. */
+  onStale?: (message: string | null) => void
 }): ReactNode {
-  const { frames, size, onLoad } = useLiveFrames(sourceId)
+  const { frames, size, onLoad } = useLiveFrames(sourceId, onStale)
   const ratio = size ? size.width / size.height : 16 / 9
   // The well follows the frame's shape within limits; the frame sits inside it, fitted, with
   // room around it — a tall window stands in the middle of a wide well.
@@ -292,7 +315,7 @@ function TypeBody({
   selected,
   sub
 }: {
-  type: (typeof TYPES)[number]
+  type: { label: string; icon: ReactNode; detail: string }
   selected: boolean
   sub?: boolean
 }): ReactNode {
@@ -310,37 +333,54 @@ function TypeBody({
 }
 
 /**
- * The Change source menu. "Window or screen" opens the grid of windows and displays; the other
- * types are chosen directly.
+ * The Change source menu. "Window or screen" opens the grid of windows and displays, or with
+ * `pickerRequired` the system picker; the other types are chosen directly.
  */
 function SourceMenuContent({
   mode,
   currentId,
   gridOpen,
+  pickerRequired,
   onGridOpen,
   onChooseType,
   onChooseSource,
+  onSystemPick,
   onOpenSettings
 }: {
   mode: Mode | null
   currentId: string | null
   gridOpen: boolean
+  pickerRequired: boolean
   onGridOpen: (open: boolean) => void
   onChooseType: (mode: Mode) => void
   onChooseSource: (sourceId: string) => void
+  onSystemPick: () => void
   onOpenSettings: () => void
 }): ReactNode {
   const [windowType, ...others] = TYPES
   return (
     <MenuContent align="start" className="src-menu">
-      <MenuSub open={gridOpen} onOpenChange={onGridOpen}>
-        <MenuPrimitive.SubTrigger className="src-type">
-          <TypeBody type={windowType} selected={mode === 'ocr'} sub />
-        </MenuPrimitive.SubTrigger>
-        <MenuSubContent className="src-grid-menu">
-          <SourceGrid currentId={currentId} onChoose={(source) => onChooseSource(source.id)} />
-        </MenuSubContent>
-      </MenuSub>
+      {pickerRequired ? (
+        <MenuPrimitive.Item className="src-type" onSelect={onSystemPick}>
+          <TypeBody
+            type={{
+              ...windowType,
+              icon: <ScreenShare />,
+              detail: 'Choose in system picker: your desktop shows its own dialog.'
+            }}
+            selected={mode === 'ocr'}
+          />
+        </MenuPrimitive.Item>
+      ) : (
+        <MenuSub open={gridOpen} onOpenChange={onGridOpen}>
+          <MenuPrimitive.SubTrigger className="src-type">
+            <TypeBody type={windowType} selected={mode === 'ocr'} sub />
+          </MenuPrimitive.SubTrigger>
+          <MenuSubContent className="src-grid-menu">
+            <SourceGrid currentId={currentId} onChoose={(source) => onChooseSource(source.id)} />
+          </MenuSubContent>
+        </MenuSub>
+      )}
       {others.map((type) => (
         <MenuPrimitive.Item
           key={type.mode}
@@ -387,7 +427,27 @@ export function SourcePanel({
     handledChooseRequest = Math.max(handledChooseRequest, seenRequest)
   }, [seenRequest])
   const [hotkeys] = useHotkeys()
-  const keyPlatform = keyPlatformOf(useCapabilities())
+  const capabilities = useCapabilities()
+  const keyPlatform = keyPlatformOf(capabilities)
+  const pickerRequired = capabilities.capture.pickerRequired
+  const systemPick = useSystemPick()
+  // Why the shared source must be chosen in the system picker again, as of which pick: a new
+  // pick replaces the source, so what was said about the old one no longer applies.
+  const [staleNote, setStaleNote] = useState<{ seq: number; message: string } | null>(null)
+  const stale = staleNote?.seq === systemPick.seq ? staleNote.message : null
+  const onStale = (message: string | null): void =>
+    setStaleNote(message ? { seq: systemPick.seq, message } : null)
+  // A pick selects natively; here it only switches the Log to reading the window or screen.
+  const chooseRef = useRef(choose)
+  useEffect(() => {
+    chooseRef.current = choose
+  })
+  const handledPick = useRef(systemPick.seq)
+  useEffect(() => {
+    if (systemPick.seq === handledPick.current) return
+    handledPick.current = systemPick.seq
+    chooseRef.current('ocr')
+  }, [systemPick.seq])
   const { state } = useViewState()
   const [websocketUrl, setWebsocketUrl] = useState(() => getSettings().websocketUrl)
   useEffect(() => onSettingsChange((next) => setWebsocketUrl(next.websocketUrl)), [])
@@ -418,10 +478,15 @@ export function SourcePanel({
         closeMenu()
         choose(next)
       }}
+      pickerRequired={pickerRequired}
       onChooseSource={(sourceId) => {
         closeMenu()
         choose('ocr')
         controller.onSelectSource(sourceId)
+      }}
+      onSystemPick={() => {
+        closeMenu()
+        void startSystemPick()
       }}
       onOpenSettings={() => {
         closeMenu()
@@ -462,6 +527,7 @@ export function SourcePanel({
           crop={crop}
           live={controller.isAutoOCREnabled}
           placeholder={isScreen ? <Monitor /> : <SourceIcon source={source} />}
+          onStale={pickerRequired ? onStale : undefined}
           hint={
             isScreen ? undefined : (
               <span className="src-front" aria-hidden>
@@ -602,6 +668,12 @@ export function SourcePanel({
           {menu}
         </Menu>
       )}
+
+      {pickerRequired &&
+        mode === 'ocr' &&
+        (systemPick.waiting || systemPick.error || stale || !source) && (
+          <SystemPickerButton message={stale} />
+        )}
 
       {mode === 'ocr' && source && (
         <div className="src-controls">

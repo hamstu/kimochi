@@ -7,8 +7,11 @@
 use crate::platform;
 use crate::state::{descriptor_key, descriptor_type, Image, Service, Shared, Thumbnail};
 use base64::Engine;
-use kimochi_capture::{crop_rect, CaptureError, CaptureRequest, Crop, Source};
+use kimochi_capture::{
+    crop_rect, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, Source,
+};
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,12 +25,57 @@ const ICON_EDGE: isize = 64;
 
 pub fn err(e: CaptureError) -> String {
     let prefix = match e.code {
+        "busy" => "busy",
         "permission" => "permission",
         "stale_source" | "unavailable" => "gone",
         "invalid_crop" | "dimensions" => "invalid",
         _ => "native",
     };
     format!("{prefix}: {}", e.message)
+}
+
+/// The tag after an error's prefix (`gone: pick-again: …`) that says the source can only come
+/// back through the system picker, so the UI offers "Choose in system picker" again rather
+/// than a list to refresh. `nativeError()` in `frontend/bridge/tauri.ts` turns it into
+/// `pickAgain: true`.
+pub const PICK_AGAIN: &str = "pick-again";
+
+/// Whether a failure on this source means "pick again". Only portal sources qualify: their ids
+/// name a stream of one picker session, so a closed stream (`stale_source`) or a session that
+/// was never picked in this run (`permission`) has no remedy but another pick.
+pub fn needs_pick_again(source_id: &str, code: &str) -> bool {
+    source_id.starts_with("portal:") && matches!(code, "stale_source" | "permission")
+}
+
+/// Insert the pick-again tag after an already formatted `prefix: message` error.
+fn tag_pick_again(error: String) -> String {
+    match error.split_once(": ") {
+        Some((prefix, message)) => format!("{prefix}: {PICK_AGAIN}: {message}"),
+        None => format!("{PICK_AGAIN}: {error}"),
+    }
+}
+
+/// `err`, tagged with `pick-again` when this source can only come back through the picker.
+pub fn err_for(source_id: &str, e: CaptureError) -> String {
+    let pick_again = needs_pick_again(source_id, e.code);
+    let text = err(e);
+    if pick_again {
+        tag_pick_again(text)
+    } else {
+        text
+    }
+}
+
+/// The error for a source that is no longer among the live ones.
+fn closed(source_id: &str) -> String {
+    let text = "gone: that source has closed; refresh the list and pick again".to_string();
+    if needs_pick_again(source_id, "stale_source") {
+        tag_pick_again(
+            "gone: that shared source has closed; choose it again in the system picker".into(),
+        )
+    } else {
+        text
+    }
 }
 
 /// Capture one source without touching any view state. Returns the frame's own RGBA
@@ -42,7 +90,7 @@ fn capture_isolated(service: &Service, source_id: &str) -> Result<kimochi_captur
             source_id: source_id.to_string(),
             crop: None,
         })
-        .map_err(err)
+        .map_err(|e| err_for(source_id, e))
 }
 
 /// Box-average downscale of tightly packed RGBA. Averaging rather than dropping
@@ -185,7 +233,7 @@ pub fn thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .thumbnail(source_id, THUMBNAIL_EDGE)
-        .map_err(err)?;
+        .map_err(|e| err_for(source_id, e))?;
     let png = encode_png(&frame.pixels, frame.info.width, frame.info.height)?;
     let data_uri: Arc<str> = Arc::from(format!(
         "data:image/png;base64,{}",
@@ -283,7 +331,7 @@ pub fn select_keeping_crop(service: &Shared, source_id: &str) -> Result<Value, S
             .map_err(err)?
             .into_iter()
             .find(|s| s.id == source_id)
-            .ok_or("gone: that source has closed; refresh the list and pick again")?
+            .ok_or_else(|| closed(source_id))?
     };
     let key = descriptor_key(source.kind, &source.name, source.app.as_deref());
     let saved = saved_crop_for_key(service, &key);
@@ -305,7 +353,7 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
             .map_err(err)?
             .into_iter()
             .find(|s| s.id == source_id)
-            .ok_or("gone: that source has closed; refresh the list and pick again")?
+            .ok_or_else(|| closed(source_id))?
     };
     if let Some(crop) = crop {
         // Reuse capture-core's validation rather than re-deriving the rules here.
@@ -347,6 +395,156 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
         }
     }
     Ok(json!({ "sourceId": source.id, "crop": crop, "key": key }))
+}
+
+// ---------------------------------------------------------------- system picker
+
+/// Set while a system picker is open, so a second request is answered rather than queued.
+static PICKING: AtomicBool = AtomicBool::new(false);
+
+/// Why a pick that returned false is reported as `cancelled`: `request_permission()` answers
+/// only a bool, and the concrete `PortalCapture::last_error()` is out of reach behind
+/// `Box<dyn CaptureBackend>`, so a dismissal, a timeout and a portal failure look the same here.
+const NOT_SHARED: &str =
+    "Nothing was shared. The system picker was closed, timed out or could not open; try again.";
+
+/// Stands in for the real backend while its system picker is open.
+///
+/// `request_permission()` blocks for as long as the user takes (up to the portal's two-minute
+/// limit). Holding the backend mutex for that long would stall every other capture command,
+/// including the synchronous `permission_status` the UI polls, so the backend is taken out of
+/// the mutex for the pick and this placeholder answers in its place: nothing granted yet,
+/// nothing to list, and `busy:` for any capture.
+struct PickerOpen {
+    capabilities: Capabilities,
+}
+
+impl PickerOpen {
+    fn busy() -> CaptureError {
+        CaptureError::new(
+            "busy",
+            "The system picker is open; choose a screen or window there first",
+        )
+    }
+}
+
+impl CaptureBackend for PickerOpen {
+    fn capabilities(&self) -> Capabilities {
+        self.capabilities.clone()
+    }
+    fn permission(&self) -> &'static str {
+        "promptOnSelect"
+    }
+    fn request_permission(&self) -> bool {
+        false
+    }
+    fn enumerate(&mut self) -> Result<Vec<Source>, CaptureError> {
+        Ok(Vec::new())
+    }
+    fn capture(&mut self, _request: &CaptureRequest) -> Result<Frame, CaptureError> {
+        Err(Self::busy())
+    }
+}
+
+/// Puts the real backend back and clears `PICKING`, also if the pick panics.
+struct Restore<'a> {
+    service: &'a Service,
+    backend: Option<Box<dyn CaptureBackend>>,
+}
+
+impl Drop for Restore<'_> {
+    fn drop(&mut self) {
+        if let Some(backend) = self.backend.take() {
+            *self
+                .service
+                .backend
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = backend;
+        }
+        PICKING.store(false, Ordering::SeqCst);
+    }
+}
+
+fn not_picked(reason: &str, message: &str) -> Value {
+    json!({ "picked": false, "reason": reason, "message": message })
+}
+
+/// What the sources a pick left behind mean. Pure, so the decision is testable without a portal.
+#[derive(Debug)]
+enum PickResult<'a> {
+    One(&'a Source),
+    /// The session ended before it could be listed: as good as nothing shared.
+    None,
+    /// The portal is asked for a single source; several would mean choosing for the user.
+    Several,
+}
+
+fn pick_result(sources: &[Source]) -> PickResult<'_> {
+    match sources {
+        [one] => PickResult::One(one),
+        [] => PickResult::None,
+        _ => PickResult::Several,
+    }
+}
+
+/// Open the system picker (the Wayland ScreenCast portal) and select what the user shares.
+///
+/// Blocking: call it on a worker. Returns `{picked: true, source, selection}` with the source
+/// in the catalog's shape and `selection` as `commit` returns it, or `{picked: false, reason,
+/// message}` with `reason` one of `cancelled`, `busy` (a picker is already open) or `ambiguous`.
+/// A backend that lists sources itself has no picker and answers `invalid:`.
+pub fn pick_source(service: &Shared) -> Result<Value, String> {
+    let capabilities = service
+        .backend
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .capabilities();
+    if !capabilities.system_picker_required {
+        return Err(
+            "invalid: this capture backend lists sources itself; choose one from the list".into(),
+        );
+    }
+    if PICKING.swap(true, Ordering::SeqCst) {
+        return Ok(not_picked("busy", "The system picker is already open."));
+    }
+    let real = std::mem::replace(
+        &mut *service
+            .backend
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        Box::new(PickerOpen { capabilities }),
+    );
+    let open = Restore {
+        service,
+        backend: Some(real),
+    };
+    let granted = open
+        .backend
+        .as_ref()
+        .is_some_and(|backend| backend.request_permission());
+    drop(open);
+    if !granted {
+        return Ok(not_picked("cancelled", NOT_SHARED));
+    }
+    let sources = service
+        .backend
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .enumerate()
+        .map_err(err)?;
+    match pick_result(&sources) {
+        PickResult::One(source) => {
+            // The same path as choosing a tile in the grid: keep a region saved for it.
+            let selection = select_keeping_crop(service, &source.id)?;
+            let desktop = platform::DesktopGeometry::current().source_to_desktop(source.clone());
+            Ok(json!({ "picked": true, "source": entry(&desktop), "selection": selection }))
+        }
+        PickResult::None => Ok(not_picked("cancelled", NOT_SHARED)),
+        PickResult::Several => Ok(not_picked(
+            "ambiguous",
+            "The system picker shared more than one source; share a single screen or window.",
+        )),
+    }
 }
 
 fn crop_differs(a: Option<&Crop>, b: Option<&Crop>) -> bool {
@@ -575,8 +773,76 @@ mod tests {
     }
 
     #[test]
+    fn only_portal_sources_are_picked_again() {
+        assert!(needs_pick_again("portal:display:57", "stale_source"));
+        assert!(needs_pick_again("portal:window:9", "permission"));
+        assert!(!needs_pick_again("portal:window:9", "dimensions"));
+        assert!(!needs_pick_again("macos:window:1:2", "stale_source"));
+        assert!(!needs_pick_again("x11:window:5", "permission"));
+    }
+
+    #[test]
+    fn a_stale_portal_source_is_tagged_after_its_prefix() {
+        assert_eq!(
+            err_for(
+                "portal:display:57",
+                CaptureError::new("stale_source", "Choose it again.")
+            ),
+            "gone: pick-again: Choose it again."
+        );
+        // Anything else keeps today's text exactly.
+        assert_eq!(
+            err_for(
+                "macos:display:1",
+                CaptureError::new("stale_source", "Closed.")
+            ),
+            "gone: Closed."
+        );
+        assert_eq!(
+            closed("macos:window:1:2"),
+            "gone: that source has closed; refresh the list and pick again"
+        );
+        assert!(closed("portal:window:3").starts_with("gone: pick-again: "));
+    }
+
+    #[test]
+    fn a_pick_selects_only_a_single_shared_source() {
+        let one = [source("portal:window:3", "window", "Game", None)];
+        assert!(matches!(pick_result(&one), PickResult::One(s) if s.id == "portal:window:3"));
+        assert!(matches!(pick_result(&[]), PickResult::None));
+        let two = [
+            source("portal:window:3", "window", "Game", None),
+            source("portal:display:4", "display", "Screen", None),
+        ];
+        assert!(matches!(pick_result(&two), PickResult::Several));
+    }
+
+    #[test]
+    fn the_picker_placeholder_reports_busy_and_nothing_granted() {
+        let mut open = PickerOpen {
+            capabilities: Capabilities {
+                backend: "test",
+                enumeration: false,
+                system_picker_required: true,
+                retained_session: true,
+            },
+        };
+        assert_eq!(open.permission(), "promptOnSelect");
+        assert!(!open.request_permission());
+        assert!(open.enumerate().unwrap().is_empty());
+        let Err(error) = open.capture(&CaptureRequest {
+            source_id: "portal:display:1".into(),
+            crop: None,
+        }) else {
+            panic!("a capture while the picker is open must fail");
+        };
+        assert!(err(error).starts_with("busy: "));
+    }
+
+    #[test]
     fn capture_errors_map_onto_the_documented_prefixes() {
         let cases = [
+            ("busy", "busy:"),
             ("permission", "permission:"),
             ("stale_source", "gone:"),
             ("unavailable", "gone:"),

@@ -3,10 +3,13 @@
  *
  * One wrapper per command. Errors from Rust are strings carrying a machine-readable prefix
  * (`busy:`, `permission:`, `gone:`, `invalid:`, `native:`); `nativeError()` parses them so callers
- * can branch, and every panel shows the human-facing remainder rather than swallowing it.
+ * can branch, and every panel shows the human-facing remainder rather than swallowing it. A
+ * `pick-again:` tag after the prefix (`gone: pick-again: …`) marks a system-picker source that can
+ * only come back through the picker; it surfaces as `pickAgain: true`.
  *
  * Shared with the overlay workstream — do not fork this file.
  */
+import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
@@ -19,6 +22,7 @@ import type {
   PanelAction,
   PanelInfo,
   PanelLabel,
+  PickSourceResult,
   PlatformCapabilities,
   Rect,
   ScanResult,
@@ -30,9 +34,13 @@ export interface NativeError {
   kind: NativeErrorKind
   message: string
   raw: string
+  /** The source was shared through the system picker and must be chosen there again. */
+  pickAgain: boolean
 }
 
 const PREFIXES: NativeErrorKind[] = ['busy', 'permission', 'gone', 'invalid', 'native']
+/** `PICK_AGAIN` in `src-tauri/src/sources.rs`. */
+const PICK_AGAIN = 'pick-again:'
 
 /** Parses a rejected invoke into its machine-readable kind plus the human-facing text. */
 export function nativeError(error: unknown): NativeError {
@@ -50,10 +58,13 @@ export function nativeError(error: unknown): NativeError {
           })()
   for (const kind of PREFIXES) {
     if (raw.startsWith(`${kind}:`)) {
-      return { kind, message: raw.slice(kind.length + 1).trim(), raw }
+      const rest = raw.slice(kind.length + 1).trim()
+      const pickAgain = rest.startsWith(PICK_AGAIN)
+      const message = pickAgain ? rest.slice(PICK_AGAIN.length).trim() : rest
+      return { kind, message, raw, pickAgain }
     }
   }
-  return { kind: 'unknown', message: raw, raw }
+  return { kind: 'unknown', message: raw, raw, pickAgain: false }
 }
 
 /** `busy:` means the single capture mutex is held; retrying is always safe. */
@@ -165,6 +176,60 @@ export const clearSourceCrop = (sourceId: string): Promise<void> =>
 /** Bring a window source's application to the front. */
 export const activateSource = (sourceId: string): Promise<void> =>
   invoke('activate_source', { sourceId })
+/**
+ * "Choose in system picker" (`capabilities.capture.pickerRequired`): opens the system's own picker
+ * and, once the user shares a screen or window, selects it. Resolves only when the user is done
+ * with the dialog, which can take as long as they like.
+ */
+export const capturePickSource = (): Promise<PickSourceResult> =>
+  invoke<PickSourceResult>('capture_pick_source')
+
+/** This window's system-picker progress (`startSystemPick`), shared by every view that offers it. */
+export interface SystemPick {
+  /** The system's dialog is open; it stays open for as long as the user takes. */
+  waiting: boolean
+  /** Why the last pick shared nothing, or failed. */
+  error: string | null
+  /** The source the last successful pick selected. */
+  picked: NativeSource | null
+  /** Bumped on each successful pick, for whoever has to react to it. */
+  seq: number
+}
+
+let systemPick: SystemPick = { waiting: false, error: null, picked: null, seq: 0 }
+const systemPickListeners = new Set<() => void>()
+function setSystemPick(next: Partial<SystemPick>): void {
+  systemPick = { ...systemPick, ...next }
+  for (const notify of systemPickListeners) notify()
+}
+const subscribeSystemPick = (notify: () => void): (() => void) => {
+  systemPickListeners.add(notify)
+  return () => systemPickListeners.delete(notify)
+}
+const currentSystemPick = (): SystemPick => systemPick
+
+/** The picker's progress, re-rendering as it changes; it outlives the menu that started it. */
+export const useSystemPick = (): SystemPick =>
+  useSyncExternalStore(subscribeSystemPick, currentSystemPick, currentSystemPick)
+
+/**
+ * Open the system picker. Native selects what the user shares, as choosing a tile would, so a
+ * successful pick needs nothing more from the caller than to show the source.
+ */
+export async function startSystemPick(): Promise<void> {
+  if (systemPick.waiting) return
+  setSystemPick({ waiting: true, error: null })
+  try {
+    const result = await capturePickSource()
+    if (result.picked) {
+      setSystemPick({ waiting: false, error: null, picked: result.source, seq: systemPick.seq + 1 })
+    } else {
+      setSystemPick({ waiting: false, error: result.message })
+    }
+  } catch (caught) {
+    setSystemPick({ waiting: false, error: nativeError(caught).message })
+  }
+}
 /** The main window, with its source menu open on the grid of windows and displays. */
 export const openSourcePicker = (): Promise<void> => invoke('open_source_picker')
 

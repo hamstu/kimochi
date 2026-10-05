@@ -790,6 +790,41 @@ async fn permission(state: State<'_, Shared>) -> Reply<bool> {
     .map_err(|e| e.to_string())?
 }
 
+/// "Choose in system picker": opens the system picker (the Wayland ScreenCast portal) and
+/// selects what the user shares, as choosing a tile in the grid would.
+///
+/// Waits as long as the user takes. The backend is out of its mutex meanwhile (see
+/// `sources::pick_source`), so other commands answer at once: captures with `busy:`.
+/// Replies `{picked: true, source, selection}` or `{picked: false, reason, message}`;
+/// `invalid:` on a backend that lists sources itself.
+#[tauri::command]
+async fn capture_pick_source(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Value> {
+    let service = state.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || sources::pick_source(&service))
+        .await
+        .map_err(|e| e.to_string())??;
+    if result["picked"] == json!(true) {
+        // Authorization is `granted` now that a session is live: say so once, here, and
+        // record it so `permission_status` does not announce the same change again.
+        let (service, handle) = (state.inner().clone(), app.clone());
+        let payload = tauri::async_runtime::spawn_blocking(move || {
+            let permission = service
+                .backend
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .permission()
+                .to_string();
+            *LAST_PERMISSION.lock().unwrap_or_else(|p| p.into_inner()) =
+                Some((permission, platform::key_trigger_status().permission));
+            capabilities_value(&handle, &service)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let _ = app.emit("platform-capabilities", payload);
+    }
+    Ok(result)
+}
+
 /// How long one local observation may take before it is abandoned.
 ///
 /// Warm observations measure about 35ms on rendered fixtures; this is a fence
@@ -829,7 +864,7 @@ async fn capture_frame(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let frame = backend.capture(&request).map_err(|error| {
-            let error = err(error);
+            let error = sources::err_for(&request.source_id, error);
             service.images.lock().unwrap().capture_error = Some(error.clone());
             error
         })?;
@@ -1361,7 +1396,9 @@ async fn scan(
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             let start = Instant::now();
-            let frame = backend.capture(&request).map_err(err)?;
+            let frame = backend
+                .capture(&request)
+                .map_err(|e| sources::err_for(&request.source_id, e))?;
             // The frame owns its pixels: release the backend before encoding and OCR,
             // which take far longer than the capture, so previews are not held up.
             drop(backend);
@@ -1875,6 +1912,7 @@ fn main() {
             save_preferences,
             enumerate,
             permission,
+            capture_pick_source,
             regions,
             place_overlay,
             desktop,

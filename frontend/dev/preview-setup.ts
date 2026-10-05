@@ -20,7 +20,9 @@
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
- *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS)
+ *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
+ *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
+ *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
@@ -346,6 +348,36 @@ const HANDLERS: Record<string, Handler> = {
   select_source: ok,
   selected_source: () => ({ sourceId: CURRENT_SOURCE.id }),
   open_source_picker: ok,
+  // The system picker (a Wayland portal): the dialog takes as long as the user does.
+  capture_pick_source: () =>
+    new Promise((resolve) =>
+      setTimeout(
+        () =>
+          resolve(
+            params.get('pick') === 'cancel'
+              ? {
+                  picked: false,
+                  reason: 'cancelled',
+                  message:
+                    'Nothing was shared. The system picker was closed, timed out or could not open; try again.'
+                }
+              : {
+                  picked: true,
+                  source: {
+                    id: 'portal:display:57',
+                    kind: 'display',
+                    name: 'Built-in display',
+                    app: null,
+                    bounds: { x: 0, y: 0, width: 1512, height: 982 },
+                    on_screen: true,
+                    icon: null
+                  },
+                  selection: { sourceId: 'portal:display:57', crop: null, key: 'Built-in display' }
+                }
+          ),
+        1500
+      )
+    ),
   permission: () => true,
   permission_status: () => 'granted',
   capture_preview: () => ({ frame: demoCapture(), error: null }),

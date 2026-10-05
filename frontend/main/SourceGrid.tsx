@@ -5,13 +5,17 @@
  *
  * Thumbnails are requested only as tiles scroll into view, at most two at a time, and a capture
  * that is momentarily `busy:` behind a scan is retried rather than shown as missing.
+ *
+ * Where the system chooses what is shared (`capture.pickerRequired`, the Wayland portal) there is
+ * no list to show: the grid becomes one "Choose in system picker" button, and the pick's progress
+ * lives in a per-window store so it outlives the menu that started it.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { AppWindow, Monitor } from 'lucide-react'
-import { Spinner } from '@kit'
+import { AppWindow, Monitor, ScreenShare } from 'lucide-react'
+import { Button, Callout, Spinner } from '@kit'
 import { invoke } from '@tauri-apps/api/core'
-import { nativeError } from '../bridge/tauri'
+import { nativeError, startSystemPick, useSystemPick } from '../bridge/tauri'
 import { useCapabilities } from '../bridge/capabilities'
 
 export interface CatalogSource {
@@ -148,7 +152,58 @@ function Tile({
   )
 }
 
+// ---------------------------------------------------------------------------- system picker
+
+/**
+ * The "Choose in system picker" button with a line on what happens next, a spinner while the
+ * dialog is up, and the reason the last pick (or the shared source, via `message`) failed.
+ */
+export function SystemPickerButton({ message = null }: { message?: string | null }): ReactNode {
+  const { waiting, error } = useSystemPick()
+  const problem = waiting ? null : (error ?? message)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--k-space-2)' }}>
+      {problem && <Callout tone="warn">{problem}</Callout>}
+      <Button
+        variant="primary"
+        disabled={waiting}
+        aria-busy={waiting || undefined}
+        onClick={() => void startSystemPick()}
+      >
+        {waiting ? <Spinner label="Waiting for the system picker" /> : <ScreenShare />}
+        {waiting ? 'Waiting for the system picker…' : 'Choose in system picker'}
+      </Button>
+      <span style={{ color: 'var(--k-text-2)', fontSize: 'var(--k-text-sm)' }}>
+        {waiting
+          ? 'Choose a screen or window in the dialog your desktop opened.'
+          : 'Your desktop opens its own dialog to choose the screen or window Kimochi reads.'}
+      </span>
+    </div>
+  )
+}
+
+/** The grid, or on a system-picker platform the one button that stands in for it. */
 export function SourceGrid({
+  currentId,
+  onChoose
+}: {
+  currentId: string | null
+  onChoose: (source: CatalogSource) => void
+}): ReactNode {
+  const capabilities = useCapabilities()
+  if (capabilities.capture.pickerRequired) {
+    return (
+      <div className="sg-scroll">
+        <div className="sg-status">
+          <SystemPickerButton />
+        </div>
+      </div>
+    )
+  }
+  return <WindowGrid currentId={currentId} onChoose={onChoose} />
+}
+
+function WindowGrid({
   currentId,
   onChoose
 }: {
