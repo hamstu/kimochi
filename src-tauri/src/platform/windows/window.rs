@@ -58,14 +58,15 @@ use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindow
 use windows::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, BringWindowToTop, GetAncestor, GetForegroundWindow, GetWindow,
     GetWindowLongPtrW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
-    IsWindowVisible, LoadCursorW, SetCursor, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
-    ShowWindow, WindowFromPoint, ASFW_ANY, GA_ROOT, GWL_EXSTYLE, GWL_STYLE, GW_OWNER, HWND_TOP,
-    HWND_TOPMOST, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS, IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO,
-    IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_WAIT, MA_NOACTIVATE,
-    STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    SW_RESTORE, SW_SHOWNA, WA_INACTIVE, WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE, WM_NCDESTROY,
-    WM_STYLECHANGING, WM_WINDOWPOSCHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+    IsWindowVisible, LoadCursorW, SendMessageTimeoutW, SetCursor, SetForegroundWindow,
+    SetWindowLongPtrW, SetWindowPos, ShowWindow, WindowFromPoint, ASFW_ANY, GA_ROOT, GWL_EXSTYLE,
+    GWL_STYLE, GW_OWNER, HWND_TOP, HWND_TOPMOST, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS, IDC_HAND,
+    IDC_HELP, IDC_IBEAM, IDC_NO, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE,
+    IDC_WAIT, MA_NOACTIVATE, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT, STYLESTRUCT, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, SW_SHOWNA, WA_INACTIVE,
+    WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NULL, WM_STYLECHANGING,
+    WM_WINDOWPOSCHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
 
 fn hwnd(w: &tauri::WebviewWindow) -> Result<HWND, String> {
@@ -425,7 +426,8 @@ fn force_foreground(target: HWND) -> bool {
     unsafe {
         // Lets whichever process we hand the foreground to keep it (activate_process).
         let _ = AllowSetForegroundWindow(ASFW_ANY);
-        if SetForegroundWindow(target).as_bool() && GetForegroundWindow() == target {
+        let _ = SetForegroundWindow(target);
+        if foreground_ready(target) {
             return true;
         }
         let foreground = GetForegroundWindow();
@@ -440,6 +442,28 @@ fn force_foreground(target: HWND) -> bool {
             let _ = SetForegroundWindow(target);
             let _ = AttachThreadInput(ours, theirs, false);
         }
+        foreground_ready(target)
+    }
+}
+
+/// Across input queues, SetForegroundWindow can return before the target handles
+/// its activation notification. WM_NULL waits for that notification to be handled
+/// without changing the target. Bound the wait for a hung/exiting application, and
+/// use the actual foreground HWND as the result, not the API's return value.
+fn foreground_ready(target: HWND) -> bool {
+    unsafe {
+        if GetForegroundWindow() == target {
+            return true;
+        }
+        let _ = SendMessageTimeoutW(
+            target,
+            WM_NULL,
+            WPARAM(0),
+            LPARAM(0),
+            SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT,
+            500,
+            None,
+        );
         GetForegroundWindow() == target
     }
 }
