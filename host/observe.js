@@ -3,6 +3,11 @@ export function observeFrame(win, hub) {
   const NativeWorker = win.Worker
   win.Worker = class extends NativeWorker {
     constructor(url, options) {
+      if (
+        win.__KIMOCHI_PLATFORM__?.os === 'windows' &&
+        new URL(url, win.location.href).pathname === '/js/dictionary/dictionary-worker-main.js'
+      )
+        url = new URL('/spike/windows-dictionary-worker.js', win.location.href)
       super(url, options)
       this.spikeUrl = new URL(url, win.location.href).pathname
       let last = 0
