@@ -52,6 +52,12 @@ windows = { version = "0.62", features = [
   "Win32_System_Threading",
 ] }
 
+# X11 capture and desktop metadata over the pure-Rust protocol crate: no libxcb, no
+# pkg-config, so Linux builds and cross-checks need no X11 -dev packages. Wayland
+# (portal + PipeWire) is Phase 7 and adds its own dependencies then.
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13", features = ["randr"] }
+
 # A main-thread harness: VisionKit delivers its completion to the main queue, so a
 # test that runs on a spawned harness thread can never see it.
 [[test]]

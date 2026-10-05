@@ -155,7 +155,8 @@ fn entry(source: &Source) -> Value {
 /// Kimochi's own windows are excluded: selecting the picker or the overlay would
 /// capture our own interface, and scanning it would feed OCR its own output.
 pub fn catalog() -> Result<Vec<Value>, String> {
-    let mut sources = platform::picker_sources()?;
+    // Bounds in desktop points, like every rectangle the UI sees.
+    let mut sources = platform::desktop_picker_sources()?;
     sources.sort_by(|a, b| {
         let rank = |s: &Source| u8::from(s.kind != "display");
         rank(a)
@@ -210,7 +211,7 @@ pub fn preview(service: &Shared, source_id: &str) -> Result<Value, String> {
     let (width, height) = (frame.info.width, frame.info.height);
     let image = Image::encoded(
         encode_png(&frame.pixels, width, height)?,
-        serde_json::to_value(&frame.info).unwrap_or(Value::Null),
+        serde_json::to_value(platform::desktop_frame_info(&frame.info)).unwrap_or(Value::Null),
     );
     let token = service.images.lock().unwrap().put_preview(image);
     Ok(json!({
@@ -230,8 +231,10 @@ pub fn preview(service: &Shared, source_id: &str) -> Result<Value, String> {
 /// off this call and only if the overlay actually loads the image.
 pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String> {
     let frame = capture_isolated(service, source_id)?;
-    let (width, height, scale) = (frame.info.width, frame.info.height, frame.info.scale_factor);
-    let info = serde_json::to_value(&frame.info).unwrap_or(Value::Null);
+    // `scaleFactor` is frame pixels per desktop point, as in the frame's own info.
+    let desktop = platform::desktop_frame_info(&frame.info);
+    let (width, height, scale) = (desktop.width, desktop.height, desktop.scale_factor);
+    let info = serde_json::to_value(&desktop).unwrap_or(Value::Null);
     let token = service
         .images
         .lock()

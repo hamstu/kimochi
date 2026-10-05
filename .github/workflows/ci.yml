@@ -6,11 +6,10 @@ name: CI
 # Sibling repositories: src-tauri depends on `../../kimochi-meikiocr` and `../../kimochi-mangaocr`
 # by path, and the OCR staging scripts read their LICENSE/NOTICE and model manifest. This repo is
 # therefore checked out into `kimochi-tauri/` with the siblings beside it.
-# TODO(ci): the sibling crates are not on GitHub yet. Push them (private is fine), then set the
-# repository variables KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if they are not
-# `<owner>/kimochi-meikiocr` / `<owner>/kimochi-mangaocr`, and add a SIBLING_REPOS_TOKEN secret
-# (fine-grained PAT with read access to contents) if they are private. Until then every job fails
-# at the sibling checkout. The alternative is vendoring both crates into this repository.
+# The siblings are private repositories under the same owner (`hamstu/kimochi-meikiocr`,
+# `hamstu/kimochi-mangaocr`), so the checkout needs the SIBLING_REPOS_TOKEN secret: a
+# fine-grained PAT with read-only Contents access to both. Override the repository variables
+# KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if they move.
 
 on:
   push:

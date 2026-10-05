@@ -62,6 +62,13 @@ windows = { version = "0.61", features = [
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }
+[target.'cfg(target_os = "linux")'.dependencies]
+# X11 desktop queries and raw key events (platform/linux), logind sleep/wake over D-Bus,
+# and the GTK main-loop hop for callbacks. All already in the lock file via tauri/arboard.
+x11rb = { version = "0.13", features = ["randr", "xinput"] }
+zbus = "5.9"
+glib = "0.18"
+raw-window-handle = "0.6"
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # macOS coordinates instances itself (platform/macos/instance.rs).
 tauri-plugin-single-instance = "2"

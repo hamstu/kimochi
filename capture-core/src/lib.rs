@@ -13,11 +13,18 @@ pub use macos::MacCapture;
 mod windows;
 #[cfg(target_os = "windows")]
 pub use windows::WgcCapture;
+// Compiled everywhere for the same reason; the X11 backend, the Wayland placeholder and
+// the shared X11 desktop queries inside it are Linux-only.
+mod linux_x11;
+pub use linux_x11::{is_wayland_session, wayland_session_now};
+#[cfg(target_os = "linux")]
+pub use linux_x11::{desktop as x11, PortalCapture, X11Capture};
 
 pub mod hash;
 pub mod ids;
 pub mod pixels;
 pub mod text;
+pub mod win_rules;
 pub use hash::{dhash_rgba, hamming};
 pub use ids::{Platform, SourceId};
 pub use text::{platform_observer, Observation, ObserverStatus, TextLine, TextObserver};
@@ -60,7 +67,8 @@ pub struct Source {
     /// The platform's global desktop coordinates, top-left origin. Can be negative.
     /// macOS: desktop points. Windows: physical virtual-screen pixels (the app is
     /// Per-Monitor-V2 DPI aware under tao), the visible frame without the invisible
-    /// resize borders. Other backends may not disclose global coordinates (e.g. Wayland).
+    /// resize borders. X11: desktop units (root pixels / GDK scale), the client area.
+    /// Other backends may not disclose global coordinates (e.g. Wayland).
     pub bounds: Option<Rect>,
     pub on_screen: Option<bool>,
 }
@@ -150,10 +158,11 @@ pub fn platform_backend() -> Result<Box<dyn CaptureBackend>> {
     }
     #[cfg(target_os = "linux")]
     {
-        Err(CaptureError::new(
-            "unsupported",
-            "Linux capture backend arrives in Phase 6",
-        ))
+        if wayland_session_now() {
+            Ok(Box::new(PortalCapture::new()))
+        } else {
+            Ok(Box::new(X11Capture::connect()?))
+        }
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {

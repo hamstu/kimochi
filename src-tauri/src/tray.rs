@@ -79,16 +79,16 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
             };
             // The tray rect type is crate-private, so its geometry is unpacked here
             // rather than passed along.
-            let scale = tray_scale(rect.position.to_logical::<f64>(1.0));
-            let position: tauri::LogicalPosition<f64> = rect.position.to_logical(scale);
-            let size: tauri::LogicalSize<f64> = rect.size.to_logical(scale);
+            let raw = rect.position.to_logical::<f64>(1.0);
+            let raw_size = rect.size.to_logical::<f64>(1.0);
+            let anchor = tray_anchor(raw.x, raw.y, raw_size.width, raw_size.height);
             toggle_popover(
                 tray.app_handle(),
                 &store,
-                position.x,
-                position.y,
-                size.width,
-                size.height,
+                anchor.x,
+                anchor.y,
+                anchor.width,
+                anchor.height,
             );
         })
         .build(app)
@@ -96,39 +96,48 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
     Ok(())
 }
 
-/// The scale to read the tray icon's rect with. macOS keeps the first display's, as it
-/// always has; elsewhere the icon's own display decides, since a taskbar can sit on a
-/// monitor with a different DPI from the primary one.
-fn tray_scale(raw: tauri::LogicalPosition<f64>) -> f64 {
-    let displays = platform::display_infos();
-    #[cfg(not(target_os = "macos"))]
+/// The tray icon's rect in desktop points.
+///
+/// Tauri reports it in physical pixels. macOS divides by the first display's scale, as
+/// it always has (the menu bar lives on the main display). Elsewhere the rect goes
+/// through the same desktop-point conversion as every other native rectangle, so a
+/// taskbar on a monitor with a different DPI from the primary places correctly.
+fn tray_anchor(x: f64, y: f64, width: f64, height: f64) -> Rect {
+    #[cfg(target_os = "macos")]
     {
-        if let Some(display) = display_containing(&displays, raw.x, raw.y, true) {
-            return display.scale_factor.max(1.0);
+        let scale = platform::display_infos()
+            .first()
+            .map(|d| d.scale_factor)
+            .unwrap_or(1.0)
+            .max(1.0);
+        Rect {
+            x: x / scale,
+            y: y / scale,
+            width: width / scale,
+            height: height / scale,
         }
     }
-    #[cfg(target_os = "macos")]
-    let _ = raw;
-    displays
-        .first()
-        .map(|d| d.scale_factor)
-        .unwrap_or(1.0)
-        .max(1.0)
+    #[cfg(not(target_os = "macos"))]
+    {
+        platform::DesktopGeometry::current().rect_to_desktop(Rect {
+            x,
+            y,
+            width,
+            height,
+        })
+    }
 }
 
-/// The display whose bounds contain a point. With `physical`, the point is in physical
-/// pixels and each display's logical bounds are scaled by its own factor first.
+/// The display whose bounds (in desktop points) contain a point.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
 fn display_containing(
     displays: &[platform::DisplayInfo],
     x: f64,
     y: f64,
-    physical: bool,
 ) -> Option<&platform::DisplayInfo> {
     displays.iter().find(|d| {
-        let s = if physical { d.scale_factor.max(1.0) } else { 1.0 };
         let b = &d.bounds;
-        x >= b.x * s && y >= b.y * s && x < (b.x + b.width) * s && y < (b.y + b.height) * s
+        x >= b.x && y >= b.y && x < b.x + b.width && y < b.y + b.height
     })
 }
 
@@ -151,8 +160,8 @@ fn popover_bounds(x: f64, y: f64, width: f64, height: f64, popover: (f64, f64)) 
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let displays = platform::display_infos();
-        let display = display_containing(&displays, x + width / 2.0, y + height / 2.0, false);
+        let displays = platform::desktop_display_infos();
+        let display = display_containing(&displays, x + width / 2.0, y + height / 2.0);
         popover_above(centred_x, y, height, (pw, ph), display.map(|d| d.work_area))
     }
 }

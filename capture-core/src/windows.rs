@@ -22,78 +22,14 @@
 //! explicit opt-in; this backend never asks for it and leaves the border setting at
 //! the system default. Cursor capture is turned off where the OS allows it.
 //!
-//! The pure decisions (which windows are listed, how handles are spelled, where the
-//! visible rectangle sits in a frame) live at the top of this file and compile on
-//! every platform, so they are tested on the macOS development machine too.
+//! The pure decisions compile on every platform, so they are tested on the macOS
+//! development machine too: which windows are listed and how handles are spelled live
+//! in `win_rules` (shared with the app's Windows adapter); where the visible rectangle
+//! sits in a frame lives at the top of this file.
 #![cfg_attr(not(target_os = "windows"), allow(dead_code))]
 
 #[cfg(target_os = "windows")]
 pub use wgc::WgcCapture;
-
-/// `WS_EX_TOOLWINDOW`: palettes and floating tool windows, kept out of the taskbar.
-const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
-/// `WS_EX_APPWINDOW`: forces a window onto the taskbar, even a tool window.
-const WS_EX_APPWINDOW: u32 = 0x0004_0000;
-/// Smallest window worth listing, in physical pixels.
-const MIN_WINDOW: (i32, i32) = (80, 60);
-/// Shell surfaces that are visible, titled and unowned but are not windows anyone
-/// means to read: the desktop and the taskbars.
-const SHELL_CLASSES: [&str; 4] = [
-    "Progman",
-    "WorkerW",
-    "Shell_TrayWnd",
-    "Shell_SecondaryTrayWnd",
-];
-
-/// What the catalog knows about one top-level window, as plain values.
-#[derive(Clone, Debug)]
-pub(crate) struct WindowFacts<'a> {
-    pub visible: bool,
-    pub title: &'a str,
-    pub class: &'a str,
-    pub ex_style: u32,
-    pub has_owner: bool,
-    /// `DWMWA_CLOAKED != 0`: suspended UWP apps, windows on other virtual desktops.
-    pub cloaked: bool,
-    pub pid: u32,
-    pub minimized: bool,
-    /// Visible size (extended frame bounds), physical pixels.
-    pub width: i32,
-    pub height: i32,
-}
-
-/// Whether a top-level window belongs in the source list: the windows the taskbar
-/// and Alt+Tab would show, minus this app's own and anything too small to read.
-///
-/// Minimized windows are listed (as off screen, like macOS lists windows on other
-/// Spaces); their rectangle is the iconic placeholder, so size is not judged.
-pub(crate) fn is_listable(f: &WindowFacts, own_pid: u32) -> bool {
-    if !f.visible || f.cloaked || f.has_owner || f.pid == own_pid {
-        return false;
-    }
-    if f.title.trim().is_empty() || SHELL_CLASSES.contains(&f.class) {
-        return false;
-    }
-    if f.ex_style & WS_EX_TOOLWINDOW != 0 && f.ex_style & WS_EX_APPWINDOW == 0 {
-        return false;
-    }
-    f.minimized || (f.width >= MIN_WINDOW.0 && f.height >= MIN_WINDOW.1)
-}
-
-/// An `HWND` or `HMONITOR` as an id handle: upper-case hex with a `0x` prefix.
-/// Handles are pointer-sized, so they never travel as numbers (see `ids.rs`).
-pub(crate) fn hex_handle(raw: usize) -> String {
-    format!("0x{raw:X}")
-}
-
-/// The inverse of `hex_handle`. A null handle names nothing.
-pub(crate) fn parse_hex_handle(s: &str) -> Option<usize> {
-    let digits = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X"))?;
-    if digits.is_empty() || digits.len() > 16 {
-        return None;
-    }
-    usize::from_str_radix(digits, 16).ok().filter(|&v| v != 0)
-}
 
 /// The file stem of a process image path: `C:\Games\vn.exe` -> `vn`.
 pub(crate) fn image_stem(path: &str) -> Option<String> {
@@ -160,9 +96,8 @@ pub(crate) fn visible_region(
 
 #[cfg(target_os = "windows")]
 mod wgc {
-    use super::{
-        hex_handle, image_stem, is_listable, parse_hex_handle, visible_region, PxRect, WindowFacts,
-    };
+    use super::{image_stem, visible_region, PxRect};
+    use crate::win_rules::{hex_handle, listable, parse_hex_handle, WindowMeta};
     use crate::pixels::{bgra_crop_to_rgba, box_downscale, crop_pixels, fit_within, unpremultiply};
     use crate::{
         crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop,
@@ -359,19 +294,22 @@ mod wgc {
         let minimized = unsafe { IsIconic(h) }.as_bool();
         let bounds = visible_rect(h).or_else(|| outer_rect(h))?;
         let pid = window_pid(h);
-        let facts = WindowFacts {
+        let meta = WindowMeta {
             visible,
-            title: &title,
-            class: &class,
-            ex_style: unsafe { GetWindowLongPtrW(h, GWL_EXSTYLE) } as u32,
-            has_owner: has_owner(h),
+            iconic: minimized,
             cloaked: is_cloaked(h),
+            has_owner: has_owner(h),
+            tool_window: false,
+            app_window: false,
+            title_nonempty: !title.trim().is_empty(),
+            class_name: &class,
             pid,
-            minimized,
-            width: bounds.width(),
-            height: bounds.height(),
-        };
-        if !is_listable(&facts, own_pid) {
+            own_pid,
+            width: f64::from(bounds.width()),
+            height: f64::from(bounds.height()),
+        }
+        .with_ex_style(unsafe { GetWindowLongPtrW(h, GWL_EXSTYLE) } as u32);
+        if !listable(&meta) {
             return None;
         }
         Some(Source {
@@ -956,145 +894,6 @@ mod wgc {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn facts<'a>() -> WindowFacts<'a> {
-        WindowFacts {
-            visible: true,
-            title: "Visual Novel",
-            class: "VNWindowClass",
-            ex_style: 0,
-            has_owner: false,
-            cloaked: false,
-            pid: 4242,
-            minimized: false,
-            width: 1280,
-            height: 720,
-        }
-    }
-
-    #[test]
-    fn an_ordinary_app_window_is_listed() {
-        assert!(is_listable(&facts(), 1));
-    }
-
-    #[test]
-    fn hidden_untitled_owned_cloaked_and_own_windows_are_not() {
-        let own = 7;
-        let cases: [(&str, WindowFacts); 6] = [
-            (
-                "invisible",
-                WindowFacts {
-                    visible: false,
-                    ..facts()
-                },
-            ),
-            (
-                "untitled",
-                WindowFacts {
-                    title: "  ",
-                    ..facts()
-                },
-            ),
-            (
-                "owned",
-                WindowFacts {
-                    has_owner: true,
-                    ..facts()
-                },
-            ),
-            (
-                "cloaked",
-                WindowFacts {
-                    cloaked: true,
-                    ..facts()
-                },
-            ),
-            (
-                "ours",
-                WindowFacts {
-                    pid: own,
-                    ..facts()
-                },
-            ),
-            (
-                "desktop",
-                WindowFacts {
-                    class: "Progman",
-                    ..facts()
-                },
-            ),
-        ];
-        for (label, f) in cases {
-            assert!(!is_listable(&f, own), "{label}");
-        }
-    }
-
-    #[test]
-    fn tool_windows_need_app_window_to_be_listed() {
-        let tool = WindowFacts {
-            ex_style: WS_EX_TOOLWINDOW,
-            ..facts()
-        };
-        assert!(!is_listable(&tool, 1));
-        let promoted = WindowFacts {
-            ex_style: WS_EX_TOOLWINDOW | WS_EX_APPWINDOW,
-            ..facts()
-        };
-        assert!(is_listable(&promoted, 1));
-    }
-
-    #[test]
-    fn tiny_windows_are_skipped_unless_minimized() {
-        assert!(!is_listable(
-            &WindowFacts {
-                width: 79,
-                ..facts()
-            },
-            1
-        ));
-        assert!(!is_listable(
-            &WindowFacts {
-                height: 59,
-                ..facts()
-            },
-            1
-        ));
-        assert!(is_listable(
-            &WindowFacts {
-                width: 80,
-                height: 60,
-                ..facts()
-            },
-            1
-        ));
-        // The iconic placeholder rectangle is tiny; that is not the window's size.
-        let iconic = WindowFacts {
-            minimized: true,
-            width: 160,
-            height: 28,
-            ..facts()
-        };
-        assert!(is_listable(&iconic, 1));
-    }
-
-    #[test]
-    fn handles_round_trip_through_hex_ids() {
-        for raw in [0x1A0B2C_usize, 1, usize::MAX] {
-            let s = hex_handle(raw);
-            assert!(s.starts_with("0x"));
-            assert_eq!(parse_hex_handle(&s), Some(raw));
-        }
-        assert_eq!(hex_handle(0x1A0B2C), "0x1A0B2C");
-        let id = crate::SourceId::window(crate::Platform::Windows, hex_handle(0x1A0B2C), 4242);
-        assert_eq!(id.to_string(), "windows:window:0x1A0B2C:4242");
-        assert_eq!(
-            crate::SourceId::display(crate::Platform::Windows, hex_handle(0x10001)).to_string(),
-            "windows:display:0x10001"
-        );
-        for bad in ["", "0x", "1A0B2C", "0xZZ", "0x0", "0x11112222333344445"] {
-            assert_eq!(parse_hex_handle(bad), None, "{bad:?}");
-        }
-    }
 
     #[test]
     fn process_image_stems() {

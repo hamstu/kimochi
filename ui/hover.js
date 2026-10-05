@@ -184,9 +184,9 @@ export class HoverOverlay {
   /**
    * The window's own pixels, exactly where the window is.
    *
-   * The capture is the window's content rect at its backing scale, so drawing it
-   * at the window's bounds in CSS points — the same box the outline surrounds —
-   * maps it 1:1 onto the screen, Retina included. It sits beneath the outline
+   * The capture is the window's content rect at its pixel scale (Retina backing
+   * scale, Windows DPI scale), so drawing it at the window's bounds in desktop
+   * points — the same box the outline surrounds — maps it 1:1 onto the screen. It sits beneath the outline
    * (inserted first) and fades in only once decoded, so the outline never waits.
    */
   updateWindowImage(url, left, top, bounds) {

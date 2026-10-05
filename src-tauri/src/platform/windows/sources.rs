@@ -75,11 +75,7 @@ fn owned(hwnd: HWND) -> bool {
 }
 
 fn window_source_id(hwnd: HWND, pid: u32) -> SourceId {
-    SourceId::window(
-        Platform::Windows,
-        rules::format_handle(hwnd.0 as usize),
-        pid,
-    )
+    SourceId::window(Platform::Windows, rules::hex_handle(hwnd.0 as usize), pid)
 }
 
 /// Monitors, then every window a reader could pick, front to back.
@@ -110,44 +106,50 @@ pub fn picker_sources() -> Result<Vec<Source>, String> {
         if title.trim().is_empty() {
             continue;
         }
-        let Some(bounds) = frame_bounds(hwnd) else {
+        let iconic = unsafe { IsIconic(hwnd) }.as_bool();
+        // A minimised window's rectangle is the iconic placeholder, not where it will be:
+        // the size rule skips it and the source says nothing rather than something wrong.
+        let frame = frame_bounds(hwnd);
+        if frame.is_none() && !iconic {
             continue;
-        };
+        }
         let pid = window_pid(hwnd);
         let class = class_name(hwnd);
-        let iconic = unsafe { IsIconic(hwnd) }.as_bool();
         let is_cloaked = cloaked(hwnd);
-        let facts = rules::WindowFacts {
-            title: &title,
-            class: &class,
-            ex_style: unsafe { GetWindowLongW(hwnd, GWL_EXSTYLE) } as u32,
+        let meta = rules::WindowMeta {
             visible,
+            iconic,
             cloaked: is_cloaked,
-            owned: owned(hwnd),
+            has_owner: owned(hwnd),
+            tool_window: false,
+            app_window: false,
+            title_nonempty: !title.trim().is_empty(),
+            class_name: &class,
             pid,
-            width: bounds.width,
-            height: bounds.height,
-        };
-        if !rules::picker_window_eligible(&facts, own) {
+            own_pid: own,
+            width: frame.map_or(0., |b| b.width),
+            height: frame.map_or(0., |b| b.height),
+        }
+        .with_ex_style(unsafe { GetWindowLongW(hwnd, GWL_EXSTYLE) } as u32);
+        if !rules::listable(&meta) {
             continue;
         }
         let app = names
             .entry(pid)
             .or_insert_with(|| process_name(pid))
             .clone();
+        let bounds = frame.filter(|_| !iconic);
         sources.push(Source {
             id: window_source_id(hwnd, pid).to_string(),
             kind: "window",
             name: title,
             app,
-            bounds: Some(bounds),
-            on_screen: Some(rules::on_screen(
-                visible,
-                iconic,
-                is_cloaked,
-                bounds.width,
-                bounds.height,
-            )),
+            bounds,
+            on_screen: Some(
+                bounds.is_some_and(|b| {
+                    rules::on_screen(visible, iconic, is_cloaked, b.width, b.height)
+                }),
+            ),
         });
     }
     Ok(sources)
@@ -160,7 +162,7 @@ fn resolve(id: &SourceId) -> Option<HWND> {
     if id.platform() != Platform::Windows || !id.is_window() {
         return None;
     }
-    let hwnd = hwnd_from(rules::parse_handle(id.handle())?);
+    let hwnd = hwnd_from(rules::parse_hex_handle(id.handle())?);
     if !unsafe { IsWindow(Some(hwnd)) }.as_bool() {
         return None;
     }
@@ -218,15 +220,16 @@ pub fn front_window() -> Option<FrontWindow> {
     if pid == 0 {
         return None;
     }
-    let readable = frame_bounds(root).is_some_and(|r| {
-        rules::on_screen(
-            unsafe { IsWindowVisible(root) }.as_bool(),
-            unsafe { IsIconic(root) }.as_bool(),
-            cloaked(root),
-            r.width,
-            r.height,
-        )
-    }) && !rules::SHELL_CLASSES.contains(&class_name(root).as_str());
+    let readable =
+        frame_bounds(root).is_some_and(|r| {
+            rules::on_screen(
+                unsafe { IsWindowVisible(root) }.as_bool(),
+                unsafe { IsIconic(root) }.as_bool(),
+                cloaked(root),
+                r.width,
+                r.height,
+            )
+        }) && !rules::is_shell_surface(&class_name(root), !window_text(root).trim().is_empty());
     Some(FrontWindow {
         window: readable.then(|| window_source_id(root, pid)),
         pid,

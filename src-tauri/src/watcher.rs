@@ -27,7 +27,12 @@ fn trigger_keys(service: &Shared) -> Vec<String> {
 
 pub fn start(app: &tauri::AppHandle, service: &Shared) {
     // The view keeps its historical name: on macOS this is the Accessibility grant.
-    service.view.lock().unwrap().accessibility = platform::key_trigger_status().permission == "granted";
+    // "Accessibility" is the macOS name for the key-trigger grant; a platform that needs
+    // no grant reports it as satisfied so the UI does not show a denied state.
+    service.view.lock().unwrap().accessibility = matches!(
+        platform::key_trigger_status().permission,
+        "granted" | "notRequired"
+    );
     let on_line = {
         let app = app.clone();
         let service = service.clone();
@@ -57,7 +62,7 @@ fn handle(app: &tauri::AppHandle, service: &Shared, event: &Value) {
             "frontmost-app",
             json!({
                 "appName": name,
-                "pid": platform::frontmost_pid(),
+                "pid": platform::frontmost_pid_for(&name),
                 "windowTitle": event.get("windowTitle"),
                 "appPath": event.get("appPath"),
             }),

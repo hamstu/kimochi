@@ -5,115 +5,20 @@
 //! host (`cargo test` on macOS included, by `#[path]`-including this file) and so the
 //! *semantic* window rules the plan keeps shared (§3.1: "has title, user-visible, not our
 //! own, minimum size") are written once, not re-derived inside an `EnumWindows` callback.
+//! The listing rule itself and handle spelling live in `kimochi_capture::win_rules`.
 use std::path::{Path, PathBuf};
 
-/// Smallest window a reader could plausibly be reading. Same thresholds as the macOS
-/// adapter (`readable_window`): anything smaller is a toolbar, HUD strip or helper.
-pub const MIN_WIDTH: f64 = 80.;
-pub const MIN_HEIGHT: f64 = 60.;
-
-/// `WS_EX_TOOLWINDOW`.
-pub const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
-/// `WS_EX_APPWINDOW`.
-pub const WS_EX_APPWINDOW: u32 = 0x0004_0000;
-
-/// Window classes that are the shell itself rather than an application window: the
-/// desktop (`Progman`, `WorkerW`) and the hosts of UWP shell surfaces, which are visible,
-/// titled and uncloaked while being nothing a reader opened.
-pub const SHELL_CLASSES: [&str; 3] = ["Progman", "WorkerW", "Windows.UI.Core.CoreWindow"];
-
-/// Geometry that could be a document rather than a framework surface.
-pub fn sized(width: f64, height: f64) -> bool {
-    width.is_finite() && height.is_finite() && width >= MIN_WIDTH && height >= MIN_HEIGHT
-}
-
-/// Whether the extended style marks a window as a tool window for the taskbar and
-/// Alt+Tab. `WS_EX_APPWINDOW` overrides `WS_EX_TOOLWINDOW` there, so it does here too.
-pub fn is_tool_window(ex_style: u32) -> bool {
-    ex_style & WS_EX_TOOLWINDOW != 0 && ex_style & WS_EX_APPWINDOW == 0
-}
+// Which windows are sources and how handles are spelled are capture-core's rules, shared
+// with the WGC backend so the picker and `enumerate` cannot disagree.
+pub use kimochi_capture::win_rules::{
+    hex_handle, is_shell_surface, is_tool_window, listable, parse_hex_handle, sized, WindowMeta,
+};
 
 /// On screen as far as a person is concerned: shown, not minimised, not cloaked by DWM
 /// (a suspended UWP app or a window on another virtual desktop is "visible" to USER but
 /// cloaked), and big enough to be read.
 pub fn on_screen(visible: bool, iconic: bool, cloaked: bool, width: f64, height: f64) -> bool {
     visible && !iconic && !cloaked && sized(width, height)
-}
-
-/// Could a reader be looking at this window? The shared semantic rule: a non-empty
-/// title, visible, uncloaked, at least 80x60, and not a tool window.
-///
-/// The title requirement mirrors the macOS picker: untitled top-level windows are
-/// overwhelmingly framework helper surfaces (IME windows, GPU/broker hosts, splash
-/// remnants). They remain capturable by id; they just do not belong in a list.
-pub fn readable_window(
-    title: &str,
-    visible: bool,
-    cloaked: bool,
-    tool_window: bool,
-    width: f64,
-    height: f64,
-) -> bool {
-    !title.trim().is_empty() && visible && !cloaked && !tool_window && sized(width, height)
-}
-
-/// Everything the picker knows about one top-level window, already read from Win32.
-#[derive(Clone, Debug)]
-pub struct WindowFacts<'a> {
-    pub title: &'a str,
-    pub class: &'a str,
-    pub ex_style: u32,
-    pub visible: bool,
-    pub cloaked: bool,
-    /// `GetWindow(GW_OWNER)` is non-null: a dialog, palette or popup of another window.
-    pub owned: bool,
-    pub pid: u32,
-    pub width: f64,
-    pub height: f64,
-}
-
-/// The source picker's rule: readable, unowned, not ours, not the shell.
-///
-/// A minimised window is listed (it is still a window the reader can pick and restore),
-/// unlike `on_screen`, which is about whether its text can be shown right now. Its
-/// extended frame bounds are the restored size only when DWM reports them, so a minimised
-/// window whose bounds collapsed to the iconic placeholder fails the size test, which is
-/// acceptable: it reappears on the next refresh once restored.
-pub fn picker_window_eligible(w: &WindowFacts<'_>, own_pid: u32) -> bool {
-    w.pid != own_pid
-        && !w.owned
-        && !SHELL_CLASSES.contains(&w.class)
-        && readable_window(
-            w.title,
-            w.visible,
-            w.cloaked,
-            is_tool_window(w.ex_style),
-            w.width,
-            w.height,
-        )
-}
-
-/// The wire form of a window or monitor handle: upper-case hex with a `0x` prefix,
-/// byte-identical to capture-core's `windows::hex_handle`, because ids from the picker,
-/// the capture backend and `front_window` are compared as strings.
-///
-/// Handles are pointer-sized and must never round-trip through a JavaScript number, so
-/// the id carries them as a string (see `kimochi_capture::ids`).
-pub fn format_handle(raw: usize) -> String {
-    format!("0x{raw:X}")
-}
-
-/// Inverse of `format_handle`. Accepts either case and an optional `0x`/`0X` prefix (ids
-/// written by hand or by another tool), rejects zero, which is never a live handle.
-pub fn parse_handle(s: &str) -> Option<usize> {
-    let digits = s
-        .strip_prefix("0x")
-        .or_else(|| s.strip_prefix("0X"))
-        .unwrap_or(s);
-    if digits.is_empty() {
-        return None;
-    }
-    usize::from_str_radix(digits, 16).ok().filter(|v| *v != 0)
 }
 
 /// `C:\Games\Foo\foo.exe` -> `foo`. Written by hand rather than with `Path::file_stem`
@@ -368,102 +273,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_titled_visible_window_of_reading_size_is_readable() {
-        assert!(readable_window("Game", true, false, false, 1280., 720.));
-        assert!(readable_window("Game", true, false, false, 80., 60.));
-    }
-
-    #[test]
-    fn untitled_hidden_cloaked_tool_or_tiny_windows_are_not() {
-        assert!(!readable_window("", true, false, false, 1280., 720.));
-        assert!(!readable_window("   ", true, false, false, 1280., 720.));
-        assert!(!readable_window("Game", false, false, false, 1280., 720.));
-        assert!(!readable_window("Game", true, true, false, 1280., 720.));
-        assert!(!readable_window("Game", true, false, true, 1280., 720.));
-        assert!(!readable_window("Game", true, false, false, 79., 720.));
-        assert!(!readable_window("Game", true, false, false, 1280., 59.));
-        assert!(!readable_window("Game", true, false, false, f64::NAN, 720.));
-        assert!(!readable_window(
-            "Game",
-            true,
-            false,
-            false,
-            1280.,
-            f64::INFINITY
-        ));
-    }
-
-    #[test]
-    fn app_window_overrides_tool_window() {
-        assert!(is_tool_window(WS_EX_TOOLWINDOW));
-        assert!(!is_tool_window(WS_EX_TOOLWINDOW | WS_EX_APPWINDOW));
-        assert!(!is_tool_window(0));
-    }
-
-    fn facts<'a>(title: &'a str, class: &'a str) -> WindowFacts<'a> {
-        WindowFacts {
-            title,
-            class,
-            ex_style: 0,
-            visible: true,
-            cloaked: false,
-            owned: false,
-            pid: 2,
-            width: 800.,
-            height: 600.,
-        }
-    }
-
-    #[test]
-    fn picker_keeps_normal_windows_and_rejects_ours_owned_and_shell() {
-        assert!(picker_window_eligible(&facts("Notepad", "Notepad"), 1));
-        assert!(!picker_window_eligible(&facts("Notepad", "Notepad"), 2));
-        assert!(!picker_window_eligible(
-            &WindowFacts {
-                owned: true,
-                ..facts("Find", "#32770")
-            },
-            1
-        ));
-        for class in SHELL_CLASSES {
-            assert!(!picker_window_eligible(&facts("Program Manager", class), 1));
-        }
-        assert!(!picker_window_eligible(
-            &WindowFacts {
-                ex_style: WS_EX_TOOLWINDOW,
-                ..facts("Palette", "X")
-            },
-            1
-        ));
-        assert!(picker_window_eligible(
-            &WindowFacts {
-                ex_style: WS_EX_TOOLWINDOW | WS_EX_APPWINDOW,
-                ..facts("Launcher", "X")
-            },
-            1
-        ));
-    }
-
-    #[test]
     fn on_screen_excludes_minimised_and_cloaked() {
         assert!(on_screen(true, false, false, 800., 600.));
         assert!(!on_screen(true, true, false, 800., 600.));
         assert!(!on_screen(true, false, true, 800., 600.));
         assert!(!on_screen(false, false, false, 800., 600.));
-    }
-
-    #[test]
-    fn handles_round_trip_as_capture_core_hex() {
-        assert_eq!(format_handle(0x001A_0B2C), "0x1A0B2C");
-        assert_eq!(format_handle(0x10001), "0x10001");
-        assert_eq!(parse_handle("0xa0b2c"), Some(0xA0B2C));
-        assert_eq!(parse_handle("0x000A0B2C"), Some(0xA0B2C));
-        assert_eq!(parse_handle("A0B2C"), Some(0xA0B2C));
-        assert_eq!(parse_handle(&format_handle(usize::MAX)), Some(usize::MAX));
-        assert_eq!(parse_handle("0x0"), None);
-        assert_eq!(parse_handle("0x"), None);
-        assert_eq!(parse_handle(""), None);
-        assert_eq!(parse_handle("0xnothex"), None);
     }
 
     #[test]

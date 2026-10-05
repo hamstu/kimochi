@@ -15,7 +15,7 @@
 //!
 //! Handles on the wire: windows are `windows:window:0x{HWND:X}:{pid}` and displays
 //! `windows:display:0x{HMONITOR:X}`, upper-case hex with a `0x` prefix, byte-identical
-//! to capture-core's `hex_handle` (see `rules::format_handle` and `display_source_id`).
+//! to capture-core's `win_rules::hex_handle` (see `display_source_id`).
 //!
 //! Threading: the window functions (`place`, `order_front`, `promote_to_key`,
 //! `make_panel`, `panel_cursor`, `activate_*`) are meant to run on the main (UI) thread,
@@ -207,7 +207,7 @@ pub fn display_infos() -> Vec<DisplayInfo> {
 /// string capture-core's Windows backend mints (`hex_handle(hmonitor)`), so a display
 /// picked in the UI resolves there.
 pub fn display_source_id(display_id: u32) -> String {
-    SourceId::display(Platform::Windows, rules::format_handle(display_id as usize)).to_string()
+    SourceId::display(Platform::Windows, rules::hex_handle(display_id as usize)).to_string()
 }
 
 /// macOS needs an autorelease pool around AppKit-heavy work; Win32 has nothing like it.

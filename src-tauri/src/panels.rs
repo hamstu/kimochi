@@ -149,7 +149,7 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
     let mut rect = match saved {
         Some(rect) => rect,
         None => {
-            let area = platform::display_infos()
+            let area = platform::desktop_display_infos()
                 .first()
                 .map(|d| d.work_area)
                 .unwrap_or(Rect {
@@ -288,7 +288,7 @@ pub fn ensure(
     // Keep Kimochi's own panels out of captures of the display they sit on, where the
     // OS honours it. This is the same mechanism as Electron's setContentProtection.
     let _ = window.set_content_protected(true);
-    platform::place(&window, bounds)?;
+    platform::desktop_place(&window, bounds)?;
     attach_events(app, settings, &window, spec);
     Ok(window)
 }
@@ -329,7 +329,7 @@ fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpe
     if window.is_minimized().unwrap_or(false) {
         return;
     }
-    if let Ok(rect) = platform::bounds(window) {
+    if let Ok(rect) = platform::desktop_bounds(window) {
         let _ = settings.set(
             &format!("nativeWindowBounds.{}", spec.label),
             json!({"x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height}),
@@ -341,7 +341,7 @@ pub fn info(window: &WebviewWindow) -> Result<Value, String> {
     Ok(json!({
         "label": window.label(),
         "native": platform::inspect(window)?,
-        "bounds": platform::bounds(window)?,
+        "bounds": platform::desktop_bounds(window)?,
         "scale": window.scale_factor().map_err(|e| e.to_string())?,
         "pinned": window.is_always_on_top().map_err(|e| e.to_string())?,
         "focused": window.is_focused().map_err(|e| e.to_string())?,
@@ -374,7 +374,7 @@ pub fn act(
         "drag" => window.start_dragging().map_err(native_err)?,
         "place" => {
             let rect = rect.ok_or("invalid: place requires bounds")?;
-            platform::place(&window, platform::clamp_to_visible(rect))?;
+            platform::desktop_place(&window, platform::clamp_to_visible(rect))?;
             // Reassert the flag: programmatic placement has been observed to turn
             // resizing back on for windows that must stay fixed.
             let resizable = spec(label).is_some_and(|s| s.resizable);
@@ -429,22 +429,22 @@ fn place_on_main_display(
     label: &str,
 ) -> Result<(), String> {
     let spec = spec(label).ok_or("invalid: unknown panel spec")?;
-    let (width, height) = match platform::bounds(window) {
+    let (width, height) = match platform::desktop_bounds(window) {
         Ok(current) if existed => (current.width, current.height),
         _ => (spec.width, spec.height),
     };
-    let displays = platform::display_infos();
+    let displays = platform::desktop_display_infos();
     let (x, y) = app
         .get_webview_window(MAIN)
         .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
-        .and_then(|w| platform::bounds(&w).ok())
+        .and_then(|w| platform::desktop_bounds(&w).ok())
         .map(|r| (r.x + r.width / 2., r.y + r.height / 2.))
-        .or_else(|| platform::cursor().map(|p| (p.x, p.y)))
+        .or_else(|| platform::desktop_cursor().map(|p| (p.x, p.y)))
         .unwrap_or((0., 0.));
     let Some(area) = work_area_at(&displays, x, y) else {
         return Ok(());
     };
-    platform::place(window, centred(width, height, area))
+    platform::desktop_place(window, centred(width, height, area))
 }
 
 /// The work area of the display containing a desktop point (top-left points), or the
@@ -488,7 +488,7 @@ pub fn set_content_height(
         return Ok(());
     }
     let window = ensure(app, settings, label)?;
-    let current = platform::bounds(&window)?;
+    let current = platform::desktop_bounds(&window)?;
     let next = platform::clamp_to_visible(Rect {
         width: spec.width,
         height: height.max(spec.min_height).ceil(),
@@ -498,7 +498,7 @@ pub fn set_content_height(
         || (next.height - current.height).abs() > 0.5
         || (next.y - current.y).abs() > 0.5
     {
-        platform::place(&window, next)?;
+        platform::desktop_place(&window, next)?;
     }
     Ok(())
 }
@@ -513,10 +513,10 @@ pub fn recover_bounds(app: &tauri::AppHandle, settings: &Arc<Settings>) {
         if window.is_minimized().unwrap_or(false) {
             continue;
         }
-        if let Ok(rect) = platform::bounds(&window) {
+        if let Ok(rect) = platform::desktop_bounds(&window) {
             let clamped = platform::clamp_to_visible(rect);
             if (clamped.x - rect.x).abs() > 0.5 || (clamped.y - rect.y).abs() > 0.5 {
-                let _ = platform::place(&window, clamped);
+                let _ = platform::desktop_place(&window, clamped);
                 save_bounds(settings, &window, spec);
             }
         }

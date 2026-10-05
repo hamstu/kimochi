@@ -73,3 +73,38 @@ test('monitor chosen from captured source including negative origins', () => {
   ]
   assert.deepEqual(sourceDisplay({ x: -900, y: 0, width: 640, height: 400 }, d), d[0])
 })
+test('Windows frames map through desktop points like a Retina frame on macOS', () => {
+  // Native converts a Windows frame's physical `source_bounds` to desktop points
+  // (platform::DesktopGeometry::frame_info_to_desktop): a 900×600 physical window at
+  // x=2400 on a 150 % monitor whose raw origin is 1920 sits at 2240 points, 600×400.
+  // Frame pixels stay physical, so the mapping is the same per-axis ratio as Retina.
+  const info = {
+    full_width: 900,
+    full_height: 600,
+    crop_pixels: [0, 0, 900, 600],
+    source_bounds: { x: 2240, y: 200, width: 600, height: 400 }
+  }
+  const word = {
+    description: '言葉',
+    boundingPoly: {
+      vertices: [
+        { x: 90, y: 60 },
+        { x: 180, y: 60 },
+        { x: 180, y: 90 },
+        { x: 90, y: 90 }
+      ]
+    }
+  }
+  const overlay = { x: 1920, y: 0, width: 1920, height: 1080 }
+  const [box] = boxes(info, [word], overlay)
+  assert.equal(box.text, '言葉')
+  assert.ok(Math.abs(box.x - 380) < 1e-9 && Math.abs(box.y - 240) < 1e-9, JSON.stringify(box))
+  assert.ok(Math.abs(box.width - 60) < 1e-9 && Math.abs(box.height - 20) < 1e-9, JSON.stringify(box))
+  // The same window as macOS would report it at 2× gives the same overlay box.
+  const [mac] = boxes(
+    { ...info, full_width: 1200, full_height: 800, crop_pixels: [0, 0, 1200, 800] },
+    [{ ...word, boundingPoly: { vertices: word.boundingPoly.vertices.map((v) => ({ x: (v.x * 4) / 3, y: (v.y * 4) / 3 })) } }],
+    overlay
+  )
+  for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(mac[key] - box[key]) < 1e-9)
+})

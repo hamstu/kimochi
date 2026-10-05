@@ -158,14 +158,19 @@ pub async fn show_popover(
     // inside transparent margin and doesn't get clipped by the OS window.
     let win_w = width + 2.0 * SHADOW_PAD;
     let win_h = height + 2.0 * SHADOW_PAD;
-    let _ = window.set_size(LogicalSize::new(win_w, win_h));
+    // Where the OS's desktop is already in points (macOS), Tauri's logical size and
+    // position are desktop points; elsewhere the window is placed below, in one call.
+    let logical = crate::platform::desktop_unit() == crate::platform::DesktopUnit::Points;
+    if logical {
+        let _ = window.set_size(LogicalSize::new(win_w, win_h));
+    }
 
-    // cursor_x / cursor_y arrive in LOGICAL CSS pixels (event.screenX/Y).
-    // Find the monitor that contains the cursor so we put the popover on the
-    // same physical display the user is reading on.
+    // cursor_x / cursor_y arrive in desktop points (event.screenX/Y on macOS, where
+    // they coincide). Find the monitor that contains the cursor so we put the popover
+    // on the same physical display the user is reading on.
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
-        let _ = tx.send(crate::platform::display_infos());
+        let _ = tx.send(crate::platform::desktop_display_infos());
     })
     .map_err(|e| e.to_string())?;
     let displays = rx.await.map_err(|e| e.to_string())?;
@@ -217,10 +222,22 @@ pub async fn show_popover(
     // (x, y) above target the CARD's top-left. Subtract SHADOW_PAD so the
     // window's transparent margin sits behind the card. Tauri converts logical
     // → physical using the destination monitor's scale factor.
-    let _ = window.set_position(LogicalPosition::new(
-        (x - SHADOW_PAD).round(),
-        (y - SHADOW_PAD).round(),
-    ));
+    if logical {
+        let _ = window.set_position(LogicalPosition::new(
+            (x - SHADOW_PAD).round(),
+            (y - SHADOW_PAD).round(),
+        ));
+    } else {
+        // Tauri's logical position is not desktop points under mixed DPI, so the
+        // platform places the window (on the main thread, which native placement needs).
+        let rect = kimochi_capture::Rect {
+            x: (x - SHADOW_PAD).round(),
+            y: (y - SHADOW_PAD).round(),
+            width: win_w,
+            height: win_h,
+        };
+        let _ = on_popup_main(&app, move |w| crate::platform::desktop_place(&w, rect)).await;
+    }
 
     let is_notebook = kind.as_deref() == Some("notebook");
 
@@ -410,7 +427,8 @@ pub fn pointer_down(app: &AppHandle, x: f64, y: f64) {
             if LOOKUP_GEN.load(Ordering::Relaxed) != generation {
                 return Ok(());
             }
-            let b = crate::platform::bounds(&window)?;
+            // `x`, `y` come from the cursor poll in desktop points.
+            let b = crate::platform::desktop_bounds(&window)?;
             if x >= b.x && x < b.x + b.width && y >= b.y && y < b.y + b.height {
                 return Ok(());
             }
@@ -463,7 +481,7 @@ pub async fn smoke(app: AppHandle) -> Result<(), String> {
         if !window.is_visible().map_err(|e| e.to_string())? {
             return Err("popup did not become visible".into());
         }
-        let b = on_popup_main(&app, |w| crate::platform::bounds(&w)).await?;
+        let b = on_popup_main(&app, |w| crate::platform::desktop_bounds(&w)).await?;
         pointer_down(&app, b.x + b.width / 2., b.y + b.height / 2.);
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         if !window.is_visible().map_err(|e| e.to_string())? {

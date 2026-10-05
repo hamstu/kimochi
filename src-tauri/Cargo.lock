@@ -2949,6 +2949,7 @@ dependencies = [
  "base64 0.22.1",
  "block2",
  "gilrs",
+ "glib",
  "image",
  "kimochi-capture",
  "libc",
@@ -2959,6 +2960,7 @@ dependencies = [
  "objc2-foundation",
  "ort",
  "png 0.18.1",
+ "raw-window-handle",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -2975,6 +2977,8 @@ dependencies = [
  "tower-http",
  "tungstenite",
  "windows 0.61.3",
+ "x11rb",
+ "zbus",
 ]
 
 [[package]]
@@ -2990,6 +2994,7 @@ dependencies = [
  "serde",
  "windows 0.62.2",
  "windows-capture",
+ "x11rb",
 ]
 
 [[package]]

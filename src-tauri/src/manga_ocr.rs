@@ -1,9 +1,13 @@
 //! Native page OCR, reused on the retained-frame blocking worker.
+use crate::engine_probe::{self, Loaded, Probe, Verified};
 use mangaocr::{
     Backend, ComicTextDetector, DetectionOptions, MangaOcr, ModelPaths, OcrOptions, PageResult,
 };
 use serde_json::{json, Value};
-use std::{path::PathBuf, sync::Mutex};
+use std::{
+    path::PathBuf,
+    sync::{Arc, LazyLock, Mutex},
+};
 use tauri::Manager;
 
 struct PageEngine {
@@ -35,12 +39,62 @@ fn assets(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
     Err("Manga OCR assets are missing. Run npm run prepare:mangaocr or rebuild with npm run bundle.".into())
 }
-/// Whether the models are present, without loading them. For `platform_capabilities`.
+static PROBE: LazyLock<Arc<Probe>> = LazyLock::new(Default::default);
+
+/// Whether Manga OCR can run here, for `platform_capabilities`.
+///
+/// Missing models are reported at once. Present models are reported available
+/// until the first call's background probe has selected the Candle device
+/// (Metal/CUDA/CPU) and built the comic text detector graph on it; from then on
+/// this is the verified answer. The detector (about 95 MB) is the probe's
+/// stand-in for the whole engine: it exercises device selection, which is what
+/// differs per machine, without loading the 440 MB recogniser. It is dropped
+/// once built, so nothing stays resident.
 pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
-    match assets(app) {
-        Ok(_) => (true, None),
-        Err(e) => (false, Some(e)),
+    let root = match assets(app) {
+        Ok(root) => root,
+        Err(e) => return (false, Some(e)),
+    };
+    // Metal on macOS is proven; see meiki_ocr::availability for why the startup probe
+    // is reserved for the other platforms.
+    if cfg!(target_os = "macos") {
+        return (true, None);
     }
+    let probe = move || {
+        let detector = engine_probe::guarded(|| {
+            ComicTextDetector::new(root.join("comic-text-detector.onnx"), Backend::Auto)
+                .map_err(|e| format!("Comic detector model: {e}"))
+        })?;
+        let info = detector.backend_info();
+        Ok(Loaded {
+            accelerator: match info.selected {
+                Backend::Metal => "metal",
+                Backend::Cuda => "cuda",
+                Backend::Cpu | Backend::Auto => "cpu",
+            },
+            diagnostics: info
+                .fallback_reasons
+                .iter()
+                .map(|r| format!("fallback: {r}"))
+                .collect(),
+        })
+    };
+    match PROBE.verified_or_start("mangaocr", engine_probe::PROBE_TIMEOUT, probe) {
+        Some(verified) => (verified.available, verified.reason),
+        None => (true, None),
+    }
+}
+
+/// The verified verdict once the probe has finished: accelerator and diagnostics.
+// TODO(integrator): surface `accelerator` in `ocrEngines.mangaocr` instead of the OS table's guess.
+#[allow(dead_code)]
+pub fn verification() -> Option<Verified> {
+    PROBE.verified()
+}
+
+/// Run `hook` whenever the probe records a verdict, so capabilities can be re-announced.
+pub fn on_verified(hook: impl Fn() + Send + Sync + 'static) {
+    PROBE.on_verified(hook);
 }
 pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
     let image = mangaocr::decode_image(png).map_err(|e| format!("Manga OCR image: {e}"))?;

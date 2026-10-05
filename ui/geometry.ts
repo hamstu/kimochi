@@ -1,3 +1,10 @@
+/**
+ * Coordinates. Every rectangle and point native hands a page is in *desktop points*:
+ * the OS desktop in units of one CSS pixel on the display they are on. On macOS those
+ * are the OS's own points; on Windows native converts physical pixels per monitor
+ * before anything reaches a page (see `platform::DesktopGeometry`). Frame pixels
+ * (`full_*`, `crop_pixels`, OCR vertices) are capture pixels and never desktop points.
+ */
 export interface Rect {
   x: number
   y: number
@@ -21,7 +28,7 @@ export interface Annotation {
   boundingPoly: { vertices: { x?: number; y?: number }[] }
 }
 /**
- * Current full capture pixels → logical desktop points, per axis.
+ * Current full capture pixels → desktop points, per axis.
  *
  * `bounds` is where the source is *now*. It defaults to where it was when the
  * frame was captured, which is the only thing a frame knows about itself. A
@@ -40,7 +47,7 @@ export function scaleOf(info: FrameInfo, bounds?: Rect): { sx: number; sy: numbe
  * Reference-crop rescaling belongs to capture-core: `crop_pixels` already
  * describes the crop in the *current* capture's pixels, so each axis only needs
  * its own current-full-to-logical ratio. That is what keeps a saved crop correct
- * when the same window moves between a 1× and a Retina display.
+ * when the same window moves between a 1× and a Retina (or 150 %) display.
  *
  * Pixels and points stay independent: everything the frame knows — the crop
  * offset, the annotation rectangle, the full dimensions — remains in the capture
@@ -125,9 +132,9 @@ export function sourceDisplay(source: Rect, displays: Rect[]): Rect {
 /**
  * A desktop point in the overlay window's own coordinates.
  *
- * Both spaces are macOS points, so this is a translation and never a scale: the
+ * Both spaces are desktop points, so this is a translation and never a scale: the
  * overlay covers `origin` exactly, and its viewport is that many CSS pixels wide
- * whatever the display's backing scale. A display left of or above the primary has a
+ * whatever the display's backing (macOS) or DPI (Windows) scale. A display left of or above the primary has a
  * negative origin, which is why this must subtract rather than assume a first
  * quadrant.
  */

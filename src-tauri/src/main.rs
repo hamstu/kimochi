@@ -1,9 +1,12 @@
+// A release build on Windows is a GUI app: no console window behind it.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod reader;
 use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
 mod actions;
 mod capture_unavailable;
+mod engine_probe;
 mod gamepad;
 mod history_merge;
 mod hotkeys;
@@ -16,6 +19,7 @@ mod scan_trace;
 mod settings;
 mod sources;
 mod state;
+mod text_observer;
 mod texthooker;
 mod tray;
 mod watcher;
@@ -429,6 +433,9 @@ fn clear(state: State<Shared>) {
 
 #[tauri::command]
 fn panel_pointer(window: tauri::WebviewWindow) -> Reply<Option<(f64, f64)>> {
+    // Window-local CSS pixels straight from the OS module on every platform (macOS
+    // points are CSS pixels; Windows divides by the window's DPI itself), so no desktop
+    // conversion applies here.
     platform::panel_pointer(&window)
 }
 
@@ -460,7 +467,9 @@ fn panel_content_height(
 
 #[tauri::command]
 fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Reply<()> {
-    platform::place(
+    // `rect` and the stored origin are desktop points, the space the cursor poll compares
+    // hit regions in.
+    platform::desktop_place(
         &app.get_webview_window(OVERLAY)
             .ok_or("native: overlay missing")?,
         rect,
@@ -471,7 +480,7 @@ fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Rep
 
 #[tauri::command]
 fn desktop() -> Vec<Rect> {
-    platform::displays()
+    platform::desktop_displays()
 }
 
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
@@ -493,8 +502,8 @@ fn controller_nav(app: tauri::AppHandle, active: bool, take_focus: Option<bool>)
 /// reader is looking, not on whichever display holds the chosen source.
 #[tauri::command]
 fn pointer_display() -> Option<platform::DisplayInfo> {
-    let platform::PointerSample { x, y, .. } = platform::cursor()?;
-    let displays = platform::display_infos();
+    let platform::PointerSample { x, y, .. } = platform::desktop_cursor()?;
+    let displays = platform::desktop_display_infos();
     displays
         .iter()
         .find(|d| {
@@ -527,8 +536,8 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
 /// covers one display and sees no pointer events outside it.
 #[tauri::command]
 fn pointer_location() -> Option<Value> {
-    let platform::PointerSample { x, y, .. } = platform::cursor()?;
-    let display = platform::display_infos().into_iter().find(|d| {
+    let platform::PointerSample { x, y, .. } = platform::desktop_cursor()?;
+    let display = platform::desktop_display_infos().into_iter().find(|d| {
         let b = &d.bounds;
         x >= b.x && y >= b.y && x < b.x + b.width && y < b.y + b.height
     });
@@ -541,7 +550,7 @@ fn pointer_location() -> Option<Value> {
 /// into the desktop, which is the only space two native windows share.
 #[tauri::command]
 fn window_bounds(window: tauri::WebviewWindow) -> Reply<Rect> {
-    platform::bounds(&window)
+    platform::desktop_bounds(&window)
 }
 
 /// Move, size and show the popup window, in desktop points.
@@ -559,7 +568,7 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
         .ok_or("native: the popup window is missing")?;
     if let Some(rect) = rect {
         if rect.width > 0. && rect.height > 0. {
-            platform::place(&window, rect)?;
+            platform::desktop_place(&window, rect)?;
         }
     }
     let shown = window.is_visible().unwrap_or(false);
@@ -576,7 +585,7 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
 
 #[tauri::command]
 fn displays() -> Vec<platform::DisplayInfo> {
-    platform::display_infos()
+    platform::desktop_display_infos()
 }
 
 #[tauri::command]
@@ -724,6 +733,13 @@ async fn enumerate(state: State<'_, Shared>) -> Reply<Vec<Source>> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .enumerate()
+            .map(|sources| {
+                let geometry = platform::DesktopGeometry::current();
+                sources
+                    .into_iter()
+                    .map(|s| geometry.source_to_desktop(s))
+                    .collect()
+            })
             .map_err(err)
     })
     .await
@@ -837,7 +853,8 @@ async fn capture_frame(
             }
         }
 
-        let info = serde_json::to_value(&frame.info).map_err(|e| e.to_string())?;
+        let info = serde_json::to_value(platform::desktop_frame_info(&frame.info))
+            .map_err(|e| e.to_string())?;
         // One id space shared with `scan`, so `ocr_frame` can pick this exact frame up.
         let id = service
             .images
@@ -1318,7 +1335,8 @@ async fn scan(
             // which take far longer than the capture, so previews are not held up.
             drop(backend);
             let png = frame.png().map_err(err)?;
-            let info = serde_json::to_value(&frame.info).map_err(|e| e.to_string())?;
+            let info = serde_json::to_value(platform::desktop_frame_info(&frame.info))
+                .map_err(|e| e.to_string())?;
             let id = s
                 .images
                 .lock()
@@ -1697,7 +1715,7 @@ fn system_state(state: State<Shared>) -> Value {
     json!({
         "frontmostApp": view.frontmost_app,
         "accessibility": view.accessibility,
-        "displays": platform::display_infos(),
+        "displays": platform::desktop_display_infos(),
     })
 }
 
@@ -1895,9 +1913,7 @@ fn main() {
             };
             let service: Shared = Arc::new(Service {
                 backend: Mutex::new(backend),
-                observer: Mutex::new(Box::new(kimochi_capture::text::CachedObserver::new(
-                    kimochi_capture::platform_observer(),
-                ))),
+                observer: Mutex::new(text_observer::local_observer(&handle)),
                 images: Mutex::new(Default::default()),
                 settings: store.clone(),
                 selection: Mutex::new(None),
@@ -2118,7 +2134,7 @@ fn main() {
                         activate_service.view.lock().unwrap().frontmost_app = Some(name.clone());
                         let _ = activate_handle.emit(
                             "frontmost-app",
-                            json!({ "appName": name, "pid": platform::frontmost_pid() }),
+                            json!({ "appName": name, "pid": platform::frontmost_pid_for(&name) }),
                         );
                     },
                 );
@@ -2278,7 +2294,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 y,
                 down,
                 modifiers,
-            }) = platform::cursor()
+            }) = platform::desktop_cursor()
             {
                 if down && !was_down {
                     reader::popover::pointer_down(&handle, x, y);
@@ -2493,7 +2509,7 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
 fn spawn_display_watch(handle: tauri::AppHandle, settings: Arc<Settings>) {
     std::thread::spawn(move || {
         let layout = || {
-            platform::displays()
+            platform::desktop_displays()
                 .iter()
                 .map(|r| format!("{},{},{},{}", r.x, r.y, r.width, r.height))
                 .collect::<Vec<_>>()
@@ -2535,7 +2551,7 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             let Some(window) = SourceId::parse(&source_id).filter(|id| id.is_window()) else {
                 continue;
             };
-            let Some((rect, on_screen)) = platform::window_bounds(&window) else {
+            let Some((rect, on_screen)) = platform::desktop_window_bounds(&window) else {
                 continue;
             };
             let changed = last.is_none_or(|(prev, was_on)| {

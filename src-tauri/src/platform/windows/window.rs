@@ -216,7 +216,7 @@ pub fn inspect(w: &tauri::WebviewWindow) -> Result<Value, String> {
     let foreground = unsafe { GetForegroundWindow() };
     let own = std::process::id();
     Ok(json!({
-        "hwnd": rules::format_handle(hwnd.0 as usize),
+        "hwnd": rules::hex_handle(hwnd.0 as usize),
         "style": format!("{style:#010x}"),
         "ex_style": format!("{ex:#010x}"),
         "topmost": ex & WS_EX_TOPMOST.0 != 0,

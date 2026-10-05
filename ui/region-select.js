@@ -38,7 +38,8 @@
  *
  * Everything here is in points, never pixels: CSS points inside the window, desktop points outside.
  * There is no `devicePixelRatio` anywhere in this file; converting points to capture pixels needs
- * the display's backing scale, which only the caller knows.
+ * the display's `scale_factor` (capture pixels per desktop point: the Retina backing scale on
+ * macOS, the DPI scale on Windows), which only the caller knows.
  *
  * ## Two call shapes
  *
