@@ -11,11 +11,14 @@ name: CI
 # fine-grained PAT with read-only Contents access to both. Override the repository variables
 # KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if they move.
 
+# CI builds are intentionally off until the Windows and Linux ports have been exercised by
+# hand (CROSS_PLATFORM_PLAN.md progress log). Only a manual dispatch runs this workflow;
+# restore the push/pull_request triggers below when CI builds are wanted again.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
+  # push:
+  #   branches: [main]
+  # pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
