@@ -70,11 +70,15 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
         service.view.lock().unwrap().overlay_visible = false;
         Some(false)
     } else { visibility };
+    #[cfg(target_os = "linux")]
+    let visibility = if crate::platform::capture::suppressed() { None } else { visibility };
     if let Some(visible) = visibility {
         if let Some(overlay) = app.get_webview_window("overlay") {
             let _ = if visible {
                 overlay.show()
             } else {
+                #[cfg(target_os = "linux")]
+                if overlay.is_visible().unwrap_or(false) { crate::platform::capture::mark_hidden(); }
                 overlay.hide()
             };
             if !visible {

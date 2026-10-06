@@ -419,7 +419,8 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
         // The Wayland reader owns its whole input surface. Never leave an empty
         // transparent surface over another application (including WM dialogs).
         let visible = !usable.is_empty()
-            && (state.view.lock().unwrap().overlay_visible || platform::region_editing());
+            && (state.view.lock().unwrap().overlay_visible || platform::region_editing())
+            && !platform::capture::suppressed();
         if visible && platform::wayland_overlay_unavailable() {
             // A hide action disables input; restore whole-window input on show.
             let _ = window.set_ignore_cursor_events(false);
@@ -428,6 +429,7 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
             let result = if visible {
                 window.show()
             } else {
+                platform::capture::mark_hidden();
                 window.hide()
             };
             if let Err(error) = result {
@@ -499,10 +501,21 @@ async fn panel(
     rect: Option<Rect>,
 ) -> Reply<Value> {
     #[cfg(target_os = "linux")]
+    if platform::capture::suppressed() && platform::capture::annotation_window(&label)
+        && matches!(action.as_str(), "show" | "show_inactive")
+    {
+        return Err("busy: annotations are temporarily hidden for capture".into());
+    }
+    #[cfg(target_os = "linux")]
     if label == OVERLAY && platform::wayland_overlay_unavailable()
         && matches!(action.as_str(), "show" | "show_inactive")
     {
         return Err("Native overlay is unavailable on this Wayland compositor".into());
+    }
+    #[cfg(target_os = "linux")]
+    if platform::capture::annotation_window(&label) && action == "hide"
+        && app.get_webview_window(&label).is_some_and(|w| w.is_visible().unwrap_or(false)) {
+        platform::capture::mark_hidden();
     }
     let settings = state.settings.clone();
     panels::act_async(&app, &settings, label, action, rect).await
@@ -2052,6 +2065,8 @@ fn main() {
                     Some(e.message),
                 ),
             };
+            #[cfg(target_os = "linux")]
+            let backend = platform::capture::protect(handle.clone(), backend);
             let service: Shared = Arc::new(Service {
                 backend: Mutex::new(backend),
                 observer: Mutex::new(text_observer::local_observer(&handle)),

@@ -356,6 +356,7 @@ mod backend {
 
     /// One frame, already converted to tightly packed RGBA.
     struct LatestFrame {
+        received: Instant,
         pixels: Vec<u8>,
         width: u32,
         height: u32,
@@ -375,6 +376,7 @@ mod backend {
         fn publish(&self, pixels: Vec<u8>, width: u32, height: u32) {
             self.generation.fetch_add(1, Ordering::SeqCst);
             *self.latest.lock().unwrap() = Some(Arc::new(LatestFrame {
+                received: Instant::now(),
                 pixels,
                 width,
                 height,
@@ -386,15 +388,15 @@ mod backend {
             self.arrived.notify_all();
         }
         /// The newest frame, waiting up to `limit` for the first one.
-        fn frame(&self, limit: Duration) -> Option<Arc<LatestFrame>> {
+        fn frame(&self, limit: Duration, after: Option<Instant>) -> Option<Arc<LatestFrame>> {
             let latest = self.latest.lock().unwrap();
             let (latest, _) = self
                 .arrived
                 .wait_timeout_while(latest, limit, |frame| {
-                    frame.is_none() && !self.ended.load(Ordering::SeqCst)
+                    frame.as_ref().is_none_or(|frame| after.is_some_and(|after| frame.received < after)) && !self.ended.load(Ordering::SeqCst)
                 })
                 .unwrap();
-            latest.clone()
+            latest.clone().filter(|frame| after.is_none_or(|after| frame.received >= after))
         }
     }
 
@@ -1072,12 +1074,15 @@ mod backend {
             Ok((stream.clone(), slot))
         }
 
-        fn grab(&self, source_id: &str, crop: Option<Crop>, edge: Option<u32>) -> Result<Frame> {
+        fn grab(&self, source_id: &str, crop: Option<Crop>, edge: Option<u32>, after: Option<Instant>) -> Result<Frame> {
             let start = Instant::now();
             let (stream, slot) = self.resolve(source_id)?;
+            // An isolated portal window does not contain separate layer surfaces;
+            // hiding them may not damage this stream, so no new buffer is required.
+            let after = if stream.kind == StreamKind::Window { None } else { after };
             let resolve_ms = elapsed_ms(start);
             let acquisition = Instant::now();
-            let frame = slot.frame(FIRST_FRAME_WAIT).ok_or_else(|| {
+            let frame = slot.frame(FIRST_FRAME_WAIT, after).ok_or_else(|| {
                 if slot.ended.load(Ordering::SeqCst) {
                     stale_source()
                 } else {
@@ -1170,10 +1175,16 @@ mod backend {
             })
         }
         fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
-            self.grab(&request.source_id, request.crop, None)
+            self.grab(&request.source_id, request.crop, None, None)
+        }
+        fn capture_after(&mut self, request: &CaptureRequest, after: Instant) -> Result<Frame> {
+            self.grab(&request.source_id, request.crop, None, Some(after))
         }
         fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
-            self.grab(source_id, None, Some(edge))
+            self.grab(source_id, None, Some(edge), None)
+        }
+        fn thumbnail_after(&mut self, source_id: &str, edge: u32, after: Instant) -> Result<Frame> {
+            self.grab(source_id, None, Some(edge), Some(after))
         }
         fn close(&mut self) {
             self.drop_cast();
@@ -1185,6 +1196,33 @@ mod backend {
             self.drop_cast();
         }
     }
+    #[cfg(test)]
+    mod freshness_tests {
+        use super::*;
+        #[test]
+        fn cached_frame_before_suppression_is_never_returned() {
+            let slot = Slot::default();
+            slot.publish(vec![1; 4], 1, 1);
+            let fence = Instant::now();
+            assert!(slot.frame(Duration::from_millis(1), Some(fence)).is_none());
+            slot.publish(vec![2; 4], 1, 1);
+            assert_eq!(slot.frame(Duration::from_millis(1), Some(fence)).unwrap().pixels, vec![2; 4]);
+        }
+        #[test]
+        fn capture_waits_for_a_post_suppression_frame() {
+            let slot = Arc::new(Slot::default());
+            slot.publish(vec![1; 4], 1, 1);
+            let fence = Instant::now();
+            let writer = slot.clone();
+            let task = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(10));
+                writer.publish(vec![3; 4], 1, 1);
+            });
+            assert_eq!(slot.frame(Duration::from_secs(1), Some(fence)).unwrap().pixels, vec![3; 4]);
+            task.join().unwrap();
+        }
+    }
+
 }
 
 #[cfg(test)]

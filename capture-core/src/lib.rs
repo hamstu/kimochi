@@ -144,6 +144,11 @@ pub trait CaptureBackend: Send {
     fn request_permission(&self) -> bool;
     fn enumerate(&mut self) -> Result<Vec<Source>>;
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame>;
+    /// Linux streamed captures must not reuse a buffer from before UI suppression.
+    #[cfg(target_os = "linux")]
+    fn capture_after(&mut self, request: &CaptureRequest, _after: Instant) -> Result<Frame> {
+        self.capture(request)
+    }
     /// The whole source, scaled so its longest edge is at most `edge` pixels. Backends
     /// that can scale while capturing should, rather than capture full size and shrink.
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
@@ -152,6 +157,10 @@ pub trait CaptureBackend: Send {
             source_id: source_id.to_string(),
             crop: None,
         })
+    }
+    #[cfg(target_os = "linux")]
+    fn thumbnail_after(&mut self, source_id: &str, edge: u32, _after: Instant) -> Result<Frame> {
+        self.thumbnail(source_id, edge)
     }
     fn close(&mut self) {}
 }

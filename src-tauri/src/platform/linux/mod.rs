@@ -257,6 +257,7 @@ pub fn capabilities() -> Value {
             "windowCapture": x11,
             // X has no capture exclusion list: a display capture includes our overlay.
             "excludesOwnWindows": false,
+            "overlayExclusion": "hideDuringCapture",
         },
         "sources": {
             "catalog": x11,
@@ -295,3 +296,5 @@ pub fn capabilities() -> Value {
 }
 
 pub use layer::{region_editing, region_keyboard};
+
+pub mod capture;

@@ -124,8 +124,8 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
 - **`run_cli`**: direct spawn, `PATH` resolution by std, own process group
   (`process_group(0)`), no login shell.
 - **`capabilities()`** includes `session: {backend, compositor, layerShell, xwayland}`.
-  X11 reports `excludesOwnWindows: false` (display captures include the overlay; X has
-  no exclusion list) and `windowCapture: true`; Wayland reports `windowCapture: false`
+  X11 reports `excludesOwnWindows: false` (X has
+  no native exclusion list; annotations are temporarily hidden by the Linux capture decorator) and `windowCapture: true`; Wayland reports `windowCapture: false`
   because global window tracking/placement is unavailable (the portal can still share a window). `ocrAccelerators: {meikiocr: "cpu", mangaocr: "cpu"}`.
 - **Threading.** The X11 query connection is one process-wide `RustConnection` (it is
   `Sync`), opened on first use; if the X server cannot be reached every X11 query answers
@@ -175,3 +175,7 @@ codecs). The Linux AppImage helper deploys the required MP3/WAV playback plugins
 and their ELF dependencies, plus the plugin scanner, and sets bundle-local plugin
 paths. AppImage builds need GStreamer pkg-config metadata (Debian
 `libgstreamer1.0-dev`; Arch provides it in the installed libraries). Native JS, Yomitan assets and macOS/Windows audio are unchanged.
+
+### Annotation capture fallback
+
+Linux reports `excludesOwnWindows: false` and `overlayExclusion: hideDuringCapture`. The app hides overlay/dictionary annotation surfaces while acquiring pixels, waits up to 350 ms for tested compositor hide animations, and restores prior visibility on success/error. PipeWire monitor capture rejects pre-hide cached buffers. Main/settings windows are not excluded. This passed pixel checks on Hyprland ARM64; X11, other compositor animations and sustained observer timing remain unverified. Active crop editing blocks captures until the editor closes.
