@@ -6,8 +6,9 @@
  * render modes and — more importantly — the interaction contract that makes
  * Yomitan work on top of it:
  *
- *  - every box carries the *next ten* annotations' text, off-screen but present
- *    in the DOM, so a lookup can run past the end of a box when OCR split a word
+ *  - every box carries the *next ten* annotations' text, in reading order, unseen
+ *    but present in the DOM, so a lookup can run past the end of a box when OCR
+ *    split a word (see `.ocr-lookahead` in overlay.html for how it stays scannable)
  *  - entering a box dismisses any open popup with a synthetic Escape
  *  - clicking dispatches a synthetic shift+mousedown, which is what Yomitan's
  *    scanner treats as "look this up"; clicking the same box again dismisses
@@ -58,6 +59,68 @@ export function measureEms(text) {
   if (advances.size > 2000) advances.clear()
   advances.set(text, ems)
   return ems
+}
+
+/**
+ * Reading order within one paragraph, the same order `logicalGroups` (ocr-result.ts) writes
+ * a group's text in: vertical text in columns right to left, each read top to bottom;
+ * horizontal text in lines top to bottom, each read left to right. Two boxes share a line
+ * (or column) when their centres are within 0.7 of the thinner box's line height.
+ */
+function compareReadingOrder(vertical) {
+  return (a, b) => {
+    const ax = a.box.x + a.box.width / 2
+    const bx = b.box.x + b.box.width / 2
+    const ay = a.box.y + a.box.height / 2
+    const by = b.box.y + b.box.height / 2
+    const order = vertical
+      ? Math.abs(ax - bx) < Math.min(a.box.width, b.box.width) * 0.7
+        ? a.box.y - b.box.y
+        : bx - ax
+      : Math.abs(ay - by) < Math.min(a.box.height, b.box.height) * 0.7
+        ? a.box.x - b.box.x
+        : a.box.y - b.box.y
+    return order || a.index - b.index
+  }
+}
+
+/**
+ * For each box, the index of the box that follows it in reading order within its paragraph,
+ * or -1 for the last box of a paragraph.
+ *
+ * OCR order is not reading order. Cloud engines return chunks roughly in reading order,
+ * but nothing guarantees it, and a column of vertical text read in the wrong order hands
+ * Yomitan nonsense to match against. A paragraph is the box's `groupId` (every result
+ * normalised by ocr-result.ts carries one); boxes without one are treated as one paragraph.
+ */
+export function readingSuccessors(boxes) {
+  const paragraphs = new Map()
+  boxes.forEach((box, index) => {
+    const key = box.groupId || ''
+    const members = paragraphs.get(key)
+    if (members) members.push({ box, index })
+    else paragraphs.set(key, [{ box, index }])
+  })
+  const next = boxes.map(() => -1)
+  for (const members of paragraphs.values()) {
+    const first = members[0].box
+    members.sort(compareReadingOrder(first.orientation === 'vertical' || first.isVertical === true))
+    for (let i = 0; i + 1 < members.length; i++) next[members[i].index] = members[i + 1].index
+  }
+  return next
+}
+
+/**
+ * The text a lookup may run into after each box: the next `count` boxes of its paragraph in
+ * reading order, joined with nothing. Japanese has no spaces between words and Yomitan ends
+ * a match at whitespace, so any joiner would cut every split word back in two.
+ */
+export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = LOOKAHEAD) {
+  return boxes.map((_, index) => {
+    let text = ''
+    for (let j = next[index], n = 0; j !== -1 && n < count; j = next[j], n++) text += boxes[j].text
+    return text
+  })
 }
 
 /** Shrink to fit the box, then use letter spacing for the remainder. */
@@ -373,6 +436,8 @@ export class TextOverlayRenderer {
 
   renderWords(annotations, info, origin, scanning, bounds) {
     const mapped = mapAnnotations(info, annotations, origin, bounds)
+    const successors = readingSuccessors(mapped)
+    const ahead = lookaheadTexts(mapped, successors)
     const fragment = document.createDocumentFragment()
 
     mapped.forEach((box, index) => {
@@ -412,16 +477,18 @@ export class TextOverlayRenderer {
         Object.assign(element.style, { fontSize: `${Math.max(1, Math.min(48, size))}px`, lineHeight: '1.3', letterSpacing: '0px', height: `${box.height}px`, width: `${box.width}px` })
       }
       // The visible word, then the following words: present in the DOM for a lookup
-      // to run into, and never seen.
+      // to run into, and never seen. Cloud OCR splits words (食べ|ました), and a lookup
+      // that stops at the end of this box can only ever find the first half.
       //
-      // The lookahead is scaffolding, so it must not influence where the dictionary
-      // popup opens. Yomitan positions the popup from `Range.getClientRects()` of the
-      // whole match, and a match that runs past the hovered word into this text takes
-      // the following words' layout with it — which put the popup to the right of the
-      // word the reader was actually pointing at. Zero font size leaves the text in
-      // the DOM, where the scanner reads it by content, and takes it out of the
-      // geometry, where it does not belong. `DOMTextScanner` walks nodes and computed
-      // display, never rectangles, so this is invisible to it.
+      // Two constraints pull against each other, and `.ocr-lookahead` in overlay.html
+      // satisfies both (the details, and why the obvious alternatives fail, are there):
+      //  - Yomitan's `DOMTextScanner` only enters an element its computed style calls
+      //    visible: not `opacity: 0`, not `font-size: 0`, not `visibility: hidden`, not
+      //    transparent unless selectable; and it ends a scan at an absolutely positioned
+      //    or block-level element. So the text has to be "visible" inline content.
+      //  - Yomitan positions the popup from `Range.getClientRects()` of the whole match,
+      //    so text the reader is not pointing at must contribute no rectangle with area,
+      //    or the popup follows the following words instead of the hovered one.
       const text = document.createElement('span')
       text.className = 'ocr-word-text'
       const current = document.createElement('span')
@@ -435,11 +502,7 @@ export class TextOverlayRenderer {
       current.textContent = box.text
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
-      lookahead.textContent = mapped
-        .slice(index + 1, index + 1 + LOOKAHEAD)
-        .filter(next => !box.groupId || next.groupId === box.groupId)
-        .map((next) => next.text)
-        .join('')
+      lookahead.textContent = ahead[index]
       text.append(current, lookahead)
       element.append(text)
 
@@ -454,6 +517,8 @@ export class TextOverlayRenderer {
         // The lines the engine found inside the box, if any, for placing characters on the source.
         lines: box.lines ?? [],
         index,
+        // The word after this one in reading order, which is where its lookahead begins.
+        next: successors[index],
         centerX: box.x + box.width / 2,
         centerY: box.y + box.height / 2,
         box
@@ -673,13 +738,15 @@ export class TextOverlayRenderer {
           if (!selected.startsWith(word)) continue
           next.add(this.words[i].index)
           let overflow = selected.slice(word.length)
-          for (let j = i + 1; j < this.words.length && overflow.length > 0; j++) {
+          // Follow the lookahead's own order — reading order within the paragraph — since
+          // that is the text the selection ran into.
+          for (let j = this.words[i].next ?? -1; j !== -1 && overflow.length > 0; j = this.words[j]?.next ?? -1) {
             const nextWord = this.words[j].box.text
             if (overflow.startsWith(nextWord)) {
               next.add(this.words[j].index)
               overflow = overflow.slice(nextWord.length)
-            } else if (nextWord.startsWith(overflow)) {
-              next.add(this.words[j].index)
+            } else {
+              if (nextWord.startsWith(overflow)) next.add(this.words[j].index)
               break
             }
           }

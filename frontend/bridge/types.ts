@@ -62,6 +62,7 @@ export type PanelLabel =
   | 'welcome'
   | 'overlay'
   | 'fixture'
+  | 'fixture-chunks'
 
 export type PanelAction =
   | 'show'

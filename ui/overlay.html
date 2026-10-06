@@ -72,15 +72,35 @@
     .ocr-group.scanning {
       cursor: default;
     }
-    /* Lookahead context for the dictionary scanner: in the DOM, never seen, and
-       deliberately without geometry. Yomitan positions the popup from the client
-       rectangles of the matched range, so text the reader is not pointing at must
-       not contribute any. `DOMTextScanner` reads content and computed display, not
-       rectangles, so the scanner still runs straight through it. */
+    /* Lookahead: the following words' text, after the hovered word, for a lookup to
+       run into when OCR split a word (render.js). It has to satisfy two readers.
+
+       Yomitan's `DOMTextScanner` (yomitan/js/dom/dom-text-scanner.js) only enters an
+       element whose computed style `isStyleVisible` accepts: `visibility` not hidden,
+       `opacity` > 0, `font-size` > 0, and not a transparent colour unless selectable.
+       It also turns `position: absolute|fixed|sticky` into two newlines and a block,
+       flex, grid, list-item or table display into one, either of which ends the match.
+       `opacity: 0` and `font-size: 0` were exactly what kept every split word from
+       being found.
+
+       Yomitan's popup is placed from `Range.getClientRects()` of the match, so this
+       text must contribute no rectangle with area, or the popup follows the following
+       words. Clipping (`clip-path`, `overflow: hidden`, a zero-width box) only stops
+       painting; the text keeps its full-size rectangles.
+
+       `transform: scale(0)` does both. Every computed style the scanner reads stays
+       ordinary, `inline-block` is not a layout-changing display to it, and a degenerate
+       transform collapses every client rectangle of the text to a point: nothing is
+       painted, nothing hit-tests, and the popup host drops zero-area source rectangles
+       (`withExtent` in popup-geometry.ts). The zero-size box keeps the line from
+       growing. Transforms need a non-inline box, hence `inline-block`. */
     .ocr-lookahead {
-      font-size: 0;
-      line-height: 0;
-      opacity: 0;
+      display: inline-block;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+      vertical-align: top;
+      transform: scale(0);
     }
     .ocr-group .ocr-lookahead {
       position: absolute;

@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+  <meta charset="utf-8" /><title>Kimochi Split-Word Fixture</title
+  ><style>
+    :root {
+      --gap: 12px;
+    }
+    body {
+      margin: 0;
+      background: white;
+      color: #162824;
+      font:
+        16px -apple-system,
+        system-ui,
+        "Segoe UI",
+        sans-serif;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #153c32;
+      color: white;
+      padding: 12px 16px;
+      font-size: 15px;
+      cursor: grab;
+    }
+    header strong {
+      flex: 1;
+    }
+    header label {
+      cursor: default;
+    }
+    main {
+      display: flex;
+      gap: 32px;
+      padding: 20px 24px 8px;
+    }
+    .horizontal p {
+      font-size: 34px;
+      line-height: 1.7;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .vertical {
+      writing-mode: vertical-rl;
+      font-size: 34px;
+      line-height: 1.7;
+    }
+    .vertical p {
+      margin: 0;
+      white-space: nowrap;
+    }
+    /* The split: a gap a reader reads straight across, wide enough that cloud OCR
+       returns the stem and the ending as separate chunks. */
+    .gap {
+      display: inline-block;
+      inline-size: var(--gap);
+    }
+    details {
+      margin: 8px 24px 20px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #445;
+    }
+    summary {
+      cursor: pointer;
+      color: #153c32;
+      font-weight: 600;
+    }
+    code {
+      font-size: 12px;
+    }
+  </style>
+  <body>
+    <header>
+      <strong>Split-word fixture · drag to move</strong>
+      <label
+        >Gap <input id="gap" type="range" min="0" max="32" value="12" />
+        <output id="gap-value">12px</output></label
+      >
+    </header>
+    <main>
+      <section class="horizontal">
+        <p>昨日、寿司を食べ<i class="gap"></i>ました。</p>
+        <p>子供が公園で走っ<i class="gap"></i>ている。</p>
+        <p>夕日がとても美し<i class="gap"></i>かった。</p>
+        <p>日本<i class="gap"></i>語を勉強<i class="gap"></i>します。</p>
+        <p>新しい本を読み<i class="gap"></i>たいです。</p>
+      </section>
+      <section class="vertical">
+        <p>毎朝パンを食べ<i class="gap"></i>ます。</p>
+        <p>先生に話し<i class="gap"></i>かけた。</p>
+        <p>東<i class="gap"></i>京へ行き<i class="gap"></i>ました。</p>
+      </section>
+    </main>
+    <details>
+      <summary>How to use this with cloud OCR</summary>
+      <p>
+        Each sentence has a small gap inside one or two words (食べ|ました,
+        走っ|ている, 美し|かった, 日本|語, 勉強|します, 読み|たい, and in the
+        vertical column 食べ|ます, 話し|かけた, 東|京, 行き|ました). A reader
+        sees one word; Google Vision does not know Japanese word boundaries and
+        returns the two halves as separate chunks.
+      </p>
+      <ol>
+        <li>
+          Set the OCR engine to Google Cloud Vision and turn text grouping
+          <b>off</b> (ungrouped words mode: one box per OCR chunk).
+        </li>
+        <li>
+          Choose a source that covers this window (a display or region;
+          Kimochi's own windows are not offered in the window picker), or open
+          <code>ui/fixture-chunks.html</code> in a browser and pick that window.
+        </li>
+        <li>
+          Scan, then hover the <b>first</b> half of a split word (食べ) with the
+          lookup modifier. The popup should show the whole word (食べる for
+          食べました), anchored on the hovered box, not shifted towards the
+          following chunk.
+        </li>
+        <li>
+          If OCR still reads a split word as one chunk, widen the gap with the
+          slider. If it starts reading the halves as separate lines, narrow it.
+        </li>
+        <li>
+          The vertical column checks reading order: the lookahead follows
+          columns right to left, each top to bottom.
+        </li>
+      </ol>
+      <p>
+        Local MeikiOCR returns whole lines, so it should look the same before
+        and after.
+      </p>
+    </details>
+    <script>
+      const slider = document.querySelector("#gap");
+      slider.oninput = () => {
+        document.documentElement.style.setProperty(
+          "--gap",
+          slider.value + "px",
+        );
+        document.querySelector("#gap-value").textContent = slider.value + "px";
+      };
+      slider.onmousedown = (event) => event.stopPropagation();
+      document.querySelector("header").onmousedown = () =>
+        window.__TAURI__?.core.invoke("panel", {
+          label: "fixture-chunks",
+          action: "drag",
+          rect: null,
+        });
+    </script>
+  </body>
+</html>

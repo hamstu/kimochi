@@ -145,6 +145,7 @@ where `native` reports `{level, opaque, ignores_mouse}`.
 | `tray-popover` | `app/tray-popover.html` | Fixed size, dismisses on blur |
 | `yomitan` | `settings.html` | Yomitan's own distributed page, system window frame |
 | `fixture` | `ui/fixture.html` | Diagnostic Japanese test source |
+| `fixture-chunks` | `ui/fixture-chunks.html` | Split-word source for cloud OCR lookahead checks (macOS menu: Panels → Split-Word Fixture) |
 | `overlay` | `ui/overlay.html` | Transparent, click-through, hosts the Yomitan backend |
 
 There is deliberately **no** `sources` or `crop` panel. The POC's `ui/sources.html` is

@@ -133,6 +133,16 @@ pub static PANELS: &[PanelSpec] = &[
             400.,
         )
     },
+    // Japanese with a small gap between each stem and its ending, so cloud OCR returns
+    // the halves of a word as separate chunks: the source for checking that a lookup
+    // in ungrouped words mode still runs on into the next chunk. Opened from the menu.
+    panel(
+        "fixture-chunks",
+        "Kimochi Split-Word Fixture",
+        "ui/fixture-chunks.html",
+        760.,
+        560.,
+    ),
 ];
 
 pub fn spec(label: &str) -> Option<&'static PanelSpec> {

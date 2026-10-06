@@ -2167,6 +2167,7 @@ fn main() {
                     .text("yomitan", "Yomitan")
                     .text("diagnostics", "Diagnostics")
                     .text("fixture", "Japanese Fixture")
+                    .text("fixture-chunks", "Split-Word Fixture")
                     .build()?;
                 menu.append(&panel_menu)?;
                 app.set_menu(menu)?;
