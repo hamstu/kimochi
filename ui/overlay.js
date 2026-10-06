@@ -1259,7 +1259,7 @@ async function editSourceRegion() {
 }
 
 /** Portal captures have pixel dimensions, but no desktop display catalogue or window origin. */
-async function editPortalRegion(sourceId, kind) {
+async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
   const frame = await native.sourceHoverPreview(sourceId)
   if (!frame?.width || !frame?.height) {
     throw new Error('No portal frame available. Choose a source in the system picker first.')
@@ -1287,9 +1287,9 @@ async function editPortalRegion(sourceId, kind) {
       width: frame.width * fit,
       height: frame.height * fit
     }
-    const rect = await editRegion('Save', {
+    const rect = await editRegion(quick ? 'Scan' : 'Save', {
       area: bounds,
-      initial: state.crop ? cropToLocal(state.crop, origin, bounds) : null,
+      initial: !quick && state.crop ? cropToLocal(state.crop, origin, bounds) : null,
       picture: kind === 'window' ? bounds : undefined,
       onStart: kind === 'window' ? (selector) => void selector.setPicture(frame.url) : undefined
     })
@@ -1305,6 +1305,7 @@ async function editPortalRegion(sourceId, kind) {
       reference_height: frame.height
     }
     if (crop.width <= 0 || crop.height <= 0) return false
+    if (quick) return crop
     await native.commitSource(sourceId, crop)
     log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer' })
     return true
@@ -1426,6 +1427,30 @@ async function editWindowRegion(sourceId) {
 async function quickShot() {
   if (state.regionSelecting) return
   try {
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (await native.capabilities()).session.backend === 'wayland') {
+      const { runWaylandQuickShot } = await import('./linux-quick-shot.js')
+      await runWaylandQuickShot({
+        available: waylandLayer,
+        catalog: () => native.invoke('enumerate'),
+        pick: () => native.invoke('capture_pick_source', { fresh: true }),
+        edit: (id) => editPortalRegion(id, 'display', { quick: true }),
+        scan: async (sourceId, crop) => {
+          await processView(await native.snapshot())
+          for (let attempt = 0; handling || pendingView; attempt++) {
+            if (attempt >= 100) throw new Error('Screen share did not synchronize with the reader.')
+            await new Promise((resolve) => setTimeout(resolve, 20))
+          }
+          log({ check: 'quick-shot', display: sourceId, crop, editor: 'wayland-layer' })
+          void native.panel('log', 'show').catch(() => undefined)
+          return performScan({ generation: generation.current, sourceId,
+            source: { sourceId, kind: 'display', name: 'Quick Shot' },
+            request: { source_id: sourceId, crop }, detached: true })
+        },
+        status: (status) => publish({ scanning: false, status }),
+        log
+      })
+      return
+    }
     const display = await native.pointerDisplay()
     if (!display?.bounds) {
       log({ check: 'quick-shot-skipped', reason: 'no display under the pointer' })
