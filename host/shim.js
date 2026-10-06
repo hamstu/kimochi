@@ -410,4 +410,9 @@
   window.addEventListener('unhandledrejection', (e) =>
     hub.log({ error: String(e.reason), stack: e.reason?.stack, frame: ctx.id })
   )
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && window !== root) {
+    void import(new URL('/spike/linux-scan-input.js', root.location.href).href)
+      .then(({ installLinuxScanInput }) => installLinuxScanInput(window, { passive: true }))
+      .catch(error => hub.log({ check: 'linux-scan-input-failed', error: String(error), frame: ctx.id }))
+  }
 })()

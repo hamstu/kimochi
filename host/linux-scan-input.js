@@ -3,15 +3,19 @@
  * shortcut supplies their Shift state; ordinary panels also use local key events.
  * A stationary pointer needs a move on press, not a lookup on release. */
 export async function installLinuxScanInput(win = window, { passive = false } = {}) {
-  if (win.__KIMOCHI_PLATFORM__?.os !== 'linux' || win.__linuxScanInputInstalled) return
+  const host = win.top ?? win
+  if ((win.__KIMOCHI_PLATFORM__ ?? host.__KIMOCHI_PLATFORM__)?.os !== 'linux' || win.__linuxScanInputInstalled) return
   win.__linuxScanInputInstalled = true
+  const keys = new Set()
+  let portalHeld = host.__linuxDictionaryShiftHeld === true
+  let portalKnown = typeof host.__linuxDictionaryShiftHeld === 'boolean'
   let point = null
-  let held = false
-  let known = false
+  let held = portalHeld
+  let known = portalKnown
   let forwarding = false
   const editable = target => target?.closest?.('input,textarea,[contenteditable="true"]')
   const scan = () => {
-    if (!passive && !win.document.hasFocus()) return
+    if (!passive && !host.document.hasFocus()) return
     if (!point || !held || editable(win.document.activeElement)) return
     const target = win.document.elementFromPoint(point.clientX, point.clientY)
     if (!target || editable(target)) return
@@ -22,10 +26,10 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
       }))
     } finally { forwarding = false }
   }
-  const update = down => {
+  const update = () => {
+    const down = portalHeld || keys.size > 0
     const changed = held !== down
     held = down
-    known = true
     if (changed && held) scan()
   }
   win.addEventListener('pointermove', e => {
@@ -43,8 +47,23 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
     }
   }, true)
   win.addEventListener('pointerout', e => { if (!e.relatedTarget) point = null }, true)
-  win.addEventListener('keydown', e => { if (e.key === 'Shift') update(true) }, true)
-  win.addEventListener('keyup', e => { if (e.key === 'Shift') update(e.shiftKey) }, true)
-  win.addEventListener('blur', () => { held = false; known = false })
-  await win.__TAURI__.event.listen('linux-dictionary-modifier', ({ payload }) => update(!!payload.shift))
+  const side = e => e.code === 'ShiftRight' || e.location === 2 ? 'right' : 'left'
+  win.addEventListener('keydown', e => {
+    if (e.key !== 'Shift') return
+    keys.add(side(e)); known = true; update()
+  }, true)
+  win.addEventListener('keyup', e => {
+    if (e.key !== 'Shift') return
+    // GTK may still report Shift in the release event's modifier flags. The
+    // event's edge, not that flag, decides whether this physical key is held.
+    keys.delete(side(e)); known = true; update()
+  }, true)
+  win.addEventListener('blur', () => {
+    keys.clear(); known = portalKnown; update()
+  })
+  const stop = await (win.__TAURI__ ?? host.__TAURI__).event.listen('linux-dictionary-modifier', ({ payload }) => {
+    portalHeld = !!payload.shift; host.__linuxDictionaryShiftHeld = portalHeld
+    portalKnown = true; known = true; update()
+  })
+  win.addEventListener('pagehide', () => stop?.(), { once: true })
 }

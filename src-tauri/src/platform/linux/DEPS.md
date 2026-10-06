@@ -211,3 +211,5 @@ permitted modifier feed exists. Normal focused-reader Shift lookup works locally
 
 Sources: [portal Activated/Deactivated](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html),
 [Hyprland bind flags](https://wiki.hypr.land/Configuring/Basics/Binds/).
+
+Continuous Shift scanning: the Linux host adapter tracks physical Shift edges independently of portal state, retains passive portal holds across focus changes, and is installed in dictionary/preview frames as well as root readers. Native Wayland virtual-device tests exercise three words during a single hold in reader, OCR overlay and nested popup scanner; physical-device and other-compositor acceptance remain unverified.

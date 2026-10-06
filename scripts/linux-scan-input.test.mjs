@@ -50,3 +50,40 @@ test('unfocused reader ignores global presses; passive overlay still scans', asy
   await installLinuxScanInput(overlay.win, { passive: true }); overlay.move(false); overlay.send(true)
   assert.equal(overlay.received.length, 1)
 })
+test('a Shift-up event with stale shiftKey=true must never start a lookup', async () => {
+  const f = fixture(); await installLinuxScanInput(f.win); f.move(false)
+  f.listeners.get('keyup')({ key: 'Shift', code: 'ShiftLeft', shiftKey: true })
+  assert.equal(f.received.length, 0)
+})
+test('passive overlay keeps the portal hold through focus transitions and gliding', async () => {
+  const f = fixture(); await installLinuxScanInput(f.win, { passive: true }); f.move(false)
+  f.send(true); f.listeners.get('blur')(); f.move(false); f.move(false)
+  assert.deepEqual(f.received.map(e => e.shiftKey), [true, true, true])
+  f.send(false); f.move(true)
+  assert.equal(f.received.at(-1).shiftKey, false)
+})
+test('releasing one locally held Shift does not clear the other', async () => {
+  const f = fixture(); await installLinuxScanInput(f.win); f.move(false)
+  f.listeners.get('keydown')({ key:'Shift',code:'ShiftLeft' })
+  f.listeners.get('keydown')({ key:'Shift',code:'ShiftRight' })
+  f.listeners.get('keyup')({ key:'Shift',code:'ShiftLeft',shiftKey:true })
+  f.move(false); assert.equal(f.received.at(-1).shiftKey,true)
+  f.listeners.get('keyup')({ key:'Shift',code:'ShiftRight',shiftKey:true })
+  f.move(true); assert.equal(f.received.at(-1).shiftKey,false)
+})
+test('dictionary frame uses the top host transport and focus without stealing focus', async () => {
+  const f=fixture(); const child=fixture(); child.win.top=f.win
+  delete child.win.__TAURI__; delete child.win.__KIMOCHI_PLATFORM__
+  child.win.document.hasFocus=()=>false
+  await installLinuxScanInput(child.win); child.move(false); f.send(true)
+  assert.equal(child.received.length,1)
+})
+
+test('a dictionary frame opened during a portal hold inherits the modifier', async () => {
+  const parent=fixture(); await installLinuxScanInput(parent.win, {passive:true}); parent.send(true)
+  const child=fixture(); child.win.top=parent.win; delete child.win.__TAURI__
+  await installLinuxScanInput(child.win, {passive:true}); child.move(false)
+  assert.equal(child.received.at(-1).shiftKey,true)
+  parent.send(false); child.move(true)
+  assert.equal(child.received.at(-1).shiftKey,false)
+})

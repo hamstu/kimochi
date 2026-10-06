@@ -840,6 +840,15 @@
     for (const port of [...ctx.ports]) port.disconnect()
     hub.contexts.delete(ctx.id)
   })
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+    // Settings previews and nested dictionary frames do not call host.start().
+    // Give every Linux Yomitan document the same modifier-edge handling.
+    void import(asset('/spike/linux-scan-input.js'))
+      .then(({ installLinuxScanInput }) => installLinuxScanInput(window, {
+        passive: ['overlay', 'popup-host'].includes(hub.label)
+      }))
+      .catch(error => hub.log({ check: 'linux-scan-input-failed', error: String(error) }))
+  }
   window.addEventListener('error', (e) =>
     hub.log({ check: 'panel-error', error: e.message, file: e.filename, line: e.lineno })
   )
