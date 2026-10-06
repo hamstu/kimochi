@@ -163,3 +163,15 @@ the user must bind those actions in compositor configuration. Capabilities/setti
 explain this limitation. No compositor IPC is used by the app. Portal service
 restart/rebinding, KDE/GNOME shortcut dialogs and physical fullscreen shortcuts
 remain unverified.
+
+### Dictionary audio runtime
+
+WebKitGTK requires GStreamer base/good/bad plugins for audio, including `appsink`,
+`autoaudiosink`, `volume`, `scaletempo` and `fakevideosink`. Missing elements can abort
+the WebKit process instead of returning a JavaScript playback error. Debian bundles
+now declare all three plugin packages. Arch development hosts need
+`gst-plugins-base gst-plugins-good gst-plugins-bad` (libav is optional for further
+codecs). The Linux AppImage helper deploys the required MP3/WAV playback plugins
+and their ELF dependencies, plus the plugin scanner, and sets bundle-local plugin
+paths. AppImage builds need GStreamer pkg-config metadata (Debian
+`libgstreamer1.0-dev`; Arch provides it in the installed libraries). Native JS, Yomitan assets and macOS/Windows audio are unchanged.

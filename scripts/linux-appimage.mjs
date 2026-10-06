@@ -1,5 +1,5 @@
 // Reproducible Linux AppImage repairs; no changes to application/library versions.
-import { readFile, writeFile, copyFile, readdir, access } from 'node:fs/promises'
+import { readFile, writeFile, copyFile, readdir, access, mkdir, rename } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
@@ -45,6 +45,33 @@ export function hashOverlapsHeaders(bytes) {
   return false
 }
 
+// WebKit loads GStreamer elements dynamically; linuxdeploy cannot infer them from ELF dependencies.
+export async function bundleLinuxAudio(appdir, env) {
+  const variable = (name) => {
+    const result = spawnSync('pkg-config', [`--variable=${name}`, 'gstreamer-1.0'], { encoding: 'utf8' })
+    if (result.status !== 0 || !result.stdout.trim()) throw new Error(`GStreamer ${name} unavailable; install its development package`)
+    return result.stdout.trim()
+  }
+  const plugins = variable('pluginsdir')
+  const names = ['coreelements', 'app', 'playback', 'typefindfunctions', 'audioconvert', 'audioresample', 'volume', 'audiofx', 'debugutilsbad', 'autodetect', 'pulseaudio', 'audioparsers', 'id3demux', 'mpg123', 'wavparse']
+  const destination = path.join(appdir, 'usr/lib/gstreamer-1.0')
+  await mkdir(destination, { recursive: true })
+  for (const name of names) {
+    const source = path.join(plugins, `libgst${name}.so`)
+    if (!(await exists(source))) throw new Error(`Missing ${source}; install GStreamer base/good/bad audio plugins`)
+    await copyFile(source, path.join(destination, path.basename(source)))
+  }
+  const scanner = path.join(variable('pluginscannerdir'), 'gst-plugin-scanner')
+  const scannerDirectory = path.join(appdir, 'usr/libexec/gstreamer-1.0')
+  await mkdir(scannerDirectory, { recursive: true })
+  await copyFile(scanner, path.join(scannerDirectory, 'gst-plugin-scanner'))
+  // Deploy dependencies with the same bundler/exclusion policy as the main app.
+  const arch = { arm64: 'aarch64', x64: 'x86_64' }[process.arch]
+  const deployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${destination}`, `--deploy-deps-only=${scannerDirectory}`], { stdio: 'inherit', env })
+  if (deployed.error || deployed.status !== 0) throw deployed.error ?? new Error(`GStreamer dependency deployment failed (${deployed.status})`)
+  console.log(`Bundled ${names.length} GStreamer audio plugins and their scanner.`)
+}
+
 export async function repairLinuxAppImages({ target, release, env }) {
   const directory = path.resolve(process.env.CARGO_TARGET_DIR ?? 'src-tauri/target', target ?? '', release ? 'release' : 'debug', 'bundle/appimage')
   const entries = await readdir(directory)
@@ -52,6 +79,7 @@ export async function repairLinuxAppImages({ target, release, env }) {
   const images = entries.filter((name) => name.endsWith('.AppImage'))
   if (appdirs.length !== 1 || images.length !== 1) throw new Error(`Expected one AppDir and AppImage in ${directory}`)
   const appdir = path.join(directory, appdirs[0])
+  await bundleLinuxAudio(appdir, env)
   const libraries = path.join(appdir, 'usr/lib')
   const ldconfig = spawnSync('ldconfig', ['-p'], { encoding: 'utf8' })
   const originals = new Map([...ldconfig.stdout.matchAll(/^\s*(\S+)\s+.*=>\s+(\S+)$/gm)].map((match) => [match[1], match[2]]))
@@ -75,9 +103,15 @@ export async function repairLinuxAppImages({ target, release, env }) {
   const hook = path.join(appdir, 'apprun-hooks/linuxdeploy-plugin-gtk.sh')
   const script = await readFile(hook, 'utf8')
   await writeFile(hook, script.replace(/^export GDK_BACKEND=x11.*$/m, `# Respect an explicit backend; prefer native Wayland in a Wayland login.\nif [ -z "\${GDK_BACKEND:-}" ]; then\n    if [ "\${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "\${WAYLAND_DISPLAY:-}" ]; then\n        GDK_BACKEND=wayland\n    else\n        GDK_BACKEND=x11\n    fi\nfi\nexport GDK_BACKEND`))
+  await writeFile(path.join(appdir, 'apprun-hooks/kimochi-audio.sh'), `#!/bin/sh
+export GST_PLUGIN_SYSTEM_PATH_1_0="$APPDIR/usr/lib/gstreamer-1.0"
+export GST_PLUGIN_SCANNER_1_0="$APPDIR/usr/libexec/gstreamer-1.0/gst-plugin-scanner"
+`)
+  const repacked = path.join(directory, `${images[0]}.repacked`)
   const result = spawnSync(path.join(cache, 'linuxdeploy-plugin-appimage.AppImage'), [`--appdir=${appdir}`], {
     stdio: 'inherit', cwd: directory,
-    env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1', LDAI_OUTPUT: path.join(directory, images[0]) }
+    env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1', LDAI_OUTPUT: repacked }
   })
   if (result.error || result.status !== 0) throw result.error ?? new Error(`AppImage repack failed (${result.status})`)
+  await rename(repacked, path.join(directory, images[0]))
 }

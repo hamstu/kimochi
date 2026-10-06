@@ -39,7 +39,7 @@ The two OCR crates are path dependencies: `kimochi-meikiocr` and `kimochi-mangao
 
 - **macOS** (the implementation target): macOS 14+, Node 22+, Rust stable and the Command Line Tools. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries. `npm run release` produces `src-tauri/target/release/bundle/macos/Kimochi.app`; install by copying it to `/Applications`.
 - **Windows** 10 22H2 or 11, x64 or ARM64: Node 22+, Rust stable (MSVC toolchain) and the Visual Studio Build Tools "Desktop development with C++" workload. The installer embeds the WebView2 bootstrapper and installs per user (no admin). Capture, overlay and input are not implemented yet (see [CROSS_PLATFORM_PLAN.md](CROSS_PLATFORM_PLAN.md)).
-- **Linux** (Ubuntu 22.04 or newer): Node 22+, Rust stable and `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf`. Same caveats as Windows.
+- **Linux** (Ubuntu 22.04 or newer): Node 22+, Rust stable and `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`. Same caveats as Windows.
 
 ### Configuration split
 
