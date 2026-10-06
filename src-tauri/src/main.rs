@@ -410,12 +410,17 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
         .take(2000)
         .collect();
     #[cfg(target_os = "linux")]
-    if window.label() == OVERLAY && (platform::wayland_reader() || platform::wayland_layer_overlay()) {
+    let usable = if window.label() == OVERLAY && platform::wayland_overlay_unavailable() {
+        let _ = window.hide();
+        Vec::new()
+    } else { usable };
+    #[cfg(target_os = "linux")]
+    if window.label() == OVERLAY && (platform::wayland_overlay_unavailable() || platform::wayland_layer_overlay()) {
         // The Wayland reader owns its whole input surface. Never leave an empty
         // transparent surface over another application (including WM dialogs).
         let visible = !usable.is_empty()
             && (state.view.lock().unwrap().overlay_visible || platform::region_editing());
-        if visible && platform::wayland_reader() {
+        if visible && platform::wayland_overlay_unavailable() {
             // A hide action disables input; restore whole-window input on show.
             let _ = window.set_ignore_cursor_events(false);
         }
@@ -493,6 +498,12 @@ async fn panel(
     action: String,
     rect: Option<Rect>,
 ) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    if label == OVERLAY && platform::wayland_overlay_unavailable()
+        && matches!(action.as_str(), "show" | "show_inactive")
+    {
+        return Err("Native overlay is unavailable on this Wayland compositor".into());
+    }
     let settings = state.settings.clone();
     panels::act_async(&app, &settings, label, action, rect).await
 }
@@ -654,6 +665,8 @@ fn app_quit(app: tauri::AppHandle) {
     }
     #[cfg(target_os = "linux")]
     platform::stop_key_trigger();
+    #[cfg(target_os = "linux")]
+    platform::shortcuts::stop();
     app.exit(0);
 }
 
@@ -831,11 +844,31 @@ async fn permission(state: State<'_, Shared>) -> Reply<bool> {
 /// Replies `{picked: true, source, selection}` or `{picked: false, reason, message}`;
 /// `invalid:` on a backend that lists sources itself.
 #[tauri::command]
-async fn capture_pick_source(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Value> {
+async fn capture_pick_source(app: tauri::AppHandle, state: State<'_, Shared>, fresh: Option<bool>) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    if fresh.unwrap_or(true) {
+        let mut backend = state.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if backend.capabilities().system_picker_required {
+            backend.close();
+            let _ = state.settings.set(PORTAL_TOKEN_KEY, Value::Null);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = fresh;
     let service = state.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || sources::pick_source(&service))
         .await
         .map_err(|e| e.to_string())??;
+    #[cfg(target_os = "linux")]
+    let result = if result["picked"] == json!(false) && result["reason"] != "busy" {
+        match kimochi_capture::last_portal_pick_error().filter(|error| error != "cancelled") {
+            Some(error) => {
+                record(&app, &state, json!({"check":"portal-pick-failed","error":error}));
+                json!({"picked":false,"reason":"error","message":error})
+            }
+            None => result,
+        }
+    } else { result };
     if result["picked"] == json!(true) {
         // Authorization is `granted` now that a session is live: say so once, here, and
         // record it so `permission_status` does not announce the same change again.
@@ -2071,7 +2104,7 @@ fn main() {
             .content_protected(true)
             .initialization_script_for_all_frames(platform::platform_prelude());
             #[cfg(target_os = "linux")]
-            let reader_popup_builder = reader_popup_builder.focusable(platform::wayland_reader());
+            let reader_popup_builder = reader_popup_builder.focusable(platform::wayland_overlay_unavailable());
             let reader_popup = reader_popup_builder.build()?;
             make_panel(&handle, &service, &reader_popup);
             // Opt-in native regression: only the API popup, no source restore or OCR.
@@ -2141,28 +2174,18 @@ fn main() {
                 }
             });
             #[cfg(target_os = "linux")]
-            let overlay_builder = if platform::wayland_reader() {
-                overlay_builder
-                    .title("Kimochi Detached Reader")
-                    .transparent(false)
-                    .decorations(true)
-                    .resizable(true)
-                    .always_on_top(false)
-                    .visible(false)
-                    .inner_size(800., 600.)
-            } else {
+            let overlay_builder = {
                 let overlay_builder = overlay_builder.focusable(false);
                 if platform::wayland_layer_overlay() {
-                    // Layer-shell stretches to the output. A non-resizable GTK window
-                    // otherwise retains the initial 1117px minimum height.
                     overlay_builder.visible(false).resizable(true).inner_size(1., 1.)
                 } else {
-                    overlay_builder
+                    // Unsupported Wayland keeps only the hidden OCR host, never a detached reader.
+                    overlay_builder.visible(false)
                 }
             };
             let overlay = overlay_builder.build()?;
             #[cfg(target_os = "linux")]
-            let ignore_cursor_events = !platform::wayland_reader();
+            let ignore_cursor_events = !platform::wayland_overlay_unavailable();
             #[cfg(not(target_os = "linux"))]
             let ignore_cursor_events = true;
             #[cfg(target_os = "linux")]
@@ -2210,7 +2233,7 @@ fn main() {
                 .initialization_script_for_all_frames(platform::platform_prelude())
                 .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim);
                 #[cfg(target_os = "linux")]
-                let window_builder = window_builder.focusable(platform::wayland_reader());
+                let window_builder = window_builder.focusable(platform::wayland_overlay_unavailable());
                 let window = window_builder.build()?;
                 let _ = window.set_content_protected(true);
                 // The dictionary is hovered and clicked while the reader stays in their
@@ -2325,6 +2348,20 @@ fn spawn_source_restore(service: Shared) {
         else {
             return;
         };
+        #[cfg(target_os = "linux")]
+        if service.backend.lock().is_ok_and(|backend| backend.capabilities().system_picker_required)
+            && !service.settings.get_or::<String>(PORTAL_TOKEN_KEY, String::new()).is_empty()
+        {
+            service.set_status("Restoring the previous screen share…");
+            match sources::pick_source(&service) {
+                Ok(result) if result["picked"] == json!(true) => {
+                    service.set_status("Restored the previous screen share.");
+                }
+                Ok(result) => service.set_status(format!("Screen share not restored: {} Choose New Source to share again.", kimochi_capture::last_portal_pick_error().as_deref().unwrap_or(result["message"].as_str().unwrap_or("Sharing was cancelled.")))),
+                Err(error) => service.set_status(format!("Could not restore screen share: {error}. Choose New Source to share again.")),
+            }
+            return;
+        }
         let live = match service.backend.lock() {
             Ok(mut backend) => match backend.enumerate() {
                 Ok(live) => live,

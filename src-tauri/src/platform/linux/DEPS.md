@@ -50,8 +50,10 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
   `system_picker_required: true`): permission is `promptOnSelect` until
   `request_permission()` has run the system picker, then `granted` while that session
   lives; `enumerate` lists only the picked stream(s) as `portal:display:{node}` /
-  `portal:window:{node}`. The app boots as a detached reader and the UI must offer
-  "Choose in system picker" (plan Phase 7).
+  `portal:window:{node}`. Startup restores a saved portal token without forcing a new-source action. The
+  source submenu offers "Use Current Source" and "Choose New Source…"; the latter
+  closes the old portal session and clears its token before opening a fresh picker.
+  Cancel clears a spent token; non-cancellation failures retain their exact error.
 - **Ids.** `x11:window:{xid}:{pid}` (decimal xid), `x11:window:{xid}` for clients
   without `_NET_WM_PID`; `x11:display:{first RandR output XID}` (0 = whole root when
   RandR is missing). Minted only by `kimochi_capture::x11`, shared with the capture
@@ -124,24 +126,40 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
 - **`capabilities()`** includes `session: {backend, compositor, layerShell, xwayland}`.
   X11 reports `excludesOwnWindows: false` (display captures include the overlay; X has
   no exclusion list) and `windowCapture: true`; Wayland reports `windowCapture: false`
-  until the portal backend lands. `ocrAccelerators: {meikiocr: "cpu", mangaocr: "cpu"}`.
+  because global window tracking/placement is unavailable (the portal can still share a window). `ocrAccelerators: {meikiocr: "cpu", mangaocr: "cpu"}`.
 - **Threading.** The X11 query connection is one process-wide `RustConnection` (it is
   `Sync`), opened on first use; if the X server cannot be reached every X11 query answers
   "nothing". Blocking event loops use their own connections.
 
 ## Not verified on Linux
 
-Everything compiles for `x86_64-unknown-linux-gnu` (see the Phase 6 report), and the pure
-rules are unit-tested on macOS, but none of it has run against an X server or a Wayland
-session yet. First things to check on real hardware: XInput 2 raw events arriving while
+Native ARM64 Hyprland/Wayland startup, portal capture, CPU OCR and layer overlay/crop
+have now run on Linux; see `LINUX_BRINGUP.md` for exact evidence and qualifications.
+x86_64 runtime and a real X11 session remain unverified. Remaining X11 checks include: XInput 2 raw events arriving while
 a game has focus; `_NET_WM_WINDOW_TYPE_UTILITY` after map on GNOME/KDE/XFCE; panel
 clicks not stealing focus; `GetImage` on windows of depth-32 visuals; GTK CSD windows'
 bounds versus the overlay.
 
-### Native Wayland layer-shell experiment (Linux bring-up)
+### Native Wayland overlays (Linux bring-up)
 
-The bring-up user explicitly expanded the original reduced-tier scope to investigate native Wayland overlays. `KIMOCHI_WAYLAND_OVERLAY=1` opts into the experiment; it is off by default pending acceptance. During GTK setup the Linux module dynamically loads optional `libgtk-layer-shell.so.0` and probes the actual Wayland protocol. Missing library/protocol falls back to the ordinary detached reader without adding a link-time dependency. No crate/model versions change. `session.nativeLayerShell` reports whether this integration initialized, distinct from the historical compositor-name hint `session.layerShell`.
+The bring-up user explicitly expanded the original reduced-tier scope to investigate native Wayland overlays. Native layers are enabled automatically when supported; `KIMOCHI_WAYLAND_OVERLAY=0` disables them for diagnostics. During GTK setup the Linux module dynamically loads optional `libgtk-layer-shell.so.0` and probes the actual Wayland protocol. Missing library/protocol disables the overlay and crop editor entirely; there is no detached reader fallback or link-time dependency. No crate/model versions change. `session.nativeLayerShell` reports whether this integration initialized, distinct from the historical compositor-name hint `session.layerShell`.
 
 Layer panels use keyboard mode NONE, no exclusive layout reservation, an initially empty mouse input region, and published annotation rectangles applied through GDK on the GTK main thread. The overlay anchors to all output edges; dictionary panels anchor top/left. Screen-frame coordinates map to the layer surface's actual local dimensions; portal window frames are deliberately not drawn at an invented desktop position. Multi-output mapping, dictionary placement, native hover, long-lived scheduling and desktop fallback remain acceptance gates. See root `LINUX_BRINGUP.md` for observed passes/failures. GNOME/Ubuntu has not been tested and protocol support must not be assumed.
 
 For an explicitly opened crop editor, `region_keys` switches the overlay alone to keyboard ON_DEMAND (never EXCLUSIVE), then restores NONE on completion/cancellation. Portal screen crops use frame-pixel dimensions versus configured logical surface size; portal window crops use a fitted screenshot because global window placement is unavailable. The editor temporarily publishes whole-surface input and releases it immediately on close. A hidden layer is mapped and configured before crop geometry is measured.
+
+### Wayland global shortcuts
+
+Action shortcuts use the standard GlobalShortcuts portal on a dedicated registered
+D-Bus connection. The Registry application ID matches the packaged `Kimochi.desktop`.
+Development/AppImage launches create a marked user desktop entry if none exists;
+user-owned entries are preserved and a system entry takes precedence. Portal
+registration/failure and Activated events are recorded in evidence. A denied or
+missing portal reports its exact error without failing app startup. X11 retains
+the existing global-shortcut plugin.
+
+Hyprland's backend advertises actions but ignores preferred key combinations;
+the user must bind those actions in compositor configuration. Capabilities/settings
+explain this limitation. No compositor IPC is used by the app. Portal service
+restart/rebinding, KDE/GNOME shortcut dialogs and physical fullscreen shortcuts
+remain unverified.

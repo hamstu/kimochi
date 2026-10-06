@@ -186,15 +186,25 @@ if (task === 'check' || task === 'check:all') {
   process.exit(0)
 }
 
+let linuxBundler
+if (process.platform === 'linux') {
+  linuxBundler = await import('./linux-appimage.mjs')
+  await linuxBundler.prepareLinuxBundler()
+}
+
 // `release` is the optimised, installable app; `bundle` is the faster debug build.
 const bundles = { darwin: 'app', win32: 'nsis', linux: 'deb,appimage' }[process.platform]
 if (!bundles) throw new Error(`No bundle format configured for ${process.platform}`)
-exitOnFailure(
-  node('@tauri-apps/cli', 'tauri', [
+let built = node('@tauri-apps/cli', 'tauri', [
     'build',
     ...(task === 'release' ? [] : ['--debug']),
     '--bundles',
     bundles,
     ...extra
   ])
-)
+// A first build may just have downloaded the GTK helper. Retry only after its known fix.
+if (built.status !== 0 && linuxBundler && await linuxBundler.prepareLinuxBundler()) {
+  built = node('@tauri-apps/cli', 'tauri', ['build', ...(task === 'release' ? [] : ['--debug']), '--bundles', bundles, ...extra])
+}
+exitOnFailure(built)
+if (linuxBundler) await linuxBundler.repairLinuxAppImages({ target: env.KIMOCHI_TARGET, release: task === 'release', env })

@@ -65,6 +65,11 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
             None
         }
     };
+    #[cfg(target_os = "linux")]
+    let visibility = if crate::platform::wayland_overlay_unavailable() {
+        service.view.lock().unwrap().overlay_visible = false;
+        Some(false)
+    } else { visibility };
     if let Some(visible) = visibility {
         if let Some(overlay) = app.get_webview_window("overlay") {
             let _ = if visible {

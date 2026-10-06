@@ -89,6 +89,10 @@ impl TokenStore for MemoryTokenStore {
 }
 
 static TOKEN_STORE: Mutex<Option<Box<dyn TokenStore>>> = Mutex::new(None);
+static LAST_PICK_ERROR: Mutex<Option<String>> = Mutex::new(None);
+
+/// Native failure text for the last portal pick, without exposing the restore token.
+pub fn last_portal_pick_error() -> Option<String> { LAST_PICK_ERROR.lock().unwrap().clone() }
 
 /// Install the restore-token store the Wayland backend uses. Call once at startup,
 /// before or after `platform_backend()`; it is read at every pick. A no-op in effect on
@@ -1002,7 +1006,9 @@ mod backend {
         }
 
         fn fail(&self, message: impl Into<String>) -> bool {
-            *self.last_error.lock().unwrap() = Some(message.into());
+            let message = message.into();
+            *super::LAST_PICK_ERROR.lock().unwrap() = Some(message.clone());
+            *self.last_error.lock().unwrap() = Some(message);
             false
         }
 
@@ -1030,7 +1036,7 @@ mod backend {
                 Ok(Err(error)) => {
                     let _ = portal.join();
                     return match error {
-                        PickError::Cancelled => self.fail("cancelled"),
+                        PickError::Cancelled => { store_token(None); self.fail("cancelled") },
                         PickError::Failed(message) => self.fail(message),
                     };
                 }
@@ -1047,6 +1053,7 @@ mod backend {
                 Ok(cast) => {
                     *self.cast.lock().unwrap() = Some(cast);
                     *self.last_error.lock().unwrap() = None;
+                    *super::LAST_PICK_ERROR.lock().unwrap() = None;
                     true
                 }
                 Err(e) => self.fail(e.message),

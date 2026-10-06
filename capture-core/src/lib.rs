@@ -214,6 +214,10 @@ pub fn crop_rect(crop: Option<Crop>, width: u32, height: u32) -> Result<[u32; 4]
     Ok([x as u32, y as u32, (right - x) as u32, (bottom - y) as u32])
 }
 
+
+#[cfg(target_os = "linux")]
+pub use linux_portal::last_portal_pick_error;
+
 #[cfg(test)]
 mod tests {
     use super::*;

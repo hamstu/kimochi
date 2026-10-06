@@ -25,9 +25,9 @@ pub fn region_editing() -> bool {
 /// Called during Tauri setup, after GTK initialization and before panel creation.
 pub fn initialize() {
     API.get_or_init(|| {
-        // Experimental until screen alignment and dictionary acceptance are verified.
+        // Prefer native layers when supported; explicit 0 disables them.
         if super::session().backend != super::Backend::Wayland
-            || std::env::var("KIMOCHI_WAYLAND_OVERLAY").as_deref() != Ok("1")
+            || std::env::var("KIMOCHI_WAYLAND_OVERLAY").as_deref() == Ok("0")
         {
             return None;
         }

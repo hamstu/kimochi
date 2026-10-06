@@ -1,0 +1,349 @@
+//! Wayland action shortcuts through the desktop portal, never X11 grabs.
+use crate::{
+    actions,
+    settings::{merged_hotkeys, Settings},
+    state::Shared,
+};
+use serde_json::{json, Value};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
+};
+use tauri::{Emitter, Manager};
+use zbus::{
+    blocking::{Connection, MessageIterator, Proxy},
+    zvariant::{OwnedObjectPath, OwnedValue, Value as BusValue},
+    MatchRule,
+};
+
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+static AVAILABLE: AtomicBool = AtomicBool::new(false);
+static CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
+static REPORT: Mutex<Option<Value>> = Mutex::new(None);
+type Dict = HashMap<String, OwnedValue>;
+
+pub fn available() -> bool {
+    AVAILABLE.load(Ordering::SeqCst)
+}
+pub fn report() -> Value {
+    REPORT
+        .lock()
+        .unwrap()
+        .clone()
+        .unwrap_or(json!({"backend":"portal","pending":true}))
+}
+pub fn stop() {
+    GENERATION.fetch_add(1, Ordering::SeqCst);
+    AVAILABLE.store(false, Ordering::SeqCst);
+    if let Some(connection) = CONNECTION.lock().unwrap().take() {
+        let _ = connection.close();
+    }
+}
+
+/// Accelerator spelling is the XDG Shortcuts specification, not Electron syntax.
+fn trigger(accelerator: &str) -> String {
+    accelerator
+        .split('+')
+        .map(|part| match part {
+            "CommandOrControl" | "Control" | "Ctrl" => "CTRL",
+            "Shift" => "SHIFT",
+            "Alt" => "ALT",
+            "Super" | "Meta" => "LOGO",
+            "Space" => "space",
+            "Enter" => "Return",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
+fn text(value: &str) -> OwnedValue {
+    OwnedValue::try_from(BusValue::from(value)).expect("owned string")
+}
+
+fn request<B: serde::Serialize + zbus::zvariant::DynamicType>(
+    conn: &Connection,
+    proxy: &Proxy<'_>,
+    token: &str,
+    method: &str,
+    body: &B,
+) -> Result<Dict, String> {
+    let sender = conn
+        .unique_name()
+        .ok_or("missing bus name")?
+        .as_str()
+        .trim_start_matches(':')
+        .replace('.', "_");
+    let path = format!("/org/freedesktop/portal/desktop/request/{sender}/{token}");
+    let request = Proxy::new(
+        conn,
+        "org.freedesktop.portal.Desktop",
+        path.as_str(),
+        "org.freedesktop.portal.Request",
+    )
+    .map_err(|e| e.to_string())?;
+    let mut responses = request
+        .receive_signal("Response")
+        .map_err(|e| e.to_string())?;
+    let returned: OwnedObjectPath = proxy.call(method, body).map_err(|e| e.to_string())?;
+    if returned.as_str() != path {
+        return Err("Portal returned an unexpected request handle".into());
+    }
+    let response = responses.next().ok_or("Portal response stream closed")?;
+    let (code, data): (u32, Dict) = response.body().deserialize().map_err(|e| e.to_string())?;
+    if code != 0 {
+        return Err(if code == 1 {
+            "Shortcut configuration cancelled".into()
+        } else {
+            format!("Shortcut portal refused request (response {code})")
+        });
+    }
+    Ok(data)
+}
+
+pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) -> Value {
+    stop();
+    if suspended {
+        return json!({"registered":[],"failed":[],"suspended":true,"backend":"portal"});
+    }
+    let generation = GENERATION.load(Ordering::SeqCst);
+    let definitions = merged_hotkeys(settings);
+    let app = app.clone();
+    let pending = json!({"registered":[],"failed":[],"backend":"portal","pending":true});
+    *REPORT.lock().unwrap() = Some(pending.clone());
+    std::thread::spawn(move || {
+        let result = bind(&app, definitions, generation);
+        if GENERATION.load(Ordering::SeqCst) != generation {
+            return;
+        }
+        if let Err(error) = result {
+            AVAILABLE.store(false, Ordering::SeqCst);
+            let report = json!({"registered":[],"failed":[{"name":"Wayland shortcuts","error":error}],"backend":"portal","pending":false});
+            *REPORT.lock().unwrap() = Some(report.clone());
+            crate::record(
+                &app,
+                &app.state::<Shared>(),
+                json!({"check":"global-shortcuts","report":report}),
+            );
+            let _ = app.emit(
+                "platform-capabilities",
+                crate::capabilities_value(&app, &app.state::<Shared>()),
+            );
+        }
+    });
+    pending
+}
+
+/// Portals require a desktop entry even for an unsandboxed development build/AppImage.
+/// Preserve user entries; only update entries carrying our generated marker.
+fn desktop_identity() -> Result<(), String> {
+    let home = std::env::var_os("HOME").ok_or("HOME unavailable")?;
+    let data = std::env::var_os("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(home).join(".local/share"));
+    let applications = data.join("applications");
+    let entry = applications.join("Kimochi.desktop");
+    let existing = std::fs::read_to_string(&entry).ok();
+    let generated = existing
+        .as_deref()
+        .is_some_and(|s| s.contains("X-Kimochi-Generated=true"));
+    if existing.is_some() && !generated {
+        return Ok(());
+    }
+    let dirs =
+        std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    // AppImage adds its private usr/share to XDG_DATA_DIRS. The host portal
+    // cannot see that mount, so it still needs the generated user entry.
+    let appdir = std::env::var_os("APPDIR").map(std::path::PathBuf::from);
+    if dirs.split(':').any(|d| {
+        let directory = std::path::Path::new(d);
+        !appdir
+            .as_ref()
+            .is_some_and(|root| directory.starts_with(root))
+            && directory.join("applications/Kimochi.desktop").exists()
+    }) {
+        if generated {
+            std::fs::remove_file(&entry).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    let executable = std::env::var_os("APPIMAGE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or(std::env::current_exe().map_err(|e| e.to_string())?);
+    let escaped = executable
+        .to_string_lossy()
+        .replace('\\', r"\\")
+        .replace('"', r#"\""#)
+        .replace('%', "%%");
+    std::fs::create_dir_all(&applications).map_err(|e| e.to_string())?;
+    let icon = data.join("icons/hicolor/256x256/apps/kimochi.png");
+    let source_icon = std::env::var_os("APPDIR")
+        .map(std::path::PathBuf::from)
+        .map(|d| d.join("kimochi.png"))
+        .filter(|p| p.exists())
+        .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("icons/icon.png"));
+    if source_icon.exists() {
+        std::fs::create_dir_all(icon.parent().ok_or("icon directory missing")?)
+            .map_err(|e| e.to_string())?;
+        if !icon.exists() {
+            std::fs::copy(source_icon, &icon).map_err(|e| e.to_string())?;
+        }
+    }
+    std::fs::write(entry, format!("[Desktop Entry]\nType=Application\nName=Kimochi\nExec=\"{escaped}\"\nIcon=kimochi\nTerminal=false\nStartupWMClass=kimochi\nCategories=Education;\nX-Kimochi-Generated=true\n")).map_err(|e| e.to_string())
+}
+
+fn bind(
+    app: &tauri::AppHandle,
+    definitions: serde_json::Map<String, Value>,
+    generation: u64,
+) -> Result<(), String> {
+    desktop_identity()?;
+    let conn = zbus::blocking::connection::Builder::session()
+        .map_err(|e| e.to_string())?
+        .method_timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+    {
+        let mut connection = CONNECTION.lock().unwrap();
+        if GENERATION.load(Ordering::SeqCst) != generation {
+            return Ok(());
+        }
+        *connection = Some(conn.clone());
+    }
+    // Match Tauri's generated Kimochi.desktop entry. Register this connection
+    // before any portal call so unsandboxed builds have a stable application ID.
+    let registry = Proxy::new(
+        &conn,
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        "org.freedesktop.host.portal.Registry",
+    )
+    .map_err(|e| e.to_string())?;
+    let _: () = registry
+        .call("Register", &("Kimochi", Dict::new()))
+        .map_err(|e| format!("Could not identify Kimochi to the shortcut portal: {e}"))?;
+    let portal = Proxy::new(
+        &conn,
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        "org.freedesktop.portal.GlobalShortcuts",
+    )
+    .map_err(|e| e.to_string())?;
+    let token = format!("kimochi_shortcuts_{generation}");
+    let mut options = Dict::new();
+    options.insert("handle_token".into(), text(&token));
+    options.insert("session_handle_token".into(), text(&token));
+    let mut result = request(&conn, &portal, &token, "CreateSession", &(options,))?;
+    let session = String::try_from(
+        result
+            .remove("session_handle")
+            .ok_or("Portal omitted shortcut session")?,
+    )
+    .map_err(|e| e.to_string())?;
+    let session = OwnedObjectPath::try_from(session).map_err(|e| e.to_string())?;
+    let mut bindings = Vec::new();
+    for (name, definition) in definitions {
+        if definition["enabled"] == json!(false) {
+            continue;
+        }
+        let Some(accelerator) = definition["accelerator"].as_str() else {
+            continue;
+        };
+        let mut data = Dict::new();
+        data.insert(
+            "description".into(),
+            text(match name.as_str() {
+                "triggerScan" => "Scan Japanese text",
+                "openControllerMenu" => "Open Kimochi controls",
+                _ => &name,
+            }),
+        );
+        data.insert("preferred_trigger".into(), text(&trigger(accelerator)));
+        bindings.push((format!("dev.kimochi.app.{name}"), data));
+    }
+    let bind_token = format!("{token}_bind");
+    let mut options = Dict::new();
+    options.insert("handle_token".into(), text(&bind_token));
+    let mut result = request(
+        &conn,
+        &portal,
+        &bind_token,
+        "BindShortcuts",
+        &(&session, bindings, "", options),
+    )?;
+    let rule = MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .sender("org.freedesktop.portal.Desktop")
+        .map_err(|e| e.to_string())?
+        .path("/org/freedesktop/portal/desktop")
+        .map_err(|e| e.to_string())?
+        .interface("org.freedesktop.portal.GlobalShortcuts")
+        .map_err(|e| e.to_string())?
+        .member("Activated")
+        .map_err(|e| e.to_string())?
+        .build();
+    let signals =
+        MessageIterator::for_match_rule(rule, &conn, Some(32)).map_err(|e| e.to_string())?;
+    if GENERATION.load(Ordering::SeqCst) != generation {
+        return Ok(());
+    }
+    AVAILABLE.store(true, Ordering::SeqCst);
+    let bound: Vec<(String, Dict)> = Vec::try_from(
+        result
+            .remove("shortcuts")
+            .ok_or("Portal omitted bound shortcuts")?,
+    )
+    .map_err(|e| e.to_string())?;
+    let registered: Vec<String> = bound
+        .iter()
+        .map(|(id, _)| {
+            id.strip_prefix("dev.kimochi.app.")
+                .unwrap_or(id)
+                .to_string()
+        })
+        .collect();
+    let report = json!({"backend":"portal","pending":false,"registered":registered,"failed":[]});
+    *REPORT.lock().unwrap() = Some(report.clone());
+    crate::record(
+        app,
+        &app.state::<Shared>(),
+        json!({"check":"global-shortcuts","report":report}),
+    );
+    let _ = app.emit(
+        "platform-capabilities",
+        crate::capabilities_value(app, &app.state::<Shared>()),
+    );
+    for signal in signals {
+        if GENERATION.load(Ordering::SeqCst) != generation {
+            break;
+        }
+        let signal = signal.map_err(|e| e.to_string())?;
+        let (source, id, _time, _options): (OwnedObjectPath, String, u64, Dict) =
+            signal.body().deserialize().map_err(|e| e.to_string())?;
+        if source != session {
+            continue;
+        }
+        if let Some(action) = id.strip_prefix("dev.kimochi.app.") {
+            crate::record(
+                app,
+                &app.state::<Shared>(),
+                json!({"check":"global-shortcut-activated","action":action}),
+            );
+            actions::dispatch(app, &app.state::<Shared>(), action);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn accelerator_uses_xdg_spelling() {
+        assert_eq!(super::trigger("CommandOrControl+Shift+8"), "CTRL+SHIFT+8");
+        assert_eq!(super::trigger("Ctrl+Shift+Space"), "CTRL+SHIFT+space");
+    }
+}

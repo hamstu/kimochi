@@ -51,6 +51,10 @@ pub fn suspended() -> bool {
 /// While suspended this only clears the old set: a save during recording must not bring
 /// the shortcuts back early, and `suspend(false)` registers the saved set afterwards.
 pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Value {
+    #[cfg(target_os = "linux")]
+    if crate::platform::capabilities()["session"]["backend"] == "wayland" {
+        return crate::platform::shortcuts::apply(app, settings, suspended());
+    }
     let mut registry = lock();
     let _ = app.global_shortcut().unregister_all();
     registry.active.clear();
@@ -67,6 +71,22 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Value {
 /// combination pressed while recording is captured instead of firing. Restoring returns
 /// the same report as `apply`. Both directions are idempotent.
 pub fn suspend(app: &tauri::AppHandle, settings: &Arc<Settings>, on: bool) -> Value {
+    #[cfg(target_os = "linux")]
+    if crate::platform::capabilities()["session"]["backend"] == "wayland" {
+        let mut registry = lock();
+        registry.suspended = on;
+        registry.generation += 1;
+        let generation = registry.generation;
+        drop(registry);
+        if on {
+            let app = app.clone(); let settings = settings.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(SUSPEND_LIMIT);
+                if lock().generation == generation { resume(&app, &settings); }
+            });
+        }
+        return crate::platform::shortcuts::apply(app, settings, on);
+    }
     let mut registry = lock();
     if on {
         registry.generation += 1;

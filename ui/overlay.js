@@ -41,7 +41,7 @@ import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as native from './native.js'
 
-let waylandReader = false
+let waylandDisabled = false
 let waylandLayer = false
 
 const hub = window.__extensionHost
@@ -267,6 +267,7 @@ function holdAutoScan() {
 
 let lastVisibilityTrace = null
 function draw() {
+  if (waylandDisabled) { renderer.clear(); return }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
   if (waylandLayer && state.info?.source_id?.startsWith('portal:window:')) {
@@ -276,7 +277,7 @@ function draw() {
   const visible =
     controller.holdsText ||
     (isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) &&
-      (waylandReader || waylandLayer ||
+      (waylandLayer ||
         shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp)))
 
   const reason = !isOverlayTextVisible(
@@ -305,7 +306,7 @@ function draw() {
     return
   }
   let readerBounds = null
-  if ((waylandReader || waylandLayer) && state.info) {
+  if ((waylandLayer) && state.info) {
     const scale = Math.min(
       innerWidth / state.info.full_width,
       innerHeight / state.info.full_height
@@ -475,7 +476,7 @@ async function followSource(source) {
 
 /** Place the overlay over the display that holds the captured source. */
 async function positionFor(info) {
-  if (waylandReader || waylandLayer) return { x: 0, y: 0, width: innerWidth, height: innerHeight }
+  if (waylandLayer) return { x: 0, y: 0, width: innerWidth, height: innerHeight }
   if (!info?.source_bounds) return state.origin
   const origin = sourceDisplay(info.source_bounds, await native.desktop())
   const moved =
@@ -1215,6 +1216,10 @@ async function placeOverlayOn(bounds) {
  * region is limited to it.
  */
 async function editSourceRegion() {
+  if (waylandDisabled) {
+    publish({ status: 'Native overlay unavailable on this desktop; crop selection is disabled.' })
+    return
+  }
   if (state.regionSelecting) return
   const sourceId = await native.selectedSource()
   if (!sourceId) {
@@ -1951,6 +1956,7 @@ const popupRects = () => popupHitRects(livePopups, state.origin)
  * — which a reader has deliberately opened and has to be able to type into.
  */
 function hitRects() {
+  if (waylandDisabled) return []
   if (!state.origin) return []
   // Selecting a region needs every event on the display, not just the parts of
   // it that happen to have text under them.
@@ -2208,22 +2214,10 @@ await native.watchCapabilities((caps) => {
       draw()
     })
   }
-  if (
-    window.__KIMOCHI_PLATFORM__?.os === 'linux' &&
-    caps.session.backend === 'wayland' &&
-    !caps.session.nativeLayerShell &&
-    !waylandReader
-  ) {
-    waylandReader = true
-    const style = document.createElement('style')
-    style.textContent = `html, body { background: #202428 !important; }
-      .ocr-word-text { opacity: 1 !important; }
-      .ocr-word { background: #202428 !important; }`
-    document.head.append(style)
-    window.addEventListener('resize', () => {
-      state.origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
-      draw()
-    })
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && caps.session.backend === 'wayland' && !caps.session.nativeLayerShell) {
+    waylandDisabled = true
+    renderer.clear()
+    log({ check: 'overlay-disabled', reason: 'Native layer-shell overlay is unavailable on this desktop.' })
   }
 
   if (caps.os === 'windows')

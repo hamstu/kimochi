@@ -6,8 +6,9 @@
 //!   EWMH properties for overlay panels; XInput 2 raw events for trigger keys.
 //! - **Wayland** (plan Phase 7, reduced tier): every query that Wayland does not answer
 //!   answers "nothing" (`None`, empty, or `Err("unsupported on Wayland: …")`) and
-//!   `capabilities()` says so, so the app boots as a detached reader with portal
-//!   capture (stubbed until Phase 7). Nothing here depends on layer-shell.
+//!   `capabilities()` says so. Capture uses the ScreenCast/PipeWire portal. Native
+//!   overlays require optional GTK layer-shell and compositor support; otherwise
+//!   overlays are disabled. Global shortcuts use the desktop portal.
 //!
 //! **Coordinates are desktop units throughout**: X11 root-window pixels divided by
 //! GDK's window scale, which is exactly what Tauri's logical coordinates are on X11 (and
@@ -34,6 +35,7 @@ use std::sync::OnceLock;
 
 mod keytrigger;
 mod layer;
+pub mod shortcuts;
 mod rules;
 mod window;
 mod workspace;
@@ -56,7 +58,7 @@ pub(crate) fn session() -> &'static Session {
 }
 
 /// Whether this process uses the reduced, ordinary-window reader tier.
-pub fn wayland_reader() -> bool {
+pub fn wayland_overlay_unavailable() -> bool {
     session().backend == Backend::Wayland && !layer::available()
 }
 
@@ -264,6 +266,8 @@ pub fn capabilities() -> Value {
             "foregroundTracking": x11,
         },
         "overlay": {
+            "available": x11 || layer::available(),
+            "reason": if !x11 && !layer::available() { Some("Native overlay unavailable: this compositor does not support layer-shell, or gtk-layer-shell is not installed.") } else { None },
             "passive": x11 || layer::available(),
             // X11 with SHAPE: `set_input_regions` installs an XShape input region and
             // the cursor poll stops toggling click-through. Without SHAPE the shared
@@ -280,7 +284,7 @@ pub fn capabilities() -> Value {
             "nonActivating": x11 || layer::available(),
             "nativeHoverWorkaround": false,
         },
-        "input": {"globalShortcuts": x11},
+        "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if !x11 && s.compositor.as_deref().unwrap_or("").to_ascii_lowercase().contains("hypr") { Some("On Hyprland, set key combinations in your compositor configuration. Changing a shortcut here does not update those desktop bindings.") } else { None }},
         // The executable's file name, which is what `frontmost_app` and focus events
         // report for this app.
         "ownAppNames": ["Kimochi", "kimochi"],
