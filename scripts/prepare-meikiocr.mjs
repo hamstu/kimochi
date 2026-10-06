@@ -283,6 +283,9 @@ const library = { darwin: 'libonnxruntime.dylib', win32: 'onnxruntime.dll', linu
   platform
 ]
 const required = flavor === 'directml' ? [library, 'DirectML.dll'] : [library]
+// Linux's archive exposes both the SONAME and versioned library through links.
+// Keep those names in the bundle too; extract() resolves them to regular files.
+if (platform === 'linux') required.push(`${library}.1`, `${library}.${version}`)
 
 /** Copy the selected files and top-level licences out of one archive into `install`. */
 async function extract(install, archive, bytes, { dir, pick, top, licensePrefix = '' }) {
@@ -359,7 +362,9 @@ async function stageRuntime(install) {
     await extract(install, archive, bytes, {
       dir: `${base}/lib`,
       pick: (name) =>
-        platform === 'win32' ? /\.dll$/i.test(name) : name === library || /providers.*\.so$/.test(name),
+        platform === 'win32'
+          ? /\.dll$/i.test(name)
+          : name === library || name.startsWith(`${library}.`) || /providers.*\.so$/.test(name),
       top: base
     })
   }

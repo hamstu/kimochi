@@ -41,6 +41,9 @@ import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as native from './native.js'
 
+let waylandReader = false
+let waylandLayer = false
+
 const hub = window.__extensionHost
 const log = (value) => {
   if (hub?.log) hub.log(value)
@@ -264,10 +267,17 @@ function holdAutoScan() {
 
 let lastVisibilityTrace = null
 function draw() {
+  // Layer-shell provides an output-local surface, not another window's position.
+  // Do not draw a portal window frame at a fabricated desktop location.
+  if (waylandLayer && state.info?.source_id?.startsWith('portal:window:')) {
+    renderer.clear()
+    return
+  }
   const visible =
     controller.holdsText ||
     (isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) &&
-      shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp))
+      (waylandReader || waylandLayer ||
+        shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp)))
 
   const reason = !isOverlayTextVisible(
     setting('liveOverlayEnabled'),
@@ -294,15 +304,28 @@ function draw() {
     renderer.clear()
     return
   }
+  let readerBounds = null
+  if ((waylandReader || waylandLayer) && state.info) {
+    const scale = Math.min(
+      innerWidth / state.info.full_width,
+      innerHeight / state.info.full_height
+    )
+    readerBounds = {
+      x: (innerWidth - state.info.full_width * scale) / 2,
+      y: (innerHeight - state.info.full_height * scale) / 2,
+      width: state.info.full_width * scale,
+      height: state.info.full_height * scale
+    }
+  }
   const renderChange = renderer.render({
     annotations: state.annotations,
     info: state.info,
     origin: state.origin,
     // Where the source is now, not where it was when the frame was captured, so
     // text follows a window that has since moved or been resized.
-    bounds: state.detached
+    bounds: readerBounds ?? (state.detached
       ? (state.info?.source_bounds ?? null)
-      : (state.sourceBounds ?? state.info?.source_bounds ?? null),
+      : (state.sourceBounds ?? state.info?.source_bounds ?? null)),
     grouping: setting('textOverlayGrouping'),
     opacity: setting('overlayOpacity'),
     scanning: state.scanning
@@ -452,6 +475,7 @@ async function followSource(source) {
 
 /** Place the overlay over the display that holds the captured source. */
 async function positionFor(info) {
+  if (waylandReader || waylandLayer) return { x: 0, y: 0, width: innerWidth, height: innerHeight }
   if (!info?.source_bounds) return state.origin
   const origin = sourceDisplay(info.source_bounds, await native.desktop())
   const moved =
@@ -1089,6 +1113,7 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, onS
   })
   try {
     await native.regionKeys(true)
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer) await publishRegions()
     const appearance = setting('appearance')
     const theme =
       appearance === 'light' || appearance === 'dark'
@@ -1118,6 +1143,7 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, onS
     syncAutoScanner()
     stopKeys()
     await native.regionKeys(false)
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer) await publishRegions()
   }
 }
 
@@ -1200,19 +1226,88 @@ async function editSourceRegion() {
     // (never pattern-matched on a platform name) only when the view has not caught up.
     const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
     const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
-    const saved = kind === 'window'
-      ? await editWindowRegion(sourceId)
-      : await editScreenRegion(sourceId)
+    const saved = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer
+      ? await editPortalRegion(sourceId, kind)
+      : kind === 'window'
+        ? await editWindowRegion(sourceId)
+        : await editScreenRegion(sourceId)
     if (!saved) {
       log({ check: 'region-edit-cancelled' })
       return
     }
     // Committing changes the selection, so anything in flight belongs to the old one.
     generation.bump()
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer) {
+      // Consume the committed crop before a scan snapshots its generation. The native
+      // state event otherwise arrives during OCR and invalidates this very result.
+      await processView(await native.snapshot())
+      for (let attempt = 0; handling || pendingView; attempt++) {
+        if (attempt >= 100) throw new Error('Committed crop did not synchronize with the reader.')
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+    }
     if (!state.flags.autoOcrEnabled) await performScan()
   } catch (error) {
     log({ check: 'region-edit-error', error: String(error?.message ?? error) })
     publish({ status: `Editing the region failed: ${error?.message ?? error}` })
+  }
+}
+
+/** Portal captures have pixel dimensions, but no desktop display catalogue or window origin. */
+async function editPortalRegion(sourceId, kind) {
+  const frame = await native.sourceHoverPreview(sourceId)
+  if (!frame?.width || !frame?.height) {
+    throw new Error('No portal frame available. Choose a source in the system picker first.')
+  }
+  // A hidden layer has not received its output-sized configure yet (initially 1×1).
+  // Map it for the editor before reading its viewport, and unwind even if setup fails.
+  state.regionSelecting = true
+  state.origin = { x: 0, y: 0, width: Math.max(1, innerWidth), height: Math.max(1, innerHeight) }
+  try {
+    await native.regionKeys(true)
+    await publishRegions()
+    for (let attempt = 0; innerWidth <= 1 || innerHeight <= 1; attempt++) {
+      if (attempt >= 100) throw new Error('Wayland crop surface did not receive its screen size.')
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    const origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
+    state.origin = origin
+    // Window streams are edited against their screenshot, never a fabricated screen position.
+    const fit = kind === 'window'
+      ? Math.min(origin.width / frame.width, origin.height / frame.height)
+      : null
+    const bounds = fit === null ? origin : {
+      x: (origin.width - frame.width * fit) / 2,
+      y: (origin.height - frame.height * fit) / 2,
+      width: frame.width * fit,
+      height: frame.height * fit
+    }
+    const rect = await editRegion('Save', {
+      area: bounds,
+      initial: state.crop ? cropToLocal(state.crop, origin, bounds) : null,
+      picture: kind === 'window' ? bounds : undefined,
+      onStart: kind === 'window' ? (selector) => void selector.setPicture(frame.url) : undefined
+    })
+    if (!rect) return false
+    const sx = frame.width / bounds.width
+    const sy = frame.height / bounds.height
+    const crop = {
+      x: Math.max(0, Math.round((rect.x - bounds.x) * sx)),
+      y: Math.max(0, Math.round((rect.y - bounds.y) * sy)),
+      width: Math.round(rect.width * sx),
+      height: Math.round(rect.height * sy),
+      reference_width: frame.width,
+      reference_height: frame.height
+    }
+    if (crop.width <= 0 || crop.height <= 0) return false
+    await native.commitSource(sourceId, crop)
+    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer' })
+    return true
+  } finally {
+    state.regionSelecting = false
+    syncAutoScanner()
+    await native.regionKeys(false)
+    await publishRegions()
   }
 }
 
@@ -2106,6 +2201,31 @@ await native.listen('frontmost-app', ({ payload }) =>
 // Which pids and app names are ours, so our own windows are recognised by process
 // where the platform can tell; the default names stand until it says.
 await native.watchCapabilities((caps) => {
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && caps.session.nativeLayerShell && !waylandLayer) {
+    waylandLayer = true
+    window.addEventListener('resize', () => {
+      state.origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
+      draw()
+    })
+  }
+  if (
+    window.__KIMOCHI_PLATFORM__?.os === 'linux' &&
+    caps.session.backend === 'wayland' &&
+    !caps.session.nativeLayerShell &&
+    !waylandReader
+  ) {
+    waylandReader = true
+    const style = document.createElement('style')
+    style.textContent = `html, body { background: #202428 !important; }
+      .ocr-word-text { opacity: 1 !important; }
+      .ocr-word { background: #202428 !important; }`
+    document.head.append(style)
+    window.addEventListener('resize', () => {
+      state.origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
+      draw()
+    })
+  }
+
   if (caps.os === 'windows')
     void import('/spike/windows-pointer.js').then(({ installWindowsPointer }) =>
       installWindowsPointer(window, () => livePopups)

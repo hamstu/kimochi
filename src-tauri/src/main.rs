@@ -409,6 +409,27 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
         .filter(Region::usable)
         .take(2000)
         .collect();
+    #[cfg(target_os = "linux")]
+    if window.label() == OVERLAY && (platform::wayland_reader() || platform::wayland_layer_overlay()) {
+        // The Wayland reader owns its whole input surface. Never leave an empty
+        // transparent surface over another application (including WM dialogs).
+        let visible = !usable.is_empty()
+            && (state.view.lock().unwrap().overlay_visible || platform::region_editing());
+        if visible && platform::wayland_reader() {
+            // A hide action disables input; restore whole-window input on show.
+            let _ = window.set_ignore_cursor_events(false);
+        }
+        if window.is_visible().unwrap_or(false) != visible {
+            let result = if visible {
+                window.show()
+            } else {
+                window.hide()
+            };
+            if let Err(error) = result {
+                eprintln!("Wayland reader visibility: {error}");
+            }
+        }
+    }
     let mut v = state.view.lock().unwrap();
     if usable.is_empty() {
         v.regions.remove(window.label());
@@ -517,6 +538,11 @@ fn desktop() -> Vec<Rect> {
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
+    #[cfg(target_os = "linux")]
+    if platform::wayland_layer_overlay() {
+        let window = app.get_webview_window("overlay").ok_or("overlay unavailable")?;
+        return platform::region_keyboard(&window, on);
+    }
     hotkeys::set_region_keys(&app, on)
 }
 
@@ -626,6 +652,8 @@ fn app_quit(app: tauri::AppHandle) {
         platform::stop_mouse_guard();
         platform::stop_key_trigger();
     }
+    #[cfg(target_os = "linux")]
+    platform::stop_key_trigger();
     app.exit(0);
 }
 
@@ -1975,6 +2003,8 @@ fn main() {
             platform_capabilities,
         ])
         .setup(move |app| {
+            #[cfg(target_os = "linux")]
+            platform::initialize_wayland_overlay();
             let handle = app.handle().clone();
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // The Wayland portal's restore token lives in settings so the picker is not
@@ -2024,7 +2054,7 @@ fn main() {
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
 
-            let reader_popup = tauri::WebviewWindowBuilder::new(
+            let reader_popup_builder = tauri::WebviewWindowBuilder::new(
                 app,
                 "reader-popup",
                 tauri::WebviewUrl::App("app/reader-popup.html".into()),
@@ -2039,8 +2069,10 @@ fn main() {
             .skip_taskbar(true)
             .inner_size(500., 380.)
             .content_protected(true)
-            .initialization_script_for_all_frames(platform::platform_prelude())
-            .build()?;
+            .initialization_script_for_all_frames(platform::platform_prelude());
+            #[cfg(target_os = "linux")]
+            let reader_popup_builder = reader_popup_builder.focusable(platform::wayland_reader());
+            let reader_popup = reader_popup_builder.build()?;
             make_panel(&handle, &service, &reader_popup);
             // Opt-in native regression: only the API popup, no source restore or OCR.
             #[cfg(debug_assertions)]
@@ -2067,7 +2099,7 @@ fn main() {
             panels::create_eager(&handle, &store)?;
             panels::act_existing(&handle, &store, panels::MAIN, "show_inactive", None)?;
 
-            let overlay = tauri::WebviewWindowBuilder::new(
+            let overlay_builder = tauri::WebviewWindowBuilder::new(
                 app,
                 OVERLAY,
                 tauri::WebviewUrl::App("ui/overlay.html".into()),
@@ -2107,9 +2139,38 @@ fn main() {
                             .as_ref()
                             .is_some_and(|origin| &u.origin() == origin)
                 }
-            })
-            .build()?;
-            overlay.set_ignore_cursor_events(true)?;
+            });
+            #[cfg(target_os = "linux")]
+            let overlay_builder = if platform::wayland_reader() {
+                overlay_builder
+                    .title("Kimochi Detached Reader")
+                    .transparent(false)
+                    .decorations(true)
+                    .resizable(true)
+                    .always_on_top(false)
+                    .visible(false)
+                    .inner_size(800., 600.)
+            } else {
+                let overlay_builder = overlay_builder.focusable(false);
+                if platform::wayland_layer_overlay() {
+                    // Layer-shell stretches to the output. A non-resizable GTK window
+                    // otherwise retains the initial 1117px minimum height.
+                    overlay_builder.visible(false).resizable(true).inner_size(1., 1.)
+                } else {
+                    overlay_builder
+                }
+            };
+            let overlay = overlay_builder.build()?;
+            #[cfg(target_os = "linux")]
+            let ignore_cursor_events = !platform::wayland_reader();
+            #[cfg(not(target_os = "linux"))]
+            let ignore_cursor_events = true;
+            #[cfg(target_os = "linux")]
+            if !platform::wayland_layer_overlay() {
+                overlay.set_ignore_cursor_events(ignore_cursor_events)?;
+            }
+            #[cfg(not(target_os = "linux"))]
+            overlay.set_ignore_cursor_events(ignore_cursor_events)?;
             // Pointing at a word must not rearrange the reader's desktop, and clicking
             // one must not take the keyboard out of their game. See `platform::make_panel`.
             make_panel(&handle, &service, &overlay);
@@ -2130,7 +2191,7 @@ fn main() {
                     })?;
                 let shim = String::from_utf8(asset.bytes)
                     .map_err(|_| std::io::Error::other("panel-shim.js is not valid UTF-8"))?;
-                let window = tauri::WebviewWindowBuilder::new(
+                let window_builder = tauri::WebviewWindowBuilder::new(
                     app,
                     POPUP_HOST,
                     tauri::WebviewUrl::App("ui/popup-host.html".into()),
@@ -2147,8 +2208,10 @@ fn main() {
                 .visible(false)
                 .inner_size(400., 250.)
                 .initialization_script_for_all_frames(platform::platform_prelude())
-                .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim)
-                .build()?;
+                .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim);
+                #[cfg(target_os = "linux")]
+                let window_builder = window_builder.focusable(platform::wayland_reader());
+                let window = window_builder.build()?;
                 let _ = window.set_content_protected(true);
                 // The dictionary is hovered and clicked while the reader stays in their
                 // game; a panel is what lets it be used without activating this app.

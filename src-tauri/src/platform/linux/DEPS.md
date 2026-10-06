@@ -137,3 +137,11 @@ session yet. First things to check on real hardware: XInput 2 raw events arrivin
 a game has focus; `_NET_WM_WINDOW_TYPE_UTILITY` after map on GNOME/KDE/XFCE; panel
 clicks not stealing focus; `GetImage` on windows of depth-32 visuals; GTK CSD windows'
 bounds versus the overlay.
+
+### Native Wayland layer-shell experiment (Linux bring-up)
+
+The bring-up user explicitly expanded the original reduced-tier scope to investigate native Wayland overlays. `KIMOCHI_WAYLAND_OVERLAY=1` opts into the experiment; it is off by default pending acceptance. During GTK setup the Linux module dynamically loads optional `libgtk-layer-shell.so.0` and probes the actual Wayland protocol. Missing library/protocol falls back to the ordinary detached reader without adding a link-time dependency. No crate/model versions change. `session.nativeLayerShell` reports whether this integration initialized, distinct from the historical compositor-name hint `session.layerShell`.
+
+Layer panels use keyboard mode NONE, no exclusive layout reservation, an initially empty mouse input region, and published annotation rectangles applied through GDK on the GTK main thread. The overlay anchors to all output edges; dictionary panels anchor top/left. Screen-frame coordinates map to the layer surface's actual local dimensions; portal window frames are deliberately not drawn at an invented desktop position. Multi-output mapping, dictionary placement, native hover, long-lived scheduling and desktop fallback remain acceptance gates. See root `LINUX_BRINGUP.md` for observed passes/failures. GNOME/Ubuntu has not been tested and protocol support must not be assumed.
+
+For an explicitly opened crop editor, `region_keys` switches the overlay alone to keyboard ON_DEMAND (never EXCLUSIVE), then restores NONE on completion/cancellation. Portal screen crops use frame-pixel dimensions versus configured logical surface size; portal window crops use a fitted screenshot because global window placement is unavailable. The editor temporarily publishes whole-surface input and releases it immediately on close. A hidden layer is mapped and configured before crop geometry is measured.

@@ -47,6 +47,7 @@ pub fn detect_session(get: impl Fn(&str) -> Option<String>) -> Session {
     let wayland = kimochi_capture::is_wayland_session(
         get("XDG_SESSION_TYPE").as_deref(),
         get("WAYLAND_DISPLAY").as_deref(),
+        get("GDK_BACKEND").as_deref(),
     );
     let compositor = compositor_name(
         set("XDG_CURRENT_DESKTOP").as_deref(),

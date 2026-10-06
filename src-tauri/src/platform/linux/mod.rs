@@ -33,6 +33,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 mod keytrigger;
+mod layer;
 mod rules;
 mod window;
 mod workspace;
@@ -53,6 +54,14 @@ pub(crate) fn session() -> &'static Session {
     static SESSION: OnceLock<Session> = OnceLock::new();
     SESSION.get_or_init(|| rules::detect_session(|k| std::env::var(k).ok()))
 }
+
+/// Whether this process uses the reduced, ordinary-window reader tier.
+pub fn wayland_reader() -> bool {
+    session().backend == Backend::Wayland && !layer::available()
+}
+
+pub fn initialize_wayland_overlay() { layer::initialize(); }
+pub fn wayland_layer_overlay() -> bool { layer::available() }
 
 fn on_x11() -> bool {
     session().backend == Backend::X11
@@ -233,6 +242,7 @@ pub fn capabilities() -> Value {
             "backend": s.backend.as_str(),
             "compositor": s.compositor,
             "layerShell": s.layer_shell,
+            "nativeLayerShell": layer::available(),
             "xwayland": s.xwayland,
         },
         "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super"},
@@ -254,18 +264,20 @@ pub fn capabilities() -> Value {
             "foregroundTracking": x11,
         },
         "overlay": {
-            "passive": x11,
+            "passive": x11 || layer::available(),
             // X11 with SHAPE: `set_input_regions` installs an XShape input region and
             // the cursor poll stops toggling click-through. Without SHAPE the shared
             // poll toggles it, as on macOS and Windows.
-            "inputRegions": if !x11 {
+            "inputRegions": if layer::available() {
+                "native"
+            } else if !x11 {
                 "wholeWindowOnly"
             } else if x11::has_input_shape() {
                 "native"
             } else {
                 "poll"
             },
-            "nonActivating": x11,
+            "nonActivating": x11 || layer::available(),
             "nativeHoverWorkaround": false,
         },
         "input": {"globalShortcuts": x11},
@@ -277,3 +289,5 @@ pub fn capabilities() -> Value {
         "ocrAccelerators": {"meikiocr": "cpu", "mangaocr": "cpu"},
     })
 }
+
+pub use layer::{region_editing, region_keyboard};
