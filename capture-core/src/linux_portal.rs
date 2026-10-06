@@ -1183,9 +1183,6 @@ mod backend {
         fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
             self.grab(source_id, None, Some(edge), None)
         }
-        fn thumbnail_after(&mut self, source_id: &str, edge: u32, after: Instant) -> Result<Frame> {
-            self.grab(source_id, None, Some(edge), Some(after))
-        }
         fn close(&mut self) {
             self.drop_cast();
         }

@@ -158,9 +158,10 @@ pub trait CaptureBackend: Send {
             crop: None,
         })
     }
+    /// A UI-only preview must not interrupt Linux annotation surfaces.
     #[cfg(target_os = "linux")]
-    fn thumbnail_after(&mut self, source_id: &str, edge: u32, _after: Instant) -> Result<Frame> {
-        self.thumbnail(source_id, edge)
+    fn preview(&mut self, request: &CaptureRequest) -> Result<Frame> {
+        self.capture(request)
     }
     fn close(&mut self) {}
 }

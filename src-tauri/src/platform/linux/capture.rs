@@ -155,18 +155,12 @@ impl CaptureBackend for Protected {
         drop(hidden);
         result
     }
+    // Picker/sidebar images never enter OCR or the observer. They may include
+    // annotations, but must not disturb what the user is reading.
+    fn preview(&mut self, request: &CaptureRequest) -> Result<Frame> {
+        self.inner.capture(request)
+    }
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
-        let hidden = hide(&self.app)?;
-        if let Some(after) = hidden.after {
-            if let Some(wait) = Duration::from_millis(350).checked_sub(after.elapsed()) {
-                std::thread::sleep(wait);
-            }
-        }
-        let result = match hidden.after {
-            Some(after) => self.inner.thumbnail_after(source_id, edge, after),
-            None => self.inner.thumbnail(source_id, edge),
-        };
-        drop(hidden);
-        result
+        self.inner.thumbnail(source_id, edge)
     }
 }

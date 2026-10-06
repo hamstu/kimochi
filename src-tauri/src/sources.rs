@@ -85,12 +85,15 @@ fn capture_isolated(service: &Service, source_id: &str) -> Result<kimochi_captur
         .backend
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    backend
-        .capture(&CaptureRequest {
-            source_id: source_id.to_string(),
-            crop: None,
-        })
-        .map_err(|e| err_for(source_id, e))
+    let request = CaptureRequest {
+        source_id: source_id.to_string(),
+        crop: None,
+    };
+    #[cfg(target_os = "linux")]
+    let frame = backend.preview(&request);
+    #[cfg(not(target_os = "linux"))]
+    let frame = backend.capture(&request);
+    frame.map_err(|e| err_for(source_id, e))
 }
 
 /// Box-average downscale of tightly packed RGBA. Averaging rather than dropping
