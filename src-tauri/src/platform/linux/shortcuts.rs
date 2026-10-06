@@ -365,7 +365,8 @@ fn bind(
                 crate::record(
                     app,
                     &app.state::<Shared>(),
-                    json!({"check":"dictionary-modifier","shift":shift}),
+                    json!({"check":"dictionary-modifier","shift":shift,
+                        "at":crate::now_millis(),"action":action,"edge":member,"portalTimestamp":_time}),
                 );
                 continue;
             }

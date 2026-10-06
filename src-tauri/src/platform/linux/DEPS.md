@@ -213,3 +213,5 @@ Sources: [portal Activated/Deactivated](https://flatpak.github.io/xdg-desktop-po
 [Hyprland bind flags](https://wiki.hypr.land/Configuring/Basics/Binds/).
 
 Continuous Shift scanning: the Linux host adapter tracks physical Shift edges independently of portal state, retains passive portal holds across focus changes, and is installed in dictionary/preview frames as well as root readers. Native Wayland virtual-device tests exercise three words during a single hold in reader, OCR overlay and nested popup scanner; physical-device and other-compositor acceptance remain unverified.
+
+Local Shift state is shared across all documents in a native window: focus entering a popup iframe does not release Shift, and a child receiving key-up releases the parent's state. Actual native-window blur clears local keys. Optional `scripts/linux-shift-native.sh` builds an isolated Shift/pointer probe from supplied protocol XMLs; use physical keyboard acceptance separately because portal-driven virtual input previously passed while the user still reported release-only failures.

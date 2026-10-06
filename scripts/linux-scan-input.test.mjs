@@ -13,8 +13,12 @@ function fixture(os = 'linux') {
     addEventListener: (type, fn) => listeners.set(type, fn),
     __TAURI__: { event: { listen: async (_, fn) => { portal = fn } } } }
   return { win, received, listeners, target,
-    move: shiftKey => listeners.get('pointermove')({ target, pointerType: 'mouse', isPrimary: true,
-      clientX: 17, clientY: 23, shiftKey, stopImmediatePropagation() {} }),
+    move: shiftKey => {
+      let blocked=false
+      listeners.get('pointermove')({ target, pointerType: 'mouse', isPrimary: true,
+        clientX: 17, clientY: 23, shiftKey, stopImmediatePropagation() { blocked=true } })
+      return blocked
+    },
     send: shift => portal({ payload: { shift } }) }
 }
 test('portal Shift scans a stationary pointer on press, never on release', async () => {
@@ -86,4 +90,42 @@ test('a dictionary frame opened during a portal hold inherits the modifier', asy
   assert.equal(child.received.at(-1).shiftKey,true)
   parent.send(false); child.move(true)
   assert.equal(child.received.at(-1).shiftKey,false)
+})
+
+test('focusing a popup iframe cannot cancel a local Shift hold', async () => {
+  const f=fixture(); await installLinuxScanInput(f.win); f.move(false)
+  f.listeners.get('keydown')({key:'Shift',code:'ShiftLeft'})
+  f.listeners.get('blur')(); f.move(false)
+  assert.equal(f.received.length,2)
+  assert.equal(f.received.at(-1).shiftKey,true)
+})
+test('a key released in a popup iframe releases the parent local hold', async () => {
+  const parent=fixture(); await installLinuxScanInput(parent.win); parent.move(false)
+  parent.listeners.get('keydown')({key:'Shift',code:'ShiftLeft'})
+  const child=fixture(); child.win.top=parent.win; await installLinuxScanInput(child.win); child.move(false)
+  assert.equal(child.received.at(-1).shiftKey,true)
+  child.listeners.get('keyup')({key:'Shift',code:'ShiftLeft',shiftKey:true})
+  parent.move(true); assert.equal(parent.received.at(-1).shiftKey,false)
+})
+test('leaving the native reader clears local keys without a release in that reader', async () => {
+  const f=fixture(); await installLinuxScanInput(f.win); f.move(false)
+  f.listeners.get('keydown')({key:'Shift',code:'ShiftLeft'})
+  f.win.document.hasFocus=()=>false; f.listeners.get('blur')()
+  f.move(true); assert.equal(f.received.at(-1).shiftKey,false)
+})
+test('physical Shift code works when its logical key name is remapped', async () => {
+  const f=fixture(); await installLinuxScanInput(f.win); f.move(false)
+  f.listeners.get('keydown')({key:'Unidentified',code:'ShiftLeft'})
+  assert.equal(f.received.at(-1).shiftKey,true)
+  f.listeners.get('keyup')({key:'Unidentified',code:'ShiftLeft',shiftKey:true})
+  f.move(true); assert.equal(f.received.at(-1).shiftKey,false)
+})
+
+test('returning to a reader with Shift already held accepts fresh native pointer modifiers', async () => {
+  const f=fixture(); await installLinuxScanInput(f.win); f.move(false)
+  f.listeners.get('keydown')({key:'Shift',code:'ShiftLeft'})
+  f.win.document.hasFocus=()=>false; f.listeners.get('blur')()
+  assert.equal(f.move(true),true)
+  f.win.document.hasFocus=()=>true; f.listeners.get('focus')()
+  assert.equal(f.move(true),false)
 })
