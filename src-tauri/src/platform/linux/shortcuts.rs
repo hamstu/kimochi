@@ -107,6 +107,7 @@ fn request<B: serde::Serialize + zbus::zvariant::DynamicType>(
 
 pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) -> Value {
     stop();
+    let _ = app.emit("linux-dictionary-modifier", json!({"shift":false}));
     if suspended {
         return json!({"registered":[],"failed":[],"suspended":true,"backend":"portal"});
     }
@@ -122,6 +123,7 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
         }
         if let Err(error) = result {
             AVAILABLE.store(false, Ordering::SeqCst);
+            let _ = app.emit("linux-dictionary-modifier", json!({"shift":false}));
             let report = json!({"registered":[],"failed":[{"name":"Wayland shortcuts","error":error}],"backend":"portal","pending":false});
             *REPORT.lock().unwrap() = Some(report.clone());
             crate::record(
@@ -265,6 +267,29 @@ fn bind(
         data.insert("preferred_trigger".into(), text(&trigger(accelerator)));
         bindings.push((format!("dev.kimochi.app.{name}"), data));
     }
+    // Hyprland supports non-consuming modifier-only desktop bindings. Other
+    // portal backends may reject modifier-only accelerators, so do not add them
+    // there or advertise a raw/global keyboard watcher.
+    if super::session()
+        .compositor
+        .as_deref()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .contains("hypr")
+    {
+        for (name, key) in [
+            ("dictionaryShiftLeft", "Shift_L"),
+            ("dictionaryShiftRight", "Shift_R"),
+        ] {
+            let mut data = Dict::new();
+            data.insert(
+                "description".into(),
+                text("Hold Shift for dictionary lookup"),
+            );
+            data.insert("preferred_trigger".into(), text(key));
+            bindings.push((format!("dev.kimochi.app.{name}"), data));
+        }
+    }
     let bind_token = format!("{token}_bind");
     let mut options = Dict::new();
     options.insert("handle_token".into(), text(&bind_token));
@@ -282,8 +307,6 @@ fn bind(
         .path("/org/freedesktop/portal/desktop")
         .map_err(|e| e.to_string())?
         .interface("org.freedesktop.portal.GlobalShortcuts")
-        .map_err(|e| e.to_string())?
-        .member("Activated")
         .map_err(|e| e.to_string())?
         .build();
     let signals =
@@ -317,17 +340,38 @@ fn bind(
         "platform-capabilities",
         crate::capabilities_value(app, &app.state::<Shared>()),
     );
+    let mut modifiers = DictionaryModifiers::default();
     for signal in signals {
         if GENERATION.load(Ordering::SeqCst) != generation {
             break;
         }
         let signal = signal.map_err(|e| e.to_string())?;
+        let member = signal
+            .header()
+            .member()
+            .map(|m| m.as_str().to_owned())
+            .unwrap_or_default();
+        if member != "Activated" && member != "Deactivated" {
+            continue;
+        }
         let (source, id, _time, _options): (OwnedObjectPath, String, u64, Dict) =
             signal.body().deserialize().map_err(|e| e.to_string())?;
         if source != session {
             continue;
         }
         if let Some(action) = id.strip_prefix("dev.kimochi.app.") {
+            if let Some(shift) = modifiers.update(action, member == "Activated") {
+                let _ = app.emit("linux-dictionary-modifier", json!({"shift":shift}));
+                crate::record(
+                    app,
+                    &app.state::<Shared>(),
+                    json!({"check":"dictionary-modifier","shift":shift}),
+                );
+                continue;
+            }
+            if member != "Activated" {
+                continue;
+            }
             crate::record(
                 app,
                 &app.state::<Shared>(),
@@ -339,8 +383,33 @@ fn bind(
     Ok(())
 }
 
+#[derive(Default)]
+struct DictionaryModifiers {
+    left: bool,
+    right: bool,
+}
+impl DictionaryModifiers {
+    fn update(&mut self, action: &str, down: bool) -> Option<bool> {
+        match action {
+            "dictionaryShiftLeft" => self.left = down,
+            "dictionaryShiftRight" => self.right = down,
+            _ => return None,
+        }
+        Some(self.left || self.right)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn releasing_one_shift_keeps_the_other_held() {
+        let mut state = super::DictionaryModifiers::default();
+        assert_eq!(state.update("dictionaryShiftLeft", true), Some(true));
+        assert_eq!(state.update("dictionaryShiftRight", true), Some(true));
+        assert_eq!(state.update("dictionaryShiftLeft", false), Some(true));
+        assert_eq!(state.update("triggerScan", true), None);
+        assert_eq!(state.update("dictionaryShiftRight", false), Some(false));
+    }
     #[test]
     fn accelerator_uses_xdg_spelling() {
         assert_eq!(super::trigger("CommandOrControl+Shift+8"), "CTRL+SHIFT+8");

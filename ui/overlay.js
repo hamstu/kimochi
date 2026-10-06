@@ -2206,9 +2206,11 @@ await native.listen('frontmost-app', ({ payload }) =>
 )
 // Which pids and app names are ours, so our own windows are recognised by process
 // where the platform can tell; the default names stand until it says.
-await native.watchCapabilities((caps) => {
+await native.watchCapabilities(async (caps) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && caps.session.nativeLayerShell && !waylandLayer) {
     waylandLayer = true
+    const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
+    await installLinuxScanInput(window, { passive: true })
     window.addEventListener('resize', () => {
       state.origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
       draw()

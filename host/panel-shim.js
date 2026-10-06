@@ -874,7 +874,7 @@
      * where it is — the Yomitan settings page previews its popup on purpose.
      */
     const popupHost = root.__kimochiPopupHost
-    const remotePopup =
+    let remotePopup =
       popupHost && typeof FRAME_BANDS[popupHost] === 'number' && popupHost !== hub.label
         ? {
             frameId: FRAME_BANDS[popupHost],
@@ -915,6 +915,12 @@
       hub,
       async start() {
         await hub.ready
+        if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+          const caps = await tauri.core.invoke('platform_capabilities')
+          // Wayland exposes no toplevel origin. Keep anchors and popups in the
+          // same coordinate space instead of treating (0,0) as a desktop origin.
+          if (caps.session.backend === 'wayland') remotePopup = null
+        }
         // Before the frontend, so no popup can be built without being seen. This is
         // the only record of whether a lookup produced a popup: these windows are
         // capture-protected, so a screenshot cannot answer it.
@@ -927,6 +933,10 @@
         if (platformInfo().os === 'win') {
           const { installWindowsPointer } = await import(asset('/spike/windows-pointer.js'))
           await installWindowsPointer(root, () => observed.popups)
+        }
+        if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+          const { installLinuxScanInput } = await import(asset('/spike/linux-scan-input.js'))
+          await installLinuxScanInput(root)
         }
         if (remotePopup && !(await hub.waitForWindow(popupHost, 30000))) {
           // Yomitan caches which popup a frontend uses, so starting before the host

@@ -181,3 +181,33 @@ paths. AppImage builds need GStreamer pkg-config metadata (Debian
 Linux reports `excludesOwnWindows: false` and `overlayExclusion: hideDuringCapture`. Actual OCR/observer captures hide overlay/dictionary annotation surfaces while acquiring pixels, waits up to 350 ms for tested compositor hide animations, and restores prior visibility on success/error. PipeWire monitor capture rejects pre-hide cached buffers. Main/settings windows are not excluded. This passed pixel checks on Hyprland ARM64; X11, other compositor animations and sustained observer timing remain unverified. Active crop editing blocks captures until the editor closes.
 
 UI-only source previews and thumbnails use the unsuppressed Linux preview path, so sidebar refreshes do not flash annotations. Their images may contain overlays; they never feed OCR. Tauri/Tao content protection is unsupported on Linux. Hyprland0.56.1 `no_screen_share` blackens the full layer rectangle rather than exposing the desktop underneath; it is unsuitable for our full-screen transparent OCR layer. See the root report for the reverted compositor test.
+
+## Wayland dictionary Shift-hover bring-up (2026-10-06)
+
+Ordinary reader panels use an in-window Yomitan popup on Wayland: toplevel global
+origins are unavailable, so the cross-window popup offset cannot be calculated.
+X11 keeps the original remote popup path. Linux host glue replays a stationary
+pointer on Shift press and rejects stale held-Shift pointer modifiers after release.
+Editable controls remain ordinary text inputs. Vendor Yomitan stays unchanged.
+
+Native layer-shell overlays keep keyboard mode NONE. On Hyprland, two explicit
+GlobalShortcuts portal actions relay left/right Shift press and release, without
+claiming a global raw keyboard watcher. Desktop bindings must be non-consuming.
+For Hyprland 0.56.1 Lua configuration (add to the user's bindings file):
+
+```lua
+hl.bind("Shift_L", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftLeft"), { non_consuming = true, transparent = true, ignore_mods = true })
+hl.bind("Shift_R", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftRight"), { non_consuming = true, transparent = true, ignore_mods = true })
+```
+
+Both edges are forwarded by the global dispatcher; releasing one Shift must not
+clear the other. No exclusive keyboard grab, evdev access, root requirement, or
+compositor IPC dependency is added to Kimochi. This configuration syntax is
+version-specific; consult the compositor's current documentation. Other Wayland
+backends do not receive modifier-only portal bindings automatically, because they
+may reject them and break action shortcuts. Passive stationary Shift lookup on
+those compositors remains unverified/unavailable until an equivalent explicitly
+permitted modifier feed exists. Normal focused-reader Shift lookup works locally.
+
+Sources: [portal Activated/Deactivated](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html),
+[Hyprland bind flags](https://wiki.hypr.land/Configuring/Basics/Binds/).
