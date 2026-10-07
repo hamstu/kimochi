@@ -1,5 +1,20 @@
 # platform/linux: dependencies and integration contract
 
+## Ubuntu build prerequisites
+
+The README's Ubuntu command includes PipeWire/SPA development headers and libclang
+for capture bindings, `libudev-dev` for gilrs gamepad support, and GStreamer development
+metadata plus base/good/bad runtime plugins for packaging/audio. Missing `libudev.pc`
+was reproduced by the first Ubuntu app build; see `UBUNTU_BRINGUP.md` and its evidence.
+Use Node >=22, npm >=10 and Rust stable >=1.87 with Clippy/rustfmt. Japanese fonts
+(`fonts-noto-cjk`) and diagnostic tools (`mesa-utils`, `wayland-utils`, `x11-utils`)
+help runtime acceptance. Install an IME only by user agreement.
+
+Optional `libgtk-layer-shell0` enables native overlays only when the current
+compositor advertises layer-shell. Ubuntu 24.04 GNOME Wayland's native library probe
+returned unsupported even with that package installed; capture and reader panels
+remain the supported tier there. An Xorg login is a separate acceptance target.
+
 ## Cargo
 
 ```toml

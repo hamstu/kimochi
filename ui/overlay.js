@@ -476,6 +476,9 @@ async function followSource(source) {
 
 /** Place the overlay over the display that holds the captured source. */
 async function positionFor(info) {
+  // Unsupported Wayland desktops still publish capture/OCR to the reader.
+  // They have neither an annotation surface nor a portable desktop catalogue.
+  if (waylandDisabled) return state.origin
   if (waylandLayer) return { x: 0, y: 0, width: innerWidth, height: innerHeight }
   if (!info?.source_bounds) return state.origin
   const origin = sourceDisplay(info.source_bounds, await native.desktop())

@@ -103,7 +103,9 @@ export async function repairLinuxAppImages({ target, release, env }) {
   const hook = path.join(appdir, 'apprun-hooks/linuxdeploy-plugin-gtk.sh')
   const script = await readFile(hook, 'utf8')
   await writeFile(hook, script.replace(/^export GDK_BACKEND=x11.*$/m, `# Respect an explicit backend; prefer native Wayland in a Wayland login.\nif [ -z "\${GDK_BACKEND:-}" ]; then\n    if [ "\${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "\${WAYLAND_DISPLAY:-}" ]; then\n        GDK_BACKEND=wayland\n    else\n        GDK_BACKEND=x11\n    fi\nfi\nexport GDK_BACKEND`))
-  await writeFile(path.join(appdir, 'apprun-hooks/kimochi-audio.sh'), `#!/bin/sh
+  // linuxdeploy's generated AppRun sources only its registered GTK hook.
+  // A separate hook added after deployment is never registered with AppRun.
+  await writeFile(hook, (await readFile(hook, 'utf8')) + `
 export GST_PLUGIN_SYSTEM_PATH_1_0="$APPDIR/usr/lib/gstreamer-1.0"
 export GST_PLUGIN_SCANNER_1_0="$APPDIR/usr/libexec/gstreamer-1.0/gst-plugin-scanner"
 `)

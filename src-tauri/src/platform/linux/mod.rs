@@ -253,8 +253,8 @@ pub fn capabilities() -> Value {
             "canOpenSettings": false,
             "restartAfterGrant": false,
             "pickerRequired": !x11,
-            // Window capture works on X11; the Wayland portal backend is Phase 7.
-            "windowCapture": x11,
+            // X11 and portal window streams support capture; Wayland tracking is deferred.
+            "windowCapture": true,
             // X has no capture exclusion list: a display capture includes our overlay.
             "excludesOwnWindows": false,
             "overlayExclusion": "hideDuringCapture",
