@@ -59,6 +59,8 @@ export interface PlatformCapabilities {
   }
   input: {
     globalShortcuts: boolean
+    globalShortcutBackend?: string
+    globalShortcutRemediation?: string | null
     keyTrigger: {
       available: boolean
       permission: KeyTriggerPermission

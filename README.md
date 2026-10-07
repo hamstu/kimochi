@@ -39,7 +39,7 @@ The two OCR crates are path dependencies: `kimochi-meikiocr` and `kimochi-mangao
 
 - **macOS** (the implementation target): macOS 14+, Node 22+, Rust stable and the Command Line Tools. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries. `npm run release` produces `src-tauri/target/release/bundle/macos/Kimochi.app`; install by copying it to `/Applications`.
 - **Windows** 10 22H2 or 11, x64 or ARM64: Node 22+, Rust stable (MSVC toolchain) and the Visual Studio Build Tools "Desktop development with C++" workload. The installer embeds the WebView2 bootstrapper and installs per user (no admin). Capture, overlay and input are not implemented yet (see [CROSS_PLATFORM_PLAN.md](CROSS_PLATFORM_PLAN.md)).
-- **Linux** (Ubuntu 22.04 or newer): Node 22+, Rust stable and `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf`. Same caveats as Windows.
+- **Linux** (Ubuntu 22.04 or newer): Node 22+, Rust stable >=1.87 and `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libpipewire-0.3-dev libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`. See [Linux dependencies and capabilities](src-tauri/src/platform/linux/DEPS.md) and the session-specific [Ubuntu report](UBUNTU_BRINGUP.md).
 
 ### Configuration split
 
@@ -181,3 +181,34 @@ MANGAOCR_TEST_IMAGE=../kimochi-mangaocr/tests/fixtures/images/00.jpg cargo test 
 OCR results share an engine-independent group contract in `ui/ocr-result.ts`. Manga OCR supplies semantic text blocks; fragmented cloud results are grouped by glyph-relative proximity and direction. Direction metadata takes priority over aspect/neighbor inference. Vertical overlays use Japanese vertical layout and a right-edge blue marker; transcript rows remain horizontal, one row per group, with capture boundaries and group counters. Group IDs survive history persistence/replay. Existing text-only engines remain supported. Tesseract is removed; saved `local` OCR preferences migrate to MeikiOCR.
 
 Manga assets are checksum-pinned and staged by `npm run prepare:mangaocr`, including the Comic Text Detector ONNX file. Its graph runs in Rust via Candle (Metal on macOS), without Python or ONNX Runtime. The combined app is GPL-3.0-only; see `LICENSE` and the detector/recognizer provenance in `NOTICE`.
+
+
+### Optional GNOME 46 Wayland overlay (Ubuntu prototype)
+
+On GNOME 46 Wayland, **Set up GNOME overlay** installs the extension embedded in
+this Linux build. Initial installation (or migration from the old monolithic
+extension) requires one login so GNOME discovers the stable loader. Subsequent
+**Update GNOME overlay** operations stage an immutable implementation, disable/enable
+only Kimochi, verify its running revision and restore the previous implementation
+if startup fails. Other enabled extension names are preserved. Unrecognized edits
+to Kimochi's loader/metadata are refused; the recognized legacy implementation is
+backed up before migration. No unsafe Shell evaluation or compositor restart.
+
+Shell actors provide one monitor's screen annotations and Shift-hover/click lookup.
+The dictionary uses the existing full Yomitan Popup/Display in a small native
+window, including dictionary images, audio controls and nested lookup. GNOME supplies
+geometry for Kimochi's own log/popup windows so log lookups can extend outside the
+log. The popup does not request activation when mapped; clicking it can focus it.
+The hidden OCR WebKit host never becomes a transparent ordinary desktop overlay.
+There is no modal or keyboard grab. Portal window annotations/following remain
+deferred, GNOME desktop crop/Quick Shot and multi-monitor mapping remain unavailable.
+Full UI/placement and loader recovery have isolated GNOME46 evidence; physical
+focus/input/audio acceptance on the user's current desktop is tracked separately
+in UBUNTU_BRINGUP.md. Other GNOME versions are rejected until tested.
+
+Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen overlays are hidden while the panel control is unavailable. Ordinary application Escape is not intercepted.
+
+GNOME caches the stable loader's entry module for the login. A change to the loader
+itself still needs a new login; ordinary implementation updates use unique module
+paths and reload in place. The UI reports whether the expected revision is actually
+running rather than treating an enable command's success as proof.

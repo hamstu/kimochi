@@ -58,6 +58,21 @@ pub(super) fn xid(w: &tauri::WebviewWindow) -> Result<u32, String> {
 
 /// Place by Tauri's logical coordinates (desktop units on X11).
 pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
+    if w.label() == "log" && super::gnome::eligible_popup_session() {
+        // Set before first map, so the bridge never races the first lookup.
+        w.set_title("Kimochi · log").map_err(|e| e.to_string())?;
+    }
+    if session().backend == Backend::Wayland && w.is_resizable().unwrap_or(false) {
+        // A tiling compositor can allocate less than a panel's preferred minimum.
+        // GTK then keeps a wider WebView than the displayed surface, squashing
+        // pixels and offsetting hit targets. Resizable panels must fit their tile.
+        w.set_min_size(Some(tauri::LogicalSize::new(1., 1.)))
+            .map_err(|e| e.to_string())?;
+    }
+    if super::layer::available() {
+        super::layer::place(w, r)?;
+        if w.label() == "overlay" { return Ok(()); }
+    }
     w.set_position(tauri::LogicalPosition::new(r.x, r.y))
         .map_err(|e| e.to_string())?;
     w.set_size(tauri::LogicalSize::new(r.width, r.height))
@@ -65,11 +80,18 @@ pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
 }
 
 pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
+    // Native input shapes need the popup's mapped origin; startup must also allow
+    // unmapped windows. Explicit popup-anchor queries remain strict in window_bounds.
+    if w.label() == "popup-host" && super::gnome::desktop_popup() {
+        if let Ok(rect) = super::gnome::own_bounds(w) { return Ok(rect); }
+    }
     let scale = w.scale_factor().map_err(|e| e.to_string())?;
-    let position = w
+    let position = if super::layer::available() {
+        tauri::LogicalPosition::new(0., 0.)
+    } else { w
         .outer_position()
         .map_err(|e| e.to_string())?
-        .to_logical::<f64>(scale);
+        .to_logical::<f64>(scale) };
     let size = w
         .outer_size()
         .map_err(|e| e.to_string())?
@@ -121,6 +143,9 @@ pub fn set_input_regions(
     w: &tauri::WebviewWindow,
     regions: Option<&[Rect]>,
 ) -> Result<bool, String> {
+    if super::layer::available() || (w.label() == "popup-host" && super::gnome::eligible_popup_session()) {
+        return super::layer::input_regions(w, regions);
+    }
     if session().backend != Backend::X11 || !x11::has_input_shape() {
         return Ok(false);
     }
@@ -212,8 +237,32 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
         return Ok(false);
     }
     if session().backend == Backend::Wayland {
+        if w.label() == "popup-host" && super::gnome::eligible_popup_session() {
+            use glib::object::ObjectType as _;
+            unsafe extern "C" { fn gtk_window_set_focus_on_map(window: *mut std::ffi::c_void, focus: i32); }
+            let gtk = w.gtk_window().map_err(|e| e.to_string())?;
+            // A small dictionary window may take focus on an explicit click, never on map.
+            unsafe { gtk_window_set_focus_on_map(gtk.as_ptr().cast(), 0) };
+            w.set_title("Kimochi · popup-host").map_err(|e| e.to_string())?;
+            w.set_skip_taskbar(true).map_err(|e| e.to_string())?;
+            insert(&PANELS, w.label());
+            return Ok(true);
+        }
+        if super::layer::make_panel(w)? {
+            insert(&PANELS, w.label());
+            return Ok(true);
+        }
         return Err(WAYLAND_PANEL.into());
     }
+    // A hidden GTK window has no GDK/X11 handle until realized. Realizing creates
+    // that handle without mapping the window, so the utility type precedes first show.
+    use glib::object::ObjectType as _;
+    unsafe extern "C" {
+        fn gtk_widget_realize(widget: *mut std::ffi::c_void);
+    }
+    let gtk_window = w.gtk_window().map_err(|e| e.to_string())?;
+    // make_panel is called on the main thread during window setup only.
+    unsafe { gtk_widget_realize(gtk_window.as_ptr().cast()) };
     w.set_focusable(false).map_err(|e| e.to_string())?;
     w.set_skip_taskbar(true).map_err(|e| e.to_string())?;
     w.set_always_on_top(true).map_err(|e| e.to_string())?;

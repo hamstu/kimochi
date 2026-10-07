@@ -1,4 +1,5 @@
 /** Settings → General: appearance and interface size for every Kimochi window, and the welcome guide. */
+import { GnomeOverlaySetup } from '../../main/GnomeOverlaySetup'
 import type { ReactNode } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
@@ -70,6 +71,7 @@ export function GeneralTab(): ReactNode {
           />
         </SettingsRow>
       </SettingsSection>
+      <GnomeOverlaySetup settings />
       <SettingsSection title="Help">
         <SettingsRow
           label="Welcome guide"

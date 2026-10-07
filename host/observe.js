@@ -8,6 +8,10 @@ export function observeFrame(win, hub) {
         new URL(url, win.location.href).pathname === '/js/dictionary/dictionary-worker-main.js'
       )
         url = new URL('/spike/windows-dictionary-worker.js', win.location.href)
+      if (
+        win.__KIMOCHI_PLATFORM__?.os === 'linux' &&
+        new URL(url, win.location.href).pathname === '/js/dictionary/dictionary-worker-main.js'
+      ) url = new URL('/spike/linux-dictionary-worker.js', win.location.href)
       super(url, options)
       this.spikeUrl = new URL(url, win.location.href).pathname
       let last = 0

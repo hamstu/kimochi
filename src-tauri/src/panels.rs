@@ -59,6 +59,15 @@ const fn panel(
 
 /// Sizes come from Electron's `panels` table so a first launch looks the same.
 pub static PANELS: &[PanelSpec] = &[
+    #[cfg(target_os = "linux")]
+    PanelSpec {pinned:true,min_width:1.,min_height:1.,resizable:false,
+        ..panel("controller-host", "Kimochi · controller-host", "ui/gnome-controller-host.html", 520., 520.)},
+    #[cfg(target_os = "linux")]
+    PanelSpec {
+        pinned: true,
+        min_width: 1., min_height: 1.,
+        ..panel("crop-host", "Kimochi · crop-host", "ui/gnome-crop-host.html", 640., 480.)
+    },
     // The main window: the Log, with the Controller's rows as a collapsible sidebar and the
     // Notebook as a second view. It keeps the `log` label because that label is also its
     // texthooker ownership, its Yomitan frame band and its popup host.
@@ -386,6 +395,13 @@ fn ensure(
             .always_on_top(pinned)
             .visible(false)
             .initialization_script_for_all_frames(platform::platform_prelude());
+    #[cfg(target_os = "linux")]
+    if matches!(spec.label, "crop-host" | "controller-host") {
+        if !crate::platform::gnome::eligible_popup_session() {
+            return Err("GNOME crop host requires supported GNOME Wayland".into());
+        }
+        builder = builder.transparent(true).background_color(tauri::window::Color(0, 0, 0, 0)).skip_taskbar(true);
+    }
     if let Some(path) = spec.init_asset {
         let asset = app.asset_resolver().get(path.into()).ok_or_else(|| {
             format!(
@@ -743,9 +759,10 @@ mod tests {
     }
 
     #[test]
-    fn only_the_tray_popover_is_fixed_size() {
+    fn tray_and_linux_controller_hosts_are_fixed_size() {
         for spec in PANELS {
-            let expected = !matches!(spec.label, "tray-popover");
+            let expected = !matches!(spec.label, "tray-popover")
+                && !(cfg!(target_os = "linux") && spec.label == "controller-host");
             assert_eq!(spec.resizable, expected, "{} resizable", spec.label);
         }
     }

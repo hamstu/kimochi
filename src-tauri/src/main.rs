@@ -409,6 +409,43 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
         .filter(Region::usable)
         .take(2000)
         .collect();
+    #[cfg(target_os = "linux")]
+    let usable = if window.label() == OVERLAY && platform::wayland_overlay_unavailable() {
+        let _ = window.hide();
+        Vec::new()
+    } else { usable };
+    #[cfg(target_os = "linux")]
+    if window.label() == OVERLAY {
+        // Linux overlays start hidden. Map X11 panels as well as native Wayland
+        // layers when they publish words or editor regions, and hide empty surfaces.
+        let visible = !usable.is_empty()
+            && (state.view.lock().unwrap().overlay_visible || platform::region_editing())
+            && !platform::capture::suppressed();
+        if visible && platform::wayland_overlay_unavailable() {
+            // A hide action disables input; restore whole-window input on show.
+            let _ = window.set_ignore_cursor_events(false);
+        }
+        if window.is_visible().unwrap_or(false) != visible {
+            let result = if visible {
+                window.show()
+            } else {
+                platform::capture::mark_hidden();
+                window.hide()
+            };
+            if let Err(error) = result {
+                eprintln!("Linux overlay visibility: {error}");
+            } else if visible && !platform::wayland_layer_overlay() {
+                // GTK can discard a hidden X11 window's requested size on first map.
+                // Reapply its already resolved display bounds after showing it.
+                let origin = state.view.lock().unwrap().origin;
+                if let Some(rect) = origin {
+                    if let Err(error) = platform::desktop_place(&window, rect) {
+                        eprintln!("Linux overlay placement: {error}");
+                    }
+                }
+            }
+        }
+    }
     let mut v = state.view.lock().unwrap();
     if usable.is_empty() {
         v.regions.remove(window.label());
@@ -472,6 +509,23 @@ async fn panel(
     action: String,
     rect: Option<Rect>,
 ) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    if platform::capture::suppressed() && platform::capture::annotation_window(&label)
+        && matches!(action.as_str(), "show" | "show_inactive")
+    {
+        return Err("busy: annotations are temporarily hidden for capture".into());
+    }
+    #[cfg(target_os = "linux")]
+    if label == OVERLAY && platform::wayland_overlay_unavailable()
+        && matches!(action.as_str(), "show" | "show_inactive")
+    {
+        return Err("Native overlay is unavailable on this Wayland compositor".into());
+    }
+    #[cfg(target_os = "linux")]
+    if platform::capture::annotation_window(&label) && action == "hide"
+        && app.get_webview_window(&label).is_some_and(|w| w.is_visible().unwrap_or(false)) {
+        platform::capture::mark_hidden();
+    }
     let settings = state.settings.clone();
     panels::act_async(&app, &settings, label, action, rect).await
 }
@@ -510,6 +564,20 @@ fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Rep
 }
 
 #[tauri::command]
+async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operation: String, payload: Value) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    { let service=state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {let result=platform::gnome::request(&operation,payload.clone())?;
+            if operation=="track"&&payload["operation"]=="match"&&!result.is_null(){if let Some(id)=payload["sourceId"].as_str(){platform::gnome::refresh_identity(&service,id);}}
+            if matches!(operation.as_str(),"update"|"install")&&result["live"]==true {hotkeys::apply(&app,&service.settings);}
+            Ok(result)
+        }).await.map_err(|e|e.to_string())?
+    }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = (app,state,operation, payload); Err("GNOME overlay is Linux-only".into()) }
+}
+
+#[tauri::command]
 fn desktop() -> Vec<Rect> {
     platform::desktop_displays()
 }
@@ -517,6 +585,11 @@ fn desktop() -> Vec<Rect> {
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
+    #[cfg(target_os = "linux")]
+    if platform::wayland_layer_overlay() {
+        let window = app.get_webview_window("overlay").ok_or("overlay unavailable")?;
+        return platform::region_keyboard(&window, on);
+    }
     hotkeys::set_region_keys(&app, on)
 }
 
@@ -549,6 +622,10 @@ fn pointer_display() -> Option<platform::DisplayInfo> {
 /// (`macos:window:<window>:<pid>`); a display has nothing to bring forward.
 #[tauri::command]
 async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> {
+    #[cfg(target_os = "linux")]
+    if source_id.starts_with("portal:window:") && platform::gnome::eligible_popup_session() {
+        return platform::gnome::request("track", json!({"operation":"activate","sourceId":source_id})).map(|_| ());
+    }
     let pid = SourceId::parse(&source_id)
         .filter(|id| id.is_window() && id.is_local())
         .and_then(|id| id.pid())
@@ -581,6 +658,10 @@ fn pointer_location() -> Option<Value> {
 /// into the desktop, which is the only space two native windows share.
 #[tauri::command]
 fn window_bounds(window: tauri::WebviewWindow) -> Reply<Rect> {
+    #[cfg(target_os = "linux")]
+    if matches!(window.label(), "log" | "popup-host") && platform::gnome::eligible_popup_session() {
+        return platform::gnome::own_bounds(&window);
+    }
     platform::desktop_bounds(&window)
 }
 
@@ -597,6 +678,23 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
     let window = app
         .get_webview_window(POPUP_HOST)
         .ok_or("native: the popup window is missing")?;
+    #[cfg(target_os = "linux")]
+    if platform::gnome::eligible_popup_session() {
+        if !visible { window.hide().map_err(|e| e.to_string())?; return Ok(()); }
+        if !platform::gnome::desktop_popup() {
+            let _ = window.hide();
+            return Err("GNOME dictionary popup integration is unavailable".into());
+        }
+        if let Some(rect) = rect {
+            // Validate bounded placement before resizing/mapping. Shell finishes it
+            // when the Wayland surface appears; GTK does not activate it on map.
+            platform::gnome::request("own-window", json!({"label":"popup-host","rect":rect}))?;
+            window.set_size(tauri::LogicalSize::new(rect.width, rect.height)).map_err(|e| e.to_string())?;
+        }
+        if visible { window.show().map_err(|e| e.to_string())?; }
+        else { window.hide().map_err(|e| e.to_string())?; }
+        return Ok(());
+    }
     if let Some(rect) = rect {
         if rect.width > 0. && rect.height > 0. {
             platform::desktop_place(&window, rect)?;
@@ -626,6 +724,10 @@ fn app_quit(app: tauri::AppHandle) {
         platform::stop_mouse_guard();
         platform::stop_key_trigger();
     }
+    #[cfg(target_os = "linux")]
+    platform::stop_key_trigger();
+    #[cfg(target_os = "linux")]
+    platform::shortcuts::stop();
     app.exit(0);
 }
 
@@ -803,11 +905,34 @@ async fn permission(state: State<'_, Shared>) -> Reply<bool> {
 /// Replies `{picked: true, source, selection}` or `{picked: false, reason, message}`;
 /// `invalid:` on a backend that lists sources itself.
 #[tauri::command]
-async fn capture_pick_source(app: tauri::AppHandle, state: State<'_, Shared>) -> Reply<Value> {
+async fn capture_pick_source(app: tauri::AppHandle, state: State<'_, Shared>, fresh: Option<bool>) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    if fresh.unwrap_or(true) {
+        if platform::gnome::eligible_popup_session() {
+            let _ = platform::gnome::request("track", json!({"operation":"clear"}));
+        }
+        let mut backend = state.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if backend.capabilities().system_picker_required {
+            backend.close();
+            let _ = state.settings.set(PORTAL_TOKEN_KEY, Value::Null);
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = fresh;
     let service = state.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || sources::pick_source(&service))
         .await
         .map_err(|e| e.to_string())??;
+    #[cfg(target_os = "linux")]
+    let result = if result["picked"] == json!(false) && result["reason"] != "busy" {
+        match kimochi_capture::last_portal_pick_error().filter(|error| error != "cancelled") {
+            Some(error) => {
+                record(&app, &state, json!({"check":"portal-pick-failed","error":error}));
+                json!({"picked":false,"reason":"error","message":error})
+            }
+            None => result,
+        }
+    } else { result };
     if result["picked"] == json!(true) {
         // Authorization is `granted` now that a session is live: say so once, here, and
         // record it so `permission_status` does not announce the same change again.
@@ -1904,6 +2029,8 @@ fn main() {
             reader::ankiconnect::anki_gui_browse,
             reader::ankiconnect::anki_store_media_file,
             reader::ankiconnect::anki_add_note,
+            #[cfg(target_os = "linux")]
+            platform::dictionary_images::linux_dictionary_image,
             report,
             scan_trace::scan_trace,
             storage_load,
@@ -1973,9 +2100,14 @@ fn main() {
             open_screen_capture_preferences,
             open_accessibility_preferences,
             platform_capabilities,
+            gnome_overlay,
         ])
         .setup(move |app| {
+            #[cfg(target_os = "linux")]
+            platform::initialize_wayland_overlay();
             let handle = app.handle().clone();
+            #[cfg(target_os = "linux")]
+            platform::gnome::start(handle.clone());
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // The Wayland portal's restore token lives in settings so the picker is not
             // shown again on every launch. A no-op store everywhere else.
@@ -1989,6 +2121,8 @@ fn main() {
                     Some(e.message),
                 ),
             };
+            #[cfg(target_os = "linux")]
+            let backend = platform::capture::protect(handle.clone(), backend);
             let service: Shared = Arc::new(Service {
                 backend: Mutex::new(backend),
                 observer: Mutex::new(text_observer::local_observer(&handle)),
@@ -2024,7 +2158,7 @@ fn main() {
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
 
-            let reader_popup = tauri::WebviewWindowBuilder::new(
+            let reader_popup_builder = tauri::WebviewWindowBuilder::new(
                 app,
                 "reader-popup",
                 tauri::WebviewUrl::App("app/reader-popup.html".into()),
@@ -2039,8 +2173,10 @@ fn main() {
             .skip_taskbar(true)
             .inner_size(500., 380.)
             .content_protected(true)
-            .initialization_script_for_all_frames(platform::platform_prelude())
-            .build()?;
+            .initialization_script_for_all_frames(platform::platform_prelude());
+            #[cfg(target_os = "linux")]
+            let reader_popup_builder = reader_popup_builder.focusable(platform::wayland_overlay_unavailable());
+            let reader_popup = reader_popup_builder.build()?;
             make_panel(&handle, &service, &reader_popup);
             // Opt-in native regression: only the API popup, no source restore or OCR.
             #[cfg(debug_assertions)]
@@ -2067,7 +2203,7 @@ fn main() {
             panels::create_eager(&handle, &store)?;
             panels::act_existing(&handle, &store, panels::MAIN, "show_inactive", None)?;
 
-            let overlay = tauri::WebviewWindowBuilder::new(
+            let overlay_builder = tauri::WebviewWindowBuilder::new(
                 app,
                 OVERLAY,
                 tauri::WebviewUrl::App("ui/overlay.html".into()),
@@ -2107,9 +2243,28 @@ fn main() {
                             .as_ref()
                             .is_some_and(|origin| &u.origin() == origin)
                 }
-            })
-            .build()?;
-            overlay.set_ignore_cursor_events(true)?;
+            });
+            #[cfg(target_os = "linux")]
+            let overlay_builder = {
+                let overlay_builder = overlay_builder.focusable(false);
+                if platform::wayland_layer_overlay() {
+                    overlay_builder.visible(false).resizable(true).inner_size(1., 1.)
+                } else {
+                    // Unsupported Wayland keeps only the hidden OCR host, never a detached reader.
+                    overlay_builder.visible(false)
+                }
+            };
+            let overlay = overlay_builder.build()?;
+            #[cfg(target_os = "linux")]
+            let ignore_cursor_events = !platform::wayland_overlay_unavailable();
+            #[cfg(not(target_os = "linux"))]
+            let ignore_cursor_events = true;
+            #[cfg(target_os = "linux")]
+            if !platform::wayland_layer_overlay() {
+                overlay.set_ignore_cursor_events(ignore_cursor_events)?;
+            }
+            #[cfg(not(target_os = "linux"))]
+            overlay.set_ignore_cursor_events(ignore_cursor_events)?;
             // Pointing at a word must not rearrange the reader's desktop, and clicking
             // one must not take the keyboard out of their game. See `platform::make_panel`.
             make_panel(&handle, &service, &overlay);
@@ -2130,7 +2285,7 @@ fn main() {
                     })?;
                 let shim = String::from_utf8(asset.bytes)
                     .map_err(|_| std::io::Error::other("panel-shim.js is not valid UTF-8"))?;
-                let window = tauri::WebviewWindowBuilder::new(
+                let window_builder = tauri::WebviewWindowBuilder::new(
                     app,
                     POPUP_HOST,
                     tauri::WebviewUrl::App("ui/popup-host.html".into()),
@@ -2147,8 +2302,10 @@ fn main() {
                 .visible(false)
                 .inner_size(400., 250.)
                 .initialization_script_for_all_frames(platform::platform_prelude())
-                .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim)
-                .build()?;
+                .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim);
+                #[cfg(target_os = "linux")]
+                let window_builder = window_builder.focusable(platform::wayland_overlay_unavailable());
+                let window = window_builder.build()?;
                 let _ = window.set_content_protected(true);
                 // The dictionary is hovered and clicked while the reader stays in their
                 // game; a panel is what lets it be used without activating this app.
@@ -2263,6 +2420,20 @@ fn spawn_source_restore(service: Shared) {
         else {
             return;
         };
+        #[cfg(target_os = "linux")]
+        if service.backend.lock().is_ok_and(|backend| backend.capabilities().system_picker_required)
+            && !service.settings.get_or::<String>(PORTAL_TOKEN_KEY, String::new()).is_empty()
+        {
+            service.set_status("Restoring the previous screen share…");
+            match sources::pick_source(&service) {
+                Ok(result) if result["picked"] == json!(true) => {
+                    service.set_status("Restored the previous screen share.");
+                }
+                Ok(result) => service.set_status(format!("Screen share not restored: {} Choose New Source to share again.", kimochi_capture::last_portal_pick_error().as_deref().unwrap_or(result["message"].as_str().unwrap_or("Sharing was cancelled.")))),
+                Err(error) => service.set_status(format!("Could not restore screen share: {error}. Choose New Source to share again.")),
+            }
+            return;
+        }
         let live = match service.backend.lock() {
             Ok(mut backend) => match backend.enumerate() {
                 Ok(live) => live,

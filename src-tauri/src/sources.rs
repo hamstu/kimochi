@@ -85,12 +85,15 @@ fn capture_isolated(service: &Service, source_id: &str) -> Result<kimochi_captur
         .backend
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    backend
-        .capture(&CaptureRequest {
-            source_id: source_id.to_string(),
-            crop: None,
-        })
-        .map_err(|e| err_for(source_id, e))
+    let request = CaptureRequest {
+        source_id: source_id.to_string(),
+        crop: None,
+    };
+    #[cfg(target_os = "linux")]
+    let frame = backend.preview(&request);
+    #[cfg(not(target_os = "linux"))]
+    let frame = backend.capture(&request);
+    frame.map_err(|e| err_for(source_id, e))
 }
 
 /// Box-average downscale of tightly packed RGBA. Averaging rather than dropping
@@ -300,6 +303,8 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
 /// refreshes it every few seconds. It shares the source's running stream with scans and
 /// the hover preview, so it is a copy and a shrink rather than a capture of its own.
 pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
+    #[cfg(target_os = "linux")]
+    crate::platform::gnome::refresh_identity(service,source_id);
     let frame = capture_isolated(service, source_id)?;
     let (small, width, height) = downscale(
         &frame.pixels,
@@ -394,6 +399,8 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
             view.revision += 1;
         }
     }
+    #[cfg(target_os = "linux")]
+    platform::gnome::refresh_identity(service, &source.id);
     Ok(json!({ "sourceId": source.id, "crop": crop, "key": key }))
 }
 

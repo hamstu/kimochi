@@ -840,6 +840,20 @@
     for (const port of [...ctx.ports]) port.disconnect()
     hub.contexts.delete(ctx.id)
   })
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+    // Settings previews and nested dictionary frames do not call host.start().
+    // Give every Linux Yomitan document the same modifier-edge handling.
+    if (platformInfo().os === 'linux' && hub.label === 'popup-host' && window !== root) {
+      void import(asset('/spike/linux-popup-document.js'))
+        .then(({ installLinuxPopupDocument }) => installLinuxPopupDocument(window))
+        .catch(error => hub.log({ check: 'linux-popup-document-failed', error: String(error) }))
+    }
+    void import(asset('/spike/linux-scan-input.js'))
+      .then(({ installLinuxScanInput }) => installLinuxScanInput(window, {
+        passive: ['overlay', 'popup-host'].includes(hub.label)
+      }))
+      .catch(error => hub.log({ check: 'linux-scan-input-failed', error: String(error) }))
+  }
   window.addEventListener('error', (e) =>
     hub.log({ check: 'panel-error', error: e.message, file: e.filename, line: e.lineno })
   )
@@ -874,7 +888,7 @@
      * where it is — the Yomitan settings page previews its popup on purpose.
      */
     const popupHost = root.__kimochiPopupHost
-    const remotePopup =
+    let remotePopup =
       popupHost && typeof FRAME_BANDS[popupHost] === 'number' && popupHost !== hub.label
         ? {
             frameId: FRAME_BANDS[popupHost],
@@ -897,6 +911,11 @@
      */
     async function watchOutsideClicks() {
       let seen = null
+      if (platformInfo().os === 'linux') {
+        await tauri?.event?.listen('gnome-popup-dismiss', () => root.dispatchEvent(
+          new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true })
+        ))
+      }
       await tauri?.event?.listen('state', ({ payload }) => {
         const count = payload?.dismiss
         if (typeof count !== 'number') return
@@ -915,6 +934,15 @@
       hub,
       async start() {
         await hub.ready
+        if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+          const caps = await tauri.core.invoke('platform_capabilities')
+          // Wayland exposes no toplevel origin. Keep anchors and popups in the
+          // same coordinate space instead of treating (0,0) as a desktop origin.
+          if (caps.session.backend === 'wayland') {
+            const gnome = await tauri.core.invoke('gnome_overlay', { operation: 'status', payload: null })
+            if (!gnome.available || !gnome.desktopPopup) remotePopup = null
+          }
+        }
         // Before the frontend, so no popup can be built without being seen. This is
         // the only record of whether a lookup produced a popup: these windows are
         // capture-protected, so a screenshot cannot answer it.
@@ -927,6 +955,10 @@
         if (platformInfo().os === 'win') {
           const { installWindowsPointer } = await import(asset('/spike/windows-pointer.js'))
           await installWindowsPointer(root, () => observed.popups)
+        }
+        if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+          const { installLinuxScanInput } = await import(asset('/spike/linux-scan-input.js'))
+          await installLinuxScanInput(root)
         }
         if (remotePopup && !(await hub.waitForWindow(popupHost, 30000))) {
           // Yomitan caches which popup a frontend uses, so starting before the host

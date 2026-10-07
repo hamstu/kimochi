@@ -27,6 +27,11 @@ if (!process.argv.includes('--verify')) {
   await cp(source, 'dist', { recursive: true })
   await cp('host', 'dist/spike', { recursive: true })
   await cp('ui', 'dist/ui', { recursive: true })
+  if (process.platform === 'linux') {
+    await build({ entryPoints: ['host/linux-popup-fonts.css'],
+      outfile: 'dist/spike/linux-popup-fonts.css', bundle: true,
+      loader: { '.woff2': 'file', '.woff': 'file' }, assetNames: 'linux-fonts/[name]-[hash]' })
+  }
   // Every `ui/*.ts` module compiles to `dist/ui/*.js`. Globbed rather than listed so the overlay
   // workstream can add modules without touching this script.
   const typescriptModules = (await readdir('ui')).filter((name) => name.endsWith('.ts'))

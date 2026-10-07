@@ -64,6 +64,8 @@ import {
 import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
 import { useCapabilities } from '../bridge/capabilities'
+import { GnomeWindowLink } from './GnomeWindowLink'
+import { LinuxSourceCrop } from './LinuxSourceCrop'
 import type { ControllerWiring } from '../panels/useController'
 
 type Controller = ControllerWiring['props']
@@ -341,26 +343,43 @@ function SourceMenuContent({
   currentId,
   gridOpen,
   pickerRequired,
+  linuxPortal,
   onGridOpen,
   onChooseType,
   onChooseSource,
   onSystemPick,
+  onLinkWindow,
   onOpenSettings
 }: {
   mode: Mode | null
   currentId: string | null
   gridOpen: boolean
   pickerRequired: boolean
+  linuxPortal: boolean
   onGridOpen: (open: boolean) => void
   onChooseType: (mode: Mode) => void
   onChooseSource: (sourceId: string) => void
   onSystemPick: () => void
+  onLinkWindow?: () => void
   onOpenSettings: () => void
 }): ReactNode {
   const [windowType, ...others] = TYPES
   return (
     <MenuContent align="start" className="src-menu">
-      {pickerRequired ? (
+      {linuxPortal ? (
+        <MenuSub>
+          <MenuPrimitive.SubTrigger className="src-type">
+            <TypeBody type={windowType} selected={mode === 'ocr'} sub />
+          </MenuPrimitive.SubTrigger>
+          <MenuSubContent>
+            <MenuItem icon={<ScreenShare />} disabled={!currentId} onSelect={() => currentId && onChooseSource(currentId)}>
+              Use Current Source
+            </MenuItem>
+            <MenuItem icon={<Plus />} onSelect={onSystemPick}>Choose New Source…</MenuItem>
+            {onLinkWindow && <><MenuSeparator /><MenuItem icon={<AppWindow />} onSelect={onLinkWindow}>Relink window overlay…</MenuItem></>}
+          </MenuSubContent>
+        </MenuSub>
+      ) : pickerRequired ? (
         <MenuPrimitive.Item className="src-type" onSelect={onSystemPick}>
           <TypeBody
             type={{
@@ -479,6 +498,8 @@ export function SourcePanel({
         choose(next)
       }}
       pickerRequired={pickerRequired}
+      linuxPortal={capabilities.os === 'linux' && pickerRequired}
+      onLinkWindow={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && capabilities.session.compositor === 'GNOME' && capabilities.overlay.passive && mode === 'ocr' && source?.sourceId?.startsWith('portal:window:') ? () => {closeMenu();window.dispatchEvent(new Event('kimochi-link-window'))} : undefined}
       onChooseSource={(sourceId) => {
         closeMenu()
         choose('ocr')
@@ -644,17 +665,20 @@ export function SourcePanel({
     </Button>
   )
 
+  const overlayUnavailable = capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
   const overlayRow = (
     <button
       type="button"
       role="switch"
-      aria-checked={overlayOn}
+      disabled={overlayUnavailable}
+      title={overlayUnavailable ? 'Native overlay is unavailable on this desktop.' : undefined}
+      aria-checked={!overlayUnavailable && overlayOn}
       className="k-row src-row"
       onClick={() => controller.onToggleTextOverlayVisibility()}
     >
       <Eye />
-      <span className="k-row-label">Show overlay</span>
-      <SwitchMark on={overlayOn} />
+      <span className="k-row-label">{overlayUnavailable ? 'Overlay unavailable' : 'Show overlay'}</span>
+      <SwitchMark on={!overlayUnavailable && overlayOn} />
     </button>
   )
 
@@ -695,6 +719,8 @@ export function SourcePanel({
         </div>
       )}
 
+      {mode === 'ocr' && <GnomeWindowLink key={source?.sourceId} sourceId={source?.sourceId} />}
+      <LinuxSourceCrop enabled={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && !(capabilities.session as { nativeLayerShell?: boolean }).nativeLayerShell} />
       {mode === 'quickshot' && (
         <div className="src-controls">
           {scanButton}

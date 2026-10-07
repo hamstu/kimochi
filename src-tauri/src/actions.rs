@@ -65,11 +65,22 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
             None
         }
     };
+    #[cfg(target_os = "linux")]
+    let visibility = if crate::platform::wayland_overlay_unavailable() {
+        // The GTK overlay host stays hidden on this path. GNOME Shell uses the
+        // logical view flags; do not map/hide or change input on an unrealized
+        // GTK window (Tao's CursorIgnoreEvents(true) unwraps its absent GDK window).
+        None
+    } else { visibility };
+    #[cfg(target_os = "linux")]
+    let visibility = if crate::platform::capture::suppressed() { None } else { visibility };
     if let Some(visible) = visibility {
         if let Some(overlay) = app.get_webview_window("overlay") {
             let _ = if visible {
                 overlay.show()
             } else {
+                #[cfg(target_os = "linux")]
+                if overlay.is_visible().unwrap_or(false) { crate::platform::capture::mark_hidden(); }
                 overlay.hide()
             };
             if !visible {

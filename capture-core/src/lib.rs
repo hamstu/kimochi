@@ -144,6 +144,11 @@ pub trait CaptureBackend: Send {
     fn request_permission(&self) -> bool;
     fn enumerate(&mut self) -> Result<Vec<Source>>;
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame>;
+    /// Linux streamed captures must not reuse a buffer from before UI suppression.
+    #[cfg(target_os = "linux")]
+    fn capture_after(&mut self, request: &CaptureRequest, _after: Instant) -> Result<Frame> {
+        self.capture(request)
+    }
     /// The whole source, scaled so its longest edge is at most `edge` pixels. Backends
     /// that can scale while capturing should, rather than capture full size and shrink.
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
@@ -152,6 +157,11 @@ pub trait CaptureBackend: Send {
             source_id: source_id.to_string(),
             crop: None,
         })
+    }
+    /// A UI-only preview must not interrupt Linux annotation surfaces.
+    #[cfg(target_os = "linux")]
+    fn preview(&mut self, request: &CaptureRequest) -> Result<Frame> {
+        self.capture(request)
     }
     fn close(&mut self) {}
 }
@@ -213,6 +223,10 @@ pub fn crop_rect(crop: Option<Crop>, width: u32, height: u32) -> Result<[u32; 4]
         (u64::from(c.y + c.height) * u64::from(height)).div_ceil(u64::from(c.reference_height));
     Ok([x as u32, y as u32, (right - x) as u32, (bottom - y) as u32])
 }
+
+
+#[cfg(target_os = "linux")]
+pub use linux_portal::last_portal_pick_error;
 
 #[cfg(test)]
 mod tests {

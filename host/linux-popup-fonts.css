@@ -1,0 +1,3 @@
+/* The same pinned font packages used by frontend/kit/tokens.css. Linux only. */
+@import "@fontsource-variable/figtree/wght.css";
+@import "@fontsource-variable/noto-sans-jp/wght.css";

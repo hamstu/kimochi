@@ -163,7 +163,11 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let was = NAV.swap(active, Ordering::SeqCst);
     if active {
-        if !was {
+        let local_keys = {
+            #[cfg(target_os="linux")] { !take_focus && crate::platform::gnome::eligible_popup_session() }
+            #[cfg(not(target_os="linux"))] { false }
+        };
+        if !was && !local_keys {
             if let Err(e) = crate::hotkeys::set_nav_keys(app, true) {
                 log(
                     app,

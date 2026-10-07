@@ -50,12 +50,22 @@ pub(crate) const MIN_WINDOW: (i32, i32) = (80, 60);
 /// `WAYLAND_DISPLAY` as given. The one rule both crates use (`platform::linux::rules`
 /// calls it), so capture and the window layer always pick the same tier.
 ///
-/// The session type logind records wins; a session that does not say (`tty`, or a
+/// An explicit `GDK_BACKEND=x11` selects the XWayland tier. Otherwise the session
+/// type logind records wins; a session that does not say (`tty`, or a
 /// window manager started by hand with `startx`) is Wayland when a Wayland socket is
 /// advertised, X11 otherwise. A Wayland session that also offers XWayland (`DISPLAY`
 /// set) is still Wayland: XWayland sees only XWayland clients, so the X11 catalog and
 /// geometry would silently miss every native Wayland window.
-pub fn is_wayland_session(session_type: Option<&str>, wayland_display: Option<&str>) -> bool {
+pub fn is_wayland_session(
+    session_type: Option<&str>,
+    wayland_display: Option<&str>,
+    gdk_backend: Option<&str>,
+) -> bool {
+    // Explicit X11 GTK selects XWayland inside a Wayland login. Its catalog
+    // remains limited to XWayland clients.
+    if gdk_backend.is_some_and(|backend| backend.trim() == "x11") {
+        return false;
+    }
     match session_type
         .map(|s| s.trim().to_ascii_lowercase())
         .as_deref()
@@ -72,6 +82,7 @@ pub fn wayland_session_now() -> bool {
     is_wayland_session(
         var("XDG_SESSION_TYPE").as_deref(),
         var("WAYLAND_DISPLAY").as_deref(),
+        var("GDK_BACKEND").as_deref(),
     )
 }
 
@@ -1163,17 +1174,24 @@ mod tests {
 
     #[test]
     fn logind_session_type_wins() {
-        assert!(is_wayland_session(Some("wayland"), None));
-        assert!(!is_wayland_session(Some("x11"), Some("wayland-0")));
-        assert!(is_wayland_session(Some(" Wayland "), None));
+        assert!(is_wayland_session(Some("wayland"), None, None));
+        assert!(!is_wayland_session(Some("x11"), Some("wayland-0"), None));
+        assert!(is_wayland_session(Some(" Wayland "), None, None));
     }
 
     #[test]
     fn unknown_session_types_fall_back_to_the_sockets() {
-        assert!(is_wayland_session(Some("tty"), Some("wayland-0")));
-        assert!(!is_wayland_session(Some("tty"), None));
-        assert!(!is_wayland_session(None, Some("")));
-        assert!(!is_wayland_session(None, None));
+        assert!(is_wayland_session(Some("tty"), Some("wayland-0"), None));
+        assert!(!is_wayland_session(Some("tty"), None, None));
+        assert!(!is_wayland_session(None, Some(""), None));
+        assert!(!is_wayland_session(None, None, None));
+    }
+
+    #[test]
+    fn explicit_x11_backend_selects_xwayland() {
+        assert!(!is_wayland_session(Some("wayland"), Some("wayland-1"), Some("x11")));
+        assert!(is_wayland_session(Some("wayland"), Some("wayland-1"), None));
+        assert!(is_wayland_session(Some("wayland"), Some("wayland-1"), Some("*")));
     }
 
     fn facts<'a>() -> WindowFacts<'a> {

@@ -159,6 +159,7 @@ function Tile({
  * dialog is up, and the reason the last pick (or the shared source, via `message`) failed.
  */
 export function SystemPickerButton({ message = null }: { message?: string | null }): ReactNode {
+  const linuxPortal = useCapabilities().os === 'linux'
   const { waiting, error } = useSystemPick()
   const problem = waiting ? null : (error ?? message)
   return (
@@ -171,7 +172,7 @@ export function SystemPickerButton({ message = null }: { message?: string | null
         onClick={() => void startSystemPick()}
       >
         {waiting ? <Spinner label="Waiting for the system picker" /> : <ScreenShare />}
-        {waiting ? 'Waiting for the system picker…' : 'Choose in system picker'}
+        {waiting ? 'Waiting for the system picker…' : linuxPortal ? 'Choose New Source…' : 'Choose in system picker'}
       </Button>
       <span style={{ color: 'var(--k-text-2)', fontSize: 'var(--k-text-sm)' }}>
         {waiting

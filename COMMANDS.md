@@ -581,3 +581,14 @@ Real limitations, recorded rather than papered over.
   pointer hit test. It does not make arbitrary webview hover work in background windows.
 - **Transparent windows** use Tauri's macOS private API feature, which is unsuitable for
   a Mac App Store claim.
+
+## Optional GNOME Shell overlay (Linux only)
+
+`gnome_overlay({operation, payload}) -> Value`: status/install/present/clear/definition.
+Only the native Linux GNOME Wayland backend supports this bridge. The bundled extension
+creates compositor-owned annotation actors; ordinary Tauri annotation windows stay hidden.
+Screen annotations only, initially one monitor and GNOME46; portal window tracking stays deferred.
+Installation preserves differing existing extension files and tells the user to save work
+and log out/in when GNOME cannot discover the newly installed extension. No automatic logout.
+`gnome-overlay-lookup` forwards native word click or Shift hover to the existing Yomitan backend.
+The extension displays plain dictionary text; full Yomitan popup controls are not implemented.

@@ -19,7 +19,8 @@ const HINTS: Partial<Record<HotkeyName, string>> = {
 
 export function ShortcutsSections(): ReactNode {
   const [hotkeys, setHotkeys, hotkeyFailures] = useHotkeys()
-  const keyPlatform = keyPlatformOf(useCapabilities())
+  const capabilities = useCapabilities()
+  const keyPlatform = keyPlatformOf(capabilities)
 
   const updateHotkeyField = useCallback(
     (
@@ -42,6 +43,9 @@ export function ShortcutsSections(): ReactNode {
 
   return (
     <>
+      {capabilities.os === 'linux' && capabilities.input.globalShortcutRemediation && (
+        <Callout tone="warn" className="settings-page-callout">{capabilities.input.globalShortcutRemediation}</Callout>
+      )}
       {hotkeyFailures.length > 0 && (
         <Callout tone="danger" className="settings-page-callout">
           {hotkeyFailures.length === 1 ? 'This shortcut' : 'These shortcuts'} could not be
