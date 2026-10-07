@@ -117,7 +117,11 @@
           Scan, then hover the <b>first</b> half of a split word (食べ) with the
           lookup modifier. The popup should show the whole word (食べる for
           食べました), anchored on the hovered box, not shifted towards the
-          following chunk.
+          following chunk. The hovered box itself should widen to read 食べました
+          while the popup is open, with the ました box gone underneath it rather
+          than lit as a second piece; both return to normal when the popup
+          closes. For 日本|語を勉強|します the lookup 勉強します spans 勉強 and
+          します only, so 日本語 stays as it was.
         </li>
         <li>
           If OCR still reads a split word as one chunk, widen the gap with the

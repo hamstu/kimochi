@@ -9,6 +9,10 @@
  *  - every box carries the *next ten* annotations' text, in reading order, unseen
  *    but present in the DOM, so a lookup can run past the end of a box when OCR
  *    split a word (see `.ocr-lookahead` in overlay.html for how it stays scannable)
+ *  - while a lookup's selection runs past the hovered box, that box widens to show
+ *    the whole matched word and the boxes whose text it swallowed are hidden, so the
+ *    reader sees 食べました once, where 食べ was, rather than two lit halves (see
+ *    `selectionExtension` and `.ocr-word-current[data-ext]` in overlay.html)
  *  - entering a box dismisses any open popup with a synthetic Escape
  *  - clicking dispatches a synthetic shift+mousedown, which is what Yomitan's
  *    scanner treats as "look this up"; clicking the same box again dismisses
@@ -123,6 +127,42 @@ export function lookaheadTexts(boxes, next = readingSuccessors(boxes), count = L
   })
 }
 
+/**
+ * How a selection that starts in one word-mode box and runs into its lookahead should show.
+ *
+ * `extension` is the matched text past the end of the box, drawn after the box's own text
+ * so the reader sees the whole word in one place; `consumed` are the indices of the following
+ * boxes whose entire text the selection covers, which are hidden while it stands (their
+ * text is now on the first box). A box the selection ends inside is neither: its text past
+ * the match still belongs where it was. Nothing happens when the selection does not start
+ * with the box's text, or `startIndex` is not a box.
+ *
+ * @param {string} selectedText
+ * @param {number} startIndex
+ * @param {{text: string, next: number}[]} words — each box's text and reading-order successor
+ * @returns {{extension: string, consumed: number[]}}
+ */
+export function selectionExtension(selectedText, startIndex, words) {
+  const start = words[startIndex]
+  if (!start || !selectedText || !selectedText.startsWith(start.text))
+    return { extension: '', consumed: [] }
+  let overflow = selectedText.slice(start.text.length)
+  let extension = ''
+  const consumed = []
+  for (let j = start.next ?? -1; j !== -1 && overflow.length > 0; j = words[j]?.next ?? -1) {
+    const text = words[j].text
+    if (overflow.startsWith(text)) {
+      consumed.push(j)
+      extension += text
+      overflow = overflow.slice(text.length)
+    } else {
+      if (text.startsWith(overflow)) extension += overflow
+      break
+    }
+  }
+  return { extension, consumed }
+}
+
 /** Shrink to fit the box, then use letter spacing for the remainder. */
 function calculateFontSize(text, width, height, vertical = false) {
   if (vertical) [width, height] = [height, width]
@@ -198,7 +238,12 @@ export class TextOverlayRenderer {
     this.mouse = { x: -1000, y: -1000 }
     this.words = []
     this.lastLookupIndex = null
+    /** Boxes a selection starts in: lit as if hovered. */
     this.selectionIndices = new Set()
+    /** Boxes whose whole text the selection swallowed past the box it started in: hidden. */
+    this.consumedIndices = new Set()
+    /** The text drawn after one box's own to show the whole selected word, or null. */
+    this.extension = null
     /** While the controller reads word by word, boxes stay dark: its outline is the only mark. */
     this.quiet = false
     this.mode = 'words'
@@ -278,6 +323,8 @@ export class TextOverlayRenderer {
     this.words = []
     this.lastLookupIndex = null
     this.selectionIndices = new Set()
+    this.consumedIndices = new Set()
+    this.extension = null
   }
 
   /**
@@ -370,6 +417,10 @@ export class TextOverlayRenderer {
     const selected = new Set(
       this.words.filter((word) => this.selectionIndices.has(word.index)).map((word) => word.element)
     )
+    const consumed = new Set(
+      this.words.filter((word) => this.consumedIndices.has(word.index)).map((word) => word.element)
+    )
+    const extended = this.words.find((word) => word.index === this.extension?.index)?.element ?? null
     const lookup = oldChildren.find((element) => element.ocrIndex === this.lastLookupIndex)
     this.words = []
     this.mode = grouping.enabled ? 'groups' : 'words'
@@ -423,6 +474,16 @@ export class TextOverlayRenderer {
     this.selectionIndices = new Set(
       this.words.filter((word) => selected.has(word.element)).map((word) => word.index)
     )
+    // The extension and the hidden boxes belong to one selection, from the box it started
+    // in; if that box did not survive, nothing stays hidden on its account.
+    const extendedWord = extended && this.words.find((word) => word.element === extended)
+    this.extension = extendedWord ? { index: extendedWord.index, text: this.extension.text } : null
+    this.consumedIndices = new Set(
+      extendedWord
+        ? this.words.filter((word) => consumed.has(word.element)).map((word) => word.index)
+        : []
+    )
+    this.applySelectionMarks()
     this.lastLookupIndex = lookup && keep.has(lookup) ? lookup.ocrIndex : null
     this.scheduleProximityUpdate()
     return {
@@ -449,6 +510,9 @@ export class TextOverlayRenderer {
         width: `${box.width}px`,
         height: `${box.height + 5}px`
       })
+      // The box OCR saw, for the floor a box extended past its text keeps (overlay.html).
+      element.style.setProperty('--ocr-width', `${box.width}px`)
+      element.style.setProperty('--ocr-height', `${box.height}px`)
 
       if (scanning) {
         element.className = 'ocr-skeleton'
@@ -693,8 +757,11 @@ export class TextOverlayRenderer {
   updateProximity() {
     for (const word of this.words) {
       const { box } = word
+      const consumed = this.consumedIndices.has(word.index)
+      const extended = this.extension?.index === word.index
       const hovering =
         !this.quiet &&
+        !consumed &&
         (this.selectionIndices.has(word.index) ||
           (this.mouse.x >= box.x &&
             this.mouse.x <= box.x + box.width &&
@@ -708,55 +775,80 @@ export class TextOverlayRenderer {
       word.element.style.backgroundColor = style.backgroundColor
       word.element.style.borderRadius = hovering ? '6px' : '6px 6px 0 0'
       word.element.style.transform = hovering ? 'scale(1.2)' : 'scale(1)'
+      // An extended box grows along the reading axis; scaling it about its start keeps the
+      // stem where OCR read it, with the extension running on over the hidden boxes.
+      word.element.style.transformOrigin = extended ? (vertical ? 'center top' : 'left center') : 'center'
       word.text.style.opacity = String(style.textOpacity)
-      word.current.style.textAlign = hovering ? 'center' : 'left'
+      word.current.style.textAlign = hovering && !extended ? 'center' : 'left'
     }
   }
 
   /**
-   * Keep every box a selection spans legible.
+   * Mark the boxes for the selection as it stands: the extension on the box it starts
+   * in, hidden on the boxes it swallowed. Attributes only — the class names take part
+   * in `render`'s matching of nudged boxes, and the text nodes hold Yomitan's Range.
+   */
+  applySelectionMarks() {
+    for (const word of this.words) {
+      const extension = this.extension?.index === word.index ? this.extension.text : ''
+      if (extension) {
+        word.current.dataset.ext = extension
+        word.element.dataset.extended = ''
+      } else {
+        delete word.current.dataset.ext
+        delete word.element.dataset.extended
+      }
+      if (this.consumedIndices.has(word.index)) word.element.dataset.consumed = ''
+      else delete word.element.dataset.consumed
+    }
+  }
+
+  /**
+   * Show a selection that ran past its box as one word.
    *
-   * A selection that starts in one box usually runs into the lookahead text of
-   * the boxes after it, which is invisible by default. Walking the overflow
-   * forward and lighting up those boxes is what makes a multi-word selection
-   * readable instead of a single lit box followed by blanks.
+   * A lookup from the first half of a split word selects that box's text and the
+   * matched part of its lookahead, which is invisible by default. The box the
+   * selection starts in is lit and shows the whole word (`selectionExtension`), and
+   * the boxes whose text that covers are hidden under it, so the reader sees the word
+   * once, where it begins, until the selection clears.
    */
   updateSelectionHighlight() {
     if (this.mode !== 'words' || this.words.length === 0) return
-    const previous = this.selectionIndices
     const selection = window.getSelection()
     const selected = selection?.toString().trim() ?? ''
     const next = new Set()
+    const consumed = new Set()
+    let extension = null
 
     if (selected) {
       const anchor = selection?.anchorNode
       const start =
         anchor?.nodeType === Node.ELEMENT_NODE ? anchor : (anchor?.parentElement ?? null)
-      if (start?.closest?.('[data-ocr-word-box]')) {
-        for (let i = 0; i < this.words.length; i++) {
-          const word = this.words[i].box.text
-          if (!selected.startsWith(word)) continue
-          next.add(this.words[i].index)
-          let overflow = selected.slice(word.length)
-          // Follow the lookahead's own order — reading order within the paragraph — since
-          // that is the text the selection ran into.
-          for (let j = this.words[i].next ?? -1; j !== -1 && overflow.length > 0; j = this.words[j]?.next ?? -1) {
-            const nextWord = this.words[j].box.text
-            if (overflow.startsWith(nextWord)) {
-              next.add(this.words[j].index)
-              overflow = overflow.slice(nextWord.length)
-            } else {
-              if (nextWord.startsWith(overflow)) next.add(this.words[j].index)
-              break
-            }
-          }
-          break
+      const host = start?.closest?.('[data-ocr-word-box]') ?? null
+      const index = this.words.findIndex((word) => word.element === host)
+      if (index !== -1) {
+        const chain = this.words.map((word) => ({ text: word.box.text, next: word.next ?? -1 }))
+        const result = selectionExtension(selected, index, chain)
+        if (selected.startsWith(chain[index].text)) {
+          next.add(this.words[index].index)
+          for (const j of result.consumed) consumed.add(this.words[j].index)
+          if (result.extension) extension = { index: this.words[index].index, text: result.extension }
         }
       }
     }
 
-    if (next.size === previous.size && [...next].every((i) => previous.has(i))) return
+    const same = (a, b) => a.size === b.size && [...a].every((i) => b.has(i))
+    if (
+      same(next, this.selectionIndices) &&
+      same(consumed, this.consumedIndices) &&
+      extension?.index === this.extension?.index &&
+      extension?.text === this.extension?.text
+    )
+      return
     this.selectionIndices = next
+    this.consumedIndices = consumed
+    this.extension = extension
+    this.applySelectionMarks()
     this.updateProximity()
   }
 }

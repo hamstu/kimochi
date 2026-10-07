@@ -80,8 +80,12 @@ globalThis.document = {
 };
 globalThis.requestAnimationFrame = () => 1;
 
-const { TextOverlayRenderer, readingSuccessors, lookaheadTexts } =
-  await load("render.js");
+const {
+  TextOverlayRenderer,
+  readingSuccessors,
+  lookaheadTexts,
+  selectionExtension,
+} = await load("render.js");
 const { DOMTextScanner } =
   await import("../yomitan/js/dom/dom-text-scanner.js");
 
@@ -223,20 +227,238 @@ test("a retained box has its lookahead updated in place when the following text 
   assert.equal(ahead.textContent, "ます");
 });
 
-test("a selection that ran into the lookahead lights the boxes it covers, in reading order", () => {
+/** The rendered box whose own text is `text`. */
+const boxOf = (host, text) =>
+  host.children.find(
+    (box) => box.querySelector(".ocr-word-current").textContent === text,
+  );
+/** Stand in for a selection Yomitan made: anchored in the text node of `box`. */
+function select(renderer, box, text) {
+  selection = text
+    ? { toString: () => text, anchorNode: { nodeType: 1, closest: () => box } }
+    : null;
+  renderer.updateSelectionHighlight();
+}
+const marks = (box) => ({
+  ext: box.querySelector(".ocr-word-current").dataset.ext,
+  extended: "extended" in box.dataset,
+  consumed: "consumed" in box.dataset,
+});
+
+test("a selection that ran into the lookahead lights only the box it started in and hides the boxes it swallowed", () => {
   const host = element();
   const renderer = new TextOverlayRenderer(host);
   renderer.render(view(horizontal));
+  select(renderer, boxOf(host, "食べ"), "食べました走っ");
+  const lit = [...renderer.selectionIndices].map(
+    (i) => renderer.words[i].box.text,
+  );
+  assert.deepEqual(lit, ["食べ"]);
+  const hidden = [...renderer.consumedIndices]
+    .map((i) => renderer.words[i].box.text)
+    .sort();
+  assert.deepEqual(hidden, ["ました", "走っ"].sort());
+  select(renderer, null, null);
+});
+
+// --- showing the selected word on one box ---------------------------------------
+
+test("selectionExtension: a selection of exactly the box's text extends nothing and hides nothing", () => {
+  const words = [
+    { text: "食べ", next: 1 },
+    { text: "ました", next: 2 },
+    { text: "走っ", next: -1 },
+  ];
+  assert.deepEqual(selectionExtension("食べ", 0, words), {
+    extension: "",
+    consumed: [],
+  });
+});
+
+test("selectionExtension: a selection spanning one or two whole successors shows them and hides them", () => {
+  const words = [
+    { text: "食べ", next: 1 },
+    { text: "ました", next: 2 },
+    { text: "走っ", next: 3 },
+    { text: "ている", next: -1 },
+  ];
+  assert.deepEqual(selectionExtension("食べました", 0, words), {
+    extension: "ました",
+    consumed: [1],
+  });
+  assert.deepEqual(selectionExtension("食べました走っ", 0, words), {
+    extension: "ました走っ",
+    consumed: [1, 2],
+  });
+});
+
+test("selectionExtension: a selection ending inside a successor shows the part it took but leaves that box", () => {
+  const words = [
+    { text: "食べ", next: 1 },
+    { text: "ました", next: 2 },
+    { text: "走っ", next: -1 },
+  ];
+  assert.deepEqual(selectionExtension("食べまし", 0, words), {
+    extension: "まし",
+    consumed: [],
+  });
+  assert.deepEqual(selectionExtension("食べました走", 0, words), {
+    extension: "ました走",
+    consumed: [1],
+  });
+});
+
+test("selectionExtension: follows reading order, not array order", () => {
+  // Array order ました, 食べ: the successor chain is what matters.
+  const words = [
+    { text: "ました", next: -1 },
+    { text: "食べ", next: 0 },
+  ];
+  assert.deepEqual(selectionExtension("食べました", 1, words), {
+    extension: "ました",
+    consumed: [0],
+  });
+});
+
+test("selectionExtension: does nothing for a selection that does not start with the box's text, or no box", () => {
+  const words = [
+    { text: "食べ", next: 1 },
+    { text: "ました", next: -1 },
+  ];
+  const none = { extension: "", consumed: [] };
+  assert.deepEqual(selectionExtension("ました", 0, words), none);
+  assert.deepEqual(selectionExtension("", 0, words), none);
+  assert.deepEqual(selectionExtension("食べました", -1, words), none);
+  assert.deepEqual(selectionExtension("食べました", 5, words), none);
+});
+
+test("the box a selection starts in carries the extension and the swallowed boxes are marked hidden, until it clears", () => {
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  renderer.render(view(horizontal));
+  const stem = boxOf(host, "食べ");
+  const ending = boxOf(host, "ました");
+  const after = boxOf(host, "走っ");
+
+  select(renderer, stem, "食べました");
+  assert.deepEqual(marks(stem), { ext: "ました", extended: true, consumed: false });
+  assert.deepEqual(marks(ending), { ext: undefined, extended: false, consumed: true });
+  assert.deepEqual(marks(after), { ext: undefined, extended: false, consumed: false });
+  // The stem is lit and aligned from its start; the hidden box is not lit.
+  renderer.updateProximity();
+  assert.equal(stem.style.transform, "scale(1.2)");
+  assert.equal(stem.style.transformOrigin, "left center");
+  assert.equal(stem.querySelector(".ocr-word-current").style.textAlign, "left");
+  assert.equal(ending.style.transform, "scale(1)");
+  // Text nodes are untouched: Yomitan's Range lives in them.
+  assert.equal(stem.querySelector(".ocr-word-current").textContent, "食べ");
+  assert.equal(stem.querySelector(".ocr-lookahead").textContent, "ました走っている");
+
+  select(renderer, null, null);
+  const clear = { ext: undefined, extended: false, consumed: false };
+  assert.deepEqual(marks(stem), clear);
+  assert.deepEqual(marks(ending), clear);
+  assert.equal(renderer.selectionIndices.size, 0);
+  assert.equal(renderer.consumedIndices.size, 0);
+  assert.equal(renderer.extension, null);
+  renderer.updateProximity();
+  assert.equal(stem.style.transformOrigin, "center");
+});
+
+test("a selection ending inside a successor leaves that box visible", () => {
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  renderer.render(view(horizontal));
+  select(renderer, boxOf(host, "食べ"), "食べまし");
+  assert.deepEqual(marks(boxOf(host, "食べ")), { ext: "まし", extended: true, consumed: false });
+  assert.deepEqual(marks(boxOf(host, "ました")), { ext: undefined, extended: false, consumed: false });
+  select(renderer, null, null);
+});
+
+test("a selection anchored outside any box, or not starting with its box's text, marks nothing", () => {
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  renderer.render(view(horizontal));
+  select(renderer, null, "食べました");
+  assert.equal(renderer.extension, null);
+  assert.equal(renderer.selectionIndices.size, 0);
+  select(renderer, boxOf(host, "ました"), "食べました");
+  assert.equal(renderer.extension, null);
+  assert.equal(renderer.selectionIndices.size, 0);
+  select(renderer, null, null);
+});
+
+test("vertical boxes extend the same way, scaled from their top", () => {
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  const tall = { groupId: "v", orientation: "vertical", isVertical: true };
+  renderer.render(
+    view([
+      chunk("語", 60, 40, tall, 20, 30),
+      chunk("ました", 100, 40, tall, 20, 30),
+      chunk("日本", 60, 0, tall, 20, 30),
+      chunk("食べ", 100, 0, tall, 20, 30),
+    ]),
+  );
+  const stem = boxOf(host, "食べ");
+  select(renderer, stem, "食べました");
+  assert.deepEqual(marks(stem), { ext: "ました", extended: true, consumed: false });
+  assert.deepEqual(marks(boxOf(host, "ました")), { ext: undefined, extended: false, consumed: true });
+  assert.deepEqual(marks(boxOf(host, "日本")), { ext: undefined, extended: false, consumed: false });
+  renderer.updateProximity();
+  assert.equal(stem.style.transformOrigin, "center top");
+  assert.equal(stem.style["--ocr-height"], "30px");
+  select(renderer, null, null);
+});
+
+test("the marks follow retained boxes through a re-render and clear afterwards", () => {
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  renderer.render(
+    view([
+      chunk("食べ", 0, 0, { groupId: "p" }),
+      chunk("ました", 40, 0, { groupId: "p" }),
+      chunk("HP12", 200, 0, { groupId: "hud" }),
+    ]),
+  );
+  const stem = boxOf(host, "食べ");
+  const ending = boxOf(host, "ました");
+  select(renderer, stem, "食べました");
+  renderer.render(
+    view([
+      chunk("食べ", 0, 0, { groupId: "p" }),
+      chunk("ました", 40, 0, { groupId: "p" }),
+      chunk("HP11", 200, 0, { groupId: "hud" }),
+    ]),
+  );
+  assert.equal(boxOf(host, "食べ"), stem);
+  assert.deepEqual(marks(stem), { ext: "ました", extended: true, consumed: false });
+  assert.deepEqual(marks(ending), { ext: undefined, extended: false, consumed: true });
+  assert.deepEqual(renderer.extension, { index: 0, text: "ました" });
+  // The box it started in is gone: nothing is left extended or hidden.
+  renderer.render(
+    view([
+      chunk("ました", 40, 0, { groupId: "p" }),
+      chunk("HP11", 200, 0, { groupId: "hud" }),
+    ]),
+  );
+  assert.equal(renderer.extension, null);
+  assert.deepEqual(marks(ending), { ext: undefined, extended: false, consumed: false });
+  select(renderer, null, null);
+});
+
+test("group mode never extends or hides: its lookahead is empty", () => {
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  renderer.render(view(horizontal, { enabled: true, proximityThreshold: 100 }));
   selection = {
-    toString: () => "食べました走っ",
-    anchorNode: { nodeType: 1, closest: () => true },
+    toString: () => "食べました",
+    anchorNode: { nodeType: 1, closest: () => host.children[0] },
   };
   renderer.updateSelectionHighlight();
   selection = null;
-  const lit = [...renderer.selectionIndices]
-    .map((i) => renderer.words[i].box.text)
-    .sort();
-  assert.deepEqual(lit, ["ました", "食べ", "走っ"].sort());
+  assert.equal(renderer.extension, null);
+  assert.equal(renderer.consumedIndices.size, 0);
 });
 
 // --- the vendored scanner over the rendered tree -----------------------------------
@@ -431,6 +653,51 @@ test("seeking forward from the end of the hovered word continues into the lookah
   // A lookup the way Yomitan runs it: from the hovered character, layout-aware, scan length 16.
   const lookup = new DOMTextScanner(text, 0, false, true).seek(16);
   assert.equal(lookup.content, "食べました");
+});
+
+test("showing the selected word on the hovered box changes nothing the scanner reads", () => {
+  // The extension is drawn by `.ocr-word-current[data-ext]::after`, so the only change the
+  // DOM sees is an attribute and the sizes that rule sets; apply those sizes here too.
+  const shown = {
+    "ocr-word-current": {
+      ...rule("ocr-word-current"),
+      width: "auto",
+      minWidth: "30px",
+    },
+  };
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  renderer.render(
+    view([
+      chunk("食べ", 0, 0, { groupId: "p" }),
+      chunk("ました", 40, 0, { groupId: "p" }),
+    ]),
+  );
+  renderer.setPointer(10, 10);
+  renderer.updateProximity();
+  select(renderer, host.children[0], "食べました");
+  assert.equal(marks(host.children[0]).ext, "ました");
+  const root = toDom(
+    { ...element("div"), className: "words", style: { position: "absolute" }, children: host.children },
+    null,
+    shown,
+  );
+  const current = find(root.childNodes[0], "ocr-word-current");
+  // One text node, the box's own text: the extension is not in the tree at all.
+  assert.equal(current.childNodes.length, 1);
+  assert.equal(current.childNodes[0].nodeValue, "食べ");
+  const texts = [];
+  (function walk(node) {
+    if (node.nodeType === 3) texts.push(node.nodeValue);
+    for (const child of node.childNodes) walk(child);
+  })(root.childNodes[0]);
+  assert.deepEqual(texts, ["食べ", "ました"]);
+  assert.equal(DOMTextScanner.isStyleVisible(computedStyle(current)), true);
+  assert.equal(
+    new DOMTextScanner(current.childNodes[0], 0, false, true).seek(16).content,
+    "食べました",
+  );
+  select(renderer, null, null);
 });
 
 test("regression: the old zero-size, zero-opacity lookahead stopped every lookup at the chunk edge", () => {

@@ -105,6 +105,47 @@
     .ocr-group .ocr-lookahead {
       position: absolute;
     }
+    /* A selection that ran past its box (食べ|ました looked up from 食べ). The box it
+       started in shows the whole word and the boxes whose text it took are hidden
+       under it; see `applySelectionMarks` in render.js, which sets these attributes.
+
+       The extension is pseudo-element content, `attr(data-ext)`, never a text node:
+       Yomitan's scanner walks DOM text, so on the next hover it still reads the box's
+       own text and then its lookahead, as if nothing were shown. The box and its text
+       span grow along the reading axis (width when horizontal, height when vertical)
+       from the size OCR gave them, anchored at their start, so the stem stays over
+       the source glyphs and the extension runs on over the hidden boxes. `!important`
+       beats the inline sizes `renderWords` sets; `updateProximity` rewrites other
+       inline styles every frame and leaves these alone. Attributes rather than classes
+       because `render` matches a nudged box on its class name. */
+    .ocr-word[data-extended] {
+      width: auto !important;
+      min-width: var(--ocr-width);
+      z-index: 1;
+    }
+    .ocr-word.ocr-vertical[data-extended] {
+      width: var(--ocr-width) !important;
+      height: auto !important;
+      min-height: var(--ocr-height);
+    }
+    .ocr-word-current[data-ext] {
+      width: auto !important;
+      min-width: var(--ocr-width);
+    }
+    .ocr-vertical .ocr-word-current[data-ext] {
+      width: auto !important;
+      min-width: 0;
+      height: auto !important;
+      min-height: var(--ocr-height);
+    }
+    .ocr-word-current[data-ext]::after {
+      content: attr(data-ext);
+    }
+    /* Hidden, not transparent: a hidden box takes no pointer events and leaves the
+       click-through regions (`hitRects`), which the extended box over it now covers. */
+    .ocr-word[data-consumed] {
+      visibility: hidden !important;
+    }
     /* Each run sits over the line or word it was read from; see text-layout.js. Glyphs are
        centred across the run by its line height and along it by letter spacing. */
     .ocr-group .ocr-run {
