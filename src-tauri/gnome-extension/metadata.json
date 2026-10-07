@@ -1,0 +1,8 @@
+{
+  "uuid": "kimochi-overlay@hamstu.github.io",
+  "name": "Kimochi Overlay",
+  "description": "Native GNOME annotations for Kimochi Japanese OCR.",
+  "shell-version": ["46"],
+  "version": 1,
+  "url": "https://github.com/hamstu/kimochi-tauri"
+}

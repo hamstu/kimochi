@@ -181,3 +181,22 @@ MANGAOCR_TEST_IMAGE=../kimochi-mangaocr/tests/fixtures/images/00.jpg cargo test 
 OCR results share an engine-independent group contract in `ui/ocr-result.ts`. Manga OCR supplies semantic text blocks; fragmented cloud results are grouped by glyph-relative proximity and direction. Direction metadata takes priority over aspect/neighbor inference. Vertical overlays use Japanese vertical layout and a right-edge blue marker; transcript rows remain horizontal, one row per group, with capture boundaries and group counters. Group IDs survive history persistence/replay. Existing text-only engines remain supported. Tesseract is removed; saved `local` OCR preferences migrate to MeikiOCR.
 
 Manga assets are checksum-pinned and staged by `npm run prepare:mangaocr`, including the Comic Text Detector ONNX file. Its graph runs in Rust via Candle (Metal on macOS), without Python or ONNX Runtime. The combined app is GPL-3.0-only; see `LICENSE` and the detector/recognizer provenance in `NOTICE`.
+
+
+### Optional GNOME 46 Wayland overlay (Ubuntu prototype)
+
+On GNOME 46 Wayland, **Set up GNOME overlay** in the source panel installs the
+extension embedded in the Linux binary into the current user's extension directory.
+It preserves other enabled extensions and refuses to overwrite a differing existing
+Kimochi extension. Save work, log out and log back in once so GNOME discovers it,
+then launch Kimochi and share an entire screen. No Node installation is needed by
+end users. This integration is optional; native layer-shell and X11 paths remain.
+
+The prototype supports one monitor's screen annotations, Shift-hover/click lookup
+and plain dictionary definitions through the existing Yomitan backend. The Shell
+owns the actors; the hidden WebKit OCR host never becomes a transparent ordinary
+Wayland overlay. There is no modal or keyboard grab. Window-share annotations,
+GNOME crop editing/Quick Shot, rich popup/audio controls and multi-monitor mapping
+remain unavailable. GNOME versions other than 46 are rejected until tested. Actual
+current-desktop acceptance requires the login reload; compositor-native isolated
+GNOME tests and build evidence are recorded in `UBUNTU_BRINGUP.md`.

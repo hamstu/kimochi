@@ -564,6 +564,14 @@ fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Rep
 }
 
 #[tauri::command]
+async fn gnome_overlay(operation: String, payload: Value) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    { tauri::async_runtime::spawn_blocking(move || platform::gnome::request(&operation, payload)).await.map_err(|e| e.to_string())? }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = (operation, payload); Err("GNOME overlay is Linux-only".into()) }
+}
+
+#[tauri::command]
 fn desktop() -> Vec<Rect> {
     platform::desktop_displays()
 }
@@ -2056,11 +2064,14 @@ fn main() {
             open_screen_capture_preferences,
             open_accessibility_preferences,
             platform_capabilities,
+            gnome_overlay,
         ])
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             platform::initialize_wayland_overlay();
             let handle = app.handle().clone();
+            #[cfg(target_os = "linux")]
+            platform::gnome::start(handle.clone());
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // The Wayland portal's restore token lives in settings so the picker is not
             // shown again on every launch. A no-op store everywhere else.

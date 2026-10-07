@@ -64,6 +64,7 @@ import {
 import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
 import { useCapabilities } from '../bridge/capabilities'
+import { GnomeOverlaySetup } from './GnomeOverlaySetup'
 import type { ControllerWiring } from '../panels/useController'
 
 type Controller = ControllerWiring['props']
@@ -678,6 +679,7 @@ export function SourcePanel({
 
   return (
     <div className="src-panel">
+      <GnomeOverlaySetup />
       {mode === 'ocr' && source ? (
         card
       ) : (

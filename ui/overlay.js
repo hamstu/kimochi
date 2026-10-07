@@ -265,9 +265,10 @@ function holdAutoScan() {
   scanner.pauseRecognitionFor(3000)
 }
 
+let gnomeOverlay = null
 let lastVisibilityTrace = null
 function draw() {
-  if (waylandDisabled) { renderer.clear(); return }
+  if (waylandDisabled) { renderer.clear(); void gnomeOverlay?.update(); return }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
   if (waylandLayer && state.info?.source_id?.startsWith('portal:window:')) {
@@ -2246,8 +2247,12 @@ await native.watchCapabilities(async (caps) => {
   }
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && caps.session.backend === 'wayland' && !caps.session.nativeLayerShell) {
     waylandDisabled = true
+    if (!gnomeOverlay && caps.session.compositor === 'GNOME') {
+      const { installGnomeOverlay } = await import('./gnome-overlay.js')
+      gnomeOverlay = await installGnomeOverlay(native, state, () => isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible, log)
+    }
     renderer.clear()
-    log({ check: 'overlay-disabled', reason: 'Native layer-shell overlay is unavailable on this desktop.' })
+    log({ check: caps.session.nativeGnomeShell ? 'overlay-native-gnome' : 'overlay-disabled', reason: caps.session.nativeGnomeShell ? 'GNOME Shell owns screen annotations; the WebKit OCR host stays hidden.' : 'Native layer-shell overlay is unavailable on this desktop. GNOME can use the optional Shell integration.' })
   }
 
   if (caps.os === 'windows')

@@ -141,6 +141,7 @@ impl CaptureBackend for Protected {
         self.inner.close();
     }
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
+        let _gnome = super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?;
         let hidden = hide(&self.app)?;
         // Allow compositor fade-out animations and queued PipeWire buffers to finish.
         if let Some(after) = hidden.after {

@@ -233,3 +233,22 @@ Local Shift state is shared across all documents in a native window: focus enter
 
 
 Wayland Quick Shot uses a granted portal screen stream and the native layer crop editor, not global pointer/display discovery. Without a shared screen it opens the system picker; choose an entire screen. The granted screen is reused until replaced/closed. A one-off crop is converted from logical layer coordinates to captured frame pixels and is not committed as the saved source crop. Picker/crop cancellation and unsupported native layers report status rather than silently doing nothing. Window-following overlays remain deferred; sharing a window is insufficient for on-screen Quick Shot placement. Other compositor/multi-output acceptance remains unverified.
+
+
+### Optional GNOME 46 Wayland overlay (Ubuntu prototype)
+
+On GNOME 46 Wayland, **Set up GNOME overlay** in the source panel installs the
+extension embedded in the Linux binary into the current user's extension directory.
+It preserves other enabled extensions and refuses to overwrite a differing existing
+Kimochi extension. Save work, log out and log back in once so GNOME discovers it,
+then launch Kimochi and share an entire screen. No Node installation is needed by
+end users. This integration is optional; native layer-shell and X11 paths remain.
+
+The prototype supports one monitor's screen annotations, Shift-hover/click lookup
+and plain dictionary definitions through the existing Yomitan backend. The Shell
+owns the actors; the hidden WebKit OCR host never becomes a transparent ordinary
+Wayland overlay. There is no modal or keyboard grab. Window-share annotations,
+GNOME crop editing/Quick Shot, rich popup/audio controls and multi-monitor mapping
+remain unavailable. GNOME versions other than 46 are rejected until tested. Actual
+current-desktop acceptance requires the login reload; compositor-native isolated
+GNOME tests and build evidence are recorded in `UBUNTU_BRINGUP.md`.

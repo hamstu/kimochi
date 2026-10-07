@@ -34,6 +34,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 mod keytrigger;
+pub mod gnome;
 mod layer;
 pub mod shortcuts;
 mod rules;
@@ -236,6 +237,7 @@ fn os_version() -> String {
 pub fn capabilities() -> Value {
     let s = session();
     let x11 = s.backend == Backend::X11;
+    let gnome = gnome::status()["available"].as_bool().unwrap_or(false);
     json!({
         "os": "linux",
         "osVersion": os_version(),
@@ -245,6 +247,7 @@ pub fn capabilities() -> Value {
             "compositor": s.compositor,
             "layerShell": s.layer_shell,
             "nativeLayerShell": layer::available(),
+            "nativeGnomeShell": gnome,
             "xwayland": s.xwayland,
         },
         "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super"},
@@ -267,13 +270,13 @@ pub fn capabilities() -> Value {
             "foregroundTracking": x11,
         },
         "overlay": {
-            "available": x11 || layer::available(),
-            "reason": if !x11 && !layer::available() { Some("Native overlay unavailable: this compositor does not support layer-shell, or gtk-layer-shell is not installed.") } else { None },
-            "passive": x11 || layer::available(),
+            "available": x11 || layer::available() || gnome,
+            "reason": if !x11 && !layer::available() && !gnome { Some("Native overlay unavailable: this compositor does not support layer-shell, or gtk-layer-shell is not installed.") } else { None },
+            "passive": x11 || layer::available() || gnome,
             // X11 with SHAPE: `set_input_regions` installs an XShape input region and
             // the cursor poll stops toggling click-through. Without SHAPE the shared
             // poll toggles it, as on macOS and Windows.
-            "inputRegions": if layer::available() {
+            "inputRegions": if layer::available() || gnome {
                 "native"
             } else if !x11 {
                 "wholeWindowOnly"
@@ -282,7 +285,7 @@ pub fn capabilities() -> Value {
             } else {
                 "poll"
             },
-            "nonActivating": x11 || layer::available(),
+            "nonActivating": x11 || layer::available() || gnome,
             "nativeHoverWorkaround": false,
         },
         "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if !x11 && s.compositor.as_deref().unwrap_or("").to_ascii_lowercase().contains("hypr") { Some("On Hyprland, set key combinations in your compositor configuration. Changing a shortcut here does not update those desktop bindings.") } else { None }},
