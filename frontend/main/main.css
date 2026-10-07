@@ -94,6 +94,10 @@
   justify-content: center;
   gap: var(--k-space-1-5);
   min-width: 0;
+  /* Every tab is one pixel taller than the strip and overlaps its bottom line, so the label sits
+     at the same height in every state. Idle and hovered tabs are see-through, so the line still
+     shows under them; the active tab's solid ground covers it and joins the page below. */
+  margin-bottom: -1px;
   padding: 0 var(--k-space-3);
   border: 0;
   background: transparent;
@@ -119,8 +123,6 @@
   color: var(--k-text);
 }
 .main-tab[aria-selected="true"] {
-  /* One pixel taller than the strip, so it covers the strip's bottom line and joins the page. */
-  margin-bottom: -1px;
   background: var(--k-bg);
   color: var(--k-text);
 }
