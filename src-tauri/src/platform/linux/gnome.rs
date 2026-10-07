@@ -32,6 +32,7 @@ pub fn status() -> Value {
         let text: String = proxy.call("Status", &()).map_err(|e| e.to_string())?;
         let mut value: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
         if value["protocol"] != 1 { return Err("Unsupported GNOME overlay protocol".into()); }
+        if value.get("hideButton").is_none() { return Err("GNOME cached an older extension; log out and back in to load the safety update".into()); }
         value["available"] = json!(true);
         Ok(value)
     })();

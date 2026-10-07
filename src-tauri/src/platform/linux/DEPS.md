@@ -252,3 +252,7 @@ GNOME crop editing/Quick Shot, rich popup/audio controls and multi-monitor mappi
 remain unavailable. GNOME versions other than 46 are rejected until tested. Actual
 current-desktop acceptance requires the login reload; compositor-native isolated
 GNOME tests and build evidence are recorded in `UBUNTU_BRINGUP.md`.
+
+Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen overlays are hidden while the panel control is unavailable. Ordinary application Escape is not intercepted.
+
+After an extension update, GNOME may retain the earlier code until the next login. Kimochi rejects revisions without the dismissal control. The Ubuntu follow-up leaves the extension disabled after the disruptive full-screen test; keep it off until deliberately reactivating the updated integration.

@@ -4,6 +4,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const IFACE = 'dev.kimochi.GnomeOverlay';
@@ -23,14 +24,19 @@ export default class KimochiOverlay extends Extension {
         this._lastUpdate = 0;
         this._lastLookup = null;
         this._group = new Clutter.Actor({reactive: false});
-        Main.layoutManager.addChrome(this._group, {affectsInputRegion: false, trackFullscreen: false});
+        Main.layoutManager.addChrome(this._group, {affectsInputRegion: false, trackFullscreen: true});
         this._bus = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this._bus.export(Gio.DBus.session, '/dev/kimochi/GnomeOverlay');
         this._name = Gio.bus_own_name_on_connection(Gio.DBus.session, IFACE, Gio.BusNameOwnerFlags.NONE, null, null);
         this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
             if (this._lastUpdate && GLib.get_monotonic_time() - this._lastUpdate > 5000000)
                 this._clear();
-            if (!this._words.length || this._suspended) return GLib.SOURCE_CONTINUE;
+            if (!this._words.length) return GLib.SOURCE_CONTINUE;
+            // Never publish input/text when the emergency panel control is hidden.
+            const visible = !this._suspended && this._controlVisible();
+            this._group.visible = visible;
+            if (this._popup) this._popup.visible = visible;
+            if (!visible) return GLib.SOURCE_CONTINUE;
             const [x, y, mods] = global.get_pointer();
             const p = this._popup?.get_transformed_position();
             const size = this._popup?.get_transformed_size();
@@ -42,15 +48,30 @@ export default class KimochiOverlay extends Extension {
             this._lastLookup = key;
             return GLib.SOURCE_CONTINUE;
         });
+        // A visible emergency control; no global key interception or menu grab.
+        this._hideButton = new PanelMenu.Button(0.0, 'Hide Kimochi annotations', true);
+        this._hideButton.add_child(new St.Label({text: 'Hide Kimochi', y_align: Clutter.ActorAlign.CENTER}));
+        this._hideButton.connect('button-press-event', () => {
+            this._dismissedPayload = this._payload;
+            this._clear();
+            return Clutter.EVENT_STOP;
+        });
+        Main.panel.addToStatusArea(this.uuid, this._hideButton);
+        this._hideButton.hide();
         this._lockSignal = Main.sessionMode.connect('updated', () => {
             if (Main.sessionMode.isLocked || Main.sessionMode.isGreeter)
                 this._clear();
         });
     }
 
+    _controlVisible() {
+        const [width, height] = this._hideButton.get_transformed_size();
+        return this._hideButton.get_paint_visibility() && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+    }
+
     Status() {
         return JSON.stringify({protocol: 1, shell: '46', words: this._words.length,
-            keyboardGrab: false, fullscreenInputSurface: false, pointer: global.get_pointer(),
+            keyboardGrab: false, fullscreenInputSurface: false, hideButton: this._hideButton?.visible ? {position: this._hideButton.get_transformed_position(), size: this._hideButton.get_transformed_size()} : null, pointer: global.get_pointer(),
             painted: this._group.get_paint_visibility(),
             actors: this._words.map((w, i) => ({...w, position: this._group.get_child_at_index(i)?.get_transformed_position(), size: this._group.get_child_at_index(i)?.get_transformed_size()})),
             suspended: Boolean(this._suspended), serial: this._serial, popup: Boolean(this._popup),
@@ -74,9 +95,19 @@ export default class KimochiOverlay extends Extension {
                 if (!monitors.some(m => w.x >= m.x && w.y >= m.y && w.x + w.width <= m.x + m.width && w.y + w.height <= m.y + m.height))
                     throw new Error('Annotation lies outside a monitor');
                 return w;
+            }).filter(w => {
+                const primary = Main.layoutManager.primaryMonitor;
+                return !primary || w.x + w.width <= primary.x || w.x >= primary.x + primary.width || w.y >= primary.y + Main.panel.height || w.y + w.height <= primary.y;
             });
             if (Main.sessionMode.isLocked || Main.sessionMode.isGreeter)
                 throw new Error('Annotations are unavailable on the lock screen');
+            // A heartbeat must not undo the user's dismissal. A new OCR frame
+            // includes a new frameId and can explicitly publish again.
+            if (this._dismissedPayload === payload) {
+                invocation.return_value(null);
+                return;
+            }
+            this._dismissedPayload = null;
             if (this._payload === payload && this._owner === sender) {
                 this._lastUpdate = GLib.get_monotonic_time();
                 invocation.return_value(null);
@@ -102,7 +133,8 @@ export default class KimochiOverlay extends Extension {
                 });
                 this._group.add_child(actor);
             }
-            this._group.visible = !this._suspended;
+            this._hideButton.visible = words.length > 0;
+            this._group.visible = !this._suspended && this._controlVisible();
             invocation.return_value(null);
         } catch (e) {
             invocation.return_dbus_error(`${IFACE}.InvalidAnnotations`, e.message);
@@ -146,7 +178,7 @@ export default class KimochiOverlay extends Extension {
             this._popup.set_width(width);
             this._popup.set_position(Math.max(monitor.x, Math.min(data.x + 16, monitor.x + monitor.width - width)), Math.max(monitor.y, Math.min(data.y + 20, monitor.y + monitor.height - 240)));
             Main.layoutManager.addChrome(this._popup, {affectsStruts: false});
-            this._popup.visible = !this._suspended;
+            this._popup.visible = !this._suspended && this._controlVisible();
             invocation.return_value(null);
         } catch (e) { invocation.return_dbus_error(`${IFACE}.InvalidDefinition`, e.message); }
     }
@@ -158,8 +190,8 @@ export default class KimochiOverlay extends Extension {
         }
         const hadAnnotations = this._words.length > 0;
         this._suspended = on;
-        this._group.visible = !on;
-        if (this._popup) this._popup.visible = !on;
+        this._group.visible = !on && this._controlVisible();
+        if (this._popup) this._popup.visible = !on && this._controlVisible();
         invocation.return_value(new GLib.Variant('(b)', [hadAnnotations]));
     }
 
@@ -173,6 +205,7 @@ export default class KimochiOverlay extends Extension {
         this._payload = null;
         this._group?.destroy_all_children();
         this._words = [];
+        this._hideButton?.hide();
         this._owner = null;
         this._lastUpdate = 0;
         this._lastLookup = null;
@@ -185,7 +218,10 @@ export default class KimochiOverlay extends Extension {
         this._bus?.unexport();
         if (this._name) Gio.bus_unown_name(this._name);
         this._group?.destroy();
+        this._hideButton?.destroy();
+        this._hideButton = null;
         this._timer = this._lockSignal = this._name = null;
+        this._dismissedPayload = null;
         this._bus = this._group = null;
         this._words = [];
         this._owner = null;

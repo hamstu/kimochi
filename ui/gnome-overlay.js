@@ -29,7 +29,7 @@ export async function installGnomeOverlay(native, state, enabled, log) {
         const height = (Math.max(...ys) - Math.min(...ys)) * sy
         return width > 0 && height > 0 ? [{ text: a.description, x, y, width, height }] : []
       })
-      await gnomeRequest('present', { sourceKind: 'screen', words })
+      await gnomeRequest('present', { sourceKind: 'screen', frameId: state.appliedScanId, words })
       lastError = null
     } catch (error) {
       const message = String(error)
