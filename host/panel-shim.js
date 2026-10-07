@@ -843,6 +843,11 @@
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     // Settings previews and nested dictionary frames do not call host.start().
     // Give every Linux Yomitan document the same modifier-edge handling.
+    if (platformInfo().os === 'linux' && hub.label === 'popup-host' && window !== root) {
+      void import(asset('/spike/linux-popup-document.js'))
+        .then(({ installLinuxPopupDocument }) => installLinuxPopupDocument(window))
+        .catch(error => hub.log({ check: 'linux-popup-document-failed', error: String(error) }))
+    }
     void import(asset('/spike/linux-scan-input.js'))
       .then(({ installLinuxScanInput }) => installLinuxScanInput(window, {
         passive: ['overlay', 'popup-host'].includes(hub.label)
@@ -906,6 +911,11 @@
      */
     async function watchOutsideClicks() {
       let seen = null
+      if (platformInfo().os === 'linux') {
+        await tauri?.event?.listen('gnome-popup-dismiss', () => root.dispatchEvent(
+          new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true })
+        ))
+      }
       await tauri?.event?.listen('state', ({ payload }) => {
         const count = payload?.dismiss
         if (typeof count !== 'number') return

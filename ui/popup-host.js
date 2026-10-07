@@ -87,6 +87,9 @@ const placed = new Map()
 const gnomeSources = new Map()
 let desktopLookup = false
 let gnomeBridge = false
+let appearance = 'system'
+const themeMedia = matchMedia('(prefers-color-scheme: dark)')
+const resolvedTheme = () => appearance === 'light' || appearance === 'dark' ? appearance : themeMedia.matches ? 'dark' : 'light'
 let anchors = []
 let displays = []
 let windowRect = null
@@ -106,6 +109,12 @@ async function refreshDisplays() {
   }
 }
 await refreshDisplays()
+if (gnomeBridge) {
+  appearance = (await invoke('settings_all')).appearance ?? 'system'
+  await window.__TAURI__.event.listen('settings:changed', ({ payload }) => {
+    if (payload.key === 'appearance') appearance = payload.value
+  })
+}
 
 // The viewport Yomitan positions within: the work area of the display the scanned
 // text is on, not the one this window happens to be sitting on.
@@ -246,7 +255,8 @@ async function relayout() {
   try {
     if (gnomeBridge) {
       await invoke('gnome_overlay', { operation: 'own-window', payload: {
-        label: LABEL, sourceKind: gnomeSources.get(newest) ?? 'reader'
+        label: LABEL, sourceKind: gnomeSources.get(newest) ?? 'reader',
+        interactiveRects: visible.filter(([popup]) => container === whole || popup === newest).map(([, rect]) => rect)
       } })
     }
     await invoke('popup_window', { rect: padded, visible: true })
@@ -258,7 +268,9 @@ async function relayout() {
       // scrolling and its keyboard shortcuts work. Since this window is a
       // non-activating panel, that costs the reader's own application nothing: it
       // stays active, and its window order is not touched.
-      rects: [{ ...container, focus: true }]
+      rects: gnomeBridge
+        ? visible.filter(([popup]) => container === whole || popup === newest).map(([, rect]) => ({ ...rect, focus: true }))
+        : [{ ...container, focus: true }]
     })
   } catch (error) {
     report({ check: 'popup-host-place-failed', error: String(error?.message ?? error) })
@@ -309,6 +321,11 @@ Popup.prototype.showContent = async function (details, displayDetails) {
   // `_getViewport` takes no arguments, so the anchor has to be in scope before
   // `_show` runs. Set per call rather than per popup: a nested lookup positions
   // against its own source rectangles.
+  if (gnomeBridge && !this.parent) {
+    // Reader and desktop lookups share one native host, not two independent
+    // root popups. Keep nested children, but retire the previous root chain.
+    for (const [popup] of placed) if (!popup.parent && popup !== this) popup.hide(false)
+  }
   markNewest(this)
   if (gnomeBridge && sent.length) gnomeSources.set(this, this.parent ? gnomeSources.get(this.parent) : desktopLookup ? 'desktop' : 'reader')
   anchors = origin
@@ -320,6 +337,16 @@ Popup.prototype.showContent = async function (details, displayDetails) {
       }))
     : real
   if (anchors !== sent) details = { ...details, sourceRects: anchors }
+  if (gnomeBridge) {
+    // Display.window.focus() is appropriate for an in-page iframe, but a remote
+    // GTK window would take the reader's Shift hold with it. Hover stays passive;
+    // the real window can still receive an explicit click and scroll normally.
+    const pageTheme = displayDetails?.state?.pageTheme ?? resolvedTheme()
+    this._themeController.siteTheme = pageTheme
+    this._themeController.updateTheme()
+    if (displayDetails) displayDetails = { ...displayDetails, focus: false,
+      state: { ...displayDetails.state, pageTheme } }
+  }
   try {
     await showContent.call(this, details, displayDetails)
   } catch (error) {
@@ -399,6 +426,11 @@ await Application.main(false, async (application) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     let generation = 0
     let desktopPopup = null
+    // Desktop OCR has no Frontend scanner. Original Display.close() still calls
+    // the content-origin API; answer that API here instead of timing out.
+    application.crossFrame.registerHandlers([
+      ['frontendClosePopup', () => { ++generation; desktopPopup?.hide(false) }]
+    ])
     await window.__TAURI__.event.listen('gnome-popup-dismiss', () => {
       ++generation
       for (const [popup] of placed) popup.hide(false)
@@ -415,6 +447,10 @@ await Application.main(false, async (application) => {
         if (serial !== generation) return
         const current = await invoke('gnome_overlay', { operation: 'status', payload: null })
         if (current.suspended || current.serial !== payload.serial) return
+        await invoke('gnome_overlay', { operation: 'highlight', payload: {
+          serial: payload.serial, index: payload.index, length: result.originalTextLength ?? 0
+        } })
+        if (!result.dictionaryEntries.length) { desktopPopup?.hide(false); return }
         await refreshDisplays()
         desktopPopup ??= await factory.getOrCreatePopup({ frameId: application.frameId, depth: 0, childrenSupported: true })
         await desktopPopup.setOptionsContext(optionsContext)
@@ -425,7 +461,7 @@ await Application.main(false, async (application) => {
           sourceRects: [{ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height }],
           writingMode: 'horizontal-tb' }, {
           focus: false, historyMode: 'clear', params: { type: 'terms', query: payload.text.slice(0, result.originalTextLength ?? payload.text.length), wildcards: 'off' },
-          state: { focusEntry: 0, optionsContext, url: location.href, sentence: { text: payload.sentence ?? payload.text, offset: payload.offset ?? 0 }, documentTitle: 'Kimochi screen OCR' },
+          state: { focusEntry: 0, optionsContext, url: location.href, pageTheme: resolvedTheme(), sentence: { text: payload.sentence ?? payload.text, offset: payload.offset ?? 0 }, documentTitle: 'Kimochi screen OCR' },
           content: { contentOrigin: { tabId: application.tabId, frameId: application.frameId }, dictionaryEntries: result.dictionaryEntries }
         })
         if (serial !== generation) desktopPopup.hide(false)

@@ -54,7 +54,7 @@ pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
     }
     let conn = connection()?;
     let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
-    let method = match operation { "present" => "Present", "clear" => "Clear", _ => return Err("Unknown GNOME overlay operation".into()) };
+    let method = match operation { "present" => "Present", "clear" => "Clear", "highlight" => "Highlight", _ => return Err("Unknown GNOME overlay operation".into()) };
     if method == "Clear" {
         proxy.call::<_, _, ()>(method, &()).map_err(|e| e.to_string())?;
     } else {
@@ -151,6 +151,19 @@ fn install() -> Result<Value, String> {
 
 pub fn start(app: tauri::AppHandle) {
     if !eligible() { return; }
+    let modifier_app = app.clone();
+    let _ = std::thread::Builder::new().name("gnome-modifier".into()).spawn(move || loop {
+        let _ = (|| -> Result<(), String> {
+            let conn = connection()?;
+            let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+            for event in proxy.receive_signal("Modifier").map_err(|e| e.to_string())? {
+                let (shift,): (bool,) = event.body().deserialize().map_err(|e| e.to_string())?;
+                let _ = modifier_app.emit("linux-dictionary-modifier", json!({"shift":shift}));
+            }
+            Ok(())
+        })();
+        std::thread::sleep(Duration::from_secs(2));
+    });
     let dismiss_app = app.clone();
     let _ = std::thread::Builder::new().name("gnome-popup-dismiss".into()).spawn(move || loop {
         let _ = (|| -> Result<(), String> {

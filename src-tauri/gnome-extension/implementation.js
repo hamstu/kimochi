@@ -16,6 +16,8 @@ const XML = `<node><interface name="${IFACE}">
 <signal name="Dismiss"/>
 <method name="Suspend"><arg type="b" direction="in"/><arg type="b" direction="out"/></method>
 <signal name="Lookup"><arg type="s"/></signal>
+<signal name="Modifier"><arg type="b"/></signal>
+<method name="Highlight"><arg type="s" direction="in"/></method>
 </interface></node>`;
 
 export default class KimochiOverlay extends Extension {
@@ -24,12 +26,16 @@ export default class KimochiOverlay extends Extension {
         this._owner = null;
         this._lastUpdate = 0;
         this._lastLookup = null;
+        this._hoverIndex = -1;
+        this._shift = null;
+        this._buttons = 0;
+        this._focusBeforePopup = null;
         this._group = new Clutter.Actor({reactive: false});
         Main.layoutManager.addChrome(this._group, {affectsInputRegion: false, trackFullscreen: true});
         this._bus = Gio.DBusExportedObject.wrapJSObject(XML, this);
         this._bus.export(Gio.DBus.session, '/dev/kimochi/GnomeOverlay');
         this._name = Gio.bus_own_name_on_connection(Gio.DBus.session, IFACE, Gio.BusNameOwnerFlags.NONE, null, null);
-        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+        this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 20, () => {
             if (this._lastUpdate && GLib.get_monotonic_time() - this._lastUpdate > 5000000)
                 this._clear();
             if (this._placement) {
@@ -37,13 +43,18 @@ export default class KimochiOverlay extends Extension {
                     w.get_pid() === this._placement.pid && w.get_title() === 'Kimochi · popup-host');
                 if (win) this._placePopup(win, this._placement.rect);
             }
+            const [x, y, mods] = global.get_pointer();
+            const shift = Boolean(mods & Clutter.ModifierType.SHIFT_MASK);
+            if (shift !== this._shift) {
+                this._shift = shift;
+                this._bus.emit_signal('Modifier', new GLib.Variant('(b)', [shift]));
+            }
             if (!this._words.length) return GLib.SOURCE_CONTINUE;
             // Never publish input/text when the emergency panel control is hidden.
             const visible = !this._suspended && this._controlVisible();
             this._group.visible = visible;
             if (this._popup) this._popup.visible = visible;
             if (!visible) return GLib.SOURCE_CONTINUE;
-            const [x, y, mods] = global.get_pointer();
             const nativeRect = this._nativePopup?.get_compositor_private()?.get_paint_visibility() ? this._nativePopup.get_frame_rect() : null;
             if (nativeRect && x >= nativeRect.x && y >= nativeRect.y && x < nativeRect.x + nativeRect.width && y < nativeRect.y + nativeRect.height)
                 return GLib.SOURCE_CONTINUE;
@@ -55,6 +66,11 @@ export default class KimochiOverlay extends Extension {
             if (key !== null && key !== this._lastLookup)
                 this._bus.emit_signal('Lookup', new GLib.Variant('(s)', [JSON.stringify({index: key, serial: this._serial, text: this._words[key].text, sentence: this._words[key].sentence, offset: this._words[key].offset, rect: this._words[key], x, y})]));
             this._lastLookup = key;
+            if (index !== this._hoverIndex) {
+                this._hoverIndex = index;
+                this._match = null;
+                this._paintHighlight();
+            }
             return GLib.SOURCE_CONTINUE;
         });
         // A visible emergency control; no global key interception or menu grab.
@@ -68,21 +84,117 @@ export default class KimochiOverlay extends Extension {
         Main.panel.addToStatusArea(this.uuid, this._hideButton);
         this._hideButton.hide();
         this._pointerSignal = global.stage.connect('captured-event', (_actor, event) => {
-            if (event.type() !== Clutter.EventType.BUTTON_PRESS || !this._nativePopup?.get_compositor_private()?.get_paint_visibility()) return Clutter.EVENT_PROPAGATE;
-            const [x, y] = event.get_coords();
-            const r = this._nativePopup.get_frame_rect();
-            if (x < r.x || x >= r.x + r.width || y < r.y || y >= r.y + r.height) {
-                if (!this._words.some(w => x >= w.x && x < w.x + w.width && y >= w.y && y < w.y + w.height)) {
-                    this._bus.emit_signal('Dismiss', null);
-                    this._nativePopup.get_compositor_private()?.hide();
-                    this._placement = this._nativePopup = null;
-                }
+            if (event.type() === Clutter.EventType.BUTTON_PRESS) {
+                const [x, y] = event.get_coords();
+                this._outsidePress(x, y);
             }
             return Clutter.EVENT_PROPAGATE;
+        });
+        this._focusSignal = global.display.connect('notify::focus-window', () => {
+            const win = global.display.focus_window;
+            if (!win) return;
+            if (!this._placement || win.get_pid() !== this._placement.pid || win.get_title() !== 'Kimochi · popup-host') {
+                if (this._popupClicked && !this._restoringFocus) this._dismissPopup();
+                return;
+            }
+            const [x, y, mods] = global.get_pointer();
+            const r = win.get_frame_rect();
+            const clicked = Boolean(mods & Clutter.ModifierType.BUTTON1_MASK) &&
+                x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
+            if (clicked || this._popupClicked) return;
+            // Mutter can activate a newly mapped same-app toplevel despite GTK's
+            // focus_on_map=false. Restore the focus it had immediately before map;
+            // do not override a deliberate click or a subsequent unrelated switch.
+            const previous = this._focusBeforePopup;
+            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                if (!this._popupClicked && global.display.focus_window === win && previous?.get_compositor_private()) {
+                    this._restoringFocus = true;
+                    try { previous.activate(global.get_current_time()); }
+                    finally { this._restoringFocus = false; }
+                }
+                return GLib.SOURCE_REMOVE;
+            });
         });
         this._lockSignal = Main.sessionMode.connect('updated', () => {
             if (Main.sessionMode.isLocked || Main.sessionMode.isGreeter)
                 this._clear();
+        });
+    }
+
+    _outsidePress(x, y) {
+        if (!this._nativePopup?.get_compositor_private()?.get_paint_visibility()) return;
+        const rects = this._popupRects ?? [this._nativePopup.get_frame_rect()];
+        if (rects.some(r => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)) {
+            this._popupClicked = true;
+            return;
+        }
+        this._dismissPopup();
+    }
+
+    _dismissPopup() {
+        if (!this._nativePopup?.get_compositor_private()?.get_paint_visibility()) return;
+        this._bus.emit_signal('Dismiss', null);
+        this._nativePopup.get_compositor_private()?.hide();
+        this._placement = this._nativePopup = null;
+        this._popupClicked = false;
+        this._popupRects = null;
+        this._match = null;
+        this._paintHighlight();
+    }
+
+    _watchPopupButtons() {
+        if (this._buttonTimer || !this._nativePopup?.get_compositor_private()?.get_paint_visibility()) return;
+        const mask = Clutter.ModifierType.BUTTON1_MASK | Clutter.ModifierType.BUTTON2_MASK | Clutter.ModifierType.BUTTON3_MASK;
+        this._buttons = global.get_pointer()[2] & mask;
+        // Only the small visible dictionary needs this cadence. Ordinary client
+        // presses bypass Shell actor events and can be shorter than a frame.
+        this._buttonTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2, () => {
+            if (!this._nativePopup?.get_compositor_private()?.get_paint_visibility()) {
+                this._buttonTimer = null;
+                return GLib.SOURCE_REMOVE;
+            }
+            const [x, y, mods] = global.get_pointer();
+            const buttons = mods & mask;
+            if (buttons && !this._buttons) this._outsidePress(x, y);
+            this._buttons = buttons;
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    HighlightAsync([payload], invocation) {
+        try {
+            if (this._owner !== invocation.get_sender()) throw new Error('Only the annotation owner may highlight');
+            if (payload.length > 1024) throw new Error('Highlight exceeds limit');
+            const data = JSON.parse(payload);
+            if (data.serial !== this._serial || data.index !== this._lastLookup) {
+                invocation.return_value(null);
+                return;
+            }
+            if (!Number.isInteger(data.index) || !this._words[data.index] || !Number.isInteger(data.length) || data.length < 0 || data.length > 512)
+                throw new Error('Invalid dictionary match');
+            this._match = {index: data.index, length: data.length};
+            this._paintHighlight();
+            invocation.return_value(null);
+        } catch (e) { invocation.return_dbus_error(`${IFACE}.InvalidHighlight`, e.message); }
+    }
+
+    _paintHighlight() {
+        const match = this._match;
+        const first = match ? this._words[match.index] : null;
+        let end = match?.index ?? -1;
+        if (first) {
+            while (end < this._words.length) {
+                const w = this._words[end];
+                if (w.sentence !== first.sentence || w.offset >= first.offset + match.length ||
+                    (end > match.index && w.offset <= this._words[end - 1].offset)) break;
+                ++end;
+            }
+        }
+        this._words.forEach((w, i) => {
+            const selected = first ? i >= match.index && i < end : i === this._hoverIndex;
+            this._group.get_child_at_index(i)?.set_style(selected
+                ? 'background-color: rgba(135,87,217,0.14); border: 0; border-bottom: 2px solid rgba(135,87,217,0.8); border-radius: 3px;'
+                : 'background-color: transparent; border: 0; border-radius: 3px;');
         });
     }
 
@@ -95,7 +207,7 @@ export default class KimochiOverlay extends Extension {
         return JSON.stringify({protocol: 1, shell: '46', words: this._words.length,
             keyboardGrab: false, fullscreenInputSurface: false, hideButton: this._hideButton?.visible ? {position: this._hideButton.get_transformed_position(), size: this._hideButton.get_transformed_size()} : null, pointer: global.get_pointer(),
             painted: this._group.get_paint_visibility(),
-            appearance: 'hover-highlight', desktopPopup: true, revision: this.metadata.revision,
+            appearance: 'matched-word-highlight', matched: this._match ?? null, desktopPopup: true, revision: this.metadata.revision,
             ownPopup: this._nativePopup ? (() => { const r = this._nativePopup.get_frame_rect(); return {x: r.x, y: r.y, width: r.width, height: r.height}; })() : null,
             focus: global.display.focus_window?.get_title() ?? null,
             actors: this._words.map((w, i) => ({...w, position: this._group.get_child_at_index(i)?.get_transformed_position(), size: this._group.get_child_at_index(i)?.get_transformed_size(), style: this._group.get_child_at_index(i)?.get_style()})),
@@ -149,18 +261,10 @@ export default class KimochiOverlay extends Extension {
             for (const w of words) {
                 // Preserve the source's typography; only the hovered word is marked.
                 const restingStyle = 'background-color: transparent; border: 0; border-radius: 3px;';
-                const actor = new St.Widget({reactive: true, can_focus: false, track_hover: true,
+                const actor = new St.Widget({reactive: false, can_focus: false,
                     style: restingStyle});
-                actor.connect('notify::hover', () => actor.set_style(actor.hover
-                    ? 'background-color: rgba(135,87,217,0.14); border: 0; border-bottom: 2px solid rgba(135,87,217,0.8); border-radius: 3px;'
-                    : restingStyle));
                 actor.set_position(w.x, w.y);
                 actor.set_size(w.width, w.height);
-                actor.connect('button-press-event', () => {
-                    const [x, y] = global.get_pointer();
-                    this._bus.emit_signal('Lookup', new GLib.Variant('(s)', [JSON.stringify({index: this._words.indexOf(w), serial: this._serial, text: w.text, sentence: w.sentence, offset: w.offset, rect: w, x, y})]));
-                    return Clutter.EVENT_STOP;
-                });
                 this._group.add_child(actor);
             }
             this._hideButton.visible = words.length > 0;
@@ -193,6 +297,13 @@ export default class KimochiOverlay extends Extension {
             const [pid] = response.deep_unpack();
             const win = global.get_window_actors().map(a => a.meta_window)
                 .find(w => w.get_pid() === pid && w.get_title() === `Kimochi · ${data.label}`);
+            if (data.interactiveRects !== undefined) {
+                if (data.label !== 'popup-host' || !Array.isArray(data.interactiveRects) || data.interactiveRects.length > 32 ||
+                    !data.interactiveRects.every(r => [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0 &&
+                        Main.layoutManager.monitors.some(m => r.x >= m.x && r.y >= m.y && r.x + r.width <= m.x + m.width && r.y + r.height <= m.y + m.height)))
+                    throw new Error('Invalid dictionary input rectangles');
+                this._popupRects = data.interactiveRects;
+            }
             if (data.sourceKind !== undefined) {
                 if (data.label !== 'popup-host' || !['desktop', 'reader'].includes(data.sourceKind)) throw new Error('Invalid dictionary source');
                 this._popupSourceKind = data.sourceKind;
@@ -204,6 +315,11 @@ export default class KimochiOverlay extends Extension {
                     !Main.layoutManager.monitors.some(m => r.width <= m.width && r.height <= m.height &&
                         r.x + r.width > m.x && r.x < m.x + m.width && r.y + r.height > m.y && r.y < m.y + m.height))
                     throw new Error('Dictionary popup must fit a monitor');
+                if (!win?.get_compositor_private()?.get_paint_visibility()) this._popupClicked = false;
+                // Snapshot only for this own-popup request; no foreign-window
+                // geometry or general window-following/foreground tracker.
+                const focused = global.display.focus_window;
+                if (focused && focused !== win) this._focusBeforePopup = focused;
                 this._placement = {pid, rect: r};
                 if (win) {
                     this._placePopup(win, r);
@@ -219,7 +335,10 @@ export default class KimochiOverlay extends Extension {
     _placePopup(win, r) {
         this._nativePopup = win;
         win.make_above();
-        win.move_frame(false, Math.round(r.x), Math.round(r.y));
+        const current = win.get_frame_rect();
+        if (current.x !== Math.round(r.x) || current.y !== Math.round(r.y))
+            win.move_frame(false, Math.round(r.x), Math.round(r.y));
+        this._watchPopupButtons();
     }
 
     SuspendAsync([on], invocation) {
@@ -249,6 +368,7 @@ export default class KimochiOverlay extends Extension {
             this._bus?.emit_signal('Dismiss', null);
             this._nativePopup?.get_compositor_private()?.hide();
             this._placement = this._nativePopup = null;
+            this._popupRects = null;
         }
         this._popup?.destroy();
         this._popup = null;
@@ -259,14 +379,19 @@ export default class KimochiOverlay extends Extension {
         this._owner = null;
         this._lastUpdate = 0;
         this._lastLookup = null;
+        this._hoverIndex = -1;
+        this._match = null;
     }
 
     disable() {
         this._bus?.emit_signal('Dismiss', null);
         this._nativePopup?.get_compositor_private()?.hide();
         if (this._timer) GLib.source_remove(this._timer);
+        if (this._buttonTimer) GLib.source_remove(this._buttonTimer);
+        this._buttonTimer = null;
         if (this._lockSignal) Main.sessionMode.disconnect(this._lockSignal);
         if (this._pointerSignal) global.stage.disconnect(this._pointerSignal);
+        if (this._focusSignal) global.display.disconnect(this._focusSignal);
         this._clear();
         this._bus?.unexport();
         if (this._name) Gio.bus_unown_name(this._name);
@@ -279,5 +404,6 @@ export default class KimochiOverlay extends Extension {
         this._words = [];
         this._owner = null;
         this._placement = this._nativePopup = null;
+        this._popupRects = null;
     }
 }

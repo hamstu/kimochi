@@ -108,6 +108,7 @@ unsafe extern "C" {
     fn gtk_widget_realize(widget: *mut c_void);
     fn gtk_widget_get_realized(widget: *mut c_void) -> c_int;
     fn gtk_widget_get_window(widget: *mut c_void) -> *mut c_void;
+    fn gtk_widget_queue_draw(widget: *mut c_void);
     fn gdk_window_input_shape_combine_region(
         window: *mut c_void,
         region: *mut c_void,
@@ -201,6 +202,12 @@ pub fn input_regions(
                     0,
                     0,
                 );
+                if window.label() == "popup-host" && super::gnome::eligible_popup_session() {
+                    // GNOME/GTK can defer the Wayland input-region commit until a
+                    // paint. Without damage, a shadow click still reaches this
+                    // window despite the new shape. Queue once per shape change.
+                    gtk_widget_queue_draw(gtk.as_ptr().cast());
+                }
                 if let Some(region) = region {
                     cairo_region_destroy(region);
                 }

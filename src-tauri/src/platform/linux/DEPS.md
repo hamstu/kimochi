@@ -250,7 +250,15 @@ Shell actors provide one monitor's screen annotations and Shift-hover/click look
 The dictionary uses the existing full Yomitan Popup/Display in a small native
 window, including dictionary images, audio controls and nested lookup. GNOME supplies
 geometry for Kimochi's own log/popup windows so log lookups can extend outside the
-log. The popup does not request activation when mapped; clicking it can focus it.
+log. Hover lookup keeps the original reader's keyboard focus; the GNOME bridge
+restores pre-map focus if Mutter activates the own popup automatically, and a deliberate
+popup click can focus it. Non-consuming GNOME modifier/button state enables continuous
+Shift lookup and outside-click dismissal without a keyboard grab. Dictionary matched
+length highlights all matching OCR character cells. Desktop and reader share one root
+popup chain and the app's resolved theme, bundled fonts and smoothing; explicit Yomitan
+font/theme settings remain authoritative. Original resize gestures suppress accidental
+text selection. These have automated/virtual-input evidence; attended UX acceptance is
+still required after the reported failures (see Ubuntu ledger entries92 onward).
 The hidden OCR WebKit host never becomes a transparent ordinary desktop overlay.
 There is no modal or keyboard grab. Portal window annotations/following remain
 deferred, GNOME desktop crop/Quick Shot and multi-monitor mapping remain unavailable.
