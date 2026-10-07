@@ -1220,10 +1220,6 @@ async function placeOverlayOn(bounds) {
  * region is limited to it.
  */
 async function editSourceRegion() {
-  if (waylandDisabled) {
-    publish({ status: 'Native overlay unavailable on this desktop; crop selection is disabled.' })
-    return
-  }
   if (state.regionSelecting) return
   const sourceId = await native.selectedSource()
   if (!sourceId) {
@@ -1235,7 +1231,9 @@ async function editSourceRegion() {
     // (never pattern-matched on a platform name) only when the view has not caught up.
     const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
     const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
-    const saved = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer
+    const saved = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled
+      ? await editLinuxSourceImage(sourceId)
+      : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer
       ? await editPortalRegion(sourceId, kind)
       : kind === 'window'
         ? await editWindowRegion(sourceId)
@@ -1246,7 +1244,7 @@ async function editSourceRegion() {
     }
     // Committing changes the selection, so anything in flight belongs to the old one.
     generation.bump()
-    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer) {
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (waylandLayer || waylandDisabled)) {
       // Consume the committed crop before a scan snapshots its generation. The native
       // state event otherwise arrives during OCR and invalidates this very result.
       await processView(await native.snapshot())
@@ -1259,6 +1257,44 @@ async function editSourceRegion() {
   } catch (error) {
     log({ check: 'region-edit-error', error: String(error?.message ?? error) })
     publish({ status: `Editing the region failed: ${error?.message ?? error}` })
+  }
+}
+
+/** A source-image editor in the main window when a native desktop layer is unavailable. */
+async function editLinuxSourceImage(sourceId) {
+  state.regionSelecting = true
+  syncAutoScanner()
+  const requestId = crypto.randomUUID()
+  let stop = () => {}
+  let timer
+  try {
+    // Shell targets sit above application windows; release them before editor input.
+    await gnomeOverlay?.pause().catch(() => {})
+    const frame = await native.invoke('source_preview', { sourceId })
+    let finish
+    const result = new Promise((resolve, reject) => {
+      finish = resolve
+      timer = setTimeout(() => reject(new Error('Crop editor timed out. Open it again to continue.')), 600000)
+    })
+    stop = await native.listen('linux:source-crop-result', ({ payload }) => {
+      if (payload?.requestId === requestId) finish(Boolean(payload.saved))
+    })
+    // Register the reply listener before the main window can submit the editor.
+    await native.panel('log', 'show')
+    await window.__TAURI__.event.emit('linux:edit-source-crop', { requestId, sourceId, frame, crop: state.crop })
+    const saved = await result
+    if (saved) log({ check: 'region-saved', sourceId, editor: 'linux-source-image' })
+    return saved
+  } finally {
+    clearTimeout(timer)
+    stop()
+    try {
+      await window.__TAURI__.event.emit('linux:close-source-crop', { requestId })
+    } finally {
+      state.regionSelecting = false
+      syncAutoScanner()
+      void gnomeOverlay?.update()
+    }
   }
 }
 
@@ -2249,7 +2285,7 @@ await native.watchCapabilities(async (caps) => {
     waylandDisabled = true
     if (!gnomeOverlay && caps.session.compositor === 'GNOME') {
       const { installGnomeOverlay } = await import('./gnome-overlay.js')
-      gnomeOverlay = await installGnomeOverlay(native, state, () => isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible, log)
+      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible, log)
     }
     renderer.clear()
     log({ check: caps.session.nativeGnomeShell ? 'overlay-native-gnome' : 'overlay-disabled', reason: caps.session.nativeGnomeShell ? 'GNOME Shell owns screen annotations; the WebKit OCR host stays hidden.' : 'Native layer-shell overlay is unavailable on this desktop. GNOME can use the optional Shell integration.' })

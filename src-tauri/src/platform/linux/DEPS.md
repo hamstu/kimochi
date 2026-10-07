@@ -248,10 +248,18 @@ The prototype supports one monitor's screen annotations, Shift-hover/click looku
 and plain dictionary definitions through the existing Yomitan backend. The Shell
 owns the actors; the hidden WebKit OCR host never becomes a transparent ordinary
 Wayland overlay. There is no modal or keyboard grab. Window-share annotations,
-GNOME crop editing/Quick Shot, rich popup/audio controls and multi-monitor mapping
+native GNOME desktop crop editing/Quick Shot, rich popup/audio controls and multi-monitor mapping
 remain unavailable. GNOME versions other than 46 are rejected until tested. Actual
 current-desktop acceptance requires the login reload; compositor-native isolated
 GNOME tests and build evidence are recorded in `UBUNTU_BRINGUP.md`.
+
+On Linux Wayland without native layer-shell, **Crop area → Set crop area…** opens
+the full shared source image in the existing main window. Drag a rectangle, then
+**Save crop**; it uses full-frame capture pixels and the normal persisted crop/OCR
+path. This works for entire-screen and window shares, independently of the GNOME
+annotation extension. Cancel/Escape leaves the saved crop unchanged. Automatic OCR
+pauses during editing and resumes afterward. This is an image editor, not a native
+desktop layer; native layer-shell and X11 retain their existing on-screen editor.
 
 Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen overlays are hidden while the panel control is unavailable. Ordinary application Escape is not intercepted.
 

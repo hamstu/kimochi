@@ -58,5 +58,13 @@ export async function installGnomeOverlay(native, state, enabled, log) {
     } catch (error) { log({ check: 'gnome-dictionary-error', error: String(error) }) }
   })
   setInterval(() => void update(), 1000)
-  return { update }
+  const pause = async () => {
+    // Finish any in-flight publication before clearing its reactive word targets.
+    while (busy) await new Promise(resolve => setTimeout(resolve, 20))
+    busy = true
+    try {
+      if ((await gnomeRequest('status')).available) await gnomeRequest('clear')
+    } finally { busy = false }
+  }
+  return { update, pause }
 }

@@ -91,7 +91,7 @@ fn install() -> Result<Value, String> {
         if !result.status.success() { return Err(String::from_utf8_lossy(&result.stderr).into_owned()); }
     }
     let enabled = std::process::Command::new("gnome-extensions").args(["enable", "kimochi-overlay@hamstu.github.io"]).output().map_err(|e| e.to_string())?;
-    Ok(json!({"installed":true,"enabled":enabled.status.success(),"message":"Save your work, log out and log back in, then launch Kimochi. Screen annotations and plain dictionary definitions are supported; crop and Quick Shot remain unavailable."}))
+    Ok(json!({"installed":true,"enabled":enabled.status.success(),"message":"Save your work, log out and log back in, then launch Kimochi. Screen annotations and plain dictionary definitions are supported. Crop editing uses the source image in the main window; Quick Shot remains unavailable."}))
 }
 
 pub fn start(app: tauri::AppHandle) {

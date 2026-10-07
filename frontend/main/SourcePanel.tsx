@@ -65,6 +65,7 @@ import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
 import { useCapabilities } from '../bridge/capabilities'
 import { GnomeOverlaySetup } from './GnomeOverlaySetup'
+import { LinuxSourceCrop } from './LinuxSourceCrop'
 import type { ControllerWiring } from '../panels/useController'
 
 type Controller = ControllerWiring['props']
@@ -590,7 +591,7 @@ export function SourcePanel({
             <MenuContent align="start" className="src-crop-menu">
               <MenuItem
                 icon={<SquareDashed />}
-                disabled={!controller.hasSource || (capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive)}
+                disabled={!controller.hasSource}
                 onSelect={() => controller.onEditCropArea()}
               >
                 {crop ? 'Change crop area…' : 'Set crop area…'}
@@ -715,6 +716,7 @@ export function SourcePanel({
         </div>
       )}
 
+      <LinuxSourceCrop enabled={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && !(capabilities.session as { nativeLayerShell?: boolean }).nativeLayerShell} />
       {mode === 'quickshot' && (
         <div className="src-controls">
           {scanButton}
