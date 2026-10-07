@@ -415,9 +415,9 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
         Vec::new()
     } else { usable };
     #[cfg(target_os = "linux")]
-    if window.label() == OVERLAY && (platform::wayland_overlay_unavailable() || platform::wayland_layer_overlay()) {
-        // The Wayland reader owns its whole input surface. Never leave an empty
-        // transparent surface over another application (including WM dialogs).
+    if window.label() == OVERLAY {
+        // Linux overlays start hidden. Map X11 panels as well as native Wayland
+        // layers when they publish words or editor regions, and hide empty surfaces.
         let visible = !usable.is_empty()
             && (state.view.lock().unwrap().overlay_visible || platform::region_editing())
             && !platform::capture::suppressed();
@@ -433,7 +433,16 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
                 window.hide()
             };
             if let Err(error) = result {
-                eprintln!("Wayland reader visibility: {error}");
+                eprintln!("Linux overlay visibility: {error}");
+            } else if visible && !platform::wayland_layer_overlay() {
+                // GTK can discard a hidden X11 window's requested size on first map.
+                // Reapply its already resolved display bounds after showing it.
+                let origin = state.view.lock().unwrap().origin;
+                if let Some(rect) = origin {
+                    if let Err(error) = platform::desktop_place(&window, rect) {
+                        eprintln!("Linux overlay placement: {error}");
+                    }
+                }
             }
         }
     }
