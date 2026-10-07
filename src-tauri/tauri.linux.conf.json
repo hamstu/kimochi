@@ -19,7 +19,9 @@
           "libayatana-appindicator3-1",
           "gstreamer1.0-plugins-base",
           "gstreamer1.0-plugins-good",
-          "gstreamer1.0-plugins-bad"
+          "gstreamer1.0-plugins-bad",
+          "heif-gdk-pixbuf",
+          "libheif-plugin-aomdec"
         ]
       }
     }

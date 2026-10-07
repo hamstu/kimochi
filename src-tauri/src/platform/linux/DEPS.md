@@ -264,3 +264,11 @@ desktop layer; native layer-shell and X11 retain their existing on-screen editor
 Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen overlays are hidden while the panel control is unavailable. Ordinary application Escape is not intercepted.
 
 After an extension update, GNOME may retain the earlier code until the next login. Kimochi rejects revisions without the dismissal control. The Ubuntu follow-up leaves the extension disabled after the disruptive full-screen test; keep it off until deliberately reactivating the updated integration.
+
+On Ubuntu builds of WebKitGTK without AVIF decoding, dictionary imports use the
+system GdkPixbuf AVIF loader as a Linux-only fallback. Install `heif-gdk-pixbuf`
+and `libheif-plugin-aomdec` (declared in the Debian package). Images are converted
+to PNG only after the browser decoder fails; vendor sources and original
+archives remain untouched. AppImage staging requires the loader and deploys its
+dynamic AVIF decoder plugins and dependencies with a bundle-local
+`LIBHEIF_PLUGIN_PATH`.

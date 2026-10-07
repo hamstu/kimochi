@@ -33,6 +33,7 @@ use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::OnceLock;
 
+pub mod dictionary_images;
 mod keytrigger;
 pub mod gnome;
 mod layer;

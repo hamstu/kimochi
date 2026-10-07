@@ -72,6 +72,32 @@ export async function bundleLinuxAudio(appdir, env) {
   console.log(`Bundled ${names.length} GStreamer audio plugins and their scanner.`)
 }
 
+// HEIF discovers its AVIF decoder dynamically, outside linuxdeploy's ELF scan.
+export async function bundleLinuxDictionaryImages(appdir, env) {
+  const configured = spawnSync('pkg-config', ['--variable=gdk_pixbuf_moduledir', 'gdk-pixbuf-2.0'], { encoding: 'utf8' })
+  const loaderDirectory = configured.stdout.trim()
+  if (!loaderDirectory) return // Some desktops use Glycin instead of legacy loaders.
+  const loader = path.join(loaderDirectory, 'libpixbufloader-heif.so')
+  if (!(await exists(loader))) {
+    console.log('No legacy AVIF loader; dictionary images require browser decoding on this build.')
+    return
+  }
+  const libraryDirectory = path.resolve(loaderDirectory, '../../..')
+  const plugins = path.join(libraryDirectory, 'libheif/plugins')
+  if (!(await exists(plugins))) return // Older libheif builds include their decoder.
+  const decoderNames = (await readdir(plugins)).filter(name => /^libheif-(aomdec|dav1d).*\.so(?:\..*)?$/.test(name))
+  if (!decoderNames.length) throw new Error('AVIF decoder missing; install libheif-plugin-aomdec')
+  const destination = path.join(appdir, 'usr/lib/libheif')
+  await mkdir(destination, { recursive: true })
+  for (const name of decoderNames) await copyFile(path.join(plugins, name), path.join(destination, name))
+  const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
+  const deployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${destination}`], { stdio: 'inherit', env })
+  if (deployed.error || deployed.status !== 0) throw deployed.error ?? new Error(`AVIF decoder deployment failed (${deployed.status})`)
+  const hook = path.join(appdir, 'apprun-hooks/linuxdeploy-plugin-gtk.sh')
+  await writeFile(hook, (await readFile(hook, 'utf8')) + '\nexport LIBHEIF_PLUGIN_PATH="$APPDIR/usr/lib/libheif"\n')
+  console.log(`Bundled ${decoderNames.length} AVIF decoder plugins.`)
+}
+
 export async function repairLinuxAppImages({ target, release, env }) {
   const directory = path.resolve(process.env.CARGO_TARGET_DIR ?? 'src-tauri/target', target ?? '', release ? 'release' : 'debug', 'bundle/appimage')
   const entries = await readdir(directory)
@@ -80,6 +106,7 @@ export async function repairLinuxAppImages({ target, release, env }) {
   if (appdirs.length !== 1 || images.length !== 1) throw new Error(`Expected one AppDir and AppImage in ${directory}`)
   const appdir = path.join(directory, appdirs[0])
   await bundleLinuxAudio(appdir, env)
+  await bundleLinuxDictionaryImages(appdir, env)
   const libraries = path.join(appdir, 'usr/lib')
   const ldconfig = spawnSync('ldconfig', ['-p'], { encoding: 'utf8' })
   const originals = new Map([...ldconfig.stdout.matchAll(/^\s*(\S+)\s+.*=>\s+(\S+)$/gm)].map((match) => [match[1], match[2]]))

@@ -1995,6 +1995,8 @@ fn main() {
             reader::ankiconnect::anki_gui_browse,
             reader::ankiconnect::anki_store_media_file,
             reader::ankiconnect::anki_add_note,
+            #[cfg(target_os = "linux")]
+            platform::dictionary_images::linux_dictionary_image,
             report,
             scan_trace::scan_trace,
             storage_load,

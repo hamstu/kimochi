@@ -21,7 +21,9 @@ async function sources(directory) {
 
 test('frontend literal native commands have registered Rust handlers', async () => {
   const main = await readFile(path.join(root, 'src-tauri/src/main.rs'), 'utf8')
-  const handlers = [...main.matchAll(/generate_handler!\s*\[([\s\S]*?)\]/g)].flatMap((match) =>
+  // Strip cfg attributes before locating the handler list: their closing ] is not the list end.
+  const registrations = main.replace(/#\[cfg\([^\]]*\)\]\s*/g, '')
+  const handlers = [...registrations.matchAll(/generate_handler!\s*\[([\s\S]*?)\]/g)].flatMap((match) =>
     match[1].split(',').map((name) => name.trim().split('::').at(-1))
   )
   assert.ok(handlers.length > 0, 'No native command registration found')
