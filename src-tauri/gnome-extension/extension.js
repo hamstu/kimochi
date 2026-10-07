@@ -73,7 +73,8 @@ export default class KimochiOverlay extends Extension {
         return JSON.stringify({protocol: 1, shell: '46', words: this._words.length,
             keyboardGrab: false, fullscreenInputSurface: false, hideButton: this._hideButton?.visible ? {position: this._hideButton.get_transformed_position(), size: this._hideButton.get_transformed_size()} : null, pointer: global.get_pointer(),
             painted: this._group.get_paint_visibility(),
-            actors: this._words.map((w, i) => ({...w, position: this._group.get_child_at_index(i)?.get_transformed_position(), size: this._group.get_child_at_index(i)?.get_transformed_size()})),
+            appearance: 'hover-highlight',
+            actors: this._words.map((w, i) => ({...w, position: this._group.get_child_at_index(i)?.get_transformed_position(), size: this._group.get_child_at_index(i)?.get_transformed_size(), style: this._group.get_child_at_index(i)?.get_style()})),
             suspended: Boolean(this._suspended), serial: this._serial, popup: Boolean(this._popup),
             monitors: Main.layoutManager.monitors.map(m => ({x: m.x, y: m.y, width: m.width, height: m.height}))});
     }
@@ -122,8 +123,13 @@ export default class KimochiOverlay extends Extension {
             this._lastUpdate = GLib.get_monotonic_time();
             this._words = words;
             for (const w of words) {
-                const actor = new St.Label({text: w.text, reactive: true, can_focus: false,
-                    style: 'background-color: rgba(255,255,255,0.85); color: #151515; border: 1px solid #8757d9; font-size: 20px;'});
+                // Preserve the source's typography; only the hovered word is marked.
+                const restingStyle = 'background-color: transparent; border: 0; border-radius: 3px;';
+                const actor = new St.Widget({reactive: true, can_focus: false, track_hover: true,
+                    style: restingStyle});
+                actor.connect('notify::hover', () => actor.set_style(actor.hover
+                    ? 'background-color: rgba(135,87,217,0.14); border: 0; border-bottom: 2px solid rgba(135,87,217,0.8); border-radius: 3px;'
+                    : restingStyle));
                 actor.set_position(w.x, w.y);
                 actor.set_size(w.width, w.height);
                 actor.connect('button-press-event', () => {
