@@ -11,19 +11,19 @@ export function GnomeOverlaySetup(): React.JSX.Element | null {
   const caps = useCapabilities()
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
-  if (window.__KIMOCHI_PLATFORM__?.os !== 'linux' || caps.session?.backend !== 'wayland' || caps.session.compositor !== 'GNOME' || caps.overlay.passive)
+  if (window.__KIMOCHI_PLATFORM__?.os !== 'linux' || caps.session?.backend !== 'wayland' || caps.session.compositor !== 'GNOME' || caps.session.layerShell)
     return null
   const install = async (): Promise<void> => {
     setBusy(true)
     try {
-      const result = await invoke<{message: string}>('gnome_overlay', {operation: 'install', payload: null})
+      const result = await invoke<{message: string}>('gnome_overlay', {operation: 'update', payload: null})
       setMessage(result.message)
     } catch (error) { setMessage(String(error)) }
     finally { setBusy(false) }
   }
   return <div className="src-controls">
     <button type="button" className="k-row src-row" disabled={busy} onClick={() => void install()}>
-      {busy ? 'Installing…' : 'Set up GNOME overlay'}
+      {busy ? 'Updating…' : caps.overlay.passive ? 'Update GNOME overlay' : 'Set up GNOME overlay'}
     </button>
     {message && <p role="status">{message}</p>}
   </div>

@@ -84,6 +84,9 @@ for (const seam of ['_getViewport', '_getPosition']) {
 
 /** Desktop rectangle each visible popup has been placed at. */
 const placed = new Map()
+const gnomeSources = new Map()
+let desktopLookup = false
+let gnomeBridge = false
 let anchors = []
 let displays = []
 let windowRect = null
@@ -91,6 +94,13 @@ let windowRect = null
 async function refreshDisplays() {
   try {
     displays = await invoke('displays')
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+      const status = await invoke('gnome_overlay', { operation: 'status', payload: null })
+      gnomeBridge = Boolean(status.available && status.desktopPopup)
+      if (gnomeBridge) {
+        displays = status.monitors.map((m, id) => ({ id, bounds: m, work_area: m.workArea, scale_factor: 1 }))
+      }
+    }
   } catch (error) {
     report({ check: 'popup-host-displays-failed', error: String(error?.message ?? error) })
   }
@@ -234,6 +244,11 @@ async function relayout() {
     height: container.height + SHADOW_PAD * 2
   }
   try {
+    if (gnomeBridge) {
+      await invoke('gnome_overlay', { operation: 'own-window', payload: {
+        label: LABEL, sourceKind: gnomeSources.get(newest) ?? 'reader'
+      } })
+    }
     await invoke('popup_window', { rect: padded, visible: true })
     await invoke('regions', {
       // `focus: true` asks native to make this window key when the pointer arrives on
@@ -295,6 +310,7 @@ Popup.prototype.showContent = async function (details, displayDetails) {
   // `_show` runs. Set per call rather than per popup: a nested lookup positions
   // against its own source rectangles.
   markNewest(this)
+  if (gnomeBridge && sent.length) gnomeSources.set(this, this.parent ? gnomeSources.get(this.parent) : desktopLookup ? 'desktop' : 'reader')
   anchors = origin
     ? real.map((r) => ({
         left: r.left + origin.x,
@@ -380,6 +396,43 @@ if (!reachable.ready) {
 await Application.main(false, async (application) => {
   const factory = new PopupFactory(application)
   factory.prepare()
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+    let generation = 0
+    let desktopPopup = null
+    await window.__TAURI__.event.listen('gnome-popup-dismiss', () => {
+      ++generation
+      for (const [popup] of placed) popup.hide(false)
+    })
+    await window.__TAURI__.event.listen('gnome-overlay-lookup', async ({ payload }) => {
+      const serial = ++generation
+      try {
+        const status = await invoke('gnome_overlay', { operation: 'status', payload: null })
+        if (!status.available || !status.desktopPopup || status.suspended || status.serial !== payload?.serial) return
+        const r = payload.rect
+        if (!r || ![r.x, r.y, r.width, r.height].every(Number.isFinite) || typeof payload.text !== 'string') return
+        const optionsContext = { url: location.href, depth: 0 }
+        const result = await application.api.termsFind(payload.text, {}, optionsContext)
+        if (serial !== generation) return
+        const current = await invoke('gnome_overlay', { operation: 'status', payload: null })
+        if (current.suspended || current.serial !== payload.serial) return
+        await refreshDisplays()
+        desktopPopup ??= await factory.getOrCreatePopup({ frameId: application.frameId, depth: 0, childrenSupported: true })
+        await desktopPopup.setOptionsContext(optionsContext)
+        if (serial !== generation) return
+        desktopLookup = true
+        try {
+        await desktopPopup.showContent({ optionsContext,
+          sourceRects: [{ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height }],
+          writingMode: 'horizontal-tb' }, {
+          focus: false, historyMode: 'clear', params: { type: 'terms', query: payload.text.slice(0, result.originalTextLength ?? payload.text.length), wildcards: 'off' },
+          state: { focusEntry: 0, optionsContext, url: location.href, sentence: { text: payload.sentence ?? payload.text, offset: payload.offset ?? 0 }, documentTitle: 'Kimochi screen OCR' },
+          content: { contentOrigin: { tabId: application.tabId, frameId: application.frameId }, dictionaryEntries: result.dictionaryEntries }
+        })
+        if (serial !== generation) desktopPopup.hide(false)
+        } finally { desktopLookup = false }
+      } catch (error) { report({ check: 'gnome-yomitan-popup-failed', error: String(error) }) }
+    })
+  }
   // Only now: a client that asks earlier gets a timeout, and Yomitan caches which
   // popup a frontend uses, so one early miss would cost the whole session.
   host.hub.serving = true

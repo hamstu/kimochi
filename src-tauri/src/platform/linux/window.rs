@@ -58,6 +58,10 @@ pub(super) fn xid(w: &tauri::WebviewWindow) -> Result<u32, String> {
 
 /// Place by Tauri's logical coordinates (desktop units on X11).
 pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
+    if w.label() == "log" && super::gnome::eligible_popup_session() {
+        // Set before first map, so the bridge never races the first lookup.
+        w.set_title("Kimochi · log").map_err(|e| e.to_string())?;
+    }
     if session().backend == Backend::Wayland && w.is_resizable().unwrap_or(false) {
         // A tiling compositor can allocate less than a panel's preferred minimum.
         // GTK then keeps a wider WebView than the displayed surface, squashing
@@ -76,6 +80,11 @@ pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
 }
 
 pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
+    // Native input shapes need the popup's mapped origin; startup must also allow
+    // unmapped windows. Explicit popup-anchor queries remain strict in window_bounds.
+    if w.label() == "popup-host" && super::gnome::desktop_popup() {
+        if let Ok(rect) = super::gnome::own_bounds(w) { return Ok(rect); }
+    }
     let scale = w.scale_factor().map_err(|e| e.to_string())?;
     let position = if super::layer::available() {
         tauri::LogicalPosition::new(0., 0.)
@@ -134,7 +143,7 @@ pub fn set_input_regions(
     w: &tauri::WebviewWindow,
     regions: Option<&[Rect]>,
 ) -> Result<bool, String> {
-    if super::layer::available() {
+    if super::layer::available() || (w.label() == "popup-host" && super::gnome::eligible_popup_session()) {
         return super::layer::input_regions(w, regions);
     }
     if session().backend != Backend::X11 || !x11::has_input_shape() {
@@ -228,6 +237,17 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
         return Ok(false);
     }
     if session().backend == Backend::Wayland {
+        if w.label() == "popup-host" && super::gnome::eligible_popup_session() {
+            use glib::object::ObjectType as _;
+            unsafe extern "C" { fn gtk_window_set_focus_on_map(window: *mut std::ffi::c_void, focus: i32); }
+            let gtk = w.gtk_window().map_err(|e| e.to_string())?;
+            // A small dictionary window may take focus on an explicit click, never on map.
+            unsafe { gtk_window_set_focus_on_map(gtk.as_ptr().cast(), 0) };
+            w.set_title("Kimochi · popup-host").map_err(|e| e.to_string())?;
+            w.set_skip_taskbar(true).map_err(|e| e.to_string())?;
+            insert(&PANELS, w.label());
+            return Ok(true);
+        }
         if super::layer::make_panel(w)? {
             insert(&PANELS, w.label());
             return Ok(true);

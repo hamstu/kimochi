@@ -928,7 +928,10 @@
           const caps = await tauri.core.invoke('platform_capabilities')
           // Wayland exposes no toplevel origin. Keep anchors and popups in the
           // same coordinate space instead of treating (0,0) as a desktop origin.
-          if (caps.session.backend === 'wayland') remotePopup = null
+          if (caps.session.backend === 'wayland') {
+            const gnome = await tauri.core.invoke('gnome_overlay', { operation: 'status', payload: null })
+            if (!gnome.available || !gnome.desktopPopup) remotePopup = null
+          }
         }
         // Before the frontend, so no popup can be built without being seen. This is
         // the only record of whether a lookup produced a popup: these windows are

@@ -8,6 +8,7 @@ const NAME: &str = "dev.kimochi.GnomeOverlay";
 const PATH: &str = "/dev/kimochi/GnomeOverlay";
 static CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
 static AVAILABLE: AtomicBool = AtomicBool::new(false);
+static DESKTOP_POPUP: AtomicBool = AtomicBool::new(false);
 
 fn eligible() -> bool {
     super::session().backend == super::Backend::Wayland
@@ -36,6 +37,7 @@ pub fn status() -> Value {
         value["available"] = json!(true);
         Ok(value)
     })();
+    DESKTOP_POPUP.store(result.as_ref().is_ok_and(|value| value["desktopPopup"] == true), Ordering::SeqCst);
     AVAILABLE.store(result.is_ok(), Ordering::SeqCst);
     result.unwrap_or_else(|error| json!({"available":false,"reason":error}))
 }
@@ -43,10 +45,16 @@ pub fn status() -> Value {
 pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
     if !eligible() { return Err("GNOME integration requires GNOME Wayland without native layer-shell".into()); }
     if operation == "status" { return Ok(status()); }
-    if operation == "install" { return install(); }
+    if operation == "install" || operation == "update" { return install(); }
+    if operation == "own-window" {
+        let conn = connection()?;
+        let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+        let reply: String = proxy.call("OwnWindow", &(payload.to_string(),)).map_err(|e| e.to_string())?;
+        return serde_json::from_str(&reply).map_err(|e| e.to_string());
+    }
     let conn = connection()?;
     let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
-    let method = match operation { "present" => "Present", "clear" => "Clear", "definition" => "Definition", _ => return Err("Unknown GNOME overlay operation".into()) };
+    let method = match operation { "present" => "Present", "clear" => "Clear", _ => return Err("Unknown GNOME overlay operation".into()) };
     if method == "Clear" {
         proxy.call::<_, _, ()>(method, &()).map_err(|e| e.to_string())?;
     } else {
@@ -66,16 +74,37 @@ fn install() -> Result<Value, String> {
     let dir = home.join("gnome-shell/extensions/kimochi-overlay@hamstu.github.io");
     let files = [("metadata.json", include_str!("../../../gnome-extension/metadata.json")),
         ("extension.js", include_str!("../../../gnome-extension/extension.js"))];
-    if dir.exists() {
-        for (name, contents) in files {
-            if std::fs::read_to_string(dir.join(name)).map_err(|e| e.to_string())? != contents {
-                return Err("An existing Kimochi extension differs; preserve it before installing this build".into());
-            }
+    const IMPLEMENTATION: &str = include_str!("../../../gnome-extension/implementation.js");
+    let revision = digest(IMPLEMENTATION)?;
+    let running = status();
+    let previous_revision = running["revision"].as_str().map(str::to_owned)
+        .or_else(|| std::fs::read_to_string(dir.join("revision")).ok());
+    let bootstrapping = dir.exists() && std::fs::read_to_string(dir.join("extension.js")).map_err(|e| e.to_string())? != files[1].1;
+    if bootstrapping {
+        // Accept only the exact previous Kimochi implementation, never arbitrary user edits.
+        if digest(&std::fs::read_to_string(dir.join("extension.js")).map_err(|e| e.to_string())?)? != "b9feb3db6467f2378e34287b70cee76b87117153eafdc9cf8941863fc8561941" {
+            return Err("Existing Kimochi extension has unrecognized edits; it was not overwritten".into());
         }
-    } else {
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        for (name, contents) in files { std::fs::write(dir.join(name), contents).map_err(|e| e.to_string())?; }
+        std::fs::copy(dir.join("extension.js"), dir.join("extension.js.pre-loader" )).map_err(|e| e.to_string())?;
     }
+    std::fs::create_dir_all(dir.join("revisions")).map_err(|e| e.to_string())?;
+    for (name, contents) in files {
+        let path = dir.join(name);
+        if path.exists() && name == "metadata.json" && std::fs::read_to_string(&path).map_err(|e| e.to_string())? != contents {
+            return Err("Existing Kimochi metadata differs; it was not overwritten".into());
+        }
+        std::fs::write(path, contents).map_err(|e| e.to_string())?;
+    }
+    let implementation_path = dir.join("revisions").join(format!("{revision}.js"));
+    if implementation_path.exists() && std::fs::read_to_string(&implementation_path).map_err(|e| e.to_string())? != IMPLEMENTATION {
+        return Err("Immutable GNOME implementation differs".into());
+    }
+    std::fs::write(implementation_path, IMPLEMENTATION).map_err(|e| e.to_string())?;
+    if let Some(previous) = &previous_revision {
+        std::fs::write(dir.join("previous-revision"), previous).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(dir.join("revision.next"), &revision).map_err(|e| e.to_string())?;
+    std::fs::rename(dir.join("revision.next"), dir.join("revision")).map_err(|e| e.to_string())?;
     // Register only our UUID, preserving the user's other enabled extensions.
     // GNOME discovers a new local extension at the next login.
     use glib::variant::ToVariant;
@@ -91,11 +120,49 @@ fn install() -> Result<Value, String> {
         if !result.status.success() { return Err(String::from_utf8_lossy(&result.stderr).into_owned()); }
     }
     let enabled = std::process::Command::new("gnome-extensions").args(["enable", "kimochi-overlay@hamstu.github.io"]).output().map_err(|e| e.to_string())?;
-    Ok(json!({"installed":true,"enabled":enabled.status.success(),"message":"Save your work, log out and log back in, then launch Kimochi. Screen annotations and plain dictionary definitions are supported. Crop editing uses the source image in the main window; Quick Shot remains unavailable."}))
+    let restart = || -> Result<(), String> {
+        let conn = connection()?;
+        let proxy = Proxy::new(&conn, "org.gnome.Shell.Extensions", "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions").map_err(|e| e.to_string())?;
+        let disabled: bool = proxy.call("DisableExtension", &(uuid,)).map_err(|e| e.to_string())?;
+        if !disabled { return Err("GNOME did not disable Kimochi for reload".into()); }
+        let enabled: bool = proxy.call("EnableExtension", &(uuid,)).map_err(|e| e.to_string())?;
+        if !enabled { return Err("GNOME did not enable Kimochi after reload".into()); }
+        Ok(())
+    };
+    let mut live = false;
+    if !bootstrapping {
+        let restarted = restart();
+        for _ in 0..40 {
+            if restarted.is_ok() && status()["revision"] == revision { live = true; break; }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        if !live {
+            if let Some(previous) = previous_revision {
+                // Restore the last revision if a hot implementation fails startup.
+                std::fs::write(dir.join("revision.next"), previous).map_err(|e| e.to_string())?;
+                std::fs::rename(dir.join("revision.next"), dir.join("revision")).map_err(|e| e.to_string())?;
+                restart()?;
+            }
+        }
+    }
+    Ok(json!({"installed":true,"enabled":enabled.status.success(),"revision":revision,"live":live,"needsLogin":!live && !status()["desktopPopup"].as_bool().unwrap_or(false),
+        "message":if live { "GNOME extension updated in place; no logout required." } else if status()["desktopPopup"] == true { "Update could not be verified; the previous implementation was restored. See GNOME extension errors." } else { "The versioned loader is installed. GNOME has cached the old entry point; save your work and log out/in once. Future implementation updates reload in place." }}))
 }
 
 pub fn start(app: tauri::AppHandle) {
     if !eligible() { return; }
+    let dismiss_app = app.clone();
+    let _ = std::thread::Builder::new().name("gnome-popup-dismiss".into()).spawn(move || loop {
+        let _ = (|| -> Result<(), String> {
+            let conn = connection()?;
+            let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+            for _ in proxy.receive_signal("Dismiss").map_err(|e| e.to_string())? {
+                let _ = dismiss_app.emit("gnome-popup-dismiss", ());
+            }
+            Ok(())
+        })();
+        std::thread::sleep(Duration::from_secs(2));
+    });
     let _ = std::thread::Builder::new().name("gnome-overlay-events".into()).spawn(move || {
         loop {
             let result = (|| -> Result<(), String> {
@@ -111,7 +178,7 @@ pub fn start(app: tauri::AppHandle) {
                 }
                 Ok(())
             })();
-            if result.is_err() { AVAILABLE.store(false, Ordering::SeqCst); }
+            if result.is_err() { AVAILABLE.store(false, Ordering::SeqCst); DESKTOP_POPUP.store(false, Ordering::SeqCst); }
             std::thread::sleep(Duration::from_secs(2));
         }
     });
@@ -132,4 +199,19 @@ pub fn suppress() -> Result<Suppressed, String> {
     if !eligible() || !AVAILABLE.load(Ordering::SeqCst) { return Ok(Suppressed(false)); }
     if suspend(true)? { super::capture::mark_hidden(); }
     Ok(Suppressed(true))
+}
+
+/// Only a supported GNOME own-window bridge may supply otherwise unavailable origins.
+pub fn desktop_popup() -> bool { eligible() && DESKTOP_POPUP.load(Ordering::SeqCst) }
+pub fn own_bounds(w: &tauri::WebviewWindow) -> Result<kimochi_capture::Rect, String> {
+    let value = request("own-window", json!({"label":w.label()}))?;
+    serde_json::from_value(value).map_err(|e| e.to_string())
+}
+
+pub fn eligible_popup_session() -> bool { eligible() }
+
+fn digest(contents: &str) -> Result<String, String> {
+    let mut checksum = glib::Checksum::new(glib::ChecksumType::Sha256).ok_or("SHA256 unavailable")?;
+    checksum.update(contents.as_bytes());
+    checksum.string().ok_or_else(|| "Missing SHA digest".into())
 }

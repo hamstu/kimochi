@@ -166,7 +166,7 @@ pub fn input_regions(
     window: &tauri::WebviewWindow,
     regions: Option<&[Rect]>,
 ) -> Result<bool, String> {
-    if !available() {
+    if !(available() || window.label() == "popup-host" && super::gnome::eligible_popup_session()) {
         return Ok(false);
     }
     let window = window.clone();

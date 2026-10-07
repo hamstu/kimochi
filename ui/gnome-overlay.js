@@ -1,4 +1,7 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Linux runtime bridge. */
+import { gnomeWordCells } from './gnome-word-cells.js'
+import { measureEms } from './render.js'
+
 /** GNOME Shell owns these actors; the hidden WebKit window only runs OCR/Yomitan. */
 export async function installGnomeOverlay(native, state, enabled, log) {
   if (window.__KIMOCHI_PLATFORM__?.os !== 'linux') return null
@@ -27,8 +30,8 @@ export async function installGnomeOverlay(native, state, enabled, log) {
         const y = monitor.y + (cy + Math.min(...ys)) * sy
         const width = (Math.max(...xs) - Math.min(...xs)) * sx
         const height = (Math.max(...ys) - Math.min(...ys)) * sy
-        return width > 0 && height > 0 ? [{ text: a.description, x, y, width, height }] : []
-      })
+        return width > 0 && height > 0 ? gnomeWordCells(a.description, { x, y, width, height }, a.orientation === 'vertical' || a.isVertical === true, measureEms) : []
+      }).slice(0, 500)
       await gnomeRequest('present', { sourceKind: 'screen', frameId: state.appliedScanId, words })
       lastError = null
     } catch (error) {
@@ -37,26 +40,8 @@ export async function installGnomeOverlay(native, state, enabled, log) {
       lastError = message
     } finally { busy = false }
   }
-  const flatten = value => typeof value === 'string' ? value : Array.isArray(value) ? value.map(flatten).filter(Boolean).join('; ') : value && typeof value === 'object' ? flatten(value.content) : ''
-  let lookupGeneration = 0
-  await native.listen('gnome-overlay-lookup', async ({ payload }) => {
-    const generation = ++lookupGeneration
-    if (!enabled() || !payload?.text) return
-    try {
-      const { API } = await import('/js/comm/api.js')
-      const { WebExtension } = await import('/js/extension/web-extension.js')
-      const result = await new API(new WebExtension()).termsFind(payload.text, {}, { url: location.href, depth: 0 })
-      if (generation !== lookupGeneration) return
-      const entry = result.dictionaryEntries?.[0]
-      await gnomeRequest('definition', {
-        serial: payload.serial,
-        text: entry?.headwords?.[0]?.term ?? payload.text,
-        reading: entry?.headwords?.[0]?.reading ?? '',
-        definition: entry ? entry.definitions.slice(0, 8).map(d => flatten(d.entries)).join('\n').slice(0, 4000) : 'No dictionary entry found.',
-        x: payload.x, y: payload.y
-      })
-    } catch (error) { log({ check: 'gnome-dictionary-error', error: String(error) }) }
-  })
+  // The full vendor Popup/Display runs in the dedicated native popup host. This
+  // bridge publishes annotations only; it never flattens dictionary entries.
   setInterval(() => void update(), 1000)
   const pause = async () => {
     // Finish any in-flight publication before clearing its reactive word targets.

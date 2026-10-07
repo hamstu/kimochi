@@ -648,6 +648,10 @@ fn pointer_location() -> Option<Value> {
 /// into the desktop, which is the only space two native windows share.
 #[tauri::command]
 fn window_bounds(window: tauri::WebviewWindow) -> Reply<Rect> {
+    #[cfg(target_os = "linux")]
+    if matches!(window.label(), "log" | "popup-host") && platform::gnome::eligible_popup_session() {
+        return platform::gnome::own_bounds(&window);
+    }
     platform::desktop_bounds(&window)
 }
 
@@ -664,6 +668,23 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
     let window = app
         .get_webview_window(POPUP_HOST)
         .ok_or("native: the popup window is missing")?;
+    #[cfg(target_os = "linux")]
+    if platform::gnome::eligible_popup_session() {
+        if !visible { window.hide().map_err(|e| e.to_string())?; return Ok(()); }
+        if !platform::gnome::desktop_popup() {
+            let _ = window.hide();
+            return Err("GNOME dictionary popup integration is unavailable".into());
+        }
+        if let Some(rect) = rect {
+            // Validate bounded placement before resizing/mapping. Shell finishes it
+            // when the Wayland surface appears; GTK does not activate it on map.
+            platform::gnome::request("own-window", json!({"label":"popup-host","rect":rect}))?;
+            window.set_size(tauri::LogicalSize::new(rect.width, rect.height)).map_err(|e| e.to_string())?;
+        }
+        if visible { window.show().map_err(|e| e.to_string())?; }
+        else { window.hide().map_err(|e| e.to_string())?; }
+        return Ok(());
+    }
     if let Some(rect) = rect {
         if rect.width > 0. && rect.height > 0. {
             platform::desktop_place(&window, rect)?;

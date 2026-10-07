@@ -237,21 +237,26 @@ Wayland Quick Shot uses a granted portal screen stream and the native layer crop
 
 ### Optional GNOME 46 Wayland overlay (Ubuntu prototype)
 
-On GNOME 46 Wayland, **Set up GNOME overlay** in the source panel installs the
-extension embedded in the Linux binary into the current user's extension directory.
-It preserves other enabled extensions and refuses to overwrite a differing existing
-Kimochi extension. Save work, log out and log back in once so GNOME discovers it,
-then launch Kimochi and share an entire screen. No Node installation is needed by
-end users. This integration is optional; native layer-shell and X11 paths remain.
+On GNOME 46 Wayland, **Set up GNOME overlay** installs the extension embedded in
+this Linux build. Initial installation (or migration from the old monolithic
+extension) requires one login so GNOME discovers the stable loader. Subsequent
+**Update GNOME overlay** operations stage an immutable implementation, disable/enable
+only Kimochi, verify its running revision and restore the previous implementation
+if startup fails. Other enabled extension names are preserved. Unrecognized edits
+to Kimochi's loader/metadata are refused; the recognized legacy implementation is
+backed up before migration. No unsafe Shell evaluation or compositor restart.
 
-The prototype supports one monitor's screen annotations, Shift-hover/click lookup
-and plain dictionary definitions through the existing Yomitan backend. The Shell
-owns the actors; the hidden WebKit OCR host never becomes a transparent ordinary
-Wayland overlay. There is no modal or keyboard grab. Window-share annotations,
-native GNOME desktop crop editing/Quick Shot, rich popup/audio controls and multi-monitor mapping
-remain unavailable. GNOME versions other than 46 are rejected until tested. Actual
-current-desktop acceptance requires the login reload; compositor-native isolated
-GNOME tests and build evidence are recorded in `UBUNTU_BRINGUP.md`.
+Shell actors provide one monitor's screen annotations and Shift-hover/click lookup.
+The dictionary uses the existing full Yomitan Popup/Display in a small native
+window, including dictionary images, audio controls and nested lookup. GNOME supplies
+geometry for Kimochi's own log/popup windows so log lookups can extend outside the
+log. The popup does not request activation when mapped; clicking it can focus it.
+The hidden OCR WebKit host never becomes a transparent ordinary desktop overlay.
+There is no modal or keyboard grab. Portal window annotations/following remain
+deferred, GNOME desktop crop/Quick Shot and multi-monitor mapping remain unavailable.
+Full UI/placement and loader recovery have isolated GNOME46 evidence; physical
+focus/input/audio acceptance on the user's current desktop is tracked separately
+in UBUNTU_BRINGUP.md. Other GNOME versions are rejected until tested.
 
 On Linux Wayland without native layer-shell, **Crop area → Set crop area…** opens
 the full shared source image in the existing main window. Drag a rectangle, then
@@ -263,7 +268,10 @@ desktop layer; native layer-shell and X11 retain their existing on-screen editor
 
 Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen overlays are hidden while the panel control is unavailable. Ordinary application Escape is not intercepted.
 
-After an extension update, GNOME may retain the earlier code until the next login. Kimochi rejects revisions without the dismissal control. The Ubuntu follow-up leaves the extension disabled after the disruptive full-screen test; keep it off until deliberately reactivating the updated integration.
+GNOME caches the stable loader's entry module for the login. A change to the loader
+itself still needs a new login; ordinary implementation updates use unique module
+paths and reload in place. The UI reports whether the expected revision is actually
+running rather than treating an enable command's success as proof.
 
 On Ubuntu builds of WebKitGTK without AVIF decoding, dictionary imports use the
 system GdkPixbuf AVIF loader as a Linux-only fallback. Install `heif-gdk-pixbuf`
