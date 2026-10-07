@@ -1,7 +1,7 @@
 //! Optional GNOME Shell actors, never ordinary Wayland overlay windows.
 use serde_json::{json, Value};
 use std::{sync::{atomic::{AtomicBool, Ordering}, Mutex}, time::Duration};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use zbus::blocking::{connection::Builder, Connection, Proxy};
 
 const NAME: &str = "dev.kimochi.GnomeOverlay";
@@ -46,6 +46,12 @@ pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
     if !eligible() { return Err("GNOME integration requires GNOME Wayland without native layer-shell".into()); }
     if operation == "status" { return Ok(status()); }
     if operation == "install" || operation == "update" { return install(); }
+    if operation == "crop" || operation == "track" || operation == "shortcuts" || operation == "controller" {
+        let conn = connection()?;
+        let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+        let reply: String = proxy.call(match operation { "crop" => "Crop", "track" => "Track", "controller" => "Controller", _ => "Shortcuts" }, &(payload.to_string(),)).map_err(|e| e.to_string())?;
+        return serde_json::from_str(&reply).map_err(|e| e.to_string());
+    }
     if operation == "own-window" {
         let conn = connection()?;
         let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
@@ -151,6 +157,52 @@ fn install() -> Result<Value, String> {
 
 pub fn start(app: tauri::AppHandle) {
     if !eligible() { return; }
+    let action_app=app.clone();
+    let _=std::thread::Builder::new().name("gnome-action-events".into()).spawn(move || loop {
+        let _=(|| -> Result<(),String> {
+            let conn=connection()?;let proxy=Proxy::new(&conn,NAME,PATH,NAME).map_err(|e|e.to_string())?;
+            for event in proxy.receive_signal("Action").map_err(|e|e.to_string())? {
+                let (name,):(String,)=event.body().deserialize().map_err(|e|e.to_string())?;
+                if name=="controllerClosed" {let _=action_app.emit("gnome-controller-closed",());} else {super::shortcuts::dispatch_gnome(&action_app,&name);}
+            } Ok(())
+        })();std::thread::sleep(Duration::from_secs(2));
+    });
+    let track_app = app.clone();
+    let _ = std::thread::Builder::new().name("gnome-track-events".into()).spawn(move || loop {
+        let _ = (|| -> Result<(), String> {
+            let conn = connection()?;
+            let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+            for event in proxy.receive_signal("TrackResult").map_err(|e| e.to_string())? {
+                let (text,): (String,) = event.body().deserialize().map_err(|e| e.to_string())?;
+                if text.len() <= 4096 {
+                    if let Ok(payload) = serde_json::from_str::<Value>(&text) {
+                        if payload["linked"]==true {if let Some(id)=payload["sourceId"].as_str(){refresh_identity(&track_app.state::<crate::state::Shared>(),id);}}
+                        let _ = track_app.emit("gnome-track-result", payload);
+                    }
+                }
+            }
+            Ok(())
+        })();
+        std::thread::sleep(Duration::from_secs(2));
+    });
+    let crop_app = app.clone();
+    let _ = std::thread::Builder::new().name("gnome-crop-events".into()).spawn(move || loop {
+        let _ = (|| -> Result<(), String> {
+            let conn = connection()?;
+            let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+            for event in proxy.receive_signal("CropResult").map_err(|e| e.to_string())? {
+                let (text,): (String,) = event.body().deserialize().map_err(|e| e.to_string())?;
+                if text.len() <= 4096 {
+                    if let Ok(payload) = serde_json::from_str::<Value>(&text) {
+                        super::capture::mark_hidden();
+                        let _ = crop_app.emit("gnome-crop-result", payload);
+                    }
+                }
+            }
+            Ok(())
+        })();
+        std::thread::sleep(Duration::from_secs(2));
+    });
     let modifier_app = app.clone();
     let _ = std::thread::Builder::new().name("gnome-modifier".into()).spawn(move || loop {
         let _ = (|| -> Result<(), String> {
@@ -227,4 +279,108 @@ fn digest(contents: &str) -> Result<String, String> {
     let mut checksum = glib::Checksum::new(glib::ChecksumType::Sha256).ok_or("SHA256 unavailable")?;
     checksum.update(contents.as_bytes());
     checksum.string().ok_or_else(|| "Missing SHA digest".into())
+}
+
+/// A live GNOME pairing is explicit and scoped to this portal node/session.
+pub fn tracked_bounds(source_id: &str) -> Option<kimochi_capture::Rect> {
+    if !eligible() || !source_id.starts_with("portal:window:") { return None; }
+    let value = request("track", json!({"operation":"status","sourceId":source_id})).ok()?;
+    serde_json::from_value(value["bounds"].clone()).ok()
+}
+
+pub fn match_window(source_id: &str, width: u32, height: u32) -> Option<kimochi_capture::Rect> {
+    if !eligible() || !source_id.starts_with("portal:window:") { return None; }
+    let value = request("track", json!({"operation":"match","sourceId":source_id,"width":width,"height":height})).ok()?;
+    serde_json::from_value(value["bounds"].clone()).ok()
+}
+
+/// Refuse to stretch a partial or stale-sized portal buffer over a linked window.
+pub fn tracked_frame_bounds(source_id: &str, width: u32, height: u32) -> Option<kimochi_capture::Rect> {
+    if !eligible() || !source_id.starts_with("portal:window:") { return None; }
+    let value = request("track", json!({"operation":"status","sourceId":source_id})).ok()?;
+    let rect: kimochi_capture::Rect = serde_json::from_value(value["bounds"].clone()).ok()?;
+    let scale = value["scale"].as_f64()?;
+    (scale > 0. && (rect.width * scale - f64::from(width)).abs() <= 2.
+        && (rect.height * scale - f64::from(height)).abs() <= 2.).then_some(rect)
+}
+
+/// Enrich only the active paired portal source; keep its current crop when naming
+/// the formerly anonymous descriptor. Native live identity never survives closure.
+pub fn refresh_identity(service: &crate::state::Shared, source_id: &str) {
+    if !eligible() || !source_id.starts_with("portal:window:") { return; }
+    let Ok(mut descriptor)=service.settings.get("lastSelectedSource").map(|v|v.unwrap_or(Value::Null)) else{return;};
+    if descriptor["sourceId"]!=source_id{return;}
+    let Ok(identity)=request("track",json!({"operation":"status","sourceId":source_id})) else{return;};
+    let Some(title)=identity["title"].as_str().filter(|s|!s.trim().is_empty()) else{return;};
+    let old=descriptor.clone();
+    let old_key=crate::state::descriptor_key("window",old["name"].as_str().unwrap_or(""),old["appName"].as_str());
+    descriptor["name"]=json!(title);
+    descriptor["appName"]=identity["appName"].clone();
+    descriptor["appId"]=identity["appId"].clone();
+    if descriptor["iconName"]!=identity["iconName"] || descriptor.get("icon").is_none() {
+        descriptor["iconName"]=identity["iconName"].clone();
+        descriptor["icon"]=identity["iconName"].as_str().and_then(|name|icon_png(name,64)).map(|png|{
+            use base64::Engine;
+            json!(format!("data:image/png;base64,{}",base64::engine::general_purpose::STANDARD.encode(png)))
+        }).unwrap_or(Value::Null);
+    }
+    if descriptor==old{return;}
+    let new_key=crate::state::descriptor_key("window",title,descriptor["appName"].as_str());
+    let crops=service.settings.get("cropRegions").ok().flatten().unwrap_or(Value::Null);
+    let active=service.settings.get("cropScanEnabled").ok().flatten().unwrap_or(Value::Null);
+    let mut changes=vec![(vec!["lastSelectedSource"],descriptor)];
+    if new_key!=old_key && crops.get(&new_key).is_none() {
+        if let Some(crop)=crops.get(&old_key){changes.push((vec!["cropRegions",&new_key],crop.clone()));changes.push((vec!["cropScanEnabled",&new_key],active[&old_key].clone()));}
+    }
+    let borrowed:Vec<(&[&str],Value)>=changes.iter().map(|(path,v)|(path.as_slice(),v.clone())).collect();
+    if service.settings.set_many(&borrowed).is_ok(){service.view.lock().unwrap().revision+=1;}
+}
+
+// GTK/GdkPixbuf already ship through Tauri; no extra crate/version or icon binaries.
+#[link(name="gtk-3")]
+extern "C" {
+    fn gtk_icon_theme_get_default()->*mut std::ffi::c_void;
+    fn gtk_icon_theme_lookup_by_gicon(theme:*mut std::ffi::c_void,icon:*mut std::ffi::c_void,size:i32,flags:i32)->*mut std::ffi::c_void;
+    fn gtk_icon_info_load_icon(info:*mut std::ffi::c_void,error:*mut *mut glib::ffi::GError)->*mut std::ffi::c_void;
+}
+#[link(name="gio-2.0")]
+extern "C" { fn g_icon_new_for_string(value:*const std::ffi::c_char,error:*mut *mut glib::ffi::GError)->*mut std::ffi::c_void; }
+#[link(name="gdk_pixbuf-2.0")]
+extern "C" {
+    fn gdk_pixbuf_save_to_bufferv(pixbuf:*mut std::ffi::c_void,buffer:*mut *mut std::ffi::c_char,size:*mut usize,kind:*const std::ffi::c_char,keys:*mut *mut std::ffi::c_char,values:*mut *mut std::ffi::c_char,error:*mut *mut glib::ffi::GError)->i32;
+}
+fn icon_png(name:&str,size:i32)->Option<Vec<u8>>{
+    let name=name.to_owned();
+    let load=move || unsafe {
+        let name=std::ffi::CString::new(name).ok()?;
+        let icon=g_icon_new_for_string(name.as_ptr(),std::ptr::null_mut());if icon.is_null(){return None;}
+        let theme=gtk_icon_theme_get_default();
+        let info=if theme.is_null(){std::ptr::null_mut()}else{gtk_icon_theme_lookup_by_gicon(theme,icon,size,16)};
+        glib::gobject_ffi::g_object_unref(icon.cast());if info.is_null(){return None;}
+        let pixbuf=gtk_icon_info_load_icon(info,std::ptr::null_mut());glib::gobject_ffi::g_object_unref(info.cast());
+        if pixbuf.is_null(){return None;}
+        let mut bytes=std::ptr::null_mut();let mut length=0;
+        let ok=gdk_pixbuf_save_to_bufferv(pixbuf,&mut bytes,&mut length,c"png".as_ptr(),std::ptr::null_mut(),std::ptr::null_mut(),std::ptr::null_mut());
+        glib::gobject_ffi::g_object_unref(pixbuf.cast());
+        if ok==0||bytes.is_null(){return None;}
+        let result=std::slice::from_raw_parts(bytes.cast::<u8>(),length).to_vec();glib::ffi::g_free(bytes.cast());Some(result)
+    };
+    let context=glib::MainContext::default();if context.is_owner(){return load();}
+    let (tx,rx)=std::sync::mpsc::channel();context.invoke(move ||{let _=tx.send(load());});rx.recv_timeout(Duration::from_secs(2)).ok().flatten()
+}
+
+/// The paired native window is authoritative for a portal window's identity.
+pub fn decorate_source(source: &mut kimochi_capture::Source) {
+    if !source.id.starts_with("portal:window:") {return;}
+    if let Ok(value)=request("track",json!({"operation":"status","sourceId":source.id})) {
+        if let Some(title)=value["title"].as_str().filter(|title|!title.trim().is_empty()) {source.name=title.to_owned();}
+        if let Some(name)=value["appName"].as_str() {source.app=Some(name.to_owned());}
+    }
+}
+
+/// Resolve only the matched native app, never a guessed title-to-app association.
+pub fn paired_app_icon_png(name:&str,target:isize)->Option<Vec<u8>> {
+    let identity=status()["tracked"].clone();
+    if identity["appName"].as_str()!=Some(name)&&identity["title"].as_str()!=Some(name){return None;}
+    icon_png(identity["iconName"].as_str()?,target.clamp(16,256) as i32)
 }

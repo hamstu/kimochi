@@ -1,3 +1,4 @@
+import {Button, SettingsRow, SettingsSection} from '@kit'
 import {useState} from 'react'
 import {invoke} from '@tauri-apps/api/core'
 import {useCapabilities} from '../bridge/capabilities'
@@ -7,7 +8,7 @@ declare global {
 }
 
 /** Optional compositor integration; other Linux desktops retain their native paths. */
-export function GnomeOverlaySetup(): React.JSX.Element | null {
+export function GnomeOverlaySetup({settings = false}: {settings?: boolean}): React.JSX.Element | null {
   const caps = useCapabilities()
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -21,6 +22,14 @@ export function GnomeOverlaySetup(): React.JSX.Element | null {
     } catch (error) { setMessage(String(error)) }
     finally { setBusy(false) }
   }
+  if (settings) return <SettingsSection title="Desktop integration">
+    <SettingsRow label="GNOME overlay" description="Enables screen annotations, dictionary popups and desktop region selection.">
+      <Button size="sm" disabled={busy} onClick={() => void install()}>
+        {busy ? 'Updating…' : caps.overlay.passive ? 'Update' : 'Set up'}
+      </Button>
+    </SettingsRow>
+    {message && <p role="status">{message}</p>}
+  </SettingsSection>
   return <div className="src-controls">
     <button type="button" className="k-row src-row" disabled={busy} onClick={() => void install()}>
       {busy ? 'Updating…' : caps.overlay.passive ? 'Update GNOME overlay' : 'Set up GNOME overlay'}

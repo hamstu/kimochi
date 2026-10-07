@@ -10,7 +10,8 @@
     "fixture",
     "yomitan",
     "overlay",
-    "popup-host"
+    "popup-host",
+    "crop-host", "controller-host"
   ],
   "permissions": [
     "core:event:default",

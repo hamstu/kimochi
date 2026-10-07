@@ -266,6 +266,7 @@ function holdAutoScan() {
 }
 
 let gnomeOverlay = null
+let gnomeControllerWords = false
 let lastVisibilityTrace = null
 function draw() {
   if (waylandDisabled) { renderer.clear(); void gnomeOverlay?.update(); return }
@@ -974,8 +975,23 @@ async function reportObserver() {
 async function onAction(name) {
   switch (name) {
     case 'triggerScan':
+      if(window.__KIMOCHI_PLATFORM__?.os==='linux'&&gnomeOverlay&&controllerHold) {
+        await window.__TAURI__.event.emit('gnome-controller-toggle')
+        for(let attempt=0;attempt<20&&controllerHold;attempt++)await new Promise(resolve=>setTimeout(resolve,25))
+        if(controllerHold)throw new Error('Close controller navigation before scanning')
+      }
       return isQuickShot() ? quickShot() : performScan()
     case 'openControllerMenu':
+      if(window.__KIMOCHI_PLATFORM__?.os==='linux'&&gnomeOverlay) {
+        if(controllerHold)return window.__TAURI__.event.emit('gnome-controller-toggle')
+        await native.panel('controller-host','show_inactive')
+        // The lazy WebKit host acknowledges opening through the shared hold flag.
+        for(let attempt=0;attempt<20&&!controllerHold;attempt++){
+          await window.__TAURI__.event.emit('gnome-controller-open')
+          await new Promise(resolve=>setTimeout(resolve,100))
+        }
+        return
+      }
       return controller.toggle()
     case 'playAudio':
       return playLatest()
@@ -1231,7 +1247,9 @@ async function editSourceRegion() {
     // (never pattern-matched on a platform name) only when the view has not caught up.
     const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
     const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
-    const saved = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled
+    const desktopCrop = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled && await gnomeCropAvailable(sourceId)
+    const saved = desktopCrop ? await editGnomeRegion(sourceId)
+      : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled
       ? await editLinuxSourceImage(sourceId)
       : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer
       ? await editPortalRegion(sourceId, kind)
@@ -1257,6 +1275,51 @@ async function editSourceRegion() {
   } catch (error) {
     log({ check: 'region-edit-error', error: String(error?.message ?? error) })
     publish({ status: `Editing the region failed: ${error?.message ?? error}` })
+  }
+}
+
+/** A portal screen maps to the sole GNOME monitor; never infer a window origin. */
+async function gnomeCropAvailable(sourceId = null) {
+  if (!waylandDisabled || window.__KIMOCHI_PLATFORM__?.os !== 'linux') return false
+  let status = await native.invoke('gnome_overlay', {operation:'status', payload:null})
+  if (sourceId?.startsWith('portal:window:') && status.available && status.windowTracking && status.tracked?.sourceId !== sourceId) {
+    const frame = await native.sourceHoverPreview(sourceId)
+    if (frame?.width && frame?.height) {
+      await native.invoke('gnome_overlay', {operation:'track', payload:{operation:'match',sourceId,width:frame.width,height:frame.height,name:state.viewSource?.name}})
+      status = await native.invoke('gnome_overlay', {operation:'status', payload:null})
+    }
+  }
+  return status.available && status.cropEditor && status.monitors?.length === 1 &&
+    (!sourceId?.startsWith('portal:window:') || status.tracked?.sourceId === sourceId)
+}
+
+async function editGnomeRegion(sourceId, {quick = false} = {}) {
+  if (!/^portal:(display|window):[0-9]+$/.test(sourceId)) throw new Error('Desktop crop requires a shared screen or linked window.')
+  state.regionSelecting = true
+  syncAutoScanner()
+  let restoreLog = false
+  let selected = false
+  try {
+    if (quick) {
+      restoreLog = Boolean((await native.panel('log','inspect')).visible)
+      if (restoreLog) await native.panel('log','hide')
+    }
+    await gnomeOverlay?.pause()
+    const frame = await native.sourceHoverPreview(sourceId)
+    if (!frame?.width || !frame?.height) throw new Error('No shared screen frame available. Choose a screen first.')
+    const {selectGnomeCrop} = await import('./gnome-crop.js')
+    const crop = await selectGnomeCrop(native, {sourceId, frame, initial:state.crop, quick, theme:setting('appearance') === 'light' ? 'light' : setting('appearance') === 'dark' ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'})
+    if (!crop) return false
+    if (await native.selectedSource() !== sourceId) throw new Error('The shared screen changed while editing. Open the editor again.')
+    if (quick) { selected = true; return crop }
+    await native.commitSource(sourceId, crop)
+    log({check:'region-saved', sourceId, crop, editor:'gnome-shell'})
+    return true
+  } finally {
+    state.regionSelecting = false
+    syncAutoScanner()
+    void gnomeOverlay?.update()
+    if (restoreLog && !selected) await native.panel('log','show').catch(() => {})
   }
 }
 
@@ -1470,21 +1533,24 @@ async function quickShot() {
     if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (await native.capabilities()).session.backend === 'wayland') {
       const { runWaylandQuickShot } = await import('./linux-quick-shot.js')
       await runWaylandQuickShot({
-        available: waylandLayer,
+        available: waylandLayer || await gnomeCropAvailable(),
         catalog: () => native.invoke('enumerate'),
         pick: () => native.invoke('capture_pick_source', { fresh: true }),
-        edit: (id) => editPortalRegion(id, 'display', { quick: true }),
+        edit: (id) => waylandLayer ? editPortalRegion(id, 'display', { quick: true }) : editGnomeRegion(id, {quick:true}),
         scan: async (sourceId, crop) => {
           await processView(await native.snapshot())
           for (let attempt = 0; handling || pendingView; attempt++) {
             if (attempt >= 100) throw new Error('Screen share did not synchronize with the reader.')
             await new Promise((resolve) => setTimeout(resolve, 20))
           }
-          log({ check: 'quick-shot', display: sourceId, crop, editor: 'wayland-layer' })
-          void native.panel('log', 'show').catch(() => undefined)
-          return performScan({ generation: generation.current, sourceId,
-            source: { sourceId, kind: 'display', name: 'Quick Shot' },
-            request: { source_id: sourceId, crop }, detached: true })
+          log({ check: 'quick-shot', display: sourceId, crop, editor: waylandLayer ? 'wayland-layer' : 'gnome-shell' })
+          try {
+            return await performScan({ generation: generation.current, sourceId,
+              source: { sourceId, kind: 'display', name: 'Quick Shot' },
+              request: { source_id: sourceId, crop }, detached: true })
+          } finally {
+            await native.panel('log', 'show').catch(() => undefined)
+          }
         },
         status: (status) => publish({ scanning: false, status }),
         log
@@ -2285,7 +2351,7 @@ await native.watchCapabilities(async (caps) => {
     waylandDisabled = true
     if (!gnomeOverlay && caps.session.compositor === 'GNOME') {
       const { installGnomeOverlay } = await import('./gnome-overlay.js')
-      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible, log)
+      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && (gnomeControllerWords || isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible), log)
     }
     renderer.clear()
     log({ check: caps.session.nativeGnomeShell ? 'overlay-native-gnome' : 'overlay-disabled', reason: caps.session.nativeGnomeShell ? 'GNOME Shell owns screen annotations; the WebKit OCR host stays hidden.' : 'Native layer-shell overlay is unavailable on this desktop. GNOME can use the optional Shell integration.' })
@@ -2325,6 +2391,7 @@ await native.listen('source-bounds', async ({ payload }) => {
   state.sourceBounds = bounds
   // Quick Shot text belongs to the display region it was read from, not to this window.
   if (state.detached) return
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled) { draw(); return }
 
   try {
     const origin = sourceDisplay(bounds, await native.desktop())
@@ -2508,4 +2575,25 @@ window.kimochiOverlay = {
   renderer,
   scanner,
   state
+}
+
+// GNOME hosts the unchanged controller UI in a bounded own window. The OCR
+// coordinator still owns scanning, settings, and the one dictionary backend.
+if(window.__KIMOCHI_PLATFORM__?.os==='linux') {
+  await native.listen('gnome-controller-command',async({payload:p})=>{
+    if(!gnomeOverlay)return
+    let result,error
+    try {
+      switch(p.action) {
+        case 'snapshot':result={hasText:state.annotations.length>0,autoOcr:Boolean(state.flags.autoOcrEnabled),autoAvailable:!isQuickShot(),scanId:state.appliedScanId,settings:{controllerButtons:setting('controllerButtons')}};break
+        case 'scan':await onAction('triggerScan');result=true;break
+        case 'action':if(p.name!=='toggleAutoOcr')throw new Error('Invalid controller action');await onAction(p.name);break
+        case 'dictionary':if(p.apiAction!=='parseText')throw new Error('Invalid dictionary action');result=await extensionApi(p.apiAction,p.params);break
+        case 'text':await setOverlayText(Boolean(p.visible));await gnomeOverlay.update();break
+        case 'hold':gnomeControllerWords=Boolean(p.hold);holdForController(gnomeControllerWords);await gnomeOverlay.flush();break
+        default:throw new Error('Unknown controller command')
+      }
+    }catch(e){error=String(e)}
+    await window.__TAURI__.event.emit('gnome-controller-response',{id:p.id,result,error})
+  })
 }

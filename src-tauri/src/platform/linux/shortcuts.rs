@@ -36,7 +36,16 @@ pub fn report() -> Value {
         .clone()
         .unwrap_or(json!({"backend":"portal","pending":true}))
 }
+pub fn dispatch_gnome(app:&tauri::AppHandle,name:&str) {
+    let allowed=report();
+    if available() && allowed["backend"]=="gnome-shell" && allowed["registered"].as_array().is_some_and(|keys|keys.iter().any(|key|key==name)) && actions::ACTIONS.contains(&name) {
+        crate::record(app,&app.state::<Shared>(),json!({"check":"global-shortcut-activated","backend":"gnome-shell","action":name}));
+        actions::dispatch(app,&app.state::<Shared>(),name);
+    }
+}
+
 pub fn stop() {
+    if report()["backend"]=="gnome-shell" {let _=super::gnome::request("shortcuts",json!({"bindings":[]}));}
     GENERATION.fetch_add(1, Ordering::SeqCst);
     AVAILABLE.store(false, Ordering::SeqCst);
     if let Some(connection) = CONNECTION.lock().unwrap().take() {
@@ -117,7 +126,7 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
     let pending = json!({"registered":[],"failed":[],"backend":"portal","pending":true});
     *REPORT.lock().unwrap() = Some(pending.clone());
     std::thread::spawn(move || {
-        let result = bind(&app, definitions, generation);
+        let result = if super::gnome::status()["nativeShortcuts"]==true {bind_gnome(&app,definitions,generation)}else{bind(&app,definitions,generation)};
         if GENERATION.load(Ordering::SeqCst) != generation {
             return;
         }
@@ -138,6 +147,23 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
         }
     });
     pending
+}
+
+fn gtk_trigger(accelerator:&str)->String {
+    let mut result=String::new();
+    for part in accelerator.split('+') {
+        result.push_str(match part {"CommandOrControl"|"Control"|"Ctrl"=>"<Control>","Shift"=>"<Shift>","Alt"=>"<Alt>","Super"|"Meta"=>"<Super>","Space"=>"space","Enter"=>"Return",other=>other});
+    }result
+}
+
+fn bind_gnome(app:&tauri::AppHandle,definitions:serde_json::Map<String,Value>,generation:u64)->Result<(),String>{
+    let bindings:Vec<Value>=definitions.into_iter().filter(|(name,d)|actions::ACTIONS.contains(&name.as_str())&&d["enabled"]!=false).filter_map(|(name,d)|d["accelerator"].as_str().filter(|s|!s.is_empty()).map(|s|json!({"name":name,"accelerator":gtk_trigger(s)}))).collect();
+    let result=super::gnome::request("shortcuts",json!({"bindings":bindings}))?;
+    if GENERATION.load(Ordering::SeqCst)!=generation{return Ok(());}
+    AVAILABLE.store(result["registered"].as_array().is_some_and(|v|!v.is_empty()),Ordering::SeqCst);
+    *REPORT.lock().unwrap()=Some(result.clone());
+    crate::record(app,&app.state::<Shared>(),json!({"check":"global-shortcuts","report":result}));
+    let _=app.emit("platform-capabilities",crate::capabilities_value(app,&app.state::<Shared>()));Ok(())
 }
 
 /// Portals require a desktop entry even for an unsandboxed development build/AppImage.

@@ -64,7 +64,7 @@ import {
 import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
 import { useCapabilities } from '../bridge/capabilities'
-import { GnomeOverlaySetup } from './GnomeOverlaySetup'
+import { GnomeWindowLink } from './GnomeWindowLink'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
 import type { ControllerWiring } from '../panels/useController'
 
@@ -348,6 +348,7 @@ function SourceMenuContent({
   onChooseType,
   onChooseSource,
   onSystemPick,
+  onLinkWindow,
   onOpenSettings
 }: {
   mode: Mode | null
@@ -359,6 +360,7 @@ function SourceMenuContent({
   onChooseType: (mode: Mode) => void
   onChooseSource: (sourceId: string) => void
   onSystemPick: () => void
+  onLinkWindow?: () => void
   onOpenSettings: () => void
 }): ReactNode {
   const [windowType, ...others] = TYPES
@@ -374,6 +376,7 @@ function SourceMenuContent({
               Use Current Source
             </MenuItem>
             <MenuItem icon={<Plus />} onSelect={onSystemPick}>Choose New Source…</MenuItem>
+            {onLinkWindow && <><MenuSeparator /><MenuItem icon={<AppWindow />} onSelect={onLinkWindow}>Relink window overlay…</MenuItem></>}
           </MenuSubContent>
         </MenuSub>
       ) : pickerRequired ? (
@@ -496,6 +499,7 @@ export function SourcePanel({
       }}
       pickerRequired={pickerRequired}
       linuxPortal={capabilities.os === 'linux' && pickerRequired}
+      onLinkWindow={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && capabilities.session.compositor === 'GNOME' && capabilities.overlay.passive && mode === 'ocr' && source?.sourceId?.startsWith('portal:window:') ? () => {closeMenu();window.dispatchEvent(new Event('kimochi-link-window'))} : undefined}
       onChooseSource={(sourceId) => {
         closeMenu()
         choose('ocr')
@@ -680,7 +684,6 @@ export function SourcePanel({
 
   return (
     <div className="src-panel">
-      <GnomeOverlaySetup />
       {mode === 'ocr' && source ? (
         card
       ) : (
@@ -716,6 +719,7 @@ export function SourcePanel({
         </div>
       )}
 
+      {mode === 'ocr' && <GnomeWindowLink key={source?.sourceId} sourceId={source?.sourceId} />}
       <LinuxSourceCrop enabled={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && !(capabilities.session as { nativeLayerShell?: boolean }).nativeLayerShell} />
       {mode === 'quickshot' && (
         <div className="src-controls">

@@ -15,8 +15,10 @@ export async function installGnomeOverlay(native, state, enabled, log) {
       const status = await gnomeRequest('status')
       if (!status.available) return
       const info = state.info
-      const monitor = status.monitors?.length === 1 ? status.monitors[0] : null
-      if (!enabled() || !state.geometry || !info?.source_id?.startsWith('portal:display:') || !monitor) {
+      const screen = info?.source_id?.startsWith('portal:display:')
+      const tracked = !screen && status.tracked?.sourceId === info?.source_id ? status.tracked : null
+      const monitor = screen ? (status.monitors?.length === 1 ? status.monitors[0] : null) : tracked?.bounds
+      if (!enabled() || !state.geometry || !monitor || (!screen && (!tracked?.visible || !info.source_bounds || Math.abs(info.source_bounds.width-monitor.width)>=2 || Math.abs(info.source_bounds.height-monitor.height)>=2))) {
         await gnomeRequest('clear')
         return
       }
@@ -32,7 +34,7 @@ export async function installGnomeOverlay(native, state, enabled, log) {
         const height = (Math.max(...ys) - Math.min(...ys)) * sy
         return width > 0 && height > 0 ? gnomeWordCells(a.description, { x, y, width, height }, a.orientation === 'vertical' || a.isVertical === true, measureEms) : []
       }).slice(0, 500)
-      await gnomeRequest('present', { sourceKind: 'screen', frameId: state.appliedScanId, words })
+      await gnomeRequest('present', { sourceKind: screen ? 'screen' : 'window', sourceId:info.source_id, referenceBounds:screen ? undefined : monitor, frameId: state.appliedScanId, words })
       lastError = null
     } catch (error) {
       const message = String(error)
@@ -51,5 +53,6 @@ export async function installGnomeOverlay(native, state, enabled, log) {
       if ((await gnomeRequest('status')).available) await gnomeRequest('clear')
     } finally { busy = false }
   }
-  return { update, pause }
+  const flush=async()=>{while(busy)await new Promise(resolve=>setTimeout(resolve,20));await update()}
+  return { update, pause, flush }
 }

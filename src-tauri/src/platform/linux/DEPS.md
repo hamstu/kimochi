@@ -159,7 +159,7 @@ bounds versus the overlay.
 
 The bring-up user explicitly expanded the original reduced-tier scope to investigate native Wayland overlays. Native layers are enabled automatically when supported; `KIMOCHI_WAYLAND_OVERLAY=0` disables them for diagnostics. During GTK setup the Linux module dynamically loads optional `libgtk-layer-shell.so.0` and probes the actual Wayland protocol. Missing library/protocol disables the overlay and crop editor entirely; there is no detached reader fallback or link-time dependency. No crate/model versions change. `session.nativeLayerShell` reports whether this integration initialized, distinct from the historical compositor-name hint `session.layerShell`.
 
-Layer panels use keyboard mode NONE, no exclusive layout reservation, an initially empty mouse input region, and published annotation rectangles applied through GDK on the GTK main thread. The overlay anchors to all output edges; dictionary panels anchor top/left. Screen-frame coordinates map to the layer surface's actual local dimensions; portal window frames are deliberately not drawn at an invented desktop position. Multi-output mapping, dictionary placement, native hover, long-lived scheduling and desktop fallback remain acceptance gates. See root `LINUX_BRINGUP.md` for observed passes/failures. GNOME/Ubuntu has not been tested and protocol support must not be assumed.
+Layer panels use keyboard mode NONE, no exclusive layout reservation, an initially empty mouse input region, and published annotation rectangles applied through GDK on the GTK main thread. The overlay anchors to all output edges; dictionary panels anchor top/left. Screen-frame coordinates map to the layer surface's actual local dimensions; portal window frames are deliberately not drawn at an invented desktop position. Multi-output mapping, dictionary placement, native hover, long-lived scheduling and desktop fallback remain acceptance gates. See root `LINUX_BRINGUP.md` for observed passes/failures. GNOME does not advertise layer-shell in the tested Ubuntu session; see the optional GNOME adapter below.
 
 For an explicitly opened crop editor, `region_keys` switches the overlay alone to keyboard ON_DEMAND (never EXCLUSIVE), then restores NONE on completion/cancellation. Portal screen crops use frame-pixel dimensions versus configured logical surface size; portal window crops use a fitted screenshot because global window placement is unavailable. The editor temporarily publishes whole-surface input and releases it immediately on close. A hidden layer is mapped and configured before crop geometry is measured.
 
@@ -240,7 +240,7 @@ Wayland Quick Shot uses a granted portal screen stream and the native layer crop
 On GNOME 46 Wayland, **Set up GNOME overlay** installs the extension embedded in
 this Linux build. Initial installation (or migration from the old monolithic
 extension) requires one login so GNOME discovers the stable loader. Subsequent
-**Update GNOME overlay** operations stage an immutable implementation, disable/enable
+**Update GNOME overlay** operations (Settings → General → Desktop integration) stage an immutable implementation, disable/enable
 only Kimochi, verify its running revision and restore the previous implementation
 if startup fails. Other enabled extension names are preserved. Unrecognized edits
 to Kimochi's loader/metadata are refused; the recognized legacy implementation is
@@ -260,13 +260,32 @@ font/theme settings remain authoritative. Original resize gestures suppress acci
 text selection. These have automated/virtual-input evidence; attended UX acceptance is
 still required after the reported failures (see Ubuntu ledger entries92 onward).
 The hidden OCR WebKit host never becomes a transparent ordinary desktop overlay.
-There is no modal or keyboard grab. Portal window annotations/following remain
-deferred, GNOME desktop crop/Quick Shot and multi-monitor mapping remain unavailable.
+There is no modal or keyboard grab. GNOME 46 now supports native desktop crop and
+Quick Shot on the single supported monitor. GNOME hosts the original shared
+`RegionSelect` editor in a transparent WebKit window only during explicit selection;
+Shell supplies validated fullscreen placement and lease cleanup. Explicit selection temporarily owns
+mouse input, supports drawing/moving/resizing, Save/Scan/Reset/Cancel and Escape,
+and expires on client loss or missing heartbeat. Quick Shot crops are one-off.
+The existing source-image editor remains the fallback for unsupported mapping.
+
+GNOME window shares first match actual captured pixel dimensions against live
+Mutter buffer bounds and scale, excluding Kimochi's own windows. A meaningful exact
+title breaks size ties when supplied; generic portal labels cannot identify a
+window. A unique match binds automatically without raising the window. Ambiguity
+leaves annotations hidden and offers **Link window overlay…** for one explicit
+click on the shared window. Pairing follows that live window's stable identity,
+not its title: moving translates annotations, resizing hides them until a fresh
+matching frame, and minimizing/focus departure/closure hides or clears them.
+GTK client-side decorations are included through buffer bounds, not frame bounds.
+Linked window crop uses that same validated geometry. Fresh portal selection clears
+old pairing. Other compositor window-following remains deferred; no invented
+portable desktop coordinates or general foreground tracker. Multi-monitor crop
+mapping and other GNOME versions remain unsupported until verified.
 Full UI/placement and loader recovery have isolated GNOME46 evidence; physical
 focus/input/audio acceptance on the user's current desktop is tracked separately
 in UBUNTU_BRINGUP.md. Other GNOME versions are rejected until tested.
 
-On Linux Wayland without native layer-shell, **Crop area → Set crop area…** opens
+On Linux Wayland without native layer-shell or supported GNOME desktop mapping, **Crop area → Set crop area…** opens
 the full shared source image in the existing main window. Drag a rectangle, then
 **Save crop**; it uses full-frame capture pixels and the normal persisted crop/OCR
 path. This works for entire-screen and window shares, independently of the GNOME
@@ -274,7 +293,7 @@ annotation extension. Cancel/Escape leaves the saved crop unchanged. Automatic O
 pauses during editing and resumes afterward. This is an image editor, not a native
 desktop layer; native layer-shell and X11 retain their existing on-screen editor.
 
-Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen overlays are hidden while the panel control is unavailable. Ordinary application Escape is not intercepted.
+Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen annotations expose a small bottom-right **Hide Kimochi** control when the panel is hidden; clearing removes annotations and any transient selection input. Ordinary application Escape is not intercepted.
 
 GNOME caches the stable loader's entry module for the login. A change to the loader
 itself still needs a new login; ordinary implementation updates use unique module
@@ -288,3 +307,35 @@ to PNG only after the browser decoder fails; vendor sources and original
 archives remain untouched. AppImage staging requires the loader and deploys its
 dynamic AVIF decoder plugins and dependencies with a bundle-local
 `LIBHEIF_PLUGIN_PATH`.
+
+
+### GNOME source metadata, action shortcuts, and controller host
+
+The optional GNOME46 adapter now supplies the paired native window's title, app
+identity and GIcon. Source descriptors and newly recorded OCR session metadata
+use that identity; no title-to-app guess or archived-history rewrite is needed.
+The existing GTK icon theme loads PNG data for the normal source UI. A window
+without installed app metadata uses the system generic application icon.
+
+Where the adapter advertises nativeShortcuts, configured action combinations use
+Mutter accelerator registration in NORMAL mode with IGNORE_AUTOREPEAT. Conflicts
+are reported without replacing another binding. Client loss, disable/rebind and
+extension updates release/reapply registrations. Other Wayland sessions retain
+the GlobalShortcuts portal backend. This does not grant an arbitrary key trigger.
+
+The explicitly opened controller menu uses the unchanged shared ControllerInput,
+RadialMenu, WordCursor and controller UI in a Linux-only controller-host WebKit
+window. The menu is bounded to 520×520, read-along HUD to 520×100. Shell owns a
+PID/DBus-owner lease, placement and normal focus; focused DOM key events replace
+global unmodified arrow/Return/Escape grabs on this path. Owner loss, source
+closure, focus departure, lock/disable and heartbeat timeout close it. Exit
+restores previous focus only while Kimochi's own menu still has focus. The existing
+OCR/Yomitan coordinator performs scans/parsing; native word indices use the real
+Yomitan Popup/Display host, including scroll/entry controls. No fullscreen passive
+input surface or exclusive keyboard grab is introduced.
+
+Ubuntu evidence distinguishes native virtual input and synthetic controller events
+from physical keyboard/gamepad acceptance. The available js0 is a Parallels virtual
+mouse, not a controller. GNOME remains version-gated to 46 and screen mapping
+single-monitor. Other compositor window tracking is still deferred; X11 and native
+layer-shell paths are preserved. See UBUNTU_BRINGUP.md entry105 and final gates.

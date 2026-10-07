@@ -564,11 +564,17 @@ fn place_overlay(app: tauri::AppHandle, state: State<Shared>, rect: Rect) -> Rep
 }
 
 #[tauri::command]
-async fn gnome_overlay(operation: String, payload: Value) -> Reply<Value> {
+async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operation: String, payload: Value) -> Reply<Value> {
     #[cfg(target_os = "linux")]
-    { tauri::async_runtime::spawn_blocking(move || platform::gnome::request(&operation, payload)).await.map_err(|e| e.to_string())? }
+    { let service=state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {let result=platform::gnome::request(&operation,payload.clone())?;
+            if operation=="track"&&payload["operation"]=="match"&&!result.is_null(){if let Some(id)=payload["sourceId"].as_str(){platform::gnome::refresh_identity(&service,id);}}
+            if matches!(operation.as_str(),"update"|"install")&&result["live"]==true {hotkeys::apply(&app,&service.settings);}
+            Ok(result)
+        }).await.map_err(|e|e.to_string())?
+    }
     #[cfg(not(target_os = "linux"))]
-    { let _ = (operation, payload); Err("GNOME overlay is Linux-only".into()) }
+    { let _ = (app,state,operation, payload); Err("GNOME overlay is Linux-only".into()) }
 }
 
 #[tauri::command]
@@ -616,6 +622,10 @@ fn pointer_display() -> Option<platform::DisplayInfo> {
 /// (`macos:window:<window>:<pid>`); a display has nothing to bring forward.
 #[tauri::command]
 async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> {
+    #[cfg(target_os = "linux")]
+    if source_id.starts_with("portal:window:") && platform::gnome::eligible_popup_session() {
+        return platform::gnome::request("track", json!({"operation":"activate","sourceId":source_id})).map(|_| ());
+    }
     let pid = SourceId::parse(&source_id)
         .filter(|id| id.is_window() && id.is_local())
         .and_then(|id| id.pid())
@@ -898,6 +908,9 @@ async fn permission(state: State<'_, Shared>) -> Reply<bool> {
 async fn capture_pick_source(app: tauri::AppHandle, state: State<'_, Shared>, fresh: Option<bool>) -> Reply<Value> {
     #[cfg(target_os = "linux")]
     if fresh.unwrap_or(true) {
+        if platform::gnome::eligible_popup_session() {
+            let _ = platform::gnome::request("track", json!({"operation":"clear"}));
+        }
         let mut backend = state.backend.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if backend.capabilities().system_picker_required {
             backend.close();

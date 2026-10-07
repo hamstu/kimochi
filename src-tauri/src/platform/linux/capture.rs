@@ -135,12 +135,15 @@ impl CaptureBackend for Protected {
         self.inner.request_permission()
     }
     fn enumerate(&mut self) -> Result<Vec<Source>> {
-        self.inner.enumerate()
+        let mut sources=self.inner.enumerate()?;
+        for source in &mut sources {super::gnome::decorate_source(source);}
+        Ok(sources)
     }
     fn close(&mut self) {
         self.inner.close();
     }
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
+        let mut before = super::gnome::tracked_bounds(&request.source_id);
         let _gnome = super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?;
         let hidden = hide(&self.app)?;
         // Allow compositor fade-out animations and queued PipeWire buffers to finish.
@@ -149,10 +152,26 @@ impl CaptureBackend for Protected {
                 std::thread::sleep(wait);
             }
         }
-        let result = match hidden.after {
+        let mut result = match hidden.after {
             Some(after) => self.inner.capture_after(request, after),
             None => self.inner.capture(request),
         };
+        if before.is_none() {
+            if let Ok(frame) = &result {
+                before = super::gnome::match_window(&request.source_id, frame.info.full_width, frame.info.full_height);
+            }
+        }
+        if let (Some(before), Some(after), Ok(frame)) = (before, result.as_ref().ok().and_then(|frame| super::gnome::tracked_frame_bounds(&request.source_id, frame.info.full_width, frame.info.full_height)), result.as_mut()) {
+            if before.width == after.width && before.height == after.height {
+                let sx = f64::from(frame.info.full_width) / after.width;
+                let sy = f64::from(frame.info.full_height) / after.height;
+                if sx > 0. && (sx - sy).abs() < 0.02 {
+                    frame.info.source_bounds = Some(after);
+                    frame.info.scale_factor = sx;
+                }
+            }
+        }
+        if result.is_ok(){if let Some(service)=self.app.try_state::<crate::state::Shared>(){super::gnome::refresh_identity(&service,&request.source_id);}}
         drop(hidden);
         result
     }

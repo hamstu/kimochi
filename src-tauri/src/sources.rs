@@ -303,6 +303,8 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
 /// refreshes it every few seconds. It shares the source's running stream with scans and
 /// the hover preview, so it is a copy and a shrink rather than a capture of its own.
 pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
+    #[cfg(target_os = "linux")]
+    crate::platform::gnome::refresh_identity(service,source_id);
     let frame = capture_isolated(service, source_id)?;
     let (small, width, height) = downscale(
         &frame.pixels,
@@ -397,6 +399,8 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
             view.revision += 1;
         }
     }
+    #[cfg(target_os = "linux")]
+    platform::gnome::refresh_identity(service, &source.id);
     Ok(json!({ "sourceId": source.id, "crop": crop, "key": key }))
 }
 

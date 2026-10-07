@@ -156,6 +156,10 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
 pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
     if on_x11() {
         x11::window_bounds(id)
+    } else if gnome::eligible_popup_session() {
+        let value = gnome::request("track", json!({"operation":"status","sourceId":id.to_string()})).ok()?;
+        let rect = serde_json::from_value(value["bounds"].clone()).ok()?;
+        Some((rect, value["visible"].as_bool().unwrap_or(false)))
     } else {
         None
     }
@@ -187,12 +191,13 @@ pub fn frontmost_pid() -> Option<u32> {
 }
 
 /// `_NET_WM_ICON` of one of the app's windows, as PNG. `None` on Wayland and for apps
-/// without an icon property (the UI falls back to its glyph).
+/// without an icon property (the UI falls back to its glyph). GNOME resolves the
+/// paired native app through its installed GIcon.
 pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
     if on_x11() {
         x11::app_icon_png(&app.name, app.pid, target)
     } else {
-        None
+        gnome::paired_app_icon_png(&app.name, target)
     }
 }
 
@@ -238,7 +243,9 @@ fn os_version() -> String {
 pub fn capabilities() -> Value {
     let s = session();
     let x11 = s.backend == Backend::X11;
-    let gnome = gnome::status()["available"].as_bool().unwrap_or(false);
+    let gnome_status = gnome::status();
+    let gnome = gnome_status["available"].as_bool().unwrap_or(false);
+    let tracking = gnome && gnome_status["windowTracking"].as_bool().unwrap_or(false);
     json!({
         "os": "linux",
         "osVersion": os_version(),
@@ -266,8 +273,8 @@ pub fn capabilities() -> Value {
         "sources": {
             "catalog": x11,
             "thumbnails": x11,
-            "icons": x11,
-            "followWindowBounds": x11,
+            "icons": x11 || tracking,
+            "followWindowBounds": x11 || tracking,
             "foregroundTracking": x11,
         },
         "overlay": {
@@ -289,7 +296,7 @@ pub fn capabilities() -> Value {
             "nonActivating": x11 || layer::available() || gnome,
             "nativeHoverWorkaround": false,
         },
-        "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if !x11 && s.compositor.as_deref().unwrap_or("").to_ascii_lowercase().contains("hypr") { Some("On Hyprland, set key combinations in your compositor configuration. Changing a shortcut here does not update those desktop bindings.") } else { None }},
+        "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else if shortcuts::report()["backend"] == "gnome-shell" { "gnome-shell" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if !x11 && s.compositor.as_deref().unwrap_or("").to_ascii_lowercase().contains("hypr") { Some("On Hyprland, set key combinations in your compositor configuration. Changing a shortcut here does not update those desktop bindings.") } else { None }},
         // The executable's file name, which is what `frontmost_app` and focus events
         // report for this app.
         "ownAppNames": ["Kimochi", "kimochi"],
