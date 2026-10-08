@@ -18,7 +18,7 @@ export interface OcrEngineCapability {
   reason?: string | null
   /**
    * Present when the engine's downloadable models are what keeps it from scanning
-   * ("Downloading model… 32%" is then the `reason`). Choosing the engine downloads them.
+   * ("Downloading model… 32%" is then the `reason`). Choosing the engine asks to download them.
    */
   model?: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | null
 }

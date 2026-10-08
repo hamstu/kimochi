@@ -89,7 +89,8 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   tone = 'default',
   onConfirm,
-  busy
+  busy,
+  dismissOnOutsideClick
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -100,11 +101,16 @@ export function ConfirmDialog({
   tone?: 'default' | 'danger'
   onConfirm: () => void
   busy?: boolean
+  /** A click outside cancels, like Escape. Off by default: an alert dialog wants an answer. */
+  dismissOnOutsideClick?: boolean
 }): ReactNode {
   return (
     <AlertPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <AlertPrimitive.Portal container={portalRoot()}>
-        <AlertPrimitive.Overlay className="k-overlay" />
+        <AlertPrimitive.Overlay
+          className="k-overlay"
+          onClick={dismissOnOutsideClick ? () => onOpenChange(false) : undefined}
+        />
         <AlertPrimitive.Content className="k-dialog" style={{ maxWidth: '24rem' }}>
           <div className="k-dialog-header">
             <div>

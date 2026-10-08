@@ -42,7 +42,7 @@ The shared design system for every Kimochi window. Import components from `@kit`
 | `Menu`, `MenuTrigger`, `MenuContent`, `MenuItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel` | Action menus (line actions, session menu). |
 | `Popover`, `PopoverContent` (`menu` prop for menu styling) | Anchored panels. |
 | `Tooltip` | Hover explanations; wrap one focusable child. |
-| `Dialog` + `DialogContent title description footer size variant="sheet"` | Modal work. `ConfirmDialog` for destructive confirmation. |
+| `Dialog` + `DialogContent title description footer size variant="sheet"` | Modal work. `ConfirmDialog` for destructive confirmation (`dismissOnOutsideClick` when a click outside may cancel, as Escape does). |
 | `Segmented` | 2–4 short exclusive options (theme, size). |
 | `ChoiceGroup` | Exclusive modes that each need a detail line (input source, engine). |
 | `Slider` | Continuous values. |

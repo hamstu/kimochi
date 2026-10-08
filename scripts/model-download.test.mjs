@@ -135,6 +135,17 @@ test('the download confirmation names the engine and its size', () => {
   assert.doesNotMatch(downloadPrompt(manga({ overallTotal: 0 })).description, /0 MB/)
 })
 
+test('both engine pickers share the confirmation and list engines by name alone', async () => {
+  for (const file of ['frontend/main/MainSidebar.tsx', 'frontend/panels/settings/OcrTab.tsx']) {
+    const source = await read(file)
+    assert.ok(source.includes('useEngineSelection()'), `${file} does not use useEngineSelection`)
+    assert.ok(source.includes('<DownloadConfirmDialog'), `${file} does not render DownloadConfirmDialog`)
+    assert.ok(!/useSetting<OcrMode>\('ocrMode'/.test(source), `${file} still writes ocrMode directly`)
+  }
+  const ocrTab = await read('frontend/panels/settings/OcrTab.tsx')
+  assert.ok(!ocrTab.includes('detail: engine.reason || undefined }'), 'a model-gated engine still shows its reason')
+})
+
 test('the capabilities carry the model gate and its human reason through normalisation', () => {
   const caps = normalizeCapabilities(
     {

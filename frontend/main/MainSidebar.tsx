@@ -11,8 +11,9 @@ import { ArrowLeft, Settings } from 'lucide-react'
 import { Row, Select } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
-import { useSetting } from '../bridge/useSetting'
+import { useEngineSelection } from '../bridge/useEngineSelection'
 import { SETTINGS_NAV } from '../panels/settings/settingsNav'
+import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
@@ -91,9 +92,12 @@ const OCR_MODE_OPTIONS = (Object.keys(OCR_MODES) as OcrMode[]).map((value) => ({
   label: OCR_MODES[value].label
 }))
 
-/** The same engine choice as Settings → OCR, with a way there for the engine's own settings. */
+/**
+ * The same engine choice as Settings → OCR (and the same download confirmation), with a way there
+ * for the engine's own settings.
+ */
 function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
-  const [ocrMode, setOcrMode] = useSetting<OcrMode>('ocrMode', 'cloud')
+  const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   return (
     <div className="sb-group">
       <div className="sb-label sb-label-row">
@@ -107,11 +111,12 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
         <Select
           aria-label="OCR model"
           className="sb-select"
-          value={ocrMode}
-          onValueChange={(value) => void setOcrMode(value)}
+          value={shown}
+          onValueChange={choose}
           options={OCR_MODE_OPTIONS}
         />
       </div>
+      <DownloadConfirmDialog confirmation={confirmation} />
     </div>
   )
 }

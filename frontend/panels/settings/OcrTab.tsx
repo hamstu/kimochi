@@ -31,7 +31,9 @@ import { useViewState } from '../../bridge/state'
 import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
 import { nativeError, openAccessibilityPreferences, quitApp } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
+import { useEngineSelection } from '../../bridge/useEngineSelection'
 import { ModelDownloadCard } from './ModelDownloadCard'
+import { DownloadConfirmDialog } from './DownloadConfirmDialog'
 
 /** The engines, with those this machine cannot run disabled and the reason beside them. */
 const ocrModeOptions = (
@@ -39,9 +41,9 @@ const ocrModeOptions = (
 ): { value: OcrMode; label: string; disabled?: boolean; detail?: string }[] =>
   (Object.keys(OCR_MODES) as OcrMode[]).map((value) => {
     const engine = engines[value]
-    if (!engine || engine.available) return { value, label: OCR_MODES[value].label }
-    // Held back only by its model: choosing it starts the download.
-    if (engine.model) return { value, label: OCR_MODES[value].label, detail: engine.reason || undefined }
+    // Held back only by its model, it reads as any other engine: picking it asks to download
+    // (useEngineSelection), and the Model section below says where the download stands.
+    if (!engine || engine.available || engine.model) return { value, label: OCR_MODES[value].label }
     return {
       value,
       label: OCR_MODES[value].label,
@@ -106,7 +108,8 @@ const POLL_OPTIONS = [
 ]
 
 export function OcrTab(): ReactNode {
-  const [ocrMode, setOcrMode] = useSetting<OcrMode>('ocrMode', 'cloud')
+  const engineSelection = useEngineSelection()
+  const { ocrMode } = engineSelection
   const [serverSettings, setServerSettings] = useSetting<ServerSettings>('serverSettings', {
     mode: DEFAULT_SERVER_MODE
   })
@@ -194,10 +197,11 @@ export function OcrTab(): ReactNode {
         >
           <Select
             aria-label="OCR engine"
-            value={ocrMode}
-            onValueChange={(value) => void setOcrMode(value)}
+            value={engineSelection.shown}
+            onValueChange={engineSelection.choose}
             options={ocrModes}
           />
+          <DownloadConfirmDialog confirmation={engineSelection.confirmation} />
         </SettingsRow>
         {showServer && (
           <SettingsRow

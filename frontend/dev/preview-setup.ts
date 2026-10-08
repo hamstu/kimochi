@@ -38,7 +38,7 @@ import {
   seedFilesystem,
   thumbnailSvg
 } from './demo-data'
-import { MODEL_HANDLERS } from './preview-models'
+import { MODEL_HANDLERS, onModelSettingSet } from './preview-models'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -284,7 +284,11 @@ const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
-  settings_set: (a) => publish(String(a?.key), a?.value),
+  settings_set: (a) => {
+    publish(String(a?.key), a?.value)
+    onModelSettingSet(String(a?.key), a?.value)
+    return null
+  },
   settings_all: () => ({ ...settings }),
   reader_settings_patch: (a) => {
     const current = (settings.superTexthooker as Record<string, unknown>) ?? {}

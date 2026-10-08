@@ -4,6 +4,9 @@
  *
  *   ?model=absent|downloading|paused|failed|ready  the starting state of both local engines
  *                                                  (default: MeikiOCR ready, Manga OCR absent)
+ *
+ * Picking an `absent` engine in the sidebar or Settings → OCR opens the download confirmation;
+ * Download saves `ocrMode`, which starts the simulated download (`onModelSettingSet`).
  */
 import { emit } from '@tauri-apps/api/event'
 import type { ModelEngine, ModelStatus } from '@ui/model-download'
@@ -144,6 +147,15 @@ function start(engine: ModelEngine): ModelStatus {
       overallReceived: received
     })
   )
+}
+
+/**
+ * Like native `settings_set`: saving `ocrMode` as a local engine whose models are absent starts
+ * their download (the pickers only save it after the download confirmation).
+ */
+export function onModelSettingSet(key: string, value: unknown): void {
+  if (key !== 'ocrMode' || (value !== 'meikiocr' && value !== 'mangaocr')) return
+  if (states.get(value)?.state === 'absent') start(value)
 }
 
 const engineOf = (args: Record<string, unknown> | undefined): ModelEngine =>
