@@ -12,6 +12,7 @@ import { Row, Select } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
 import { useEngineSelection } from '../bridge/useEngineSelection'
+import { useCapabilities } from '../bridge/capabilities'
 import { SETTINGS_NAV } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 import type { SettingsTabName } from '../bridge/tauri'
@@ -98,6 +99,7 @@ const OCR_MODE_OPTIONS = (Object.keys(OCR_MODES) as OcrMode[]).map((value) => ({
  */
 function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
+  const capabilities = useCapabilities()
   return (
     <div className="sb-group">
       <div className="sb-label sb-label-row">
@@ -113,7 +115,7 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
           className="sb-select"
           value={shown}
           onValueChange={choose}
-          options={OCR_MODE_OPTIONS}
+          options={OCR_MODE_OPTIONS.filter((option) => option.value !== 'oneocr' || capabilities.os === 'windows')}
         />
       </div>
       <DownloadConfirmDialog confirmation={confirmation} />

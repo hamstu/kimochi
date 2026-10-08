@@ -22,7 +22,7 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr'
+export type OcrMode = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr' | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
@@ -202,6 +202,22 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     ],
     requirements:
       'A larger one-time model download, and each scan takes longer than with MeikiOCR. Uses the GPU where it can (Metal on macOS, CUDA on NVIDIA cards) and the CPU otherwise.'
+  },
+  oneocr: {
+    label: 'Local (OneOCR)',
+    name: 'OneOCR',
+    tagline: 'Offline, via Snipping Tool',
+    geometry: true,
+    runs: 'local',
+    description:
+      'Reads text locally using the OCR engine in Microsoft Snipping Tool. Returns word and line positions for dictionary lookups directly over the captured text.',
+    strengths: [
+      'Works offline; captures never leave this computer',
+      'Word positions for overlay lookups',
+      'Uses the Snipping Tool runtime already installed on Windows 11'
+    ],
+    requirements:
+      'Windows only. On Windows 11, install or update Microsoft Snipping Tool. No Python or OCR server is needed.'
   },
   websocket: {
     label: 'WebSocket (OwOCR)',

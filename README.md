@@ -23,6 +23,8 @@ npm start
 
 The two OCR crates are path dependencies: `kimochi-meikiocr` and `kimochi-mangaocr` must be checked out beside this repository (`../kimochi-meikiocr`, `../kimochi-mangaocr`). Two parity tests also read the Electron app at `../kimochi`; without it they are reported as skipped.
 
+Windows builds also bundle the small local OneOCR helpers from `oneocr-worker/`. Install both Rust targets (`rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc`) and the MSVC v143 ARM64/ARM64EC C++ build tools component (`Microsoft.VisualStudio.Component.VC.Tools.ARM64`) alongside the x64 C++ workload. OneOCR uses the installed Snipping Tool runtime on Windows 11; Windows 10 users can supply its three runtime files. See [ONEOCR.md](ONEOCR.md) for setup and [WINDOWS_ONEOCR.md](WINDOWS_ONEOCR.md) for validation.
+
 | Command | What it does |
 | --- | --- |
 | `npm run bundle` | Debug bundle for this OS: `.app` (macOS), NSIS `-setup.exe` (Windows), `.deb` + `.AppImage` (Linux), under `src-tauri/target/debug/bundle/`. Stages the OCR runtime and licences first; the OCR models are downloaded by the app on demand, not bundled. |

@@ -140,6 +140,10 @@ if (
   for (const [from, to] of legal) if (!existsSync(to)) await copyFile(from, to)
 }
 
+if (process.platform === 'win32' && ['dev', 'bundle', 'release'].includes(task)) {
+  await import('./prepare-oneocr.mjs')
+}
+
 // The React panels build into `dist/app/`, after prepare.mjs has rebuilt `dist/` from `yomitan/`
 // (it wipes the directory first). `dist/app` exists in neither `yomitan/` nor `ui/`, so the
 // extension hash verification is unaffected.

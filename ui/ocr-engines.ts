@@ -46,8 +46,8 @@ export function engineHint(
 ): EngineHint | null {
   if (capability && !capability.available && !capability.model) {
     return {
-      text: 'Unavailable',
-      tone: 'muted',
+      text: capability.selectable ? 'Setup needed' : 'Unavailable',
+      tone: capability.selectable ? 'warn' : 'muted',
       reason: capability.reason || 'Not available on this computer'
     }
   }
@@ -64,7 +64,7 @@ export function engineHint(
 
 /** Whether an engine can be chosen here: anything but one this computer cannot run at all. */
 export const engineSelectable = (capability: OcrEngineCapability | undefined): boolean =>
-  !capability || capability.available || !!capability.model
+  !capability || capability.available || !!capability.model || capability.selectable === true
 
 /** Where a local engine runs, as the detail panel says it: "the GPU, through Core ML". */
 export function acceleratorLabel(accelerator: OcrEngineCapability['accelerator']): string | null {

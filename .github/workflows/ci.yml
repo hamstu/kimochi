@@ -203,6 +203,24 @@ jobs:
           workspaces: kimochi-tauri/src-tauri -> target
           shared-key: bundle-${{ matrix.target }}
 
+      - name: Install OneOCR helper Rust targets
+        if: runner.os == 'Windows'
+        run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+
+      - name: Ensure ARM64 C++ tools for OneOCR helper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installed = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+          if (-not $installed) {
+            $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+            if (-not $vs) { throw 'MSVC C++ tools not found' }
+            $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+            $process = Start-Process $setup -ArgumentList @('modify', '--installPath', ('"' + $vs + '"'), '--add', 'Microsoft.VisualStudio.Component.VC.Tools.ARM64', '--quiet', '--norestart') -WindowStyle Hidden -Wait -PassThru
+            if ($process.ExitCode -notin @(0, 3010)) { throw "ARM64 C++ tools installation failed: $($process.ExitCode)" }
+          }
+
       # Downloaded OCR runtimes are hash-verified by the staging scripts, so a cache hit only
       # saves bandwidth; a stale or wrong-target runtime is detected and replaced. Models are not
       # staged for bundles (the app downloads them on demand).

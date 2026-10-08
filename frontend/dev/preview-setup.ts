@@ -142,7 +142,8 @@ function previewCapabilities(): PlatformCapabilities {
         cloud: { available: true },
         websocket: { available: true },
         meikiocr: { available: true, accelerator: 'directml' },
-        mangaocr: { available: false, reason: 'Not available on Windows yet' }
+        mangaocr: { available: false, reason: 'Not available on Windows yet' },
+        oneocr: { available: true }
       },
       ownAppNames: ['Kimochi', 'kimochi.exe']
     }
@@ -178,7 +179,8 @@ function previewCapabilities(): PlatformCapabilities {
         cloud: { available: true },
         websocket: { available: true },
         meikiocr: { available: true, accelerator: 'cpu' },
-        mangaocr: { available: true, accelerator: 'cpu' }
+        mangaocr: { available: true, accelerator: 'cpu' },
+        oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
       },
       ownAppNames: ['kimochi'],
       tray: false
