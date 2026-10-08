@@ -16,11 +16,30 @@
 //!
 //! A different sentence of similar length is neither, at any length: containment allows about
 //! one wrong character in eight, and text shorter than six characters must match exactly.
+//!
+//! Merging exists to keep the reader's log to one line per sentence, so it only looks at
+//! entries the log may still be showing. When the reader clears the log, everything written
+//! before that is forgotten here too (`forget_before`): the same sentence scanned again is new
+//! to the log, and must be written again rather than skipped as already there.
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// How far back, and how many entries, a new entry is compared with.
 pub const WINDOW_MS: u64 = 60_000;
 pub const DEPTH: usize = 3;
+
+/// Entries at or before this time (ms) are no longer compared with; see `forget_before`.
+static FORGOTTEN_UNTIL: AtomicU64 = AtomicU64::new(0);
+
+/// Stop merging with every entry written up to `now`: the log they would merge into was cleared.
+pub fn forget_before(now: u64) {
+    FORGOTTEN_UNTIL.fetch_max(now, Ordering::SeqCst);
+}
+
+/// The time up to which entries are forgotten.
+pub fn forgotten_until() -> u64 {
+    FORGOTTEN_UNTIL.load(Ordering::SeqCst)
+}
 
 /// What to do with a new entry.
 #[derive(Debug, PartialEq, Eq)]
@@ -68,14 +87,16 @@ pub fn contained(small: &str, big: &str) -> bool {
     previous.into_iter().min().unwrap_or(usize::MAX) <= tolerance
 }
 
-/// Decide what a new entry does to the recent history (newest first).
-pub fn decide(text: &str, source: &Value, now: u64, history: &[Value]) -> Merge {
+/// Decide what a new entry does to the recent history (newest first). Entries written at or
+/// before `forgotten` predate a cleared log and are not compared with.
+pub fn decide(text: &str, source: &Value, now: u64, forgotten: u64, history: &[Value]) -> Merge {
     let recent: Vec<&Value> = history
         .iter()
         .take(DEPTH)
         .filter(|entry| {
             let at = entry.get("timestamp").and_then(Value::as_u64).unwrap_or(0);
             now.saturating_sub(at) <= WINDOW_MS
+                && at > forgotten
                 && entry.get("source").unwrap_or(&Value::Null) == source
         })
         .collect();
@@ -119,14 +140,14 @@ mod tests {
         // The first line arrives alone, with two characters misread.
         let history = vec![entry("1", FIRST, now - 2000)];
         assert_eq!(
-            decide(WHOLE, &Value::Null, now, &history),
+            decide(WHOLE, &Value::Null, now, 0, &history),
             Merge::Replace(vec!["1".into()])
         );
         // The whole passage is in; the second line on its own adds nothing.
         let history = vec![entry("2", WHOLE, now - 1000)];
-        assert_eq!(decide(SECOND, &Value::Null, now, &history), Merge::Skip);
+        assert_eq!(decide(SECOND, &Value::Null, now, 0, &history), Merge::Skip);
         // Nor does the same passage read again.
-        assert_eq!(decide(WHOLE, &Value::Null, now, &history), Merge::Skip);
+        assert_eq!(decide(WHOLE, &Value::Null, now, 0, &history), Merge::Skip);
     }
 
     #[test]
@@ -134,12 +155,12 @@ mod tests {
         let now = 1_000_000;
         let history = vec![entry("1", "今日はいい天気ですね", now - 1000)];
         assert_eq!(
-            decide("明日は雨が降りそうですね", &Value::Null, now, &history),
+            decide("明日は雨が降りそうですね", &Value::Null, now, 0, &history),
             Merge::Add
         );
         // Short replies must match exactly: はい is not いいえ.
         let history = vec![entry("1", "はい", now - 1000)];
-        assert_eq!(decide("いいえ", &Value::Null, now, &history), Merge::Add);
+        assert_eq!(decide("いいえ", &Value::Null, now, 0, &history), Merge::Add);
         assert!(!contained("殺す", "返す"));
     }
 
@@ -147,10 +168,10 @@ mod tests {
     fn only_recent_entries_from_the_same_source_are_merged() {
         let now = 1_000_000;
         let old = vec![entry("1", WHOLE, now - WINDOW_MS - 1)];
-        assert_eq!(decide(WHOLE, &Value::Null, now, &old), Merge::Add);
+        assert_eq!(decide(WHOLE, &Value::Null, now, 0, &old), Merge::Add);
         let elsewhere =
             vec![json!({ "id": "1", "text": WHOLE, "timestamp": now, "source": {"name": "x"} })];
-        assert_eq!(decide(WHOLE, &Value::Null, now, &elsewhere), Merge::Add);
+        assert_eq!(decide(WHOLE, &Value::Null, now, 0, &elsewhere), Merge::Add);
     }
 
     #[test]
@@ -158,8 +179,40 @@ mod tests {
         let now = 1_000_000;
         let history = vec![entry("2", SECOND, now - 500), entry("1", FIRST, now - 1500)];
         assert_eq!(
-            decide(WHOLE, &Value::Null, now, &history),
+            decide(WHOLE, &Value::Null, now, 0, &history),
             Merge::Replace(vec!["2".into(), "1".into()])
         );
+    }
+
+    #[test]
+    fn a_cleared_log_forgets_what_it_held() {
+        let now = 1_000_000;
+        let history = vec![entry("1", WHOLE, now - 1000)];
+        // The log still shows it: the same passage again is skipped.
+        assert_eq!(decide(WHOLE, &Value::Null, now, 0, &history), Merge::Skip);
+        // The log was cleared after it was written: scanned again, it is new.
+        assert_eq!(
+            decide(WHOLE, &Value::Null, now, now - 500, &history),
+            Merge::Add
+        );
+        // Nor is a fuller reading tied to a fragment the log no longer shows.
+        let history = vec![entry("1", FIRST, now - 1000)];
+        assert_eq!(
+            decide(WHOLE, &Value::Null, now, now - 500, &history),
+            Merge::Add
+        );
+        // Entries written after the clear merge as before.
+        let history = vec![entry("2", WHOLE, now - 100), entry("1", WHOLE, now - 1000)];
+        assert_eq!(
+            decide(WHOLE, &Value::Null, now, now - 500, &history),
+            Merge::Skip
+        );
+    }
+
+    #[test]
+    fn forgetting_never_moves_back_in_time() {
+        forget_before(2_000);
+        forget_before(1_000);
+        assert!(forgotten_until() >= 2_000);
     }
 }

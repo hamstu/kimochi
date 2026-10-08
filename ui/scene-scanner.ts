@@ -321,6 +321,11 @@ export class SceneScanner<Frame = unknown> {
     this.emit({ type: 'status', state: 'idle', message: 'Automatic scanning stopped.' })
   }
 
+  /** The reader cleared their log: text published before may be published again. */
+  forgetPublished(): void {
+    this.scene.forgetPublished()
+  }
+
   /** Forget the screen: a different source or crop, a wake from sleep. */
   reset(): void {
     this.epoch++

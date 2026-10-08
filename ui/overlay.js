@@ -2541,6 +2541,12 @@ await native.listen('pointer', ({ payload }) => {
 })
 
 await native.listen('state', ({ payload }) => void processView(payload))
+// The reader cleared its log. Both loops forget what they published, so a line read again
+// reaches the log again; native's history merge forgets it on the same signal.
+await native.listen('history:merge-reset', () => {
+  imageScanner.forgetPublished()
+  sceneScanner.forgetPublished()
+})
 
 syncAutoScanner()
 void reportObserver()

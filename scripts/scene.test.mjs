@@ -479,3 +479,26 @@ test('the same passage read again with its lines split differently is not publis
   scene.apply(reading(merged), scene.snapshot(750), 760)
   assert.deepEqual(published(scene, 760), [])
 })
+
+test('a cleared log forgets what was published, but the lines still showing are not written back', () => {
+  const run = (clearAfterFirst) => {
+    const scene = new SceneMemory()
+    hold(scene, DIALOGUE, 0)
+    scene.apply(reading(DIALOGUE), scene.snapshot(250), 300)
+    assert.deepEqual(published(scene, 300), ['今日はいい天気ですね散歩に行きましょうか'])
+    if (clearAfterFirst) scene.forgetPublished()
+    // Still on screen, unchanged: nothing more, cleared log or not.
+    hold(scene, DIALOGUE, 400)
+    assert.deepEqual(published(scene, 650), [])
+    // Other dialogue in the same box, then the first passage again without a blank between.
+    const next = [line('明日は雨だそうです', 396), line('傘を持って行こう', 436)]
+    hold(scene, next, 900, 3)
+    scene.apply(reading(next), scene.snapshot(1400), 1410)
+    published(scene, 1410)
+    hold(scene, DIALOGUE, 1700, 3)
+    scene.apply(reading(DIALOGUE), scene.snapshot(2200), 2210)
+    return published(scene, 2210)
+  }
+  assert.deepEqual(run(false), [], 'the log still holds it: not written twice')
+  assert.deepEqual(run(true), ['今日はいい天気ですね散歩に行きましょうか'], 'the log was cleared: written again')
+})

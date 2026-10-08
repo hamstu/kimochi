@@ -37,8 +37,11 @@ async function harness(initial = {}, persistedFiles = new Map()) {
       void env.listen("settings:changed", wrapped);
       return () => listeners.get("settings:changed")?.delete(wrapped);
     },
+    invoked: [],
     async invoke(command, args) {
+      env.invoked.push(command);
       if (command === "hide_popover") return;
+      if (command === "history_merge_reset") return;
       if (command === "reader_settings_patch")
         return env.setSetting("superTexthooker", {
           ...settings.superTexthooker,
@@ -335,3 +338,21 @@ test('semantic OCR groups remain separate with independent durable replay IDs', 
   const replay=await harness({...h.settings,texthookerIngestedHistory:[]},h.files)
   assert.equal(replay.snapshot().lines.length,3)
 })
+
+test('clearing the log tells native to forget the scans it held, so the same text logs again', async () => {
+  const h = await harness({ superTexthooker: { autoMatchSource: false } });
+  await h.setSetting('scannedTextHistory', [entry('20', 'Game', '消した台詞')]);
+  await h.drain();
+  assert.deepEqual(h.snapshot().lines.map((l) => l.text), ['消した台詞']);
+  assert.ok(!h.invoked.includes('history_merge_reset'), 'nothing to forget while the log holds it');
+  await h.call('store', 'clearLines');
+  await h.drain();
+  assert.deepEqual(h.snapshot().lines, []);
+  // Native merges a rescan of recent text into the entry already there; after the clear it
+  // must not, and only this signal tells it the log no longer holds that entry.
+  assert.ok(h.invoked.includes('history_merge_reset'));
+  await h.setSetting('scannedTextHistory', [entry('21', 'Game', '消した台詞'), entry('20', 'Game', '消した台詞')]);
+  await h.drain();
+  assert.deepEqual(h.snapshot().lines.map((l) => l.text), ['消した台詞']);
+  await h.call('stats', 'resetStats');
+});

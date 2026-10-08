@@ -432,6 +432,27 @@ test('a brief blank does not reset deduplication', async () => {
   )
 })
 
+test('a cleared log lets the same line through again, but an unchanged screen stays free', async () => {
+  const h = harness({ emptyObservationsToClear: 3, minRequestSpacingMs: 0 })
+  h.sees('消した台詞')
+  await h.step()
+  await h.step()
+  assert.deepEqual(h.published(), ['cloud:消した台詞'])
+
+  // The reader clears the log while the line is still showing: nothing is written back.
+  h.scanner.forgetPublished()
+  for (let i = 0; i < 4; i++) await h.step()
+  assert.equal(h.state.recognizeCalls.length, 1, 'an unchanged screen costs nothing')
+
+  // A brief blank, then the same line: the log no longer has it, so it goes in again.
+  h.sees('')
+  await h.step()
+  h.sees('消した台詞')
+  await h.step()
+  await h.step()
+  assert.deepEqual(h.published(), ['cloud:消した台詞', 'cloud:消した台詞'])
+})
+
 test('an empty screen never spends a request', async () => {
   const h = harness()
   h.sees('')

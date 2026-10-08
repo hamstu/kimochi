@@ -1,6 +1,7 @@
 import type { OcrGroup } from "../../ui/ocr-result";
 /** Always-loaded Log realm: sole owner of session files, serialized RPC and OCR intake. */
 import { emit, listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { getSetting, setSetting, onSettingsChange } from "../bridge/settings";
 import * as sessions from "./core/sessions";
 import * as store from "./core/store";
@@ -161,6 +162,13 @@ export function startHost(): Promise<void> {
       await presets.loadPresets();
       await store.loadLines();
       await notebook.loadNotebook();
+      // Scans that repeat a line already logged are dropped upstream (the history merge and the
+      // automatic scanners remember what they published). Once the log is cleared that line is
+      // no longer there, so they must forget it too, or scanning it again shows nothing.
+      store.subscribe((event) => {
+        if (event.type === "clear")
+          void invoke("history_merge_reset").catch(reportError);
+      });
       bindings = await getSetting("texthookerSourceSessions", {});
       seen = await getSetting("texthookerIngestedHistory", []);
       await listen<{

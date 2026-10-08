@@ -913,6 +913,16 @@ export class AutoScanner<Frame = unknown> {
   }
 
   /**
+   * The reader cleared their log: the text last sent there is no longer in it, so the same
+   * text read again is sent again. The candidate on screen keeps its `submitted` mark, so an
+   * unchanged screen still costs nothing and is not written straight back into the log.
+   */
+  forgetPublished(): void {
+    this.lastSubmittedKey = ''
+    this.lastPublishedKey = ''
+  }
+
+  /**
    * Forget everything observed, so the next tick starts from nothing.
    * Used after a source change, a sleep/wake, or a crop commit.
    */

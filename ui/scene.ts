@@ -389,6 +389,16 @@ export class SceneMemory {
     this.options = { ...this.options, ...options }
   }
 
+  /**
+   * The reader cleared their log, so a passage published earlier is no longer there to repeat:
+   * shown again, it is published again. What is on screen now stays published (`passageOf`),
+   * so clearing the log does not immediately write the lines still showing back into it.
+   */
+  forgetPublished(): void {
+    this.published = []
+    this.recent = []
+  }
+
   reset(): void {
     this.tracks = []
     this.units = []

@@ -405,6 +405,7 @@ const HANDLERS: Record<string, Handler> = {
   history_add: ok,
   history_delete: ok,
   history_clear: ok,
+  history_merge_reset: ok,
 
   // hotkeys
   hotkeys_load: () => mergeHotkeysWithOverrides({}),

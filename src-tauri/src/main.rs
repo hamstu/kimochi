@@ -1768,7 +1768,8 @@ fn history_add(
     let mut skipped = false;
     edit_history(&app, &state, |list| {
         if merge.unwrap_or(false) {
-            match history_merge::decide(&text, &entry["source"], now as u64, list) {
+            let forgotten = history_merge::forgotten_until();
+            match history_merge::decide(&text, &entry["source"], now as u64, forgotten, list) {
                 history_merge::Merge::Skip => {
                     skipped = true;
                     return;
@@ -1804,6 +1805,15 @@ fn history_delete(app: tauri::AppHandle, state: State<Shared>, id: String) -> Re
 fn history_clear(app: tauri::AppHandle, state: State<Shared>) -> Reply<()> {
     edit_history(&app, &state, Vec::clear)?;
     Ok(())
+}
+
+/// The reader cleared its log: what it showed is no longer there to duplicate. Scans merge
+/// only with entries written after this (see history_merge.rs), and the automatic scanners
+/// are told to forget what they published, so the same text scanned again reaches the log.
+#[tauri::command]
+fn history_merge_reset(app: tauri::AppHandle) {
+    history_merge::forget_before(now_millis() as u64);
+    let _ = app.emit("history:merge-reset", ());
 }
 
 #[tauri::command]
@@ -2141,6 +2151,7 @@ fn main() {
             history_add,
             history_delete,
             history_clear,
+            history_merge_reset,
             ext_relay,
             window_bounds,
             popup_window,
