@@ -14,9 +14,10 @@ import type { ModelControls } from '../../bridge/models'
 import { ModelDownload } from './ModelDownload'
 
 /**
- * Whether this is a local development build. The frontend is always `vite build`-ed (even for
- * `tauri dev`), so `import.meta.env.DEV` only covers the Vite dev server; a debug native build
- * says so through `__KIMOCHI_PLATFORM__.debug` (`platform_prelude` in `src-tauri/src/platform`).
+ * Whether this is a local development build. `import.meta.env.DEV` covers the Vite dev servers
+ * (`tauri dev` and `npm run preview:ui`); a debug native build loading a `vite build` (`npm run
+ * bundle`) says so through `__KIMOCHI_PLATFORM__.debug` (`platform_prelude` in
+ * `src-tauri/src/platform`).
  */
 const DEV_BUILD =
   import.meta.env.DEV ||

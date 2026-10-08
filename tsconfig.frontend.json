@@ -39,6 +39,7 @@
     "frontend/**/*.ts",
     "frontend/**/*.tsx",
     "frontend/**/*.d.ts",
-    "vite.config.ts"
+    "vite.config.ts",
+    "vite.dev.config.ts"
   ]
 }

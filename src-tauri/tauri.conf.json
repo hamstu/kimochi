@@ -4,7 +4,13 @@
   "version": "0.1.0",
   "identifier": "dev.kimochi.app",
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "devUrl": "http://127.0.0.1:1430",
+    "beforeDevCommand": {
+      "script": "node node_modules/vite/bin/vite.js --config vite.dev.config.ts",
+      "cwd": "..",
+      "wait": false
+    }
   },
   "app": {
     "withGlobalTauri": true,

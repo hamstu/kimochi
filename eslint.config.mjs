@@ -40,7 +40,7 @@ export default tseslint.config(
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   {
-    files: ['scripts/**/*.mjs', 'vite.config.ts', 'eslint.config.mjs'],
+    files: ['scripts/**/*.mjs', 'vite.config.ts', 'vite.dev.config.ts', 'eslint.config.mjs'],
     languageOptions: { globals: { ...globals.node } }
   }
 )

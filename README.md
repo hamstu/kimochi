@@ -28,12 +28,22 @@ The two OCR crates are path dependencies: `kimochi-meikiocr` and `kimochi-mangao
 | `npm run bundle` | Debug bundle for this OS: `.app` (macOS), NSIS `-setup.exe` (Windows), `.deb` + `.AppImage` (Linux), under `src-tauri/target/debug/bundle/`. Stages the OCR runtime and licences first; the OCR models are downloaded by the app on demand, not bundled. |
 | `npm run release` | Optimised bundle for this OS, under `src-tauri/target/release/bundle/`. |
 | `npm start` | Launches the **already-built** debug output: `open`s `Kimochi.app` on macOS, starts `target/debug/kimochi(.exe)` elsewhere. Rebuild after changes. |
-| `npm run dev` | Rebuilds `dist/` (`prepare.mjs` + `vite build`), then `tauri dev`. Dev mode serves the built `dist/`, so rerun it after frontend changes. Stages OCR assets only if they have never been staged. |
+| `npm run dev` | Rebuilds `dist/` (`prepare.mjs`), then `tauri dev` with live reload (see [Dev mode](#dev-mode)). Stages OCR assets only if they have never been staged. |
 | `npm run check:rust` | `cargo clippy -D warnings` for `src-tauri`. |
 | `npm run check:all` | `check:rust`, plus `cargo check` of `capture-core` for `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc` and `x86_64-unknown-linux-gnu` (each skipped with a hint unless `rustup target add` has been run). A convenience only: native CI on each OS is the real compile gate. |
 | `npm run prepare:meikiocr -- --target <triple>` | Stage the ONNX Runtime for another Rust target (also `KIMOCHI_TARGET`); `MEIKIOCR_DEST` stages into another directory. `prepare:mangaocr` accepts the same flag (its models are platform-neutral). |
 
 `npm run bundle -- --target <triple>` cross-builds when the toolchain allows it and stages the matching OCR runtime. `npm run preview:ui` renders every window in Chrome against mocked native commands for design work.
+
+### Dev mode
+
+`npm run dev` runs `tauri dev`, which starts the Vite dev server in `vite.dev.config.ts` (`build.beforeDevCommand`) and loads every window from it at `build.devUrl`, `http://127.0.0.1:1430`. That is the origin `tauri dev`'s built-in static server used before, so the dev build keeps its dictionaries (IndexedDB is per origin). One origin serves both halves of the app:
+
+- `/app/*`: the React windows from `frontend/`. Edits apply through Vite HMR without a reload.
+- everything else: the prepared `dist/` tree (Yomitan, `dist/spike/` from `host/`, `dist/ui/` from `ui/`). Editing `ui/` redoes that `prepare.mjs` step and reloads the plain `ui/` windows (overlay, dictionary popup host, ...); `ui/panel-yomitan.js`, which the panels load at runtime, reloads every window.
+- `src-tauri/` edits rebuild and relaunch the app (`tauri dev`'s own watcher). So do `host/` edits: the dev server copies them into `dist/spike/`, and the app relaunches because native injects `host/shim.js` and `host/panel-shim.js` when a window is created.
+
+Quitting the app or pressing Ctrl-C stops `tauri dev` and the dev server with it. Port 1430 must be free; `KIMOCHI_DEV_PORT=1431 npm run dev` runs a second checkout alongside (that origin starts with empty dictionaries). A bare `npx tauri dev` also works, but skips OCR staging and reloads windows for `host/` edits instead of relaunching (restart it yourself after editing the two injected shims). Bundles (`npm run bundle`/`release`) never use the dev server: they `vite build` into `dist/app/` and embed `dist/`.
 
 ### Prerequisites per OS
 

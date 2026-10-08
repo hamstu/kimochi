@@ -2250,9 +2250,10 @@ fn main() {
             .initialization_script_for_all_frames(platform::platform_prelude())
             .initialization_script_for_all_frames(include_str!("../../host/shim.js"))
             .on_navigation({
-                // `tauri dev` serves `dist/` from the CLI's own dev server rather than the
-                // `tauri://` protocol, so a dev build must also accept that origin or the
-                // overlay's own page is blocked and the dictionary backend never starts.
+                // `tauri dev` loads every page from `build.devUrl` (the Vite dev server in
+                // `vite.dev.config.ts`) rather than the `tauri://` protocol, so a dev build must
+                // also accept that origin or the overlay's own page is blocked and the
+                // dictionary backend never starts.
                 // Bundles (custom-protocol) stay locked to the app origin
                 // (`tauri://localhost` on macOS; see `platform::app_origin`).
                 let dev_origin = if cfg!(dev) {

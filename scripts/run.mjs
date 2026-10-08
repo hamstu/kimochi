@@ -1,7 +1,7 @@
 // Task runner behind the npm scripts. Usage: node scripts/run.mjs <task> [extra tauri args]
 //
 //   launch     open the last debug bundle (macOS .app, or the debug binary on Windows/Linux)
-//   dev        prepare + vite build, then `tauri dev` (dev mode serves the built `dist/`)
+//   dev        prepare, then `tauri dev` with live reload (see "Dev mode" below)
 //   bundle     debug bundle for this OS (app | nsis | deb,appimage)
 //   release    optimised bundle for this OS
 //   check      cargo clippy -D warnings for src-tauri
@@ -9,6 +9,19 @@
 //
 // `bundle`/`release` accept `--target <rust-triple>`; it is passed to tauri and to the OCR
 // staging scripts (as KIMOCHI_TARGET) so the bundled runtime matches the binary.
+//
+// Dev mode: `tauri dev` starts `vite.dev.config.ts` as its `beforeDevCommand` and loads every
+// window from it at `build.devUrl` (http://127.0.0.1:1430, the origin `tauri dev`'s built-in static
+// server used, so the dev dictionaries in that origin's IndexedDB carry over):
+//   - React windows (`frontend/`, served at `/app/`) update through Vite HMR, no reload.
+//   - `ui/` edits redo prepare.mjs's `ui/` step into `dist/ui/` and reload the plain `ui/` pages
+//     (overlay, popup host, ...); `ui/panel-yomitan.js`, which the panels load at runtime, reloads
+//     every window.
+//   - Rust edits under `src-tauri/` rebuild and relaunch the app (`tauri dev`'s own watcher), and so
+//     do `host/` edits, because native injects `host/shim.js` and `host/panel-shim.js` at window
+//     creation (the dev server still copies them into `dist/spike/` first).
+// Quitting the app (or Ctrl-C) stops `tauri dev`, which stops the dev server. `KIMOCHI_DEV_PORT`
+// moves the dev server, e.g. to run a second checkout alongside; that origin has its own storage.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readdir } from 'node:fs/promises'
@@ -88,7 +101,7 @@ if (
   }
 }
 
-await import('./prepare.mjs')
+await (await import('./prepare.mjs')).prepare()
 
 const ocrResources = ['src-tauri/resources/meikiocr', 'src-tauri/resources/mangaocr']
 // Written last by each staging script, so their presence means a complete earlier run.
@@ -140,15 +153,25 @@ if (
   for (const [from, to] of legal) if (!existsSync(to)) await copyFile(from, to)
 }
 
-// The React panels build into `dist/app/`, after prepare.mjs has rebuilt `dist/` from `yomitan/`
-// (it wipes the directory first). `dist/app` exists in neither `yomitan/` nor `ui/`, so the
-// extension hash verification is unaffected.
-if (task !== 'check' && task !== 'check:all') exitOnFailure(node('vite', 'vite', ['build']))
-
 if (task === 'dev') {
-  exitOnFailure(node('@tauri-apps/cli', 'tauri', ['dev', ...extra]))
+  const devArgs = ['dev']
+  const port = env.KIMOCHI_DEV_PORT
+  if (port) devArgs.push('--config', JSON.stringify({ build: { devUrl: `http://127.0.0.1:${port}` } }))
+  // `host/shim.js` and `host/panel-shim.js` are injected by native into every frame when a window
+  // is created, so a page reload cannot pick up an edit: relaunch the app instead, like a Rust
+  // change. tauri cannot watch single files (or honour a `.taurignore` that keeps only two), so
+  // all of `host/` relaunches; the dev server then skips its own reload (KIMOCHI_DEV_HOST_RELAUNCH).
+  // Absolute, because tauri resolves the folder from `src-tauri/`.
+  devArgs.push('--additional-watch-folders', path.resolve('host'))
+  env.KIMOCHI_DEV_HOST_RELAUNCH = '1'
+  exitOnFailure(node('@tauri-apps/cli', 'tauri', [...devArgs, ...extra]))
   process.exit(0)
 }
+
+// The React panels build into `dist/app/`, after prepare.mjs has rebuilt `dist/` from `yomitan/`
+// (it wipes the directory first). `dist/app` exists in neither `yomitan/` nor `ui/`, so the
+// extension hash verification is unaffected. Dev mode serves them from Vite instead.
+if (task !== 'check' && task !== 'check:all') exitOnFailure(node('vite', 'vite', ['build']))
 
 if (task === 'check' || task === 'check:all') {
   exitOnFailure(
