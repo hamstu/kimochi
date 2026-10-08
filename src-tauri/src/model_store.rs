@@ -942,6 +942,74 @@ impl ModelStore {
     }
 }
 
+// ---------------------------------------------------------------------------- activity
+
+/// Shortest gap between two progress posts to the activity feed.
+const ACTIVITY_PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
+
+/// What the activity feed hears about one engine's download: each state change once, and
+/// progress at most once a second. The `model-download` event is far chattier (every 250 ms)
+/// because the settings card draws a bar from it; the feed is read, not watched.
+#[derive(Default)]
+pub struct ModelTicker {
+    state: Option<&'static str>,
+    percent: u64,
+    posted: Option<Instant>,
+}
+
+impl ModelTicker {
+    /// The feed key for an engine's download, so progress settles into its outcome.
+    pub fn key(engine: Engine) -> String {
+        format!("model:{}", engine.key())
+    }
+
+    /// The post this status calls for, if any.
+    pub fn next(
+        &mut self,
+        status: &ModelStatus,
+        now: Instant,
+    ) -> Option<(String, crate::activity::Tone)> {
+        use crate::activity::Tone;
+        let name = format!("{} model", status.name);
+        let pct = percent(status.overall_received, status.overall_total);
+        let previous = self.state.replace(status.state);
+        let changed = previous != Some(status.state);
+        let post = match status.state {
+            "downloading" => {
+                let due = self
+                    .posted
+                    .is_none_or(|at| now.duration_since(at) >= ACTIVITY_PROGRESS_INTERVAL);
+                (changed || (due && pct != self.percent))
+                    .then(|| (format!("Downloading {name}… {pct}%"), Tone::Busy))
+            }
+            _ if !changed => None,
+            "verifying" => Some((format!("Verifying {name}…"), Tone::Busy)),
+            // Only a download finishing is news; an engine found ready is not.
+            "ready" => previous
+                .is_some()
+                .then(|| (format!("{name} ready"), Tone::Ok)),
+            "paused" => Some((format!("{name} download paused at {pct}%"), Tone::Info)),
+            "failed" => Some((
+                format!(
+                    "{name} download failed: {}",
+                    status.message.as_deref().unwrap_or("unknown error")
+                ),
+                Tone::Error,
+            )),
+            "absent" => Some(match previous {
+                Some("ready") | None => (format!("{name} removed"), Tone::Info),
+                Some(_) => (format!("{name} download cancelled"), Tone::Info),
+            }),
+            _ => None,
+        };
+        if post.is_some() {
+            self.percent = pct;
+            self.posted = Some(now);
+        }
+        post
+    }
+}
+
 // ---------------------------------------------------------------------------- app glue
 
 /// The model directories outside the store, in resolution order.
@@ -981,8 +1049,19 @@ pub fn install(app: &tauri::AppHandle) -> Result<(), String> {
     let store = ModelStore::new(root, manifest().clone(), Arc::new(HttpFetch::default()));
     let handle = app.clone();
     let announced: Mutex<Option<Instant>> = Mutex::new(None);
+    let tickers: Mutex<HashMap<Engine, ModelTicker>> = Mutex::new(HashMap::new());
     store.on_change(move |engine, transition| {
-        let _ = handle.emit("model-download", status(&handle, engine));
+        let current = status(&handle, engine);
+        let post = tickers
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .entry(engine)
+            .or_default()
+            .next(&current, Instant::now());
+        if let Some((text, tone)) = post {
+            crate::activity::post(&handle, &text, tone, Some(&ModelTicker::key(engine)));
+        }
+        let _ = handle.emit("model-download", current);
         // The capabilities carry the gate's reason ("Downloading model… 32%"): re-announce
         // them on every state change, and about once a second while bytes arrive.
         let due = {
@@ -1411,6 +1490,83 @@ mod tests {
             Some("Model not downloaded")
         );
         assert_eq!(reason(&Phase::Ready, 100), None);
+    }
+
+    #[test]
+    fn the_activity_feed_hears_state_changes_and_throttled_progress() {
+        use crate::activity::Tone;
+        let models = EngineModels {
+            name: "MeikiOCR".into(),
+            files: vec![file("a.onnx", &[0; 100])],
+        };
+        let at = |phase: Phase| ModelStatus::new(Engine::Meiki, &models, &phase, None);
+        let downloading = |received| {
+            at(Phase::Downloading {
+                file: "a.onnx".into(),
+                received,
+                total: 100,
+                overall_received: received,
+            })
+        };
+        let start = Instant::now();
+        let later = |ms| start + Duration::from_millis(ms);
+        let mut ticker = ModelTicker::default();
+
+        assert_eq!(
+            ticker.next(&downloading(0), start),
+            Some(("Downloading MeikiOCR model… 0%".into(), Tone::Busy))
+        );
+        // Bytes arriving inside the second are not news yet.
+        assert_eq!(ticker.next(&downloading(10), later(250)), None);
+        assert_eq!(ticker.next(&downloading(20), later(500)), None);
+        assert_eq!(
+            ticker.next(&downloading(42), later(1000)),
+            Some(("Downloading MeikiOCR model… 42%".into(), Tone::Busy))
+        );
+        // Nor is a second without progress.
+        assert_eq!(ticker.next(&downloading(42), later(2500)), None);
+        assert_eq!(
+            ticker.next(
+                &at(Phase::Verifying {
+                    file: "a.onnx".into(),
+                    overall_received: 100
+                }),
+                later(2600)
+            ),
+            Some(("Verifying MeikiOCR model…".into(), Tone::Busy))
+        );
+        assert_eq!(
+            ticker.next(&at(Phase::Ready), later(2700)),
+            Some(("MeikiOCR model ready".into(), Tone::Ok))
+        );
+        assert_eq!(ticker.next(&at(Phase::Ready), later(2800)), None);
+        assert_eq!(
+            ticker.next(&at(Phase::Absent), later(2900)),
+            Some(("MeikiOCR model removed".into(), Tone::Info))
+        );
+
+        let mut ticker = ModelTicker::default();
+        ticker.next(&downloading(50), start);
+        assert_eq!(
+            ticker.next(
+                &at(Phase::Failed {
+                    message: "HTTP 503".into(),
+                    overall_received: 50
+                }),
+                later(100)
+            ),
+            Some((
+                "MeikiOCR model download failed: HTTP 503".into(),
+                Tone::Error
+            ))
+        );
+        assert_eq!(
+            ticker.next(&at(Phase::Absent), later(200)),
+            Some(("MeikiOCR model download cancelled".into(), Tone::Info))
+        );
+        // An engine first seen ready was not downloaded just now.
+        assert_eq!(ModelTicker::default().next(&at(Phase::Ready), start), None);
+        assert_eq!(ModelTicker::key(Engine::Manga), "model:mangaocr");
     }
 
     #[test]

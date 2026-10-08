@@ -23,6 +23,7 @@
  *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
  *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
+ *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
@@ -394,6 +395,10 @@ const HANDLERS: Record<string, Handler> = {
   capture_frame: () => demoCapture(),
   scan: () => null,
   clear: ok,
+  activity_post: (a) => {
+    void emit('activity', { text: a?.text, tone: a?.tone ?? 'info', key: a?.key ?? null, at: Date.now() })
+    return null
+  },
 
   // actions
   trigger_action: (a) => note('trigger_action', a?.name),
@@ -474,6 +479,40 @@ function installIpc(label: string): void {
   )
 }
 
+// ---------------------------------------------------------------- activity script
+
+/** `?activity=1`: what the overlay and native post during a few scans, on a loop. */
+function playActivity(): void {
+  type Step = [delayMs: number, text: string, tone: string, key?: string]
+  const steps: Step[] = [
+    [1200, 'Auto-scan on', 'info', 'auto-scan'],
+    [1500, 'Scanning…', 'busy', 'scan'],
+    [400, 'Recognising with MeikiOCR…', 'busy', 'scan'],
+    [900, 'Added 2 lines', 'ok', 'scan'],
+    [2500, 'Scanning…', 'busy', 'scan'],
+    [700, 'Same text as before, not added', 'info', 'scan'],
+    [2500, 'Scanning…', 'busy', 'scan'],
+    [600, 'Nothing recognised', 'warn', 'scan'],
+    [1500, 'Scanning…', 'busy', 'scan'],
+    [600, 'Nothing recognised', 'warn', 'scan'],
+    [2000, 'Downloading Manga OCR model… 12%', 'busy', 'model:mangaocr'],
+    [1000, 'Downloading Manga OCR model… 47%', 'busy', 'model:mangaocr'],
+    [1000, 'Downloading Manga OCR model… 88%', 'busy', 'model:mangaocr'],
+    [1000, 'Manga OCR model ready', 'ok', 'model:mangaocr'],
+    [2500, 'Scanning…', 'busy', 'scan'],
+    [800, 'OCR failed: OCR HTTP 429: quota exceeded', 'error', 'scan']
+  ]
+  let index = 0
+  const next = (): void => {
+    const [delay, text, tone, key] = steps[index++ % steps.length]
+    setTimeout(() => {
+      void emit('activity', { text, tone, key: key ?? null, at: Date.now() })
+      next()
+    }, delay)
+  }
+  next()
+}
+
 // ---------------------------------------------------------------- dictionary relay stub
 
 // `preloadPanelYomitan` imports `/ui/panel-yomitan.js`; vite.preview.config.ts serves a stub there.
@@ -487,6 +526,7 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   document.documentElement.dataset.preview = label
 
   if (params.get('empty') !== '1') await seedFilesystem()
+  if (params.get('activity') === '1') playActivity()
 
   // The Log window is the texthooker host (sole owner of session files). Every other window that
   // reads reader data is a client of it over events, so run a host in-page for those windows.

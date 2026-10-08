@@ -87,15 +87,28 @@ export async function publishScan(annotations, grouping, options = {}) {
 
 export { MAX_HISTORY_ENTRIES }
 
-/** Publish a capture once while preserving independently readable OCR units. */
+/**
+ * Publish a capture once while preserving independently readable OCR units.
+ *
+ * `options.onPublication` hears how it went, `{lines, duplicate}`, for the activity feed: the
+ * returned string is empty both for a reading with nothing in it and for one the history
+ * already had, and to the reader those are different outcomes.
+ */
 export async function publishOcrResult(result, options = {}) {
+  const report = (lines, duplicate = false) => options.onPublication?.({ lines, duplicate })
   let groups = result.groups ?? []
   if (result.geometry && !result.textAnnotations.some(a => a.granularity === 'block')) {
     groups = logicalGroups(visibleAnnotations(result.textAnnotations, options.grouping ?? {})).groups
-    if (!groups.length) return ''
+    if (!groups.length) {
+      report(0)
+      return ''
+    }
   }
   const text = groups.map(group => group.text).join('\n') || result.fullText || ''
-  if (!text.trim()) return ''
+  if (!text.trim()) {
+    report(0)
+    return ''
+  }
   // History first: with `merge`, a reading already in the history (the same sentence again,
   // or a piece of one) is skipped there, and then is not sent to the clipboard either. A fuller
   // reading replaces the fragments it contains; see history_merge.rs.
@@ -105,7 +118,12 @@ export async function publishOcrResult(result, options = {}) {
     engine: result.engine,
     merge: !!options.merge
   })
-  if (entry?.skipped) return ''
+  if (entry?.skipped) {
+    report(0, true)
+    return ''
+  }
   await publishText(text)
+  // The Log gives each non-empty group a line of its own, and an ungrouped reading one line.
+  report(groups.filter(group => group.text?.trim()).length || 1)
   return text
 }

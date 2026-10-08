@@ -5,6 +5,7 @@ use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
 mod actions;
+mod activity;
 mod capture_unavailable;
 mod engine_probe;
 mod gamepad;
@@ -2162,6 +2163,7 @@ fn main() {
             open_accessibility_preferences,
             platform_capabilities,
             gnome_overlay,
+            activity::activity_post,
             model_store::model_status,
             model_store::model_download_start,
             model_store::model_download_pause,

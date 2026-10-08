@@ -529,6 +529,20 @@ workstream owns. No window sets a data store identifier, so every webview shares
 test is to open the Yomitan window and confirm its installed dictionary count matches
 what the overlay reports.
 
+## Activity feed
+
+| Command | Signature |
+| --- | --- |
+| `activity_post` | `({text, tone?, key?}) -> ()` — `tone`: `info` (default) \| `busy` \| `ok` \| `warn` \| `error` |
+
+Broadcasts `activity` `{text, tone, key, at}` to every window, the poster included; `at` is
+stamped natively (epoch ms) so all windows share one clock, and `text` is flattened to one line
+of at most 300 characters. Native code posts through `activity::post` (model downloads, from
+`model_store::install`). Nothing is stored: each window's feed (`ui/activity.ts`) lives in
+memory for that window's lifetime, coalescing repeats and letting the next post with a `busy`
+entry's key settle it. The Log shows it as the activity ticker; the overlay's scan pipeline
+posts through `postActivity` in `ui/native.js`, with its wording in `ui/scan-activity.ts`.
+
 ## System, tray and lifecycle
 
 | Command | Signature |

@@ -72,3 +72,49 @@ test('a refused native publication is not presented as a successful overlay resu
     /evicted frame/
   )
 })
+
+test('the overlay tells the activity feed how a result ended', async () => {
+  const posts = []
+  const reports = []
+  const context = vm.createContext({
+    native: { publishScanState: async () => undefined },
+    state: {},
+    generation: { isStale: () => false, current: 1 },
+    foreground: { current: null },
+    draw: () => {},
+    setting: () => null,
+    publishOcrResult: async (_result, options) => {
+      options.onPublication?.({ lines: 2, duplicate: false })
+      return 'text'
+    },
+    log: () => {},
+    publish: () => {},
+    rejectFrame: () => {},
+    activity: (post) => posts.push(post),
+    scanActivity: { sourceChanged: () => ({ text: 'source changed', key: 'scan' }) },
+    autoRound: null
+  })
+  vm.runInContext(functions, context)
+
+  // An applied result hands the publisher's report to whoever is waiting for it.
+  await context.applyResult({ geometry: false, fullText: 'text' }, { id: 1 }, { source: {} }, {
+    publish: true,
+    onPublication: (report) => reports.push(report)
+  })
+  assert.deepEqual(reports, [{ lines: 2, duplicate: false }])
+  assert.deepEqual(posts, [])
+
+  // A stale one says it was discarded, rather than ending in silence.
+  context.generation.isStale = () => true
+  await context.applyResult({ geometry: false, fullText: 'text' }, { id: 2 }, { source: {} })
+  assert.deepEqual(
+    posts.map((post) => post.text),
+    ['source changed']
+  )
+
+  // Inside an automatic recognition it is kept for the round's one outcome instead.
+  context.autoRound = { lines: 0, duplicate: false, outcome: null }
+  await context.applyResult({ geometry: false, fullText: 'text' }, { id: 3 }, { source: {} })
+  assert.equal(posts.length, 1)
+  assert.equal(context.autoRound.outcome.text, 'source changed')
+})

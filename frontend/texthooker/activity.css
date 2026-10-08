@@ -1,0 +1,203 @@
+/*
+ * The activity ticker (components/ActivityTicker.tsx): a raised strip floating over the foot of
+ * the transcript, which opens upward into the recent history. Raised like a popover
+ * (`--k-raised`, `--k-shadow-pop`), because it sits over the lines rather than among them.
+ */
+
+/* The transcript's positioned frame: the ticker floats over it without scrolling with it. */
+.log-transcript-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Room to scroll the last line clear of the ticker; nothing moves when it appears. */
+.log-transcript-frame[data-activity] > .log-transcript {
+  padding-bottom: calc(var(--k-row-h) + var(--k-space-6));
+}
+
+.activity {
+  position: absolute;
+  bottom: var(--k-space-3);
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column-reverse;
+  width: min(28rem, calc(100% - var(--k-space-3) * 2));
+  border-radius: var(--k-radius-xl);
+  background: var(--k-raised);
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  color: var(--k-text);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  transform: translateX(-50%);
+}
+.dark .activity {
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a6);
+}
+
+/* ------------------------------------------------------------------ the ticker */
+.activity-ticker {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  width: 100%;
+  height: var(--k-row-h);
+  padding: 0 var(--k-space-3);
+  border: 0;
+  border-radius: var(--k-radius-xl);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  transition: background-color var(--k-fast);
+}
+.activity-ticker:hover {
+  background: var(--k-hover);
+}
+.activity-ticker:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+.activity[data-open] .activity-ticker {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* One line tall: the old message leaves upward as the new one rises into its place. */
+.activity-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: var(--k-leading-sm);
+  overflow: hidden;
+}
+.activity-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-text-in {
+  animation: activity-in 200ms var(--k-ease-out);
+}
+.activity-text-out {
+  position: absolute;
+  inset: 0;
+  animation: activity-out 200ms var(--k-ease-out) forwards;
+}
+@keyframes activity-in {
+  from { opacity: 0; transform: translateY(100%); }
+}
+@keyframes activity-out {
+  to { opacity: 0; transform: translateY(-100%); }
+}
+
+.activity-dot-busy {
+  animation: activity-pulse 1.4s ease-in-out infinite;
+}
+@keyframes activity-pulse {
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+.activity-count {
+  height: 1rem;
+  padding: 0 var(--k-space-1);
+}
+.activity-time {
+  flex: none;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ the history */
+.activity-panel {
+  border-bottom: 1px solid var(--k-line);
+  animation: activity-open var(--k-base) var(--k-ease-out);
+}
+@keyframes activity-open {
+  from { opacity: 0; transform: translateY(0.25rem); }
+}
+.activity-list {
+  max-height: min(50vh, 18rem);
+  margin: 0;
+  padding: var(--k-space-1) 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.activity-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-height: var(--k-item-h);
+  padding: var(--k-space-0-5) var(--k-space-3) var(--k-space-0-5) var(--k-space-1-5);
+}
+.activity-row-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.activity-row[data-tone="error"] .activity-row-text {
+  color: var(--k-danger-text);
+}
+
+.activity-disclosure,
+.activity-disclosure-space {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.activity-disclosure {
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-text-3);
+  cursor: default;
+}
+.activity-disclosure:hover {
+  background: var(--k-hover);
+  color: var(--k-text-2);
+}
+.activity-disclosure:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -1px;
+}
+.activity-disclosure svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+  transition: transform var(--k-fast) var(--k-ease-out);
+}
+.activity-disclosure[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+/* Each time a repeated entry happened, under its text. */
+.activity-instances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--k-space-0-5) var(--k-space-3);
+  margin: 0;
+  padding: 0 var(--k-space-3) var(--k-space-1-5) calc(var(--k-space-1-5) + 1.25rem + var(--k-space-2) * 2 + 0.4375rem);
+  list-style: none;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-dot-busy,
+  .activity-text-in,
+  .activity-panel {
+    animation: none;
+  }
+  /* No exit to watch, so the old text simply goes. */
+  .activity-text-out {
+    display: none;
+  }
+}
