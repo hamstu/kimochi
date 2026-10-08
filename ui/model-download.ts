@@ -1,7 +1,7 @@
 /**
  * On-demand OCR model downloads, as the UI sees them: the `model_status` reply and
  * `model-download` event payload (`ModelStatus` in `src-tauri/src/model_store.rs`), and the
- * pure wording and decisions the settings card and the sidebar badge share.
+ * pure wording and decisions the settings card, the sidebar badge and the engine pickers share.
  */
 
 export type ModelEngine = 'meikiocr' | 'mangaocr'
@@ -79,26 +79,78 @@ export function formatBytes(bytes: number): string {
 export const progressText = (received: number, total: number): string =>
   `${formatBytes(received)} of ${formatBytes(total)}`
 
-/** One short line for the state, e.g. "Downloading… 32%". */
-export function stateLabel(status: ModelStatus): string {
+/** The line under the settings card's progress bar, e.g. "Downloading Manga OCR · 212 MB of 539 MB". */
+export function statusLine(status: ModelStatus): string {
   const pct = percent(status.overallReceived, status.overallTotal)
   switch (status.state) {
     case 'absent':
-      return 'Not downloaded'
+      return `Not downloaded · ${formatBytes(status.overallTotal)}`
     case 'downloading':
-      return `Downloading… ${pct}%`
+      return `Downloading ${status.name} · ${progressText(status.overallReceived, status.overallTotal)}`
     case 'verifying':
       return 'Verifying…'
     case 'paused':
       return pct > 0 ? `Paused at ${pct}%` : 'Paused'
     case 'failed':
-      return 'Download failed'
+      return status.message ? `Download failed: ${status.message}` : 'Download failed'
     case 'ready':
-      return status.source === 'downloaded' || !status.source
-        ? 'Downloaded'
-        : status.source === 'bundled'
-          ? 'Included with this build'
-          : 'Using the development copy'
+      return status.source === 'bundled'
+        ? 'Ready · included with this build'
+        : status.source === 'development'
+          ? 'Ready · using the development copy'
+          : `Ready · ${formatBytes(status.overallTotal)}`
+  }
+}
+
+/** How full the progress bar is, 0–100: empty until something arrives, full once ready. */
+export function barPercent(status: ModelStatus): number {
+  switch (status.state) {
+    case 'absent':
+      return 0
+    case 'ready':
+    case 'verifying':
+      return 100
+    default:
+      return percent(status.overallReceived, status.overallTotal)
+  }
+}
+
+/** A button's label; Download carries the size, since pressing it is the consent. */
+export function actionLabel(action: ModelAction, status: ModelStatus): string {
+  switch (action) {
+    case 'download':
+      return status.overallTotal > 0 ? `Download (${formatBytes(status.overallTotal)})` : 'Download'
+    case 'pause':
+      return 'Pause'
+    case 'resume':
+      return 'Resume'
+    case 'retry':
+      return 'Retry'
+    case 'cancel':
+      return 'Cancel'
+    case 'delete':
+      return 'Delete'
+  }
+}
+
+/**
+ * Picking an engine in the sidebar or Settings: a local engine whose models were never
+ * downloaded asks first (choosing it starts a download of hundreds of MB); anything else (a
+ * ready model, or one already under way, paused or failed) is selected directly. `status` is the
+ * picked engine's model status, null when it has none (a cloud engine, an older backend).
+ */
+export function engineChoice(mode: string, status: ModelStatus | null): 'confirm' | 'select' {
+  return isModelEngine(mode) && status?.engine === mode && status.state === 'absent'
+    ? 'confirm'
+    : 'select'
+}
+
+/** The wording of the confirmation `engineChoice` asks for. */
+export function downloadPrompt(status: ModelStatus): { title: string; description: string } {
+  const size = status.overallTotal > 0 ? `about ${formatBytes(status.overallTotal)}` : 'large'
+  return {
+    title: `Download ${status.name}?`,
+    description: `${status.name} needs its model, which is ${size}. It will be downloaded now and kept on this computer; scans with ${status.name} start once it finishes.`
   }
 }
 
@@ -120,12 +172,6 @@ export function modelActions(status: ModelStatus): ModelAction[] {
       return status.source === 'downloaded' ? ['delete'] : []
   }
 }
-
-/** Whether progress bars are shown. */
-export const showsProgress = (status: ModelStatus): boolean =>
-  status.state === 'downloading' ||
-  status.state === 'verifying' ||
-  ((status.state === 'paused' || status.state === 'failed') && status.overallReceived > 0)
 
 /**
  * The sidebar badge: a spinner and percentage while busy, a warning when the selected engine

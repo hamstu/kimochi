@@ -1,7 +1,9 @@
 /**
- * Settings → OCR, under the engine: the selected local engine's model. Its size, where its
- * download stands (overall and per-file progress), and the actions that make sense now:
- * Download, Pause, Resume, Retry, Cancel or Delete.
+ * Settings → OCR, under the engine: the selected local engine's model. One progress bar, one
+ * status line under it ("Downloading Manga OCR · 212 MB of 539 MB", "Paused at 40%", "Ready ·
+ * 539 MB"), and the actions that make sense now: Download, Pause, Resume, Retry, Cancel or
+ * Delete. Download is offered here without a further dialog: the button, which names the size,
+ * is the consent.
  *
  * Self-contained: the download runs in Rust (`model_store.rs`) and survives this window closing;
  * this only shows its `model-download` events and sends the commands.
@@ -9,12 +11,11 @@
 import { useState, type ReactNode } from 'react'
 import { Button, Callout, ConfirmDialog, SettingsRow, SettingsSection } from '@kit'
 import {
+  actionLabel,
+  barPercent,
   formatBytes,
   modelActions,
-  percent,
-  progressText,
-  showsProgress,
-  stateLabel,
+  statusLine,
   type ModelAction,
   type ModelStatus
 } from '@ui/model-download'
@@ -22,60 +23,30 @@ import { modelAction, useModelStatus, type ModelEngine } from '../../bridge/mode
 import { nativeError } from '../../bridge/tauri'
 import './model-download.css'
 
-const ACTION_LABELS: Record<ModelAction, string> = {
-  download: 'Download',
-  pause: 'Pause',
-  resume: 'Resume',
-  retry: 'Retry',
-  cancel: 'Cancel',
-  delete: 'Delete'
-}
-
-function ProgressBar({
-  label,
-  value,
-  detail
-}: {
-  label: string
-  value: number
-  detail: string
-}): ReactNode {
+/**
+ * The bar and its line. Spans, since they sit inside the row's description paragraph. The fill
+ * is scaled rather than resized so the ~4 Hz progress events glide (see model-download.css).
+ */
+function ModelProgress({ status }: { status: ModelStatus }): ReactNode {
+  const value = barPercent(status)
+  const line = statusLine(status)
   return (
-    <div className="model-progress">
-      <div className="model-progress-text">
-        <span className="model-progress-label">{label}</span>
-        <span className="model-progress-detail k-num">{detail}</span>
-      </div>
-      <div
+    <span className="model-progress" data-state={status.state}>
+      <span
         className="model-progress-track"
         role="progressbar"
-        aria-label={label}
+        aria-label={`${status.name} model`}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={value}
+        // Verifying has no measurable progress: leaving the value out makes it indeterminate.
+        aria-valuenow={status.state === 'verifying' ? undefined : value}
+        aria-valuetext={line}
       >
-        <div className="model-progress-fill" style={{ width: `${value}%` }} />
-      </div>
-    </div>
+        <span className="model-progress-fill" style={{ transform: `scaleX(${value / 100})` }} />
+      </span>
+      <span className="model-progress-line k-num">{line}</span>
+    </span>
   )
-}
-
-function description(status: ModelStatus): ReactNode {
-  const size = formatBytes(status.overallTotal)
-  switch (status.state) {
-    case 'absent':
-      return `Not downloaded. This engine needs its ${size} model, downloaded once and kept on this computer.`
-    case 'ready':
-      return status.source === 'downloaded'
-        ? `Downloaded · ${size}. Stored on this computer; delete it to free the space.`
-        : `${stateLabel(status)} · ${size}.`
-    case 'paused':
-      return `${stateLabel(status)} · ${progressText(status.overallReceived, status.overallTotal)}. Scans with this engine wait until it finishes.`
-    case 'failed':
-      return `${stateLabel(status)}. Retry continues from what has already arrived.`
-    default:
-      return `${stateLabel(status)} · ${size}. Scans with this engine start once it finishes.`
-  }
 }
 
 export function ModelDownloadCard({ engine }: { engine: ModelEngine }): ReactNode {
@@ -95,18 +66,10 @@ export function ModelDownloadCard({ engine }: { engine: ModelEngine }): ReactNod
       .finally(() => setPending(null))
   }
   const actions = modelActions(status)
-  const overall = percent(status.overallReceived, status.overallTotal)
-  const fileProgress =
-    status.state === 'downloading' && status.file && status.totalBytes
-      ? {
-          value: percent(status.receivedBytes ?? 0, status.totalBytes),
-          detail: progressText(status.receivedBytes ?? 0, status.totalBytes)
-        }
-      : null
 
   return (
     <SettingsSection title="Model">
-      <SettingsRow label={`${status.name} model`} description={description(status)}>
+      <SettingsRow label={`${status.name} model`} description={<ModelProgress status={status} />}>
         {actions.length > 0 && (
           <div className="model-actions">
             {actions.map((action) => (
@@ -123,38 +86,22 @@ export function ModelDownloadCard({ engine }: { engine: ModelEngine }): ReactNod
                 disabled={pending !== null}
                 onClick={() => (action === 'delete' ? setConfirmDelete(true) : run(action))}
               >
-                {ACTION_LABELS[action]}
+                {actionLabel(action, status)}
               </Button>
             ))}
           </div>
         )}
       </SettingsRow>
-      {showsProgress(status) && (
-        <div className="model-progress-group" aria-live="polite">
-          <ProgressBar
-            label={status.state === 'verifying' ? 'Verifying' : 'Overall'}
-            value={overall}
-            detail={`${progressText(status.overallReceived, status.overallTotal)} · ${overall}%`}
-          />
-          {fileProgress && status.file && (
-            <ProgressBar
-              label={status.file}
-              value={fileProgress.value}
-              detail={fileProgress.detail}
-            />
-          )}
+      {error && (
+        <div className="settings-note">
+          <Callout tone="danger">{error}</Callout>
         </div>
       )}
-      {(status.state === 'failed' && status.message) || error ? (
-        <div className="settings-note">
-          <Callout tone="danger">{error ?? status.message}</Callout>
-        </div>
-      ) : null}
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={`Delete the ${status.name} model?`}
-        description={`This frees ${formatBytes(status.overallTotal)}. Choosing ${status.name} again downloads it again.`}
+        description={`This frees ${formatBytes(status.overallTotal)}. You can download it again from here at any time.`}
         confirmLabel="Delete"
         tone="danger"
         onConfirm={() => {

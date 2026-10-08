@@ -9,16 +9,19 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 const read = (file) => readFile(path.join(root, file), 'utf8')
 
 const {
+  actionLabel,
   badgeKind,
   badgeLabel,
+  barPercent,
+  downloadPrompt,
+  engineChoice,
   formatBytes,
   isModelEngine,
   modelActions,
   normalizeModelStatus,
   percent,
   progressText,
-  showsProgress,
-  stateLabel
+  statusLine
 } = await load('model-download.ts')
 const { normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
 
@@ -72,21 +75,27 @@ test('sizes read like a file manager shows them', () => {
   assert.equal(progressText(14_503_825, MEIKI_TOTAL), '15 MB of 46 MB')
 })
 
-test('each state has its label, its buttons and its badge', () => {
+const MANGA_TOTAL = 538907077
+const manga = (patch = {}) =>
+  normalizeModelStatus({ engine: 'mangaocr', name: 'Manga OCR', state: 'absent', overallTotal: MANGA_TOTAL, ...patch })
+
+test('each state has one status line, one bar, its buttons and its badge', () => {
   const cases = [
-    [{ state: 'absent' }, 'Not downloaded', ['download'], 'warning'],
-    [{ state: 'downloading', overallReceived: MEIKI_TOTAL * 0.325 }, 'Downloading… 32%', ['pause', 'cancel'], 'progress'],
-    [{ state: 'verifying', file: 'a.onnx' }, 'Verifying…', ['cancel'], 'progress'],
-    [{ state: 'paused', overallReceived: MEIKI_TOTAL / 2 }, 'Paused at 50%', ['resume', 'cancel'], 'warning'],
-    [{ state: 'paused' }, 'Paused', ['resume', 'cancel'], 'warning'],
-    [{ state: 'failed', message: 'x' }, 'Download failed', ['retry', 'cancel'], 'warning'],
-    [{ state: 'ready', source: 'downloaded' }, 'Downloaded', ['delete'], null],
-    [{ state: 'ready', source: 'bundled' }, 'Included with this build', [], null],
-    [{ state: 'ready', source: 'development' }, 'Using the development copy', [], null]
+    [{ state: 'absent' }, 'Not downloaded · 539 MB', 0, ['download'], 'warning'],
+    [{ state: 'downloading', overallReceived: 212e6 }, 'Downloading Manga OCR · 212 MB of 539 MB', 39, ['pause', 'cancel'], 'progress'],
+    [{ state: 'verifying', file: 'a.onnx', overallReceived: MANGA_TOTAL }, 'Verifying…', 100, ['cancel'], 'progress'],
+    [{ state: 'paused', overallReceived: MANGA_TOTAL * 0.405 }, 'Paused at 40%', 40, ['resume', 'cancel'], 'warning'],
+    [{ state: 'paused' }, 'Paused', 0, ['resume', 'cancel'], 'warning'],
+    [{ state: 'failed', message: 'HTTP 503', overallReceived: 1e6 }, 'Download failed: HTTP 503', 0, ['retry', 'cancel'], 'warning'],
+    [{ state: 'failed' }, 'Download failed', 0, ['retry', 'cancel'], 'warning'],
+    [{ state: 'ready', source: 'downloaded' }, 'Ready · 539 MB', 100, ['delete'], null],
+    [{ state: 'ready', source: 'bundled' }, 'Ready · included with this build', 100, [], null],
+    [{ state: 'ready', source: 'development' }, 'Ready · using the development copy', 100, [], null]
   ]
-  for (const [patch, label, actions, badge] of cases) {
-    const s = status(patch)
-    assert.equal(stateLabel(s), label, JSON.stringify(patch))
+  for (const [patch, line, bar, actions, badge] of cases) {
+    const s = manga(patch)
+    assert.equal(statusLine(s), line, JSON.stringify(patch))
+    assert.equal(barPercent(s), bar, JSON.stringify(patch))
     assert.deepEqual(modelActions(s), actions, JSON.stringify(patch))
     assert.equal(badgeKind(s), badge, JSON.stringify(patch))
   }
@@ -94,12 +103,36 @@ test('each state has its label, its buttons and its badge', () => {
   assert.match(badgeLabel(status({ state: 'failed', message: 'HTTP 503' })), /failed: HTTP 503\. Open OCR settings/)
 })
 
-test('progress bars show while busy and for a resumable partial download', () => {
-  assert.equal(showsProgress(status({ state: 'downloading' })), true)
-  assert.equal(showsProgress(status({ state: 'verifying' })), true)
-  assert.equal(showsProgress(status({ state: 'paused', overallReceived: 10 })), true)
-  assert.equal(showsProgress(status({ state: 'failed', overallReceived: 0 })), false)
-  assert.equal(showsProgress(status({ state: 'ready', source: 'downloaded' })), false)
+test('the Download button names the size, since pressing it is the consent', () => {
+  assert.equal(actionLabel('download', manga()), 'Download (539 MB)')
+  assert.equal(actionLabel('download', status()), 'Download (46 MB)')
+  assert.equal(actionLabel('download', manga({ overallTotal: 0 })), 'Download')
+  assert.equal(actionLabel('pause', manga()), 'Pause')
+  assert.equal(actionLabel('delete', manga()), 'Delete')
+})
+
+test('picking an engine asks first only when its model was never downloaded', () => {
+  assert.equal(engineChoice('mangaocr', manga()), 'confirm')
+  assert.equal(engineChoice('meikiocr', status()), 'confirm')
+  for (const state of ['downloading', 'verifying', 'paused', 'failed']) {
+    assert.equal(engineChoice('mangaocr', manga({ state })), 'select', state)
+  }
+  assert.equal(engineChoice('mangaocr', manga({ state: 'ready', source: 'downloaded' })), 'select')
+  assert.equal(engineChoice('mangaocr', manga({ state: 'ready', source: 'bundled' })), 'select')
+  // Cloud engines have no model; a backend without model downloads answers nothing.
+  assert.equal(engineChoice('cloud', null), 'select')
+  assert.equal(engineChoice('websocket', null), 'select')
+  assert.equal(engineChoice('mangaocr', null), 'select')
+  // A status for another engine says nothing about this one.
+  assert.equal(engineChoice('mangaocr', status()), 'select')
+})
+
+test('the download confirmation names the engine and its size', () => {
+  const prompt = downloadPrompt(manga())
+  assert.equal(prompt.title, 'Download Manga OCR?')
+  assert.match(prompt.description, /about 539 MB/)
+  assert.match(prompt.description, /downloaded now/)
+  assert.doesNotMatch(downloadPrompt(manga({ overallTotal: 0 })).description, /0 MB/)
 })
 
 test('the capabilities carry the model gate and its human reason through normalisation', () => {
