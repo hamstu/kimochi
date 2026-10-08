@@ -1,4 +1,4 @@
-import { setEmbeddedEnabled } from '/spike/frontend-mode.js'
+import { setEmbeddedEnabled, setScanScope } from '/spike/frontend-mode.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * Dictionary lookup for a panel window.
@@ -23,9 +23,18 @@ import { setEmbeddedEnabled } from '/spike/frontend-mode.js'
  * scanner walks Ranges over those nodes, so a list that remounts on hover, or
  * text drawn into a canvas or a pseudo-element, cannot be scanned. Call `start()`
  * once that content is in the DOM.
+ *
+ * ## Only marked text is looked up
+ *
+ * A panel window is mostly Kimochi's own UI (settings, the sidebar, the notebook), and none of it
+ * should open a dictionary popup. The scanner here only reads text inside an element carrying
+ * `data-yomitan-scan`: the Log's transcript lines (LineRow.tsx). Mark a container, never each
+ * word; the scope is matched against the ancestors of every scanned text node.
  */
 
 const LABEL_ATTRIBUTE = 'data-kimochi-panel'
+/** The opt-in marker for text a panel window may look up. */
+export const SCAN_SELECTOR = '[data-yomitan-scan]'
 // The overlay holds relayed requests until its backend is up, so this returns as soon as it is;
 // the bound only matters if the backend never starts. It matches the popup host and the backend's
 // own 30s readiness limit, so a slow cold start (large dictionary database) is not reported as a
@@ -56,6 +65,9 @@ if (!host) {
     'Yomitan panel host did not install. Check that host/panel-shim.js reached dist/spike/panel-shim.js.'
   )
 }
+
+// Before start(): the frontend picks the scope up as it prepares.
+setScanScope(SCAN_SELECTOR)
 
 export const hub = host.hub
 export const label = window.__kimochiPanelLabel

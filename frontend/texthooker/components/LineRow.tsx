@@ -134,12 +134,18 @@ function LineRowInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [line.id, line.text, line.tokens, cacheVersion]);
 
-  const groupProps = line.ocr ? {
-    'data-ocr-scan': line.ocr.scanId,
-    'data-ocr-index': line.ocr.groupIndex,
-    'data-ocr-count': line.ocr.groupCount,
-    'data-group-label': line.ocr.groupCount > 1 ? `${line.ocr.groupIndex + 1} / ${line.ocr.groupCount}` : undefined
-  } : {};
+  // Every row form below spreads these. `data-yomitan-scan` is the only thing that lets the main
+  // window's Yomitan scanner read text (ui/panel-yomitan.js): transcript lines are looked up, the
+  // rest of the window (settings, sidebar, notebook) is not.
+  const groupProps = {
+    'data-yomitan-scan': '',
+    ...(line.ocr ? {
+      'data-ocr-scan': line.ocr.scanId,
+      'data-ocr-index': line.ocr.groupIndex,
+      'data-ocr-count': line.ocr.groupCount,
+      'data-group-label': line.ocr.groupCount > 1 ? `${line.ocr.groupIndex + 1} / ${line.ocr.groupCount}` : undefined
+    } : {})
+  };
 
   // Interim state while DeepL is in flight: the row itself signals progress
   // (the menu closes immediately and the T hotkey has no other UI).
