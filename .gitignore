@@ -7,3 +7,5 @@ src-tauri/gen/
 
 src-tauri/resources/meikiocr/
 src-tauri/resources/mangaocr/
+src-tauri/resources/oneocr/
+oneocr-worker/target/

@@ -10,10 +10,12 @@
  */
 
 export type PlatformOs = 'macos' | 'windows' | 'linux'
-export type OcrEngineKey = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr'
+export type OcrEngineKey = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr' | 'oneocr'
 
 export interface OcrEngineCapability {
   available: boolean
+  /** A supported engine whose externally supplied runtime still needs setup. */
+  selectable?: boolean
   accelerator?: 'coreml' | 'directml' | 'metal' | 'cuda' | 'cpu'
   reason?: string | null
   /**
@@ -137,7 +139,8 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
     cloud: { available: true },
     websocket: { available: true },
     meikiocr: { available: true },
-    mangaocr: { available: true }
+    mangaocr: { available: true },
+    oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
   },
   observer: null,
   ownPids: [],

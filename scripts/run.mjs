@@ -153,6 +153,10 @@ if (
   for (const [from, to] of legal) if (!existsSync(to)) await copyFile(from, to)
 }
 
+if (process.platform === 'win32' && ['dev', 'bundle', 'release'].includes(task)) {
+  await import('./prepare-oneocr.mjs')
+}
+
 if (task === 'dev') {
   const devArgs = ['dev']
   const port = env.KIMOCHI_DEV_PORT

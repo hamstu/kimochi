@@ -57,6 +57,17 @@ test("cloud OCR retains its existing route", async () => {
   });
 });
 
+test("OneOCR uses the retained native frame with overlay geometry", async () => {
+  const result = await recognize({ id: 45 }, { ocrMode: "oneocr" });
+  assert.deepEqual(calls.pop(), {
+    command: "ocr_frame",
+    args: { id: 45, engine: "oneocr" },
+  });
+  assert.equal(result.fullText, "日本語");
+  assert.equal(result.geometry, true);
+  assert.equal(result.nativeScanId, 45);
+});
+
 test("Manga OCR uses the retained native frame and reports text only", async () => {
   const result = await recognize({ id: 44 }, { ocrMode: "mangaocr" });
   assert.deepEqual(calls.pop(), {

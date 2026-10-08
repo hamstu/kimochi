@@ -249,6 +249,10 @@ test('each engine in the list says where it stands in a few words', () => {
 })
 
 test('only an engine this computer cannot run at all is held back from being chosen', () => {
+  assert.equal(engineSelectable({ available: false, selectable: true }), true)
+  assert.deepEqual(engineHint({ available: false, selectable: true, reason: 'Missing OneOCR files' }, null), {
+    text: 'Setup needed', tone: 'warn', reason: 'Missing OneOCR files'
+  })
   assert.equal(engineSelectable(undefined), true)
   assert.equal(engineSelectable({ available: true }), true)
   assert.equal(engineSelectable({ available: false, model: 'absent' }), true)

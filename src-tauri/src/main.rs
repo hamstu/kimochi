@@ -12,6 +12,9 @@ mod history_merge;
 mod hotkeys;
 mod manga_ocr;
 mod meiki_ocr;
+#[cfg(target_os = "windows")]
+#[path = "platform/windows/oneocr.rs"]
+mod oneocr;
 mod model_store;
 mod platform;
 mod ocr_result;
@@ -1207,6 +1210,10 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, png: &[u8]) -> Reply<
     {
         "meikiocr" | "local" => meiki_ocr::recognize(app, png),
         "mangaocr" => manga_ocr::recognize(app, png),
+        #[cfg(target_os = "windows")]
+        "oneocr" => oneocr::recognize(app, png),
+        #[cfg(not(target_os = "windows"))]
+        "oneocr" => Err("OneOCR is available on Windows only.".into()),
         _ => post_ocr(settings, png),
     }
 }
@@ -1261,7 +1268,8 @@ async fn ocr_frame(
     engine: Option<String>,
 ) -> Reply<Value> {
     let engine = engine.unwrap_or_else(|| "cloud".into());
-    if !matches!(engine.as_str(), "cloud" | "meikiocr" | "mangaocr") {
+    if !matches!(engine.as_str(), "cloud" | "meikiocr" | "mangaocr")
+        && !(cfg!(target_os = "windows") && engine == "oneocr") {
         return Err(format!("invalid: unknown native OCR engine {engine}"));
     }
     let service = state.inner().clone();
@@ -1283,6 +1291,8 @@ async fn ocr_frame(
         let value = match engine.as_str() {
             "meikiocr" | "local" => meiki_ocr::recognize(&app, &png)?,
             "mangaocr" => manga_ocr::recognize(&app, &png)?,
+            #[cfg(target_os = "windows")]
+            "oneocr" => oneocr::recognize(&app, &png)?,
             _ => post_ocr(&service.settings, &png)?,
         };
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
@@ -1474,6 +1484,10 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         meikiocr: meiki_ocr::availability(app),
         mangaocr: manga_ocr::availability(app),
     });
+    #[cfg(target_os = "windows")]
+    {
+        payload["ocrEngines"]["oneocr"] = oneocr::capability(app);
+    }
     // An engine held back only by its models stays selectable: choosing it asks to download them.
     for engine in model_store::Engine::ALL {
         if let Some(state) = model_store::gate(app, engine) {

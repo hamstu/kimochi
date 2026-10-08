@@ -74,11 +74,12 @@ export async function recognize(frame, settings) {
       return normalizeOcrResult({ ...EMPTY, fullText: text }, 'websocket')
     }
     case 'mangaocr':
+    case 'oneocr':
     case 'meikiocr':
     default: {
       const result = await ocrFrame(
         frame,
-        settings.ocrMode === 'local' ? 'meikiocr' : ['meikiocr', 'mangaocr'].includes(settings.ocrMode) ? settings.ocrMode : 'cloud'
+        settings.ocrMode === 'local' ? 'meikiocr' : ['meikiocr', 'mangaocr', 'oneocr'].includes(settings.ocrMode) ? settings.ocrMode : 'cloud'
       )
       const ocr = result?.ocr
       if (!ocr) return null

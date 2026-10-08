@@ -24,6 +24,7 @@
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, Cloud, Ellipsis, Monitor, Trash2 } from 'lucide-react'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
 import {
   Badge,
   Button,
@@ -155,6 +156,10 @@ function EngineDetail({
   const [confirmRemove, setConfirmRemove] = useState(false)
   const headingId = `${id}-heading`
   const runsOn = capability?.available ? acceleratorLabel(capability.accelerator) : null
+  const capabilities = useCapabilities()
+  const windows10 = capabilities.os === 'windows' &&
+    Number(capabilities.osVersion.split('.')[2]) > 0 &&
+    Number(capabilities.osVersion.split('.')[2]) < 22000
 
   // The engine's overflow actions. Today only a downloaded model's removal; add others here.
   const engineMenu = model.engine ? (
@@ -213,6 +218,25 @@ function EngineDetail({
       {!selectable && (
         <Callout tone="warn">{capability?.reason || 'Not available on this computer.'}</Callout>
       )}
+      {mode === 'oneocr' && capabilities.os === 'windows' && (
+        <>
+          {windows10 && (
+            <p className="k-description">
+              Windows 10 needs three files from a recent Windows 11 Snipping Tool package:
+              {' '}oneocr.dll, oneocr.onemodel and onnxruntime.dll. Put a matching x64 or ARM64
+              set in your user folder under .config/oneocr.
+            </p>
+          )}
+          {!capability?.available && (
+            <Callout tone="warn">{capability?.reason || 'OneOCR runtime files need setup.'}</Callout>
+          )}
+          {(windows10 || !capability?.available) && (
+            <Button size="sm" onClick={() => void openUrl('https://github.com/AuroraWright/oneocr#readme')}>
+              OneOCR setup instructions
+            </Button>
+          )}
+        </>
+      )}
       <div className="engine-detail-settings">
         {/* An engine that cannot run here has nothing to set up or download. */}
         {selectable && <EngineSettings mode={mode} model={model} emphasis={inUse} />}
@@ -224,7 +248,9 @@ function EngineDetail({
 
 export function EngineChooser(): ReactNode {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
-  const engines = useCapabilities().ocrEngines
+  const capabilities = useCapabilities()
+  const engines = capabilities.ocrEngines
+  const modes = MODES.filter((mode) => mode !== 'oneocr' || capabilities.os === 'windows')
   const baseId = useId()
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -271,11 +297,11 @@ export function EngineChooser(): ReactNode {
   }, [asking])
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const index = MODES.indexOf(viewed)
+    const index = modes.indexOf(viewed)
     let next: number | null = null
     switch (event.key) {
       case 'ArrowDown':
-        next = Math.min(index + 1, MODES.length - 1)
+        next = Math.min(index + 1, modes.length - 1)
         break
       case 'ArrowUp':
         next = Math.max(index - 1, 0)
@@ -284,7 +310,7 @@ export function EngineChooser(): ReactNode {
         next = 0
         break
       case 'End':
-        next = MODES.length - 1
+        next = modes.length - 1
         break
       case 'Enter':
       case ' ':
@@ -295,7 +321,7 @@ export function EngineChooser(): ReactNode {
         return
     }
     event.preventDefault()
-    focusMode(MODES[next])
+    focusMode(modes[next])
   }
 
   return (
@@ -309,7 +335,7 @@ export function EngineChooser(): ReactNode {
           className="engine-list"
           onKeyDown={onKeyDown}
         >
-          {MODES.map((mode) => (
+          {modes.map((mode) => (
             <EngineItem
               key={mode}
               mode={mode}
