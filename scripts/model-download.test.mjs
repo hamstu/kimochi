@@ -146,6 +146,14 @@ test('both engine pickers share the confirmation and list engines by name alone'
   assert.ok(!ocrTab.includes('detail: engine.reason || undefined }'), 'a model-gated engine still shows its reason')
 })
 
+test('no model download starts at launch, only when ocrMode is saved', async () => {
+  const main = await read('src-tauri/src/main.rs')
+  const calls = [...main.matchAll(/model_store::on_engine_selected\(/g)]
+  assert.equal(calls.length, 1, 'on_engine_selected is called from more than settings_set')
+  const settingsSet = main.slice(main.indexOf('fn settings_set'), main.indexOf('fn settings_all'))
+  assert.ok(settingsSet.includes('model_store::on_engine_selected('), 'settings_set no longer starts the download')
+})
+
 test('the capabilities carry the model gate and its human reason through normalisation', () => {
   const caps = normalizeCapabilities(
     {

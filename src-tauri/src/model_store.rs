@@ -1048,7 +1048,8 @@ pub fn status(app: &tauri::AppHandle, engine: Engine) -> ModelStatus {
 }
 
 /// Selecting a local engine whose models are missing starts their download, unless one
-/// was paused or failed (the UI offers Resume or Retry instead).
+/// was paused or failed (the UI offers Resume or Retry instead). Called from `settings_set`
+/// only, which the pickers reach after the user confirms the download; never at launch.
 pub fn on_engine_selected(app: &tauri::AppHandle, mode: &str) {
     let Some(engine) = Engine::from_key(mode) else {
         return;

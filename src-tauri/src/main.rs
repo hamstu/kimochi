@@ -179,7 +179,8 @@ fn settings_set(
     if key.starts_with("hotkeys") {
         hotkeys::apply(&app, &state.settings);
     }
-    // Choosing a local engine whose models are missing starts their download.
+    // Choosing a local engine whose models are missing starts their download (the pickers
+    // only save that choice after the user confirms the download).
     if key == "ocrMode" {
         if let Some(mode) = value.as_str() {
             model_store::on_engine_selected(&app, mode);
@@ -1473,7 +1474,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         meikiocr: meiki_ocr::availability(app),
         mangaocr: manga_ocr::availability(app),
     });
-    // An engine held back only by its models stays selectable: choosing it downloads them.
+    // An engine held back only by its models stays selectable: choosing it asks to download them.
     for engine in model_store::Engine::ALL {
         if let Some(state) = model_store::gate(app, engine) {
             payload["ocrEngines"][engine.key()]["model"] = json!(state);
@@ -2414,12 +2415,9 @@ fn main() {
             #[cfg(target_os = "windows")]
             platform::start_fullscreen_watch(&handle, service.clone());
             spawn_display_watch(handle.clone(), store.clone());
-            // A local engine selected before its models were downloaded (an upgrade from a
-            // build that bundled them) starts the download; a paused one waits for Resume.
-            model_store::on_engine_selected(
-                &handle,
-                &store.get_or::<String>("ocrMode", "cloud".into()),
-            );
+            // No download starts at launch: a local engine selected before its models were
+            // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
+            // user starts it from Settings → OCR, where the button names the size.
             spawn_capabilities_watch(handle.clone(), service.clone());
             Ok(())
         })

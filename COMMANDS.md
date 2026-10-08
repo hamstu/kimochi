@@ -595,9 +595,13 @@ only then is it renamed into place, so a final path never holds a partial file;
 that file's `.part` and fails; a dropped connection fails and keeps it, so Retry resumes. A
 server that ignores the Range header restarts that file. Downloads run on their own thread,
 outlive every panel, and are paused (not discarded) on quit; the next launch reports
-`paused`. Setting `ocrMode` to a local engine whose models are `absent` (Settings, the
-sidebar, or at launch) starts the download; a `paused` or `failed` one waits for Resume or
-Retry. On Windows and Linux the automatic-scan observer reads frames with MeikiOCR whatever
+`paused`. Setting `ocrMode` (`settings_set`) to a local engine whose models are `absent`
+starts the download; a `paused` or `failed` one waits for Resume or Retry. The pickers (the
+sidebar and Settings → OCR, both through `frontend/bridge/useEngineSelection.ts`) ask first
+when the picked engine is `absent` ("Download Manga OCR?", with the size) and save `ocrMode`
+only on Download; Cancel leaves it unchanged. Nothing starts at launch: an engine selected
+before its models were downloaded (an upgrade from a build that bundled them) reports
+`absent`, and Settings → OCR → Model offers "Download (539 MB)". On Windows and Linux the automatic-scan observer reads frames with MeikiOCR whatever
 engine is selected, so it starts the MeikiOCR download too and answers `busy` until it is
 ready.
 
@@ -609,7 +613,7 @@ status `ready` with that `source`; they cannot be deleted from the app.
 **Gating.** While an engine's models are not usable, `platform_capabilities` reports it
 `available: false` with a human `reason` — `Model not downloaded`, `Downloading model… 32%`,
 `Verifying model…`, `Model download paused`, `Model download failed: <message>` — and adds
-`model: <state>` so pickers keep the engine selectable (choosing it downloads). Every scan
+`model: <state>` so pickers keep the engine selectable, listed by name alone. Every scan
 path refuses with the same reason: `ocr_frame` and `scan` fail with
 `"<Engine> is not ready: <reason>"`, and the observer as above. Switching to an engine whose
 models are ready scans at once.
