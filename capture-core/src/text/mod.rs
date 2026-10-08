@@ -23,6 +23,10 @@ use std::time::Duration;
 
 #[cfg(target_os = "macos")]
 mod livetext;
+/// The engine itself, for a caller that wants its own instance rather than the
+/// automatic-scan observer (the manual Apple Live Text scan in the app).
+#[cfg(target_os = "macos")]
+pub use livetext::LiveTextObserver;
 /// Test seam for the main-queue reclamation ordering; see `livetext::AckProbe`.
 #[cfg(target_os = "macos")]
 #[doc(hidden)]

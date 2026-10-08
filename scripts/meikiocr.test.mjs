@@ -68,6 +68,17 @@ test("OneOCR uses the retained native frame with overlay geometry", async () => 
   assert.equal(result.nativeScanId, 45);
 });
 
+test("Apple Live Text uses the retained native frame with overlay geometry", async () => {
+  const result = await recognize({ id: 46 }, { ocrMode: "livetext" });
+  assert.deepEqual(calls.pop(), {
+    command: "ocr_frame",
+    args: { id: 46, engine: "livetext" },
+  });
+  assert.equal(result.fullText, "日本語");
+  assert.equal(result.geometry, true);
+  assert.equal(result.nativeScanId, 46);
+});
+
 test("Manga OCR uses the retained native frame and reports text only", async () => {
   const result = await recognize({ id: 44 }, { ocrMode: "mangaocr" });
   assert.deepEqual(calls.pop(), {

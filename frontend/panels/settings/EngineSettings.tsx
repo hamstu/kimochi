@@ -122,6 +122,7 @@ export function EngineSettings({
       return <ModelDownload controls={model} emphasis={emphasis} />
     case 'websocket':
     case 'oneocr':
+    case 'livetext':
       return null
   }
 }

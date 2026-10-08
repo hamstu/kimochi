@@ -15,6 +15,9 @@ mod meiki_ocr;
 #[cfg(target_os = "windows")]
 #[path = "platform/windows/oneocr.rs"]
 mod oneocr;
+#[cfg(target_os = "macos")]
+#[path = "platform/macos/livetext.rs"]
+mod livetext;
 mod model_store;
 mod platform;
 mod ocr_result;
@@ -1203,18 +1206,24 @@ impl Drop for ScanGuard {
 }
 
 /// The legacy native scan path also honors local native OCR selections.
-fn native_ocr(app: &tauri::AppHandle, settings: &Settings, png: &[u8]) -> Reply<Value> {
-    match settings
-        .get_or::<String>("ocrMode", "cloud".into())
-        .as_str()
-    {
-        "meikiocr" | "local" => meiki_ocr::recognize(app, png),
-        "mangaocr" => manga_ocr::recognize(app, png),
+fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Reply<Value> {
+    let mode = settings.get_or::<String>("ocrMode", "cloud".into());
+    match mode.as_str() {
+        #[cfg(target_os = "macos")]
+        "livetext" => return livetext::recognize(image),
+        #[cfg(not(target_os = "macos"))]
+        "livetext" => return Err("Apple Live Text is available on macOS only.".into()),
+        _ => {}
+    }
+    let png = image.png()?;
+    match mode.as_str() {
+        "meikiocr" | "local" => meiki_ocr::recognize(app, &png),
+        "mangaocr" => manga_ocr::recognize(app, &png),
         #[cfg(target_os = "windows")]
-        "oneocr" => oneocr::recognize(app, png),
+        "oneocr" => oneocr::recognize(app, &png),
         #[cfg(not(target_os = "windows"))]
         "oneocr" => Err("OneOCR is available on Windows only.".into()),
-        _ => post_ocr(settings, png),
+        _ => post_ocr(settings, &png),
     }
 }
 
@@ -1255,6 +1264,14 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
     Ok(value)
 }
 
+/// The engines `ocr_frame` can dispatch to in this build: the portable ones, plus
+/// the OS engine of the OS this was built for.
+fn native_engine_known(engine: &str) -> bool {
+    matches!(engine, "cloud" | "meikiocr" | "mangaocr")
+        || (cfg!(target_os = "windows") && engine == "oneocr")
+        || (cfg!(target_os = "macos") && engine == "livetext")
+}
+
 /// OCR a frame that has already been captured, by id.
 ///
 /// This is what the change-detection loop must use: recapturing after the gate has
@@ -1268,8 +1285,7 @@ async fn ocr_frame(
     engine: Option<String>,
 ) -> Reply<Value> {
     let engine = engine.unwrap_or_else(|| "cloud".into());
-    if !matches!(engine.as_str(), "cloud" | "meikiocr" | "mangaocr")
-        && !(cfg!(target_os = "windows") && engine == "oneocr") {
+    if !native_engine_known(&engine) {
         return Err(format!("invalid: unknown native OCR engine {engine}"));
     }
     let service = state.inner().clone();
@@ -1293,6 +1309,8 @@ async fn ocr_frame(
             "mangaocr" => manga_ocr::recognize(&app, &png)?,
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png)?,
+            #[cfg(target_os = "macos")]
+            "livetext" => livetext::recognize(&image)?,
             _ => post_ocr(&service.settings, &png)?,
         };
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
@@ -1488,6 +1506,10 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     {
         payload["ocrEngines"]["oneocr"] = oneocr::capability(app);
     }
+    #[cfg(target_os = "macos")]
+    {
+        payload["ocrEngines"]["livetext"] = livetext::capability();
+    }
     // An engine held back only by its models stays selectable: choosing it asks to download them.
     for engine in model_store::Engine::ALL {
         if let Some(state) = model_store::gate(app, engine) {
@@ -1561,26 +1583,25 @@ async fn scan(
             // The frame owns its pixels: release the backend before encoding and OCR,
             // which take far longer than the capture, so previews are not held up.
             drop(backend);
-            let png = frame.png().map_err(err)?;
             let info = serde_json::to_value(platform::desktop_frame_info(&frame.info))
                 .map_err(|e| e.to_string())?;
+            // Pixels are kept (encoded lazily, on the first PNG read): an engine that
+            // reads RGBA skips the round trip, and the preview encodes once as before.
             let id = s
                 .images
                 .lock()
                 .unwrap()
-                .put_latest(Image::encoded(png, info.clone()));
+                .put_latest(Image::captured(frame, info.clone()));
             let mut result = json!({"id": id, "info": info, "ocr": null});
             if ocr {
-                result["ocr"] = native_ocr(
-                    &a,
-                    &s.settings,
-                    &s.images
-                        .lock()
-                        .unwrap()
+                let image = {
+                    let images = s.images.lock().unwrap();
+                    images
                         .frame(id)
                         .ok_or("gone: the captured frame was replaced mid-scan")?
-                        .png()?,
-                )?;
+                        .clone()
+                };
+                result["ocr"] = native_ocr(&a, &s.settings, &image)?;
             }
             let count = result["ocr"]["textAnnotations"]
                 .as_array()

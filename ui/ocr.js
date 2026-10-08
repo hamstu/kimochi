@@ -75,11 +75,12 @@ export async function recognize(frame, settings) {
     }
     case 'mangaocr':
     case 'oneocr':
+    case 'livetext':
     case 'meikiocr':
     default: {
       const result = await ocrFrame(
         frame,
-        settings.ocrMode === 'local' ? 'meikiocr' : ['meikiocr', 'mangaocr', 'oneocr'].includes(settings.ocrMode) ? settings.ocrMode : 'cloud'
+        settings.ocrMode === 'local' ? 'meikiocr' : ['meikiocr', 'mangaocr', 'oneocr', 'livetext'].includes(settings.ocrMode) ? settings.ocrMode : 'cloud'
       )
       const ocr = result?.ocr
       if (!ocr) return null

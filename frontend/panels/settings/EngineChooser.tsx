@@ -40,6 +40,7 @@ import { canRemoveModel, isModelEngine } from '@ui/model-download'
 import {
   acceleratorLabel,
   engineHint,
+  engineOffered,
   engineSelectable,
   type EngineHint
 } from '@ui/ocr-engines'
@@ -250,7 +251,7 @@ export function EngineChooser(): ReactNode {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
   const engines = capabilities.ocrEngines
-  const modes = MODES.filter((mode) => mode !== 'oneocr' || capabilities.os === 'windows')
+  const modes = MODES.filter((mode) => engineOffered(mode, capabilities.os))
   const baseId = useId()
   const listRef = useRef<HTMLDivElement>(null)
 

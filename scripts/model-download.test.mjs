@@ -27,7 +27,7 @@ const {
   statusLine
 } = await load('model-download.ts')
 const { normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
-const { acceleratorLabel, engineHint, engineSelectable } = await load('ocr-engines.ts')
+const { acceleratorLabel, engineHint, engineOffered, engineSelectable } = await load('ocr-engines.ts')
 const { OCR_MODES } = await load('settings.ts')
 
 const MEIKI_TOTAL = 45970040
@@ -262,9 +262,19 @@ test('only an engine this computer cannot run at all is held back from being cho
   assert.equal(acceleratorLabel(undefined), null)
 })
 
+test('an OS-specific engine is offered only on its OS', () => {
+  assert.equal(engineOffered('livetext', 'macos'), true)
+  assert.equal(engineOffered('livetext', 'windows'), false)
+  assert.equal(engineOffered('livetext', 'linux'), false)
+  assert.equal(engineOffered('oneocr', 'windows'), true)
+  assert.equal(engineOffered('oneocr', 'macos'), false)
+  for (const os of ['macos', 'windows', 'linux'])
+    for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'websocket']) assert.equal(engineOffered(mode, os), true)
+})
+
 test('every engine has the copy the chooser shows', () => {
   const modes = Object.keys(OCR_MODES)
-  for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'websocket']) assert.ok(modes.includes(mode), mode)
+  for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr', 'websocket']) assert.ok(modes.includes(mode), mode)
   for (const [mode, info] of Object.entries(OCR_MODES)) {
     for (const field of ['label', 'name', 'tagline', 'description', 'requirements']) {
       assert.equal(typeof info[field], 'string', `${mode}.${field}`)

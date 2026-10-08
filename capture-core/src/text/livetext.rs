@@ -391,6 +391,12 @@ impl LiveTextObserver {
         }
     }
 
+    /// Probe now rather than on the first observation, so a caller can report
+    /// "available" or the reason it is not before anything has been scanned.
+    pub fn available(&mut self) -> std::result::Result<(), String> {
+        self.ensure_available()
+    }
+
     /// Load the framework and prove every symbol we are about to send exists.
     ///
     /// Probing rather than assuming is the whole safety story for a private API:

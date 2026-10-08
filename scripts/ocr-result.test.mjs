@@ -105,6 +105,28 @@ test("removed Tesseract preference migrates to native MeikiOCR", () => {
   assert.equal(OCR_MODES.mangaocr.geometry, true);
 });
 
+test("Apple Live Text's lines become one block each, vertical where the engine says so", () => {
+  const column = [[300, 10], [330, 10], [330, 130], [300, 130]];
+  const result = normalizeOcrResult({
+    fullText: "日本語のテスト\n縦書き",
+    groups: [
+      { id: "livetext-line-0", text: "日本語のテスト", bbox: [10, 20, 270, 62], orientation: "horizontal", linePolygons: [[[10, 20], [270, 20], [270, 62], [10, 62]]] },
+      { id: "livetext-line-1", text: "縦書き", bbox: [300, 10, 330, 130], orientation: "vertical", linePolygons: [column] },
+    ],
+    textAnnotations: [
+      annotation("日本語のテスト", 10, 20, 260, 42, { granularity: "line", groupId: "livetext-line-0" }),
+      annotation("縦書き", 300, 10, 30, 120, { granularity: "line", groupId: "livetext-line-1" }),
+    ]
+  }, "livetext");
+  assert.equal(result.geometry, true);
+  assert.equal(result.groups.length, 2);
+  assert.equal(result.textAnnotations.length, 3);
+  assert.equal(result.textAnnotations[2].description, "縦書き");
+  assert.equal(result.textAnnotations[2].granularity, "block");
+  assert.equal(result.textAnnotations[2].isVertical, true);
+  assert.deepEqual(result.textAnnotations[2].linePolygons, [column]);
+});
+
 test("OneOCR's semantic line overrides jittered glyph gaps without inserting Japanese spaces", () => {
   const polygon = [[10, 20], [270, 20], [270, 62], [10, 62]];
   const result = normalizeOcrResult({

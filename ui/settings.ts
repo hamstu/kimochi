@@ -22,7 +22,7 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr' | 'oneocr'
+export type OcrMode = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
@@ -202,6 +202,23 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     ],
     requirements:
       'A larger one-time model download, and each scan takes longer than with MeikiOCR. Uses the GPU where it can (Metal on macOS, CUDA on NVIDIA cards) and the CPU otherwise.'
+  },
+  livetext: {
+    label: 'Local (Apple Live Text)',
+    name: 'Apple Live Text',
+    tagline: 'Offline, built into macOS',
+    geometry: true,
+    runs: 'local',
+    description:
+      'Reads text locally with the engine behind Live Text, the same recognition macOS uses when you select text in a screenshot. Returns line positions for dictionary lookups directly over the captured text.',
+    strengths: [
+      'Nothing to download: part of macOS',
+      'Fast, with no model to load',
+      'Works offline; captures never leave this computer',
+      'Handles vertical and horizontal text'
+    ],
+    requirements:
+      'macOS 13 or later. Uses the system Live Text engine through an unpublished interface, so a future macOS release could need an update.'
   },
   oneocr: {
     label: 'Local (OneOCR)',

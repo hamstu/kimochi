@@ -23,6 +23,8 @@ npm start
 
 The two OCR crates are path dependencies: `kimochi-meikiocr` and `kimochi-mangaocr` must be checked out beside this repository (`../kimochi-meikiocr`, `../kimochi-mangaocr`). Two parity tests also read the Electron app at `../kimochi`; without it they are reported as skipped.
 
+On macOS, Apple Live Text is offered as a local engine with nothing to download: it is the system's own text recognition, reached through the same private VisionKitCore path automatic scanning uses (see [OCR.md](OCR.md) and [AUTO_OCR.md](AUTO_OCR.md)).
+
 Windows builds also bundle the small local OneOCR helpers from `oneocr-worker/`. Install both Rust targets (`rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc`) and the MSVC v143 ARM64/ARM64EC C++ build tools component (`Microsoft.VisualStudio.Component.VC.Tools.ARM64`) alongside the x64 C++ workload. OneOCR uses the installed Snipping Tool runtime on Windows 11; Windows 10 users can supply its three runtime files. See [ONEOCR.md](ONEOCR.md) for setup and [WINDOWS_ONEOCR.md](WINDOWS_ONEOCR.md) for validation.
 
 | Command | What it does |

@@ -39,6 +39,12 @@ impl Image {
         }
     }
 
+    /// The captured pixels, when this image still has them (an engine that reads
+    /// RGBA directly skips the PNG round trip).
+    pub fn frame(&self) -> Option<Arc<kimochi_capture::Frame>> {
+        self.raw.clone()
+    }
+
     pub fn png(&self) -> Result<Vec<u8>, String> {
         self.png
             .get_or_init(|| self.raw.as_ref().expect("raw image").png())

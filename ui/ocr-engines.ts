@@ -3,7 +3,7 @@
  * each engine in the list, and how its accelerator reads. The engines themselves (names, copy)
  * are `OCR_MODES` in `ui/settings.ts`.
  */
-import type { OcrEngineCapability } from './capabilities.js'
+import type { OcrEngineCapability, PlatformOs } from './capabilities.js'
 import { percent, type ModelState, type ModelStatus } from './model-download.js'
 
 export type EngineHintTone = 'neutral' | 'progress' | 'warn' | 'muted'
@@ -60,6 +60,21 @@ export function engineHint(
     return hint && { ...hint, reason: hint.reason ?? capability.reason ?? undefined }
   }
   return null
+}
+
+/**
+ * Whether an engine belongs in this OS's pickers at all. An OS-specific engine is left out of
+ * the others' lists rather than shown as unavailable: there is nothing to do about it there.
+ */
+export function engineOffered(mode: string, os: PlatformOs): boolean {
+  switch (mode) {
+    case 'oneocr':
+      return os === 'windows'
+    case 'livetext':
+      return os === 'macos'
+    default:
+      return true
+  }
 }
 
 /** Whether an engine can be chosen here: anything but one this computer cannot run at all. */
