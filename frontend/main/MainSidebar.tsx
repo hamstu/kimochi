@@ -2,7 +2,7 @@
  * The main window's sidebar: where text comes from (Source, with its live preview and controls),
  * how OCR reads it (OCR model, for the OCR sources) and which session it goes into (Session), each
  * labelled, with Settings pinned to the bottom. OCR model and Session carry a "Manage" link on
- * their label row: to Settings → OCR, and to the manage-sessions dialog. The views (Log, Notebook) are tabs
+ * their label row: to Settings → OCR & Overlay, and to the manage-sessions dialog. The views (Log, Notebook) are tabs
  * across the top of the content. In the Settings view the same column lists the settings pages,
  * with a way back. Resizable from its right edge.
  */
@@ -93,7 +93,7 @@ const OCR_MODE_OPTIONS = (Object.keys(OCR_MODES) as OcrMode[]).map((value) => ({
 }))
 
 /**
- * The same engine choice as Settings → OCR (and the same download confirmation), with a way there
+ * The same engine choice as Settings → OCR & Overlay (and the same download confirmation), with a way there
  * for the engine's own settings.
  */
 function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {

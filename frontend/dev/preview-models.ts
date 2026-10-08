@@ -5,7 +5,7 @@
  *   ?model=absent|downloading|paused|failed|ready  the starting state of both local engines
  *                                                  (default: MeikiOCR ready, Manga OCR absent)
  *
- * Picking an `absent` engine in the sidebar or Settings → OCR opens the download confirmation;
+ * Picking an `absent` engine in the sidebar or Settings → OCR & Overlay opens the download confirmation;
  * Download saves `ocrMode`, which starts the simulated download (`onModelSettingSet`).
  */
 import { emit } from '@tauri-apps/api/event'

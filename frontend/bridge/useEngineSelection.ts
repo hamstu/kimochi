@@ -1,5 +1,5 @@
 /**
- * The OCR engine pickers (the sidebar's "OCR model" and Settings → OCR → OCR engine) share this,
+ * The OCR engine pickers (the sidebar's "OCR model" and the engine list in Settings → OCR & Overlay) share this,
  * so both behave the same: picking a local engine whose models were never downloaded does not
  * change `ocrMode` yet. The picker shows the pick while a confirmation asks to download the model
  * (`DownloadConfirmDialog`); Download saves `ocrMode` (and native `settings_set` starts the

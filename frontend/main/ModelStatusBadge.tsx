@@ -1,7 +1,7 @@
 /**
  * Beside the sidebar's "OCR model" label: the selected local engine's model download. A spinner
  * and percentage while it downloads or verifies; a warning when it is paused, failed or missing
- * (click it for Settings → OCR, where the download is managed); nothing once it is ready, and
+ * (click it for Settings → OCR & Overlay, where the download is managed); nothing once it is ready, and
  * nothing for engines without a model to download.
  */
 import type { ReactNode } from 'react'

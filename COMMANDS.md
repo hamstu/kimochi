@@ -597,11 +597,11 @@ server that ignores the Range header restarts that file. Downloads run on their 
 outlive every panel, and are paused (not discarded) on quit; the next launch reports
 `paused`. Setting `ocrMode` (`settings_set`) to a local engine whose models are `absent`
 starts the download; a `paused` or `failed` one waits for Resume or Retry. The pickers (the
-sidebar and Settings → OCR, both through `frontend/bridge/useEngineSelection.ts`) ask first
+sidebar and the engine list in Settings → OCR & Overlay, both through `frontend/bridge/useEngineSelection.ts`) ask first
 when the picked engine is `absent` ("Download Manga OCR?", with the size) and save `ocrMode`
 only on Download; Cancel leaves it unchanged. Nothing starts at launch: an engine selected
 before its models were downloaded (an upgrade from a build that bundled them) reports
-`absent`, and Settings → OCR → Model offers "Download (539 MB)". On Windows and Linux the automatic-scan observer reads frames with MeikiOCR whatever
+`absent`, and that engine's panel in Settings → OCR & Overlay offers "Download (539 MB)". On Windows and Linux the automatic-scan observer reads frames with MeikiOCR whatever
 engine is selected, so it starts the MeikiOCR download too and answers `busy` until it is
 ready.
 
