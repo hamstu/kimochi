@@ -2,16 +2,17 @@
  * The session picker in the main window's sidebar: which session is being read, and everything
  * that acts on it. Destructive items confirm through `LogActionsProvider`.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from "react";
 import {
+  ArrowLeftRight,
   ChevronsUpDown,
   Eraser,
   ListOrdered,
   PencilLine,
   Plus,
   RotateCcw,
-  Trash2
-} from 'lucide-react'
+  Trash2,
+} from "lucide-react";
 import {
   Menu,
   MenuCheckboxItem,
@@ -21,26 +22,40 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
-  MenuTrigger
-} from '@kit'
+  MenuSub,
+  MenuSubContent,
+  MenuSubTrigger,
+  MenuTrigger,
+} from "@kit";
 import {
   createSession,
   getManifest,
   subscribeSessions,
-  switchSession
-} from '@texthooker/lib/sessions'
-import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
-import { useLogActions } from './logActions'
+  switchSession,
+} from "@texthooker/lib/sessions";
+import {
+  getSettings,
+  onSettingsChange,
+  updateSettings,
+} from "@texthooker/lib/settings";
+import { useLogActions } from "./logActions";
 
 export function SessionMenu(): ReactNode {
-  const [manifest, setManifest] = useState(getManifest)
-  const [autoMatch, setAutoMatch] = useState(() => getSettings().autoMatchSource)
-  const actions = useLogActions()
-  useEffect(() => subscribeSessions(setManifest), [])
-  useEffect(() => onSettingsChange((next) => setAutoMatch(next.autoMatchSource)), [])
+  const [manifest, setManifest] = useState(getManifest);
+  const [autoMatch, setAutoMatch] = useState(
+    () => getSettings().autoMatchSource,
+  );
+  const actions = useLogActions();
+  useEffect(() => subscribeSessions(setManifest), []);
+  useEffect(
+    () => onSettingsChange((next) => setAutoMatch(next.autoMatchSource)),
+    [],
+  );
 
-  const active = manifest.sessions.find((session) => session.id === manifest.activeId)
-  const name = active?.name ?? 'Session'
+  const active = manifest.sessions.find(
+    (session) => session.id === manifest.activeId,
+  );
+  const name = active?.name ?? "Session";
 
   return (
     <Menu>
@@ -56,23 +71,6 @@ export function SessionMenu(): ReactNode {
         </button>
       </MenuTrigger>
       <MenuContent align="start" className="main-session-menu">
-        <MenuLabel>Sessions</MenuLabel>
-        <MenuRadioGroup
-          value={manifest.activeId}
-          onValueChange={(id) => {
-            if (id !== manifest.activeId) void switchSession(id)
-          }}
-        >
-          {manifest.sessions.map((session) => (
-            <MenuRadioItem key={session.id} value={session.id}>
-              {session.name}
-            </MenuRadioItem>
-          ))}
-        </MenuRadioGroup>
-        <MenuItem icon={<Plus />} onSelect={() => void createSession()}>
-          New session
-        </MenuItem>
-        <MenuSeparator />
         <MenuLabel>{name}</MenuLabel>
         <MenuItem icon={<PencilLine />} onSelect={actions.editSession}>
           Rename…
@@ -92,16 +90,42 @@ export function SessionMenu(): ReactNode {
           Delete session…
         </MenuItem>
         <MenuSeparator />
+        {/* The other sessions live one level down so the top level stays short. */}
+        <MenuSub>
+          <MenuSubTrigger icon={<ArrowLeftRight />}>
+            Change session
+          </MenuSubTrigger>
+          <MenuSubContent className="main-session-menu">
+            <MenuRadioGroup
+              value={manifest.activeId}
+              onValueChange={(id) => {
+                if (id !== manifest.activeId) void switchSession(id);
+              }}
+            >
+              {manifest.sessions.map((session) => (
+                <MenuRadioItem key={session.id} value={session.id}>
+                  {session.name}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+            <MenuSeparator />
+            <MenuItem icon={<Plus />} onSelect={() => void createSession()}>
+              New session
+            </MenuItem>
+          </MenuSubContent>
+        </MenuSub>
         <MenuCheckboxItem
           checked={autoMatch}
-          onCheckedChange={(value) => void updateSettings({ autoMatchSource: value })}
+          onCheckedChange={(value) =>
+            void updateSettings({ autoMatchSource: value })
+          }
         >
-          Switch by window name
+          Switch session by window name
         </MenuCheckboxItem>
         <MenuItem icon={<ListOrdered />} onSelect={actions.manageSessions}>
           Manage sessions…
         </MenuItem>
       </MenuContent>
     </Menu>
-  )
+  );
 }
