@@ -1,4 +1,7 @@
-/** Settings → OCR: engine and server, overlay behaviour, auto-scan and change detection. */
+/**
+ * Settings → OCR: engine (and, in a local dev build with Cloud OCR chosen, its server), overlay
+ * behaviour, auto-scan and change detection.
+ */
 import { useCallback, useState, type ReactNode } from 'react'
 import {
   Badge,
@@ -50,6 +53,15 @@ const ocrModeOptions = (
 /** The Trigger Keys warning on macOS when the backend gives no wording of its own. */
 const MAC_KEY_TRIGGER_REASON =
   'Watching key presses in another application needs macOS Accessibility permission for Kimochi. Until it is granted these keys will not start a scan; the gamepad trigger is unaffected.'
+
+/**
+ * Whether this is a local development build. The frontend is always `vite build`-ed (even for
+ * `tauri dev`), so `import.meta.env.DEV` only covers the Vite dev server; a debug native build
+ * says so through `__KIMOCHI_PLATFORM__.debug` (`platform_prelude` in `src-tauri/src/platform`).
+ */
+const DEV_BUILD =
+  import.meta.env.DEV ||
+  (window as { __KIMOCHI_PLATFORM__?: { debug?: boolean } }).__KIMOCHI_PLATFORM__?.debug === true
 
 const SERVER_OPTIONS = [
   { value: 'cloud', label: 'Cloud (recommended)' },
@@ -158,6 +170,8 @@ export function OcrTab(): ReactNode {
   }, [pendingServerMode, setServerSettings])
 
   const mode = OCR_MODES[ocrMode]
+  // The server is a developer's switch, and only Cloud OCR talks to it.
+  const showServer = DEV_BUILD && ocrMode === 'cloud'
   const filterSmallText = textOverlayGrouping.filterSmallText ?? true
   const threshold = Math.round((textOverlayGrouping.filterSmallTextThreshold ?? 0.75) * 100)
 
@@ -185,22 +199,24 @@ export function OcrTab(): ReactNode {
             options={ocrModes}
           />
         </SettingsRow>
-        <SettingsRow
-          label="OCR server"
-          description={
-            <>
-              Using <span className="k-mono">{serverSettings.mode === 'cloud' ? SERVER_URLS.cloud : SERVER_URLS.local}</span>.
-              Changing it restarts Kimochi.
-            </>
-          }
-        >
-          <Select
-            aria-label="OCR server"
-            value={serverSettings.mode}
-            onValueChange={(value) => handleServerModeChange(value as ServerMode)}
-            options={SERVER_OPTIONS}
-          />
-        </SettingsRow>
+        {showServer && (
+          <SettingsRow
+            label="OCR server"
+            description={
+              <>
+                Using <span className="k-mono">{serverSettings.mode === 'cloud' ? SERVER_URLS.cloud : SERVER_URLS.local}</span>.
+                Changing it restarts Kimochi.
+              </>
+            }
+          >
+            <Select
+              aria-label="OCR server"
+              value={serverSettings.mode}
+              onValueChange={(value) => handleServerModeChange(value as ServerMode)}
+              options={SERVER_OPTIONS}
+            />
+          </SettingsRow>
+        )}
       </SettingsSection>
 
       {(ocrMode === 'meikiocr' || ocrMode === 'mangaocr') && <ModelDownloadCard engine={ocrMode} />}
@@ -399,7 +415,7 @@ export function OcrTab(): ReactNode {
       </SettingsSection>
 
       <ConfirmDialog
-        open={pendingServerMode !== null}
+        open={showServer && pendingServerMode !== null}
         onOpenChange={(open) => {
           if (!open) setPendingServerMode(null)
         }}

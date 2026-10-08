@@ -707,11 +707,17 @@ pub fn is_app_url(url: &tauri::Url) -> bool {
     url.scheme() == scheme && url.host_str() == Some(host)
 }
 
-/// An initialization script defining `window.__KIMOCHI_PLATFORM__ = {os, arch}`.
+/// An initialization script defining `window.__KIMOCHI_PLATFORM__ = {os, arch, debug}`.
 /// Registered first on every webview, before `host/shim.js` and the panel shims, which
-/// read it for Yomitan's `getPlatformInfo` instead of sniffing the user agent.
+/// read it for Yomitan's `getPlatformInfo` instead of sniffing the user agent. `debug` is
+/// true in a debug (`tauri dev`) build: the frontend is always `vite build`-ed, so this,
+/// not `import.meta.env.DEV`, is how a page tells a local dev build from a release.
 pub fn platform_prelude() -> String {
-    let info = json!({"os": std::env::consts::OS, "arch": std::env::consts::ARCH});
+    let info = json!({
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "debug": cfg!(debug_assertions)
+    });
     format!(";(function(){{try{{window.__KIMOCHI_PLATFORM__={info};}}catch(e){{}}}})();\n")
 }
 

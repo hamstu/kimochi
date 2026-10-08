@@ -94,6 +94,10 @@
   justify-content: center;
   gap: var(--k-space-1-5);
   min-width: 0;
+  /* Every tab is one pixel taller than the strip and overlaps its bottom line, so the label sits
+     at the same height in every state. Idle and hovered tabs are see-through, so the line still
+     shows under them; the active tab's solid ground covers it and joins the page below. */
+  margin-bottom: -1px;
   padding: 0 var(--k-space-3);
   border: 0;
   background: transparent;
@@ -119,8 +123,6 @@
   color: var(--k-text);
 }
 .main-tab[aria-selected="true"] {
-  /* One pixel taller than the strip, so it covers the strip's bottom line and joins the page. */
-  margin-bottom: -1px;
   background: var(--k-bg);
   color: var(--k-text);
 }
@@ -234,7 +236,7 @@
   padding-bottom: var(--main-foot-pad);
 }
 
-/* OCR model: the engine select, full width, with a quiet way to its settings under it. */
+/* A group's field: the select (or select-like trigger), full width. */
 .sb-field {
   display: flex;
   flex-direction: column;
@@ -246,12 +248,18 @@
   width: 100%;
   height: var(--k-row-h);
 }
-.sb-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--k-space-0-5);
-  padding: var(--k-space-0-5) var(--k-space-0-5);
-  margin-left: calc(var(--k-space-0-5) * -1);
+/* A label with a quiet "Manage" link at its right, both on the label's baseline. The link has the
+   label's type metrics and no vertical padding, so the row is exactly as tall as a bare label. */
+.sb-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--k-space-2);
+}
+.sb-manage {
+  flex: none;
+  padding: 0 var(--k-space-0-5);
+  margin-right: calc(var(--k-space-0-5) * -1);
   border: 0;
   border-radius: var(--k-radius-sm);
   background: transparent;
@@ -260,18 +268,16 @@
   font-size: var(--k-text-xs);
   font-weight: var(--k-weight-medium);
   line-height: var(--k-leading-xs);
+  letter-spacing: normal;
+  text-transform: none;
   cursor: default;
   transition: color var(--k-fast);
 }
-.sb-link > svg {
-  width: var(--k-icon-xs);
-  height: var(--k-icon-xs);
-}
-.sb-link:hover,
-.sb-link[data-native-hover] {
+.sb-manage:hover,
+.sb-manage[data-native-hover] {
   color: var(--k-accent-text);
 }
-.sb-link:focus-visible {
+.sb-manage:focus-visible {
   outline: 2px solid var(--k-focus);
   outline-offset: 1px;
 }

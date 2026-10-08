@@ -1,12 +1,13 @@
 /**
  * The main window's sidebar: where text comes from (Source, with its live preview and controls),
  * how OCR reads it (OCR model, for the OCR sources) and which session it goes into (Session), each
- * labelled, with Settings pinned to the bottom. The views (Log, Notebook) are tabs
+ * labelled, with Settings pinned to the bottom. OCR model and Session carry a "Manage" link on
+ * their label row: to Settings → OCR, and to the manage-sessions dialog. The views (Log, Notebook) are tabs
  * across the top of the content. In the Settings view the same column lists the settings pages,
  * with a way back. Resizable from its right edge.
  */
 import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
-import { ArrowLeft, ArrowUpRight, Settings } from 'lucide-react'
+import { ArrowLeft, Settings } from 'lucide-react'
 import { Row, Select } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
@@ -17,6 +18,7 @@ import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
 import { SessionMenu } from './SessionMenu'
 import { ModelStatusBadge } from './ModelStatusBadge'
+import { useLogActions } from './logActions'
 
 export type MainView = 'log' | 'notebook' | 'settings'
 
@@ -75,6 +77,15 @@ function ResizeHandle({
   )
 }
 
+/** The quiet "Manage" link at the right of a group's label, on the label's baseline. */
+function ManageLink({ label, onClick }: { label: string; onClick: () => void }): JSX.Element {
+  return (
+    <button type="button" className="sb-manage" aria-label={label} onClick={onClick}>
+      Manage
+    </button>
+  )
+}
+
 const OCR_MODE_OPTIONS = (Object.keys(OCR_MODES) as OcrMode[]).map((value) => ({
   value,
   label: OCR_MODES[value].label
@@ -85,9 +96,12 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
   const [ocrMode, setOcrMode] = useSetting<OcrMode>('ocrMode', 'cloud')
   return (
     <div className="sb-group">
-      <div className="sb-label" id="sb-ocr-label">
-        OCR model
-        <ModelStatusBadge engine={ocrMode} onOpenSettings={onOpenSettings} />
+      <div className="sb-label sb-label-row">
+        <span>
+          <span id="sb-ocr-label">OCR model</span>
+          <ModelStatusBadge engine={ocrMode} onOpenSettings={onOpenSettings} />
+        </span>
+        <ManageLink label="Manage OCR settings" onClick={onOpenSettings} />
       </div>
       <div className="sb-field">
         <Select
@@ -97,10 +111,6 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
           onValueChange={(value) => void setOcrMode(value)}
           options={OCR_MODE_OPTIONS}
         />
-        <button type="button" className="sb-link" onClick={onOpenSettings}>
-          OCR settings
-          <ArrowUpRight />
-        </button>
       </div>
     </div>
   )
@@ -139,6 +149,7 @@ export function MainSidebar({
   const [live, setLive] = useState<number | null>(null)
   const style = { width: live ?? width }
   const readsScreen = useReadsScreen()
+  const logActions = useLogActions()
   const handle = <ResizeHandle width={live ?? width} onLive={setLive} onCommit={onResize} />
 
   if (view === 'settings') {
@@ -181,8 +192,9 @@ export function MainSidebar({
         </div>
         {readsScreen && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} />}
         <div className="sb-group">
-          <div className="sb-label" id="sb-session-label">
-            Session
+          <div className="sb-label sb-label-row">
+            <span id="sb-session-label">Session</span>
+            <ManageLink label="Manage sessions" onClick={logActions.manageSessions} />
           </div>
           <div className="sb-field">
             <SessionMenu />
