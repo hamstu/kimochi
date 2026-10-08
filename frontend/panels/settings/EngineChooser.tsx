@@ -12,7 +12,8 @@
  * - The VIEWED engine is the one the panel on the right describes (highlighted in the list).
  *   It starts as, and follows, the active engine.
  *
- * Clicking an item views it and makes it active. The keyboard can look without choosing: the list
+ * Clicking an item (on release, as a click is) views it and makes it active at once; nothing
+ * happens on press. The keyboard can look without choosing: the list
  * is one tab stop, the arrow keys (and Home/End) move the highlight and the panel with it, and
  * Enter or Space makes the highlighted engine active. When the panel shows an engine that is not
  * in use (moved to by keyboard, or left there by a cancelled download), its header offers "Use
@@ -103,6 +104,10 @@ function EngineItem({
       data-active={active ? '' : undefined}
       data-pending={pending ? '' : undefined}
       onFocus={onFocus}
+      // The mouse acts on release only: a native mousedown would focus the item, and focus moves
+      // the view, so the panel would switch to an engine that is not chosen until the click
+      // completes. Keyboard focus (the arrow keys) still views as it moves.
+      onMouseDown={(event) => event.preventDefault()}
       onClick={(event) => {
         // A click views the engine as well as choosing it, so the keyboard carries on from here.
         event.currentTarget.focus()
