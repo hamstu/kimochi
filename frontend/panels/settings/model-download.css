@@ -1,0 +1,63 @@
+/* Settings → OCR → Model (ModelDownloadCard.tsx). */
+.model-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--k-space-1-5);
+}
+
+.model-progress-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2-5);
+  padding: var(--k-space-1) var(--k-space-3) var(--k-space-3);
+}
+
+.model-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+}
+
+.model-progress-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+
+.model-progress-label {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--k-text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-progress-detail {
+  flex: none;
+  color: var(--k-text-3);
+}
+
+.model-progress-track {
+  overflow: hidden;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: var(--k-sunken);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+}
+
+.model-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--k-accent);
+  transition: width 240ms var(--k-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-progress-fill {
+    transition: none;
+  }
+}

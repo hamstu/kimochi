@@ -28,6 +28,7 @@ import { useViewState } from '../../bridge/state'
 import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
 import { nativeError, openAccessibilityPreferences, quitApp } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
+import { ModelDownloadCard } from './ModelDownloadCard'
 
 /** The engines, with those this machine cannot run disabled and the reason beside them. */
 const ocrModeOptions = (
@@ -36,6 +37,8 @@ const ocrModeOptions = (
   (Object.keys(OCR_MODES) as OcrMode[]).map((value) => {
     const engine = engines[value]
     if (!engine || engine.available) return { value, label: OCR_MODES[value].label }
+    // Held back only by its model: choosing it starts the download.
+    if (engine.model) return { value, label: OCR_MODES[value].label, detail: engine.reason || undefined }
     return {
       value,
       label: OCR_MODES[value].label,
@@ -199,6 +202,8 @@ export function OcrTab(): ReactNode {
           />
         </SettingsRow>
       </SettingsSection>
+
+      {(ocrMode === 'meikiocr' || ocrMode === 'mangaocr') && <ModelDownloadCard engine={ocrMode} />}
 
       <SettingsSection title="Overlay">
         <SettingsRow

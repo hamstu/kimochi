@@ -38,6 +38,7 @@ import {
   seedFilesystem,
   thumbnailSvg
 } from './demo-data'
+import { MODEL_HANDLERS } from './preview-models'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -280,6 +281,7 @@ const note = (what: string, detail: unknown): null => {
 
 /** Every command the React windows call, with a plausible response. */
 const HANDLERS: Record<string, Handler> = {
+  ...MODEL_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => publish(String(a?.key), a?.value),
