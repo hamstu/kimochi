@@ -69,6 +69,7 @@ globalThis.document = {
 }
 globalThis.requestAnimationFrame = () => 1
 const { TextOverlayRenderer } = await load('render.js')
+const { normalizeOcrResult } = await load('ocr-result.ts')
 const word = (text, x) => ({
   description: text,
   boundingPoly: {
@@ -94,6 +95,33 @@ const view = (words, extras = {}) => ({
   opacity: 60,
   scanning: false,
   ...extras
+})
+
+test('OneOCR line renders one contiguous lookup target and font size in both overlay modes', () => {
+  const result = normalizeOcrResult({
+    groups: [{ id: 'oneocr-line-0', text: '日本語を勉強しています。', bbox: [10, 10, 280, 44], orientation: 'horizontal', linePolygons: [[[10, 10], [280, 10], [280, 44], [10, 44]]] }],
+    textAnnotations: [word('日', 10), word('本', 65), word('語', 95)]
+  }, 'oneocr')
+  for (const enabled of [false, true]) {
+    const host = element()
+    const renderer = new TextOverlayRenderer(host)
+    renderer.render(view([], { annotations: result.textAnnotations, grouping: { enabled, filterSmallText: false } }))
+    assert.equal(host.children.length, 1)
+    const texts = []
+    const sizes = new Set()
+    const visit = (node, inheritedSize) => {
+      const size = node.style?.fontSize || inheritedSize
+      if (node.textContent && node.className !== 'ocr-lookahead') {
+        texts.push(node.textContent)
+        sizes.add(size)
+      }
+      for (const child of node.children ?? []) visit(child, size)
+    }
+    visit(host.children[0])
+    assert.ok(texts.includes('日本語を勉強しています。'))
+    assert.equal(sizes.size, 1, 'a line must not size its characters independently')
+    renderer.destroy()
+  }
 })
 
 test('unchanged text and scanning toggles do not replace nodes or allocate new words', () => {

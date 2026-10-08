@@ -104,3 +104,21 @@ test("removed Tesseract preference migrates to native MeikiOCR", () => {
   assert.equal(OCR_MODES.local, undefined);
   assert.equal(OCR_MODES.mangaocr.geometry, true);
 });
+
+test("OneOCR's semantic line overrides jittered glyph gaps without inserting Japanese spaces", () => {
+  const polygon = [[10, 20], [270, 20], [270, 62], [10, 62]];
+  const result = normalizeOcrResult({
+    fullText: "日本語のテスト API",
+    groups: [{ id: "oneocr-line-0", text: "日本語のテスト API", bbox: [10, 20, 270, 62], orientation: "horizontal", linePolygons: [polygon] }],
+    textAnnotations: [
+      annotation("日", 10, 24, 8, 20, { granularity: "fragment", groupId: "oneocr-line-0" }),
+      annotation("本", 70, 20, 25, 42, { granularity: "fragment", groupId: "oneocr-line-0" }),
+      annotation("語", 120, 22, 13, 26, { granularity: "fragment", groupId: "oneocr-line-0" }),
+    ]
+  }, "oneocr");
+  assert.equal(result.fullText, "日本語のテスト API");
+  assert.equal(result.textAnnotations.length, 2);
+  assert.equal(result.textAnnotations[1].description, "日本語のテスト API");
+  assert.equal(result.textAnnotations[1].granularity, "block");
+  assert.deepEqual(result.textAnnotations[1].linePolygons, [polygon]);
+});

@@ -53,6 +53,51 @@ fn check(code: i64, operation: &str) -> Result<(), String> {
         ))
     }
 }
+
+/// Keep the engine's line text authoritative. Glyph boxes are useful evidence,
+/// but Japanese glyph gaps must not become spaces or independent font sizes.
+fn line_group(index: i64, text: &str, polygon: &Value) -> Result<Value, String> {
+    let vertices = polygon["vertices"]
+        .as_array()
+        .ok_or("OneOCR line has no vertices")?;
+    if vertices.len() != 4 {
+        return Err("OneOCR line needs four vertices".into());
+    }
+    let mut bbox = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    let mut points = Vec::new();
+    for vertex in vertices {
+        let x = vertex["x"]
+            .as_f64()
+            .filter(|x| x.is_finite())
+            .ok_or("OneOCR line has invalid x")?;
+        let y = vertex["y"]
+            .as_f64()
+            .filter(|y| y.is_finite())
+            .ok_or("OneOCR line has invalid y")?;
+        bbox[0] = bbox[0].min(x);
+        bbox[1] = bbox[1].min(y);
+        bbox[2] = bbox[2].max(x);
+        bbox[3] = bbox[3].max(y);
+        points.push([x, y]);
+    }
+    let width = bbox[2] - bbox[0];
+    let height = bbox[3] - bbox[1];
+    let orientation = if text.chars().count() > 1 && height > width * 1.5 {
+        "vertical"
+    } else {
+        "horizontal"
+    };
+    Ok(json!({
+        "id": format!("oneocr-line-{index}"), "text": text,
+        "bbox": if width > 0. && height > 0. { Some(bbox) } else { None },
+        "orientation": orientation, "linePolygons": [points]
+    }))
+}
 impl Native {
     unsafe fn function<T: Copy>(&self, name: &[u8]) -> Result<T, String> {
         self.library
@@ -224,6 +269,7 @@ impl Native {
     unsafe fn parse(&self, result: i64, width: u32, height: u32) -> Result<Value, String> {
         let mut annotations = Vec::new();
         let mut lines = Vec::new();
+        let mut groups = Vec::new();
         for index in 0..self.count(result, b"GetOcrLineCount\0")? {
             let line = self.child(result, index, b"GetOcrLine\0")?;
             let text = self.text(line, b"GetOcrLineContent\0")?;
@@ -232,20 +278,12 @@ impl Native {
             }
             lines.push(text.clone());
             let polygon = self.polygon(line, b"GetOcrLineBoundingBox\0", width, height)?;
-            let vertices = polygon["vertices"]
-                .as_array()
-                .ok_or("OneOCR line has no vertices")?;
-            let xs = vertices.iter().map(|p| p["x"].as_f64().unwrap_or(0.));
-            let ys = vertices.iter().map(|p| p["y"].as_f64().unwrap_or(0.));
-            let line_width =
-                xs.clone().fold(f64::NEG_INFINITY, f64::max) - xs.fold(f64::INFINITY, f64::min);
-            let line_height =
-                ys.clone().fold(f64::NEG_INFINITY, f64::max) - ys.fold(f64::INFINITY, f64::min);
-            let orientation = if text.chars().count() > 1 && line_height > line_width * 1.5 {
-                "vertical"
-            } else {
-                "horizontal"
-            };
+            let group = line_group(index, &text, &polygon)?;
+            let orientation = group["orientation"]
+                .as_str()
+                .ok_or("OneOCR line has no orientation")?
+                .to_owned();
+            groups.push(group);
             let count = self.count(line, b"GetOcrLineWordCount\0")?;
             if count == 0 {
                 annotations.push(json!({"description":text,"boundingPoly":polygon,"orientation":orientation,"granularity":"line","groupId":format!("oneocr-line-{index}")}));
@@ -271,7 +309,7 @@ impl Native {
         if !annotations.is_empty() {
             annotations.insert(0, json!({"description":text,"granularity":"aggregate","boundingPoly":{"vertices":[{"x":0,"y":0},{"x":width,"y":0},{"x":width,"y":height},{"x":0,"y":height}]}}));
         }
-        Ok(json!({"fullText":text,"textAnnotations":annotations,"engine":"oneocr"}))
+        Ok(json!({"fullText":text,"textAnnotations":annotations,"groups":groups,"engine":"oneocr"}))
     }
 }
 impl Drop for Native {
@@ -344,5 +382,22 @@ mod tests {
             check(-1, "scan").unwrap_err(),
             "OneOCR scan failed (code -1, 0xFFFFFFFFFFFFFFFF)"
         );
+    }
+    #[test]
+    fn semantic_line_preserves_japanese_and_real_spaces_with_one_box() {
+        let polygon = json!({"vertices":[{"x":12.,"y":7.},{"x":332.,"y":8.},{"x":330.,"y":51.},{"x":10.,"y":50.}]});
+        let group = line_group(3, "日本語のテスト API", &polygon).unwrap();
+        assert_eq!(group["text"], "日本語のテスト API");
+        assert_eq!(group["bbox"], json!([10., 7., 332., 51.]));
+        assert_eq!(group["id"], "oneocr-line-3");
+        assert_eq!(group["orientation"], "horizontal");
+        assert_eq!(group["linePolygons"][0][2], json!([330., 51.]));
+    }
+    #[test]
+    fn semantic_line_keeps_vertical_capture_coordinates() {
+        let polygon = json!({"vertices":[{"x":20.,"y":10.},{"x":50.,"y":10.},{"x":50.,"y":210.},{"x":20.,"y":210.}]});
+        let group = line_group(0, "日本語", &polygon).unwrap();
+        assert_eq!(group["orientation"], "vertical");
+        assert_eq!(group["bbox"], json!([20., 10., 50., 210.]));
     }
 }
