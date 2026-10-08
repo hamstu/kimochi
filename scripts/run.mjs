@@ -11,7 +11,7 @@
 // staging scripts (as KIMOCHI_TARGET) so the bundled runtime matches the binary.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir } from 'node:fs/promises'
+import { copyFile, mkdir, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -123,9 +123,21 @@ if (
     }
   }
 } else {
-  // tauri-build copies `bundle.resources` at compile time and fails on a missing directory.
-  // A compile check needs the directories, not the (downloaded) models inside them.
+  // tauri-build copies `bundle.resources` at compile time and fails on a missing path. A
+  // compile check needs the paths tauri.conf.json names (the runtime directory and the
+  // licences), not the runtime or the models themselves; the licences are copied from the
+  // sibling engine repositories exactly as the staging scripts copy them.
   for (const dir of ocrResources) await mkdir(dir, { recursive: true })
+  await mkdir('src-tauri/resources/meikiocr/runtime', { recursive: true })
+  const legal = [
+    ['../kimochi-meikiocr/LICENSE', 'src-tauri/resources/meikiocr/LICENSE'],
+    ['../kimochi-meikiocr/NOTICE', 'src-tauri/resources/meikiocr/NOTICE'],
+    ['../kimochi-mangaocr/LICENSE', 'src-tauri/resources/mangaocr/LICENSE'],
+    ['../kimochi-mangaocr/LICENSE-APACHE', 'src-tauri/resources/mangaocr/LICENSE-APACHE'],
+    ['../kimochi-mangaocr/NOTICE', 'src-tauri/resources/mangaocr/NOTICE'],
+    ['../kimochi-mangaocr/scripts/model-manifest.json', 'src-tauri/resources/mangaocr/model-manifest.json']
+  ]
+  for (const [from, to] of legal) if (!existsSync(to)) await copyFile(from, to)
 }
 
 // The React panels build into `dist/app/`, after prepare.mjs has rebuilt `dist/` from `yomitan/`

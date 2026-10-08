@@ -17,8 +17,13 @@
   "bundle": {
     "active": true,
     "resources": {
-      "resources/meikiocr/": "meikiocr/",
-      "resources/mangaocr/": "mangaocr/"
+      "resources/meikiocr/runtime/": "meikiocr/runtime/",
+      "resources/meikiocr/LICENSE": "meikiocr/LICENSE",
+      "resources/meikiocr/NOTICE": "meikiocr/NOTICE",
+      "resources/mangaocr/LICENSE": "mangaocr/LICENSE",
+      "resources/mangaocr/LICENSE-APACHE": "mangaocr/LICENSE-APACHE",
+      "resources/mangaocr/NOTICE": "mangaocr/NOTICE",
+      "resources/mangaocr/model-manifest.json": "mangaocr/model-manifest.json"
     },
     "icon": [
       "icons/icon.icns",

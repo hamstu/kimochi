@@ -553,6 +553,67 @@ The tray uses the Electron build's macOS template icon, a left-click popover pos
 under the icon, and a right-click menu of Show Controls / Settings / Quit. Emits
 `tray:action` `{action}`.
 
+## OCR model downloads
+
+The local engines' models are not bundled; only the ONNX Runtime libraries are. They are
+downloaded on demand into `<app local data>/models/<engine>/` (`app_local_data_dir`: the app
+data directory on macOS and Linux, `%LOCALAPPDATA%` rather than the roaming profile on
+Windows) from the pinned list in `src-tauri/ocr-models.json` (repository, revision, URL,
+SHA-256 and size per file). Implementation: `src-tauri/src/model_store.rs`.
+
+`engine` is `"meikiocr"` or `"mangaocr"`. Every command answers with the engine's
+`ModelStatus` after acting:
+
+| Command | Signature |
+| --- | --- |
+| `model_status` | `({engine}) -> ModelStatus` |
+| `model_download_start` | `({engine}) -> ModelStatus` — no-op while downloading or ready |
+| `model_download_pause` | `({engine}) -> ModelStatus` — keeps the `.part` files |
+| `model_download_resume` | `({engine}) -> ModelStatus` — continues from the `.part` files (HTTP Range) |
+| `model_download_retry` | `({engine}) -> ModelStatus` — after `failed`; also resumes |
+| `model_download_cancel` | `({engine}) -> ModelStatus` — stops and removes everything downloaded; leaves a ready engine alone |
+| `model_delete` | `({engine}) -> ModelStatus` — unloads the engine and removes its downloaded models |
+
+```ts
+ModelStatus = {
+  engine, name,                      // "meikiocr", "MeikiOCR"
+  state: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready',
+  source: 'downloaded' | 'bundled' | 'development' | null,  // where ready models live
+  file, receivedBytes, totalBytes,   // the file in progress (downloading / verifying)
+  overallReceived, overallTotal,     // bytes across every file of the engine
+  message                            // why it failed
+}
+```
+
+Emits `model-download` with a `ModelStatus` on every state change and about four times a
+second while bytes arrive, and re-emits `platform-capabilities` on every state change (and
+about once a second during a download) so the gate's reason stays current.
+
+**Behaviour.** Each file is written as `<name>.part`, its size and SHA-256 are checked, and
+only then is it renamed into place, so a final path never holds a partial file;
+`verified.json` beside the files records what was verified. A checksum mismatch discards
+that file's `.part` and fails; a dropped connection fails and keeps it, so Retry resumes. A
+server that ignores the Range header restarts that file. Downloads run on their own thread,
+outlive every panel, and are paused (not discarded) on quit; the next launch reports
+`paused`. Setting `ocrMode` to a local engine whose models are `absent` (Settings, the
+sidebar, or at launch) starts the download; a `paused` or `failed` one waits for Resume or
+Retry. On Windows and Linux the automatic-scan observer reads frames with MeikiOCR whatever
+engine is selected, so it starts the MeikiOCR download too and answers `busy` until it is
+ready.
+
+**Resolution order** for an engine's models: the downloaded store when complete and
+verified, then `<resources>/<engine>/models` (a build that still bundles them), then
+`src-tauri/resources/<engine>/models` (development). Bundled and development copies make the
+status `ready` with that `source`; they cannot be deleted from the app.
+
+**Gating.** While an engine's models are not usable, `platform_capabilities` reports it
+`available: false` with a human `reason` — `Model not downloaded`, `Downloading model… 32%`,
+`Verifying model…`, `Model download paused`, `Model download failed: <message>` — and adds
+`model: <state>` so pickers keep the engine selectable (choosing it downloads). Every scan
+path refuses with the same reason: `ocr_frame` and `scan` fail with
+`"<Engine> is not ready: <reason>"`, and the observer as above. Switching to an engine whose
+models are ready scans at once.
+
 ## Capabilities
 
 `capabilities/core.json` grants `core:event:default` plus a few read-only window

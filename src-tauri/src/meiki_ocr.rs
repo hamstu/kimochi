@@ -6,6 +6,7 @@
 //! one short-lived engine on a background thread). They share only the process-wide
 //! ONNX Runtime initialisation and, on DirectML, one run lock.
 use crate::engine_probe::{self, Loaded, Probe, Verified};
+use crate::model_store;
 use meikiocr::{Backend, MeikiOcr, ModelPaths, OcrOptions, TextLine};
 use serde_json::{json, Value};
 use std::{
@@ -17,20 +18,39 @@ use tauri::Manager;
 #[derive(Default)]
 pub struct MeikiState(Mutex<Option<MeikiOcr>>);
 
-fn assets(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+/// The bundled native runtime's root (`<root>/runtime/<library>`): the resource
+/// directory, then the development fallback. The runtime always ships with the app;
+/// only the models are downloaded (`model_store`).
+fn runtime_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let bundled = app
         .path()
         .resource_dir()
         .map_err(|e| e.to_string())?
         .join("meikiocr");
-    if bundled.join("models").is_dir() {
-        return Ok(bundled);
-    }
     let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/meikiocr");
-    if development.join("models").is_dir() {
-        return Ok(development);
+    [bundled, development]
+        .into_iter()
+        .find(|root| runtime_library(root).is_file())
+        .ok_or_else(|| RUNTIME_MISSING.to_string())
+}
+
+/// Where the runtime and the models were found.
+pub(crate) struct Assets {
+    runtime: PathBuf,
+    models: PathBuf,
+}
+
+/// The models directory, or why MeikiOCR cannot scan yet ("Downloading model… 32%").
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+pub(crate) fn models_ready(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    model_store::models_dir(app, model_store::Engine::Meiki)
+}
+
+/// Drop the manual scan's engine so its model files can be deleted.
+pub fn unload(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<MeikiState>() {
+        *state.0.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
-    Err("MeikiOCR assets are missing. Rebuild Kimochi with npm run bundle.".into())
 }
 
 /// The ONNX Runtime library this OS loads, inside the asset root.
@@ -78,13 +98,19 @@ const RUNTIME_MISSING: &str =
     "MeikiOCR native runtime is missing. Rebuild Kimochi with npm run bundle.";
 
 /// Whether the models and native runtime are present, without loading either.
-fn presence(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let root = assets(app)?;
-    if runtime_library(&root).is_file() {
-        Ok(root)
-    } else {
-        Err(RUNTIME_MISSING.into())
-    }
+/// The models are checked first, so an engine waiting for its download says so.
+fn presence(app: &tauri::AppHandle) -> Result<Assets, String> {
+    let models = model_store::models_dir(app, model_store::Engine::Meiki)?;
+    Ok(Assets {
+        runtime: runtime_root(app)?,
+        models,
+    })
+}
+
+/// Whether the native runtime is bundled, whatever the state of the models.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+pub(crate) fn runtime_available(app: &tauri::AppHandle) -> Result<(), String> {
+    runtime_root(app).map(|_| ())
 }
 
 static PROBE: LazyLock<Arc<Probe>> = LazyLock::new(Default::default);
@@ -96,8 +122,8 @@ static PROBE: LazyLock<Arc<Probe>> = LazyLock::new(Default::default);
 /// the runtime and built the sessions; from then on this is the verified answer.
 /// Nothing here blocks: the probe never runs on the caller's thread.
 pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
-    let root = match presence(app) {
-        Ok(root) => root,
+    let assets = match presence(app) {
+        Ok(assets) => assets,
         Err(reason) => return (false, Some(reason)),
     };
     // On macOS the Core ML path is proven and the sessions are built on first scan, as
@@ -110,7 +136,7 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
     let probe = move || {
         // The probe's engine is dropped once built: verifying must not leave a
         // second resident copy of the sessions for users who never scan with Meiki.
-        let engine = load_engine(&root)?;
+        let engine = load_engine(&assets)?;
         let info = engine.backend_info();
         let mut diagnostics = RUNTIME_DIAGNOSTICS.get().cloned().unwrap_or_default();
         diagnostics.extend(
@@ -184,9 +210,10 @@ fn initialize_runtime(root: &Path) -> Result<(), String> {
         .clone()
 }
 
-/// The asset root, when the models and the runtime library are both present.
+/// The runtime and models, when both are present.
 /// For an engine owned elsewhere (the observer), which loads it with `load_engine`.
-pub(crate) fn engine_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+pub(crate) fn engine_root(app: &tauri::AppHandle) -> Result<Assets, String> {
     presence(app)
 }
 
@@ -194,9 +221,9 @@ pub(crate) fn engine_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 ///
 /// Panics from the runtime are caught: a provider that panics during session
 /// creation is a deployment failure, reported like any other.
-pub(crate) fn load_engine(root: &Path) -> Result<MeikiOcr, String> {
-    initialize_runtime(root)?;
-    let models = ModelPaths::from_dir(root.join("models"));
+pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
+    initialize_runtime(&assets.runtime)?;
+    let models = ModelPaths::from_dir(&assets.models);
     engine_probe::guarded(|| MeikiOcr::new(models).map_err(|e| format!("MeikiOCR models: {e}")))
 }
 
@@ -227,15 +254,15 @@ pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
     let image = image::load_from_memory_with_format(png, image::ImageFormat::Png)
         .map_err(|e| format!("MeikiOCR image: {e}"))?
         .to_rgb8();
-    let root = assets(app)?;
-    initialize_runtime(&root)?;
+    let assets = presence(app).map_err(|reason| format!("MeikiOCR is not ready: {reason}"))?;
+    initialize_runtime(&assets.runtime)?;
     let state = app.state::<MeikiState>();
     let mut engine = state
         .0
         .lock()
         .map_err(|_| "MeikiOCR worker unavailable".to_string())?;
     if engine.is_none() {
-        *engine = Some(load_engine(&root)?);
+        *engine = Some(load_engine(&assets)?);
     }
     let engine = engine.as_mut().ok_or("MeikiOCR initialization failed")?;
     let lines = infer(engine, &image)?;

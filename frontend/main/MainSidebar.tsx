@@ -16,6 +16,7 @@ import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
 import { SessionMenu } from './SessionMenu'
+import { ModelStatusBadge } from './ModelStatusBadge'
 
 export type MainView = 'log' | 'notebook' | 'settings'
 
@@ -86,6 +87,7 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
     <div className="sb-group">
       <div className="sb-label" id="sb-ocr-label">
         OCR model
+        <ModelStatusBadge engine={ocrMode} onOpenSettings={onOpenSettings} />
       </div>
       <div className="sb-field">
         <Select

@@ -1,0 +1,37 @@
+/* The sidebar's model download badge, beside the "OCR model" label (ModelStatusBadge.tsx). */
+.sb-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  margin-left: var(--k-space-1-5);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--k-text-3);
+  font: inherit;
+  font-size: var(--k-text-xs);
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: middle;
+  cursor: default;
+}
+.sb-model-badge .k-spinner {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.sb-model-badge-warning {
+  border-radius: var(--k-radius-sm);
+  color: var(--k-warn-text);
+}
+.sb-model-badge-warning > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.sb-model-badge-warning:hover,
+.sb-model-badge-warning[data-native-hover] {
+  color: var(--k-accent-text);
+}
+.sb-model-badge-warning:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
