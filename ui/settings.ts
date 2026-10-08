@@ -143,6 +143,8 @@ export interface OcrModeInfo {
   tagline: string
   /** Whether results carry positions, so the overlay can draw over the game. */
   geometry: boolean
+  /** Where it runs: on this computer, or a service across the network (the chooser's icon). */
+  runs: 'local' | 'online'
   /** What it is and what it is good for: the chooser's detail paragraph. */
   description: string
   /** Two to four short reasons to pick it. */
@@ -158,6 +160,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     name: 'Cloud OCR',
     tagline: 'Online, via Google Vision',
     geometry: true,
+    runs: 'online',
     description:
       'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision and returns the text with the position of every word. Dependable on almost any Japanese text, at the cost of a round trip over the network.',
     strengths: [
@@ -173,6 +176,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     name: 'MeikiOCR',
     tagline: 'Offline, for game text',
     geometry: true,
+    runs: 'local',
     description:
       'A small, fast recogniser that runs entirely on this computer. It is tuned for Japanese video game text: dialogue boxes, menus and subtitles, horizontal or vertical, with a box for every line.',
     strengths: [
@@ -188,6 +192,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     name: 'Manga OCR',
     tagline: 'Offline, for manga',
     geometry: true,
+    runs: 'local',
     description:
       'Finds speech bubbles and text blocks with the comic text detector, then reads each one with Manga OCR, a model trained on manga. The best choice for comics, stylised lettering and vertical text.',
     strengths: [
@@ -203,6 +208,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     name: 'OwOCR',
     tagline: 'Your own OwOCR server',
     geometry: false,
+    runs: 'local',
     description:
       'Sends each capture to an OwOCR server you run yourself, so any engine OwOCR supports can read your game.',
     strengths: ['Use any engine OwOCR supports', 'Runs wherever you host it'],

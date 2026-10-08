@@ -3,10 +3,12 @@
  *
  * Two ideas, kept apart:
  * - The ACTIVE engine is the one scans use (`ocrMode`). It is marked by the filled radio dot in
- *   the list and "In use" in the panel. Choosing goes through `useEngineSelection`, as the
+ *   the list and "Active" in the panel. Choosing goes through `useEngineSelection`, as the
  *   sidebar's picker does, so a local engine whose model was never downloaded asks first
  *   (`DownloadConfirmDialog`); while it asks, the item shows as pending, and Cancel puts the dot
- *   back where it was.
+ *   back where it was. A pick is shown as active from the click, not from the saved setting, so
+ *   the beat spent asking the model's status (and the write afterwards) does not flash "Use this
+ *   engine" first.
  * - The VIEWED engine is the one the panel on the right describes (highlighted in the list).
  *   It starts as, and follows, the active engine.
  *
@@ -20,7 +22,7 @@
  * per-engine overflow actions in `engineMenu` below.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Check, Ellipsis, Trash2 } from 'lucide-react'
+import { Check, Cloud, Ellipsis, Monitor, Trash2 } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -51,6 +53,16 @@ import './engine-chooser.css'
 type Engines = PlatformCapabilities['ocrEngines']
 
 const MODES = Object.keys(OCR_MODES) as OcrMode[]
+
+/** Where the engine runs, as an icon: this computer, or a service across the network. */
+function RunsIcon({ mode }: { mode: OcrMode }): ReactNode {
+  const local = OCR_MODES[mode].runs === 'local'
+  return (
+    <span className="engine-runs" title={local ? 'Runs on this computer' : 'Runs online'}>
+      {local ? <Monitor aria-label="On this computer" /> : <Cloud aria-label="Online" />}
+    </span>
+  )
+}
 
 function EngineItem({
   mode,
@@ -99,7 +111,10 @@ function EngineItem({
     >
       <span className="engine-item-radio" aria-hidden />
       <span className="engine-item-text">
-        <span className="engine-item-name">{info.name}</span>
+        <span className="engine-item-name">
+          {info.name}
+          <RunsIcon mode={mode} />
+        </span>
         <span className="engine-item-tagline">{info.tagline}</span>
         {hint && (
           <Tooltip content={hint.reason}>
@@ -153,9 +168,10 @@ function EngineDetail({
       <header className="engine-detail-header">
         <h3 id={headingId} className="k-heading engine-detail-name">
           {info.name}
+          <RunsIcon mode={mode} />
         </h3>
         {inUse ? (
-          <Badge tone="accent">In use</Badge>
+          <Badge tone="accent">Active</Badge>
         ) : pending ? (
           <Badge>Confirming…</Badge>
         ) : selectable ? (
@@ -218,7 +234,10 @@ export function EngineChooser(): ReactNode {
 
   const itemId = (mode: OcrMode): string => `${baseId}-engine-${mode}`
   const detailId = `${baseId}-detail`
-  const pendingMode = shown !== ocrMode ? shown : null
+  // Only a pick the download question is open for is pending. A pick still being decided, or
+  // written, already shows as active: `shown` leads `ocrMode` by a round trip, and the panel
+  // follows `shown` so it does not flash "Use this engine" in between.
+  const pendingMode = confirmation ? shown : null
 
   const pick = (mode: OcrMode): void => {
     setViewed(mode)
@@ -304,7 +323,7 @@ export function EngineChooser(): ReactNode {
           mode={viewed}
           id={detailId}
           engines={engines}
-          inUse={viewed === ocrMode}
+          inUse={viewed === shown && viewed !== pendingMode}
           pending={viewed === pendingMode}
           onUse={() => pick(viewed)}
         />

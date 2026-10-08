@@ -7,8 +7,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSetting, onSettingsChange, setSetting } from './settings'
 
+/**
+ * The last value seen for each key in this window, from a load, a write or another window's
+ * change. A hook mounting later starts from it instead of its default, so a view that opens
+ * after the value is known (Settings → OCR & Overlay, after the sidebar loaded `ocrMode`) renders
+ * the real value on its first frame rather than the default for one frame and the real one next.
+ */
+const known = new Map<string, unknown>()
+
+function remember<T>(key: string, value: T): T {
+  known.set(key, value)
+  return value
+}
+
 export function useSetting<T>(key: string, defaultValue: T): [T, (value: T) => Promise<void>] {
-  const [value, setValue] = useState<T>(defaultValue)
+  const [value, setValue] = useState<T>(() => (known.has(key) ? (known.get(key) as T) : defaultValue))
   const defaultValueRef = useRef<T>(defaultValue)
   const isSettingRef = useRef(false)
 
@@ -22,7 +35,10 @@ export function useSetting<T>(key: string, defaultValue: T): [T, (value: T) => P
     let mounted = true
     getSetting<T>(key, defaultValueRef.current)
       .then((loaded) => {
-        if (mounted) setValue(loaded !== undefined && loaded !== null ? loaded : defaultValueRef.current)
+        if (mounted)
+          setValue(
+            remember(key, loaded !== undefined && loaded !== null ? loaded : defaultValueRef.current)
+          )
       })
       .catch((error) => {
         console.error(`Failed to load setting "${key}":`, error)
@@ -37,7 +53,10 @@ export function useSetting<T>(key: string, defaultValue: T): [T, (value: T) => P
     return onSettingsChange((changedKey, newValue) => {
       if (changedKey !== key || isSettingRef.current) return
       setValue(
-        newValue !== undefined && newValue !== null ? (newValue as T) : defaultValueRef.current
+        remember(
+          key,
+          newValue !== undefined && newValue !== null ? (newValue as T) : defaultValueRef.current
+        )
       )
     })
   }, [key])
@@ -46,14 +65,16 @@ export function useSetting<T>(key: string, defaultValue: T): [T, (value: T) => P
     async (newValue: T): Promise<void> => {
       try {
         isSettingRef.current = true
-        setValue(newValue)
+        setValue(remember(key, newValue))
         await setSetting(key, newValue)
       } catch (error) {
         console.error(`Failed to save setting "${key}":`, error)
         const current = await getSetting<T>(key, defaultValueRef.current).catch(
           () => defaultValueRef.current
         )
-        setValue(current !== undefined && current !== null ? current : defaultValueRef.current)
+        setValue(
+          remember(key, current !== undefined && current !== null ? current : defaultValueRef.current)
+        )
       } finally {
         setTimeout(() => {
           isSettingRef.current = false

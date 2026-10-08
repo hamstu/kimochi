@@ -156,8 +156,10 @@ test('both engine pickers share the confirmation and list engines by name alone'
   const sidebar = await read('frontend/main/MainSidebar.tsx')
   assert.ok(sidebar.includes('label: OCR_MODES[value].label\n'), 'the sidebar picker labels engines with more than their name')
   const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
-  assert.ok(
-    chooser.includes('<span className="engine-item-name">{info.name}</span>'),
+  // The name, then where the engine runs as an icon; never a download-state suffix.
+  assert.match(
+    chooser,
+    /<span className="engine-item-name">\s*\{info\.name\}\s*<RunsIcon mode=\{mode\} \/>\s*<\/span>/,
     'the list labels engines with more than their name'
   )
   assert.ok(chooser.includes('engineHint(capability, status)'), 'the list no longer shows the download state as a hint')
@@ -266,6 +268,7 @@ test('every engine has the copy the chooser shows', () => {
     }
     assert.equal(typeof info.geometry, 'boolean', `${mode}.geometry`)
     assert.ok(Array.isArray(info.strengths) && info.strengths.length >= 2, `${mode} needs strengths`)
+    assert.ok(['local', 'online'].includes(info.runs), `${mode} must say where it runs`)
     for (const strength of info.strengths) assert.ok(strength.trim().length > 0, `${mode} has an empty strength`)
     // A tagline fits one line of the list's third of the width.
     assert.ok(info.tagline.length <= 34, `${mode}.tagline is too long for the list`)
