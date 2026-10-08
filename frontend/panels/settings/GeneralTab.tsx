@@ -1,4 +1,4 @@
-/** Settings → General: appearance and interface size for every Kimochi window, and the welcome guide. */
+/** Settings → General: appearance and interface size for every Kimochi window, sound effects, and the welcome guide. */
 import { GnomeOverlaySetup } from '../../main/GnomeOverlaySetup'
 import type { ReactNode } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
@@ -23,6 +23,7 @@ const SCALES = (Object.keys(INTERFACE_SCALES) as InterfaceScale[]).map((value) =
 export function GeneralTab(): ReactNode {
   const [appearance, setAppearance] = useSetting<Appearance>('appearance', 'system')
   const [scale, setScale] = useSetting<InterfaceScale>('interfaceScale', 'medium')
+  const [soundEffects, setSoundEffects] = useSetting<boolean>('soundEffects', true)
   const { props: controller } = useController()
   const { capture } = useCapabilities()
   // Screen recording is a step only where it is granted in the system's settings.
@@ -55,6 +56,19 @@ export function GeneralTab(): ReactNode {
             value={scale}
             onValueChange={(value) => void setScale(value)}
             options={SCALES}
+          />
+        </SettingsRow>
+      </SettingsSection>
+      <SettingsSection title="Sound">
+        <SettingsRow
+          label="Sound effects"
+          controlId="general-sound-effects"
+          description="Play a sound when a scan starts, finishes or fails."
+        >
+          <Switch
+            id="general-sound-effects"
+            checked={soundEffects}
+            onCheckedChange={(checked) => void setSoundEffects(checked)}
           />
         </SettingsRow>
       </SettingsSection>

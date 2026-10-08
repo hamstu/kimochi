@@ -4,6 +4,7 @@
 
 # Binary assets: never normalised or diffed as text.
 *.png binary
+*.mp3 binary
 *.icns binary
 *.ico binary
 *.onnx binary

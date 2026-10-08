@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 import ts from 'typescript'
+import { load } from './load.mjs'
 
 const source = await readFile(new URL('../ui/overlay.js', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('overlay.js', source, ts.ScriptTarget.Latest, true)
@@ -117,4 +118,125 @@ test('the overlay tells the activity feed how a result ended', async () => {
   await context.applyResult({ geometry: false, fullText: 'text' }, { id: 3 }, { source: {} })
   assert.equal(posts.length, 1)
   assert.equal(context.autoRound.outcome.text, 'source changed')
+})
+
+const scanPath = ast.statements
+  .filter(
+    (node) =>
+      ts.isFunctionDeclaration(node) &&
+      [
+        'performScan',
+        'reportOutcome',
+        'beginAutoRound',
+        'noteAutoPublication',
+        'settleAutoRound',
+        'onAutoScanEvent'
+      ].includes(node.name?.text)
+  )
+  .map((node) => node.getText(ast))
+  .join('\n')
+
+/**
+ * The real scan path with every stage stubbed: `recognise` and `applied` decide how the scan
+ * goes, and `sounds` records what the player was asked for (before the setting or throttle).
+ */
+async function scanContext({ recognise = async () => ({ fullText: 'text' }), applied } = {}) {
+  const scanActivity = await load('scan-activity.ts')
+  const { outcomeSound } = await load('sounds.ts')
+  const sounds = []
+  const context = vm.createContext({
+    scanActivity,
+    outcomeSound,
+    playSound: (name, options = {}) => sounds.push([name, Boolean(options.auto)]),
+    activity: () => {},
+    trace: () => {},
+    log: () => {},
+    draw: () => {},
+    publish: () => {},
+    setScanning: (scanning) => {
+      context.state.scanning = scanning
+    },
+    forgetFrame: () => {},
+    observationFrom: () => null,
+    beginJob: async () => ({ request: {} }),
+    setting: (key) => (key === 'autoOCRSettings' ? { observerMode: 'text' } : 'meikiocr'),
+    recognize: (...args) => recognise(...args),
+    applyResult: async (_result, _frame, _job, outcome) => {
+      if (applied) outcome.onPublication?.(applied)
+      return applied?.lines ? 'text' : ''
+    },
+    native: { captureFrame: async () => ({ id: 1 }) },
+    scanner: { isRunning: false, noteExternalScan: () => {} },
+    pipeline: { run: (work) => work() },
+    generation: { current: 1, isStale: () => false },
+    state: { scanning: false },
+    autoRound: null
+  })
+  vm.runInContext(scanPath, context)
+  return { context, sounds }
+}
+
+test('a scan the reader asks for plucks at the start and chimes when lines are added', async () => {
+  const { context, sounds } = await scanContext({ applied: { lines: 2, duplicate: false } })
+  await context.performScan()
+  assert.deepEqual(sounds, [
+    ['scan-start', false],
+    ['scan-done', false]
+  ])
+})
+
+test('a repeat or an empty reading ends a scan without a chime', async () => {
+  for (const applied of [{ lines: 0, duplicate: true }, { lines: 0, duplicate: false }]) {
+    const { context, sounds } = await scanContext({ applied })
+    await context.performScan()
+    assert.deepEqual(sounds, [
+      ['scan-start', false],
+      [null, false]
+    ])
+  }
+  const { context, sounds } = await scanContext({ recognise: async () => null })
+  await context.performScan()
+  assert.deepEqual(sounds, [
+    ['scan-start', false],
+    [null, false]
+  ])
+})
+
+test('a failed scan buzzes', async () => {
+  const { context, sounds } = await scanContext({
+    recognise: async () => {
+      throw new Error('connection refused')
+    }
+  })
+  await context.performScan()
+  assert.deepEqual(sounds, [
+    ['scan-start', false],
+    ['scan-error', false]
+  ])
+})
+
+test('the automatic loop never plucks, chimes for lines, and buzzes as automatic', async () => {
+  const { context, sounds } = await scanContext()
+  context.beginAutoRound()
+  context.noteAutoPublication({ lines: 1, duplicate: false })
+  context.settleAutoRound()
+
+  context.beginAutoRound()
+  context.onAutoScanEvent({ type: 'skip', reason: 'empty-result' })
+  context.settleAutoRound()
+
+  context.beginAutoRound()
+  context.onAutoScanEvent({ type: 'error', stage: 'recognize', message: 'connection refused' })
+  context.settleAutoRound()
+
+  context.onAutoScanEvent({ type: 'error', stage: 'capture', message: 'native: stream stopped' })
+  // A manual scan holding the capture is not a failure, and makes no outcome at all.
+  context.onAutoScanEvent({ type: 'error', stage: 'capture', message: 'busy: capture running' })
+
+  assert.deepEqual(sounds, [
+    ['scan-done', true],
+    [null, true],
+    ['scan-error', true],
+    ['scan-error', true]
+  ])
 })

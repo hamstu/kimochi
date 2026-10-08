@@ -96,6 +96,8 @@ export interface Settings {
   scannedTextFontSize: number
   appearance: Appearance
   interfaceScale: InterfaceScale
+  /** Sounds when a scan starts, adds lines or fails; see sounds.ts. */
+  soundEffects: boolean
 }
 
 export const DEFAULT_VOICE_ID = 'j210dv0vWm7fCknyQpbA'
@@ -126,7 +128,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   scannedTextHistory: [],
   scannedTextFontSize: 14,
   appearance: 'system',
-  interfaceScale: 'medium'
+  interfaceScale: 'medium',
+  soundEffects: true
 }
 
 /**

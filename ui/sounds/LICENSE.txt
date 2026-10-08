@@ -1,0 +1,14 @@
+Sound effects in this directory
+
+  scan-start.mp3   originally tick_001.ogg
+  scan-done.mp3    originally bong_001.ogg
+  scan-error.mp3   originally error_003.ogg
+
+From Kenney (www.kenney.nl), the "Interface Sounds" and "UI Audio" packs. Re-encoded from
+Ogg Vorbis to MP3 (WebKit cannot play Ogg), with a short reverb tail added, and renamed.
+
+License: Creative Commons Zero, CC0
+http://creativecommons.org/publicdomain/zero/1.0/
+
+You may use these assets in personal and commercial projects. Credit (Kenney or
+www.kenney.nl) would be nice but is not mandatory.

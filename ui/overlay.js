@@ -40,6 +40,7 @@ import { isOverlayTextVisible, nextOverlayToggle, overlayTextChange } from './se
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
+import { createSoundPlayer, outcomeSound } from './sounds.js'
 import * as native from './native.js'
 
 let waylandDisabled = false
@@ -112,6 +113,19 @@ const state = {
 }
 
 const setting = (key) => native.getSetting(key)
+
+/** Scan sounds; the setting is read at each one, so turning them off in Settings is immediate. */
+const playSound = createSoundPlayer({ enabled: () => setting('soundEffects') })
+
+/**
+ * Post how a scan ended, with the sound it calls for (see sounds.ts). Progress posts go through
+ * `activity` alone; only outcomes make a sound. `auto` marks the automatic loop's, whose errors
+ * are rate-limited because it can fail on every tick.
+ */
+function reportOutcome(post, { auto = false } = {}) {
+  activity(post)
+  playSound(outcomeSound(post, { auto }), { auto })
+}
 
 /**
  * Quick Shot is the Log reading OCR with no chosen source. The flag alone is not enough: the
@@ -583,6 +597,9 @@ async function performScan(explicit = null) {
   const ran = await pipeline.run(async () => {
     setScanning(true, 'Capturing\u2026')
     activity(scanActivity.scanStarted())
+    // Only here: every caller of performScan is the reader asking (shortcut, button, gamepad,
+    // Quick Shot, a committed region), and the automatic loop never comes through this path.
+    playSound('scan-start')
     // Which stage a failure belongs to decides how it is told: a capture error is about the
     // source, a recognition error about the engine.
     let stage = 'capture'
@@ -591,7 +608,7 @@ async function performScan(explicit = null) {
       if (!job) {
         log({ check: 'overlay-scan-skipped', reason: 'no source selected' })
         setScanning(false, 'Choose a source before scanning.')
-        activity(scanActivity.noSource())
+        reportOutcome(scanActivity.noSource())
         return
       }
       forgetFrame()
@@ -608,7 +625,7 @@ async function performScan(explicit = null) {
       })
       if (!result) {
         setScanning(false, 'No result from the OCR engine.')
-        activity(scanActivity.nothingRecognised())
+        reportOutcome(scanActivity.nothingRecognised())
         return
       }
       stage = 'publish'
@@ -621,7 +638,8 @@ async function performScan(explicit = null) {
       })
       // Every applied result reaches the publisher, which reports; one that did not was
       // discarded as stale, and applyResult has already said so.
-      if (publication || !generation.isStale(job)) activity(scanActivity.scanOutcome(publication))
+      if (publication || !generation.isStale(job))
+        reportOutcome(scanActivity.scanOutcome(publication))
       // Keep the auto loop from immediately republishing what we just showed —
       // but only if the result was actually accepted.
       // Tell the loop what has just been spent and shown, so it does not
@@ -637,7 +655,7 @@ async function performScan(explicit = null) {
       state.scanning = false
       draw()
       publish({ scanning: false, status: message })
-      activity(scanActivity.scanFailed(error, stage, setting('ocrMode')))
+      reportOutcome(scanActivity.scanFailed(error, stage, setting('ocrMode')))
       return
     } finally {
       if (state.scanning) setScanning(false)
@@ -787,7 +805,7 @@ function beginAutoRound() {
 /** Lines the automatic path published; outside a recognition they are news on their own. */
 function noteAutoPublication(report) {
   if (!autoRound) {
-    if (report.lines > 0) activity(scanActivity.scanOutcome(report, { auto: true }))
+    if (report.lines > 0) reportOutcome(scanActivity.scanOutcome(report, { auto: true }), { auto: true })
     return
   }
   autoRound.lines += report.lines
@@ -799,10 +817,11 @@ function settleAutoRound() {
   autoRound = null
   if (!round) return
   // Lines that reached the Log are the outcome, whatever else was said on the way.
-  activity(
+  reportOutcome(
     round.lines > 0 || !round.outcome
       ? scanActivity.scanOutcome(round, { auto: true })
-      : round.outcome
+      : round.outcome,
+    { auto: true }
   )
 }
 
@@ -978,7 +997,9 @@ function onAutoScanEvent(event) {
       if (event.stage === 'capture') {
         // A manual scan holding the capture is the loop's normal rhythm, not news.
         if (!/^busy:/.test(event.message))
-          activity(scanActivity.scanFailed(event.message, 'capture', setting('ocrMode')))
+          reportOutcome(scanActivity.scanFailed(event.message, 'capture', setting('ocrMode')), {
+            auto: true
+          })
       } else if ((event.stage === 'recognize' || event.stage === 'publish') && autoRound) {
         autoRound.outcome = scanActivity.scanFailed(
           event.message,
@@ -1694,7 +1715,7 @@ async function quickShot() {
   } catch (error) {
     log({ check: 'quick-shot-error', error: String(error?.message ?? error) })
     publish({ scanning: false, status: `Quick Shot failed: ${error?.message ?? error}` })
-    activity({ text: `Quick Shot failed: ${error?.message ?? error}`, tone: 'error' })
+    reportOutcome({ text: `Quick Shot failed: ${error?.message ?? error}`, tone: 'error' })
   }
 }
 
