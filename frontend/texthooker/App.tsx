@@ -32,6 +32,8 @@ import { SelectionAddButton } from "./components/SelectionAddButton";
 import { AddToNotebookModal } from "./components/AddToNotebookModal";
 import { StatsFooter } from "./components/StatsFooter";
 import { LogMoreMenu } from "./components/LogMoreMenu";
+import { ActivityTicker } from "./components/ActivityTicker";
+import { useActivity } from "../bridge/activity";
 import { onEditModalRequest } from "./lib/editModal";
 import { getSettings, onSettingsChange, updateSettings } from "./lib/settings";
 import { getSnapshot, subscribe } from "./bridge";
@@ -101,6 +103,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   }, []);
 
   const [addText, setAddText] = useState<string | null>(null);
+  const hasActivity = useActivity().length > 0;
   const [shown, setShown] = useState(100);
   const scroll = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -178,60 +181,67 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
           )}
         </div>
       )}
-      <main
-        ref={scroll}
-        onScroll={() => {
-          const e = scroll.current;
-          if (e)
-            follow.current = e.scrollHeight - e.scrollTop - e.clientHeight < 32;
-        }}
-        className="log-transcript"
+      <div
+        className="log-transcript-frame"
+        data-activity={hasActivity || undefined}
       >
-        {!snap.lines.length && (
-          <EmptyState
-            className="log-empty"
-            icon={<ScrollText />}
-            title="No lines yet"
-            actions={
-              <Button size="sm" onClick={() => void openSettings("sources")}>
-                Source settings
-              </Button>
-            }
-          >
-            Lines from your source appear here. Choose the screen, the
-            clipboard or a WebSocket with the source menu in the sidebar.
-          </EmptyState>
-        )}
-        {snap.lines.length > shown && (
-          <div className="log-earlier">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShown((n) => n + 100)}
-            >
-              <ChevronUp />
-              Show earlier lines
-            </Button>
-          </div>
-        )}
-        <div
-          className="jp-text scan-region log-lines"
-          translate="no"
-          lang="ja"
-          style={{ fontSize: settings.fontSizePx }}
+        <main
+          ref={scroll}
+          onScroll={() => {
+            const e = scroll.current;
+            if (e)
+              follow.current =
+                e.scrollHeight - e.scrollTop - e.clientHeight < 32;
+          }}
+          className="log-transcript"
         >
-          {snap.lines.slice(-shown).map((line) => (
-            <LineRow
-              key={`${snap.sessions.activeId}:${line.id}`}
-              line={apiMode ? line : { ...line, tokens: null }}
-              yomitanBaseUrl={settings.yomitanApiUrl}
-              showFurigana={settings.showFurigana}
-              disableClickToDefine={!apiMode || settings.disableClickToDefine}
-              translateEnabled={Boolean(settings.deeplApiKey.trim())}
-            />
-          ))}
-        </div>
-      </main>
+          {!snap.lines.length && (
+            <EmptyState
+              className="log-empty"
+              icon={<ScrollText />}
+              title="No lines yet"
+              actions={
+                <Button size="sm" onClick={() => void openSettings("sources")}>
+                  Source settings
+                </Button>
+              }
+            >
+              Lines from your source appear here. Choose the screen, the
+              clipboard or a WebSocket with the source menu in the sidebar.
+            </EmptyState>
+          )}
+          {snap.lines.length > shown && (
+            <div className="log-earlier">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShown((n) => n + 100)}
+              >
+                <ChevronUp />
+                Show earlier lines
+              </Button>
+            </div>
+          )}
+          <div
+            className="jp-text scan-region log-lines"
+            translate="no"
+            lang="ja"
+            style={{ fontSize: settings.fontSizePx }}
+          >
+            {snap.lines.slice(-shown).map((line) => (
+              <LineRow
+                key={`${snap.sessions.activeId}:${line.id}`}
+                line={apiMode ? line : { ...line, tokens: null }}
+                yomitanBaseUrl={settings.yomitanApiUrl}
+                showFurigana={settings.showFurigana}
+                disableClickToDefine={!apiMode || settings.disableClickToDefine}
+                translateEnabled={Boolean(settings.deeplApiKey.trim())}
+              />
+            ))}
+          </div>
+        </main>
+        <ActivityTicker visible={visible} />
+      </div>
       <Bar position="bottom">
         <StatsFooter lineCount={snap.lines.length} />
         <BarSpacer />
