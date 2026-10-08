@@ -39,6 +39,7 @@ import { parseSourceId } from './source-id.js'
 import { isOverlayTextVisible, nextOverlayToggle, overlayTextChange } from './settings.js'
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
+import * as scanActivity from './scan-activity.js'
 import * as native from './native.js'
 
 let waylandDisabled = false
@@ -49,6 +50,9 @@ const log = (value) => {
   if (hub?.log) hub.log(value)
   else void native.report(value)
 }
+
+/** Say what just happened on the Log's activity ticker; see scan-activity.ts for the words. */
+const activity = (post) => native.postActivity(post)
 
 const scanTrace = new ScanTrace((records) => native.writeScanTrace(records))
 const trace = (kind, data) => {
@@ -516,6 +520,9 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
       current: generation.current
     })
     publish({ scanning: false, status: 'Scan discarded: the source changed while it was running.' })
+    // An automatic recognition reports once, when the loop lets go; see `autoRound`.
+    if (autoRound) autoRound.outcome = scanActivity.sourceChanged()
+    else activity(scanActivity.sourceChanged())
     return ''
   }
 
@@ -550,7 +557,8 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
           detached: !!job.detached,
           grouping,
           // A scan of text that is already in the history does not add it again.
-          merge: true
+          merge: true,
+          onPublication: outcome.onPublication
         })
 
   log({
@@ -574,11 +582,16 @@ async function performScan(explicit = null) {
   trace('manual-scan', { generation: generation.current })
   const ran = await pipeline.run(async () => {
     setScanning(true, 'Capturing\u2026')
+    activity(scanActivity.scanStarted())
+    // Which stage a failure belongs to decides how it is told: a capture error is about the
+    // source, a recognition error about the engine.
+    let stage = 'capture'
     try {
       const job = explicit ?? (await beginJob())
       if (!job) {
         log({ check: 'overlay-scan-skipped', reason: 'no source selected' })
         setScanning(false, 'Choose a source before scanning.')
+        activity(scanActivity.noSource())
         return
       }
       forgetFrame()
@@ -587,15 +600,28 @@ async function performScan(explicit = null) {
         scanner.isRunning,
         setting('autoOCRSettings').observerMode
       )
+      stage = 'recognise'
+      activity(scanActivity.recognising(setting('ocrMode')))
       const result = await recognize(frame, {
         ocrMode: setting('ocrMode'),
         owocrWebSocketUrl: setting('owocrWebSocketUrl')
       })
       if (!result) {
         setScanning(false, 'No result from the OCR engine.')
+        activity(scanActivity.nothingRecognised())
         return
       }
-      const published = await applyResult(result, frame, job)
+      stage = 'publish'
+      let publication = null
+      const published = await applyResult(result, frame, job, {
+        publish: true,
+        onPublication: (report) => {
+          publication = report
+        }
+      })
+      // Every applied result reaches the publisher, which reports; one that did not was
+      // discarded as stale, and applyResult has already said so.
+      if (publication || !generation.isStale(job)) activity(scanActivity.scanOutcome(publication))
       // Keep the auto loop from immediately republishing what we just showed —
       // but only if the result was actually accepted.
       // Tell the loop what has just been spent and shown, so it does not
@@ -611,12 +637,16 @@ async function performScan(explicit = null) {
       state.scanning = false
       draw()
       publish({ scanning: false, status: message })
+      activity(scanActivity.scanFailed(error, stage, setting('ocrMode')))
       return
     } finally {
       if (state.scanning) setScanning(false)
     }
   })
-  if (ran === null) log({ check: 'overlay-scan-skipped', reason: 'a scan is already running' })
+  if (ran === null) {
+    log({ check: 'overlay-scan-skipped', reason: 'a scan is already running' })
+    activity(scanActivity.scanBusy())
+  }
   return ran !== null
 }
 
@@ -727,9 +757,53 @@ const scanDeps = {
     )
     trace('decision', { event: safe, frameId: frame?.id ?? null, counters, ...context })
   },
-  onScanStart: () => setScanning(true, 'Auto scan\u2026'),
-  onScanEnd: () => setScanning(false),
+  onScanStart: () => {
+    setScanning(true, 'Auto scan\u2026')
+    beginAutoRound()
+  },
+  onScanEnd: () => {
+    setScanning(false)
+    settleAutoRound()
+  },
   onEvent: onAutoScanEvent
+}
+
+/**
+ * What the recognition the automatic loop has out will be reported as.
+ *
+ * The loop starts one whenever the screen settles on new text, and its outcome arrives in
+ * pieces: lines published through `applyResult` or the scene, a skip or an error event from
+ * the loop. They are gathered here and said once, when the loop lets go of the pipeline, so
+ * the ticker shows one "Screen settled, scanning…" and one outcome per recognition rather than
+ * a line for every step.
+ */
+let autoRound = null
+
+function beginAutoRound() {
+  autoRound = { lines: 0, duplicate: false, outcome: null }
+  activity(scanActivity.autoScanStarted())
+}
+
+/** Lines the automatic path published; outside a recognition they are news on their own. */
+function noteAutoPublication(report) {
+  if (!autoRound) {
+    if (report.lines > 0) activity(scanActivity.scanOutcome(report, { auto: true }))
+    return
+  }
+  autoRound.lines += report.lines
+  autoRound.duplicate ||= report.duplicate
+}
+
+function settleAutoRound() {
+  const round = autoRound
+  autoRound = null
+  if (!round) return
+  // Lines that reached the Log are the outcome, whatever else was said on the way.
+  activity(
+    round.lines > 0 || !round.outcome
+      ? scanActivity.scanOutcome(round, { auto: true })
+      : round.outcome
+  )
 }
 
 /**
@@ -742,7 +816,10 @@ const imageScanner = new AutoScanner({
     const started = performance.now()
     trace('apply-start', { frameId: frame?.id, publish: outcome.publish })
     try {
-      const applied = await applyResult(result, frame, frame?.job ?? autoJob, outcome)
+      const applied = await applyResult(result, frame, frame?.job ?? autoJob, {
+        ...outcome,
+        onPublication: noteAutoPublication
+      })
       trace('apply-end', {
         frameId: frame?.id,
         durationMs: performance.now() - started,
@@ -808,7 +885,12 @@ async function applyScene(update) {
  * one that completes an earlier fragment replaces it.
  */
 async function publishPassage(passage, grouping) {
-  return publishOcrResult(passage.result, { detached: state.detached, grouping, merge: true })
+  return publishOcrResult(passage.result, {
+    detached: state.detached,
+    grouping,
+    merge: true,
+    onPublication: noteAutoPublication
+  })
 }
 
 /**
@@ -874,6 +956,8 @@ function onAutoScanEvent(event) {
         void scanTrace.flush()
       }
       log({ check: 'auto-scan-status', state: event.state, message: event.message })
+      // Null for the states that are not news; posting nothing is a no-op.
+      activity(scanActivity.autoScanStatus(event.state, event.message))
       if (event.state === 'unavailable' || event.state === 'suspended') {
         state.scanning = false
         draw()
@@ -891,8 +975,21 @@ function onAutoScanEvent(event) {
       // log; an observer that has simply not answered yet does not, because it
       // retries on its own and the status line would flicker.
       if (event.stage !== 'observer') publish({ scanning: false, status: event.message })
+      if (event.stage === 'capture') {
+        // A manual scan holding the capture is the loop's normal rhythm, not news.
+        if (!/^busy:/.test(event.message))
+          activity(scanActivity.scanFailed(event.message, 'capture', setting('ocrMode')))
+      } else if ((event.stage === 'recognize' || event.stage === 'publish') && autoRound) {
+        autoRound.outcome = scanActivity.scanFailed(
+          event.message,
+          event.stage === 'recognize' ? 'recognise' : 'publish',
+          setting('ocrMode')
+        )
+      }
       return
     case 'skip':
+      // Only the skips that end a recognition the ticker has already announced.
+      if (autoRound && !autoRound.outcome) autoRound.outcome = scanActivity.autoScanSkipped(event.reason)
       return log({ check: 'auto-scan-skip', reason: event.reason, detail: event.detail ?? null })
     case 'request':
       return log({
@@ -1597,6 +1694,7 @@ async function quickShot() {
   } catch (error) {
     log({ check: 'quick-shot-error', error: String(error?.message ?? error) })
     publish({ scanning: false, status: `Quick Shot failed: ${error?.message ?? error}` })
+    activity({ text: `Quick Shot failed: ${error?.message ?? error}`, tone: 'error' })
   }
 }
 
