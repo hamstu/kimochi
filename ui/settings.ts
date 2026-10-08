@@ -129,29 +129,85 @@ export const SETTINGS_DEFAULTS: Settings = {
   interfaceScale: 'medium'
 }
 
+/**
+ * What an OCR engine is, for Settings → OCR & Overlay's engine chooser, the sidebar picker and the
+ * overlay. Adding an engine is adding an entry here (and its capability in `ui/capabilities.ts`):
+ * the chooser lists every key, in this order, and draws the rest from these fields.
+ */
+export interface OcrModeInfo {
+  /** The picker label, which says where it runs ("Local (MeikiOCR)"). */
+  label: string
+  /** The engine's own name, as the chooser's list and detail heading show it. */
+  name: string
+  /** One short line under the name in the chooser's list. */
+  tagline: string
+  /** Whether results carry positions, so the overlay can draw over the game. */
+  geometry: boolean
+  /** What it is and what it is good for: the chooser's detail paragraph. */
+  description: string
+  /** Two to four short reasons to pick it. */
+  strengths: string[]
+  /** What it needs to run: a connection, a download, a server of your own. */
+  requirements: string
+}
+
 /** Capabilities and descriptions shared by Settings and the overlay. */
-export const OCR_MODES: Record<OcrMode, { label: string; geometry: boolean; detail: string }> = {
+export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
   cloud: {
     label: 'Cloud OCR',
+    name: 'Cloud OCR',
+    tagline: 'Online, via Google Vision',
     geometry: true,
-    detail: 'Returns word positions, so scanned text can be selected and looked up in place.'
+    description:
+      'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision and returns the text with the position of every word. Dependable on almost any Japanese text, at the cost of a round trip over the network.',
+    strengths: [
+      'Accurate across fonts, sizes and busy backgrounds',
+      'Word positions, so text can be hovered and looked up in place',
+      'Nothing to download, and the same on every computer'
+    ],
+    requirements:
+      'Needs an internet connection. Each capture is sent to the Kimochi server to be read.'
   },
   meikiocr: {
     label: 'Local (MeikiOCR)',
+    name: 'MeikiOCR',
+    tagline: 'Offline, for game text',
     geometry: true,
-    detail:
-      'Reads Japanese game text on this machine, with selectable text boxes. No server required.'
+    description:
+      'A small, fast recogniser that runs entirely on this computer. It is tuned for Japanese video game text: dialogue boxes, menus and subtitles, horizontal or vertical, with a box for every line.',
+    strengths: [
+      'Fast: a scan takes a fraction of a second',
+      'Works offline; captures never leave this computer',
+      'Line positions, so the overlay can draw over your game'
+    ],
+    requirements:
+      'A one-time model download. Uses the GPU where it can (Core ML on macOS, DirectML on Windows) and the CPU otherwise.'
   },
   mangaocr: {
     label: 'Local (Manga OCR)',
+    name: 'Manga OCR',
+    tagline: 'Offline, for manga',
     geometry: true,
-    detail:
-      'Detects manga text blocks and reads each group on this machine, with vertical overlay support.'
+    description:
+      'Finds speech bubbles and text blocks with the comic text detector, then reads each one with Manga OCR, a model trained on manga. The best choice for comics, stylised lettering and vertical text.',
+    strengths: [
+      'Excellent on vertical text and hand-lettered dialogue',
+      'Reads text set over busy artwork',
+      'Works offline; captures never leave this computer'
+    ],
+    requirements:
+      'A larger one-time model download, and each scan takes longer than with MeikiOCR. Uses the GPU where it can (Metal on macOS, CUDA on NVIDIA cards) and the CPU otherwise.'
   },
   websocket: {
     label: 'WebSocket (OwOCR)',
+    name: 'OwOCR',
+    tagline: 'Your own OwOCR server',
     geometry: false,
-    detail: 'Sends the capture to a local OwOCR server. Returns text only — no overlay boxes.'
+    description:
+      'Sends each capture to an OwOCR server you run yourself, so any engine OwOCR supports can read your game.',
+    strengths: ['Use any engine OwOCR supports', 'Runs wherever you host it'],
+    requirements:
+      'Needs OwOCR running and listening on a local WebSocket. It returns text only, so nothing is drawn over your game.'
   }
 }
 

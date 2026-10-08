@@ -1,0 +1,241 @@
+/*
+ * Settings → OCR & Overlay → Engine (EngineChooser.tsx): the engine list beside the panel about
+ * the highlighted one, in one settings group. Narrow, the list sits above the panel.
+ */
+.engine-chooser {
+  container-type: inline-size;
+}
+
+.engine-chooser-frame {
+  display: grid;
+  grid-template-columns: minmax(10.5rem, 1fr) minmax(0, 2fr);
+  overflow: hidden;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-sunken);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+}
+
+/* ------------------------------------------------------------------ the list */
+.engine-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-0-5);
+  padding: var(--k-space-1-5);
+  border-right: 1px solid var(--k-line);
+}
+
+.engine-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+  padding: var(--k-space-2) var(--k-space-2);
+  border-radius: var(--k-radius-md);
+  outline: none;
+  cursor: default;
+  user-select: none;
+  transition: background-color var(--k-fast) ease;
+}
+.engine-item:hover {
+  background: var(--k-hover);
+}
+/* The engine the panel describes: neutral, like a selected navigation row. */
+.engine-item[data-viewed] {
+  background: var(--k-selected);
+}
+.engine-item:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
+
+/* The engine in use: a radio dot, accent only when on. */
+.engine-item-radio {
+  flex: none;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  margin-top: 0.1875rem;
+  border-radius: 999px;
+  background: var(--k-field);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+  transition:
+    box-shadow var(--k-base) var(--k-ease-out),
+    background-color var(--k-base) ease;
+}
+.engine-item[data-active] .engine-item-radio {
+  background: var(--k-accent-contrast);
+  box-shadow:
+    inset 0 0 0 1px var(--k-accent),
+    inset 0 0 0 0.25rem var(--k-accent);
+}
+/* Chosen, but waiting on the download question: the dot is drawn, not yet filled. */
+.engine-item[data-pending] .engine-item-radio {
+  background: var(--k-field);
+  box-shadow:
+    inset 0 0 0 1px var(--k-accent),
+    inset 0 0 0 0.25rem var(--k-accent-soft);
+}
+
+.engine-item-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--k-space-0-5);
+  min-width: 0;
+}
+.engine-item-name {
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text);
+}
+.engine-item-tagline {
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  color: var(--k-text-2);
+}
+.engine-item-hint {
+  align-self: flex-start;
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text-2);
+}
+.engine-item-hint[data-tone='progress'] {
+  color: var(--k-accent-text);
+}
+.engine-item-hint[data-tone='warn'] {
+  color: var(--k-warn-text);
+}
+.engine-item-hint[data-tone='muted'] {
+  color: var(--k-text-3);
+}
+.engine-item[aria-disabled='true'] .engine-item-name,
+.engine-item[aria-disabled='true'] .engine-item-tagline {
+  opacity: 0.6;
+}
+.engine-item[aria-disabled='true'] .engine-item-radio {
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------------------ the panel */
+.engine-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+  min-width: 0;
+  padding: var(--k-space-3) var(--k-space-4) var(--k-space-4);
+  animation: engine-detail-enter var(--k-base) var(--k-ease-out);
+}
+
+@keyframes engine-detail-enter {
+  from {
+    opacity: 0.4;
+  }
+}
+
+.engine-detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-height: var(--k-control-h);
+}
+.engine-detail-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--k-text-lg);
+  line-height: var(--k-leading-lg);
+}
+
+.engine-detail-description {
+  margin: 0;
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  color: var(--k-text);
+  text-wrap: pretty;
+}
+
+.engine-strengths {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.engine-strengths li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-1-5);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text);
+}
+.engine-strengths svg {
+  flex: none;
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+  margin-top: 0.1875rem;
+  color: var(--k-ok-text);
+}
+
+/* The engine's own settings (EngineSettings.tsx), under a hairline; nothing when it has none. */
+.engine-detail-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+  padding-top: var(--k-space-3);
+  border-top: 1px solid var(--k-line);
+}
+.engine-detail-settings:empty {
+  display: none;
+}
+
+.engine-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-2) var(--k-space-4);
+}
+.engine-setting-text {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: var(--k-space-0-5);
+  min-width: 0;
+}
+.engine-setting-label {
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text);
+}
+.engine-setting-control {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.engine-setting-control > .k-select-trigger {
+  min-width: 9rem;
+}
+
+/* ------------------------------------------------------------------ narrow: stacked */
+@container (max-width: 32rem) {
+  .engine-chooser-frame {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .engine-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--k-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .engine-detail {
+    animation: none;
+  }
+  .engine-item,
+  .engine-item-radio {
+    transition: none;
+  }
+}

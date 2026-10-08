@@ -1,27 +1,26 @@
 /**
- * Settings → OCR, under the engine: the selected local engine's model. One progress bar, one
- * status line under it ("Downloading Manga OCR · 212 MB of 539 MB", "Paused at 40%", "Ready ·
- * 539 MB"), and the actions that make sense now: Download, Pause, Resume, Retry, Cancel or
- * Delete. Download is offered here without a further dialog: the button, which names the size,
- * is the consent.
+ * Settings → OCR & Overlay → a local engine's detail panel (`EngineChooser`): its model. One
+ * progress bar, one status line under it ("Downloading Manga OCR · 212 MB of 539 MB", "Paused at
+ * 40%", "Ready · 539 MB"), and the actions that make sense now: Download, Pause, Resume, Retry or
+ * Cancel. Download is offered here without a further dialog: the button, which names the size,
+ * is the consent. Removing a downloaded model is not a button here but an item in the panel's
+ * overflow menu, confirmed by `RemoveModelDialog`.
  *
- * Self-contained: the download runs in Rust (`model_store.rs`) and survives this window closing;
- * this only shows its `model-download` events and sends the commands.
+ * The download runs in Rust (`model_store.rs`) and survives this window closing; this only shows
+ * its `model-download` events and sends the commands.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button, Callout, ConfirmDialog, SettingsRow, SettingsSection } from '@kit'
+import { Button, Callout, ConfirmDialog } from '@kit'
 import {
   actionLabel,
   barPercent,
   formatBytes,
-  modelActions,
+  primaryModelActions,
   showsBar,
   statusLine,
-  type ModelAction,
   type ModelStatus
 } from '@ui/model-download'
-import { modelAction, useModelStatus, type ModelEngine } from '../../bridge/models'
-import { nativeError } from '../../bridge/tauri'
+import type { ModelControls } from '../../bridge/models'
 import './model-download.css'
 
 /** How long the bar stays mounted while it fades out; matches the exit transition in the CSS. */
@@ -73,27 +72,29 @@ function ModelProgress({ status }: { status: ModelStatus }): ReactNode {
   )
 }
 
-export function ModelDownloadCard({ engine }: { engine: ModelEngine }): ReactNode {
-  const status = useModelStatus(engine)
-  const [pending, setPending] = useState<ModelAction | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-
+/**
+ * The bar, the line and the buttons. `emphasis` makes the next step (Download, Resume, Retry) the
+ * primary button; off while the panel is showing an engine that is not in use, whose primary
+ * action is "Use this engine".
+ */
+export function ModelDownload({
+  controls,
+  emphasis
+}: {
+  controls: ModelControls
+  emphasis: boolean
+}): ReactNode {
+  const { status, pending, error, run } = controls
   // A backend without model downloads says nothing.
-  if (!status || status.engine !== engine) return null
-
-  const run = (action: ModelAction): void => {
-    setPending(action)
-    setError(null)
-    modelAction(engine, action)
-      .catch((e) => setError(nativeError(e).message))
-      .finally(() => setPending(null))
-  }
-  const actions = modelActions(status)
-
+  if (!status) return null
+  const actions = primaryModelActions(status)
   return (
-    <SettingsSection title="Model">
-      <SettingsRow label={`${status.name} model`} description={<ModelProgress status={status} />}>
+    <div className="model-download">
+      <div className="model-download-row">
+        <div className="model-download-text">
+          <span className="model-download-label">Model</span>
+          <ModelProgress status={status} />
+        </div>
         {actions.length > 0 && (
           <div className="model-actions">
             {actions.map((action) => (
@@ -101,38 +102,53 @@ export function ModelDownloadCard({ engine }: { engine: ModelEngine }): ReactNod
                 key={action}
                 size="sm"
                 variant={
-                  action === 'delete'
-                    ? 'danger'
-                    : action === 'cancel' || action === 'pause'
-                      ? 'secondary'
-                      : 'primary'
+                  emphasis && action !== 'cancel' && action !== 'pause' ? 'primary' : 'secondary'
                 }
                 disabled={pending !== null}
-                onClick={() => (action === 'delete' ? setConfirmDelete(true) : run(action))}
+                onClick={() => run(action)}
               >
                 {actionLabel(action, status)}
               </Button>
             ))}
           </div>
         )}
-      </SettingsRow>
-      {error && (
-        <div className="settings-note">
-          <Callout tone="danger">{error}</Callout>
-        </div>
-      )}
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={`Delete the ${status.name} model?`}
-        description={`This frees ${formatBytes(status.overallTotal)}. You can download it again from here at any time.`}
-        confirmLabel="Delete"
-        tone="danger"
-        onConfirm={() => {
-          setConfirmDelete(false)
-          run('delete')
-        }}
-      />
-    </SettingsSection>
+      </div>
+      {error && <Callout tone="danger">{error}</Callout>}
+    </div>
+  )
+}
+
+/** "Remove the Manga OCR model?", opened from the panel's overflow menu. */
+export function RemoveModelDialog({
+  controls,
+  open,
+  onOpenChange
+}: {
+  controls: ModelControls
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}): ReactNode {
+  const { status, run } = controls
+  // The last status asked about, so the words stay put while the dialog fades out.
+  const [last, setLast] = useState(status)
+  if (status && status !== last) setLast(status)
+  const shown = status ?? last
+  return (
+    <ConfirmDialog
+      open={open && shown !== null}
+      onOpenChange={onOpenChange}
+      title={shown ? `Remove the ${shown.name} model?` : ''}
+      description={
+        shown
+          ? `This frees ${formatBytes(shown.overallTotal)}. You can download it again from here at any time.`
+          : undefined
+      }
+      confirmLabel="Remove"
+      tone="danger"
+      onConfirm={() => {
+        onOpenChange(false)
+        run('delete')
+      }}
+    />
   )
 }

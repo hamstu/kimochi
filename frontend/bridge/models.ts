@@ -3,7 +3,7 @@
  * `model-download` event; see COMMANDS.md → OCR model downloads), shared by every component in a
  * window. The download itself runs in Rust and outlives any panel.
  */
-import { useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import {
   normalizeModelStatus,
@@ -11,7 +11,7 @@ import {
   type ModelEngine,
   type ModelStatus
 } from '@ui/model-download'
-import { onEvent } from './tauri'
+import { nativeError, onEvent } from './tauri'
 
 export type { ModelAction, ModelEngine, ModelStatus }
 
@@ -84,4 +84,38 @@ export function useModelStatus(engine: ModelEngine | null): ModelStatus | null {
     () => (engine ? (statuses.get(engine) ?? null) : null),
     () => null
   )
+}
+
+/**
+ * One engine's model: its live status, the action under way and the last error, shared by the
+ * download block and the panel's "Remove downloaded model…" menu item.
+ */
+export interface ModelControls {
+  /** Null for an engine without a downloadable model. */
+  engine: ModelEngine | null
+  /** Null for such an engine, on a backend without model downloads, or until native answers. */
+  status: ModelStatus | null
+  pending: ModelAction | null
+  error: string | null
+  run: (action: ModelAction) => void
+}
+
+export function useModelControls(engine: ModelEngine | null): ModelControls {
+  const live = useModelStatus(engine)
+  const status = engine && live?.engine === engine ? live : null
+  const [pending, setPending] = useState<ModelAction | null>(null)
+  const [error, setError] = useState<{ engine: ModelEngine; message: string } | null>(null)
+  const run = useCallback(
+    (action: ModelAction): void => {
+      if (!engine) return
+      setPending(action)
+      setError(null)
+      modelAction(engine, action)
+        .catch((e) => setError({ engine, message: nativeError(e).message }))
+        .finally(() => setPending(null))
+    },
+    [engine]
+  )
+  // An error belongs to the engine it came from, not whichever one is shown next.
+  return { engine, status, pending, error: error?.engine === engine ? error.message : null, run }
 }

@@ -1,13 +1,13 @@
 /**
- * Settings → OCR: engine (and, in a local dev build with Cloud OCR chosen, its server), overlay
- * behaviour, auto-scan and change detection.
+ * Settings → OCR & Overlay: the engine chooser (`EngineChooser`: the engines, what each is good
+ * for, its model or server), then overlay behaviour, auto-scan and change detection. The page
+ * keeps the `ocr` value, so deep links and `onSettingsTab('ocr')` still land here.
  */
-import { useCallback, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import {
   Badge,
   Button,
   Callout,
-  ConfirmDialog,
   Input,
   Select,
   SettingsPage,
@@ -21,54 +21,18 @@ import { DEFAULT_AUTO_OCR_SETTINGS } from '../../../ui/autoscan'
 import type {
   AutoOCRSettings,
   AutoScanSettings,
-  ServerSettings,
   TextOverlayGroupingSettings
 } from '../../vendor/shared-types'
-import { DEFAULT_SERVER_MODE, SERVER_URLS, type ServerMode } from '../../vendor/shared-constants'
-import { OCR_MODES, type OcrMode } from '../../bridge/settings'
 import { useSetting } from '../../bridge/useSetting'
 import { useViewState } from '../../bridge/state'
-import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
-import { nativeError, openAccessibilityPreferences, quitApp } from '../../bridge/tauri'
+import { useCapabilities } from '../../bridge/capabilities'
+import { nativeError, openAccessibilityPreferences } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
-import { useEngineSelection } from '../../bridge/useEngineSelection'
-import { ModelDownloadCard } from './ModelDownloadCard'
-import { DownloadConfirmDialog } from './DownloadConfirmDialog'
-
-/** The engines, with those this machine cannot run disabled and the reason beside them. */
-const ocrModeOptions = (
-  engines: PlatformCapabilities['ocrEngines']
-): { value: OcrMode; label: string; disabled?: boolean; detail?: string }[] =>
-  (Object.keys(OCR_MODES) as OcrMode[]).map((value) => {
-    const engine = engines[value]
-    // Held back only by its model, it reads as any other engine: picking it asks to download
-    // (useEngineSelection), and the Model section below says where the download stands.
-    if (!engine || engine.available || engine.model) return { value, label: OCR_MODES[value].label }
-    return {
-      value,
-      label: OCR_MODES[value].label,
-      disabled: true,
-      detail: engine.reason || 'Not available on this computer'
-    }
-  })
+import { EngineChooser } from './EngineChooser'
 
 /** The Trigger Keys warning on macOS when the backend gives no wording of its own. */
 const MAC_KEY_TRIGGER_REASON =
   'Watching key presses in another application needs macOS Accessibility permission for Kimochi. Until it is granted these keys will not start a scan; the gamepad trigger is unaffected.'
-
-/**
- * Whether this is a local development build. The frontend is always `vite build`-ed (even for
- * `tauri dev`), so `import.meta.env.DEV` only covers the Vite dev server; a debug native build
- * says so through `__KIMOCHI_PLATFORM__.debug` (`platform_prelude` in `src-tauri/src/platform`).
- */
-const DEV_BUILD =
-  import.meta.env.DEV ||
-  (window as { __KIMOCHI_PLATFORM__?: { debug?: boolean } }).__KIMOCHI_PLATFORM__?.debug === true
-
-const SERVER_OPTIONS = [
-  { value: 'cloud', label: 'Cloud (recommended)' },
-  { value: 'local', label: 'Local (localhost:3000)' }
-] as const
 
 const SCAN_DELAYS = [
   { value: '100', label: '100 ms' },
@@ -108,11 +72,6 @@ const POLL_OPTIONS = [
 ]
 
 export function OcrTab(): ReactNode {
-  const engineSelection = useEngineSelection()
-  const { ocrMode } = engineSelection
-  const [serverSettings, setServerSettings] = useSetting<ServerSettings>('serverSettings', {
-    mode: DEFAULT_SERVER_MODE
-  })
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
   const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
     enabled: false,
@@ -151,30 +110,6 @@ export function OcrTab(): ReactNode {
     (capabilities.os === 'macos'
       ? MAC_KEY_TRIGGER_REASON
       : 'Watching key presses in another application is not available on this computer, so these keys will not start a scan; the gamepad trigger is unaffected.')
-  const ocrModes = ocrModeOptions(capabilities.ocrEngines)
-
-  // Changing the server needs a restart, so it is confirmed first (local UI state, not persisted).
-  const [pendingServerMode, setPendingServerMode] = useState<ServerMode | null>(null)
-
-  const handleServerModeChange = useCallback(
-    (mode: ServerMode): void => {
-      if (mode !== serverSettings.mode) setPendingServerMode(mode)
-    },
-    [serverSettings.mode]
-  )
-
-  const confirmServerModeChange = useCallback(async (): Promise<void> => {
-    if (pendingServerMode) {
-      await setServerSettings({ mode: pendingServerMode })
-      setPendingServerMode(null)
-      // Request app quit
-      quitApp().catch((error) => console.error('Quit failed:', nativeError(error).message))
-    }
-  }, [pendingServerMode, setServerSettings])
-
-  const mode = OCR_MODES[ocrMode]
-  // The server is a developer's switch, and only Cloud OCR talks to it.
-  const showServer = DEV_BUILD && ocrMode === 'cloud'
   const filterSmallText = textOverlayGrouping.filterSmallText ?? true
   const threshold = Math.round((textOverlayGrouping.filterSmallTextThreshold ?? 0.75) * 100)
 
@@ -182,48 +117,13 @@ export function OcrTab(): ReactNode {
     void setAutoOCRSettings({ ...autoOCRSettings, ...patch })
 
   return (
-    <SettingsPage title="OCR" description="How the screen is read, and what is drawn over your game.">
-      <SettingsSection title="Engine">
-        <SettingsRow
-          label="OCR engine"
-          description={
-            <>
-              {mode?.detail}
-              {mode && !mode.geometry
-                ? ' Results appear in the log, texthooker and audio, but nothing is drawn over your game.'
-                : ''}
-            </>
-          }
-        >
-          <Select
-            aria-label="OCR engine"
-            value={engineSelection.shown}
-            onValueChange={engineSelection.choose}
-            options={ocrModes}
-          />
-          <DownloadConfirmDialog confirmation={engineSelection.confirmation} />
-        </SettingsRow>
-        {showServer && (
-          <SettingsRow
-            label="OCR server"
-            description={
-              <>
-                Using <span className="k-mono">{serverSettings.mode === 'cloud' ? SERVER_URLS.cloud : SERVER_URLS.local}</span>.
-                Changing it restarts Kimochi.
-              </>
-            }
-          >
-            <Select
-              aria-label="OCR server"
-              value={serverSettings.mode}
-              onValueChange={(value) => handleServerModeChange(value as ServerMode)}
-              options={SERVER_OPTIONS}
-            />
-          </SettingsRow>
-        )}
+    <SettingsPage
+      title="OCR & Overlay"
+      description="Which engine reads the screen, and what is drawn over your game."
+    >
+      <SettingsSection title="Engine" grouped={false}>
+        <EngineChooser />
       </SettingsSection>
-
-      {(ocrMode === 'meikiocr' || ocrMode === 'mangaocr') && <ModelDownloadCard engine={ocrMode} />}
 
       <SettingsSection title="Overlay">
         <SettingsRow
@@ -418,16 +318,6 @@ export function OcrTab(): ReactNode {
         </SettingsRow>
       </SettingsSection>
 
-      <ConfirmDialog
-        open={showServer && pendingServerMode !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingServerMode(null)
-        }}
-        title="Restart required"
-        description="Changing the OCR server requires restarting Kimochi. The app will quit and you'll need to reopen it manually."
-        confirmLabel="Quit & apply"
-        onConfirm={() => void confirmServerModeChange()}
-      />
     </SettingsPage>
   )
 }

@@ -183,6 +183,17 @@ export function modelActions(status: ModelStatus): ModelAction[] {
 }
 
 /**
+ * The actions shown as buttons beside the bar: everything but Delete, which is a quiet item in
+ * the engine panel's overflow menu rather than a button inviting a click.
+ */
+export const primaryModelActions = (status: ModelStatus): ModelAction[] =>
+  modelActions(status).filter((action) => action !== 'delete')
+
+/** Whether "Remove downloaded model…" is offered: only a model the store downloaded. */
+export const canRemoveModel = (status: ModelStatus | null): boolean =>
+  status?.state === 'ready' && status.source === 'downloaded'
+
+/**
  * The sidebar badge: a spinner and percentage while busy, a warning when the selected engine
  * cannot scan until the user acts, nothing once ready.
  */

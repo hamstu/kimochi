@@ -13,6 +13,8 @@ const {
   badgeKind,
   badgeLabel,
   barPercent,
+  canRemoveModel,
+  primaryModelActions,
   showsBar,
   downloadPrompt,
   engineChoice,
@@ -25,6 +27,8 @@ const {
   statusLine
 } = await load('model-download.ts')
 const { normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
+const { acceleratorLabel, engineHint, engineSelectable } = await load('ocr-engines.ts')
+const { OCR_MODES } = await load('settings.ts')
 
 const MEIKI_TOTAL = 45970040
 const status = (patch = {}) =>
@@ -139,14 +143,133 @@ test('the download confirmation names the engine and its size', () => {
 })
 
 test('both engine pickers share the confirmation and list engines by name alone', async () => {
-  for (const file of ['frontend/main/MainSidebar.tsx', 'frontend/panels/settings/OcrTab.tsx']) {
+  for (const file of ['frontend/main/MainSidebar.tsx', 'frontend/panels/settings/EngineChooser.tsx']) {
     const source = await read(file)
     assert.ok(source.includes('useEngineSelection()'), `${file} does not use useEngineSelection`)
     assert.ok(source.includes('<DownloadConfirmDialog'), `${file} does not render DownloadConfirmDialog`)
     assert.ok(!/useSetting<OcrMode>\('ocrMode'/.test(source), `${file} still writes ocrMode directly`)
   }
   const ocrTab = await read('frontend/panels/settings/OcrTab.tsx')
-  assert.ok(!ocrTab.includes('detail: engine.reason || undefined }'), 'a model-gated engine still shows its reason')
+  assert.ok(ocrTab.includes('<EngineChooser />'), 'Settings → OCR & Overlay no longer shows the engine chooser')
+  assert.ok(!ocrTab.includes('useEngineSelection'), 'OcrTab picks the engine itself instead of through EngineChooser')
+  // The name is the name: where a download stands is a separate hint, never a label suffix.
+  const sidebar = await read('frontend/main/MainSidebar.tsx')
+  assert.ok(sidebar.includes('label: OCR_MODES[value].label\n'), 'the sidebar picker labels engines with more than their name')
+  const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
+  assert.ok(
+    chooser.includes('<span className="engine-item-name">{info.name}</span>'),
+    'the list labels engines with more than their name'
+  )
+  assert.ok(chooser.includes('engineHint(capability, status)'), 'the list no longer shows the download state as a hint')
+})
+
+test('the engine list is a listbox whose arrow keys look and whose Enter chooses', async () => {
+  const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
+  assert.ok(chooser.includes('role="listbox"') && chooser.includes('role="option"'), 'the list lost its listbox semantics')
+  assert.ok(chooser.includes('aria-selected={active}'), 'the chosen engine is not aria-selected')
+  for (const key of ["'ArrowDown'", "'ArrowUp'", "'Home'", "'End'", "'Enter'", "' '"]) {
+    assert.ok(chooser.includes(`case ${key}:`), `the list does not handle ${key}`)
+  }
+  assert.ok(chooser.includes('Use this engine'), 'the panel no longer offers to use the engine it shows')
+})
+
+test('removing a downloaded model lives in the overflow menu, not beside the bar', async () => {
+  const block = await read('frontend/panels/settings/ModelDownload.tsx')
+  assert.ok(block.includes('primaryModelActions(status)'), 'the download block offers every action, Delete included')
+  const buttons = block.slice(block.indexOf('export function ModelDownload'), block.indexOf('export function RemoveModelDialog'))
+  assert.ok(buttons.includes('<Button'), 'the download block has no buttons')
+  assert.ok(!buttons.includes("'danger'") && !buttons.includes("'delete'"), 'the download block still has a Delete button')
+  const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
+  assert.match(
+    chooser,
+    /<MenuItem[\s\S]*?disabled=\{!canRemoveModel\(model\.status\)[\s\S]*?Remove downloaded model…[\s\S]*?<\/MenuItem>/
+  )
+  assert.ok(chooser.includes('<RemoveModelDialog'), 'the removal is no longer confirmed')
+})
+
+test('the OCR page is "OCR & Overlay" and still answers to ocr', async () => {
+  const nav = await read('frontend/panels/settings/settingsNav.tsx')
+  assert.ok(nav.includes("{ value: 'ocr', label: 'OCR & Overlay'"), 'the nav entry is not OCR & Overlay on the ocr value')
+  const ocrTab = await read('frontend/panels/settings/OcrTab.tsx')
+  assert.ok(ocrTab.includes('title="OCR & Overlay"'), 'the page title is not OCR & Overlay')
+})
+
+test('only Delete leaves the buttons, and only a downloaded model can be removed', () => {
+  for (const state of ['absent', 'downloading', 'verifying', 'paused', 'failed']) {
+    const s = manga({ state })
+    assert.deepEqual(primaryModelActions(s), modelActions(s), state)
+    assert.equal(canRemoveModel(s), false, state)
+  }
+  assert.deepEqual(primaryModelActions(manga({ state: 'ready', source: 'downloaded' })), [])
+  assert.equal(canRemoveModel(manga({ state: 'ready', source: 'downloaded' })), true)
+  assert.equal(canRemoveModel(manga({ state: 'ready', source: 'bundled' })), false)
+  assert.equal(canRemoveModel(manga({ state: 'ready', source: 'development' })), false)
+  assert.equal(canRemoveModel(null), false)
+})
+
+test('each engine in the list says where it stands in a few words', () => {
+  const ready = { available: true }
+  const cases = [
+    [manga(), 'Not downloaded', 'neutral'],
+    [manga({ state: 'downloading', overallReceived: MANGA_TOTAL * 0.325 }), 'Downloading 32%', 'progress'],
+    [manga({ state: 'downloading', overallTotal: 0 }), 'Downloading', 'progress'],
+    [manga({ state: 'verifying' }), 'Verifying…', 'progress'],
+    [manga({ state: 'paused', overallReceived: MANGA_TOTAL * 0.405 }), 'Paused at 40%', 'warn'],
+    [manga({ state: 'paused' }), 'Paused', 'warn'],
+    [manga({ state: 'failed', message: 'HTTP 503' }), 'Download failed', 'warn']
+  ]
+  for (const [s, text, tone] of cases) {
+    const hint = engineHint(ready, s)
+    assert.equal(hint.text, text, s.state)
+    assert.equal(hint.tone, tone, s.state)
+  }
+  assert.equal(engineHint(ready, manga({ state: 'failed', message: 'HTTP 503' })).reason, 'HTTP 503')
+  assert.equal(engineHint(ready, manga({ state: 'ready', source: 'downloaded' })), null)
+  // A cloud engine, or a local one before its status arrives, with nothing to report.
+  assert.equal(engineHint(ready, null), null)
+  assert.equal(engineHint(undefined, null), null)
+  // Until the live status arrives, the capability's model gate speaks.
+  assert.deepEqual(
+    engineHint({ available: false, reason: 'Downloading model… 32%', model: 'downloading' }, null),
+    { text: 'Downloading', tone: 'progress', reason: 'Downloading model… 32%' }
+  )
+  assert.equal(
+    engineHint({ available: false, reason: 'Model not downloaded', model: 'absent' }, null).text,
+    'Not downloaded'
+  )
+  // Cannot run here at all: "Unavailable", with the reason for the tooltip, whatever the model says.
+  assert.deepEqual(engineHint({ available: false, reason: 'Not available on Windows yet' }, manga()), {
+    text: 'Unavailable',
+    tone: 'muted',
+    reason: 'Not available on Windows yet'
+  })
+  assert.equal(engineHint({ available: false }, null).reason, 'Not available on this computer')
+})
+
+test('only an engine this computer cannot run at all is held back from being chosen', () => {
+  assert.equal(engineSelectable(undefined), true)
+  assert.equal(engineSelectable({ available: true }), true)
+  assert.equal(engineSelectable({ available: false, model: 'absent' }), true)
+  assert.equal(engineSelectable({ available: false, reason: 'Not available on Windows yet' }), false)
+  assert.equal(acceleratorLabel('coreml'), 'the GPU and Neural Engine, through Core ML')
+  assert.equal(acceleratorLabel('cpu'), 'the CPU')
+  assert.equal(acceleratorLabel(undefined), null)
+})
+
+test('every engine has the copy the chooser shows', () => {
+  const modes = Object.keys(OCR_MODES)
+  for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'websocket']) assert.ok(modes.includes(mode), mode)
+  for (const [mode, info] of Object.entries(OCR_MODES)) {
+    for (const field of ['label', 'name', 'tagline', 'description', 'requirements']) {
+      assert.equal(typeof info[field], 'string', `${mode}.${field}`)
+      assert.ok(info[field].trim().length > 0, `${mode}.${field} is empty`)
+    }
+    assert.equal(typeof info.geometry, 'boolean', `${mode}.geometry`)
+    assert.ok(Array.isArray(info.strengths) && info.strengths.length >= 2, `${mode} needs strengths`)
+    for (const strength of info.strengths) assert.ok(strength.trim().length > 0, `${mode} has an empty strength`)
+    // A tagline fits one line of the list's third of the width.
+    assert.ok(info.tagline.length <= 34, `${mode}.tagline is too long for the list`)
+  }
 })
 
 test('no model download starts at launch, only when ocrMode is saved', async () => {

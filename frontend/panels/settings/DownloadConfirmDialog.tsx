@@ -1,5 +1,5 @@
 /**
- * "Download Manga OCR?": asked when an engine picker (sidebar or Settings → OCR) picks a local
+ * "Download Manga OCR?": asked when an engine picker (sidebar or Settings → OCR & Overlay) picks a local
  * engine whose models were never downloaded. Download saves the pick; Cancel, Escape or a click
  * outside drops it. Driven by `useEngineSelection`.
  */

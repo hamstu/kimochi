@@ -14,7 +14,7 @@ import type { SettingsNavItem } from './SettingsShell'
 export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName })[] = [
   { value: 'general', label: 'General', icon: <SlidersHorizontal /> },
   { value: 'sources', label: 'Sources', icon: <Waypoints /> },
-  { value: 'ocr', label: 'OCR', icon: <ScanText /> },
+  { value: 'ocr', label: 'OCR & Overlay', icon: <ScanText /> },
   { value: 'log', label: 'Log', icon: <ScrollText /> },
   { value: 'dictionary', label: 'Dictionary', icon: <BookOpen /> },
   { value: 'assist', label: 'Translation & AI', icon: <Languages /> },

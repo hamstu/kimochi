@@ -1,4 +1,32 @@
-/* Settings → OCR → Model (ModelDownloadCard.tsx): one bar, one line, the buttons. */
+/*
+ * Settings → OCR & Overlay → a local engine's panel → Model (ModelDownload.tsx): one bar, one
+ * line, the buttons.
+ */
+.model-download {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+}
+.model-download-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-2) var(--k-space-4);
+}
+.model-download-text {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  min-width: 0;
+}
+.model-download-label {
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text);
+}
+
 .model-actions {
   display: flex;
   flex-wrap: wrap;
@@ -29,7 +57,7 @@
 
 /*
  * The bar is only there while something is happening. When the download completes it is kept
- * mounted for one more beat (ModelDownloadCard.tsx, BAR_EXIT_MS), shown full and green, then
+ * mounted for one more beat (ModelDownload.tsx, BAR_EXIT_MS), shown full and green, then
  * fades and collapses so the status line slides up into its place.
  */
 .model-progress[data-bar='leaving'] .model-progress-track {
