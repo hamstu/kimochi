@@ -8,13 +8,14 @@
  * Self-contained: the download runs in Rust (`model_store.rs`) and survives this window closing;
  * this only shows its `model-download` events and sends the commands.
  */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Callout, ConfirmDialog, SettingsRow, SettingsSection } from '@kit'
 import {
   actionLabel,
   barPercent,
   formatBytes,
   modelActions,
+  showsBar,
   statusLine,
   type ModelAction,
   type ModelStatus
@@ -23,27 +24,50 @@ import { modelAction, useModelStatus, type ModelEngine } from '../../bridge/mode
 import { nativeError } from '../../bridge/tauri'
 import './model-download.css'
 
+/** How long the bar stays mounted while it fades out; matches the exit transition in the CSS. */
+const BAR_EXIT_MS = 400
+
 /**
- * The bar and its line. Spans, since they sit inside the row's description paragraph. The fill
- * is scaled rather than resized so the ~4 Hz progress events glide (see model-download.css).
+ * The line, with the bar above it only while a download is under way. Spans, since they sit
+ * inside the row's description paragraph. The fill is scaled rather than resized so the ~4 Hz
+ * progress events glide (see model-download.css). When the download completes the bar stays
+ * mounted for one exit transition, full and green, then collapses, rather than vanishing on the
+ * same frame the last byte lands.
  */
 function ModelProgress({ status }: { status: ModelStatus }): ReactNode {
   const value = barPercent(status)
   const line = statusLine(status)
+  const active = showsBar(status)
+  // Lingering: the bar has just gone inactive and is playing its exit. Set during render when
+  // `active` flips, which is React's way of deriving state from a prop change; the effect only
+  // ends it.
+  const [wasActive, setWasActive] = useState(active)
+  const [lingering, setLingering] = useState(false)
+  if (wasActive !== active) {
+    setWasActive(active)
+    setLingering(!active)
+  }
+  useEffect(() => {
+    if (!lingering) return
+    const timer = window.setTimeout(() => setLingering(false), BAR_EXIT_MS)
+    return () => window.clearTimeout(timer)
+  }, [lingering])
   return (
-    <span className="model-progress" data-state={status.state}>
-      <span
-        className="model-progress-track"
-        role="progressbar"
-        aria-label={`${status.name} model`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        // Verifying has no measurable progress: leaving the value out makes it indeterminate.
-        aria-valuenow={status.state === 'verifying' ? undefined : value}
-        aria-valuetext={line}
-      >
-        <span className="model-progress-fill" style={{ transform: `scaleX(${value / 100})` }} />
-      </span>
+    <span className="model-progress" data-state={status.state} data-bar={active ? 'shown' : 'leaving'}>
+      {(active || lingering) && (
+        <span
+          className="model-progress-track"
+          role="progressbar"
+          aria-label={`${status.name} model`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          // Verifying has no measurable progress: leaving the value out makes it indeterminate.
+          aria-valuenow={status.state === 'verifying' ? undefined : value}
+          aria-valuetext={line}
+        >
+          <span className="model-progress-fill" style={{ transform: `scaleX(${value / 100})` }} />
+        </span>
+      )}
       <span className="model-progress-line k-num">{line}</span>
     </span>
   )

@@ -102,6 +102,15 @@ export function statusLine(status: ModelStatus): string {
   }
 }
 
+/**
+ * Whether the bar has anything to say. Only while a download is under way (or stuck): an empty
+ * bar before it starts and a full one for good afterwards are noise, so those states show the
+ * status line alone.
+ */
+export function showsBar(status: ModelStatus): boolean {
+  return status.state !== 'absent' && status.state !== 'ready'
+}
+
 /** How full the progress bar is, 0–100: empty until something arrives, full once ready. */
 export function barPercent(status: ModelStatus): number {
   switch (status.state) {

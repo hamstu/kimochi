@@ -24,6 +24,29 @@
   border-radius: 999px;
   background: var(--k-sunken);
   box-shadow: inset 0 0 0 1px var(--k-line);
+  animation: model-progress-enter 250ms ease-out;
+}
+
+/*
+ * The bar is only there while something is happening. When the download completes it is kept
+ * mounted for one more beat (ModelDownloadCard.tsx, BAR_EXIT_MS), shown full and green, then
+ * fades and collapses so the status line slides up into its place.
+ */
+.model-progress[data-bar='leaving'] .model-progress-track {
+  height: 0;
+  margin-bottom: calc(var(--k-space-1-5) * -1);
+  opacity: 0;
+  animation: none;
+  transition:
+    opacity 250ms ease 100ms,
+    height 300ms ease 100ms,
+    margin-bottom 300ms ease 100ms;
+}
+
+@keyframes model-progress-enter {
+  from {
+    opacity: 0;
+  }
 }
 
 /*
@@ -93,6 +116,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .model-progress-fill {
+    transition: none;
+  }
+  .model-progress-track,
+  .model-progress[data-bar='leaving'] .model-progress-track {
+    animation: none;
     transition: none;
   }
   .model-progress[data-state='verifying'] .model-progress-fill {

@@ -13,6 +13,7 @@ const {
   badgeKind,
   badgeLabel,
   barPercent,
+  showsBar,
   downloadPrompt,
   engineChoice,
   formatBytes,
@@ -96,6 +97,8 @@ test('each state has one status line, one bar, its buttons and its badge', () =>
     const s = manga(patch)
     assert.equal(statusLine(s), line, JSON.stringify(patch))
     assert.equal(barPercent(s), bar, JSON.stringify(patch))
+    // The bar is only shown while something is happening; before and after, the line stands alone.
+    assert.equal(showsBar(s), !['absent', 'ready'].includes(s.state), JSON.stringify(patch))
     assert.deepEqual(modelActions(s), actions, JSON.stringify(patch))
     assert.equal(badgeKind(s), badge, JSON.stringify(patch))
   }
