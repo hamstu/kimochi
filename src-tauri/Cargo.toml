@@ -27,6 +27,8 @@ tauri-plugin-global-shortcut = "2.3"
 kimochi-capture = { path = "../capture-core" }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 base64 = "0.22"
+# Verifies downloaded OCR models (model_store.rs). Already in the lock file via Tauri.
+sha2 = "0.10"
 png = "0.18"
 tungstenite = "0.30"
 arboard = "3.6"

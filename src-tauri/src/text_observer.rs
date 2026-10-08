@@ -68,8 +68,10 @@ pub fn local_observer(app: &tauri::AppHandle) -> Box<dyn TextObserver> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let inner: Box<dyn TextObserver> = match crate::meiki_ocr::engine_root(app) {
-            Ok(_) => Box::new(MeikiObserver::new(app.clone())),
+        // Only the bundled runtime is a standing fact here: the models may still be
+        // downloading, and `MeikiObserver` waits for them (see `models_gate`).
+        let inner: Box<dyn TextObserver> = match crate::meiki_ocr::runtime_available(app) {
+            Ok(()) => Box::new(MeikiObserver::new(app.clone())),
             // Leaked once at startup: `UnsupportedObserver` holds a `&'static str`.
             Err(reason) => Box::new(UnsupportedObserver::new(Box::leak(
                 unavailable_detail(&reason).into_boxed_str(),
@@ -191,14 +193,47 @@ impl MeikiObserver {
     }
 }
 
+/// Automatic scanning reads frames with MeikiOCR whichever engine recognises the text,
+/// so its models are needed even with Cloud OCR selected. Missing models start their
+/// download (about 45 MB). While it runs the observer answers `busy`, which the
+/// scheduler retries without turning automatic scanning off; a paused or failed
+/// download is `unsupported` until the user resumes it in Settings → OCR.
+///
+/// Never sticky: once the models are ready the next observation proceeds.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn models_gate(app: &tauri::AppHandle) -> Result<(), CaptureError> {
+    use crate::model_store::{self, Engine};
+    let Err(reason) = crate::meiki_ocr::models_ready(app) else {
+        return Ok(());
+    };
+    model_store::ensure_started(app, Engine::Meiki);
+    let waiting = matches!(
+        model_store::status(app, Engine::Meiki).state,
+        "downloading" | "verifying"
+    );
+    if waiting {
+        Err(CaptureError::new(
+            "busy",
+            format!("Automatic scanning is waiting for the MeikiOCR model: {reason}"),
+        ))
+    } else {
+        Err(CaptureError::new(
+            "unsupported",
+            unavailable_detail(&reason),
+        ))
+    }
+}
+
 impl TextObserver for MeikiObserver {
     fn status(&self) -> ObserverStatus {
+        let models = crate::meiki_ocr::models_ready(&self.app).err();
+        let reason = self.unsupported.as_ref().or(models.as_ref());
         ObserverStatus {
-            supported: self.unsupported.is_none(),
+            supported: reason.is_none(),
             engine: "meikiocr",
             minimum_os: "",
             private_api: false,
-            detail: match &self.unsupported {
+            detail: match reason {
                 Some(reason) => unavailable_detail(reason),
                 None => "Automatic scanning reads each changed frame with the bundled MeikiOCR engine on this computer; nothing leaves it until the text settles.".into(),
             },
@@ -214,6 +249,7 @@ impl TextObserver for MeikiObserver {
         if let Some(reason) = &self.unsupported {
             return Err(CaptureError::new("unsupported", unavailable_detail(reason)));
         }
+        models_gate(&self.app)?;
         let key = frame_key(frame);
         let image = rgb_image(frame)?;
         match self.worker()?.submit(key, image, timeout) {

@@ -12,6 +12,7 @@ mod history_merge;
 mod hotkeys;
 mod manga_ocr;
 mod meiki_ocr;
+mod model_store;
 mod platform;
 mod ocr_result;
 mod panels;
@@ -177,6 +178,12 @@ fn settings_set(
     }
     if key.starts_with("hotkeys") {
         hotkeys::apply(&app, &state.settings);
+    }
+    // Choosing a local engine whose models are missing starts their download.
+    if key == "ocrMode" {
+        if let Some(mode) = value.as_str() {
+            model_store::on_engine_selected(&app, mode);
+        }
     }
     Ok(())
 }
@@ -1458,14 +1465,21 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         .ok()
         .and_then(|observer| serde_json::to_value(observer.status()).ok())
         .unwrap_or(Value::Null);
-    platform::capabilities_payload(platform::DynamicCapabilities {
+    let mut payload = platform::capabilities_payload(platform::DynamicCapabilities {
         capture_permission,
         capture,
         capture_reason: CAPTURE_UNAVAILABLE.get().cloned(),
         observer,
         meikiocr: meiki_ocr::availability(app),
         mangaocr: manga_ocr::availability(app),
-    })
+    });
+    // An engine held back only by its models stays selectable: choosing it downloads them.
+    for engine in model_store::Engine::ALL {
+        if let Some(state) = model_store::gate(app, engine) {
+            payload["ocrEngines"][engine.key()]["model"] = json!(state);
+        }
+    }
+    payload
 }
 
 #[tauri::command]
@@ -2101,6 +2115,13 @@ fn main() {
             open_accessibility_preferences,
             platform_capabilities,
             gnome_overlay,
+            model_store::model_status,
+            model_store::model_download_start,
+            model_store::model_download_pause,
+            model_store::model_download_resume,
+            model_store::model_download_retry,
+            model_store::model_download_cancel,
+            model_store::model_delete,
         ])
         .setup(move |app| {
             #[cfg(target_os = "linux")]
@@ -2109,6 +2130,8 @@ fn main() {
             #[cfg(target_os = "linux")]
             platform::gnome::start(handle.clone());
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
+            // Before anything asks whether a local engine's models are ready.
+            model_store::install(&handle).map_err(std::io::Error::other)?;
             // The Wayland portal's restore token lives in settings so the picker is not
             // shown again on every launch. A no-op store everywhere else.
             kimochi_capture::set_portal_token_store(Box::new(PortalTokens(store.clone())));
@@ -2391,11 +2414,24 @@ fn main() {
             #[cfg(target_os = "windows")]
             platform::start_fullscreen_watch(&handle, service.clone());
             spawn_display_watch(handle.clone(), store.clone());
+            // A local engine selected before its models were downloaded (an upgrade from a
+            // build that bundled them) starts the download; a paused one waits for Resume.
+            model_store::on_engine_selected(
+                &handle,
+                &store.get_or::<String>("ocrMode", "cloud".into()),
+            );
             spawn_capabilities_watch(handle.clone(), service.clone());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Kimochi runtime");
+        .build(tauri::generate_context!())
+        .expect("Kimochi runtime")
+        .run(|app, event| {
+            // Every quit path (tray, menu, main window, app_quit) ends here: pause model
+            // downloads so their partial files are kept and resumed next launch.
+            if let tauri::RunEvent::Exit = event {
+                model_store::shutdown(app);
+            }
+        });
 }
 
 /// Resolve the previously selected source against a fresh enumeration, off the UI

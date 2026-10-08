@@ -1,0 +1,80 @@
+{
+  "$comment": "Source of truth for the local OCR model files: compiled into the app (src/model_store.rs), which downloads them on demand into <app local data>/models/<engine>/, and read by scripts/prepare-meikiocr.mjs and scripts/prepare-mangaocr.mjs when staging models for development (--with-models). Every file is pinned by revision, SHA-256 and size.",
+  "schemaVersion": 1,
+  "engines": {
+    "meikiocr": {
+      "name": "MeikiOCR",
+      "files": [
+        {
+          "name": "meiki.text.detect.v0.1.960x544.onnx",
+          "repository": "rtr46/meiki.text.detect.v0",
+          "revision": "a9cffa4f60cbf72ddb87edf19c6f98a01cd042e6",
+          "url": "https://huggingface.co/rtr46/meiki.text.detect.v0/resolve/a9cffa4f60cbf72ddb87edf19c6f98a01cd042e6/meiki.text.detect.v0.1.960x544.onnx",
+          "sha256": "40b6a016667745cae7d3055929ae3b8b1e7716aac795f5904cd3c2c7c3b8404b",
+          "size": 14503825
+        },
+        {
+          "name": "meiki.text.rec.v0.960x32.onnx",
+          "repository": "rtr46/meiki.txt.recognition.v0",
+          "revision": "a28cf5874dc2438ebb1c86336be26bcec51e3375",
+          "url": "https://huggingface.co/rtr46/meiki.txt.recognition.v0/resolve/a28cf5874dc2438ebb1c86336be26bcec51e3375/meiki.text.rec.v0.960x32.onnx",
+          "sha256": "3e96bc772fbee9717e536a6353032bb944c3382dd2f6960ef4890decda43b000",
+          "size": 18593254
+        },
+        {
+          "name": "meiki.text.rec.v0.vertical.32x480.onnx",
+          "repository": "rtr46/meiki.txt.recognition.v0",
+          "revision": "a28cf5874dc2438ebb1c86336be26bcec51e3375",
+          "url": "https://huggingface.co/rtr46/meiki.txt.recognition.v0/resolve/a28cf5874dc2438ebb1c86336be26bcec51e3375/meiki.text.rec.v0.vertical.32x480.onnx",
+          "sha256": "2c2a83a23bc3b7e6c63962175f507ecc6c5e85cc174f17bdec37d9bbd0bf895a",
+          "size": 12872961
+        }
+      ]
+    },
+    "mangaocr": {
+      "name": "Manga OCR",
+      "files": [
+        {
+          "name": "config.json",
+          "repository": "kha-white/manga-ocr-base",
+          "revision": "aa6573bd10b0d446cbf622e29c3e084914df9741",
+          "url": "https://huggingface.co/kha-white/manga-ocr-base/resolve/aa6573bd10b0d446cbf622e29c3e084914df9741/config.json",
+          "sha256": "8c0e395de8fa699daaac21aee33a4ba9bd1309cfbff03147813d2a025f39f349",
+          "size": 77546
+        },
+        {
+          "name": "vocab.txt",
+          "repository": "kha-white/manga-ocr-base",
+          "revision": "aa6573bd10b0d446cbf622e29c3e084914df9741",
+          "url": "https://huggingface.co/kha-white/manga-ocr-base/resolve/aa6573bd10b0d446cbf622e29c3e084914df9741/vocab.txt",
+          "sha256": "344fbb6b8bf18c57839e924e2c9365434697e0227fac00b88bb4899b78aa594d",
+          "size": 24072
+        },
+        {
+          "name": "preprocessor_config.json",
+          "repository": "kha-white/manga-ocr-base",
+          "revision": "aa6573bd10b0d446cbf622e29c3e084914df9741",
+          "url": "https://huggingface.co/kha-white/manga-ocr-base/resolve/aa6573bd10b0d446cbf622e29c3e084914df9741/preprocessor_config.json",
+          "sha256": "af4eb4d79cf61b47010fc0bc9352ee967579c417423b4917188d809b7e048948",
+          "size": 228
+        },
+        {
+          "name": "comic-text-detector.onnx",
+          "repository": "dmMaze/comic-text-detector",
+          "revision": "440b978563c71b758e31aaa315d100faba1efa2f",
+          "url": "https://github.com/zyddnys/manga-image-translator/releases/download/beta-0.2.1/comictextdetector.pt.onnx",
+          "sha256": "1a86ace74961413cbd650002e7bb4dcec4980ffa21b2f19b86933372071d718f",
+          "size": 94669756
+        },
+        {
+          "name": "pytorch_model.bin",
+          "repository": "kha-white/manga-ocr-base",
+          "revision": "aa6573bd10b0d446cbf622e29c3e084914df9741",
+          "url": "https://huggingface.co/kha-white/manga-ocr-base/resolve/aa6573bd10b0d446cbf622e29c3e084914df9741/pytorch_model.bin",
+          "sha256": "c63e0bb5b3ff798c5991de18a8e0956c7ee6d1563aca6729029815eda6f5c2eb",
+          "size": 444135475
+        }
+      ]
+    }
+  }
+}

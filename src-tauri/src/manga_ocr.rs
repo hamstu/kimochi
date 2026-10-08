@@ -1,5 +1,6 @@
 //! Native page OCR, reused on the retained-frame blocking worker.
 use crate::engine_probe::{self, Loaded, Probe, Verified};
+use crate::model_store;
 use mangaocr::{
     Backend, ComicTextDetector, DetectionOptions, MangaOcr, ModelPaths, OcrOptions, PageResult,
 };
@@ -16,28 +17,17 @@ struct PageEngine {
 }
 #[derive(Default)]
 pub struct MangaState(Mutex<Option<PageEngine>>);
+/// The models directory (downloaded, bundled or development; see `model_store`), or why
+/// Manga OCR cannot scan yet ("Downloading model… 32%").
 fn assets(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let bundled = app
-        .path()
-        .resource_dir()
-        .map_err(|e| e.to_string())?
-        .join("mangaocr/models");
-    let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/mangaocr/models");
-    for root in [bundled, development] {
-        let paths = ModelPaths::from_dir(&root);
-        if [
-            &paths.weights,
-            &paths.vocab,
-            &paths.config,
-            &root.join("comic-text-detector.onnx"),
-        ]
-        .iter()
-        .all(|p| p.is_file())
-        {
-            return Ok(root);
-        }
+    model_store::models_dir(app, model_store::Engine::Manga)
+}
+
+/// Drop the loaded engine so its model files can be deleted.
+pub fn unload(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<MangaState>() {
+        *state.0.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
-    Err("Manga OCR assets are missing. Run npm run prepare:mangaocr or rebuild with npm run bundle.".into())
 }
 static PROBE: LazyLock<Arc<Probe>> = LazyLock::new(Default::default);
 
@@ -98,13 +88,14 @@ pub fn on_verified(hook: impl Fn() + Send + Sync + 'static) {
 }
 pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
     let image = mangaocr::decode_image(png).map_err(|e| format!("Manga OCR image: {e}"))?;
+    // Checked on every scan, not just the first: models deleted since are refused cleanly.
+    let root = assets(app).map_err(|reason| format!("Manga OCR is not ready: {reason}"))?;
     let state = app.state::<MangaState>();
     let mut engine = state
         .0
         .lock()
         .map_err(|_| "Manga OCR worker unavailable".to_string())?;
     if engine.is_none() {
-        let root = assets(app)?;
         *engine = Some(PageEngine {
             recognizer: MangaOcr::new(ModelPaths::from_dir(&root))
                 .map_err(|e| format!("Manga OCR models: {e}"))?,
