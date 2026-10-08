@@ -67,8 +67,6 @@ const RELOAD_CLIENT = `if (window === window.top) {
 `
 
 /** `ui/` files a React window imports from dist/ at runtime rather than through Vite. */
-const RUNTIME_SHARED = new Set(['panel-yomitan.js'])
-
 /** A `dist/` file for a request path, or null when there is none (never a directory). */
 async function distFile(urlPath: string): Promise<string | null> {
   let decoded: string
@@ -108,12 +106,14 @@ function kimochiDev(): Plugin {
       return
     }
     const names = files.map((file) => path.relative(here('.'), file)).join(', ')
-    // A React window that imports a `ui/` module gets the change through Vite's module graph (HMR
-    // or Vite's own reload); the copies in dist/ are what the plain `ui/` pages load, so those
-    // reload. The React windows also load from dist/ at runtime: the `/ui/panel-yomitan.js` relay
-    // (frontend/shell/panelYomitan.ts) and, through it, `host/` files. Those reload every window.
-    const everywhere =
-      hostFiles.length > 0 || uiFiles.some((file) => RUNTIME_SHARED.has(path.basename(file)))
+    // Every window reloads for any `ui/` or `host/` change, not only the plain `ui/` pages that
+    // load the changed file. The windows share Yomitan state across native window boundaries:
+    // the Log's dictionary popup lives in `ui/popup-host.html`, and the Log's popup factory
+    // registers that popup by id. Reloading popup-host alone left the Log holding an id the
+    // new popup-host never issued, and its first hide came back as an unhandled "Invalid popup
+    // ID" rejection on the Log's error banner. A `ui/` edit is rare enough that losing the React
+    // windows' state costs less than that.
+    const everywhere = true
     // `scripts/run.mjs dev` has `tauri dev` relaunch the app for `host/` edits, because native
     // injects `host/shim.js` and `host/panel-shim.js` at window creation and a reload keeps the old
     // copy. Reloading as well would only be undone a moment later.
