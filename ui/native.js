@@ -296,5 +296,23 @@ export function frameUrl(frame) {
   return core?.convertFileSrc ? core.convertFileSrc(String(id), 'capture') : null
 }
 
+/**
+ * Tell the reader what just happened, on the Log's activity ticker (`ui/activity.ts`).
+ *
+ * `post` is `{text, tone, key}`; a `busy` post is settled by the next one with its key. Native
+ * stamps the time and broadcasts it to every window. Never throws and never waits on anything:
+ * a status line must not be able to fail or slow the work it describes.
+ *
+ * @param {{text: string, tone?: 'info'|'busy'|'ok'|'warn'|'error', key?: string|null}} post
+ */
+export function postActivity(post) {
+  if (!post?.text) return
+  void optional('activity_post', {
+    text: post.text,
+    tone: post.tone ?? 'info',
+    key: post.key ?? null
+  }).catch(() => undefined)
+}
+
 /** Batched bounded diagnostic sink; it does not feed panel state broadcasts. */
 export const writeScanTrace = (records) => invoke('scan_trace', { records })
