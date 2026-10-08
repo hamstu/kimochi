@@ -5,7 +5,7 @@ Sound effects in this directory
   scan-error.mp3   originally error_003.ogg
 
 From Kenney (www.kenney.nl), the "Interface Sounds" and "UI Audio" packs. Re-encoded from
-Ogg Vorbis to MP3 (WebKit cannot play Ogg), with a short reverb tail added, and renamed.
+Ogg Vorbis to MP3 (WebKit cannot play Ogg), with a short light reverb tail (the dry sound unchanged, a short room under it) added, and renamed.
 
 License: Creative Commons Zero, CC0
 http://creativecommons.org/publicdomain/zero/1.0/
