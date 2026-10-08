@@ -109,8 +109,9 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint
-      # cargo clippy -D warnings for src-tauri. Creates empty OCR resource directories so
-      # tauri-build's resource copy succeeds without downloading models.
+      # cargo clippy -D warnings for src-tauri. Creates the OCR resource paths tauri.conf.json
+      # names (an empty runtime directory, the licences) so tauri-build's resource copy succeeds
+      # without downloading anything.
       - run: npm run check:rust
       - name: Test capture-core
         run: cargo test --manifest-path capture-core/Cargo.toml
@@ -202,14 +203,15 @@ jobs:
           workspaces: kimochi-tauri/src-tauri -> target
           shared-key: bundle-${{ matrix.target }}
 
-      # Downloaded OCR models and runtimes are hash-verified by the staging scripts, so a cache
-      # hit only saves bandwidth; a stale or wrong-target runtime is detected and replaced.
+      # Downloaded OCR runtimes are hash-verified by the staging scripts, so a cache hit only
+      # saves bandwidth; a stale or wrong-target runtime is detected and replaced. Models are not
+      # staged for bundles (the app downloads them on demand).
       - uses: actions/cache@v4
         with:
           path: |
             kimochi-tauri/src-tauri/resources/meikiocr
             kimochi-tauri/src-tauri/resources/mangaocr
-          key: ocr-${{ matrix.target }}-${{ hashFiles('kimochi-tauri/scripts/prepare-meikiocr.mjs', 'kimochi-mangaocr/scripts/model-manifest.json') }}
+          key: ocr-${{ matrix.target }}-${{ hashFiles('kimochi-tauri/scripts/prepare-meikiocr.mjs', 'kimochi-tauri/src-tauri/ocr-models.json', 'kimochi-mangaocr/scripts/model-manifest.json') }}
           restore-keys: ocr-${{ matrix.target }}-
 
       - name: Install Windows signing CLI

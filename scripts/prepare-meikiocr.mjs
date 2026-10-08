@@ -1,7 +1,10 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Build-time JavaScript. */
 // Stage self-contained native assets. Nothing here runs on an end user's machine.
 //
-//   node scripts/prepare-meikiocr.mjs [--target <rust-triple>]
+//   node scripts/prepare-meikiocr.mjs [--target <rust-triple>] [--with-models]
+//
+// Stages the ONNX Runtime (bundled) and the licences. The models are downloaded by the app on
+// demand; `--with-models` (or KIMOCHI_WITH_MODELS=1) also stages a development copy of them.
 //
 // The target defaults to the host (or KIMOCHI_TARGET). Every archive is extracted in-process
 // (gzip/tar and zip/nupkg readers below), so a Windows builder needs no `tar` or `unzip`.
@@ -84,23 +87,14 @@ const checksums = {
     'bb76395092d150b52c7092dc6b8f2fe4d80f0f3bf0416d2f269193e347e24702'
 }
 
-const models = [
-  [
-    'rtr46/meiki.text.detect.v0',
-    'a9cffa4f60cbf72ddb87edf19c6f98a01cd042e6',
-    'meiki.text.detect.v0.1.960x544.onnx'
-  ],
-  [
-    'rtr46/meiki.txt.recognition.v0',
-    'a28cf5874dc2438ebb1c86336be26bcec51e3375',
-    'meiki.text.rec.v0.960x32.onnx'
-  ],
-  [
-    'rtr46/meiki.txt.recognition.v0',
-    'a28cf5874dc2438ebb1c86336be26bcec51e3375',
-    'meiki.text.rec.v0.vertical.32x480.onnx'
-  ]
-]
+// The models are not bundled: the app downloads them on demand (src-tauri/src/model_store.rs)
+// from the pinned list in src-tauri/ocr-models.json. `--with-models` (or KIMOCHI_WITH_MODELS=1)
+// also stages them here, where a development build finds them without downloading.
+const withModels =
+  process.argv.includes('--with-models') || process.env.KIMOCHI_WITH_MODELS === '1'
+const { files: models } = JSON.parse(
+  await readFile(path.join(root, 'src-tauri/ocr-models.json'), 'utf8')
+).engines.meikiocr
 
 async function get(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(300000) })
@@ -376,20 +370,19 @@ async function stageRuntime(install) {
 
 // ---- Models ----------------------------------------------------------------------------------
 
-await mkdir(path.join(destination, 'models'), { recursive: true })
-for (const [repo, revision, name] of models) {
-  const metadata = JSON.parse(
-    await get(`https://huggingface.co/api/models/${repo}/revision/${revision}?blobs=true`)
-  )
-  const expected = metadata.siblings.find((s) => s.rfilename === name)?.lfs?.sha256
-  if (!expected) throw new Error(`Missing model SHA-256: ${name}`)
-  const file = path.join(destination, 'models', name)
-  const existing = await readFile(file).catch(() => null)
-  if (existing && sha(existing) === expected) continue
-  const bytes = await get(`https://huggingface.co/${repo}/resolve/${revision}/${name}`)
-  if (sha(bytes) !== expected) throw new Error(`Model checksum mismatch: ${name}`)
-  await writeFile(`${file}.tmp`, bytes)
-  await rename(`${file}.tmp`, file)
+if (withModels) {
+  await mkdir(path.join(destination, 'models'), { recursive: true })
+  for (const { name, url, sha256: expected, size } of models) {
+    const file = path.join(destination, 'models', name)
+    const existing = await readFile(file).catch(() => null)
+    if (existing && sha(existing) === expected) continue
+    const bytes = await get(url)
+    if (bytes.length !== size || sha(bytes) !== expected) {
+      throw new Error(`Model checksum mismatch: ${name}`)
+    }
+    await writeFile(`${file}.tmp`, bytes)
+    await rename(`${file}.tmp`, file)
+  }
 }
 
 // ---- Runtime ---------------------------------------------------------------------------------
@@ -447,4 +440,8 @@ if (current !== marker && current === legacy && platform !== 'win32' && (await p
 }
 await cp(path.join(root, '../kimochi-meikiocr/LICENSE'), path.join(destination, 'LICENSE'))
 await cp(path.join(root, '../kimochi-meikiocr/NOTICE'), path.join(destination, 'NOTICE'))
-console.log(`MeikiOCR models and ${target} (${flavor}) runtime ready for bundling.`)
+console.log(
+  withModels
+    ? `MeikiOCR models (development copy, not bundled) and ${target} (${flavor}) runtime ready.`
+    : `MeikiOCR ${target} (${flavor}) runtime ready for bundling; models download on demand.`
+)
