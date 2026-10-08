@@ -339,20 +339,43 @@ test('semantic OCR groups remain separate with independent durable replay IDs', 
   assert.equal(replay.snapshot().lines.length,3)
 })
 
+const resets = (h) => h.invoked.filter((c) => c === 'history_merge_reset').length;
+
 test('clearing the log tells native to forget the scans it held, so the same text logs again', async () => {
   const h = await harness({ superTexthooker: { autoMatchSource: false } });
   await h.setSetting('scannedTextHistory', [entry('20', 'Game', '消した台詞')]);
   await h.drain();
   assert.deepEqual(h.snapshot().lines.map((l) => l.text), ['消した台詞']);
-  assert.ok(!h.invoked.includes('history_merge_reset'), 'nothing to forget while the log holds it');
+  const before = resets(h);
+  await h.setSetting('scannedTextHistory', [entry('21', 'Game', '次の台詞'), entry('20', 'Game', '消した台詞')]);
+  await h.drain();
+  assert.equal(resets(h), before, 'nothing to forget while the log holds its lines');
   await h.call('store', 'clearLines');
   await h.drain();
   assert.deepEqual(h.snapshot().lines, []);
   // Native merges a rescan of recent text into the entry already there; after the clear it
   // must not, and only this signal tells it the log no longer holds that entry.
-  assert.ok(h.invoked.includes('history_merge_reset'));
-  await h.setSetting('scannedTextHistory', [entry('21', 'Game', '消した台詞'), entry('20', 'Game', '消した台詞')]);
+  assert.equal(resets(h), before + 1);
+  await h.setSetting('scannedTextHistory', [entry('22', 'Game', '消した台詞'), entry('21', 'Game', '次の台詞'), entry('20', 'Game', '消した台詞')]);
   await h.drain();
   assert.deepEqual(h.snapshot().lines.map((l) => l.text), ['消した台詞']);
+  await h.call('stats', 'resetStats');
+});
+
+test('a new or switched-to session tells native to forget the scans, so the same text logs there too', async () => {
+  const h = await harness({ superTexthooker: { autoMatchSource: false } });
+  const first = h.snapshot().sessions.activeId;
+  await h.setSetting('scannedTextHistory', [entry('30', 'Game', '同じ台詞')]);
+  await h.drain();
+  let before = resets(h);
+  await h.call('sessions', 'createSession', ['Empty']);
+  assert.deepEqual(h.snapshot().lines, []);
+  assert.ok(resets(h) > before, 'creating a session forgets');
+  await h.setSetting('scannedTextHistory', [entry('31', 'Game', '同じ台詞'), entry('30', 'Game', '同じ台詞')]);
+  await h.drain();
+  assert.deepEqual(h.snapshot().lines.map((l) => l.text), ['同じ台詞']);
+  before = resets(h);
+  await h.call('sessions', 'switchSession', [first]);
+  assert.ok(resets(h) > before, 'switching sessions forgets');
   await h.call('stats', 'resetStats');
 });

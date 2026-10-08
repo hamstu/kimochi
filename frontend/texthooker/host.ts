@@ -163,10 +163,11 @@ export function startHost(): Promise<void> {
       await store.loadLines();
       await notebook.loadNotebook();
       // Scans that repeat a line already logged are dropped upstream (the history merge and the
-      // automatic scanners remember what they published). Once the log is cleared that line is
-      // no longer there, so they must forget it too, or scanning it again shows nothing.
+      // automatic scanners remember what they published). Once the log is cleared, or another
+      // session's lines are loaded in its place, that line may no longer be there, so they must
+      // forget it too, or scanning it again shows nothing.
       store.subscribe((event) => {
-        if (event.type === "clear")
+        if (event.type === "clear" || event.type === "load")
           void invoke("history_merge_reset").catch(reportError);
       });
       bindings = await getSetting("texthookerSourceSessions", {});
