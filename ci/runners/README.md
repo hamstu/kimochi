@@ -78,6 +78,7 @@ with Contents: read on both, works as an alternative.
 
 ## Triggers and releases
 
-- Push to `main`: debug bundles for every platform, kept 7 days as workflow artifacts.
+- Push to `main`: debug bundles for every platform, kept 2 days as workflow artifacts (a run is
+  ~850 MB and the Free plan meters artifact storage at 500 MB even for self-hosted runs).
 - Manual run: choose `bundle` or `release`, and optionally add the Arch runner.
 - Tag `v*`: optimised bundles, attached to a draft GitHub Release named after the tag.

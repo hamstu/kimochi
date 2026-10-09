@@ -303,7 +303,7 @@ jobs:
           name: kimochi-${{ matrix.target }}${{ matrix.suffix }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 2
 
   # A tag push collects every bundle into a draft release for a final look before publishing.
   release:
