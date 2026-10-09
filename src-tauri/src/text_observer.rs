@@ -44,6 +44,9 @@
 //!    the scheduler backs off and retries, and the identical-pixels reuse above
 //!    hands it the answer once one exists.
 //!  - `observe`: inference ran and failed for this frame. Non-fatal.
+
+// macOS keeps only the Live Text branch; the Meiki worker below is compiled but unused there.
+#![cfg_attr(target_os = "macos", allow(dead_code))]
 #[cfg(not(target_os = "macos"))]
 use kimochi_capture::text::UnsupportedObserver;
 use kimochi_capture::{
@@ -97,7 +100,6 @@ fn announce_verified_capabilities(app: &tauri::AppHandle) {
     crate::manga_ocr::on_verified(announce(app.clone()));
 }
 
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn unavailable_detail(reason: &str) -> String {
     format!(
         "Automatic scanning needs the local MeikiOCR engine, which is not available: {reason} Manual scanning works normally."
@@ -109,14 +111,12 @@ const STALL_AFTER: Duration = Duration::from_secs(30);
 
 /// One read, as the worker returns it.
 #[derive(Clone)]
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 struct Read {
     lines: Vec<TextLine>,
     duration_ms: f64,
 }
 
 #[derive(Clone)]
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 enum Failure {
     /// The engine cannot be loaded here; standing.
     Unavailable(String),
@@ -127,7 +127,6 @@ enum Failure {
 type Answer = Result<Read, Failure>;
 
 /// The Windows/Linux `TextObserver`: MeikiOCR on a dedicated worker.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub struct MeikiObserver {
     app: tauri::AppHandle,
     worker: Option<LatestWorker<image::RgbImage, Answer>>,
@@ -136,7 +135,6 @@ pub struct MeikiObserver {
     timeouts: u32,
 }
 
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 impl MeikiObserver {
     pub fn new(app: tauri::AppHandle) -> Self {
         Self {
@@ -200,7 +198,6 @@ impl MeikiObserver {
 /// download is `unsupported` until the user resumes it in Settings → OCR.
 ///
 /// Never sticky: once the models are ready the next observation proceeds.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn models_gate(app: &tauri::AppHandle) -> Result<(), CaptureError> {
     use crate::model_store::{self, Engine};
     let Err(reason) = crate::meiki_ocr::models_ready(app) else {
@@ -331,7 +328,7 @@ fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImage> {
     }
     let mut rgb = Vec::with_capacity(width * height * 3);
     for row in frame.pixels.chunks(stride).take(height) {
-        for pixel in row[..width * 4].chunks_exact(4) {
+        for pixel in row[..width * 4].as_chunks::<4>().0 {
             rgb.extend_from_slice(&pixel[..3]);
         }
     }

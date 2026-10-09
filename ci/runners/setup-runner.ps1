@@ -93,7 +93,9 @@ Set-Content -Path '.env' -Encoding ascii -Value @(
   "USERDOMAIN=NT AUTHORITY",
   "USERNAME=SYSTEM"
 )
-$pathEntries = @("$cargoHome\bin") + ($env:Path -split ';' | Where-Object { $_ })
+# Git's bin folder (bash.exe for `shell: bash` steps) is not on a normal PATH, only cmd\ is.
+$gitBin = Join-Path (Split-Path -Parent (Split-Path -Parent (Get-Command git.exe).Source)) 'bin'
+$pathEntries = @("$cargoHome\bin", $gitBin) + ($env:Path -split ';' | Where-Object { $_ })
 Set-Content -Path '.path' -Encoding ascii -Value (($pathEntries | Select-Object -Unique) -join ';')
 
 if (-not $NoService) {

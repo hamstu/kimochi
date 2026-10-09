@@ -128,7 +128,9 @@ fn decode_png(bytes: &[u8]) -> Result<Frame, String> {
     let pixels = match (info.color_type, info.bit_depth) {
         (png::ColorType::Rgba, png::BitDepth::Eight) => buffer,
         (png::ColorType::Rgb, png::BitDepth::Eight) => buffer
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|rgb| [rgb[0], rgb[1], rgb[2], 255])
             .collect(),
         (color, depth) => {

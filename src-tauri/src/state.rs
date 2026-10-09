@@ -41,6 +41,7 @@ impl Image {
 
     /// The captured pixels, when this image still has them (an engine that reads
     /// RGBA directly skips the PNG round trip).
+    #[cfg(target_os = "macos")]
     pub fn frame(&self) -> Option<Arc<kimochi_capture::Frame>> {
         self.raw.clone()
     }

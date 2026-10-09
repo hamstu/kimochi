@@ -693,15 +693,6 @@ mod tests {
         width: 1440.,
         height: 875.,
     };
-    const fn at(x: f64, y: f64) -> Rect {
-        Rect {
-            x,
-            y,
-            width: 410.,
-            height: 150.,
-        }
-    }
-
     #[test]
     fn a_large_panel_centres_on_its_display_and_fits_small_displays() {
         let r = centred(520., 560., AREA);
