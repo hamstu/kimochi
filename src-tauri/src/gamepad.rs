@@ -11,7 +11,7 @@ use gilrs::{Button, Gilrs};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
 /// W3C "standard" gamepad mapping order, so `gamepadButton` indices stored by the
@@ -58,11 +58,26 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         let mut previous: Vec<bool> = vec![false; STANDARD.len()];
         // The stick positions last sent in a `controller-nav` event.
         let mut reported = [(0.0, 0.0); 2];
+        // The last `gamepad` event and when it went out, so an unchanged state is not resent
+        // every tick to every window.
+        let mut broadcast: Option<(Value, Instant)> = None;
+        let mut last_tick = Instant::now();
         loop {
-            std::thread::sleep(Duration::from_millis(16));
+            // Wake as soon as input arrives rather than on a fixed frame, so a stick sweeping
+            // the controller menu is reported the moment it moves. The timeout keeps hotplug
+            // and settings current while nothing is pressed; MIN_TICK lets a burst of events
+            // settle into one tick instead of one tick each.
+            let _ = gilrs.next_event_blocking(Some(IDLE_TICK));
+            let since = last_tick.elapsed();
+            if since < MIN_TICK {
+                std::thread::sleep(MIN_TICK - since);
+            }
+            last_tick = Instant::now();
             // Drain the queue so connect/disconnect and button state stay current.
             while gilrs.next_event().is_some() {}
             if !service.settings.get_or("gamepadSettings.enabled", true) {
+                BUTTONS_HELD.store(false, Ordering::SeqCst);
+                hand_back_when_released(&app);
                 continue;
             }
             let preferred: Option<usize> = service
@@ -127,15 +142,23 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 }
                 previous_system_menu = system_menu;
             }
-            let _ = app.emit(
-                "gamepad",
-                json!({
-                    "gamepads": devices,
-                    "activeGamepadIndex": active,
-                    "buttonStates": buttons,
-                    "axisStates": axes,
-                }),
-            );
+            BUTTONS_HELD.store(buttons.contains(&true), Ordering::SeqCst);
+            hand_back_when_released(&app);
+            let state = json!({
+                "gamepads": devices,
+                "activeGamepadIndex": active,
+                "buttonStates": buttons,
+                "axisStates": axes,
+            });
+            // Every change goes out, and the unchanged state now and then, so a window opened
+            // since still learns what is connected.
+            let stale = broadcast
+                .as_ref()
+                .is_none_or(|(last, at)| *last != state || at.elapsed() >= RESEND_UNCHANGED);
+            if stale {
+                let _ = app.emit("gamepad", &state);
+                broadcast = Some((state, Instant::now()));
+            }
             // While the controller menu is open the controller drives the menu instead: the
             // overlay gets every change and nothing is dispatched, the menu's own chord
             // included (the overlay sees it pressed and closes itself).
@@ -207,10 +230,48 @@ fn delayed_scan_allowed(queued: u64, current: u64, focused: bool, navigation: bo
     queued == current && !focused && !navigation && !suspended
 }
 
+/// The longest the poll waits for input before looking again anyway.
+const IDLE_TICK: Duration = Duration::from_millis(16);
+/// The shortest gap between ticks: input is picked up within this, at most 250 times a second.
+const MIN_TICK: Duration = Duration::from_millis(4);
+/// How often an unchanged `gamepad` state is sent again.
+const RESEND_UNCHANGED: Duration = Duration::from_millis(500);
+
 /// Controller navigation: the overlay's radial menu is open and the controller drives it.
 static NAV: AtomicBool = AtomicBool::new(false);
 /// The application that was in front when the menu took activation, to hand it back.
 static NAV_RETURN: Mutex<Option<u32>> = Mutex::new(None);
+
+/// Whether any button on the active controller was down at the last poll.
+static BUTTONS_HELD: AtomicBool = AtomicBool::new(false);
+/// The application to reactivate once every button is up, and when navigation ended.
+static PENDING_RETURN: Mutex<Option<(u32, Instant)>> = Mutex::new(None);
+/// The longest the game waits for its focus back while a button stays down.
+const RETURN_WAIT_LIMIT: Duration = Duration::from_millis(1500);
+
+fn pending_return() -> std::sync::MutexGuard<'static, Option<(u32, Instant)>> {
+    PENDING_RETURN
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn reactivate(app: &tauri::AppHandle, pid: u32) {
+    let _ = app.run_on_main_thread(move || {
+        let _ = crate::platform::activate_process(pid);
+    });
+}
+
+/// Give the game its focus back once the button that closed the menu is up. Handed back while
+/// B or A is still down, the game would see that button released and act on it.
+fn hand_back_when_released(app: &tauri::AppHandle) {
+    let mut pending = pending_return();
+    let Some((pid, since)) = *pending else { return };
+    if BUTTONS_HELD.load(Ordering::SeqCst) && since.elapsed() < RETURN_WAIT_LIMIT {
+        return;
+    }
+    *pending = None;
+    reactivate(app, pid);
+}
 
 pub fn navigating() -> bool {
     NAV.load(Ordering::SeqCst)
@@ -223,7 +284,8 @@ pub fn navigating() -> bool {
 /// activation from the game so the game stops reading the same controller, with the overlay
 /// made key so the keys land there. The application that was in front is remembered.
 ///
-/// Off: all of that is undone, and the remembered application is reactivated.
+/// Off: all of that is undone, and the remembered application is reactivated, once no
+/// controller button is down, so it never sees the release of the button that closed the menu.
 ///
 /// Returns the remembered process id. Activation is scheduled on the main thread rather
 /// than waited for, so this is safe to call from anywhere, including that thread.
@@ -233,6 +295,10 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let was = NAV.swap(active, Ordering::SeqCst);
     if active {
+        // Reopened before the game got its focus back: it is still the one to return to.
+        if let Some((pid, _)) = pending_return().take() {
+            remembered.get_or_insert(pid);
+        }
         let local_keys = {
             #[cfg(target_os="linux")] { !take_focus && crate::platform::gnome::eligible_popup_session() }
             #[cfg(not(target_os="linux"))] { false }
@@ -265,9 +331,11 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
     }
     let previous = remembered.take();
     if let Some(pid) = previous {
-        let _ = app.run_on_main_thread(move || {
-            let _ = crate::platform::activate_process(pid);
-        });
+        if BUTTONS_HELD.load(Ordering::SeqCst) {
+            *pending_return() = Some((pid, Instant::now()));
+        } else {
+            reactivate(app, pid);
+        }
     }
     previous
 }
@@ -282,6 +350,11 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
 ///
 /// `front` is the frontmost application's pid, `source` the pid owning the selected window.
 pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<u32>, source: Option<u32>) {
+    // The reader went somewhere else while the game waited for a button to come up: leave
+    // them there.
+    if front.is_some_and(|front| front != std::process::id()) {
+        pending_return().take();
+    }
     if !navigating() {
         return;
     }
