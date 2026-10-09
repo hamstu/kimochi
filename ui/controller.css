@@ -77,10 +77,12 @@
       cursor: pointer;
       transition:
         fill 0.14s ease,
-        stroke 0.14s ease,
-        filter 0.14s ease;
+        stroke 0.14s ease;
     }
+    /* A wedge lights up at once, so a sweeping stick is never ahead of the ring; the one it
+       left still fades out. */
     .cm-wedge.cm-selected {
+      transition-duration: 0.04s;
       fill: url(#cm-glow);
       stroke: rgba(var(--cm-accent-rgb), 0.85);
       filter: drop-shadow(0 0 14px rgba(var(--cm-accent-rgb), 0.55));
@@ -96,13 +98,30 @@
     .cm-wedge.cm-chosen {
       animation: cm-flash 0.22s ease-out;
     }
+    /* Turned from script every frame the stick moves, so no transform transition: one would
+       restart on every report and leave the pointer forever chasing the stick. */
     .cm-pointer {
-      fill: var(--cm-accent);
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: var(--cm-pointer-size);
+      height: var(--cm-pointer-size);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
       opacity: 0;
+      will-change: transform;
+      transition: opacity 0.12s ease;
+    }
+    .cm-pointer.cm-aiming {
+      opacity: 1;
+    }
+    .cm-pointer svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      fill: var(--cm-accent);
       filter: drop-shadow(0 0 6px var(--cm-accent));
-      transition:
-        transform 0.06s linear,
-        opacity 0.12s ease;
     }
     .cm-item {
       position: absolute;
@@ -152,8 +171,10 @@
     }
     .cm-item.cm-selected {
       color: #fff;
+      transition-duration: 0.04s;
     }
     .cm-item.cm-selected .cm-icon {
+      transition-duration: 0.12s;
       transform: scale(1.16);
       color: var(--cm-accent);
       filter: drop-shadow(0 0 10px rgba(var(--cm-accent-rgb), 0.8));

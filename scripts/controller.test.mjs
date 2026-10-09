@@ -276,6 +276,22 @@ test('the stick points at items clockwise from the top', () => {
   assert.equal(itemAt(0.2, 0.2, 4), -1)
 })
 
+test('the item pointed at holds a little past its edge, so a boundary cannot flicker', () => {
+  const at = (degrees, current) => {
+    const radians = (degrees * Math.PI) / 180
+    return itemAt(Math.sin(radians), Math.cos(radians), 4, current)
+  }
+  // Top and right meet at 45°.
+  assert.equal(at(47, -1), 1)
+  assert.equal(at(47, 0), 0)
+  assert.equal(at(53, 0), 1)
+  // Across the wrap at the top, too.
+  assert.equal(at(318, 0), 0)
+  assert.equal(at(308, 0), 3)
+  // Pointing well into another item always takes it.
+  assert.equal(at(180, 0), 2)
+})
+
 test('a D-pad direction names the item nearest it', () => {
   assert.equal(itemFor('left', 4, 0), 3)
   assert.equal(itemFor('down', 4, -1), 2)

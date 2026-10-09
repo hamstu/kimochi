@@ -105,6 +105,7 @@ fn unavailable_detail(reason: &str) -> String {
 }
 
 /// How long one inference may run before the observer is reported stalled.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 const STALL_AFTER: Duration = Duration::from_secs(30);
 
 /// One read, as the worker returns it.
@@ -282,6 +283,7 @@ impl TextObserver for MeikiObserver {
 }
 
 /// The error for an answer that was not ready in time (see the module docs).
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn busy_error(running_for: Option<Duration>) -> CaptureError {
     match running_for {
         Some(running) if running >= STALL_AFTER => CaptureError::new(
@@ -320,6 +322,7 @@ fn text_lines(lines: &[meikiocr::TextLine], width: u32, height: u32) -> Vec<Text
 }
 
 /// The frame's RGBA rows (with their stride) as the RGB image Meiki reads.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImage> {
     let (width, height) = (frame.info.width as usize, frame.info.height as usize);
     let stride = frame.info.stride.max(width * 4);
@@ -331,8 +334,8 @@ fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImage> {
     }
     let mut rgb = Vec::with_capacity(width * height * 3);
     for row in frame.pixels.chunks(stride).take(height) {
-        for pixel in row[..width * 4].chunks_exact(4) {
-            rgb.extend_from_slice(&pixel[..3]);
+        for [r, g, b, _] in row[..width * 4].as_chunks::<4>().0 {
+            rgb.extend_from_slice(&[*r, *g, *b]);
         }
     }
     image::RgbImage::from_raw(frame.info.width, frame.info.height, rgb)
@@ -340,6 +343,7 @@ fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImage> {
 }
 
 /// Identity of a frame's content, for reusing a result on identical pixels.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn frame_key(frame: &Frame) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -355,6 +359,7 @@ fn frame_key(frame: &Frame) -> u64 {
 
 /// What `LatestWorker::submit` came back with.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 enum Outcome<O> {
     Ready(O),
     /// Not ready in time; `running_for` is how long the in-flight job has run.
@@ -369,12 +374,14 @@ struct Job<I> {
     input: I,
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 struct Running {
     generation: u64,
     key: u64,
     started: Instant,
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 struct Done<O> {
     generation: u64,
     key: u64,
@@ -402,6 +409,7 @@ impl<I, O> Channel<I, O> {
 
 /// One owned worker thread, a one-deep latest-wins queue, and generation-stamped
 /// results. `run` is only ever called on the worker, one input at a time.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 struct LatestWorker<I, O> {
     channel: Arc<Channel<I, O>>,
     generation: u64,
@@ -459,6 +467,7 @@ impl<I: Send + 'static, O: Clone + Send + 'static> LatestWorker<I, O> {
 
     /// Ask for `input` (whose content is identified by `key`) and wait at most
     /// `timeout` for its answer.
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     fn submit(&mut self, key: u64, input: I, timeout: Duration) -> Outcome<O> {
         let deadline = Instant::now() + timeout;
         let mut slot = self.channel.lock();
