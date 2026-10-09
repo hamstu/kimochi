@@ -841,6 +841,16 @@
     hub.contexts.delete(ctx.id)
   })
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+    void import(asset('/spike/linux-dictionary-images.js'))
+      .then(({ installLinuxDictionaryImages }) => installLinuxDictionaryImages(window))
+      .catch(error => hub.log({ check: 'linux-dictionary-images-failed', error: String(error) }))
+    // A long touch can create a separate GTK context-menu surface. Gamescope
+    // cannot present that surface reliably, while its native grab blocks the UI.
+    void tauri.core.invoke('platform_capabilities').then(caps => {
+      if (caps.session.nativeGamescope) {
+        document.addEventListener('contextmenu', event => event.preventDefault())
+      }
+    }).catch(error => hub.log({ check: 'gamescope-context-menu-failed', error: String(error) }))
     // Settings previews and nested dictionary frames do not call host.start().
     // Give every Linux Yomitan document the same modifier-edge handling.
     if (platformInfo().os === 'linux' && hub.label === 'popup-host' && window !== root) {
@@ -938,6 +948,7 @@
           const caps = await tauri.core.invoke('platform_capabilities')
           // Wayland exposes no toplevel origin. Keep anchors and popups in the
           // same coordinate space instead of treating (0,0) as a desktop origin.
+          if (caps.session.nativeGamescope) remotePopup = null
           if (caps.session.backend === 'wayland') {
             const gnome = await tauri.core.invoke('gnome_overlay', { operation: 'status', payload: null })
             if (!gnome.available || !gnome.desktopPopup) remotePopup = null

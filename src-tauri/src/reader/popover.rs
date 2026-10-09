@@ -399,6 +399,9 @@ fn extract_media(v: &Value, key: &str) -> Vec<MediaItem> {
 }
 
 fn hide_on_main(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    crate::platform::gamescope::hide(window)?;
+    #[cfg(not(target_os = "linux"))]
     window.hide().map_err(|e| e.to_string())?;
     LOOKUP_GEN.fetch_add(1, Ordering::Relaxed);
     POPOVER_VISIBLE.store(false, Ordering::Relaxed);

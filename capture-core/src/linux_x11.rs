@@ -76,10 +76,24 @@ pub fn is_wayland_session(
     }
 }
 
+/// Gamescope may render through XWayland while capturing the compositor's portal.
+/// Explicit opt-in; never changes another compositor's X11 capture path.
+pub fn gamescope_portal_now() -> bool {
+    gamescope_portal(
+        std::env::var("GDK_BACKEND").ok().as_deref(),
+        std::env::var("XDG_CURRENT_DESKTOP").ok().as_deref(),
+        std::env::var("KIMOCHI_GAMESCOPE_OVERLAY").ok().as_deref(),
+    )
+}
+fn gamescope_portal(gdk: Option<&str>, desktop: Option<&str>, overlay: Option<&str>) -> bool {
+    gdk == Some("x11") && overlay == Some("x11")
+        && desktop.is_some_and(|name| name.eq_ignore_ascii_case("gamescope"))
+}
+
 /// `is_wayland_session` over this process's environment.
 pub fn wayland_session_now() -> bool {
     let var = |k: &str| std::env::var(k).ok();
-    is_wayland_session(
+    gamescope_portal_now() || is_wayland_session(
         var("XDG_SESSION_TYPE").as_deref(),
         var("WAYLAND_DISPLAY").as_deref(),
         var("GDK_BACKEND").as_deref(),
@@ -1462,5 +1476,18 @@ mod tests {
             crate::SourceId::display(crate::Platform::X11, 66u32).to_string(),
             "x11:display:66"
         );
+    }
+}
+
+#[cfg(test)]
+mod gamescope_tests {
+    #[test]
+    fn portal_override_requires_gamescope_and_explicit_xwayland_renderer() {
+        use super::gamescope_portal;
+        assert!(gamescope_portal(Some("x11"), Some("gamescope"), Some("x11")));
+        assert!(!gamescope_portal(Some("x11"), Some("GNOME"), Some("x11")));
+        assert!(!gamescope_portal(Some("x11"), Some("Hyprland"), Some("x11")));
+        assert!(!gamescope_portal(Some("x11"), Some("gamescope"), None));
+        assert!(!gamescope_portal(Some("wayland"), Some("gamescope"), Some("x11")));
     }
 }

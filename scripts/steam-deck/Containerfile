@@ -1,0 +1,27 @@
+# Native x86_64 build tools, confined to a rootless Podman image. No host packages.
+FROM docker.io/library/ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates gnupg curl wget file git build-essential pkg-config \
+    libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev \
+    librsvg2-dev patchelf libpipewire-0.3-dev libspa-0.2-dev libclang-dev \
+    libpipewire-0.3-modules pipewire-bin heif-gdk-pixbuf libheif-plugin-aomdec \
+    libudev-dev libgtk-layer-shell-dev libgstreamer1.0-dev \
+    gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+    && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+       | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main' \
+       > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
+RUN curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
+    && sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable \
+       --component clippy --component rustfmt \
+    && rm /tmp/rustup-init.sh \
+    && chmod -R a+rX /opt/rustup /opt/cargo
+ENV PATH=/opt/cargo/bin:$PATH
+USER ubuntu
+WORKDIR /work/kimochi-tauri

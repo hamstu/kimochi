@@ -103,9 +103,9 @@ pub fn compositor_name(
 /// Compositors known to implement `zwlr_layer_shell_v1`. GNOME (Mutter) does not and
 /// says it never will; unknown compositors are assumed not to.
 pub fn layer_shell_likely(compositor: &str) -> bool {
-    const KNOWN: [&str; 11] = [
+    const KNOWN: [&str; 12] = [
         "kde", "hyprland", "sway", "niri", "wayfire", "river", "cosmic", "labwc", "hikari", "lxqt",
-        "budgie",
+        "budgie", "gamescope",
     ];
     let c = compositor.to_ascii_lowercase();
     KNOWN
@@ -483,6 +483,28 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         move |k: &str| map.get(k).cloned()
+    }
+
+    #[test]
+    fn gamescope_native_launcher_and_explicit_xwayland_remain_distinct() {
+        let native = detect_session(env(&[
+            ("XDG_SESSION_TYPE", "wayland"),
+            ("GDK_BACKEND", "wayland"),
+            ("WAYLAND_DISPLAY", "gamescope-0"),
+            ("DISPLAY", ":0"),
+            ("XDG_CURRENT_DESKTOP", "gamescope"),
+        ]));
+        assert_eq!(native.backend, Backend::Wayland);
+        assert!(native.layer_shell && native.xwayland);
+        let xwayland = detect_session(env(&[
+            ("XDG_SESSION_TYPE", "wayland"),
+            ("GDK_BACKEND", "x11"),
+            ("WAYLAND_DISPLAY", "gamescope-0"),
+            ("DISPLAY", ":0"),
+            ("XDG_CURRENT_DESKTOP", "gamescope"),
+        ]));
+        assert_eq!(xwayland.backend, Backend::X11);
+        assert!(!xwayland.layer_shell);
     }
 
     #[test]

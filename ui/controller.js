@@ -161,7 +161,9 @@ export function createController(context) {
         detail: status.autoOcr ? 'On' : 'Off',
         unavailable: 'Not in Quick Shot'
       }
-    ]
+    ].concat(window.__KIMOCHI_PLATFORM__?.os === 'linux' && status.gamescope
+      ? [{ id: 'controls', label: 'Kimochi', icon: ICONS.text, enabled: true }]
+      : [])
   }
 
   async function openMenu(how = 'pad') {

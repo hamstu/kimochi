@@ -178,6 +178,8 @@ const renderer = new TextOverlayRenderer(wordsContainer, {
  * text on screen while it steps through it, even once native has moved focus off the game,
  * which would otherwise hide the text as belonging to an app that is no longer in front.
  */
+let nativeGamescope = false
+let gamescopeMenuCenter = null
 let controller = null
 controller = createController({
   host: document.querySelector('#controller'),
@@ -191,6 +193,7 @@ controller = createController({
         ? { x: bounds.x - origin.x, y: bounds.y - origin.y, width: bounds.width, height: bounds.height }
         : null
     return {
+      gamescope: window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope,
       hasText: state.annotations.length > 0 && Boolean(state.geometry),
       autoOcr: Boolean(state.flags.autoOcrEnabled),
       autoAvailable: !isQuickShot(),
@@ -198,11 +201,12 @@ controller = createController({
       origin,
       area,
       scanId: state.appliedScanId,
-      center: area ? { x: area.x + area.width / 2, y: area.y + area.height / 2 } : null
+      center: nativeGamescope ? gamescopeMenuCenter : area ? { x: area.x + area.width / 2, y: area.y + area.height / 2 } : null
     }
   },
   run: (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && id === 'controls') return void native.panel('log', 'show')
   },
   // With automatic OCR on, Scan catches the loop up at once instead of a separate scan;
   // either way it resolves once the text on screen is current.
@@ -244,6 +248,20 @@ controller = createController({
 })
 /** The scan the controller last saw drawn, so it can follow a new one in word mode. */
 let controllerScanId = null
+// The separate Gamescope watchdog resumes Steam if this webview stops servicing
+// controller mode. No ordinary Linux desktop or other platform sends this lease.
+setInterval(() => {
+  if (window.__KIMOCHI_PLATFORM__?.os !== 'linux' || !nativeGamescope || controller.mode === 'idle') return
+  void native.controllerNav(true).then(result => {
+    if (result?.gamescopeInput === false) {
+      log({ check: 'gamescope-input-lease-failed', error: result.error })
+      return controller.close()
+    }
+  }).catch(error => {
+    log({ check: 'gamescope-input-lease-failed', error: String(error) })
+    void controller.close()
+  })
+}, 500)
 
 /**
  * Automatic OCR stands still while the controller menu is open or the reader is stepping
@@ -982,6 +1000,15 @@ async function onAction(name) {
       }
       return isQuickShot() ? quickShot() : performScan()
     case 'openControllerMenu':
+      if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && controller.mode === 'idle') {
+        // A never-mapped Gamescope overlay has a zero-sized WebKit viewport.
+        // Native bounds are logical pixels and available immediately after mapping.
+        await native.panel('overlay', 'show')
+        const panel = await native.panel('overlay', 'inspect')
+        if (panel.bounds?.width > 0 && panel.bounds?.height > 0) {
+          gamescopeMenuCenter = { x: panel.bounds.width / 2, y: panel.bounds.height / 2 }
+        }
+      }
       if(window.__KIMOCHI_PLATFORM__?.os==='linux'&&gnomeOverlay) {
         if(controllerHold)return window.__TAURI__.event.emit('gnome-controller-toggle')
         await native.panel('controller-host','show_inactive')
@@ -1530,7 +1557,7 @@ async function editWindowRegion(sourceId) {
 async function quickShot() {
   if (state.regionSelecting) return
   try {
-    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (await native.capabilities()).session.backend === 'wayland') {
+    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (await native.capabilities()).capture.pickerRequired) {
       const { runWaylandQuickShot } = await import('./linux-quick-shot.js')
       await runWaylandQuickShot({
         available: waylandLayer || await gnomeCropAvailable(),
@@ -2338,7 +2365,8 @@ await native.listen('frontmost-app', ({ payload }) =>
 // Which pids and app names are ours, so our own windows are recognised by process
 // where the platform can tell; the default names stand until it says.
 await native.watchCapabilities(async (caps) => {
-  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && caps.session.nativeLayerShell && !waylandLayer) {
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true
     const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
     await installLinuxScanInput(window, { passive: true })

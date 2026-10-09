@@ -49,7 +49,7 @@ impl Drop for Hidden {
                         continue;
                     }
                     if let Some(window) = app.get_webview_window(&label) {
-                        if let Err(error) = window.show() {
+                        if let Err(error) = super::gamescope::show(&window) {
                             eprintln!("Capture overlay restore ({label}): {error}");
                         }
                     }
@@ -83,7 +83,7 @@ fn hide(app: &AppHandle) -> Result<Hidden> {
                         mark_hidden();
                     }
                     visible.push(label.to_string());
-                    if let Err(e) = window.hide() {
+                    if let Err(e) = super::gamescope::hide(&window) {
                         error = Some(e.to_string());
                         break;
                     }
@@ -97,7 +97,7 @@ fn hide(app: &AppHandle) -> Result<Hidden> {
             let (visible, _, _) = unsent.0;
             for label in visible {
                 if let Some(window) = handle.get_webview_window(&label) {
-                    let _ = window.show();
+                    let _ = super::gamescope::show(&window);
                 }
             }
         }
@@ -143,6 +143,16 @@ impl CaptureBackend for Protected {
         self.inner.close();
     }
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
+        // Gamescope's public portal stream contains the base scene, without its
+        // external layer overlays (measured on SteamOS 3.8.16 / 3.16.23.4). This
+        // does not exclude ordinary Kimochi windows, so keep the capability false.
+        if super::gamescope::scene_capture() && request.source_id.starts_with("portal:")
+        {
+            if super::region_editing() {
+                return Err(CaptureError::new("busy", "Finish crop editing before capturing"));
+            }
+            return self.inner.capture(request);
+        }
         let mut before = super::gnome::tracked_bounds(&request.source_id);
         let _gnome = super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?;
         let hidden = hide(&self.app)?;

@@ -17,7 +17,7 @@ import time
 
 
 def report(event, **fields):
-    print(json.dumps({"event": event, **fields}), flush=True)
+    print(json.dumps({"event": event, "time": time.time(), **fields}), flush=True)
 
 
 def uint(value):
@@ -44,6 +44,13 @@ def main():
     pending = bytearray()
     globals_found = {}
     resources = []
+    buffers = []
+    teardown = os.environ.get("KIMOCHI_LAYER_TEARDOWN", "unmap")
+    settle_seconds = float(os.environ.get("KIMOCHI_LAYER_SETTLE", "3"))
+    if not 0 <= settle_seconds <= 5:
+        raise RuntimeError("KIMOCHI_LAYER_SETTLE must be between 0 and 5 seconds")
+    if teardown not in {"disconnect", "destroy", "unmap"}:
+        raise RuntimeError("KIMOCHI_LAYER_TEARDOWN must be disconnect, destroy or unmap")
 
     def new(kind):
         nonlocal next_id
@@ -87,6 +94,25 @@ def main():
             result.append((obj, opcode, payload))
         return result
 
+    def roundtrip():
+        callback = new("callback")
+        send(1, 0, uint(callback))
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            for obj, opcode, payload in events():
+                if obj == callback and opcode == 0:
+                    return
+        raise RuntimeError("Wayland roundtrip timed out")
+
+    def settle(seconds):
+        deadline = time.monotonic() + seconds
+        try:
+            while time.monotonic() < deadline:
+                sock.settimeout(min(1, max(0.001, deadline - time.monotonic())))
+                events()
+        finally:
+            sock.settimeout(1)
+
     registry = new("registry")
     send(1, 1, uint(registry))
     callback = new("callback")
@@ -129,7 +155,8 @@ def main():
     send(layer, 4, uint(0))  # Keyboard interactivity NONE.
     send(surface, 6)
     report("requested", display=display, size=[240, 48], pointer="empty-region",
-           keyboard="none", lifetimeSeconds=10)
+           keyboard="none", lifetimeSeconds=10, teardown=teardown,
+           settleSeconds=settle_seconds)
     deadline = time.monotonic() + 10
     configured = False
     try:
@@ -159,6 +186,7 @@ def main():
                     memory[offset:offset + len(row)] = row
                 resources.append((fd, memory))
                 pool, buffer = new("pool"), new("buffer")
+                buffers.append(buffer)
                 send(shm, 0, uint(pool) + uint(size), fd=fd)
                 send(pool, 0, b"".join(uint(v) for v in
                      [buffer, 0, width, height, width * 4, 0]))
@@ -171,6 +199,20 @@ def main():
                        format="ARGB8888")
         if not configured:
             raise RuntimeError("No layer configure within 10 seconds")
+        if teardown == "unmap":
+            send(surface, 1, uint(0) + uint(0) + uint(0))
+            send(surface, 6)
+            roundtrip()
+            report("unmapped")
+            settle(settle_seconds)
+        if teardown in {"destroy", "unmap"}:
+            send(layer, 7)
+            send(surface, 0)
+            for buffer in buffers:
+                send(buffer, 0)
+            roundtrip()
+            report("destroyed")
+            settle(3)
         report("completed", protocolAccepted=True)
     finally:
         sock.close()  # Disconnect destroys every surface, even after an error.

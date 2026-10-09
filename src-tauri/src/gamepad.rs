@@ -51,6 +51,10 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
     let app = app.clone();
     let service = service.clone();
     std::thread::spawn(move || {
+        #[cfg(target_os = "linux")]
+        let mut deck = crate::platform::deck_input::Reader::new();
+        #[cfg(target_os = "linux")]
+        let mut previous_system_menu = false;
         let mut previous: Vec<bool> = vec![false; STANDARD.len()];
         // The stick positions last sent in a `controller-nav` event.
         let mut reported = [(0.0, 0.0); 2];
@@ -100,6 +104,29 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 ),
                 None => (vec![false; STANDARD.len()], vec![0.0; 4]),
             };
+            #[cfg(target_os = "linux")]
+            let (devices, active, buttons, axes) = {
+                let sample = deck.poll();
+                let mut devices = devices;
+                if let Some(sample) = sample {
+                    let index = devices.len();
+                    devices.push(json!({"index": index, "id": "Steam Deck physical controller",
+                        "connected": true, "mapping": "standard", "buttons": STANDARD.len(),
+                        "axes": 4, "timestamp": 0, "source": "steam-deck-hidraw"}));
+                    if preferred.is_none() || preferred == Some(index) {
+                        (devices, Some(index), sample.buttons, sample.axes)
+                    } else { (devices, active, buttons, axes) }
+                } else { (devices, active, buttons, axes) }
+            };
+            #[cfg(target_os = "linux")]
+            if crate::platform::gamescope::active() {
+                let system_menu = deck.system_menu();
+                if system_menu && !previous_system_menu {
+                    crate::platform::gamescope::yield_to_steam(&app);
+                    set_navigation(&app, false, false);
+                }
+                previous_system_menu = system_menu;
+            }
             let _ = app.emit(
                 "gamepad",
                 json!({
@@ -113,6 +140,14 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             // overlay gets every change and nothing is dispatched, the menu's own chord
             // included (the overlay sees it pressed and closes itself).
             if navigating() {
+                #[cfg(target_os = "linux")]
+                if crate::platform::gamescope::active() && (!deck.connected() || deck.system_menu()) {
+                    crate::platform::steam_input::handoff();
+                    set_navigation(&app, false, false);
+                    let _ = app.emit("controller-nav-cancel", json!({"reason": "Steam system button or physical controller disconnected"}));
+                    previous = buttons;
+                    continue;
+                }
                 let sticks = [stick(axes[0], axes[1]), stick(axes[2], axes[3])];
                 if let Some(payload) = nav_report(&previous, &buttons, &mut reported, sticks) {
                     let _ = app.emit("controller-nav", payload);

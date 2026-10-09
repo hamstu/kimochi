@@ -433,12 +433,12 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
             // A hide action disables input; restore whole-window input on show.
             let _ = window.set_ignore_cursor_events(false);
         }
-        if window.is_visible().unwrap_or(false) != visible {
+        if platform::gamescope::is_visible(&window) != visible {
             let result = if visible {
-                window.show()
+                platform::gamescope::show(&window)
             } else {
                 platform::capture::mark_hidden();
-                window.hide()
+                platform::gamescope::hide(&window)
             };
             if let Err(error) = result {
                 eprintln!("Linux overlay visibility: {error}");
@@ -594,7 +594,7 @@ fn desktop() -> Vec<Rect> {
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
     #[cfg(target_os = "linux")]
-    if platform::wayland_layer_overlay() {
+    if platform::wayland_layer_overlay() || platform::gamescope::active() {
         let window = app.get_webview_window("overlay").ok_or("overlay unavailable")?;
         return platform::region_keyboard(&window, on);
     }
@@ -606,6 +606,14 @@ fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
 /// stops reading the controller; the application that had it is reactivated on close.
 #[tauri::command]
 fn controller_nav(app: tauri::AppHandle, active: bool, take_focus: Option<bool>) -> Value {
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::active() {
+        let previous = gamepad::set_navigation(&app, active, false);
+        let result = platform::steam_input::update(active)
+            .and_then(|()| app.get_webview_window("overlay").ok_or_else(|| "overlay unavailable".to_owned()))
+            .and_then(|window| platform::gamescope::keyboard(&window, active));
+        return json!({"previousPid": previous, "gamescopeInput": result.is_ok(), "error": result.err()});
+    }
     let previous = gamepad::set_navigation(&app, active, take_focus.unwrap_or(true));
     json!({ "previousPid": previous })
 }
@@ -707,6 +715,10 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
         if rect.width > 0. && rect.height > 0. {
             platform::desktop_place(&window, rect)?;
         }
+    }
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::handles(&window) {
+        return if visible { platform::gamescope::show(&window) } else { platform::gamescope::hide(&window) };
     }
     let shown = window.is_visible().unwrap_or(false);
     if visible && !shown {
@@ -1946,6 +1958,8 @@ fn open_accessibility_preferences() -> Reply<()> {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if platform::steam_input::run_watchdog() { return; }
     // Before anything claims a shortcut, the gamepad or a capture stream: any other copy
     // of Kimochi, of any build, is asked to quit first. See platform/macos/instance.rs.
     #[cfg(target_os = "macos")]
@@ -2424,6 +2438,10 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Kimochi runtime")
         .run(|app, event| {
+            #[cfg(target_os = "linux")]
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
+                if platform::gamescope::prepare_exit(app, code.unwrap_or(0)) { api.prevent_exit(); }
+            }
             // Every quit path (tray, menu, main window, app_quit) ends here: pause model
             // downloads so their partial files are kept and resumed next launch.
             if let tauri::RunEvent::Exit = event {
@@ -2445,6 +2463,32 @@ fn main() {
 /// preflights the permission and returns an error instead of opening a dialog.
 fn spawn_source_restore(service: Shared) {
     std::thread::spawn(move || {
+        #[cfg(target_os = "linux")]
+        if platform::gamescope::active()
+            && service.backend.lock().is_ok_and(|backend| backend.capabilities().system_picker_required)
+        {
+            // Gamescope shares its composed game screen without a picker UI.
+            // Its portal may provide no restore token, so saved source ids alone
+            // cannot restore a stream. Reopen sharing even on first launch.
+            service.set_status("Selecting the Gaming Mode screen…");
+            match sources::pick_source(&service) {
+                Ok(result) if result["picked"] == json!(true) => {
+                    service.set_status("Gaming Mode screen selected.");
+                    service.log(json!({"check":"gaming-mode-source-select","status":"selected"}));
+                }
+                Ok(result) => {
+                    let message = kimochi_capture::last_portal_pick_error()
+                        .unwrap_or_else(|| result["message"].as_str().unwrap_or("Screen sharing was not selected.").to_string());
+                    service.set_status(format!("Gaming Mode screen not selected: {message} Choose Source to retry."));
+                    service.log(json!({"check":"gaming-mode-source-select","status":"not-selected","reason":result["reason"],"message":message}));
+                }
+                Err(error) => {
+                    service.set_status(format!("Could not select the Gaming Mode screen: {error}. Choose Source to retry."));
+                    service.log(json!({"check":"gaming-mode-source-select","status":"error","error":error}));
+                }
+            }
+            return;
+        }
         let Some(saved) = service
             .settings
             .get("lastSelectedSource")

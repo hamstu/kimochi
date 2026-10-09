@@ -447,6 +447,9 @@ fn attach_events(
             save_bounds(&store, &owned, spec);
             // A hidden Settings window can no longer finish recording a shortcut.
             crate::hotkeys::resume(&handle, &store);
+            #[cfg(target_os = "linux")]
+            let _ = platform::gamescope::hide(&owned);
+            #[cfg(not(target_os = "linux"))]
             let _ = owned.hide();
             let _ = handle.emit("panel:closed", json!({ "label": spec.label }));
         }
@@ -520,6 +523,10 @@ fn apply(
 ) -> Result<Value, String> {
     let native_err = |e: tauri::Error| format!("native: {e}");
     match action {
+        #[cfg(target_os = "linux")]
+        "hide" if platform::gamescope::handles(window) => platform::gamescope::hide(window)?,
+        #[cfg(target_os = "linux")]
+        "show" | "show_inactive" if platform::gamescope::handles(window) => platform::gamescope::show(window)?,
         "show" => {
             if label == YOMITAN && !window.is_visible().unwrap_or(false) {
                 place_on_main_display(app, window, existed, YOMITAN)?;
@@ -530,6 +537,8 @@ fn apply(
         // Passive updates must never steal focus from the source application.
         "show_inactive" => window.show().map_err(native_err)?,
         "hide" => window.hide().map_err(native_err)?,
+        #[cfg(target_os = "linux")]
+        "drag" if platform::gamescope::handles(window) => {},
         "drag" => window.start_dragging().map_err(native_err)?,
         "place" => {
             let rect = rect.ok_or("invalid: place requires bounds")?;
@@ -540,6 +549,8 @@ fn apply(
             window.set_resizable(resizable).map_err(native_err)?;
             save_bounds(settings, window, spec(label).unwrap());
         }
+        #[cfg(target_os = "linux")]
+        "minimize" if platform::gamescope::handles(window) => platform::gamescope::hide(window)?,
         "minimize" => window.minimize().map_err(native_err)?,
         "restore" => {
             window.unminimize().map_err(native_err)?;
@@ -554,6 +565,10 @@ fn apply(
         _ => return Err(format!("invalid: unknown window action {action:?}")),
     }
     let mut state = info(window)?;
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::handles(window) {
+        state["visible"] = json!(platform::gamescope::is_visible(window));
+    }
     // `is_always_on_top` reads back the old level until AppKit has applied the new one, so
     // report what was asked for; otherwise the pin button shows the previous state.
     if action == "pin" || action == "unpin" {
