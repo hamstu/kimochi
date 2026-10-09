@@ -249,4 +249,6 @@ if (built.status !== 0 && linuxBundler && await linuxBundler.prepareLinuxBundler
   built = node('@tauri-apps/cli', 'tauri', ['build', ...(task === 'release' ? [] : ['--debug']), '--bundles', bundles, ...extra])
 }
 exitOnFailure(built)
-if (linuxBundler) await linuxBundler.repairLinuxAppImages({ target: env.KIMOCHI_TARGET, release: task === 'release', env })
+// tauri writes under target/<triple>/ only for an explicit --target; KIMOCHI_TARGET alone (as CI
+// sets it for the OCR staging scripts) leaves the output in target/.
+if (linuxBundler) await linuxBundler.repairLinuxAppImages({ target: targetFlag >= 0 ? env.KIMOCHI_TARGET : undefined, release: task === 'release', env })
