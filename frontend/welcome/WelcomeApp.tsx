@@ -1,44 +1,39 @@
-/**
- * ADAPTED from `src/renderer/src/windows/welcome/WelcomeApp.tsx`: every screen, route, image and
- * back target is unchanged; the layout is rebuilt on the kit (a 28px bar holding the back button,
- * an xl heading, kit buttons) and decorative glyphs (↗, 👍) became lucide icons or were dropped.
- *
- * Deltas: the four Electron IPC sends become native calls —
- *   `resize-welcome-window`            -> `resizeWelcome(height)`   (panel place, keeping x/y/width)
- *   `open-screen-capture-preferences`  -> `openScreenCapturePreferences()`
- *   `yomitan-settings-backup`          -> `openYomitanBackup()`     (Yomitan settings in the overlay)
- *   `complete-onboarding`              -> `completeOnboarding()`    (sets hasCompletedOnboarding)
- */
-import { useEffect, useState, type JSX, type ReactNode } from 'react'
-import { Link, Route, Routes, useLocation } from 'react-router'
-import { CheckCircle2Icon, ChevronLeft, ExternalLinkIcon } from 'lucide-react'
-import { Bar, Button, IconButton } from '@kit'
-import { openScreenCapturePreferences, useSystemPick } from '../bridge/tauri'
-import { motion } from 'motion/react'
+import { useEffect, useState, type JSX, type ReactNode } from "react";
+import { Link, Route, Routes, useLocation, useNavigate } from "react-router";
+import { CheckCircle2Icon, ChevronLeft, ExternalLinkIcon } from "lucide-react";
+import { Bar, Button, IconButton } from "@kit";
+import { openScreenCapturePreferences, useSystemPick } from "../bridge/tauri";
+import { motion } from "motion/react";
 
-import AnimationLayout from './AnimationLayout'
-import WindowFrame from '../components/WindowFrame'
-import macOSScreenPerms from './assets/howto-screen-macos.png'
+import { usePanelController } from "../shell/usePanelController";
+import AnimationLayout from "./AnimationLayout";
+import WindowFrame from "../components/WindowFrame";
+import macOSScreenPerms from "./assets/howto-screen-macos.png";
 
-import yomitanIcon from './assets/yomitan-icon.svg'
-import svgLogo from './assets/kimochi-logo.svg'
-import style from './WelcomeApp.module.css'
+import DictionarySetup, { DictionaryPractice } from "./DictionarySetup";
+import YomitanSettingsPanel from "../panels/YomitanSettingsPanel";
+import { EngineChooser } from "../panels/settings/EngineChooser";
+import svgLogo from "./assets/kimochi-logo.svg";
+import style from "./WelcomeApp.module.css";
 
-import { useCaptureStep, useHasScreenRecordingPermission } from './useHasScreenRecordingPermission'
-import { useCapabilities } from '../bridge/capabilities'
-import { SystemPickerButton } from '../main/SourceGrid'
-import { completeOnboarding, openYomitanBackup, resizeWelcome } from './welcome-actions'
+import {
+  useCaptureStep,
+  useHasScreenRecordingPermission,
+} from "./useHasScreenRecordingPermission";
+import { useCapabilities } from "../bridge/capabilities";
+import { SystemPickerButton } from "../main/SourceGrid";
+import { completeOnboarding, resizeWelcome } from "./welcome-actions";
 
-/** Where each step's back button goes (unchanged from the original screens). */
+/** Setup can be revisited without changing choices already made. */
 const BACK: Record<string, string> = {
-  '/screen-recording-permission': '/',
-  '/system-picker': '/',
-  '/yomitan': '/',
-  '/yomitan-setup': '/yomitan',
-  '/yomitan-import': '/yomitan',
-  '/yomitan-import-ready': '/yomitan-import',
-  '/done': '/'
-}
+  "/ocr": "/",
+  "/dictionaries": "/ocr",
+  "/practice": "/dictionaries",
+  "/dictionary-settings": "/dictionaries",
+  "/screen-recording-permission": "/",
+  "/system-picker": "/",
+  "/done": "/practice",
+};
 
 /** One onboarding step: art, an xl heading, a paragraph and the step's actions. */
 function Step({
@@ -46,13 +41,13 @@ function Step({
   title,
   children,
   actions,
-  wide = false
+  wide = false,
 }: {
-  art: ReactNode
-  title: ReactNode
-  children: ReactNode
-  actions: ReactNode
-  wide?: boolean
+  art: ReactNode;
+  title: ReactNode;
+  children: ReactNode;
+  actions: ReactNode;
+  wide?: boolean;
 }): JSX.Element {
   return (
     <div className={wide ? `${style.step} ${style.wide}` : style.step}>
@@ -61,43 +56,23 @@ function Step({
       <p className={style.body}>{children}</p>
       <div className={style.actions}>{actions}</div>
     </div>
-  )
-}
-
-function ExternalLink({
-  href,
-  onClick,
-  children
-}: {
-  href?: string
-  onClick?: () => void
-  children: ReactNode
-}): JSX.Element {
-  return (
-    <a
-      className={`k-link external ${style.external}`}
-      href={href}
-      target={href ? '_blank' : undefined}
-      rel="noreferrer"
-      onClick={onClick}
-    >
-      {children}
-      <ExternalLinkIcon aria-hidden />
-    </a>
-  )
+  );
 }
 
 function InitialScreen(): JSX.Element {
   useEffect(() => {
-    resizeWelcome(500)
-  }, [])
-  const captureStep = useCaptureStep()
-  const next =
-    captureStep === 'permission'
-      ? '/screen-recording-permission'
-      : captureStep === 'picker'
-        ? '/system-picker'
-        : '/yomitan'
+    resizeWelcome(500);
+  }, []);
+  const captureStep = useCaptureStep();
+  const gaming =
+    useCapabilities().session?.compositor?.toLowerCase() === "gamescope";
+  const next = gaming
+    ? "/ocr"
+    : captureStep === "permission"
+      ? "/screen-recording-permission"
+      : captureStep === "picker"
+        ? "/system-picker"
+        : "/ocr";
   return (
     <Step
       art={
@@ -112,18 +87,19 @@ function InitialScreen(): JSX.Element {
         </Button>
       }
     >
-      Kimochi is a tool to help you read and understand Japanese on your computer (like in games or
-      other visual content). It looks like this is your first run, so let&apos;s get you set up.
+      Kimochi is a tool to help you read and understand Japanese on your
+      computer (like in games or other visual content). It looks like this is
+      your first run, so let&apos;s get you set up.
     </Step>
-  )
+  );
 }
 
 function ScreenPermissionScreen(): JSX.Element {
-  const hasPermission = useHasScreenRecordingPermission()
-  const { restartAfterGrant } = useCapabilities().capture
+  const hasPermission = useHasScreenRecordingPermission();
+  const { restartAfterGrant } = useCapabilities().capture;
   useEffect(() => {
-    resizeWelcome(800)
-  }, [])
+    resizeWelcome(800);
+  }, []);
   return (
     <Step
       wide
@@ -139,13 +115,13 @@ function ScreenPermissionScreen(): JSX.Element {
       actions={
         hasPermission ? (
           <Button variant="primary" asChild>
-            <Link to="/yomitan">Continue</Link>
+            <Link to="/ocr">Continue</Link>
           </Button>
         ) : (
           <Button
             variant="primary"
             onClick={() => {
-              void openScreenCapturePreferences()
+              void openScreenCapturePreferences();
             }}
           >
             Open Settings <ExternalLinkIcon />
@@ -153,13 +129,14 @@ function ScreenPermissionScreen(): JSX.Element {
         )
       }
     >
-      Kimochi needs screen recording permission to capture and OCR text from your screen. Please
-      click the button below to open your system settings and grant access.
+      Kimochi needs screen recording permission to capture and OCR text from
+      your screen. Please click the button below to open your system settings
+      and grant access.
       {restartAfterGrant
-        ? ' On macOS, you may need to restart Kimochi after granting the permission.'
-        : ''}
+        ? " On macOS, you may need to restart Kimochi after granting the permission."
+        : ""}
     </Step>
-  )
+  );
 }
 
 /**
@@ -168,10 +145,10 @@ function ScreenPermissionScreen(): JSX.Element {
  */
 function SystemPickerScreen(): JSX.Element {
   useEffect(() => {
-    resizeWelcome(560)
-  }, [])
-  const { picked } = useSystemPick()
-  const pickedName = picked ? picked.app || picked.name || 'your screen' : null
+    resizeWelcome(560);
+  }, []);
+  const { picked } = useSystemPick();
+  const pickedName = picked ? picked.app || picked.name || "your screen" : null;
   return (
     <Step
       art={<img src={svgLogo} alt="Kimochi" width={160} />}
@@ -179,128 +156,72 @@ function SystemPickerScreen(): JSX.Element {
       actions={
         <>
           {!picked && <SystemPickerButton />}
-          <Button variant={picked ? 'primary' : 'secondary'} asChild>
-            <Link to="/yomitan">{picked ? 'Continue' : 'Choose later'}</Link>
+          <Button variant={picked ? "primary" : "secondary"} asChild>
+            <Link to="/ocr">{picked ? "Continue" : "Choose later"}</Link>
           </Button>
         </>
       }
     >
       {pickedName
         ? `Kimochi will read ${pickedName}. You can choose again at any time from the sidebar's Change source menu.`
-        : 'You choose what Kimochi reads in the system picker: your desktop asks you to confirm the screen or window to share. Choose the game or app you want to read now, or later from the sidebar.'}
+        : "You choose what Kimochi reads in the system picker: your desktop asks you to confirm the screen or window to share. Choose the game or app you want to read now, or later from the sidebar."}
     </Step>
-  )
+  );
 }
 
-const yomitanArt = <img src={yomitanIcon} alt="Yomitan" width={88} />
-
-function YomitanSetupScreen(): JSX.Element {
-  useEffect(() => {
-    resizeWelcome(500)
-  }, [])
+function OcrScreen(): JSX.Element {
   return (
-    <Step
-      art={yomitanArt}
-      title="Yomitan Setup"
-      actions={
-        <>
-          <Button variant="primary" asChild>
-            <Link to="/yomitan-import">Yes, help me import my data</Link>
-          </Button>
-          <Button asChild>
-            <Link to="/yomitan-setup">No, help me set up Yomitan</Link>
-          </Button>
-        </>
-      }
-    >
-      Kimochi uses{' '}
-      <ExternalLink href="https://yomitan.wiki/">a browser extension called Yomitan</ExternalLink> to
-      show a popup dictionary for Japanese. Do you already have Yomitan set up in your browser of
-      choice?
-    </Step>
-  )
+    <section>
+      <h1>Choose how to recognize text</h1>
+      <p>
+        Local engines keep scans on this device. Cloud engines need a connection
+        and may require credentials. You can change this later in Settings.
+      </p>
+      <EngineChooser />
+      <Button variant="primary" asChild>
+        <Link to="/dictionaries">Continue</Link>
+      </Button>
+    </section>
+  );
 }
 
-function YomitanExportScreen(): JSX.Element {
-  useEffect(() => {
-    resizeWelcome(500)
-  }, [])
+function PracticeScreen(): JSX.Element {
+  const capabilities = useCapabilities();
+  const gaming =
+    capabilities.os === "linux" &&
+    capabilities.session?.compositor?.toLowerCase() === "gamescope";
   return (
-    <Step
-      art={yomitanArt}
-      title="Export Yomitan Data"
-      actions={
-        <Button variant="primary" asChild>
-          <Link to="/yomitan-import-ready">Ok, I&apos;ve exported my data</Link>
-        </Button>
-      }
-    >
-      To export your Yomitan data, first open the Yomitan settings page (
-      <ExternalLink href="https://yomitan.wiki/getting-started/#quick-actions">
-        details here
-      </ExternalLink>
-      ) and click on the “Backup” category. From there you can export both settings and
-      dictionaries as JSON files.
-    </Step>
-  )
-}
-
-function YomitanHelpScreen(): JSX.Element {
-  useEffect(() => {
-    resizeWelcome(500)
-  }, [])
-  return (
-    <Step
-      art={yomitanArt}
-      title="Yomitan How-To"
-      actions={
-        <Button variant="primary" asChild>
-          <Link to="/yomitan-import">Ok, I&apos;ve got Yomitan set up</Link>
-        </Button>
-      }
-    >
-      We got you! First, make sure you have{' '}
-      <ExternalLink href="https://yomitan.wiki/">installed the Yomitan browser extension</ExternalLink>
-      . Then, once it&apos;s installed you need to install some dictionaries and customize any other
-      settings to your liking. The{' '}
-      <ExternalLink href="https://yomitan.wiki/getting-started/">Yomitan Wiki</ExternalLink> has a
-      great guide to help you get started.
-    </Step>
-  )
-}
-
-function YomitanImportReadyScreen(): JSX.Element {
-  useEffect(() => {
-    resizeWelcome(550)
-  }, [])
-  return (
-    <Step
-      art={yomitanArt}
-      title="Import Yomitan Data"
-      actions={
-        <Button variant="primary" asChild>
-          <Link to="/done">I&apos;m done importing my data</Link>
-        </Button>
-      }
-    >
-      Now that you&apos;ve exported your Yomitan data, you can import it into Kimochi. Please{' '}
-      <ExternalLink
-        onClick={() => {
-          void openYomitanBackup()
-        }}
-      >
-        click here to open Kimochi&apos;s Yomitan settings
-      </ExternalLink>
-      . From there, scroll down to the “Backup” section and import the JSON files you exported
-      earlier.
-    </Step>
-  )
+    <section>
+      <h1>Read, look up, keep playing</h1>
+      <DictionaryPractice />
+      <ol>
+        <li>
+          {gaming
+            ? "Gaming Mode shares the game screen automatically. Set a crop around the dialogue to ignore menus and other text."
+            : "Choose the game or screen in the source selector, then crop the area you want to read."}
+        </li>
+        <li>Run Scan to recognize Japanese text.</li>
+        <li>
+          Hover a word while holding Shift, or use controller reading
+          navigation, to show definitions.
+        </li>
+        <li>Use B to leave controller reading and return to your game.</li>
+      </ol>
+      <p>
+        Try looking up 日本語 after your dictionary is ready. You can revisit
+        OCR and dictionary settings whenever you need.
+      </p>
+      <Button variant="primary" asChild>
+        <Link to="/done">Finish setup</Link>
+      </Button>
+    </section>
+  );
 }
 
 function DoneScreen(): JSX.Element {
   useEffect(() => {
-    resizeWelcome(500)
-  })
+    resizeWelcome(500);
+  });
   return (
     <Step
       art={
@@ -316,20 +237,21 @@ function DoneScreen(): JSX.Element {
         </Button>
       }
     >
-      You&apos;re all set up! Click the button below to close this window and start using Kimochi.
-      If you need to change any settings later, you can always do so from the Kimochi preferences.
+      You&apos;re all set up! Click the button below to close this window and
+      start using Kimochi. If you need to change any settings later, you can
+      always do so from the Kimochi preferences.
     </Step>
-  )
+  );
 }
 
 function CompleteOnboarding(): JSX.Element {
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     completeOnboarding().catch((caught) =>
-      setError(caught instanceof Error ? caught.message : String(caught))
-    )
-  }, [])
-  if (!error) return <></>
+      setError(caught instanceof Error ? caught.message : String(caught)),
+    );
+  }, []);
+  if (!error) return <></>;
   return (
     <Step
       art={null}
@@ -342,12 +264,25 @@ function CompleteOnboarding(): JSX.Element {
     >
       {error}
     </Step>
-  )
+  );
 }
 
 function Welcome(): JSX.Element {
-  const { pathname } = useLocation()
-  const back = BACK[pathname]
+  usePanelController("welcome");
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const back = BACK[pathname];
+  useEffect(() => {
+    const cancel = (event: Event): void => {
+      if (back) {
+        event.preventDefault();
+        void navigate(back);
+      }
+    };
+    document.addEventListener("kimochi:controller-back", cancel);
+    return () =>
+      document.removeEventListener("kimochi:controller-back", cancel);
+  }, [back, navigate]);
   return (
     <WindowFrame windowType="app">
       <Bar position="top" className={style.bar}>
@@ -364,19 +299,36 @@ function Welcome(): JSX.Element {
         <Routes>
           <Route element={<AnimationLayout />}>
             <Route index element={<InitialScreen />} />
-            <Route path="/screen-recording-permission" element={<ScreenPermissionScreen />} />
+            <Route
+              path="/screen-recording-permission"
+              element={<ScreenPermissionScreen />}
+            />
             <Route path="/system-picker" element={<SystemPickerScreen />} />
-            <Route path="/yomitan" element={<YomitanSetupScreen />} />
-            <Route path="/yomitan-setup" element={<YomitanHelpScreen />} />
-            <Route path="/yomitan-import" element={<YomitanExportScreen />} />
-            <Route path="/yomitan-import-ready" element={<YomitanImportReadyScreen />} />
+            <Route path="/ocr" element={<OcrScreen />} />
+            <Route path="/dictionaries" element={<DictionarySetup />} />
+            <Route
+              path="/dictionary-settings"
+              element={
+                <section
+                  style={{
+                    height: "65vh",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                  aria-label="Import or manage dictionaries"
+                >
+                  <YomitanSettingsPanel />
+                </section>
+              }
+            />
+            <Route path="/practice" element={<PracticeScreen />} />
             <Route path="/done" element={<DoneScreen />} />
             <Route path="/main" element={<CompleteOnboarding />} />
           </Route>
         </Routes>
       </main>
     </WindowFrame>
-  )
+  );
 }
 
-export default Welcome
+export default Welcome;

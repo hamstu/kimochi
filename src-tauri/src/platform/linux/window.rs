@@ -110,7 +110,10 @@ pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
 pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, String> {
     match session().backend {
         Backend::Wayland => Ok(None),
-        Backend::X11 => Ok(x11::pointer_in(xid(w)?)),
+        Backend::X11 => {
+            let zoom = super::gamescope::controls_zoom(w);
+            Ok(x11::pointer_in(xid(w)?).map(|(x, y)| (x / zoom, y / zoom)))
+        },
     }
 }
 
@@ -175,6 +178,7 @@ pub fn inspect(w: &tauri::WebviewWindow) -> Result<Value, String> {
 /// `present`), and a panel maps without focus (`make_panel` cleared accept-focus and set
 /// `_NET_WM_USER_TIME = 0`); the raise is a restack request, not an activation.
 pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
+    if super::gamescope::handles(w) { return super::gamescope::show(w); }
     w.show().map_err(|e| e.to_string())?;
     if session().backend == Backend::X11 {
         x11::raise(xid(w)?)?;
@@ -273,6 +277,9 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
             "platform: could not mark {} as a utility window: {e}",
             w.label()
         );
+    }
+    if super::gamescope::active() && w.label() == "overlay" {
+        super::gamescope::make_overlay(w)?;
     }
     insert(&PANELS, w.label());
     Ok(true)

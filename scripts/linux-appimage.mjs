@@ -1,8 +1,9 @@
 // Reproducible Linux AppImage repairs; no changes to application/library versions.
-import { readFile, writeFile, copyFile, readdir, access, mkdir, rename } from 'node:fs/promises'
+import { readFile, writeFile, copyFile, readdir, access, mkdir, rename, rm, cp } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 
 const cache = path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), '.cache'), 'tauri')
 const exists = async (file) => access(file).then(() => true, () => false)
@@ -67,7 +68,7 @@ export async function bundleLinuxAudio(appdir, env) {
   await copyFile(scanner, path.join(scannerDirectory, 'gst-plugin-scanner'))
   // Deploy dependencies with the same bundler/exclusion policy as the main app.
   const arch = { arm64: 'aarch64', x64: 'x86_64' }[process.arch]
-  const deployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${destination}`, `--deploy-deps-only=${scannerDirectory}`], { stdio: 'inherit', env })
+  const deployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${destination}`, `--deploy-deps-only=${scannerDirectory}`], { stdio: 'inherit', env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1' } })
   if (deployed.error || deployed.status !== 0) throw deployed.error ?? new Error(`GStreamer dependency deployment failed (${deployed.status})`)
   console.log(`Bundled ${names.length} GStreamer audio plugins and their scanner.`)
 }
@@ -91,7 +92,7 @@ export async function bundleLinuxDictionaryImages(appdir, env) {
   await mkdir(destination, { recursive: true })
   for (const name of decoderNames) await copyFile(path.join(plugins, name), path.join(destination, name))
   const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
-  const deployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${destination}`], { stdio: 'inherit', env })
+  const deployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${destination}`], { stdio: 'inherit', env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1' } })
   if (deployed.error || deployed.status !== 0) throw deployed.error ?? new Error(`AVIF decoder deployment failed (${deployed.status})`)
   const hook = path.join(appdir, 'apprun-hooks/linuxdeploy-plugin-gtk.sh')
   await writeFile(hook, (await readFile(hook, 'utf8')) + '\nexport LIBHEIF_PLUGIN_PATH="$APPDIR/usr/lib/libheif"\n')
@@ -107,7 +108,41 @@ export async function repairLinuxAppImages({ target, release, env }) {
   const appdir = path.join(directory, appdirs[0])
   await bundleLinuxAudio(appdir, env)
   await bundleLinuxDictionaryImages(appdir, env)
+  // PipeWire loads its support.system implementation dynamically. The compiled-in
+  // Ubuntu multiarch path is absent on SteamOS/Arch, even when PipeWire is installed.
+  const spaDirectory = spawnSync('pkg-config', ['--variable=plugindir', 'libspa-0.2'], { encoding: 'utf8' })
+  const spaSource = spaDirectory.stdout.trim()
+  if (spaDirectory.status !== 0 || !spaSource) throw new Error('PipeWire SPA plugin directory unavailable')
+  const spaDestination = path.join(appdir, 'usr/lib/spa-0.2/support')
+  await cp(path.join(spaSource, 'support'), spaDestination, { recursive: true })
+  const moduleDirectory = spawnSync('pkg-config', ['--variable=moduledir', 'libpipewire-0.3'], { encoding: 'utf8' }).stdout.trim()
+  const pipewirePrefix = spawnSync('pkg-config', ['--variable=prefix', 'libpipewire-0.3'], { encoding: 'utf8' }).stdout.trim()
+  if (!moduleDirectory || !pipewirePrefix) throw new Error('PipeWire runtime paths unavailable')
+  const clientConfig = path.join(pipewirePrefix, 'share/pipewire/client.conf')
+  const config = await readFile(clientConfig, 'utf8')
+  const moduleDestination = path.join(appdir, 'usr/lib/pipewire-0.3')
+  await mkdir(moduleDestination, { recursive: true })
+  // Deploy only modules referenced by the matching client configuration, not
+  // daemon services or unrelated Bluetooth/network audio backends.
+  for (const name of new Set([...config.matchAll(/name\s*=\s*(libpipewire-module-[\w-]+)/g)].map(match => match[1]))) {
+    await copyFile(path.join(moduleDirectory, `${name}.so`), path.join(moduleDestination, `${name}.so`))
+  }
+  const configDestination = path.join(appdir, 'usr/share/pipewire')
+  await mkdir(configDestination, { recursive: true })
+  await copyFile(clientConfig, path.join(configDestination, 'client.conf'))
+  const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
+  const spaDeployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${spaDestination}`, `--deploy-deps-only=${moduleDestination}`], { stdio: 'inherit', env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1' } })
+  if (spaDeployed.error || spaDeployed.status !== 0) throw spaDeployed.error ?? new Error(`PipeWire SPA deployment failed (${spaDeployed.status})`)
   const libraries = path.join(appdir, 'usr/lib')
+  // EGL/Mesa stays on the host. Its Wayland ABI must come from the host too:
+  // SteamOS Mesa needs wl_display_create_queue_with_name, absent in Ubuntu's
+  // bundled client library. Mixing them prevents WebKit from creating EGL.
+  for (const name of await readdir(libraries)) {
+    if (/^libwayland-(client|server|cursor|egl)\.so(?:\.|$)/.test(name)) {
+      await rm(path.join(libraries, name));
+      console.log(`Use host graphics stack: removed bundled ${name}.`)
+    }
+  }
   const ldconfig = spawnSync('ldconfig', ['-p'], { encoding: 'utf8' })
   const originals = new Map([...ldconfig.stdout.matchAll(/^\s*(\S+)\s+.*=>\s+(\S+)$/gm)].map((match) => [match[1], match[2]]))
   for (const name of await readdir(libraries)) {
@@ -135,6 +170,9 @@ export async function repairLinuxAppImages({ target, release, env }) {
   await writeFile(hook, (await readFile(hook, 'utf8')) + `
 export GST_PLUGIN_SYSTEM_PATH_1_0="$APPDIR/usr/lib/gstreamer-1.0"
 export GST_PLUGIN_SCANNER_1_0="$APPDIR/usr/libexec/gstreamer-1.0/gst-plugin-scanner"
+export SPA_PLUGIN_DIR="$APPDIR/usr/lib/spa-0.2"
+export PIPEWIRE_MODULE_DIR="$APPDIR/usr/lib/pipewire-0.3"
+export PIPEWIRE_CONFIG_DIR="$APPDIR/usr/share/pipewire"
 `)
   const repacked = path.join(directory, `${images[0]}.repacked`)
   const result = spawnSync(path.join(cache, 'linuxdeploy-plugin-appimage.AppImage'), [`--appdir=${appdir}`], {
@@ -143,4 +181,7 @@ export GST_PLUGIN_SCANNER_1_0="$APPDIR/usr/libexec/gstreamer-1.0/gst-plugin-scan
   })
   if (result.error || result.status !== 0) throw result.error ?? new Error(`AppImage repack failed (${result.status})`)
   await rename(repacked, path.join(directory, images[0]))
+  const packageScript = fileURLToPath(new URL('./steam-deck/package-gaming-mode.sh', import.meta.url))
+  const packaged = spawnSync('sh', [packageScript, path.join(directory, images[0]), path.join(directory, images[0].replace(/\.AppImage$/, '-gaming-mode.tar.gz'))], { stdio: 'inherit', env })
+  if (packaged.error || packaged.status !== 0) throw packaged.error ?? new Error(`Gaming Mode package failed (${packaged.status})`)
 }

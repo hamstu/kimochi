@@ -53,7 +53,7 @@ Quitting the app or pressing Ctrl-C stops `tauri dev` and the dev server with it
 
 - **macOS** (the implementation target): macOS 14+, Node 22+, Rust stable and the Command Line Tools. Always launch the bundle: a bare executable can have a different WebKit IndexedDB identity and appear to lose dictionaries. `npm run release` produces `src-tauri/target/release/bundle/macos/Kimochi.app`; install by copying it to `/Applications`.
 - **Windows** 10 22H2 or 11, x64 or ARM64: Node 22+, Rust stable (MSVC toolchain) and the Visual Studio Build Tools "Desktop development with C++" workload. The installer embeds the WebView2 bootstrapper and installs per user (no admin). Capture, overlay and input are not implemented yet (see [CROSS_PLATFORM_PLAN.md](CROSS_PLATFORM_PLAN.md)).
-- **Linux** (Ubuntu 22.04 or newer): Node 22+, Rust stable >=1.87 and `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libpipewire-0.3-dev libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`. See [Linux dependencies and capabilities](src-tauri/src/platform/linux/DEPS.md) and the session-specific [Ubuntu report](UBUNTU_BRINGUP.md).
+- **Linux** (Ubuntu 22.04 or newer): Node 22+, Rust stable >=1.87 and `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config libpipewire-0.3-dev libpipewire-0.3-modules pipewire-bin libspa-0.2-dev libclang-dev libudev-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`. See [Linux dependencies and capabilities](src-tauri/src/platform/linux/DEPS.md) and the session-specific [Ubuntu report](UBUNTU_BRINGUP.md).
 
 ### Configuration split
 
@@ -221,6 +221,103 @@ focus/input/audio acceptance on the user's current desktop is tracked separately
 in UBUNTU_BRINGUP.md. Other GNOME versions are rejected until tested.
 
 Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimochi**. This clears them until a new OCR scan; heartbeat updates cannot undo dismissal. Fullscreen overlays are hidden while the panel control is unavailable. Ordinary application Escape is not intercepted.
+
+### Steam Deck Gaming Mode (experimental)
+
+Linux bundles also produce `Kimochi_*-gaming-mode.tar.gz` beside the AppImage.
+Extract it in Desktop Mode and run `sh install-gaming-mode.sh ./Kimochi.AppImage`.
+Then use Steam's **Add a Game → Add a Non-Steam Game → Kimochi Gaming Mode**.
+The entry launches a background user service; pressing Play again reopens controls
+or starts the app after Quit. Installation is user-local, requires no system
+partition changes, and uses 1× GTK rendering with 1.5× controls UI by default.
+Install a newer archive with the same command, quit Kimochi, and press Play again.
+Its stable library entry and app data persist; previous versions remain available
+for rollback. This helper is a manual update path, not an automatic updater.
+
+Launch with `sh scripts/steam-deck/launch-gaming-mode.sh /path/to/Kimochi.AppImage`.
+The launcher selects the Gamescope XWayland overlay renderer and portal capture,
+and uses GTK's 2× rendering scale for the Deck's small display. This affects only
+the launched process; desktop scaling and saved interface preferences stay intact.
+Use `KIMOCHI_GAMESCOPE_SCALE=1` before the command for normal size (integer values
+1–4 are supported). Capture pixels retain their original resolution, with overlay
+placement and input regions converted using the reported GTK scale.
+
+For an SSH-launched test that survives disconnects, use
+`KIMOCHI_GAMESCOPE_SCALE=1 KIMOCHI_GAMESCOPE_UI_SCALE=1.5 sh scripts/steam-deck/launch-gaming-mode-service.sh /absolute/path/to/Kimochi.AppImage`.
+This creates a transient user service, with no auto-start or automatic restart;
+Quit still exits the app. Main/settings browser UI can use a fractional scale
+(1–4, including 1.25 and 1.5); annotation/capture coordinates keep the native GTK
+scale. Gaming Mode panels fit the output rather than enforcing desktop minimum
+sizes. These options do not affect ordinary desktop launches.
+
+A Steam non-game shortcut can target
+`sh scripts/steam-deck/launch-from-steam.sh /absolute/path/to/Kimochi.AppImage`.
+The shortcut starts the sidecar service and exits; pressing Play again reopens
+controls or starts a fresh app after Quit. Steam may therefore show Play instead
+of a running game. The installer supplies a desktop entry and icon; Steam's
+one-time Add a Non-Steam Game step remains manual. The older Deck development
+shortcut is named `kimochi_steamdeck`.
+
+Kimochi temporarily enables native touch passthrough while its controls have focus, including
+native dictionary file dialogs, then restores the game's touch mode. An independent
+watchdog restores that mode if the app exits or crashes.
+
+For the current Gaming Mode test flow:
+
+1. Start Kimochi with that launcher; Gaming Mode automatically selects its shared
+   screen at startup. Choose Source remains available to retry. Choose an OCR
+   engine and install your Yomitan dictionary. MeikiOCR runs locally on the Deck CPU.
+2. Use the main window's **Minimize** button to return to Steam without quitting
+   Kimochi. Launch your game normally; Kimochi keeps running in the background.
+3. Click **both sticks together** to open the radial menu. Use the D-pad or left
+   stick and **A** to choose **Scan**, **Read Along**, **Auto OCR**, **Recent text**,
+   **Kimochi**, or **OCR settings**. D-pad steps around the expanded ring.
+   **Kimochi** returns to the controls; minimize those controls to return again.
+4. In reading mode, use the D-pad/left stick to navigate text, **LB/RB** to step
+   through definitions, and the right stick to scroll. **B** or the menu chord
+   closes reading mode and releases Kimochi's input focus.
+
+**Recent text** opens durable scan history without taking another screenshot or
+republishing old OCR. Choose an entry with **A** to navigate its words; **B**
+returns to the list, then **B** returns to the game. The separate GNOME Shell
+controller host currently directs history reading to Kimochi instead.
+
+Controls and setup share controller focus navigation: D-pad/left stick moves
+focus, **A** activates or edits a field, right stick scrolls, and **B** closes a
+dialog, leaves editing, or goes back. Touch and mouse remain available. Text
+entry uses an app-owned controller keyboard for supported fields; Japanese IME
+still uses a physical or system keyboard. Custom action bindings are
+suppressed while a control panel has focus, except the radial-menu chord.
+
+Gaming Mode reads the running graphics game's Steam ID independently of input
+focus and names it from local Steam manifests where available. Its crop and
+reader session follow that identity rather than the temporary portal stream.
+**Change game profile** supplies a named manual profile for emulators or
+unrecognized games; **Use detected game** resumes automatic matching. OCR engine
+selection remains global. Ordinary desktop window/session matching is unchanged.
+
+The shared first-run guide now opens until setup is completed. It offers the
+existing OCR engine/model controls, an on-demand recommended dictionary setup,
+optional existing dictionary/settings imports inside the guide, and a sample
+dictionary lookup. No separate browser extension is required. Setup can be
+reopened from Settings → General → Welcome guide.
+
+The explicit Gamescope launcher enables a read-only physical Deck controller
+stream, because Steam's virtual gamepad can be silent outside an active game
+profile. Automatic controller selection prefers this stream; an explicitly
+selected external controller is respected. Steam's dedicated system buttons
+remain unbound by Kimochi. No device grab or controller-mode command is sent.
+Controller mode temporarily pauses Steam's direct controller reader so Steam
+cannot navigate behind Kimochi. An independent watchdog resumes Steam on close,
+app exit/crash, or missed webview heartbeats; Steam's own UI/client processing
+pauses while this mode is active. Physical menu navigation and B-close have been
+verified over Steam's library. Steam/Quick Access presses are intended to close
+controller mode and return control to Steam; physical acceptance is pending.
+For initial real-game testing, pause the game before reading: game compatibility,
+Steam services during long reading sessions and Steam/QAM coexistence remain
+acceptance gates. The installation companion and new controller/setup/history
+features have offline checks and an ARM64 bundle build; their latest physical
+Deck acceptance remains pending. Autostart is not installed.
 
 GNOME caches the stable loader's entry module for the login. A change to the loader
 itself still needs a new login; ordinary implementation updates use unique module

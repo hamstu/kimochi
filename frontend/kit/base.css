@@ -90,3 +90,9 @@ textarea,
     transition-duration: 1ms !important;
   }
 }
+
+/* Controller focus is explicit: programmatic focus need not match :focus-visible. */
+html[data-controller-focus] :focus {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+}

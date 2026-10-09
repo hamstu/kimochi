@@ -15,6 +15,19 @@ compositor advertises layer-shell. Ubuntu 24.04 GNOME Wayland's native library p
 returned unsupported even with that package installed; capture and reader panels
 remain the supported tier there. An Xorg login is a separate acceptance target.
 
+AppImage builders also need `libpipewire-0.3-modules` and `pipewire-bin`: the
+PipeWire client loads SPA support plugins and client modules dynamically, so ELF
+dependency discovery alone misses them. Packaging copies the matching support
+plugins, client modules and `client.conf`, with paths inside the AppImage. It
+leaves Wayland libraries on the host alongside Mesa/EGL; mixing Ubuntu's older
+Wayland client with SteamOS Mesa prevented WebKit EGL initialization. No driver,
+PipeWire daemon service or system configuration is bundled or installed.
+
+Gamescope Gaming Mode needs the explicit launcher in `scripts/steam-deck/` because
+Steam's exported environment reports X11 despite the native Wayland socket.
+Gamescope-only window lifecycle and external-layer capture behavior are documented
+with their qualifications and remaining gaps in `STEAM_DECK_BRINGUP.md`.
+
 ## Cargo
 
 ```toml

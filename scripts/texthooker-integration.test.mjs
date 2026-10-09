@@ -1,4 +1,8 @@
-import test from "node:test";
+import test, { after } from "node:test";
+const cleanupHosts = [];
+after(async () => {
+  for (const cleanup of cleanupHosts) await cleanup();
+});
 import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
@@ -128,6 +132,7 @@ async function harness(initial = {}, persistedFiles = new Map()) {
   );
   await api.startHost();
   await api.bridge.initializeClient();
+  cleanupHosts.push(() => api.bridge.call("stats", "resetStats", []));
   return {
     ...env,
     env,
@@ -387,4 +392,68 @@ test('a new or switched-to session tells native to forget the scans, so the same
   await h.call('sessions', 'switchSession', [first]);
   assert.ok(resets(h) > before, 'switching sessions forgets');
   await h.call('stats', 'resetStats');
+});
+
+test("whole-screen Gaming Mode routes sessions by game identity without renaming the portal source", async () => {
+  const { api } = await harness();
+  const a = {
+    type: "screen",
+    sourceId: "portal:display:80",
+    name: "Screen",
+    applicationContext: { id: "steam:42", name: "Game" },
+  };
+  const b = { ...a, applicationContext: { id: "steam:43", name: "Game" } };
+  const sessions = [
+    { id: "a", name: "Game" },
+    { id: "b", name: "Game" },
+  ];
+  assert.equal(api.routing.sourceKey(a), "application:steam:42");
+  assert.equal(api.routing.matchedSession(a, sessions, {}), null);
+  assert.equal(
+    api.routing.matchedSession(a, sessions, { "application:steam:42": "a" }),
+    "a",
+  );
+  assert.equal(
+    api.routing.matchedSession(b, sessions, { "application:steam:42": "a" }),
+    null,
+  );
+  assert.equal(api.routing.sourceKey({ type: "screen", name: "Screen" }), null);
+});
+
+test("game sidecar context reuses its reader session across portal IDs and keeps other games separate", async () => {
+  const h = await harness();
+  const source = (id, sourceId = "portal:display:80") => ({
+    type: "screen",
+    name: "Screen",
+    sourceId,
+    applicationContext: { id: `steam:${id}`, name: "Game" },
+  });
+  await h.setSetting("scannedTextHistory", [
+    { id: "game-1", text: "猫", timestamp: 1, source: source(42) },
+  ]);
+  await h.drain();
+  const first = h.snapshot().sessions.activeId;
+  assert.equal(
+    h.snapshot().sessions.sessions.find((s) => s.id === first).name,
+    "Game",
+  );
+  await h.setSetting("scannedTextHistory", [
+    { id: "game-2", text: "犬", timestamp: 2, source: source(43) },
+  ]);
+  await h.drain();
+  assert.notEqual(h.snapshot().sessions.activeId, first);
+  await h.setSetting("scannedTextHistory", [
+    {
+      id: "game-3",
+      text: "鳥",
+      timestamp: 3,
+      source: source(42, "portal:display:99"),
+    },
+  ]);
+  await h.drain();
+  assert.equal(h.snapshot().sessions.activeId, first);
+  assert.deepEqual(
+    h.snapshot().lines.map((line) => line.text),
+    ["猫", "鳥"],
+  );
 });

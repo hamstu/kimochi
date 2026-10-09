@@ -6,6 +6,7 @@ use capture_unavailable::UnavailableBackend;
 
 mod actions;
 mod activity;
+mod application_context;
 mod capture_unavailable;
 mod engine_probe;
 mod gamepad;
@@ -272,7 +273,8 @@ fn save_preferences(app: tauri::AppHandle, state: State<Shared>, prefs: Prefs) -
     ])?;
     if let Some(crop) = prefs.crop {
         if let Some((kind, name, app_name)) = selected_descriptor(&state) {
-            let key = state::descriptor_key(&kind, &name, app_name.as_deref());
+            let context = if kind == "screen" { application_context::current(&state) } else { None };
+            let key = application_context::crop_key(context.as_ref(), state::descriptor_key(&kind, &name, app_name.as_deref()));
             state
                 .settings
                 .set_path(&["cropRegions", &key], serde_json::to_value(crop).unwrap())?;
@@ -359,6 +361,10 @@ const OVERLAY: &str = "overlay";
 const POPUP_HOST: &str = "popup-host";
 
 fn snapshot_value(service: &Service) -> Value {
+    // Capture reading identity once so headers and crop cannot describe different games.
+    let context = application_context::current(service);
+    let crop = selected_descriptor(service).and_then(|(kind, name, app)| sources::saved_crop_with_context(service, &kind, &name, app.as_deref(), context.as_ref()));
+    let source = application_context::source_with_context(service, context.as_ref());
     let v = service.view.lock().unwrap();
     json!({
         "revision": v.revision,
@@ -371,14 +377,10 @@ fn snapshot_value(service: &Service) -> Value {
         "origin": v.origin,
         "dictionary": v.dictionary,
         "dismiss": v.dismiss,
-        "source": service
-            .settings
-            .get("lastSelectedSource")
-            .ok()
-            .flatten()
-            .map(with_source_kind),
-        "crop": current_crop(service),
-        "cropEnabled": current_crop(service).is_some(),
+        "source": source.map(with_source_kind),
+        "applicationContext": context,
+        "crop": crop,
+        "cropEnabled": crop.is_some(),
         "isScanning": v.scanning,
         "autoOcrEnabled": v.auto_ocr,
         "overlayVisible": v.overlay_visible,
@@ -389,6 +391,22 @@ fn snapshot_value(service: &Service) -> Value {
         "accessibility": v.accessibility,
         "action": v.last_action.as_ref().map(|name| json!({"name": name, "seq": v.action_seq})),
     })
+}
+
+#[tauri::command]
+fn application_context_get(state: State<Shared>) -> Value {
+    json!({"available": application_context::available(), "context": application_context::current(&state)})
+}
+
+#[tauri::command]
+fn application_context_set(state: State<Shared>, context: Option<application_context::ApplicationContext>) -> Reply<Value> {
+    application_context::set_override(&state, context)?;
+    let mut view = state.view.lock().unwrap();
+    view.scan = None;
+    view.regions.clear();
+    view.revision += 1;
+    drop(view);
+    Ok(application_context_get(state))
 }
 
 #[tauri::command]
@@ -440,12 +458,12 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
             // A hide action disables input; restore whole-window input on show.
             let _ = window.set_ignore_cursor_events(false);
         }
-        if window.is_visible().unwrap_or(false) != visible {
+        if platform::gamescope::is_visible(&window) != visible {
             let result = if visible {
-                window.show()
+                platform::gamescope::show(&window)
             } else {
                 platform::capture::mark_hidden();
-                window.hide()
+                platform::gamescope::hide(&window)
             };
             if let Err(error) = result {
                 eprintln!("Linux overlay visibility: {error}");
@@ -601,7 +619,7 @@ fn desktop() -> Vec<Rect> {
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
     #[cfg(target_os = "linux")]
-    if platform::wayland_layer_overlay() {
+    if platform::wayland_layer_overlay() || platform::gamescope::active() {
         let window = app.get_webview_window("overlay").ok_or("overlay unavailable")?;
         return platform::region_keyboard(&window, on);
     }
@@ -613,6 +631,14 @@ fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
 /// stops reading the controller; the application that had it is reactivated on close.
 #[tauri::command]
 fn controller_nav(app: tauri::AppHandle, active: bool, take_focus: Option<bool>) -> Value {
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::active() {
+        let previous = gamepad::set_navigation(&app, active, false);
+        let result = platform::steam_input::update(active)
+            .and_then(|()| app.get_webview_window("overlay").ok_or_else(|| "overlay unavailable".to_owned()))
+            .and_then(|window| platform::gamescope::keyboard(&window, active));
+        return json!({"previousPid": previous, "gamescopeInput": result.is_ok(), "error": result.err()});
+    }
     let previous = gamepad::set_navigation(&app, active, take_focus.unwrap_or(true));
     json!({ "previousPid": previous })
 }
@@ -714,6 +740,10 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
         if rect.width > 0. && rect.height > 0. {
             platform::desktop_place(&window, rect)?;
         }
+    }
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::handles(&window) {
+        return if visible { platform::gamescope::show(&window) } else { platform::gamescope::hide(&window) };
     }
     let shown = window.is_visible().unwrap_or(false);
     if visible && !shown {
@@ -1754,12 +1784,7 @@ fn history_add(
     let source = if detached.unwrap_or(false) {
         Value::Null
     } else {
-        state
-            .settings
-            .get("lastSelectedSource")
-            .ok()
-            .flatten()
-            .unwrap_or(Value::Null)
+        application_context::source(&state).unwrap_or(Value::Null)
     };
     let now = now_millis();
     let mut entry = json!({ "id": history_id(), "text": text, "timestamp": now, "source": source, "groups": groups, "engine": engine });
@@ -1992,6 +2017,8 @@ fn open_accessibility_preferences() -> Reply<()> {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if platform::steam_input::run_watchdog() { return; }
     // Before anything claims a shortcut, the gamepad or a capture stream: any other copy
     // of Kimochi, of any build, is asked to quit first. See platform/macos/instance.rs.
     #[cfg(target_os = "macos")]
@@ -2003,7 +2030,8 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
         if let Some(service) = app.try_state::<Shared>() {
             let settings = service.settings.clone();
-            let _ = panels::act_existing(app, &settings, panels::MAIN, "show", None);
+            let initial = settings.get("hasCompletedOnboarding").ok().flatten();
+            let _ = panels::act_existing(app, &settings, onboarding_panel(initial.as_ref()), "show", None);
         }
     }));
     builder
@@ -2066,6 +2094,8 @@ fn main() {
             });
         })
         .invoke_handler(tauri::generate_handler![
+            application_context_get,
+            application_context_set,
             reader_settings_patch,
             reader_notebook_ack,
             reader::vndb::vndb_search_vns,
@@ -2273,7 +2303,16 @@ fn main() {
             spawn_source_restore(service.clone());
 
             panels::create_eager(&handle, &store)?;
-            panels::act_existing(&handle, &store, panels::MAIN, "show_inactive", None)?;
+            // Shared first-run omission: every platform previously ignored the persisted flag.
+            let initial_panel = onboarding_panel(store.get("hasCompletedOnboarding")?.as_ref());
+            panels::with_panel(&handle, initial_panel, {
+                let store = store.clone();
+                let initial_panel = initial_panel.to_string();
+                move |app, turn| {
+                    let action = if initial_panel == panels::MAIN { "show_inactive" } else { "show" };
+                    let _ = panels::act(turn, app, &store, &initial_panel, action, None);
+                }
+            });
 
             let overlay_builder = tauri::WebviewWindowBuilder::new(
                 app,
@@ -2473,12 +2512,21 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Kimochi runtime")
         .run(|app, event| {
+            #[cfg(target_os = "linux")]
+            if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
+                if platform::gamescope::prepare_exit(app, code.unwrap_or(0)) { api.prevent_exit(); }
+            }
             // Every quit path (tray, menu, main window, app_quit) ends here: pause model
             // downloads so their partial files are kept and resumed next launch.
             if let tauri::RunEvent::Exit = event {
                 model_store::shutdown(app);
             }
         });
+}
+
+/// Only an explicitly completed setup skips onboarding; absent or malformed values are first run.
+fn onboarding_panel(completed: Option<&Value>) -> &'static str {
+    if completed.and_then(Value::as_bool) == Some(true) { panels::MAIN } else { "welcome" }
 }
 
 /// Resolve the previously selected source against a fresh enumeration, off the UI
@@ -2494,6 +2542,32 @@ fn main() {
 /// preflights the permission and returns an error instead of opening a dialog.
 fn spawn_source_restore(service: Shared) {
     std::thread::spawn(move || {
+        #[cfg(target_os = "linux")]
+        if platform::gamescope::active()
+            && service.backend.lock().is_ok_and(|backend| backend.capabilities().system_picker_required)
+        {
+            // Gamescope shares its composed game screen without a picker UI.
+            // Its portal may provide no restore token, so saved source ids alone
+            // cannot restore a stream. Reopen sharing even on first launch.
+            service.set_status("Selecting the Gaming Mode screen…");
+            match sources::pick_source(&service) {
+                Ok(result) if result["picked"] == json!(true) => {
+                    service.set_status("Gaming Mode screen selected.");
+                    service.log(json!({"check":"gaming-mode-source-select","status":"selected"}));
+                }
+                Ok(result) => {
+                    let message = kimochi_capture::last_portal_pick_error()
+                        .unwrap_or_else(|| result["message"].as_str().unwrap_or("Screen sharing was not selected.").to_string());
+                    service.set_status(format!("Gaming Mode screen not selected: {message} Choose Source to retry."));
+                    service.log(json!({"check":"gaming-mode-source-select","status":"not-selected","reason":result["reason"],"message":message}));
+                }
+                Err(error) => {
+                    service.set_status(format!("Could not select the Gaming Mode screen: {error}. Choose Source to retry."));
+                    service.log(json!({"check":"gaming-mode-source-select","status":"error","error":error}));
+                }
+            }
+            return;
+        }
         let Some(saved) = service
             .settings
             .get("lastSelectedSource")
@@ -2583,8 +2657,17 @@ fn make_panel(app: &tauri::AppHandle, service: &Shared, window: &tauri::WebviewW
 fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut previous = String::new();
+        let mut previous_context = application_context::current(&service).map(|c| c.id);
         loop {
             std::thread::sleep(Duration::from_millis(100));
+            let context = application_context::current(&service).map(|c| c.id);
+            if context != previous_context {
+                previous_context = context;
+                let mut view = service.view.lock().unwrap();
+                view.scan = None;
+                view.regions.clear();
+                view.revision += 1;
+            }
             let fingerprint = {
                 let v = service.view.lock().unwrap();
                 format!(
@@ -3058,6 +3141,14 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn onboarding_requires_an_explicit_completion_flag() {
+        assert_eq!(super::onboarding_panel(None), "welcome");
+        assert_eq!(super::onboarding_panel(Some(&serde_json::json!(false))), "welcome");
+        assert_eq!(super::onboarding_panel(Some(&serde_json::json!("true"))), "welcome");
+        assert_eq!(super::onboarding_panel(Some(&serde_json::json!(true))), crate::panels::MAIN);
+    }
+
     use super::*;
 
     #[test]

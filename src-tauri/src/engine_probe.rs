@@ -210,9 +210,11 @@ mod tests {
         let probe = Arc::new(Probe::default());
         let loads = Arc::new(AtomicUsize::new(0));
         let hooks = Arc::new(AtomicUsize::new(0));
+        let (hook_done, hook_received) = mpsc::channel();
         let h = hooks.clone();
         probe.on_verified(move || {
             h.fetch_add(1, Ordering::SeqCst);
+            hook_done.send(()).unwrap();
         });
         let l = loads.clone();
         let load = move || {
@@ -233,6 +235,8 @@ mod tests {
             probe.verified_or_start("test", Duration::from_secs(5), || panic!("must not reload"));
         assert_eq!(again, Some(verified));
         assert_eq!(loads.load(Ordering::SeqCst), 1);
+        // The verdict is published before the hook runs on the worker thread.
+        hook_received.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(hooks.load(Ordering::SeqCst), 1);
     }
 

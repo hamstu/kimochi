@@ -4,6 +4,7 @@
  */
 let lastInputKeyboard = false
 if (typeof window !== 'undefined') {
+  window.addEventListener('kimochi:controller-focus', () => (lastInputKeyboard = true))
   window.addEventListener('keydown', () => (lastInputKeyboard = true), true)
   window.addEventListener('pointerdown', () => (lastInputKeyboard = false), true)
 }

@@ -66,6 +66,10 @@ impl Platform {
                 let gdk_backend = std::env::var("GDK_BACKEND").ok();
                 #[cfg(not(target_os = "linux"))]
                 let gdk_backend: Option<String> = None;
+                #[cfg(target_os = "linux")]
+                if crate::linux_x11::gamescope_portal_now() {
+                    return Platform::Portal;
+                }
                 if crate::linux_x11::is_wayland_session(
                     session.as_deref(),
                     wayland.as_deref(),

@@ -1,0 +1,217 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createDictionarySetup } from "../ui/setup-dictionaries.js";
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+function harness({
+  existing = [],
+  http = 200,
+  importError = null,
+  enableError = false,
+  backendError = false,
+  entries = 4,
+} = {}) {
+  const calls = [];
+  const jobs = createDictionarySetup({
+    api: async (action, params) => {
+      calls.push([action, params]);
+      if (backendError) throw Error("Backend disconnected");
+      if (action === "getDictionaryInfo") return existing;
+      if (action === "optionsGetFull")
+        return {
+          profileCurrent: 1,
+          profiles: [
+            { options: {} },
+            {
+              options: { dictionaries: [{ name: "Keep me", enabled: false }] },
+            },
+          ],
+        };
+      if (action === "modifySettings")
+        return [
+          { error: enableError ? { message: "Storage full" } : undefined },
+        ];
+    },
+    countEntries: async () => entries,
+    fetchArchive: async () => ({
+      ok: http === 200,
+      status: http,
+      arrayBuffer: async () => new ArrayBuffer(1),
+    }),
+    importArchive: async () => {
+      if (importError) return { errors: [Error(importError)] };
+      existing.push({
+        title: "Jitendex.org [2026-10-03]",
+        importSuccess: true,
+      });
+      return { errors: [], result: existing.at(-1) };
+    },
+  });
+  return { jobs, calls };
+}
+async function run(jobs) {
+  const { id } = await jobs.handle({
+    command: "start",
+    dictionaryId: "jitendex",
+  });
+  await tick();
+  return jobs.handle({ command: "status", id });
+}
+test("job returns immediately, duplicate starts reuse it, only selected profile dictionary changes", async () => {
+  const { jobs, calls } = harness();
+  const first = await jobs.handle({
+    command: "start",
+    dictionaryId: "jitendex",
+  });
+  assert.equal(
+    (await jobs.handle({ command: "start", dictionaryId: "jitendex" })).id,
+    first.id,
+  );
+  await tick();
+  assert.equal(
+    (await jobs.handle({ command: "status", id: first.id })).stage,
+    "complete",
+  );
+  assert.equal(
+    calls.find(([action]) => action === "modifySettings")[1].targets[0].path,
+    "profiles[1].options.dictionaries",
+  );
+  assert.equal(
+    calls.some(([action]) => action === "setAllSettings"),
+    false,
+  );
+});
+test("complete existing import is reused", async () => {
+  assert.equal(
+    (
+      await run(
+        harness({
+          existing: [{ title: "Jitendex.org [2026]", importSuccess: true }],
+        }).jobs,
+      )
+    ).stage,
+    "complete",
+  );
+});
+for (const [name, config, error] of [
+  ["download HTTP failure", { http: 503 }, /HTTP 503/],
+  [
+    "import failure",
+    { importError: "Media decode failed" },
+    /Media decode failed/,
+  ],
+  ["enable failure", { enableError: true }, /Storage full/],
+  ["backend failure", { backendError: true }, /Backend disconnected/],
+  ["empty import", { entries: 0 }, /no term entries/],
+  [
+    "incomplete existing import preserved",
+    { existing: [{ title: "Jitendex.org [2026]", importSuccess: false }] },
+    /incomplete/,
+  ],
+])
+  test(name, async () => {
+    const { jobs } = harness(config);
+    const result = await run(jobs);
+    assert.equal(result.stage, "failed");
+    assert.match(result.error, error);
+  });
+test("unknown selection rejected before downloads", async () => {
+  await assert.rejects(
+    harness().jobs.handle({ command: "start", dictionaryId: "other" }),
+    /Unknown recommended/,
+  );
+});
+
+test("long import runs independently of requesting panel and status polling", async () => {
+  let finish;
+  const pending = new Promise((resolve) => {
+    finish = resolve;
+  });
+  const existing = [];
+  const jobs = createDictionarySetup({
+    api: async (action) => {
+      if (action === "getDictionaryInfo") return existing;
+      if (action === "optionsGetFull")
+        return {
+          profileCurrent: 0,
+          profiles: [{ options: { dictionaries: [] } }],
+        };
+    },
+    countEntries: async () => 7,
+    fetchArchive: async () => ({
+      ok: true,
+      arrayBuffer: async () => new ArrayBuffer(1),
+    }),
+    importArchive: async () => {
+      await pending;
+      existing.push({ title: "Jitendex.org [test]", importSuccess: true });
+      return { errors: [], result: existing[0] };
+    },
+  });
+  const { id } = await jobs.handle({
+    command: "start",
+    dictionaryId: "jitendex",
+  });
+  await tick();
+  assert.equal(
+    (await jobs.handle({ command: "status", id })).stage,
+    "importing",
+  );
+  finish();
+  await tick();
+  assert.equal(
+    (await jobs.handle({ command: "status", id })).stage,
+    "complete",
+  );
+});
+test("practice uses the selected profile and reports real lookup results", async () => {
+  let received;
+  const jobs = createDictionarySetup({
+    api: async (action, params) => {
+      received = { action, params };
+      return { dictionaryEntries: [{}, {}] };
+    },
+  });
+  assert.deepEqual(await jobs.handle({ command: "practice" }), {
+    text: "日本語",
+    matches: 2,
+  });
+  assert.equal(received.action, "termsFind");
+  assert.equal(received.params.optionsContext.current, true);
+});
+test("catalog can add a second dictionary without changing job behavior", async () => {
+  const enabled = [];
+  const jobs = createDictionarySetup({
+    catalog: [
+      {
+        id: "other",
+        title: "Other dictionary",
+        titlePrefix: "Other ",
+        url: "https://example.com/other.zip",
+      },
+    ],
+    api: async (action, params) => {
+      if (action === "getDictionaryInfo")
+        return [{ title: "Other [1]", importSuccess: true }];
+      if (action === "optionsGetFull")
+        return {
+          profileCurrent: 0,
+          profiles: [{ options: { dictionaries: [] } }],
+        };
+      if (action === "modifySettings") {
+        enabled.push(params.targets[0].items[0].name);
+        return [{}];
+      }
+    },
+    countEntries: async () => 123,
+    fetchArchive: async () => {
+      throw Error("Complete dictionaries must not download again");
+    },
+  });
+  const { id } = await jobs.handle({ command: "start", dictionaryId: "other" });
+  await tick();
+  assert.equal(
+    (await jobs.handle({ command: "status", id })).stage,
+    "complete",
+  );
+  assert.deepEqual(enabled, ["Other [1]"]);
+});

@@ -3,6 +3,7 @@
  * Each failure is logged with the native message rather than being swallowed.
  */
 import { nativeError, panel } from '../bridge/tauri'
+import { loadCapabilities } from '../bridge/capabilities'
 import { setSetting } from '../bridge/settings'
 
 const report = (what: string) => (error: unknown) =>
@@ -11,6 +12,11 @@ const report = (what: string) => (error: unknown) =>
 /** Electron's `resize-welcome-window`: same width and position, new height per step. */
 export async function resizeWelcome(height: number): Promise<void> {
   try {
+    if (
+      (await loadCapabilities()).session?.compositor?.toLowerCase() ===
+      'gamescope'
+    )
+      return
     const info = await panel('welcome', 'inspect')
     await panel('welcome', 'place', { ...info.bounds, height })
   } catch (error) {

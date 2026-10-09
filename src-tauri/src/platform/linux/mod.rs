@@ -36,6 +36,11 @@ use std::sync::OnceLock;
 pub mod dictionary_images;
 mod keytrigger;
 pub mod gnome;
+pub mod gamescope;
+pub mod gaming_context;
+pub mod steam_input;
+mod gamescope_touch;
+pub mod deck_input;
 mod layer;
 pub mod shortcuts;
 mod rules;
@@ -243,6 +248,7 @@ fn os_version() -> String {
 pub fn capabilities() -> Value {
     let s = session();
     let x11 = s.backend == Backend::X11;
+    let portal = gamescope::active() || !x11;
     let gnome_status = gnome::status();
     let gnome = gnome_status["available"].as_bool().unwrap_or(false);
     let tracking = gnome && gnome_status["windowTracking"].as_bool().unwrap_or(false);
@@ -255,27 +261,29 @@ pub fn capabilities() -> Value {
             "compositor": s.compositor,
             "layerShell": s.layer_shell,
             "nativeLayerShell": layer::available(),
+            "nativeGamescope": gamescope::active(),
+            "captureBackend": if portal { "xdg-portal-pipewire" } else { "x11-getimage" },
             "nativeGnomeShell": gnome,
-            "xwayland": s.xwayland,
+            "xwayland": s.xwayland || gamescope::active(),
         },
         "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super"},
         "capture": {
-            "authorization": if x11 { "granted" } else { "promptOnSelect" },
+            "authorization": if !portal { "granted" } else { "promptOnSelect" },
             "canOpenSettings": false,
             "restartAfterGrant": false,
-            "pickerRequired": !x11,
+            "pickerRequired": portal,
             // X11 and portal window streams support capture; Wayland tracking is deferred.
             "windowCapture": true,
             // X has no capture exclusion list: a display capture includes our overlay.
             "excludesOwnWindows": false,
-            "overlayExclusion": "hideDuringCapture",
+            "overlayExclusion": if gamescope::scene_capture() { "compositorScene" } else { "hideDuringCapture" },
         },
         "sources": {
-            "catalog": x11,
-            "thumbnails": x11,
-            "icons": x11 || tracking,
-            "followWindowBounds": x11 || tracking,
-            "foregroundTracking": x11,
+            "catalog": !portal,
+            "thumbnails": !portal,
+            "icons": !portal || tracking,
+            "followWindowBounds": !portal || tracking,
+            "foregroundTracking": !portal,
         },
         "overlay": {
             "available": x11 || layer::available() || gnome,
@@ -306,6 +314,9 @@ pub fn capabilities() -> Value {
     })
 }
 
-pub use layer::{region_editing, region_keyboard};
+pub fn region_editing() -> bool { gamescope::editing() || layer::region_editing() }
+pub fn region_keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
+    if gamescope::active() { gamescope::keyboard(window, on) } else { layer::region_keyboard(window, on) }
+}
 
 pub mod capture;

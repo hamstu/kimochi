@@ -65,6 +65,7 @@ import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
 import { useCapabilities } from '../bridge/capabilities'
 import { GnomeWindowLink } from './GnomeWindowLink'
+import { GamingApplicationProfile } from './GamingApplicationProfile'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
 import type { ControllerWiring } from '../panels/useController'
 
@@ -720,6 +721,7 @@ export function SourcePanel({
       )}
 
       {mode === 'ocr' && <GnomeWindowLink key={source?.sourceId} sourceId={source?.sourceId} />}
+      {mode === 'ocr' && <GamingApplicationProfile />}
       <LinuxSourceCrop enabled={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && !(capabilities.session as { nativeLayerShell?: boolean }).nativeLayerShell} />
       {mode === 'quickshot' && (
         <div className="src-controls">
