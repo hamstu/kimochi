@@ -167,6 +167,9 @@ jobs:
   bundle:
     name: Bundle (${{ matrix.name }})
     needs: [plan, checks]
+    # Bundles follow the checks but do not wait on other platforms' results: one machine's red
+    # check must not withhold every other platform's build. A release still needs them all green.
+    if: always() && needs.plan.result == 'success' && (needs.checks.result == 'success' || needs.plan.outputs.mode != 'release')
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}

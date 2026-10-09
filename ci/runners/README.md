@@ -54,8 +54,9 @@ or `Get-Service actions.runner.*` (Windows); logs live in `_diag/` beside the ru
    $env:RUNNER_TOKEN = '...'
    powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name NAME -Labels kimochi -Dir C:\actions-runner -ToolchainUser USER
    ```
-   Needs rustup for `USER`, Visual Studio Build Tools with the C++ workload (ARM64 tools on
-   ARM), and the WebView2 runtime. NSIS is fetched by the Tauri CLI on first use.
+   Needs rustup for `USER`, Visual Studio Build Tools with the C++ workload (ARM64 tools and
+   the Clang component on ARM, since `ring` compiles with clang there), and the WebView2
+   runtime. NSIS is fetched by the Tauri CLI on first use.
 4. Re-running either script with the same `--name` replaces the registration.
 
 To share the fleet across repositories, register the runners against an organisation instead

@@ -47,6 +47,9 @@ $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.e
 if (-not (Test-Path $vswhere) -or -not (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)) {
   Write-Warning 'MSVC C++ build tools not found; install Visual Studio Build Tools with the "Desktop development with C++" workload.'
 }
+if ($arch -eq 'arm64' -and -not (Get-Command clang.exe -ErrorAction SilentlyContinue)) {
+  Write-Warning 'clang not found: the `ring` crate needs it on Windows ARM64. Add the "C++ Clang Compiler for Windows" component (Microsoft.VisualStudio.Component.VC.Llvm.Clang) and put its VC\Tools\Llvm\ARM64\bin on the machine PATH.'
+}
 $webview = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue
 if (-not $webview) { Write-Warning 'WebView2 runtime not found; install the Evergreen runtime from Microsoft.' }
 
