@@ -1,0 +1,132 @@
+/*
+ * Kimochi site tokens. Mirrors the app's colour roles (frontend/kit/tokens.css, DESIGN.md):
+ * Radix slate neutrals + one Radix indigo accent. Components use these roles (or the Tailwind
+ * names mapped in index.css), never raw hex values or prefers-color-scheme queries.
+ *
+ * Theme resolution: light by default; dark when the OS prefers dark and the user has not forced
+ * light (data-theme="light"), or when the user forces dark (data-theme="dark").
+ */
+@import "@fontsource-variable/figtree/wght.css";
+@import "@fontsource-variable/noto-sans-jp/wght.css";
+
+:root {
+  color-scheme: light;
+
+  /* Type */
+  --k-font-ui: "Figtree Variable", "Figtree", system-ui, sans-serif;
+  --k-font-jp: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP Variable",
+    "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  --k-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, monospace;
+  --k-weight-regular: 430;
+  --k-weight-medium: 520;
+  --k-weight-semibold: 620;
+
+  /* Layout */
+  --k-header-h: 3.5rem;
+  --k-gutter: 1rem; /* 16px side gutter on phones */
+  --k-page-max: 72rem;
+  --k-prose-max: 65ch;
+
+  /* Radius */
+  --k-radius-sm: 0.25rem;
+  --k-radius-md: 0.375rem;
+  --k-radius-lg: 0.5rem;
+  --k-radius-xl: 0.75rem;
+
+  /* Motion */
+  --k-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --k-fast: 100ms;
+  --k-base: 160ms;
+
+  /* Colour roles: light (Radix slate / indigo light scales) */
+  --k-bg: #ffffff; /* page ground */
+  --k-bar: #f9f9fb; /* header, footer, quiet bands (slate-2) */
+  --k-sunken: #00005506; /* wells: previews, code, empty frames (slate-a2) */
+  --k-raised: #ffffff; /* popovers, menus */
+  --k-field: rgba(255, 255, 255, 0.85); /* secondary buttons, inputs */
+
+  --k-text: #1c2024; /* slate-12 */
+  --k-text-2: #60646c; /* slate-11 */
+  --k-text-3: #80838d; /* slate-10: meta only */
+
+  --k-line: #00002d17; /* hairline (slate-a4) */
+  --k-line-strong: #00002f26; /* control border (slate-a6) */
+  --k-hover: #0000330f; /* slate-a3 */
+  --k-press: #00002d17; /* slate-a4 */
+
+  --k-accent: #3e63dd; /* indigo-9 */
+  --k-accent-hover: #3358d4; /* indigo-10 */
+  --k-accent-contrast: #ffffff;
+  --k-accent-text: #3a5bc7; /* indigo-11 */
+  --k-accent-soft: #0047f112; /* indigo-a3 */
+  --k-focus: #8da4ef; /* indigo-8 */
+
+  --k-danger: #e5484d;
+  --k-danger-text: #ce2c31;
+  --k-ok: #30a46c;
+  --k-ok-text: #218358;
+  --k-warn-text: #ab6400;
+
+  --k-shadow-pop: 0 1px 2px rgb(15 17 26 / 0.08), 0 10px 28px -8px rgb(15 17 26 / 0.22);
+  --k-shadow-frame: 0 1px 2px rgb(15 17 26 / 0.06), 0 24px 56px -16px rgb(15 17 26 / 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --k-bg: #111113;
+    --k-bar: #18191b;
+    --k-sunken: #d8f4f609;
+    --k-raised: #18191b;
+    --k-field: #d8f4f609;
+    --k-text: #edeef0;
+    --k-text-2: #b0b4ba;
+    --k-text-3: #777b84;
+    --k-line: #d3edf81d;
+    --k-line-strong: #d6ebfd30;
+    --k-hover: #ddeaf814;
+    --k-press: #d3edf81d;
+    --k-accent: #3e63dd;
+    --k-accent-hover: #5472e4;
+    --k-accent-contrast: #ffffff;
+    --k-accent-text: #9eb1ff;
+    --k-accent-soft: #2f62ff3c;
+    --k-focus: #435db1;
+    --k-danger: #e5484d;
+    --k-danger-text: #ff9592;
+    --k-ok: #30a46c;
+    --k-ok-text: #3dd68c;
+    --k-warn-text: #ffca16;
+    --k-shadow-pop: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+    --k-shadow-frame: 0 1px 2px rgb(0 0 0 / 0.3), 0 28px 64px -16px rgb(0 0 0 / 0.7);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --k-bg: #111113;
+  --k-bar: #18191b;
+  --k-sunken: #d8f4f609;
+  --k-raised: #18191b;
+  --k-field: #d8f4f609;
+  --k-text: #edeef0;
+  --k-text-2: #b0b4ba;
+  --k-text-3: #777b84;
+  --k-line: #d3edf81d;
+  --k-line-strong: #d6ebfd30;
+  --k-hover: #ddeaf814;
+  --k-press: #d3edf81d;
+  --k-accent: #3e63dd;
+  --k-accent-hover: #5472e4;
+  --k-accent-contrast: #ffffff;
+  --k-accent-text: #9eb1ff;
+  --k-accent-soft: #2f62ff3c;
+  --k-focus: #435db1;
+  --k-danger: #e5484d;
+  --k-danger-text: #ff9592;
+  --k-ok: #30a46c;
+  --k-ok-text: #3dd68c;
+  --k-warn-text: #ffca16;
+  --k-shadow-pop: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+  --k-shadow-frame: 0 1px 2px rgb(0 0 0 / 0.3), 0 28px 64px -16px rgb(0 0 0 / 0.7);
+}

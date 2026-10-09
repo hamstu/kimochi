@@ -7,6 +7,7 @@
  * are representative without any network access.
  */
 import { previewFs } from './mocks/plugin-fs'
+import { DEMO_CONTENT, type DemoLine } from './demo-content'
 import { SETTINGS_DEFAULTS as READER_DEFAULTS } from '../texthooker/lib/types'
 import type {
   Line,
@@ -61,52 +62,22 @@ export const manifest: SessionsManifest = {
   ]
 }
 
-const SG_TEXT: [string, { translation?: string; showTranslation?: boolean; explanation?: string }?][] = [
-  ['秋葉原の夏は、今年も容赦なく暑かった。'],
-  ['「フゥーハハハ！　我が名は鳳凰院凶真！　狂気のマッドサイエンティストだ！」'],
-  ['「オカリン、また独り言言ってる〜」'],
-  [
-    'まゆりはいつものように、のんびりとした笑顔でバナナを頬張っていた。',
-    {
-      translation: 'Mayuri was munching on a banana with her usual easygoing smile.',
-      showTranslation: false
-    }
-  ],
-  ['ラジ館の屋上に、人工衛星のようなものが突き刺さっている。'],
-  ['「……あなた、さっき私に何か言おうとしてたわよね？」'],
-  [
-    '「牧瀬紅莉栖。十八歳にして論文がサイエンス誌に載った天才少女だ」',
-    {
-      translation:
-        '"Makise Kurisu. A genius girl whose paper was published in Science at just eighteen."',
-      showTranslation: true
-    }
-  ],
-  ['「助手よ、コーヒーを淹れてくれたまえ」'],
-  ['「誰が助手よ！」'],
-  ['電話レンジ（仮）の扉が開くと、中のバナナはゲル状に変化していた。'],
-  [
-    '「これは……ただの電子レンジじゃない。時間を超えてメールを送れる装置なのかもしれない」',
-    {
-      explanation:
-        '**Translation:** "This... isn\'t just a microwave. It might be a device that can send mail across time."\n\n- **ただの〜じゃない** — "not merely a ~".\n- **かもしれない** — speculative "might be".'
-    }
-  ],
-  ['ダルはモニターから目を離さずに、キーボードを叩き続けている。'],
-  ['「オカリン、それってSERNにハッキングするってこと？　マジで？」'],
-  ['世界線が、ほんのわずかに揺らいだ気がした。'],
-  ['「エル・プサイ・コングルゥ」']
-]
+/** The Steins;Gate transcript lives in demo-content.ts, shared with the marketing site's demo. */
+function sgText(omitPlayed: boolean): DemoLine[] {
+  return DEMO_CONTENT.lines.filter((line) => !(omitPlayed && line.play))
+}
 
-function sgLines(): Line[] {
+function sgLines(omitPlayed = false): Line[] {
   const start = NOW - 42 * 60_000
-  return SG_TEXT.map(([text, extra], index) => ({
+  return sgText(omitPlayed).map(({ text, translation, showTranslation, explanation }, index) => ({
     id: index + 1,
     text,
     tokens: null,
     source: 'ocr' as const,
     ts: start + index * 160_000,
-    ...(extra ?? {})
+    ...(translation !== undefined ? { translation } : {}),
+    ...(showTranslation !== undefined ? { showTranslation } : {}),
+    ...(explanation !== undefined ? { explanation } : {})
   }))
 }
 
@@ -255,8 +226,12 @@ function sgNotebook(images: Record<string, string>): NotebookFile {
   return { version: 2, cacheVersion: 1, entries }
 }
 
-/** Writes every file the texthooker core loads. Idempotent per page load. */
-export async function seedFilesystem(): Promise<void> {
+/**
+ * Writes every file the texthooker core loads. Idempotent per page load. `omitPlayed` leaves the
+ * lines the site's demo plays (`play: true` in demo-content.ts) out of the Steins;Gate session, so
+ * they arrive fresh when the embedding page sends them (`?embed=1`).
+ */
+export async function seedFilesystem({ omitPlayed = false }: { omitPlayed?: boolean } = {}): Promise<void> {
   previewFs.put('sessions.json', JSON.stringify(manifest))
   const images: Record<string, string> = {}
   const specs: Record<string, ImageSpec> = {
@@ -275,7 +250,7 @@ export async function seedFilesystem(): Promise<void> {
   }
   previewFs.put(
     `sessions/${SESSION_IDS.steinsGate}/lines.json`,
-    JSON.stringify({ version: 1, lines: sgLines() })
+    JSON.stringify({ version: 1, lines: sgLines(omitPlayed) })
   )
   previewFs.put(`sessions/${SESSION_IDS.steinsGate}/notebook.json`, JSON.stringify(sgNotebook(images)))
   for (const [sid, texts] of Object.entries(otherLines)) {

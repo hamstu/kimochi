@@ -24,6 +24,11 @@
  *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
+ *   ?embed=1         embedded in the marketing site's live demo (vite.demo.config.ts builds this page
+ *                    into site/public/demo/): the lines the site's game plays are left out of the
+ *                    seeded log, the page never moves focus or scrolls its parent until it is made
+ *                    interactive, and it takes `postMessage` commands from the same-origin parent
+ *                    (see `listenToEmbedder`)
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
@@ -481,6 +486,9 @@ function installIpc(label: string): void {
 
 // ---------------------------------------------------------------- activity script
 
+/** Set once an embedding page drives the activity ticker itself. */
+let scriptStopped = false
+
 /** `?activity=1`: what the overlay and native post during a few scans, on a loop. */
 function playActivity(): void {
   type Step = [delayMs: number, text: string, tone: string, key?: string]
@@ -506,11 +514,79 @@ function playActivity(): void {
   const next = (): void => {
     const [delay, text, tone, key] = steps[index++ % steps.length]
     setTimeout(() => {
+      if (scriptStopped) return
       void emit('activity', { text, tone, key: key ?? null, at: Date.now() })
       next()
     }, delay)
   }
   next()
+}
+
+// ---------------------------------------------------------------- embedding (?embed=1)
+
+/** A command from the embedding page (site/src/demo/). */
+type EmbedMessage =
+  | { kimochiDemo: 1; type: 'scan'; engine?: string }
+  | { kimochiDemo: 1; type: 'line'; text: string; engine?: string }
+  | { kimochiDemo: 1; type: 'theme'; value: 'light' | 'dark' }
+  | { kimochiDemo: 1; type: 'interactive'; value: boolean }
+
+let embedScan = 0
+
+/**
+ * Commands from the same-origin parent: `scan` shows a scan starting on the activity ticker, `line`
+ * ingests a recognised line exactly as an OCR scan does (through the texthooker host, so the Log
+ * appends, counts and tokenizes it), `theme` switches the appearance setting without a reload, and
+ * `interactive` lets the page take focus once the visitor chooses to use it.
+ */
+function listenToEmbedder(): void {
+  let interactive = false
+  // Inert until the visitor opts in: no focus moves, and no scrollIntoView reaching the parent.
+  const focus = HTMLElement.prototype.focus
+  HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
+    if (interactive) focus.call(this, { ...options, preventScroll: true })
+  }
+  Element.prototype.scrollIntoView = function (this: Element) {
+    for (let el = this.parentElement; el; el = el.parentElement) {
+      if (el.scrollHeight <= el.clientHeight + 1) continue
+      const overflow = getComputedStyle(el).overflowY
+      if (overflow !== 'auto' && overflow !== 'scroll') continue
+      const box = this.getBoundingClientRect()
+      const port = el.getBoundingClientRect()
+      if (box.top < port.top) el.scrollTop += box.top - port.top
+      else if (box.bottom > port.bottom) el.scrollTop += box.bottom - port.bottom
+      return
+    }
+  }
+  addEventListener('message', (event: MessageEvent<EmbedMessage>) => {
+    if (event.origin !== location.origin || event.data?.kimochiDemo !== 1) return
+    const message = event.data
+    const engine = 'engine' in message && message.engine ? message.engine : 'MeikiOCR'
+    if (message.type === 'scan') {
+      scriptStopped = true
+      void emit('activity', { text: 'Scanning…', tone: 'busy', key: 'scan', at: Date.now() })
+      setTimeout(
+        () => void emit('activity', { text: `Recognising with ${engine}…`, tone: 'busy', key: 'scan', at: Date.now() }),
+        350
+      )
+    } else if (message.type === 'line') {
+      scriptStopped = true
+      const scanId = `embed-${++embedScan}`
+      // OCR lines skip the host's text dedupe (native dedupes scans), so a looping demo keeps adding.
+      const ocr = { scanId, groupId: `${scanId}:0`, groupIndex: 0, groupCount: 1, engine: 'meikiocr', orientation: 'horizontal' }
+      void emit('reader:request', {
+        id: scanId,
+        module: 'host',
+        method: 'ingest',
+        args: [message.text, 'ocr', Date.now(), scanId, ocr]
+      })
+      void emit('activity', { text: 'Added 1 line', tone: 'ok', key: 'scan', at: Date.now() })
+    } else if (message.type === 'theme') {
+      publish('appearance', message.value)
+    } else if (message.type === 'interactive') {
+      interactive = message.value
+    }
+  })
 }
 
 // ---------------------------------------------------------------- dictionary relay stub
@@ -525,7 +601,9 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   installIpc(label)
   document.documentElement.dataset.preview = label
 
-  if (params.get('empty') !== '1') await seedFilesystem()
+  const embed = params.get('embed') === '1'
+  if (embed) listenToEmbedder()
+  if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed })
   if (params.get('activity') === '1') playActivity()
 
   // The Log window is the texthooker host (sole owner of session files). Every other window that

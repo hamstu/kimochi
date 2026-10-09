@@ -9,3 +9,6 @@ src-tauri/resources/meikiocr/
 src-tauri/resources/mangaocr/
 src-tauri/resources/oneocr/
 oneocr-worker/target/
+
+# Static build of the preview harness for the site demo (npm run demo:build)
+site/public/demo/

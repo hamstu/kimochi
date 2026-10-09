@@ -6,6 +6,10 @@
     "prepare": "node scripts/prepare.mjs",
     "build:frontend": "vite build",
     "preview:ui": "vite --config vite.preview.config.ts",
+    "demo:build": "vite build --config vite.demo.config.ts",
+    "site:dev": "npm --prefix site run dev",
+    "site:build": "npm run demo:build && npm --prefix site run build",
+    "site:preview": "npm --prefix site run preview",
     "bundle": "node scripts/run.mjs bundle",
     "build": "node scripts/run.mjs bundle",
     "release": "node scripts/run.mjs release",
@@ -15,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.frontend.json",
     "lint": "eslint .",
     "format": "prettier --write frontend scripts ui",
+    "icons": "node scripts/icons.mjs",
     "verify": "node scripts/prepare.mjs --verify",
     "check:rust": "node scripts/run.mjs check",
     "check:all": "node scripts/run.mjs check:all",
@@ -25,6 +30,7 @@
     "prepare:mangaocr": "node scripts/prepare-mangaocr.mjs"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.11.0",
     "@types/node": "^26.6.3",

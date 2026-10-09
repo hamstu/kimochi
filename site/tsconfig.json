@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "useDefineForClassFields": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["vite/client"],
+    "paths": { "@kimochi/demo-content": ["../frontend/dev/demo-content.ts"] }
+  },
+  "include": ["src", "vite.config.ts"]
+}

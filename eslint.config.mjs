@@ -6,7 +6,7 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'evidence/**', 'yomitan/**'] },
+  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'evidence/**', 'yomitan/**', 'site/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -40,7 +40,7 @@ export default tseslint.config(
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   {
-    files: ['scripts/**/*.mjs', 'vite.config.ts', 'vite.dev.config.ts', 'eslint.config.mjs'],
+    files: ['scripts/**/*.mjs', 'branding/**/*.mjs', 'vite.config.ts', 'vite.dev.config.ts', 'vite.demo.config.ts', 'vite.preview.config.ts', 'eslint.config.mjs'],
     languageOptions: { globals: { ...globals.node } }
   }
 )
