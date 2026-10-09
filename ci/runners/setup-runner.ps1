@@ -105,9 +105,10 @@ Set-Content -Path '.env' -Encoding ascii -Value @(
   "RUSTUP_HOME=$rustupHome",
   "RUSTUP_TOOLCHAIN=stable",
   $(if ($signtool) { "TAURI_WINDOWS_SIGNTOOL_PATH=$signtool" }),
-  # LocalSystem's profile lives under C:\Windows\System32, and 32-bit tools such as the NSIS
-  # launcher that tauri caches in LOCALAPPDATA get that path redirected to SysWOW64 and fail
-  # with "Unable to start child process". Keep the job's app-data beside the runner instead.
+  # LocalSystem's profile lives under C:\Windows\System32, where 32-bit tools get the path
+  # redirected to SysWOW64 (tauri's NSIS launcher then fails with "Unable to start child
+  # process"). Tools that honour these variables keep their caches beside the runner instead;
+  # tauri uses the known-folder API, so tauri.windows.conf.json sets useLocalToolsDir.
   "LOCALAPPDATA=$Dir\_appdata\Local",
   "APPDATA=$Dir\_appdata\Roaming",
   # actions/checkout's ssh-key support runs `icacls /grant:r USERDOMAIN\USERNAME`, which has no
