@@ -1,0 +1,6 @@
+# Linux on ARM64: the gemm kernels candle pulls in (through kimochi-mangaocr) carry inline
+# fp16 assembly that needs the FEAT_FP16 target feature, which rustc does not enable by
+# default for aarch64-unknown-linux-gnu. Every ARMv8.2+ CPU has it (Apple Silicon VMs,
+# Raspberry Pi 5, Graviton, Ampere). Not needed on macOS or Windows, whose baselines include it.
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-feature=+fp16"]

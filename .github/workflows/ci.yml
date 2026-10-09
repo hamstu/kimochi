@@ -242,7 +242,7 @@ jobs:
 
       - name: Ensure ARM64 C++ tools for OneOCR helper
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $installed = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
@@ -275,7 +275,7 @@ jobs:
 
       - name: Verify Windows signature
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
-        shell: pwsh
+        shell: powershell
         run: |
           Get-ChildItem src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/nsis/*-setup.exe | ForEach-Object {
             $sig = Get-AuthenticodeSignature $_.FullName
