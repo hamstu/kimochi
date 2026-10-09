@@ -53,6 +53,12 @@ if ($arch -eq 'arm64' -and -not (Get-Command clang.exe -ErrorAction SilentlyCont
 $webview = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue
 if (-not $webview) { Write-Warning 'WebView2 runtime not found; install the Evergreen runtime from Microsoft.' }
 
+# Workflow steps with `shell: powershell` run a generated local .ps1, which the default
+# Restricted policy refuses.
+if ((Get-ExecutionPolicy -Scope LocalMachine) -in @('Restricted', 'Undefined', 'AllSigned')) {
+  Set-ExecutionPolicy RemoteSigned -Scope LocalMachine -Force
+}
+
 # ------------------------------------------------------------------ runner package
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 Set-Location $Dir
