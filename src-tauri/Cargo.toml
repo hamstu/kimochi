@@ -78,5 +78,10 @@ tauri-plugin-single-instance = "2"
 [features]
 mangaocr-cuda = ["mangaocr/cuda"]
 custom-protocol = ["tauri/custom-protocol"]
+[lints.clippy]
+# Stylistic (Rust 1.99): `chunks_exact(4)` says "one RGBA pixel" more plainly than
+# `as_chunks::<4>().0`, and several Windows/Linux pixel loops are written that way.
+chunks_exact_to_as_chunks = "allow"
+
 [profile.release]
 strip = true
