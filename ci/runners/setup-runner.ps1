@@ -93,10 +93,17 @@ Log "Registering '$Name' with $Url (labels: $Labels)"
 if ($LASTEXITCODE -ne 0) { throw "config.cmd failed with $LASTEXITCODE" }
 
 # Jobs run as LocalSystem: give them the user's Rust toolchain and the tools on this machine.
+# tauri's bundler verifies signatures with the Windows SDK signtool even with a custom
+# signCommand, and its registry-based lookup does not find it under LocalSystem.
+$kitArch = if ($arch -eq 'arm64') { 'arm64' } else { 'x64' }
+$signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$kitArch\signtool.exe" -ErrorAction SilentlyContinue |
+  Sort-Object FullName | Select-Object -Last 1 -ExpandProperty FullName
+if (-not $signtool) { Write-Warning 'signtool.exe not found: install a Windows 10/11 SDK (the bundler needs it to verify signatures).' }
 Set-Content -Path '.env' -Encoding ascii -Value @(
   "CARGO_HOME=$cargoHome",
   "RUSTUP_HOME=$rustupHome",
   "RUSTUP_TOOLCHAIN=stable",
+  $(if ($signtool) { "TAURI_WINDOWS_SIGNTOOL_PATH=$signtool" }),
   # actions/checkout's ssh-key support runs `icacls /grant:r USERDOMAIN\USERNAME`, which has no
   # mapping for the LocalSystem account's machine name; give it the account's real name.
   "USERDOMAIN=NT AUTHORITY",
