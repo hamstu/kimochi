@@ -59,17 +59,24 @@ if [[ $DEPS == 1 ]]; then
   if [[ $os == Linux ]]; then
     if command -v apt-get >/dev/null; then
       log "Installing apt packages"
+      if ! command -v gh >/dev/null; then
+        # GitHub CLI, for uploading bundles to releases (cli.github.com apt repository).
+        sudo mkdir -p -m 755 /etc/apt/keyrings
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+        sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+      fi
       sudo apt-get update
       sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y \
         curl wget file git build-essential pkg-config libssl-dev libclang-dev patchelf \
         libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
-        libpipewire-0.3-dev libspa-0.2-dev libudev-dev \
+        libpipewire-0.3-dev libspa-0.2-dev libudev-dev gh \
         libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio
     elif command -v pacman >/dev/null; then
       log "Installing pacman packages"
       sudo pacman -Sy --needed --noconfirm \
         curl wget file git base-devel pkgconf openssl clang patchelf \
-        webkit2gtk-4.1 xdotool libayatana-appindicator librsvg pipewire gtk3 fuse2 \
+        webkit2gtk-4.1 xdotool libayatana-appindicator librsvg pipewire gtk3 fuse2 github-cli \
         gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad
     else
       echo "no apt-get or pacman; install the Tauri Linux prerequisites by hand" >&2

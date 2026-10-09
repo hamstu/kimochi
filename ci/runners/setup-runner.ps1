@@ -50,6 +50,19 @@ if (-not (Test-Path $vswhere) -or -not (& $vswhere -latest -products * -requires
 if ($arch -eq 'arm64' -and -not (Get-Command clang.exe -ErrorAction SilentlyContinue)) {
   Write-Warning 'clang not found: the `ring` crate needs it on Windows ARM64. Add the "C++ Clang Compiler for Windows" component (Microsoft.VisualStudio.Component.VC.Llvm.Clang) and put its VC\Tools\Llvm\ARM64\bin on the machine PATH.'
 }
+if (-not (Get-Command gh.exe -ErrorAction SilentlyContinue)) {
+  # GitHub CLI, for uploading bundles to releases.
+  $ghArch = if ($arch -eq 'arm64') { 'arm64' } else { 'amd64' }
+  $gh = Invoke-RestMethod 'https://api.github.com/repos/cli/cli/releases/latest' -Headers @{ 'User-Agent' = 'kimochi-runner-setup' }
+  $msi = ($gh.assets | Where-Object { $_.name -like "gh_*_windows_$ghArch.msi" } | Select-Object -First 1).browser_download_url
+  if ($msi) {
+    Log "Installing GitHub CLI from $msi"
+    $tmp = Join-Path $env:TEMP 'gh.msi'
+    Invoke-WebRequest -Uri $msi -OutFile $tmp
+    Start-Process msiexec.exe -ArgumentList @('/i', $tmp, '/qn', '/norestart') -Wait
+    Remove-Item $tmp
+  } else { Write-Warning 'Could not find a GitHub CLI installer; install gh by hand.' }
+}
 $webview = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue
 if (-not $webview) { Write-Warning 'WebView2 runtime not found; install the Evergreen runtime from Microsoft.' }
 

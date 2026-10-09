@@ -2,7 +2,9 @@ name: CI
 
 # Native compile, lint and test gates on every OS, then a bundle of the app per target, all on
 # the self-hosted runners described in ci/runners/README.md (nothing here uses GitHub-hosted
-# minutes). A tag `v*` builds optimised bundles and attaches them to a draft GitHub Release.
+# minutes). Bundles go straight to GitHub Releases, which are not metered like workflow
+# artifacts: a push to main replaces the assets of the rolling `nightly` pre-release, and a tag
+# `v*` builds optimised bundles into a draft release of that tag for a final look.
 #
 # Sibling repositories: src-tauri depends on `../../kimochi-meikiocr` and `../../kimochi-mangaocr`
 # by path, and the OCR staging scripts read their LICENSE/NOTICE and model manifest. This repo is
@@ -50,10 +52,14 @@ jobs:
   plan:
     name: Plan
     runs-on: [self-hosted, macOS]
+    permissions:
+      contents: write
     outputs:
       mode: ${{ steps.plan.outputs.mode }}
       profile: ${{ steps.plan.outputs.profile }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      release: ${{ steps.release.outputs.tag }}
+      rolling: ${{ steps.release.outputs.rolling }}
     steps:
       - uses: actions/github-script@v7
         id: plan
@@ -85,6 +91,41 @@ jobs:
             core.setOutput('profile', profile)
             core.setOutput('matrix', JSON.stringify({ include }))
             core.summary.addHeading(`Mode: ${mode}`).addList(include.map((p) => `${p.name} → ${p.labels.join(', ')}`)).write()
+
+      # The release the bundle jobs upload into. A tag gets a draft release of its own (publish
+      # it by hand once the bundles look right). Anything else refreshes the rolling `nightly`
+      # pre-release: its tag is moved to this commit and each bundle job replaces its own
+      # assets, so only one set of development bundles is ever stored.
+      - name: Prepare release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="$GITHUB_REF_NAME"
+            gh release view "$tag" >/dev/null 2>&1 ||
+              gh release create "$tag" --draft --title "Kimochi $tag" --generate-notes
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "rolling=false" >> "$GITHUB_OUTPUT"
+          else
+            tag=nightly
+            if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
+              gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$tag" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            else
+              gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
+            fi
+            notes="Development build of \`$GITHUB_REF_NAME\` at ${GITHUB_SHA:0:7} (run [#$GITHUB_RUN_NUMBER]($GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID)). Replaced on every push; unsigned debug bundles."
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release edit "$tag" --prerelease --title "Latest development build" --notes "$notes" >/dev/null
+            else
+              gh release create "$tag" --prerelease --title "Latest development build" --notes "$notes"
+            fi
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+            echo "rolling=true" >> "$GITHUB_OUTPUT"
+          fi
 
   checks:
     name: Checks (${{ matrix.name }})
@@ -172,6 +213,8 @@ jobs:
   bundle:
     name: Bundle (${{ matrix.name }})
     needs: [plan, checks]
+    permissions:
+      contents: write
     # Bundles follow the checks but do not wait on other platforms' results: one machine's red
     # check must not withhold every other platform's build. A release still needs them all green.
     if: always() && needs.plan.result == 'success' && (needs.checks.result == 'success' || needs.plan.outputs.mode != 'release')
@@ -293,40 +336,44 @@ jobs:
             if ($sig.Status -ne 'Valid') { exit 1 }
           }
 
-      # upload-artifact drops file modes, so the .app is archived with ditto first.
+      # A zip keeps the .app's file modes and signature intact.
       - name: Archive macOS app
         if: runner.os == 'macOS'
         run: ditto -c -k --keepParent src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/macos/Kimochi.app src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/macos/Kimochi.app.zip
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: kimochi-${{ matrix.target }}${{ matrix.suffix }}
-          path: ${{ matrix.artifacts }}
-          if-no-files-found: error
-          retention-days: 2
-
-  # A tag push collects every bundle into a draft release for a final look before publishing.
-  release:
-    name: Draft release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [plan, bundle]
-    runs-on: [self-hosted, macOS]
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      - name: Create draft release
+      # Tag releases keep tauri's versioned file names. The rolling nightly drops the version
+      # from the name so each push replaces the previous asset instead of piling up beside it.
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE: ${{ needs.plan.outputs.release }}
+          ROLLING: ${{ needs.plan.outputs.rolling }}
+          SUFFIX: ${{ matrix.suffix }}
+          PATTERNS: ${{ matrix.artifacts }}
         run: |
-          rm -rf release && mkdir release
-          for dir in artifacts/*/; do
-            name="$(basename "$dir")"
-            find "$dir" -type f | while read -r file; do
-              cp "$file" "release/${name#kimochi-}-$(basename "$file")"
+          set -euo pipefail
+          rm -rf ../upload && mkdir ../upload
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          found=0
+          while IFS= read -r pattern; do
+            [[ -z "$pattern" ]] && continue
+            for file in ${pattern#kimochi-tauri/}; do
+              [[ -f "$file" ]] || continue
+              found=1
+              name="$(basename "$file")"
+              case "$name" in
+                Kimochi.app.zip) name="Kimochi_${version}_aarch64.app.zip" ;;
+              esac
+              if [[ "$ROLLING" == true ]]; then
+                name="$(printf '%s' "$name" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.]+)?_/_/')"
+              fi
+              if [[ -n "$SUFFIX" ]]; then
+                name="${name%.*}${SUFFIX}.${name##*.}"
+              fi
+              cp "$file" "../upload/$name"
             done
-          done
-          ls -l release
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "Kimochi $GITHUB_REF_NAME" release/*
+          done <<< "$PATTERNS"
+          [[ $found == 1 ]] || { echo "no bundle matched: $PATTERNS" >&2; exit 1; }
+          ls -l ../upload
+          gh release upload "$RELEASE" ../upload/* --clobber

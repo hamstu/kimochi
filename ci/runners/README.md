@@ -78,7 +78,21 @@ with Contents: read on both, works as an alternative.
 
 ## Triggers and releases
 
-- Push to `main`: debug bundles for every platform, kept 2 days as workflow artifacts (a run is
-  ~850 MB and the Free plan meters artifact storage at 500 MB even for self-hosted runs).
-- Manual run: choose `bundle` or `release`, and optionally add the Arch runner.
-- Tag `v*`: optimised bundles, attached to a draft GitHub Release named after the tag.
+Bundles are published to GitHub Releases, not kept as workflow artifacts: release assets are
+not metered the way Actions artifact storage is (500 MB on the Free plan), each file may be up
+to 2 GB, and there is no total cap beyond fair use.
+
+- Push to `main`: debug bundles for every platform, uploaded into the rolling `nightly`
+  pre-release. Its tag moves to the pushed commit and each platform replaces its own asset
+  (version-less names such as `Kimochi_x64-setup.exe`), so only one set is ever stored.
+- Manual run: choose `bundle` or `release`, and optionally add the Arch runner (its Linux ARM64
+  bundles get an `-arch` suffix).
+- Tag `v*`: optimised bundles, uploaded into a draft release of that tag with tauri's versioned
+  file names. Publish the draft by hand once the bundles look right.
+
+GitHub has no retention setting for releases; a release stays until deleted. To prune old
+versions, `gh release list` and `gh release delete <tag> --cleanup-tag`, or add a scheduled job
+that keeps the newest N.
+
+Every runner needs the `gh` CLI for the upload (the setup scripts install it); the workflow's
+own `GITHUB_TOKEN` is used, nothing to log in.
