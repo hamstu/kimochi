@@ -3,6 +3,36 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
+const ENV_KEY = "__kimochiReaderTestEnv";
+let bundled;
+function bundle() {
+  bundled ??= build({
+    stdin: {
+      contents: `export * from './frontend/texthooker/host'; export * as bridge from './frontend/texthooker/bridge'; export * as routing from './frontend/texthooker/source-sessions'; export * as readerSettings from './frontend/texthooker/lib/settings';`,
+      resolveDir: root,
+    },
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "node",
+    alias: { "@texthooker": `${root}frontend/texthooker` },
+    plugins: [
+      {
+        name: "native-test-transport",
+        setup(builder) {
+          builder.onResolve(
+            { filter: /^(?:@tauri-apps\/)|bridge\/settings$/ },
+            (args) => ({ path: args.path, namespace: "mock" }),
+          );
+          builder.onLoad({ filter: /.*/, namespace: "mock" }, () => ({
+            contents: `const env=globalThis[${JSON.stringify(ENV_KEY)}]; export const {listen,emit,invoke,getSetting,setSetting,onSettingsChange,BaseDirectory,exists,mkdir,readTextFile,writeTextFile,readFile,writeFile,remove,rename,open,save,getCurrentWindow}=env;`,
+          }));
+        },
+      },
+    ],
+  }).then((built) => built.outputFiles[0].text);
+  return bundled;
+}
 async function harness(initial = {}, persistedFiles = new Map()) {
   const settings = {
     yomitanSettings: { popupType: "builtin", customApiUrl: "" },
@@ -86,36 +116,15 @@ async function harness(initial = {}, persistedFiles = new Map()) {
       return { label: "log" };
     },
   };
-  const key = `readerTest${crypto.randomUUID()}`;
-  globalThis[key] = env;
-  const built = await build({
-    stdin: {
-      contents: `export * from './frontend/texthooker/host'; export * as bridge from './frontend/texthooker/bridge'; export * as routing from './frontend/texthooker/source-sessions'; export * as readerSettings from './frontend/texthooker/lib/settings';`,
-      resolveDir: root,
-    },
-    bundle: true,
-    write: false,
-    format: "esm",
-    platform: "node",
-    alias: { "@texthooker": `${root}frontend/texthooker` },
-    plugins: [
-      {
-        name: "native-test-transport",
-        setup(builder) {
-          builder.onResolve(
-            { filter: /^(?:@tauri-apps\/)|bridge\/settings$/ },
-            (args) => ({ path: args.path, namespace: "mock" }),
-          );
-          builder.onLoad({ filter: /.*/, namespace: "mock" }, () => ({
-            contents: `const env=globalThis[${JSON.stringify(key)}]; export const {listen,emit,invoke,getSetting,setSetting,onSettingsChange,BaseDirectory,exists,mkdir,readTextFile,writeTextFile,readFile,writeFile,remove,rename,open,save,getCurrentWindow}=env;`,
-          }));
-        },
-      },
-    ],
-  });
+  // One esbuild bundle per file, not per harness: the mock transport reads its environment from
+  // a fixed global at module initialisation, and each harness imports a fresh copy of the same
+  // bundle (a unique trailing comment keeps the data: URLs distinct) after pointing that global
+  // at its own env. Bundling the reader a dozen times was most of this file's run time.
+  globalThis[ENV_KEY] = env;
+  const built = await bundle();
   // Real owner modules + cross-window protocol; only filesystem and Tauri I/O are replaced.
   const api = await import(
-    `data:text/javascript;base64,${Buffer.from(built.outputFiles[0].contents).toString("base64")}`
+    `data:text/javascript;base64,${Buffer.from(`${built}\n//${crypto.randomUUID()}`).toString("base64")}`
   );
   await api.startHost();
   await api.bridge.initializeClient();

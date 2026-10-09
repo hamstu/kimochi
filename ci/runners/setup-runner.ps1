@@ -87,7 +87,11 @@ if ($LASTEXITCODE -ne 0) { throw "config.cmd failed with $LASTEXITCODE" }
 Set-Content -Path '.env' -Encoding ascii -Value @(
   "CARGO_HOME=$cargoHome",
   "RUSTUP_HOME=$rustupHome",
-  "RUSTUP_TOOLCHAIN=stable"
+  "RUSTUP_TOOLCHAIN=stable",
+  # actions/checkout's ssh-key support runs `icacls /grant:r USERDOMAIN\USERNAME`, which has no
+  # mapping for the LocalSystem account's machine name; give it the account's real name.
+  "USERDOMAIN=NT AUTHORITY",
+  "USERNAME=SYSTEM"
 )
 $pathEntries = @("$cargoHome\bin") + ($env:Path -split ';' | Where-Object { $_ })
 Set-Content -Path '.path' -Encoding ascii -Value (($pathEntries | Select-Object -Unique) -join ';')

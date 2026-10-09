@@ -109,6 +109,10 @@ function armAfkTimer() {
     emit();
     scheduleSave();
   }, afkMs);
+  // Under Node (the integration tests) a pending minute-long timer would keep the process alive
+  // past the test timeout; the browser's timer handle has no such method.
+  if (typeof afkTimer === "object" && afkTimer !== null && "unref" in afkTimer)
+    afkTimer.unref();
 }
 
 /** Called by useIngest for every successful append. */
