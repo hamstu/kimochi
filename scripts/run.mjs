@@ -142,6 +142,9 @@ if (
   // sibling engine repositories exactly as the staging scripts copy them.
   for (const dir of ocrResources) await mkdir(dir, { recursive: true })
   await mkdir('src-tauri/resources/meikiocr/runtime', { recursive: true })
+  // tauri.windows.conf.json also bundles the OneOCR helper directory (prepare-oneocr.mjs
+  // fills it for a real build).
+  if (process.platform === 'win32') await mkdir('src-tauri/resources/oneocr', { recursive: true })
   const legal = [
     ['../kimochi-meikiocr/LICENSE', 'src-tauri/resources/meikiocr/LICENSE'],
     ['../kimochi-meikiocr/NOTICE', 'src-tauri/resources/meikiocr/NOTICE'],
