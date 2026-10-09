@@ -67,7 +67,7 @@ Windows: `bundle.windows.signCommand` runs `node ../scripts/sign-windows.mjs %1`
 
 ### CI
 
-`.github/workflows/ci.yml` runs tests, typecheck, lint, clippy and the `capture-core` tests on macOS, Windows x64, Windows ARM64 and Ubuntu 22.04, then builds a debug bundle on each and uploads it. macOS bundles are ad-hoc signed. Windows bundles are signed only when the Azure secrets exist. CI checks the sibling OCR crates out beside this repository, so they need to be pushed to GitHub first (see the TODO at the top of the workflow).
+`.github/workflows/ci.yml` runs tests, typecheck, lint, clippy and the `capture-core` tests on macOS, Windows x64, Windows ARM64, Linux x64 and Linux ARM64, then builds a bundle on each and uploads it; a `v*` tag turns those into a draft GitHub Release. It runs on our own machines as self-hosted runners (free, no Actions minutes), set up and documented in [ci/runners/README.md](ci/runners/README.md). macOS bundles are ad-hoc signed. Windows bundles are signed only when the Azure secrets exist. CI checks the sibling OCR crates out beside this repository through read-only deploy keys.
 
 ## Integrated Texthooker
 

@@ -1,28 +1,40 @@
 name: CI
 
-# Native compile, lint and test gates on every OS, plus unsigned-or-signed debug bundles.
-# No release/publish job yet (CROSS_PLATFORM_PLAN.md Phase 5).
+# Native compile, lint and test gates on every OS, then a bundle of the app per target, all on
+# the self-hosted runners described in ci/runners/README.md (nothing here uses GitHub-hosted
+# minutes). A tag `v*` builds optimised bundles and attaches them to a draft GitHub Release.
 #
 # Sibling repositories: src-tauri depends on `../../kimochi-meikiocr` and `../../kimochi-mangaocr`
 # by path, and the OCR staging scripts read their LICENSE/NOTICE and model manifest. This repo is
-# therefore checked out into `kimochi-tauri/` with the siblings beside it.
-# The siblings are private repositories under the same owner (`hamstu/kimochi-meikiocr`,
-# `hamstu/kimochi-mangaocr`), so the checkout needs the SIBLING_REPOS_TOKEN secret: a
-# fine-grained PAT with read-only Contents access to both. Override the repository variables
-# KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if they move.
+# therefore checked out into `kimochi-tauri/` with the siblings beside it. The siblings are private
+# repositories under the same owner, read through the MEIKIOCR_DEPLOY_KEY / MANGAOCR_DEPLOY_KEY
+# secrets (read-only deploy keys). SIBLING_REPOS_TOKEN (a fine-grained PAT with Contents: read on
+# both) still works as an alternative. Override KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if
+# they move.
+#
+# Runners are persistent machines: the checkout keeps the Rust target directories, node_modules
+# and the staged OCR runtimes between runs instead of using the GitHub cache, so the second
+# build on a machine is incremental.
 
-# CI builds are intentionally off until the Windows and Linux ports have been exercised by
-# hand (CROSS_PLATFORM_PLAN.md progress log). Only a manual dispatch runs this workflow;
-# restore the push/pull_request triggers below when CI builds are wanted again.
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [main]
-  # pull_request:
+    inputs:
+      mode:
+        description: Build mode
+        type: choice
+        options: [bundle, release]
+        default: bundle
+      arch_linux:
+        description: Also build Linux ARM64 on the Arch runner
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    tags: ['v*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -33,21 +45,54 @@ env:
   COPYFILE_DISABLE: '1'
 
 jobs:
+  # Which machines build, and whether optimised or debug. A tag always releases; a manual run
+  # chooses; a push to main bundles.
+  plan:
+    name: Plan
+    runs-on: [self-hosted, macOS]
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      profile: ${{ steps.plan.outputs.profile }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/github-script@v7
+        id: plan
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_ARCH_LINUX: ${{ inputs.arch_linux }}
+        with:
+          script: |
+            const tag = context.ref.startsWith('refs/tags/')
+            const mode = process.env.INPUT_MODE || (tag ? 'release' : 'bundle')
+            const profile = mode === 'release' ? 'release' : 'debug'
+            const bundle = `kimochi-tauri/src-tauri/target/${profile}/bundle`
+            const include = [
+              { name: 'macOS', labels: ['self-hosted', 'macOS', 'ARM64'], target: 'aarch64-apple-darwin',
+                artifacts: `${bundle}/macos/Kimochi.app.zip` },
+              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64'], target: 'x86_64-pc-windows-msvc',
+                artifacts: `${bundle}/nsis/*-setup.exe` },
+              { name: 'Windows ARM64', labels: ['self-hosted', 'Windows', 'ARM64'], target: 'aarch64-pc-windows-msvc',
+                artifacts: `${bundle}/nsis/*-setup.exe` },
+              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64'], target: 'x86_64-unknown-linux-gnu',
+                artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
+              { name: 'Linux ARM64', labels: ['self-hosted', 'Linux', 'ARM64', 'ubuntu'], target: 'aarch64-unknown-linux-gnu',
+                artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
+            ]
+            if (process.env.INPUT_ARCH_LINUX === 'true') include.push(
+              { name: 'Linux ARM64 (Arch)', labels: ['self-hosted', 'Linux', 'ARM64', 'arch'], target: 'aarch64-unknown-linux-gnu',
+                artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage`, suffix: '-arch' })
+            core.setOutput('mode', mode)
+            core.setOutput('profile', profile)
+            core.setOutput('matrix', JSON.stringify({ include }))
+            core.summary.addHeading(`Mode: ${mode}`).addList(include.map((p) => `${p.name} → ${p.labels.join(', ')}`)).write()
+
   checks:
     name: Checks (${{ matrix.name }})
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-          - name: Windows x64
-            os: windows-latest
-          - name: Windows ARM64
-            os: windows-11-arm
-          - name: Linux x64
-            os: ubuntu-22.04
-    runs-on: ${{ matrix.os }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.labels }}
     defaults:
       run:
         shell: bash
@@ -56,23 +101,31 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: kimochi-tauri
+          clean: false
       - name: Check out kimochi-meikiocr
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
+          ssh-key: ${{ secrets.MEIKIOCR_DEPLOY_KEY }}
           token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-meikiocr
       - name: Check out kimochi-mangaocr
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
+          ssh-key: ${{ secrets.MANGAOCR_DEPLOY_KEY }}
           token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-mangaocr
+      # Drop stale build output but keep the expensive, regenerable caches.
+      - name: Clean workspace
+        run: git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         working-directory: .
         run: |
+          # Arch runners get their packages from ci/runners/setup-runner.sh --deps.
+          command -v apt-get >/dev/null || { echo "no apt-get; assuming prerequisites are installed"; exit 0; }
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
@@ -92,17 +145,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: kimochi-tauri/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            kimochi-tauri/src-tauri -> target
-            kimochi-tauri/capture-core -> target
-          shared-key: checks
 
       # `npm ci` runs the `prepare` lifecycle script (scripts/prepare.mjs), which builds dist/.
       - run: npm ci
@@ -121,37 +166,18 @@ jobs:
 
   bundle:
     name: Bundle (${{ matrix.name }})
-    needs: checks
+    needs: [plan, checks]
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-            target: aarch64-apple-darwin
-            artifacts: kimochi-tauri/src-tauri/target/debug/bundle/macos/Kimochi.app.zip
-          - name: Windows x64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifacts: kimochi-tauri/src-tauri/target/debug/bundle/nsis/*-setup.exe
-          - name: Windows ARM64
-            os: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            artifacts: kimochi-tauri/src-tauri/target/debug/bundle/nsis/*-setup.exe
-          - name: Linux x64
-            os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            artifacts: |
-              kimochi-tauri/src-tauri/target/debug/bundle/deb/*.deb
-              kimochi-tauri/src-tauri/target/debug/bundle/appimage/*.AppImage
-    runs-on: ${{ matrix.os }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.labels }}
     defaults:
       run:
         shell: bash
         working-directory: kimochi-tauri
     env:
       KIMOCHI_TARGET: ${{ matrix.target }}
-      # macOS: no Apple identity in CI; ad-hoc sign the app and the bundled dylib.
+      # macOS: ad-hoc sign the app and the bundled dylib (no Developer ID / notarisation yet).
       KIMOCHI_ADHOC: '1'
       # Step-level env is not visible to a step's own `if`, so expose the gate at job level.
       HAS_WINDOWS_SIGNING: ${{ secrets.AZURE_TENANT_ID != '' }}
@@ -159,23 +185,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: kimochi-tauri
+          clean: false
       - name: Check out kimochi-meikiocr
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
+          ssh-key: ${{ secrets.MEIKIOCR_DEPLOY_KEY }}
           token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-meikiocr
       - name: Check out kimochi-mangaocr
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
+          ssh-key: ${{ secrets.MANGAOCR_DEPLOY_KEY }}
           token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-mangaocr
+      - name: Clean workspace
+        run: |
+          git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources
+          # Only this run's bundles may be uploaded.
+          rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         working-directory: .
         run: |
+          command -v apt-get >/dev/null || { echo "no apt-get; assuming prerequisites are installed"; exit 0; }
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
@@ -195,13 +230,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: kimochi-tauri/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: kimochi-tauri/src-tauri -> target
-          shared-key: bundle-${{ matrix.target }}
 
       - name: Install OneOCR helper Rust targets
         if: runner.os == 'Windows'
@@ -221,24 +250,13 @@ jobs:
             if ($process.ExitCode -notin @(0, 3010)) { throw "ARM64 C++ tools installation failed: $($process.ExitCode)" }
           }
 
-      # Downloaded OCR runtimes are hash-verified by the staging scripts, so a cache hit only
-      # saves bandwidth; a stale or wrong-target runtime is detected and replaced. Models are not
-      # staged for bundles (the app downloads them on demand).
-      - uses: actions/cache@v4
-        with:
-          path: |
-            kimochi-tauri/src-tauri/resources/meikiocr
-            kimochi-tauri/src-tauri/resources/mangaocr
-          key: ocr-${{ matrix.target }}-${{ hashFiles('kimochi-tauri/scripts/prepare-meikiocr.mjs', 'kimochi-tauri/src-tauri/ocr-models.json', 'kimochi-mangaocr/scripts/model-manifest.json') }}
-          restore-keys: ocr-${{ matrix.target }}-
-
       - name: Install Windows signing CLI
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
         run: cargo install --locked artifact-signing-cli
 
       - run: npm ci
-      - name: Bundle
-        run: npm run bundle
+      - name: Bundle (${{ needs.plan.outputs.mode }})
+        run: npm run ${{ needs.plan.outputs.mode }}
         env:
           # Windows: scripts/sign-windows.mjs (signCommand) signs when these are present and
           # skips with a warning otherwise. KIMOCHI_REQUIRE_SIGNING makes a partial secret set
@@ -255,7 +273,7 @@ jobs:
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
         shell: pwsh
         run: |
-          Get-ChildItem src-tauri/target/debug/bundle/nsis/*-setup.exe | ForEach-Object {
+          Get-ChildItem src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/nsis/*-setup.exe | ForEach-Object {
             $sig = Get-AuthenticodeSignature $_.FullName
             Write-Host "$($_.Name): $($sig.Status) $($sig.SignerCertificate.Subject)"
             if ($sig.Status -ne 'Valid') { exit 1 }
@@ -264,10 +282,37 @@ jobs:
       # upload-artifact drops file modes, so the .app is archived with ditto first.
       - name: Archive macOS app
         if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent src-tauri/target/debug/bundle/macos/Kimochi.app src-tauri/target/debug/bundle/macos/Kimochi.app.zip
+        run: ditto -c -k --keepParent src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/macos/Kimochi.app src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/macos/Kimochi.app.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: kimochi-${{ matrix.target }}
+          name: kimochi-${{ matrix.target }}${{ matrix.suffix }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error
+          retention-days: 7
+
+  # A tag push collects every bundle into a draft release for a final look before publishing.
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [plan, bundle]
+    runs-on: [self-hosted, macOS]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf release && mkdir release
+          for dir in artifacts/*/; do
+            name="$(basename "$dir")"
+            find "$dir" -type f | while read -r file; do
+              cp "$file" "release/${name#kimochi-}-$(basename "$file")"
+            done
+          done
+          ls -l release
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --generate-notes --title "Kimochi $GITHUB_REF_NAME" release/*
