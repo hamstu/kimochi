@@ -63,7 +63,7 @@ if [[ $DEPS == 1 ]]; then
       sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y \
         curl wget file git build-essential pkg-config libssl-dev libclang-dev patchelf \
         libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
-        libpipewire-0.3-dev libspa-0.2-dev
+        libpipewire-0.3-dev libspa-0.2-dev libudev-dev
     elif command -v pacman >/dev/null; then
       log "Installing pacman packages"
       sudo pacman -Sy --needed --noconfirm \

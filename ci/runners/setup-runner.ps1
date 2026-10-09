@@ -94,7 +94,12 @@ Set-Content -Path '.env' -Encoding ascii -Value @(
   "USERNAME=SYSTEM"
 )
 # Git's bin folder (bash.exe for `shell: bash` steps) is not on a normal PATH, only cmd\ is.
+# The service inherits the machine PATH, so put it there too (the .path file alone did not do).
 $gitBin = Join-Path (Split-Path -Parent (Split-Path -Parent (Get-Command git.exe).Source)) 'bin'
+$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+if (($machinePath -split ';') -notcontains $gitBin) {
+  [Environment]::SetEnvironmentVariable('Path', "$gitBin;$machinePath", 'Machine')
+}
 $pathEntries = @("$cargoHome\bin", $gitBin) + ($env:Path -split ';' | Where-Object { $_ })
 Set-Content -Path '.path' -Encoding ascii -Value (($pathEntries | Select-Object -Unique) -join ';')
 

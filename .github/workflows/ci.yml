@@ -140,7 +140,8 @@ jobs:
             patchelf \
             libpipewire-0.3-dev \
             libspa-0.2-dev \
-            libclang-dev
+            libclang-dev \
+            libudev-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -159,10 +160,9 @@ jobs:
       # without downloading anything.
       - run: npm run check:rust
       - name: Test capture-core
-        run: cargo test --manifest-path capture-core/Cargo.toml
-        env:
-          # Swift-backed crates link @rpath/libswift_*.dylib from the OS.
-          DYLD_LIBRARY_PATH: ${{ runner.os == 'macOS' && '/usr/lib/swift' || '' }}
+        # Swift-backed crates link @rpath/libswift_*.dylib from the OS. The variable is set on the
+        # command line because SIP strips DYLD_* from /bin/bash's own environment.
+        run: ${{ runner.os == 'macOS' && 'DYLD_LIBRARY_PATH=/usr/lib/swift ' || '' }}cargo test --manifest-path capture-core/Cargo.toml
 
   bundle:
     name: Bundle (${{ matrix.name }})
@@ -225,7 +225,8 @@ jobs:
             patchelf \
             libpipewire-0.3-dev \
             libspa-0.2-dev \
-            libclang-dev
+            libclang-dev \
+            libudev-dev
 
       - uses: actions/setup-node@v4
         with:
