@@ -338,9 +338,9 @@ pub fn select_keeping_crop(service: &Shared, source_id: &str) -> Result<Value, S
             .find(|s| s.id == source_id)
             .ok_or_else(|| closed(source_id))?
     };
-    let key = descriptor_key(source.kind, &source.name, source.app.as_deref());
+    let key = selection_crop_key(service, source.kind, &source.name, source.app.as_deref());
     let saved = saved_crop_for_key(service, &key);
-    commit(service, source_id, saved)
+    commit_with_key(service, source_id, saved, Some(key))
 }
 
 /// Selection and crop change together or not at all.
@@ -348,6 +348,10 @@ pub fn select_keeping_crop(service: &Shared, source_id: &str) -> Result<Value, S
 /// All three persisted keys go through a single settings transaction, so a failed
 /// write cannot leave a source selected with another source's crop.
 pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<Value, String> {
+    commit_with_key(service, source_id, crop, None)
+}
+
+fn commit_with_key(service: &Shared, source_id: &str, crop: Option<Crop>, saved_key: Option<String>) -> Result<Value, String> {
     let source = {
         let mut backend = service
             .backend
@@ -365,7 +369,7 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
         crop_rect(Some(crop), crop.reference_width, crop.reference_height)
             .map_err(|e| format!("invalid: {}", e.message))?;
     }
-    let key = descriptor_key(source.kind, &source.name, source.app.as_deref());
+    let key = saved_key.unwrap_or_else(|| selection_crop_key(service, source.kind, &source.name, source.app.as_deref()));
     let previous = saved_crop_for_key(service, &key);
     let crop_value = match crop {
         Some(crop) => serde_json::to_value(crop).unwrap(),
@@ -578,6 +582,11 @@ fn crop_differs(a: Option<&Crop>, b: Option<&Crop>) -> bool {
     }
 }
 
+fn selection_crop_key(service: &Service, kind: &str, name: &str, app: Option<&str>) -> String {
+    let context = if descriptor_type(kind) == "screen" { crate::application_context::current(service) } else { None };
+    crate::application_context::crop_key(context.as_ref(), descriptor_key(kind, name, app))
+}
+
 fn saved_crop_for_key(service: &Service, key: &str) -> Option<Crop> {
     service
         .settings
@@ -639,7 +648,12 @@ pub fn resolve_saved_source(saved: &Value, live: &[Source]) -> Restored {
 
 /// The crop saved for a source descriptor, used when a scan starts.
 pub fn saved_crop(service: &Service, kind: &str, name: &str, app: Option<&str>) -> Option<Crop> {
-    saved_crop_for_key(service, &descriptor_key(kind, name, app))
+    saved_crop_with_context(service, kind, name, app, crate::application_context::current(service).as_ref())
+}
+
+pub fn saved_crop_with_context(service: &Service, kind: &str, name: &str, app: Option<&str>, context: Option<&crate::application_context::ApplicationContext>) -> Option<Crop> {
+    let context = if descriptor_type(kind) == "screen" { context } else { None };
+    saved_crop_for_key(service, &crate::application_context::crop_key(context, descriptor_key(kind, name, app)))
 }
 
 #[cfg(test)]

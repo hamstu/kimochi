@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } fr
 import { Minus, Pin, PinOff, X } from 'lucide-react'
 import { nativeError, panel, panelContentHeight, onEvent, quitApp } from '../bridge/tauri'
 import type { PanelStateEvent } from '../bridge/types'
+import { usePanelController } from './usePanelController'
 import { useNativeHover } from './useNativeHover'
 import { TitleBarSlotContext } from './titleBarSlot'
 
@@ -41,6 +42,7 @@ export default function PanelShell({
   const [error, setError] = useState<string | null>(null)
 
   useNativeHover()
+  usePanelController(label)
 
   useEffect(() => {
     document.title = title

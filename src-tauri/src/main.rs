@@ -5,6 +5,7 @@ use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
 mod actions;
+mod application_context;
 mod capture_unavailable;
 mod engine_probe;
 mod gamepad;
@@ -265,7 +266,8 @@ fn save_preferences(app: tauri::AppHandle, state: State<Shared>, prefs: Prefs) -
     ])?;
     if let Some(crop) = prefs.crop {
         if let Some((kind, name, app_name)) = selected_descriptor(&state) {
-            let key = state::descriptor_key(&kind, &name, app_name.as_deref());
+            let context = if kind == "screen" { application_context::current(&state) } else { None };
+            let key = application_context::crop_key(context.as_ref(), state::descriptor_key(&kind, &name, app_name.as_deref()));
             state
                 .settings
                 .set_path(&["cropRegions", &key], serde_json::to_value(crop).unwrap())?;
@@ -352,6 +354,10 @@ const OVERLAY: &str = "overlay";
 const POPUP_HOST: &str = "popup-host";
 
 fn snapshot_value(service: &Service) -> Value {
+    // Capture reading identity once so headers and crop cannot describe different games.
+    let context = application_context::current(service);
+    let crop = selected_descriptor(service).and_then(|(kind, name, app)| sources::saved_crop_with_context(service, &kind, &name, app.as_deref(), context.as_ref()));
+    let source = application_context::source_with_context(service, context.as_ref());
     let v = service.view.lock().unwrap();
     json!({
         "revision": v.revision,
@@ -364,14 +370,10 @@ fn snapshot_value(service: &Service) -> Value {
         "origin": v.origin,
         "dictionary": v.dictionary,
         "dismiss": v.dismiss,
-        "source": service
-            .settings
-            .get("lastSelectedSource")
-            .ok()
-            .flatten()
-            .map(with_source_kind),
-        "crop": current_crop(service),
-        "cropEnabled": current_crop(service).is_some(),
+        "source": source.map(with_source_kind),
+        "applicationContext": context,
+        "crop": crop,
+        "cropEnabled": crop.is_some(),
         "isScanning": v.scanning,
         "autoOcrEnabled": v.auto_ocr,
         "overlayVisible": v.overlay_visible,
@@ -382,6 +384,22 @@ fn snapshot_value(service: &Service) -> Value {
         "accessibility": v.accessibility,
         "action": v.last_action.as_ref().map(|name| json!({"name": name, "seq": v.action_seq})),
     })
+}
+
+#[tauri::command]
+fn application_context_get(state: State<Shared>) -> Value {
+    json!({"available": application_context::available(), "context": application_context::current(&state)})
+}
+
+#[tauri::command]
+fn application_context_set(state: State<Shared>, context: Option<application_context::ApplicationContext>) -> Reply<Value> {
+    application_context::set_override(&state, context)?;
+    let mut view = state.view.lock().unwrap();
+    view.scan = None;
+    view.regions.clear();
+    view.revision += 1;
+    drop(view);
+    Ok(application_context_get(state))
 }
 
 #[tauri::command]
@@ -1730,12 +1748,7 @@ fn history_add(
     let source = if detached.unwrap_or(false) {
         Value::Null
     } else {
-        state
-            .settings
-            .get("lastSelectedSource")
-            .ok()
-            .flatten()
-            .unwrap_or(Value::Null)
+        application_context::source(&state).unwrap_or(Value::Null)
     };
     let now = now_millis();
     let mut entry = json!({ "id": history_id(), "text": text, "timestamp": now, "source": source, "groups": groups, "engine": engine });
@@ -1971,7 +1984,8 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
         if let Some(service) = app.try_state::<Shared>() {
             let settings = service.settings.clone();
-            let _ = panels::act_existing(app, &settings, panels::MAIN, "show", None);
+            let initial = settings.get("hasCompletedOnboarding").ok().flatten();
+            let _ = panels::act_existing(app, &settings, onboarding_panel(initial.as_ref()), "show", None);
         }
     }));
     builder
@@ -2034,6 +2048,8 @@ fn main() {
             });
         })
         .invoke_handler(tauri::generate_handler![
+            application_context_get,
+            application_context_set,
             reader_settings_patch,
             reader_notebook_ack,
             reader::vndb::vndb_search_vns,
@@ -2239,7 +2255,16 @@ fn main() {
             spawn_source_restore(service.clone());
 
             panels::create_eager(&handle, &store)?;
-            panels::act_existing(&handle, &store, panels::MAIN, "show_inactive", None)?;
+            // Shared first-run omission: every platform previously ignored the persisted flag.
+            let initial_panel = onboarding_panel(store.get("hasCompletedOnboarding")?.as_ref());
+            panels::with_panel(&handle, initial_panel, {
+                let store = store.clone();
+                let initial_panel = initial_panel.to_string();
+                move |app, turn| {
+                    let action = if initial_panel == panels::MAIN { "show_inactive" } else { "show" };
+                    let _ = panels::act(turn, app, &store, &initial_panel, action, None);
+                }
+            });
 
             let overlay_builder = tauri::WebviewWindowBuilder::new(
                 app,
@@ -2450,6 +2475,11 @@ fn main() {
         });
 }
 
+/// Only an explicitly completed setup skips onboarding; absent or malformed values are first run.
+fn onboarding_panel(completed: Option<&Value>) -> &'static str {
+    if completed.and_then(Value::as_bool) == Some(true) { panels::MAIN } else { "welcome" }
+}
+
 /// Resolve the previously selected source against a fresh enumeration, off the UI
 /// thread.
 ///
@@ -2578,8 +2608,17 @@ fn make_panel(app: &tauri::AppHandle, service: &Shared, window: &tauri::WebviewW
 fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut previous = String::new();
+        let mut previous_context = application_context::current(&service).map(|c| c.id);
         loop {
             std::thread::sleep(Duration::from_millis(100));
+            let context = application_context::current(&service).map(|c| c.id);
+            if context != previous_context {
+                previous_context = context;
+                let mut view = service.view.lock().unwrap();
+                view.scan = None;
+                view.regions.clear();
+                view.revision += 1;
+            }
             let fingerprint = {
                 let v = service.view.lock().unwrap();
                 format!(
@@ -3053,6 +3092,14 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn onboarding_requires_an_explicit_completion_flag() {
+        assert_eq!(super::onboarding_panel(None), "welcome");
+        assert_eq!(super::onboarding_panel(Some(&serde_json::json!(false))), "welcome");
+        assert_eq!(super::onboarding_panel(Some(&serde_json::json!("true"))), "welcome");
+        assert_eq!(super::onboarding_panel(Some(&serde_json::json!(true))), crate::panels::MAIN);
+    }
+
     use super::*;
 
     #[test]

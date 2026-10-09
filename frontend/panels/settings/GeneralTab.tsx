@@ -77,8 +77,8 @@ export function GeneralTab(): ReactNode {
           label="Welcome guide"
           description={
             grantsCapture
-              ? 'The first-run walkthrough: screen recording permission, a source and the dictionary.'
-              : 'The first-run walkthrough: a source and the dictionary.'
+              ? 'The first-run walkthrough: capture permission, OCR, dictionaries and reading basics.'
+              : 'The first-run walkthrough: OCR, dictionaries and reading basics.'
           }
         >
           <Button size="sm" onClick={() => void panel('welcome', 'show').catch(() => undefined)}>

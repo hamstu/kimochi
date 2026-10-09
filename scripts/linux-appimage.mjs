@@ -3,6 +3,7 @@ import { readFile, writeFile, copyFile, readdir, access, mkdir, rename, rm, cp }
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 
 const cache = path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), '.cache'), 'tauri')
 const exists = async (file) => access(file).then(() => true, () => false)
@@ -180,4 +181,7 @@ export PIPEWIRE_CONFIG_DIR="$APPDIR/usr/share/pipewire"
   })
   if (result.error || result.status !== 0) throw result.error ?? new Error(`AppImage repack failed (${result.status})`)
   await rename(repacked, path.join(directory, images[0]))
+  const packageScript = fileURLToPath(new URL('./steam-deck/package-gaming-mode.sh', import.meta.url))
+  const packaged = spawnSync('sh', [packageScript, path.join(directory, images[0]), path.join(directory, images[0].replace(/\.AppImage$/, '-gaming-mode.tar.gz'))], { stdio: 'inherit', env })
+  if (packaged.error || packaged.status !== 0) throw packaged.error ?? new Error(`Gaming Mode package failed (${packaged.status})`)
 }

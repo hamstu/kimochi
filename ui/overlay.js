@@ -1,3 +1,4 @@
+import { createDictionarySetup } from './setup-dictionaries.js'
 import { installApiLookup, lookupTerm } from './api-lookup.js'
 import { createController } from './controller.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
@@ -204,10 +205,15 @@ controller = createController({
       center: nativeGamescope ? gamescopeMenuCenter : area ? { x: area.x + area.width / 2, y: area.y + area.height / 2 } : null
     }
   },
-  run: (id) => {
+  run: async (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
-    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && id === 'controls') return void native.panel('log', 'show')
+    if (id === 'controls' || id === 'ocr-settings') {
+      if (id === 'ocr-settings') await native.setSetting('settingsActiveTab', 'ocr')
+      await native.panel('log', 'show')
+      if (id === 'ocr-settings') await window.__TAURI__.event.emit('main:show-settings')
+    }
   },
+  history: () => native.invoke('settings_get', { key: 'scannedTextHistory' }),
   // With automatic OCR on, Scan catches the loop up at once instead of a separate scan;
   // either way it resolves once the text on screen is current.
   scan: async () => {
@@ -1682,6 +1688,7 @@ async function playLatest() {
 
 const relayTargets = new Set()
 let extensionApi = null
+let dictionarySetup = null
 let openInIframe = null
 
 /** Relayed windows share this window's extension storage rather than forking it. */
@@ -1749,7 +1756,9 @@ async function handleRelay(from, payload) {
   try {
     await whenBackendReady()
     const result =
-      payload.message?.action === '__storage'
+      dictionarySetup?.handles(payload.message?.action)
+        ? await dictionarySetup.handle(payload.message.params)
+        : payload.message?.action === '__storage'
         ? await relayStorage(payload.message.params)
         : await hub.message(
             { id: `relay:${from}`, win: window, events: { onMessage: { listeners: new Set() } } },
@@ -1827,6 +1836,19 @@ async function startYomitan() {
   await import('/js/app/content-script-wrapper.js')
 
   extensionApi = api
+  dictionarySetup = createDictionarySetup({
+    api,
+    fetchArchive: (url) => hub.fetchRemote(url),
+    countEntries: async (title) => {
+      const { DictionaryWorker } = await import('/js/dictionary/dictionary-worker.js')
+      const result = await new DictionaryWorker().getDictionaryCounts([title], false)
+      return result.counts[0]?.terms ?? 0
+    },
+    importArchive: async (archive, progress) => {
+      const { DictionaryWorker } = await import('/js/dictionary/dictionary-worker.js')
+      return new DictionaryWorker().importDictionary(archive, { prefixWildcardsSupported: false }, progress)
+    }
+  })
   window.pocApi = api
   openInIframe = hub.open.bind(hub)
   hub.open = (url) => {
@@ -2225,6 +2247,7 @@ async function processView(view) {
     // picker reaches the hover markings without a scan in between.
     const selection = {
       sourceId: view.source?.sourceId ?? view.source?.id ?? null,
+      applicationContextId: view.source?.applicationContext?.id ?? null,
       crop: view.crop ?? null
     }
     if (generation.bumpIfChanged(lastSelection, selection)) {

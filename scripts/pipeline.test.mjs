@@ -167,3 +167,22 @@ test('the loop takes the same lock the manual path does, not a private flag', as
   assert.deepEqual(held, [true], 'the recognition ran with the shared lock held')
   assert.equal(lock.isHeld, false)
 })
+
+test("changing the active game invalidates OCR even when portal stream and crop stay identical", () => {
+  const generation = new Generation();
+  const job = { generation: generation.current };
+  const previous = {
+    sourceId: "portal:display:80",
+    crop: null,
+    applicationContextId: "steam:42",
+  };
+  assert.equal(
+    generation.bumpIfChanged(previous, {
+      ...previous,
+      applicationContextId: "steam:43",
+    }),
+    true,
+  );
+  assert.equal(generation.isStale(job), true);
+  assert.equal(sameSelection(previous, { ...previous }), true);
+});

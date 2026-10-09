@@ -657,3 +657,23 @@ Installation preserves differing existing extension files and tells the user to 
 and log out/in when GNOME cannot discover the newly installed extension. No automatic logout.
 `gnome-overlay-lookup` forwards native word click or Shift hover to the existing Yomitan backend.
 The extension displays plain dictionary text; full Yomitan popup controls are not implemented.
+
+## Gaming Mode reading identity
+
+`application_context_get() -> {available, context}` reports the reading application
+independently of the capture source. `context` is null or `{id,name,provider,manual}`.
+Currently automatic detection is Linux/Gamescope-only and reads the graphics game,
+not input focus. Screen source descriptors and history carry optional
+`applicationContext`; their real portal `sourceId` and kind remain unchanged.
+
+`application_context_set({context:{id,name}|null})` stores a validated named manual
+profile, or resumes detection with null. IDs/names must be bounded and contain no
+control characters. Unsupported sessions reject changes. Crops use
+`application:<id>` and reader sessions match that stable ID. Context changes
+invalidate old scan geometry and in-flight frontend OCR. OCR engine remains global.
+
+The overlay's one Yomitan backend serves app-owned `__setupDictionaries` relay
+requests: `catalog`, `start({dictionaryId})`, `status({id})`, and `practice`.
+`start` returns a job ID immediately; download/import outlives the requesting panel,
+then verifies import success/counts and enables the dictionary through granular
+profile updates. Jobs live for the app process, not across crashes/restarts.

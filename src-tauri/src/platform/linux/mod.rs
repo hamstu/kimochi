@@ -37,6 +37,7 @@ pub mod dictionary_images;
 mod keytrigger;
 pub mod gnome;
 pub mod gamescope;
+pub mod gaming_context;
 pub mod steam_input;
 mod gamescope_touch;
 pub mod deck_input;

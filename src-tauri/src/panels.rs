@@ -97,13 +97,16 @@ pub static PANELS: &[PanelSpec] = &[
         min_height: 420.,
         ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.)
     },
-    panel(
-        "welcome",
-        "Welcome to Kimochi",
-        "app/welcome.html",
-        800.,
-        640.,
-    ),
+    PanelSpec {
+        init_asset: Some("/spike/panel-shim.js"),
+        ..panel(
+            "welcome",
+            "Welcome to Kimochi",
+            "app/welcome.html",
+            800.,
+            640.,
+        )
+    },
     PanelSpec {
         resizable: false,
         // The width is also what `tray.rs` centres under the tray icon, so the minimum must
@@ -431,17 +434,23 @@ fn attach_events(
     let handle = app.clone();
     let store = settings.clone();
     let owned = window.clone();
+    crate::gamepad::panel_focus(spec.label, window.is_focused().unwrap_or(false));
     window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Focused(focused) => crate::gamepad::panel_focus(spec.label, *focused),
+        tauri::WindowEvent::Destroyed => crate::gamepad::panel_focus(spec.label, false),
         tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
             save_bounds(&store, &owned, spec);
+            if owned.is_minimized().unwrap_or(false) { crate::gamepad::panel_focus(spec.label, false); }
         }
         tauri::WindowEvent::CloseRequested { api, .. } if spec.label == MAIN => {
+            crate::gamepad::panel_focus(spec.label, false);
             // The main window is the app: closing it quits, like any single-window Mac app.
             api.prevent_close();
             save_bounds(&store, &owned, spec);
             handle.exit(0);
         }
         tauri::WindowEvent::CloseRequested { api, .. } => {
+            crate::gamepad::panel_focus(spec.label, false);
             // Closing hides; only the main window quits. Reopening restores native bounds.
             api.prevent_close();
             save_bounds(&store, &owned, spec);
@@ -564,6 +573,7 @@ fn apply(
         "inspect" => {}
         _ => return Err(format!("invalid: unknown window action {action:?}")),
     }
+    if matches!(action, "hide" | "minimize") { crate::gamepad::panel_focus(label, false); }
     let mut state = info(window)?;
     #[cfg(target_os = "linux")]
     if platform::gamescope::handles(window) {
@@ -708,15 +718,6 @@ mod tests {
         width: 1440.,
         height: 875.,
     };
-    const fn at(x: f64, y: f64) -> Rect {
-        Rect {
-            x,
-            y,
-            width: 410.,
-            height: 150.,
-        }
-    }
-
     #[test]
     fn a_large_panel_centres_on_its_display_and_fits_small_displays() {
         let r = centred(520., 560., AREA);
@@ -805,10 +806,10 @@ mod tests {
                 "{} should use Kimochi's own chrome",
                 spec.label
             );
-            // Exactly the windows that run the original extension in a subframe.
+            // Extension settings and app-owned dictionary clients share the one backend.
             assert_eq!(
                 spec.init_asset.is_some(),
-                matches!(spec.label, "yomitan" | "log"),
+                matches!(spec.label, "yomitan" | "log" | "welcome"),
                 "{}",
                 spec.label
             );

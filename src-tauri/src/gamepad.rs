@@ -9,7 +9,7 @@ use crate::actions;
 use crate::state::Shared;
 use gilrs::{Button, Gilrs};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
@@ -170,6 +170,41 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             previous = buttons;
         }
     });
+}
+
+/// Ordinary controls own controller actions while focused; overlay navigation is separate.
+static PANEL_FOCUS: Mutex<Option<String>> = Mutex::new(None);
+static PANEL_FOCUS_REVISION: AtomicU64 = AtomicU64::new(0);
+
+fn update_panel_focus(owner: &mut Option<String>, label: &str, focused: bool) -> bool {
+    if focused {
+        if owner.as_deref() == Some(label) { return false; }
+        *owner = Some(label.to_owned());
+        true
+    } else if owner.as_deref() == Some(label) {
+        *owner = None;
+        true
+    } else { false }
+}
+
+pub fn panel_focus(label: &str, focused: bool) {
+    if !matches!(label, "log" | "settings" | "diagnostics" | "yomitan" | "welcome") { return; }
+    let mut owner = PANEL_FOCUS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if update_panel_focus(&mut owner, label, focused) {
+        PANEL_FOCUS_REVISION.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+fn panel_focused() -> bool {
+    PANEL_FOCUS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some()
+}
+
+fn panel_action_allowed(name: &str, focused: bool) -> bool {
+    !focused || name == "openControllerMenu"
+}
+
+fn delayed_scan_allowed(queued: u64, current: u64, focused: bool, navigation: bool, suspended: bool) -> bool {
+    queued == current && !focused && !navigation && !suspended
 }
 
 /// Controller navigation: the overlay's radial menu is open and the controller drives it.
@@ -353,10 +388,12 @@ fn chord_to_fire<'a>(
 }
 
 fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool], rising: &[bool]) {
+    let focused = panel_focused();
     let hotkeys = crate::settings::merged_hotkeys(&service.settings);
     let bindings: Vec<(&str, Vec<usize>)> = actions::HOTKEY_ACTIONS
         .iter()
         .filter_map(|name| {
+            if !panel_action_allowed(name, focused) { return None; }
             let definition = hotkeys.get(*name)?;
             if definition.get("enabled") == Some(&Value::Bool(false)) {
                 return None;
@@ -368,6 +405,7 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
         actions::dispatch(app, service, name);
         return;
     }
+    if focused { return; }
     let auto: Option<usize> = service
         .settings
         .get_or("autoScanSettings.gamepadButton", None);
@@ -376,10 +414,13 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
             .settings
             .get_or::<f64>("autoScanSettings.scanDelay", 500.0)
             .clamp(0.0, 10_000.0);
+        let revision = PANEL_FOCUS_REVISION.load(Ordering::SeqCst);
         let app = app.clone();
         let service = service.clone();
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(delay as u64));
+            if !delayed_scan_allowed(revision, PANEL_FOCUS_REVISION.load(Ordering::SeqCst),
+                panel_focused(), navigating(), crate::hotkeys::suspended()) { return; }
             actions::dispatch(&app, &service, "triggerScan");
         });
     }
@@ -388,6 +429,35 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panel_focus_transfer_ignores_late_blur_from_previous_window() {
+        let mut owner = None;
+        assert!(update_panel_focus(&mut owner, "log", true));
+        assert!(update_panel_focus(&mut owner, "yomitan", true));
+        assert!(!update_panel_focus(&mut owner, "log", false));
+        assert_eq!(owner.as_deref(), Some("yomitan"));
+        assert!(update_panel_focus(&mut owner, "yomitan", false));
+        assert!(owner.is_none());
+    }
+
+    #[test]
+    fn focused_controls_suppress_scan_bindings_but_preserve_menu_chord() {
+        let bindings = [("triggerScan", vec![0]), ("openControllerMenu", vec![10, 11])];
+        let allowed: Vec<_> = bindings.into_iter().filter(|(name, _)| panel_action_allowed(name, true)).collect();
+        assert_eq!(chord_to_fire(&allowed, &states(&[0]), &states(&[0])), None);
+        assert_eq!(chord_to_fire(&allowed, &states(&[10, 11]), &states(&[11])), Some("openControllerMenu"));
+        assert!(panel_action_allowed("triggerScan", false));
+    }
+
+    #[test]
+    fn queued_scan_is_cancelled_when_controls_acquire_then_release_focus() {
+        assert!(delayed_scan_allowed(1, 1, false, false, false));
+        assert!(!delayed_scan_allowed(1, 3, false, false, false));
+        assert!(!delayed_scan_allowed(1, 1, true, false, false));
+        assert!(!delayed_scan_allowed(1, 1, false, true, false));
+        assert!(!delayed_scan_allowed(1, 1, false, false, true));
+    }
 
     #[test]
     fn standard_mapping_matches_the_web_gamepad_order() {

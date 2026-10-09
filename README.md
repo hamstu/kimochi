@@ -210,6 +210,16 @@ Safety update: when GNOME annotations are visible, the panel exposes **Hide Kimo
 
 ### Steam Deck Gaming Mode (experimental)
 
+Linux bundles also produce `Kimochi_*-gaming-mode.tar.gz` beside the AppImage.
+Extract it in Desktop Mode and run `sh install-gaming-mode.sh ./Kimochi.AppImage`.
+Then use Steam's **Add a Game → Add a Non-Steam Game → Kimochi Gaming Mode**.
+The entry launches a background user service; pressing Play again reopens controls
+or starts the app after Quit. Installation is user-local, requires no system
+partition changes, and uses 1× GTK rendering with 1.5× controls UI by default.
+Install a newer archive with the same command, quit Kimochi, and press Play again.
+Its stable library entry and app data persist; previous versions remain available
+for rollback. This helper is a manual update path, not an automatic updater.
+
 Launch with `sh scripts/steam-deck/launch-gaming-mode.sh /path/to/Kimochi.AppImage`.
 The launcher selects the Gamescope XWayland overlay renderer and portal capture,
 and uses GTK's 2× rendering scale for the Deck's small display. This affects only
@@ -230,8 +240,9 @@ A Steam non-game shortcut can target
 `sh scripts/steam-deck/launch-from-steam.sh /absolute/path/to/Kimochi.AppImage`.
 The shortcut starts the sidecar service and exits; pressing Play again reopens
 controls or starts a fresh app after Quit. Steam may therefore show Play instead
-of a running game. Installation of that shortcut and its artwork is not yet
-packaged; the Deck development shortcut is named `kimochi_steamdeck`.
+of a running game. The installer supplies a desktop entry and icon; Steam's
+one-time Add a Non-Steam Game step remains manual. The older Deck development
+shortcut is named `kimochi_steamdeck`.
 
 Kimochi temporarily enables native touch passthrough while its controls have focus, including
 native dictionary file dialogs, then restores the game's touch mode. An independent
@@ -245,11 +256,37 @@ For the current Gaming Mode test flow:
 2. Use the main window's **Minimize** button to return to Steam without quitting
    Kimochi. Launch your game normally; Kimochi keeps running in the background.
 3. Click **both sticks together** to open the radial menu. Use the D-pad or left
-   stick and **A** to choose **Scan**, **Read Along**, **Auto**, or **Kimochi**.
+   stick and **A** to choose **Scan**, **Read Along**, **Auto OCR**, **Recent text**,
+   **Kimochi**, or **OCR settings**. D-pad steps around the expanded ring.
    **Kimochi** returns to the controls; minimize those controls to return again.
 4. In reading mode, use the D-pad/left stick to navigate text, **LB/RB** to step
    through definitions, and the right stick to scroll. **B** or the menu chord
    closes reading mode and releases Kimochi's input focus.
+
+**Recent text** opens durable scan history without taking another screenshot or
+republishing old OCR. Choose an entry with **A** to navigate its words; **B**
+returns to the list, then **B** returns to the game. The separate GNOME Shell
+controller host currently directs history reading to Kimochi instead.
+
+Controls and setup share controller focus navigation: D-pad/left stick moves
+focus, **A** activates or edits a field, right stick scrolls, and **B** closes a
+dialog, leaves editing, or goes back. Touch and mouse remain available. Text
+entry uses an app-owned controller keyboard for supported fields; Japanese IME
+still uses a physical or system keyboard. Custom action bindings are
+suppressed while a control panel has focus, except the radial-menu chord.
+
+Gaming Mode reads the running graphics game's Steam ID independently of input
+focus and names it from local Steam manifests where available. Its crop and
+reader session follow that identity rather than the temporary portal stream.
+**Change game profile** supplies a named manual profile for emulators or
+unrecognized games; **Use detected game** resumes automatic matching. OCR engine
+selection remains global. Ordinary desktop window/session matching is unchanged.
+
+The shared first-run guide now opens until setup is completed. It offers the
+existing OCR engine/model controls, an on-demand recommended dictionary setup,
+optional existing dictionary/settings imports inside the guide, and a sample
+dictionary lookup. No separate browser extension is required. Setup can be
+reopened from Settings → General → Welcome guide.
 
 The explicit Gamescope launcher enables a read-only physical Deck controller
 stream, because Steam's virtual gamepad can be silent outside an active game
@@ -264,8 +301,9 @@ verified over Steam's library. Steam/Quick Access presses are intended to close
 controller mode and return control to Steam; physical acceptance is pending.
 For initial real-game testing, pause the game before reading: game compatibility,
 Steam services during long reading sessions and Steam/QAM coexistence remain
-acceptance gates. Use the manual launcher for now; the development Steam shortcut
-prototype has unresolved presentation issues, and autostart is not installed.
+acceptance gates. The installation companion and new controller/setup/history
+features have offline checks and an ARM64 bundle build; their latest physical
+Deck acceptance remains pending. Autostart is not installed.
 
 GNOME caches the stable loader's entry module for the login. A change to the loader
 itself still needs a new login; ordinary implementation updates use unique module

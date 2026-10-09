@@ -57,6 +57,15 @@ export default function MainPanel(): JSX.Element {
     if (entryId) setEditing(entryId)
   }
 
+  useEffect(() => {
+    const back = (event: Event): void => {
+      if (editing !== null) { setEditing(null); event.preventDefault() }
+      else if (view === 'settings') { setViewState(lastView.current); event.preventDefault() }
+    }
+    document.addEventListener('kimochi:controller-back', back)
+    return () => document.removeEventListener('kimochi:controller-back', back)
+  }, [view, editing])
+
   // Other windows (the tray, a pop-up) ask for Settings by event; the page is already stored.
   useEffect(() => {
     const pending = listen('main:show-settings', () => setViewState('settings'))

@@ -11,6 +11,8 @@ unset LD_PRELOAD
 export DISPLAY=:0
 export KIMOCHI_GAMESCOPE_SCALE=${KIMOCHI_GAMESCOPE_SCALE:-1}
 export KIMOCHI_GAMESCOPE_UI_SCALE=${KIMOCHI_GAMESCOPE_UI_SCALE:-1.5}
+# Steam supplies the launcher's ID. Do not mistake this library entry for the game.
+export KIMOCHI_STEAM_APP_ID=${KIMOCHI_STEAM_APP_ID:-${SteamAppId:-}}
 if systemctl --user is-active --quiet kimochi-gaming-mode.service; then
   # The existing single-instance handler opens the first app's controls and exits.
   exec /bin/sh "$script_dir/launch-gaming-mode.sh" "$@"

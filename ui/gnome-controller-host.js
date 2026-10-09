@@ -63,7 +63,15 @@ if(window.__KIMOCHI_PLATFORM__?.os==='linux') {
   }}
   controller=createController({host:document.querySelector('#controller'),words,native,
     status:()=>({...snapshot,origin:{x:0,y:0},area:{x:0,y:0,width:innerWidth,height:innerHeight},center:{x:innerWidth/2,y:innerHeight/2}}),
-    run:id=>void rpc('action',{name:id==='auto'?'toggleAutoOcr':id}),
+    run:async id=>{
+      if(id==='controls'||id==='ocr-settings'){
+        if(id==='ocr-settings')await base.setSetting('settingsActiveTab','ocr')
+        await base.panel('log','show')
+        if(id==='ocr-settings')await emit('main:show-settings')
+        return
+      }
+      return rpc('action',{name:id==='auto'?'toggleAutoOcr':id})
+    },
     scan:async()=>{const result=await rpc('scan');await refresh();return result},
     popupControl:control=>void emit('gnome-controller-popup-control',control),
     redraw:()=>{},quietText:()=>{},charRects:()=>null,nearText:()=>false,

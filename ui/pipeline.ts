@@ -15,6 +15,7 @@
 
 export interface Selection {
   sourceId: string | null
+  applicationContextId?: string | null
   crop: unknown
 }
 
@@ -30,7 +31,7 @@ export function selectionKey(selection: Selection): string {
   const crop = selection.crop
     ? JSON.stringify(selection.crop, Object.keys(selection.crop as object).sort())
     : 'full'
-  return `${selection.sourceId ?? 'none'}|${crop}`
+  return `${selection.sourceId ?? 'none'}|${crop}|${selection.applicationContextId ?? ''}`
 }
 
 export function sameSelection(a: Selection, b: Selection): boolean {

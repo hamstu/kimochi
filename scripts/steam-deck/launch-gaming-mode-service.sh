@@ -14,4 +14,5 @@ exec systemd-run --user --collect --unit=kimochi-gaming-mode \
   --setenv="KIMOCHI_GAMESCOPE_SCALE=${KIMOCHI_GAMESCOPE_SCALE:-2}" \
   --setenv="KIMOCHI_GAMESCOPE_UI_SCALE=${KIMOCHI_GAMESCOPE_UI_SCALE:-${KIMOCHI_GAMESCOPE_SCALE:-2}}" \
   --setenv="KIMOCHI_GAMESCOPE_DISPLAY=${KIMOCHI_GAMESCOPE_DISPLAY:-gamescope-0}" \
+  --setenv="KIMOCHI_STEAM_APP_ID=${KIMOCHI_STEAM_APP_ID:-}" \
   /bin/sh "$script_dir/launch-gaming-mode.sh" "$@"
