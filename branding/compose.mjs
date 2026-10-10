@@ -98,8 +98,34 @@ const svg = (w, h, body, extra = "") =>
 
 const glyphPath = (p, attrs) => `  <path transform="${p.transform}" d="${p.d}" ${attrs}/>`;
 
+/**
+ * Four corner brackets around the glyph: a viewfinder / shutter reticle that hints at
+ * the OCR capture. All sizes are fractions of the tile width `w`. Weight and inset are
+ * tuned so the strokes stay a solid ~1.2px at a 32px icon (thinner ones dissolved into
+ * noise there); below ~24px the brackets fade into texture and the キ carries it.
+ */
+export const RETICLE = {
+  half: 0.335, // centre to bracket corner (sets the inset from the tile edge)
+  arm: 0.115, // length of each bracket leg
+  stroke: 0.046, // line weight
+  opacity: 0.82, // a step behind the glyph
+};
+
+function reticlePath({ cx, cy, w, half, arm, stroke, opacity }, attrs) {
+  const [h, a] = [half * w, arm * w];
+  const [l, t, rr, b] = [cx - h, cy - h, cx + h, cy + h].map(r);
+  const A = r(a);
+  const d = [
+    `M${l} ${r(t + A)}V${t}H${r(l + A)}`,
+    `M${r(rr - A)} ${t}H${rr}V${r(t + A)}`,
+    `M${rr} ${r(b - A)}V${b}H${r(rr - A)}`,
+    `M${r(l + A)} ${b}H${l}V${r(b - A)}`,
+  ].join(" ");
+  return `  <path d="${d}" stroke-width="${r(stroke * w)}" stroke-opacity="${opacity}" stroke-linecap="round" stroke-linejoin="round" ${attrs}/>`;
+}
+
 /** The indigo tile, glyph and finish shared by every coloured variant. */
-function tile({ shape, box, glyphHeight, gradient = "vertical", id = "k", shadow = false, edge = true, motif = null }) {
+function tile({ shape, box, glyphHeight, gradient = "vertical", id = "k", shadow = false, edge = true, reticle = null, motif = null }) {
   const [bx, by, bw, bh] = box;
   const grad =
     gradient === "diagonal"
@@ -147,6 +173,7 @@ function tile({ shape, box, glyphHeight, gradient = "vertical", id = "k", shadow
     edge ? `    <path d="${shape}" fill="none" stroke="url(#${id}-edge)" stroke-width="${r(bw * 0.006)}"/>` : "",
     motif ? motif({ bx, by, bw, bh, id }) : "",
     `  </g>`,
+    reticle ? reticlePath({ cx: bx + bw / 2, cy: by + bh / 2, w: bw, ...reticle }, `fill="none" stroke="#fff" filter="url(#${id}-lift)"`) : "",
     glyphPath(glyph, `fill="url(#${id}-glyph)" filter="url(#${id}-lift)"`),
   ];
   return body.filter(Boolean).join("\n");
@@ -162,23 +189,34 @@ const FULL_RADIUS = 1024 * (185.4 / 824);
 
 const files = {};
 
-files["icon.svg"] = svg(1024, 1024, tile({ shape: squircle(...FULL_BOX, FULL_RADIUS), box: FULL_BOX, glyphHeight: 1024 * 0.54 }));
+// Shipped design: キ inside four corner brackets (owner's pick, from sketch "d-scan"
+// minus its scan line). The glyph shrinks from 0.54 to 0.44 of the tile to leave air
+// inside the reticle.
+const GLYPH = 0.44;
+
+files["icon.svg"] = svg(
+  1024,
+  1024,
+  tile({ shape: squircle(...FULL_BOX, FULL_RADIUS), box: FULL_BOX, glyphHeight: 1024 * GLYPH, reticle: RETICLE }),
+);
 
 files["icon-macos.svg"] = svg(
   1024,
   1024,
-  tile({ shape: squircle(...MAC_BOX, MAC_RADIUS), box: MAC_BOX, glyphHeight: 824 * 0.54, shadow: true }),
+  tile({ shape: squircle(...MAC_BOX, MAC_RADIUS), box: MAC_BOX, glyphHeight: 824 * GLYPH, shadow: true, reticle: RETICLE }),
 );
 
-// Windows / Linux / web: full-bleed square, glyph a touch larger (it has to survive
-// 16px and 24px taskbar sizes).
+// Windows / Linux / web: full-bleed square. Everything scales off the full 1024 width,
+// so glyph and brackets come out ~24% larger than on the macOS tile, which helps at
+// 16px and 24px taskbar sizes.
 files["icon-square.svg"] = svg(
   1024,
   1024,
-  tile({ shape: "M0 0H1024V1024H0Z", box: FULL_BOX, glyphHeight: 1024 * 0.58, edge: false }),
+  tile({ shape: "M0 0H1024V1024H0Z", box: FULL_BOX, glyphHeight: 1024 * GLYPH, edge: false, reticle: RETICLE }),
 );
 
-// Glyph-only, monochrome. currentColor when inlined; standalone (favicon) it picks the
+// Glyph-only, monochrome. No brackets: at favicon/menu-bar sizes they would squeeze
+// the キ to ~7px and turn to fuzz. currentColor when inlined; standalone (favicon) it picks the
 // indigo accent per colour scheme via the embedded style.
 const mono = placeGlyph({ cx: 512, cy: 512, height: 1024 * 0.92 });
 files["favicon.svg"] = svg(
@@ -197,7 +235,14 @@ files["tray-template.svg"] = svg(16, 16, glyphPath(tray, `fill="#000"`));
 
 // ---- Sketches for comparison ---------------------------------------------------
 
-files["sketches/a-vertical.svg"] = files["icon-macos.svg"];
+files["sketches/0-final-macos.svg"] = files["icon-macos.svg"];
+files["sketches/0-final-square.svg"] = files["icon-square.svg"];
+
+files["sketches/a-vertical.svg"] = svg(
+  1024,
+  1024,
+  tile({ shape: squircle(...MAC_BOX, MAC_RADIUS), box: MAC_BOX, glyphHeight: 824 * 0.54, shadow: true }),
+);
 
 files["sketches/b-diagonal.svg"] = svg(
   1024,
@@ -238,37 +283,6 @@ files["sketches/b-diagonal.svg"] = svg(
     ].join("\n"),
   );
 }
-
-// OCR hint: viewfinder corner brackets framing the glyph, and a faint scan line.
-files["sketches/d-scan.svg"] = svg(
-  1024,
-  1024,
-  tile({
-    shape: squircle(...MAC_BOX, MAC_RADIUS),
-    box: MAC_BOX,
-    glyphHeight: 824 * 0.46,
-    shadow: true,
-    id: "s",
-    motif: ({ bx, by, bw }) => {
-      const c = bx + bw / 2;
-      const half = bw * 0.33; // bracket box half-size
-      const arm = bw * 0.09;
-      const sw = bw * 0.028;
-      const [l, t, rr, b] = [c - half, by + bw / 2 - half, c + half, by + bw / 2 + half];
-      const corners = [
-        `M${l} ${t + arm}V${t}H${l + arm}`,
-        `M${rr - arm} ${t}H${rr}V${t + arm}`,
-        `M${rr} ${b - arm}V${b}H${rr - arm}`,
-        `M${l + arm} ${b}H${l}V${b - arm}`,
-      ];
-      const scanY = by + bw * 0.62;
-      return [
-        `    <path d="${corners.join(" ")}" fill="none" stroke="#fff" stroke-opacity="0.55" stroke-width="${r(sw)}" stroke-linecap="round" stroke-linejoin="round"/>`,
-        `    <rect x="${r(l - sw)}" y="${r(scanY)}" width="${r(2 * half + 2 * sw)}" height="${r(sw * 0.5)}" rx="${r(sw * 0.25)}" fill="#c9d4ff" fill-opacity="0.45"/>`,
-      ].join("\n");
-    },
-  }),
-);
 
 files["sketches/e-mono.svg"] = svg(
   1024,

@@ -26,8 +26,8 @@
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
  *   ?embed=1         embedded in the marketing site's live demo (vite.demo.config.ts builds this page
  *                    into site/public/demo/): the lines the site's game plays are left out of the
- *                    seeded log, the page never moves focus or scrolls its parent until it is made
- *                    interactive, and it takes `postMessage` commands from the same-origin parent
+ *                    seeded log, the page never moves focus until clicked and never scrolls its
+ *                    parent, and it takes `postMessage` commands from the same-origin parent
  *                    (see `listenToEmbedder`)
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
@@ -537,11 +537,13 @@ let embedScan = 0
  * Commands from the same-origin parent: `scan` shows a scan starting on the activity ticker, `line`
  * ingests a recognised line exactly as an OCR scan does (through the texthooker host, so the Log
  * appends, counts and tokenizes it), `theme` switches the appearance setting without a reload, and
- * `interactive` lets the page take focus once the visitor chooses to use it.
+ * `interactive` lets the page take focus (a click inside the page does the same).
  */
 function listenToEmbedder(): void {
   let interactive = false
-  // Inert until the visitor opts in: no focus moves, and no scrollIntoView reaching the parent.
+  // No focus moves until the visitor clicks in the page (or the parent says so), and never a
+  // scrollIntoView that reaches the parent page.
+  addEventListener('pointerdown', () => (interactive = true), { capture: true })
   const focus = HTMLElement.prototype.focus
   HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
     if (interactive) focus.call(this, { ...options, preventScroll: true })

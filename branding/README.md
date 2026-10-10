@@ -1,6 +1,8 @@
 # Kimochi icon
 
-A white katakana キ (ki) on a Radix indigo squircle (`#3e63dd`, from a step lighter at the top to a step deeper at the bottom, with a faint top sheen). The glyph is Hiragino Sans W8, already converted to outlines, so no SVG here depends on an installed font.
+A white katakana キ (ki) framed by four corner brackets, on a Radix indigo squircle (`#3e63dd`, from a step lighter at the top to a step deeper at the bottom, with a faint top sheen). The brackets read as a camera viewfinder or targeting reticle, a nod to the OCR capture. The glyph is Hiragino Sans W8, already converted to outlines, so no SVG here depends on an installed font.
+
+The brackets are set by `RETICLE` in `compose.mjs`, as fractions of the tile width: `half` 0.335 (sets the inset from the tile edge), `arm` 0.115, `stroke` 0.046 and `opacity` 0.82. The キ is 0.44 of the tile (`GLYPH`). This weight keeps each bracket a solid line of about 1.2px at a 32px icon; the earlier thinner brackets broke up at that size. At 16px the brackets soften into texture and the キ carries the icon.
 
 ## Files
 
@@ -8,10 +10,10 @@ A white katakana キ (ki) on a Radix indigo squircle (`#3e63dd`, from a step lig
 | --- | --- | --- |
 | `icon.svg` | Squircle filling the 1024 canvas, no margin or shadow | Website hero (`site/public/icon.svg`), OG image |
 | `icon-macos.svg` | 824px squircle centred in the 1024 canvas (100px margin) with a soft drop shadow | `src-tauri/icons/icon.icns` |
-| `icon-square.svg` | Full-bleed square, glyph ~7% larger | `icon.ico`, Linux PNGs, `Square*Logo.png`, `StoreLogo.png`, apple-touch-icon |
-| `favicon.svg` | Glyph only, `currentColor`. Standalone it uses indigo `#3e63dd` in light mode and `#9eb1ff` in dark mode. If you inline it in HTML, delete its `<style>` so it inherits colour from the page | `site/public/favicon.svg` |
-| `tray-template.svg` | 16pt black glyph for the macOS menu bar | `tray-template.png`, `tray-template@2x.png` |
-| `sketches/*.svg` | Alternatives to compare, with `.png` previews and `contact-sheet.png` | Not shipped |
+| `icon-square.svg` | Full-bleed square. Glyph and brackets scale with the full 1024 width, so they are ~24% larger than on the macOS tile | `icon.ico`, Linux PNGs, `Square*Logo.png`, `StoreLogo.png`, apple-touch-icon |
+| `favicon.svg` | Bare キ, no brackets (at 16px they would squeeze the glyph to ~7px). Uses `currentColor`. Standalone it uses indigo `#3e63dd` in light mode and `#9eb1ff` in dark mode. If you inline it in HTML, delete its `<style>` so it inherits colour from the page | `site/public/favicon.svg` |
+| `tray-template.svg` | 16pt black キ for the macOS menu bar, no brackets for the same reason | `tray-template.png`, `tray-template@2x.png` |
+| `sketches/*.svg` | `0-final-macos` and `0-final-square` are copies of the shipped design. The rest are the alternatives that were considered (vertical gradient without brackets, diagonal gradient, dark ground, bare glyph). Each has a `.png` preview, and `contact-sheet.png` shows them all | Previews only |
 | `compose.mjs` | Writes all of the SVGs above from shared parameters: squircle geometry, colours, glyph size and optical centring | Optional |
 
 ## Regenerating
@@ -39,7 +41,7 @@ To change the icon, edit the SVGs directly and run `npm run icons`. You can also
 - **macOS** applies no mask to `.icns`, so the shape has to be drawn in the source. Apple's Big Sur grid puts an 824×824 continuous-corner squircle (radius ≈ 185) centred in the 1024 canvas, leaving ~10% around it for the shadow. The shadow is soft, about 10px down, 10px blur and 30% black. `squircle()` uses the reverse-engineered `UIBezierPath` continuous-corner curve, not a circular-arc rounded rect.
 - **macOS 26 Tahoe** puts legacy icons into a grey squircle ("icon jail") when their pixels poke outside its expected shape ([heise](https://heise.de/-11075561), [Rogue Amoeba](https://weblog.rogueamoeba.com/2026/06/26/free-the-icons/)). Matching the 824/100 grid is the best defence. If Tahoe still jails the app, the next steps are to drop the shadow filter in `icon-macos.svg` or to ship an Icon Composer `.icon` asset.
 - **Dev mode on macOS** uses the `.icns` for the Dock (`tauri-codegen` prefers `.icns` there). The window icon on Linux comes from the first `.png` in `bundle.icon`, which is `icon.png`, the square variant.
-- **Windows** expects a full-bleed square `.ico`; the system adds no rounding or plate. **Linux** expects square RGBA PNGs (32/128/256/512) and themes may mask them. Both use `icon-square`. The glyph is drawn larger there so it holds up at 16–24px.
+- **Windows** expects a full-bleed square `.ico`; the system adds no rounding or plate. **Linux** expects square RGBA PNGs (32/128/256/512) and themes may mask them. Both use `icon-square`. Glyph and brackets come out larger there, which helps them hold up at 16–24px.
 
 ## Tray icon
 

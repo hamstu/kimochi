@@ -6,6 +6,8 @@
  * from the preview harness (vite.demo.config.ts → /demo/panel.html) with the Tauri runtime mocked,
  * embedded in an iframe and driven by postMessage, so each line the game shows arrives in the Log.
  *
+ * The platform comes in as a prop (the home page's PlatformStrip is the selector).
+ *
  * Steam Deck: one handheld screen and the controller flow (both sticks → radial menu → Scan → D-pad
  * word to word → A reads → B back).
  *
@@ -20,13 +22,12 @@ import { GameScreen } from './GameScreen'
 import { DeckBody, DeckHud } from './DeckStage'
 import { LogFrame, type PostToLog } from './LogFrame'
 import { DesktopBar, Taskbar, TitleBar, WINDOW_SHAPE } from './chrome'
-import { PlatformTabs } from './PlatformTabs'
 import { PLAY_LINES } from './content'
 import './demo.css'
 
 export interface LiveDemoProps {
   className?: string
-  /** Initial platform tab; defaults to the visitor's OS. */
+  /** The platform to show (the home page's platform strip drives it); defaults to the visitor's OS. */
   platform?: Platform
 }
 
@@ -38,8 +39,9 @@ function stillFrame(frames: Frame[]): Frame {
   return frames.find((f) => f.popup) ?? frames[0]
 }
 
-export function LiveDemo({ className = '', platform: initial }: LiveDemoProps) {
-  const [platform, setPlatform] = useState<Platform>(() => initial ?? guessPlatform())
+export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
+  const [detected] = useState<Platform>(guessPlatform)
+  const platform = chosen ?? detected
   const theme = useResolvedTheme()
   const reduced = useReducedMotion()
   const stageRef = useRef<HTMLDivElement>(null)
@@ -67,10 +69,6 @@ export function LiveDemo({ className = '', platform: initial }: LiveDemoProps) {
   // A visitor's pick belongs to the line it was made on.
   useEffect(() => setUserCursor(null), [frame.line, platform])
 
-  const choose = (p: Platform): void => {
-    setUserCursor(null)
-    setPlatform(p)
-  }
 
   const screen = useMemo(
     () => (
@@ -89,10 +87,9 @@ export function LiveDemo({ className = '', platform: initial }: LiveDemoProps) {
 
   return (
     <div className={`w-full ${className}`}>
-      <PlatformTabs value={platform} onChange={choose} />
       <div
         ref={stageRef}
-        className="kd-stage relative mt-4 flex w-full flex-col overflow-hidden rounded-xl border border-hairline lg:aspect-[16/10]"
+        className="kd-stage relative flex w-full [overflow-anchor:none] flex-col overflow-hidden rounded-xl border border-hairline lg:aspect-[16/10]"
       >
         {deck ? (
           <div className="grid flex-1 place-items-center px-3 py-8 sm:px-8 lg:px-14">
@@ -122,11 +119,6 @@ export function LiveDemo({ className = '', platform: initial }: LiveDemoProps) {
           </>
         )}
       </div>
-      <p className="mt-3 text-meta text-ink-3">
-        {deck
-          ? 'Steam Deck: press both sticks for the Kimochi menu, Scan, step through words with the D-pad, A to read, B to go back.'
-          : 'The game is a drawing. The Log beside it is the real Kimochi window running in your browser; hover a boxed word to look it up, or press Try it to use the Log.'}
-      </p>
     </div>
   )
 }

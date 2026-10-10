@@ -3,19 +3,11 @@ import { DownloadButton } from '../DownloadButton'
 
 /**
  * The home hero: the app icon, wordmark, promise, lede and the download button, centred, over a
- * faint vertical 気持ち ("feeling", the name's origin) set in the Japanese face.
+ * soft indigo bloom.
  */
 export function Hero() {
   return (
     <section className="relative isolate overflow-hidden">
-      {/* Backdrop: the name in Japanese, set vertically, barely there. */}
-      <p
-        lang="ja"
-        aria-hidden
-        className="pointer-events-none absolute top-6 right-[max(1rem,calc(50%-34rem))] -z-10 text-[clamp(7rem,4rem+12vw,13rem)] leading-none font-semibold text-hairline opacity-70 select-none [writing-mode:vertical-rl] max-sm:right-[-1.5rem] max-sm:opacity-50"
-      >
-        気持ち
-      </p>
       {/* A soft indigo bloom behind the icon. */}
       <div
         aria-hidden

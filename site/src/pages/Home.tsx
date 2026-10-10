@@ -1,16 +1,15 @@
 import { DownloadButton } from '../components/DownloadButton'
+import { DemoShowcase } from '../components/home/DemoShowcase'
 import { Section } from '../components/Section'
 import { FeatureGrid } from '../components/home/FeatureGrid'
 import { Hero } from '../components/home/Hero'
 import { HowItWorks } from '../components/home/HowItWorks'
-import { PlatformStrip } from '../components/home/PlatformStrip'
 import { PrivacyNote } from '../components/home/PrivacyNote'
 import { Testimonials } from '../components/home/TestimonialsSection'
-import { LiveDemo } from '../demo/LiveDemo'
 
 /**
- * Home. Section order: hero, platforms, demo, features, how it works, privacy, testimonials
- * (hidden while empty), download. Keep the ids features, demo and download: the header nav links
+ * Home. Section order: hero, the platform strip + live demo (DemoShowcase), features, how it
+ * works, privacy, testimonials (hidden while empty), download. Keep the ids features, demo and download: the header nav links
  * to them. Feature copy and visuals: src/components/home/features.ts. Quotes:
  * src/components/home/testimonials.ts.
  */
@@ -18,16 +17,7 @@ export function Home() {
   return (
     <>
       <Hero />
-      <PlatformStrip />
-
-      <Section
-        id="demo"
-        eyebrow="Demo"
-        heading="See it read"
-        lede="A scene, the overlay on top and the Log beside it. Point at a word to look it up, the way you would in a game."
-      >
-        <LiveDemo />
-      </Section>
+      <DemoShowcase />
 
       <Section
         id="features"

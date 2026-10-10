@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { MousePointerClick, X } from 'lucide-react'
 import { WINDOW_SHAPE, type DesktopPlatform } from './chrome'
 
 /** The harness page built by `npm run demo:build` (vite.demo.config.ts) into site/public/demo/. */
@@ -34,14 +33,14 @@ interface LogFrameProps {
 }
 
 /**
- * The REAL Kimochi Log window (the app's React UI with the Tauri runtime mocked), embedded inert:
- * no pointer events, no focus, no scrolling the page, until the visitor presses "Try it".
+ * The REAL Kimochi Log window (the app's React UI with the Tauri runtime mocked), interactive by
+ * default. It never takes focus or scrolls the page on its own: the frame is out of the tab order,
+ * and the harness (`?embed=1`) ignores the app's programmatic focus until the visitor clicks in it.
  */
 export function LogFrame({ platform, theme, load, postRef, className = '' }: LogFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const [ok, setOk] = useState<boolean | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [interactive, setInteractive] = useState(false)
   const themeRef = useRef(theme)
   themeRef.current = theme
 
@@ -56,7 +55,6 @@ export function LogFrame({ platform, theme, load, postRef, className = '' }: Log
     const params = new URLSearchParams({ window: 'log', embed: '1', sidebar: '0', theme: themeRef.current })
     if (platform !== 'macos') params.set('platform', platform)
     setLoaded(false)
-    setInteractive(false)
     setSrc(`${LOG_URL}?${params}`)
   }, [load, ok, platform])
 
@@ -73,10 +71,6 @@ export function LogFrame({ platform, theme, load, postRef, className = '' }: Log
     if (loaded) postRef.current?.({ type: 'theme', value: theme })
   }, [theme, loaded, postRef])
 
-  useEffect(() => {
-    if (loaded) postRef.current?.({ type: 'interactive', value: interactive })
-  }, [interactive, loaded, postRef])
-
   return (
     <div className={`relative overflow-hidden bg-raised ${WINDOW_SHAPE[platform]} ${className}`}>
       {src ? (
@@ -84,9 +78,8 @@ export function LogFrame({ platform, theme, load, postRef, className = '' }: Log
           ref={frameRef}
           src={src}
           title="Kimochi Log window (live)"
-          className={`absolute inset-0 size-full border-0 transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'} ${interactive ? '' : 'pointer-events-none'}`}
-          tabIndex={interactive ? 0 : -1}
-          inert={!interactive}
+          className={`absolute inset-0 size-full border-0 transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          tabIndex={-1}
           onLoad={() => setLoaded(true)}
         />
       ) : null}
@@ -100,27 +93,6 @@ export function LogFrame({ platform, theme, load, postRef, className = '' }: Log
             <span className="h-1 w-16 animate-pulse rounded-full bg-hover" />
           )}
         </div>
-      )}
-      {loaded && !interactive && (
-        <button
-          type="button"
-          onClick={() => setInteractive(true)}
-          className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-accent px-4 py-2 text-small font-medium text-accent-contrast shadow-pop transition-colors hover:bg-accent-hover"
-        >
-          <MousePointerClick size={16} aria-hidden />
-          Try it
-        </button>
-      )}
-      {interactive && (
-        <button
-          type="button"
-          onClick={() => setInteractive(false)}
-          aria-label="Stop using the Log"
-          className="absolute bottom-14 right-3 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-raised px-3 py-1.5 text-meta text-ink-2 shadow-pop hover:bg-hover"
-        >
-          <X size={14} aria-hidden />
-          Done
-        </button>
       )}
     </div>
   )

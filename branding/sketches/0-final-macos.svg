@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="k-fill" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="924">
+      <stop offset="0" stop-color="#5a7ce6"/>
+      <stop offset="0.45" stop-color="#3e63dd"/>
+      <stop offset="1" stop-color="#2c4cbf"/>
+    </linearGradient>
+    <linearGradient id="k-sheen" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="553.2">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="k-edge" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="347.2">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="k-glyph" gradientUnits="userSpaceOnUse" x1="0" y1="264.8" x2="0" y2="759.2">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e9edfc"/>
+    </linearGradient>
+    <clipPath id="k-clip"><path d="M383.41 100 L640.59 100 C722.19 100 763 100 799.79 112.14 L806.92 113.89 C854.88 131.34 892.66 169.12 910.11 217.08 C924 261 924 301.81 924 383.41 L924 640.59 C924 722.19 924 763 911.86 799.79 L910.11 806.92 C892.66 854.88 854.88 892.66 806.92 910.11 C763 924 722.19 924 640.59 924 L383.41 924 C301.81 924 261 924 224.21 911.86 L217.08 910.11 C169.12 892.66 131.34 854.88 113.89 806.92 C100 763 100 722.19 100 640.59 L100 383.41 C100 301.81 100 261 112.14 224.21 L113.89 217.08 C131.34 169.12 169.12 131.34 217.08 113.89 C261 100 301.81 100 383.41 100 Z"/></clipPath>
+    <filter id="k-lift" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6.59" stdDeviation="9.89" flood-color="#1a2c80" flood-opacity="0.35"/>
+    </filter>
+    <filter id="k-shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <path d="M383.41 100 L640.59 100 C722.19 100 763 100 799.79 112.14 L806.92 113.89 C854.88 131.34 892.66 169.12 910.11 217.08 C924 261 924 301.81 924 383.41 L924 640.59 C924 722.19 924 763 911.86 799.79 L910.11 806.92 C892.66 854.88 854.88 892.66 806.92 910.11 C763 924 722.19 924 640.59 924 L383.41 924 C301.81 924 261 924 224.21 911.86 L217.08 910.11 C169.12 892.66 131.34 854.88 113.89 806.92 C100 763 100 722.19 100 640.59 L100 383.41 C100 301.81 100 261 112.14 224.21 L113.89 217.08 C131.34 169.12 169.12 131.34 217.08 113.89 C261 100 301.81 100 383.41 100 Z" fill="url(#k-fill)" filter="url(#k-shadow)"/>
+  <g clip-path="url(#k-clip)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#k-sheen)"/>
+    <path d="M383.41 100 L640.59 100 C722.19 100 763 100 799.79 112.14 L806.92 113.89 C854.88 131.34 892.66 169.12 910.11 217.08 C924 261 924 301.81 924 383.41 L924 640.59 C924 722.19 924 763 911.86 799.79 L910.11 806.92 C892.66 854.88 854.88 892.66 806.92 910.11 C763 924 722.19 924 640.59 924 L383.41 924 C301.81 924 261 924 224.21 911.86 L217.08 910.11 C169.12 892.66 131.34 854.88 113.89 806.92 C100 763 100 722.19 100 640.59 L100 383.41 C100 301.81 100 261 112.14 224.21 L113.89 217.08 C131.34 169.12 169.12 131.34 217.08 113.89 C261 100 301.81 100 383.41 100 Z" fill="none" stroke="url(#k-edge)" stroke-width="4.94"/>
+  </g>
+  <path d="M235.96 330.72V235.96H330.72 M693.28 235.96H788.04V330.72 M788.04 693.28V788.04H693.28 M330.72 788.04H235.96V693.28" stroke-width="37.9" stroke-opacity="0.82" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#fff" filter="url(#k-lift)"/>
+  <path transform="translate(314.61 667.75) scale(0.395376)" d="M358 -641L219 -620C149 -609 116 -605 72 -604L99 -433C140 -444 163 -448 248 -461L386 -483L409 -357L218 -327C158 -317 116 -313 75 -311L102 -141C165 -157 170 -158 239 -169L437 -200L463 -56C477 20 481 49 481 83L671 52C659 14 657 4 641 -82L613 -227L802 -256C886 -268 886 -268 943 -274L913 -443C871 -430 838 -423 769 -412L584 -384L560 -510L716 -534C824 -550 824 -550 858 -553L830 -721C786 -708 758 -703 687 -692L531 -668L520 -723C512 -769 507 -803 506 -834L322 -806C332 -777 337 -756 348 -693Z" fill="url(#k-glyph)" filter="url(#k-lift)"/>
+</svg>
