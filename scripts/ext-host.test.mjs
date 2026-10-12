@@ -12,15 +12,17 @@
  * tab-manager.ts `enable?`/`enabled`, content.js `hd_reader_command`, …).
  */
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import vm from 'node:vm'
 import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { yomitanShimSource } from './yomitan-shims.mjs'
 
 const root = new URL('../', import.meta.url)
+// A path, not `URL.pathname`: on Windows the latter is `/C:/...`, which esbuild cannot resolve.
 const built = await build({
-  entryPoints: [new URL('host/ext/entry.js', root).pathname],
+  entryPoints: [fileURLToPath(new URL('host/ext/entry.js', root))],
   bundle: true,
   format: 'iife',
   platform: 'browser',
@@ -281,7 +283,10 @@ class World {
       Event, EventTarget, CustomEvent, KeyboardEvent: Event, MouseEvent: Event, PointerEvent: Event,
       console: { log() {}, warn() {}, error() {}, info() {} },
       // Unreferenced, so a host timer still pending when the tests end (a relay hello loop, a
-      // delivery acknowledgement deadline) never keeps the test process alive.
+      // delivery acknowledgement deadline) never keeps the test process alive. While the tests
+      // run, `keepAlive` below holds the loop open instead: a test that awaits nothing but one of
+      // these timers would otherwise drain the loop and be cancelled ("Promise resolution is
+      // still pending but the event loop has already resolved"), as Node 22 does on CI.
       setTimeout: (...args) => setTimeout(...args).unref(),
       setInterval: (...args) => setInterval(...args).unref(),
       clearTimeout, clearInterval, queueMicrotask, structuredClone, btoa, atob, Blob,
@@ -499,6 +504,9 @@ async function tentenSession(options = {}) {
 }
 
 // ---------------------------------------------------------------- engine resolution
+
+const keepAlive = setInterval(() => {}, 1000)
+after(() => clearInterval(keepAlive))
 
 test('the host stands down for Yomitan, builtin and custom-api, and installs for the two extensions', () => {
   for (const mirror of ['yomitan', 'builtin', 'custom-api']) {

@@ -108,8 +108,13 @@ test("release companion contains everything needed for installation including th
     encoding: "utf8",
   });
   assert.equal(packed.status, 0, packed.stderr);
-  const contents = spawnSync("tar", ["-tzf", output], { encoding: "utf8" });
-  assert.equal(contents.status, 0);
+  // Relative to its directory: GNU tar on the Windows runners reads a drive letter in an
+  // absolute path (`C:\...`) as a remote host and fails to connect to it.
+  const contents = spawnSync("tar", ["-tzf", path.basename(output)], {
+    cwd: f.data,
+    encoding: "utf8",
+  });
+  assert.equal(contents.status, 0, contents.stderr);
   assert.match(contents.stdout, /Kimochi-Gaming-Mode\/install-gaming-mode.sh/);
   assert.match(contents.stdout, /Kimochi-Gaming-Mode\/kimochi.png/);
   assert.match(contents.stdout, /Kimochi-Gaming-Mode\/INSTALL.txt/);
