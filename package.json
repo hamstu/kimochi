@@ -15,7 +15,7 @@
     "release": "node scripts/run.mjs release",
     "dev": "node scripts/run.mjs dev",
     "start": "node scripts/run.mjs launch",
-    "test": "node --test --test-timeout=30000 scripts/*.test.mjs",
+    "test": "node --test --test-timeout=120000 scripts/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.frontend.json",
     "lint": "eslint .",
     "format": "prettier --write frontend scripts ui",

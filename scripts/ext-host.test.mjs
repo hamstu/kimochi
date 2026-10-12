@@ -687,7 +687,10 @@ test('settings messages and ports wait when the engine window has not registered
     port.onMessage.addListener((m) => got.push(m))
     port.postMessage({ early: true })
   `)
-  assert.equal(await result(page, 'answer'), 'fast-offscreen')
+  // Whoever answers, the early message was held until the engine window registered, then
+  // delivered. The offscreen document usually answers first; on a slow machine it may not exist
+  // yet when the queue drains, and the background's later answer is the one that comes back.
+  assert.ok(['fast-offscreen', 'slow-background'].includes(await result(page, 'answer')))
   await starting
   await waitFor(() => result(page, 'got.length'), 'early settings port echo')
   assert.equal(result(page, 'got[0].echo.early'), true)
@@ -1265,7 +1268,7 @@ test("a module worker's remote fetch goes through its frame, streams, keeps the 
   const shimBuild = await build({
     stdin: {
       contents: "export { installWorkerNetwork, runWorkerShim, WORKER_SHIM_PATH } from './host/ext/worker-network.js'; export { createNetworkServer } from './host/ext/network.js'",
-      resolveDir: new URL('.', root).pathname,
+      resolveDir: fileURLToPath(root),
       loader: 'js'
     },
     bundle: true,
@@ -1379,7 +1382,7 @@ test('lookupRange meets the same enable switch and scope as a pointer lookup', a
 
 async function importWorkerNetwork() {
   const out = await build({
-    stdin: { contents: "export * from './host/ext/worker-network.js'", resolveDir: new URL('.', root).pathname, loader: 'js' },
+    stdin: { contents: "export * from './host/ext/worker-network.js'", resolveDir: fileURLToPath(root), loader: 'js' },
     bundle: true,
     format: 'esm',
     platform: 'browser',

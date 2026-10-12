@@ -22,6 +22,15 @@ const gnuOnly = {
   skip:
     process.platform !== "linux" && "installer needs GNU coreutils (SteamOS)",
 };
+/**
+ * A path as the MSYS `sh` on the Windows runners should see it (`G:\\a\\b` → `/g/a/b`): GNU tar
+ * there reads the drive letter of a native path as a remote host. Unchanged elsewhere.
+ */
+const shellPath = (p) =>
+  process.platform === "win32"
+    ? p.replace(/^([A-Za-z]):/, (_, d) => "/" + d.toLowerCase()).replace(/\\/g, "/")
+    : p;
+
 async function fixture(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "kimochi-install-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -104,7 +113,7 @@ test("release companion contains everything needed for installation including th
   const packager = fileURLToPath(
     new URL("./steam-deck/package-gaming-mode.sh", import.meta.url),
   );
-  const packed = spawnSync("sh", [packager, f.artifact, output], {
+  const packed = spawnSync("sh", [shellPath(packager), shellPath(f.artifact), shellPath(output)], {
     encoding: "utf8",
   });
   assert.equal(packed.status, 0, packed.stderr);

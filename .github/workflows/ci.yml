@@ -321,6 +321,14 @@ jobs:
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
         run: cargo install --locked artifact-signing-cli
 
+      # makensis maps the whole installer in the temp directory; the system drive of a runner can
+      # be nearly full while its work drive has plenty, so use the runner's own temp directory.
+      - name: Use the runner's work drive for temporary files
+        if: runner.os == 'Windows'
+        run: |
+          echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       # The Hachidori and 10ten trees are gitignored; fetch the pinned releases into the kept
       # extensions/ cache (a no-op when they already match extensions/<id>.sha256.json).
       - name: Fetch vendored extensions
