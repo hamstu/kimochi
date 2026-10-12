@@ -62,7 +62,7 @@ await import('/spike/panel-shim.js')
 const host = window.__kimochiPanelYomitan
 if (!host) {
   throw new Error(
-    'Yomitan panel host did not install. Check that host/panel-shim.js reached dist/spike/panel-shim.js.'
+    'Yomitan panel host did not install. Check that scripts/prepare.mjs built dist/spike/panel-shim.js from host/yomitan/.'
   )
 }
 

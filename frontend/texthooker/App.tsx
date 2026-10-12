@@ -43,7 +43,7 @@ import { useWebSocketInput } from "./hooks/useWebSocketInput";
 import type { SocketStatus } from "./websocket-input";
 import { useScanMode } from "./hooks/useScanMode";
 import { useLineHotkeys } from "./hooks/useLineHotkeys";
-import { usePanelYomitan } from "../shell/panelYomitan";
+import { usePanelDictionary } from "../shell/panelDictionary";
 import { openSettings } from "../bridge/tauri";
 
 /** Starts the session owner, then renders its children; shows progress or the failure meanwhile. */
@@ -108,7 +108,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   const scroll = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const apiMode = settings.dictionaryMode === "custom-api";
-  const lookup = usePanelYomitan(!apiMode);
+  const lookup = usePanelDictionary(!apiMode);
   useEffect(() => subscribe(setSnap), []);
   useEffect(() => onSettingsChange(setSettings), []);
   const openNotebook = useRef(onOpenNotebook);

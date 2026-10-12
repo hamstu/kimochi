@@ -9,16 +9,16 @@
  * a floating async IIFE, so nothing surfaced: the Log went on reporting the
  * dictionary as reachable, which it was, while no hover could ever look a word up.
  *
- * This runs the real `host/panel-shim.js`, not a description of it.
+ * This runs the real `dist/spike/panel-shim.js` bundle (built from `host/yomitan/`), not a
+ * description of it.
  */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import vm from 'node:vm'
 import { readFile } from 'node:fs/promises'
+import { yomitanShimSource } from './yomitan-shims.mjs'
 
-const shim = (
-  await readFile(new URL('../host/panel-shim.js', import.meta.url), 'utf8')
-).replace("import(asset('/spike/network-bundle.js'))", 'Promise.resolve()')
+const shim = await yomitanShimSource('panel-shim.js', { network: 'Promise.resolve()' })
 
 function panelWindow() {
   const context = vm.createContext({ URL, EventTarget, Event, console, structuredClone, Promise })

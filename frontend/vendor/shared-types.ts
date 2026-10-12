@@ -83,7 +83,14 @@ export type HotkeyOverrides = {
   }
 }
 
-export type PopupType = 'builtin' | 'custom-api'
+/**
+ * `yomitanSettings.popupType`. `'builtin'` is Yomitan; the engine table and the
+ * `dictionaryEngineOf` / `popupTypeOf` helpers live in `ui/settings.ts` (`@ui/settings`).
+ */
+export type PopupType = 'builtin' | 'custom-api' | 'hachidori' | 'tenten'
+
+/** The dictionary engine by name; see `DICTIONARY_ENGINES` in `ui/settings.ts`. */
+export type DictionaryEngine = 'yomitan' | 'hachidori' | 'tenten' | 'custom-api'
 
 export type YomitanSettings = {
   popupType: PopupType

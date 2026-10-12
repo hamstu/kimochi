@@ -1,0 +1,22 @@
+<!doctype html>
+<!--
+  The background context of a Hachidori / 10ten engine (DICTIONARY_ENGINES.md §5.4), served at
+  <scheme>://localhost/__kimochi/ext-background.html?engine=<id> as the top document of the engine's
+  hidden `ext-<id>` window (native, panels.rs `extension_window`), so its IndexedDB/OPFS are
+  first-party and persist; it relays to the overlay's hub over ext_relay and creates the offscreen
+  iframe (Hachidori) inside itself.
+
+  Only the host is loaded here. host/ext/frame.js then loads the extension's own background script
+  (`manifest.background.service_worker`, as a module for Hachidori, classic for 10ten) after it has
+  set `chrome.*`, a <base> at the extension root (10ten resolves `./10ten-ja-jpdict.js` against it)
+  and the i18n table, and fires onInstalled / onStartup once it has run. Native also injects the
+  host at document start; the second copy sees the first and stands down.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Kimochi extension background</title>
+    <script src="/__kimochi/ext-host.js"></script>
+  </head>
+  <body></body>
+</html>

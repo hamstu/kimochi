@@ -57,7 +57,7 @@ export type PanelLabel =
   | 'log'
   | 'settings'
   | 'diagnostics'
-  | 'yomitan'
+  | 'dictionary'
   | 'tray-popover'
   | 'welcome'
   | 'overlay'

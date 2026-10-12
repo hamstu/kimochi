@@ -39,11 +39,11 @@ function newEntry(text) {
  * add/delete race Electron already has when the log panel edits history while a
  * scan lands.
  */
-export async function addHistoryEntry(text, { detached = false, groups, engine, merge = false } = {}) {
-  const entry = { ...newEntry(text), ...(groups ? { groups, engine } : {}) }
+export async function addHistoryEntry(text, { detached = false, groups, engine, merge = false, frame = null } = {}) {
+  const entry = { ...newEntry(text), ...(groups ? { groups, engine } : {}), ...(frame ? { frame } : {}) }
   const native = await optional(
     'history_add',
-    { text, detached, groups: groups ?? null, engine: engine ?? null, merge },
+    { text, detached, groups: groups ?? null, engine: engine ?? null, merge, frame: frame ?? null },
     null
   )
   if (native) return native
@@ -116,7 +116,9 @@ export async function publishOcrResult(result, options = {}) {
     detached: options.detached,
     groups,
     engine: result.engine,
-    merge: !!options.merge
+    merge: !!options.merge,
+    // The capture frame it was read from: a mining screenshot from this line shows it.
+    frame: options.frame ?? null
   })
   if (entry?.skipped) {
     report(0, true)

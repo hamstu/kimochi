@@ -26,6 +26,15 @@ export type OcrMode = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr' | 'livetex
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
+/**
+ * How `yomitanSettings.popupType` is stored. `'builtin'` (Yomitan) and `'custom-api'` predate the
+ * other engines and keep their spelling, so no stored setting needs migrating.
+ */
+export type PopupType = 'builtin' | 'custom-api' | 'hachidori' | 'tenten'
+
+/** The dictionary engine by name, as everything but the stored setting speaks of it. */
+export type DictionaryEngine = 'yomitan' | 'hachidori' | 'tenten' | 'custom-api'
+
 export type InterfaceScale = 'small' | 'medium' | 'large' | 'xlarge'
 export const INTERFACE_SCALES: Record<InterfaceScale, { label: string; factor: number }> = {
   small: { label: 'Small', factor: 0.92 },
@@ -87,7 +96,8 @@ export interface Settings {
   gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number }
   controllerButtons: ControllerButtons
   yomitanSettings: {
-    popupType: 'builtin' | 'custom-api'
+    /** Which dictionary engine; see `DICTIONARY_ENGINES`. `'builtin'` is Yomitan. */
+    popupType: PopupType
     customApiUrl: string
   }
   ocrMode: OcrMode
@@ -253,6 +263,220 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
   }
 }
 
+/**
+ * What a dictionary engine is, for Settings → Dictionary's chooser, the dictionary panel and
+ * onboarding. The chooser lists every key, in this order. See DICTIONARY_ENGINES.md §1.
+ */
+export interface DictionaryEngineInfo {
+  name: string
+  /** One short line under the name in the chooser's list. */
+  tagline: string
+  description: string
+  strengths: string[]
+  /** What it needs, and anything about how it runs inside Kimochi worth knowing up front. */
+  requirements: string
+  /** The engine's licence (an SPDX id), or where it comes from when it is Kimochi's own. */
+  licence: string
+  /** The project's home, linked from the chooser. */
+  upstream: string
+  /** The link's text when it is not the engine's own project ("Upstream" otherwise). */
+  upstreamLabel?: string
+  /** The bundled release, or null for Kimochi's own pop-up. */
+  version: string | null
+  runs: 'local' | 'online'
+  /** The engine's own options page, relative to its origin; null when it has none. */
+  optionsPage: string | null
+  /** Shown as a badge beside the name. */
+  experimental?: boolean
+}
+
+export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> = {
+  yomitan: {
+    name: 'Yomitan',
+    tagline: 'The popup dictionary you may already use',
+    description:
+      'Yomitan itself, running inside Kimochi. Import the Yomitan dictionaries you already have; audio, scanning options and Anki mining are all set up in its own settings.',
+    strengths: [
+      'Imports any Yomitan dictionary, including settings backups',
+      'Word audio and Anki mining built in',
+      'Works offline once dictionaries are imported'
+    ],
+    requirements:
+      'Needs at least one dictionary: the setup offers Jitendex, or import your own in Yomitan settings.',
+    licence: 'GPL-3.0-or-later',
+    upstream: 'https://github.com/yomidevs/yomitan',
+    version: '26.8.24.0',
+    runs: 'local',
+    optionsPage: 'settings.html'
+  },
+  hachidori: {
+    name: 'Hachidori',
+    tagline: 'Fast, with native dictionary indexes',
+    description:
+      'A fast lookup engine written in C++ and compiled to WebAssembly, which keeps dictionaries in native indexes rather than a browser database. It imports Yomitan dictionaries and MDict, and on first run offers a set of recommended dictionaries.',
+    strengths: [
+      'Quick lookups, even with many large dictionaries',
+      'Imports Yomitan dictionaries and MDict',
+      'Recommended dictionaries offered on first run',
+      'Anki mining through AnkiConnect'
+    ],
+    requirements:
+      'Needs dictionaries, from its first-run offer or your own. Kimochi runs its single-threaded engine, so imports take a few seconds longer than in Chrome.',
+    licence: 'GPL-3.0-or-later',
+    upstream: 'https://github.com/bee-san/hachidori',
+    version: '0.3.0',
+    runs: 'local',
+    optionsPage: 'settings.html'
+  },
+  tenten: {
+    name: '10ten',
+    tagline: 'Lightweight, works straight away',
+    description:
+      '10ten Japanese Reader is a lightweight reader with a word dictionary bundled in, so it looks words up the moment it is chosen. It then downloads the full JMdict, kanji and names dictionaries in the background.',
+    strengths: [
+      'Works immediately, with nothing to import',
+      'Kanji and proper-name lookups',
+      'Small and quick to start'
+    ],
+    requirements:
+      'Downloads its full dictionaries from data.10ten.life on first use and keeps them up to date. No Anki mining.',
+    licence: 'GPL-3.0-or-later',
+    upstream: 'https://github.com/birchill/10ten-ja-reader',
+    version: '1.28.0',
+    runs: 'local',
+    optionsPage: 'options.html'
+  },
+  'custom-api': {
+    name: 'Kimochi pop-up',
+    tagline: 'Over a Yomitan API server',
+    description:
+      'Click words in the Log to look them up through a Yomitan API server, and build Anki cards here.',
+    strengths: [
+      'Click-to-define and furigana in the Log',
+      'Anki card builder in Kimochi',
+      'Uses a Yomitan API server you run'
+    ],
+    requirements: 'Needs a Yomitan API server reachable from this computer.',
+    licence: 'Part of Kimochi',
+    upstream: 'https://github.com/yomidevs/yomitan-api',
+    upstreamLabel: 'Yomitan API',
+    version: null,
+    runs: 'online',
+    optionsPage: null,
+    experimental: true
+  }
+}
+
+const ENGINE_OF: Record<PopupType, DictionaryEngine> = {
+  builtin: 'yomitan',
+  'custom-api': 'custom-api',
+  hachidori: 'hachidori',
+  tenten: 'tenten'
+}
+
+/** The engine a stored `popupType` names. Anything unrecognised is Yomitan, the default. */
+export function dictionaryEngineOf(popupType: unknown): DictionaryEngine {
+  return typeof popupType === 'string' && Object.hasOwn(ENGINE_OF, popupType)
+    ? ENGINE_OF[popupType as PopupType]
+    : 'yomitan'
+}
+/** The contract's name for `dictionaryEngineOf` (DICTIONARY_ENGINES.md §1). */
+export const dictionaryEngine = dictionaryEngineOf
+
+/** How an engine is stored in `yomitanSettings.popupType`. */
+export function popupTypeOf(engine: DictionaryEngine): PopupType {
+  return engine === 'yomitan' ? 'builtin' : engine
+}
+
+/**
+ * The engine whose host scripts a window needs. Kimochi's pop-up runs over the Yomitan host: the
+ * overlay keeps Yomitan's backend for the controller's word splitting (`parseText`) and installs
+ * the API lookup hook from it (`ui/api-lookup.js`), exactly as before the other engines existed.
+ * So switching between Yomitan and Kimochi's pop-up changes no host and needs no reload.
+ */
+export function hostEngineOf(engine: DictionaryEngine): 'yomitan' | 'hachidori' | 'tenten' {
+  return engine === 'custom-api' ? 'yomitan' : engine
+}
+
+/**
+ * The document-start mirror of the engine (`localStorage` on the app origin), which the injected
+ * host scripts read synchronously before any extension script runs. See DICTIONARY_ENGINES.md §2.
+ * It holds `hostEngineOf(engine)`, never `'custom-api'`, so the Yomitan shims keep installing for
+ * Kimochi's pop-up.
+ */
+export const DICTIONARY_ENGINE_KEY = 'kimochi.dictionaryEngine'
+
+/**
+ * The engine as the injected scripts resolve it: the mirror, else the value native put in the
+ * window prelude, else Yomitan. Either may hold a stored spelling (`'builtin'`) or an engine name.
+ */
+export function resolveDictionaryEngine(
+  mirrored: string | null | undefined,
+  injected: string | null | undefined
+): DictionaryEngine {
+  const value = mirrored ?? injected ?? 'yomitan'
+  return value === 'yomitan' ? 'yomitan' : dictionaryEngineOf(value)
+}
+
+/**
+ * Where the main window was when it switched dictionary engines, kept in its `sessionStorage`
+ * across the reload `dictionary_engine_apply` gives it (DICTIONARY_ENGINES.md §2). Per window,
+ * survives a reload, never a relaunch. The reloaded window opens straight onto this page (no Log
+ * first) and Settings → Dictionary says which engine is now in use.
+ */
+export const ENGINE_SWITCH_KEY = 'kimochi.engineSwitch'
+/**
+ * A record older than this is not this reload's: a switch whose reload never came (the command
+ * failed, the window was closed) must not reopen Settings on some later, unrelated reload.
+ */
+export const ENGINE_SWITCH_TTL_MS = 30_000
+
+export interface EngineSwitchRecord {
+  /** The engine just chosen, for "Now using …". */
+  engine: DictionaryEngine
+  /** The main window's view; a switch is made from Settings. */
+  view: 'settings'
+  /** The Settings page (`settingsActiveTab`), so the first frame is that page, not the default. */
+  tab: string
+  /** Where Back from Settings returns to. */
+  back: 'log' | 'notebook'
+  /** The Settings page's scroll offset, in CSS pixels. */
+  scrollTop: number
+  /** `Date.now()` when the switch was made. */
+  at: number
+}
+
+export function encodeEngineSwitch(record: EngineSwitchRecord): string {
+  return JSON.stringify(record)
+}
+
+/** The record if `raw` is a well-formed one from the last `ENGINE_SWITCH_TTL_MS`, else null. */
+export function decodeEngineSwitch(raw: string | null | undefined, now: number): EngineSwitchRecord | null {
+  if (!raw) return null
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const { engine, view, tab, back, scrollTop, at } = record
+  if (typeof engine !== 'string' || !Object.hasOwn(DICTIONARY_ENGINES, engine)) return null
+  if (view !== 'settings' || typeof tab !== 'string' || !tab) return null
+  if (typeof at !== 'number' || !Number.isFinite(at)) return null
+  // A clock that stepped back a little still counts; a record from the future does not.
+  if (now - at > ENGINE_SWITCH_TTL_MS || at - now > 5_000) return null
+  return {
+    engine: engine as DictionaryEngine,
+    view,
+    tab,
+    back: back === 'notebook' ? 'notebook' : 'log',
+    scrollTop: typeof scrollTop === 'number' && Number.isFinite(scrollTop) && scrollTop > 0 ? scrollTop : 0,
+    at
+  }
+}
+
 export function serverUrls(mode: ServerMode): { ocr: string; tts: string } {
   const base = SERVER_URLS[mode] ?? SERVER_URLS.cloud
   return { ocr: `${base}/detect-text`, tts: `${base}/tts` }
@@ -270,6 +494,18 @@ export function withDefaults<K extends keyof Settings>(key: K, stored: unknown):
   // Automatic OCR is the one key whose stored shape changed meaning rather than
   // only gaining fields, so it gets a real migration instead of a shallow merge.
   if (key === 'autoOCRSettings') return migrateAutoScanSettings(stored) as Settings[K]
+  if (key === 'yomitanSettings') {
+    // A popupType written by a newer build (an engine this one does not ship) reads as Yomitan
+    // rather than leaving every window guessing.
+    const merged =
+      stored && typeof stored === 'object' && !Array.isArray(stored)
+        ? { ...SETTINGS_DEFAULTS.yomitanSettings, ...(stored as object) }
+        : SETTINGS_DEFAULTS.yomitanSettings
+    return {
+      ...merged,
+      popupType: popupTypeOf(dictionaryEngineOf(merged.popupType))
+    } as Settings[K]
+  }
   const fallback = SETTINGS_DEFAULTS[key]
   if (stored === undefined || stored === null) return fallback
   if (

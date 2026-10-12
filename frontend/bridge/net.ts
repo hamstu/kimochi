@@ -25,7 +25,11 @@ export const HTTP_SCOPE: string[] = [
   'http://127.0.0.1:8765/**',
   'https://github.com/**',
   'https://*.githubusercontent.com/**',
-  'https://api.jiten.moe/**'
+  'https://api.jiten.moe/**',
+  'https://data.10ten.life/**',
+  'https://jitendex.org/**',
+  'http://localhost:5050/**',
+  'http://127.0.0.1:5050/**'
 ]
 
 function matchesPattern(url: URL, pattern: string): boolean {

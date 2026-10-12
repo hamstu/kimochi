@@ -15,3 +15,31 @@ is not bundled or licensed by this project.
 Kimochi also includes MeikiOCR (Apache-2.0), ported from rtr46/meikiocr
 revision 52aa607ecdc1038c7bf390f37cd9a8b306e8a08a. Its models and ONNX
 Runtime carry their own licenses in the bundled meikiocr resource directory.
+
+Dictionary extensions
+Kimochi bundles two browser-extension pop-up dictionaries, each distributed
+byte-identical to its upstream release package (unpacked, never modified;
+scripts/prepare.mjs verifies every file against extensions/<id>.sha256.json
+on each build). The pinned release, asset URL and SHA-256 of each are in
+extensions/<id>.source.json. Both are licensed GPL-3.0-or-later and are
+distributed here under GPL-3.0, whose text is in LICENSE.
+
+Hachidori: https://github.com/bee-san/hachidori (GPL-3.0-or-later)
+Release 0.3.0, commit 51eb85486fd9d9b00561c623bbc6defa60853f16, asset
+hachidori-0.3.0-51eb85486fd9-chrome.zip, in extensions/hachidori/. Its
+LICENSE, THIRD_PARTY_NOTICES.md and licenses/ directory (notices for
+Hoshidicts, Zstandard, zip.js, Emscripten, musl, LLVM runtimes, KANJIDIC2
+under CC BY-SA 4.0 and others) are part of that tree; SOURCE.json names the
+matching corresponding-source archive and its SHA-256.
+
+10ten Japanese Reader: https://github.com/birchill/10ten-ja-reader
+(GPL-3.0-or-later). Release v1.28.0, commit
+05e9fe2815de2eb1c7807b3d7bebdef456cbb5d1, asset
+10ten-ja-reader-1.28.0-chrome.zip, in extensions/tenten/. The release package
+carries no licence file of its own; its GPL text is the one in LICENSE. Its
+fonts carry their licences beside them (extensions/tenten/fonts/*.LICENSE.txt).
+Its dictionary data (extensions/tenten/data/ and the updates it downloads) is
+derived from the JMdict, KANJIDIC and ENAMDICT/JMnedict files of the
+Electronic Dictionary Research and Development Group
+(https://www.edrdg.org/), used in conformance with the Group's licence,
+Creative Commons Attribution-ShareAlike 3.0.

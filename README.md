@@ -6,7 +6,7 @@ A macOS Tauri version of Kimochi, built from the working Electron UI and the act
 
 This project now lives beside the Electron repository at `../kimochi-tauri`, outside its Git working tree. All existing files, uncommitted changes and build artifacts were moved intact. Historical reports retain their original paths. A standalone Git repository now contains baseline commit `c4724e7`, made before the Texthooker integration.
 
-Build/runtime assets (`yomitan/`, macOS `bin/keytrigger-*`, and the tray icon in `resources/`) are local copies from Kimochi. Two parity tests still read `../kimochi/src/main/` to compare against the Electron implementation; keep that sibling checkout available when running the full test suite.
+Build/runtime assets (`yomitan/`, macOS `bin/keytrigger-*`, and the tray icon in `resources/`) are local copies from Kimochi. `extensions/` holds the Hachidori and 10ten dictionary extensions as byte-identical upstream release copies, pinned in `extensions/<id>.source.json`; the trees themselves are gitignored and fetched from the pinned release by `node scripts/sync-extension.mjs --all --if-missing` (which `prepare.mjs` runs for an absent tree, so a fresh clone needs the network on its first `npm ci`), and refreshed only with `node scripts/sync-extension.mjs <id> --replace`; `prepare.mjs` copies them to `dist/ext/` and verifies every byte (see [DICTIONARY_ENGINES.md](DICTIONARY_ENGINES.md)). Two parity tests still read `../kimochi/src/main/` to compare against the Electron implementation; keep that sibling checkout available when running the full test suite.
 
 ## Install, build and run
 
@@ -45,7 +45,9 @@ Windows builds also bundle the small local OneOCR helpers from `oneocr-worker/`.
 
 - `/app/*`: the React windows from `frontend/`. Edits apply through Vite HMR without a reload.
 - everything else: the prepared `dist/` tree (Yomitan, `dist/spike/` from `host/`, `dist/ui/` from `ui/`). Editing `ui/` redoes that `prepare.mjs` step and reloads the plain `ui/` windows (overlay, dictionary popup host, ...); `ui/panel-yomitan.js`, which the panels load at runtime, reloads every window.
-- `src-tauri/` edits rebuild and relaunch the app (`tauri dev`'s own watcher). So do `host/` edits: the dev server copies them into `dist/spike/`, and the app relaunches because native injects `host/shim.js` and `host/panel-shim.js` when a window is created.
+- `src-tauri/` edits rebuild and relaunch the app (`tauri dev`'s own watcher). So do `host/` edits: the dev server copies them into `dist/spike/`, and the app relaunches because native injects the Yomitan shims (`dist/spike/shim.js` and `panel-shim.js`, built from `host/yomitan/`) when a window is created.
+
+For browser testing outside Tauri, the dev server also serves each dictionary extension at its own origin: `http://127.0.0.1:1440/` (Hachidori) and `:1441/` (10ten), with `/__kimochi/` → `dist/spike/` and the extension host injected into their HTML pages; inside the app the `hachidori://` and `tenten://` schemes do this instead. These ports follow `KIMOCHI_DEV_PORT` (+10, +11).
 
 Quitting the app or pressing Ctrl-C stops `tauri dev` and the dev server with it. Port 1430 must be free; `KIMOCHI_DEV_PORT=1431 npm run dev` runs a second checkout alongside (that origin starts with empty dictionaries). A bare `npx tauri dev` also works, but skips OCR staging and reloads windows for `host/` edits instead of relaunching (restart it yourself after editing the two injected shims). Bundles (`npm run bundle`/`release`) never use the dev server: they `vite build` into `dist/app/` and embed `dist/`.
 

@@ -1,12 +1,13 @@
 {
   "identifier": "kimochi-network",
-  "description": "Outbound HTTP for the configured OCR/TTS server, the local Yomitan API, and the dictionary hosts Yomitan itself downloads from \u2014 the last of which the yomitan settings window needs for imports. Deliberately not a general internet grant.",
+  "description": "Outbound HTTP for the configured OCR/TTS server, the local Yomitan API, and the dictionary hosts the dictionary engines download from (Yomitan, Hachidori, 10ten) \u2014 the last of which the dictionary settings window needs for imports. Deliberately not a general internet grant.",
   "windows": [
     "overlay",
     "log",
     "settings",
-    "yomitan",
-    "popup-host"
+    "dictionary",
+    "popup-host",
+    "welcome"
   ],
   "permissions": [
     {
@@ -41,6 +42,18 @@
         },
         {
           "url": "https://api.jiten.moe/**"
+        },
+        {
+          "url": "https://data.10ten.life/**"
+        },
+        {
+          "url": "https://jitendex.org/**"
+        },
+        {
+          "url": "http://localhost:5050/**"
+        },
+        {
+          "url": "http://127.0.0.1:5050/**"
         }
       ]
     }

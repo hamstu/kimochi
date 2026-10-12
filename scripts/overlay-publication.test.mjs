@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { load } from './load.mjs'
+import { markScanPublished } from '../ui/scan-publication.js'
 
 const source = await readFile(new URL('../ui/overlay.js', import.meta.url), 'utf8')
 const ast = ts.createSourceFile('overlay.js', source, ts.ScriptTarget.Latest, true)
@@ -23,6 +24,8 @@ test('the real overlay application awaits native publication before releasing it
   let drawn = 0
   let history = 0
   const context = vm.createContext({
+    markScanPublished,
+    sessionStorage: { setItem() {} },
     native: { publishScanState: () => ack },
     state: {},
     generation: { isStale: () => false },
@@ -78,6 +81,8 @@ test('the overlay tells the activity feed how a result ended', async () => {
   const posts = []
   const reports = []
   const context = vm.createContext({
+    markScanPublished,
+    sessionStorage: { setItem() {} },
     native: { publishScanState: async () => undefined },
     state: {},
     generation: { isStale: () => false, current: 1 },

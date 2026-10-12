@@ -91,6 +91,8 @@ const settings: Record<string, unknown> = {
     sourceId: CURRENT_SOURCE.id
   },
   settingsActiveTab: params.get('tab') ?? 'general',
+  // `?popup=hachidori` stands in for a stored engine (the store is in memory, so a reload resets it).
+  ...(params.get('popup') ? { yomitanSettings: { popupType: params.get('popup'), customApiUrl: '' } } : {}),
   mainSidebarOpen: params.get('sidebar') !== '0',
   quickShotEnabled: params.get('quickshot') === '1',
   ...(params.get('theme') ? { appearance: params.get('theme') } : {}),
@@ -443,6 +445,8 @@ const HANDLERS: Record<string, Handler> = {
   yomitan_tokenize: () => [],
   yomitan_ankifields: () => ({ fields: [], audioMedia: [], dictionaryMedia: [] }),
   install_yomitan_native_host: () => 'Installed (preview).',
+  // Native reloads the reader windows; there are none to reload in the preview.
+  dictionary_engine_apply: () => note('dictionary_engine_apply', null),
 
   // anki
   anki_probe: () => 18,
@@ -593,7 +597,8 @@ function listenToEmbedder(): void {
 
 // ---------------------------------------------------------------- dictionary relay stub
 
-// `preloadPanelYomitan` imports `/ui/panel-yomitan.js`; vite.preview.config.ts serves a stub there.
+// `preloadPanelDictionary` imports `/ui/panel-yomitan.js` (the engine resolves to Yomitan here: no
+// mirror, no prelude); vite.preview.config.ts serves a stub there.
 
 // ---------------------------------------------------------------- entry point
 

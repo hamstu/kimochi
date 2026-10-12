@@ -18,15 +18,17 @@ import PanelShell from "../shell/PanelShell";
 import MainPanel from "../main/MainPanel";
 import SettingsPanel from "../panels/SettingsPanel";
 import DiagnosticsPanel from "../panels/DiagnosticsPanel";
-import YomitanSettingsPanel from "../panels/YomitanSettingsPanel";
-import { preloadPanelYomitan } from "../shell/panelYomitan";
+import DictionarySettingsPanel from "../panels/DictionarySettingsPanel";
+import DictionaryPanelShell from "../shell/DictionaryPanelShell";
+import { preloadPanelDictionary } from "../shell/panelDictionary";
 
 /** Titles and components, matching `PanelApp.tsx`'s `titles` / `components` maps. */
 const PANELS = {
   log: { title: "Kimochi", Component: MainPanel, hideTitle: true },
   settings: { title: "Settings", Component: SettingsPanel, hideTitle: false },
   diagnostics: { title: "Diagnostics", Component: DiagnosticsPanel, hideTitle: true },
-  yomitan: { title: "Yomitan settings", Component: YomitanSettingsPanel, hideTitle: false },
+  // Titled by the engine; see `DictionaryPanelShell`.
+  dictionary: { title: "Dictionary", Component: DictionarySettingsPanel, hideTitle: false },
 } as const;
 
 type KnownLabel = keyof typeof PANELS;
@@ -52,12 +54,13 @@ if (!(label in PANELS)) {
   );
 }
 
-// The main window (the Log) hosts built-in Yomitan lookups over scanned text. The real backend lives in the
-// overlay (one IndexedDB writer), so the overlay workstream ships a relay module that must publish
-// this window's native label and install its chrome.* host BEFORE React mounts. `start()` is called
-// separately, after the log content is in the DOM — see `usePanelYomitan` in the Log panel.
+// The main window (the Log) hosts dictionary lookups over scanned text. The real backend lives in the
+// overlay (one IndexedDB writer), so for Yomitan the overlay workstream ships a relay module that
+// must publish this window's native label and install its chrome.* host BEFORE React mounts; for
+// Hachidori and 10ten the injected extension host is already in place. `start()` is called
+// separately, after the log content is in the DOM — see `usePanelDictionary` in the Log panel.
 if (known === "log") {
-  await preloadPanelYomitan(label);
+  await preloadPanelDictionary(label);
 }
 
 createRoot(document.getElementById("root")!, {
@@ -65,9 +68,16 @@ createRoot(document.getElementById("root")!, {
 }).render(
   <StrictMode>
     <Providers>
-      <PanelShell label={label} title={title} hideTitle={hideTitle}>
-        <Component />
-      </PanelShell>
+      {known === "dictionary" ? (
+        // The dictionary window's title follows the active engine.
+        <DictionaryPanelShell label={label} hideTitle={hideTitle}>
+          <Component />
+        </DictionaryPanelShell>
+      ) : (
+        <PanelShell label={label} title={title} hideTitle={hideTitle}>
+          <Component />
+        </PanelShell>
+      )}
     </Providers>
   </StrictMode>,
 );

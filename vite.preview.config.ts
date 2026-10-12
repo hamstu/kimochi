@@ -12,7 +12,7 @@ const appConfig = appConfigExport as UserConfig
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url))
 const mock = (name: string): string => here(`frontend/dev/mocks/${name}.ts`)
 
-/** `preloadPanelYomitan` imports `/ui/panel-yomitan.js` from the app origin at runtime. */
+/** `preloadPanelDictionary` (for Yomitan) imports `/ui/panel-yomitan.js` from the app origin at runtime. */
 const PANEL_YOMITAN_STUB = `
 const ok = { ready: true }
 export function setEmbeddedEnabled() {}

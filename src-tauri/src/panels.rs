@@ -1,5 +1,6 @@
 //! Native window lifecycle, pinning, placement and bounds recovery.
 //! Mirrors the semantics of the Electron build's `src/main/native-windows.ts`.
+use crate::extensions;
 use crate::platform;
 use crate::settings::Settings;
 use kimochi_capture::Rect;
@@ -9,7 +10,7 @@ use tauri::{Emitter, Manager, WebviewWindow};
 
 /// One label-parameterised React page backs every ordinary panel, matching the
 /// Electron build's single `panel.html` that switched on the snapshot kind.
-const PANEL_PAGE: &str = "app/panel.html";
+pub const PANEL_PAGE: &str = "app/panel.html";
 
 pub struct PanelSpec {
     pub label: &'static str,
@@ -28,11 +29,17 @@ pub struct PanelSpec {
     /// Kimochi's own panels draw their own title bars; a hosted third-party page
     /// (Yomitan settings) keeps the system frame.
     pub decorated: bool,
-    /// Embedded asset injected at document start, for all frames. Resolved through
-    /// Tauri's asset resolver at creation time, so this crate does not have to
-    /// compile against a file another workstream owns.
-    pub init_asset: Option<&'static str>,
+    /// Embedded assets injected at document start, for all frames, in this order and
+    /// after the label prelude. Resolved through Tauri's asset resolver at creation
+    /// time, so this crate does not have to compile against files another workstream
+    /// owns. A window that hosts a dictionary gets both the Yomitan panel shim and the
+    /// generic extension host; exactly one of them installs (DICTIONARY_ENGINES.md §2).
+    pub init_assets: &'static [&'static str],
 }
+
+/// What every dictionary-hosting panel injects: the Yomitan relay shim, then the generic
+/// extension host for Hachidori and 10ten.
+const EXTENSION_HOST_ASSETS: &[&str] = &["/spike/panel-shim.js", extensions::EXT_HOST];
 
 const fn panel(
     label: &'static str,
@@ -53,7 +60,7 @@ const fn panel(
         pinned: false,
         eager: false,
         decorated: false,
-        init_asset: None,
+        init_assets: &[],
     }
 }
 
@@ -83,7 +90,7 @@ pub static PANELS: &[PanelSpec] = &[
         // so without this the popup frame throws, the FrameClient handshake never
         // completes, and lookup fails silently while the window still reports the
         // backend as reachable.
-        init_asset: Some("/spike/panel-shim.js"),
+        init_assets: EXTENSION_HOST_ASSETS,
         ..panel("log", "Kimochi", PANEL_PAGE, 900., 560.)
     },
     PanelSpec {
@@ -98,7 +105,7 @@ pub static PANELS: &[PanelSpec] = &[
         ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.)
     },
     PanelSpec {
-        init_asset: Some("/spike/panel-shim.js"),
+        init_assets: EXTENSION_HOST_ASSETS,
         ..panel(
             "welcome",
             "Welcome to Kimochi",
@@ -121,16 +128,18 @@ pub static PANELS: &[PanelSpec] = &[
         )
     },
     PanelSpec {
-        // The real distributed Yomitan settings page, in its own native window like
-        // Electron's `createYomitanWindow`, framed by Kimochi's own panel chrome: the
-        // React panel draws the title bar and loads `/settings.html` in an iframe.
-        // Every frame gets the panel shim (as in the Log), never the overlay's
-        // backend-hosting `host/shim.js`: a second backend on the same IndexedDB is
-        // the one thing that must not happen.
+        // The active dictionary engine's own distributed options page (Yomitan's
+        // `/settings.html`, Hachidori's `settings.html`, 10ten's `options.html` on their
+        // own origins), in its own native window like Electron's `createYomitanWindow`,
+        // framed by Kimochi's own panel chrome: the React panel draws the title bar
+        // (which follows the engine) and loads the page in an iframe. Every frame gets
+        // the panel shim and the extension host (as in the Log), never the overlay's
+        // backend-hosting overlay shim (`dist/spike/shim.js`): a second backend on the same IndexedDB is the
+        // one thing that must not happen.
         min_width: 720.,
         min_height: 480.,
-        init_asset: Some("/spike/panel-shim.js"),
-        ..panel("yomitan", "Yomitan settings", PANEL_PAGE, 960., 680.)
+        init_assets: EXTENSION_HOST_ASSETS,
+        ..panel("dictionary", "Dictionary settings", PANEL_PAGE, 960., 680.)
     },
     // The POC's `ui/sources.html` is deliberately NOT registered: sources are chosen in the
     // main window's sidebar, and offering the old screen as a second, stale path would be
@@ -209,7 +218,7 @@ fn pinned_default(settings: &Settings, spec: &PanelSpec) -> bool {
 ///
 /// The overlay is deliberately absent: it hosts the real backend with its own
 /// numbering, and it is a popup *client* at most, never addressed by id from outside.
-pub const FRAME_BANDS: &[(&str, u32)] = &[("log", 1000), ("yomitan", 2000), ("popup-host", 3000)];
+pub const FRAME_BANDS: &[(&str, u32)] = &[("log", 1000), ("dictionary", 2000), ("popup-host", 3000)];
 
 pub const FRAME_BAND_SIZE: u32 = 1000;
 
@@ -217,7 +226,7 @@ pub const FRAME_BAND_SIZE: u32 = 1000;
 /// themselves.
 ///
 /// The Log is the case this exists for: its popup was clipped to a 720-point-wide
-/// window, and a nested lookup was pinned flat against its top edge. The Yomitan
+/// window, and a nested lookup was pinned flat against its top edge. The dictionary
 /// settings page is deliberately absent — its popup preview is *meant* to be inside
 /// the page it is previewing.
 fn popup_host_for(label: &str) -> Option<&'static str> {
@@ -231,9 +240,13 @@ fn popup_host_for(label: &str) -> Option<&'static str> {
 /// is already too late for an injected host, and every panel shares one URL — so
 /// without this every window would fall back to the same pathname and collide.
 /// Emitting it for subframes too keeps a popup frame on its opener's identity.
-pub fn label_prelude(label: &str) -> String {
+///
+/// It also carries the active dictionary engine and the extension origins
+/// ([`extensions::engine_prelude`]); `engine` is read from the store by the caller when
+/// the window is built ([`extensions::dictionary_engine`]).
+pub fn label_prelude(label: &str, engine: &str) -> String {
     let bands: Vec<_> = FRAME_BANDS.iter().map(|(l, b)| (*l, *b)).collect();
-    format!(
+    let mut script = format!(
         ";(function(){{try{{\
 window.__kimochiPanelLabel={};\
 window.__kimochiFrameBase={};\
@@ -251,7 +264,9 @@ window.__kimochiPopupHost={};\
         .unwrap_or_else(|_| "{}".into()),
         FRAME_BAND_SIZE,
         serde_json::to_string(&popup_host_for(label)).unwrap_or_else(|_| "null".into()),
-    )
+    );
+    script.push_str(&extensions::engine_prelude(engine));
+    script
 }
 
 /// The first frame id this window may use. Zero for windows outside the bridge.
@@ -353,6 +368,131 @@ pub async fn set_content_height_async(
     .await
 }
 
+/// Runs `job` in a later main-thread turn, from a synchronous command or callback that may
+/// need to create a window (see [`MainTurn`]). Fire and forget.
+pub fn later(app: &tauri::AppHandle, job: impl FnOnce(&tauri::AppHandle, &MainTurn) + Send + 'static) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || job(&handle, &MainTurn(())));
+}
+
+/// For `setup`, which runs before the event loop and outside any command or callback.
+pub fn in_setup<T>(app: &tauri::AppHandle, job: impl FnOnce(&tauri::AppHandle, &MainTurn) -> T) -> T {
+    job(app, &MainTurn(()))
+}
+
+/// The hidden window an extension engine's background document runs in
+/// (DICTIONARY_ENGINES.md §5.4, [`extensions::WINDOW_PREFIX`]).
+#[derive(Debug, PartialEq)]
+pub struct ExtensionWindowSpec {
+    pub label: String,
+    /// `<origin>/__kimochi/ext-background.html?engine=<id>`, on the engine's own scheme.
+    pub url: String,
+    /// The label prelude (label `ext-<id>`, no frame band, no popup host) with the engine
+    /// prelude, which names the engine of every frame on the extension origin.
+    pub prelude: String,
+}
+
+pub fn extension_window_spec(engine: &str) -> ExtensionWindowSpec {
+    let label = extensions::window_label(engine);
+    ExtensionWindowSpec {
+        prelude: label_prelude(&label, engine),
+        url: extensions::background_url(engine),
+        label,
+    }
+}
+
+/// What [`extension_window`] did.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ExtensionWindowAction {
+    Created,
+    Kept,
+    Reloaded,
+}
+
+impl ExtensionWindowAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Kept => "kept",
+            Self::Reloaded => "reloaded",
+        }
+    }
+}
+
+/// Makes sure the extension window of `engine` exists; `reload` reloads one that does.
+///
+/// Never shown and never focused: no title bar, 1×1, off the taskbar, not focusable,
+/// content-protected, and nothing ever calls `show` on it (it is not a panel, so `panel`
+/// refuses its label). Background throttling is off like the overlay's, because it runs the
+/// dictionary while the reader is in another app. It shares the one WKWebsiteDataStore with
+/// every other window (no data store identifier), so the engine's storage is the same
+/// partition the next launch opens. Init scripts for all frames: the platform prelude, the
+/// label prelude and the generic host (never a Yomitan shim). Navigation is limited to the
+/// engine's own origin (and `about:blank`).
+pub fn extension_window(
+    _turn: &MainTurn,
+    app: &tauri::AppHandle,
+    engine: &str,
+    reload: bool,
+) -> Result<ExtensionWindowAction, String> {
+    if !extensions::IDS.contains(&engine) {
+        return Err(format!("invalid: {engine:?} is not an extension engine"));
+    }
+    let spec = extension_window_spec(engine);
+    if let Some(window) = app.get_webview_window(&spec.label) {
+        if !reload {
+            return Ok(ExtensionWindowAction::Kept);
+        }
+        window
+            .eval("location.reload()")
+            .map_err(|e| format!("native: {e}"))?;
+        return Ok(ExtensionWindowAction::Reloaded);
+    }
+    let url: tauri::Url = spec
+        .url
+        .parse()
+        .map_err(|e| format!("native: {} is not a URL: {e}", spec.url))?;
+    let allowed = engine.to_string();
+    let mut builder = tauri::WebviewWindowBuilder::new(app, &spec.label, tauri::WebviewUrl::CustomProtocol(url))
+        .title(format!("Kimochi {engine} background"))
+        .visible(false)
+        .focused(false)
+        .focusable(false)
+        .skip_taskbar(true)
+        .decorations(false)
+        .shadow(false)
+        .resizable(false)
+        .inner_size(1., 1.)
+        .content_protected(true)
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+        .initialization_script_for_all_frames(platform::platform_prelude())
+        .initialization_script_for_all_frames(spec.prelude.clone())
+        .on_navigation(move |u| u.as_str() == "about:blank" || platform::is_extension_url_of(u, &allowed));
+    if let Some(script) = extensions::init_script(app, &spec.label, extensions::EXT_HOST)? {
+        builder = builder.initialization_script_for_all_frames(script);
+    }
+    builder.build().map_err(|e| format!("native: {e}"))?;
+    Ok(ExtensionWindowAction::Created)
+}
+
+/// Closes every extension window but `keep`'s (the engine that is no longer active).
+/// Returns the labels it closed.
+pub fn close_extension_windows(app: &tauri::AppHandle, keep: Option<&str>) -> Vec<String> {
+    let mut closed = Vec::new();
+    for id in extensions::IDS {
+        if Some(*id) == keep {
+            continue;
+        }
+        let label = extensions::window_label(id);
+        if let Some(window) = app.get_webview_window(&label) {
+            if window.destroy().is_ok() {
+                closed.push(label);
+            }
+        }
+    }
+    closed
+}
+
 /// Builds the panels marked `eager`. For `setup` only, which runs before the event loop and
 /// outside any command or callback.
 pub fn create_eager(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), String> {
@@ -405,21 +545,21 @@ fn ensure(
         }
         builder = builder.transparent(true).background_color(tauri::window::Color(0, 0, 0, 0)).skip_taskbar(true);
     }
-    if let Some(path) = spec.init_asset {
-        let asset = app.asset_resolver().get(path.into()).ok_or_else(|| {
-            format!(
-                "invalid: {} needs {path}, which is not in the bundle",
-                spec.label
-            )
-        })?;
-        let script = String::from_utf8(asset.bytes)
-            .map_err(|_| format!("invalid: {path} is not valid UTF-8"))?;
-        builder = builder.initialization_script_for_all_frames(label_prelude(spec.label) + &script);
+    if !spec.init_assets.is_empty() {
+        // Read now, not at app start: a panel built after an engine switch must say so.
+        let engine = extensions::dictionary_engine(settings);
+        builder = builder.initialization_script_for_all_frames(label_prelude(spec.label, &engine));
+        for asset in spec.init_assets {
+            if let Some(script) = extensions::init_script(app, spec.label, asset)? {
+                builder = builder.initialization_script_for_all_frames(script);
+            }
+        }
     }
     let window = builder.build().map_err(|e| format!("native: {e}"))?;
     // Keep Kimochi's own panels out of captures of the display they sit on, where the
     // OS honours it. This is the same mechanism as Electron's setContentProtection.
-    let _ = window.set_content_protected(true);
+    // OCR fixtures are source content: protecting them makes window captures blank.
+    let _ = window.set_content_protected(!matches!(spec.label, "fixture" | "fixture-chunks"));
     platform::desktop_place(&window, bounds)?;
     attach_events(app, settings, &window, spec);
     Ok(window)
@@ -537,8 +677,8 @@ fn apply(
         #[cfg(target_os = "linux")]
         "show" | "show_inactive" if platform::gamescope::handles(window) => platform::gamescope::show(window)?,
         "show" => {
-            if label == YOMITAN && !window.is_visible().unwrap_or(false) {
-                place_on_main_display(app, window, existed, YOMITAN)?;
+            if label == DICTIONARY && !window.is_visible().unwrap_or(false) {
+                place_on_main_display(app, window, existed, DICTIONARY)?;
             }
             window.show().map_err(native_err)?;
             window.set_focus().map_err(native_err)?;
@@ -600,9 +740,9 @@ fn apply(
 
 /// The main window (the Log with its Controller sidebar).
 pub const MAIN: &str = "log";
-const YOMITAN: &str = "yomitan";
+const DICTIONARY: &str = "dictionary";
 
-/// Centres a large panel (Yomitan settings) on the display the main window is on, or
+/// Centres a large panel (the dictionary settings) on the display the main window is on, or
 /// the display under the cursor when it is hidden, clamped to its work
 /// area. A window resized this session keeps its size and a new
 /// one starts at the spec size, not a frame restored from an older build.
@@ -712,6 +852,32 @@ pub fn recover_bounds(app: &tauri::AppHandle, settings: &Arc<Settings>) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn an_extension_window_is_labelled_per_engine_and_opens_its_background_page() {
+        let spec = extension_window_spec("hachidori");
+        assert_eq!(spec.label, "ext-hachidori");
+        assert_eq!(
+            spec.url,
+            format!("{}/__kimochi/ext-background.html?engine=hachidori", platform::extension_origin("hachidori"))
+        );
+        // Named for the host, outside the frame bands and with no popup host of its own.
+        assert!(spec.prelude.contains(r#"window.__kimochiPanelLabel="ext-hachidori";"#), "{}", spec.prelude);
+        assert!(spec.prelude.contains("window.__kimochiFrameBase=0;"));
+        assert!(spec.prelude.contains("window.__kimochiPopupHost=null;"));
+        assert!(spec.prelude.contains(r#"var e="hachidori";"#));
+        assert!(spec.prelude.contains("window.__kimochiExtensionOrigins=o;"));
+        assert_eq!(extension_window_spec("tenten").label, "ext-tenten");
+        // Not a panel: `panel` (show, focus, place) refuses these labels.
+        assert!(spec_is_absent("ext-hachidori") && spec_is_absent("ext-tenten"));
+        assert_eq!(ExtensionWindowAction::Created.as_str(), "created");
+        assert_eq!(ExtensionWindowAction::Kept.as_str(), "kept");
+        assert_eq!(ExtensionWindowAction::Reloaded.as_str(), "reloaded");
+    }
+
+    fn spec_is_absent(label: &str) -> bool {
+        spec(label).is_none() && !FRAME_BANDS.iter().any(|(l, _)| *l == label)
+    }
+
     const AREA: Rect = Rect {
         x: 0.,
         y: 25.,
@@ -786,8 +952,8 @@ mod tests {
     #[test]
     fn react_panels_do_not_collide_with_yomitan_paths() {
         // Yomitan owns the dist root, so our own pages must stay under a prefix. The
-        // `yomitan` window is a panel too; it loads Yomitan's settings page (at its real
-        // path) in an iframe.
+        // `dictionary` window is a panel too; it loads the engine's settings page (at its
+        // real path) in an iframe.
         for spec in PANELS {
             assert!(
                 spec.url.starts_with("ui/") || spec.url.starts_with("app/"),
@@ -806,13 +972,46 @@ mod tests {
                 "{} should use Kimochi's own chrome",
                 spec.label
             );
-            // Extension settings and app-owned dictionary clients share the one backend.
-            assert_eq!(
-                spec.init_asset.is_some(),
-                matches!(spec.label, "yomitan" | "log" | "welcome"),
-                "{}",
-                spec.label
-            );
+            // Extension settings and app-owned dictionary clients share the one backend,
+            // through the Yomitan relay shim or the generic host, whichever engine is on.
+            let hosts = matches!(spec.label, "dictionary" | "log" | "welcome");
+            let expected: &[&str] = if hosts {
+                &["/spike/panel-shim.js", "/spike/ext-host.js"]
+            } else {
+                &[]
+            };
+            assert_eq!(spec.init_assets, expected, "{}", spec.label);
         }
+        assert!(spec("yomitan").is_none(), "the yomitan panel is now `dictionary`");
+        assert_eq!(spec(DICTIONARY).unwrap().title, "Dictionary settings");
+    }
+
+    #[test]
+    fn frame_bands_name_the_dictionary_window_and_leave_the_overlay_at_zero() {
+        assert_eq!(frame_base("log"), 1000);
+        assert_eq!(frame_base("dictionary"), 2000);
+        assert_eq!(frame_base("popup-host"), 3000);
+        assert_eq!(frame_base("yomitan"), 0);
+        // The overlay hosts the backend with its own zero-based numbering.
+        assert_eq!(frame_base("overlay"), 0);
+        assert!(FRAME_BANDS.iter().all(|(l, _)| *l != "overlay"));
+    }
+
+    #[test]
+    fn the_label_prelude_carries_identity_engine_and_origins() {
+        let log = label_prelude("log", "hachidori");
+        assert!(log.contains("window.__kimochiPanelLabel=\"log\";"));
+        assert!(log.contains("window.__kimochiFrameBase=1000;"));
+        assert!(log.contains("window.__kimochiPopupHost=\"popup-host\";"));
+        assert!(log.contains(
+            "window.__kimochiFrameBands={\"dictionary\":2000,\"log\":1000,\"popup-host\":3000};"
+        ));
+        assert!(log.contains("var e=\"hachidori\";"));
+        assert!(log.contains("window.__kimochiExtensionOrigins=o;"));
+        let overlay = label_prelude("overlay", "yomitan");
+        assert!(overlay.contains("window.__kimochiPanelLabel=\"overlay\";"));
+        assert!(overlay.contains("window.__kimochiFrameBase=0;"));
+        assert!(overlay.contains("window.__kimochiPopupHost=null;"));
+        assert!(overlay.contains("var e=\"yomitan\";"));
     }
 }

@@ -68,7 +68,9 @@ export function ShortcutRecorder({
       if (isModifierOnly(event)) setHeld(heldModifierCaps(event, platform))
     }
     const onPointerDown = (event: PointerEvent): void => {
-      if (!buttonRef.current?.contains(event.target as Node)) stop()
+      // `target` can be `window` for a synthetic event from an injected host script.
+      const target = event.target
+      if (!(target instanceof Node) || !buttonRef.current?.contains(target)) stop()
     }
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('keyup', onKeyUp, true)

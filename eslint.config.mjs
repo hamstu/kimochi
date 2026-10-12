@@ -6,7 +6,7 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'evidence/**', 'yomitan/**', 'site/**'] },
+  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'evidence/**', 'yomitan/**', 'extensions/**', 'site/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

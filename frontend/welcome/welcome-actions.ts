@@ -24,11 +24,14 @@ export async function resizeWelcome(height: number): Promise<void> {
   }
 }
 
-/** Electron's `yomitan-settings-backup`: opens Yomitan's settings in its own panel window. */
+/**
+ * Electron's `yomitan-settings-backup`: opens the active dictionary engine's settings in their own
+ * panel window (the `dictionary` window, which follows the engine).
+ */
 export const openYomitanBackup = (): Promise<void> =>
-  panel('yomitan', 'show')
+  panel('dictionary', 'show')
     .then(() => undefined)
-    .catch(report('Open Yomitan settings'))
+    .catch(report('Open dictionary settings'))
 
 /**
  * Electron's `complete-onboarding`: record it, show the main window, close onboarding.

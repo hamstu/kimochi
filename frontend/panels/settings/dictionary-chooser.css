@@ -1,0 +1,77 @@
+/*
+ * Settings → Dictionary → Engine (DictionaryChooser.tsx). The frame, list and panel are the OCR
+ * chooser's (engine-chooser.css); this adds only what the dictionary panel has and that one lacks.
+ */
+
+/* Version, licence and the upstream link, in one quiet line under the requirements. */
+.dictionary-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-1) var(--k-space-3);
+  margin: 0;
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  color: var(--k-text-3);
+}
+
+.dictionary-detail-upstream {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+}
+.dictionary-detail-upstream > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.dictionary-detail-upstream:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+  border-radius: var(--k-radius-sm);
+}
+
+/* The engine's own settings: a row with its description beside an action. */
+.dictionary-engine-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-2) var(--k-space-4);
+}
+
+/* Kimochi pop-up's sections sit inside the panel, so they lose the page's outer spacing. */
+.dictionary-engine-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-4);
+}
+
+/* The reload note or an error, under the frame. */
+.dictionary-chooser-status {
+  margin-top: var(--k-space-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+}
+
+/* "Now using …" after the reload a switch gave the main window: eases in, so the page settles. */
+.dictionary-chooser-switched {
+  animation: dictionary-chooser-switched-in 220ms var(--k-ease-out, ease-out) both;
+}
+
+@keyframes dictionary-chooser-switched-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictionary-chooser-switched {
+    animation: none;
+  }
+}

@@ -121,7 +121,10 @@ export function ActivityTicker({ visible }: { visible: boolean }): ReactNode {
       toggle.current?.focus()
     }
     const onPointer = (event: PointerEvent): void => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false)
+      // A synthetic pointer event from an injected host script can target `window` (not a Node),
+      // which `contains` rejects with a TypeError. Anything that is not inside the panel closes it.
+      const target = event.target
+      if (!(target instanceof Node) || !root.current?.contains(target)) setOpen(false)
     }
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('pointerdown', onPointer, true)

@@ -1,6 +1,13 @@
 import { useEffect, useState, type JSX } from "react";
 import { Button } from "@kit";
 import { Link } from "react-router";
+import { nativeError, openSettings } from "../bridge/tauri";
+import {
+  DICTIONARY_ENGINES,
+  openDictionarySettings,
+  useDictionaryEngine,
+  type DictionaryEngine,
+} from "../bridge/dictionaryEngine";
 
 type Job = {
   id: string;
@@ -22,7 +29,66 @@ async function request<T>(params: object): Promise<T> {
     );
   return host.toBackend({ action: "__setupDictionaries", params });
 }
+/**
+ * Onboarding's dictionary step. Yomitan's quick setup (Jitendex) only applies to Yomitan; the
+ * other engines bring their own first-run (Hachidori offers dictionaries, 10ten downloads its
+ * own), so for them this explains that and opens their settings. DICTIONARY_ENGINES.md §8.
+ */
 export default function DictionarySetup(): JSX.Element {
+  const [engine] = useDictionaryEngine();
+  return engine === "yomitan" ? (
+    <YomitanSetup />
+  ) : (
+    <OtherEngineSetup engine={engine} />
+  );
+}
+
+const ENGINE_SETUP: Record<Exclude<DictionaryEngine, "yomitan">, string> = {
+  hachidori:
+    "Hachidori offers a set of recommended dictionaries the first time its settings open, and imports Yomitan dictionaries and MDict files you already have.",
+  tenten:
+    "10ten works straight away with its bundled word dictionary, and downloads the full JMdict, kanji and names dictionaries in the background. There is nothing to import.",
+  "custom-api":
+    "The Kimochi pop-up looks words up through a Yomitan API server you run. Set its address in Settings → Dictionary.",
+};
+
+function OtherEngineSetup({
+  engine,
+}: {
+  engine: Exclude<DictionaryEngine, "yomitan">;
+}): JSX.Element {
+  const name = DICTIONARY_ENGINES[engine].name;
+  const [error, setError] = useState<string | null>(null);
+  const open = (): void => {
+    setError(null);
+    const opening =
+      engine === "custom-api"
+        ? openSettings("dictionary")
+        : openDictionarySettings();
+    opening.catch((caught: unknown) =>
+      setError(nativeError(caught).message),
+    );
+  };
+  return (
+    <section aria-labelledby="dictionary-setup-title">
+      <h1 id="dictionary-setup-title">Definitions, ready to read</h1>
+      <p>Kimochi is set to look words up with {name}.</p>
+      <p>{ENGINE_SETUP[engine]}</p>
+      <p>You can switch dictionary engines later in Settings → Dictionary.</p>
+      {error && <p role="alert">{error}</p>}
+      <Button onClick={open}>
+        {engine === "custom-api"
+          ? "Open Settings → Dictionary"
+          : `Open ${name} settings`}
+      </Button>{" "}
+      <Button variant="primary" asChild>
+        <Link to="/practice">Continue</Link>
+      </Button>
+    </section>
+  );
+}
+
+function YomitanSetup(): JSX.Element {
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<
@@ -130,6 +196,13 @@ export default function DictionarySetup(): JSX.Element {
 }
 
 export function DictionaryPractice(): JSX.Element {
+  const [engine] = useDictionaryEngine();
+  // The check asks Yomitan's backend directly; the other engines are tried by hovering text.
+  if (engine !== "yomitan") return <></>;
+  return <YomitanPractice />;
+}
+
+function YomitanPractice(): JSX.Element {
   const [result, setResult] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   async function check(): Promise<void> {

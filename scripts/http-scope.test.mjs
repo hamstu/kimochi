@@ -74,3 +74,26 @@ test('the Yomitan requests match the Electron handlers exactly', async (t) => {
     assert.ok(yomitan.includes(fragment), `${fragment} missing from the Tauri client`)
   }
 })
+
+test('the extension windows get event listening and the same HTTP scope as network.json, nothing else', async () => {
+  const dir = new URL('../src-tauri/capabilities/', import.meta.url)
+  const read = async (name) => JSON.parse(await readFile(new URL(name, dir), 'utf8'))
+  const extension = await read('extension-windows.json')
+  assert.deepEqual(extension.windows.slice().sort(), ['ext-hachidori', 'ext-tenten'])
+  const names = extension.permissions.map((permission) => (typeof permission === 'string' ? permission : permission.identifier))
+  assert.deepEqual(names, ['core:event:allow-listen', 'http:default'])
+  const scope = extension.permissions
+    .filter((permission) => typeof permission === 'object' && permission.identifier === 'http:default')
+    .flatMap((permission) => permission.allow ?? [])
+    .map((entry) => entry.url)
+  assert.deepEqual(scope.slice().sort(), scopeFromCapability.slice().sort())
+  // No other capability names an extension window (a broader grant would apply to it too).
+  const { readdir } = await import('node:fs/promises')
+  for (const file of await readdir(dir)) {
+    if (!file.endsWith('.json') || file === 'extension-windows.json') continue
+    const capability = await read(file)
+    for (const window of capability.windows ?? []) {
+      assert.ok(!/^ext-|\*/.test(window), `${file} lists ${window}, which would reach an extension window`)
+    }
+  }
+})

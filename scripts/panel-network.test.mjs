@@ -6,8 +6,10 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
-const shimSource = await readFile(new URL('../host/panel-shim.js', import.meta.url), 'utf8')
-const shim = shimSource.replace("import(asset('/spike/network-bundle.js'))", '__loadNetwork()')
+import { YOMITAN_SHIMS, yomitanShimSource } from './yomitan-shims.mjs'
+
+const shimSource = await yomitanShimSource('panel-shim.js')
+const shim = await yomitanShimSource('panel-shim.js', { network: '__loadNetwork()' })
 const { outputFiles } = await build({
   entryPoints: [fileURLToPath(new URL('../host/network-entry.js', import.meta.url))],
   bundle: true,
@@ -108,9 +110,10 @@ test('panel startup keeps native local fetch when the deferred network adapter i
  * dictionaries. Resolving against the document is what makes both deliveries work.
  */
 test('host scripts that native injects resolve their own dynamic imports absolutely', async () => {
-  for (const name of ['panel-shim.js', 'shim.js']) {
-    const source = (await readFile(new URL(`../host/${name}`, import.meta.url), 'utf8'))
-      // The rule is about code, and both files explain it in prose above the fix.
+  const sources = [...new Set(Object.values(YOMITAN_SHIMS).concat('host/yomitan/common.js'))]
+  for (const path of sources) {
+    const source = (await readFile(new URL(`../${path}`, import.meta.url), 'utf8'))
+      // The rule is about code, and the files explain it in prose above the fix.
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/(^|[^:'"`])\/\/.*$/gm, '$1')
     const rootRelative = [...source.matchAll(/\bimport\s*\(\s*['"](\/[^'"]*)['"]/g)].map(
@@ -119,8 +122,14 @@ test('host scripts that native injects resolve their own dynamic imports absolut
     assert.deepEqual(
       rootRelative,
       [],
-      `host/${name} is injected without a module URL, so ${rootRelative.join(', ')} cannot resolve`
+      `${path} is injected without a module URL, so ${rootRelative.join(', ')} cannot resolve`
     )
+  }
+  // The bundles are what native injects; esbuild must not have turned an import into one.
+  for (const name of Object.keys(YOMITAN_SHIMS)) {
+    const bundle = await yomitanShimSource(name)
+    assert.doesNotMatch(bundle, /\bimport\s*\(\s*['"]\//, `dist/spike/${name}`)
+    assert.doesNotMatch(bundle, /\bimport\.meta\b|^\s*(import|export)\s/m, `dist/spike/${name} must be a classic script`)
   }
 })
 

@@ -1,0 +1,15 @@
+{
+  "id": "hachidori",
+  "name": "Hachidori",
+  "upstream": "https://github.com/bee-san/hachidori",
+  "license": "GPL-3.0-or-later",
+  "version": "0.3.0",
+  "tag": "0.3.0",
+  "commit": "51eb85486fd9d9b00561c623bbc6defa60853f16",
+  "released": "2026-10-10",
+  "asset": {
+    "url": "https://github.com/bee-san/hachidori/releases/download/0.3.0/hachidori-0.3.0-51eb85486fd9-chrome.zip",
+    "sha256": "9345e6acf1b31a2d7bdecc423439a57e5c97f3ad188bcc2d6e5368642703bf8e"
+  },
+  "unpack": {}
+}

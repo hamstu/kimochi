@@ -18,7 +18,7 @@
 //     (overlay, popup host, ...); `ui/panel-yomitan.js`, which the panels load at runtime, reloads
 //     every window.
 //   - Rust edits under `src-tauri/` rebuild and relaunch the app (`tauri dev`'s own watcher), and so
-//     do `host/` edits, because native injects `host/shim.js` and `host/panel-shim.js` at window
+//     do `host/` edits, because native injects the Yomitan shims (`dist/spike/shim.js`, `panel-shim.js`) at window
 //     creation (the dev server still copies them into `dist/spike/` first).
 // Quitting the app (or Ctrl-C) stops `tauri dev`, which stops the dev server. `KIMOCHI_DEV_PORT`
 // moves the dev server, e.g. to run a second checkout alongside; that origin has its own storage.
@@ -164,7 +164,7 @@ if (task === 'dev') {
   const devArgs = ['dev']
   const port = env.KIMOCHI_DEV_PORT
   if (port) devArgs.push('--config', JSON.stringify({ build: { devUrl: `http://127.0.0.1:${port}` } }))
-  // `host/shim.js` and `host/panel-shim.js` are injected by native into every frame when a window
+  // The Yomitan shims (built from `host/yomitan/`) are injected by native into every frame when a window
   // is created, so a page reload cannot pick up an edit: relaunch the app instead, like a Rust
   // change. tauri cannot watch single files (or honour a `.taurignore` that keeps only two), so
   // all of `host/` relaunches; the dev server then skips its own reload (KIMOCHI_DEV_HOST_RELAUNCH).

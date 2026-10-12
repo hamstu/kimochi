@@ -8,6 +8,11 @@ src-tauri/gen/
 src-tauri/resources/meikiocr/
 src-tauri/resources/mangaocr/
 src-tauri/resources/oneocr/
+
+# Vendored dictionary-extension trees (64 MB of upstream bytes). Only the pins and hash records
+# (`extensions/<id>.source.json`, `.sha256.json`) are committed; `node scripts/sync-extension.mjs
+# --all --if-missing` (run by prepare.mjs for an absent tree, and by CI) refills them.
+extensions/*/
 oneocr-worker/target/
 
 # Static build of the preview harness for the site demo (npm run demo:build)

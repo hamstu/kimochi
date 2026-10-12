@@ -1,15 +1,24 @@
 /**
- * Settings → Dictionary: which lookup pop-up to use, then everything that belongs to it. Yomitan's
- * pop-up keeps its dictionaries, audio and Anki mining in Yomitan's own settings; Kimochi's pop-up
- * (over a Yomitan API server) is set up here, including its Anki card builder.
+ * Settings → Dictionary: which dictionary engine looks words up (`DictionaryChooser`, in the shape
+ * of the OCR engine chooser), and that engine's own settings in its panel. Yomitan, Hachidori and
+ * 10ten keep their dictionaries and options in their own settings pages (the `dictionary`
+ * panel); Kimochi's pop-up (over a Yomitan API server) is set up here, including its Anki card
+ * builder.
+ *
+ * Choosing an engine saves `yomitanSettings.popupType`, writes the document-start mirror
+ * (`localStorage['kimochi.dictionaryEngine']`) and asks native to reload the reader windows
+ * (`dictionary_engine_apply`), whose injected host scripts then install the new engine. The main
+ * window is one of those (it runs lookups over the transcript), and this page is a view inside
+ * it, so the page records where it is first (`rememberEngineSwitch`); the reloaded window opens
+ * straight back onto it and says "Now using …". The separate Settings window hosts no engine and
+ * is not reloaded; it says "Reloading the reader windows…" instead. Yomitan and Kimochi's pop-up
+ * share the Yomitan host, so moving between those two reloads nothing. See DICTIONARY_ENGINES.md
+ * §2 and §8.
  */
-import { useCallback, useState, type ReactNode } from 'react'
-import { BookOpen, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
-  Badge,
   Button,
   Callout,
-  ChoiceGroup,
   Input,
   SettingsPage,
   SettingsRow,
@@ -20,10 +29,22 @@ import {
   Switch,
   type Tone
 } from '@kit'
-import type { PopupType, YomitanSettings } from '../../vendor/shared-types'
+import type { YomitanSettings } from '../../vendor/shared-types'
 import { API_URLS } from '../../vendor/shared-constants'
 import { useSetting } from '../../bridge/useSetting'
-import { nativeError, panel } from '../../bridge/tauri'
+import { setSetting } from '../../bridge/settings'
+import { nativeError } from '../../bridge/tauri'
+import {
+  DICTIONARY_ENGINES,
+  applyDictionaryEngine,
+  dictionaryEngineOf,
+  documentEngine,
+  hostEngineOf,
+  mirrorDictionaryEngine,
+  openDictionarySettings,
+  popupTypeOf,
+  type DictionaryEngine
+} from '../../bridge/dictionaryEngine'
 import { describeUrlRestriction, testApiConnection } from '../../bridge/yomitan'
 import { AnkiSetup } from '@texthooker/components/AnkiSetup'
 import { clearAudioCache } from '@texthooker/lib/audio'
@@ -31,27 +52,24 @@ import { updateSettings } from '@texthooker/lib/settings'
 import type { Settings } from '@texthooker/lib/types'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { NumberField } from './fields'
+import { DictionaryChooser } from './DictionaryChooser'
+import { engineSwitchRecord, forgetEngineSwitch, rememberEngineSwitch } from '../../main/engineSwitch'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 
-const POPUP_OPTIONS = [
-  {
-    value: 'builtin',
-    label: 'Yomitan pop-up',
-    icon: <BookOpen />,
-    detail: 'Yomitan itself, running inside Kimochi, with its own dictionaries, audio and Anki mining.'
-  },
-  {
-    value: 'custom-api',
-    label: (
-      <>
-        Kimochi pop-up <Badge tone="warn">Experimental</Badge>
-      </>
-    ),
-    icon: <Sparkles />,
-    detail: 'Click words in the Log to look them up through a Yomitan API server, and build Anki cards here.'
-  }
-] as const
+/** How long "Reloading the reader windows…" stays up after native has answered. */
+const RELOAD_NOTE_MS = 2500
+/** How long "Now using …" stays up after the reload a switch gave this window. */
+const SWITCHED_NOTE_MS = 6000
+
+/**
+ * The engine this window was just reloaded into by a switch made here, while that is news. The
+ * record is read once per document, so a later visit to this page does not announce it again.
+ */
+function justSwitchedTo(): DictionaryEngine | null {
+  const record = engineSwitchRecord()
+  return record && Date.now() - record.at < SWITCHED_NOTE_MS + 4000 ? record.engine : null
+}
 
 const STATUS_TONE: Record<TestStatus, Tone> = {
   idle: 'neutral',
@@ -68,19 +86,71 @@ const STATUS_LABEL: Record<TestStatus, string> = {
 }
 
 export function DictionaryTab(): ReactNode {
+  // Until the setting loads, the engine this document was (re)loaded for, not the shipped
+  // default: after a switch the chooser's first frame already shows the new engine as active.
+  const [switchedTo, setSwitchedTo] = useState<DictionaryEngine | null>(justSwitchedTo)
   const [yomitanSettings, setYomitanSettings] = useSetting<YomitanSettings>('yomitanSettings', {
-    popupType: 'builtin',
+    popupType: popupTypeOf(engineSwitchRecord()?.engine ?? documentEngine()),
     customApiUrl: API_URLS.YOMITAN_FALLBACK
   })
   const [apiTestStatus, setApiTestStatus] = useState<TestStatus>('idle')
+  const saved = dictionaryEngineOf(yomitanSettings.popupType)
+  // The pick, shown as active from the click so the panel does not flash "Use this engine" while
+  // the write goes out. Cleared once the setting agrees (or the write fails).
+  const [picked, setPicked] = useState<DictionaryEngine | null>(null)
+  const active = picked ?? saved
+  // What this window does once native has the switch: 'self' when it is about to be reloaded
+  // itself (the main window), 'others' when only the reader windows are.
+  const [reloading, setReloading] = useState<'self' | 'others' | null>(null)
+  const [applyError, setApplyError] = useState<string | null>(null)
 
-  const handlePopupTypeChange = useCallback(
-    (value: PopupType): void => {
-      void setYomitanSettings({ ...yomitanSettings, popupType: value })
-      // Reset test status when changing popup type
-      if (value === 'builtin') setApiTestStatus('idle')
+  if (picked !== null && picked === saved) setPicked(null)
+
+  useEffect(() => {
+    if (!reloading) return
+    const timer = setTimeout(() => setReloading(null), RELOAD_NOTE_MS)
+    return () => clearTimeout(timer)
+  }, [reloading])
+
+  useEffect(() => {
+    if (!switchedTo) return
+    const timer = setTimeout(() => setSwitchedTo(null), SWITCHED_NOTE_MS)
+    return () => clearTimeout(timer)
+  }, [switchedTo])
+
+  const handleChoose = useCallback(
+    async (engine: DictionaryEngine): Promise<void> => {
+      setPicked(engine)
+      setApplyError(null)
+      setSwitchedTo(null)
+      // Reset test status when leaving the Kimochi pop-up, as before.
+      if (engine !== 'custom-api') setApiTestStatus('idle')
+      try {
+        // Through the settings client directly, not the hook's setter: that one reverts quietly
+        // on failure, and a failed save must not go on to mirror and reload the windows.
+        await setSetting('yomitanSettings', { ...yomitanSettings, popupType: popupTypeOf(engine) })
+      } catch (error) {
+        setPicked(null)
+        setApplyError(`Could not save the dictionary engine: ${nativeError(error).message}`)
+        return
+      }
+      mirrorDictionaryEngine(engine)
+      // Yomitan and Kimochi's pop-up share a host, so moving between them reloads nothing: the
+      // overlay switches live, as it always has.
+      if (hostEngineOf(engine) === hostEngineOf(saved)) return
+      // Before native reloads this window, so the reload comes back to this page.
+      setReloading(rememberEngineSwitch(engine) ? 'self' : 'others')
+      try {
+        await applyDictionaryEngine()
+      } catch (error) {
+        forgetEngineSwitch()
+        setReloading(null)
+        setApplyError(
+          `Saved, but the reader windows could not be reloaded: ${nativeError(error).message}. Restart Kimochi to switch engines.`
+        )
+      }
     },
-    [yomitanSettings, setYomitanSettings]
+    [yomitanSettings, saved]
   )
 
   const handleApiUrlChange = useCallback(
@@ -107,37 +177,37 @@ export function DictionaryTab(): ReactNode {
     ? describeUrlRestriction(yomitanSettings.customApiUrl)
     : null
 
-  return (
-    <SettingsPage title="Dictionary" description="The pop-up that shows definitions when you look up a word.">
-      <SettingsSection title="Pop-up">
-        <div className="settings-choice">
-          <ChoiceGroup
-            aria-label="Pop-up"
-            value={yomitanSettings.popupType}
-            onValueChange={(value) => handlePopupTypeChange(value)}
-            options={POPUP_OPTIONS}
-          />
-        </div>
-
-        {yomitanSettings.popupType === 'builtin' && (
-          <SettingsRow
-            label="Yomitan settings"
-            description="Dictionaries, scanning, audio and Anki mining for this pop-up are all set up in Yomitan's own settings."
-          >
+  const renderSettings = (engine: DictionaryEngine, inUse: boolean): ReactNode => {
+    if (engine !== 'custom-api') {
+      const name = DICTIONARY_ENGINES[engine].name
+      return (
+        <div className="dictionary-engine-action">
+          <div className="engine-setting-text">
+            <span className="engine-setting-label">{name} settings</span>
+            <span className="k-description">
+              {inUse
+                ? `Dictionaries, scanning and lookups are set up in ${name}'s own settings.`
+                : `${name}'s own settings open here once it is the active engine.`}
+            </span>
+          </div>
+          {inUse && (
             <Button
               size="sm"
               onClick={() => {
-                panel('yomitan', 'show').catch((error) =>
-                  console.error('Open Yomitan settings failed:', nativeError(error).message)
+                openDictionarySettings().catch((error) =>
+                  console.error(`Open ${name} settings failed:`, nativeError(error).message)
                 )
               }}
             >
-              Open Yomitan settings
+              Open {name} settings
             </Button>
-          </SettingsRow>
-        )}
-
-        {yomitanSettings.popupType === 'custom-api' && (
+          )}
+        </div>
+      )
+    }
+    return (
+      <>
+        <SettingsSection grouped>
           <SettingsRow
             stacked
             label="Yomitan API URL"
@@ -163,17 +233,41 @@ export function DictionaryTab(): ReactNode {
               </Button>
             </div>
           </SettingsRow>
-        )}
-        {yomitanSettings.popupType === 'custom-api' && restriction && (
-          <div className="settings-note">
-            <Callout tone="warn">{restriction}</Callout>
-          </div>
-        )}
-      </SettingsSection>
+          {restriction && (
+            <div className="settings-note">
+              <Callout tone="warn">{restriction}</Callout>
+            </div>
+          )}
+        </SettingsSection>
+        <WithReaderSettings>
+          {(settings) => <KimochiPopupSections settings={settings} />}
+        </WithReaderSettings>
+      </>
+    )
+  }
 
-      {yomitanSettings.popupType === 'custom-api' && (
-        <WithReaderSettings>{(settings) => <KimochiPopupSections settings={settings} />}</WithReaderSettings>
-      )}
+  return (
+    <SettingsPage title="Dictionary" description="The pop-up that shows definitions when you look up a word.">
+      <SettingsSection title="Engine" grouped={false}>
+        <DictionaryChooser
+          active={active}
+          onChoose={(engine) => void handleChoose(engine)}
+          renderSettings={renderSettings}
+          status={
+            applyError ? (
+              <Callout tone="danger">{applyError}</Callout>
+            ) : reloading === 'self' ? (
+              <span role="status">Switching to {DICTIONARY_ENGINES[active].name}…</span>
+            ) : reloading === 'others' ? (
+              <span role="status">Reloading the reader windows…</span>
+            ) : switchedTo && switchedTo === active ? (
+              <Callout tone="ok" className="dictionary-chooser-switched">
+                Now using {DICTIONARY_ENGINES[switchedTo].name}. The reader windows reloaded with it.
+              </Callout>
+            ) : null
+          }
+        />
+      </SettingsSection>
     </SettingsPage>
   )
 }
@@ -182,7 +276,7 @@ export function DictionaryTab(): ReactNode {
 function KimochiPopupSections({ settings }: { settings: Settings }): ReactNode {
   const volume = Math.round(settings.audioVolume * 100)
   return (
-    <div className="texthooker">
+    <div className="texthooker dictionary-engine-sections">
       <SettingsSection title="In the Log">
         <SettingsRow
           label="Click a word to look it up"

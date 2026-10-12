@@ -9,6 +9,11 @@
  *   then reloads the pages that load it (for `host/`, `scripts/run.mjs dev` relaunches the app
  *   instead).
  *
+ * Two more origins serve the vendored dictionary extensions for browser testing outside Tauri
+ * (DICTIONARY_ENGINES.md §4, §9): `KIMOCHI_DEV_PORT + 10` is Hachidori (`dist/ext/hachidori/`),
+ * `+ 11` is 10ten (`dist/ext/tenten/`), each with `/__kimochi/` → `dist/spike/`. In Tauri the
+ * custom schemes `hachidori://` and `tenten://` do this job and these ports are unused.
+ *
  * The origin is deliberately the one Tauri's built-in static server used, so a dev build keeps
  * its IndexedDB (the dev dictionaries) and localStorage. `KIMOCHI_DEV_PORT` moves it, e.g. for a
  * second checkout; `scripts/run.mjs dev` passes the matching `devUrl` to `tauri dev`.
@@ -16,15 +21,27 @@
  */
 import { createReadStream } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
+import type { Server } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mergeConfig, type Plugin, type UserConfig, type ViteDevServer } from 'vite'
 import appConfigExport from './vite.config'
-import { dist, prepare, prepareHost, prepareUi } from './scripts/prepare.mjs'
+import { dist, prepare, prepareExtensions, prepareHost, prepareUi } from './scripts/prepare.mjs'
+import {
+  createExtensionServer,
+  createProxyMiddleware,
+  createRelayBus,
+  harnessInjectsYomitanShim,
+  injectHostScript,
+  scopeFromCapability,
+  YOMITAN_SHIM_TAG
+} from './scripts/ext-dev-server.mjs'
 
 const appConfig = appConfigExport as UserConfig
 const here = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
 const port = Number(process.env.KIMOCHI_DEV_PORT ?? 1430)
+/** Engine id → its dev origin's port. Fixed offsets so a second checkout moves them together. */
+const EXTENSION_PORTS: Record<string, number> = { hachidori: port + 10, tenten: port + 11 }
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -49,6 +66,9 @@ const MIME: Record<string, string> = {
   '.ttf': 'font/ttf',
   '.otf': 'font/otf',
   '.wasm': 'application/wasm',
+  // 10ten's dictionary data (`data/words.ljson`, `data/words.idx`): read as bytes, not text.
+  '.ljson': 'application/octet-stream',
+  '.idx': 'application/octet-stream',
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.wav': 'audio/wav',
@@ -115,7 +135,7 @@ function kimochiDev(): Plugin {
     // windows' state costs less than that.
     const everywhere = true
     // `scripts/run.mjs dev` has `tauri dev` relaunch the app for `host/` edits, because native
-    // injects `host/shim.js` and `host/panel-shim.js` at window creation and a reload keeps the old
+    // injects the Yomitan shims (built from `host/yomitan/`) at window creation and a reload keeps the old
     // copy. Reloading as well would only be undone a moment later.
     const relaunching = hostFiles.length > 0 && process.env.KIMOCHI_DEV_HOST_RELAUNCH === '1'
     let outcome: string
@@ -131,7 +151,7 @@ function kimochiDev(): Plugin {
       `[kimochi] dist/ updated in ${Date.now() - started} ms (${names}); ${outcome}`,
       { timestamp: true }
     )
-    const injected = hostFiles.filter((file) => /[\\/](panel-)?shim\.js$/.test(file))
+    const injected = hostFiles.filter((file) => /[\\/]host[\\/](yomitan[\\/]|ext[\\/])/.test(file))
     if (injected.length > 0 && !relaunching) {
       server.config.logger.warn(
         `[kimochi] ${injected.map((file) => path.basename(file)).join(', ')} is injected by native at window creation: restart the app to apply it (\`npm run dev\` does so itself).`,
@@ -162,8 +182,24 @@ function kimochiDev(): Plugin {
       } else {
         await prepare()
       }
+      // `extensions/` is never edited in place, so it is copied once rather than watched.
+      if (!(await stat(path.join(dist, 'ext')).catch(() => null))) await prepareExtensions()
+      // The browser harness's plugin-http stand-in (ui/dictionary-harness.js `?fetch=proxy`):
+      // loopback only, limited to the hosts the app's own network capability allows. Mounted on
+      // the extension origins too, where the extension window's page fetches.
+      const capability = JSON.parse(await readFile(here('src-tauri/capabilities/network.json'), 'utf8'))
+      const proxy = createProxyMiddleware({
+        scope: scopeFromCapability(capability),
+        log: (message: string) => server.config.logger.warn(`[kimochi] ${message}`, { timestamp: true })
+      })
+      // The harness's `ext_relay` stand-in, one bus for every origin (ext-dev-server.mjs).
+      const relay = createRelayBus()
+      startExtensionServers(server, [proxy, relay.middleware])
       server.watcher.add([ui, host])
       for (const event of ['add', 'change', 'unlink'] as const) server.watcher.on(event, onChange)
+
+      server.middlewares.use(proxy)
+      server.middlewares.use(relay.middleware)
 
       // Registered before Vite's own middlewares: anything outside `/app/` is the static origin.
       server.middlewares.use(async (req, res, next) => {
@@ -187,6 +223,12 @@ function kimochiDev(): Plugin {
           res.end(html.includes('</body>') ? html.replace('</body>', `${tag}</body>`) : html + tag)
           return
         }
+        // The harness's stand-in for native's all-frames Yomitan shim (see ext-dev-server.mjs).
+        if (file.endsWith('.html') && harnessInjectsYomitanShim(req.headers.cookie)) {
+          const html = await readFile(file, 'utf8')
+          res.end(req.method === 'HEAD' ? undefined : injectHostScript(html, YOMITAN_SHIM_TAG))
+          return
+        }
         if (req.method === 'HEAD') {
           res.end()
           return
@@ -195,6 +237,52 @@ function kimochiDev(): Plugin {
       })
     }
   }
+}
+
+/** The two extension origins (see the header), closed with the dev server. */
+type Middleware = (req: unknown, res: unknown, next: () => void) => unknown
+
+function startExtensionServers(server: ViteDevServer, middleware: Middleware[]): void {
+  const servers: Server[] = []
+  const logger = server.config.logger
+  for (const [id, extPort] of Object.entries(EXTENSION_PORTS)) {
+    const http = createExtensionServer({
+      extRoot: path.join(dist, 'ext', id),
+      spikeRoot: path.join(dist, 'spike'),
+      mime: MIME,
+      log: (message: string) => logger.error(`[kimochi] ${id} origin: ${message}`, { timestamp: true }),
+      middleware,
+      // The extension window's page in the harness gets the native stand-in from the app origin.
+      harnessScript: `http://127.0.0.1:${port}/ui/dictionary-harness-native.js`
+    }) as Server
+    // A config change makes Vite restart: the new listeners race the old ones, which are still
+    // draining keep-alive connections, so the port can be busy for a moment. Retried briefly;
+    // anything else is reported, not fatal: the app never uses these ports, only browser tests.
+    let attempts = 0
+    const listen = (): void => {
+      http.listen(extPort, '127.0.0.1', () => {
+        logger.info(`[kimochi] ${id} dev origin: http://127.0.0.1:${extPort}/`, { timestamp: true })
+      })
+    }
+    http.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE' && attempts++ < 20) {
+        setTimeout(listen, 250)
+        return
+      }
+      logger.warn(`[kimochi] ${id} dev origin on port ${extPort} unavailable: ${error.message}`, {
+        timestamp: true
+      })
+    })
+    listen()
+    servers.push(http)
+  }
+  server.httpServer?.once('close', () => {
+    for (const http of servers) {
+      // Drop idle keep-alive connections too, or the port stays taken until they time out.
+      http.closeAllConnections?.()
+      http.close()
+    }
+  })
 }
 
 export default mergeConfig(appConfig, {

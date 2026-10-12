@@ -517,9 +517,6 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
             if !CGRectMakeWithDictionaryRepresentation(Retained::as_ptr(&dict).cast(), &mut b) {
                 continue;
             }
-            if !picker_window_eligible(layer, pid, own, b.size.width, b.size.height) {
-                continue;
-            }
             let string = |key: &NSString| -> Option<String> {
                 entry
                     .objectForKey(key)
@@ -529,6 +526,9 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
             // Empty-title windows are overwhelmingly framework helper surfaces, not app
             // documents. They remain capturable by ID, but do not belong in the picker.
             let Some(name) = name else { continue };
+            if !picker_window_eligible(layer, pid, own, b.size.width, b.size.height, &name) {
+                continue;
+            }
             sources.push(kimochi_capture::Source {
                 id: SourceId::window(Platform::MacOs, id, pid).to_string(),
                 kind: "window",
@@ -547,8 +547,9 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     })
 }
 
-fn picker_window_eligible(layer: u32, pid: u32, own: u32, width: f64, height: f64) -> bool {
-    layer == 0 && pid != own && readable_window(layer, 1., width, height)
+fn picker_window_eligible(layer: u32, pid: u32, own: u32, width: f64, height: f64, title: &str) -> bool {
+    let fixture = matches!(title, "Kimochi Japanese Fixture" | "Kimochi Split-Word Fixture");
+    layer == 0 && (pid != own || fixture) && readable_window(layer, 1., width, height)
 }
 
 /// Could a reader be looking at this window?
@@ -905,13 +906,21 @@ mod tests {
 
     #[test]
     fn picker_rejects_helper_surfaces_but_keeps_normal_windows() {
-        assert!(picker_window_eligible(0, 2, 1, 800., 600.));
-        assert!(!picker_window_eligible(3, 2, 1, 800., 600.));
-        assert!(!picker_window_eligible(0, 1, 1, 800., 600.));
-        assert!(!picker_window_eligible(0, 2, 1, 1., 1.));
-        assert!(!picker_window_eligible(0, 2, 1, 30., 40.));
-        assert!(!picker_window_eligible(0, 2, 1, f64::NAN, 600.));
-        assert!(!picker_window_eligible(0, 2, 1, 800., f64::INFINITY));
+        assert!(picker_window_eligible(0, 2, 1, 800., 600., "Game"));
+        assert!(!picker_window_eligible(3, 2, 1, 800., 600., "Game"));
+        assert!(!picker_window_eligible(0, 1, 1, 800., 600., "Game"));
+        assert!(!picker_window_eligible(0, 2, 1, 1., 1., "Game"));
+        assert!(!picker_window_eligible(0, 2, 1, 30., 40., "Game"));
+        assert!(!picker_window_eligible(0, 2, 1, f64::NAN, 600., "Game"));
+        assert!(!picker_window_eligible(0, 2, 1, 800., f64::INFINITY, "Game"));
+    }
+
+    #[test]
+    fn picker_allows_own_ocr_fixtures_only() {
+        assert!(picker_window_eligible(0, 1, 1, 640., 400., "Kimochi Japanese Fixture"));
+        assert!(picker_window_eligible(0, 1, 1, 760., 560., "Kimochi Split-Word Fixture"));
+        assert!(!picker_window_eligible(0, 1, 1, 800., 600., "Kimochi"));
+        assert!(!picker_window_eligible(3, 1, 1, 640., 400., "Kimochi Japanese Fixture"));
     }
 
     #[test]

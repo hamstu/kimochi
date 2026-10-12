@@ -11,7 +11,7 @@ import WindowFrame from "../components/WindowFrame";
 import macOSScreenPerms from "./assets/howto-screen-macos.png";
 
 import DictionarySetup, { DictionaryPractice } from "./DictionarySetup";
-import YomitanSettingsPanel from "../panels/YomitanSettingsPanel";
+import DictionarySettingsPanel from "../panels/DictionarySettingsPanel";
 import { EngineChooser } from "../panels/settings/EngineChooser";
 import svgLogo from "./assets/kimochi-logo.svg";
 import style from "./WelcomeApp.module.css";
@@ -317,7 +317,7 @@ function Welcome(): JSX.Element {
                   }}
                   aria-label="Import or manage dictionaries"
                 >
-                  <YomitanSettingsPanel />
+                  <DictionarySettingsPanel />
                 </section>
               }
             />

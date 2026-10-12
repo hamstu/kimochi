@@ -159,7 +159,7 @@ jobs:
           path: kimochi-mangaocr
       # Drop stale build output but keep the expensive, regenerable caches.
       - name: Clean workspace
-        run: git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources
+        run: git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -196,6 +196,10 @@ jobs:
         with:
           components: clippy
 
+      # The Hachidori and 10ten trees are gitignored; fetch the pinned releases into the kept
+      # extensions/ cache (a no-op when they already match extensions/<id>.sha256.json).
+      - name: Fetch vendored extensions
+        run: node scripts/sync-extension.mjs --all --if-missing
       # `npm ci` runs the `prepare` lifecycle script (scripts/prepare.mjs), which builds dist/.
       - run: npm ci
       - run: npm test
@@ -253,7 +257,7 @@ jobs:
           path: kimochi-mangaocr
       - name: Clean workspace
         run: |
-          git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources
+          git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
           # Only this run's bundles may be uploaded.
           rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle
 
@@ -311,6 +315,10 @@ jobs:
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
         run: cargo install --locked artifact-signing-cli
 
+      # The Hachidori and 10ten trees are gitignored; fetch the pinned releases into the kept
+      # extensions/ cache (a no-op when they already match extensions/<id>.sha256.json).
+      - name: Fetch vendored extensions
+        run: node scripts/sync-extension.mjs --all --if-missing
       - run: npm ci
       - name: Bundle (${{ needs.plan.outputs.mode }})
         run: npm run ${{ needs.plan.outputs.mode }}

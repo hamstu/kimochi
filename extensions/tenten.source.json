@@ -1,0 +1,15 @@
+{
+  "id": "tenten",
+  "name": "10ten Japanese Reader",
+  "upstream": "https://github.com/birchill/10ten-ja-reader",
+  "license": "GPL-3.0-or-later",
+  "version": "1.28.0",
+  "tag": "v1.28.0",
+  "commit": "05e9fe2815de2eb1c7807b3d7bebdef456cbb5d1",
+  "released": "2026-09-02",
+  "asset": {
+    "url": "https://github.com/birchill/10ten-ja-reader/releases/download/v1.28.0/10ten-ja-reader-1.28.0-chrome.zip",
+    "sha256": "9ce5dcf9930c6dbb5988dbb25e088150dcd77d70cfee70af448df5c8420cbede"
+  },
+  "unpack": {}
+}

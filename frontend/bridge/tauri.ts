@@ -30,6 +30,45 @@ import type {
   ViewState
 } from './types'
 
+/**
+ * Makes Tauri's `unlisten` tolerate a listener it does not (yet, or any longer) know.
+ *
+ * `listen()` resolves with the event id from the IPC reply, but the page-side listener record is
+ * written by a separate script native evaluates in the page, and nothing orders the two. An effect
+ * cleanup that unlistens right away (React StrictMode runs every effect twice in development; a
+ * component that unmounts at once does the same) can get there first. Tauri's unregister script
+ * then reads `listeners[eventId].handlerId` off `undefined`, `_unlisten` rejects, and every
+ * `void pending.then((stop) => stop())` cleanup turns that into an unhandled rejection, recorded as
+ * a `panel-error` in the evidence log. The native unlisten that follows is what actually stops
+ * delivery, and it still runs; only the page-side callback slot is left, which is harmless.
+ * Patched once per document, here, because every window's code reaches Tauri events through this
+ * module.
+ */
+function guardTauriUnlisten(): void {
+  if (typeof window === 'undefined') return
+  const internals = (window as unknown as {
+    __TAURI_EVENT_PLUGIN_INTERNALS__?: {
+      unregisterListener?: (event: string, eventId: number) => void
+      __kimochiGuarded?: boolean
+    }
+  }).__TAURI_EVENT_PLUGIN_INTERNALS__
+  const original = internals?.unregisterListener
+  if (!internals || typeof original !== 'function' || internals.__kimochiGuarded) return
+  try {
+    internals.unregisterListener = (event, eventId) => {
+      try {
+        original.call(internals, event, eventId)
+      } catch {
+        // The listener record is not there: nothing page-side to unregister.
+      }
+    }
+    internals.__kimochiGuarded = true
+  } catch {
+    // A frozen internals object: keep Tauri's own behaviour.
+  }
+}
+guardTauriUnlisten()
+
 export interface NativeError {
   kind: NativeErrorKind
   message: string

@@ -183,6 +183,20 @@ impl Images {
         })
     }
 
+    /// The frame a mining screenshot shows (a dictionary extension's
+    /// `tabs.captureVisibleTab`): `wanted` when that frame is still held, otherwise the
+    /// frame whose text is on screen, otherwise the newest capture. The flag says whether
+    /// `wanted` was the one found.
+    pub fn mining_frame(&self, wanted: Option<u64>) -> Option<(u64, bool)> {
+        if let Some(id) = wanted.filter(|id| self.frame(*id).is_some()) {
+            return Some((id, true));
+        }
+        self.published
+            .as_ref()
+            .or(self.latest.as_ref())
+            .map(|(id, _)| (*id, false))
+    }
+
     /// Preview ownership is separate from OCR and source-picker ownership. Two slots
     /// let the browser finish loading the previous image while its successor arrives.
     pub fn live_preview(&mut self) -> Option<(u64, Arc<Image>)> {
@@ -456,6 +470,9 @@ pub fn source_focus(
     };
     match front {
         None => seen,
+        // An explicitly selected own window is OCR fixture content, not a reader panel.
+        Some(front) if front.pid == own_pid && window.pid() == Some(own_pid)
+            && front.window.as_ref().is_some_and(|w| w.platform() == window.platform() && w.handle() == window.handle()) => SourceFocus { focused: true, ..seen },
         Some(front) if front.pid == own_pid => SourceFocus { held: true, ..seen },
         Some(front) => SourceFocus {
             focused: front
@@ -671,6 +688,20 @@ mod focus_tests {
         let focus = source_focus(Some(source().as_str()), front(7777, 9001), OWN_PID, None, shown());
         assert!(!focus.present);
         assert!(!focus.focused);
+    }
+
+    #[test]
+    fn a_selected_own_fixture_establishes_focus_and_panels_then_hold_it() {
+        let source = SourceId::window(Platform::current(), SOURCE_WINDOW, OWN_PID).to_string();
+        // From a false answer: before the fix an own window in front only held the previous
+        // value, so starting from the default (`focused: true`) would pass without the fix.
+        let previous = SourceFocus { focused: false, ..SourceFocus::default() };
+        let focus = source_focus(Some(&source), front(SOURCE_WINDOW, OWN_PID), OWN_PID, on_screen(), previous);
+        assert!(focus.focused);
+        assert!(!focus.held);
+        let panel = source_focus(Some(&source), front(SOURCE_WINDOW + 1, OWN_PID), OWN_PID, on_screen(), focus);
+        assert!(panel.focused);
+        assert!(panel.held);
     }
 
     #[test]
@@ -1243,6 +1274,32 @@ mod tests {
         assert!(images.frame(1).is_some());
         assert!(images.release_candidate(1));
         assert!(images.pin_candidate(refused));
+    }
+
+    #[test]
+    fn mining_frame_prefers_the_wanted_scan_then_the_published_then_the_latest() {
+        let mut images = Images::default();
+        assert_eq!(images.mining_frame(None), None, "nothing captured yet");
+        assert_eq!(images.mining_frame(Some(7)), None);
+        let first = images.put_latest(image());
+        assert_eq!(images.mining_frame(None), Some((first, false)));
+        assert_eq!(images.mining_frame(Some(first)), Some((first, true)));
+        assert!(images.pin_published(first));
+        let probe = images.put_latest(image());
+        assert_eq!(
+            images.mining_frame(None),
+            Some((first, false)),
+            "the frame whose text is on screen wins over a newer probe"
+        );
+        assert_eq!(images.mining_frame(Some(probe)), Some((probe, true)));
+        images.put_latest(image());
+        assert_eq!(
+            images.mining_frame(Some(probe)),
+            Some((first, false)),
+            "an evicted scan falls back to the current frame"
+        );
+        images.clear();
+        assert_eq!(images.mining_frame(Some(first)), None);
     }
 
     #[test]

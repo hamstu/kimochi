@@ -15,3 +15,12 @@
 *.so binary
 *.exe binary
 bin/keytrigger-* binary
+
+# Vendored upstream extension releases (scripts/sync-extension.mjs), stored exactly as released.
+# `-text` keeps git from converting line endings: prepare.mjs verifies every byte against
+# extensions/<id>.sha256.json, and an upstream file may carry CRLF. Not counted as our code on
+# GitHub; the large dictionary data and Wasm files are never diffed.
+extensions/** -text linguist-vendored
+extensions/**/*.ljson -diff
+extensions/**/*.idx -diff
+extensions/**/*.wasm -diff

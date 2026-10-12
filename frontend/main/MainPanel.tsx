@@ -6,7 +6,7 @@
  * The Log stays mounted under the other views: it owns line intake (clipboard, WebSocket, OCR),
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { PanelLeft } from 'lucide-react'
 import { listen } from '@tauri-apps/api/event'
 import { IconButton, Tooltip } from '@kit'
@@ -23,13 +23,16 @@ import { settingsTabOf } from '../panels/settings/settingsNav'
 import { useController } from '../panels/useController'
 import { ViewTabs } from './ViewTabs'
 import { LogActionsProvider } from './LogActionsProvider'
+import { engineSwitchRecord, registerMainRoute } from './engineSwitch'
 import { DEFAULT_WIDTH, MainSidebar, type MainView } from './MainSidebar'
 import '../panels/settings-panel.css'
 import './main.css'
 
 function initialView(): MainView {
   const view = new URLSearchParams(location.search).get('view')
-  return view === 'notebook' || view === 'settings' ? view : 'log'
+  if (view === 'notebook' || view === 'settings') return view
+  // Reloaded by a dictionary-engine switch made in Settings: open on that page, not the Log.
+  return engineSwitchRecord()?.view ?? 'log'
 }
 
 export default function MainPanel(): JSX.Element {
@@ -37,11 +40,17 @@ export default function MainPanel(): JSX.Element {
   const [sidebarWidth, setSidebarWidth] = useSetting<number>('mainSidebarWidth', DEFAULT_WIDTH)
   // `?view=` picks the first view (used by the UI preview pages).
   const [view, setViewState] = useState<MainView>(initialView)
-  const [storedTab, setStoredTab] = useSetting<string>('settingsActiveTab', 'general')
+  // After an engine switch the stored page is known before the setting loads: the first frame
+  // shows it rather than General.
+  const [storedTab, setStoredTab] = useSetting<string>(
+    'settingsActiveTab',
+    engineSwitchRecord()?.tab ?? 'general'
+  )
   const settingsTab = settingsTabOf(storedTab)
   const [editing, setEditing] = useState<string | null>(null)
   // Where Back returns to from Settings.
-  const lastView = useRef<Exclude<MainView, 'settings'>>('log')
+  const lastView = useRef<Exclude<MainView, 'settings'>>(engineSwitchRecord()?.back ?? 'log')
+  const settingsScroll = useRef<HTMLDivElement>(null)
   const { props: controller, error, dismissError } = useController()
 
   const setView = (next: MainView): void => {
@@ -65,6 +74,33 @@ export default function MainPanel(): JSX.Element {
     document.addEventListener('kimochi:controller-back', back)
     return () => document.removeEventListener('kimochi:controller-back', back)
   }, [view, editing])
+
+  // A switch of dictionary engine reloads this window; it records where Settings was first.
+  const tabNow = useRef(settingsTab)
+  useEffect(() => {
+    tabNow.current = settingsTab
+  }, [settingsTab])
+  useEffect(
+    () =>
+      registerMainRoute(() => ({
+        tab: tabNow.current,
+        back: lastView.current,
+        scrollTop: settingsScroll.current?.scrollTop ?? 0
+      })),
+    []
+  )
+  // ...and puts the Settings page back where it was scrolled to, once, before the first paint.
+  useLayoutEffect(() => {
+    const top = engineSwitchRecord()?.scrollTop ?? 0
+    const scroller = settingsScroll.current
+    if (!top || !scroller) return
+    scroller.scrollTop = top
+    // Sections that render from a setting still loading can be short on the first frame.
+    const frame = requestAnimationFrame(() => {
+      if (scroller.scrollTop < top) scroller.scrollTop = top
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [])
 
   // Other windows (the tray, a pop-up) ask for Settings by event; the page is already stored.
   useEffect(() => {
@@ -151,7 +187,7 @@ export default function MainPanel(): JSX.Element {
               )}
               {view === 'settings' && (
                 <ReaderSettingsProvider>
-                  <div className="settings-page-scroll main-settings">
+                  <div ref={settingsScroll} className="settings-page-scroll main-settings">
                     <SettingsPageFor tab={settingsTab} />
                   </div>
                 </ReaderSettingsProvider>

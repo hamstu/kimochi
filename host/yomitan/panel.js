@@ -39,72 +39,45 @@
  * connectToDatabaseWorker is answered locally by panel-media.js, fetching bytes
  * through the JSON relay for the original media renderer. registerOffscreenPort
  * remains unavailable because Chrome offscreen documents do not exist here.
+ *
+ * Bundled by scripts/prepare.mjs into `dist/spike/panel-shim.js` (DICTIONARY_ENGINES.md §11.4) and
+ * injected by native as a document-start script for every frame of `log`, `dictionary`, `welcome`
+ * and `popup-host`. Also imported as a module by `ui/panel-yomitan.js`.
  */
-;(() => {
-  if (window.__yomitanShim || window.__yomitanPanelShim) return
-  if (!['tauri:', 'http:', 'https:', 'about:'].includes(location.protocol)) return
+import { clone, listenRelay, platformInfo as sharedPlatformInfo, runListeners, tabIdFor } from '../ext/primitives.js'
+import {
+  apiForms,
+  assetUrl,
+  channelPort as makePort,
+  createChrome,
+  dropOnPagehide,
+  event,
+  installAudioValidity,
+  installChrome,
+  installLinuxDictionaryImages,
+  installLinuxScanInput,
+  removeServiceWorker,
+  RUNTIME_ID,
+  stubSharedWorkerBridge,
+  yomitanRoot
+} from './common.js'
 
-  let root
-  try {
-    root = top
-    if (location.origin !== root.location.origin && location.href !== 'about:blank') return
-  } catch {
-    return
-  }
+install()
+
+function install() {
+  if (window.__yomitanShim || window.__yomitanPanelShim) return
+  const root = yomitanRoot(window)
+  if (!root) return
   window.__yomitanPanelShim = true
 
-  /**
-   * `chrome.runtime.getPlatformInfo()`, from the platform the native side injects as
-   * `__KIMOCHI_PLATFORM__` (`{os: 'macos' | 'windows' | 'linux', arch}`), else sniffed.
-   */
-  const platformInfo = () => {
-    let injected = window.__KIMOCHI_PLATFORM__
-    try {
-      injected ??= root.__KIMOCHI_PLATFORM__
-    } catch {
-      // A detached root keeps the sniffed answer.
-    }
-    const OS = { macos: 'mac', mac: 'mac', windows: 'win', win: 'win', linux: 'linux' }
-    const ARCH = {
-      aarch64: 'arm64',
-      arm64: 'arm64',
-      x86_64: 'x86-64',
-      'x86-64': 'x86-64',
-      x86: 'x86-32',
-      'x86-32': 'x86-32',
-      arm: 'arm'
-    }
-    const os =
-      OS[injected?.os] ??
-      (/Mac/.test(navigator.platform) ? 'mac' : /Win/.test(navigator.platform) ? 'win' : 'linux')
-    return { os, arch: ARCH[injected?.arch] ?? 'arm64' }
-  }
+  /** `chrome.runtime.getPlatformInfo()`, from native's `__KIMOCHI_PLATFORM__`, else sniffed. */
+  const platformInfo = () => sharedPlatformInfo(window, root)
 
   const tauri = root.__TAURI__
   const OVERLAY = 'overlay'
 
-  /**
-   * Absolute URL for a module this host loads itself.
-   *
-   * This file is delivered two ways: imported as a module by a page, and injected
-   * by native as a document-start script for every frame. An injected script has no
-   * module URL of its own, so a root-relative `import('/spike/...')` has nothing to
-   * resolve against and throws before the request is ever made. Resolving against
-   * the document keeps both deliveries working, and every frame here is same-origin
-   * by the guard above.
-   */
-  const asset = (path) => new URL(path, root.location.href).href
-
-  class ChromeEvent {
-    listeners = new Set()
-    addListener = (f) => this.listeners.add(f)
-    removeListener = (f) => this.listeners.delete(f)
-    hasListener = (f) => this.listeners.has(f)
-    emit = (...args) => {
-      for (const f of [...this.listeners]) f(...args)
-    }
-  }
-  const clone = (v) => (v === undefined ? undefined : structuredClone(v))
+  /** Absolute URL for a module this host loads itself (see common.js `assetUrl`). */
+  const asset = (path) => assetUrl(root, path)
 
   /**
    * Frame-id bands, injected by native before this script runs.
@@ -136,9 +109,7 @@
      * backend that routes by tab id can never confuse two windows.
      */
     const label = root.__kimochiPanelLabel ?? location.pathname
-    let tabId = 2
-    for (const ch of label) tabId = ((tabId * 31 + ch.charCodeAt(0)) >>> 0) % 1000000 || 2
-    if (tabId === 1) tabId = 2
+    const tabId = tabIdFor(label)
 
     const hub = {
       contexts: new Map(),
@@ -182,25 +153,8 @@
       },
       /** Deliver into this window's own frames: the frontend/popup path. */
       deliver(targets, message) {
-        const sender = { id: 'yomitan-spike', tab: { id: hub.tabId }, url: root.location.href }
-        let handled = false
-        let done
-        const response = new Promise((resolve) => {
-          done = resolve
-        })
-        for (const target of targets) {
-          for (const listener of [...target.events.onMessage.listeners]) {
-            const value = listener(clone(message), clone(sender), (data) => {
-              handled = true
-              done(clone(data))
-            })
-            if (value === true) handled = true
-            else if (value?.then) {
-              handled = true
-              value.then(done)
-            }
-          }
-        }
+        const sender = { id: RUNTIME_ID, tab: { id: hub.tabId }, url: root.location.href }
+        const { handled, response } = runListeners(targets, message, sender, clone)
         return handled ? response : undefined
       },
       select(id, frameId) {
@@ -245,8 +199,8 @@
        * and `CrossFrameAPIPort` cannot tell the difference.
        */
       relayPort({ channel, name, target, owner, sender }) {
-        const onMessage = new ChromeEvent()
-        const onDisconnect = new ChromeEvent()
+        const onMessage = event()
+        const onDisconnect = event()
         let closed = false
         const port = {
           name,
@@ -443,23 +397,9 @@
         // exactly-once, and a cross-frame port is not idempotent: a redelivered
         // acknowledgement fails the whole invocation with "already acknowledged", and
         // a redelivered backend broadcast fires every listener twice.
-        const seen = new Map()
-        await tauri.event.listen('ext-relay', ({ payload }) => {
-          if (!payload?.payload) return
-          const { from, to, seq } = payload
-          // Addressed to another window, or back to this one: the JS listener takes
-          // every emit regardless of target, so this is the only filter there is.
-          if (from === hub.label) return
-          if (typeof to === 'string' && to !== hub.label) return
-          if (typeof seq === 'number' && typeof from === 'string') {
-            if (seq <= (seen.get(from) ?? 0)) {
-              hub.log({ check: 'relay-duplicate', from, seq })
-              return
-            }
-            seen.set(from, seq)
-          }
-          hub.settle(payload.payload, from)
-        })
+        await listenRelay(tauri, hub.label, (payload, from) => hub.settle(payload, from), (from, seq) =>
+          hub.log({ check: 'relay-duplicate', from, seq })
+        )
       }
       await tauri?.core
         ?.invoke('ext_relay', { target: OVERLAY, payload: { kind: 'hello' } })
@@ -471,11 +411,7 @@
   const hub = root.__extensionHost
   if (!hub) return
 
-  const events = {
-    onMessage: new ChromeEvent(),
-    onConnect: new ChromeEvent(),
-    onChanged: new ChromeEvent()
-  }
+  const events = { onMessage: event(), onConnect: event(), onChanged: event() }
   const ctx = hub.register(window, events)
 
   // Install the original adapter now if it has loaded, and otherwise queue this
@@ -497,35 +433,7 @@
     window.fetch.__deferred = true
   }
 
-  const event = () => new ChromeEvent()
-  const finish = (promise, cb) => {
-    if (typeof cb !== 'function') return promise
-    promise.then(
-      (value) => cb(value),
-      (error) => {
-        chrome.runtime.lastError = { message: String(error.message ?? error) }
-        try {
-          cb()
-        } finally {
-          delete chrome.runtime.lastError
-        }
-      }
-    )
-    return undefined
-  }
-  const api =
-    (fn) =>
-    (...args) => {
-      const cb = typeof args.at(-1) === 'function' ? args.pop() : undefined
-      return finish(
-        Promise.resolve().then(() => fn(...args)),
-        cb
-      )
-    }
-  const unsupported = (name) =>
-    api(() => {
-      throw Error(`${name} is not available in a relayed Kimochi window`)
-    })
+  const { api, unsupported } = apiForms((name) => `${name} is not available in a relayed Kimochi window`)
 
   /**
    * Frame-scoped calls answered here instead of at the backend.
@@ -647,54 +555,19 @@
     }
   }
 
-  function makePort(name, sender, native, owner) {
-    const onMessage = event()
-    const onDisconnect = event()
-    let closed = false
-    const port = {
-      name,
-      sender,
-      onMessage,
-      onDisconnect,
-      postMessage(message) {
-        if (closed) throw Error('Disconnected port')
-        native.postMessage({ message })
-      },
-      disconnect() {
-        if (closed) return
-        native.postMessage({ disconnect: true })
-        closed = true
-        native.close()
-        owner.ports.delete(port)
-        onDisconnect.emit(port)
-      }
-    }
-    native.onmessage = ({ data }) => {
-      if (data.disconnect) {
-        closed = true
-        native.close()
-        owner.ports.delete(port)
-        onDisconnect.emit(port)
-      } else onMessage.emit(data.message, port)
-    }
-    owner.ports.add(port)
-    return port
-  }
-
-  window.chrome = {
-    // Tauri's Windows IPC uses WebView2's native chrome.webview bridge.
-    ...(platformInfo().os === 'win' && window.chrome?.webview
-      ? { webview: window.chrome.webview }
-      : {}),
-    runtime: {
-      id: 'yomitan-spike',
-      onMessage: events.onMessage,
-      onConnect: events.onConnect,
-      onInstalled: event(),
-      getURL: (p) => new URL(p.replace(/^\//, ''), new URL('/', root.location.href).href).href,
-      getManifest: () => clone(hub.manifest),
-      getPlatformInfo: api(() => platformInfo()),
-      sendMessage: api(async (message) => {
+  installChrome(
+    window,
+    createChrome({
+      win: window,
+      root,
+      hub,
+      ctx,
+      events,
+      tabId: hub.tabId,
+      api,
+      unsupported,
+      storage,
+      sendMessage: async (message) => {
         // `js/comm/api.js` reads `response.result`, so a locally answered call has to
         // be wrapped exactly as the backend wraps a relayed one. Returning the bare
         // value made `frameInformationGet` resolve to undefined, which killed
@@ -707,143 +580,37 @@
         }
         await hub.ready
         return hub.toBackend(message)
-      }),
-      openOptionsPage: api(() => hub.open('/settings.html')),
-      connectNative: () => {
-        throw Error('Native messaging is not implemented')
-      }
-    },
-    storage: { local: storage('local'), session: storage('session'), onChanged: events.onChanged },
-    tabs: {
-      query: api(() => [{ id: hub.tabId, windowId: 1, active: true, url: root.location.href }]),
-      get: api(() => ({ id: hub.tabId, windowId: 1, url: root.location.href })),
-      getCurrent: api(() => ({ id: hub.tabId, windowId: 1, url: location.href })),
-      getZoom: api(() => 1),
-      onZoomChange: event(),
-      // Frame-to-frame traffic (frontend <-> popup) stays inside this window.
-      sendMessage: api((id, message, options = {}) =>
-        hub.deliver(hub.select(id, options.frameId), message)
-      ),
-      connect(id, { frameId, name }) {
-        const target = hub.select(id, frameId)[0]
-        if (!target) throw Error(`Unknown frame ${frameId}`)
-        const channel = new MessageChannel()
-        const sender = { frameId: ctx.id, tab: { id: hub.tabId }, url: location.href }
-        const localPort = makePort(name, sender, channel.port1, ctx)
-        const remote = makePort(name, sender, channel.port2, target)
-        target.events.onConnect.emit(remote)
-        return localPort
       },
-      create: api(({ url }) => hub.open(url)),
-      update: api((id, details) => (details?.url ? hub.open(details.url) : { id: hub.tabId })),
-      remove: unsupported('tabs.remove'),
-      captureVisibleTab: unsupported('tabs.captureVisibleTab')
-    },
-    permissions: {
-      getAll: api(() => ({ permissions: ['storage', 'unlimitedStorage'], origins: [] })),
-      contains: api(
-        ({ permissions = [], origins = [] }) =>
-          !origins.length && permissions.every((p) => ['storage', 'unlimitedStorage'].includes(p))
-      ),
-      request: api(() => false),
-      remove: api(() => false),
-      onAdded: event(),
-      onRemoved: event()
-    },
-    action: {
-      setBadgeText: api(() => {}),
-      setBadgeBackgroundColor: api(() => {}),
-      setTitle: api(() => {})
-    },
-    commands: { getAll: api(() => []), onCommand: event() },
-    contextMenus: { create: () => {}, remove: api(() => {}), onClicked: event() },
-    scripting: {
-      getRegisteredContentScripts: api(() => []),
-      registerContentScripts: unsupported('scripting.registerContentScripts'),
-      unregisterContentScripts: api(() => {}),
-      insertCSS: api(async ({ target, css, files }) => {
-        if (files)
-          css = (
-            await Promise.all(
-              files.map((p) => fetch(chrome.runtime.getURL(p)).then((r) => r.text()))
-            )
-          ).join('\n')
-        for (const c of hub.select(target.tabId)) {
-          if (!target.allFrames && target.frameIds && !target.frameIds.includes(c.id)) continue
-          const style = c.win.document.createElement('style')
-          style.textContent = css
-          c.win.document.head.append(style)
-        }
-      })
-    },
-    declarativeNetRequest: {
-      getDynamicRules: api(() => []),
-      getSessionRules: api(() => []),
-      // Backend-scoped: the overlay's backend makes the requests (see host/shim.js).
-      updateDynamicRules: api(() => {}),
-      updateSessionRules: api(() => {})
-    },
-    extension: {
-      isAllowedFileSchemeAccess: api(() => false),
-      isAllowedIncognitoAccess: api(() => false)
-    },
-    i18n: { getUILanguage: () => navigator.language },
-    windows: {
-      create: unsupported('windows.create'),
-      update: unsupported('windows.update'),
-      get: api(() => ({ id: 1, focused: true }))
-    }
-  }
-  window.browser = window.chrome
+      // Frame-to-frame traffic (frontend <-> popup) stays inside this window.
+      tabsSendMessage: (id, message, options = {}) => hub.deliver(hub.select(id, options.frameId), message)
+    })
+  )
 
   // Yomitan picks its transport from these. Removing the service worker takes the
   // MessagePort branch; the stub below lets that branch complete without a
   // backend in this window, and the resulting port only ever carries media
   // drawing, which is fire-and-forget.
-  let proto = navigator
-  while (proto) {
-    if (Object.hasOwn(proto, 'serviceWorker')) delete proto.serviceWorker
-    proto = Object.getPrototypeOf(proto)
-  }
-  const NativeSharedWorker = window.SharedWorker
-  window.SharedWorker = class {
-    constructor(url, options) {
-      if (new URL(url, location.href).pathname !== '/js/comm/shared-worker-bridge.js')
-        return new NativeSharedWorker(url, options)
-      // `Application.main` hands the far end of this channel to what it believes
-      // is the backend. Nothing here forwards it anywhere — the only message
-      // that arrives carrying a port is the media drawing worker's database
-      // connection, and both ends of that are inside this window, so it is
-      // answered locally rather than dropped.
-      const channel = new MessageChannel()
-      this.port = channel.port1
-      channel.port2.onmessage = ({ data, ports }) => {
-        if (data?.action === 'connectToDatabaseWorker' && ports?.[0]) {
-          void hub.serveMedia(ports[0])
-        }
-        // `registerOffscreenPort` is Chrome's offscreen document, which does not
-        // exist here; its port is simply never answered, as before.
-      }
+  removeServiceWorker(window)
+  stubSharedWorkerBridge(window, ({ data, ports }) => {
+    // `Application.main` hands the far end of this channel to what it believes
+    // is the backend. Nothing here forwards it anywhere — the only message
+    // that arrives carrying a port is the media drawing worker's database
+    // connection, and both ends of that are inside this window, so it is
+    // answered locally rather than dropped.
+    if (data?.action === 'connectToDatabaseWorker' && ports?.[0]) {
+      void hub.serveMedia(ports[0])
     }
-  }
+    // `registerOffscreenPort` is Chrome's offscreen document, which does not
+    // exist here; its port is simply never answered, as before.
+  })
 
   // The popup plays its audio here; the "not available" clip check is WebKit's to fix
   // (see /spike/audio-bridge.js). Fetching is the backend's, in the overlay.
-  if (['/popup.html', '/search.html', '/settings.html'].includes(location.pathname))
-    void import(asset('/spike/audio-bridge.js'))
-      .then((m) => m.installAudioValidity(new URL('/js/media/audio-system.js', location.href).href))
-      .catch((error) =>
-        hub.log({ check: 'audio-bridge-failed', error: String(error?.message ?? error) })
-      )
+  installAudioValidity(window, root, (value) => hub.log(value))
 
-  window.addEventListener('pagehide', () => {
-    for (const port of [...ctx.ports]) port.disconnect()
-    hub.contexts.delete(ctx.id)
-  })
+  dropOnPagehide(window, hub, ctx)
+  installLinuxDictionaryImages(window, root, (value) => hub.log(value))
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
-    void import(asset('/spike/linux-dictionary-images.js'))
-      .then(({ installLinuxDictionaryImages }) => installLinuxDictionaryImages(window))
-      .catch(error => hub.log({ check: 'linux-dictionary-images-failed', error: String(error) }))
     // A long touch can create a separate GTK context-menu surface. Gamescope
     // cannot present that surface reliably, while its native grab blocks the UI.
     void tauri.core.invoke('platform_capabilities').then(caps => {
@@ -858,11 +625,9 @@
         .then(({ installLinuxPopupDocument }) => installLinuxPopupDocument(window))
         .catch(error => hub.log({ check: 'linux-popup-document-failed', error: String(error) }))
     }
-    void import(asset('/spike/linux-scan-input.js'))
-      .then(({ installLinuxScanInput }) => installLinuxScanInput(window, {
-        passive: ['overlay', 'popup-host'].includes(hub.label)
-      }))
-      .catch(error => hub.log({ check: 'linux-scan-input-failed', error: String(error) }))
+    installLinuxScanInput(window, root, (value) => hub.log(value), {
+      passive: ['overlay', 'popup-host'].includes(hub.label)
+    })
   }
   window.addEventListener('error', (e) =>
     hub.log({ check: 'panel-error', error: e.message, file: e.filename, line: e.lineno })
@@ -995,4 +760,4 @@
       hub.log({ check: 'panel-frontend-started', remotePopup: remotePopup?.frameId ?? null })
     }
   }
-})()
+}

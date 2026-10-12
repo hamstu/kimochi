@@ -702,13 +702,40 @@ pub fn app_origin() -> &'static str {
 
 /// Whether a navigation target is one of Kimochi's own pages (bundled build origin).
 pub fn is_app_url(url: &tauri::Url) -> bool {
-    let origin = app_origin();
+    has_origin(url, app_origin())
+}
+
+/// The origin a dictionary extension (`hachidori`, `tenten`) is served from: its own
+/// custom scheme, registered in `main.rs` (DICTIONARY_ENGINES.md §4). Like the app
+/// origin, WebView2 reaches it through Tauri's HTTP bridge as `http://<id>.localhost`.
+pub fn extension_origin(id: &str) -> String {
+    if HTTP_SCHEME_BRIDGE {
+        format!("http://{id}.localhost")
+    } else {
+        format!("{id}://localhost")
+    }
+}
+
+/// Whether a navigation target is on one of the dictionary extensions' origins.
+pub fn is_extension_url(url: &tauri::Url) -> bool {
+    crate::extensions::IDS
+        .iter()
+        .any(|id| is_extension_url_of(url, id))
+}
+
+/// Whether a navigation target is on the origin of the extension `id` exactly: the
+/// allowlist of that engine's hidden extension window (`ext-<id>`).
+pub fn is_extension_url_of(url: &tauri::Url, id: &str) -> bool {
+    has_origin(url, &extension_origin(id))
+}
+
+fn has_origin(url: &tauri::Url, origin: &str) -> bool {
     let (scheme, host) = origin.split_once("://").unwrap_or((origin, ""));
-    url.scheme() == scheme && url.host_str() == Some(host)
+    url.scheme() == scheme && url.host_str() == Some(host) && url.port().is_none()
 }
 
 /// An initialization script defining `window.__KIMOCHI_PLATFORM__ = {os, arch, debug}`.
-/// Registered first on every webview, before `host/shim.js` and the panel shims, which
+/// Registered first on every webview, before the Yomitan shims (`dist/spike/shim.js`, `panel-shim.js`), which
 /// read it for Yomitan's `getPlatformInfo` instead of sniffing the user agent. `debug` is
 /// true in a debug build (`tauri dev` or `npm run bundle`): a debug bundle loads a `vite build`,
 /// so this, not `import.meta.env.DEV`, is how its pages tell a local build from a release.
@@ -927,6 +954,38 @@ mod tests {
             assert!(is_app_url(&"tauri://localhost/ui/overlay.html".parse().unwrap()));
             assert!(!is_app_url(&"https://localhost/".parse().unwrap()));
         }
+    }
+
+    #[test]
+    fn extension_origins_match_the_webview() {
+        let url = |s: &str| -> tauri::Url { s.parse().unwrap() };
+        if cfg!(target_os = "windows") {
+            assert_eq!(extension_origin("hachidori"), "http://hachidori.localhost");
+            assert_eq!(extension_origin("tenten"), "http://tenten.localhost");
+            assert!(is_extension_url(&url("http://hachidori.localhost/settings.html")));
+            assert!(is_extension_url(&url("http://tenten.localhost/__kimochi/ext-background.html?engine=tenten")));
+            assert!(!is_extension_url(&url("hachidori://localhost/settings.html")));
+        } else {
+            assert_eq!(extension_origin("hachidori"), "hachidori://localhost");
+            assert_eq!(extension_origin("tenten"), "tenten://localhost");
+            assert!(is_extension_url(&url("hachidori://localhost/settings.html")));
+            assert!(is_extension_url(&url("tenten://localhost/options.html#general")));
+            assert!(!is_extension_url(&url("http://hachidori.localhost/settings.html")));
+        }
+        // The app origin, other schemes and look-alike hosts are not extension origins,
+        // and an extension origin is not the app origin.
+        assert!(!is_extension_url(&url(&format!("{}/ui/overlay.html", app_origin()))));
+        assert!(!is_app_url(&url(&format!("{}/settings.html", extension_origin("hachidori")))));
+        assert!(!is_extension_url(&url("capture://localhost/live/1")));
+        assert!(!is_extension_url(&url("yomitan://localhost/settings.html")));
+        assert!(!is_extension_url(&url("hachidori://evil.example/settings.html")));
+        assert!(!is_extension_url(&url("http://hachidori.localhost:1440/settings.html")));
+        assert!(!is_extension_url(&url("https://hachidori.localhost/settings.html")));
+        // One engine's window allows its own origin only.
+        let hachidori = url(&format!("{}/offscreen.html", extension_origin("hachidori")));
+        assert!(is_extension_url_of(&hachidori, "hachidori"));
+        assert!(!is_extension_url_of(&hachidori, "tenten"));
+        assert!(!is_extension_url_of(&url(&format!("{}/ui/overlay.html", app_origin())), "hachidori"));
     }
 
     fn display(id: u32, bounds: Rect, scale: f64) -> DisplayInfo {

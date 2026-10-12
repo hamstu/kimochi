@@ -211,7 +211,7 @@ fn update_panel_focus(owner: &mut Option<String>, label: &str, focused: bool) ->
 }
 
 pub fn panel_focus(label: &str, focused: bool) {
-    if !matches!(label, "log" | "settings" | "diagnostics" | "yomitan" | "welcome") { return; }
+    if !matches!(label, "log" | "settings" | "diagnostics" | "dictionary" | "welcome") { return; }
     let mut owner = PANEL_FOCUS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if update_panel_focus(&mut owner, label, focused) {
         PANEL_FOCUS_REVISION.fetch_add(1, Ordering::SeqCst);
@@ -507,10 +507,10 @@ mod tests {
     fn panel_focus_transfer_ignores_late_blur_from_previous_window() {
         let mut owner = None;
         assert!(update_panel_focus(&mut owner, "log", true));
-        assert!(update_panel_focus(&mut owner, "yomitan", true));
+        assert!(update_panel_focus(&mut owner, "dictionary", true));
         assert!(!update_panel_focus(&mut owner, "log", false));
-        assert_eq!(owner.as_deref(), Some("yomitan"));
-        assert!(update_panel_focus(&mut owner, "yomitan", false));
+        assert_eq!(owner.as_deref(), Some("dictionary"));
+        assert!(update_panel_focus(&mut owner, "dictionary", false));
         assert!(owner.is_none());
     }
 

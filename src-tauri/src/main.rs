@@ -9,6 +9,7 @@ mod activity;
 mod application_context;
 mod capture_unavailable;
 mod engine_probe;
+mod extensions;
 mod gamepad;
 mod history_merge;
 mod hotkeys;
@@ -335,9 +336,12 @@ fn record(app: &tauri::AppHandle, service: &Shared, value: Value) {
     }
 }
 
+/// `chrome.storage` persistence. No `extension` is Yomitan's `chrome-local.json`; an
+/// extension engine id (`[a-z0-9-]{1,32}`) gets its own `chrome-local-<id>.json`.
 #[tauri::command]
-fn storage_load(app: tauri::AppHandle) -> Reply<Value> {
-    match std::fs::read(path(&app, "chrome-local.json")?) {
+fn storage_load(app: tauri::AppHandle, extension: Option<String>) -> Reply<Value> {
+    let file = extensions::storage_file(extension.as_deref())?;
+    match std::fs::read(path(&app, &file)?) {
         Ok(b) => serde_json::from_slice(&b).map_err(|e| e.to_string()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
         Err(e) => Err(e.to_string()),
@@ -345,8 +349,171 @@ fn storage_load(app: tauri::AppHandle) -> Reply<Value> {
 }
 
 #[tauri::command]
-fn storage_save(app: tauri::AppHandle, value: Value) -> Reply<()> {
-    save(&app, "chrome-local.json", &value)
+fn storage_save(app: tauri::AppHandle, extension: Option<String>, value: Value) -> Reply<()> {
+    save(&app, &extensions::storage_file(extension.as_deref())?, &value)
+}
+
+/// Copies an extension engine's `chrome-local-<id>.json` to `chrome-local-<id>.json.bak-<ms>`
+/// and answers the backup's file name; `null` when there is no file to back up. The extension
+/// host calls it before resetting metadata that describes data missing from this launch's
+/// WebKit store (DICTIONARY_ENGINES.md §5.4.1). An extension id is required: Yomitan's file is
+/// never backed up or rewritten by this path.
+#[tauri::command]
+fn storage_backup(app: tauri::AppHandle, state: State<Shared>, extension: String) -> Reply<Option<String>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let name = extensions::backup_file(&extension, now)?;
+    let source = path(&app, &extensions::storage_file(Some(&extension))?)?;
+    if !source.exists() {
+        return Ok(None);
+    }
+    let target = path(&app, &name)?;
+    std::fs::copy(&source, &target).map_err(|e| format!("native: {e}"))?;
+    record(&app, &state, json!({ "check": "storage-backup", "extension": extension, "file": name }));
+    Ok(Some(name))
+}
+
+/// The windows that run a dictionary extension host, in the order a switch reloads them.
+const EXTENSION_HOST_WINDOWS: &[&str] = &[OVERLAY, panels::MAIN, "dictionary", POPUP_HOST, "welcome"];
+
+/// Switches the dictionary engine in place: reloads every extension-hosting window that
+/// exists, so its document-start scripts run again and read the new engine (the Settings
+/// page has already saved `yomitanSettings.popupType` and written the `localStorage`
+/// mirror). Windows not built yet need nothing: their prelude reads the store when they
+/// are. The Log reloads too; Settings records its route in `sessionStorage` first, so it
+/// comes back on Settings → Dictionary (DICTIONARY_ENGINES.md §2.1). Settings is the only
+/// caller on a switch; the overlay calls this only from its startup mirror repair.
+#[tauri::command]
+fn dictionary_engine_apply(app: tauri::AppHandle, state: State<Shared>) -> Reply<()> {
+    let engine = extensions::dictionary_engine(&state.settings);
+    let mut reloaded = Vec::new();
+    let mut failed = Vec::new();
+    for label in EXTENSION_HOST_WINDOWS {
+        let Some(window) = app.get_webview_window(label) else {
+            continue;
+        };
+        // The dictionary window may have left its panel page: Yomitan's host answers an
+        // `openOptionsPage` by navigating the top document to `/settings.html`. Reloading
+        // that page under a new engine would run it with no `chrome.*` at all, so it is sent
+        // back to the panel, which shows the new engine's own page.
+        let script = if *label == "dictionary" {
+            format!("location.replace(location.origin + '/{}')", panels::PANEL_PAGE)
+        } else {
+            "location.reload()".to_string()
+        };
+        match window.eval(&script) {
+            Ok(()) => reloaded.push(*label),
+            Err(e) => failed.push(json!({ "window": label, "error": e.to_string() })),
+        }
+    }
+    // The engine's extension window (DICTIONARY_ENGINES.md §5.4): any other engine's is
+    // closed, this engine's reloads with the rest or, when there is none yet, is created in a
+    // later main-thread turn (creating a window from a synchronous command deadlocks
+    // WebView2). The overlay's hub also asks for it when it starts, which is idempotent.
+    for label in panels::close_extension_windows(&app, Some(engine.as_str())) {
+        record(&app, &state, json!({ "check": "extension-window", "engine": engine, "label": label, "action": "closed" }));
+    }
+    if extensions::IDS.contains(&engine.as_str()) {
+        let label = extensions::window_label(&engine);
+        if let Some(window) = app.get_webview_window(&label) {
+            match window.eval("location.reload()") {
+                Ok(()) => {
+                    record(&app, &state, json!({ "check": "extension-window", "engine": engine, "label": label, "action": "reloaded" }));
+                }
+                Err(e) => failed.push(json!({ "window": label, "error": e.to_string() })),
+            }
+        } else {
+            let id = engine.clone();
+            panels::later(&app, move |app, turn| {
+                let result = panels::extension_window(turn, app, &id, false);
+                let _ = record_extension_window(app, &id, "apply", result);
+            });
+        }
+    }
+    record(
+        &app,
+        &state,
+        json!({ "check": "dictionary-engine-apply", "engine": engine, "reloaded": reloaded, "failed": failed }),
+    );
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("native: could not reload {failed:?}"))
+    }
+}
+
+/// Makes sure the active extension engine's hidden window exists (DICTIONARY_ENGINES.md
+/// §5.4), for the overlay's hub when it starts: native creates it at startup and on a switch,
+/// so this is usually `kept`. `reload` (a retry after a failed start) reloads it. Refused for
+/// any engine but the active one, so an overlay still running the previous engine cannot
+/// bring that engine's window back.
+#[tauri::command]
+async fn extension_window_ensure(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    engine: String,
+    reload: Option<bool>,
+) -> Reply<Value> {
+    let active = extensions::dictionary_engine(&state.settings);
+    if !extensions::IDS.contains(&engine.as_str()) {
+        return Err(format!("invalid: {engine:?} is not an extension engine"));
+    }
+    if engine != active {
+        return Err(format!("invalid: {engine} is not the active dictionary engine ({active} is)"));
+    }
+    let id = engine.clone();
+    let result = panels::on_main_turn(&app, move |app, turn| {
+        panels::extension_window(turn, app, &id, reload.unwrap_or(false))
+    })
+    .await;
+    let action = record_extension_window(&app, &engine, "ensure", result)?;
+    Ok(json!({ "label": extensions::window_label(&engine), "action": action }))
+}
+
+/// Records what happened to an extension window (`{check:'extension-window', engine, action}`)
+/// and hands the action back.
+fn record_extension_window(
+    app: &tauri::AppHandle,
+    engine: &str,
+    cause: &str,
+    result: std::result::Result<panels::ExtensionWindowAction, String>,
+) -> std::result::Result<&'static str, String> {
+    let label = extensions::window_label(engine);
+    let (value, out) = match result {
+        Ok(action) => (
+            json!({ "check": "extension-window", "engine": engine, "label": label, "action": action.as_str(), "cause": cause }),
+            Ok(action.as_str()),
+        ),
+        Err(error) => (
+            json!({ "check": "extension-window", "engine": engine, "label": label, "action": "failed", "cause": cause, "error": error }),
+            Err(error),
+        ),
+    };
+    eprintln!("kimochi: {value}");
+    if let Some(service) = app.try_state::<Shared>() {
+        record(app, &service, value);
+    }
+    out
+}
+
+/// Refuses an app command an extension window may not invoke
+/// ([`extensions::command_allowed`]), recording each refused command once per launch.
+fn refuse_extension_command(app: &tauri::AppHandle, label: &str, command: &str) {
+    static REFUSED: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    let first = REFUSED
+        .get_or_init(Default::default)
+        .lock()
+        .map(|mut seen| seen.insert(format!("{label}:{command}")))
+        .unwrap_or(false);
+    if first {
+        let value = json!({ "check": "extension-window-command-refused", "window": label, "command": command });
+        eprintln!("kimochi: {value}");
+        if let Some(service) = app.try_state::<Shared>() {
+            record(app, &service, value);
+        }
+    }
 }
 
 /// The always-present window that owns the Yomitan backend and the OCR text.
@@ -1760,6 +1927,8 @@ fn edit_history(
     Ok(value)
 }
 
+// One argument per field the overlay sends; a Tauri command's arguments are its IPC schema.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 fn history_add(
     app: tauri::AppHandle,
@@ -1769,6 +1938,7 @@ fn history_add(
     groups: Option<Vec<ocr_result::OcrGroup>>,
     engine: Option<String>,
     merge: Option<bool>,
+    frame: Option<u64>,
 ) -> Reply<Value> {
     if text.trim().is_empty() {
         return Err("invalid: history entries cannot be empty".into());
@@ -1788,6 +1958,11 @@ fn history_add(
     };
     let now = now_millis();
     let mut entry = json!({ "id": history_id(), "text": text, "timestamp": now, "source": source, "groups": groups, "engine": engine });
+    // The capture frame this reading came from, so a mining screenshot taken from the Log's
+    // line can show that frame while the image store still holds it (`capture_frame_source`).
+    if let Some(frame) = frame {
+        entry["frame"] = json!(frame);
+    }
     // Merging is decided inside the history lock, against the list as it is now; see
     // history_merge.rs. A replaced entry is named on the new one so the reader's log can
     // swap its lines rather than keep the fragment.
@@ -1817,6 +1992,41 @@ fn history_add(
         entry["skipped"] = json!(true);
     }
     Ok(entry)
+}
+
+/// The capture frame a history entry was read from, when it recorded one.
+fn history_frame(history: Option<&Value>, id: &str) -> Option<u64> {
+    history?
+        .as_array()?
+        .iter()
+        .find(|entry| entry.get("id").and_then(Value::as_str) == Some(id))?
+        .get("frame")?
+        .as_u64()
+}
+
+/// The captured source frame a dictionary extension's mining screenshot shows
+/// (`tabs.captureVisibleTab` in host/ext/hub.js): the frame of the history entry `scan`
+/// (a Log line's `ocr.scanId`) while the image store still holds it, else the frame whose
+/// text is on screen, else the newest capture; `null` before anything was captured.
+///
+/// Only the frame's id and `capture:` URL cross the bridge: the pixels are fetched over
+/// the protocol like every other frame, and never logged.
+#[tauri::command]
+fn capture_frame_source(state: State<'_, Shared>, scan: Option<String>) -> Reply<Value> {
+    let wanted = match scan.as_deref() {
+        Some(id) => history_frame(state.settings.get_path(&HISTORY_KEY)?.as_ref(), id),
+        None => None,
+    };
+    let images = state.images.lock().map_err(|e| e.to_string())?;
+    Ok(match images.mining_frame(wanted) {
+        Some((id, matched)) => json!({
+            "id": id,
+            "url": platform::capture_url(&id.to_string()),
+            "info": images.frame(id).map(|image| image.info.clone()),
+            "matched": matched,
+        }),
+        None => Value::Null,
+    })
 }
 
 #[tauri::command]
@@ -2034,7 +2244,7 @@ fn main() {
             let _ = panels::act_existing(app, &settings, onboarding_panel(initial.as_ref()), "show", None);
         }
     }));
-    builder
+    let builder = builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -2092,8 +2302,20 @@ fn main() {
                 };
                 responder.respond(response);
             });
+        });
+    // One origin per dictionary extension (DICTIONARY_ENGINES.md §4), answered off the
+    // main thread like `capture`: an extension loads hundreds of files at start.
+    let builder = extensions::IDS.iter().fold(builder, |builder, &id| {
+        builder.register_asynchronous_uri_scheme_protocol(id, move |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(extensions::respond(&app, id, &request));
+            });
         })
-        .invoke_handler(tauri::generate_handler![
+    });
+    let commands: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
+            dictionary_engine_apply,
+            extension_window_ensure,
             application_context_get,
             application_context_set,
             reader_settings_patch,
@@ -2126,6 +2348,7 @@ fn main() {
             scan_trace::scan_trace,
             storage_load,
             storage_save,
+            storage_backup,
             snapshot,
             panel_pointer,
             panel_cursor,
@@ -2148,6 +2371,7 @@ fn main() {
             clear,
             scan,
             capture_frame,
+            capture_frame_source,
             capture_preview,
             retain_frame,
             observer_status,
@@ -2201,7 +2425,21 @@ fn main() {
             model_store::model_download_retry,
             model_store::model_download_cancel,
             model_store::model_delete,
-        ])
+        ]);
+    builder
+        // The invoke guard: an extension window (`ext-<id>`) runs extension code in a top
+        // document that has Tauri's IPC, so only the commands its host needs get through
+        // (`extensions::EXTENSION_WINDOW_COMMANDS`). Plugin commands never reach this handler;
+        // capabilities/extension-windows.json limits those.
+        .invoke_handler(move |invoke: tauri::ipc::Invoke| {
+            let label = invoke.message.webview_ref().label().to_string();
+            if let Err(message) = extensions::command_allowed(&label, invoke.message.command()) {
+                refuse_extension_command(invoke.message.webview_ref().app_handle(), &label, invoke.message.command());
+                invoke.resolver.reject(message);
+                return true;
+            }
+            commands(invoke)
+        })
         .setup(move |app| {
             #[cfg(target_os = "linux")]
             platform::initialize_wayland_overlay();
@@ -2314,6 +2552,14 @@ fn main() {
                 }
             });
 
+            // The overlay's Yomitan host, bundled from host/yomitan/ by scripts/prepare.mjs
+            // (DICTIONARY_ENGINES.md §11.4) and read through the asset resolver like the panel
+            // shim and the generic host, rather than compiled in: a host edit is a `dist/`
+            // rebuild, and a bundle without it fails here, loudly, instead of starting an overlay
+            // with no dictionary backend.
+            let overlay_shim = extensions::init_script(&handle, OVERLAY, "/spike/shim.js")
+                .map_err(std::io::Error::other)?
+                .unwrap_or_default();
             let overlay_builder = tauri::WebviewWindowBuilder::new(
                 app,
                 OVERLAY,
@@ -2333,9 +2579,12 @@ fn main() {
             .focused(false)
             .inner_size(1728., 1117.)
             // Only the overlay hosts the Yomitan backend. Panels get the relay shim
-            // instead, so there is never a second writer on the same IndexedDB.
+            // instead, so there is never a second writer on the same IndexedDB. The
+            // generic extension host follows; exactly one of the two installs. The label
+            // prelude names the window but leaves it outside the frame bands (base 0).
             .initialization_script_for_all_frames(platform::platform_prelude())
-            .initialization_script_for_all_frames(include_str!("../../host/shim.js"))
+            .initialization_script_for_all_frames(panels::label_prelude(OVERLAY, &extensions::dictionary_engine(&store)))
+            .initialization_script_for_all_frames(overlay_shim)
             .on_navigation({
                 // `tauri dev` loads every page from `build.devUrl` (the Vite dev server in
                 // `vite.dev.config.ts`) rather than the `tauri://` protocol, so a dev build must
@@ -2348,14 +2597,24 @@ fn main() {
                 } else {
                     None
                 };
+                // The extension engines' background and offscreen documents are iframes on
+                // their own origins, and WebKit asks this policy about subframes too.
                 move |u| {
                     u.as_str() == "about:blank"
                         || platform::is_app_url(u)
+                        || platform::is_extension_url(u)
                         || dev_origin
                             .as_ref()
                             .is_some_and(|origin| &u.origin() == origin)
                 }
             });
+            // After the Yomitan shim, in the same all-frames list.
+            let overlay_builder = match extensions::init_script(&handle, OVERLAY, extensions::EXT_HOST)
+                .map_err(std::io::Error::other)?
+            {
+                Some(script) => overlay_builder.initialization_script_for_all_frames(script),
+                None => overlay_builder,
+            };
             #[cfg(target_os = "linux")]
             let overlay_builder = {
                 let overlay_builder = overlay_builder.focusable(false);
@@ -2389,14 +2648,11 @@ fn main() {
             // surface over the desktop to get wrong. It never takes focus on its own:
             // the reader is pointing at a word in another window.
             {
-                let asset = app
-                    .asset_resolver()
-                    .get("/spike/panel-shim.js".into())
-                    .ok_or_else(|| {
-                        std::io::Error::other("popup host needs /spike/panel-shim.js")
-                    })?;
-                let shim = String::from_utf8(asset.bytes)
-                    .map_err(|_| std::io::Error::other("panel-shim.js is not valid UTF-8"))?;
+                let script = |asset| {
+                    extensions::init_script(&handle, POPUP_HOST, asset).map_err(std::io::Error::other)
+                };
+                let shim = script("/spike/panel-shim.js")?.unwrap_or_default();
+                let ext_host = script(extensions::EXT_HOST)?;
                 let window_builder = tauri::WebviewWindowBuilder::new(
                     app,
                     POPUP_HOST,
@@ -2414,7 +2670,13 @@ fn main() {
                 .visible(false)
                 .inner_size(400., 250.)
                 .initialization_script_for_all_frames(platform::platform_prelude())
-                .initialization_script_for_all_frames(panels::label_prelude(POPUP_HOST) + &shim);
+                .initialization_script_for_all_frames(
+                    panels::label_prelude(POPUP_HOST, &extensions::dictionary_engine(&store)) + &shim,
+                );
+                let window_builder = match ext_host {
+                    Some(script) => window_builder.initialization_script_for_all_frames(script),
+                    None => window_builder,
+                };
                 #[cfg(target_os = "linux")]
                 let window_builder = window_builder.focusable(platform::wayland_overlay_unavailable());
                 let window = window_builder.build()?;
@@ -2422,6 +2684,18 @@ fn main() {
                 // The dictionary is hovered and clicked while the reader stays in their
                 // game; a panel is what lets it be used without activating this app.
                 make_panel(&handle, &service, &window);
+            }
+
+            // The active extension engine's hidden window (DICTIONARY_ENGINES.md §5.4), where
+            // its background and offscreen documents keep first-party, persistent storage.
+            // Yomitan (and the Kimochi pop-up) need none. A failure is recorded, not fatal: the
+            // overlay's hub asks again when it starts and reports why the engine is down.
+            {
+                let engine = extensions::dictionary_engine(&store);
+                if extensions::IDS.contains(&engine.as_str()) {
+                    let result = panels::in_setup(&handle, |app, turn| panels::extension_window(turn, app, &engine, false));
+                    let _ = record_extension_window(&handle, &engine, "startup", result);
+                }
             }
 
             // The app menu belongs in the macOS menu bar. Elsewhere a window menu would be
@@ -2433,7 +2707,7 @@ fn main() {
                     .text("log", "Kimochi")
                     .text("choose-source", "Select Source")
                     .text("settings", "Settings")
-                    .text("yomitan", "Yomitan")
+                    .text("dictionary", "Dictionary")
                     .text("diagnostics", "Diagnostics")
                     .text("fixture", "Japanese Fixture")
                     .text("fixture-chunks", "Split-Word Fixture")
@@ -3206,6 +3480,25 @@ mod tests {
     fn ready_status_matches_the_rust_scan_wording() {
         assert_eq!(ready_status(18), "Scan ready · 18 text annotations");
         assert_eq!(ready_status(0), "Scan ready · 0 text annotations");
+    }
+
+    #[test]
+    fn history_frame_finds_the_frame_an_entry_was_read_from() {
+        let history = json!([
+            {"id": "a", "text": "x", "frame": 12},
+            {"id": "b", "text": "y"},
+            {"id": "c", "text": "z", "frame": "not-a-number"},
+        ]);
+        assert_eq!(history_frame(Some(&history), "a"), Some(12));
+        assert_eq!(
+            history_frame(Some(&history), "b"),
+            None,
+            "no frame recorded"
+        );
+        assert_eq!(history_frame(Some(&history), "c"), None);
+        assert_eq!(history_frame(Some(&history), "gone"), None);
+        assert_eq!(history_frame(None, "a"), None, "no history yet");
+        assert_eq!(history_frame(Some(&json!({})), "a"), None);
     }
 
     #[test]

@@ -2,11 +2,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import vm from 'node:vm'
-import { readFile } from 'node:fs/promises'
+import { yomitanShimSource } from './yomitan-shims.mjs'
 
 for (const file of ['shim.js', 'panel-shim.js']) {
-  const source = (await readFile(new URL(`../host/${file}`, import.meta.url), 'utf8'))
-    .replace("import(asset('/spike/network-bundle.js'))", 'Promise.resolve()')
+  const source = await yomitanShimSource(file, { network: 'Promise.resolve()' })
   test(`${file} preserves WebView2 IPC while providing the Windows extension API`, async () => {
     const sent = []
     const nativeWebview = { postMessage: (message) => sent.push(message) }

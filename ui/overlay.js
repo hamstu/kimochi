@@ -27,6 +27,7 @@ import { visibleAnnotations } from './annotations.js'
 import { AutoScanner } from './autoscan.js'
 import { SceneScanner } from './scene-scanner.js'
 import { ScanTrace } from './scan-trace.js'
+import { scanWasPublished, markScanPublished } from './scan-publication.js'
 import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
 import { HoverOverlay, HoverPreview } from './hover.js'
@@ -37,7 +38,15 @@ import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
 import { parseSourceId } from './source-id.js'
-import { isOverlayTextVisible, nextOverlayToggle, overlayTextChange } from './settings.js'
+import {
+  DICTIONARY_ENGINE_KEY,
+  dictionaryEngineOf,
+  hostEngineOf,
+  isOverlayTextVisible,
+  nextOverlayToggle,
+  overlayTextChange,
+  resolveDictionaryEngine
+} from './settings.js'
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
@@ -110,10 +119,68 @@ const state = {
    * where it was captured instead of following the source window around.
    */
   detached: false,
+  // The dictionary backend, whichever engine it is. Named for Yomitan, the first engine, and kept
+  // so: `ready` gates the pointer feed for every engine, and `error` is what lookups report.
   yomitan: { ready: false, error: null }
 }
 
 const setting = (key) => native.getSetting(key)
+
+/**
+ * The dictionary engine whose host this document installed, as the injected scripts resolved it
+ * at document start (DICTIONARY_ENGINES.md §2): the `localStorage` mirror, else native's prelude.
+ * Read before this window rewrites the mirror. Kimochi's pop-up runs over the Yomitan host.
+ */
+const readEngineMirror = () => {
+  try {
+    return localStorage.getItem(DICTIONARY_ENGINE_KEY)
+  } catch {
+    return null
+  }
+}
+const hostedEngine = hostEngineOf(
+  resolveDictionaryEngine(readEngineMirror(), window.__kimochiDictionaryEngine)
+)
+/** Hachidori or 10ten, run by the generic extension host (`window.__kimochiExtensionHost`). */
+const extensionHosted = hostedEngine !== 'yomitan'
+const extensionHost = () => window.__kimochiExtensionHost ?? null
+
+/**
+ * Keep the document-start mirror in step with the setting, so every window (re)loaded from now on
+ * installs the right host. Settings writes it on a switch too; this covers a store edited
+ * elsewhere and the first launch after an update, before any mirror existed.
+ */
+function mirrorDictionaryEngine({ repair = false } = {}) {
+  const engine = hostEngineOf(dictionaryEngineOf(setting('yomitanSettings')?.popupType))
+  try {
+    if (localStorage.getItem(DICTIONARY_ENGINE_KEY) !== engine) localStorage.setItem(DICTIONARY_ENGINE_KEY, engine)
+  } catch (error) {
+    log({ check: 'dictionary-engine-mirror-failed', engine, error: String(error?.message ?? error) })
+  }
+  if (engine !== hostedEngine) {
+    // This document runs another engine's host than the setting names: Settings is about to
+    // reload it, or the mirror was missing (or stale, after an edit to the store from elsewhere)
+    // when it loaded. Said once, so it is visible; and when nobody is about to reload, the
+    // windows are reloaded from here, once per overlay load, now that the mirror is right.
+    log({ check: 'dictionary-engine-mismatch', hosted: hostedEngine, setting: engine, repair })
+    // Only the startup check repairs. A change that arrives while this document is running is
+    // Settings switching the engine, and Settings calls `dictionary_engine_apply` itself; a
+    // second call from here reloaded every window twice, the second time mid-handshake.
+    if (!repair) return
+    let repaired = false
+    try {
+      repaired = sessionStorage.getItem('kimochi.dictionaryEngineRepaired') === engine
+      if (!repaired) sessionStorage.setItem('kimochi.dictionaryEngineRepaired', engine)
+    } catch {
+      // No sessionStorage: reload once anyway rather than run the wrong host for the session.
+    }
+    if (!repaired) {
+      void native.invoke('dictionary_engine_apply').catch((error) =>
+        log({ check: 'dictionary-engine-repair-failed', error: String(error?.message ?? error) })
+      )
+    }
+  }
+}
 
 /** Scan sounds; the setting is read at each one, so turning them off in Settings is immediate. */
 const playSound = createSoundPlayer({ enabled: () => setting('soundEffects') })
@@ -244,7 +311,11 @@ controller = createController({
   dictionary: () => extensionApi,
   popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
   buttons: () => setting('controllerButtons'),
-  lookupRange: async (range) => (await import('/spike/frontend-mode.js')).lookupRange(range),
+  // Yomitan's frontend module is only imported for Yomitan: it loads Yomitan's own frontend.
+  lookupRange: async (range) =>
+    extensionHosted
+      ? (await extensionHost()?.lookupRange(range)) ?? false
+      : (await import('/spike/frontend-mode.js')).lookupRange(range),
   lookupTerm,
   charRects: (element) => (renderer.mode === 'words' ? renderer.charRects(element) : null),
   quietText: (quiet) => renderer.setQuiet(quiet),
@@ -596,8 +667,15 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
           grouping,
           // A scan of text that is already in the history does not add it again.
           merge: true,
+          frame: frame?.id ?? null,
           onPublication: outcome.onPublication
         })
+
+  // A reloaded overlay must redraw this native scan without replaying its outputs. Saved whatever
+  // `publish` said: `publish: false` means the outputs were handled elsewhere (auto-OCR text mode
+  // publishes passages itself, image-mode refreshes hold them back), and a replay must not add
+  // them either.
+  markScanPublished(state.appliedScanId)
 
   log({
     check: 'overlay-scan-applied',
@@ -910,7 +988,7 @@ async function applyScene(update) {
   }
   let published = 0
   for (const passage of update.publish) {
-    published += (await publishPassage(passage, grouping)).length
+    published += (await publishPassage(passage, grouping, update.frame?.id ?? null)).length
   }
   log({
     check: 'auto-scan-scene',
@@ -927,11 +1005,12 @@ async function applyScene(update) {
  * passage that is the same sentence as one just written, or a piece of it, adds nothing, and
  * one that completes an earlier fragment replaces it.
  */
-async function publishPassage(passage, grouping) {
+async function publishPassage(passage, grouping, frame) {
   return publishOcrResult(passage.result, {
     detached: state.detached,
     grouping,
     merge: true,
+    frame,
     onPublication: noteAutoPublication
   })
 }
@@ -1860,6 +1939,9 @@ async function whenBackendReady() {
 }
 
 async function handleRelay(from, payload) {
+  // Hachidori and 10ten: the extension host's hub listens to `ext-relay` itself and answers its
+  // own relays. Answering here too would double-answer `hello` with a Yomitan backend's status.
+  if (extensionHosted) return
   if (!payload || typeof payload !== 'object') return
   if (payload.kind === 'hello') {
     relayTargets.add(from)
@@ -1867,7 +1949,7 @@ async function handleRelay(from, payload) {
     return
   }
   if (payload.kind === 'open') {
-    void openYomitan(payload.url)
+    void openDictionaryPage(payload.url)
     return
   }
   if (payload.kind !== 'request') return
@@ -1899,10 +1981,10 @@ async function handleRelay(from, payload) {
  * in-overlay iframe when that window does not exist. Either way the single
  * backend in this realm serves it.
  */
-async function openYomitan(url) {
+async function openDictionaryPage(url) {
   try {
-    await native.panel('yomitan', 'show')
-    await native.relay('yomitan', { kind: 'navigate', url })
+    await native.panel('dictionary', 'show')
+    await native.relay('dictionary', { kind: 'navigate', url })
     return
   } catch {
     // No native window for the extension pages; present them here instead.
@@ -1971,7 +2053,7 @@ async function startYomitan() {
   window.pocApi = api
   openInIframe = hub.open.bind(hub)
   hub.open = (url) => {
-    void openYomitan(url)
+    void openDictionaryPage(url)
     return { id: 1, windowId: 1, url }
   }
 
@@ -1997,6 +2079,41 @@ async function startYomitan() {
     check: 'yomitan-ready',
     dictionaries: (await api('getDictionaryInfo')).map((d) => d.title)
   })
+}
+
+/**
+ * The extension popup's rectangle in this document's CSS pixels, while it is shown. It lives in
+ * the light DOM (a shadow host), so `hitRects` adds it like a frame; see `observePopup`.
+ */
+let extensionPopupRect = null
+
+/**
+ * Bring up Hachidori or 10ten through the generic extension host (host/ext, injected by native
+ * before this script runs). `start({host: true})` makes this window the hub: it creates the
+ * extension's background (and offscreen) frames and answers every relayed window. Scope null:
+ * everything this window draws is scannable. Resolves when the engine is ready, throws otherwise,
+ * so the caller's unavailable path is the same as Yomitan's.
+ */
+async function startExtensionEngine() {
+  const host = extensionHost()
+  if (!host) {
+    log({
+      check: 'ext-host-missing',
+      engine: hostedEngine,
+      note: 'Native did not inject dist/spike/ext-host.js into the overlay, or it refused to install.'
+    })
+    throw Error(`The ${hostedEngine} extension host did not load`)
+  }
+  // Before start, so a popup opened by the very first lookup is already a region.
+  host.observePopup(({ visible, rect }) => {
+    extensionPopupRect = visible && rect ? rect : null
+    void publishRegions()
+  })
+  const result = await host.start({ host: true, scope: null })
+  if (!result?.ready) throw Error(result?.error ?? `${hostedEngine} did not start`)
+  state.yomitan.ready = true
+  settleBackend()
+  log({ check: 'ext-engine-ready', engine: hostedEngine })
 }
 
 /**
@@ -2040,8 +2157,17 @@ async function importFixtureDictionary() {
   return imported.result
 }
 
-/** Yomitan closes its popup on a pointerdown outside the popup's own frame. */
+/**
+ * Close the dictionary popup. Yomitan closes its popup on a pointerdown outside the popup's own
+ * frame; the extension engines are told by their host (only while one is showing, since their
+ * dismissal sends commands and synthetic events).
+ */
 function dismissPopup() {
+  if (extensionHosted) {
+    const host = extensionHost()
+    if (host && (extensionPopupRect || host.isPopupVisible?.())) host.dismiss()
+    return
+  }
   window.dispatchEvent(
     new PointerEvent('pointerdown', { pointerType: 'mouse', button: 0, isPrimary: true })
   )
@@ -2082,6 +2208,11 @@ async function capturePopups() {
 function controlPopup(control) {
   if ((setting('yomitanSettings')?.popupType ?? 'builtin') === 'custom-api') {
     void globalThis.__TAURI__?.event?.emit('popover:control', control)
+    return
+  }
+  if (extensionHosted) {
+    // The extension's popup is in a closed-off shadow root; its host knows how to drive it.
+    extensionHost()?.popupControl(control)
     return
   }
   const popup = [...(livePopups ?? [])].find((candidate) => candidate.isVisibleSync?.())
@@ -2274,12 +2405,16 @@ function hitRects() {
   }
   for (const frame of document.querySelectorAll('iframe')) {
     if (frame.id === 'backend') continue
+    // The extension host's background and offscreen frames are never meant to be seen.
+    if (frame.checkVisibility?.() === false) continue
     if (frame.id === 'extension-page' && !state.dictionaryOpen) continue
     add(frame.getBoundingClientRect(), true)
   }
   if (state.dictionaryOpen) add(pagesSection.getBoundingClientRect(), true)
   // The popup is not in the light DOM; see popupRects().
   rects.push(...popupRects())
+  // An extension engine's popup: a shadow host in this document, reported by its host.
+  if (extensionPopupRect) add(extensionPopupRect, true)
   for (const rect of controller.hitRects()) add(rect, false)
   return rects
 }
@@ -2331,7 +2466,8 @@ async function processView(view) {
               sourceId: view.source?.sourceId ?? view.source?.id ?? null,
               source: view.source ?? null,
               request: { source_id: null, crop: view.crop ?? null }
-            }
+            },
+            { publish: !scanWasPublished(scanId) }
           )
           scanner.noteExternalScan(ocr.fullText ?? '', null, ocr)
         } else if (!view.scan && !pipeline.isHeld && !state.scanning) {
@@ -2491,9 +2627,12 @@ native.onCapabilityGap((command) =>
 )
 
 await native.loadSettings()
+mirrorDictionaryEngine({ repair: true })
 await native.watchSettings((key) => {
   if (key === 'autoOCRSettings' || key === 'quickShotEnabled' || key === 'superTexthooker')
     syncAutoScanner()
+  // Mirror only: a switch is reloaded by Settings (`dictionary_engine_apply`), not from here.
+  if (key === 'yomitanSettings') mirrorDictionaryEngine()
   syncOverlayText()
 })
 
@@ -2608,6 +2747,10 @@ await native.listen('ext-relay', ({ payload }) => {
 
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return
+  // 10ten is dismissed with a synthetic Escape on this window (host/ext/content.js); if it
+  // declines the key the event reaches here, and answering it with another dismiss would
+  // recurse. Only the reader's own key dismisses from here.
+  if (!event.isTrusted) return
   dismissPopup()
   void native.setDictionaryOpen(false)
 })
@@ -2702,7 +2845,19 @@ await native.listen('pointer', ({ payload }) => {
   // somewhere else would otherwise close the controller's popup.
   if (!state.yomitan.ready || controller.drivesLookups) return
   const init = scanPointerInit(payload, local, performance.now() - lastRealPointer)
-  if (init) window.dispatchEvent(new PointerEvent('pointermove', init))
+  if (init) {
+    // Yomitan reads only the coordinates. The extension engines also look at the event's target,
+    // so theirs is dispatched at the element under the point (it bubbles to window either way).
+    const target = extensionHosted ? document.elementFromPoint(local.x, local.y) ?? window : window
+    // Each engine listens for its own event: Yomitan and 10ten for `pointermove`, Hachidori for
+    // `mousemove` on the document (extensions/hachidori/content.js). The descriptor says which.
+    const types = window.__kimochiExtensionHost?.descriptor?.pointerEvents ?? ['pointermove']
+    for (const type of types) {
+      target.dispatchEvent(
+        type === 'mousemove' ? new MouseEvent(type, init) : new PointerEvent(type, init)
+      )
+    }
+  }
   // Once each, then never again. Whether a modifier can be read at all from a window
   // that does not have the keyboard is the one thing this window cannot find out for
   // itself, and "Shift does nothing" has two completely different causes depending on
@@ -2725,12 +2880,14 @@ startRegionLoop()
 void native.snapshot().then(processView)
 
 // Scanning and rendering are live from here. The dictionary comes up behind them:
-// if it fails, lookups are unavailable and say so, but OCR still works.
-startYomitan().catch((error) => {
+// if it fails, lookups are unavailable and say so, but OCR still works. Which engine is the one
+// this document's host scripts installed (`hostedEngine`); Kimochi's pop-up runs over Yomitan's.
+;(extensionHosted ? startExtensionEngine() : startYomitan()).catch((error) => {
   state.yomitan.error = String(error?.message ?? error)
   settleBackend()
   log({
-    check: 'yomitan-unavailable',
+    check: extensionHosted ? 'dictionary-unavailable' : 'yomitan-unavailable',
+    engine: hostedEngine,
     error: state.yomitan.error,
     note: 'Scanning and text output still work; dictionary lookup does not.'
   })
@@ -2764,7 +2921,7 @@ if(window.__KIMOCHI_PLATFORM__?.os==='linux') {
         case 'snapshot':result={hasText:state.annotations.length>0,autoOcr:Boolean(state.flags.autoOcrEnabled),autoAvailable:!isQuickShot(),scanId:state.appliedScanId,settings:{controllerButtons:setting('controllerButtons')}};break
         case 'scan':await onAction('triggerScan');result=true;break
         case 'action':if(p.name!=='toggleAutoOcr')throw new Error('Invalid controller action');await onAction(p.name);break
-        case 'dictionary':if(p.apiAction!=='parseText')throw new Error('Invalid dictionary action');result=await extensionApi(p.apiAction,p.params);break
+        case 'dictionary':if(p.apiAction!=='parseText')throw new Error('Invalid dictionary action');if(!extensionApi)throw new Error('Word splitting needs Yomitan; using the segmenter');result=await extensionApi(p.apiAction,p.params);break
         case 'text':await setOverlayText(Boolean(p.visible));await gnomeOverlay.update();break
         case 'hold':gnomeControllerWords=Boolean(p.hold);holdForController(gnomeControllerWords);await gnomeOverlay.flush();break
         default:throw new Error('Unknown controller command')

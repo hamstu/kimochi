@@ -193,7 +193,7 @@ test('only the panel relay scopes its scanner, to the marker the Log lines carry
   assert.match(relay, /export const SCAN_SELECTOR = '\[data-yomitan-scan\]'/)
   assert.match(relay, /^setScanScope\(SCAN_SELECTOR\)$/m)
   // The windows whose scanning must stay as it was never narrow it.
-  for (const path of ['ui/overlay.js', 'ui/popup-host.js', 'ui/api-lookup.js', 'host/shim.js', 'host/panel-shim.js']) {
+  for (const path of ['ui/overlay.js', 'ui/popup-host.js', 'ui/api-lookup.js', 'host/yomitan/overlay.js', 'host/yomitan/panel.js', 'host/yomitan/common.js']) {
     assert.doesNotMatch(read(path), /setScanScope|includeSelector/, path)
   }
 })

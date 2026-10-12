@@ -82,7 +82,7 @@ Keys and defaults mirror `src/main/settings.ts`:
 `texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
 `gamepadSettings.{enabled,preferredGamepadIndex}` (enabled defaults true),
 `lastSelectedSource.{sourceId,type,name,appName}`,
-`yomitanSettings.{popupType,customApiUrl}`, `serverSettings.{mode}` (`'cloud'`),
+`yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Yomitan) \| `'custom-api'` \| `'hachidori'` \| `'tenten'`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
 (`false, 100, true, 0.75`), `overlayOpacity` (80), `liveOverlayEnabled` (false),
 `ocrMode` (`'cloud' | 'local' | 'websocket'`, default `'cloud'`), `endpoint` (unset by
@@ -143,10 +143,10 @@ where `native` reports `{level, opaque, ignores_mouse}`.
 | `source-picker` | `app/source-picker.html` | The only source UX |
 | `welcome` | `app/welcome.html` | Onboarding |
 | `tray-popover` | `app/tray-popover.html` | Fixed size, dismisses on blur |
-| `yomitan` | `settings.html` | Yomitan's own distributed page, system window frame |
+| `dictionary` | `app/panel.html` | The active engine's own options page in an iframe (Yomitan `/settings.html`, `hachidori://localhost/settings.html`, `tenten://localhost/options.html`); renamed from `yomitan`, so its saved bounds start fresh |
 | `fixture` | `ui/fixture.html` | Diagnostic Japanese test source |
 | `fixture-chunks` | `ui/fixture-chunks.html` | Split-word source for cloud OCR lookahead checks (macOS menu: Panels → Split-Word Fixture) |
-| `overlay` | `ui/overlay.html` | Transparent, click-through, hosts the Yomitan backend |
+| `overlay` | `ui/overlay.html` | Transparent, click-through, hosts the dictionary backend (Yomitan, or an extension engine's background and offscreen iframes) |
 
 There is deliberately **no** `sources` or `crop` panel. The POC's `ui/sources.html` is
 kept on disk for history but is not registered, because there is exactly one source UX
@@ -501,8 +501,8 @@ change re-emits `settings:changed` for `scannedTextHistory`.
 
 `ext_relay` emits `ext-relay` `{from: <sender label>, payload}` to `target`, or to every
 window when `target` is null. Deliberately generic: no Yomitan knowledge lives in Rust.
-It exists so the Log panel and the Yomitan settings window can reach the single Yomitan
-backend in the overlay without standing up a second one.
+It exists so the Log panel and the dictionary settings window can reach the single
+dictionary backend in the overlay without standing up a second one.
 
 `yomitan_request` POSTs JSON to a user-configured Yomitan-compatible API and returns its
 JSON — the transport for the Dictionary tab's Test button, tokenize and termEntries.
@@ -520,14 +520,137 @@ The **OCR endpoint** is validated separately and more strictly: HTTPS anywhere, 
 HTTP only on loopback. Auto-OCR calls it on a timer and it carries captured pixels, so
 sending those across a network in the clear stays refused.
 
-**Single backend, single database.** `host/shim.js` is injected into `overlay` only.
-The `yomitan` window gets `/spike/panel-shim.js` instead, resolved through Tauri's asset
+**Single backend, single database.** `dist/spike/shim.js` (built from `host/yomitan/overlay.js`) is injected into `overlay` only.
+The `dictionary` window gets `/spike/panel-shim.js` instead, resolved through Tauri's asset
 resolver at window creation so this crate does not compile against a file another
 workstream owns. No window sets a data store identifier, so every webview shares one
 `WKWebsiteDataStore` and `tauri://localhost` resolves to the same IndexedDB everywhere.
 **That is a static reading of the code, not a runtime observation** — the launch smoke
-test is to open the Yomitan window and confirm its installed dictionary count matches
+test is to open the dictionary window (Yomitan engine) and confirm its installed dictionary count matches
 what the overlay reports.
+
+## Dictionary engines
+
+Hachidori and 10ten run unmodified beside Yomitan through the generic extension host
+(`host/ext/`, bundled to `dist/spike/ext-host.js`). The contract is
+`DICTIONARY_ENGINES.md`; this is the native surface.
+
+| Command | Signature |
+| --- | --- |
+| `storage_load` | `({extension?}) -> Value` |
+| `storage_save` | `({extension?, value}) -> ()` |
+| `storage_backup` | `({extension}) -> string \| null` |
+| `dictionary_engine_apply` | `() -> ()` |
+| `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
+
+`storage_load` / `storage_save` persist `chrome.storage`. Without `extension` they read and
+write Yomitan's `chrome-local.json`, exactly as before; with an engine id they use
+`chrome-local-<id>.json` beside it. The id must match `[a-z0-9-]{1,32}` or the call fails
+with `invalid:`, so it can never name a path. A missing file loads as `{}`.
+
+`storage_backup` copies an extension engine's `chrome-local-<id>.json` to
+`chrome-local-<id>.json.bak-<epoch ms>` beside it and answers that name (`null` when there
+is no file). `extension` is required and must be an engine id, so Yomitan's file is never
+backed up or rewritten through it. The overlay's hub calls it before resetting metadata that
+describes extension data missing from this launch's WebKit store: the file is shared by every
+launch (it is named by the app identifier), the WebKit store is not (a bundle and the bare dev
+executable get different ones), see `DICTIONARY_ENGINES.md` §5.4.1. Records
+`{check: 'storage-backup', extension, file}`; the host then reports `ext-host-storage-desync`.
+
+`dictionary_engine_apply` reloads (`location.reload()`) every extension-hosting window
+that exists, in this order: `overlay`, `log`, `dictionary`, `popup-host`, `welcome`. Call
+it after saving `yomitanSettings.popupType` and writing the `localStorage` mirror
+`kimochi.dictionaryEngine`: the reload re-runs the document-start scripts, which read the
+new engine. The mirror and the prelude name the *host* engine: `'builtin'` and
+`'custom-api'` both resolve to `yomitan`, because the Kimochi pop-up tokenises and looks
+words up through the Yomitan backend in the overlay, so switching between those two
+reloads nothing. A window not built yet needs nothing, because its prelude reads the store when
+it is built. Call it once per switch: Settings is the only caller on a switch (the overlay
+calls it only from its startup repair of a stale mirror). The Log comes back on Settings →
+Dictionary because Settings records its route in `sessionStorage` first
+(`kimochi.engineSwitch`, `DICTIONARY_ENGINES.md` §2.1); other in-page state that is not
+persisted is dropped, and the transcript is history and comes back. Records
+`{check: 'dictionary-engine-apply', engine, reloaded, failed}`. It also settles the
+extension windows (below): any other engine's `ext-<id>` window is closed, the active
+engine's is reloaded with the rest, or created in a later main-thread turn when there is
+none yet; each step records `{check: 'extension-window', engine, label, action}` with
+`action` `closed`, `reloaded` or `created`.
+
+**Extension windows.** Each extension engine's background document (and Hachidori's
+offscreen document, an iframe inside it) runs in a hidden window of its own, labelled
+`ext-hachidori` / `ext-tenten`, whose top document is
+`<origin>/__kimochi/ext-background.html?engine=<id>`. As a top document on the extension's
+own origin its IndexedDB and OPFS are first-party and survive a quit; as an iframe of the
+overlay (the earlier design) WebKit kept them only for the session, so Hachidori's imported
+dictionaries and 10ten's `jpdict` database were gone after every relaunch. Native creates
+the window at startup when the active engine is an extension engine, and on a switch as
+above. The window is never shown and never focused: `visible(false)`, `focused(false)`,
+`focusable(false)`, `skip_taskbar`, no decorations, 1×1, content-protected, background
+throttling off like the overlay's, and it is not a panel, so `panel` refuses its label. Its
+document-start scripts, for all frames, are the platform prelude, the label prelude
+(label `ext-<id>`, no frame band, no popup host) and `ext-host.js`; never a Yomitan shim.
+Its navigation allowlist is the engine's own origin (and `about:blank`). It shares the one
+website data store with every other window.
+
+`extension_window_ensure` is the overlay hub's way to ask for it when it starts:
+idempotent (`action: 'kept'` when it exists), `created` otherwise; `reload: true` (a retry
+after a failed start) reloads an existing one (`reloaded`). It refuses an `engine` that is
+not the active extension engine (`invalid:`), so an overlay still running the previous
+engine cannot bring that window back. Records `{check: 'extension-window', engine, label,
+action, cause: 'ensure'}` (`cause` is `startup` or `apply` for native's own calls; a failure
+records `action: 'failed'` with the error).
+
+**Origins.** Each extension is served from its own custom scheme, named by its id:
+`hachidori://localhost/` and `tenten://localhost/` on macOS and Linux,
+`http://hachidori.localhost/` and `http://tenten.localhost/` on Windows (Tauri's WebView2
+bridge, as for `tauri://` and `capture://`). `/<path>` is `dist/ext/<id>/<path>`,
+`/__kimochi/<path>` is `dist/spike/<path>`, and anything else, a directory path (`/`, a
+trailing slash) or a `..` segment (also percent-encoded) is a 404. A bundle checks the
+embedded file list first, because Tauri's asset resolver would otherwise answer a missing
+file with `index.html`; `tauri dev` reads `dist/` from disk. Every response carries
+`Access-Control-Allow-Origin: *` and `Cache-Control: no-store`, with a `Content-Type` from
+the file extension (`.js`/`.mjs` `text/javascript`, `.wasm` `application/wasm`, fonts,
+images, audio; `.ljson`, `.idx` and anything unknown `application/octet-stream`). The
+`overlay`'s navigation allowlist accepts these origins (WebKit asks it about subframes);
+each `ext-<id>` window accepts its own engine's origin only; the panels and `popup-host`
+set no allowlist.
+
+**Document-start scripts.** `overlay`, `log`, `dictionary`, `welcome` and `popup-host` get,
+for all frames: the platform prelude; the label prelude (`__kimochiPanelLabel`, frame
+band, popup host, plus `__kimochiDictionaryEngine` and `__kimochiExtensionOrigins`); their
+Yomitan shim (`shim.js` in the overlay, `panel-shim.js` elsewhere, both built from `host/yomitan/`); then
+`ext-host.js`. Exactly one shim installs, depending on the engine. The overlay is named
+`overlay` but stays outside the frame bands, numbering from 0. `__kimochiDictionaryEngine`
+comes from `yomitanSettings.popupType` when the window is built (`builtin` is `yomitan`),
+except in a frame on an extension origin, which is always that extension's engine: it
+cannot read the app origin's `localStorage` mirror, and the prelude keeps its build-time
+value across a reload. A debug build without `ext-host.js` records `ext-host-missing` and
+builds the window without it; a release build refuses, because a bundle without it is broken.
+
+**IPC and extension code.** Tauri injects `__TAURI_INTERNALS__`, the invoke key and
+`withGlobalTauri`'s `__TAURI__` into each window's main frame only, and counts the
+registered extension schemes as *local* origins for the ACL. An extension-origin iframe
+(an options page in `dictionary`, the offscreen document) has no IPC and reaches native
+through its top document by `postMessage`. The `ext-<id>` windows are the one place an
+extension-origin document is a main frame, so the extension's own background script runs
+next to `__TAURI__` there. Two things contain it:
+
+- **Capability.** `capabilities/extension-windows.json` covers `ext-hachidori` and
+  `ext-tenten` only, and grants `core:event:allow-listen` (the host hears `ext-relay`) and
+  `http:default` with exactly `network.json`'s URL scope (the background and its offscreen
+  frame download dictionaries through plugin-http themselves). No emit, window, webview,
+  shell, fs, dialog or clipboard permission, and no other capability lists these windows
+  (`scripts/http-scope.test.mjs` checks both). Plugin commands are subject to this ACL.
+- **Invoke guard.** App commands are not (the app defines no ACL manifest), so `main.rs`
+  wraps `generate_handler!`: a call from a webview whose label starts with `ext-` is
+  rejected with `invalid: <command> is not available to an extension window` unless the
+  command is in `extensions::EXTENSION_WINDOW_COMMANDS`, which is `ext_relay` and `report`.
+  Storage, capture and window commands are the hub's, in the overlay, and are refused
+  there. Each refused command is recorded once per launch as
+  `{check: 'extension-window-command-refused', window, command}`.
+
+`ext_relay` accepts any window label as sender and target, so the extension windows relay
+like the Log; nothing native checks a sender's origin.
 
 ## Activity feed
 
@@ -639,12 +762,12 @@ queries (`is-visible`, `is-focused`, `is-minimized`, `scale-factor`) to our own 
 labels. Without `core:event:default` a React panel's `event.listen` would build fine and
 fail silently at runtime.
 
-`capabilities/network.json` scopes `http:default` to `overlay`, `log`, `settings` and
-`yomitan` — the last because dictionary downloads from the Yomitan settings window go
-through the same plugin —
+`capabilities/network.json` scopes `http:default` to `overlay`, `log`, `settings`,
+`dictionary` and `popup-host` — `dictionary` because dictionary downloads from the
+dictionary settings window go through the same plugin —
 allowing only the configured OCR/TTS server (cloud and `localhost:3000`), the local
-Yomitan API (`19633`) and AnkiConnect (`8765`), plus the dictionary hosts Yomitan itself
-downloads from. It is deliberately not a general internet grant. WebSocket OCR
+Yomitan API (`19633`) and AnkiConnect (`8765`), plus the dictionary hosts the engines
+download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`). It is deliberately not a general internet grant. WebSocket OCR
 (`ws://localhost:7331`) needs nothing here: WebSocket bypasses the HTTP plugin.
 
 ## Platform gaps

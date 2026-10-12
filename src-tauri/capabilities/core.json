@@ -9,7 +9,7 @@
     "tray-popover",
     "fixture",
     "fixture-chunks",
-    "yomitan",
+    "dictionary",
     "overlay",
     "popup-host",
     "crop-host", "controller-host"
