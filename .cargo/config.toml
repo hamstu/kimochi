@@ -1,3 +1,7 @@
+# Local overrides that stay on this machine (gitignored), such as building against local
+# checkouts of the OCR crates: see "Working on the OCR crates" in CONTRIBUTING.md.
+include = [{ path = "config.local.toml", optional = true }]
+
 # ARM64 Linux and Windows: the gemm kernels candle pulls in (through kimochi-mangaocr) carry
 # inline fp16 assembly that needs the FEAT_FP16 target feature, which rustc does not enable by
 # default for these targets (macOS's arm64 baseline already has it). Every ARMv8.2+ CPU has it

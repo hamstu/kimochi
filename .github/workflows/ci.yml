@@ -8,11 +8,10 @@ name: CI
 # into a draft release of that tag, which the `manifest` job publishes once every platform has
 # built and signed. Tags are the only way a release is published; main stays the development line.
 #
-# Sibling repositories: src-tauri depends on `../../kimochi-meikiocr` and `../../kimochi-mangaocr`
-# by path, and the OCR staging scripts read their LICENSE/NOTICE and model manifest. This repo is
-# therefore checked out into `kimochi-tauri/` with the siblings beside it. The siblings are public
-# repositories under the same owner; override KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if
-# they move.
+# OCR engines: src-tauri pins the public meikiocr and mangaocr crates to exact git revisions
+# (src-tauri/Cargo.toml and Cargo.lock), so Cargo fetches the recorded source itself and the
+# staging scripts read the licences and model manifest from that checkout (scripts/ocr-crates.mjs).
+# The repo is checked out into `kimochi-tauri/`, which the steps below use as their directory.
 #
 # Runners are persistent machines: the checkout keeps the Rust target directories, node_modules
 # and the staged OCR runtimes between runs instead of using the GitHub cache, so the second
@@ -179,16 +178,6 @@ jobs:
         with:
           path: kimochi-tauri
           clean: false
-      - name: Check out kimochi-meikiocr
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
-          path: kimochi-meikiocr
-      - name: Check out kimochi-mangaocr
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
-          path: kimochi-mangaocr
       # Drop stale build output but keep the expensive, regenerable caches.
       - name: Clean workspace
         run: git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
@@ -277,16 +266,6 @@ jobs:
         with:
           path: kimochi-tauri
           clean: false
-      - name: Check out kimochi-meikiocr
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
-          path: kimochi-meikiocr
-      - name: Check out kimochi-mangaocr
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
-          path: kimochi-mangaocr
       - name: Clean workspace
         run: |
           git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions

@@ -3332,6 +3332,7 @@ dependencies = [
 [[package]]
 name = "mangaocr"
 version = "0.1.0"
+source = "git+https://github.com/hamstu/kimochi-mangaocr?rev=e4561afc540d059f49e62fa7e2f31314e681ce50#e4561afc540d059f49e62fa7e2f31314e681ce50"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -3373,6 +3374,7 @@ dependencies = [
 [[package]]
 name = "meikiocr"
 version = "0.1.0"
+source = "git+https://github.com/hamstu/kimochi-meikiocr?rev=16f2e4eb429c1f2c9a8dc75bb31eb8133e7f4aae#16f2e4eb429c1f2c9a8dc75bb31eb8133e7f4aae"
 dependencies = [
  "image",
  "ndarray",

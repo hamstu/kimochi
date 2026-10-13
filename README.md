@@ -57,11 +57,11 @@ You need Node 22+ and stable Rust, plus per OS:
   libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`
   (details in [src-tauri/src/platform/linux/DEPS.md](src-tauri/src/platform/linux/DEPS.md)).
 
-The OCR engines are separate crates used by path, so clone them beside this repository first:
+The OCR engines are separate crates ([kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr),
+[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr)); Cargo fetches them at the exact
+revisions pinned in `src-tauri/Cargo.toml`, so there is nothing else to clone:
 
 ```sh
-git clone https://github.com/hamstu/kimochi-meikiocr
-git clone https://github.com/hamstu/kimochi-mangaocr
 git clone https://github.com/hamstu/kimochi-tauri
 cd kimochi-tauri
 npm ci

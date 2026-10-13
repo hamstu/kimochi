@@ -3,6 +3,8 @@ dist/
 src-tauri/target/
 capture-core/target/
 src-tauri/gen/
+# Machine-local Cargo overrides, e.g. local OCR crate checkouts (CONTRIBUTING.md)
+.cargo/config.local.toml
 .DS_Store
 
 src-tauri/resources/meikiocr/

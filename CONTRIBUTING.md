@@ -14,10 +14,9 @@ feature requests, so please don't be surprised if an idea is declined or a PR si
 
 ## Development workflow
 
-Set up as in the README's [Building from source](README.md#building-from-source), with
-`kimochi-meikiocr` and `kimochi-mangaocr` checked out beside this repository. Two parity tests
-compare against the original Electron app at `../kimochi`, which is not public; without it they
-are reported as skipped.
+Set up as in the README's [Building from source](README.md#building-from-source). Two parity
+tests compare against the original Electron app at `../kimochi`, which is not public; without it
+they are reported as skipped.
 
 Branch from `main`, then before opening a PR run:
 
@@ -38,6 +37,27 @@ preview state live in [frontend/dev/preview-setup.ts](frontend/dev/preview-setup
 [frontend/kit/README.md](frontend/kit/README.md); colours, type and spacing are in
 [DESIGN.md](DESIGN.md). Native commands and events are documented in [COMMANDS.md](COMMANDS.md):
 update it alongside any change to the interface.
+
+**Working on the OCR crates.** `src-tauri/Cargo.toml` pins
+[kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr) and
+[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr) to exact git revisions, so every
+build names the source it was made from. To build against local checkouts instead, clone them
+beside this repository and create the gitignored `.cargo/config.local.toml` (paths are relative
+to the repository root):
+
+```toml
+paths = ["../kimochi-meikiocr", "../kimochi-mangaocr"]
+```
+
+Cargo then compiles your checkouts, and the OCR staging scripts copy their licences and model
+manifest from them (they ask `cargo metadata`, see `scripts/ocr-crates.mjs`); `Cargo.lock` keeps
+the pinned revisions. The override applies to cargo run from inside this repository (npm scripts,
+`tauri`), and needs the checkouts to keep the pinned revision's dependencies; while you change a
+crate's dependencies, use a `[patch."https://github.com/hamstu/kimochi-mangaocr"]` table there
+instead, and don't commit the `Cargo.lock` it rewrites. Delete the file to build the pins again.
+To move a pin, push the crate change, set the new full commit SHA as `rev` in `src-tauri/Cargo.toml`
+(both `mangaocr` lines), then run `cargo update -p mangaocr` (or `meikiocr`) in `src-tauri/` and
+commit both files.
 
 **Changelog.** If a user would notice your change, add a `- ` line under `## [Unreleased]` in
 [CHANGELOG.md](CHANGELOG.md), written for the person using the app. These lines become the

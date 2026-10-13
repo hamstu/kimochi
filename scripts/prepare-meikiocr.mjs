@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import zlib from 'node:zlib'
+import { ocrCrateDir } from './ocr-crates.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const destination = path.resolve(
@@ -438,8 +439,10 @@ if (current !== marker && current === legacy && platform !== 'win32' && (await p
     await rm(stage, { recursive: true, force: true })
   }
 }
-await cp(path.join(root, '../kimochi-meikiocr/LICENSE'), path.join(destination, 'LICENSE'))
-await cp(path.join(root, '../kimochi-meikiocr/NOTICE'), path.join(destination, 'NOTICE'))
+// From the meikiocr source Cargo builds from (the pinned revision, or a local override).
+const source = ocrCrateDir('meikiocr')
+await cp(path.join(source, 'LICENSE'), path.join(destination, 'LICENSE'))
+await cp(path.join(source, 'NOTICE'), path.join(destination, 'NOTICE'))
 console.log(
   withModels
     ? `MeikiOCR models (development copy, not bundled) and ${target} (${flavor}) runtime ready.`

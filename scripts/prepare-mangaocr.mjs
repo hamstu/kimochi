@@ -13,6 +13,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
+import { ocrCrateDir } from './ocr-crates.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 // Accepted for symmetry with prepare-meikiocr.mjs (`--target <rust-triple>` or KIMOCHI_TARGET).
@@ -24,7 +25,8 @@ const target =
   process.env.KIMOCHI_TARGET ??
   'host'
 const withModels = argv.includes('--with-models') || process.env.KIMOCHI_WITH_MODELS === '1'
-const library = path.resolve(root, '../kimochi-mangaocr')
+// The mangaocr source Cargo builds from (the pinned revision, or a local override).
+const library = ocrCrateDir('mangaocr')
 const { files } = JSON.parse(
   await readFile(path.join(root, 'src-tauri/ocr-models.json'), 'utf8')
 ).engines.mangaocr

@@ -67,10 +67,11 @@ Runners are persistent, so the workflow checks out with `clean: false` and keeps
 runs. Everything else is `git clean`ed. Delete `_work/kimochi-tauri` beside a runner for a
 cold build. Expect 10–20 GB per machine for the work directory.
 
-## Sibling repositories
+## OCR crates
 
-The public `kimochi-meikiocr` and `kimochi-mangaocr` repositories are checked out beside this
-one; no credentials are needed.
+The public `kimochi-meikiocr` and `kimochi-mangaocr` crates are git dependencies pinned to exact
+revisions in `src-tauri/Cargo.toml`; Cargo fetches them into the runner's `~/.cargo/git`, and no
+credentials are needed.
 
 ## Triggers and releases
 

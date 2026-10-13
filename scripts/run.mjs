@@ -29,6 +29,7 @@ import { copyFile, mkdir, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ocrCrateDir } from './ocr-crates.mjs'
 
 process.chdir(fileURLToPath(new URL('../', import.meta.url)))
 const task = process.argv[2]
@@ -140,21 +141,23 @@ if (
   // tauri-build copies `bundle.resources` at compile time and fails on a missing path. A
   // compile check needs the paths tauri.conf.json names (the runtime directory and the
   // licences), not the runtime or the models themselves; the licences are copied from the
-  // sibling engine repositories exactly as the staging scripts copy them.
+  // engine crates' sources (scripts/ocr-crates.mjs) exactly as the staging scripts copy them.
   for (const dir of ocrResources) await mkdir(dir, { recursive: true })
   await mkdir('src-tauri/resources/meikiocr/runtime', { recursive: true })
   // tauri.windows.conf.json also bundles the OneOCR helper directory (prepare-oneocr.mjs
   // fills it for a real build).
   if (process.platform === 'win32') await mkdir('src-tauri/resources/oneocr', { recursive: true })
   const legal = [
-    ['../kimochi-meikiocr/LICENSE', 'src-tauri/resources/meikiocr/LICENSE'],
-    ['../kimochi-meikiocr/NOTICE', 'src-tauri/resources/meikiocr/NOTICE'],
-    ['../kimochi-mangaocr/LICENSE', 'src-tauri/resources/mangaocr/LICENSE'],
-    ['../kimochi-mangaocr/LICENSE-APACHE', 'src-tauri/resources/mangaocr/LICENSE-APACHE'],
-    ['../kimochi-mangaocr/NOTICE', 'src-tauri/resources/mangaocr/NOTICE'],
-    ['../kimochi-mangaocr/scripts/model-manifest.json', 'src-tauri/resources/mangaocr/model-manifest.json']
+    ['meikiocr', 'LICENSE', 'src-tauri/resources/meikiocr/LICENSE'],
+    ['meikiocr', 'NOTICE', 'src-tauri/resources/meikiocr/NOTICE'],
+    ['mangaocr', 'LICENSE', 'src-tauri/resources/mangaocr/LICENSE'],
+    ['mangaocr', 'LICENSE-APACHE', 'src-tauri/resources/mangaocr/LICENSE-APACHE'],
+    ['mangaocr', 'NOTICE', 'src-tauri/resources/mangaocr/NOTICE'],
+    ['mangaocr', 'scripts/model-manifest.json', 'src-tauri/resources/mangaocr/model-manifest.json']
   ]
-  for (const [from, to] of legal) if (!existsSync(to)) await copyFile(from, to)
+  for (const [crate, from, to] of legal) {
+    if (!existsSync(to)) await copyFile(path.join(ocrCrateDir(crate), from), to)
+  }
 }
 
 if (process.platform === 'win32' && ['dev', 'bundle', 'release'].includes(task)) {
