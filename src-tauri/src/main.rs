@@ -9,6 +9,7 @@ mod activity;
 mod application_context;
 mod capture_unavailable;
 mod engine_probe;
+mod extension_store;
 mod extensions;
 mod gamepad;
 mod history_merge;
@@ -384,10 +385,27 @@ const EXTENSION_HOST_WINDOWS: &[&str] = &[OVERLAY, panels::MAIN, "dictionary", P
 /// mirror). Windows not built yet need nothing: their prelude reads the store when they
 /// are. The Log reloads too; Settings records its route in `sessionStorage` first, so it
 /// comes back on Settings → Dictionary (DICTIONARY_ENGINES.md §2.1). Settings is the only
-/// caller on a switch; the overlay calls this only from its startup mirror repair.
+/// caller on a switch, and only once the chosen engine is downloaded: a switch to an engine
+/// whose files are missing is refused rather than reloading every window into a dead host.
+/// The overlay calls this with `repair` from its startup mirror check, which reloads into the
+/// effective engine (possibly none) whatever the setting says.
 #[tauri::command]
-fn dictionary_engine_apply(app: tauri::AppHandle, state: State<Shared>) -> Reply<()> {
-    let engine = extensions::dictionary_engine(&state.settings);
+fn dictionary_engine_apply(app: tauri::AppHandle, state: State<Shared>, repair: Option<bool>) -> Reply<()> {
+    let selected = extensions::selected_engine(&state.settings);
+    if !repair.unwrap_or(false) && !extension_store::is_ready(&selected) {
+        return Err(format!("invalid: {selected} is not downloaded"));
+    }
+    reload_engine_windows(&app, &state, &extensions::dictionary_engine(&state.settings))
+}
+
+/// The engine the windows were last built or reloaded for, so a download finishing (or one
+/// being removed) that changes the effective engine moves them once, and only then.
+static APPLIED_ENGINE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Reloads the extension-hosting windows into `engine` (see `dictionary_engine_apply`).
+fn reload_engine_windows(app: &tauri::AppHandle, state: &Shared, engine: &str) -> Reply<()> {
+    *APPLIED_ENGINE.lock().unwrap_or_else(|p| p.into_inner()) = Some(engine.to_string());
+    let engine = engine.to_string();
     let mut reloaded = Vec::new();
     let mut failed = Vec::new();
     for label in EXTENSION_HOST_WINDOWS {
@@ -412,29 +430,29 @@ fn dictionary_engine_apply(app: tauri::AppHandle, state: State<Shared>) -> Reply
     // closed, this engine's reloads with the rest or, when there is none yet, is created in a
     // later main-thread turn (creating a window from a synchronous command deadlocks
     // WebView2). The overlay's hub also asks for it when it starts, which is idempotent.
-    for label in panels::close_extension_windows(&app, Some(engine.as_str())) {
-        record(&app, &state, json!({ "check": "extension-window", "engine": engine, "label": label, "action": "closed" }));
+    for label in panels::close_extension_windows(app, Some(engine.as_str())) {
+        record(app, state, json!({ "check": "extension-window", "engine": engine, "label": label, "action": "closed" }));
     }
     if extensions::IDS.contains(&engine.as_str()) {
         let label = extensions::window_label(&engine);
         if let Some(window) = app.get_webview_window(&label) {
             match window.eval("location.reload()") {
                 Ok(()) => {
-                    record(&app, &state, json!({ "check": "extension-window", "engine": engine, "label": label, "action": "reloaded" }));
+                    record(app, state, json!({ "check": "extension-window", "engine": engine, "label": label, "action": "reloaded" }));
                 }
                 Err(e) => failed.push(json!({ "window": label, "error": e.to_string() })),
             }
         } else {
             let id = engine.clone();
-            panels::later(&app, move |app, turn| {
+            panels::later(app, move |app, turn| {
                 let result = panels::extension_window(turn, app, &id, false);
                 let _ = record_extension_window(app, &id, "apply", result);
             });
         }
     }
     record(
-        &app,
-        &state,
+        app,
+        state,
         json!({ "check": "dictionary-engine-apply", "engine": engine, "reloaded": reloaded, "failed": failed }),
     );
     if failed.is_empty() {
@@ -442,6 +460,43 @@ fn dictionary_engine_apply(app: tauri::AppHandle, state: State<Shared>) -> Reply
     } else {
         Err(format!("native: could not reload {failed:?}"))
     }
+}
+
+/// A download finished or an engine was removed: when that changes the engine the windows can
+/// run (an engine the user already chose became usable, or the one in use went away), move
+/// them to it. The mirror is written first, in the overlay (it shares `localStorage` with every
+/// app-origin window and takes precedence over the prelude), so the reload lands on the right
+/// host. A download the user started from Settings or onboarding for a different engine changes
+/// nothing here: those pages save the choice and apply it themselves once it is ready.
+fn follow_effective_engine(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<Shared>() else { return };
+    let engine = extensions::dictionary_engine(&state.settings);
+    let applied = APPLIED_ENGINE.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    if applied.as_deref() == Some(engine.as_str()) {
+        return;
+    }
+    if let Some(overlay) = app.get_webview_window(OVERLAY) {
+        let key = serde_json::to_string(&engine).unwrap_or_default();
+        let _ = overlay.eval(format!("try{{localStorage.setItem('kimochi.dictionaryEngine',{key})}}catch(e){{}}"));
+    }
+    record(app, &state, json!({ "check": "dictionary-engine-follow", "from": applied, "engine": engine }));
+    let _ = reload_engine_windows(app, &state, &engine);
+}
+
+/// The dictionary engine as the windows should run it: `selected` (the setting's host engine),
+/// `effective` (it, when downloaded; else `none`) and which engines are ready. The overlay mirrors
+/// `effective`; Settings and onboarding draw the download states from it.
+#[tauri::command]
+fn dictionary_engine_effective(state: State<Shared>) -> Value {
+    let ready: serde_json::Map<String, Value> = extension_store::IDS
+        .iter()
+        .map(|id| (id.to_string(), json!(extension_store::is_ready(id))))
+        .collect();
+    json!({
+        "selected": extensions::selected_engine(&state.settings),
+        "effective": extensions::dictionary_engine(&state.settings),
+        "ready": ready,
+    })
 }
 
 /// Makes sure the active extension engine's hidden window exists (DICTIONARY_ENGINES.md
@@ -2315,7 +2370,15 @@ fn main() {
     });
     let commands: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
             dictionary_engine_apply,
+            dictionary_engine_effective,
             extension_window_ensure,
+            extension_store::extension_status,
+            extension_store::extension_download_start,
+            extension_store::extension_download_pause,
+            extension_store::extension_download_resume,
+            extension_store::extension_download_retry,
+            extension_store::extension_download_cancel,
+            extension_store::extension_delete,
             application_context_get,
             application_context_set,
             reader_settings_patch,
@@ -2449,6 +2512,20 @@ fn main() {
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // Before anything asks whether a local engine's models are ready.
             model_store::install(&handle).map_err(std::io::Error::other)?;
+            // Before any window is built: the windows' engine and Yomitan's files come from it.
+            let engine_store = {
+                let reporter = handle.clone();
+                extension_store::install(
+                    &handle,
+                    move |value| {
+                        if let Some(service) = reporter.try_state::<Shared>() {
+                            record(&reporter, &service, value);
+                        }
+                    },
+                    |app, _, _| follow_effective_engine(app),
+                )
+                .map_err(std::io::Error::other)?
+            };
             // The Wayland portal's restore token lives in settings so the picker is not
             // shown again on every launch. A no-op store everywhere else.
             kimochi_capture::set_portal_token_store(Box::new(PortalTokens(store.clone())));
@@ -2484,6 +2561,27 @@ fn main() {
                 }),
             });
             app.manage(service.clone());
+            {
+                // The windows are built below for the effective engine.
+                let selected = extensions::selected_engine(&store);
+                let effective = extensions::dictionary_engine(&store);
+                *APPLIED_ENGINE.lock().unwrap_or_else(|p| p.into_inner()) = Some(effective.clone());
+                let onboarded = store.get("hasCompletedOnboarding")?.and_then(|v| v.as_bool()) == Some(true);
+                // The one download that starts at launch: the engine the user already chose, when
+                // its files are missing (an app update moved its pin, or the build they upgraded
+                // from bundled it). Their dictionaries are in the WebView's storage and were never
+                // touched; lookups come back when it is ready. A first run chooses in onboarding.
+                let started = onboarded && extension_store::ensure_selected(&handle, &selected);
+                let value = json!({
+                    "check": "dictionary-engine-startup",
+                    "selected": selected,
+                    "effective": effective,
+                    "downloading": started,
+                    "store": engine_store.root().display().to_string(),
+                });
+                eprintln!("kimochi: {value}");
+                service.log(value);
+            }
             if let Some(report) = platform::instance_report() {
                 service.log(report);
             }
@@ -2783,7 +2881,7 @@ fn main() {
             spawn_capabilities_watch(handle.clone(), service.clone());
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context())
         .expect("Kimochi runtime")
         .run(|app, event| {
             #[cfg(target_os = "linux")]
@@ -2794,8 +2892,19 @@ fn main() {
             // downloads so their partial files are kept and resumed next launch.
             if let tauri::RunEvent::Exit = event {
                 model_store::shutdown(app);
+                extension_store::shutdown(app);
             }
         });
+}
+
+/// The generated context with the dictionary engines layered over the embedded `dist/`: Yomitan's
+/// paths at the app origin root are answered from its download (`extension_store::EngineAssets`),
+/// so Yomitan keeps its origin, and its users' IndexedDB, without being in the binary.
+fn context() -> tauri::Context {
+    let mut context = tauri::generate_context!();
+    let embedded = context.set_assets(Box::new(extension_store::NoAssets));
+    context.set_assets(Box::new(extension_store::EngineAssets::new(embedded)));
+    context
 }
 
 /// Only an explicitly completed setup skips onboarding; absent or malformed values are first run.

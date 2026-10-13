@@ -40,12 +40,14 @@ import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
 import { parseSourceId } from './source-id.js'
 import {
   DICTIONARY_ENGINE_KEY,
+  NO_ENGINE,
+  NO_ENGINE_MESSAGE,
   dictionaryEngineOf,
   hostEngineOf,
   isOverlayTextVisible,
   nextOverlayToggle,
   overlayTextChange,
-  resolveDictionaryEngine
+  resolveHostEngine
 } from './settings.js'
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
@@ -138,31 +140,46 @@ const readEngineMirror = () => {
     return null
   }
 }
-const hostedEngine = hostEngineOf(
-  resolveDictionaryEngine(readEngineMirror(), window.__kimochiDictionaryEngine)
-)
+const hostedEngine = resolveHostEngine(readEngineMirror(), window.__kimochiDictionaryEngine)
 /** Hachidori or 10ten, run by the generic extension host (`window.__kimochiExtensionHost`). */
-const extensionHosted = hostedEngine !== 'yomitan'
+const extensionHosted = hostedEngine === 'hachidori' || hostedEngine === 'tenten'
 const extensionHost = () => window.__kimochiExtensionHost ?? null
 
 /**
- * Keep the document-start mirror in step with the setting, so every window (re)loaded from now on
- * installs the right host. Settings writes it on a switch too; this covers a store edited
- * elsewhere and the first launch after an update, before any mirror existed.
+ * The engine the windows should run: native's effective engine (the selected one when it is
+ * downloaded, else none; `dictionary_engine_effective`). An older backend without the command gets
+ * the setting's host engine, as before engines were downloaded.
  */
-function mirrorDictionaryEngine({ repair = false } = {}) {
-  const engine = hostEngineOf(dictionaryEngineOf(setting('yomitanSettings')?.popupType))
+async function effectiveEngine() {
+  try {
+    const answer = await native.invoke('dictionary_engine_effective')
+    if (typeof answer?.effective === 'string') return answer.effective
+  } catch {
+    // Fall through to the setting.
+  }
+  return hostEngineOf(dictionaryEngineOf(setting('yomitanSettings')?.popupType))
+}
+
+/**
+ * Keep the document-start mirror in step with the effective engine, so every window (re)loaded
+ * from now on installs the right host (or none). Settings writes it on a switch too, and native
+ * writes it when a download makes an engine usable or a removal takes one away; this covers a
+ * store edited elsewhere and the first launch after an update, before any mirror existed.
+ */
+async function mirrorDictionaryEngine({ repair = false } = {}) {
+  const engine = await effectiveEngine()
   try {
     if (localStorage.getItem(DICTIONARY_ENGINE_KEY) !== engine) localStorage.setItem(DICTIONARY_ENGINE_KEY, engine)
   } catch (error) {
     log({ check: 'dictionary-engine-mirror-failed', engine, error: String(error?.message ?? error) })
   }
   if (engine !== hostedEngine) {
-    // This document runs another engine's host than the setting names: Settings is about to
-    // reload it, or the mirror was missing (or stale, after an edit to the store from elsewhere)
-    // when it loaded. Said once, so it is visible; and when nobody is about to reload, the
-    // windows are reloaded from here, once per overlay load, now that the mirror is right.
-    log({ check: 'dictionary-engine-mismatch', hosted: hostedEngine, setting: engine, repair })
+    // This document runs another engine's host than the windows should: Settings is about to
+    // reload it, or the mirror was missing (or stale: after an edit to the store from elsewhere,
+    // or an engine whose files are gone) when it loaded. Said once, so it is visible; and when
+    // nobody is about to reload, the windows are reloaded from here, once per overlay load per
+    // engine, now that the mirror is right.
+    log({ check: 'dictionary-engine-mismatch', hosted: hostedEngine, effective: engine, repair })
     // Only the startup check repairs. A change that arrives while this document is running is
     // Settings switching the engine, and Settings calls `dictionary_engine_apply` itself; a
     // second call from here reloaded every window twice, the second time mid-handshake.
@@ -175,7 +192,9 @@ function mirrorDictionaryEngine({ repair = false } = {}) {
       // No sessionStorage: reload once anyway rather than run the wrong host for the session.
     }
     if (!repaired) {
-      void native.invoke('dictionary_engine_apply').catch((error) =>
+      // `repair`: reload into the effective engine even when the setting names one that is not
+      // downloaded (native refuses that for a switch).
+      void native.invoke('dictionary_engine_apply', { repair: true }).catch((error) =>
         log({ check: 'dictionary-engine-repair-failed', error: String(error?.message ?? error) })
       )
     }
@@ -2627,12 +2646,12 @@ native.onCapabilityGap((command) =>
 )
 
 await native.loadSettings()
-mirrorDictionaryEngine({ repair: true })
+await mirrorDictionaryEngine({ repair: true })
 await native.watchSettings((key) => {
   if (key === 'autoOCRSettings' || key === 'quickShotEnabled' || key === 'superTexthooker')
     syncAutoScanner()
   // Mirror only: a switch is reloaded by Settings (`dictionary_engine_apply`), not from here.
-  if (key === 'yomitanSettings') mirrorDictionaryEngine()
+  if (key === 'yomitanSettings') void mirrorDictionaryEngine()
   syncOverlayText()
 })
 
@@ -2882,11 +2901,17 @@ void native.snapshot().then(processView)
 // Scanning and rendering are live from here. The dictionary comes up behind them:
 // if it fails, lookups are unavailable and say so, but OCR still works. Which engine is the one
 // this document's host scripts installed (`hostedEngine`); Kimochi's pop-up runs over Yomitan's.
-;(extensionHosted ? startExtensionEngine() : startYomitan()).catch((error) => {
+// No engine downloaded (a first run that skipped the choice, a removed engine, a pin bump still
+// downloading): nothing to start, and lookups say how to get one.
+async function startNoEngine() {
+  throw Error(NO_ENGINE_MESSAGE)
+}
+
+;(hostedEngine === NO_ENGINE ? startNoEngine() : extensionHosted ? startExtensionEngine() : startYomitan()).catch((error) => {
   state.yomitan.error = String(error?.message ?? error)
   settleBackend()
   log({
-    check: extensionHosted ? 'dictionary-unavailable' : 'yomitan-unavailable',
+    check: hostedEngine === NO_ENGINE ? 'dictionary-none' : extensionHosted ? 'dictionary-unavailable' : 'yomitan-unavailable',
     engine: hostedEngine,
     error: state.yomitan.error,
     note: 'Scanning and text output still work; dictionary lookup does not.'

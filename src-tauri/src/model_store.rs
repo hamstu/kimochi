@@ -57,7 +57,7 @@ const MANIFEST_JSON: &str = include_str!("../ocr-models.json");
 /// Per-engine record of which final files were verified, and against which SHA-256.
 const MARKER: &str = "verified.json";
 /// How often progress is reported while bytes arrive (about four times a second).
-const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
+pub(crate) const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 
 // ---------------------------------------------------------------------------- manifest
 
@@ -211,7 +211,7 @@ impl Phase {
         }
     }
 
-    fn overall_received(&self, overall_total: u64) -> u64 {
+    pub(crate) fn overall_received(&self, overall_total: u64) -> u64 {
         match self {
             Phase::Absent => 0,
             Phase::Ready => overall_total,
@@ -341,7 +341,7 @@ impl ModelStatus {
 
 // ---------------------------------------------------------------------------- disk
 
-fn part_path(dir: &Path, name: &str) -> PathBuf {
+pub(crate) fn part_path(dir: &Path, name: &str) -> PathBuf {
     dir.join(format!("{name}.part"))
 }
 
@@ -420,7 +420,7 @@ pub fn scan_disk(dir: &Path, files: &[ModelFile]) -> Phase {
     }
 }
 
-fn sha256_file(path: &Path) -> io::Result<String> {
+pub(crate) fn sha256_file(path: &Path) -> io::Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0u8; 1 << 20];
@@ -438,7 +438,7 @@ fn sha256_file(path: &Path) -> io::Result<String> {
         .collect())
 }
 
-fn remove_dir(dir: &Path) -> io::Result<()> {
+pub(crate) fn remove_dir(dir: &Path) -> io::Result<()> {
     match fs::remove_dir_all(dir) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
         _ => Ok(()),
@@ -522,9 +522,9 @@ impl Fetch for HttpFetch {
     }
 }
 
-const RUN: u8 = 0;
-const PAUSE: u8 = 1;
-const CANCEL: u8 = 2;
+pub(crate) const RUN: u8 = 0;
+pub(crate) const PAUSE: u8 = 1;
+pub(crate) const CANCEL: u8 = 2;
 
 /// Why a download stopped before its engine was ready.
 #[derive(Debug, PartialEq, Eq)]

@@ -302,7 +302,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Works offline once dictionaries are imported'
     ],
     requirements:
-      'Needs at least one dictionary: the setup offers Jitendex, or import your own in Yomitan settings.',
+      'Downloaded from its official release when you choose it (about 15 MB). Needs at least one dictionary: the setup offers Jitendex, or import your own in Yomitan settings.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/yomidevs/yomitan',
     version: '26.8.24.0',
@@ -321,7 +321,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Anki mining through AnkiConnect'
     ],
     requirements:
-      'Needs dictionaries, from its first-run offer or your own. Kimochi runs its single-threaded engine, so imports take a few seconds longer than in Chrome.',
+      'Downloaded from its official release when you choose it (about 5 MB). Needs dictionaries, from its first-run offer or your own. Kimochi runs its single-threaded engine, so imports take a few seconds longer than in Chrome.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/bee-san/hachidori',
     version: '0.3.0',
@@ -339,7 +339,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Small and quick to start'
     ],
     requirements:
-      'Downloads its full dictionaries from data.10ten.life on first use and keeps them up to date. No Anki mining.',
+      'Downloaded from its official release when you choose it (about 18 MB), then fetches its full dictionaries from data.10ten.life and keeps them up to date. No Anki mining.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/birchill/10ten-ja-reader',
     version: '1.28.0',
@@ -356,7 +356,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Anki card builder in Kimochi',
       'Uses a Yomitan API server you run'
     ],
-    requirements: 'Needs a Yomitan API server reachable from this computer.',
+    requirements: 'Needs a Yomitan API server reachable from this computer, and Yomitan downloaded (it splits the text into words).',
     licence: 'Part of Kimochi',
     upstream: 'https://github.com/yomidevs/yomitan-api',
     upstreamLabel: 'Yomitan API',
@@ -416,6 +416,26 @@ export function resolveDictionaryEngine(
 ): DictionaryEngine {
   const value = mirrored ?? injected ?? 'yomitan'
   return value === 'yomitan' ? 'yomitan' : dictionaryEngineOf(value)
+}
+
+/**
+ * The host a document installs: an engine, or `'none'` when the selected engine is not downloaded
+ * (nothing is bundled, so there is no fallback). Native publishes it in the window prelude and the
+ * overlay mirrors it (DICTIONARY_ENGINES.md §2); neither the Yomitan shims nor the generic host
+ * install for `'none'`.
+ */
+export type HostEngine = 'yomitan' | 'hachidori' | 'tenten' | 'none'
+export const NO_ENGINE = 'none' as const
+
+/** What lookups say while no engine is downloaded. */
+export const NO_ENGINE_MESSAGE =
+  'No dictionary is set up yet. Choose and download one in Settings → Dictionary.'
+
+/** `resolveDictionaryEngine`, keeping `'none'` instead of reading it as Yomitan. */
+export function resolveHostEngine(mirrored: string | null | undefined, injected: string | null | undefined): HostEngine {
+  const value = mirrored ?? injected
+  if (value === NO_ENGINE) return NO_ENGINE
+  return hostEngineOf(resolveDictionaryEngine(value, null))
 }
 
 /**

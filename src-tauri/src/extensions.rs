@@ -2,15 +2,21 @@
 //! origins, which engine is active, their storage files and the generic host script.
 //! The contract is DICTIONARY_ENGINES.md §2, §4 and §6. No extension knowledge beyond
 //! ids and file serving lives here; everything that adapts an extension is `host/ext/`.
+//! The engines' own files are downloaded on demand and served by `extension_store`.
 use crate::settings::Settings;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::OnceLock;
 use tauri::Manager;
 
-/// The extension engines, by id. Each id is also its URI scheme and its directory
-/// under `dist/ext/`.
+/// The extension engines, by id. Each id is also its URI scheme. (Yomitan is not one: it is
+/// served at the app origin root; `extension_store::IDS` lists every downloadable engine.)
 pub const IDS: &[&str] = &["hachidori", "tenten"];
+
+/// The host engine when no engine can run: the selected one is not downloaded (a first run that
+/// skipped the choice, a removed download, a pin bump still downloading). Neither the Yomitan
+/// shims nor the generic host install for it, and lookups say to choose an engine.
+pub const NONE: &str = "none";
 
 /// The generic extension host, bundled by `scripts/prepare.mjs` from `host/ext/`.
 pub const EXT_HOST: &str = "/spike/ext-host.js";
@@ -59,13 +65,11 @@ pub fn command_allowed(label: &str, command: &str) -> Result<(), String> {
     }
 }
 
-/// The engine *host* `yomitanSettings.popupType` needs: `'builtin'` (and anything missing or
+/// The engine *host* `yomitanSettings.popupType` selects: `'builtin'` (and anything missing or
 /// malformed) is Yomitan, and so is `'custom-api'`: the Kimochi pop-up still tokenises and
 /// looks words up through the Yomitan backend in the overlay (`installApiLookup` in
 /// ui/overlay.js), so that host must run for it. `hachidori` and `tenten` pass through.
-/// Read from the store each time, never cached, so a window built after a switch gets the
-/// new engine.
-pub fn dictionary_engine(settings: &Settings) -> String {
+pub fn selected_engine(settings: &Settings) -> String {
     engine_for(
         settings
             .get_path(&["yomitanSettings", "popupType"])
@@ -73,6 +77,24 @@ pub fn dictionary_engine(settings: &Settings) -> String {
             .flatten()
             .as_ref(),
     )
+}
+
+/// The engine the windows run: the selected one when its files can be served
+/// (`extension_store::is_ready`), else [`NONE`]. Nothing is bundled, so there is no fallback
+/// engine: a reader whose engine is missing gets "choose a dictionary" rather than another
+/// engine's pop-up. Read from the store and the disk each time, never cached, so a window built
+/// after a switch or a download gets the new engine.
+pub fn dictionary_engine(settings: &Settings) -> String {
+    effective(&selected_engine(settings), crate::extension_store::is_ready)
+}
+
+/// `selected` if `ready` says so, else [`NONE`].
+pub fn effective(selected: &str, ready: impl Fn(&str) -> bool) -> String {
+    if ready(selected) {
+        selected.to_string()
+    } else {
+        NONE.to_string()
+    }
 }
 
 fn engine_for(popup_type: Option<&Value>) -> String {
@@ -113,14 +135,23 @@ fn valid_extension_id(id: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
-/// The asset key a request path on an extension's scheme maps to, or `None` for a 404.
+/// What a request path on an extension's scheme names.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Target {
+    /// A host script or page: the `dist/spike/` asset key (`/spike/<path>`).
+    Host(String),
+    /// A file of the extension's release, relative to its tree (`extension_store::read`).
+    File(String),
+}
+
+/// What a request path on an extension's scheme maps to, or `None` for a 404.
 ///
-/// `/<path>` is the extension's own file (`/ext/<id>/<path>`); `/__kimochi/<path>` is a
-/// host script or page (`/spike/<path>`). The path is percent-decoded first and then
-/// checked segment by segment, so an encoded `..` or `/` cannot escape either tree.
-/// Directory paths (`/`, a trailing slash) never resolve: the extensions never ask for
-/// one, and the asset resolver would answer them with an `index.html` fallback.
-pub fn asset_key(id: &str, uri_path: &str) -> Option<String> {
+/// `/<path>` is the extension's own file; `/__kimochi/<path>` is a host script or page
+/// (`/spike/<path>`). The path is percent-decoded first and then checked segment by segment,
+/// so an encoded `..` or `/` cannot escape either tree. Directory paths (`/`, a trailing slash)
+/// never resolve: the extensions never ask for one. A file must also be in the pinned map
+/// (`extension_store::read`), which is a second, filesystem-independent allowlist.
+pub fn target(uri_path: &str) -> Option<Target> {
     let path = percent_decode(uri_path)?;
     let path = path.strip_prefix('/')?;
     if path.is_empty() || path.ends_with('/') {
@@ -135,8 +166,8 @@ pub fn asset_key(id: &str, uri_path: &str) -> Option<String> {
     }
     match segments.split_first() {
         Some((&"__kimochi", [])) => None,
-        Some((&"__kimochi", rest)) => Some(format!("/spike/{}", rest.join("/"))),
-        _ => Some(format!("/ext/{id}/{path}")),
+        Some((&"__kimochi", rest)) => Some(Target::Host(format!("/spike/{}", rest.join("/")))),
+        _ => Some(Target::File(path.to_string())),
     }
 }
 
@@ -218,8 +249,13 @@ pub fn respond(
         // Fonts, CSS and module scripts are loaded from the app origin's documents.
         .header("Access-Control-Allow-Origin", "*")
         .header("Cache-Control", "no-store");
-    let found = asset_key(id, request.uri().path())
-        .and_then(|key| exact_asset(app, &key).map(|bytes| (mime_for(&key), bytes)));
+    let found = match target(request.uri().path()) {
+        Some(Target::Host(key)) => exact_asset(app, &key).map(|bytes| (mime_for(&key), bytes)),
+        Some(Target::File(rel)) => {
+            crate::extension_store::read(id, &rel).map(|bytes| (mime_for(&rel), bytes))
+        }
+        None => None,
+    };
     match found {
         Some((mime, bytes)) => response.header("Content-Type", mime).body(bytes),
         None => response.status(404).body(Vec::new()),
@@ -294,31 +330,15 @@ mod tests {
 
     #[test]
     fn request_paths_map_to_the_extension_or_host_tree_only() {
-        assert_eq!(
-            asset_key("hachidori", "/settings.html").as_deref(),
-            Some("/ext/hachidori/settings.html")
-        );
-        assert_eq!(
-            asset_key("tenten", "/fonts/NotoSansJP.woff2").as_deref(),
-            Some("/ext/tenten/fonts/NotoSansJP.woff2")
-        );
-        assert_eq!(
-            asset_key("tenten", "/__kimochi/ext-host.js").as_deref(),
-            Some("/spike/ext-host.js")
-        );
-        assert_eq!(
-            asset_key("hachidori", "/__kimochi/sub/page.html").as_deref(),
-            Some("/spike/sub/page.html")
-        );
-        // Percent-decoded before mapping, as the asset resolver would.
-        assert_eq!(
-            asset_key("hachidori", "/assets/a%20b.png").as_deref(),
-            Some("/ext/hachidori/assets/a b.png")
-        );
-        assert_eq!(
-            asset_key("tenten", "/_locales/ja/messages.json").as_deref(),
-            Some("/ext/tenten/_locales/ja/messages.json")
-        );
+        let file = |p: &str| Some(Target::File(p.into()));
+        let host = |p: &str| Some(Target::Host(p.into()));
+        assert_eq!(target("/settings.html"), file("settings.html"));
+        assert_eq!(target("/fonts/NotoSansJP.woff2"), file("fonts/NotoSansJP.woff2"));
+        assert_eq!(target("/__kimochi/ext-host.js"), host("/spike/ext-host.js"));
+        assert_eq!(target("/__kimochi/sub/page.html"), host("/spike/sub/page.html"));
+        // Percent-decoded before mapping.
+        assert_eq!(target("/assets/a%20b.png"), file("assets/a b.png"));
+        assert_eq!(target("/_locales/ja/messages.json"), file("_locales/ja/messages.json"));
         // Directories, traversal (plain or encoded), empty segments and malformed escapes.
         for bad in [
             "",
@@ -342,8 +362,22 @@ mod tests {
             "/__kimochi/../ext/tenten/x.js",
             "settings.html",
         ] {
-            assert_eq!(asset_key("hachidori", bad), None, "{bad:?}");
+            assert_eq!(target(bad), None, "{bad:?}");
         }
+        // A well-formed path outside the pinned release is still a 404: the map is the allowlist.
+        assert!(crate::extension_store::read("tenten", "installed.json").is_none());
+        assert!(crate::extension_store::read("tenten", "not-in-the-release.js").is_none());
+        assert!(crate::extension_store::read("none", "manifest.json").is_none());
+    }
+
+    #[test]
+    fn the_effective_engine_is_the_selected_one_only_when_it_can_be_served() {
+        let ready = |id: &str| id == "hachidori";
+        assert_eq!(effective("hachidori", ready), "hachidori");
+        // Nothing is bundled any more: a missing engine is no engine, never another one.
+        assert_eq!(effective("tenten", ready), NONE);
+        assert_eq!(effective("yomitan", ready), NONE);
+        assert_eq!(effective("yomitan", |_| true), "yomitan");
     }
 
     #[test]
@@ -437,7 +471,7 @@ mod tests {
         // The URL is on the engine's own origin, so its window's allowlist admits it.
         let url: tauri::Url = background_url("hachidori").parse().unwrap();
         assert!(crate::platform::is_extension_url_of(&url, "hachidori"));
-        assert_eq!(asset_key("hachidori", url.path()).as_deref(), Some("/spike/ext-background.html"));
+        assert_eq!(target(url.path()), Some(Target::Host("/spike/ext-background.html".into())));
     }
 
     #[test]

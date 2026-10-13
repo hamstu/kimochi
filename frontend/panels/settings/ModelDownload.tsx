@@ -18,9 +18,18 @@ import {
   primaryModelActions,
   showsBar,
   statusLine,
-  type ModelStatus
+  type DownloadStatus,
+  type ModelAction
 } from '@ui/model-download'
 import type { ModelControls } from '../../bridge/models'
+
+/** Any download's controls: an OCR model's (`useModelControls`) or an engine's (`useExtensionControls`). */
+export interface DownloadControls {
+  status: DownloadStatus | null
+  pending: ModelAction | null
+  error: string | null
+  run: (action: ModelAction) => void
+}
 import './model-download.css'
 
 /** How long the bar stays mounted while it fades out; matches the exit transition in the CSS. */
@@ -33,7 +42,7 @@ const BAR_EXIT_MS = 400
  * mounted for one exit transition, full and green, then collapses, rather than vanishing on the
  * same frame the last byte lands.
  */
-function ModelProgress({ status }: { status: ModelStatus }): ReactNode {
+function ModelProgress({ status, noun }: { status: DownloadStatus; noun: string }): ReactNode {
   const value = barPercent(status)
   const line = statusLine(status)
   const active = showsBar(status)
@@ -57,7 +66,7 @@ function ModelProgress({ status }: { status: ModelStatus }): ReactNode {
         <span
           className="model-progress-track"
           role="progressbar"
-          aria-label={`${status.name} model`}
+          aria-label={`${status.name} ${noun}`}
           aria-valuemin={0}
           aria-valuemax={100}
           // Verifying has no measurable progress: leaving the value out makes it indeterminate.
@@ -79,10 +88,13 @@ function ModelProgress({ status }: { status: ModelStatus }): ReactNode {
  */
 export function ModelDownload({
   controls,
-  emphasis
+  emphasis,
+  label = 'Model'
 }: {
-  controls: ModelControls
+  controls: DownloadControls
   emphasis: boolean
+  /** The row's label: "Model" for OCR, "Download" for a dictionary engine. */
+  label?: string
 }): ReactNode {
   const { status, pending, error, run } = controls
   // A backend without model downloads says nothing.
@@ -92,8 +104,8 @@ export function ModelDownload({
     <div className="model-download">
       <div className="model-download-row">
         <div className="model-download-text">
-          <span className="model-download-label">Model</span>
-          <ModelProgress status={status} />
+          <span className="model-download-label">{label}</span>
+          <ModelProgress status={status} noun={label === 'Model' ? 'model' : 'download'} />
         </div>
         {actions.length > 0 && (
           <div className="model-actions">

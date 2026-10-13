@@ -30,7 +30,7 @@
  * explicit unavailable state, never swallowed.
  */
 import { useEffect, useState } from 'react'
-import { documentEngine, extensionHost } from '../bridge/dictionaryEngine'
+import { NO_ENGINE, NO_ENGINE_MESSAGE, documentEngine, extensionHost } from '../bridge/dictionaryEngine'
 
 const LABEL_ATTRIBUTE = 'data-kimochi-panel'
 const RELAY_PATH = '/ui/panel-yomitan.js'
@@ -99,6 +99,12 @@ function describe(error: unknown): string {
 export async function preloadPanelDictionary(label: string): Promise<PanelDictionary | null> {
   document.documentElement.setAttribute(LABEL_ATTRIBUTE, label)
   const engine = documentEngine()
+  if (engine === NO_ENGINE) {
+    // No engine is downloaded: the lookup state says so (and where to get one), honestly.
+    relay = Promise.reject(new Error(NO_ENGINE_MESSAGE))
+    relay.catch(() => undefined)
+    return null
+  }
   if (engine !== 'yomitan') {
     const adapter = extensionAdapter()
     if (!adapter) {

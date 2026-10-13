@@ -13,13 +13,38 @@
  * "Use this engine". Choosing is the caller's (`onChoose`): it saves, mirrors and reloads the
  * reader windows. Each engine's own settings come from `renderSettings`.
  *
+ * No engine is bundled: each is downloaded from its pinned upstream release when first chosen
+ * (EXTENSION_DOWNLOADS.md). A viewed engine that is not downloaded offers "Download · 15 MB"
+ * instead of "Use this engine"; the caller asks first, downloads, and switches only once the
+ * download is ready (`pending` is the engine waiting for its download). The download's progress
+ * block sits in the panel, and the overflow menu removes a downloaded engine that is not in use.
+ *
  * Copy comes from `DICTIONARY_ENGINES` in `ui/settings.ts`.
  */
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Check, Cloud, ExternalLink, Monitor } from 'lucide-react'
+import { Check, Cloud, Download, Ellipsis, ExternalLink, Monitor, Trash2 } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
-import { Badge, Button } from '@kit'
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  IconButton,
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuTrigger,
+  Tooltip
+} from '@kit'
 import { DICTIONARY_ENGINES, type DictionaryEngine } from '../../bridge/dictionaryEngine'
+import { useExtensionControls, useExtensionStatus, type ExtensionControls } from '../../bridge/extensions'
+import {
+  canRemoveExtension,
+  downloadButtonLabel,
+  downloadEngineFor,
+  removePrompt,
+  type ExtensionEngine
+} from '@ui/extension-download'
+import { ModelDownload } from './ModelDownload'
 import './engine-chooser.css'
 import './dictionary-chooser.css'
 
@@ -55,6 +80,8 @@ function DictionaryItem({
   onPick: () => void
 }): ReactNode {
   const info = DICTIONARY_ENGINES[engine]
+  const status = useExtensionStatus(engine === 'custom-api' ? null : engine)
+  const missing = status !== null && status.state !== 'ready'
   return (
     <div
       id={id}
@@ -77,6 +104,11 @@ function DictionaryItem({
         <span className="engine-item-name">
           {info.name}
           <RunsIcon engine={engine} />
+          {missing && (
+            <span className="engine-runs" title="Not downloaded yet">
+              <Download aria-label="Not downloaded yet" />
+            </span>
+          )}
         </span>
         <span className="engine-item-tagline">{info.tagline}</span>
       </span>
@@ -84,21 +116,66 @@ function DictionaryItem({
   )
 }
 
+/** "Remove Hachidori?", from the panel's overflow menu. */
+function RemoveEngineDialog({
+  controls,
+  open,
+  onOpenChange
+}: {
+  controls: ExtensionControls
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}): ReactNode {
+  const { status, run } = controls
+  const [last, setLast] = useState(status)
+  if (status && status !== last) setLast(status)
+  const shown = status ?? last
+  const prompt = shown ? removePrompt(shown) : null
+  return (
+    <ConfirmDialog
+      open={open && shown !== null}
+      onOpenChange={onOpenChange}
+      title={prompt?.title ?? ''}
+      description={prompt?.description}
+      confirmLabel="Remove"
+      tone="danger"
+      onConfirm={() => {
+        onOpenChange(false)
+        run('delete')
+      }}
+    />
+  )
+}
+
 function DictionaryDetail({
   engine,
   id,
   inUse,
+  pending,
+  selectedDownload,
   onUse,
   children
 }: {
   engine: DictionaryEngine
   id: string
   inUse: boolean
+  /** A switch to this engine is waiting for its download. */
+  pending: boolean
+  /** The download the saved engine needs: it cannot be removed from here. */
+  selectedDownload: ExtensionEngine
   onUse: () => void
   children: ReactNode
 }): ReactNode {
   const info = DICTIONARY_ENGINES[engine]
   const headingId = `${id}-heading`
+  const needs = downloadEngineFor(engine)
+  const download = useExtensionControls(needs)
+  const status = download.status
+  // Unknown (an older backend, the preview) counts as ready: nothing to download then.
+  const ready = status === null || status.state === 'ready'
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const removable = canRemoveExtension(status) && needs !== selectedDownload && download.pending === null
+  const showMenu = engine !== 'custom-api' && status !== null && status.source !== 'development'
   return (
     <section id={id} className="engine-detail" aria-labelledby={headingId}>
       <header className="engine-detail-header">
@@ -109,10 +186,40 @@ function DictionaryDetail({
         </h3>
         {inUse ? (
           <Badge tone="accent">Active</Badge>
-        ) : (
+        ) : pending ? (
+          <Badge>Switching when ready</Badge>
+        ) : ready ? (
           <Button size="sm" variant="primary" onClick={onUse}>
             Use this engine
           </Button>
+        ) : (
+          <Button size="sm" variant="primary" onClick={onUse}>
+            <Download aria-hidden />
+            {status?.state === 'absent' ? downloadButtonLabel(status) : 'Use when downloaded'}
+          </Button>
+        )}
+        {showMenu && (
+          <Menu>
+            <Tooltip content="More">
+              <MenuTrigger asChild>
+                <IconButton label={`More ${info.name} actions`} size="sm">
+                  <Ellipsis />
+                </IconButton>
+              </MenuTrigger>
+            </Tooltip>
+            <MenuContent align="end">
+              <MenuItem
+                icon={<Trash2 />}
+                tone="danger"
+                disabled={!removable}
+                onSelect={() => setConfirmRemove(true)}
+              >
+                {needs === selectedDownload && canRemoveExtension(status)
+                  ? 'Remove downloaded engine… (switch to another engine first)'
+                  : 'Remove downloaded engine…'}
+              </MenuItem>
+            </MenuContent>
+          </Menu>
         )}
       </header>
       <p className="engine-detail-description">{info.description}</p>
@@ -141,19 +248,36 @@ function DictionaryDetail({
           <ExternalLink aria-hidden />
         </button>
       </p>
-      <div className="engine-detail-settings">{children}</div>
+      {status && !ready && (
+        <p className="k-description">
+          {engine === 'custom-api'
+            ? `Kimochi's pop-up runs over Yomitan, which is not downloaded yet.`
+            : `${info.name} is not part of Kimochi's download: it is fetched from its official release when you choose it.`}
+        </p>
+      )}
+      <div className="engine-detail-settings">
+        {/* While it is not downloaded (or a download is under way), its progress and actions. */}
+        {status && (!ready || pending) && (
+          <ModelDownload controls={download} emphasis={inUse || pending} label="Download" />
+        )}
+        {children}
+      </div>
+      <RemoveEngineDialog controls={download} open={confirmRemove} onOpenChange={setConfirmRemove} />
     </section>
   )
 }
 
 export function DictionaryChooser({
   active,
+  pending = null,
   onChoose,
   renderSettings,
   status
 }: {
   /** The engine shown as chosen: the caller's pick, ahead of the saved setting. */
   active: DictionaryEngine
+  /** An engine whose switch waits for its download. */
+  pending?: DictionaryEngine | null
   onChoose: (engine: DictionaryEngine) => void
   /** The viewed engine's own settings, under the panel's hairline. */
   renderSettings: (engine: DictionaryEngine, inUse: boolean) => ReactNode
@@ -239,6 +363,8 @@ export function DictionaryChooser({
           engine={viewed}
           id={detailId}
           inUse={viewed === active}
+          pending={viewed === pending}
+          selectedDownload={downloadEngineFor(active)}
           onUse={() => pick(viewed)}
         >
           {renderSettings(viewed, viewed === active)}

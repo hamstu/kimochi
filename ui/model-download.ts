@@ -9,7 +9,24 @@ export type ModelState = 'absent' | 'downloading' | 'paused' | 'failed' | 'verif
 export type ModelSource = 'downloaded' | 'bundled' | 'development'
 export type ModelAction = 'download' | 'pause' | 'resume' | 'retry' | 'cancel' | 'delete'
 
-export interface ModelStatus {
+/**
+ * What the progress block, its wording and its buttons need from any download: an OCR model's
+ * (`ModelStatus`) or a dictionary engine's (`ExtensionStatus`, ui/extension-download.ts).
+ */
+export interface DownloadStatus {
+  name: string
+  state: ModelState
+  /** Where a ready download lives: downloaded, bundled or development. */
+  source: string | null
+  file: string | null
+  receivedBytes: number | null
+  totalBytes: number | null
+  overallReceived: number
+  overallTotal: number
+  message: string | null
+}
+
+export interface ModelStatus extends DownloadStatus {
   engine: ModelEngine
   name: string
   state: ModelState
@@ -80,7 +97,7 @@ export const progressText = (received: number, total: number): string =>
   `${formatBytes(received)} of ${formatBytes(total)}`
 
 /** The line under the settings card's progress bar, e.g. "Downloading Manga OCR · 212 MB of 539 MB". */
-export function statusLine(status: ModelStatus): string {
+export function statusLine(status: DownloadStatus): string {
   const pct = percent(status.overallReceived, status.overallTotal)
   switch (status.state) {
     case 'absent':
@@ -107,12 +124,12 @@ export function statusLine(status: ModelStatus): string {
  * bar before it starts and a full one for good afterwards are noise, so those states show the
  * status line alone.
  */
-export function showsBar(status: ModelStatus): boolean {
+export function showsBar(status: DownloadStatus): boolean {
   return status.state !== 'absent' && status.state !== 'ready'
 }
 
 /** How full the progress bar is, 0–100: empty until something arrives, full once ready. */
-export function barPercent(status: ModelStatus): number {
+export function barPercent(status: DownloadStatus): number {
   switch (status.state) {
     case 'absent':
       return 0
@@ -125,7 +142,7 @@ export function barPercent(status: ModelStatus): number {
 }
 
 /** A button's label; Download carries the size, since pressing it is the consent. */
-export function actionLabel(action: ModelAction, status: ModelStatus): string {
+export function actionLabel(action: ModelAction, status: DownloadStatus): string {
   switch (action) {
     case 'download':
       return status.overallTotal > 0 ? `Download (${formatBytes(status.overallTotal)})` : 'Download'
@@ -164,7 +181,7 @@ export function downloadPrompt(status: ModelStatus): { title: string; descriptio
 }
 
 /** The buttons that make sense now, in display order. */
-export function modelActions(status: ModelStatus): ModelAction[] {
+export function modelActions(status: DownloadStatus): ModelAction[] {
   switch (status.state) {
     case 'absent':
       return ['download']
@@ -186,7 +203,7 @@ export function modelActions(status: ModelStatus): ModelAction[] {
  * The actions shown as buttons beside the bar: everything but Delete, which is a quiet item in
  * the engine panel's overflow menu rather than a button inviting a click.
  */
-export const primaryModelActions = (status: ModelStatus): ModelAction[] =>
+export const primaryModelActions = (status: DownloadStatus): ModelAction[] =>
   modelActions(status).filter((action) => action !== 'delete')
 
 /** Whether "Remove downloaded model…" is offered: only a model the store downloaded. */

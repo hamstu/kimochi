@@ -3042,6 +3042,8 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "block2",
+ "crc32fast",
+ "flate2",
  "gilrs",
  "glib",
  "image",

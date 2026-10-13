@@ -14,11 +14,19 @@
  * is not reloaded; it says "Reloading the reader windows…" instead. Yomitan and Kimochi's pop-up
  * share the Yomitan host, so moving between those two reloads nothing. See DICTIONARY_ENGINES.md
  * §2 and §8.
+ *
+ * Engines are downloaded on demand (EXTENSION_DOWNLOADS.md §2, UI). Choosing one that is not
+ * downloaded asks first ("Download 10ten?"), starts the download and records a PENDING switch;
+ * nothing is saved, so the engine in use is untouched while it downloads, and an offline failure
+ * leaves everything as it was, with Retry. When the download is ready and the switch is still
+ * pending, it is made exactly as above. If this page is closed meanwhile, the download finishes
+ * in Rust and the engine simply offers "Use this engine" next time.
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Button,
   Callout,
+  ConfirmDialog,
   Input,
   SettingsPage,
   SettingsRow,
@@ -38,7 +46,7 @@ import {
   DICTIONARY_ENGINES,
   applyDictionaryEngine,
   dictionaryEngineOf,
-  documentEngine,
+  documentPlaceholder,
   hostEngineOf,
   mirrorDictionaryEngine,
   openDictionarySettings,
@@ -53,6 +61,9 @@ import type { Settings } from '@texthooker/lib/types'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { NumberField } from './fields'
 import { DictionaryChooser } from './DictionaryChooser'
+import { extensionAction, extensionStatus, type ExtensionStatus } from '../../bridge/extensions'
+import { downloadEngineFor, extensionDownloadPrompt, normalizeExtensionStatus } from '@ui/extension-download'
+import { onEvent } from '../../bridge/tauri'
 import { engineSwitchRecord, forgetEngineSwitch, rememberEngineSwitch } from '../../main/engineSwitch'
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
@@ -90,7 +101,7 @@ export function DictionaryTab(): ReactNode {
   // default: after a switch the chooser's first frame already shows the new engine as active.
   const [switchedTo, setSwitchedTo] = useState<DictionaryEngine | null>(justSwitchedTo)
   const [yomitanSettings, setYomitanSettings] = useSetting<YomitanSettings>('yomitanSettings', {
-    popupType: popupTypeOf(engineSwitchRecord()?.engine ?? documentEngine()),
+    popupType: popupTypeOf(engineSwitchRecord()?.engine ?? documentPlaceholder()),
     customApiUrl: API_URLS.YOMITAN_FALLBACK
   })
   const [apiTestStatus, setApiTestStatus] = useState<TestStatus>('idle')
@@ -106,6 +117,10 @@ export function DictionaryTab(): ReactNode {
 
   if (picked !== null && picked === saved) setPicked(null)
 
+  // A switch waiting for its engine's download, and the question asked before starting one.
+  const [pending, setPending] = useState<DictionaryEngine | null>(null)
+  const [asking, setAsking] = useState<{ engine: DictionaryEngine; status: ExtensionStatus } | null>(null)
+
   useEffect(() => {
     if (!reloading) return
     const timer = setTimeout(() => setReloading(null), RELOAD_NOTE_MS)
@@ -118,7 +133,7 @@ export function DictionaryTab(): ReactNode {
     return () => clearTimeout(timer)
   }, [switchedTo])
 
-  const handleChoose = useCallback(
+  const commit = useCallback(
     async (engine: DictionaryEngine): Promise<void> => {
       setPicked(engine)
       setApplyError(null)
@@ -152,6 +167,81 @@ export function DictionaryTab(): ReactNode {
     },
     [yomitanSettings, saved]
   )
+
+  // Choosing: an engine that can run is switched to at once; one that is not downloaded is asked
+  // about (absent) or resumed (paused, failed) and switched to once ready.
+  const ticket = useRef(0)
+  const handleChoose = useCallback(
+    async (engine: DictionaryEngine): Promise<void> => {
+      const mine = ++ticket.current
+      setApplyError(null)
+      let status: ExtensionStatus | null = null
+      try {
+        status = await extensionStatus(downloadEngineFor(engine))
+      } catch {
+        // A backend without engine downloads: everything it has is bundled.
+      }
+      if (ticket.current !== mine) return
+      if (!status || status.state === 'ready') {
+        setPending(null)
+        return commit(engine)
+      }
+      if (status.state === 'absent') {
+        setAsking({ engine, status })
+        return
+      }
+      setPending(engine === saved ? null : engine)
+      if (status.state === 'paused' || status.state === 'failed') {
+        extensionAction(status.engine, status.state === 'paused' ? 'resume' : 'retry').catch((error) =>
+          setApplyError(`Could not download ${status.name}: ${nativeError(error).message}`)
+        )
+      }
+    },
+    [commit, saved]
+  )
+
+  const confirmDownload = useCallback((): void => {
+    if (!asking) return
+    const { engine, status } = asking
+    setAsking(null)
+    // The saved engine needs no switch: native moves the windows to it once it is downloaded.
+    setPending(engine === saved ? null : engine)
+    extensionAction(status.engine, 'download').catch((error) => {
+      setPending(null)
+      setApplyError(`Could not download ${status.name}: ${nativeError(error).message}`)
+    })
+  }, [asking, saved])
+
+  // The pending switch is made when its download is ready; a cancelled download drops it.
+  useEffect(() => {
+    if (!pending) return
+    const needs = downloadEngineFor(pending)
+    let done = false
+    const settle = (status: ExtensionStatus | null): void => {
+      if (done || status?.engine !== needs) return
+      if (status.state === 'ready') {
+        done = true
+        setPending(null)
+        void commit(pending)
+      } else if (status.state === 'absent') {
+        done = true
+        setPending(null)
+      }
+    }
+    let unlisten: (() => void) | null = null
+    let closed = false
+    onEvent<unknown>('extension-download', (payload) => settle(normalizeExtensionStatus(payload)))
+      .then((stop) => (closed ? stop() : (unlisten = stop)))
+      .catch(() => undefined)
+    // It may have become ready before the listener was up.
+    extensionStatus(needs).then(settle, () => undefined)
+    return () => {
+      closed = true
+      done = true
+      unlisten?.()
+    }
+  }, [pending, commit])
+  const prompt = asking ? extensionDownloadPrompt(asking.status) : null
 
   const handleApiUrlChange = useCallback(
     (value: string): void => {
@@ -249,8 +339,20 @@ export function DictionaryTab(): ReactNode {
   return (
     <SettingsPage title="Dictionary" description="The pop-up that shows definitions when you look up a word.">
       <SettingsSection title="Engine" grouped={false}>
+        <ConfirmDialog
+          open={asking !== null}
+          onOpenChange={(open) => {
+            if (!open) setAsking(null)
+          }}
+          title={prompt?.title ?? ''}
+          description={prompt?.description}
+          confirmLabel="Download"
+          onConfirm={confirmDownload}
+          dismissOnOutsideClick
+        />
         <DictionaryChooser
           active={active}
+          pending={pending}
           onChoose={(engine) => void handleChoose(engine)}
           renderSettings={renderSettings}
           status={

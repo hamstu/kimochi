@@ -14,20 +14,23 @@ import { invoke } from '@tauri-apps/api/core'
 import {
   DICTIONARY_ENGINE_KEY,
   DICTIONARY_ENGINES,
+  NO_ENGINE,
+  NO_ENGINE_MESSAGE,
   SETTINGS_DEFAULTS,
   dictionaryEngineOf,
   hostEngineOf,
   popupTypeOf,
-  resolveDictionaryEngine,
+  resolveHostEngine,
   type DictionaryEngine,
-  type DictionaryEngineInfo
+  type DictionaryEngineInfo,
+  type HostEngine
 } from '@ui/settings'
 import type { YomitanSettings } from '../vendor/shared-types'
 import { useSetting } from './useSetting'
 import { panel } from './tauri'
 
-export { DICTIONARY_ENGINES, dictionaryEngineOf, hostEngineOf, popupTypeOf }
-export type { DictionaryEngine, DictionaryEngineInfo }
+export { DICTIONARY_ENGINES, NO_ENGINE, NO_ENGINE_MESSAGE, dictionaryEngineOf, hostEngineOf, popupTypeOf }
+export type { DictionaryEngine, DictionaryEngineInfo, HostEngine }
 
 /** The engines the extension host runs; the others have no `__kimochiExtensionHost`. */
 export type ExtensionEngine = 'hachidori' | 'tenten'
@@ -71,10 +74,17 @@ function readMirror(): string | null {
 
 /**
  * The engine whose host this document's scripts installed at document start: Yomitan, Hachidori
- * or 10ten (Kimochi's pop-up runs over the Yomitan host; see `hostEngineOf`).
+ * or 10ten (Kimochi's pop-up runs over the Yomitan host; see `hostEngineOf`), or `'none'` when the
+ * selected engine was not downloaded and no host installed.
  */
-export function documentEngine(): 'yomitan' | 'hachidori' | 'tenten' {
-  return hostEngineOf(resolveDictionaryEngine(readMirror(), globals().__kimochiDictionaryEngine))
+export function documentEngine(): HostEngine {
+  return resolveHostEngine(readMirror(), globals().__kimochiDictionaryEngine)
+}
+
+/** The setting a document's engine stands for, as a placeholder until the real one loads. */
+export const documentPlaceholder = (): DictionaryEngine => {
+  const engine = documentEngine()
+  return engine === NO_ENGINE ? 'yomitan' : engine
 }
 
 /**
@@ -117,7 +127,7 @@ export function useDictionaryEngine(): [DictionaryEngine, YomitanSettings, (valu
   // importer, whose first request then fails.
   const [settings, setSettings] = useSetting<YomitanSettings>('yomitanSettings', {
     ...SETTINGS_DEFAULTS.yomitanSettings,
-    popupType: popupTypeOf(documentEngine())
+    popupType: popupTypeOf(documentPlaceholder())
   })
   return [dictionaryEngineOf(settings.popupType), settings, setSettings]
 }

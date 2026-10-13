@@ -19,6 +19,7 @@ import { Button, Callout, Spinner } from '@kit'
 import { nativeError, openSettings } from '../bridge/tauri'
 import {
   DICTIONARY_ENGINES,
+  NO_ENGINE,
   documentEngine,
   extensionHost,
   extensionOrigin,
@@ -62,6 +63,8 @@ function acceptNavigation(engine: DictionaryEngine, url: unknown): string | null
 export default function DictionarySettingsPanel(): JSX.Element {
   const [engine] = useDictionaryEngine()
   if (engine === 'custom-api') return <KimochiPopupNote />
+  // The engine is chosen but not downloaded (or not yet): nothing can show its settings.
+  if (documentEngine() === NO_ENGINE) return <NotDownloadedNote engine={engine} />
   // The page needs this document's host to be the engine's: after a switch the setting arrives
   // first, and native reloads this window a moment later. Loading the new engine's page under the
   // old host would hand it a `chrome.*` that answers for the wrong extension.
@@ -135,6 +138,30 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
         data-loaded={loaded || undefined}
         onLoad={() => setLoaded(true)}
       />
+    </div>
+  )
+}
+
+function NotDownloadedNote({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'> }): JSX.Element {
+  const name = DICTIONARY_ENGINES[engine].name
+  return (
+    <div className="dictionary-settings dictionary-settings-note">
+      <p className="k-description">
+        {name} is not downloaded yet, so there are no settings to show and words are not looked up.
+        Download it, or choose another dictionary, in Settings → Dictionary.
+      </p>
+      <div>
+        <Button
+          size="sm"
+          onClick={() => {
+            openSettings('dictionary').catch((error) =>
+              console.error('Open Settings failed:', nativeError(error).message)
+            )
+          }}
+        >
+          Open Settings → Dictionary
+        </Button>
+      </div>
     </div>
   )
 }
