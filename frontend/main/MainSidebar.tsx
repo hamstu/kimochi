@@ -21,6 +21,7 @@ import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
 import { SessionMenu } from './SessionMenu'
 import { ModelStatusBadge } from './ModelStatusBadge'
+import { UpdateNotice } from './UpdateNotice'
 import { useLogActions } from './logActions'
 
 export type MainView = 'log' | 'notebook' | 'settings'
@@ -180,6 +181,7 @@ export function MainSidebar({
             ))}
           </nav>
         </div>
+        <UpdateNotice />
         {handle}
       </aside>
     )
@@ -209,6 +211,7 @@ export function MainSidebar({
           </div>
         </div>
       </div>
+      <UpdateNotice />
       <div className="sb-footer">
         <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
           Settings

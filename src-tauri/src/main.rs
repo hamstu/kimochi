@@ -33,6 +33,7 @@ mod state;
 mod text_observer;
 mod texthooker;
 mod tray;
+mod updater;
 mod watcher;
 
 use kimochi_capture::*;
@@ -988,8 +989,9 @@ fn displays() -> Vec<platform::DisplayInfo> {
     platform::desktop_display_infos()
 }
 
-#[tauri::command]
-fn app_quit(app: tauri::AppHandle) {
+/// Stops the platform's own threads (key trigger, mouse guard, shortcuts) before the process
+/// ends: on quit, and before an update replaces it (updater.rs).
+fn shutdown_platform() {
     #[cfg(target_os = "windows")]
     {
         platform::stop_mouse_guard();
@@ -999,6 +1001,11 @@ fn app_quit(app: tauri::AppHandle) {
     platform::stop_key_trigger();
     #[cfg(target_os = "linux")]
     platform::shortcuts::stop();
+}
+
+#[tauri::command]
+fn app_quit(app: tauri::AppHandle) {
+    shutdown_platform();
     app.exit(0);
 }
 
@@ -2310,6 +2317,8 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Self-updates (updater.rs); the check, download and install are our own commands.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Asynchronous, and answered from a worker thread: a captured image is PNG-encoded on
         // request, which for a full-size window takes long enough to stall every window if it
         // ran on the main thread (a region drag stuttered each time the picture refreshed).
@@ -2492,6 +2501,13 @@ fn main() {
             model_store::model_download_retry,
             model_store::model_download_cancel,
             model_store::model_delete,
+            updater::update_status,
+            updater::update_check,
+            updater::update_download,
+            updater::update_cancel,
+            updater::update_install,
+            updater::update_retry,
+            updater::update_dismiss,
         ]);
     builder
         // The invoke guard: an extension window (`ext-<id>`) runs extension code in a top
@@ -2565,6 +2581,21 @@ fn main() {
                 }),
             });
             app.manage(service.clone());
+            {
+                // Self-updates: the shared status every window reads, and (in a bundle) the
+                // quiet periodic check. The reporter writes to the evidence log like the engine
+                // store's does.
+                let reporter = handle.clone();
+                updater::install(
+                    &handle,
+                    move |value| {
+                        if let Some(service) = reporter.try_state::<Shared>() {
+                            record(&reporter, &service, value);
+                        }
+                    },
+                    shutdown_platform,
+                );
+            }
             {
                 // The windows are built below for the effective engine.
                 let selected = extensions::selected_engine(&store);

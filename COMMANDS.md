@@ -835,6 +835,59 @@ path refuses with the same reason: `ocr_frame` and `scan` fail with
 `"<Engine> is not ready: <reason>"`, and the observer as above. Switching to an engine whose
 models are ready scans at once.
 
+## App updates
+
+Kimochi updates itself from the project's GitHub Releases through `tauri-plugin-updater`
+(`src-tauri/src/updater.rs`). The endpoint, `plugins.updater.endpoints` in `tauri.conf.json`, is
+the *latest* release's `latest.json`, which GitHub resolves to the newest published,
+non-prerelease release: the rolling `nightly` pre-release and the draft a `v*` tag creates are
+never offered, so only a release someone published by hand is. CI signs each platform's bundle
+with the minisign key whose public half is `plugins.updater.pubkey`, and composes `latest.json`
+(`scripts/updater-artifacts.mjs`, the `manifest` job in `ci.yml`); the app verifies the
+signature before anything is installed. The user starts every download and every restart.
+
+Every command answers with the `UpdateStatus` after acting:
+
+| Command | Signature |
+| --- | --- |
+| `update_status` | `() -> UpdateStatus` |
+| `update_check` | `() -> UpdateStatus` — the user's own check; its failure is shown. Returns `checking` at once; the result follows on the event. No-op while downloading, ready or installing |
+| `update_download` | `() -> UpdateStatus` — from `available` (or a failed download); no-op while downloading or once ready |
+| `update_cancel` | `() -> UpdateStatus` — stops a download; the offer stays |
+| `update_install` | `() -> UpdateStatus` — from `ready`: swaps the bundle in and restarts. Replies `installing`; the process is replaced when the swap is done (on Windows the installer relaunches the app) |
+| `update_retry` | `() -> UpdateStatus` — the failed step again: the download, the install (without a new download), or the check |
+| `update_dismiss` | `() -> UpdateStatus` — "Not now": hides the sidebar notice for this run (Settings still shows it); a download, or a different version, brings it back |
+
+```ts
+UpdateStatus = {
+  state: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'installing' | 'failed',
+  currentVersion,                    // the running build
+  version, notes, date, size,        // the offered release (available and later); size when the manifest names it
+  receivedBytes, totalBytes,         // the download in progress
+  message, stage,                    // why it failed, at which step: 'check' | 'download' | 'install'
+  checkedAt,                         // the last successful check, ms since the epoch
+  dismissed,                         // "Not now" was pressed for this offer
+  automatic                          // whether this build checks on its own
+}
+```
+
+Emits `update-status` with an `UpdateStatus` on every state change and about four times a
+second while bytes arrive. Posts "Kimochi 0.2.0 is available" / "… is ready to install" on the
+activity feed (key `update`).
+
+**Behaviour.** A bundle checks on its own twenty seconds after launch and every six hours;
+a failed automatic check goes to `evidence.jsonl` (`update-check`) and leaves the status alone
+(`idle` before any successful check, `none` after one), so a laptop that is offline never nags.
+A `tauri dev` binary (`debug_assertions`) does not check on its own (there is no `.app` or
+AppImage to replace) and says so in Settings; `KIMOCHI_UPDATE_ENDPOINT` replaces the endpoint and
+turns automatic checks on, for testing against a local manifest (MANUAL_TESTING.md → App
+updates). The download is held in memory until the user restarts; quitting discards it. On
+Windows the NSIS installer runs passively (`plugins.updater.windows.installMode`) and relaunches
+the app; on Linux an AppImage is replaced in place and a `.deb` goes through `pkexec dpkg -i`
+(`latest.json` carries a `linux-<arch>-deb` entry beside `linux-<arch>`; the plugin picks by
+the installed bundle type). Before the process is replaced the platform's own threads are
+stopped exactly as `app_quit` does.
+
 ## Capabilities
 
 `capabilities/core.json` grants `core:event:default` plus a few read-only window

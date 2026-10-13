@@ -1008,3 +1008,82 @@
 @container (max-width: 16rem) {
   .src-action > svg { display: none; }
 }
+
+/*
+ * The update notice (UpdateNotice.tsx), pinned above the sidebar's foot: a title line with its
+ * icon, the download bar while bytes arrive, a detail line and the one button that is the next
+ * step. On the bar plane with a hairline above, like the foot, so it reads as part of the
+ * sidebar's furniture rather than a floating card.
+ */
+.sb-update {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--k-space-1-5);
+  padding: var(--k-space-2-5) var(--k-space-3);
+  border-top: 1px solid var(--k-line);
+  animation: sb-update-enter 250ms var(--k-ease-out);
+}
+@keyframes sb-update-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--k-space-1));
+  }
+}
+.sb-update-head {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  min-height: var(--k-control-h-sm);
+}
+.sb-update-head > svg {
+  flex: none;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-accent-text);
+}
+.sb-update[data-state='failed'] .sb-update-head > svg {
+  color: var(--k-danger-text);
+}
+.sb-update[data-state='ready'] .sb-update-head > svg {
+  color: var(--k-ok-text);
+}
+.sb-update-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--k-text);
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-leading-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-update-dismiss {
+  flex: none;
+  margin-right: calc(var(--k-space-1) * -1);
+}
+/* The bar is the model download's (model-download.css); here it needs no top padding. */
+.sb-update .model-progress {
+  padding-top: 0;
+}
+.sb-update-detail {
+  margin: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+.sb-update-detail[data-tone='danger'] {
+  color: var(--k-danger-text);
+}
+.sb-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--k-space-1-5);
+  padding-top: var(--k-space-0-5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-update {
+    animation: none;
+  }
+}

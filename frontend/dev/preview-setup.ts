@@ -27,6 +27,8 @@
  *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
  *                    paused, failed, verifying, ready
  *   ?model=<state>   OCR model downloads (preview-models.ts)
+ *   ?update=<state>  self-updates (preview-updates.ts): none (default), idle, checking, available,
+ *                    downloading, ready, failed; the sidebar notice and Settings → General → Updates
  *
  * Onboarding (welcome.html):
  *   ?step=intro|permission|picker|ocr|engine|dictionaries|dictionary-settings|done|error
@@ -58,6 +60,7 @@ import {
 } from './demo-data'
 import { MODEL_HANDLERS, onModelSettingSet } from './preview-models'
 import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
+import { UPDATE_HANDLERS } from './preview-updates'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -311,6 +314,7 @@ const note = (what: string, detail: unknown): null => {
 const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
   ...EXTENSION_HANDLERS,
+  ...UPDATE_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => {

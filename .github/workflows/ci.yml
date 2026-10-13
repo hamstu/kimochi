@@ -262,8 +262,8 @@ jobs:
       - name: Clean workspace
         run: |
           git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
-          # Only this run's bundles may be uploaded.
-          rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle
+          # Only this run's bundles (and updater artifacts) may be uploaded.
+          rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle ../updater
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -357,6 +357,21 @@ jobs:
             if ($sig.Status -ne 'Valid') { exit 1 }
           }
 
+      # Release mode: what the app's self-updater downloads for this platform (macOS: a tar.gz of
+      # the .app; Windows: the installer; Linux: the AppImage and the .deb), each one's minisign
+      # signature, and a sidecar for the manifest job below. Runs after every step that touches
+      # the bundles (the AppImage repack inside `npm run release`, Authenticode signing), so the
+      # signature covers the bytes users download. The key is the TAURI_SIGNING_PRIVATE_KEY
+      # secret (`tauri signer generate`); its public half is `plugins.updater.pubkey` in
+      # tauri.conf.json. A release without it cannot be updated to, so the step fails rather
+      # than skips.
+      - name: Updater artifacts
+        if: needs.plan.outputs.mode == 'release'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/updater-artifacts.mjs sign --target "$KIMOCHI_TARGET" --profile ${{ needs.plan.outputs.profile }} --out ../updater
+
       # A zip keeps the .app's file modes and signature intact.
       - name: Archive macOS app
         if: runner.os == 'macOS'
@@ -396,5 +411,56 @@ jobs:
             done
           done <<< "$PATTERNS"
           [[ $found == 1 ]] || { echo "no bundle matched: $PATTERNS" >&2; exit 1; }
+          # Release mode: the updater's signatures, sidecars and the macOS tar.gz, named as the
+          # manifest will name them (never renamed, so no rolling-release handling here).
+          if [[ -d ../updater ]]; then cp ../updater/* ../upload/; fi
           ls -l ../upload
           gh release upload "$RELEASE" ../upload/* --clobber
+
+  # Release mode: `latest.json`, the document the app's updater fetches
+  # (`https://github.com/<repo>/releases/latest/download/latest.json`), composed from the
+  # sidecars every bundle job uploaded. It waits for all of them: a manifest missing a platform
+  # would tell that platform there is no update, for good. GitHub resolves `latest` only once
+  # the draft is published, so publishing the release is what offers the update.
+  manifest:
+    name: Update manifest
+    needs: [plan, bundle]
+    if: needs.plan.outputs.mode == 'release'
+    runs-on: [self-hosted, macOS]
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+        working-directory: kimochi-tauri
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: kimochi-tauri
+          clean: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The script uses node built-ins only: no `npm ci` (which would rebuild dist/ here).
+      - name: Compose and upload latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE: ${{ needs.plan.outputs.release }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          rm -rf ../manifest && mkdir ../manifest
+          gh release download "$RELEASE" --pattern 'updater-*.json' --dir ../manifest
+          gh release view "$RELEASE" --json body --jq .body > ../manifest/notes.md
+          date="$(gh release view "$RELEASE" --json createdAt --jq .createdAt)"
+          node scripts/updater-artifacts.mjs manifest \
+            --version "$version" --tag "$RELEASE" --repo "$GH_REPO" \
+            --sidecars ../manifest --notes ../manifest/notes.md --date "$date" \
+            --out ../manifest/latest.json
+          cat ../manifest/latest.json
+          gh release upload "$RELEASE" ../manifest/latest.json --clobber
+          # The sidecars have served their purpose.
+          for sidecar in ../manifest/updater-*.json; do
+            gh release delete-asset "$RELEASE" "$(basename "$sidecar")" --yes
+          done

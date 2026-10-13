@@ -44,6 +44,10 @@ tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
 tower-http = { version = "0.6", features = ["cors"] }
+# Self-updates from GitHub Releases (updater.rs): the check, the signed download and the swap.
+tauri-plugin-updater = "2"
+# Formats the offered release's date for the panels. Already in the lock file via the updater.
+time = { version = "0.3", features = ["formatting"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 mangaocr = { path = "../../kimochi-mangaocr", features = ["metal"] }
 objc2 = "0.6"
