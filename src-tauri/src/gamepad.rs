@@ -479,6 +479,8 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
         return;
     }
     if focused { return; }
+    // The Auto-scan switch gates the button; with it off a saved button does nothing.
+    if !service.settings.get_or("autoScanSettings.enabled", false) { return; }
     let auto: Option<usize> = service
         .settings
         .get_or("autoScanSettings.gamepadButton", None);
