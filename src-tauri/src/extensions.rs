@@ -66,7 +66,7 @@ pub fn command_allowed(label: &str, command: &str) -> Result<(), String> {
 }
 
 /// The engine *host* `yomitanSettings.popupType` selects: `'builtin'` (and anything missing or
-/// malformed) is Yomitan, and so is `'custom-api'`: the Kimochi pop-up still tokenises and
+/// malformed) is Yomitan, and so is `'custom-api'`: the Yomitan API pop-up still tokenises and
 /// looks words up through the Yomitan backend in the overlay (`installApiLookup` in
 /// ui/overlay.js), so that host must run for it. `hachidori` and `tenten` pass through.
 pub fn selected_engine(settings: &Settings) -> String {
@@ -445,7 +445,7 @@ mod tests {
         assert_eq!(engine_for(Some(&json!("builtin"))), "yomitan");
         assert_eq!(engine_for(Some(&json!(""))), "yomitan");
         assert_eq!(engine_for(Some(&json!(3))), "yomitan");
-        // The Kimochi pop-up runs over the Yomitan backend, so it needs the Yomitan host.
+        // The Yomitan API pop-up runs over the Yomitan backend, so it needs the Yomitan host.
         assert_eq!(engine_for(Some(&json!("custom-api"))), "yomitan");
         assert_eq!(engine_for(Some(&json!("hachidori"))), "hachidori");
         assert_eq!(engine_for(Some(&json!("tenten"))), "tenten");

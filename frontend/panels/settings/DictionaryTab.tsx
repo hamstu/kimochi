@@ -2,8 +2,9 @@
  * Settings → Dictionary: which dictionary engine looks words up (`DictionaryChooser`, in the shape
  * of the OCR engine chooser), and that engine's own settings in its panel. Yomitan, Hachidori and
  * 10ten keep their dictionaries and options in their own settings pages (the `dictionary`
- * panel); Kimochi's pop-up (over a Yomitan API server) is set up here, including its Anki card
- * builder.
+ * panel); the Yomitan API (Kimochi's own pop-up over the Yomitan in the user's browser) is set up
+ * here: its helper and connection (`YomitanApiStatusRows`, and the setup wizard in a dialog, which
+ * opens on its own when the Yomitan API is chosen), its address and its Anki card builder.
  *
  * Choosing an engine saves `yomitanSettings.popupType`, writes the document-start mirror
  * (`localStorage['kimochi.dictionaryEngine']`) and asks native to reload the reader windows
@@ -11,8 +12,8 @@
  * window is one of those (it runs lookups over the transcript), and this page is a view inside
  * it, so the page records where it is first (`rememberEngineSwitch`); the reloaded window opens
  * straight back onto it and says "Now using …". The separate Settings window hosts no engine and
- * is not reloaded; it says "Reloading the reader windows…" instead. Yomitan and Kimochi's pop-up
- * share the Yomitan host, so moving between those two reloads nothing. See DICTIONARY_ENGINES.md
+ * is not reloaded; it says "Reloading the reader windows…" instead. Built-in Yomitan and the
+ * Yomitan API share the Yomitan host, so moving between those two reloads nothing. See DICTIONARY_ENGINES.md
  * §2 and §8.
  *
  * Engines are downloaded on demand (EXTENSION_DOWNLOADS.md §2, UI). Choosing one that is not
@@ -33,12 +34,11 @@ import {
   SettingsSection,
   SettingsSubgroup,
   Slider,
-  StatusDot,
-  Switch,
-  type Tone
+  Switch
 } from '@kit'
 import type { YomitanSettings } from '../../vendor/shared-types'
-import { API_URLS } from '../../vendor/shared-constants'
+import { DEFAULT_YOMITAN_API_URL, resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
+import { YomitanApiSetupDialog, YomitanApiStatusRows } from '../../components/YomitanApiSetup'
 import { useSetting } from '../../bridge/useSetting'
 import { setSetting } from '../../bridge/settings'
 import { nativeError } from '../../bridge/tauri'
@@ -53,7 +53,7 @@ import {
   popupTypeOf,
   type DictionaryEngine
 } from '../../bridge/dictionaryEngine'
-import { describeUrlRestriction, testApiConnection } from '../../bridge/yomitan'
+import { describeUrlRestriction } from '../../bridge/yomitan'
 import { AnkiSetup } from '@texthooker/components/AnkiSetup'
 import { clearAudioCache } from '@texthooker/lib/audio'
 import { updateSettings } from '@texthooker/lib/settings'
@@ -65,8 +65,6 @@ import { extensionAction, extensionStatus, type ExtensionStatus } from '../../br
 import { downloadEngineFor, extensionDownloadPrompt, normalizeExtensionStatus } from '@ui/extension-download'
 import { onEvent } from '../../bridge/tauri'
 import { engineSwitchRecord, forgetEngineSwitch, rememberEngineSwitch } from '../../main/engineSwitch'
-
-type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 
 /** How long "Reloading the reader windows…" stays up after native has answered. */
 const RELOAD_NOTE_MS = 2500
@@ -82,29 +80,18 @@ function justSwitchedTo(): DictionaryEngine | null {
   return record && Date.now() - record.at < SWITCHED_NOTE_MS + 4000 ? record.engine : null
 }
 
-const STATUS_TONE: Record<TestStatus, Tone> = {
-  idle: 'neutral',
-  testing: 'warn',
-  success: 'ok',
-  error: 'danger'
-}
-
-const STATUS_LABEL: Record<TestStatus, string> = {
-  idle: 'Not tested',
-  testing: 'Testing',
-  success: 'Connected',
-  error: 'Connection failed'
-}
-
 export function DictionaryTab(): ReactNode {
   // Until the setting loads, the engine this document was (re)loaded for, not the shipped
   // default: after a switch the chooser's first frame already shows the new engine as active.
   const [switchedTo, setSwitchedTo] = useState<DictionaryEngine | null>(justSwitchedTo)
   const [yomitanSettings, setYomitanSettings] = useSetting<YomitanSettings>('yomitanSettings', {
     popupType: popupTypeOf(engineSwitchRecord()?.engine ?? documentPlaceholder()),
-    customApiUrl: API_URLS.YOMITAN_FALLBACK
+    customApiUrl: ''
   })
-  const [apiTestStatus, setApiTestStatus] = useState<TestStatus>('idle')
+  const apiUrl = resolveYomitanApiUrl(yomitanSettings.customApiUrl)
+  // The Yomitan API's setup wizard: opened by choosing the Yomitan API (here, or on the reload a
+  // switch from Hachidori or 10ten gives this window), and from its Helper row.
+  const [setupOpen, setSetupOpen] = useState(switchedTo === 'custom-api')
   const saved = dictionaryEngineOf(yomitanSettings.popupType)
   // The pick, shown as active from the click so the panel does not flash "Use this engine" while
   // the write goes out. Cleared once the setting agrees (or the write fails).
@@ -138,8 +125,6 @@ export function DictionaryTab(): ReactNode {
       setPicked(engine)
       setApplyError(null)
       setSwitchedTo(null)
-      // Reset test status when leaving the Kimochi pop-up, as before.
-      if (engine !== 'custom-api') setApiTestStatus('idle')
       try {
         // Through the settings client directly, not the hook's setter: that one reverts quietly
         // on failure, and a failed save must not go on to mirror and reload the windows.
@@ -150,8 +135,11 @@ export function DictionaryTab(): ReactNode {
         return
       }
       mirrorDictionaryEngine(engine)
-      // Yomitan and Kimochi's pop-up share a host, so moving between them reloads nothing: the
-      // overlay switches live, as it always has.
+      // The Yomitan API needs the browser side set up. If this window is reloaded by the switch,
+      // the reloaded one opens the wizard again (`switchedTo`).
+      if (engine === 'custom-api') setSetupOpen(true)
+      // Built-in Yomitan and the Yomitan API share a host, so moving between them reloads nothing:
+      // the overlay switches live, as it always has.
       if (hostEngineOf(engine) === hostEngineOf(saved)) return
       // Before native reloads this window, so the reload comes back to this page.
       setReloading(rememberEngineSwitch(engine) ? 'self' : 'others')
@@ -246,22 +234,9 @@ export function DictionaryTab(): ReactNode {
   const handleApiUrlChange = useCallback(
     (value: string): void => {
       void setYomitanSettings({ ...yomitanSettings, customApiUrl: value })
-      setApiTestStatus('idle')
     },
     [yomitanSettings, setYomitanSettings]
   )
-
-  const handleTestApiConnection = useCallback(async (): Promise<void> => {
-    setApiTestStatus('testing')
-    try {
-      const result = await testApiConnection(yomitanSettings.customApiUrl)
-      setApiTestStatus(result.success ? 'success' : 'error')
-      if (!result.success) console.error('API test failed:', result.error)
-    } catch (error) {
-      console.error('Failed to test API connection:', error)
-      setApiTestStatus('error')
-    }
-  }, [yomitanSettings.customApiUrl])
 
   const restriction = yomitanSettings.customApiUrl
     ? describeUrlRestriction(yomitanSettings.customApiUrl)
@@ -297,30 +272,22 @@ export function DictionaryTab(): ReactNode {
     }
     return (
       <>
-        <SettingsSection grouped>
+        <SettingsSection title="Your browser's Yomitan" grouped>
+          <YomitanApiStatusRows url={apiUrl} active={!setupOpen} onSetUp={() => setSetupOpen(true)} />
           <SettingsRow
             stacked
-            label="Yomitan API URL"
+            label="API address"
             controlId="dictionary-api-url"
-            description="The URL of your Yomitan API endpoint. Test verifies the connection."
+            description={`Where the helper serves the Yomitan API. Leave it empty for the default, ${DEFAULT_YOMITAN_API_URL}.`}
           >
             <div className="settings-url">
-              <span title={STATUS_LABEL[apiTestStatus]} className="settings-url-status">
-                <StatusDot tone={STATUS_TONE[apiTestStatus]} />
-              </span>
-              <span className="sr-only" role="status">
-                {STATUS_LABEL[apiTestStatus]}
-              </span>
               <Input
                 id="dictionary-api-url"
                 mono
                 value={yomitanSettings.customApiUrl}
                 onChange={(e) => handleApiUrlChange(e.target.value)}
-                placeholder={API_URLS.YOMITAN_FALLBACK}
+                placeholder={DEFAULT_YOMITAN_API_URL}
               />
-              <Button onClick={() => void handleTestApiConnection()} disabled={apiTestStatus === 'testing'}>
-                {apiTestStatus === 'testing' ? 'Testing…' : 'Test'}
-              </Button>
             </div>
           </SettingsRow>
           {restriction && (
@@ -350,6 +317,7 @@ export function DictionaryTab(): ReactNode {
           onConfirm={confirmDownload}
           dismissOnOutsideClick
         />
+        <YomitanApiSetupDialog open={setupOpen} onOpenChange={setSetupOpen} url={apiUrl} />
         <DictionaryChooser
           active={active}
           pending={pending}
@@ -374,7 +342,7 @@ export function DictionaryTab(): ReactNode {
   )
 }
 
-/** Everything that only applies to Kimochi's own pop-up. */
+/** Everything that only applies to the Yomitan API (Kimochi's own pop-up). */
 function KimochiPopupSections({ settings }: { settings: Settings }): ReactNode {
   const volume = Math.round(settings.audioVolume * 100)
   return (

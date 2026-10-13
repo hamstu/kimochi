@@ -26,7 +26,7 @@ export const isExtensionEngine = (engine: unknown): engine is ExtensionEngine =>
 const count = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 
-/** The download an engine needs: its own, or Yomitan's for Kimochi's pop-up (which runs over it). */
+/** The download an engine needs: its own, or Yomitan's for the Yomitan API (which runs over it). */
 export function downloadEngineFor(engine: DictionaryEngine): ExtensionEngine {
   return engine === 'custom-api' ? 'yomitan' : engine
 }

@@ -41,7 +41,11 @@
  *                    open that step (error: the last step's save failed). Every step stays
  *                    navigable from there; ?platform=linux makes the capture step the picker
  *   ?permission=denied  macOS Screen Recording not granted yet (default: granted)
- *   ?popup=hachidori|tenten  the dictionary engine already chosen (the setup step follows it)
+ *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
+ *                    follows it; custom-api is the Yomitan API wizard)
+ *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
+ *                    official, unknown, kimochi, broken, host, ready, fail; for the wizard in
+ *                    onboarding and in Settings → Dictionary (?tab=dictionary&popup=custom-api)
  *   ?dict=fail|none  Jitendex quick setup fails while importing, or Yomitan's backend is not
  *                    reachable (default: Set up Jitendex runs through every stage in about 6 s)
  *   ?embed=1         embedded in the marketing site's live demo (vite.demo.config.ts builds this page
@@ -67,6 +71,7 @@ import {
 import { MODEL_HANDLERS, onModelSettingSet } from './preview-models'
 import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
 import { UPDATE_HANDLERS } from './preview-updates'
+import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -315,6 +320,7 @@ const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
   ...EXTENSION_HANDLERS,
   ...UPDATE_HANDLERS,
+  ...YOMITAN_API_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => {
@@ -471,7 +477,6 @@ const HANDLERS: Record<string, Handler> = {
   yomitan_request: () => null,
   yomitan_tokenize: () => [],
   yomitan_ankifields: () => ({ fields: [], audioMedia: [], dictionaryMedia: [] }),
-  install_yomitan_native_host: () => 'Installed (preview).',
   // Native reloads the reader windows; there are none to reload in the preview.
   dictionary_engine_apply: () => note('dictionary_engine_apply', null),
 

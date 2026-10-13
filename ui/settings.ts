@@ -282,7 +282,7 @@ export interface DictionaryEngineInfo {
   upstream: string
   /** The link's text when it is not the engine's own project ("Upstream" otherwise). */
   upstreamLabel?: string
-  /** The bundled release, or null for Kimochi's own pop-up. */
+  /** The bundled release, or null for the Yomitan API (Kimochi's own pop-up). */
   version: string | null
   runs: 'local' | 'online'
   /** The engine's own options page, relative to its origin; null when it has none. */
@@ -293,12 +293,12 @@ export interface DictionaryEngineInfo {
 
 export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> = {
   yomitan: {
-    name: 'Yomitan',
-    tagline: 'The popup dictionary you may already use',
+    name: 'Built-in Yomitan',
+    tagline: 'A copy of Yomitan inside Kimochi',
     description:
-      'Yomitan itself, running inside Kimochi. Import the Yomitan dictionaries you already have; audio, scanning options and Anki mining are all set up in its own settings.',
+      'An embedded copy of Yomitan that runs inside Kimochi, with its own dictionaries and settings. Set it up here: import dictionaries, or bring in the settings and dictionaries you exported from Yomitan in your browser. Audio, scanning options and Anki mining are all in its own settings.',
     strengths: [
-      'Imports any Yomitan dictionary, including settings backups',
+      'Imports any Yomitan dictionary, and settings exported from your browser',
       'Word audio and Anki mining built in',
       'Works offline once dictionaries are imported'
     ],
@@ -348,21 +348,23 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     optionsPage: 'options.html'
   },
   'custom-api': {
-    name: 'Kimochi pop-up',
-    tagline: 'Over a Yomitan API server',
+    name: 'Yomitan API',
+    tagline: 'The Yomitan in your browser',
     description:
-      'Click words in the Log to look them up through a Yomitan API server, and build Anki cards here.',
+      "A pop-up built into Kimochi that looks words up through the Yomitan you already use in your browser, over the Yomitan API. Your browser's dictionaries and settings are used as they are, with nothing to import again. Click words in the Log to look them up, and build Anki cards here.",
     strengths: [
+      'Uses the dictionaries already in your browser',
       'Click-to-define and furigana in the Log',
-      'Anki card builder in Kimochi',
-      'Uses a Yomitan API server you run'
+      'Anki card builder in Kimochi'
     ],
-    requirements: 'Needs a Yomitan API server reachable from this computer, and Yomitan downloaded (it splits the text into words).',
+    requirements:
+      "Needs Yomitan in your browser with its API turned on, and a small helper the browser starts (Kimochi installs it for you). Kimochi also downloads Yomitan for splitting text into words.",
     licence: 'Part of Kimochi',
     upstream: 'https://github.com/yomidevs/yomitan-api',
     upstreamLabel: 'Yomitan API',
     version: null,
-    runs: 'online',
+    // The browser's Yomitan on this computer (an address on another computer still works).
+    runs: 'local',
     optionsPage: null,
     experimental: true
   }
@@ -390,10 +392,11 @@ export function popupTypeOf(engine: DictionaryEngine): PopupType {
 }
 
 /**
- * The engine whose host scripts a window needs. Kimochi's pop-up runs over the Yomitan host: the
- * overlay keeps Yomitan's backend for the controller's word splitting (`parseText`) and installs
- * the API lookup hook from it (`ui/api-lookup.js`), exactly as before the other engines existed.
- * So switching between Yomitan and Kimochi's pop-up changes no host and needs no reload.
+ * The engine whose host scripts a window needs. The Yomitan API engine (Kimochi's own pop-up over
+ * the browser's Yomitan) runs over the Yomitan host: the overlay keeps Yomitan's backend for the
+ * controller's word splitting (`parseText`) and installs the API lookup hook from it
+ * (`ui/api-lookup.js`), exactly as before the other engines existed.
+ * So switching between Built-in Yomitan and the Yomitan API changes no host and needs no reload.
  */
 export function hostEngineOf(engine: DictionaryEngine): 'yomitan' | 'hachidori' | 'tenten' {
   return engine === 'custom-api' ? 'yomitan' : engine
@@ -403,7 +406,7 @@ export function hostEngineOf(engine: DictionaryEngine): 'yomitan' | 'hachidori' 
  * The document-start mirror of the engine (`localStorage` on the app origin), which the injected
  * host scripts read synchronously before any extension script runs. See DICTIONARY_ENGINES.md §2.
  * It holds `hostEngineOf(engine)`, never `'custom-api'`, so the Yomitan shims keep installing for
- * Kimochi's pop-up.
+ * the Yomitan API engine.
  */
 export const DICTIONARY_ENGINE_KEY = 'kimochi.dictionaryEngine'
 

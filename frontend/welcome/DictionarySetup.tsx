@@ -1,14 +1,16 @@
 import { useEffect, useState, type JSX } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Download, ExternalLink, Settings2 } from 'lucide-react'
+import { Download, ExternalLink } from 'lucide-react'
 import { Button, Callout, StatusDot, type Tone } from '@kit'
-import { nativeError, openSettings } from '../bridge/tauri'
+import { nativeError } from '../bridge/tauri'
 import {
   DICTIONARY_ENGINES,
   openDictionarySettings,
   useDictionaryEngine,
   type DictionaryEngine
 } from '../bridge/dictionaryEngine'
+import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
+import { YomitanApiWizard } from '../components/YomitanApiSetup'
 import Step from './Step'
 import { StepActions } from './StepActions'
 import style from './WelcomeApp.module.css'
@@ -40,35 +42,53 @@ async function request<T>(params: object): Promise<T> {
 const NEXT = '/done'
 
 /**
- * Onboarding's dictionary step. Yomitan's quick setup (Jitendex) only applies to Yomitan; the
+ * Onboarding's dictionary step. Yomitan's quick setup (Jitendex) only applies to Built-in Yomitan;
+ * the Yomitan API gets its setup wizard (the helper, the browser setting, the connection); the
  * other engines bring their own first-run (Hachidori offers dictionaries, 10ten downloads its
  * own), so for them this explains that and opens their settings. DICTIONARY_ENGINES.md §8.
  */
 export default function DictionarySetup(): JSX.Element {
   const [engine] = useDictionaryEngine()
-  return engine === 'yomitan' ? <YomitanSetup /> : <OtherEngineSetup engine={engine} />
+  if (engine === 'yomitan') return <YomitanSetup />
+  if (engine === 'custom-api') return <YomitanApiSetup />
+  return <OtherEngineSetup engine={engine} />
 }
 
-const ENGINE_SETUP: Record<Exclude<DictionaryEngine, 'yomitan'>, string> = {
+type OtherEngine = Exclude<DictionaryEngine, 'yomitan' | 'custom-api'>
+
+const ENGINE_SETUP: Record<OtherEngine, string> = {
   hachidori:
     'Hachidori offers a set of recommended dictionaries the first time its settings open, and imports Yomitan dictionaries and MDict files you already have.',
   tenten:
-    '10ten works straight away with its bundled word dictionary, and downloads the full JMdict, kanji and names dictionaries in the background. There is nothing to import.',
-  'custom-api':
-    'The Kimochi pop-up looks words up through a Yomitan API server you run. Set its address in Settings → Dictionary.'
+    '10ten works straight away with its bundled word dictionary, and downloads the full JMdict, kanji and names dictionaries in the background. There is nothing to import.'
 }
 
-function OtherEngineSetup({
-  engine
-}: {
-  engine: Exclude<DictionaryEngine, 'yomitan'>
-}): JSX.Element {
+/** The Yomitan API: its setup wizard, whose buttons go in the bar. Skippable at every step. */
+function YomitanApiSetup(): JSX.Element {
+  const navigate = useNavigate()
+  const [, settings] = useDictionaryEngine()
+  return (
+    <Step
+      title="Connect your browser's Yomitan"
+      lede="Kimochi's pop-up looks words up through the Yomitan you already use in your browser, with its dictionaries and settings. It needs a small helper and one setting in Yomitan."
+    >
+      <YomitanApiWizard
+        url={resolveYomitanApiUrl(settings.customApiUrl)}
+        Actions={StepActions}
+        onFinish={() => void navigate(NEXT)}
+        finishLabel="Continue"
+        onSkip={() => void navigate(NEXT)}
+      />
+    </Step>
+  )
+}
+
+function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
   const name = DICTIONARY_ENGINES[engine].name
   const [error, setError] = useState<string | null>(null)
   const open = (): void => {
     setError(null)
-    const opening = engine === 'custom-api' ? openSettings('dictionary') : openDictionarySettings()
-    opening.catch((caught: unknown) => setError(nativeError(caught).message))
+    openDictionarySettings().catch((caught: unknown) => setError(nativeError(caught).message))
   }
   return (
     <Step
@@ -79,8 +99,8 @@ function OtherEngineSetup({
         <p className={style.text}>{ENGINE_SETUP[engine]}</p>
         <div>
           <Button onClick={open}>
-            {engine === 'custom-api' ? <Settings2 /> : <ExternalLink />}
-            {engine === 'custom-api' ? 'Open Settings → Dictionary' : `Open ${name} settings`}
+            <ExternalLink />
+            Open {name} settings
           </Button>
         </div>
       </div>
@@ -159,7 +179,7 @@ function YomitanSetup(): JSX.Element {
   return (
     <Step
       title="Add a dictionary"
-      lede="Yomitan is downloaded and runs inside Kimochi, so there is no browser extension to install. It needs at least one dictionary to look words up."
+      lede="Built-in Yomitan is downloaded and runs inside Kimochi, so there is no browser extension to install. It needs at least one dictionary to look words up: set one up here, or import the dictionaries and settings you exported from Yomitan in your browser."
     >
       {catalog.map((item) => (
         <div key={item.id} className={style.block}>

@@ -6,6 +6,7 @@ import {
   onSettingsChange as onNativeChange,
 } from "../../bridge/settings";
 import { inputSourceOf } from "../input-source";
+import { resolveYomitanApiUrl } from "../../../ui/yomitan-api-setup";
 import { SETTINGS_DEFAULTS, type Settings } from "./types";
 let current: Settings = { ...SETTINGS_DEFAULTS };
 let loaded = false;
@@ -26,7 +27,8 @@ const mergeDictionary = async (): Promise<void> => {
     ...current,
     dictionaryMode:
       dictionary.popupType === "custom-api" ? "custom-api" : "builtin",
-    yomitanApiUrl: dictionary.customApiUrl ?? SETTINGS_DEFAULTS.yomitanApiUrl,
+    // Empty means the helper's default address (127.0.0.1:19633).
+    yomitanApiUrl: resolveYomitanApiUrl(dictionary.customApiUrl),
   };
 };
 onNativeChange((key, value) => {

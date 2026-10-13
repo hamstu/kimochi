@@ -43,7 +43,7 @@
   gap: var(--k-space-2) var(--k-space-4);
 }
 
-/* Kimochi pop-up's sections sit inside the panel, so they lose the page's outer spacing. */
+/* The Yomitan API's sections sit inside the panel, so they lose the page's outer spacing. */
 .dictionary-engine-sections {
   display: flex;
   flex-direction: column;

@@ -251,7 +251,7 @@ function DictionaryDetail({
       {status && !ready && (
         <p className="k-description">
           {engine === 'custom-api'
-            ? `Kimochi's pop-up runs over Yomitan, which is not downloaded yet.`
+            ? `The Yomitan API splits text into words with Built-in Yomitan, which is not downloaded yet.`
             : `${info.name} is not part of Kimochi's download: it is fetched from its official release when you choose it.`}
         </p>
       )}

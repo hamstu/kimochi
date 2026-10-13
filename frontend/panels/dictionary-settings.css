@@ -24,7 +24,7 @@
   color: var(--k-text-2);
   font-size: var(--k-text-sm);
 }
-/* Kimochi's pop-up, or an engine whose page cannot be shown: a short note instead of a frame. */
+/* The Yomitan API, or an engine whose page cannot be shown: a short note instead of a frame. */
 .dictionary-settings-note {
   display: flex;
   flex-direction: column;

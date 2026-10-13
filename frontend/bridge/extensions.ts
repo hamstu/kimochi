@@ -66,7 +66,7 @@ function subscribe(notify: () => void): () => void {
   return () => subscribers.delete(notify)
 }
 
-/** The live status of `engine` (null for Kimochi's pop-up, or until native answers). */
+/** The live status of `engine` (null for the Yomitan API engine, or until native answers). */
 export function useExtensionStatus(engine: ExtensionEngine | null): ExtensionStatus | null {
   useEffect(() => {
     if (!engine) return

@@ -62,7 +62,7 @@ test('every engine has the copy the chooser draws', () => {
     assert.ok(['local', 'online'].includes(info.runs), `${id}.runs`)
     assert.match(info.upstream, /^https:\/\//, `${id}.upstream`)
   }
-  assert.equal(DICTIONARY_ENGINES['custom-api'].runs, 'online')
+  assert.equal(DICTIONARY_ENGINES['custom-api'].runs, 'local')
   assert.equal(DICTIONARY_ENGINES['custom-api'].optionsPage, null)
   assert.equal(DICTIONARY_ENGINES['custom-api'].experimental, true)
 })
@@ -107,7 +107,7 @@ test('popupTypeOf is its inverse for every engine', () => {
   assert.equal(popupTypeOf('custom-api'), 'custom-api')
 })
 
-test("Kimochi's pop-up runs over the Yomitan host", () => {
+test('the Yomitan API engine runs over the Yomitan host', () => {
   assert.equal(hostEngineOf('custom-api'), 'yomitan')
   assert.equal(hostEngineOf('yomitan'), 'yomitan')
   assert.equal(hostEngineOf('hachidori'), 'hachidori')

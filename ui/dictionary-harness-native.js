@@ -138,7 +138,7 @@
         },
         report,
         window_bounds: () => ({ x: 0, y: 0, width: 0, height: 0 }),
-        // ui/api-lookup.js (the Kimochi pop-up), which the Yomitan path installs: Yomitan's own popup.
+        // ui/api-lookup.js (the Yomitan API pop-up), which the Yomitan path installs: Yomitan's own popup.
         settings_get: ({ key } = {}) => (key === 'yomitanSettings' ? { popupType: 'builtin' } : null),
         hide_popover: () => null,
         panel: (args) => {

@@ -119,7 +119,7 @@ export function createYomitanHarness({ log, openPage }) {
     const { observePopups } = await import('/spike/popup-bridge.js')
     ;({ popups } = await observePopups({ log, window: 'harness', onChange: changed }))
     // installApiLookup imports frontend-mode.js, which must wrap Frontend#prepare before the
-    // frontend is created (scan scope, setTextSource); the Kimochi pop-up path itself stays off.
+    // frontend is created (scan scope, setTextSource); the Yomitan API pop-up path itself stays off.
     const { installApiLookup } = await import('/ui/api-lookup.js')
     await installApiLookup()
     state.fixture = await importFixture()

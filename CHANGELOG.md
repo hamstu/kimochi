@@ -21,6 +21,21 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Kimochi updates itself. A bundle checks GitHub Releases quietly after launch and every six
   hours; a found update appears above Settings in the sidebar, where you download it and choose
   when to restart. Settings → General → Updates checks on demand and shows the version.
+- A guided setup for the Yomitan API, the dictionary option that looks words up through the
+  Yomitan already in your browser. Kimochi finds the helper your browser needs (its own or the
+  official one), installs its own in one click if you have none, shows how to turn the API on in
+  Yomitan, and tells you the moment it connects. It appears in the first-run guide and in
+  Settings → Dictionary.
+
+### Changed
+
+- The dictionary options have clearer names: **Built-in Yomitan** (a copy of Yomitan inside
+  Kimochi, set up with its own or your exported dictionaries) and **Yomitan API** (formerly
+  "Kimochi pop-up"). Your choice is kept.
+
+### Fixed
+
+- The Yomitan API helper now installs correctly on Windows, for every supported browser.
 
 ### Removed
 

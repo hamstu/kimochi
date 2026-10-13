@@ -7,7 +7,8 @@
  * - Hachidori, 10ten: the extension's options page from its own origin
  *   (`hachidori://localhost/settings.html`, `tenten://localhost/options.html`); the generic host
  *   injected into that frame relays its extension-page context to the overlay's hub.
- * - Kimochi's pop-up has no page of its own: a note and the way to Settings → Dictionary.
+ * - The Yomitan API (Kimochi's own pop-up) has no page of its own: a note and the way to
+ *   Settings → Dictionary.
  *
  * The title follows the SETTING; the page waits until this document's host is that engine's.
  * Navigation requests (an extension opening another of its pages) arrive as the window event
@@ -62,7 +63,7 @@ function acceptNavigation(engine: DictionaryEngine, url: unknown): string | null
 
 export default function DictionarySettingsPanel(): JSX.Element {
   const [engine] = useDictionaryEngine()
-  if (engine === 'custom-api') return <KimochiPopupNote />
+  if (engine === 'custom-api') return <YomitanApiNote />
   // The engine is chosen but not downloaded (or not yet): nothing can show its settings.
   if (documentEngine() === NO_ENGINE) return <NotDownloadedNote engine={engine} />
   // The page needs this document's host to be the engine's: after a switch the setting arrives
@@ -166,12 +167,12 @@ function NotDownloadedNote({ engine }: { engine: Exclude<DictionaryEngine, 'cust
   )
 }
 
-function KimochiPopupNote(): JSX.Element {
+function YomitanApiNote(): JSX.Element {
   return (
     <div className="dictionary-settings dictionary-settings-note">
       <p className="k-description">
-        The Kimochi pop-up has no settings page of its own: its server, pop-up size, audio and Anki
-        cards are all in Settings → Dictionary.
+        The Yomitan API uses the dictionaries in your browser&apos;s Yomitan, so there is nothing to
+        manage here. Its connection, pop-up size, audio and Anki cards are in Settings → Dictionary.
       </p>
       <div>
         <Button

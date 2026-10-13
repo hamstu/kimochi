@@ -1,6 +1,6 @@
 /**
  * Onboarding's dictionary-engine step. Kimochi ships no dictionary engine (EXTENSION_DOWNLOADS.md):
- * a first run chooses one here (Yomitan recommended), downloads it with the same progress block as
+ * a first run chooses one here (Built-in Yomitan recommended), downloads it with the same progress block as
  * the OCR models (pause, resume, retry, cancel), and can continue once it is ready. Offline, the
  * failure is shown with Retry, and another engine can be picked instead. Skipping is possible but
  * explicit, behind a warning that nothing will look words up until an engine is chosen in
@@ -14,6 +14,10 @@
  * route is moved to the next step first, so the reload lands there. The engine the setting already
  * names (Yomitan, by default) needs none of that: native moves the windows to it the moment its
  * download is ready.
+ *
+ * The Yomitan API is offered too. It needs Yomitan's download (for splitting text into words), so
+ * it downloads that, and its setup step is the Yomitan API wizard. Moving between Built-in Yomitan
+ * and the Yomitan API reloads nothing: they share the Yomitan host.
  */
 import { useState, type JSX } from 'react'
 import { useNavigate } from 'react-router'
@@ -24,13 +28,20 @@ import {
   DICTIONARY_ENGINES,
   applyDictionaryEngine,
   dictionaryEngineOf,
+  hostEngineOf,
   mirrorDictionaryEngine,
   popupTypeOf,
-  useDictionaryEngine
+  useDictionaryEngine,
+  type DictionaryEngine
 } from '../bridge/dictionaryEngine'
 import { useExtensionControls, useExtensionStatus } from '../bridge/extensions'
 import { formatBytes } from '@ui/model-download'
-import { EXTENSION_ENGINES, downloadButtonLabel, type ExtensionEngine } from '@ui/extension-download'
+import {
+  EXTENSION_ENGINES,
+  downloadButtonLabel,
+  downloadEngineFor,
+  type ExtensionEngine
+} from '@ui/extension-download'
 import { ModelDownload } from '../panels/settings/ModelDownload'
 import Step from './Step'
 import { StepActions } from './StepActions'
@@ -58,19 +69,18 @@ export default function EngineSetup(): JSX.Element {
   const navigate = useNavigate()
   const [, settings] = useDictionaryEngine()
   const saved = dictionaryEngineOf(settings.popupType)
-  const savedDownload: ExtensionEngine = saved === 'custom-api' ? 'yomitan' : saved
-  const [chosen, setChosen] = useState<ExtensionEngine>(savedDownload)
+  const [chosen, setChosen] = useState<DictionaryEngine>(saved)
   // The setting arrives after the first render: follow it until the user picks.
   const [touched, setTouched] = useState(false)
-  if (!touched && chosen !== savedDownload) setChosen(savedDownload)
-  const controls = useExtensionControls(chosen)
+  if (!touched && chosen !== saved) setChosen(saved)
+  const controls = useExtensionControls(downloadEngineFor(chosen))
   const status = controls.status
   const ready = status?.state === 'ready'
   const [error, setError] = useState<string | null>(null)
   const [switching, setSwitching] = useState(false)
   const [askSkip, setAskSkip] = useState(false)
 
-  const choose = (engine: ExtensionEngine): void => {
+  const choose = (engine: DictionaryEngine): void => {
     setError(null)
     setTouched(true)
     setChosen(engine)
@@ -78,7 +88,7 @@ export default function EngineSetup(): JSX.Element {
 
   const proceed = async (): Promise<void> => {
     setError(null)
-    if (savedDownload === chosen) {
+    if (saved === chosen) {
       // Native already runs (or is moving the windows to) this engine.
       void navigate(AFTER_ENGINE)
       return
@@ -94,6 +104,8 @@ export default function EngineSetup(): JSX.Element {
     mirrorDictionaryEngine(chosen)
     // Before the reload, so it lands on the next step.
     void navigate(AFTER_ENGINE)
+    // Built-in Yomitan and the Yomitan API share a host: nothing to reload.
+    if (hostEngineOf(chosen) === hostEngineOf(saved)) return
     try {
       await applyDictionaryEngine()
     } catch (caught) {
@@ -111,17 +123,17 @@ export default function EngineSetup(): JSX.Element {
       title="Choose a pop-up dictionary"
       lede="Kimochi looks words up with a pop-up dictionary engine. Choose one and Kimochi downloads it from its official release. You can switch at any time in Settings → Dictionary."
     >
-      <ChoiceGroup<ExtensionEngine>
+      <ChoiceGroup<DictionaryEngine>
         aria-label="Dictionary engine"
         className={style.engines}
         value={chosen}
         onValueChange={choose}
-        options={EXTENSION_ENGINES.map((engine) => ({
+        options={[...EXTENSION_ENGINES, 'custom-api' as const].map((engine) => ({
           value: engine,
           label: (
             <>
               <span className={style.engineName}>{DICTIONARY_ENGINES[engine].name}</span>
-              <EngineSize engine={engine} />
+              <EngineSize engine={downloadEngineFor(engine)} />
             </>
           ),
           detail: (

@@ -130,7 +130,7 @@ const setting = (key) => native.getSetting(key)
 /**
  * The dictionary engine whose host this document installed, as the injected scripts resolved it
  * at document start (DICTIONARY_ENGINES.md §2): the `localStorage` mirror, else native's prelude.
- * Read before this window rewrites the mirror. Kimochi's pop-up runs over the Yomitan host.
+ * Read before this window rewrites the mirror. The Yomitan API engine runs over the Yomitan host.
  */
 const readEngineMirror = () => {
   try {
@@ -2212,7 +2212,7 @@ async function capturePopups() {
  *
  * Yomitan's popup is a same-origin frame in this window, so it is scrolled directly: its
  * definitions are the per-dictionary `.definition-item`s, or whole `.entry`s when no entry
- * holds more than one. The Kimochi pop-up is its own window and is asked by event.
+ * holds more than one. The Yomitan API pop-up is its own window and is asked by event.
  */
 function controlPopup(control) {
   if ((setting('yomitanSettings')?.popupType ?? 'builtin') === 'custom-api') {
@@ -2890,7 +2890,7 @@ void native.snapshot().then(processView)
 
 // Scanning and rendering are live from here. The dictionary comes up behind them:
 // if it fails, lookups are unavailable and say so, but OCR still works. Which engine is the one
-// this document's host scripts installed (`hostedEngine`); Kimochi's pop-up runs over Yomitan's.
+// this document's host scripts installed (`hostedEngine`); The Yomitan API engine runs over Yomitan's.
 // No engine downloaded (a first run that skipped the choice, a removed engine, a pin bump still
 // downloading): nothing to start, and lookups say how to get one.
 async function startNoEngine() {

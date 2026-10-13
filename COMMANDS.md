@@ -72,7 +72,7 @@ Keys and defaults mirror `src/main/settings.ts`:
 `texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
 `gamepadSettings.{enabled,preferredGamepadIndex}` (enabled defaults true),
 `lastSelectedSource.{sourceId,type,name,appName}`,
-`yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Yomitan) \| `'custom-api'` \| `'hachidori'` \| `'tenten'`), `serverSettings.{mode}` (`'cloud'`),
+`yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Built-in Yomitan) \| `'custom-api'` (Yomitan API) \| `'hachidori'` \| `'tenten'`; an empty `customApiUrl` means `http://127.0.0.1:19633`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
 (`false, 100, true, 0.75`), `overlayOpacity` (80), `liveOverlayEnabled` (false),
 `ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'`;
@@ -585,7 +585,7 @@ engine, `none` included, whatever the setting says. Otherwise it reloads
 it after saving `yomitanSettings.popupType` and writing the `localStorage` mirror
 `kimochi.dictionaryEngine`: the reload re-runs the document-start scripts, which read the
 new engine. The mirror and the prelude name the *host* engine: `'builtin'` and
-`'custom-api'` both resolve to `yomitan`, because the Kimochi pop-up tokenises and looks
+`'custom-api'` both resolve to `yomitan`, because the Yomitan API engine tokenises and looks
 words up through the Yomitan backend in the overlay, so switching between those two
 reloads nothing. A window not built yet needs nothing, because its prelude reads the store when
 it is built. Call it once per switch: Settings is the only caller on a switch (the overlay
@@ -714,6 +714,54 @@ the effective focus) from "no signal yet" (where text must be shown, never hidde
 The tray uses the Electron build's macOS template icon, a left-click popover positioned
 under the icon, and a right-click menu of Show Controls / Settings / Quit. Emits
 `tray:action` `{action}`.
+
+## Yomitan API setup
+
+The Yomitan API engine (`popupType: 'custom-api'`) looks words up through the Yomitan in the
+user's browser. Yomitan talks to Kimochi through a native-messaging **helper** (host name
+`yomitan_api`) that the *browser* starts while Yomitan's "Enable Yomitan API" setting is on; the
+helper serves HTTP on `127.0.0.1:19633` (an empty `customApiUrl` means that address). Installed
+and reachable are separate facts and are reported separately: installed but not reachable
+normally means the browser is closed, the setting is off, or the browser suspended the helper.
+
+| Command | Signature |
+| --- | --- |
+| `yomitan_host_status` | `() -> HostStatus` |
+| `yomitan_api_check` | `({url}) -> ApiStatus` |
+| `install_yomitan_native_host` | `() -> string` (the installer's output) |
+| `yomitan_probe` | `({baseUrl}) -> latencyMs` (the Log's reader: a `/tokenize` round trip) |
+| `yomitan_tokenize`, `yomitan_ankifields` | the Log's reader requests to the API |
+
+`yomitan_host_status` only reads. It looks for `yomitan_api.json` in every browser's
+`NativeMessagingHosts` folder (macOS `~/Library/Application Support/<Google/Chrome, Chromium,
+BraveSoftware/Brave-Browser, Microsoft Edge, Vivaldi, Arc/User Data, Mozilla>`; Linux
+`~/.config/<google-chrome, chromium, BraveSoftware/Brave-Browser, microsoft-edge, vivaldi>` and
+`~/.mozilla/native-messaging-hosts`), and on Windows reads the default value of
+`HKCU\Software\<Google\Chrome | Chromium | BraveSoftware\Brave-Browser | Microsoft\Edge | Vivaldi |
+Mozilla>\NativeMessagingHosts\yomitan_api` (`reg query`) and reads the manifest it names.
+`HostStatus` is `{os, installed, method, browsers: [{browser, browserName, manifestPath, hostPath,
+method, hostExists, problem}]}`. `method` is classified from the program the manifest names:
+`'official'` (yomidevs/yomitan-api: `yomitan_api.py`, or its `yomitan_api.bat` wrapper),
+`'kimochi'` (the Go helper: `yomitan-host-*`, `go-yomitan-native-messaging-host`) or `'unknown'`;
+it is null when the manifest cannot be read as a `yomitan_api` manifest. `installed` is true when
+at least one registration's program exists, and the top-level `method` prefers Kimochi's, then
+the official one.
+
+`yomitan_api_check` POSTs `/serverVersion` (answered by the helper itself, 1.5 s timeout), then
+`/yomitanVersion` (a round trip into the extension, 4 s): `ApiStatus` is `{url, server, yomitan,
+yomitanVersion, latencyMs, error}`. Connection failures are answers, not errors; only an address
+`validate_configured_api_url` refuses (`invalid:`) rejects. Not callable from `overlay`, like
+`yomitan_request`. The setup wizard calls it every second while it is open (never overlapping),
+Settings → Dictionary every five seconds.
+
+`install_yomitan_native_host` is the only command that writes registrations, and only runs from
+the wizard's Install button. It downloads the latest release asset `yomitan-host-<os>-<arch>` of
+[hamstu/go-yomitan-native-messaging-host](https://github.com/hamstu/go-yomitan-native-messaging-host).
+On macOS and Linux the binary's own `install` copies it into every browser's folder and writes the
+manifests there; the download is then deleted. On Windows Kimochi keeps the binary at
+`<app local data>/yomitan-host/yomitan-host.exe`, writes `yomitan_api.json` (Chromium
+`allowed_origins`) and `yomitan_api_firefox.json` (Firefox `allowed_extensions`) beside it, and
+sets each browser's `HKCU` key above with `reg add`.
 
 ## Dictionary engine downloads
 

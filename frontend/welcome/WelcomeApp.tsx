@@ -48,8 +48,8 @@ const STEP_OF: Record<string, StepId> = {
 }
 
 /**
- * Whether the dictionary the setting names can be used: its download (Kimochi's pop-up needs
- * Yomitan's) is ready. Null until native answers (and on a backend without engine downloads).
+ * Whether the dictionary the setting names can be used: its download (the Yomitan API needs
+ * Built-in Yomitan's) is ready. Null until native answers (and on a backend without engine downloads).
  */
 function useDictionaryReady(): boolean | null {
   const [engine] = useDictionaryEngine()

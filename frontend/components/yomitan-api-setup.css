@@ -1,0 +1,193 @@
+/* The Yomitan API setup (YomitanApiSetup.tsx), in onboarding and in the Settings dialog. */
+
+.yomitan-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-4);
+  max-width: 34rem;
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+}
+
+/* The three steps: a quiet row of numbered marks, the current one in accent, done ones ticked. */
+.yomitan-setup-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--k-space-1) var(--k-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.yomitan-setup-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-1-5) 0 var(--k-space-0-5);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: none;
+  font: inherit;
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text-2);
+  cursor: pointer;
+}
+.yomitan-setup-step:hover {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.yomitan-setup-step:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+.yomitan-setup-step[data-current] {
+  color: var(--k-text);
+}
+.yomitan-setup-step-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 999px;
+  background: var(--k-hover);
+  font-size: var(--k-text-xs);
+  line-height: 1;
+  color: var(--k-text-2);
+}
+.yomitan-setup-step-mark > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.yomitan-setup-step[data-current] .yomitan-setup-step-mark {
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+}
+.yomitan-setup-step[data-done] .yomitan-setup-step-mark {
+  background: var(--k-ok-soft);
+  color: var(--k-ok-text);
+}
+
+.yomitan-setup-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--k-space-3);
+}
+.yomitan-setup-body > .k-callout {
+  align-self: stretch;
+}
+
+.yomitan-setup-text {
+  margin: 0;
+  line-height: var(--k-leading-lg);
+  text-wrap: pretty;
+}
+.yomitan-setup-text strong,
+.yomitan-setup-list strong {
+  font-weight: var(--k-weight-semibold);
+}
+
+.yomitan-setup-aside {
+  margin: 0;
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+  text-wrap: pretty;
+}
+
+.yomitan-setup-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1-5);
+  margin: 0;
+  padding-left: var(--k-space-5);
+  line-height: var(--k-leading-md);
+}
+
+/* A status line: a dot (or spinner) and what is true now. */
+.yomitan-setup-status {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  margin: 0;
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+}
+.yomitan-setup-status > :first-child {
+  flex: none;
+}
+
+.yomitan-setup-link-icon {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+  margin-left: var(--k-space-0-5);
+  vertical-align: -0.1em;
+}
+
+.yomitan-setup-details {
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+}
+.yomitan-setup-details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.yomitan-setup-details ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1-5);
+  margin: var(--k-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.yomitan-setup-path {
+  display: block;
+  color: var(--k-text-3);
+  overflow-wrap: anywhere;
+}
+.yomitan-setup-problem {
+  color: var(--k-warn-text);
+}
+
+.yomitan-setup-pre {
+  margin: var(--k-space-1) 0;
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The dialog's footer slot, which the wizard fills with its buttons. */
+.yomitan-setup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--k-space-2);
+  width: 100%;
+}
+
+/* Settings → Dictionary: the connection row's label with its dot. */
+.yomitan-setup-row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+
+/* Links that open pages are buttons; they read as links in a sentence. */
+.yomitan-setup button.k-link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.yomitan-setup button.k-link:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+  border-radius: var(--k-radius-sm);
+}

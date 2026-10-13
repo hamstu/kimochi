@@ -1,9 +1,9 @@
-/** Opens the Kimochi pop-up for a term at a desktop point, once installed. */
+/** Opens the Yomitan API pop-up for a term at a desktop point, once installed. */
 let showTerm = null;
 
 /** The controller's word cursor: look `term` up as if it had been clicked at (x, y). */
 export async function lookupTerm(term, x, y, sentence) {
-  if (!showTerm) throw Error("The Kimochi pop-up is not ready");
+  if (!showTerm) throw Error("The Yomitan API pop-up is not ready");
   await showTerm(term, x, y, sentence, false);
 }
 
@@ -48,7 +48,8 @@ export async function installApiLookup() {
         cursorY,
         width: reader.popoverWidth || 480,
         height: reader.popoverHeight || 360,
-        baseUrl: settings.customApiUrl ?? "http://localhost:8765",
+        // Empty means the helper's default address (resolveYomitanApiUrl in yomitan-api-setup.ts).
+        baseUrl: settings.customApiUrl?.trim() || "http://127.0.0.1:19633",
         focus,
         sentence,
         includeMedia: Boolean(reader.audioEnabled || reader.ankiEnabled),

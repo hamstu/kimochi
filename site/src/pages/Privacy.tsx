@@ -169,8 +169,10 @@ export function Privacy() {
           and its terms.
         </li>
         <li>
-          <strong>Yomitan API helper.</strong> If you install the optional
-          native helper from settings, it is downloaded from GitHub.
+          <strong>Yomitan API helper.</strong> If you choose the Yomitan API
+          dictionary option and install its optional native helper, the helper
+          is downloaded from GitHub. Lookups then go to the Yomitan in your own
+          browser, on your computer.
         </li>
         <li>
           <strong>Clipboard and WebSocket</strong> inputs and outputs only talk

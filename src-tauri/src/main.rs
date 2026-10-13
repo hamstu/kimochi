@@ -2414,6 +2414,8 @@ fn main() {
             reader::explain::explain_cancel,
             reader::explain::explain_run,
             reader::yomitan_install::install_yomitan_native_host,
+            reader::yomitan_host::yomitan_host_status,
+            reader::yomitan_host::yomitan_api_check,
             reader::popover::show_popover,
             reader::popover::reader_popup_ready,
             reader::popover::reader_popup_focus,
@@ -2829,7 +2831,7 @@ fn main() {
 
             // The active extension engine's hidden window (DICTIONARY_ENGINES.md §5.4), where
             // its background and offscreen documents keep first-party, persistent storage.
-            // Yomitan (and the Kimochi pop-up) need none. A failure is recorded, not fatal: the
+            // Yomitan (and the Yomitan API) need none. A failure is recorded, not fatal: the
             // overlay's hub asks again when it starts and reports why the engine is down.
             {
                 let engine = extensions::dictionary_engine(&store);

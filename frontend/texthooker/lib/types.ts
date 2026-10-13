@@ -161,7 +161,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   dictionaryMode: "builtin",
   autoMatchSource: true,
   version: 3,
-  yomitanApiUrl: API_URLS.YOMITAN_FALLBACK,
+  yomitanApiUrl: API_URLS.YOMITAN,
   webhookPort: 7890,
   fontSizePx: 14,
   alwaysOnTop: false,

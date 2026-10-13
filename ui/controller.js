@@ -51,11 +51,11 @@ export function scrollSpeed(y) {
  * @param {() => void} context.redraw redraw the text overlay (it is held visible in word mode)
  * @param {() => ((action: string, params: object) => Promise<any>)|null} context.dictionary Yomitan's backend API, once ready
  * @param {() => object} context.buttons the command buttons from settings (`controllerButtons`)
- * @param {() => string} context.popupType `yomitanSettings.popupType`: only `custom-api` (Kimochi
- *   pop-up) is told apart; `builtin` (Yomitan), `hachidori` and `tenten` all look up by range
+ * @param {() => string} context.popupType `yomitanSettings.popupType`: only `custom-api` (the Yomitan
+ *   API pop-up) is told apart; `builtin` (Yomitan), `hachidori` and `tenten` all look up by range
  * @param {(range: Range) => Promise<boolean>} context.lookupRange open the dictionary engine's popup
  *   on a range (Yomitan's frontend, or the extension host's `lookupRange`)
- * @param {(term: string, x: number, y: number, sentence: string) => Promise<void>} context.lookupTerm open the Kimochi pop-up
+ * @param {(term: string, x: number, y: number, sentence: string) => Promise<void>} context.lookupTerm open the Yomitan API pop-up
  * @param {() => void} context.dismiss close whichever popup is open
  * @param {(element: HTMLElement) => ({x: number, y: number, width: number, height: number, line: number}|null)[]|null} context.charRects
  *   where each character of a word-mode box is on the source, by code unit; null in grouped mode

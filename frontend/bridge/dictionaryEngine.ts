@@ -74,7 +74,7 @@ function readMirror(): string | null {
 
 /**
  * The engine whose host this document's scripts installed at document start: Yomitan, Hachidori
- * or 10ten (Kimochi's pop-up runs over the Yomitan host; see `hostEngineOf`), or `'none'` when the
+ * or 10ten (the Yomitan API engine runs over the Yomitan host; see `hostEngineOf`), or `'none'` when the
  * selected engine was not downloaded and no host installed.
  */
 export function documentEngine(): HostEngine {
@@ -89,7 +89,7 @@ export const documentPlaceholder = (): DictionaryEngine => {
 
 /**
  * Writes the document-start mirror, so windows (re)loaded from now on install that engine's host.
- * Kimochi's pop-up is mirrored as Yomitan, whose host it runs over (`hostEngineOf`).
+ * The Yomitan API engine is mirrored as Yomitan, whose host it runs over (`hostEngineOf`).
  */
 export function mirrorDictionaryEngine(engine: DictionaryEngine): void {
   try {
