@@ -16,7 +16,7 @@
  * `animate` plays the build (see KimochiLogo.module.css); `settled` (or reduced motion, in the
  * CSS) shows the final state at once. Without `animate` the icon is static.
  */
-import { useId, type JSX } from 'react'
+import { useEffect, useId, useState, type JSX } from 'react'
 import style from './KimochiLogo.module.css'
 
 /** `squircle()` in compose.mjs at the full 1024 tile. */
@@ -49,24 +49,29 @@ const BRACKETS = [
   { d: 'M286.72 855.04H168.96V737.28', corner: 'bl' }
 ] as const
 
+/** Whether the window is on a 1x display, where the scaled-down icon's brackets fall between pixels. */
+function useLowDpi(): boolean {
+  const [low, setLow] = useState(() => typeof window !== 'undefined' && window.devicePixelRatio < 1.5)
+  useEffect(() => {
+    const query = window.matchMedia('(max-resolution: 1.49dppx)')
+    const update = (): void => setLow(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+  return low
+}
+
 /**
- * The icon at title-bar sizes (up to 24 px): a 16-unit grid, pixel-aligned instead of the 1024
- * tile scaled down. The brackets are 1 px strokes on half-pixel coordinates, the キ a 2 px stem
- * with 1 px bars on whole pixels, so it stays crisp at 1x and 2x alike (at 16 px the real
- * outline's tilt only blurs). `shape-rendering: crispEdges` keeps the tile edge from softening.
+ * The icon for title-bar sizes on 1x displays. The tile and the キ are the real icon's shapes
+ * (the glyph outline keeps its proportions; antialiasing suits it), but the brackets are redrawn
+ * as 1 px strokes on half-pixel coordinates of a 16-unit grid, so they land on whole pixels
+ * instead of smearing across two. On HiDPI the scaled icon is already sharp, so it is used as is.
  */
 export function KimochiMark({ size = 16, className }: { size?: number; className?: string }): JSX.Element {
   const id = useId().replace(/:/g, '')
   return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      shapeRendering="crispEdges"
-      role="img"
-      aria-label="Kimochi"
-    >
+    <svg className={className} width={size} height={size} viewBox="0 0 16 16" role="img" aria-label="Kimochi">
       <defs>
         <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#5a7ce6" />
@@ -74,18 +79,19 @@ export function KimochiMark({ size = 16, className }: { size?: number; className
           <stop offset="1" stopColor="#2c4cbf" />
         </linearGradient>
       </defs>
-      <rect width="16" height="16" rx="4" fill={`url(#${id}-fill)`} />
+      <rect width="16" height="16" rx="4" fill={`url(#${id}-fill)`} shapeRendering="crispEdges" />
       <path
         d="M2.5 5.5V2.5H5.5M10.5 2.5H13.5V5.5M13.5 10.5V13.5H10.5M5.5 13.5H2.5V10.5"
         fill="none"
         stroke="#fff"
-        strokeOpacity="0.8"
+        strokeOpacity="0.82"
         strokeWidth="1"
+        shapeRendering="crispEdges"
       />
-      <g fill="#fff">
-        <rect x="7" y="3" width="2" height="10" />
-        <rect x="5" y="6" width="6" height="1" />
-        <rect x="4" y="9" width="8" height="1" />
+      <g transform={`scale(${16 / 1024})`}>
+        <g transform={KI_TRANSFORM}>
+          <path d={KI} fill="#fff" />
+        </g>
       </g>
     </svg>
   )
@@ -105,7 +111,8 @@ export default function KimochiLogo({
   className?: string
 }): JSX.Element {
   const id = useId().replace(/:/g, '')
-  if (size <= 24 && !animate) return <KimochiMark size={size} className={className} />
+  const lowDpi = useLowDpi()
+  if (size <= 24 && !animate && lowDpi) return <KimochiMark size={size} className={className} />
   const ref = (name: string): string => `${id}-${name}`
   const url = (name: string): string => `url(#${ref(name)})`
   return (
