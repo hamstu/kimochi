@@ -24,6 +24,18 @@
  *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
+ *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
+ *                    paused, failed, verifying, ready
+ *   ?model=<state>   OCR model downloads (preview-models.ts)
+ *
+ * Onboarding (welcome.html):
+ *   ?step=intro|permission|picker|ocr|engine|dictionaries|dictionary-settings|done|error
+ *                    open that step (error: the last step's save failed). Every step stays
+ *                    navigable from there; ?platform=linux makes the capture step the picker
+ *   ?permission=denied  macOS Screen Recording not granted yet (default: granted)
+ *   ?popup=hachidori|tenten  the dictionary engine already chosen (the setup step follows it)
+ *   ?dict=fail|none  Jitendex quick setup fails while importing, or Yomitan's backend is not
+ *                    reachable (default: Set up Jitendex runs through every stage in about 6 s)
  *   ?embed=1         embedded in the marketing site's live demo (vite.demo.config.ts builds this page
  *                    into site/public/demo/): the lines the site's game plays are left out of the
  *                    seeded log, the page never moves focus until clicked and never scrolls its
@@ -45,6 +57,7 @@ import {
   thumbnailSvg
 } from './demo-data'
 import { MODEL_HANDLERS, onModelSettingSet } from './preview-models'
+import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -113,7 +126,10 @@ function previewCapabilities(): PlatformCapabilities {
     ...DEFAULT_CAPABILITIES_MACOS,
     osVersion: '15.5',
     arch: 'aarch64',
-    capture: { ...DEFAULT_CAPABILITIES_MACOS.capture, authorization: 'granted' },
+    capture: {
+      ...DEFAULT_CAPABILITIES_MACOS.capture,
+      authorization: params.get('permission') === 'denied' ? 'denied' : 'granted'
+    },
     input: {
       ...DEFAULT_CAPABILITIES_MACOS.input,
       keyTrigger: { ...DEFAULT_CAPABILITIES_MACOS.input.keyTrigger, permission: 'granted' }
@@ -272,7 +288,7 @@ function panelInfo(label: string): Record<string, unknown> {
     native: { level: 3, opaque: false, ignores_mouse: false },
     bounds: { x: 200, y: 120, width: innerWidth, height: innerHeight },
     scale: devicePixelRatio,
-    pinned: label === 'log',
+    pinned: label === 'log' || label === 'welcome',
     focused: true,
     resizable: label !== 'tray-popover'
   }
@@ -294,9 +310,12 @@ const note = (what: string, detail: unknown): null => {
 /** Every command the React windows call, with a plausible response. */
 const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
+  ...EXTENSION_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => {
+    if (a?.key === 'hasCompletedOnboarding' && params.get('step') === 'error')
+      throw 'io: the settings file is read-only (preview)'
     publish(String(a?.key), a?.value)
     onModelSettingSet(String(a?.key), a?.value)
     return null
@@ -397,7 +416,7 @@ const HANDLERS: Record<string, Handler> = {
       )
     ),
   permission: () => true,
-  permission_status: () => 'granted',
+  permission_status: () => (params.get('permission') === 'denied' ? 'denied' : 'granted'),
   capture_preview: () => ({ frame: demoCapture(), error: null }),
   capture_frame: () => demoCapture(),
   scan: () => null,
@@ -600,13 +619,81 @@ function listenToEmbedder(): void {
 // `preloadPanelDictionary` imports `/ui/panel-yomitan.js` (the engine resolves to Yomitan here: no
 // mirror, no prelude); vite.preview.config.ts serves a stub there.
 
+// ---------------------------------------------------------------- onboarding (welcome.html)
+
+const WELCOME_ROUTES: Record<string, string> = {
+  intro: '/',
+  permission: '/screen-recording-permission',
+  picker: '/system-picker',
+  ocr: '/ocr',
+  engine: '/engine',
+  dictionaries: '/dictionaries',
+  'dictionary-settings': '/dictionary-settings',
+  done: '/done',
+  error: '/main'
+}
+
+/** The stages Yomitan's quick setup (`ui/setup-dictionaries.js`) reports, with a fake clock. */
+function installDictionarySetup(): void {
+  if (params.get('dict') === 'none') return
+  const fail = params.get('dict') === 'fail'
+  let started = 0
+  const job = (): Record<string, unknown> => {
+    const t = Date.now() - started
+    if (t < 1500) return { id: 'job-1', stage: 'downloading' }
+    if (t < 4500 || fail) {
+      if (fail && t >= 2500)
+        return { id: 'job-1', stage: 'failed', error: 'Dictionary import failed: the archive is incomplete (preview).' }
+      return { id: 'job-1', stage: 'importing', progress: { index: Math.min(12, Math.round((t - 1500) / 250)), count: 12 } }
+    }
+    if (t < 5200) return { id: 'job-1', stage: 'verifying' }
+    if (t < 5800) return { id: 'job-1', stage: 'enabling' }
+    return { id: 'job-1', stage: 'complete', title: 'Jitendex.org [2026-10-01]', entries: 287_431 }
+  }
+  ;(window as unknown as { __extensionHost: unknown }).__extensionHost = {
+    toBackend: async ({ params: request }: { params: { command: string } }) => {
+      switch (request.command) {
+        case 'catalog':
+          return {
+            catalog: [
+              {
+                id: 'jitendex',
+                title: 'Jitendex',
+                description:
+                  'Japanese–English definitions. Downloads on demand; nothing is installed without your choice.'
+              }
+            ],
+            dictionaries: []
+          }
+        case 'start':
+          started = Date.now()
+          return { id: 'job-1' }
+        case 'status':
+          return job()
+        case 'practice':
+          return { text: '日本語', matches: 12 }
+        default:
+          return null
+      }
+    }
+  }
+}
+
+function setupWelcome(): void {
+  const route = WELCOME_ROUTES[params.get('step') ?? '']
+  if (route) history.replaceState(null, '', `${location.pathname}${location.search}#${route}`)
+  installDictionarySetup()
+}
+
 // ---------------------------------------------------------------- entry point
 
 export async function setupPreview(page: PreviewPage): Promise<string> {
   const label = page === 'panel' ? (params.get('window') ?? 'log') : PAGE_LABELS[page]
   mockWindows(label, 'log', 'settings', 'diagnostics')
   installIpc(label)
+  startSeededDownloads()
   document.documentElement.dataset.preview = label
+  if (page === 'welcome') setupWelcome()
 
   const embed = params.get('embed') === '1'
   if (embed) listenToEmbedder()

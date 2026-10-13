@@ -39,9 +39,36 @@
         <tr><td><a href="./panel.html?window=diagnostics">Diagnostics</a></td><td>680 × 720</td></tr>
         <tr><td><a href="./tray-popover.html">Tray popover</a></td><td>320 × 420</td></tr>
         <tr><td><a href="./reader-popup.html">Reader popup (dictionary)</a></td><td>480 × 360</td></tr>
-        <tr><td><a href="./welcome.html">Welcome</a></td><td>—</td></tr>
+        <tr><td>Onboarding:
+          <a href="./welcome.html">from the start</a> ·
+          <a href="./welcome.html?step=intro">Intro</a> ·
+          <a href="./welcome.html?step=permission&amp;permission=denied">Screen Recording (not granted)</a> ·
+          <a href="./welcome.html?step=permission">(granted)</a> ·
+          <a href="./welcome.html?step=picker&amp;platform=linux">System picker (Linux)</a> ·
+          <a href="./welcome.html?step=ocr">OCR engine</a> ·
+          <a href="./welcome.html?step=ocr&amp;model=downloading">(model downloading)</a></td><td>720 × 620<br />min 600 × 520</td></tr>
+        <tr><td>Onboarding, dictionary engine:
+          <a href="./welcome.html?step=engine">not downloaded</a> ·
+          <a href="./welcome.html?step=engine&amp;ext=downloading">downloading</a> ·
+          <a href="./welcome.html?step=engine&amp;ext=paused">paused</a> ·
+          <a href="./welcome.html?step=engine&amp;ext=failed">failed</a> ·
+          <a href="./welcome.html?step=engine&amp;ext=verifying">verifying</a> ·
+          <a href="./welcome.html?step=engine&amp;ext=ready">ready</a></td><td>720 × 620</td></tr>
+        <tr><td>Onboarding, engine setup:
+          <a href="./welcome.html?step=dictionaries&amp;ext=ready">Yomitan (Jitendex)</a> ·
+          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;dict=fail">(import fails)</a> ·
+          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;dict=none">(backend unreachable)</a> ·
+          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;popup=hachidori">Hachidori</a> ·
+          <a href="./welcome.html?step=dictionaries&amp;ext=ready&amp;popup=tenten">10ten</a> ·
+          <a href="./welcome.html?step=dictionary-settings&amp;ext=ready">Import or manage</a></td><td>720 × 620</td></tr>
+        <tr><td>Onboarding, last step:
+          <a href="./welcome.html?step=done&amp;ext=ready">ready</a> ·
+          <a href="./welcome.html?step=done">no dictionary (skipped)</a> ·
+          <a href="./welcome.html?step=error&amp;ext=ready">setup could not be saved</a></td><td>720 × 620</td></tr>
       </table>
-      <p style="margin-top: 24px">Add <code>&amp;empty=1</code> to any panel URL for the first-run (no data) state.</p>
+      <p style="margin-top: 24px">Add <code>&amp;empty=1</code> to any panel URL for the first-run (no data) state.
+        Add <code>&amp;theme=light</code> or <code>&amp;theme=dark</code> to force an appearance. Onboarding parameters are listed in
+        <code>frontend/dev/preview-setup.ts</code>.</p>
     </main>
   </body>
 </html>
