@@ -37,6 +37,9 @@ sha2 = "0.10"
 flate2 = "1.1"
 crc32fast = "1.5"
 png = "0.18"
+# Google Lens OCR (google_lens.rs): its request and response are protobuf, declared by hand with
+# prost's derive. Already in the lock file.
+prost = "0.14"
 tungstenite = "0.30"
 arboard = "3.6"
 gilrs = "0.11"

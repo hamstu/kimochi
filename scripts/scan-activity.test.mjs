@@ -21,6 +21,7 @@ test('engines are named as the settings name them', () => {
   assert.equal(engineName('meikiocr'), 'MeikiOCR')
   assert.equal(engineName('local'), 'MeikiOCR')
   assert.equal(engineName('cloud'), 'Cloud OCR')
+  assert.equal(engineName('googlelens'), 'Google Lens')
   assert.equal(engineName('nonsense'), 'the OCR engine')
   assert.deepEqual(said(recognising('mangaocr')), ['Recognising with Manga OCR…', 'busy'])
 })

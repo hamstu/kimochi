@@ -34,7 +34,7 @@ const AGREED = {
   overlayOpacity: 80,
   liveOverlayEnabled: false,
   scannedTextFontSize: 14,
-  ocrMode: 'cloud',
+  ocrMode: 'googlelens',
   serverSettings: { mode: 'cloud' },
   audioSettings: { voiceId: 'j210dv0vWm7fCknyQpbA' },
   autoScanSettings: { enabled: false, scanDelay: 500 },
@@ -85,6 +85,12 @@ test('the shared schema matches the agreed contract', () => {
     assert.deepEqual(SETTINGS_DEFAULTS[key], expected, `default for "${key}"`)
   }
   assert.equal(DEFAULT_VOICE_ID, 'j210dv0vWm7fCknyQpbA')
+})
+
+test('new installs default to Google Lens in the Rust store too', async () => {
+  // The Rust store merges its own copy of the defaults; it must name the same engine.
+  const rust = await readFile(new URL('../src-tauri/src/settings.rs', import.meta.url), 'utf8')
+  assert.match(rust, /"ocrMode": "googlelens"/)
 })
 
 test('serverSettings is an object, never a flat scalar', () => {

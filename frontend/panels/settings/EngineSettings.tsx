@@ -120,6 +120,7 @@ export function EngineSettings({
     case 'meikiocr':
     case 'mangaocr':
       return <ModelDownload controls={model} emphasis={emphasis} />
+    case 'googlelens':
     case 'oneocr':
     case 'livetext':
       return null

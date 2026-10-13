@@ -13,6 +13,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- Google Lens is a new OCR engine, and the default for new installs: accurate on Japanese,
+  horizontal or vertical, with nothing to download. It sends each capture to Google, so choose a
+  local engine in Settings → OCR & Overlay if you'd rather nothing leave your computer. Existing
+  installs keep the engine they use.
+
 - Kimochi updates itself. A bundle checks GitHub Releases quietly after launch and every six
   hours; a found update appears above Settings in the sidebar, where you download it and choose
   when to restart. Settings → General → Updates checks on demand and shows the version.

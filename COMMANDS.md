@@ -75,9 +75,11 @@ Keys and defaults mirror `src/main/settings.ts`:
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Yomitan) \| `'custom-api'` \| `'hachidori'` \| `'tenten'`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
 (`false, 100, true, 0.75`), `overlayOpacity` (80), `liveOverlayEnabled` (false),
-`ocrMode` (`'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'`, default `'cloud'`; a stored
-`'local'` reads as `'meikiocr'`, and a stored `'websocket'` — the removed OwOCR mode — as the
-default), `endpoint` (unset by default — see below).
+`ocrMode` (`'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'`;
+`'local'` is the retired name for `'meikiocr'`, and a stored `'websocket'` — the removed OwOCR
+mode — reads as the default), default `'googlelens'` for a new install only: a settings file that
+exists but never recorded `ocrMode` loads as `'cloud'`, the engine it was using. `endpoint` (unset
+by default — see below).
 
 **The OCR endpoint follows `serverSettings.mode` unless genuinely overridden.** A custom
 `endpoint` wins; otherwise the URL is derived as `<base>/detect-text` from the mode
@@ -249,7 +251,7 @@ crop changes on the same source**, since the old text no longer matches the new 
 | `permission` | `() -> bool` — **requests** Screen Recording access |
 | `permission_status` | `() -> "granted" \| "not_granted"` — read-only, never prompts |
 | `capture_frame` | `({request}) -> {id, info, url}` |
-| `ocr_frame` | `({id}) -> {id, info, ocr}` — pure |
+| `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, and `'livetext'` / `'oneocr'` on their OS) |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
 | `scan` | `({request, ocr}) -> {id, info, ocr}` |
 | `clear` | `() -> ()` |
@@ -919,7 +921,9 @@ fail silently at runtime.
 dictionary settings window go through the same plugin —
 allowing only the local Yomitan API (`19633`) and AnkiConnect (`8765`), plus the dictionary hosts the engines
 download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`). It is deliberately not a general internet grant. Kimochi's own server (cloud OCR,
-text to speech) is deliberately absent: it takes an access key, so only Rust calls it.
+text to speech) is deliberately absent: it takes an access key, so only Rust calls it. Google Lens
+(`ocrMode: 'googlelens'`) needs nothing here either: `ocr_frame` posts the frame to
+`lensfrontend-pa.googleapis.com` from Rust (`src-tauri/src/google_lens.rs`), never from a webview.
 
 ## Platform gaps
 

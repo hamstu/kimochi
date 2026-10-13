@@ -30,7 +30,7 @@ export interface EngineSelection {
 }
 
 export function useEngineSelection(): EngineSelection {
-  const [ocrMode, setOcrMode] = useSetting<OcrMode>('ocrMode', 'cloud')
+  const [ocrMode, setOcrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
   const [pick, setPick] = useState<{ mode: OcrMode; status: ModelStatus | null } | null>(null)
   // A later pick supersedes a status request still in flight for an earlier one.
   const ticket = useRef(0)

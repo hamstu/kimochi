@@ -8,7 +8,7 @@ export function Privacy() {
     <Prose
       title="Privacy"
       lede="Kimochi is a desktop app with no accounts and no analytics. Most of what it does happens on your computer. This page lists exactly what leaves it, and when."
-      updated="2026-10-09"
+      updated="2026-10-13"
     >
       <h2 id="summary">The short version</h2>
       <ul>
@@ -41,7 +41,8 @@ export function Privacy() {
         <li>
           <strong>Screen and window captures.</strong> Frames are held in memory
           while Kimochi reads them and are not saved to disk or uploaded, except
-          to a cloud OCR service if you use one (see below).
+          to an online OCR service (Google Lens or cloud OCR) if you use one
+          (see below).
         </li>
         <li>
           <strong>Recognised text and the Log.</strong> OCR results, the line
@@ -71,6 +72,19 @@ export function Privacy() {
       <h2 id="online">What leaves your computer, and when</h2>
       <p>
         These features contact a server. Each one only does so when you use it.
+      </p>
+
+      <h3>Google Lens</h3>
+      <p>
+        Google Lens is the default engine for new installs. When it is selected
+        and you scan (manually or with Auto OCR), Kimochi sends an image of the
+        captured region straight from your computer to Google&rsquo;s Lens
+        service at <code>lensfrontend-pa.googleapis.com</code> (the one Chrome
+        uses for Google Lens) and receives the recognised text. The image does
+        not pass through our servers, and we never see it. Google processes it
+        under its own terms and{" "}
+        <a href="https://policies.google.com/privacy">privacy policy</a>,
+        which describe what it keeps.
       </p>
 
       <h3>Kimochi cloud OCR</h3>

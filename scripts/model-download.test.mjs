@@ -268,7 +268,7 @@ test('an OS-specific engine is offered only on its OS', () => {
   assert.equal(engineOffered('oneocr', 'windows'), true)
   assert.equal(engineOffered('oneocr', 'macos'), false)
   for (const os of ['macos', 'windows', 'linux'])
-    for (const mode of ['cloud', 'meikiocr', 'mangaocr']) assert.equal(engineOffered(mode, os), true)
+    for (const mode of ['googlelens', 'cloud', 'meikiocr', 'mangaocr']) assert.equal(engineOffered(mode, os), true)
 })
 
 test('Kimochi cloud is listed only with an access key, or while it is still selected', () => {
@@ -289,8 +289,10 @@ test('cloudAccess defaults to false and is read from the payload', () => {
 
 test('every engine has the copy the chooser shows', () => {
   const modes = Object.keys(OCR_MODES)
-  for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr']) assert.ok(modes.includes(mode), mode)
+  for (const mode of ['googlelens', 'cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr']) assert.ok(modes.includes(mode), mode)
   assert.equal(modes.includes('websocket'), false, 'OwOCR was removed')
+  // Google Lens leads the list: it is the default for new installs.
+  assert.equal(modes[0], 'googlelens')
   for (const [mode, info] of Object.entries(OCR_MODES)) {
     for (const field of ['label', 'name', 'tagline', 'description', 'requirements']) {
       assert.equal(typeof info[field], 'string', `${mode}.${field}`)

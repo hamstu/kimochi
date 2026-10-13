@@ -196,7 +196,7 @@ export function OcrTab(): ReactNode {
 
       <SettingsSection
         title="Change detection"
-        description="Automatic scanning reads the screen locally several times a second and only spends a Cloud OCR request once the text stops changing."
+        description="Automatic scanning reads the screen locally several times a second and only sends it to the OCR engine once the text stops changing."
       >
         <SettingsRow
           label="Adaptive polling"
@@ -233,7 +233,7 @@ export function OcrTab(): ReactNode {
         </SettingsRow>
         <SettingsRow
           label="Minimum time between requests"
-          description="A floor on how often Cloud OCR is called, however fast dialogue moves. Lines that arrive during the wait are not queued; only the latest is kept."
+          description="A floor on how often the OCR engine is called, however fast dialogue moves. Lines that arrive during the wait are not queued; only the latest is kept."
         >
           <Select
             aria-label="Minimum time between requests"

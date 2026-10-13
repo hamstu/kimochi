@@ -28,9 +28,9 @@ text on screen, draws it back over the game so you can point at any word to look
 a running log of every line with audio, Anki export and a notebook for names and places. It is a
 Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux builds.
 
-- **OCR where the text is**: local engines (MeikiOCR, Manga OCR, Apple Live Text on macOS,
-  OneOCR on Windows 11); Kimochi's own cloud OCR and text to speech need an access key and are
-  not offered in public builds for now. Auto OCR waits for text to settle, then reads it once.
+- **OCR where the text is**: Google Lens by default (captures are sent to Google), or local
+  engines (MeikiOCR, Manga OCR, Apple Live Text on macOS, OneOCR on Windows 11). Auto OCR waits
+  for text to settle, then reads it once.
 - **Pop-up dictionaries**: Yomitan, Hachidori or 10ten, downloaded on demand from their upstream
   releases, hash-checked and run unmodified, with your own dictionaries.
 - **Reading log**: a built-in texthooker with sessions, reading stats, a notebook and VNDB

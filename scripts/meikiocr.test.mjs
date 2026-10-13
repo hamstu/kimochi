@@ -57,6 +57,16 @@ test("cloud OCR retains its existing route", async () => {
   });
 });
 
+test("Google Lens uses the retained native frame with overlay geometry", async () => {
+  const result = await recognize({ id: 47 }, { ocrMode: "googlelens" });
+  assert.deepEqual(calls.pop(), {
+    command: "ocr_frame",
+    args: { id: 47, engine: "googlelens" },
+  });
+  assert.equal(result.geometry, true);
+  assert.equal(result.nativeScanId, 47);
+});
+
 test("OneOCR uses the retained native frame with overlay geometry", async () => {
   const result = await recognize({ id: 45 }, { ocrMode: "oneocr" });
   assert.deepEqual(calls.pop(), {

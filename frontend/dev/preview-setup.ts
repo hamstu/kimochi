@@ -162,6 +162,7 @@ function previewCapabilities(): PlatformCapabilities {
       overlay: { passive: true, inputRegions: 'native', nonActivating: true, nativeHoverWorkaround: false },
       input: { globalShortcuts: true },
       ocrEngines: {
+        googlelens: { available: true },
         cloud: { available: true },
         meikiocr: { available: true, accelerator: 'directml' },
         mangaocr: { available: false, reason: 'Not available on Windows yet' },
@@ -191,6 +192,7 @@ function previewCapabilities(): PlatformCapabilities {
       overlay: { passive: false, inputRegions: 'wholeWindowOnly', nonActivating: false, nativeHoverWorkaround: false },
       input: { globalShortcuts: false },
       ocrEngines: {
+        googlelens: { available: true },
         cloud: { available: true },
         meikiocr: { available: true, accelerator: 'cpu' },
         mangaocr: { available: true, accelerator: 'cpu' },

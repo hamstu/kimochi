@@ -10,7 +10,7 @@
  */
 
 export type PlatformOs = 'macos' | 'windows' | 'linux'
-export type OcrEngineKey = 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
+export type OcrEngineKey = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
 
 export interface OcrEngineCapability {
   available: boolean
@@ -128,6 +128,7 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
     globalShortcuts: true
   },
   ocrEngines: {
+    googlelens: { available: true },
     cloud: { available: true },
     meikiocr: { available: true },
     mangaocr: { available: true },

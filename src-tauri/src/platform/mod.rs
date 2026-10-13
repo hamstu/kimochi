@@ -880,6 +880,7 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         entry
     };
     payload["ocrEngines"] = json!({
+        "googlelens": {"available": true},
         "cloud": {"available": true},
         "meikiocr": engine(dynamic.meikiocr, &accelerators["meikiocr"]),
         "mangaocr": engine(dynamic.mangaocr, &accelerators["mangaocr"]),

@@ -19,6 +19,7 @@ import { normalizeOcrResult } from './ocr-result.js'
  */
 export async function recognize(frame, settings) {
   switch (settings.ocrMode) {
+    case 'googlelens':
     case 'mangaocr':
     case 'oneocr':
     case 'livetext':
@@ -26,7 +27,7 @@ export async function recognize(frame, settings) {
     default: {
       const result = await ocrFrame(
         frame,
-        settings.ocrMode === 'local' ? 'meikiocr' : ['meikiocr', 'mangaocr', 'oneocr', 'livetext'].includes(settings.ocrMode) ? settings.ocrMode : 'cloud'
+        settings.ocrMode === 'local' ? 'meikiocr' : ['googlelens', 'meikiocr', 'mangaocr', 'oneocr', 'livetext'].includes(settings.ocrMode) ? settings.ocrMode : 'cloud'
       )
       const ocr = result?.ocr
       if (!ocr) return null

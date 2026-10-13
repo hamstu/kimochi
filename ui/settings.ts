@@ -22,7 +22,7 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode = 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
+export type OcrMode = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
@@ -131,7 +131,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   gamepadSettings: { enabled: true, preferredGamepadIndex: undefined },
   controllerButtons: DEFAULT_CONTROLLER_BUTTONS,
   yomitanSettings: { popupType: 'builtin', customApiUrl: '' },
-  ocrMode: 'cloud',
+  ocrMode: 'googlelens',
   scannedTextHistory: [],
   scannedTextFontSize: 14,
   appearance: 'system',
@@ -165,6 +165,22 @@ export interface OcrModeInfo {
 
 /** Capabilities and descriptions shared by Settings and the overlay. */
 export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
+  googlelens: {
+    label: 'Google Lens',
+    name: 'Google Lens',
+    tagline: 'Online, sent to Google',
+    geometry: true,
+    runs: 'online',
+    description:
+      'Sends each capture to Google Lens, the image recognition behind Lens in Chrome, and returns the text with the position of every line. Very accurate on Japanese, horizontal or vertical, with nothing to set up.',
+    strengths: [
+      'Accurate on game text, manga and busy backgrounds',
+      'Reads vertical and horizontal text, with line positions for the overlay',
+      'Nothing to download, and the same on every computer'
+    ],
+    requirements:
+      "Needs an internet connection. Each capture is sent to Google and handled under Google's terms and privacy policy. Kimochi uses the service Chrome's Lens uses, which is not a published API, so Google could change or stop it at any time."
+  },
   cloud: {
     label: 'Cloud OCR',
     name: 'Cloud OCR',

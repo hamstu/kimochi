@@ -34,6 +34,21 @@ The licence and notice files of both crates travel inside the app, in its
 meikiocr/ and mangaocr/ resource directories.
 
 
+Google Lens OCR (src-tauri/src/google_lens.rs)
+----------------------------------------------
+
+Kimochi's Google Lens engine is a Rust port of the Google Lens engine in
+owocr by AuroraWright (https://github.com/AuroraWright/owocr, owocr/ocr.py,
+class GoogleLens, revision 5ddee7961a9b5b4a50fa0b2afc41f9eea72bb5d5),
+GPL-3.0-only. The request it sends, the endpoint and headers, the image size
+limit and the reading of text and geometry from the response follow owocr.
+Its protobuf messages are a hand-written subset of the Lens overlay protocol
+definitions from Chromium (third_party/lens_server_proto), which owocr
+generates its bindings from; Copyright The Chromium Authors, BSD-3-Clause.
+No Google software is included. When you choose Google Lens, captures are
+sent to Google's Lens service and are subject to Google's terms.
+
+
 OCR runtime (bundled with the app)
 ----------------------------------
 

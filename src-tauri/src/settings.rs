@@ -55,7 +55,8 @@ pub fn defaults() -> Value {
         },
         "overlayOpacity": 80,
         "liveOverlayEnabled": false,
-        "ocrMode": "cloud"
+        // New installs only: `load` keeps an existing settings file on the engine it had.
+        "ocrMode": "googlelens"
         // `endpoint` is intentionally absent: an unset endpoint follows
         // serverSettings.mode. See `resolve_endpoint`.
     })
@@ -84,7 +85,15 @@ impl Settings {
         }
         if let Ok(bytes) = existing {
             match serde_json::from_slice::<Value>(&bytes) {
-                Ok(stored) => merge(&mut doc, stored),
+                Ok(stored) => {
+                    let engine_recorded = stored.get("ocrMode").is_some();
+                    merge(&mut doc, stored);
+                    // Google Lens is the default for new installs. A file from before then
+                    // that never recorded an engine was using Cloud OCR, and keeps it.
+                    if !engine_recorded {
+                        doc["ocrMode"] = json!("cloud");
+                    }
+                }
                 // A corrupt file must not wipe the user's settings silently, and must
                 // not stop the app booting. Keep defaults in memory and leave the file
                 // alone until something explicitly writes.
@@ -439,6 +448,21 @@ mod tests {
             )),
             doc: Mutex::new(defaults()),
         }
+    }
+
+    #[test]
+    fn google_lens_is_the_default_for_new_installs_only() {
+        let dir = std::env::temp_dir().join(format!("kimochi-settings-engine-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fresh = Settings::load(dir.join("absent.json"));
+        assert_eq!(fresh.get_or::<String>("ocrMode", String::new()), "googlelens");
+        let older = dir.join("older.json");
+        std::fs::write(&older, r#"{"overlayOpacity": 50}"#).unwrap();
+        assert_eq!(Settings::load(older).get_or::<String>("ocrMode", String::new()), "cloud");
+        let chosen = dir.join("chosen.json");
+        std::fs::write(&chosen, r#"{"ocrMode": "mangaocr"}"#).unwrap();
+        assert_eq!(Settings::load(chosen).get_or::<String>("ocrMode", String::new()), "mangaocr");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

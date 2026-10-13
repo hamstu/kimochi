@@ -13,6 +13,7 @@ mod engine_probe;
 mod extension_store;
 mod extensions;
 mod gamepad;
+mod google_lens;
 mod history_merge;
 mod hotkeys;
 mod manga_ocr;
@@ -1464,7 +1465,7 @@ impl Drop for ScanGuard {
 
 /// The legacy native scan path also honors local native OCR selections.
 fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Reply<Value> {
-    let mode = settings.get_or::<String>("ocrMode", "cloud".into());
+    let mode = settings.get_or::<String>("ocrMode", "googlelens".into());
     match mode.as_str() {
         #[cfg(target_os = "macos")]
         "livetext" => return livetext::recognize(image),
@@ -1476,6 +1477,7 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
     match mode.as_str() {
         "meikiocr" | "local" => meiki_ocr::recognize(app, &png),
         "mangaocr" => manga_ocr::recognize(app, &png),
+        "googlelens" => google_lens::recognize(&png),
         #[cfg(target_os = "windows")]
         "oneocr" => oneocr::recognize(app, &png),
         #[cfg(not(target_os = "windows"))]
@@ -1536,7 +1538,7 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
 /// The engines `ocr_frame` can dispatch to in this build: the portable ones, plus
 /// the OS engine of the OS this was built for.
 fn native_engine_known(engine: &str) -> bool {
-    matches!(engine, "cloud" | "meikiocr" | "mangaocr")
+    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr")
         || (cfg!(target_os = "windows") && engine == "oneocr")
         || (cfg!(target_os = "macos") && engine == "livetext")
 }
@@ -1576,6 +1578,7 @@ async fn ocr_frame(
         let value = match engine.as_str() {
             "meikiocr" | "local" => meiki_ocr::recognize(&app, &png)?,
             "mangaocr" => manga_ocr::recognize(&app, &png)?,
+            "googlelens" => google_lens::recognize(&png)?,
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png)?,
             #[cfg(target_os = "macos")]
