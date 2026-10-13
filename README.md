@@ -105,6 +105,7 @@ opening anything large.
 
 ## License
 
-[GPL-3.0](LICENSE). Kimochi includes Apache-2.0 code ([LICENSE-APACHE](LICENSE-APACHE)); the
-third-party notices, including the OCR models and the dictionary engines it downloads, are in
-[NOTICE](NOTICE).
+[GPL-3.0](LICENSE). Kimochi includes Apache-2.0 code ([LICENSE-APACHE](LICENSE-APACHE)) and
+fonts under the SIL Open Font License ([LICENSE-OFL.txt](LICENSE-OFL.txt)); the third-party
+notices, including the OCR models and the dictionary engines it downloads, are in
+[NOTICE](NOTICE). The licence files ship inside the app.

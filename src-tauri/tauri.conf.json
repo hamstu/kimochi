@@ -40,7 +40,11 @@
       "resources/mangaocr/LICENSE": "mangaocr/LICENSE",
       "resources/mangaocr/LICENSE-APACHE": "mangaocr/LICENSE-APACHE",
       "resources/mangaocr/NOTICE": "mangaocr/NOTICE",
-      "resources/mangaocr/model-manifest.json": "mangaocr/model-manifest.json"
+      "resources/mangaocr/model-manifest.json": "mangaocr/model-manifest.json",
+      "../LICENSE": "licenses/LICENSE",
+      "../LICENSE-APACHE": "licenses/LICENSE-APACHE",
+      "../LICENSE-OFL.txt": "licenses/LICENSE-OFL.txt",
+      "../NOTICE": "licenses/NOTICE"
     },
     "icon": [
       "icons/icon.icns",

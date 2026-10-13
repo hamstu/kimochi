@@ -1,22 +1,140 @@
-Kimochi Manga OCR
-Native Rust inference and page grouping for Manga OCR and Comic Text Detector.
+Kimochi
+Read your games in Japanese: on-screen OCR, pop-up dictionaries and a reading
+log, beside any game or visual novel.
 
-Manga OCR: https://github.com/kha-white/manga-ocr (Apache-2.0)
-Model: kha-white/manga-ocr-base, revision aa6573bd10b0d446cbf622e29c3e084914df9741
-Apache license retained in LICENSE-APACHE.
+Copyright (C) 2026 Hamish Macpherson
+https://github.com/hamstu/kimochi-tauri
 
-Comic Text Detector: https://github.com/dmMaze/comic-text-detector (GPL-3.0)
-Source revision 440b978563c71b758e31aaa315d100faba1efa2f.
-ONNX weights distributed by zyddnys/manga-image-translator, beta-0.2.1.
-Pinned asset provenance and checksums: scripts/model-manifest.json.
-This combined library is distributed under GPL-3.0-only. Test manga imagery
-is not bundled or licensed by this project.
+Kimochi is free software, licensed under the GNU General Public License,
+version 3 only (GPL-3.0-only); the full text is in LICENSE. This file lists
+the third-party work that Kimochi includes, bundles or downloads, and the
+licence of each.
 
-Kimochi also includes MeikiOCR (Apache-2.0), ported from rtr46/meikiocr
-revision 52aa607ecdc1038c7bf390f37cd9a8b306e8a08a. Its models and ONNX
-Runtime carry their own licenses in the bundled meikiocr resource directory.
+
+OCR libraries (compiled into Kimochi)
+-------------------------------------
+
+meikiocr (crate from https://github.com/hamstu/kimochi-meikiocr), Apache-2.0.
+A Rust port of MeikiOCR (https://github.com/rtr46/meikiocr, Apache-2.0),
+upstream revision 52aa607ecdc1038c7bf390f37cd9a8b306e8a08a; its
+preprocessing and postprocessing were adapted from meikiocr/ocr.py. The
+Apache License 2.0 is in LICENSE-APACHE.
+
+mangaocr (crate from https://github.com/hamstu/kimochi-mangaocr),
+GPL-3.0-only. Native Rust inference and page grouping for:
+  - Manga OCR: https://github.com/kha-white/manga-ocr (Apache-2.0); the
+    Apache License 2.0 is in LICENSE-APACHE.
+  - Comic Text Detector: https://github.com/dmMaze/comic-text-detector
+    (GPL-3.0), source revision 440b978563c71b758e31aaa315d100faba1efa2f.
+    Because the detector is ported from it, the crate as a whole is
+    GPL-3.0-only.
+Test manga imagery is not bundled or licensed by this project.
+
+The licence and notice files of both crates travel inside the app, in its
+meikiocr/ and mangaocr/ resource directories.
+
+
+OCR runtime (bundled with the app)
+----------------------------------
+
+ONNX Runtime, https://github.com/microsoft/onnxruntime, MIT License,
+Copyright (c) Microsoft Corporation. Version 1.30.0 on Apple Silicon Macs and
+1.22.0 elsewhere, taken unmodified from Microsoft's release archives (pinned by
+SHA-256 in scripts/prepare-meikiocr.mjs). Its LICENSE and
+ThirdPartyNotices.txt are bundled beside it in meikiocr/runtime/.
+
+DirectML (Windows builds only), Microsoft.AI.DirectML 1.15.4 from NuGet,
+Copyright (c) Microsoft Corporation. DirectML.dll is redistributed unmodified
+under the Microsoft Software License Terms for Microsoft DirectX Machine
+Learning (DirectML), which permit redistribution inside applications. It is
+not open source. Its licence and third-party notices are bundled beside it as
+meikiocr/runtime/DirectML-LICENSE.txt, DirectML-LICENSE-CODE.txt and
+DirectML-ThirdPartyNotices.txt.
+
+The Windows installer also carries Microsoft's WebView2 bootstrapper, which
+installs the Microsoft Edge WebView2 Runtime under Microsoft's own terms if
+it is missing.
+
+
+OCR models (downloaded on demand, not bundled)
+----------------------------------------------
+
+Kimochi does not include any OCR model. When you choose MeikiOCR or Manga OCR,
+the app downloads that engine's model files from their upstream location.
+Every file is pinned by revision, SHA-256 and size in src-tauri/ocr-models.json.
+
+MeikiOCR models, LGPL-3.0, by rtr46 on Hugging Face:
+  - https://huggingface.co/rtr46/meiki.text.detect.v0
+    (revision a9cffa4f60cbf72ddb87edf19c6f98a01cd042e6)
+  - https://huggingface.co/rtr46/meiki.txt.recognition.v0
+    (revision a28cf5874dc2438ebb1c86336be26bcec51e3375)
+
+Manga OCR model, Apache-2.0: https://huggingface.co/kha-white/manga-ocr-base
+(revision aa6573bd10b0d446cbf622e29c3e084914df9741).
+
+Comic Text Detector ONNX weights, GPL-3.0, from dmMaze/comic-text-detector,
+as distributed by zyddnys/manga-image-translator (GPL-3.0), release
+beta-0.2.1:
+https://github.com/zyddnys/manga-image-translator/releases/tag/beta-0.2.1
+
+
+OneOCR (Windows, optional)
+--------------------------
+
+Kimochi does not include or redistribute anything from Microsoft for OneOCR.
+The OneOCR engine uses oneocr.dll, oneocr.onemodel and onnxruntime.dll that
+you supply yourself from your own copy of Windows Snipping Tool (see
+docs/ONEOCR.md); your use of those files is governed by Microsoft's terms for
+that software. Kimochi ships only its own GPL-3.0-only helper process
+(oneocr-worker/), which loads them.
+
+
+Fonts
+-----
+
+Figtree, Copyright 2022 The Figtree Project Authors
+(https://github.com/erikdkennedy/figtree), and Noto Sans JP, Copyright
+2014-2021 Adobe, with Reserved Font Name 'Source', via the
+@fontsource-variable packages. Both are licensed under the SIL Open
+Font License, Version 1.1; the full text is in LICENSE-OFL.txt. They are
+bundled in the app's web assets and the website.
+
+
+Sounds
+------
+
+The scan sounds in ui/sounds/ are from Kenney (https://www.kenney.nl),
+"Interface Sounds" and "UI Audio", CC0 1.0 (public domain dedication),
+re-encoded and lightly processed. See ui/sounds/LICENSE.txt.
+
+
+Keyboard helper (macOS)
+-----------------------
+
+bin/keytrigger-darwin-* are built by the Kimochi author from the keytrigger Go
+program and bundled in the macOS app. They contain the Go standard library
+and runtime, Copyright (c) 2009 The Go Authors, BSD-3-Clause
+(https://go.dev/LICENSE).
+
+
+Libraries
+---------
+
+Kimochi is built with Tauri (MIT OR Apache-2.0), React (MIT), Radix UI (MIT)
+and other Rust crates and npm packages. src-tauri/Cargo.lock,
+capture-core/Cargo.lock, oneocr-worker/Cargo.lock and package-lock.json name
+each one and its exact version. Their licences are all compatible with
+GPL-3.0: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD,
+Unicode-3.0, BSL-1.0, CC0-1.0, Unlicense, CDLA-Permissive-2.0 (the
+webpki-roots certificate data) and MPL-2.0 (cssparser, selectors, dtoa-short
+and option-ext, used unmodified; their source is at https://crates.io).
+DOMPurify is used under Apache-2.0 (it is dual licensed MPL-2.0 OR
+Apache-2.0).
+
 
 Dictionary engines
+------------------
+
 Kimochi does not include any pop-up dictionary engine. When you choose one,
 Kimochi downloads that engine's own, unmodified release asset from its
 upstream GitHub release, checks it against a pinned SHA-256 and every
@@ -24,6 +142,13 @@ unpacked file against a pinned hash list (extensions/<id>.source.json and
 extensions/<id>.sha256.json in Kimochi's source), and runs it unmodified.
 Each engine's licence and notices are part of that download; its source is
 the upstream tag named below. All three are licensed GPL-3.0-or-later.
+
+Kimochi's source keeps small copies of some upstream metadata files so that
+it can host the engines: each engine's manifest.json
+(extensions/<id>.manifest.json; the Hachidori and 10ten manifests are compiled
+into Kimochi) and 10ten's English _locales/en/messages.json
+(extensions/tenten.messages-en.json, used by tests only). These copies are
+from the releases named below and remain under GPL-3.0-or-later.
 
 Yomitan: https://github.com/yomidevs/yomitan (GPL-3.0-or-later)
 Not included in Kimochi. When you choose it, Kimochi downloads release
