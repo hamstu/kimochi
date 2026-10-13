@@ -16,3 +16,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Kimochi updates itself. A bundle checks GitHub Releases quietly after launch and every six
   hours; a found update appears above Settings in the sidebar, where you download it and choose
   when to restart. Settings → General → Updates checks on demand and shows the version.
+
+### Removed
+
+- Auto-scan is now started from your controller (the gamepad trigger in Settings → OCR &
+  Overlay) or a scan shortcut; the keyboard "Trigger keys" option is gone on every platform.
+  On macOS, Kimochi no longer needs Accessibility permission, and you can remove it in System
+  Settings → Privacy & Security → Accessibility.

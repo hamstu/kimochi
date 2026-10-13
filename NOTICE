@@ -108,15 +108,6 @@ The scan sounds in ui/sounds/ are from Kenney (https://www.kenney.nl),
 re-encoded and lightly processed. See ui/sounds/LICENSE.txt.
 
 
-Keyboard helper (macOS)
------------------------
-
-bin/keytrigger-darwin-* are built by the Kimochi author from the keytrigger Go
-program and bundled in the macOS app. They contain the Go standard library
-and runtime, Copyright (c) 2009 The Go Authors, BSD-3-Clause
-(https://go.dev/LICENSE).
-
-
 Libraries
 ---------
 

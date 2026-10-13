@@ -1,5 +1,5 @@
 //! One dispatch point for every user action, whatever triggered it: a global
-//! shortcut, a gamepad button, a keyboard auto-scan trigger, the tray, or a panel
+//! shortcut, a gamepad button, the gamepad auto-scan trigger, the tray, or a panel
 //! calling `trigger_action`. Keeping it single means two input paths can never fire
 //! two different code paths for the same action.
 use crate::state::Shared;

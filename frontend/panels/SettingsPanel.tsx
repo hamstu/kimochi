@@ -9,8 +9,8 @@
  *     picker, and the input kind is on the Sources page and in the sidebar's source menu.
  *  2. Transport: `window.yomitan.*` -> the bridge, `close-app` IPC -> `quitApp()`.
  *  3. Additions, all honest about what is not proven yet (see PARITY_GAPS.md): the OCR engine
- *     selector (`ocrMode`), the Accessibility note on trigger keys, failed global-shortcut
- *     registrations, and the unverified-gamepad warning.
+ *     selector (`ocrMode`), failed global-shortcut registrations, and the unverified-gamepad
+ *     warning.
  *  4. Each category is its own component in `./settings/` and owns its settings and handlers. The
  *     pages that edit the Log's settings share one connection, `ReaderSettingsProvider`.
  */

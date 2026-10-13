@@ -34,7 +34,7 @@ qualifications and remaining gaps.
 [target.'cfg(target_os = "linux")'.dependencies]
 # Pure-Rust X11 protocol (no libxcb, no pkg-config). Same major as capture-core's, so
 # one copy is compiled and `kimochi_capture::x11::Desktop` speaks these types.
-x11rb = { version = "0.13", features = ["randr", "xinput", "shape"] }
+x11rb = { version = "0.13", features = ["randr", "shape"] }
 # logind PrepareForSleep. Already in the tree through tauri-plugin-single-instance
 # (same default features), so nothing new is compiled.
 zbus = "5.9"
@@ -71,7 +71,7 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
   `kimochi_capture::is_wayland_session` is the single rule both crates use). Under
   Wayland: `cursor`/`front_window`/`window_bounds`/`frontmost_*`/`app_icon_png` are
   `None`, `displays`/`display_infos` empty (so `clamp_to_visible` is a no-op),
-  `picker_sources`/`make_panel`/`start_key_trigger`/`activate_*` are
+  `picker_sources`/`make_panel`/`activate_*` are
   `Err("unsupported on Wayland: …")`, `promote_to_key` is `Ok(false)`, `order_front`
   is a plain `show()`. `observe_workspace` still reports sleep/wake (logind), never
   activation. capture-core returns `PortalCapture` (backend `xdg-portal-pipewire`,
@@ -93,8 +93,8 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
   windows and windows on other workspaces are not listed (X unmaps them).
 - **`front_window`** = `_NET_ACTIVE_WINDOW` + `_NET_WM_PID`; `window` is `None` for
   unreadable windows (dock, desktop, unmapped, tiny); `None` overall when nothing is
-  active or the client has no pid. App names (`frontmost_app`, picker `app`, focus
-  events, activation) are the executable's file name from `/proc/<pid>/exe`, else
+  active or the client has no pid. App names (`frontmost_app`, picker `app`,
+  activation) are the executable's file name from `/proc/<pid>/exe`, else
   `/proc/<pid>/comm`; for this app that is `kimochi` (`ownAppNames`).
 - **Panels (`make_panel`, X11).** Tauri `set_focusable(false)` (GTK accept-focus →
   `WM_HINTS.input = False`), `set_skip_taskbar(true)` (taskbar + pager hints),
@@ -133,17 +133,6 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
   `SET` replaces whatever GDK last installed, so the overlay's initial "ignore" needs no
   undoing. Reparenting window managers must propagate the client's input shape to the
   frame; the mainstream ones do (tao's own click-through relies on it too).
-- **`start_key_trigger`** (X11): XInput 2 raw key events on the root (`XI_RawKeyPress`/
-  `Release`, all master devices) on a dedicated thread with its own connection. Lines:
-  `{"key","keyCode","action","repeat"}` (Windows module's key names; `keyCode` is the
-  X keycode; repeat = down while held) and `{"type":"windowFocus","appName",
-  "windowTitle","appPath"}` on every `_NET_ACTIVE_WINDOW` change, our own windows
-  included, plus one at start. XTEST (synthetic) devices are ignored. `stop_key_trigger()`
-  exists as on Windows (not in the shared contract). `key_trigger_status` is
-  `available/notRequired` on X11 with a live X connection; on Wayland `unsupported` with
-  a reason and evdev-opt-in remediation text. `watcher.rs::start` sets
-  `view.accessibility = permission == "granted"`, which is false for `notRequired`;
-  the Windows module has the same situation.
 - **`observe_workspace`** must be called on the main (GTK) thread (it is, from
   `setup`): callbacks are stored there and run there via `glib::idle_add_once` from two
   watcher threads (logind over the system bus; `_NET_ACTIVE_WINDOW` PropertyNotify,
@@ -163,8 +152,7 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
 
 Native ARM64 Hyprland/Wayland startup, portal capture, CPU OCR and layer overlay/crop
 have now run on Linux.
-x86_64 runtime and a real X11 session remain unverified. Remaining X11 checks include: XInput 2 raw events arriving while
-a game has focus; `_NET_WM_WINDOW_TYPE_UTILITY` after map on GNOME/KDE/XFCE; panel
+x86_64 runtime and a real X11 session remain unverified. Remaining X11 checks include: `_NET_WM_WINDOW_TYPE_UTILITY` after map on GNOME/KDE/XFCE; panel
 clicks not stealing focus; `GetImage` on windows of depth-32 visuals; GTK CSD windows'
 bounds versus the overlay.
 

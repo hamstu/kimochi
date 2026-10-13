@@ -6,9 +6,6 @@
 import { type ReactNode } from 'react'
 import {
   Badge,
-  Button,
-  Callout,
-  Input,
   Select,
   SettingsPage,
   SettingsRow,
@@ -24,15 +21,8 @@ import type {
   TextOverlayGroupingSettings
 } from '../../vendor/shared-types'
 import { useSetting } from '../../bridge/useSetting'
-import { useViewState } from '../../bridge/state'
-import { useCapabilities } from '../../bridge/capabilities'
-import { nativeError, openAccessibilityPreferences } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { EngineChooser } from './EngineChooser'
-
-/** The Trigger Keys warning on macOS when the backend gives no wording of its own. */
-const MAC_KEY_TRIGGER_REASON =
-  'Watching key presses in another application needs macOS Accessibility permission for Kimochi. Until it is granted these keys will not start a scan; the gamepad trigger is unaffected.'
 
 const SCAN_DELAYS = [
   { value: '100', label: '100 ms' },
@@ -75,7 +65,6 @@ export function OcrTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
   const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
     enabled: false,
-    triggerKeys: '',
     scanDelay: 500
   })
   const [textOverlayGrouping, setTextOverlayGrouping] = useSetting<TextOverlayGroupingSettings>(
@@ -91,25 +80,6 @@ export function OcrTab(): ReactNode {
     'autoOCRSettings',
     DEFAULT_AUTO_OCR_SETTINGS
   )
-  // Watching keys inside another application needs macOS Accessibility; the backend reports
-  // whether it has been granted, so the Trigger Keys field can say what is actually true.
-  // On macOS the view state's `accessibility` flag is live, so it decides; elsewhere (and before
-  // the flag arrives) the platform capabilities' `input.keyTrigger` does.
-  const { state: viewState } = useViewState()
-  const capabilities = useCapabilities()
-  const keyTrigger = capabilities.input.keyTrigger
-  const keyTriggerPermission =
-    capabilities.os === 'macos' && typeof viewState.accessibility === 'boolean'
-      ? viewState.accessibility
-        ? 'granted'
-        : 'denied'
-      : keyTrigger.permission
-  const keyTriggerWarning = keyTriggerPermission !== 'granted' && keyTriggerPermission !== 'notRequired'
-  const keyTriggerReason =
-    keyTrigger.reason ||
-    (capabilities.os === 'macos'
-      ? MAC_KEY_TRIGGER_REASON
-      : 'Watching key presses in another application is not available on this computer, so these keys will not start a scan; the gamepad trigger is unaffected.')
   const filterSmallText = textOverlayGrouping.filterSmallText ?? true
   const threshold = Math.round((textOverlayGrouping.filterSmallTextThreshold ?? 0.75) * 100)
 
@@ -191,9 +161,9 @@ export function OcrTab(): ReactNode {
 
       <SettingsSection title="Auto-scan">
         <SettingsRow
-          label="Scan after a key press"
+          label="Scan after a button press"
           controlId="ocr-autoscan"
-          description="Scans automatically after you press chosen keys in your game or application."
+          description="Scans automatically after you press a chosen gamepad button."
         >
           <Switch
             id="ocr-autoscan"
@@ -203,40 +173,7 @@ export function OcrTab(): ReactNode {
         </SettingsRow>
         {autoScanSettings.enabled && (
           <SettingsSubgroup>
-            <SettingsRow label="Trigger keys" controlId="ocr-trigger-keys" description="Comma-separated.">
-              <Input
-                id="ocr-trigger-keys"
-                className="settings-field"
-                value={autoScanSettings.triggerKeys}
-                onChange={(e) =>
-                  void setAutoScanSettings({ ...autoScanSettings, triggerKeys: e.target.value })
-                }
-                placeholder="e.g. space, enter, z"
-              />
-            </SettingsRow>
-            {keyTriggerWarning && (
-              <div className="settings-note">
-                <Callout tone="warn">
-                  <span>
-                    {keyTriggerReason}
-                    {keyTrigger.remediation ? ` ${keyTrigger.remediation}` : ''}
-                  </span>
-                  {capabilities.os === 'macos' && (
-                    <Button
-                      size="sm"
-                      onClick={() =>
-                        void openAccessibilityPreferences().catch((error) =>
-                          console.error('Open Accessibility settings failed:', nativeError(error).message)
-                        )
-                      }
-                    >
-                      Open Accessibility settings
-                    </Button>
-                  )}
-                </Callout>
-              </div>
-            )}
-            <SettingsRow label="Scan delay" description="Wait after the key press before scanning.">
+            <SettingsRow label="Scan delay" description="Wait after the button press before scanning.">
               <Select
                 aria-label="Scan delay"
                 value={autoScanSettings.scanDelay.toString()}

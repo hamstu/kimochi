@@ -461,36 +461,12 @@ pub fn front_window_of(pid: u32) -> Option<Window> {
     windows_of(desktop()?, pid).into_iter().next()
 }
 
-/// A fresh connection for a thread that blocks on events (key trigger, workspace
-/// observer): the shared query connection must never be blocked in `wait_for_event`.
+/// A fresh connection for a thread that blocks on events (the workspace observer): the
+/// shared query connection must never be blocked in `wait_for_event`.
 pub fn event_connection() -> Result<(RustConnection, Window), String> {
     let (conn, screen) = x11rb::connect(None).map_err(|e| e.to_string())?;
     let root = conn.setup().roots.get(screen).ok_or("no X screen")?.root;
     Ok((conn, root))
-}
-
-/// What the focus events report about the active window.
-pub struct ActiveWindow {
-    pub app_name: String,
-    pub title: String,
-    pub app_path: String,
-}
-
-pub fn active_window_facts() -> Option<ActiveWindow> {
-    let d = desktop()?;
-    let active = d.active_window()?;
-    let pid = d.pid(active);
-    let path = pid
-        .and_then(|p| std::fs::read_link(format!("/proc/{p}/exe")).ok())
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    Some(ActiveWindow {
-        app_name: pid
-            .and_then(kimochi_capture::x11::process_name)
-            .unwrap_or_default(),
-        title: d.title(active),
-        app_path: path,
-    })
 }
 
 #[allow(dead_code)] // Used by `inspect` callers that want the id form.

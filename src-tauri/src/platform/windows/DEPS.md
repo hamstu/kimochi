@@ -50,17 +50,9 @@ pub use windows::*;`. The pure rules in `rules.rs` have no Win32 dependency and 
   must be called on the main thread (it is, from `setup`). It creates its message-only
   window and WinEvent hook on the calling thread, and tao's message loop delivers both,
   so the callbacks run on the main thread as on macOS. Called from a thread with no
-  message loop, nothing fires.
-- **`start_key_trigger`** spawns two threads (hook + drain). `on_line` runs on the drain
-  thread. Lines are the Go keytrigger format plus a `"repeat": bool` field on key events.
-  Auto-repeat still arrives as `"down"`, as it did with the Go helper, so
-  `watcher.rs::handle` triggers on every repeat unless it checks `repeat`. Injected input
-  is ignored. `appName` is the image stem (`notepad`), not `notepad.exe`. Foreground
-  events include our own process (no `WINEVENT_SKIPOWNPROCESS`, which goes against the
-  original brief) because `watcher.rs` must be able to tell "Kimochi is frontmost" from
-  "no signal". `stop_key_trigger()` is extra (not in the shared contract); a second
-  `start_key_trigger` without a stop returns `Err`. `watcher.rs::start` still calls
-  `native::accessibility_trusted()`; on Windows use `key_trigger_status()` instead.
+  message loop, nothing fires. Its `EVENT_SYSTEM_FOREGROUND` hook is the only source of
+  `frontmost-app` on Windows: one event per change of foreground *process*, our own
+  included. There is no keyboard hook.
 - **`instance_report`** is not exported here: `platform/mod.rs` defines it for all OSes
   and returns `None` off macOS.
 - **Main thread.** `make_panel` returns `Err` off the window's owning thread
@@ -86,5 +78,4 @@ pub use windows::*;`. The pure rules in `rules.rs` have no Win32 dependency and 
   the `node.exe` under it.
 - **`capabilities()`** also returns `os`, `osVersion`, `arch`, `ownAppNames`
   (`Kimochi`, `kimochi`) and `ocrAccelerators` (`meikiocr: directml`, `mangaocr: cpu`),
-  like the macOS one. `capabilities_payload` overwrites `capture.authorization` and
-  `input.keyTrigger`.
+  like the macOS one. `capabilities_payload` overwrites `capture.authorization`.

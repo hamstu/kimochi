@@ -18,7 +18,7 @@ pub fn defaults() -> Value {
         "scannedTextFontSize": 14,
         "scannedTextHistory": [],
         "audioSettings": { "voiceId": "j210dv0vWm7fCknyQpbA" },
-        "autoScanSettings": { "enabled": false, "triggerKeys": "", "scanDelay": 500 },
+        "autoScanSettings": { "enabled": false, "scanDelay": 500 },
         "gamepadSettings": { "enabled": true },
         // Standard button indices for the buttons of the overlay's controller menu and word
         // mode: A, B, Y, LB, RB. `null` unbinds one.

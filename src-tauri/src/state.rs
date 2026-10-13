@@ -506,7 +506,6 @@ pub struct View {
     /// Raw frontmost application name, unfiltered. Consumers apply their own rules
     /// (Kimochi's own windows are neutral; unknown focus must not hide text).
     pub frontmost_app: Option<String>,
-    pub accessibility: bool,
     pub action_seq: u64,
     pub last_action: Option<String>,
     /// The frame id whose result is currently published. Lets a repeated publish for

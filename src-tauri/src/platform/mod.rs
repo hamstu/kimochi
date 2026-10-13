@@ -30,13 +30,10 @@
 //! frontmost_app() -> Option<String>
 //! frontmost_pid() -> Option<u32>
 //! app_icon_png(&AppIdentity, target: isize) -> Option<Vec<u8>>
-//! key_trigger_status() -> KeyTriggerStatus
-//! start_key_trigger(&AppHandle, on_line: Box<dyn Fn(Value) + Send + Sync>) -> Result<(), String>
 //! observe_workspace(on_sleep, on_wake, on_activate)
 //! activate_self() -> Result<(), String>
 //! activate_process(pid: u32) -> Result<(), String>
 //! open_capture_settings() -> Result<(), String>
-//! open_input_settings() -> Result<(), String>
 //! run_cli(program, args, stdin, cwd) -> Result<Child, String>
 //! capabilities() -> Value
 //! ```
@@ -136,17 +133,6 @@ pub struct AppIdentity {
     /// The owning process, for OSes that resolve icons by executable. macOS matches by
     /// `name` and ignores it.
     pub pid: Option<u32>,
-}
-
-/// Whether global key events can be watched, and if not, why and what to do.
-#[derive(Serialize, Clone, Debug)]
-pub struct KeyTriggerStatus {
-    pub available: bool,
-    /// `"granted" | "denied" | "notRequired" | "unsupported"`.
-    pub permission: &'static str,
-    /// `None` (serialised as `null`) when the UI's own copy applies, as on macOS.
-    pub reason: Option<String>,
-    pub remediation: Option<String>,
 }
 
 /// Keep a rectangle inside a live display's work area, shrinking it first if the
@@ -883,7 +869,6 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         payload["capture"]["pickerRequired"] = json!(dynamic.capture.system_picker_required);
     }
     payload["capture"]["reason"] = json!(dynamic.capture_reason);
-    payload["input"]["keyTrigger"] = serde_json::to_value(key_trigger_status()).unwrap_or(Value::Null);
     let engine = |(available, reason): (bool, Option<String>), accelerator: &Value| {
         let mut entry = json!({ "available": available });
         if available && accelerator.is_string() {

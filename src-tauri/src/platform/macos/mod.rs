@@ -6,7 +6,7 @@
 //! there.
 pub mod instance;
 
-use super::{AppIdentity, DisplayInfo, FrontWindow, KeyTriggerStatus, Modifiers, PointerSample};
+use super::{AppIdentity, DisplayInfo, FrontWindow, Modifiers, PointerSample};
 use block2::RcBlock;
 use kimochi_capture::{Platform, Rect, SourceId};
 use objc2::rc::Retained;
@@ -64,12 +64,6 @@ extern "C" {
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     fn CFRelease(value: *const std::ffi::c_void);
-}
-#[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
-    /// Passive read. Never call the `WithOptions` variant automatically: that one
-    /// prompts, and permission requests belong to an explicit user action.
-    fn AXIsProcessTrusted() -> bool;
 }
 
 const WINDOW_LIST_INCLUDING_WINDOW: u32 = 1 << 3;
@@ -794,33 +788,6 @@ pub fn frontmost_app() -> Option<String> {
         .map(|n| n.to_string())
 }
 
-/// Read-only Accessibility check. Used to render an honest "Accessibility required"
-/// state; it deliberately does not prompt.
-fn accessibility_trusted() -> bool {
-    unsafe { AXIsProcessTrusted() }
-}
-
-/// Whether global key events can be watched. On macOS that is the Accessibility grant
-/// the `keytrigger` sidecar needs; it is read passively and never prompts.
-pub fn key_trigger_status() -> KeyTriggerStatus {
-    if accessibility_trusted() {
-        KeyTriggerStatus {
-            available: true,
-            permission: "granted",
-            reason: None,
-            remediation: None,
-        }
-    } else {
-        KeyTriggerStatus {
-            available: false,
-            permission: "denied",
-            // The UI has its own Accessibility copy and settings button for macOS.
-            reason: None,
-            remediation: None,
-        }
-    }
-}
-
 /// System sleep/wake and application-activation notifications — the macOS equivalent of
 /// Electron's `powerMonitor`, which Tauri does not wrap.
 pub fn observe_workspace(
@@ -994,79 +961,6 @@ pub fn activate_process(pid: u32) -> Result<(), String> {
     }
 }
 
-// ---------------------------------------------------------------- key trigger
-
-fn keytrigger_binary_name() -> &'static str {
-    if cfg!(target_arch = "aarch64") {
-        "keytrigger-darwin-arm64"
-    } else {
-        "keytrigger-darwin-amd64"
-    }
-}
-
-/// Bundled resource first, then this project’s bin directory for development.
-fn keytrigger_binary_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
-    use tauri::Manager;
-    let name = keytrigger_binary_name();
-    let bundled = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|dir| dir.join("bin").join(name));
-    let repo = Some(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../bin")
-            .join(name),
-    );
-    [bundled, repo]
-        .into_iter()
-        .flatten()
-        .find(|path| path.exists())
-}
-
-/// Start the `keytrigger` sidecar from the Electron tree: line-delimited JSON on stdout,
-/// carrying key events and frontmost-window changes. Every JSON line is handed to
-/// `on_line` unchanged; anything else on stdout is ignored.
-///
-/// Key events need Accessibility permission (see `key_trigger_status`); this never
-/// triggers a permission prompt.
-pub fn start_key_trigger(
-    app: &tauri::AppHandle,
-    on_line: Box<dyn Fn(Value) + Send + Sync + 'static>,
-) -> Result<(), String> {
-    use std::io::{BufRead, BufReader};
-    use std::process::{Command, Stdio};
-    use tauri::Manager;
-    let Some(path) = keytrigger_binary_path(app) else {
-        return Err(format!(
-            "{} was not found; keyboard auto-scan and focus tracking are off",
-            keytrigger_binary_name()
-        ));
-    };
-    let mut child = Command::new(&path)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    let app = app.clone();
-    std::thread::spawn(move || {
-        let Some(stdout) = child.stdout.take() else {
-            return;
-        };
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            let Ok(event) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
-            on_line(event);
-        }
-        let _ = child.wait();
-        if let Some(service) = app.try_state::<crate::state::Shared>() {
-            service.log(json!({"check": "watcher", "status": "exited"}));
-        }
-    });
-    Ok(())
-}
-
 // ---------------------------------------------------------------- system links
 
 fn open_url(url: &str) -> Result<(), String> {
@@ -1081,11 +975,6 @@ fn open_url(url: &str) -> Result<(), String> {
 /// action; nothing in this app probes or prompts on its own.
 pub fn open_capture_settings() -> Result<(), String> {
     open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-}
-
-/// Opens the Accessibility pane, which the key trigger needs.
-pub fn open_input_settings() -> Result<(), String> {
-    open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
 }
 
 // ---------------------------------------------------------------- command runner

@@ -27,7 +27,6 @@ export interface OcrEngineCapability {
 
 export type CaptureAuthorization =
   'granted' | 'denied' | 'notRequired' | 'promptOnSelect' | 'unsupported'
-export type KeyTriggerPermission = 'granted' | 'denied' | 'notRequired' | 'unsupported'
 
 export interface PlatformCapabilities {
   os: PlatformOs
@@ -68,12 +67,6 @@ export interface PlatformCapabilities {
     globalShortcuts: boolean
     globalShortcutBackend?: string
     globalShortcutRemediation?: string | null
-    keyTrigger: {
-      available: boolean
-      permission: KeyTriggerPermission
-      reason?: string | null
-      remediation?: string | null
-    }
   }
   ocrEngines: Record<OcrEngineKey, OcrEngineCapability>
   /** The existing `observer_status` payload. */
@@ -94,10 +87,9 @@ export const DEFAULT_OWN_APP_NAMES: readonly string[] = [
 /**
  * macOS as the app behaves today, for a backend without `platform_capabilities`.
  *
- * Two permissions are unknowable from here and are reported as `denied`, which is
- * what the panels assumed before the command existed: Screen Recording is then
- * decided by the live `permission_status` poll, and key triggering by the
- * `accessibility` flag on the view state.
+ * Screen Recording is unknowable from here and is reported as `denied`, which is
+ * what the panels assumed before the command existed; the live `permission_status`
+ * poll then decides it.
  */
 export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
   os: 'macos',
@@ -127,13 +119,7 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
     nativeHoverWorkaround: true
   },
   input: {
-    globalShortcuts: true,
-    keyTrigger: {
-      available: true,
-      permission: 'denied',
-      reason: null,
-      remediation: null
-    }
+    globalShortcuts: true
   },
   ocrEngines: {
     cloud: { available: true },
@@ -191,7 +177,6 @@ export function normalizeCapabilities(
       ? { ...(base[key] as object), ...(raw[key] as object) }
       : base[key]) as PlatformCapabilities[K]
   const input = section('input')
-  const rawKeyTrigger = isRecord(raw.input) ? raw.input.keyTrigger : undefined
   const engines = { ...base.ocrEngines }
   if (isRecord(raw.ocrEngines)) {
     for (const key of Object.keys(engines) as OcrEngineKey[]) {
@@ -222,15 +207,7 @@ export function normalizeCapabilities(
     capture: section('capture'),
     sources: section('sources'),
     overlay: section('overlay'),
-    input: {
-      ...input,
-      keyTrigger: isRecord(rawKeyTrigger)
-        ? {
-            ...base.input.keyTrigger,
-            ...(rawKeyTrigger as Partial<PlatformCapabilities['input']['keyTrigger']>)
-          }
-        : base.input.keyTrigger
-    },
+    input,
     ocrEngines: engines,
     observer: 'observer' in raw ? raw.observer : base.observer,
     ownPids: pids,

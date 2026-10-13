@@ -14,7 +14,6 @@
 *.dll binary
 *.so binary
 *.exe binary
-bin/keytrigger-* binary
 
 # Vendored upstream extension releases (scripts/sync-extension.mjs), stored exactly as released.
 # `-text` keeps git from converting line endings: prepare.mjs verifies every byte against

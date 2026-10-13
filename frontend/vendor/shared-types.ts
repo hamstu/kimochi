@@ -147,7 +147,6 @@ export type LiveOverlaySettings = {
 // Auto-scan after button press settings
 export type AutoScanSettings = {
   enabled: boolean
-  triggerKeys: string // comma-separated list of keys
   scanDelay: number // delay in milliseconds
   gamepadButton?: number // optional gamepad button index to trigger scan
 }
@@ -158,14 +157,6 @@ export type TextOverlayGroupingSettings = {
   proximityThreshold: number // pixels - how close text boxes need to be to group
   filterSmallText: boolean // filter out furigana and small text (default: true)
   filterSmallTextThreshold: number // threshold as ratio of median height (default: 0.75)
-}
-
-// Window focus event from watcher
-export type WindowFocusEvent = {
-  type: 'windowFocus'
-  windowTitle: string
-  appName: string
-  appPath: string
 }
 
 // Server settings (OCR/TTS server)

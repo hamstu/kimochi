@@ -3,7 +3,7 @@
 //!
 //! - **X11** (plan Phase 6, near parity): `x11rb` for the pointer, displays (RandR),
 //!   the source catalog (EWMH), focus, icons and activation; GTK (through Tauri) plus
-//!   EWMH properties for overlay panels; XInput 2 raw events for trigger keys.
+//!   EWMH properties for overlay panels.
 //! - **Wayland** (plan Phase 7, reduced tier): every query that Wayland does not answer
 //!   answers "nothing" (`None`, empty, or `Err("unsupported on Wayland: …")`) and
 //!   `capabilities()` says so. Capture uses the ScreenCast/PipeWire portal. Native
@@ -34,7 +34,6 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 pub mod dictionary_images;
-mod keytrigger;
 pub mod gnome;
 pub mod gamescope;
 pub mod gaming_context;
@@ -48,7 +47,6 @@ mod window;
 mod workspace;
 mod x11;
 
-pub use keytrigger::{key_trigger_status, start_key_trigger, stop_key_trigger};
 use rules::{Backend, Session};
 pub use window::{
     activate_process, activate_self, bounds, inspect, make_panel, order_front, panel_cursor,
@@ -210,10 +208,6 @@ pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
 
 pub fn open_capture_settings() -> Result<(), String> {
     Err("not applicable: Linux has no screen recording setting to open".into())
-}
-
-pub fn open_input_settings() -> Result<(), String> {
-    Err("not applicable: Linux has no input monitoring setting to open".into())
 }
 
 /// Spawn a CLI directly (no login shell), resolved on `PATH` by the standard library,

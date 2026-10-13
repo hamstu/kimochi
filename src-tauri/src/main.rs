@@ -34,7 +34,6 @@ mod text_observer;
 mod texthooker;
 mod tray;
 mod updater;
-mod watcher;
 
 use kimochi_capture::*;
 use serde::{Deserialize, Serialize};
@@ -615,7 +614,6 @@ fn snapshot_value(service: &Service) -> Value {
         "debugOverlayVisible": v.debug_overlay_visible,
         // Raw and unfiltered: consumers decide what our own windows mean.
         "frontmostApp": v.frontmost_app,
-        "accessibility": v.accessibility,
         "action": v.last_action.as_ref().map(|name| json!({"name": name, "seq": v.action_seq})),
     })
 }
@@ -989,16 +987,11 @@ fn displays() -> Vec<platform::DisplayInfo> {
     platform::desktop_display_infos()
 }
 
-/// Stops the platform's own threads (key trigger, mouse guard, shortcuts) before the process
-/// ends: on quit, and before an update replaces it (updater.rs).
+/// Stops the platform's own threads (mouse guard, shortcuts) before the process ends: on
+/// quit, and before an update replaces it (updater.rs).
 fn shutdown_platform() {
     #[cfg(target_os = "windows")]
-    {
-        platform::stop_mouse_guard();
-        platform::stop_key_trigger();
-    }
-    #[cfg(target_os = "linux")]
-    platform::stop_key_trigger();
+    platform::stop_mouse_guard();
     #[cfg(target_os = "linux")]
     platform::shortcuts::stop();
 }
@@ -1222,8 +1215,7 @@ async fn capture_pick_source(app: tauri::AppHandle, state: State<'_, Shared>, fr
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .permission()
                 .to_string();
-            *LAST_PERMISSION.lock().unwrap_or_else(|p| p.into_inner()) =
-                Some((permission, platform::key_trigger_status().permission));
+            *LAST_PERMISSION.lock().unwrap_or_else(|p| p.into_inner()) = Some(permission);
             capabilities_value(&handle, &service)
         })
         .await
@@ -1701,9 +1693,9 @@ fn permission_status(app: tauri::AppHandle, state: State<Shared>) -> Reply<Strin
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .permission()
         .to_string();
-    // The UI polls this; a Screen Recording or Accessibility grant or revocation is
-    // what changes the capabilities.
-    let now = (permission.clone(), platform::key_trigger_status().permission);
+    // The UI polls this; a Screen Recording grant or revocation is what changes the
+    // capabilities.
+    let now = permission.clone();
     let changed = {
         let mut last = LAST_PERMISSION.lock().unwrap_or_else(|p| p.into_inner());
         let changed = last.as_ref().is_some_and(|was| *was != now);
@@ -1716,8 +1708,8 @@ fn permission_status(app: tauri::AppHandle, state: State<Shared>) -> Reply<Strin
     Ok(permission)
 }
 
-/// The capture and key-trigger permissions last reported, so a change is announced once.
-static LAST_PERMISSION: Mutex<Option<(String, &'static str)>> = Mutex::new(None);
+/// The capture permission last reported, so a change is announced once.
+static LAST_PERMISSION: Mutex<Option<String>> = Mutex::new(None);
 
 /// Why the capture backend could not be created, if it could not.
 static CAPTURE_UNAVAILABLE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -1804,7 +1796,7 @@ fn spawn_capabilities_watch(handle: tauri::AppHandle, service: Shared) {
         LAST_PERMISSION
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .get_or_insert((permission, platform::key_trigger_status().permission));
+            .get_or_insert(permission);
         let payload = capabilities_value(&handle, &service);
         let _ = handle.emit("platform-capabilities", payload);
     });
@@ -2274,7 +2266,6 @@ fn system_state(state: State<Shared>) -> Value {
     let view = state.view.lock().unwrap();
     json!({
         "frontmostApp": view.frontmost_app,
-        "accessibility": view.accessibility,
         "displays": platform::desktop_display_infos(),
     })
 }
@@ -2284,12 +2275,6 @@ fn system_state(state: State<Shared>) -> Value {
 #[tauri::command]
 fn open_screen_capture_preferences() -> Reply<()> {
     platform::open_capture_settings()
-}
-
-/// Opens the settings that let the key trigger see global keys (Accessibility on macOS).
-#[tauri::command]
-fn open_accessibility_preferences() -> Reply<()> {
-    platform::open_input_settings()
 }
 
 fn main() {
@@ -2490,7 +2475,6 @@ fn main() {
             system_state,
             app_quit,
             open_screen_capture_preferences,
-            open_accessibility_preferences,
             platform_capabilities,
             gnome_overlay,
             activity::activity_post,
@@ -2576,7 +2560,6 @@ fn main() {
                     status: "Choose a source; preview before sending to OCR.".into(),
                     overlay_visible: true,
                     text_overlay_visible: true,
-                    accessibility: platform::key_trigger_status().permission == "granted",
                     frontmost_app: platform::frontmost_app(),
                     ..View::default()
                 }),
@@ -2873,7 +2856,6 @@ fn main() {
                 &service,
                 json!({ "check": "hotkeys-applied", "result": shortcuts }),
             );
-            watcher::start(&handle, &service);
             gamepad::start(&handle, &service);
 
             {
@@ -3090,7 +3072,7 @@ fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
             let fingerprint = {
                 let v = service.view.lock().unwrap();
                 format!(
-                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}",
+                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}",
                     v.revision,
                     v.action_seq,
                     v.scanning,
@@ -3101,7 +3083,6 @@ fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
                     v.dictionary,
                     v.dismiss,
                     v.logs.len(),
-                    v.accessibility,
                     (&v.status, &v.frontmost_app),
                     v.source_focus,
                 )

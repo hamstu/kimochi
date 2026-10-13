@@ -172,8 +172,6 @@ export interface ViewState {
   permission?: 'granted' | 'denied' | 'unknown'
   /** Raw and unfiltered; consumers decide what Kimochi's own windows mean. */
   frontmostApp?: string | null
-  /** Whether macOS Accessibility is granted (needed for key-triggered auto-scan). */
-  accessibility?: boolean
   /** The most recent controller/tray/hotkey action, with a monotonic sequence number. */
   action?: { name: string; seq: number } | null
 }
@@ -233,7 +231,6 @@ export type NativeErrorKind = 'busy' | 'permission' | 'gone' | 'invalid' | 'nati
 /** Declared once beside its macOS default (`ui/capabilities.ts`); re-exported for the panels. */
 export type {
   CaptureAuthorization,
-  KeyTriggerPermission,
   OcrEngineCapability,
   OcrEngineKey,
   PlatformCapabilities,

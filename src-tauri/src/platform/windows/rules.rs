@@ -45,80 +45,6 @@ pub fn image_stem(path: &str) -> String {
     }
 }
 
-/// The key name the Go `keytrigger` helper (`keymap_windows.go`) emitted for a virtual-key
-/// code. Users' `autoScanSettings.triggerKeys` were written against these strings, so
-/// the table is copied verbatim, including its quirks: the low-level hook reports the
-/// sided codes (`VK_LSHIFT` = 0xA0), so the left key is plain `shift` and the right one
-/// `shift_right`; the Windows key is `cmd`; anything unlisted is `unknown`.
-pub fn key_name(vk: u32) -> &'static str {
-    match vk {
-        0x41..=0x5A => {
-            const LETTERS: [&str; 26] = [
-                "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
-                "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
-            ];
-            LETTERS[(vk - 0x41) as usize]
-        }
-        0x30..=0x39 => {
-            const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-            DIGITS[(vk - 0x30) as usize]
-        }
-        0x70..=0x7B => {
-            const F: [&str; 12] = [
-                "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
-            ];
-            F[(vk - 0x70) as usize]
-        }
-        0x10 | 0xA0 => "shift",
-        0xA1 => "shift_right",
-        0x11 | 0xA2 => "ctrl",
-        0xA3 => "ctrl_right",
-        0x12 | 0xA4 => "alt",
-        0xA5 => "alt_right",
-        0x5B => "cmd",
-        0x5C => "cmd_right",
-        0x14 => "capslock",
-        0x0D => "return",
-        0x09 => "tab",
-        0x20 => "space",
-        0x08 => "backspace",
-        0x1B => "escape",
-        0x2E => "delete",
-        0x24 => "home",
-        0x23 => "end",
-        0x21 => "pageup",
-        0x22 => "pagedown",
-        0x25 => "left",
-        0x27 => "right",
-        0x28 => "down",
-        0x26 => "up",
-        0xBD => "minus",
-        0xBB => "equals",
-        0xDB => "bracket_left",
-        0xDD => "bracket_right",
-        0xBA => "semicolon",
-        0xDE => "quote",
-        0xDC => "backslash",
-        0xBC => "comma",
-        0xBE => "period",
-        0xBF => "slash",
-        0xC0 => "grave",
-        0x60..=0x69 => {
-            const PAD: [&str; 10] = [
-                "numpad_0", "numpad_1", "numpad_2", "numpad_3", "numpad_4", "numpad_5", "numpad_6",
-                "numpad_7", "numpad_8", "numpad_9",
-            ];
-            PAD[(vk - 0x60) as usize]
-        }
-        0x6A => "numpad_multiply",
-        0x6B => "numpad_add",
-        0x6D => "numpad_subtract",
-        0x6E => "numpad_decimal",
-        0x6F => "numpad_divide",
-        _ => "unknown",
-    }
-}
-
 /// Which native frame edge the pointer is on, mirroring the macOS adapter's
 /// `resize_edge` (4-pixel band, corners first).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -335,25 +261,6 @@ mod tests {
         assert_eq!(image_stem("noext"), "noext");
         assert_eq!(image_stem(".hidden"), ".hidden");
         assert_eq!(image_stem(""), "");
-    }
-
-    #[test]
-    fn key_names_match_the_go_keytrigger_table() {
-        assert_eq!(key_name(0x41), "a");
-        assert_eq!(key_name(0x5A), "z");
-        assert_eq!(key_name(0x30), "0");
-        assert_eq!(key_name(0x7B), "f12");
-        assert_eq!(key_name(0xA0), "shift");
-        assert_eq!(key_name(0xA1), "shift_right");
-        assert_eq!(key_name(0xA2), "ctrl");
-        assert_eq!(key_name(0xA4), "alt");
-        assert_eq!(key_name(0x5B), "cmd");
-        assert_eq!(key_name(0x0D), "return");
-        assert_eq!(key_name(0x20), "space");
-        assert_eq!(key_name(0x69), "numpad_9");
-        assert_eq!(key_name(0xC0), "grave");
-        assert_eq!(key_name(0x7C), "unknown"); // F13 was never mapped
-        assert_eq!(key_name(0xFF), "unknown");
     }
 
     #[test]

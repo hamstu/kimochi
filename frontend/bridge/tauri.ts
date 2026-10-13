@@ -285,8 +285,6 @@ export const openDictionary = (open: boolean): Promise<void> => invoke('dictiona
 export const texthookerSend = (text: string): Promise<void> => invoke('texthooker_send', { text })
 export const openScreenCapturePreferences = (): Promise<void> =>
   invoke('open_screen_capture_preferences')
-export const openAccessibilityPreferences = (): Promise<void> =>
-  invoke('open_accessibility_preferences')
 
 /** Session flags the owning window sets directly (see `view_flags` in the backend). */
 export const setViewFlags = (flags: Record<string, boolean>): Promise<void> =>

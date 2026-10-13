@@ -67,7 +67,7 @@ Keys and defaults mirror `src/main/settings.ts`:
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `scannedTextFontSize` (14),
 `scannedTextHistory[]`, `audioSettings.voiceId`,
-`autoScanSettings.{enabled,triggerKeys,scanDelay,gamepadButton}`,
+`autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
 `texthookerSettings.{copyToClipboard,sendToWebSocket,webSocketUrl}`,
 `gamepadSettings.{enabled,preferredGamepadIndex}` (enabled defaults true),
@@ -396,7 +396,7 @@ Carries the POC fields (`revision`, `scan`, `status`, `logs`, `interactive`, `re
 `origin`, `dictionary`, `dismiss`) plus, so panels can stop polling expensive sources:
 `source` (the frontend-shaped descriptor), `crop`, `cropEnabled`, `isScanning`,
 `autoOcrEnabled`, `overlayVisible`, `textOverlayVisible`, `debugOverlayVisible`,
-`frontmostApp`, `sourceFocus`, `accessibility`, and `action` `{name, seq}`.
+`frontmostApp`, `sourceFocus`, and `action` `{name, seq}`.
 
 `regions` is keyed by the window label that published each set: the overlay owns the
 words it drew and the dictionary popup owns the popup, and a press has to be
@@ -405,8 +405,8 @@ from it.
 
 ## Actions, hotkeys and input
 
-All input paths converge on one dispatcher, so a keyboard shortcut, a gamepad button, a
-keyboard auto-scan trigger, the tray and a panel can never fire two different code paths
+All input paths converge on one dispatcher, so a keyboard shortcut, a gamepad button, the
+gamepad auto-scan trigger, the tray and a panel can never fire two different code paths
 for the same action.
 
 | Command | Signature |
@@ -446,14 +446,10 @@ Verified against the parser rather than assumed: `global-hotkey` accepts
 so `CommandOrControl+Shift+8` registers unchanged. Per-key registration failures are
 reported in `failed` instead of disabling the whole set silently.
 
-**Keyboard-triggered auto-scan** reuses the Electron tree's `keytrigger` sidecar
-(`bin/keytrigger-darwin-{arm64,amd64}`, bundled as a resource, with a repo fallback for a
-dev run). Its line-delimited JSON gives key events and frontmost-window changes. A key
-in `autoScanSettings.triggerKeys` fires `triggerScan` after `autoScanSettings.scanDelay`,
-matching Electron. Key events require macOS Accessibility; that state is reported as
-`snapshot().accessibility` and through `system_state()` so the UI can say so honestly.
-Nothing probes or prompts on its own — `open_accessibility_preferences()` exists for an
-explicit user action.
+**Auto-scan trigger.** The gamepad button in `autoScanSettings.gamepadButton` fires
+`triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`). Kimochi does not watch
+individual keyboard keys in other applications on any platform: a keyboard scan is a
+global shortcut (`hotkeys`), which needs no Accessibility or other input permission.
 
 **Gamepad is owned by Rust, not the webview.** Emits `gamepad`
 `{gamepads, activeGamepadIndex, buttonStates, axisStates}` in the shape of
@@ -675,18 +671,20 @@ posts through `postActivity` in `ui/native.js`, with its wording in `ui/scan-act
 
 | Command | Signature |
 | --- | --- |
-| `system_state` | `() -> {frontmostApp, accessibility, displays}` |
+| `system_state` | `() -> {frontmostApp, displays}` |
 | `app_quit` | `() -> ()` |
 | `open_screen_capture_preferences` | `() -> ()` |
-| `open_accessibility_preferences` | `() -> ()` |
 
 Emits `system-suspend` and `system-resume` from
 `NSWorkspaceWillSleepNotification` / `NSWorkspaceDidWakeNotification` — the macOS
 equivalent of Electron's `powerMonitor`, which Tauri does not wrap. Consumers should
 tear down and re-establish capture state across a sleep exactly as Electron does.
 
-Emits `frontmost-app` `{appName, windowTitle?, appPath?}` from the `keytrigger` sidecar
-and from `NSWorkspaceDidActivateApplicationNotification`. **The name is raw and
+Emits `frontmost-app` `{appName, pid}` once per change of frontmost *application*, from
+`platform::observe_workspace`: `NSWorkspaceDidActivateApplicationNotification` on macOS,
+an `EVENT_SYSTEM_FOREGROUND` WinEvent hook on Windows, and `_NET_ACTIVE_WINDOW` changes on
+X11 (Wayland does not say which application is active, so nothing is emitted there). The
+starting value is `snapshot().frontmostApp`. **The name is raw and
 unfiltered on purpose.** Kimochi's own windows are not filtered out, because a consumer
 needs to distinguish "Kimochi is frontmost" (where the previous foreign app should stay
 the effective focus) from "no signal yet" (where text must be shown, never hidden).
@@ -908,8 +906,8 @@ download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.li
 
 Real limitations, recorded rather than papered over.
 
-- **macOS only.** Capture, overlay geometry, icons, cursors, power, window tracking and
-  the `keytrigger` sidecar are all macOS 14+ implementations. No cross-platform capture
+- **macOS only.** Capture, overlay geometry, icons, cursors, power and window tracking
+  are all macOS 14+ implementations. No cross-platform capture
   behaviour is claimed or implemented; Windows and Linux need separate backends.
 - **Panels on a captured display.** Own-process exclusion covers Kimochi's windows in
   display captures; it has not been observed at runtime.

@@ -47,7 +47,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 mod cli;
 mod icon;
-mod keytrigger;
 mod mouseguard;
 mod rules;
 mod sources;
@@ -56,7 +55,6 @@ mod workspace;
 
 pub use cli::run_cli;
 pub use icon::app_icon_png;
-pub use keytrigger::{key_trigger_status, start_key_trigger, stop_key_trigger};
 pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use sources::{front_window, frontmost_app, frontmost_pid, picker_sources, window_bounds};
 pub use window::{
@@ -308,10 +306,6 @@ pub fn open_capture_settings() -> Result<(), String> {
     Err("not applicable: Windows needs no screen recording permission".into())
 }
 
-pub fn open_input_settings() -> Result<(), String> {
-    Err("not applicable: watching trigger keys needs no permission on Windows".into())
-}
-
 // ---------------------------------------------------------------- capabilities
 
 /// `major.minor.build` from `RtlGetVersion`, which, unlike `GetVersionEx`, is not
@@ -364,7 +358,7 @@ pub fn capabilities() -> Value {
             "nonActivating": true,
             "nativeHoverWorkaround": false,
         },
-        "input": {"globalShortcuts": true, "keyTrigger": key_trigger_status()},
+        "input": {"globalShortcuts": true},
         // The image stem is what `frontmost_app` and focus events report for this app.
         "ownAppNames": ["Kimochi", "kimochi"],
         "tray": true,

@@ -139,10 +139,6 @@ function previewCapabilities(): PlatformCapabilities {
       ...DEFAULT_CAPABILITIES_MACOS.capture,
       authorization: params.get('permission') === 'denied' ? 'denied' : 'granted'
     },
-    input: {
-      ...DEFAULT_CAPABILITIES_MACOS.input,
-      keyTrigger: { ...DEFAULT_CAPABILITIES_MACOS.input.keyTrigger, permission: 'granted' }
-    },
     ownPids: [4242]
   }
   const platform = params.get('platform')
@@ -162,15 +158,7 @@ function previewCapabilities(): PlatformCapabilities {
         excludesOwnWindows: true
       },
       overlay: { passive: true, inputRegions: 'native', nonActivating: true, nativeHoverWorkaround: false },
-      input: {
-        globalShortcuts: true,
-        keyTrigger: {
-          available: false,
-          permission: 'unsupported',
-          reason: 'Watching key presses in other applications is not available on Windows yet.',
-          remediation: 'Use the gamepad trigger or the scan shortcut instead.'
-        }
-      },
+      input: { globalShortcuts: true },
       ocrEngines: {
         cloud: { available: true },
         websocket: { available: true },
@@ -200,15 +188,7 @@ function previewCapabilities(): PlatformCapabilities {
       },
       sources: { catalog: false, thumbnails: false, icons: false, followWindowBounds: false, foregroundTracking: false },
       overlay: { passive: false, inputRegions: 'wholeWindowOnly', nonActivating: false, nativeHoverWorkaround: false },
-      input: {
-        globalShortcuts: false,
-        keyTrigger: {
-          available: false,
-          permission: 'unsupported',
-          reason: 'Wayland does not let applications watch key presses in other windows.',
-          remediation: null
-        }
-      },
+      input: { globalShortcuts: false },
       ocrEngines: {
         cloud: { available: true },
         websocket: { available: true },
@@ -269,7 +249,6 @@ function viewState(label: string): Record<string, unknown> {
     debugOverlayVisible: label === 'diagnostics',
     permission: 'granted',
     frontmostApp: CURRENT_SOURCE.app,
-    accessibility: true,
     action: null
   }
 }
@@ -442,7 +421,6 @@ const HANDLERS: Record<string, Handler> = {
   dictionary: ok,
   texthooker_send: ok,
   open_screen_capture_preferences: ok,
-  open_accessibility_preferences: ok,
   history_add: ok,
   history_delete: ok,
   history_clear: ok,

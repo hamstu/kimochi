@@ -82,7 +82,6 @@ export interface Settings {
   autoOCRSettings: AutoScanSettings
   autoScanSettings: {
     enabled: boolean
-    triggerKeys: string
     scanDelay: number
     gamepadButton?: number
   }
@@ -122,7 +121,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   liveOverlayEnabled: false,
   textOverlayGrouping: DEFAULT_GROUPING,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,
-  autoScanSettings: { enabled: false, triggerKeys: '', scanDelay: 500 },
+  autoScanSettings: { enabled: false, scanDelay: 500 },
   texthookerSettings: {
     copyToClipboard: false,
     sendToWebSocket: false,

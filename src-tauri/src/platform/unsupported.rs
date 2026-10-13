@@ -1,7 +1,7 @@
 //! The platform contract for an OS with no native integration yet (Linux until its
 //! adapters land). Every query answers "nothing", every action fails with a reason, and
 //! nothing panics, so the reader, dictionary, texthooker and settings still work.
-use super::{AppIdentity, DisplayInfo, FrontWindow, KeyTriggerStatus, PointerSample};
+use super::{AppIdentity, DisplayInfo, FrontWindow, PointerSample};
 use kimochi_capture::{Platform, Rect, SourceId};
 use serde_json::{json, Value};
 use std::path::Path;
@@ -115,22 +115,6 @@ pub fn app_icon_png(_app: &AppIdentity, _target: isize) -> Option<Vec<u8>> {
     None
 }
 
-pub fn key_trigger_status() -> KeyTriggerStatus {
-    KeyTriggerStatus {
-        available: false,
-        permission: "unsupported",
-        reason: Some("Watching trigger keys is not available on this platform yet.".into()),
-        remediation: None,
-    }
-}
-
-pub fn start_key_trigger(
-    _app: &tauri::AppHandle,
-    _on_line: Box<dyn Fn(Value) + Send + Sync + 'static>,
-) -> Result<(), String> {
-    Err("keyboard auto-scan and focus tracking are not available on this platform yet".into())
-}
-
 pub fn observe_workspace(
     _on_sleep: impl Fn() + 'static,
     _on_wake: impl Fn() + 'static,
@@ -147,10 +131,6 @@ pub fn activate_process(_pid: u32) -> Result<(), String> {
 }
 
 pub fn open_capture_settings() -> Result<(), String> {
-    Err("not applicable".into())
-}
-
-pub fn open_input_settings() -> Result<(), String> {
     Err("not applicable".into())
 }
 

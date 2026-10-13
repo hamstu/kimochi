@@ -37,7 +37,7 @@ const AGREED = {
   ocrMode: 'cloud',
   serverSettings: { mode: 'cloud' },
   audioSettings: { voiceId: 'j210dv0vWm7fCknyQpbA' },
-  autoScanSettings: { enabled: false, triggerKeys: '', scanDelay: 500 },
+  autoScanSettings: { enabled: false, scanDelay: 500 },
   textOverlayGrouping: {
     enabled: false,
     proximityThreshold: 100,

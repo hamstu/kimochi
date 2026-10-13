@@ -6,10 +6,6 @@
     ],
     "macOS": {
       "minimumSystemVersion": "14.0"
-    },
-    "resources": {
-      "../bin/keytrigger-darwin-arm64": "bin/keytrigger-darwin-arm64",
-      "../bin/keytrigger-darwin-amd64": "bin/keytrigger-darwin-amd64"
     }
   }
 }

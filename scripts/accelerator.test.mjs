@@ -45,7 +45,7 @@ test('a partial capabilities payload is completed from the default', () => {
   assert.equal(caps.ocrEngines.mangaocr.available, false)
   assert.equal(caps.ocrEngines.cloud.available, true)
   assert.deepEqual(caps.ownAppNames, DEFAULT_CAPABILITIES_MACOS.ownAppNames)
-  assert.equal(caps.input.keyTrigger.permission, DEFAULT_CAPABILITIES_MACOS.input.keyTrigger.permission)
+  assert.deepEqual(caps.input, DEFAULT_CAPABILITIES_MACOS.input)
 })
 
 test('formats accelerators as platform key caps', () => {
