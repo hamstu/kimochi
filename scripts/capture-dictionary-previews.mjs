@@ -10,7 +10,7 @@
  *
  * - The dev server (vite.dev.config.ts) on `--port` (default 1470, so it does not collide with
  *   `npm run dev` on 1430), with Hachidori and 10ten on their own origins at +10 and +11, and the
- *   browser preview (vite.preview.config.ts) on +4000 for the Kimochi pop-up. Both in-process,
+ *   browser preview (vite.preview.config.ts) on +4000 for the Yomitan API pop-up. Both in-process,
  *   closed at the end.
  * - frontend/dev/dictionary-preview.html, the scene, which starts each engine exactly as the dictionary
  *   harness does (DICTIONARY_ENGINES.md §9). Chrome points at 食べられなかった with Shift held (a
@@ -27,7 +27,7 @@
  * - 10ten ships its own word dictionary in the extension, and fetches the full JMdict data from
  *   its server in the background (through the dev server's proxy); the capture waits for that
  *   download so the pop-up shows complete results, then shoots.
- * - The Kimochi pop-up (`custom-api`) shows a Yomitan API `/ankiFields` answer. With the API
+ * - The Yomitan API pop-up (`custom-api`) shows a Yomitan API `/ankiFields` answer. With the API
  *   reachable (`--api`, default http://127.0.0.1:19633) the answer is live and is recorded to
  *   scripts/fixtures/dictionary-previews/yomitan-api.json; `--offline`, or an unreachable API,
  *   replays that recording.

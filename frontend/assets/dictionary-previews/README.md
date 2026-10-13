@@ -13,7 +13,7 @@ Files are found at build time: a missing one is simply not shown.
 | Built-in Yomitan | `yomitan-light` | `yomitan-dark` |
 | Hachidori | `hachidori-light` | `hachidori-dark` |
 | 10ten | `tenten-light` | `tenten-dark` |
-| Kimochi pop-up (Yomitan API) | `custom-api-light` | `custom-api-dark` |
+| Yomitan API | `custom-api-light` | `custom-api-dark` |
 
 - **Format:** `.webp` (what the capture writes), `.png`, `.jpg` or `.jpeg`. A PNG or JPEG wins over
   a WebP of the same name, so a screenshot dropped in by hand replaces the captured one without
@@ -43,7 +43,7 @@ Yomitan dictionary zips, default `../yomitan-dicts` or `$KIMOCHI_YOMITAN_DICTS`)
   imports it; nothing of it is kept.
 - **10ten:** nothing; it ships its own dictionary and updates it from its server (needs a
   connection the first time).
-- **Kimochi pop-up:** a running Yomitan API. Its answer is recorded to
+- **Yomitan API:** a running Yomitan API. Its answer is recorded to
   `scripts/fixtures/dictionary-previews/yomitan-api.json`, which `--offline` (or an unreachable
   API) replays.
 

@@ -120,7 +120,7 @@
       }
       .line { margin: 0; font-size: 30px; line-height: 1.6; letter-spacing: 0.02em; }
       /* Kimochi's overlay box under the pointer (ui/render.js proximityStyle, hovering), for the
-         Kimochi pop-up, whose lookups start from the overlay rather than an extension's scan. */
+         Yomitan API pop-up, whose lookups start from the overlay rather than an extension's scan. */
       [data-engine='custom-api'] #word.hovered {
         border-radius: 6px 6px 0 0;
         background: rgba(0, 0, 0, 0.9);
@@ -166,7 +166,7 @@
     <svg id="pointer" viewBox="0 0 22 32" aria-hidden="true">
       <path d="M2 2 L2 25 L7.6 19.8 L11.4 28.6 L15 27 L11.3 18.4 L18.8 18.4 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round" />
     </svg>
-    <iframe id="api-popup" title="Kimochi pop-up"></iframe>
+    <iframe id="api-popup" title="Yomitan API pop-up"></iframe>
     <div class="internals" aria-hidden="true">
       <span id="engine"></span><span id="origin"></span><span id="ready"></span>
       <pre id="status"></pre>
@@ -184,7 +184,7 @@
        *   wordPoint()             where to point: the middle of the first character of the word
        *   wordRect()              the word's box
        *   popupRect()             the visible pop-up's box, or null
-       *   showApiPopup(payload)   Kimochi pop-up only: open the frame at the pointer and show `payload`
+       *   showApiPopup(payload)   Yomitan API pop-up only: open the frame at the pointer and show `payload`
        */
       ;(() => {
         const params = new URLSearchParams(location.search)
