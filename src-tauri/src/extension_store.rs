@@ -25,7 +25,7 @@
 //! [`read`] answers a file of an engine for the schemes (`hachidori://`, `tenten://`, in
 //! `extensions.rs`) and for Yomitan at the app origin root ([`EngineAssets`], which replaces the
 //! context's asset provider so Yomitan keeps `tauri://localhost/` and its users' IndexedDB). Only
-//! paths in the pinned map are answered; the tree is the ready download, or in a debug build the
+//! paths in the pinned map are answered; the tree is the ready download, or under `tauri dev` the
 //! developer cache `extensions/<id>/` (unless `KIMOCHI_EXTENSIONS_NO_DEV_TREE` is set); no path
 //! component may be a link; and each file is hashed against the map the first time it is served
 //! in a session.
@@ -79,7 +79,7 @@ const PINS: &[(&str, &str, &str)] = &[
 
 const INSTALLED: &str = "installed.json";
 const STAGING: &str = ".staging-";
-/// Set to test the real download in a debug build, which otherwise serves `extensions/<id>/`.
+/// Set to test the real download under `tauri dev`, which otherwise serves `extensions/<id>/`.
 pub const NO_DEV_TREE: &str = "KIMOCHI_EXTENSIONS_NO_DEV_TREE";
 
 // ---------------------------------------------------------------------------- pins
@@ -1015,11 +1015,13 @@ fn report(value: Value) {
     }
 }
 
-/// The developer cache `<repo>/extensions/<id>/`, in a debug build only (a release binary never
-/// serves code from a compiled-in path of the build machine), and not with
-/// `KIMOCHI_EXTENSIONS_NO_DEV_TREE` set.
+/// The developer cache `<repo>/extensions/<id>/`, under `tauri dev` only: never in a bundle,
+/// debug or release (a bundle never serves code from a compiled-in path of the build machine, and
+/// a debug bundle is how the real download is tested), and not with
+/// `KIMOCHI_EXTENSIONS_NO_DEV_TREE` set. `tauri dev`'s dev server serves the same cache for
+/// Yomitan (scripts/ext-dev-server.mjs `engineTree`), so the two agree.
 pub fn dev_tree(id: &str) -> Option<PathBuf> {
-    if !cfg!(debug_assertions) || std::env::var_os(NO_DEV_TREE).is_some() {
+    if !cfg!(all(dev, debug_assertions)) || std::env::var_os(NO_DEV_TREE).is_some() {
         return None;
     }
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("extensions").join(id);
