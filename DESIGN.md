@@ -263,6 +263,7 @@ A cool slate neutral field with one indigo accent. Colour signals state; it neve
 **Character:** Figtree is a warm, slightly geometric sans that reads small and stays neutral next to Japanese. The variable weights are tuned off-grid (430 / 520 / 620) so 13px text is solid without looking heavy.
 
 ### Hierarchy
+- **Display** (620, 1.75rem / 28px, -0.02em): the "Kimochi" wordmark on the onboarding intro, and nowhere else.
 - **Heading XL** (620, 1.125rem / 18px, 1.625rem): first-run and empty-state headings only.
 - **Title** (620, 0.9375rem / 15px, 1.375rem, -0.005em, balanced wrap): settings page titles and dialog titles.
 - **Heading** (620, 0.8125rem / 13px): settings section headings and empty-state titles.
@@ -277,7 +278,7 @@ Transcript lines use the Japanese stack at their own pixel size, the Log's `font
 ### Named Rules
 **The Tabular Data Rule.** Counts, times, rates and shortcuts use tabular numerals (`k-num`, `tnum`) in the UI face. Mono is never decorative.
 
-**The Five-Step Ramp Rule.** UI text uses 11, 12, 13, 15 or 18 and nothing in between. Only Japanese content leaves the ramp.
+**The Five-Step Ramp Rule.** UI text uses 11, 12, 13, 15 or 18 and nothing in between. Only Japanese content and the onboarding wordmark leave the ramp.
 
 ## Layout
 
@@ -354,6 +355,9 @@ The remote's grammar is the whole system in one element.
 - **Choice card:** for exclusive modes that each need a detail line (input source, engine). It uses field ground with a control-line border and lg radius. When selected it shows the indigo wash with a 1.5px indigo inset ring.
 - **Slider:** a 0.25rem gray-a5 track, an indigo range and a 0.875rem white thumb.
 - **Badge / dot / callout:** tone-tinted soft grounds (neutral, accent, ok, warn, danger). Callouts use the tint alone, with no border.
+
+### Onboarding
+The welcome guide is an ordinary panel window: the shared title bar, the window ground, and a footer action bar on the bar plane (like a dialog footer: hairline above, 0.75rem × 1rem padding) holding Back and the step dots on the left and the step's actions on the right, primary last. Each step is one column up to 40rem wide (prose up to 34rem): an 18px heading, a 13px secondary lede, then the step's controls, with no cards around them. The step dots are 6px gray-a6 dots, past steps faint ink, the current one a 16px indigo pill. The intro is the one decorated screen: the icon (`frontend/welcome/KimochiLogo.tsx`, built from `branding/icon.svg`) builds itself, then the display wordmark and tagline fade up; reduced motion shows the finished state.
 
 ### Transcript (Log)
 Japanese lines sit on the window ground at their own px size, separated by hairlines. Dictionary tokens get an indigo wash on hover. Notebook matches are indigo-ink words with a 1em round avatar or category marker. The footer shows stats in faint meta-size tabular numerals, separated by 0.1875rem gray-a7 dots.
