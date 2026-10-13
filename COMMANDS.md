@@ -540,7 +540,8 @@ Hachidori and 10ten run unmodified beside Yomitan through the generic extension 
 | `storage_load` | `({extension?}) -> Value` |
 | `storage_save` | `({extension?, value}) -> ()` |
 | `storage_backup` | `({extension}) -> string \| null` |
-| `dictionary_engine_apply` | `() -> ()` |
+| `dictionary_engine_apply` | `({repair?}) -> ()` |
+| `dictionary_engine_effective` | `() -> {selected, effective, ready: {yomitan, hachidori, tenten}}` |
 | `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
 
 `storage_load` / `storage_save` persist `chrome.storage`. Without `extension` they read and
@@ -557,8 +558,22 @@ launch (it is named by the app identifier), the WebKit store is not (a bundle an
 executable get different ones), see `DICTIONARY_ENGINES.md` §5.4.1. Records
 `{check: 'storage-backup', extension, file}`; the host then reports `ext-host-storage-desync`.
 
-`dictionary_engine_apply` reloads (`location.reload()`) every extension-hosting window
-that exists, in this order: `overlay`, `log`, `dictionary`, `popup-host`, `welcome`. Call
+**The effective engine.** No engine is bundled (see "Dictionary engine downloads" below), so
+the engine the windows run is the *effective* one: the setting's host engine when its files
+can be served, else `none`. `none` installs neither the Yomitan shims nor the generic host;
+lookups answer "No dictionary is set up yet. Choose and download one in Settings →
+Dictionary.", and the Log and the dictionary window say the same. Native's preludes carry the
+effective engine, and the overlay mirrors it (`dictionary_engine_effective`), so a selected
+engine whose files are missing (a removed download, a pin bump still downloading) never leaves
+a window running a dead host. `dictionary_engine_effective` answers `selected` (the setting's
+host engine), `effective`, and `ready` per engine.
+
+`dictionary_engine_apply` refuses with `invalid: <engine> is not downloaded` when the setting
+names an engine whose files are missing, so a switch never reloads the windows into a host
+with no files; Settings and onboarding switch only once the download is ready. With
+`repair: true` (the overlay's startup repair of a stale mirror) it reloads into the effective
+engine, `none` included, whatever the setting says. Otherwise it reloads
+(`location.reload()`) every extension-hosting window that exists, in this order: `overlay`, `log`, `dictionary`, `popup-host`, `welcome`. Call
 it after saving `yomitanSettings.popupType` and writing the `localStorage` mirror
 `kimochi.dictionaryEngine`: the reload re-runs the document-start scripts, which read the
 new engine. The mirror and the prelude name the *host* engine: `'builtin'` and
@@ -689,6 +704,71 @@ the effective focus) from "no signal yet" (where text must be shown, never hidde
 The tray uses the Electron build's macOS template icon, a left-click popover positioned
 under the icon, and a right-click menu of Show Controls / Settings / Quit. Emits
 `tray:action` `{action}`.
+
+## Dictionary engine downloads
+
+Yomitan, Hachidori and 10ten are not bundled. Each is pinned to one upstream GitHub release by
+`extensions/<id>.source.json` (version, tag, commit, asset URL, SHA-256, size) and
+`extensions/<id>.sha256.json` (every file of the unpacked release and its SHA-256), both
+compiled in. Implementation: `src-tauri/src/extension_store.rs`; the plan and its reasoning:
+`EXTENSION_DOWNLOADS.md`.
+
+`engine` is `"yomitan"`, `"hachidori"` or `"tenten"`. Every command answers with the engine's
+`ExtensionStatus` after acting:
+
+| Command | Signature |
+| --- | --- |
+| `extension_status` | `({engine}) -> ExtensionStatus` |
+| `extension_download_start` | `({engine}) -> ExtensionStatus` — no-op while downloading or ready |
+| `extension_download_pause` | `({engine}) -> ExtensionStatus` — keeps the `.part` |
+| `extension_download_resume` | `({engine}) -> ExtensionStatus` — continues from the `.part` (HTTP Range) |
+| `extension_download_retry` | `({engine}) -> ExtensionStatus` — after `failed`; also resumes |
+| `extension_download_cancel` | `({engine}) -> ExtensionStatus` — stops and removes what was fetched; leaves a ready engine alone |
+| `extension_delete` | `({engine}) -> ExtensionStatus` — removes the downloaded engine; refused (`invalid:`) for the engine the setting names |
+
+```ts
+ExtensionStatus = {
+  engine, name, version,             // "tenten", "10ten Japanese Reader", "1.28.0"
+  state: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready',
+  source: 'downloaded' | 'development' | null,  // where a ready engine is served from
+  file,                              // "<version>.zip" while downloading or verifying it; "unpacking"
+  receivedBytes, totalBytes, overallReceived, overallTotal,  // bytes of the zip
+  message                            // why it failed
+}
+```
+
+Emits `extension-download` with an `ExtensionStatus` on every state change and about four
+times a second while bytes arrive, and posts to the activity feed ("Downloading Yomitan… 40%",
+"Yomitan ready", "Yomitan download failed: …", key `extension:<id>`).
+
+**Store.** `<app local data>/extensions/<id>/`: the zip is downloaded as
+`<version>.zip.part` with the OCR models' transfer (resume by Range, restart on 416 or an
+ignored Range, Content-Length and size checks, SHA-256), renamed to `<version>.zip`, then
+unpacked into `.staging-<version>-…` by a port of `scripts/sync-extension.mjs`'s reader
+(stored and deflate only; ZIP64, encryption, symlinks, absolute paths, drive letters,
+backslashes and `..` refused; size and CRC checked). Every file is hashed as it is written and
+the set must equal the pinned map exactly (nothing missing, changed or added); then the
+staging tree is renamed to `<version>/` (retried on Windows while an antivirus holds a file)
+and `installed.json` records it. The `<version>/` directory is the commit point. Other
+versions, stray parts and staging directories are removed after an install and at start-up.
+Removing an engine removes its program files only: its dictionaries (the WebView's storage for
+its origin, and `chrome-local-<id>.json` or Yomitan's `chrome-local.json`) are kept.
+
+**Serving.** Only paths in the pinned map are answered (`hachidori://`, `tenten://` and, at
+the app origin root, Yomitan's paths through the app's asset provider), from the installed
+tree; under `tauri dev` only, the developer cache `extensions/<id>/` is used when nothing is
+installed (unless `KIMOCHI_EXTENSIONS_NO_DEV_TREE` is set). No component of the path may be a
+link, and each file is hashed against the map the first time it is served in a session
+(`{check: 'extension-file-refused', engine, file, reason}` when not).
+
+**When the windows move.** Settings → Dictionary and onboarding download first and switch
+(`dictionary_engine_apply`) only once the engine is ready. A download finishing, or an engine
+being removed, that changes the effective engine (the engine the setting already names became
+usable, or the one in use went away) makes native write the mirror and reload the windows once
+(`{check: 'dictionary-engine-follow', from, engine}`). At launch, when setup is complete and
+the selected engine is not usable (an app update moved its pin, or the build the user upgraded
+from bundled it), its download starts on its own (`dictionary-engine-startup`): the user
+already chose it, and their dictionaries are untouched. A first run chooses in onboarding.
 
 ## OCR model downloads
 

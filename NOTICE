@@ -16,30 +16,46 @@ Kimochi also includes MeikiOCR (Apache-2.0), ported from rtr46/meikiocr
 revision 52aa607ecdc1038c7bf390f37cd9a8b306e8a08a. Its models and ONNX
 Runtime carry their own licenses in the bundled meikiocr resource directory.
 
-Dictionary extensions
-Kimochi bundles two browser-extension pop-up dictionaries, each distributed
-byte-identical to its upstream release package (unpacked, never modified;
-scripts/prepare.mjs verifies every file against extensions/<id>.sha256.json
-on each build). The pinned release, asset URL and SHA-256 of each are in
-extensions/<id>.source.json. Both are licensed GPL-3.0-or-later and are
-distributed here under GPL-3.0, whose text is in LICENSE.
+Dictionary engines
+Kimochi does not include any pop-up dictionary engine. When you choose one,
+Kimochi downloads that engine's own, unmodified release asset from its
+upstream GitHub release, checks it against a pinned SHA-256 and every
+unpacked file against a pinned hash list (extensions/<id>.source.json and
+extensions/<id>.sha256.json in Kimochi's source), and runs it unmodified.
+Each engine's licence and notices are part of that download; its source is
+the upstream tag named below. All three are licensed GPL-3.0-or-later.
+
+Yomitan: https://github.com/yomidevs/yomitan (GPL-3.0-or-later)
+Not included in Kimochi. When you choose it, Kimochi downloads release
+26.8.24.0 (commit 77e200428902abf4fa48284df92da7af3dcb4162, asset
+yomitan-chrome.zip, SHA-256
+99d3ac05e09b09d19b1ecd22da2ebca4fc8cfce1d95d029b5a18d87aff632147) from
+https://github.com/yomidevs/yomitan/releases and runs it unmodified. Its
+legal notices (legal.html, legal-npm.html) are part of that download.
+Source: the upstream tag 26.8.24.0.
 
 Hachidori: https://github.com/bee-san/hachidori (GPL-3.0-or-later)
-Release 0.3.0, commit 51eb85486fd9d9b00561c623bbc6defa60853f16, asset
-hachidori-0.3.0-51eb85486fd9-chrome.zip, in extensions/hachidori/. Its
-LICENSE, THIRD_PARTY_NOTICES.md and licenses/ directory (notices for
-Hoshidicts, Zstandard, zip.js, Emscripten, musl, LLVM runtimes, KANJIDIC2
-under CC BY-SA 4.0 and others) are part of that tree; SOURCE.json names the
-matching corresponding-source archive and its SHA-256.
+Not included in Kimochi. When you choose it, Kimochi downloads release 0.3.0
+(commit 51eb85486fd9d9b00561c623bbc6defa60853f16, asset
+hachidori-0.3.0-51eb85486fd9-chrome.zip, SHA-256
+9345e6acf1b31a2d7bdecc423439a57e5c97f3ad188bcc2d6e5368642703bf8e) from
+https://github.com/bee-san/hachidori/releases and runs it unmodified. Its
+LICENSE, THIRD_PARTY_NOTICES.md and licenses/ (notices for Hoshidicts,
+Zstandard, zip.js, Emscripten, musl, LLVM runtimes, KANJIDIC2 under
+CC BY-SA 4.0 and others) are part of that download; SOURCE.json names the
+matching corresponding-source archive. Source: the upstream tag 0.3.0.
 
 10ten Japanese Reader: https://github.com/birchill/10ten-ja-reader
-(GPL-3.0-or-later). Release v1.28.0, commit
-05e9fe2815de2eb1c7807b3d7bebdef456cbb5d1, asset
-10ten-ja-reader-1.28.0-chrome.zip, in extensions/tenten/. The release package
-carries no licence file of its own; its GPL text is the one in LICENSE. Its
-fonts carry their licences beside them (extensions/tenten/fonts/*.LICENSE.txt).
-Its dictionary data (extensions/tenten/data/ and the updates it downloads) is
+(GPL-3.0-or-later). Not included in Kimochi. When you choose it, Kimochi
+downloads release v1.28.0 (commit 05e9fe2815de2eb1c7807b3d7bebdef456cbb5d1,
+asset 10ten-ja-reader-1.28.0-chrome.zip, SHA-256
+9ce5dcf9930c6dbb5988dbb25e088150dcd77d70cfee70af448df5c8420cbede) from
+https://github.com/birchill/10ten-ja-reader/releases and runs it unmodified.
+Its fonts carry their licences beside them (fonts/*.LICENSE.txt in the
+download). Source: the upstream tag v1.28.0.
+Its dictionary data (data/ in the download, and the updates it fetches) is
 derived from the JMdict, KANJIDIC and ENAMDICT/JMnedict files of the
 Electronic Dictionary Research and Development Group
 (https://www.edrdg.org/), used in conformance with the Group's licence,
-Creative Commons Attribution-ShareAlike 3.0.
+Creative Commons Attribution-ShareAlike 3.0. Kimochi shows this data in its
+own windows.
