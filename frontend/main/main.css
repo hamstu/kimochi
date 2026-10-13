@@ -56,7 +56,6 @@
 }
 .main-title > svg {
   flex: none;
-  border-radius: 4px;
 }
 
 /* The sidebar's right edge. A wide, invisible grab area over the border; the line lights up on

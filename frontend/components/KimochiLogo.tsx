@@ -49,6 +49,48 @@ const BRACKETS = [
   { d: 'M286.72 855.04H168.96V737.28', corner: 'bl' }
 ] as const
 
+/**
+ * The icon at title-bar sizes (up to 24 px): a 16-unit grid, pixel-aligned instead of the 1024
+ * tile scaled down. The brackets are 1 px strokes on half-pixel coordinates, the キ a 2 px stem
+ * with 1 px bars on whole pixels, so it stays crisp at 1x and 2x alike (at 16 px the real
+ * outline's tilt only blurs). `shape-rendering: crispEdges` keeps the tile edge from softening.
+ */
+export function KimochiMark({ size = 16, className }: { size?: number; className?: string }): JSX.Element {
+  const id = useId().replace(/:/g, '')
+  return (
+    <svg
+      className={className}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label="Kimochi"
+    >
+      <defs>
+        <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#5a7ce6" />
+          <stop offset="0.45" stopColor="#3e63dd" />
+          <stop offset="1" stopColor="#2c4cbf" />
+        </linearGradient>
+      </defs>
+      <rect width="16" height="16" rx="4" fill={`url(#${id}-fill)`} />
+      <path
+        d="M2.5 5.5V2.5H5.5M10.5 2.5H13.5V5.5M13.5 10.5V13.5H10.5M5.5 13.5H2.5V10.5"
+        fill="none"
+        stroke="#fff"
+        strokeOpacity="0.8"
+        strokeWidth="1"
+      />
+      <g fill="#fff">
+        <rect x="7" y="3" width="2" height="10" />
+        <rect x="5" y="6" width="6" height="1" />
+        <rect x="4" y="9" width="8" height="1" />
+      </g>
+    </svg>
+  )
+}
+
 export default function KimochiLogo({
   size = 128,
   animate = false,
@@ -63,6 +105,7 @@ export default function KimochiLogo({
   className?: string
 }): JSX.Element {
   const id = useId().replace(/:/g, '')
+  if (size <= 24 && !animate) return <KimochiMark size={size} className={className} />
   const ref = (name: string): string => `${id}-${name}`
   const url = (name: string): string => `url(#${ref(name)})`
   return (
