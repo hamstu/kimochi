@@ -2508,6 +2508,7 @@ fn main() {
             updater::update_install,
             updater::update_retry,
             updater::update_dismiss,
+            updater::changelog,
         ]);
     builder
         // The invoke guard: an extension window (`ext-<id>`) runs extension code in a top

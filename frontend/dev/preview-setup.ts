@@ -29,6 +29,10 @@
  *   ?model=<state>   OCR model downloads (preview-models.ts)
  *   ?update=<state>  self-updates (preview-updates.ts): none (default), idle, checking, available,
  *                    downloading, ready, failed; the sidebar notice and Settings → General → Updates
+ *   ?whatsnew=1      main window: What's new open on load (the sample changelog in preview-updates.ts;
+ *                    add ?update=available for the offered release's notes on top)
+ *   ?whatsnew=update main window: the first launch after an update (`lastSeenVersion` is an older
+ *                    version), so What's new opens on its own once the update status arrives
  *
  * Onboarding (welcome.html):
  *   ?step=intro|permission|picker|ocr|engine|dictionaries|dictionary-settings|done|error
@@ -107,6 +111,8 @@ const settings: Record<string, unknown> = {
     sourceId: CURRENT_SOURCE.id
   },
   settingsActiveTab: params.get('tab') ?? 'general',
+  // `?whatsnew=update`: an older version was last seen, as after an update (the mock runs 0.1.0).
+  ...(params.get('whatsnew') === 'update' ? { lastSeenVersion: '0.0.2' } : {}),
   // `?popup=hachidori` stands in for a stored engine (the store is in memory, so a reload resets it).
   ...(params.get('popup') ? { yomitanSettings: { popupType: params.get('popup'), customApiUrl: '' } } : {}),
   mainSidebarOpen: params.get('sidebar') !== '0',

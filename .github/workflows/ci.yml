@@ -4,7 +4,9 @@ name: CI
 # the self-hosted runners described in ci/runners/README.md (nothing here uses GitHub-hosted
 # minutes). Bundles go straight to GitHub Releases, which are not metered like workflow
 # artifacts: a push to main replaces the assets of the rolling `nightly` pre-release, and a tag
-# `v*` builds optimised bundles into a draft release of that tag for a final look.
+# `v*` (made by `npm run release -- <x.y.z>`, scripts/cut-release.mjs) builds optimised bundles
+# into a draft release of that tag, which the `manifest` job publishes once every platform has
+# built and signed. Tags are the only way a release is published; main stays the development line.
 #
 # Sibling repositories: src-tauri depends on `../../kimochi-meikiocr` and `../../kimochi-mangaocr`
 # by path, and the OCR staging scripts read their LICENSE/NOTICE and model manifest. This repo is
@@ -47,20 +49,34 @@ env:
   COPYFILE_DISABLE: '1'
 
 jobs:
-  # Which machines build, and whether optimised or debug. A tag always releases; a manual run
-  # chooses; a push to main bundles.
+  # Which machines build, and whether optimised or debug. A tag always releases (even a manual
+  # run started on one); a manual run on a branch chooses; a push to main bundles.
   plan:
     name: Plan
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write
+    defaults:
+      run:
+        shell: bash
+        working-directory: kimochi-tauri
     outputs:
       mode: ${{ steps.plan.outputs.mode }}
+      script: ${{ steps.plan.outputs.script }}
       profile: ${{ steps.plan.outputs.profile }}
       matrix: ${{ steps.plan.outputs.matrix }}
       release: ${{ steps.release.outputs.tag }}
       rolling: ${{ steps.release.outputs.rolling }}
     steps:
+      # For the tag's version and its CHANGELOG.md section. Same directory and no clean as the
+      # other jobs on this machine, so their kept build caches are untouched.
+      - uses: actions/checkout@v4
+        with:
+          path: kimochi-tauri
+          clean: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/github-script@v7
         id: plan
         env:
@@ -69,8 +85,10 @@ jobs:
         with:
           script: |
             const tag = context.ref.startsWith('refs/tags/')
-            const mode = process.env.INPUT_MODE || (tag ? 'release' : 'bundle')
+            const mode = tag ? 'release' : process.env.INPUT_MODE || 'bundle'
             const profile = mode === 'release' ? 'release' : 'debug'
+            // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
+            const script = mode === 'release' ? 'release:bundle' : 'bundle'
             const bundle = `kimochi-tauri/src-tauri/target/${profile}/bundle`
             const include = [
               { name: 'macOS', labels: ['self-hosted', 'macOS', 'ARM64'], target: 'aarch64-apple-darwin',
@@ -88,26 +106,44 @@ jobs:
               { name: 'Linux ARM64 (Arch)', labels: ['self-hosted', 'Linux', 'ARM64', 'arch'], target: 'aarch64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage`, suffix: '-arch' })
             core.setOutput('mode', mode)
+            core.setOutput('script', script)
             core.setOutput('profile', profile)
             core.setOutput('matrix', JSON.stringify({ include }))
             core.summary.addHeading(`Mode: ${mode}`).addList(include.map((p) => `${p.name} → ${p.labels.join(', ')}`)).write()
 
-      # The release the bundle jobs upload into. A tag gets a draft release of its own (publish
-      # it by hand once the bundles look right). Anything else refreshes the rolling `nightly`
-      # pre-release: its tag is moved to this commit and each bundle job replaces its own
-      # assets, so only one set of development bundles is ever stored.
+      # The release the bundle jobs upload into. A tag gets a draft release of its own, with its
+      # CHANGELOG.md section as the notes (which also become latest.json's notes, the app's
+      # "What's new"); the `manifest` job publishes it once every platform has built and signed.
+      # The tag must be `v` plus tauri.conf.json's version, checked here before anything builds
+      # (the manifest job would refuse it after an hour of bundling otherwise).
+      #
+      # Anything else refreshes the rolling `nightly` pre-release: its tag is moved to this
+      # commit and each bundle job replaces its own assets, so only one set of development
+      # bundles is ever stored. That includes a manual run in release mode on a branch: it
+      # builds optimised, updater-signed bundles into `nightly` to try the release build, and
+      # publishes nothing (there is no tag to publish, and the manifest job is skipped).
       - name: Prepare release
         id: release
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          MODE: ${{ steps.plan.outputs.mode }}
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             tag="$GITHUB_REF_NAME"
-            gh release view "$tag" >/dev/null 2>&1 ||
-              gh release create "$tag" --draft --title "Kimochi $tag" --generate-notes
+            version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+            if [[ "$tag" != "v$version" ]]; then
+              echo "::error::Tag $tag does not match version $version in src-tauri/tauri.conf.json (expected v$version). Cut releases with \`npm run release -- <x.y.z>\`, which sets both."
+              exit 1
+            fi
+            # Fails (with the reason) when CHANGELOG.md has no entries for this version.
+            node scripts/changelog.mjs section "$version" > ../release-notes.md
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release edit "$tag" --notes-file ../release-notes.md >/dev/null
+            else
+              gh release create "$tag" --draft --verify-tag --title "Kimochi $tag" --notes-file ../release-notes.md
+            fi
             echo "tag=$tag" >> "$GITHUB_OUTPUT"
             echo "rolling=false" >> "$GITHUB_OUTPUT"
           else
@@ -117,7 +153,9 @@ jobs:
             else
               gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
             fi
-            notes="Development build of \`$GITHUB_REF_NAME\` at ${GITHUB_SHA:0:7} (run [#$GITHUB_RUN_NUMBER]($GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID)). Replaced on every push; unsigned debug bundles."
+            kind="unsigned debug bundles"
+            [[ "$MODE" == release ]] && kind="optimised bundles from a manual release-mode run, not a release"
+            notes="Development build of \`$GITHUB_REF_NAME\` at ${GITHUB_SHA:0:7} (run [#$GITHUB_RUN_NUMBER]($GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID)). Replaced on every push; $kind."
             if gh release view "$tag" >/dev/null 2>&1; then
               gh release edit "$tag" --prerelease --title "Latest development build" --notes "$notes" >/dev/null
             else
@@ -334,7 +372,7 @@ jobs:
       # scripts/prepare.mjs checks that dist/ holds none.
       - run: npm ci
       - name: Bundle (${{ needs.plan.outputs.mode }})
-        run: npm run ${{ needs.plan.outputs.mode }}
+        run: npm run ${{ needs.plan.outputs.script }}
         env:
           # Windows: scripts/sign-windows.mjs (signCommand) signs when these are present and
           # skips with a warning otherwise. KIMOCHI_REQUIRE_SIGNING makes a partial secret set
@@ -360,8 +398,8 @@ jobs:
       # Release mode: what the app's self-updater downloads for this platform (macOS: a tar.gz of
       # the .app; Windows: the installer; Linux: the AppImage and the .deb), each one's minisign
       # signature, and a sidecar for the manifest job below. Runs after every step that touches
-      # the bundles (the AppImage repack inside `npm run release`, Authenticode signing), so the
-      # signature covers the bytes users download. The key is the TAURI_SIGNING_PRIVATE_KEY
+      # the bundles (the AppImage repack inside `npm run release:bundle`, Authenticode signing),
+      # so the signature covers the bytes users download. The key is the TAURI_SIGNING_PRIVATE_KEY
       # secret (`tauri signer generate`); its public half is `plugins.updater.pubkey` in
       # tauri.conf.json. A release without it cannot be updated to, so the step fails rather
       # than skips.
@@ -417,15 +455,20 @@ jobs:
           ls -l ../upload
           gh release upload "$RELEASE" ../upload/* --clobber
 
-  # Release mode: `latest.json`, the document the app's updater fetches
+  # A tag's release: `latest.json`, the document the app's updater fetches
   # (`https://github.com/<repo>/releases/latest/download/latest.json`), composed from the
-  # sidecars every bundle job uploaded. It waits for all of them: a manifest missing a platform
-  # would tell that platform there is no update, for good. GitHub resolves `latest` only once
-  # the draft is published, so publishing the release is what offers the update.
+  # sidecars every bundle job uploaded, and then the release published. It needs every bundle
+  # job to succeed (and in release mode a bundle runs only when every platform's checks passed),
+  # so a release is published only when all platforms were checked, built and signed: a manifest
+  # missing a platform would tell that platform there is no update, for good. If anything
+  # fails, nothing is published and the release stays a draft: re-run the failed jobs for a
+  # flaky machine, or delete the draft and the tag and cut a new version for a code fix.
+  # GitHub resolves `latest` only once the draft is published, so publishing offers the update.
+  # A manual release-mode run on a branch has no tag, so it skips this job (see Prepare release).
   manifest:
-    name: Update manifest
+    name: Update manifest and publish
     needs: [plan, bundle]
-    if: needs.plan.outputs.mode == 'release'
+    if: needs.plan.outputs.mode == 'release' && needs.plan.outputs.rolling == 'false'
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write
@@ -464,3 +507,12 @@ jobs:
           for sidecar in ../manifest/updater-*.json; do
             gh release delete-asset "$RELEASE" "$(basename "$sidecar")" --yes
           done
+      # Last: from here installed apps are offered the update.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE: ${{ needs.plan.outputs.release }}
+        run: |
+          gh release edit "$RELEASE" --draft=false --latest
+          echo "Published $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"

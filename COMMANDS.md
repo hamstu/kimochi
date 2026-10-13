@@ -857,6 +857,7 @@ Every command answers with the `UpdateStatus` after acting:
 | `update_install` | `() -> UpdateStatus` — from `ready`: swaps the bundle in and restarts. Replies `installing`; the process is replaced when the swap is done (on Windows the installer relaunches the app) |
 | `update_retry` | `() -> UpdateStatus` — the failed step again: the download, the install (without a new download), or the check |
 | `update_dismiss` | `() -> UpdateStatus` — "Not now": hides the sidebar notice for this run (Settings still shows it); a download, or a different version, brings it back |
+| `changelog` | `() -> string` — `CHANGELOG.md` as built into this binary, for What's new (not an `UpdateStatus`) |
 
 ```ts
 UpdateStatus = {
@@ -887,6 +888,18 @@ the app; on Linux an AppImage is replaced in place and a `.deb` goes through `pk
 (`latest.json` carries a `linux-<arch>-deb` entry beside `linux-<arch>`; the plugin picks by
 the installed bundle type). Before the process is replaced the platform's own threads are
 stopped exactly as `app_quit` does.
+
+**What's new.** `changelog` returns the embedded `CHANGELOG.md` (Keep a Changelog); the panels
+parse it (`ui/changelog.ts`) and show the released versions newest first in a dialog over the
+main window (`frontend/main/WhatsNewDialog.tsx`), marking the running one. While the changelog
+has no released section yet, the Unreleased section is shown under the running version, so the
+dialog is never empty. Settings → General → Updates → What's new opens it; while an update is
+offered (`version` set; `available`, `downloading`, `ready` or `failed`) the offered release's
+`notes` from the manifest come first, as "Coming in Kimochi x.y.z". The main window also opens it
+once on the first launch of a new version: the `lastSeenVersion` setting holds the version last
+announced; when it is unset (a fresh install, or the first build that has the setting) it is
+set silently, and when it differs from `currentVersion` the dialog opens and the setting is
+updated.
 
 ## Capabilities
 

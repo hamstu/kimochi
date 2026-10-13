@@ -3,7 +3,8 @@
 //   launch     open the last debug bundle (macOS .app, or the debug binary on Windows/Linux)
 //   dev        prepare, then `tauri dev` with live reload (see "Dev mode" below)
 //   bundle     debug bundle for this OS (app | nsis | deb,appimage)
-//   release    optimised bundle for this OS
+//   release    optimised bundle for this OS (`npm run release:bundle`; `npm run release` cuts a
+//              release instead, see scripts/cut-release.mjs)
 //   check      cargo clippy -D warnings for src-tauri
 //   check:all  check, plus `cargo check` of capture-core for the Windows and Linux targets
 //

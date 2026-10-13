@@ -1,0 +1,106 @@
+/* What's new (WhatsNewDialog.tsx): the release history in a tall dialog whose body scrolls.
+   Imported by the component, so a Settings window that opens it gets it too. */
+.whats-new.k-dialog {
+  width: min(40rem, calc(100vw - 2rem));
+  max-width: none;
+  /* Tall, up to most of the window; the header and footer stay, the history scrolls. */
+  max-height: min(80vh, calc(100vh - 2rem));
+}
+.whats-new .k-dialog-header {
+  padding-bottom: var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+}
+.whats-new .k-dialog-body {
+  flex: 1 1 auto;
+  padding: 0 var(--k-space-5);
+}
+
+/* One release per section, divided by hairlines; no boxes. */
+.whats-new-release {
+  padding: var(--k-space-4) 0 var(--k-space-5);
+}
+.whats-new-release + .whats-new-release {
+  border-top: 1px solid var(--k-line);
+}
+.whats-new-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--k-space-2);
+  margin-bottom: var(--k-space-2);
+}
+.whats-new-version {
+  margin: 0;
+  color: var(--k-text);
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-semibold);
+}
+.whats-new-meta {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.whats-new-date {
+  margin-left: auto;
+}
+.whats-new-status {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: var(--k-space-6) 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+}
+
+/* The rendered markdown: Keep a Changelog's `### Added` and its bullets. */
+.whats-new-notes {
+  color: var(--k-text);
+  font-size: var(--k-text-md);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.whats-new-notes > :first-child {
+  margin-top: 0;
+}
+.whats-new-notes > :last-child {
+  margin-bottom: 0;
+}
+.whats-new-notes h1,
+.whats-new-notes h2,
+.whats-new-notes h3,
+.whats-new-notes h4 {
+  margin: var(--k-space-4) 0 var(--k-space-1);
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.whats-new-notes p {
+  margin: var(--k-space-2) 0;
+}
+.whats-new-notes ul,
+.whats-new-notes ol {
+  margin: var(--k-space-1) 0 var(--k-space-2);
+  padding-left: var(--k-space-5);
+}
+.whats-new-notes li + li {
+  margin-top: var(--k-space-1);
+}
+.whats-new-notes li::marker {
+  color: var(--k-text-3);
+}
+.whats-new-notes a {
+  color: var(--k-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.whats-new-notes code {
+  padding: 0 var(--k-space-1);
+  border-radius: var(--k-radius-sm);
+  background: var(--k-sunken);
+  font-family: var(--k-font-mono);
+  font-size: 0.92em;
+}
+.whats-new-notes strong {
+  font-weight: var(--k-weight-semibold);
+}

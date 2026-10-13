@@ -5,6 +5,9 @@
  *   ?update=idle|none|available|downloading|ready|failed|checking   the starting state
  *                                                                   (default: none, up to date)
  *
+ * `changelog` answers with a sample CHANGELOG.md (Unreleased, then 0.1.0, the running version, and
+ * two older releases) for What's new; the offered 0.2.0's notes are the manifest's.
+ *
  * Check for updates finds 0.2.0 unless the page started `none`, in which case it stays up to
  * date. The install cannot restart a browser tab: it ends in a failure after a moment, which is
  * the one state no other seed reaches.
@@ -15,6 +18,63 @@ import type { UpdateStatus } from '@ui/update'
 const CURRENT = '0.1.0'
 const OFFERED = '0.2.0'
 const SIZE = 91_300_000
+
+/** The offered release's notes, as `latest.json` carries them: its CHANGELOG.md section. */
+const OFFERED_NOTES = `### Added
+
+- Kimochi updates itself. A found update appears above Settings in the sidebar, where you download
+  it and choose when to restart.
+- **What's new** shows what changed in each release, and opens once on its own after an update.
+
+### Fixed
+
+- The sidebar's source picker no longer flickers when a window is renamed.`
+
+/** A CHANGELOG.md as the app embeds it (the \`changelog\` command). */
+export const SAMPLE_CHANGELOG = `# Changelog
+
+What changed in each release of Kimochi, newest first.
+
+## [Unreleased]
+
+### Added
+
+- Kimochi updates itself.
+
+## [0.1.0] - 2026-09-28
+
+### Added
+
+- Quick Shot: a single scan of the chosen region from anywhere, with \`⌘⇧J\`.
+- Sessions can be renamed and given a description from the session menu.
+- Hachidori and 10ten as dictionary engines, beside Yomitan. See the
+  [dictionary guide](https://github.com/hamstu/kimochi-tauri#dictionaries).
+
+### Changed
+
+- The Log keeps its place while new lines arrive if you have scrolled up to read.
+- Settings open in the main window instead of their own.
+
+### Fixed
+
+- OCR no longer misses the last line of a text box that touches the region's edge.
+- The overlay follows a window that moves between displays.
+
+## [0.0.2] - 2026-08-30
+
+### Fixed
+
+- Clipboard lines that repeat the previous one are no longer logged twice.
+- The tray icon is legible on a light menu bar.
+
+## [0.0.1] - 2026-08-14
+
+- First release: OCR of a game window, a transcript of what was read, and dictionary lookups on
+  hover.
+
+[Unreleased]: https://github.com/hamstu/kimochi-tauri/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hamstu/kimochi-tauri/releases/tag/v0.1.0
+`
 
 function status(patch: Partial<UpdateStatus>): UpdateStatus {
   return {
@@ -38,7 +98,7 @@ function status(patch: Partial<UpdateStatus>): UpdateStatus {
 const offered = (patch: Partial<UpdateStatus>): UpdateStatus =>
   status({
     version: OFFERED,
-    notes: '## What\'s new\n\n- Self-updates\n- A quieter sidebar',
+    notes: OFFERED_NOTES,
     date: '2026-10-12T09:00:00Z',
     size: SIZE,
     ...patch
@@ -130,6 +190,7 @@ function install(): UpdateStatus {
 
 /** Merged into the preview's command table. */
 export const UPDATE_HANDLERS: Record<string, () => unknown> = {
+  changelog: () => SAMPLE_CHANGELOG,
   update_status: () => current,
   update_check: check,
   update_download: download,

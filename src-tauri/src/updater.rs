@@ -629,6 +629,15 @@ pub fn update_dismiss() -> Result<UpdateStatus, String> {
     Ok(service()?.dismiss())
 }
 
+/// The release history as written: `CHANGELOG.md` at the repository root, embedded at build time
+/// (cargo rebuilds when it changes). The panels parse it for What's new (`ui/changelog.ts`).
+#[tauri::command]
+pub fn changelog() -> &'static str {
+    CHANGELOG
+}
+
+const CHANGELOG: &str = include_str!("../../CHANGELOG.md");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -645,6 +654,11 @@ mod tests {
         assert_eq!(value["automatic"], true);
         assert_eq!(value["dismissed"], false);
         assert!(value["version"].is_null());
+    }
+
+    #[test]
+    fn changelog_is_embedded() {
+        assert!(changelog().contains("\n## ["), "CHANGELOG.md has a version section");
     }
 
     #[test]

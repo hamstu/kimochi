@@ -1,7 +1,7 @@
 // The self-updater's release side: what `src-tauri/src/updater.rs` downloads and how it finds it.
 //
 //   node scripts/updater-artifacts.mjs sign --target <rust triple> [--profile release|debug] [--out <dir>]
-//       After `npm run release` on this OS: the file the app downloads for each manifest key
+//       After `npm run release:bundle` on this OS: the file the app downloads for each manifest key
 //       (macOS: a tar.gz of the .app, made here; Windows: the NSIS installer; Linux: the AppImage,
 //       and the .deb for deb installs), its minisign signature (`<asset>.sig`, made with
 //       `tauri signer sign`, which reads TAURI_SIGNING_PRIVATE_KEY or _PATH, and _PASSWORD),

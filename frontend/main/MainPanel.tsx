@@ -26,6 +26,8 @@ import { ViewTabs } from './ViewTabs'
 import { LogActionsProvider } from './LogActionsProvider'
 import { engineSwitchRecord, registerMainRoute } from './engineSwitch'
 import { DEFAULT_WIDTH, MainSidebar, type MainView } from './MainSidebar'
+import { WhatsNewDialog } from './WhatsNewDialog'
+import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
 import './main.css'
 
@@ -53,6 +55,8 @@ export default function MainPanel(): JSX.Element {
   const lastView = useRef<Exclude<MainView, 'settings'>>(engineSwitchRecord()?.back ?? 'log')
   const settingsScroll = useRef<HTMLDivElement>(null)
   const { props: controller, error, dismissError } = useController()
+  // What's new opens on its own once, on the first launch of a new version.
+  const [whatsNew, setWhatsNew] = useWhatsNewOnLaunch()
 
   const setView = (next: MainView): void => {
     if (next !== 'settings') lastView.current = next
@@ -199,6 +203,7 @@ export default function MainPanel(): JSX.Element {
             </div>
           </div>
         </div>
+        <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
       </LogActionsProvider>
     </ReaderHost>
   )
