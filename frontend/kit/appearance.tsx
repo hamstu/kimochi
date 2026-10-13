@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { NATIVE_BACKGROUND, applyToDocument, usePrefs, writeCache } from './appearance-state'
 
 /**
- * Theme root for a window. `transparent` windows (dictionary popups, onboarding) keep their own
+ * Theme root for a window. `transparent` windows (dictionary popups) keep their own
  * see-through ground and never repaint the native window background.
  */
 export function AppearanceProvider({

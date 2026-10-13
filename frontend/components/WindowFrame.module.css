@@ -1,35 +1,4 @@
-/* Onboarding frame (a transparent window); ordinary application windows use the native panel
- * shell. Colours and depth come from the kit roles, so light and dark follow the app appearance. */
-.frameWrapper {
-  position: relative;
-  width: 100%;
-  height: 100vh;
-  padding: var(--k-space-2-5);
-  overflow: hidden;
-}
-
-.container {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  border-radius: var(--k-radius-xl);
-  background: var(--k-bg);
-  box-shadow: var(--k-shadow-dialog);
-  color: var(--k-text);
-}
-/* The hairline edge sits above the content so bars running to the edge keep it. */
-.container::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--k-line-strong);
-  pointer-events: none;
-}
-
+/* A full-height column inside a panel window. */
 .column {
   display: flex;
   flex-direction: column;

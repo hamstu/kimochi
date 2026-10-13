@@ -1,28 +1,12 @@
 /**
- * The onboarding window's three side effects, which were Electron IPC sends.
+ * The onboarding window's side effects, which were Electron IPC sends.
  * Each failure is logged with the native message rather than being swallowed.
  */
 import { nativeError, panel } from '../bridge/tauri'
-import { loadCapabilities } from '../bridge/capabilities'
 import { setSetting } from '../bridge/settings'
 
 const report = (what: string) => (error: unknown) =>
   console.error(`${what} failed:`, nativeError(error).message)
-
-/** Electron's `resize-welcome-window`: same width and position, new height per step. */
-export async function resizeWelcome(height: number): Promise<void> {
-  try {
-    if (
-      (await loadCapabilities()).session?.compositor?.toLowerCase() ===
-      'gamescope'
-    )
-      return
-    const info = await panel('welcome', 'inspect')
-    await panel('welcome', 'place', { ...info.bounds, height })
-  } catch (error) {
-    report('Resize welcome window')(error)
-  }
-}
 
 /**
  * Electron's `yomitan-settings-backup`: opens the active dictionary engine's settings in their own

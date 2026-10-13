@@ -1,110 +1,409 @@
-/* Onboarding steps inside the framed transparent window. Kit tokens only. */
-.bar {
-  padding: 0 var(--k-space-3);
-}
-.bar:has(a) {
-  padding-left: var(--k-space-1);
-}
-.barTitle {
-  font-weight: var(--k-weight-medium);
-  -webkit-user-select: none;
-  user-select: none;
+/*
+ * The onboarding window inside the panel chrome: a scrolling content area over one action bar.
+ * Kit tokens only. The intro wordmark is the one size off the UI ramp (DESIGN.md, Typography).
+ */
+.window {
+  font-size: var(--k-text-md);
+  line-height: var(--k-leading-md);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
+/* ------------------------------------------------------------------ content */
 .content {
-  display: flex;
   flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
   min-height: 0;
-  padding: var(--k-space-6) var(--k-space-8);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.content > div {
-  width: 100%;
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 1.75rem 2.5rem var(--k-space-5);
+  animation: page-in 220ms ease-out both;
+}
+/* Near the minimum width, narrower gutters keep the OCR chooser in two columns. */
+@media (max-width: 40rem) {
+  .page {
+    padding-inline: var(--k-space-6);
+  }
+}
+.page:has(> .embedded) {
+  height: 100%;
+  padding: 0;
+}
+/* Opacity only: a moving page would briefly overflow the content area and flash its scrollbar. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .step {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--k-space-3);
+  gap: var(--k-space-5);
   width: 100%;
-  max-width: 28rem;
-  margin: 0 auto;
-  text-align: center;
-}
-.wide {
   max-width: 40rem;
+  margin: 0 auto;
 }
-.art {
-  display: grid;
-  place-items: center;
-  margin-bottom: var(--k-space-3);
+.step > :global(.k-callout) {
+  max-width: 34rem;
 }
-.art:empty {
-  display: none;
+.step[data-centered] {
+  margin-block: auto;
 }
-.art img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-}
-.screenshot {
-  border-radius: var(--k-radius-lg);
-  box-shadow: 0 0 0 1px var(--k-line);
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
 }
 .title {
   margin: 0;
   font-size: var(--k-text-xl);
   line-height: var(--k-leading-xl);
   font-weight: var(--k-weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--k-text);
   text-wrap: balance;
 }
-.body {
+.lede {
+  max-width: 34rem;
   margin: 0;
-  color: var(--k-text-2);
   font-size: var(--k-text-md);
+  line-height: var(--k-leading-lg);
+  color: var(--k-text-2);
+  text-wrap: pretty;
+}
+
+.block {
+  max-width: 34rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+}
+.block :global(.k-button) {
+  align-self: flex-start;
+}
+.text {
+  max-width: 34rem;
+  margin: 0;
   line-height: var(--k-leading-lg);
   text-wrap: pretty;
 }
-.actions {
+.text strong {
+  font-weight: var(--k-weight-semibold);
+}
+.aside {
+  margin: 0;
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
+}
+.link {
+  color: var(--k-accent-text);
+  text-decoration: underline;
+  text-decoration-color: var(--k-accent-line);
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* A status line: a dot and what is true now. */
+.status {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  align-items: center;
   gap: var(--k-space-2);
-  margin-top: var(--k-space-3);
+  margin: 0;
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  color: var(--k-text-2);
 }
-.external {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--k-space-0-5);
+.status > :first-child {
+  flex: none;
 }
-.external svg {
-  align-self: center;
-  width: var(--k-icon-xs);
-  height: var(--k-icon-xs);
+.job {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
 }
-
-.kimochiDoneWrapper {
-  position: relative;
-}
-.checkboxIcon {
-  position: absolute;
-  top: calc(var(--k-space-2) * -1);
-  right: calc(var(--k-space-4) * -1);
-  width: calc(var(--k-space-8) * 1.5);
-  height: calc(var(--k-space-8) * 1.5);
-  padding: var(--k-space-1);
+/* Drawn like the download bars (model-download.css). */
+.progress {
+  width: 100%;
+  max-width: 22rem;
+  height: 0.375rem;
+  overflow: hidden;
+  border: 0;
   border-radius: 999px;
-  background: var(--k-raised);
-  color: var(--k-ok);
-  box-shadow: var(--k-shadow-pop);
+  background: var(--k-sunken);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+  appearance: none;
+}
+.progress::-webkit-progress-bar {
+  background: transparent;
+}
+.progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--k-accent);
+  transition: width var(--k-base) ease-out;
+}
+.progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--k-accent);
 }
 
-/* Router links rendered as kit buttons (`asChild`) must not inherit the anchor underline. */
-.actions a,
+/* ------------------------------------------------------------------ intro */
+.intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: auto;
+  padding-bottom: var(--k-space-4);
+  text-align: center;
+}
+.introLogo {
+  margin-bottom: var(--k-space-6);
+  filter: drop-shadow(0 1.25rem 1.75rem color-mix(in oklab, var(--k-accent) 22%, transparent));
+}
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: var(--k-space-2);
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--k-text);
+}
+.wordmarkJa {
+  font-family: var(--k-font-jp);
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-regular);
+  letter-spacing: 0;
+  color: var(--k-text-3);
+}
+.tagline {
+  margin: var(--k-space-2) 0 0;
+  font-size: var(--k-text-lg);
+  line-height: var(--k-leading-lg);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text);
+}
+.introLede {
+  max-width: 24rem;
+  margin: var(--k-space-3) 0 0;
+  line-height: var(--k-leading-lg);
+  color: var(--k-text-2);
+  text-wrap: pretty;
+}
+
+/* The words arrive once the icon has built (KimochiLogo.module.css), then Get started. */
+.intro:not([data-settled]) :is(.wordmark, .tagline, .introLede) {
+  animation: rise 460ms var(--k-ease-out) both;
+}
+.intro:not([data-settled]) .wordmark {
+  animation-delay: 1400ms;
+}
+.intro:not([data-settled]) .tagline {
+  animation-delay: 1560ms;
+}
+.intro:not([data-settled]) .introLede {
+  animation-delay: 1700ms;
+}
+.introAction[data-arriving] {
+  animation: arrive 300ms ease-out 1850ms both;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ capture */
+.screenshot {
+  display: block;
+  align-self: center;
+  width: min(100%, 24rem);
+  height: auto;
+  /* The picture carries its own shadow margin; pull the text back to it. */
+  margin: calc(var(--k-space-2) * -1) 0 calc(var(--k-space-5) * -1);
+}
+
+/* ------------------------------------------------------------------ dictionary engine */
+.engines {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.engines :global(.k-choice) {
+  gap: var(--k-space-1-5);
+  padding: var(--k-space-3);
+}
+.engines :global(.k-choice-detail) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--k-space-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  text-align: left;
+}
+.engineName {
+  font-weight: var(--k-weight-semibold);
+}
+.engineSize {
+  margin-left: auto;
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--k-text-3);
+}
+.engineBadge {
+  flex: none;
+}
+.engineDescription {
+  max-width: 34rem;
+  min-height: calc(var(--k-leading-md) * 3);
+  margin: 0;
+  line-height: var(--k-leading-md);
+  color: var(--k-text-2);
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------------ dictionary settings */
+.embedded {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ done */
+.doneTitle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--k-space-4);
+}
+.loop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+  max-width: 34rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: loop;
+}
+.loop li {
+  position: relative;
+  padding-left: 2rem;
+  line-height: var(--k-leading-lg);
+  color: var(--k-text-2);
+  counter-increment: loop;
+  text-wrap: pretty;
+}
+.loop li::before {
+  content: counter(loop);
+  position: absolute;
+  top: 0.0625rem;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.loop strong {
+  font-weight: var(--k-weight-semibold);
+  color: var(--k-text);
+}
+.practice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+}
+
+/* ------------------------------------------------------------------ action bar */
+.bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+  min-height: 3.25rem;
+  padding: var(--k-space-3) var(--k-space-4);
+  border-top: 1px solid var(--k-line);
+  background: var(--k-bar);
+}
+.barLead {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+  min-width: 0;
+}
+.back {
+  padding-left: var(--k-space-1-5);
+}
+.barActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--k-space-2);
+  margin-left: auto;
+}
 .bar a {
   text-decoration: none;
+}
+
+/* Where the guide is: one dot per step, the current one drawn long. */
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0 var(--k-space-1);
+}
+.dots span {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--k-line-strong);
+  transition:
+    width var(--k-base) var(--k-ease-out),
+    background-color var(--k-base) ease;
+}
+.dots span[data-state="done"] {
+  background: var(--k-text-3);
+}
+.dots span[data-state="current"] {
+  width: 1rem;
+  background: var(--k-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page,
+  .intro :is(.wordmark, .tagline, .introLede),
+  .introAction[data-arriving] {
+    animation: none !important;
+  }
 }
