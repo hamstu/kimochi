@@ -398,7 +398,7 @@ const HACHIDORI = {
     chrome.runtime.onInstalled.addListener((details) => lifecycle.push(details))
     chrome.runtime.onStartup.addListener(() => lifecycle.push('startup'))
     chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
-      if (m?.case === 'race') { setTimeout(() => sendResponse('slow-background'), 30); return true }
+      if (m?.case === 'race') { setTimeout(() => sendResponse('slow-background'), 500); return true }
       if (m?.case === 'async-true') { setTimeout(() => sendResponse({ ok: 'later' }), 10); return true }
       if (m?.case === 'promise') return Promise.resolve('from-promise')
       if (m?.case === 'sender') { sendResponse(sender); return false }
