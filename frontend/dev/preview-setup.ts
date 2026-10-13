@@ -36,6 +36,9 @@
  *   ?whatsnew=update main window: the first launch after an update (`lastSeenVersion` is an older
  *                    version), so What's new opens on its own once the update status arrives
  *
+ * Reader pop-up (reader-popup.html):
+ *   ?popover=message  show what the parent frame posts instead of the sample (`listenForPopover`)
+ *
  * Onboarding (welcome.html):
  *   ?step=intro|permission|picker|ocr|engine|dictionaries|dictionary-settings|done|error
  *                    open that step (error: the last step's save failed). Every step stays
@@ -315,6 +318,23 @@ const note = (what: string, detail: unknown): null => {
   return null
 }
 
+/**
+ * `?popover=message`: the reader pop-up shows what its parent frame posts instead of the sample,
+ * as `{ type: 'kimochi-preview-popover', theme: 'light' | 'dark', payload }` (a `popover:show`
+ * payload). The dictionary preview scene (frontend/dev/dictionary-preview.html) feeds it one Yomitan API
+ * answer this way. It is told `{ type: 'kimochi-preview-popover-ready' }` once listening.
+ */
+function listenForPopover(): void {
+  window.addEventListener('message', (event: MessageEvent) => {
+    const data = event.data as { type?: string; theme?: string; payload?: unknown } | null
+    if (data?.type !== 'kimochi-preview-popover') return
+    void emit('popover:theme', data.theme === 'dark' ? 'dark' : 'light').then(() =>
+      emit('popover:show', data.payload)
+    )
+  })
+  window.parent.postMessage({ type: 'kimochi-preview-popover-ready' }, '*')
+}
+
 /** Every command the React windows call, with a plausible response. */
 const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
@@ -462,6 +482,10 @@ const HANDLERS: Record<string, Handler> = {
   show_popover: (a) => note('show_popover', a),
   hide_popover: ok,
   reader_popup_ready: () => {
+    if (params.get('popover') === 'message') {
+      listenForPopover()
+      return null
+    }
     setTimeout(() => {
       const dark = matchMedia('(prefers-color-scheme: dark)').matches
       void emit('popover:theme', dark ? 'dark' : 'light')

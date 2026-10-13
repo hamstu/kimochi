@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      DEV-ONLY. The scene behind the dictionary chooser's preview thumbnails
+      (frontend/assets/dictionary-previews/): one line of game dialogue with a word being looked up.
+      `npm run capture:dictionary-previews` (scripts/capture-dictionary-previews.mjs) drives it
+      headless through the dev server (vite.dev.config.ts), which serves it on the app origin with
+      the engines; by hand: http://127.0.0.1:1430/app/dev/dictionary-preview.html?engine=tenten
+      (hold Shift and hover 食べられなかった). Not part of any build.
+
+      ?engine=yomitan|hachidori|tenten   runs that engine exactly as ui/dictionary-harness.html does
+                                         (same native stand-in, prelude and hosts; same ?hachidori=,
+                                         ?tenten=, ?dictionary= parameters), so the pop-up is the
+                                         engine's own. The harness's developer panels are left out.
+      ?engine=custom-api&popup=<url>     Kimochi's own pop-up: the reader pop-up page (the browser
+                                         preview's frontend/dev/reader-popup.html?popover=message)
+                                         in a frame placed where native places its window, fed one
+                                         Yomitan API answer through `window.__preview.showApiPopup`.
+      ?theme=light|dark                  the scene's look (default: the browser's colour scheme).
+    -->
+    <script>
+      ;(() => {
+        const params = new URLSearchParams(location.search)
+        const engine = params.get('engine') ?? 'hachidori'
+        const theme = params.get('theme') ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light'
+        document.documentElement.dataset.engine = engine
+        // The engines' hosts read everything synchronously when they install, so they are parsed
+        // here, before the body, in the harness's order (see ui/dictionary-harness.html).
+        if (engine !== 'custom-api') {
+          for (const src of ['/ui/dictionary-harness-native.js', '/ui/dictionary-harness.js', '/spike/ext-host.js', '/spike/shim.js']) {
+            document.write(`<script src="${src}"><\/script>`)
+          }
+        }
+      })()
+    </script>
+    <title>Dictionary preview scene</title>
+    <style>
+      :root {
+        --sky: linear-gradient(180deg, #8fc8f5 0%, #c4e3fa 48%, #f6e6d2 100%);
+        --far: #9db4c9;
+        --near: #6f8aa3;
+        --window: rgba(255, 255, 255, 0.55);
+        --box: rgba(255, 255, 255, 0.95);
+        --box-edge: rgba(70, 92, 120, 0.55);
+        --box-text: #1d2433;
+        --name-bg: #3c5a7a;
+        --name-text: #ffffff;
+        --sun: radial-gradient(circle at 80% 20%, #fffbe8 0 38px, rgba(255, 246, 214, 0.6) 41px, rgba(255, 246, 214, 0) 130px);
+        color-scheme: light;
+      }
+      :root[data-theme='dark'] {
+        --sky: linear-gradient(180deg, #121833 0%, #262a55 46%, #5d3b6b 76%, #b8646c 100%);
+        --far: #2b2d52;
+        --near: #1a1b36;
+        --window: rgba(255, 214, 140, 0.75);
+        --box: rgba(12, 14, 30, 0.9);
+        --box-edge: rgba(255, 255, 255, 0.6);
+        --box-text: #f4f2fb;
+        --name-bg: #c2667a;
+        --name-text: #ffffff;
+        --sun:
+          radial-gradient(circle at 80% 18%, #fff8e6 0 26px, rgba(255, 240, 210, 0.3) 29px, rgba(255, 240, 210, 0) 90px),
+          radial-gradient(circle at 12% 14%, #fff 0 1.5px, transparent 2px),
+          radial-gradient(circle at 31% 26%, #fff 0 1px, transparent 1.5px),
+          radial-gradient(circle at 47% 9%, #fff 0 1.5px, transparent 2px),
+          radial-gradient(circle at 63% 31%, #fff 0 1px, transparent 1.5px),
+          radial-gradient(circle at 92% 38%, #fff 0 1px, transparent 1.5px),
+          radial-gradient(circle at 22% 40%, #fff 0 1px, transparent 1.5px);
+        color-scheme: dark;
+      }
+      html, body { margin: 0; height: 100%; overflow: hidden; }
+      body {
+        position: relative;
+        background: var(--sky);
+        font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif;
+        cursor: none;
+      }
+      .scene { position: absolute; inset: 0; background: var(--sun); }
+      /* A skyline in two planes, each a row of blocks with lit windows. */
+      .skyline { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; gap: 10px; padding: 0 20px; }
+      .skyline > i {
+        display: block;
+        flex: 1 1 0;
+        background:
+          repeating-linear-gradient(90deg, transparent 0 10px, var(--window) 10px 18px, transparent 18px 28px) top 18px left 0 / 100% 12px no-repeat,
+          repeating-linear-gradient(90deg, transparent 0 14px, var(--window) 14px 22px, transparent 22px 32px) top 48px left 0 / 100% 12px no-repeat,
+          var(--c);
+        border-radius: 3px 3px 0 0;
+      }
+      .skyline.far { --c: var(--far); opacity: 0.9; }
+      .skyline.near { --c: var(--near); gap: 18px; }
+      .dialogue {
+        position: absolute;
+        left: 48px;
+        right: 48px;
+        bottom: 36px;
+        min-height: 128px;
+        box-sizing: border-box;
+        padding: 30px 34px 26px;
+        border: 2px solid var(--box-edge);
+        border-radius: 14px;
+        background: var(--box);
+        color: var(--box-text);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+      }
+      .speaker {
+        position: absolute;
+        top: -19px;
+        left: 26px;
+        padding: 5px 18px;
+        border-radius: 8px;
+        background: var(--name-bg);
+        color: var(--name-text);
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+      .line { margin: 0; font-size: 30px; line-height: 1.6; letter-spacing: 0.02em; }
+      /* Kimochi's overlay box under the pointer (ui/render.js proximityStyle, hovering), for the
+         Kimochi pop-up, whose lookups start from the overlay rather than an extension's scan. */
+      [data-engine='custom-api'] #word.hovered {
+        border-radius: 6px 6px 0 0;
+        background: rgba(0, 0, 0, 0.9);
+        color: #fff;
+        font-weight: 700;
+      }
+      #pointer {
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: 2147483647;
+        width: 22px;
+        height: 32px;
+        pointer-events: none;
+        display: none;
+        filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.45));
+      }
+      #api-popup {
+        position: fixed;
+        z-index: 2147483000;
+        border: 0;
+        background: transparent;
+        display: none;
+      }
+      /* The harness's own panels, kept for its scripts but out of the picture. */
+      .internals { position: fixed; left: -4000px; top: 0; width: 900px; height: 700px; overflow: hidden; }
+      .internals iframe { width: 900px; height: 700px; border: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="scene" aria-hidden="true">
+      <div class="skyline far" style="height: 300px">
+        <i style="height: 58%"></i><i style="height: 82%"></i><i style="height: 64%"></i><i style="height: 96%"></i><i style="height: 70%"></i><i style="height: 88%"></i><i style="height: 60%"></i>
+      </div>
+      <div class="skyline near" style="height: 220px">
+        <i style="height: 70%"></i><i style="height: 92%"></i><i style="height: 60%"></i><i style="height: 100%"></i><i style="height: 76%"></i>
+      </div>
+    </div>
+    <div class="dialogue">
+      <div class="speaker">ユキ</div>
+      <p class="line" id="target">あの日は怖くて、何も<span id="word">食べられなかった</span>んだ。</p>
+    </div>
+    <svg id="pointer" viewBox="0 0 22 32" aria-hidden="true">
+      <path d="M2 2 L2 25 L7.6 19.8 L11.4 28.6 L15 27 L11.3 18.4 L18.8 18.4 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round" />
+    </svg>
+    <iframe id="api-popup" title="Kimochi pop-up"></iframe>
+    <div class="internals" aria-hidden="true">
+      <span id="engine"></span><span id="origin"></span><span id="ready"></span>
+      <pre id="status"></pre>
+      <pre id="log"></pre>
+      <iframe id="options" title="Engine options page"></iframe>
+    </div>
+    <script>
+      /**
+       * The scene's own part: a drawn pointer that follows the
+       * mouse (a headless screenshot has no cursor), the overlay's hovered-word box for the Kimochi
+       * pop-up, and that pop-up's frame, placed as native places its window
+       * (src-tauri/src/reader/popover.rs `show_popover`).
+       *
+       * `window.__preview` is what scripts/capture-dictionary-previews.mjs drives:
+       *   wordPoint()             where to point: the middle of the first character of the word
+       *   wordRect()              the word's box
+       *   popupRect()             the visible pop-up's box, or null
+       *   showApiPopup(payload)   Kimochi pop-up only: open the frame at the pointer and show `payload`
+       */
+      ;(() => {
+        const params = new URLSearchParams(location.search)
+        const engine = document.documentElement.dataset.engine
+        const theme = document.documentElement.dataset.theme
+        /** popover.rs: the card's default size (ui/api-lookup.js), its gap from the cursor and its shadow margin. */
+        const POPOVER = { width: 480, height: 360, gap: 14, shadow: 16, margin: 8 }
+        const pointer = document.getElementById('pointer')
+        const word = document.getElementById('word')
+        const frame = document.getElementById('api-popup')
+        let mouse = null
+
+        document.addEventListener(
+          'mousemove',
+          (event) => {
+            mouse = { x: event.clientX, y: event.clientY }
+            pointer.style.display = 'block'
+            // The arrow's tip is at (2, 2) in its box.
+            pointer.style.transform = `translate(${event.clientX - 2}px, ${event.clientY - 2}px)`
+            if (engine === 'custom-api') {
+              const over = event.target === word || word.contains(event.target)
+              word.classList.toggle('hovered', over && event.shiftKey)
+            }
+          },
+          true
+        )
+
+        const box = (rect) => (rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null)
+
+        let frameReady = null
+        function loadFrame() {
+          frameReady ??= new Promise((resolve, reject) => {
+            const source = params.get('popup')
+            if (!source) {
+              reject(Error('?popup= (the reader pop-up preview URL) is missing'))
+              return
+            }
+            const url = new URL(source)
+            url.searchParams.set('popover', 'message')
+            url.searchParams.set('theme', theme)
+            window.addEventListener('message', function ready(event) {
+              if (event.data?.type !== 'kimochi-preview-popover-ready') return
+              window.removeEventListener('message', ready)
+              resolve()
+            })
+            // The frame's page is transparent around the card only when its colour scheme matches.
+            frame.style.colorScheme = theme
+            frame.src = url.href
+          })
+          return frameReady
+        }
+
+        /** popover.rs: centred on the cursor, above it when there is room, kept on screen. */
+        function placeFrame(cursor) {
+          const { width, height, gap, shadow, margin } = POPOVER
+          const screen = { width: innerWidth, height: innerHeight }
+          const x = Math.min(Math.max(cursor.x - width / 2, margin), screen.width - width - margin)
+          let y
+          if (cursor.y >= height + gap + margin) y = cursor.y - height - gap
+          else if (screen.height - cursor.y >= height + gap + margin) y = cursor.y + gap
+          else y = cursor.y >= screen.height - cursor.y ? margin : screen.height - height - margin
+          y = Math.min(Math.max(y, margin), screen.height - height - margin)
+          Object.assign(frame.style, {
+            display: 'block',
+            left: `${Math.round(x - shadow)}px`,
+            top: `${Math.round(y - shadow)}px`,
+            width: `${width + 2 * shadow}px`,
+            height: `${height + 2 * shadow}px`
+          })
+          return { x: Math.round(x), y: Math.round(y), width, height }
+        }
+
+        let apiRect = null
+        window.__preview = {
+          engine,
+          theme,
+          wordPoint() {
+            const range = document.createRange()
+            range.setStart(word.firstChild, 0)
+            range.setEnd(word.firstChild, 1)
+            const rect = range.getBoundingClientRect()
+            return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+          },
+          wordRect: () => box(word.getBoundingClientRect()),
+          popupRect() {
+            if (engine === 'custom-api') return apiRect
+            const state = window.__harness?.popup
+            return state?.visible ? box(state.rect) : null
+          },
+          async showApiPopup(payload) {
+            if (engine !== 'custom-api') throw Error('showApiPopup is for ?engine=custom-api')
+            if (!mouse) throw Error('Move the pointer onto the word first')
+            await loadFrame()
+            apiRect = placeFrame(mouse)
+            frame.contentWindow.postMessage({ type: 'kimochi-preview-popover', theme, payload }, '*')
+            return apiRect
+          }
+        }
+      })()
+    </script>
+  </body>
+</html>

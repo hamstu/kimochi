@@ -26,6 +26,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   official one), installs its own in one click if you have none, shows how to turn the API on in
   Yomitan, and tells you the moment it connects. It appears in the first-run guide and in
   Settings → Dictionary.
+- Choosing a dictionary (Settings → Dictionary, and the first-run guide) shows a picture of each
+  engine's pop-up looking up a word in game dialogue; click it to see it full size.
 
 ### Changed
 

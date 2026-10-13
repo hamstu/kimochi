@@ -16,7 +16,8 @@
  * `?fetch=proxy[&chunk=<bytes>&ipc=<ms>]` (remote fetches through the plugin-http stand-in),
  * `?relay=1` on the hub page plus a second page with `?window=dictionary` (the app's cross-window
  * layout: extension pages open in the second page and reach the hub over the emulated `ext_relay`),
- * `?frame=none` (the mining-screenshot frame source answers as before any scan).
+ * `?frame=none` (the mining-screenshot frame source answers as before any scan),
+ * `?dictionary=<url>` (Yomitan only, repeatable: import these Yomitan zips instead of the fixture).
  *
  * The native stand-in itself (`window.__TAURI__`, the relay bus, plugin-http over the dev proxy,
  * `extension_window_ensure` opening the extension window's page) is dictionary-harness-native.js,
@@ -133,17 +134,28 @@
   }
 
   window.addEventListener('DOMContentLoaded', async () => {
-    document.getElementById('engine').textContent = engine
-    document.getElementById('origin').textContent = origins[engine] ?? location.origin
-    for (const line of harness.log) document.getElementById('log').textContent += `${line}\n`
+    // Pages other than the harness (frontend/dev/dictionary-preview.html) leave out what they do not show.
+    const setText = (id, text) => {
+      const element = document.getElementById(id)
+      if (element) element.textContent = text
+      return element
+    }
+    setText('engine', engine)
+    setText('origin', origins[engine] ?? location.origin)
+    setText('log', harness.log.map((line) => `${line}\n`).join(''))
     const openPage = (url) => {
       append(`navigate → ${url}`)
-      document.getElementById('options').src = url
+      const frame = document.getElementById('options')
+      if (frame) frame.src = url
     }
     const host = (harness.host =
       engine === 'yomitan'
         ? window.__extensionHost &&
-          (await import('/ui/dictionary-harness-yomitan.js')).createYomitanHarness({ log: (value) => window.__extensionHost.log(value), openPage })
+          (await import('/ui/dictionary-harness-yomitan.js')).createYomitanHarness({
+            log: (value) => window.__extensionHost.log(value),
+            openPage,
+            dictionaries: params.getAll('dictionary')
+          })
         : window.__kimochiExtensionHost)
     if (!host) {
       harness.start = {
@@ -152,11 +164,11 @@
           ? 'window.__extensionHost is missing: did /spike/shim.js load and install for yomitan?'
           : 'window.__kimochiExtensionHost is missing: did /spike/ext-host.js load and resolve the engine?'
       }
-      document.getElementById('ready').textContent = 'host missing'
+      setText('ready', 'host missing')
       showStatus()
       return
     }
-    const outline = document.getElementById('popup-outline')
+    const outline = document.getElementById('popup-outline') ?? document.createElement('div')
     host.observePopup((state) => {
       harness.popup = state
       append(`popup ${state.visible ? `visible ${JSON.stringify(state.rect)}` : 'hidden'}`)
@@ -166,7 +178,7 @@
       showStatus()
     })
     const click = (id, fn) =>
-      document.getElementById(id).addEventListener('click', async () => {
+      document.getElementById(id)?.addEventListener('click', async () => {
         append(`button: ${id}`)
         try {
           const value = await fn()
@@ -188,20 +200,20 @@
       location.reload()
     })
 
-    document.getElementById('ready').textContent = 'starting'
+    setText('ready', 'starting')
     showStatus()
     if (windowLabel === 'dictionary') {
       // The dictionary panel starts nothing: its router relays to the hub by itself, and the
       // extension page arrives as `kimochi-dictionary-navigate` (above).
       harness.start = { ready: true, window: 'dictionary' }
-      document.getElementById('ready').textContent = 'dictionary window (relay client)'
+      setText('ready', 'dictionary window (relay client)')
       append('dictionary window: waiting for the hub to open a page here')
       showStatus()
       return
     }
     harness.start = await host.start({ scope, host: windowLabel === null })
-    document.getElementById('ready').textContent = harness.start.ready ? 'ready' : 'failed'
-    document.getElementById('ready').dataset.state = harness.start.ready ? 'ready' : 'failed'
+    const ready = setText('ready', harness.start.ready ? 'ready' : 'failed')
+    if (ready) ready.dataset.state = harness.start.ready ? 'ready' : 'failed'
     append(`start → ${JSON.stringify(harness.start)}`)
     showStatus()
   })

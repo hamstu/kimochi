@@ -7,6 +7,7 @@
     "build:frontend": "vite build",
     "preview:ui": "vite --config vite.preview.config.ts",
     "demo:build": "vite build --config vite.demo.config.ts",
+    "capture:dictionary-previews": "node scripts/capture-dictionary-previews.mjs",
     "site:dev": "npm --prefix site run dev",
     "site:build": "npm run demo:build && npm --prefix site run build",
     "site:preview": "npm --prefix site run preview",

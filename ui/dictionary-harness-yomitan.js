@@ -15,9 +15,18 @@
 const FIXTURE_TITLE = 'Tauri Spike Fixture v2'
 const READY_TIMEOUT_MS = 30000
 
-export function createYomitanHarness({ log, openPage }) {
+/**
+ * `dictionaries`: Yomitan zip URLs to import in place of the fixture (`?dictionary=` on the page,
+ * as the dictionary preview capture passes its JMdict excerpt). Each is imported once: a title
+ * already in the database comes back from Yomitan as "already imported" and is kept.
+ */
+export function createYomitanHarness({ log, openPage, dictionaries = [] }) {
   const hub = window.__extensionHost
   const state = { ready: false, error: null, dictionaries: [], fixture: null }
+  // The page's own fetch, taken before /spike/network-bundle.js routes remote URLs to plugin-http
+  // (which the harness only stands in for with ?fetch=proxy): the dictionary URLs are the
+  // harness's own inputs, not the engine's network.
+  const pageFetch = window.fetch.bind(window)
   let popups = new Set()
   const watchers = new Set()
 
@@ -50,21 +59,25 @@ export function createYomitanHarness({ log, openPage }) {
   }
   const visiblePopup = () => [...popups].reverse().find((popup) => popup.isVisibleSync?.()) ?? null
 
-  async function importFixture() {
-    const existing = await api('getDictionaryInfo')
-    if (existing.some((d) => d.title === FIXTURE_TITLE)) return { alreadyInstalled: true }
+  /** Imports one Yomitan zip and enables it in the current profile; its title, and whether it was new. */
+  async function importDictionary(url) {
     const { DictionaryWorker } = await import('/js/dictionary/dictionary-worker.js')
     const imported = await new DictionaryWorker().importDictionary(
-      await fetch('/spike/fixture.zip').then((r) => r.arrayBuffer()),
+      await pageFetch(url).then((r) => {
+        if (!r.ok) throw Error(`${url}: HTTP ${r.status}`)
+        return r.arrayBuffer()
+      }),
       { prefixWildcardsSupported: false },
       null
     )
-    if (imported.errors.length) throw Error(JSON.stringify(imported.errors))
+    const duplicate = imported.errors.length === 1 && /is already imported/.test(String(imported.errors[0]?.message ?? imported.errors[0]))
+    if (imported.errors.length && !duplicate) throw Error(JSON.stringify(imported.errors))
+    const title = imported.result?.title ?? /Dictionary (.*) is already imported/.exec(String(imported.errors[0]?.message ?? imported.errors[0]))?.[1]
     const options = await api('optionsGetFull')
     const profile = options.profiles[options.profileCurrent].options
-    if (!profile.dictionaries.some((d) => d.name === FIXTURE_TITLE)) {
+    if (title && !profile.dictionaries.some((d) => d.name === title)) {
       profile.dictionaries.push({
-        name: FIXTURE_TITLE,
+        name: title,
         alias: '',
         partsOfSpeechFilter: true,
         useDeinflections: true,
@@ -75,7 +88,14 @@ export function createYomitanHarness({ log, openPage }) {
       await api('setAllSettings', { value: options, source: 'kimochi-harness' })
       await api('triggerDatabaseUpdated', { type: 'dictionary', cause: 'import' })
     }
-    return { imported: imported.result?.title ?? FIXTURE_TITLE }
+    return { title, imported: !duplicate }
+  }
+
+  async function importFixture() {
+    const existing = await api('getDictionaryInfo')
+    if (existing.some((d) => d.title === FIXTURE_TITLE)) return { alreadyInstalled: true }
+    const { title } = await importDictionary('/spike/fixture.zip')
+    return { imported: title ?? FIXTURE_TITLE }
   }
 
   /** `startYomitan`, step for step, minus the native-only parts (relay, setup jobs). */
@@ -122,7 +142,11 @@ export function createYomitanHarness({ log, openPage }) {
     // frontend is created (scan scope, setTextSource); the Yomitan API pop-up path itself stays off.
     const { installApiLookup } = await import('/ui/api-lookup.js')
     await installApiLookup()
-    state.fixture = await importFixture()
+    if (dictionaries.length > 0) {
+      state.fixture = null
+      state.imported = []
+      for (const url of dictionaries) state.imported.push(await importDictionary(url))
+    } else state.fixture = await importFixture()
     await import('/js/app/content-script-wrapper.js')
     state.dictionaries = (await api('getDictionaryInfo')).map((d) => d.title)
     state.ready = true
@@ -141,7 +165,7 @@ export function createYomitanHarness({ log, openPage }) {
           return { ready: true }
         } catch (error) {
           state.error = String(error?.message ?? error)
-          log({ check: 'yomitan-start-failed', error: state.error })
+          log({ check: 'yomitan-start-failed', error: state.error, stack: String(error?.stack ?? '') })
           return { ready: false, error: state.error }
         }
       })()

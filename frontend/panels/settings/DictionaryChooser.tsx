@@ -19,7 +19,8 @@
  * download is ready (`pending` is the engine waiting for its download). The download's progress
  * block sits in the panel, and the overflow menu removes a downloaded engine that is not in use.
  *
- * Copy comes from `DICTIONARY_ENGINES` in `ui/settings.ts`.
+ * Copy comes from `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture under the
+ * description from frontend/assets/dictionary-previews/ (`DictionaryPreview`).
  */
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, Cloud, Download, Ellipsis, ExternalLink, Monitor, Trash2 } from 'lucide-react'
@@ -45,6 +46,7 @@ import {
   type ExtensionEngine
 } from '@ui/extension-download'
 import { ModelDownload } from './ModelDownload'
+import { DictionaryPreview } from '../../components/DictionaryPreview'
 import './engine-chooser.css'
 import './dictionary-chooser.css'
 
@@ -223,6 +225,7 @@ function DictionaryDetail({
         )}
       </header>
       <p className="engine-detail-description">{info.description}</p>
+      <DictionaryPreview engine={engine} />
       <ul className="engine-strengths">
         {info.strengths.map((strength) => (
           <li key={strength}>

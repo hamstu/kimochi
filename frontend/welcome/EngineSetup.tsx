@@ -43,6 +43,7 @@ import {
   type ExtensionEngine
 } from '@ui/extension-download'
 import { ModelDownload } from '../panels/settings/ModelDownload'
+import { DictionaryPreview } from '../components/DictionaryPreview'
 import Step from './Step'
 import { StepActions } from './StepActions'
 import style from './WelcomeApp.module.css'
@@ -149,6 +150,7 @@ export default function EngineSetup(): JSX.Element {
         }))}
       />
       <p className={style.engineDescription}>{info.description}</p>
+      <DictionaryPreview engine={chosen} />
       {inProgress && <ModelDownload controls={controls} emphasis={false} label="Download" />}
       {status?.state === 'failed' && (
         <p className="k-description">Check your connection and press Retry, or choose another engine.</p>

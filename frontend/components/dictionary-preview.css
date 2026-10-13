@@ -1,0 +1,43 @@
+/*
+ * A dictionary engine's pop-up picture (DictionaryPreview.tsx): a 16:10 thumbnail on a hairline,
+ * and the same picture full width in a dialog.
+ */
+.dictionary-preview {
+  display: block;
+  width: 100%;
+  max-width: 22rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: var(--k-sunken);
+  overflow: hidden;
+  cursor: zoom-in;
+  box-shadow: 0 0 0 1px var(--k-line);
+  transition: box-shadow var(--k-fast) ease;
+}
+.dictionary-preview:hover {
+  box-shadow: 0 0 0 1px var(--k-line-strong);
+}
+.dictionary-preview:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+}
+
+.dictionary-preview-image,
+.dictionary-preview-full {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+}
+
+.dictionary-preview-full {
+  border-radius: var(--k-radius-md);
+  box-shadow: 0 0 0 1px var(--k-line);
+}
+
+/* The picture for the window's theme (the appearance controller puts .dark on <html>). */
+.dark .dictionary-preview-light,
+:root:not(.dark) .dictionary-preview-dark {
+  display: none;
+}
