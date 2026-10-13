@@ -1,11 +1,11 @@
 import { MiniWindow, VisualFrame } from './parts'
 
 const ENGINES = [
-  { name: 'Apple Live Text', meta: 'macOS · built in', selected: true },
+  { name: 'Google Lens', meta: 'Default · online', selected: true },
+  { name: 'Apple Live Text', meta: 'macOS · built in' },
   { name: 'MeikiOCR', meta: 'On device · GPU' },
   { name: 'manga-ocr', meta: 'On device · manga' },
-  { name: 'OneOCR', meta: 'Windows 11 · built in' },
-  { name: 'Cloud OCR', meta: 'Opt-in' }
+  { name: 'OneOCR', meta: 'Windows 11 · built in' }
 ]
 
 /** The OCR engine picker. */

@@ -134,10 +134,10 @@ export function Compare() {
       <h3>Choose Kimochi if you want reading help in one desktop app</h3>
       <p>
         Kimochi puts capture, OCR, an overlay on the game, a running log,
-        Yomitan, text to speech, Anki export and a per-session notebook of
+        Yomitan, Anki export and a per-session notebook of
         characters and places into one set of small windows, without OBS or a
         browser in the loop. It offers on-device engines (Apple Live Text,
-        MeikiOCR, Manga OCR, OneOCR) as well as cloud OCR, and gamepad controls
+        MeikiOCR, Manga OCR, OneOCR) as well as Google Lens, and gamepad controls
         for the overlay. It is free and GPL-3.0 licensed, but it is young:
         builds are pre-release, Steam Deck support is early, and its Anki
         features are simpler than GSM&rsquo;s. See the{" "}

@@ -37,9 +37,9 @@ export function Terms() {
         merchantability, fitness for a particular purpose and non-infringement.
         OCR, dictionary results, translations and speech can be wrong. We do not
         promise that Kimochi will work with every game, be error-free, or stay
-        available, and features may change or be removed. Online features such
-        as Kimochi cloud OCR and text to speech may be limited, changed or
-        discontinued at any time.
+        available, and features may change or be removed. Online features
+        such as Google Lens depend on services we do not control and may stop
+        working, change or be discontinued at any time.
       </p>
 
       <h2 id="liability">4. Limitation of liability</h2>
@@ -66,14 +66,10 @@ export function Terms() {
           in ways the law or its owner does not allow.
         </li>
         <li>
-          If you connect third-party services (a cloud OCR provider,
+          If you use third-party services (Google Lens, a cloud OCR provider,
           AnkiConnect, DeepL, an AI tool, dictionary sources or others), you are
           responsible for following their terms, and for any keys or accounts
           you use with them.
-        </li>
-        <li>
-          Please use the shared online features (Kimochi cloud OCR and text to
-          speech) for your own reading, not for bulk or automated processing.
         </li>
       </ul>
 
