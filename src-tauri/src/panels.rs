@@ -26,6 +26,9 @@ pub struct PanelSpec {
     pub pinned: bool,
     /// Built during setup rather than on first show.
     pub eager: bool,
+    /// Centred on the main window's display (or the one under the cursor) whenever it is shown
+    /// from hidden, rather than restored to where it was last left.
+    pub centred: bool,
     /// Kimochi's own panels draw their own title bars; a hosted third-party page
     /// (Yomitan settings) keeps the system frame.
     pub decorated: bool,
@@ -59,6 +62,7 @@ const fn panel(
         resizable: true,
         pinned: false,
         eager: false,
+        centred: false,
         decorated: false,
         init_assets: &[],
     }
@@ -104,14 +108,22 @@ pub static PANELS: &[PanelSpec] = &[
         min_height: 420.,
         ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.)
     },
+    // The onboarding guide, in the same app-drawn chrome as every panel. A first run must not
+    // lose it behind another window, so it opens centred and kept on top (the title bar's pin
+    // turns that off, and it stays movable by its title bar). Sized so no step scrolls at the
+    // default size; the minimum still fits every step, scrolling inside the step if it must.
     PanelSpec {
+        pinned: true,
+        centred: true,
+        min_width: 600.,
+        min_height: 520.,
         init_assets: EXTENSION_HOST_ASSETS,
         ..panel(
             "welcome",
             "Welcome to Kimochi",
             "app/welcome.html",
-            800.,
-            640.,
+            720.,
+            620.,
         )
     },
     PanelSpec {
@@ -138,6 +150,7 @@ pub static PANELS: &[PanelSpec] = &[
         // one thing that must not happen.
         min_width: 720.,
         min_height: 480.,
+        centred: true,
         init_assets: EXTENSION_HOST_ASSETS,
         ..panel("dictionary", "Dictionary settings", PANEL_PAGE, 960., 680.)
     },
@@ -677,8 +690,8 @@ fn apply(
         #[cfg(target_os = "linux")]
         "show" | "show_inactive" if platform::gamescope::handles(window) => platform::gamescope::show(window)?,
         "show" => {
-            if label == DICTIONARY && !window.is_visible().unwrap_or(false) {
-                place_on_main_display(app, window, existed, DICTIONARY)?;
+            if spec(label).is_some_and(|s| s.centred) && !window.is_visible().unwrap_or(false) {
+                place_on_main_display(app, window, existed, label)?;
             }
             window.show().map_err(native_err)?;
             window.set_focus().map_err(native_err)?;
@@ -740,10 +753,11 @@ fn apply(
 
 /// The main window (the Log with its Controller sidebar).
 pub const MAIN: &str = "log";
+#[cfg(test)]
 const DICTIONARY: &str = "dictionary";
 
-/// Centres a large panel (the dictionary settings) on the display the main window is on, or
-/// the display under the cursor when it is hidden, clamped to its work
+/// Centres a `centred` panel (the dictionary settings, onboarding) on the display the main
+/// window is on, or the display under the cursor when it is hidden, clamped to its work
 /// area. A window resized this session keeps its size and a new
 /// one starts at the spec size, not a frame restored from an older build.
 fn place_on_main_display(
@@ -914,6 +928,21 @@ mod tests {
         assert!(spec("log").unwrap().pinned);
         assert!(!spec("settings").unwrap().pinned);
         assert!(!spec("diagnostics").unwrap().pinned);
+    }
+
+    #[test]
+    fn onboarding_opens_centred_on_top_in_kimochi_chrome() {
+        let welcome = spec("welcome").unwrap();
+        assert!(welcome.pinned, "onboarding starts always on top");
+        assert!(welcome.centred, "onboarding is centred when shown");
+        assert!(!welcome.decorated, "onboarding draws the panel chrome");
+        assert!(welcome.resizable);
+        assert_eq!((welcome.width, welcome.height), (720., 620.));
+        assert_eq!((welcome.min_width, welcome.min_height), (600., 520.));
+        assert!(spec(DICTIONARY).unwrap().centred);
+        for label in ["log", "settings", "diagnostics", "tray-popover"] {
+            assert!(!spec(label).unwrap().centred, "{label} keeps its saved place");
+        }
     }
 
     #[test]
