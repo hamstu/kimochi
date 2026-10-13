@@ -17,3 +17,20 @@ oneocr-worker/target/
 
 # Static build of the preview harness for the site demo (npm run demo:build)
 site/public/demo/
+
+# Agent worktrees and local tool state
+.claude/
+
+# Private working notes stay on the maintainer's machine, never in the repository: plans,
+# handoffs, bring-up reports, research and the evidence they collected. Root-level Markdown is
+# ignored unless it is one of the public documents listed here.
+/docs/
+/evidence/
+/*.md
+!/README.md
+!/CONTRIBUTING.md
+!/CHANGELOG.md
+!/COMMANDS.md
+!/DESIGN.md
+!/PRODUCT.md
+!/CLAUDE.md

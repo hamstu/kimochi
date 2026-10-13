@@ -1,0 +1,248 @@
+{
+  "note": "Replay timelines for scripts/autoscan-timing.test.mjs. Virtual milliseconds. `screen` is what is actually displayed; `reads` optionally overrides what the local observer reports for a given observation index range, modelling read noise. No screen is captured and no service is called.",
+  "costs": {
+    "note": "A MODEL, calibrated from measured native costs. Not measurements in themselves: each side is a flat per-observation figure standing in for a range, and the harness picks one of two values per observation. Calibration source: the parent probed an actual selected game window, local only, 16 samples (capture 125-150ms, LiveText 90-115ms warm, eager PNG 144-153ms, total 370-405ms every probe; cold 750ms). `old` models that pipeline at a flat 400ms. `new` models it with eager PNG removed from observations and identical-image observer reads cached natively, so an unchanged frame costs the capture alone (150ms, observation 0ms) and a changed one costs 250ms. recognizeMs 900 is an ASSUMPTION for the simulation, not a measurement: observed endpoint times in existing logs ranged roughly 450-1569ms, so any single figure understates the spread and latency results scale with it.",
+    "old": {
+      "observeChangedMs": 400,
+      "observeUnchangedMs": 400,
+      "recognizeMs": 900
+    },
+    "new": {
+      "observeChangedMs": 250,
+      "observeUnchangedMs": 150,
+      "recognizeMs": 900
+    }
+  },
+  "scenarios": [
+    {
+      "id": "control-static",
+      "title": "Control: a reader paused on one line, observer perfectly stable",
+      "runForMs": 60000,
+      "screen": [
+        {
+          "at": 0,
+          "text": "静かな夜でした"
+        }
+      ],
+      "expect": {
+        "requests": 1
+      }
+    },
+    {
+      "id": "latency-after-idle",
+      "title": "A new line arrives after the reader has been still for a minute",
+      "runForMs": 80000,
+      "screen": [
+        {
+          "at": 0,
+          "text": "静かな夜でした"
+        },
+        {
+          "at": 60000,
+          "text": "扉が開いた"
+        }
+      ],
+      "measureLatencyFor": {
+        "at": 60000,
+        "text": "扉が開いた"
+      }
+    },
+    {
+      "id": "gameplay-cadence",
+      "title": "Dialogue advancing every four seconds during play",
+      "runForMs": 44000,
+      "screen": [
+        {
+          "at": 0,
+          "text": ""
+        },
+        {
+          "at": 4000,
+          "text": "町に着いた"
+        },
+        {
+          "at": 8000,
+          "text": "宿を探そう"
+        },
+        {
+          "at": 12000,
+          "text": "おい、そこの君"
+        },
+        {
+          "at": 16000,
+          "text": "何か用ですか"
+        },
+        {
+          "at": 20000,
+          "text": "見ない顔だな"
+        },
+        {
+          "at": 24000,
+          "text": "旅の者です"
+        },
+        {
+          "at": 28000,
+          "text": "そうか、気をつけろ"
+        },
+        {
+          "at": 32000,
+          "text": "ありがとう"
+        }
+      ]
+    },
+    {
+      "id": "read-noise-single",
+      "title": "Static line, observer drops a character on one observation in seven",
+      "runForMs": 60000,
+      "screen": [
+        {
+          "at": 0,
+          "text": "静かな夜でした"
+        }
+      ],
+      "noise": {
+        "everyNth": 7,
+        "forObservations": 1,
+        "as": "静かな夜でし"
+      }
+    },
+    {
+      "id": "read-noise-sustained",
+      "title": "Static line, observer flips to a second reading for two observations at a time",
+      "runForMs": 60000,
+      "screen": [
+        {
+          "at": 0,
+          "text": "静かな夜でした"
+        }
+      ],
+      "noise": {
+        "everyNth": 7,
+        "forObservations": 2,
+        "as": "静かな夜でレた"
+      }
+    },
+    {
+      "id": "disappearance-after-settling",
+      "title": "A settled line is read, then the dialogue box empties",
+      "runForMs": 30000,
+      "screen": [
+        {
+          "at": 0,
+          "text": "さようなら"
+        },
+        {
+          "at": 10000,
+          "text": ""
+        }
+      ],
+      "clearedBy": 20000
+    },
+    {
+      "id": "disappearance-before-settling",
+      "title": "A line flashes up and is gone before it could settle",
+      "runForMs": 30000,
+      "screen": [
+        {
+          "at": 0,
+          "text": ""
+        },
+        {
+          "at": 10000,
+          "text": "一瞬の台詞"
+        },
+        {
+          "at": 10400,
+          "text": ""
+        }
+      ],
+      "clearedBy": 20000
+    },
+    {
+      "id": "rapid-change-slow-cloud",
+      "title": "Dialogue advancing every second while the cloud takes three",
+      "runForMs": 30000,
+      "costs": {
+        "observeChangedMs": 250,
+        "observeUnchangedMs": 150,
+        "recognizeMs": 3000
+      },
+      "screen": [
+        {
+          "at": 0,
+          "text": ""
+        },
+        {
+          "at": 2000,
+          "text": "一行目です"
+        },
+        {
+          "at": 3000,
+          "text": "二行目です"
+        },
+        {
+          "at": 4000,
+          "text": "三行目です"
+        },
+        {
+          "at": 5000,
+          "text": "四行目です"
+        },
+        {
+          "at": 6000,
+          "text": "五行目です"
+        },
+        {
+          "at": 7000,
+          "text": "六行目です"
+        },
+        {
+          "at": 8000,
+          "text": "七行目です"
+        },
+        {
+          "at": 9000,
+          "text": "八行目です"
+        },
+        {
+          "at": 10000,
+          "text": "九行目です"
+        },
+        {
+          "at": 11000,
+          "text": "十行目です"
+        }
+      ]
+    },
+    {
+      "id": "blank-after-last-pending",
+      "title": "A drawn line is replaced, then the box empties while the replacement is still queued",
+      "runForMs": 20000,
+      "costs": {
+        "observeChangedMs": 250,
+        "observeUnchangedMs": 150,
+        "recognizeMs": 900
+      },
+      "screen": [
+        {
+          "at": 0,
+          "text": ""
+        },
+        {
+          "at": 2000,
+          "text": "最初の台詞"
+        },
+        {
+          "at": 6000,
+          "text": "最後の台詞"
+        },
+        {
+          "at": 7000,
+          "text": ""
+        }
+      ],
+      "clearedBy": 12000
+    }
+  ],
+  "fingerprint": "The harness supplies contentFingerprint from the displayed screen content, standing in for the native exact RGBA digest. It is deliberately independent of observer read noise: the digest describes pixels, the reading describes what an engine made of them."
+}

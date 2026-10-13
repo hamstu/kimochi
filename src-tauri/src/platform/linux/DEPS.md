@@ -5,7 +5,7 @@
 The README's Ubuntu command includes PipeWire/SPA development headers and libclang
 for capture bindings, `libudev-dev` for gilrs gamepad support, and GStreamer development
 metadata plus base/good/bad runtime plugins for packaging/audio. Missing `libudev.pc`
-was reproduced by the first Ubuntu app build; see `UBUNTU_BRINGUP.md` and its evidence.
+was reproduced by the first Ubuntu app build.
 Use Node >=22, npm >=10 and Rust stable >=1.87 with Clippy/rustfmt. Japanese fonts
 (`fonts-noto-cjk`) and diagnostic tools (`mesa-utils`, `wayland-utils`, `x11-utils`)
 help runtime acceptance. Install an IME only by user agreement.
@@ -25,8 +25,8 @@ PipeWire daemon service or system configuration is bundled or installed.
 
 Gamescope Gaming Mode needs the explicit launcher in `scripts/steam-deck/` because
 Steam's exported environment reports X11 despite the native Wayland socket.
-Gamescope-only window lifecycle and external-layer capture behavior are documented
-with their qualifications and remaining gaps in `STEAM_DECK_BRINGUP.md`.
+Gamescope-only window lifecycle and external-layer capture behavior still have
+qualifications and remaining gaps.
 
 ## Cargo
 
@@ -162,7 +162,7 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
 ## Not verified on Linux
 
 Native ARM64 Hyprland/Wayland startup, portal capture, CPU OCR and layer overlay/crop
-have now run on Linux; see `LINUX_BRINGUP.md` for exact evidence and qualifications.
+have now run on Linux.
 x86_64 runtime and a real X11 session remain unverified. Remaining X11 checks include: XInput 2 raw events arriving while
 a game has focus; `_NET_WM_WINDOW_TYPE_UTILITY` after map on GNOME/KDE/XFCE; panel
 clicks not stealing focus; `GetImage` on windows of depth-32 visuals; GTK CSD windows'
@@ -172,7 +172,7 @@ bounds versus the overlay.
 
 The bring-up user explicitly expanded the original reduced-tier scope to investigate native Wayland overlays. Native layers are enabled automatically when supported; `KIMOCHI_WAYLAND_OVERLAY=0` disables them for diagnostics. During GTK setup the Linux module dynamically loads optional `libgtk-layer-shell.so.0` and probes the actual Wayland protocol. Missing library/protocol disables the overlay and crop editor entirely; there is no detached reader fallback or link-time dependency. No crate/model versions change. `session.nativeLayerShell` reports whether this integration initialized, distinct from the historical compositor-name hint `session.layerShell`.
 
-Layer panels use keyboard mode NONE, no exclusive layout reservation, an initially empty mouse input region, and published annotation rectangles applied through GDK on the GTK main thread. The overlay anchors to all output edges; dictionary panels anchor top/left. Screen-frame coordinates map to the layer surface's actual local dimensions; portal window frames are deliberately not drawn at an invented desktop position. Multi-output mapping, dictionary placement, native hover, long-lived scheduling and desktop fallback remain acceptance gates. See root `LINUX_BRINGUP.md` for observed passes/failures. GNOME does not advertise layer-shell in the tested Ubuntu session; see the optional GNOME adapter below.
+Layer panels use keyboard mode NONE, no exclusive layout reservation, an initially empty mouse input region, and published annotation rectangles applied through GDK on the GTK main thread. The overlay anchors to all output edges; dictionary panels anchor top/left. Screen-frame coordinates map to the layer surface's actual local dimensions; portal window frames are deliberately not drawn at an invented desktop position. Multi-output mapping, dictionary placement, native hover, long-lived scheduling and desktop fallback remain acceptance gates. GNOME does not advertise layer-shell in the tested Ubuntu session; see the optional GNOME adapter below.
 
 For an explicitly opened crop editor, `region_keys` switches the overlay alone to keyboard ON_DEMAND (never EXCLUSIVE), then restores NONE on completion/cancellation. Portal screen crops use frame-pixel dimensions versus configured logical surface size; portal window crops use a fitted screenshot because global window placement is unavailable. The editor temporarily publishes whole-surface input and releases it immediately on close. A hidden layer is mapped and configured before crop geometry is measured.
 
@@ -295,8 +295,8 @@ old pairing. Other compositor window-following remains deferred; no invented
 portable desktop coordinates or general foreground tracker. Multi-monitor crop
 mapping and other GNOME versions remain unsupported until verified.
 Full UI/placement and loader recovery have isolated GNOME46 evidence; physical
-focus/input/audio acceptance on the user's current desktop is tracked separately
-in UBUNTU_BRINGUP.md. Other GNOME versions are rejected until tested.
+focus/input/audio acceptance on the user's current desktop is tracked separately.
+Other GNOME versions are rejected until tested.
 
 On Linux Wayland without native layer-shell or supported GNOME desktop mapping, **Crop area → Set crop area…** opens
 the full shared source image in the existing main window. Drag a rectangle, then
@@ -351,4 +351,4 @@ Ubuntu evidence distinguishes native virtual input and synthetic controller even
 from physical keyboard/gamepad acceptance. The available js0 is a Parallels virtual
 mouse, not a controller. GNOME remains version-gated to 46 and screen mapping
 single-monitor. Other compositor window tracking is still deferred; X11 and native
-layer-shell paths are preserved. See UBUNTU_BRINGUP.md entry105 and final gates.
+layer-shell paths are preserved.

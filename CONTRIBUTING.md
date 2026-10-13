@@ -14,9 +14,10 @@ feature requests, so please don't be surprised if an idea is declined or a PR si
 
 ## Development workflow
 
-Set up as in [docs/BUILDING.md](docs/BUILDING.md), with `kimochi-meikiocr` and `kimochi-mangaocr`
-checked out beside this repository. Two parity tests also read the Electron app at `../kimochi`;
-without it they are reported as skipped.
+Set up as in the README's [Building from source](README.md#building-from-source), with
+`kimochi-meikiocr` and `kimochi-mangaocr` checked out beside this repository. Two parity tests
+compare against the original Electron app at `../kimochi`, which is not public; without it they
+are reported as skipped.
 
 Branch from `main`, then before opening a PR run:
 
@@ -38,7 +39,14 @@ preview state live in [frontend/dev/preview-setup.ts](frontend/dev/preview-setup
 [DESIGN.md](DESIGN.md). Native commands and events are documented in [COMMANDS.md](COMMANDS.md):
 update it alongside any change to the interface.
 
-**Releases** are cut by the maintainer; see [RELEASING.md](RELEASING.md).
+**Changelog.** If a user would notice your change, add a `- ` line under `## [Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md), written for the person using the app. These lines become the
+release notes and the app's "What's new". Refactors, CI and tests don't need one.
+
+**Releases** are cut by the maintainer. `main` is the development line: every push refreshes the
+rolling `nightly` pre-release, and nothing on `main` is offered to users as an update. A release
+is a `v<x.y.z>` tag made by `npm run release -- <x.y.z>` on a clean `main`; CI builds, signs and
+publishes it, and installed copies update to it. Never bump the version or tag by hand.
 
 ## Commands
 
@@ -46,9 +54,9 @@ update it alongside any change to the interface.
 | --- | --- |
 | `npm run bundle` | Debug bundle for this OS: `.app` (macOS), NSIS `-setup.exe` (Windows), `.deb` + `.AppImage` (Linux), under `src-tauri/target/debug/bundle/`. Stages the OCR runtime and licences first; the OCR models are downloaded by the app on demand, not bundled. |
 | `npm run release:bundle` | Optimised bundle for this OS, under `src-tauri/target/release/bundle/`. |
-| `npm run release -- <x.y.z>` | Cuts a release: bumps the version, moves `CHANGELOG.md`'s Unreleased entries under it, commits, tags `v<x.y.z>` and pushes; CI builds and publishes it (see [Cutting a release](RELEASING.md#cutting-a-release)). `--dry-run` checks and shows the changes without writing anything. |
+| `npm run release -- <x.y.z>` | Cuts a release: bumps the version, moves `CHANGELOG.md`'s Unreleased entries under it, commits, tags `v<x.y.z>` and pushes; CI builds and publishes it (see Releases above). `--dry-run` checks and shows the changes without writing anything. |
 | `npm start` | Launches the **already-built** debug output: `open`s `Kimochi.app` on macOS, starts `target/debug/kimochi(.exe)` elsewhere. Rebuild after changes. |
-| `npm run dev` | Rebuilds `dist/` (`prepare.mjs`), then `tauri dev` with live reload (see [Dev mode](docs/BUILDING.md#dev-mode)). Stages OCR assets only if they have never been staged. |
+| `npm run dev` | Rebuilds `dist/` (`prepare.mjs`), then `tauri dev` with live reload (see the README). Stages OCR assets only if they have never been staged. |
 | `npm run check:rust` | `cargo clippy -D warnings` for `src-tauri`. |
 | `npm run check:all` | `check:rust`, plus `cargo check` of `capture-core` for `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc` and `x86_64-unknown-linux-gnu` (each skipped with a hint unless `rustup target add` has been run). A convenience only: native CI on each OS is the real compile gate. |
 | `npm run prepare:meikiocr -- --target <triple>` | Stage the ONNX Runtime for another Rust target (also `KIMOCHI_TARGET`); `MEIKIOCR_DEST` stages into another directory. `prepare:mangaocr` accepts the same flag (its models are platform-neutral). |

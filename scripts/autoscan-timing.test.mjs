@@ -15,21 +15,24 @@
  * runs in a millisecond and runs the same way every time.
  *
  * The costs are measured, on an actual game window, and are stated in
- * `evidence/auto-ocr-timing/scenarios.json`. They matter more than they look:
+ * `scripts/fixtures/auto-ocr-timing/scenarios.json`. They matter more than they look:
  * a capture that costs 400ms is most of a poll interval, so the cadence a reader
  * experiences is the interval *plus* the work, not the interval.
  */
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { load } from './load.mjs'
 
 const { AutoScanner, DEFAULT_AUTO_OCR_SETTINGS } = await load('autoscan.ts')
 const { stabilityKey } = await load('observation.ts')
 
-const FIXTURES = new URL('../evidence/auto-ocr-timing/', import.meta.url)
+const FIXTURES = new URL('./fixtures/auto-ocr-timing/', import.meta.url)
 const scenarios = JSON.parse(readFileSync(new URL('scenarios.json', FIXTURES), 'utf8'))
+// Measured results are written to the gitignored evidence/ folder, not beside the fixture.
+const RESULTS = new URL('../evidence/auto-ocr-timing/', import.meta.url)
+mkdirSync(RESULTS, { recursive: true })
 
 const realSetImmediate = setImmediate
 
@@ -486,7 +489,7 @@ test('COMPARISON: every scenario, before and after, at measured costs', async ()
   comparison['latency-after-idle'].after.latency = await latencySweep(idle, 60000, 500, 11, {}, 'new')
 
   writeFileSync(
-    new URL('comparison.json', FIXTURES),
+    new URL('comparison.json', RESULTS),
     JSON.stringify(
       {
         note:
@@ -613,7 +616,7 @@ test('METRIC: how long stale boxes survive the text going away', async () => {
 
 test('records the measured baseline as evidence', async () => {
   writeFileSync(
-    new URL('baseline.json', FIXTURES),
+    new URL('baseline.json', RESULTS),
     JSON.stringify(
       {
         note:

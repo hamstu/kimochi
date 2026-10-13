@@ -9,7 +9,7 @@ use std::time::Duration;
 
 const VN_URL: &str = "https://api.vndb.org/kana/vn";
 const CHARACTER_URL: &str = "https://api.vndb.org/kana/character";
-const USER_AGENT: &str = "super-texthooker (https://github.com/anthropics)";
+const USER_AGENT: &str = "Kimochi (https://github.com/hamstu/kimochi-tauri)";
 
 const VN_FIELDS: &str =
     "title,alttitle,titles.title,titles.lang,titles.official,image.url,image.sexual,released";

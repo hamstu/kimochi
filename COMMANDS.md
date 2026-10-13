@@ -1,19 +1,9 @@
-# Kimochi Next — native command & event reference
+# Kimochi — native command & event reference
 
-Public API of the Rust backend in `src-tauri/`. This is the integration contract for
-all workstreams: the coordinator's source picker, the React panels, and the overlay /
-OCR frontend.
-
-## Status of this document
-
-Everything listed here is **implemented** in `src-tauri/` and passes static checks:
-`cargo clippy --all-targets -- -D warnings` clean, and 52 unit tests green.
-
-**Nothing here has been verified by running the application.** Static checks and
-runtime behaviour are different claims, and only the first is made. In particular the
-capture path, the tray, the gamepad reader, the `keytrigger` sidecar and the Yomitan
-settings window have never been exercised against a live window server. See
-[RESULTS.md](RESULTS.md) for what has actually been run.
+The interface between the Rust backend in `src-tauri/` and the web frontends (the React panels
+in `frontend/` and the overlay / OCR code in `ui/`). Every `invoke('…')` in the frontends must be
+a command registered here (`scripts/command-contract.test.mjs`); update this file alongside any
+change to the interface.
 
 Tests run with the Command Line Tools Swift runtime on the link path:
 
@@ -532,8 +522,8 @@ what the overlay reports.
 ## Dictionary engines
 
 Hachidori and 10ten run unmodified beside Yomitan through the generic extension host
-(`host/ext/`, bundled to `dist/spike/ext-host.js`). The contract is
-`DICTIONARY_ENGINES.md`; this is the native surface.
+(`host/ext/`, bundled to `dist/spike/ext-host.js`). This is the native
+surface.
 
 | Command | Signature |
 | --- | --- |
@@ -555,7 +545,7 @@ is no file). `extension` is required and must be an engine id, so Yomitan's file
 backed up or rewritten through it. The overlay's hub calls it before resetting metadata that
 describes extension data missing from this launch's WebKit store: the file is shared by every
 launch (it is named by the app identifier), the WebKit store is not (a bundle and the bare dev
-executable get different ones), see `DICTIONARY_ENGINES.md` §5.4.1. Records
+executable get different ones). Records
 `{check: 'storage-backup', extension, file}`; the host then reports `ext-host-storage-desync`.
 
 **The effective engine.** No engine is bundled (see "Dictionary engine downloads" below), so
@@ -583,7 +573,7 @@ reloads nothing. A window not built yet needs nothing, because its prelude reads
 it is built. Call it once per switch: Settings is the only caller on a switch (the overlay
 calls it only from its startup repair of a stale mirror). The Log comes back on Settings →
 Dictionary because Settings records its route in `sessionStorage` first
-(`kimochi.engineSwitch`, `DICTIONARY_ENGINES.md` §2.1); other in-page state that is not
+(`kimochi.engineSwitch`); other in-page state that is not
 persisted is dropped, and the transcript is history and comes back. Records
 `{check: 'dictionary-engine-apply', engine, reloaded, failed}`. It also settles the
 extension windows (below): any other engine's `ext-<id>` window is closed, the active
@@ -710,8 +700,7 @@ under the icon, and a right-click menu of Show Controls / Settings / Quit. Emits
 Yomitan, Hachidori and 10ten are not bundled. Each is pinned to one upstream GitHub release by
 `extensions/<id>.source.json` (version, tag, commit, asset URL, SHA-256, size) and
 `extensions/<id>.sha256.json` (every file of the unpacked release and its SHA-256), both
-compiled in. Implementation: `src-tauri/src/extension_store.rs`; the plan and its reasoning:
-`EXTENSION_DOWNLOADS.md`.
+compiled in. Implementation: `src-tauri/src/extension_store.rs`.
 
 `engine` is `"yomitan"`, `"hachidori"` or `"tenten"`. Every command answers with the engine's
 `ExtensionStatus` after acting:
@@ -881,8 +870,7 @@ a failed automatic check goes to `evidence.jsonl` (`update-check`) and leaves th
 (`idle` before any successful check, `none` after one), so a laptop that is offline never nags.
 A `tauri dev` binary (`debug_assertions`) does not check on its own (there is no `.app` or
 AppImage to replace) and says so in Settings; `KIMOCHI_UPDATE_ENDPOINT` replaces the endpoint and
-turns automatic checks on, for testing against a local manifest (MANUAL_TESTING.md → App
-updates). The download is held in memory until the user restarts; quitting discards it. On
+turns automatic checks on, for testing against a local manifest. The download is held in memory until the user restarts; quitting discards it. On
 Windows the NSIS installer runs passively (`plugins.updater.windows.installMode`) and relaunches
 the app; on Linux an AppImage is replaced in place and a `.deb` goes through `pkexec dpkg -i`
 (`latest.json` carries a `linux-<arch>-deb` entry beside `linux-<arch>`; the plugin picks by

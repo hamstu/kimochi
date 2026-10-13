@@ -10,10 +10,8 @@ name: CI
 #
 # Sibling repositories: src-tauri depends on `../../kimochi-meikiocr` and `../../kimochi-mangaocr`
 # by path, and the OCR staging scripts read their LICENSE/NOTICE and model manifest. This repo is
-# therefore checked out into `kimochi-tauri/` with the siblings beside it. The siblings are private
-# repositories under the same owner, read through the MEIKIOCR_DEPLOY_KEY / MANGAOCR_DEPLOY_KEY
-# secrets (read-only deploy keys). SIBLING_REPOS_TOKEN (a fine-grained PAT with Contents: read on
-# both) still works as an alternative. Override KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if
+# therefore checked out into `kimochi-tauri/` with the siblings beside it. The siblings are public
+# repositories under the same owner; override KIMOCHI_MEIKIOCR_REPO / KIMOCHI_MANGAOCR_REPO if
 # they move.
 #
 # Runners are persistent machines: the checkout keeps the Rust target directories, node_modules
@@ -185,15 +183,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
-          ssh-key: ${{ secrets.MEIKIOCR_DEPLOY_KEY }}
-          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-meikiocr
       - name: Check out kimochi-mangaocr
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
-          ssh-key: ${{ secrets.MANGAOCR_DEPLOY_KEY }}
-          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-mangaocr
       # Drop stale build output but keep the expensive, regenerable caches.
       - name: Clean workspace
@@ -287,15 +281,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MEIKIOCR_REPO || format('{0}/kimochi-meikiocr', github.repository_owner) }}
-          ssh-key: ${{ secrets.MEIKIOCR_DEPLOY_KEY }}
-          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-meikiocr
       - name: Check out kimochi-mangaocr
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.KIMOCHI_MANGAOCR_REPO || format('{0}/kimochi-mangaocr', github.repository_owner) }}
-          ssh-key: ${{ secrets.MANGAOCR_DEPLOY_KEY }}
-          token: ${{ secrets.SIBLING_REPOS_TOKEN || github.token }}
           path: kimochi-mangaocr
       - name: Clean workspace
         run: |

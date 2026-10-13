@@ -34,8 +34,7 @@ replacement machine only needs the same labels.
   VM was left as is.
 - WSL: WSL only runs while something holds it open, so `install-wsl-keepalive.ps1` registers a
   hidden scheduled task at logon of the Windows user that keeps the distro (and its systemd
-  runner service) alive. Someone has to log on to the arcade PC after a reboot, or enable
-  automatic logon, for that runner to come back.
+  runner service) alive.
 
 The runner application updates itself. Check a machine with `./svc.sh status` (macOS/Linux)
 or `Get-Service actions.runner.*` (Windows); logs live in `_diag/` beside the runner.
@@ -47,8 +46,7 @@ or `Get-Service actions.runner.*` (Windows); logs live in `_diag/` beside the ru
    ```sh
    RUNNER_TOKEN=... ci/runners/setup-runner.sh --name NAME --labels kimochi[,ubuntu|arch] --deps
    ```
-   `--deps` installs rustup and the Tauri system packages (apt or pacman). On Linux the build
-   user needs passwordless sudo (the workflow's apt step uses it too).
+   `--deps` installs rustup and the Tauri system packages (apt or pacman).
 3. Windows, in an elevated PowerShell:
    ```powershell
    $env:RUNNER_TOKEN = '...'
@@ -71,10 +69,8 @@ cold build. Expect 10–20 GB per machine for the work directory.
 
 ## Sibling repositories
 
-The private `kimochi-meikiocr` and `kimochi-mangaocr` repositories are checked out beside this
-one with read-only deploy keys (secrets `MEIKIOCR_DEPLOY_KEY` and `MANGAOCR_DEPLOY_KEY`,
-public halves added as deploy keys on each sibling). `SIBLING_REPOS_TOKEN`, a fine-grained PAT
-with Contents: read on both, works as an alternative.
+The public `kimochi-meikiocr` and `kimochi-mangaocr` repositories are checked out beside this
+one; no credentials are needed.
 
 ## Triggers and releases
 

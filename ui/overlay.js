@@ -2641,7 +2641,7 @@ native.onCapabilityGap((command) =>
   log({
     check: 'native-capability-missing',
     command,
-    note: 'Feature degraded; see PARITY_CONTRACT.md for the fallback.'
+    note: 'Feature degraded; the frontend falls back to its non-native path.'
   })
 )
 

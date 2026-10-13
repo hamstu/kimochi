@@ -1,10 +1,10 @@
-# Integrated capture-core copy
+# capture-core
 
-Derived from `../../tauri-screen-capture/capture-core` without modifying that completed experiment.
-
-The capture API, crop validation, frame mapping and pixel conversion are unchanged. The macOS display filter now excludes windows owned by Kimochi's current process, refreshed with each source catalog lookup. This is intended to keep the overlay and native controls out of display scans without hiding them. Independent window capture is unchanged. The permission error names this app.
-
-Static build/tests are recorded in the migration report. Runtime exclusion and capture feedback need user testing; the original spike's evidence does not prove this filter change.
+Screen and window capture for Kimochi: ScreenCaptureKit on macOS, Windows Graphics Capture on
+Windows, and PipeWire portals or X11 on Linux, with crop validation, frame mapping and pixel conversion.
+It began as a separate capture experiment by the same author. On macOS, display captures exclude
+Kimochi's own windows (refreshed with each source catalog lookup), so the overlay and native
+controls stay out of scans without being hidden.
 
 ## Persistent streams
 

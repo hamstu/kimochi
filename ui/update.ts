@@ -3,7 +3,7 @@
  * (`UpdateStatus` in `src-tauri/src/updater.rs`), and the pure wording and decisions the
  * sidebar notice and Settings → General → Updates share.
  */
-import { formatBytes, percent, progressText } from './model-download'
+import { formatBytes, percent, progressText } from './model-download.js'
 
 export type UpdateState =
   | 'idle'
