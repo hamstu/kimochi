@@ -1,0 +1,83 @@
+/*
+ * The icon building itself (KimochiLogo.tsx), about 1.5 s:
+ *   0–480 ms     the tile settles in (scale and fade);
+ *   300–1240 ms  キ's three strokes draw in writing order;
+ *   1100–1640 ms the brackets slide in from their corners and settle.
+ * Every rule animates FROM the hidden state to the element's resting style, so dropping the
+ * animation (settled, reduced motion, or no `animate`) leaves the finished icon.
+ */
+.logo {
+  display: block;
+  overflow: visible;
+}
+
+.tile {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.pen {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 0;
+}
+
+.logo[data-animate] .tile {
+  animation: tile-in 520ms var(--k-ease-out) both;
+}
+.logo[data-animate] .pen {
+  animation: pen-in 380ms cubic-bezier(0.45, 0, 0.25, 1) both;
+}
+.logo[data-animate] .pen[data-stroke="1"] {
+  animation-delay: 300ms;
+}
+.logo[data-animate] .pen[data-stroke="2"] {
+  animation-delay: 580ms;
+}
+.logo[data-animate] .pen[data-stroke="3"] {
+  animation-delay: 860ms;
+}
+.logo[data-animate] .bracket {
+  animation: bracket-in 540ms var(--k-ease-out) both;
+}
+.logo[data-animate] .bracket[data-corner="tl"] {
+  --from: -128px, -128px;
+  animation-delay: 1100ms;
+}
+.logo[data-animate] .bracket[data-corner="tr"] {
+  --from: 128px, -128px;
+  animation-delay: 1140ms;
+}
+.logo[data-animate] .bracket[data-corner="br"] {
+  --from: 128px, 128px;
+  animation-delay: 1180ms;
+}
+.logo[data-animate] .bracket[data-corner="bl"] {
+  --from: -128px, 128px;
+  animation-delay: 1220ms;
+}
+
+.logo[data-settled] :is(.tile, .pen, .bracket) {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo :is(.tile, .pen, .bracket) {
+    animation: none !important;
+  }
+}
+
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+}
+@keyframes pen-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+@keyframes bracket-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--from));
+  }
+}
