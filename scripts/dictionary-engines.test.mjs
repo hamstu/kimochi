@@ -37,6 +37,8 @@ const {
   hostEngineOf,
   popupTypeOf,
   resolveDictionaryEngine,
+  resolveHostEngine,
+  NO_ENGINE_MESSAGE,
   withDefaults
 } = await import(pathToFileURL(outfile).href)
 process.on('exit', () => {
@@ -191,4 +193,22 @@ test('a switch record normalises what it can rather than dropping the route', ()
   const withoutScroll = switchRecord()
   delete withoutScroll.scrollTop
   assert.equal(decodeEngineSwitch(JSON.stringify(withoutScroll), 1_000_000).scrollTop, 0)
+})
+
+test("resolveHostEngine keeps 'none' (no engine downloaded) and otherwise resolves like the hosts", () => {
+  assert.equal(resolveHostEngine('none', 'yomitan'), 'none', 'the mirror wins')
+  assert.equal(resolveHostEngine(null, 'none'), 'none', 'the prelude when there is no mirror')
+  assert.equal(resolveHostEngine(undefined, undefined), 'yomitan')
+  assert.equal(resolveHostEngine('custom-api', null), 'yomitan')
+  assert.equal(resolveHostEngine('builtin', null), 'yomitan')
+  assert.equal(resolveHostEngine('tenten', 'none'), 'tenten')
+  assert.match(NO_ENGINE_MESSAGE, /Settings → Dictionary/)
+})
+
+test('each downloadable engine says it is downloaded when chosen, and how big (its pinned size)', async () => {
+  for (const id of ['yomitan', 'hachidori', 'tenten']) {
+    const { asset } = await readJson(`../extensions/${id}.source.json`)
+    const mb = Math.round(asset.size / 1e6)
+    assert.match(DICTIONARY_ENGINES[id].requirements, new RegExp(`Downloaded .* \\(about ${mb} MB\\)`), id)
+  }
 })

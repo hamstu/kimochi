@@ -561,6 +561,21 @@ test('the Yomitan shims install only for yomitan, builtin and custom-api', async
   }
 })
 
+test("no host installs for 'none', the engine when the selected one is not downloaded", async () => {
+  const panelShim = await yomitanShimSource('panel-shim.js', { network: 'Promise.resolve()' })
+  // From the mirror, and from native's prelude when there is no mirror yet.
+  for (const options of [{ mirror: 'none' }, { prelude: 'none' }, { mirror: 'none', prelude: 'yomitan' }]) {
+    const world = new World()
+    const win = world.window({ href: `${APP}/app/panel.html`, label: 'log', ...options })
+    win.fetch = async () => ({ json: async () => ({}) })
+    world.run(win, panelShim)
+    world.load(win)
+    const name = JSON.stringify(options)
+    assert.equal(result(win, 'Boolean(window.__yomitanPanelShim)'), false, `panel-shim with ${name}`)
+    assert.equal(result(win, 'typeof __kimochiExtensionHost'), 'undefined', `ext host with ${name}`)
+  }
+})
+
 // ---------------------------------------------------------------- getURL
 
 test("getURL('') carries the extension origin, and a protocol unlike the page's", () => {
