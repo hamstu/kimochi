@@ -27,7 +27,7 @@ const {
   statusLine
 } = await load('model-download.ts')
 const { normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
-const { acceleratorLabel, engineHint, engineOffered, engineSelectable } = await load('ocr-engines.ts')
+const { acceleratorLabel, engineHint, engineListed, engineOffered, engineSelectable } = await load('ocr-engines.ts')
 const { OCR_MODES } = await load('settings.ts')
 
 const MEIKI_TOTAL = 45970040
@@ -128,7 +128,6 @@ test('picking an engine asks first only when its model was never downloaded', ()
   assert.equal(engineChoice('mangaocr', manga({ state: 'ready', source: 'bundled' })), 'select')
   // Cloud engines have no model; a backend without model downloads answers nothing.
   assert.equal(engineChoice('cloud', null), 'select')
-  assert.equal(engineChoice('websocket', null), 'select')
   assert.equal(engineChoice('mangaocr', null), 'select')
   // A status for another engine says nothing about this one.
   assert.equal(engineChoice('mangaocr', status()), 'select')
@@ -269,12 +268,29 @@ test('an OS-specific engine is offered only on its OS', () => {
   assert.equal(engineOffered('oneocr', 'windows'), true)
   assert.equal(engineOffered('oneocr', 'macos'), false)
   for (const os of ['macos', 'windows', 'linux'])
-    for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'websocket']) assert.equal(engineOffered(mode, os), true)
+    for (const mode of ['cloud', 'meikiocr', 'mangaocr']) assert.equal(engineOffered(mode, os), true)
+})
+
+test('Kimochi cloud is listed only with an access key, or while it is still selected', () => {
+  const withKey = { os: 'macos', cloudAccess: true }
+  const withoutKey = { os: 'macos', cloudAccess: false }
+  assert.equal(engineListed('cloud', withKey, 'meikiocr'), true)
+  assert.equal(engineListed('cloud', withoutKey, 'meikiocr'), false)
+  assert.equal(engineListed('cloud', withoutKey, 'cloud'), true, 'the selected engine stays visible')
+  assert.equal(engineListed('meikiocr', withoutKey, 'cloud'), true)
+  assert.equal(engineListed('oneocr', withoutKey, 'meikiocr'), false, 'still OS-specific')
+})
+
+test('cloudAccess defaults to false and is read from the payload', () => {
+  assert.equal(DEFAULT_CAPABILITIES_MACOS.cloudAccess, false)
+  assert.equal(normalizeCapabilities({ cloudAccess: true }, DEFAULT_CAPABILITIES_MACOS).cloudAccess, true)
+  assert.equal(normalizeCapabilities({ cloudAccess: 'yes' }, DEFAULT_CAPABILITIES_MACOS).cloudAccess, false)
 })
 
 test('every engine has the copy the chooser shows', () => {
   const modes = Object.keys(OCR_MODES)
-  for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr', 'websocket']) assert.ok(modes.includes(mode), mode)
+  for (const mode of ['cloud', 'meikiocr', 'mangaocr', 'livetext', 'oneocr']) assert.ok(modes.includes(mode), mode)
+  assert.equal(modes.includes('websocket'), false, 'OwOCR was removed')
   for (const [mode, info] of Object.entries(OCR_MODES)) {
     for (const field of ['label', 'name', 'tagline', 'description', 'requirements']) {
       assert.equal(typeof info[field], 'string', `${mode}.${field}`)

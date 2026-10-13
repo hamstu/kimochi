@@ -31,7 +31,6 @@ import { scanWasPublished, markScanPublished } from './scan-publication.js'
 import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
 import { HoverOverlay, HoverPreview } from './hover.js'
-import { forgetFrame } from './frames.js'
 import { recognize } from './ocr.js'
 import { normalizeOcrResult } from './ocr-result.js'
 import { publishOcrResult, listHistory } from './output.js'
@@ -535,7 +534,7 @@ function publishAccepted(frame, result) {
         geometry: result.geometry !== false
       }
     },
-    // Local and WebSocket OCR return no geometry, and the status line is where
+    // A result without geometry has nothing to draw, and the status line is where
     // that is explained rather than letting it look like a scan that found
     // nothing.
     ...(result.geometry
@@ -732,7 +731,6 @@ async function performScan(explicit = null) {
         reportOutcome(scanActivity.noSource())
         return
       }
-      forgetFrame()
       const frame = await native.captureFrame(
         job.request,
         scanner.isRunning,
@@ -740,10 +738,7 @@ async function performScan(explicit = null) {
       )
       stage = 'recognise'
       activity(scanActivity.recognising(setting('ocrMode')))
-      const result = await recognize(frame, {
-        ocrMode: setting('ocrMode'),
-        owocrWebSocketUrl: setting('owocrWebSocketUrl')
-      })
+      const result = await recognize(frame, { ocrMode: setting('ocrMode') })
       if (!result) {
         setScanning(false, 'No result from the OCR engine.')
         reportOutcome(scanActivity.nothingRecognised())
@@ -820,7 +815,6 @@ const scanDeps = {
     autoJob = await beginJob()
     const selectionMs = performance.now() - selectionStarted
     if (!autoJob) throw new Error('No source selected')
-    forgetFrame()
     const started = performance.now()
     trace('capture-start', { generation: autoJob.generation })
     let captured
@@ -871,10 +865,7 @@ const scanDeps = {
     const started = performance.now()
     trace('second-pass-start', { frameId: frame.id, mode: setting('ocrMode') })
     try {
-      const result = await recognize(frame, {
-        ocrMode: setting('ocrMode'),
-        owocrWebSocketUrl: setting('owocrWebSocketUrl')
-      })
+      const result = await recognize(frame, { ocrMode: setting('ocrMode') })
       try {
         scanTrace.result(frame.id, result?.fullText ?? '', performance.now() - started)
       } catch {
@@ -1889,11 +1880,10 @@ async function setOverlayText(visible) {
 async function playLatest() {
   const latest = listHistory()[0]?.text ?? ''
   if (!latest) return
+  // Text to speech runs on Kimochi cloud, which needs an access key.
+  if (!(await native.capabilities()).cloudAccess) return
   try {
-    await speak(latest, {
-      audioSettings: setting('audioSettings'),
-      serverSettings: setting('serverSettings')
-    })
+    await speak(latest, { audioSettings: setting('audioSettings') })
   } catch (error) {
     log({ check: 'tts-error', error: String(error?.message ?? error) })
   }

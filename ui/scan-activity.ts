@@ -99,6 +99,8 @@ export function scanFailed(error: unknown, stage: ScanStage, mode: unknown): Act
     if (model) return model
     return scan(`${name} is not available: ${notReady[1]}`, 'warn')
   }
+  // Kimochi cloud without (or with a rejected) access key: native already wrote the sentence.
+  if (/access key/.test(message)) return scan(message, 'warn')
   // "OneOCR is available on Windows only.": already the whole sentence.
   if (/is available on \w+ only/.test(message)) return scan(message.replace(/\.$/, ''), 'warn')
   return scan(`OCR failed: ${message}`, 'error')

@@ -183,6 +183,10 @@ export const displays = (): Promise<DisplayInfo[]> => invoke<DisplayInfo[]>('dis
 export const platformCapabilities = (): Promise<PlatformCapabilities> =>
   invoke<PlatformCapabilities>('platform_capabilities')
 
+/** Read `text` aloud through Kimochi cloud; the audio bytes. Refused without an access key. */
+export const ttsSpeak = (text: string, voiceId: string): Promise<ArrayBuffer> =>
+  invoke<ArrayBuffer>('tts_speak', { text, voiceId })
+
 // ---------------------------------------------------------------------------- capture / OCR
 
 export const enumerateSources = (): Promise<NativeSource[]> => invoke<NativeSource[]>('enumerate')

@@ -120,7 +120,6 @@ export function EngineSettings({
     case 'meikiocr':
     case 'mangaocr':
       return <ModelDownload controls={model} emphasis={emphasis} />
-    case 'websocket':
     case 'oneocr':
     case 'livetext':
       return null

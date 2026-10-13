@@ -8,6 +8,7 @@ mod actions;
 mod activity;
 mod application_context;
 mod capture_unavailable;
+mod cloud;
 mod engine_probe;
 mod extension_store;
 mod extensions;
@@ -1486,17 +1487,29 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
 /// POST one PNG using the shared cloud endpoint validation.
 fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
     let endpoint = settings::resolve_endpoint(settings);
+    // Kimochi's own server takes the access key; a custom endpoint never sees it.
+    let key = if settings::is_builtin_endpoint(&endpoint) {
+        Some(cloud::key().ok_or_else(|| format!("native: {}", cloud::NO_KEY_OCR))?)
+    } else {
+        None
+    };
     let image = base64::engine::general_purpose::STANDARD.encode(png);
     let client = reqwest::blocking::Client::builder()
         .user_agent("Kimochi-POC/0.1")
         .timeout(Duration::from_secs(45))
         .build()
         .map_err(|_| "native: could not initialize OCR HTTP client")?;
-    let response = client
-        .post(endpoint)
+    let mut request = client.post(endpoint);
+    if let Some(key) = &key {
+        request = cloud::authorize(request, key);
+    }
+    let response = request
         .json(&json!({ "imageBase64": image }))
         .send()
         .map_err(|_| "native: OCR network request failed (connection/TLS/timeout)")?;
+    if key.is_some() && response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(format!("native: {}", cloud::REJECTED));
+    }
     if !response.status().is_success() {
         let status = response.status().as_u16();
         // The server's own explanation (a Vision quota error, say) is the only
@@ -1614,8 +1627,7 @@ fn should_publish(published: Option<u64>, frame_id: u64) -> bool {
 
 /// Publish scan lifecycle state. The caller that ran the scan owns this.
 ///
-/// `capture_frame` and `ocr_frame` are both pure, and the browser-side backends
-/// (OwOCR) never reach `ocr_frame` at all, so without this the controller's
+/// `capture_frame` and `ocr_frame` are both pure, so without this the controller's
 /// `isScanning` and `status` and the capture/debug panels' `snapshot().scan` would
 /// never reflect a normal migrated scan. Rust does no OCR here, writes no history and
 /// re-runs nothing.
@@ -1765,6 +1777,14 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     #[cfg(target_os = "macos")]
     {
         payload["ocrEngines"]["livetext"] = livetext::capability();
+    }
+    // Kimochi cloud runs on the owner's paid accounts and needs an access key. Only whether
+    // one is present reaches the webviews, never the key.
+    let cloud_access = cloud::access();
+    payload["cloudAccess"] = json!(cloud_access);
+    if !cloud_access {
+        payload["ocrEngines"]["cloud"] =
+            json!({ "available": false, "reason": "Kimochi cloud OCR needs an access key." });
     }
     // An engine held back only by its models stays selectable: choosing it asks to download them.
     for engine in model_store::Engine::ALL {
@@ -2472,6 +2492,7 @@ fn main() {
             window_bounds,
             popup_window,
             yomitan_request,
+            cloud::tts_speak,
             system_state,
             app_quit,
             open_screen_capture_preferences,

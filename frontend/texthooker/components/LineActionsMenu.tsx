@@ -1,4 +1,5 @@
 import { AudioPlayer } from "../../components/AudioPlayer";
+import { useCapabilities } from "../../bridge/capabilities";
 import { useRef, useState } from "react";
 import {
   Copy,
@@ -39,6 +40,8 @@ export function LineActionsMenu({
 }: Props) {
   const [open, setOpen] = useState(false);
   const audioSlot = useRef<HTMLSpanElement>(null);
+  // Read aloud runs on Kimochi cloud, which needs an access key.
+  const { cloudAccess } = useCapabilities();
 
   const handleCopy = async () => {
     try {
@@ -63,30 +66,30 @@ export function LineActionsMenu({
             <MoreHorizontal />
           </IconButton>
         </MenuTrigger>
-        <MenuContent
-          align="end"
-          className="log-line-menu"
-        >
+        <MenuContent align="end" className="log-line-menu">
           {/* Read aloud: the row activates the shared AudioPlayer button, which keeps its own
-              playing state and error tooltip. The menu stays open while it plays. */}
-          <MenuItem
-            icon={
-              <span
-                ref={audioSlot}
-                className="log-audio-slot"
-                // A direct click on the speaker plays it; don't also select the row.
-                onClick={(e) => e.stopPropagation()}
-              >
-                <AudioPlayer text={line.text} />
-              </span>
-            }
-            onSelect={(e) => {
-              e.preventDefault();
-              audioSlot.current?.querySelector("button")?.click();
-            }}
-          >
-            Read aloud
-          </MenuItem>
+              playing state and error tooltip. The menu stays open while it plays. Only with a
+              Kimochi cloud access key. */}
+          {cloudAccess && (
+            <MenuItem
+              icon={
+                <span
+                  ref={audioSlot}
+                  className="log-audio-slot"
+                  // A direct click on the speaker plays it; don't also select the row.
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <AudioPlayer text={line.text} />
+                </span>
+              }
+              onSelect={(e) => {
+                e.preventDefault();
+                audioSlot.current?.querySelector("button")?.click();
+              }}
+            >
+              Read aloud
+            </MenuItem>
+          )}
           <MenuItem icon={<Copy />} onSelect={() => void handleCopy()}>
             Copy text
           </MenuItem>

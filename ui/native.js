@@ -213,6 +213,8 @@ export const commitSource = (sourceId, crop) => invoke('commit_source', { source
 /** The main window, with its source menu open on the grid of windows and displays. */
 export const openSourcePicker = () => invoke('open_source_picker')
 export const preferences = () => invoke('preferences')
+/** Read text aloud through Kimochi cloud (the key stays in Rust); the audio bytes. */
+export const ttsSpeak = (text, voiceId) => invoke('tts_speak', { text, voiceId })
 export const selectedSource = () => optional('selected_source', undefined, null)
 /**
  * The whole window, full resolution, from a slot of its own (`{url, width, height,

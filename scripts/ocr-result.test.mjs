@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { load } from "./load.mjs";
 const { normalizeOcrResult, inferOrientations, logicalGroups } =
   await load("ocr-result.ts");
-const { withDefaults, OCR_MODES } = await load("settings.ts");
+const { withDefaults, OCR_MODES, SETTINGS_DEFAULTS } = await load("settings.ts");
 const annotation = (description, x, y, width, height, extra = {}) => ({
   description,
   boundingPoly: {
@@ -93,7 +93,7 @@ test("semantic blocks remain independent even when adjacent or identical", () =>
 test("text-only engines retain text as a group without invented positions", () => {
   const result = normalizeOcrResult(
     { fullText: "文章", geometry: false },
-    "websocket",
+    "cloud",
   );
   assert.equal(result.groups[0].bbox, null);
   assert.equal(result.geometry, false);
@@ -103,6 +103,10 @@ test("removed Tesseract preference migrates to native MeikiOCR", () => {
   assert.equal(withDefaults("ocrMode", "local"), "meikiocr");
   assert.equal(OCR_MODES.local, undefined);
   assert.equal(OCR_MODES.mangaocr.geometry, true);
+});
+test("removed OwOCR preference falls back to the default engine", () => {
+  assert.equal(withDefaults("ocrMode", "websocket"), SETTINGS_DEFAULTS.ocrMode);
+  assert.equal(OCR_MODES.websocket, undefined);
 });
 
 test("Apple Live Text's lines become one block each, vertical where the engine says so", () => {

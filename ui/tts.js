@@ -2,23 +2,17 @@
 /**
  * Text to speech, ported from src/renderer/src/components/AudioPlayer.tsx.
  *
- * The request goes out through the host's remote-fetch adapter when one is
- * installed. Inside the overlay that means tauri-plugin-http, which performs the
- * request in Rust and so sidesteps CORS entirely — but it also means the TTS
- * host has to be in the app's HTTP capability scope, and a scope rejection is
- * reported as such rather than as a generic network failure.
+ * The request is made in Rust (`tts_speak`), which holds the Kimochi cloud
+ * access key and never hands it to this window. Without a key the command
+ * refuses before sending anything, and callers check `cloudAccess` first.
  */
 
-import { serverUrls, DEFAULT_VOICE_ID } from './settings.js'
+import { DEFAULT_VOICE_ID } from './settings.js'
+import { ttsSpeak } from './native.js'
 
 export { DEFAULT_VOICE_ID }
 
 let playing = null
-
-function request(url, init) {
-  const remote = globalThis.__extensionHost?.fetchRemote
-  return remote ? remote(url, init) : fetch(url, init)
-}
 
 export function isSpeaking() {
   return playing !== null
@@ -43,23 +37,10 @@ export async function speak(text, settings) {
   if (!trimmed) return false
 
   const voiceId = settings?.audioSettings?.voiceId ?? DEFAULT_VOICE_ID
-  const { tts } = serverUrls(settings?.serverSettings?.mode ?? 'cloud')
-
-  const response = await request(tts, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: trimmed, voiceId })
-  })
-  if (!response.ok) {
-    throw new Error(
-      response.status === 403
-        ? `Text to speech was refused (HTTP 403). Check that ${tts} is in the app's HTTP capability scope.`
-        : `Text to speech failed (HTTP ${response.status})`
-    )
-  }
+  const bytes = await ttsSpeak(trimmed, voiceId)
 
   stop()
-  const url = URL.createObjectURL(await response.blob())
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }))
   const audio = new Audio(url)
   playing = { audio, url }
   const release = () => {

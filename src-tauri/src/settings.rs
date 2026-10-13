@@ -273,7 +273,9 @@ pub fn resolve_endpoint(settings: &Settings) -> String {
     }
 }
 
-fn is_builtin_endpoint(endpoint: &str) -> bool {
+/// Whether `endpoint` is one of Kimochi's own servers (cloud or local), which take the
+/// access key, rather than a custom endpoint, which never receives it.
+pub fn is_builtin_endpoint(endpoint: &str) -> bool {
     [CLOUD_SERVER, LOCAL_SERVER]
         .iter()
         .any(|base| endpoint == format!("{base}/detect-text"))

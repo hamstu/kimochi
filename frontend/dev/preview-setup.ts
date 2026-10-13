@@ -22,6 +22,8 @@
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
  *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
  *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
+ *   ?cloud=1         a Kimochi cloud access key is present (`cloudAccess`): Cloud OCR is offered and
+ *                    read-aloud shows; without it (the default, as in public builds) both are hidden
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
  *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
@@ -161,7 +163,6 @@ function previewCapabilities(): PlatformCapabilities {
       input: { globalShortcuts: true },
       ocrEngines: {
         cloud: { available: true },
-        websocket: { available: true },
         meikiocr: { available: true, accelerator: 'directml' },
         mangaocr: { available: false, reason: 'Not available on Windows yet' },
         livetext: { available: false, reason: 'Apple Live Text is available on macOS only.' },
@@ -191,7 +192,6 @@ function previewCapabilities(): PlatformCapabilities {
       input: { globalShortcuts: false },
       ocrEngines: {
         cloud: { available: true },
-        websocket: { available: true },
         meikiocr: { available: true, accelerator: 'cpu' },
         mangaocr: { available: true, accelerator: 'cpu' },
         livetext: { available: false, reason: 'Apple Live Text is available on macOS only.' },
@@ -204,7 +204,20 @@ function previewCapabilities(): PlatformCapabilities {
   return mac
 }
 
-const CAPABILITIES = previewCapabilities()
+/** `?cloud=1`: a Kimochi cloud access key, as native reports it (the key itself never leaves Rust). */
+function withCloudAccess(capabilities: PlatformCapabilities): PlatformCapabilities {
+  if (params.get('cloud') === '1') return { ...capabilities, cloudAccess: true }
+  return {
+    ...capabilities,
+    cloudAccess: false,
+    ocrEngines: {
+      ...capabilities.ocrEngines,
+      cloud: { available: false, reason: 'Kimochi cloud OCR needs an access key.' }
+    }
+  }
+}
+
+const CAPABILITIES = withCloudAccess(previewCapabilities())
 
 // ---------------------------------------------------------------- view state
 
@@ -321,6 +334,11 @@ const HANDLERS: Record<string, Handler> = {
   desktop: () => DISPLAYS.map((d) => d.bounds),
   displays: () => DISPLAYS,
   platform_capabilities: () => CAPABILITIES,
+  tts_speak: () => {
+    if (!CAPABILITIES.cloudAccess)
+      throw 'native: Read aloud needs a Kimochi cloud access key, and this copy of Kimochi does not have one.'
+    throw 'native: text to speech is not available in the browser preview'
+  },
 
   // panels
   panel: (a) => {

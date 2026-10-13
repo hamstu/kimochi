@@ -1,6 +1,6 @@
 {
   "identifier": "kimochi-network",
-  "description": "Outbound HTTP for the configured OCR/TTS server, the local Yomitan API, and the dictionary hosts the dictionary engines download from (Yomitan, Hachidori, 10ten) \u2014 the last of which the dictionary settings window needs for imports. Deliberately not a general internet grant.",
+  "description": "Outbound HTTP for the local Yomitan API, and the dictionary hosts the dictionary engines download from (Yomitan, Hachidori, 10ten) \u2014 the last of which the dictionary settings window needs for imports. Deliberately not a general internet grant.",
   "windows": [
     "overlay",
     "log",
@@ -13,15 +13,6 @@
     {
       "identifier": "http:default",
       "allow": [
-        {
-          "url": "https://kimochi-server.hamish.workers.dev/**"
-        },
-        {
-          "url": "http://localhost:3000/**"
-        },
-        {
-          "url": "http://127.0.0.1:3000/**"
-        },
         {
           "url": "http://localhost:19633/**"
         },

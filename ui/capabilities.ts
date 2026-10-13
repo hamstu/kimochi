@@ -10,7 +10,7 @@
  */
 
 export type PlatformOs = 'macos' | 'windows' | 'linux'
-export type OcrEngineKey = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
+export type OcrEngineKey = 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
 
 export interface OcrEngineCapability {
   available: boolean
@@ -69,6 +69,12 @@ export interface PlatformCapabilities {
     globalShortcutRemediation?: string | null
   }
   ocrEngines: Record<OcrEngineKey, OcrEngineCapability>
+  /**
+   * Whether this machine has a Kimochi cloud access key (`~/.config/kimochi/cloud-key` or
+   * `KIMOCHI_CLOUD_KEY`). Only this boolean reaches the webviews, never the key. Without it
+   * Kimochi cloud OCR is not offered and read-aloud (text to speech) is hidden.
+   */
+  cloudAccess: boolean
   /** The existing `observer_status` payload. */
   observer: unknown
   ownPids: number[]
@@ -123,12 +129,12 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
   },
   ocrEngines: {
     cloud: { available: true },
-    websocket: { available: true },
     meikiocr: { available: true },
     mangaocr: { available: true },
     livetext: { available: true },
     oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
   },
+  cloudAccess: false,
   observer: null,
   ownPids: [],
   ownAppNames: [...DEFAULT_OWN_APP_NAMES],
@@ -209,6 +215,7 @@ export function normalizeCapabilities(
     overlay: section('overlay'),
     input,
     ocrEngines: engines,
+    cloudAccess: typeof raw.cloudAccess === 'boolean' ? raw.cloudAccess : base.cloudAccess,
     observer: 'observer' in raw ? raw.observer : base.observer,
     ownPids: pids,
     ownAppNames: names.length ? names : base.ownAppNames,

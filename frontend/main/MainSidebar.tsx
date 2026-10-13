@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
 import { ArrowLeft, Settings } from 'lucide-react'
 import { Row, Select } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
-import { engineOffered } from '@ui/ocr-engines'
+import { engineListed } from '@ui/ocr-engines'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
 import { useEngineSelection } from '../bridge/useEngineSelection'
 import { useCapabilities } from '../bridge/capabilities'
@@ -117,7 +117,14 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
           className="sb-select"
           value={shown}
           onValueChange={choose}
-          options={OCR_MODE_OPTIONS.filter((option) => engineOffered(option.value, capabilities.os))}
+          options={OCR_MODE_OPTIONS.filter((option) =>
+            engineListed(option.value, capabilities, ocrMode)
+          ).map((option) =>
+            // Kimochi cloud without an access key is listed only while it is still selected.
+            option.value === 'cloud' && !capabilities.cloudAccess
+              ? { ...option, label: `${option.label} (needs access key)` }
+              : option
+          )}
         />
       </div>
       <DownloadConfirmDialog confirmation={confirmation} />

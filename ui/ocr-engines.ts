@@ -77,6 +77,22 @@ export function engineOffered(mode: string, os: PlatformOs): boolean {
   }
 }
 
+/**
+ * Whether an engine appears in the pickers: offered on this OS, and Kimochi cloud only with an
+ * access key (`cloudAccess`). An engine that is still the selected one stays listed even without
+ * the key, so the picker shows what is chosen (as unavailable, with its reason); the setting is
+ * never changed behind the user's back.
+ */
+export function engineListed(
+  mode: string,
+  capabilities: { os: PlatformOs; cloudAccess: boolean },
+  selected: string
+): boolean {
+  if (!engineOffered(mode, capabilities.os)) return false
+  if (mode === 'cloud' && !capabilities.cloudAccess) return mode === selected
+  return true
+}
+
 /** Whether an engine can be chosen here: anything but one this computer cannot run at all. */
 export const engineSelectable = (capability: OcrEngineCapability | undefined): boolean =>
   !capability || capability.available || !!capability.model || capability.selectable === true

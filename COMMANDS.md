@@ -75,8 +75,9 @@ Keys and defaults mirror `src/main/settings.ts`:
 `yomitanSettings.{popupType,customApiUrl}` (`popupType`: `'builtin'` (Yomitan) \| `'custom-api'` \| `'hachidori'` \| `'tenten'`), `serverSettings.{mode}` (`'cloud'`),
 `textOverlayGrouping.{enabled,proximityThreshold,filterSmallText,filterSmallTextThreshold}`
 (`false, 100, true, 0.75`), `overlayOpacity` (80), `liveOverlayEnabled` (false),
-`ocrMode` (`'cloud' | 'local' | 'websocket'`, default `'cloud'`), `endpoint` (unset by
-default — see below).
+`ocrMode` (`'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'`, default `'cloud'`; a stored
+`'local'` reads as `'meikiocr'`, and a stored `'websocket'` — the removed OwOCR mode — as the
+default), `endpoint` (unset by default — see below).
 
 **The OCR endpoint follows `serverSettings.mode` unless genuinely overridden.** A custom
 `endpoint` wins; otherwise the URL is derived as `<base>/detect-text` from the mode
@@ -86,6 +87,18 @@ defaults does **not** count as custom — otherwise an inherited cloud default, 
 POC's preferences round-tripped, would permanently pin the app to cloud and make the
 Local toggle silently do nothing. `preferences()` reports the resolved endpoint, so the
 value shown is the value a scan will use.
+
+**Kimochi's own server needs an access key.** Cloud OCR and text to speech run on the
+owner's paid accounts. Rust reads the key from `KIMOCHI_CLOUD_KEY`, else from
+`~/.config/kimochi/cloud-key` (same path on every OS, under the home directory; trimmed),
+whenever a request needs it, and sends it as `X-Kimochi-Key` to both built-in bases (cloud
+and `localhost:3000`). A custom `endpoint` never receives it. Without a key the request is
+refused before anything is sent ("Kimochi cloud OCR needs an access key…"), and a `401` from
+the server is reported as the key missing or rejected. The key never reaches a webview, a log
+or a diagnostic: the frontend learns only `cloudAccess` (a boolean) from
+`platform_capabilities`, which also reports `ocrEngines.cloud` unavailable without it. The UI
+then lists Cloud OCR only while it is still the selected engine (shown as unavailable; the
+setting is not migrated) and hides read-aloud and its voice setting.
 
 `serverSettings` is an object, not a flat `serverMode` scalar, because `background.ts`
 and `AudioPlayer.tsx` read it through `useSetting<ServerSettings>('serverSettings', …)`.
@@ -253,8 +266,8 @@ network, no OCR, no endpoint call, and **no mutation of `revision`, `scan` or
 `regions`** — it runs as often as twice a second and bumping the revision would force
 the overlay to re-render every word box each tick. Its `url` is
 `capture://localhost/{id}`, drawable straight into a canvas. It is the primitive for
-browser Tesseract, WebSocket / OwOCR and any other local backend; that orchestration
-lives in the overlay webview, not in Rust.
+any frontend-side processing; that orchestration lives in the overlay webview, not in
+Rust.
 
 **`ocr_frame` is what a change-detection loop must use after its gate passes.**
 Recapturing at that point would OCR a *different* image than the one that was compared,
@@ -472,6 +485,7 @@ without a CFRunLoop has not been tested in-app.
 | `history_clear` | `() -> ()` |
 | `ext_relay` | `({target \| null, payload}) -> ()` |
 | `yomitan_request` | `({url, body}) -> Value` |
+| `tts_speak` | `({text, voiceId}) -> ArrayBuffer` (audio) |
 
 `texthooker_send` copies to the clipboard and broadcasts to the texthooker **WebSocket
 server**, which Kimochi hosts because `texthooker-ui` connects *to* us — a webview
@@ -489,6 +503,12 @@ change re-emits `settings:changed` for `scannedTextHistory`.
 window when `target` is null. Deliberately generic: no Yomitan knowledge lives in Rust.
 It exists so the Log panel and the dictionary settings window can reach the single
 dictionary backend in the overlay without standing up a second one.
+
+`tts_speak` POSTs `{text, voiceId}` to `<server base>/tts` (ElevenLabs behind it) with the
+Kimochi cloud access key and returns the audio bytes; the webviews play them through an object
+URL. It refuses without a key, before sending anything (see the access-key note under
+Settings), and reports a `401` as the key missing or rejected. It replaced the webview-side
+POST through the HTTP plugin so the key never reaches JS.
 
 `yomitan_request` POSTs JSON to a user-configured Yomitan-compatible API and returns its
 JSON — the transport for the Dictionary tab's Test button, tokenize and termEntries.
@@ -897,10 +917,9 @@ fail silently at runtime.
 `capabilities/network.json` scopes `http:default` to `overlay`, `log`, `settings`,
 `dictionary` and `popup-host` — `dictionary` because dictionary downloads from the
 dictionary settings window go through the same plugin —
-allowing only the configured OCR/TTS server (cloud and `localhost:3000`), the local
-Yomitan API (`19633`) and AnkiConnect (`8765`), plus the dictionary hosts the engines
-download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`). It is deliberately not a general internet grant. WebSocket OCR
-(`ws://localhost:7331`) needs nothing here: WebSocket bypasses the HTTP plugin.
+allowing only the local Yomitan API (`19633`) and AnkiConnect (`8765`), plus the dictionary hosts the engines
+download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`). It is deliberately not a general internet grant. Kimochi's own server (cloud OCR,
+text to speech) is deliberately absent: it takes an access key, so only Rust calls it.
 
 ## Platform gaps
 

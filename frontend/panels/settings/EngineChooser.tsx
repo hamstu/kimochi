@@ -40,7 +40,7 @@ import { canRemoveModel, isModelEngine } from '@ui/model-download'
 import {
   acceleratorLabel,
   engineHint,
-  engineOffered,
+  engineListed,
   engineSelectable,
   type EngineHint
 } from '@ui/ocr-engines'
@@ -251,7 +251,8 @@ export function EngineChooser(): ReactNode {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
   const engines = capabilities.ocrEngines
-  const modes = MODES.filter((mode) => engineOffered(mode, capabilities.os))
+  // Kimochi cloud is listed only with an access key, or while it is still the selected engine.
+  const modes = MODES.filter((mode) => engineListed(mode, capabilities, ocrMode))
   const baseId = useId()
   const listRef = useRef<HTMLDivElement>(null)
 

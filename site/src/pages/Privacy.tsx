@@ -75,9 +75,10 @@ export function Privacy() {
 
       <h3>Kimochi cloud OCR</h3>
       <p>
-        In current builds, cloud OCR is the default engine. When it is selected
-        and you scan (manually or with Auto OCR), Kimochi sends an image of the
-        captured region to our server at{" "}
+        Kimochi&rsquo;s own cloud OCR is not offered in public builds for now:
+        it needs an access key that only the developer has. Where it is
+        enabled and selected, each scan (manual or with Auto OCR) sends an
+        image of the captured region to our server at{" "}
         <code>kimochi-server.hamish.workers.dev</code>, hosted on Cloudflare
         Workers, which passes it to{" "}
         <a href="https://cloud.google.com/vision">Google Cloud Vision</a> for
@@ -93,16 +94,18 @@ export function Privacy() {
         computer.
       </p>
 
-      <h3>Your own OCR server or owocr</h3>
+      <h3>Your own OCR server</h3>
       <p>
-        If you point Kimochi at a custom OCR endpoint or an owocr WebSocket
-        service, captured images go to that address, which you control or chose.
+        If you point Kimochi at a custom OCR endpoint, captured images go to
+        that address, which you control or chose.
         Its privacy depends on whoever runs it.
       </p>
 
       <h3>Text to speech</h3>
       <p>
-        When you play audio for a line, Kimochi sends that line&rsquo;s text and
+        Text to speech is likewise not offered in public builds for now. Where
+        it is enabled and you play audio for a line, Kimochi sends that
+        line&rsquo;s text and
         the selected voice to our server, which asks{" "}
         <a href="https://elevenlabs.io/privacy-policy">ElevenLabs</a> to
         generate speech and returns the audio. Only the text you choose to hear

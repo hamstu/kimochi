@@ -20,6 +20,7 @@ import type { AudioSettings } from '../../vendor/shared-types'
 import { DEFAULT_VOICE_ID } from '../../vendor/shared-constants'
 import { AVAILABLE_VOICES } from '../../vendor/voices'
 import { useSetting } from '../../bridge/useSetting'
+import { useCapabilities } from '../../bridge/capabilities'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { NumberField } from './fields'
 
@@ -30,6 +31,8 @@ export function LogTab(): ReactNode {
     voiceId: DEFAULT_VOICE_ID
   })
   const [confirmReset, setConfirmReset] = useState(false)
+  // Read aloud runs on Kimochi cloud, which needs an access key; without one its voice is moot.
+  const { cloudAccess } = useCapabilities()
 
   return (
     <SettingsPage title="Log" description="How the transcript reads and which lines it keeps.">
@@ -52,14 +55,16 @@ export function LogTab(): ReactNode {
                   onCommit={(v) => void updateSettings({ fontSizePx: v })}
                 />
               </SettingsRow>
-              <SettingsRow label="Read-aloud voice" description="The voice that reads lines aloud.">
-                <Select
-                  aria-label="Read-aloud voice"
-                  value={audioSettings.voiceId}
-                  onValueChange={(voiceId) => void setAudioSettings({ ...audioSettings, voiceId })}
-                  options={VOICE_OPTIONS}
-                />
-              </SettingsRow>
+              {cloudAccess && (
+                <SettingsRow label="Read-aloud voice" description="The voice that reads lines aloud.">
+                  <Select
+                    aria-label="Read-aloud voice"
+                    value={audioSettings.voiceId}
+                    onValueChange={(voiceId) => void setAudioSettings({ ...audioSettings, voiceId })}
+                    options={VOICE_OPTIONS}
+                  />
+                </SettingsRow>
+              )}
             </SettingsSection>
 
             <SettingsSection title="Incoming lines">

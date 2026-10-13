@@ -881,7 +881,6 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
     };
     payload["ocrEngines"] = json!({
         "cloud": {"available": true},
-        "websocket": {"available": true},
         "meikiocr": engine(dynamic.meikiocr, &accelerators["meikiocr"]),
         "mangaocr": engine(dynamic.mangaocr, &accelerators["mangaocr"]),
     });

@@ -22,7 +22,7 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode = 'cloud' | 'websocket' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
+export type OcrMode = 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
@@ -100,7 +100,6 @@ export interface Settings {
     customApiUrl: string
   }
   ocrMode: OcrMode
-  owocrWebSocketUrl: string
   scannedTextHistory: ScanHistoryEntry[]
   scannedTextFontSize: number
   appearance: Appearance
@@ -133,7 +132,6 @@ export const SETTINGS_DEFAULTS: Settings = {
   controllerButtons: DEFAULT_CONTROLLER_BUTTONS,
   yomitanSettings: { popupType: 'builtin', customApiUrl: '' },
   ocrMode: 'cloud',
-  owocrWebSocketUrl: 'ws://localhost:7331',
   scannedTextHistory: [],
   scannedTextFontSize: 14,
   appearance: 'system',
@@ -247,18 +245,6 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     ],
     requirements:
       'Windows only. On Windows 11, install or update Microsoft Snipping Tool. No Python or OCR server is needed.'
-  },
-  websocket: {
-    label: 'WebSocket (OwOCR)',
-    name: 'OwOCR',
-    tagline: 'Your own OwOCR server',
-    geometry: false,
-    runs: 'local',
-    description:
-      'Sends each capture to an OwOCR server you run yourself, so any engine OwOCR supports can read your game.',
-    strengths: ['Use any engine OwOCR supports', 'Runs wherever you host it'],
-    requirements:
-      'Needs OwOCR running and listening on a local WebSocket. It returns text only, so nothing is drawn over your game.'
   }
 }
 
@@ -496,11 +482,6 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
   }
 }
 
-export function serverUrls(mode: ServerMode): { ocr: string; tts: string } {
-  const base = SERVER_URLS[mode] ?? SERVER_URLS.cloud
-  return { ocr: `${base}/detect-text`, tts: `${base}/tts` }
-}
-
 /**
  * Merge a stored value over its default.
  *
@@ -510,6 +491,8 @@ export function serverUrls(mode: ServerMode): { ocr: string; tts: string } {
  */
 export function withDefaults<K extends keyof Settings>(key: K, stored: unknown): Settings[K] {
   if (key === 'ocrMode' && stored === 'local') return 'meikiocr' as Settings[K]
+  // OwOCR (the WebSocket OCR mode) was removed: a stored choice falls back to the default engine.
+  if (key === 'ocrMode' && stored === 'websocket') return SETTINGS_DEFAULTS.ocrMode as Settings[K]
   // Automatic OCR is the one key whose stored shape changed meaning rather than
   // only gaining fields, so it gets a real migration instead of a shallow merge.
   if (key === 'autoOCRSettings') return migrateAutoScanSettings(stored) as Settings[K]
