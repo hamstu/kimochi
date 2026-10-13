@@ -141,8 +141,8 @@ function YomitanSetup(): JSX.Element {
     <section aria-labelledby="dictionary-setup-title">
       <h1 id="dictionary-setup-title">Definitions, ready to read</h1>
       <p>
-        Kimochi includes Yomitan. You do not need to install a browser
-        extension.
+        Yomitan is downloaded and runs inside Kimochi. You do not need to
+        install a browser extension.
       </p>
       <p>
         Quick setup downloads Jitendex, a Japanese–English dictionary, and

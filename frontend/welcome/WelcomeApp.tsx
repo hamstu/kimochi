@@ -11,6 +11,10 @@ import WindowFrame from "../components/WindowFrame";
 import macOSScreenPerms from "./assets/howto-screen-macos.png";
 
 import DictionarySetup, { DictionaryPractice } from "./DictionarySetup";
+import EngineSetup from "./EngineSetup";
+import { useExtensionStatus } from "../bridge/extensions";
+import { useDictionaryEngine } from "../bridge/dictionaryEngine";
+import { Callout } from "@kit";
 import DictionarySettingsPanel from "../panels/DictionarySettingsPanel";
 import { EngineChooser } from "../panels/settings/EngineChooser";
 import svgLogo from "./assets/kimochi-logo.svg";
@@ -27,7 +31,8 @@ import { completeOnboarding, resizeWelcome } from "./welcome-actions";
 /** Setup can be revisited without changing choices already made. */
 const BACK: Record<string, string> = {
   "/ocr": "/",
-  "/dictionaries": "/ocr",
+  "/engine": "/ocr",
+  "/dictionaries": "/engine",
   "/practice": "/dictionaries",
   "/dictionary-settings": "/dictionaries",
   "/screen-recording-permission": "/",
@@ -179,9 +184,31 @@ function OcrScreen(): JSX.Element {
       </p>
       <EngineChooser />
       <Button variant="primary" asChild>
-        <Link to="/dictionaries">Continue</Link>
+        <Link to="/engine">Continue</Link>
       </Button>
     </section>
+  );
+}
+
+/**
+ * Whether the dictionary the setting names can be used: its download (Kimochi's pop-up needs
+ * Yomitan's) is ready. Null until native answers (and on a backend without engine downloads).
+ */
+function useDictionaryReady(): boolean | null {
+  const [engine] = useDictionaryEngine();
+  const status = useExtensionStatus(engine === "custom-api" ? "yomitan" : engine);
+  return status ? status.state === "ready" : null;
+}
+
+/** Said on the last steps when onboarding goes on without a dictionary (the engine step skipped). */
+function NoDictionaryWarning(): JSX.Element | null {
+  const ready = useDictionaryReady();
+  if (ready !== false) return null;
+  return (
+    <Callout tone="warn">
+      No dictionary is set up, so nothing will look words up yet. Choose and
+      download one in Settings → Dictionary whenever you are ready.
+    </Callout>
   );
 }
 
@@ -193,6 +220,7 @@ function PracticeScreen(): JSX.Element {
   return (
     <section>
       <h1>Read, look up, keep playing</h1>
+      <NoDictionaryWarning />
       <DictionaryPractice />
       <ol>
         <li>
@@ -232,9 +260,12 @@ function DoneScreen(): JSX.Element {
       }
       title="All Set!"
       actions={
-        <Button variant="primary" asChild>
-          <Link to="/main">Get Started</Link>
-        </Button>
+        <>
+          <NoDictionaryWarning />
+          <Button variant="primary" asChild>
+            <Link to="/main">Get Started</Link>
+          </Button>
+        </>
       }
     >
       You&apos;re all set up! Click the button below to close this window and
@@ -305,6 +336,7 @@ function Welcome(): JSX.Element {
             />
             <Route path="/system-picker" element={<SystemPickerScreen />} />
             <Route path="/ocr" element={<OcrScreen />} />
+            <Route path="/engine" element={<EngineSetup />} />
             <Route path="/dictionaries" element={<DictionarySetup />} />
             <Route
               path="/dictionary-settings"
