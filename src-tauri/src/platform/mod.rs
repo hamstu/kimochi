@@ -814,7 +814,7 @@ pub struct DynamicCapabilities {
 /// The full `platform_capabilities` payload (see CROSS_PLATFORM_PLAN.md §3.3).
 ///
 /// Conservative defaults first, then the OS module's `capabilities()` merged over them,
-/// then the live values only the app knows (capture permission, key trigger, OCR assets,
+/// then the live values only the app knows (capture permission, OCR assets,
 /// the observer, our own pid). An OS module only has to report what it supports.
 pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
     let mut payload = json!({

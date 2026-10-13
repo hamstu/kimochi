@@ -1026,7 +1026,7 @@ fn os_version() -> String {
 }
 
 /// The macOS-specific part of `platform_capabilities`; see `platform::capabilities_payload`
-/// for how it is combined with capture, key-trigger, OCR and observer state.
+/// for how it is combined with capture, OCR and observer state.
 pub fn capabilities() -> Value {
     json!({
         "os": "macos",

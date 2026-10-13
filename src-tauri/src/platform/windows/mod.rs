@@ -328,8 +328,8 @@ fn os_version() -> String {
 }
 
 /// The Windows-specific part of `platform_capabilities`; `platform::capabilities_payload`
-/// merges it over the shared defaults and fills in capture authorization, key-trigger
-/// status, OCR engines and observer state.
+/// merges it over the shared defaults and fills in capture authorization, OCR engines
+/// and observer state.
 pub fn capabilities() -> Value {
     json!({
         "os": "windows",

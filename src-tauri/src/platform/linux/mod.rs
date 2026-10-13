@@ -237,8 +237,8 @@ fn os_version() -> String {
 }
 
 /// The Linux-specific part of `platform_capabilities`; `platform::capabilities_payload`
-/// merges it over the shared defaults and fills capture authorization, key trigger, OCR
-/// engines and observer state.
+/// merges it over the shared defaults and fills capture authorization, OCR engines
+/// and observer state.
 pub fn capabilities() -> Value {
     let s = session();
     let x11 = s.backend == Backend::X11;

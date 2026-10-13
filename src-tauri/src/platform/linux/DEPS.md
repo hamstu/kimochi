@@ -322,7 +322,7 @@ Where the adapter advertises nativeShortcuts, configured action combinations use
 Mutter accelerator registration in NORMAL mode with IGNORE_AUTOREPEAT. Conflicts
 are reported without replacing another binding. Client loss, disable/rebind and
 extension updates release/reapply registrations. Other Wayland sessions retain
-the GlobalShortcuts portal backend. This does not grant an arbitrary key trigger.
+the GlobalShortcuts portal backend. Only the registered shortcuts are delivered.
 
 The explicitly opened controller menu uses the unchanged shared ControllerInput,
 RadialMenu, WordCursor and controller UI in a Linux-only controller-host WebKit
