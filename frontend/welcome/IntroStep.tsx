@@ -8,7 +8,7 @@
 import { useEffect, useState, type JSX } from 'react'
 import { useNavigate } from 'react-router'
 import { Button } from '@kit'
-import KimochiLogo from './KimochiLogo'
+import KimochiLogo from '../components/KimochiLogo'
 import { StepActions } from './StepActions'
 import style from './WelcomeApp.module.css'
 

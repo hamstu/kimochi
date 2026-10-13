@@ -13,7 +13,8 @@ import { useEffect, useState, type JSX } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { ChevronLeft, ExternalLink } from 'lucide-react'
 import { Button, Callout, StatusDot } from '@kit'
-import { openScreenCapturePreferences, useSystemPick } from '../bridge/tauri'
+import { onEvent, openScreenCapturePreferences, useSystemPick } from '../bridge/tauri'
+import type { PanelStateEvent } from '../bridge/types'
 import { useCapabilities } from '../bridge/capabilities'
 import { useExtensionStatus } from '../bridge/extensions'
 import { useDictionaryEngine } from '../bridge/dictionaryEngine'
@@ -24,7 +25,7 @@ import macOSScreenPerms from './assets/howto-screen-macos.png'
 import DictionarySetup, { DictionaryPractice } from './DictionarySetup'
 import EngineSetup from './EngineSetup'
 import IntroStep from './IntroStep'
-import KimochiLogo from './KimochiLogo'
+import KimochiLogo from '../components/KimochiLogo'
 import Step from './Step'
 import { StepActions } from './StepActions'
 import { StepActionsSlot } from './stepActionsSlot'
@@ -307,6 +308,30 @@ export default function WelcomeApp(): JSX.Element {
   const { steps, captureRoute, back } = useFlow(pathname)
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
+
+  // Closing the guide only hides its window, so reopening it (Settings → General) would otherwise
+  // land on whatever step it was closed at. A hidden → visible transition starts over from the
+  // intro; a reload (an engine switch reloads every reader window) sees no transition and keeps
+  // its step.
+  useEffect(() => {
+    let visible: boolean | null = null
+    let unlisten: (() => void) | undefined
+    let active = true
+    onEvent<PanelStateEvent>('panel:state', (payload) => {
+      if (payload?.label !== 'welcome') return
+      if (visible === false && payload.visible) void navigate('/', { replace: true })
+      visible = Boolean(payload.visible)
+    })
+      .then((stop) => {
+        if (active) unlisten = stop
+        else stop()
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+      unlisten?.()
+    }
+  }, [navigate])
 
   // The controller's B goes back a step rather than closing the window.
   useEffect(() => {

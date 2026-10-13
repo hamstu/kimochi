@@ -13,6 +13,7 @@ import { IconButton, Tooltip } from '@kit'
 import { ReaderHost, Transcript } from '@texthooker/App'
 import { NotebookPanel as Notebook } from '@texthooker/components/NotebookPanel'
 import { TitleBarPortal } from '../shell/TitleBarPortal'
+import KimochiLogo from '../components/KimochiLogo'
 import { useSetting } from '../bridge/useSetting'
 import { useCapabilities } from '../bridge/capabilities'
 import { isPrimaryModifier } from '../panels/settings/accelerator'
@@ -148,7 +149,10 @@ export default function MainPanel(): JSX.Element {
               <PanelLeft />
             </IconButton>
           </Tooltip>
-          <span className="main-title">kimochi</span>
+          <span className="main-title" aria-hidden="true">
+            <KimochiLogo size={16} />
+            <span>Kimochi</span>
+          </span>
         </TitleBarPortal>
         <div className="main-frame">
           {error && (

@@ -586,7 +586,11 @@ fn snapshot_value(service: &Service) -> Value {
     // Capture reading identity once so headers and crop cannot describe different games.
     let context = application_context::current(service);
     let crop = selected_descriptor(service).and_then(|(kind, name, app)| sources::saved_crop_with_context(service, &kind, &name, app.as_deref(), context.as_ref()));
-    let source = application_context::source_with_context(service, context.as_ref());
+    // `lastSelectedSource` is a hint for the next launch; the UI shows a source only once it is
+    // the live selection. Until `spawn_source_restore` finds the saved window again, or when it
+    // is gone, the main window shows its empty "Choose a source" state instead of a stale card.
+    let selected = service.selection.lock().unwrap().is_some();
+    let source = if selected { application_context::source_with_context(service, context.as_ref()) } else { None };
     let v = service.view.lock().unwrap();
     json!({
         "revision": v.revision,
