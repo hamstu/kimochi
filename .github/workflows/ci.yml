@@ -199,8 +199,9 @@ jobs:
         with:
           components: clippy
 
-      # The Hachidori and 10ten trees are gitignored; fetch the pinned releases into the kept
-      # extensions/ cache (a no-op when they already match extensions/<id>.sha256.json).
+      # The engine trees (Yomitan, Hachidori, 10ten) are gitignored; the tests and the harness read
+      # the pinned releases from the kept extensions/ cache. A no-op when they already match
+      # extensions/<id>.sha256.json. (The app downloads them on demand; bundles carry none.)
       - name: Fetch vendored extensions
         run: node scripts/sync-extension.mjs --all --if-missing
       # `npm ci` runs the `prepare` lifecycle script (scripts/prepare.mjs), which builds dist/.
@@ -329,10 +330,8 @@ jobs:
           echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
           echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
 
-      # The Hachidori and 10ten trees are gitignored; fetch the pinned releases into the kept
-      # extensions/ cache (a no-op when they already match extensions/<id>.sha256.json).
-      - name: Fetch vendored extensions
-        run: node scripts/sync-extension.mjs --all --if-missing
+      # No engine tree is needed here: bundles carry none (the app downloads them on demand), and
+      # scripts/prepare.mjs checks that dist/ holds none.
       - run: npm ci
       - name: Bundle (${{ needs.plan.outputs.mode }})
         run: npm run ${{ needs.plan.outputs.mode }}

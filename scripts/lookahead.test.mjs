@@ -87,7 +87,7 @@ const {
   selectionExtension,
 } = await load("render.js");
 const { DOMTextScanner } =
-  await import("../yomitan/js/dom/dom-text-scanner.js");
+  await import("../extensions/yomitan/js/dom/dom-text-scanner.js");
 
 // --- the renderer ----------------------------------------------------------------
 

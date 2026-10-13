@@ -1,0 +1,72 @@
+
+{
+  "manifest_version": 3,
+  "name": "10ten Japanese Reader (Rikaichamp)",
+  "author": "Brian Birtles",
+  "version": "1.28.0",
+  "description": "__MSG_extension_description__",
+  "default_locale": "en",
+  "minimum_chrome_version": "100",
+  "icons": {
+    "16": "images/10ten-ja-reader-16.png",
+    "32": "images/10ten-ja-reader-32.png",
+    "48": "images/10ten-ja-reader-48.png",
+    "96": "images/10ten-ja-reader-96.png",
+    "128": "images/10ten-ja-reader-128.png"
+  },
+  "permissions": [
+    "alarms",
+    "contextMenus",
+    "storage",
+    "unlimitedStorage"
+  ],
+  "background": {
+    "service_worker": "10ten-ja-background.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "images/10ten-disabled-16.png",
+      "32": "images/10ten-disabled-32.png",
+      "48": "images/10ten-disabled-48.png"
+    },
+    "default_title": "__MSG_command_toggle_disabled__"
+  },
+  "options_ui": {
+    "open_in_tab": true,
+    "page": "options.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*", "file:///*"],
+      "match_about_blank": true,
+      "match_origin_as_fallback": true,
+      "js": ["10ten-ja-content.js"],
+      "all_frames": true,
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://docs.google.com/*"],
+      "js": ["10ten-ja-gdocs-bootstrap.js"],
+      "all_frames": true,
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [{
+    "resources": [
+      "css/popup-fonts.css",
+      "css/selection.css",
+      "fonts/*.woff2"
+    ],
+    "matches": [ "<all_urls>" ]
+  }],
+  "offline_enabled": true,
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+R"
+      },
+      "description": "__MSG_command_toggle_description__"
+    }
+  }
+}

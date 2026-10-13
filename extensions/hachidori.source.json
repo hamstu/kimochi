@@ -9,7 +9,8 @@
   "released": "2026-10-10",
   "asset": {
     "url": "https://github.com/bee-san/hachidori/releases/download/0.3.0/hachidori-0.3.0-51eb85486fd9-chrome.zip",
-    "sha256": "9345e6acf1b31a2d7bdecc423439a57e5c97f3ad188bcc2d6e5368642703bf8e"
+    "sha256": "9345e6acf1b31a2d7bdecc423439a57e5c97f3ad188bcc2d6e5368642703bf8e",
+    "size": 5185616
   },
   "unpack": {}
 }

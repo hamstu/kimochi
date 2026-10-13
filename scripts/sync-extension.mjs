@@ -7,14 +7,19 @@
 //   node scripts/sync-extension.mjs <id> --if-missing  download only if the tree is absent or stale
 //   node scripts/sync-extension.mjs --all [...]        every pinned id instead of one
 //
+// Kimochi does not ship these trees: the app downloads the same pinned asset on demand and verifies
+// it against the same records (src-tauri/src/extension_store.rs, EXTENSION_DOWNLOADS.md). The local
+// copy here is a developer cache: the tests, the dev server and debug builds read it.
+//
 // The pin lives in `extensions/<id>.source.json` (upstream URL, version, tag, commit, the release
-// asset's URL and sha256). The unpacked file hashes are recorded in `extensions/<id>.sha256.json`,
-// which is what `scripts/prepare.mjs` checks `dist/ext/<id>/` against. Only those two files are
-// committed: `extensions/<id>/` itself is gitignored (64 MB of upstream bytes that would otherwise
-// live in history for ever) and is refilled from the pinned release by `--if-missing`, which
-// `prepare.mjs` runs for an absent tree and CI runs before `npm ci` (EXTENSION_DOWNLOADS.md Phase 0). Nothing in the tree is ever
-// post-processed: Kimochi adapts the extension from `host/ext/`, never by editing it
-// (DICTIONARY_ENGINES.md §7).
+// asset's URL, sha256 and size). The unpacked file hashes are recorded in
+// `extensions/<id>.sha256.json`, which the app compiles in and checks every downloaded file
+// against. Beside them sit exact copies of the few files the build and the tests need without the
+// tree (`<id>.manifest.json`, and any `fixtures` the pin names), each checked against the hash map.
+// Only those records are committed: `extensions/<id>/` itself is gitignored (upstream bytes that
+// would otherwise live in history for ever) and is refilled from the pinned release by
+// `--if-missing`, which CI runs before `npm ci`. Nothing in the tree is ever post-processed:
+// Kimochi adapts the extension from `host/`, never by editing it (DICTIONARY_ENGINES.md §7).
 //
 // The unzip is a small in-process reader (stored and deflate entries, through `node:zlib`) rather
 // than a dependency or the system `unzip`, so it behaves the same on every OS and so its safety
@@ -176,7 +181,38 @@ export async function loadSource(id, dir = extensionsDir) {
   if (source.id !== id) throw Error(`${id}.source.json has id ${JSON.stringify(source.id)}`)
   if (!/^https:\/\//.test(source.asset?.url ?? '')) throw Error(`${id}.source.json: asset.url must be https`)
   if (!/^[0-9a-f]{64}$/.test(source.asset?.sha256 ?? '')) throw Error(`${id}.source.json: asset.sha256 is not a sha256`)
+  if (!Number.isSafeInteger(source.asset?.size) || source.asset.size <= 0) throw Error(`${id}.source.json: asset.size must be the asset's size in bytes`)
+  for (const [from, to] of Object.entries(source.fixtures ?? {})) {
+    safeEntryPath(from)
+    if (!new RegExp(`^${id}\\.[a-z0-9.-]+\\.json$`).test(to)) throw Error(`${id}.source.json: fixture ${from} must be copied to ${id}.<name>.json`)
+  }
   return source
+}
+
+/**
+ * `{path in the tree: record file name}` for the files kept beside the pin as exact copies: the
+ * manifest (the host inlines it at build time, `host/ext/engines.js`) and the pin's `fixtures`.
+ */
+export const recordCopies = (source) => ({ 'manifest.json': `${source.id}.manifest.json`, ...(source.fixtures ?? {}) })
+
+/** Writes the record copies from an unpacked tree. */
+export async function writeRecordCopies(source, tree, dir = extensionsDir) {
+  for (const [from, to] of Object.entries(recordCopies(source))) {
+    await writeFile(path.join(dir, to), await readFile(path.join(tree, ...from.split('/'))))
+  }
+}
+
+/** Problems with the record copies: each must hash to its entry in `<id>.sha256.json`. */
+export async function checkRecordCopies(id, dir = extensionsDir) {
+  const source = await loadSource(id, dir)
+  const hashes = JSON.parse(await readFile(path.join(dir, `${id}.sha256.json`), 'utf8'))
+  const problems = []
+  for (const [from, to] of Object.entries(recordCopies(source))) {
+    const bytes = await readFile(path.join(dir, to)).catch(() => null)
+    if (!bytes) problems.push(`missing: ${to}`)
+    else if (hashes[from] !== sha256(bytes)) problems.push(`${to} is not the release's ${from}`)
+  }
+  return problems
 }
 
 /** Every `extensions/*.source.json` id, sorted. */
@@ -205,6 +241,9 @@ export async function syncExtension(id, { replace = false, dir = extensionsDir, 
     const response = await fetch(source.asset.url, { redirect: 'follow' })
     if (!response.ok) throw Error(`Download failed: HTTP ${response.status}`)
     const zip = Buffer.from(await response.arrayBuffer())
+    if (zip.length !== source.asset.size) {
+      throw Error(`size mismatch for ${source.asset.url}: expected ${source.asset.size} bytes, got ${zip.length}`)
+    }
     await writeFile(path.join(temp, 'asset.zip'), zip)
     const actual = sha256(zip)
     if (actual !== source.asset.sha256) {
@@ -222,6 +261,7 @@ export async function syncExtension(id, { replace = false, dir = extensionsDir, 
     const problems = compareHashes(recorded, written)
     if (problems.length > 0) throw Error(`Unpacked tree differs from staging:\n  ${problems.join('\n  ')}`)
     await writeFile(path.join(dir, `${id}.sha256.json`), JSON.stringify(written, null, 2) + '\n')
+    await writeRecordCopies(source, target, dir)
     log(`Vendored ${source.name} ${source.version}: ${Object.keys(written).length} files in extensions/${id}/`)
     return written
   } finally {

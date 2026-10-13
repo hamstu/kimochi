@@ -71,12 +71,11 @@ test('options pages are the ones the dictionary window loads (§3)', () => {
   assert.equal(DICTIONARY_ENGINES.tenten.optionsPage, 'options.html')
 })
 
-test('versions and licences match what is vendored', async () => {
-  const yomitan = await readJson('../yomitan/manifest.json')
-  assert.equal(DICTIONARY_ENGINES.yomitan.version, yomitan.version)
-  for (const id of ['hachidori', 'tenten']) {
-    const source = await readJson(`../extensions/${id}.source.json`).catch(() => null)
-    if (!source) continue // vendoring not present in this checkout
+test('versions and licences match the pinned releases', async () => {
+  for (const id of ['yomitan', 'hachidori', 'tenten']) {
+    const source = await readJson(`../extensions/${id}.source.json`)
+    const manifest = await readJson(`../extensions/${id}.manifest.json`)
+    assert.equal(manifest.version, source.version, `${id}.manifest.json is the pinned release's`)
     assert.equal(DICTIONARY_ENGINES[id].version, source.version, `${id} version`)
     assert.equal(DICTIONARY_ENGINES[id].licence, source.license, `${id} licence`)
     assert.equal(DICTIONARY_ENGINES[id].upstream, source.upstream, `${id} upstream`)

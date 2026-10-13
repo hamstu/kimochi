@@ -31,9 +31,9 @@ const built = await build({
   logLevel: 'silent'
 })
 const BUNDLE = built.outputFiles[0].text
-const HACHIDORI_VERSION = JSON.parse(await readFile(new URL('extensions/hachidori/manifest.json', root), 'utf8')).version
-const HACHIDORI_CONTENT = JSON.parse(await readFile(new URL('extensions/hachidori/manifest.json', root), 'utf8')).content_scripts[0].js
-const TENTEN_LOCALE = await readFile(new URL('extensions/tenten/_locales/en/messages.json', root), 'utf8')
+const HACHIDORI_VERSION = JSON.parse(await readFile(new URL('extensions/hachidori.manifest.json', root), 'utf8')).version
+const HACHIDORI_CONTENT = JSON.parse(await readFile(new URL('extensions/hachidori.manifest.json', root), 'utf8')).content_scripts[0].js
+const TENTEN_LOCALE = await readFile(new URL('extensions/tenten.messages-en.json', root), 'utf8')
 
 const NO_RECEIVER = 'Could not establish connection. Receiving end does not exist.'
 const ORIGINS = { hachidori: 'hachidori://localhost', tenten: 'tenten://localhost' }
@@ -787,7 +787,7 @@ test("the extension window fetches through plugin-http itself, and serves its of
 
 test("the harness's loopback extension window, and its offscreen child, are recognised without a prelude", async () => {
   const origin = 'http://127.0.0.1:1440'
-  const manifest = JSON.parse(await readFile(new URL('extensions/hachidori/manifest.json', root), 'utf8'))
+  const manifest = JSON.parse(await readFile(new URL('extensions/hachidori.manifest.json', root), 'utf8'))
   const world = new World({
     engine: 'hachidori',
     files: { [`${origin}/manifest.json`]: JSON.stringify({ name: manifest.name, version: manifest.version }) },

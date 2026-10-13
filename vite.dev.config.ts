@@ -3,15 +3,19 @@
  * src-tauri/tauri.conf.json). One origin, `http://127.0.0.1:1430`, serves the whole app:
  *
  * - `/app/*`: the React windows straight from `frontend/`, with Vite HMR.
- * - everything else: the prepared `dist/` tree (the Yomitan copy, `dist/spike/` from `host/`,
- *   `dist/ui/` from `ui/`), byte for byte, as `tauri dev`'s own static server used to.
+ * - Yomitan's own paths (exactly the files in `extensions/yomitan.sha256.json`): the app's
+ *   download of Yomitan, else the developer cache `extensions/yomitan/` (`engineTree`), as the
+ *   app's asset layer serves them in a bundle.
+ * - everything else: the prepared `dist/` tree (`dist/spike/` from `host/`, `dist/ui/` from
+ *   `ui/`), byte for byte, as `tauri dev`'s own static server used to.
  * - a watcher on `ui/` and `host/` that redoes that directory's `scripts/prepare.mjs` step and
  *   then reloads the pages that load it (for `host/`, `scripts/run.mjs dev` relaunches the app
  *   instead).
  *
  * Two more origins serve the vendored dictionary extensions for browser testing outside Tauri
- * (DICTIONARY_ENGINES.md §4, §9): `KIMOCHI_DEV_PORT + 10` is Hachidori (`dist/ext/hachidori/`),
- * `+ 11` is 10ten (`dist/ext/tenten/`), each with `/__kimochi/` → `dist/spike/`. In Tauri the
+ * (DICTIONARY_ENGINES.md §4, §9): `KIMOCHI_DEV_PORT + 10` is Hachidori, `+ 11` is 10ten, each
+ * from `engineTree` (the app's download, else `extensions/<id>/`) with `/__kimochi/` →
+ * `dist/spike/`. In Tauri the
  * custom schemes `hachidori://` and `tenten://` do this job and these ports are unused.
  *
  * The origin is deliberately the one Tauri's built-in static server used, so a dev build keeps
@@ -26,11 +30,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mergeConfig, type Plugin, type UserConfig, type ViteDevServer } from 'vite'
 import appConfigExport from './vite.config'
-import { dist, prepare, prepareExtensions, prepareHost, prepareUi } from './scripts/prepare.mjs'
+import { dist, prepare, prepareHost, prepareUi } from './scripts/prepare.mjs'
 import {
   createExtensionServer,
   createProxyMiddleware,
   createRelayBus,
+  engineTree,
+  fileUnder,
   harnessInjectsYomitanShim,
   injectHostScript,
   scopeFromCapability,
@@ -86,7 +92,24 @@ const RELOAD_CLIENT = `if (window === window.top) {
 }
 `
 
-/** `ui/` files a React window imports from dist/ at runtime rather than through Vite. */
+/** Yomitan's files, exactly: the app origin answers these paths from the engine, nothing else. */
+const YOMITAN_FILES = new Set(
+  Object.keys(JSON.parse(await readFile(here('extensions/yomitan.sha256.json'), 'utf8')) as Record<string, string>)
+)
+
+/** A Yomitan file for a request path, from the app's download or the cache; null otherwise. */
+async function yomitanFile(urlPath: string): Promise<string | null> {
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(urlPath)
+  } catch {
+    return null
+  }
+  if (!YOMITAN_FILES.has(decoded.replace(/^\//, ''))) return null
+  const tree = await engineTree('yomitan')
+  return tree ? fileUnder(tree, urlPath) : null
+}
+
 /** A `dist/` file for a request path, or null when there is none (never a directory). */
 async function distFile(urlPath: string): Promise<string | null> {
   let decoded: string
@@ -174,16 +197,20 @@ function kimochiDev(): Plugin {
     apply: 'serve',
     async configureServer(devServer) {
       server = devServer
-      // A missing Yomitan copy means `dist/` was never prepared (a bare `npx tauri dev`). Otherwise
+      // A missing host bundle means `dist/` was never prepared (a bare `npx tauri dev`). Otherwise
       // only redo ui/ and host/, picking up edits made while no server ran, and leave `dist/app/`.
-      if (await distFile('/manifest.json')) {
+      if (await distFile('/spike/ext-host.js')) {
         await prepareUi()
         await prepareHost()
       } else {
         await prepare()
       }
-      // `extensions/` is never edited in place, so it is copied once rather than watched.
-      if (!(await stat(path.join(dist, 'ext')).catch(() => null))) await prepareExtensions()
+      if (!(await engineTree('yomitan'))) {
+        server.config.logger.warn(
+          '[kimochi] Yomitan is neither downloaded by the app nor in extensions/yomitan/: choose an engine in the app, or run `node scripts/sync-extension.mjs --all --if-missing`.',
+          { timestamp: true }
+        )
+      }
       // The browser harness's plugin-http stand-in (ui/dictionary-harness.js `?fetch=proxy`):
       // loopback only, limited to the hosts the app's own network capability allows. Mounted on
       // the extension origins too, where the extension window's page fetches.
@@ -194,7 +221,7 @@ function kimochiDev(): Plugin {
       })
       // The harness's `ext_relay` stand-in, one bus for every origin (ext-dev-server.mjs).
       const relay = createRelayBus()
-      startExtensionServers(server, [proxy, relay.middleware])
+      await startExtensionServers(server, [proxy, relay.middleware])
       server.watcher.add([ui, host])
       for (const event of ['add', 'change', 'unlink'] as const) server.watcher.on(event, onChange)
 
@@ -211,7 +238,7 @@ function kimochiDev(): Plugin {
           res.end(RELOAD_CLIENT)
           return
         }
-        const file = await distFile(url)
+        const file = (await yomitanFile(url)) ?? (await distFile(url))
         if (!file) return next()
         const type = MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream'
         res.setHeader('Content-Type', type)
@@ -242,12 +269,20 @@ function kimochiDev(): Plugin {
 /** The two extension origins (see the header), closed with the dev server. */
 type Middleware = (req: unknown, res: unknown, next: () => void) => unknown
 
-function startExtensionServers(server: ViteDevServer, middleware: Middleware[]): void {
+async function startExtensionServers(server: ViteDevServer, middleware: Middleware[]): Promise<void> {
   const servers: Server[] = []
   const logger = server.config.logger
   for (const [id, extPort] of Object.entries(EXTENSION_PORTS)) {
+    const extRoot = await engineTree(id)
+    if (!extRoot) {
+      logger.warn(
+        `[kimochi] ${id} dev origin skipped: not downloaded by the app and not in extensions/${id}/ (run \`node scripts/sync-extension.mjs ${id}\`).`,
+        { timestamp: true }
+      )
+      continue
+    }
     const http = createExtensionServer({
-      extRoot: path.join(dist, 'ext', id),
+      extRoot,
       spikeRoot: path.join(dist, 'spike'),
       mime: MIME,
       log: (message: string) => logger.error(`[kimochi] ${id} origin: ${message}`, { timestamp: true }),

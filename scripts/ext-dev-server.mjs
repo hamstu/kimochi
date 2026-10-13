@@ -4,7 +4,7 @@
 // a plain browser cannot load those, so for browser testing each extension gets its own port
 // instead, which is just as much its own origin:
 //
-//   http://127.0.0.1:<port>/<path>             → dist/ext/<id>/<path>
+//   http://127.0.0.1:<port>/<path>             → the engine's tree (`engineTree`)
 //   http://127.0.0.1:<port>/__kimochi/<path>   → dist/spike/<path> (the host scripts and pages)
 //
 // Every response carries the headers the custom schemes send. Extension HTML pages get the
@@ -13,7 +13,37 @@
 import { createReadStream } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import http from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const repo = fileURLToPath(new URL('../', import.meta.url))
+
+/**
+ * The app's local data directory for `identifier`, as Tauri's `app_local_data_dir()` names it:
+ * where the app keeps its engine downloads (`<dir>/extensions/<id>/<version>/`). `npm run dev`
+ * and the bundles share `dev.kimochi.app`, so the dev server sees what the app downloaded.
+ */
+export function appLocalDataDir(identifier = 'dev.kimochi.app', { platform = process.platform, env = process.env, home = os.homedir() } = {}) {
+  if (platform === 'darwin') return path.join(home, 'Library', 'Application Support', identifier)
+  if (platform === 'win32') return path.join(env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local'), identifier)
+  return path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), identifier)
+}
+
+/**
+ * Where the dev server reads an engine from, in the app's own order (extension_store.rs): the
+ * app's download of the pinned version when there is one, else the developer cache that
+ * `scripts/sync-extension.mjs` fills (`extensions/<id>/`), unless `KIMOCHI_EXTENSIONS_NO_DEV_TREE`
+ * is set, which is how the real download is tested in `npm run dev`. Null when neither is there.
+ */
+export async function engineTree(id, { env = process.env, store = path.join(appLocalDataDir(), 'extensions'), extensions = path.join(repo, 'extensions') } = {}) {
+  const source = JSON.parse(await readFile(path.join(extensions, `${id}.source.json`), 'utf8'))
+  const downloaded = path.join(store, id, source.version)
+  if ((await stat(downloaded).catch(() => null))?.isDirectory()) return downloaded
+  if (env.KIMOCHI_EXTENSIONS_NO_DEV_TREE) return null
+  const cache = path.join(extensions, id)
+  return (await stat(path.join(cache, 'manifest.json')).catch(() => null))?.isFile() ? cache : null
+}
 
 export const HOST_SCRIPT_TAG = '<script src="/__kimochi/ext-host.js"></script>'
 

@@ -55,7 +55,7 @@ function panelWindow() {
 
 /** The shape the original API client actually reads, quoted from its own source. */
 test('the original api client reads response.result, which is what the envelope is for', async () => {
-  const api = await readFile(new URL('../yomitan/js/comm/api.js', import.meta.url), 'utf8')
+  const api = await readFile(new URL('../extensions/yomitan/js/comm/api.js', import.meta.url), 'utf8')
   assert.match(api, /const \{result\}[\s\S]{0,200}resolve\(/)
   assert.match(api, /const \{error\}/)
 })

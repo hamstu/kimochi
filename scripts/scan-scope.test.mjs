@@ -22,7 +22,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const SCAN_SELECTOR = '[data-yomitan-scan]'
 
 globalThis.Node ??= { ELEMENT_NODE: 1, TEXT_NODE: 3 }
-const { TextScanner } = await import('../yomitan/js/language/text-scanner.js')
+const { TextScanner } = await import('../extensions/yomitan/js/language/text-scanner.js')
 
 // --- A tiny DOM: enough for `Element#matches` on attribute and class selectors. -------------
 
@@ -208,8 +208,8 @@ test('every form of a transcript line carries the marker', () => {
 })
 
 test('the vendored seams the scope relies on are still there', () => {
-  assert.match(read('yomitan/js/app/frontend.js'), /this\._textScanner = new TextScanner\(/)
-  const scanner = read('yomitan/js/language/text-scanner.js')
+  assert.match(read('extensions/yomitan/js/app/frontend.js'), /this\._textScanner = new TextScanner\(/)
+  const scanner = read('extensions/yomitan/js/language/text-scanner.js')
   assert.match(scanner, /set includeSelector\(value\) \{\s*this\._includeSelector = value;/)
   assert.match(scanner, /const includeSelector = this\._includeSelector;/)
 })

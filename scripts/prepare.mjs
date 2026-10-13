@@ -1,41 +1,27 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- This standalone spike runs plain JavaScript without a TypeScript build. */
-// Builds `dist/`, the app origin: a byte-identical copy of `yomitan/`, plus `host/` as `dist/spike/`
-// and `ui/` as `dist/ui/` (every `ui/*.ts` compiled to `.js`), and each vendored extension in
-// `extensions/<id>/` as `dist/ext/<id>/` (served at its own origin, DICTIONARY_ENGINES.md §4), then
-// verifies the Yomitan and extension copies.
+// Builds `dist/`, the app origin: `host/` as `dist/spike/` and `ui/` as `dist/ui/` (every `ui/*.ts`
+// compiled to `.js`). The React windows are added to `dist/app/` by `vite build` afterwards.
+//
+// No dictionary engine is in `dist/`, and so none is in the app binary: Yomitan, Hachidori and 10ten
+// are downloaded on demand by the app from their pinned upstream releases and verified file by file
+// (src-tauri/src/extension_store.rs, EXTENSION_DOWNLOADS.md). Yomitan is still served at the app
+// origin root; its bytes come from the download, through the app's asset layer, not from `dist/`.
 //
 //   node scripts/prepare.mjs           rebuild `dist/` from scratch, then verify
-//   node scripts/prepare.mjs --verify  only verify `dist/` against `yomitan/` and `extensions/`
+//   node scripts/prepare.mjs --verify  only verify `dist/` (no engine in it) and the pinned records
 //
-// The per-directory steps are exported so the dev server (`scripts/dev-server.mjs`) can redo just
-// the step a source change affects, without wiping `dist/` (and the React build beside it).
-import { cp, mkdir, rm, readdir, readFile, writeFile } from 'node:fs/promises'
+// The per-directory steps are exported so the dev server (`vite.dev.config.ts`) can redo just the
+// step a source change affects, without wiping `dist/` (and the React build beside it).
+import { cp, mkdir, rm, readdir, readFile, stat } from 'node:fs/promises'
 import { build } from 'esbuild'
-import { createHash } from 'node:crypto'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
-import { compareHashes, ensureExtension, extensionIds, hashTree, verifyExtension } from './sync-extension.mjs'
+import { checkRecordCopies, extensionIds } from './sync-extension.mjs'
 import { buildYomitanShims } from './yomitan-shims.mjs'
 
 export const root = fileURLToPath(new URL('../', import.meta.url))
 const at = (...parts) => path.join(root, ...parts)
 export const dist = at('dist')
-const source = at('yomitan')
-
-async function hashes(dir, prefix = '', skip = new Set()) {
-  const result = {}
-  for (const e of await readdir(path.join(dir, prefix), { withFileTypes: true })) {
-    const name = path.join(prefix, e.name)
-    if (skip.has(name)) continue
-    if (e.isDirectory()) Object.assign(result, await hashes(dir, name))
-    // Keys are POSIX paths so the committed evidence file is identical on every OS.
-    else
-      result[name.split(path.sep).join('/')] = createHash('sha256')
-        .update(await readFile(path.join(dir, name)))
-        .digest('hex')
-  }
-  return result
-}
 
 /** `host/` → `dist/spike/`, plus the bundles built from it. */
 export async function prepareHost() {
@@ -89,25 +75,6 @@ export async function prepareExtensionHost() {
   })
 }
 
-/**
- * `extensions/<id>/` → `dist/ext/<id>/` for every `extensions/<id>.source.json`. A plain copy:
- * the files are served exactly as upstream released them. The trees are gitignored, so a fresh
- * clone fetches each absent one from its pinned release first (`sync-extension.mjs --if-missing`);
- * a tree that is present is left alone here and checked by `verifyExtensions` afterwards.
- */
-export async function prepareExtensions({ from = at('extensions'), to = at('dist/ext'), fetchMissing = ensureExtension } = {}) {
-  await rm(to, { recursive: true, force: true })
-  await mkdir(to, { recursive: true })
-  for (const id of await extensionIds(from)) {
-    const tree = path.join(from, id)
-    if (!(await readdir(tree).catch(() => null))?.length) {
-      console.log(`extensions/${id}/ is absent; fetching the pinned release.`)
-      await fetchMissing(id, { dir: from })
-    }
-    await cp(tree, path.join(to, id), { recursive: true })
-  }
-}
-
 /** `ui/` → `dist/ui/`, with every `ui/*.ts` module compiled to `dist/ui/*.js`. */
 export async function prepareUi() {
   await cp(at('ui'), at('dist/ui'), { recursive: true })
@@ -153,51 +120,38 @@ async function checkUiSpecifiers() {
 }
 
 /**
- * Throws unless every vendored extension matches its recorded release hashes
- * (`extensions/<id>.sha256.json`) both in `extensions/<id>/` and in its `dist/ext/<id>/` copy,
- * with no file missing, changed or added. Returns `{id: {path: sha256}}`.
+ * Throws if `dir` (default `dist/`) carries any dictionary engine: an extension tree under `ext/`, or
+ * a file of Yomitan's tree at the root (its `manifest.json`, `js/`, `settings.html`, …). The binary
+ * embeds `dist/`, so this is what keeps the engines out of the bundle.
  */
-export async function verifyExtensions({ from = at('extensions'), to = at('dist/ext') } = {}) {
-  const result = {}
-  for (const id of await extensionIds(from)) {
-    const recorded = await verifyExtension(id, { dir: from })
-    const problems = compareHashes(recorded, await hashTree(path.join(to, id)))
-    if (problems.length > 0) {
-      throw Error(`Extension file changed in dist/ext/${id}/:\n  ${problems.slice(0, 20).join('\n  ')}`)
-    }
-    result[id] = recorded
-    console.log(`Verified ${Object.keys(recorded).length} ${id} files byte-for-byte.`)
+export async function checkDistHasNoEngines(dir = dist) {
+  const found = []
+  if (await stat(path.join(dir, 'ext')).catch(() => null)) found.push('ext/')
+  const yomitan = JSON.parse(await readFile(at('extensions/yomitan.sha256.json'), 'utf8'))
+  const tops = new Set(Object.keys(yomitan).map((name) => name.split('/')[0]))
+  for (const name of await readdir(dir).catch(() => [])) if (tops.has(name)) found.push(name)
+  if (found.length > 0) {
+    throw Error(`dist/ must not ship a dictionary engine (they are downloaded on demand), but has: ${found.join(', ')}`)
   }
-  return result
 }
 
-/** Throws unless every `yomitan/` file and every vendored extension reached `dist/` byte for byte. */
+/** Throws unless `dist/` holds no engine and every pin's committed record copies are exact. */
 export async function verify() {
-  const original = await hashes(source)
-  // `dist/ext/` is checked by verifyExtensions against its own record; hashing it here too would
-  // only double the work.
-  const copy = await hashes(dist, '', new Set(['ext']))
-  for (const [name, hash] of Object.entries(original)) {
-    if (copy[name] !== hash) throw Error(`Extension file changed: ${name}`)
+  await checkDistHasNoEngines()
+  for (const id of await extensionIds()) {
+    const problems = await checkRecordCopies(id)
+    if (problems.length > 0) throw Error(`extensions/${id} records:\n  ${problems.join('\n  ')}`)
   }
-  console.log(`Verified ${Object.keys(original).length} Yomitan files byte-for-byte.`)
-  const extensions = await verifyExtensions()
-  return { yomitan: original, extensions }
+  console.log('Verified: dist/ holds no dictionary engine, and the pinned records are exact.')
 }
 
 /** Rebuilds `dist/` from scratch (wiping it, including any `dist/app/`), then verifies it. */
 export async function prepare() {
   await rm(dist, { recursive: true, force: true })
   await mkdir(dist, { recursive: true })
-  await cp(source, dist, { recursive: true })
   await prepareHost()
   await prepareUi()
-  await prepareExtensions()
-  const { yomitan, extensions } = await verify()
-  await writeFile(at('evidence/extension-sha256.json'), JSON.stringify(yomitan, null, 2) + '\n')
-  // A sibling file, not new keys in the one above: that file stays a flat map of Yomitan's tree, so
-  // its history only ever shows Yomitan changes, and each extension gets its own section here.
-  await writeFile(at('evidence/extensions-sha256.json'), JSON.stringify(extensions, null, 2) + '\n')
+  await verify()
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

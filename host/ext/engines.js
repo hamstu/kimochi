@@ -3,12 +3,16 @@
  * Engine descriptors (DICTIONARY_ENGINES.md §5.1).
  *
  * The content-script lists, the background script and the manifest itself are read from the
- * vendored `extensions/<id>/manifest.json` at build time: esbuild inlines the JSON, so the host
- * never hand-maintains a list that can drift from the release it serves, and `getManifest()`
- * answers synchronously (both extensions call it at module load).
+ * committed copy of the release's manifest, `extensions/<id>.manifest.json`, at build time:
+ * esbuild inlines the JSON, so the host never hand-maintains a list that can drift from the
+ * release it serves, and `getManifest()` answers synchronously (both extensions call it at module
+ * load). The copy is the release's own bytes: sync-extension.test.mjs checks it against
+ * `extensions/<id>.sha256.json`, and the app checks the downloaded tree against the same map, so
+ * the host is never built against a manifest that differs from the one it serves
+ * (EXTENSION_DOWNLOADS.md §1, "The manifest problem", Option A).
  */
-import hachidoriManifest from '../../extensions/hachidori/manifest.json'
-import tentenManifest from '../../extensions/tenten/manifest.json'
+import hachidoriManifest from '../../extensions/hachidori.manifest.json'
+import tentenManifest from '../../extensions/tenten.manifest.json'
 
 export const ENGINES = {
   hachidori: {

@@ -9,6 +9,7 @@ import os from 'node:os'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import {
+  checkRecordCopies,
   compareHashes,
   ensureExtension,
   extensionIds,
@@ -21,7 +22,7 @@ import {
   unzipTo,
   verifyExtension
 } from './sync-extension.mjs'
-import { prepareExtensions, verifyExtensions } from './prepare.mjs'
+import { checkDistHasNoEngines } from './prepare.mjs'
 import { createExtensionServer, createRelayBus, harnessInjectsYomitanShim, harnessTagFor, injectHostScript, HOST_SCRIPT_TAG, YOMITAN_SHIM_TAG } from './ext-dev-server.mjs'
 
 /** A minimal zip writer: `[{name, data?, method?, mode?, flags?, crc?}]`, directories end in `/`. */
@@ -145,7 +146,7 @@ async function fixtureRepo(zip, extra = {}) {
     id: 'demo',
     name: 'Demo',
     version: '1.0.0',
-    asset: { url: 'https://example.invalid/demo.zip', sha256: sha256(zip) },
+    asset: { url: 'https://example.invalid/demo.zip', sha256: sha256(zip), size: zip.length },
     unpack: {},
     ...extra
   }
@@ -188,7 +189,7 @@ test('syncExtension verifies the asset hash, unpacks, records hashes and guards 
 
     // A tampered download never touches the tree.
     await withFetch(Buffer.concat([zip, Buffer.from(' ')]), async () => {
-      await assert.rejects(syncExtension('demo', { dir, log: quiet, replace: true }), /sha256 mismatch/)
+      await assert.rejects(syncExtension('demo', { dir, log: quiet, replace: true }), /size mismatch/)
     })
     assert.equal(await readFile(path.join(dir, 'demo', 'js', 'bg.js'), 'utf8'), 'patched')
   } finally {
@@ -213,30 +214,6 @@ test('ensureExtension downloads an absent or stale tree and leaves a matching on
     })
   } finally {
     await rm(dir, { recursive: true, force: true })
-  }
-})
-
-test('prepare.mjs fetches an absent extension tree before copying it, and only then', async () => {
-  const zip = makeZip([{ name: 'manifest.json', data: '{}' }])
-  const from = await fixtureRepo(zip)
-  const to = path.join(await tempDir(), 'ext')
-  const log = console.log
-  console.log = () => {}
-  try {
-    const fetched = []
-    const fetchMissing = async (id, { dir }) => {
-      fetched.push(id)
-      await withFetch(zip, () => syncExtension(id, { dir, log: () => {} }))
-    }
-    await prepareExtensions({ from, to, fetchMissing })
-    assert.deepEqual(fetched, ['demo'])
-    assert.deepEqual(Object.keys((await verifyExtensions({ from, to })).demo), ['manifest.json'])
-    await prepareExtensions({ from, to, fetchMissing })
-    assert.deepEqual(fetched, ['demo'], 'a present tree is copied without a fetch')
-  } finally {
-    console.log = log
-    await rm(from, { recursive: true, force: true })
-    await rm(path.dirname(to), { recursive: true, force: true })
   }
 })
 
@@ -266,37 +243,6 @@ test('loadSource rejects a bad id, a mismatched id, a non-https URL and a malfor
     await assert.rejects(loadSource('demo', dir), /not a sha256/)
   } finally {
     await rm(dir, { recursive: true, force: true })
-  }
-})
-
-test("prepare.mjs copies each extension into dist/ext and its verify catches a changed, added or missing file", async () => {
-  const zip = makeZip([{ name: 'manifest.json', data: '{}' }, { name: 'data/words.idx', data: 'idx' }])
-  const from = await fixtureRepo(zip)
-  const to = path.join(await tempDir(), 'ext')
-  const log = console.log
-  console.log = () => {}
-  try {
-    await withFetch(zip, () => syncExtension('demo', { dir: from, log: () => {} }))
-    await prepareExtensions({ from, to })
-    assert.deepEqual(Object.keys((await verifyExtensions({ from, to })).demo), ['data/words.idx', 'manifest.json'])
-
-    await writeFile(path.join(to, 'demo', 'data', 'words.idx'), 'IDX')
-    await assert.rejects(verifyExtensions({ from, to }), /dist\/ext\/demo\/:\n {2}changed: data\/words\.idx/)
-    await prepareExtensions({ from, to })
-    await writeFile(path.join(to, 'demo', 'extra.js'), '')
-    await assert.rejects(verifyExtensions({ from, to }), /added: extra\.js/)
-    await prepareExtensions({ from, to })
-    await rm(path.join(to, 'demo', 'manifest.json'))
-    await assert.rejects(verifyExtensions({ from, to }), /missing: manifest\.json/)
-
-    // An edit to the vendored source itself is caught too, not copied through as the new truth.
-    await writeFile(path.join(from, 'demo', 'manifest.json'), '{"edited":true}')
-    await prepareExtensions({ from, to })
-    await assert.rejects(verifyExtensions({ from, to }), /changed: manifest\.json/)
-  } finally {
-    console.log = log
-    await rm(from, { recursive: true, force: true })
-    await rm(path.dirname(to), { recursive: true, force: true })
   }
 })
 
@@ -488,5 +434,52 @@ test('the relay bus stamps {from, to, seq} per sender, survives a reload, and re
     other.close()
     server.closeAllConnections?.()
     server.close()
+  }
+})
+
+test('every pin names its size, and its committed record copies are the release bytes', async () => {
+  const ids = await extensionIds()
+  assert.deepEqual(ids, ['hachidori', 'tenten', 'yomitan'])
+  for (const id of ids) {
+    const source = await loadSource(id)
+    assert.ok(source.asset.size > 1_000_000, `${id} asset.size`)
+    assert.match(source.asset.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//, `${id} is pinned to an upstream GitHub release`)
+    // The manifest the host inlines (host/ext/engines.js) and the test fixtures are exact copies.
+    assert.deepEqual(await checkRecordCopies(id), [], id)
+  }
+})
+
+test('loadSource requires the asset size and well-formed fixture names', async () => {
+  const dir = await tempDir()
+  try {
+    const write = (source) => writeFile(path.join(dir, 'demo.source.json'), JSON.stringify(source))
+    const asset = { url: 'https://a/b.zip', sha256: 'a'.repeat(64) }
+    await write({ id: 'demo', asset })
+    await assert.rejects(loadSource('demo', dir), /asset\.size/)
+    await write({ id: 'demo', asset: { ...asset, size: 10 }, fixtures: { '../x': 'demo.x.json' } })
+    await assert.rejects(loadSource('demo', dir), /escapes/)
+    await write({ id: 'demo', asset: { ...asset, size: 10 }, fixtures: { 'a/b.json': '../evil.json' } })
+    await assert.rejects(loadSource('demo', dir), /must be copied to demo/)
+    await write({ id: 'demo', asset: { ...asset, size: 10 }, fixtures: { 'a/b.json': 'demo.b.json' } })
+    assert.equal((await loadSource('demo', dir)).asset.size, 10)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('prepare.mjs refuses a dist/ that carries any dictionary engine', async () => {
+  const dist = await tempDir()
+  try {
+    await mkdir(path.join(dist, 'spike'), { recursive: true })
+    await writeFile(path.join(dist, 'spike', 'ext-host.js'), '')
+    await checkDistHasNoEngines(dist)
+    for (const stray of ['ext/tenten/manifest.json', 'manifest.json', 'js/comm/api.js']) {
+      await mkdir(path.dirname(path.join(dist, stray)), { recursive: true })
+      await writeFile(path.join(dist, stray), '{}')
+      await assert.rejects(checkDistHasNoEngines(dist), /must not ship/, stray)
+      await rm(path.join(dist, stray))
+    }
+  } finally {
+    await rm(dist, { recursive: true, force: true })
   }
 })

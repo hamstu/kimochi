@@ -1,0 +1,156 @@
+{
+  "manifest_version": 3,
+  "name": "Hachidori",
+  "short_name": "Hachidori",
+  "version": "0.3.0",
+  "description": "Study Japanese vocabulary: look up words on any page and build Anki cards, optionally capturing on-screen context.",
+  "minimum_chrome_version": "128",
+  "icons": {
+    "16": "icons/hachidori-16.png",
+    "32": "icons/hachidori-32.png",
+    "48": "icons/hachidori-48.png",
+    "128": "icons/hachidori-128.png"
+  },
+  "permissions": [
+    "alarms",
+    "downloads",
+    "offscreen",
+    "scripting",
+    "storage",
+    "tabCapture",
+    "unlimitedStorage",
+    "userScripts"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "options_page": "settings.html",
+  "commands": {
+    "toggleTextScanning": {
+      "suggested_key": {
+        "default": "Alt+Delete"
+      },
+      "description": "Turn Japanese lookups on or off"
+    },
+    "openSettingsPage": {
+      "description": "Open Hachidori settings"
+    },
+    "close": {
+      "description": "Close the popup"
+    },
+    "addNote": {
+      "description": "Add the current popup entry to Anki"
+    },
+    "viewNotes": {
+      "description": "View the current popup entry in Anki"
+    },
+    "playAudio": {
+      "description": "Play the current popup entry's audio"
+    },
+    "nextEntry": {
+      "description": "Go to the next popup entry"
+    },
+    "previousEntry": {
+      "description": "Go to the previous popup entry"
+    },
+    "firstEntry": {
+      "description": "Go to the first popup entry"
+    },
+    "lastEntry": {
+      "description": "Go to the last popup entry"
+    },
+    "nextEntryDifferentDictionary": {
+      "description": "Go to the next dictionary in the popup"
+    },
+    "previousEntryDifferentDictionary": {
+      "description": "Go to the previous dictionary in the popup"
+    },
+    "historyBackward": {
+      "description": "Go back in the popup's history"
+    },
+    "scanSelectedText": {
+      "description": "Look up the selected text"
+    },
+    "scanTextAtSelection": {
+      "description": "Look up the text at the selection"
+    },
+    "toggleWordHighlights": {
+      "description": "Show or hide the word highlights on the page"
+    },
+    "markWordKnown": {
+      "description": "Mark the current popup entry's word as known"
+    },
+    "ignoreWord": {
+      "description": "Ignore the current popup entry's word"
+    }
+  },
+  "action": {
+    "default_title": "Hachidori",
+    "default_popup": "toolbar.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "js": [
+        "reader-options.js",
+        "dictionary-group-state.js",
+        "lookup-stats-identity.js",
+        "sentence.js",
+        "external-links.js",
+        "external-link-host.js",
+        "audio-content.js",
+        "anki-content.js",
+        "render/glossary.js",
+        "render/popup.js",
+        "theme-host.js",
+        "word-status-overrides.js",
+        "word-highlights.js",
+        "content-dictionaries.js",
+        "content-scan.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "cross_origin_embedder_policy": {
+    "value": "require-corp"
+  },
+  "cross_origin_opener_policy": {
+    "value": "same-origin"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "overlay-mode.js",
+        "browser-api.js",
+        "render/reader.css",
+        "icons.css",
+        "vendor/themes/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    },
+    {
+      "resources": [
+        "netflix-recorder.html"
+      ],
+      "matches": [
+        "https://www.netflix.com/*"
+      ]
+    }
+  ]
+}

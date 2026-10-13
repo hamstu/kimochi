@@ -9,7 +9,11 @@
   "released": "2026-09-02",
   "asset": {
     "url": "https://github.com/birchill/10ten-ja-reader/releases/download/v1.28.0/10ten-ja-reader-1.28.0-chrome.zip",
-    "sha256": "9ce5dcf9930c6dbb5988dbb25e088150dcd77d70cfee70af448df5c8420cbede"
+    "sha256": "9ce5dcf9930c6dbb5988dbb25e088150dcd77d70cfee70af448df5c8420cbede",
+    "size": 18253849
   },
-  "unpack": {}
+  "unpack": {},
+  "fixtures": {
+    "_locales/en/messages.json": "tenten.messages-en.json"
+  }
 }
