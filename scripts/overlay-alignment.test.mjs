@@ -130,12 +130,15 @@ const LIMITS = {
   meikiocr: { along: 0.08, p90: 0.16, across: 0.06 },
   'oneocr-shape': { along: 0.06, p90: 0.1, across: 0.06 },
   livetext: { along: 0.2, p90: 0.42, across: 0.1 },
-  mangaocr: { along: 0.06, p90: 0.12, across: 0.06 }
+  // Where its detector's line regions are clean. Its manga samples are held below.
+  mangaocr: { along: 0.06, p90: 0.12, across: 0.06, samples: ['large'] }
 }
 
 for (const [engine, limit] of Object.entries(LIMITS)) {
   test(`${engine}: each glyph is drawn over the one it was read from`, () => {
-    const rows = scored.filter((row) => row.engine === engine && row.coverage >= 0.6)
+    const rows = scored.filter(
+      (row) => row.engine === engine && row.coverage >= 0.6 && (!limit.samples || limit.samples.includes(row.sample))
+    )
     assert.ok(rows.length, 'scored on at least one sample')
     const [summary] = summarize(rows)
     const detail = rows.map((row) => `${row.sample} ${row.alongMean.toFixed(3)}`).join(', ')
@@ -172,5 +175,41 @@ test('every box, from every engine, is laid out inside itself with finite number
         assert.ok(at > -0.75 && at < along / run.fontSize + 0.75, `${fixture.sample}.${fixture.engine}: ${g.c} of ${run.text} at ${at.toFixed(2)}`)
       }
     }
+  }
+})
+
+/**
+ * Manga OCR's detector reports line regions, not lines: in `bubble` (a real Quick Shot of one
+ * speech bubble, two blocks of two columns with ruby beside every column) a ruby column, one
+ * column in three pieces, and two columns and their ruby run together; in `vertical` two of three
+ * columns. Shared out over those as lines, the text was set at three sizes from 11 to 63 px in
+ * one bubble and drawn over the ruby. It is set as columns, a bubble at one size, over its text.
+ */
+test('Manga OCR: a speech bubble is lettered as columns at one size, over its own text', () => {
+  const fixture = fixtures.find((f) => f.sample === 'bubble' && f.engine === 'mangaocr')
+  const { mapped, runs } = layout(fixture)
+  const size = fixture.truth.lines[0].size
+  assert.ok(runs.every((run) => run.vertical), 'every run is a column')
+  // The first block's regions are good enough to find its two columns, and the break between them.
+  assert.deepEqual(runs.slice(0, 2).map((run) => run.text), ['遥太郎くんの', '偏差値は３５。'])
+  // One size per block; the bubble's two blocks within a quarter of each other and of the truth.
+  const blockSizes = wordLayout(mapped, measure).map((block, index) => {
+    const own = block.map((run) => run.fontSize)
+    assert.ok(Math.max(...own) - Math.min(...own) < 0.01, `block ${index}: sizes ${own.map((s) => s.toFixed(1))}`)
+    return own[0]
+  })
+  assert.ok(Math.max(...blockSizes) / Math.min(...blockSizes) <= 1.25, `block sizes ${blockSizes.map((s) => s.toFixed(1))}`)
+  for (const s of blockSizes) assert.ok(s / size >= 0.85 && s / size <= 1.15, `size ${s.toFixed(1)} against ${size}`)
+  // Every glyph is drawn over the bubble's text, none out past it.
+  const truth = fixture.truth.lines.flatMap((line) => line.glyphs)
+  const [x0, y0] = [Math.min(...truth.map((g) => g.x)), Math.min(...truth.map((g) => g.y))]
+  const [x1, y1] = [Math.max(...truth.map((g) => g.x + g.w)), Math.max(...truth.map((g) => g.y + g.h))]
+  for (const g of runs.flatMap(drawn))
+    assert.ok(g.cx > x0 - size / 2 && g.cx < x1 + size / 2 && g.cy > y0 - size / 2 && g.cy < y1 + size / 2, `${g.c} at ${g.cx.toFixed(0)},${g.cy.toFixed(0)}`)
+  for (const [sample, along] of [['bubble', 0.8], ['vertical', 0.3]]) {
+    const row = scored.find((r) => r.sample === sample && r.engine === 'mangaocr')
+    assert.ok(row.coverage >= 0.6, `${sample}: coverage ${row.coverage.toFixed(2)}`)
+    assert.ok(row.alongMean <= along, `${sample}: mean along ${row.alongMean.toFixed(3)}`)
+    assert.ok(row.sizeSpread <= 0.02, `${sample}: sizes on one column vary ${(row.sizeSpread * 100).toFixed(1)}%`)
   }
 })

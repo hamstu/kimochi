@@ -44,6 +44,9 @@
  *    committed; pass its folder as `--images` to measure it.
  *  - `manga`: the manga page from the kimochi-mangaocr crate's test fixtures, likewise not
  *    committed, with no per-glyph truth: the regression test only checks every box lays out.
+ *  - `bubble`: one speech bubble from a manga page, a real Quick Shot (263×291, not committed),
+ *    two blocks of two vertical columns with ruby beside each; its truth is each glyph's ink read
+ *    from the image (３５ share one cell). Its Manga OCR answer is the detector's rough regions.
  *  - `<sample>.<engine>.json`: what each engine answered for that image, once, normalised as
  *    the overlay receives it (`normalizeOcrResult`, less the ink margins, which are applied when
  *    measured so a change to them is measured too). Google Lens through the app's ignored live
