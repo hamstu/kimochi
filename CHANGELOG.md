@@ -31,6 +31,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- Kimochi is now signed and notarised on macOS and signed on Windows, so it opens without
+  "unidentified developer" or "unknown publisher" warnings.
 - The OCR model picker in the main window lists each engine as Settings does: its icon, its
   name, whether it runs online or on your computer, and a short line about what it is for.
 - The dictionary options have clearer names: **Built-in Yomitan** (a copy of Yomitan inside

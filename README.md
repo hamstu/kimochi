@@ -81,8 +81,10 @@ downloaded the same way (`src-tauri/ocr-models.json`). For development,
 `npm run dev` serves every window from a Vite dev server at `http://127.0.0.1:1430`: React
 panel edits hot-reload, `ui/` edits reload their window, and `src-tauri/` or `host/` edits
 rebuild and relaunch the app. Set `KIMOCHI_DEV_PORT` to run a second checkout alongside.
-Local bundles are ad-hoc signed on macOS and unsigned on Windows unless signing is configured
-(`scripts/sign-windows.mjs`).
+Local bundles are signed with an Apple Development certificate if one is installed (ad-hoc
+otherwise) on macOS and unsigned on Windows. CI signs with Developer ID and notarises on macOS
+(tauri's own signing, from the `APPLE_*` secrets) and signs with Azure Artifact Signing on
+Windows (`scripts/sign-windows.mjs`); setting the same variables locally does the same.
 
 ## How it is put together
 

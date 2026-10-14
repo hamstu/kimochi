@@ -122,16 +122,19 @@ if (
   await import('./prepare-mangaocr.mjs')
   if (darwin && task !== 'dev') {
     // Hardened-runtime library validation requires the bundled dylib to carry
-    // the same signing identity as the app, rather than Microsoft's signature.
+    // the same signing identity as the app, rather than Microsoft's signature. Notarization
+    // also wants a secure timestamp on every Mach-O, so a real identity asks Apple for one;
+    // an ad-hoc signature cannot carry one.
     const runtime = 'src-tauri/resources/meikiocr/runtime'
+    const identity = env.APPLE_SIGNING_IDENTITY ?? '-'
     for (const name of await readdir(runtime)) {
       if (!name.endsWith('.dylib')) continue
       exitOnFailure(
         run('codesign', [
           '--force',
           '--sign',
-          env.APPLE_SIGNING_IDENTITY ?? '-',
-          '--timestamp=none',
+          identity,
+          ...(identity === '-' ? ['--timestamp=none'] : ['--timestamp', '--options', 'runtime']),
           `${runtime}/${name}`
         ])
       )
