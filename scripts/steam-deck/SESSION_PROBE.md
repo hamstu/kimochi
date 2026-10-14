@@ -444,3 +444,54 @@ Physical acceptance of native main/radial/Steam switching, touch, OCR and
 lookup remains pending user verification; harness acceptance is not substituted
 for full-app runtime acceptance. Native logs/build output/property dumps are
 retained under ignored `evidence/steam-deck-bringup/managed-app/`.
+
+### Native regression correction (2026-10-14)
+
+The first full-app acceptance failed: screen sharing reported `The portal
+refused the screen share`, and the user reported lost game/Steam button input.
+Captured before stopping the app: Steam was `Sl`; Kimochi and a touch watchdog
+were alive. This snapshot does not prove that every earlier input failure was
+caused by a stopped Steam process.
+
+Portal journal: `A backend call failed: Invalid app id`. A D-Bus monitor showed
+CreateSession identifying the Steam-managed caller as `app3826138355`, from
+`app-steam-app3826138355-60289.scope`. Registering a fresh host connection as
+`dev.kimochi.app` fixes that identity, without permission resets. This Deck's
+portal also requires the matching desktop entry: the first focused probe failed
+with `Could not register app ID: App info not found for 'dev.kimochi.app'`.
+After adding that entry, CreateSession, SelectSources and Start all returned 0
+and Start supplied PipeWire node 72. The installer now supplies a hidden matching
+entry if no ordinary installation already supplies it. Existing entries are
+preserved; source settings and dictionaries are untouched.
+
+Input migration differed from the successful harness: it paused Steam while
+ordinary registered controls were open, as well as while an external modal
+menu was active. Managed ordinary controls now use Steam's own foreground
+routing, matching the harness; modal overlays retain the guarded neutral
+handoff. The independent watchdog additionally reads the physical system keys,
+so Steam/QAM release does not depend on the app/webview poller. Ownership refuses
+Steam's input app ID 769, even if :0 retains stale GTK focus. A focus callback
+cannot immediately clear an explicit system-menu yield.
+
+Linux scope: portal change is in the Linux-only backend and only enabled for
+the explicit managed launch; input changes are all in platform/linux. Packaging
+changes affect the gaming-mode installer only. No macOS/Windows/vendor/dependency
+changes. Raw failure logs are retained in ignored
+`evidence/steam-deck-bringup/managed-regressions/`.
+
+Checks: capture tests 67 passed; app tests 267 passed, 2 ignored (including a
+regression test that managed controls do not stop Steam while modal navigation
+does). Both Clippy checks passed with the previously documented external MSRV
+configs. Installer creation/preservation check, shell syntax, diff check and
+vendor verification passed. The artifact uses the dependency-complete cached
+AppDir, updated native executable and rebuilt embedded frontend, then AppImage
+repacking, as for the preceding native integration.
+
+Deployed corrected artifact SHA-256
+`81ec1cd52eea42f00c43a3e0f9fb69d5b306e26a62876e2e7f618c2d60cc7491`
+as release `1792006683-64624`. Real app PID 64676 launched through the existing
+Steam shortcut. At 12:38:05 PDT the actual app's portal session
+`ashpd_y2s7LyDDoY` successfully selected sources and started PipeWire node 72.
+Steam PID 50945 stayed `Sl` with the controls open; only the independent touch
+helper was running, not a Steam-stop input lease. Physical controller/Steam-menu
+acceptance is awaiting the user; do not infer it solely from these native checks.

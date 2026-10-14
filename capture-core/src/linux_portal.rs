@@ -559,7 +559,20 @@ mod backend {
         reply: mpsc::Sender<std::result::Result<Started, PickError>>,
     ) {
         async_io::block_on(async move {
-            let proxy = match Screencast::new().await {
+            // Steam's shortcut scope is identified as `app<id>`, which is not
+            // a valid portal AppID. Register a fresh host connection before its
+            // first portal call; ordinary desktop identity detection stays intact.
+            let proxy = if std::env::var("KIMOCHI_STEAM_MANAGED").as_deref() == Ok("1") {
+                async {
+                    let connection = ashpd::zbus::Connection::session().await?;
+                    let app_id = "dev.kimochi.app".parse().expect("valid Kimochi AppID");
+                    ashpd::register_host_app_with_connection(connection.clone(), app_id).await?;
+                    Screencast::with_connection(connection).await
+                }.await
+            } else {
+                Screencast::new().await
+            };
+            let proxy = match proxy {
                 Ok(p) => p,
                 Err(e) => {
                     let _ = reply.send(Err(pick_error(e)));

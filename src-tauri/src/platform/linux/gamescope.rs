@@ -17,19 +17,20 @@ fn set_control_owner(owner: &mut Option<String>, label: &str, focused: bool) {
     if focused { *owner = Some(label.to_owned()); }
     else if owner.as_deref() == Some(label) { *owner = None; }
 }
-fn owns_input(navigation: bool, controls: bool, yielding: bool) -> bool {
-    !yielding && (navigation || controls)
+fn owns_input(navigation: bool, controls: bool, yielding: bool, managed: bool) -> bool {
+    !yielding && (navigation || (controls && !managed))
 }
-/// Overlay navigation and focused controls share one watchdog: closing either
-/// must not release Steam while the other still owns controller input.
+/// External overlays need the watchdog because Steam reads HID directly.
+/// A registered ordinary Steam app uses Steam's own foreground routing, just
+/// like the session harness: do not suspend its launcher while using controls.
 pub fn refresh_input_lease() -> Result<(), String> {
     let controls = CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()).is_some();
     let routed_here = super::gamescope_focus::owns_input(std::process::id());
-    super::steam_input::update(routed_here && owns_input(crate::gamepad::navigating(), controls, YIELDING.load(Ordering::SeqCst)))
+    super::steam_input::update(routed_here && owns_input(crate::gamepad::navigating(), controls, YIELDING.load(Ordering::SeqCst), managed()))
 }
 pub fn control_focus(window: &tauri::WebviewWindow, focused: bool) {
     if !active() || !controls(window) { return; }
-    if focused && super::gamescope_focus::owns_input(std::process::id()) {
+    if focused && !YIELDING.load(Ordering::SeqCst) && super::gamescope_focus::owns_input(std::process::id()) {
         YIELDING.store(false, Ordering::SeqCst);
         ROUTED_AWAY.store(false, Ordering::SeqCst);
     }
@@ -336,11 +337,18 @@ mod input_tests {
     use super::*;
     #[test]
     fn closing_radial_keeps_focused_controls_owned() {
-        assert!(owns_input(true, false, false));
-        assert!(owns_input(true, true, false));
-        assert!(owns_input(false, true, false));
-        assert!(!owns_input(false, false, false));
-        assert!(!owns_input(true, true, true));
+        assert!(owns_input(true, false, false, false));
+        assert!(owns_input(true, true, false, false));
+        assert!(owns_input(false, true, false, false));
+        assert!(!owns_input(false, false, false, false));
+        assert!(!owns_input(true, true, true, false));
+    }
+    #[test]
+    fn steam_managed_controls_leave_steam_running_but_modal_overlay_blocks() {
+        assert!(!owns_input(false, true, false, true));
+        assert!(owns_input(true, true, false, true));
+        assert!(owns_input(true, false, false, true));
+        assert!(!owns_input(true, true, true, true));
     }
     #[test]
     fn late_blur_does_not_release_the_new_control_window() {

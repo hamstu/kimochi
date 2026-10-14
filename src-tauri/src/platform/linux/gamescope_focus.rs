@@ -16,6 +16,13 @@ fn routes_to_owner(local: &str, mouse: &str, keyboard: &str, focused_pid: Option
 /// routed to Kimochi. Shared by the app and its independent recovery processes.
 pub(super) fn owns_input(owner: u32) -> bool {
     let Some(d) = super::x11::desktop() else { return false; };
+    // Steam menus share :0 with the managed app. XGetInputFocus may still
+    // point at our GTK window while Gamescope routes the controller to Steam.
+    let steam = d.conn.intern_atom(true, b"GAMESCOPE_FOCUSED_APP").ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .and_then(|atom| d.property32(d.root, atom.atom, AtomEnum::CARDINAL))
+        .and_then(|values| values.first().copied());
+    if steam == Some(769) { return false; }
     let display = |name: &[u8]| -> Option<String> {
         let atom = d.conn.intern_atom(true, name).ok()?.reply().ok()?.atom;
         if atom == 0 { return None; }

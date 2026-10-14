@@ -164,8 +164,13 @@ pub fn run_watchdog() -> bool {
     let mut last_heartbeat = std::time::Instant::now();
     let mut paused = false;
     let mut resume = None;
+    // Do not depend on GTK, the webview, or the parent's polling thread to let
+    // the Steam/QAM buttons escape a modal input guard.
+    let mut physical = super::deck_input::Reader::new();
     loop {
+        physical.poll();
         if STOP.load(Ordering::Relaxed)
+            || physical.system_menu()
             || !super::gamescope_focus::owns_input(owner)
             || last_heartbeat.elapsed() >= std::time::Duration::from_millis(2500)
         {

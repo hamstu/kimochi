@@ -57,6 +57,13 @@ Terminal=false
 Categories=Education;Languages;
 DESKTOP
 mv -f -- "$applications/.kimochi-gaming-mode-$$.desktop" "$applications/kimochi-gaming-mode.desktop"
+# The host portal registry requires a desktop entry matching our reverse-DNS
+# identity. Preserve a normal Kimochi installation's entry if one exists.
+if [ ! -f "$applications/dev.kimochi.app.desktop" ]; then
+  cat "$applications/kimochi-gaming-mode.desktop" > "$applications/.kimochi-portal-$$.desktop"
+  printf 'NoDisplay=true\n' >> "$applications/.kimochi-portal-$$.desktop"
+  mv -f -- "$applications/.kimochi-portal-$$.desktop" "$applications/dev.kimochi.app.desktop"
+fi
 icon=$script_dir/kimochi.png
 if [ ! -f "$icon" ]; then icon=$script_dir/../../src-tauri/icons/128x128.png; fi
 if [ -f "$icon" ]; then
