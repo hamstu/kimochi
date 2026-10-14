@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import {
   apportion,
   characterCells,
+  columns,
   distribute,
   estimate,
   fit,
@@ -280,4 +281,32 @@ test('character cells tile each run and skip line breaks, one per code unit', ()
   close(cells[1].x + cells[1].width, run.lead + 2 * run.fontSize + 1.5 * run.spacing, 'last cell')
   assert.deepEqual([cells[0].line, cells[1].line, cells[3].line, cells[5].line], [0, 0, 1, 1])
   close(cells[5].y, 40, 'second line cells sit on the second line')
+})
+
+test("a manga detector's line regions become columns: ruby dropped, pieces joined, a missed one found", () => {
+  // Two columns of six 30 px glyphs, the right one with 15 px ruby beside it. The detector saw the
+  // right column in two pieces, the top one with its ruby, and missed the left column.
+  const box = { x: 0, y: 0, width: 85, height: 180 }
+  const found = columns(
+    [
+      { x: 70, y: 0, width: 15, height: 120, segments: [] },
+      { x: 40, y: 0, width: 45, height: 90, segments: [] },
+      { x: 42, y: 92, width: 30, height: 88, segments: [] }
+    ],
+    'あいうえおかきくけこさし',
+    box
+  )
+  assert.equal(found.length, 2)
+  const [right, left] = readingOrder(found, true)
+  assert.deepEqual([right.x, right.y, right.width, right.height], [40, 0, 45, 180])
+  assert.deepEqual([left.x, left.width, left.height], [0, 40, 180])
+})
+
+test('columns the detector ran together leave the bubble to be estimated, at one size', () => {
+  const box = { x: 0, y: 0, width: 90, height: 180 }
+  const text = 'あいうえおかきくけこさし'
+  assert.equal(columns([{ ...box, segments: [] }], text, box), null)
+  const [runs] = layoutParts([{ text, rect: box, lines: [box], block: true, vertical: true }], em)
+  assert.equal(runs.length, 2)
+  close(runs[0].fontSize, runs[1].fontSize, 'one size')
 })

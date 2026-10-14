@@ -49,6 +49,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Manga OCR's overlay text on vertical speech bubbles is readable again. A bubble is lettered in
+  its columns at one size, and no text is drawn over the furigana. Before, the same bubble could
+  show tiny and huge text side by side.
 - On Windows and Linux, a scrollbar no longer flickers in the sidebar every few seconds while
   the source preview refreshes.
 - Without Screen Recording permission, the source picker now offers **Allow Screen Recording…**,

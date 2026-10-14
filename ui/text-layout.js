@@ -42,6 +42,17 @@ const EDGE = 0.06
 const OVERLAP = 1.15
 /** Line pitch against glyph size, when the lines have to be guessed: typical game and manga leading. */
 export const LEADING = 1.35
+/**
+ * A column thinner than this, against the block's glyph size, is ruby (furigana) and holds none of
+ * the text: ruby is set at about half the size of the text it reads.
+ */
+const RUBY = 0.6
+/**
+ * A column thicker than this, against the block's glyph size, is two or more columns the detector
+ * ran together, and says nothing about where one ends. One column with its ruby is about one and a
+ * half glyphs, and the size fitted to the box reads small where two digits share one cell.
+ */
+const MERGED = 2.5
 
 /** Characters as the reader sees them: one per code point. */
 export const chars = (text) => [...text]
@@ -114,6 +125,17 @@ export function distribute(text, lineRects, vertical) {
  * wins. Lines are then filled to the edge, as wrapped text is, and spread evenly across the
  * breadth, each starting at the box's edge.
  */
+/** The number of lines, and their glyph size, that set `count` characters largest in a box. */
+function bestFit(count, along, across) {
+  let best = { size: 0, lines: 1 }
+  for (let lines = 1; lines <= Math.max(1, count); lines++) {
+    const perLine = Math.ceil(count / lines)
+    const size = Math.min(along / perLine, across / (lines + (lines - 1) * (LEADING - 1)))
+    if (size > best.size) best = { size, lines }
+  }
+  return best
+}
+
 export function estimate(text, rect, vertical) {
   const along = vertical ? rect.height : rect.width
   const across = vertical ? rect.width : rect.height
@@ -123,12 +145,7 @@ export function estimate(text, rect, vertical) {
     rows = explicit
   } else {
     const all = chars(text)
-    let best = { size: 0, lines: 1 }
-    for (let lines = 1; lines <= all.length; lines++) {
-      const perLine = Math.ceil(all.length / lines)
-      const size = Math.min(along / perLine, across / (lines + (lines - 1) * (LEADING - 1)))
-      if (size > best.size) best = { size, lines }
-    }
+    const best = bestFit(all.length, along, across)
     // Wrapped text fills every line to the edge and leaves the remainder on the last, so a
     // line holds as many cells of the chosen size as fit, not an even share of the text.
     const perLine = Math.max(
@@ -155,6 +172,64 @@ export function estimate(text, rect, vertical) {
       }
     })
     .filter((run) => run.text)
+}
+
+/**
+ * A vertical block's columns, from the lines a manga text detector found in it, or null when they
+ * cannot be trusted to say where the text is.
+ *
+ * Manga OCR's detector reports line regions, not lines: a column of ruby beside the text, one
+ * column in two or three pieces, two columns run together. Shared out as lines (`distribute`),
+ * the text lands on the ruby at a third of its size and the rest spreads over a run-together pair.
+ * So, against the size the block's text would be set at in its box (`bestFit`): ruby-thin regions
+ * are dropped (RUBY), regions that overlap across by more than half the thinner one are one column
+ * (their union, with the words on both). A column still thicker than MERGED glyphs, or fewer
+ * columns than the box holds, means the detector could not separate them, which leaves only the
+ * box to go by (`estimate`).
+ */
+export function columns(lines, text, rect) {
+  const count = chars(text.replace(/\n/g, '')).length
+  const { size, lines: expected } = bestFit(count, rect.height, rect.width)
+  if (!(size > 0)) return null
+  const merged = []
+  for (const line of lines.filter((line) => line.width >= RUBY * size)) {
+    let column = { ...line, segments: [...(line.segments ?? [])] }
+    for (let joined = true; joined; ) {
+      joined = false
+      for (let i = 0; i < merged.length; i++) {
+        const other = merged[i]
+        const overlap =
+          Math.min(column.x + column.width, other.x + other.width) - Math.max(column.x, other.x)
+        if (overlap <= Math.min(column.width, other.width) / 2) continue
+        const x = Math.min(column.x, other.x)
+        const y = Math.min(column.y, other.y)
+        column = {
+          x,
+          y,
+          width: Math.max(column.x + column.width, other.x + other.width) - x,
+          height: Math.max(column.y + column.height, other.y + other.height) - y,
+          segments: [...other.segments, ...column.segments].sort((a, b) => a.y - b.y)
+        }
+        merged.splice(i, 1)
+        joined = true
+        break
+      }
+    }
+    merged.push(column)
+  }
+  if (!merged.length || merged.some((column) => column.width > MERGED * size)) return null
+  // A stretch of the box as wide as a glyph that no column covers is a column the detector missed
+  // (the box is the text's, so something is there): it runs the box's full length.
+  const covered = [...merged].sort((a, b) => a.x - b.x)
+  const missed = []
+  let edge = rect.x
+  for (const column of [...covered, { x: rect.x + rect.width, width: 0 }]) {
+    if (column.x - edge >= size)
+      missed.push({ x: edge, y: rect.y, width: column.x - edge, height: rect.height, segments: [] })
+    edge = Math.max(edge, column.x + column.width)
+  }
+  const found = [...merged, ...missed]
+  return found.length < expected ? null : found
 }
 
 /**
@@ -279,9 +354,10 @@ function bySegments(run, vertical, measure, fontSize, startMargin, endMargin) {
  * One size per visual row. Runs whose centres lie on one line (within half a glyph across, and of
  * comparable size) are a row, set at the median of its runs' own sizes, read from the runs of
  * more than one character when there are any: a lone 、 or ー boxes too little ink to size a line
- * by. Returns the size for each run, in order.
+ * by. The columns of one vertical block (`block`, the part they came from) are one row however far
+ * apart they lie: a bubble is lettered at one size. Returns the size for each run, in order.
  *
- * @param {{text: string, rect: {x: number, y: number, width: number, height: number}, vertical?: boolean, natural: number}[]} runs
+ * @param {{text: string, rect: {x: number, y: number, width: number, height: number}, vertical?: boolean, block?: number, natural: number}[]} runs
  */
 export function harmonize(runs) {
   const parent = runs.map((_, index) => index)
@@ -316,6 +392,12 @@ export function harmonize(runs) {
         parent[root(j)] = root(i)
   host.forEach((best, i) => {
     if (best >= 0) parent[i] = root(best)
+  })
+  const block = new Map()
+  runs.forEach((run, i) => {
+    if (run.block == null) return
+    if (block.has(run.block)) parent[root(i)] = root(block.get(run.block))
+    else block.set(run.block, i)
   })
   const rows = new Map()
   runs.forEach((run, index) => {
@@ -409,12 +491,13 @@ export function splitPart(part, vertical, measure = null) {
   if (!part.text) return []
   let runs
   if (part.block || part.text.includes('\n')) {
-    if (part.lines?.length) {
-      // The words found on each line travel with it through the reading-order sort.
-      const lines = part.lines.map((line, index) => ({
-        ...line,
-        segments: part.lineSegments?.[index] ?? []
-      }))
+    // The words found on each line travel with it through the reading-order sort.
+    const found = (part.lines ?? []).map((line, index) => ({
+      ...line,
+      segments: part.lineSegments?.[index] ?? []
+    }))
+    const lines = vertical && found.length ? columns(found, part.text, part.rect) : found
+    if (lines?.length) {
       runs = distribute(part.text, lines, vertical).flatMap(({ text, rect }) => {
         const { segments, ...bounds } = rect
         return splitAtGaps({ text, rect: bounds }, segments, vertical, measure)
@@ -438,7 +521,13 @@ export function layoutParts(parts, measure) {
   const pieces = parts.map((part) =>
     splitPart(part, !!part.vertical, measure).map((run) => ({ ...run, vertical: !!part.vertical }))
   )
-  const sizes = harmonize(pieces.flat().map((run) => fit(run, run.vertical, measure)))
+  const sizes = harmonize(
+    pieces.flatMap((runs, index) => {
+      const part = parts[index]
+      const block = part.vertical && (part.block || part.text.includes('\n')) ? index : undefined
+      return runs.map((run) => ({ ...fit(run, run.vertical, measure), block }))
+    })
+  )
   let next = 0
   return pieces.map((runs) => runs.map((run) => fit(run, run.vertical, measure, sizes[next++])))
 }
