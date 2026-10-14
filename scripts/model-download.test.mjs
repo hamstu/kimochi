@@ -164,15 +164,8 @@ test('both engine pickers share the confirmation and list engines by name alone'
   assert.ok(chooser.includes('engineHint(capability, status)'), 'the list no longer shows the download state as a hint')
 })
 
-test('the engine list is a listbox whose arrow keys look and whose Enter chooses', async () => {
-  const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
-  assert.ok(chooser.includes('role="listbox"') && chooser.includes('role="option"'), 'the list lost its listbox semantics')
-  assert.ok(chooser.includes('aria-selected={active}'), 'the chosen engine is not aria-selected')
-  for (const key of ["'ArrowDown'", "'ArrowUp'", "'Home'", "'End'", "'Enter'", "' '"]) {
-    assert.ok(chooser.includes(`case ${key}:`), `the list does not handle ${key}`)
-  }
-  assert.ok(chooser.includes('Use this engine'), 'the panel no longer offers to use the engine it shows')
-})
+// The chooser's view/use model (listbox, keys, "Use <name>", the in-use check) is tested for both
+// choosers in engine-chooser.test.mjs.
 
 test('removing a downloaded model lives in the overflow menu, not beside the bar', async () => {
   const block = await read('frontend/panels/settings/ModelDownload.tsx')

@@ -21,7 +21,7 @@
  * nothing is saved, so the engine in use is untouched while it downloads, and an offline failure
  * leaves everything as it was, with Retry. When the download is ready and the switch is still
  * pending, it is made exactly as above. If this page is closed meanwhile, the download finishes
- * in Rust and the engine simply offers "Use this engine" next time.
+ * in Rust and the engine simply offers "Use <name>" next time.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
@@ -93,7 +93,7 @@ export function DictionaryTab(): ReactNode {
   // switch from Hachidori or 10ten gives this window), and from its Helper row.
   const [setupOpen, setSetupOpen] = useState(switchedTo === 'custom-api')
   const saved = dictionaryEngineOf(yomitanSettings.popupType)
-  // The pick, shown as active from the click so the panel does not flash "Use this engine" while
+  // The pick, shown as active from the click so the panel does not flash "Use <name>" while
   // the write goes out. Cleared once the setting agrees (or the write fails).
   const [picked, setPicked] = useState<DictionaryEngine | null>(null)
   const active = picked ?? saved

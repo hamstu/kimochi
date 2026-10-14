@@ -44,6 +44,7 @@ import {
 } from '@ui/extension-download'
 import { ModelDownload } from '../panels/settings/ModelDownload'
 import { DictionaryPreview } from '../components/DictionaryPreview'
+import { DictionaryEngineIcon } from '../components/EngineIcon'
 import Step from './Step'
 import { StepActions } from './StepActions'
 import style from './WelcomeApp.module.css'
@@ -131,6 +132,7 @@ export default function EngineSetup(): JSX.Element {
         onValueChange={choose}
         options={[...EXTENSION_ENGINES, 'custom-api' as const].map((engine) => ({
           value: engine,
+          icon: <DictionaryEngineIcon engine={engine} />,
           label: (
             <>
               <span className={style.engineName}>{DICTIONARY_ENGINES[engine].name}</span>

@@ -84,7 +84,7 @@ function ModelProgress({ status, noun }: { status: DownloadStatus; noun: string 
 /**
  * The bar, the line and the buttons. `emphasis` makes the next step (Download, Resume, Retry) the
  * primary button; off while the panel is showing an engine that is not in use, whose primary
- * action is "Use this engine".
+ * action is "Use <name>".
  */
 export function ModelDownload({
   controls,

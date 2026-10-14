@@ -3,24 +3,31 @@
  * them, in the shape of the OCR engine chooser (`EngineChooser.tsx`), whose class names and
  * keyboard model it shares.
  *
- * - The ACTIVE engine is the one lookups use (`yomitanSettings.popupType`): the filled radio dot
- *   and "Active" in the panel. It is shown as active from the click, not from the saved setting,
- *   so the panel does not flash "Use this engine" during the write.
- * - The VIEWED engine is the one the panel describes. It starts as, and follows, the active one.
+ * - The VIEWED engine is the one the panel describes (highlighted in the list, and the listbox's
+ *   selected option). Clicking a row, or moving to it with the keyboard, only views it: its
+ *   description, pop-up picture, download and settings, with nothing changed.
+ * - The ACTIVE engine is the one lookups use (`yomitanSettings.popupType`). Its row carries a
+ *   green check (announced as "In use", and `aria-current`), and its panel says "Active". An
+ *   engine is made active only from its panel's header, "Use <name>"; it is shown as active from
+ *   the click, not from the saved setting, so the panel does not flash the button back during the
+ *   write. Choosing is the caller's (`onChoose`): it saves, mirrors and reloads the reader
+ *   windows, and for the Yomitan API opens its setup wizard.
  *
- * A click views and chooses at once; the keyboard looks without choosing (arrows, Home/End move
- * the highlight and the panel, Enter or Space chooses). A viewed engine that is not active offers
- * "Use this engine". Choosing is the caller's (`onChoose`): it saves, mirrors and reloads the
- * reader windows. Each engine's own settings come from `renderSettings`.
+ * The viewed engine starts as, and follows, the active one. The list is one tab stop: the arrow
+ * keys and Home/End move the highlight and the panel with it; Enter and Space on a row only view
+ * it. Tab moves on to the panel, whose button chooses; once used, focus goes back to the row.
  *
  * No engine is bundled: each is downloaded from its pinned upstream release when first chosen
- * (EXTENSION_DOWNLOADS.md). A viewed engine that is not downloaded offers "Download · 15 MB"
- * instead of "Use this engine"; the caller asks first, downloads, and switches only once the
- * download is ready (`pending` is the engine waiting for its download). The download's progress
- * block sits in the panel, and the overflow menu removes a downloaded engine that is not in use.
+ * (EXTENSION_DOWNLOADS.md). A viewed engine that is not downloaded offers its download in place
+ * of "Use <name>" ("Download · 15 MB", or "Use when downloaded" for one under way); the caller
+ * asks first, downloads, and switches only once the download is ready (`pending` is the engine
+ * waiting for its download, "Switching when ready"). The download's progress block sits in the
+ * panel, and the overflow menu removes a downloaded engine that is not in use.
  *
- * Copy comes from `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture under the
- * description from frontend/assets/dictionary-previews/ (`DictionaryPreview`).
+ * Each row leads with the engine's picture (`DictionaryEngineIcon`). Copy comes from
+ * `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture under the description from
+ * frontend/assets/dictionary-previews/ (`DictionaryPreview`). The decisions are
+ * `ui/engine-chooser.ts`.
  */
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, Cloud, Download, Ellipsis, ExternalLink, Monitor, Trash2 } from 'lucide-react'
@@ -45,8 +52,11 @@ import {
   removePrompt,
   type ExtensionEngine
 } from '@ui/extension-download'
+import { dictionaryUseAction, listKeyTarget, activateLabel } from '@ui/engine-chooser'
 import { ModelDownload } from './ModelDownload'
+import { InUseCheck } from './EngineChooser'
 import { DictionaryPreview } from '../../components/DictionaryPreview'
+import { DictionaryEngineIcon } from '../../components/EngineIcon'
 import './engine-chooser.css'
 import './dictionary-chooser.css'
 
@@ -70,16 +80,16 @@ function DictionaryItem({
   engine,
   id,
   viewed,
-  active,
-  onFocus,
-  onPick
+  inUse,
+  onView
 }: {
   engine: DictionaryEngine
   id: string
+  /** The panel shows this engine: the listbox's selected option. */
   viewed: boolean
-  active: boolean
-  onFocus: () => void
-  onPick: () => void
+  /** Lookups use this engine (or the pick being saved): the check mark. */
+  inUse: boolean
+  onView: () => void
 }): ReactNode {
   const info = DICTIONARY_ENGINES[engine]
   const status = useExtensionStatus(engine === 'custom-api' ? null : engine)
@@ -88,20 +98,17 @@ function DictionaryItem({
     <div
       id={id}
       role="option"
-      aria-selected={active}
+      aria-selected={viewed}
+      aria-current={inUse ? 'true' : undefined}
       tabIndex={viewed ? 0 : -1}
       className="engine-item"
       data-viewed={viewed ? '' : undefined}
-      data-active={active ? '' : undefined}
-      onFocus={onFocus}
-      // As in the OCR chooser: act on release only, so a press does not move the view first.
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={(event) => {
-        event.currentTarget.focus()
-        onPick()
-      }}
+      data-in-use={inUse ? '' : undefined}
+      // Focus views (the arrow keys, a click); nothing here makes the engine active.
+      onFocus={onView}
+      onClick={(event) => event.currentTarget.focus()}
     >
-      <span className="engine-item-radio" aria-hidden />
+      <DictionaryEngineIcon engine={engine} className="engine-item-icon" />
       <span className="engine-item-text">
         <span className="engine-item-name">
           {info.name}
@@ -114,6 +121,7 @@ function DictionaryItem({
         </span>
         <span className="engine-item-tagline">{info.tagline}</span>
       </span>
+      {inUse && <InUseCheck />}
     </div>
   )
 }
@@ -175,6 +183,7 @@ function DictionaryDetail({
   const status = download.status
   // Unknown (an older backend, the preview) counts as ready: nothing to download then.
   const ready = status === null || status.state === 'ready'
+  const action = dictionaryUseAction({ inUse, pending, download: status?.state ?? null })
   const [confirmRemove, setConfirmRemove] = useState(false)
   const removable = canRemoveExtension(status) && needs !== selectedDownload && download.pending === null
   const showMenu = engine !== 'custom-api' && status !== null && status.source !== 'development'
@@ -186,18 +195,18 @@ function DictionaryDetail({
           <RunsIcon engine={engine} />
           <ExperimentalBadge engine={engine} />
         </h3>
-        {inUse ? (
+        {action === 'active' ? (
           <Badge tone="accent">Active</Badge>
-        ) : pending ? (
+        ) : action === 'pending' ? (
           <Badge>Switching when ready</Badge>
-        ) : ready ? (
+        ) : action === 'use' ? (
           <Button size="sm" variant="primary" onClick={onUse}>
-            Use this engine
+            {activateLabel(info.name)}
           </Button>
         ) : (
           <Button size="sm" variant="primary" onClick={onUse}>
             <Download aria-hidden />
-            {status?.state === 'absent' ? downloadButtonLabel(status) : 'Use when downloaded'}
+            {action === 'download' ? downloadButtonLabel(status) : 'Use when downloaded'}
           </Button>
         )}
         {showMenu && (
@@ -301,39 +310,27 @@ export function DictionaryChooser({
   const itemId = (engine: DictionaryEngine): string => `${baseId}-dictionary-${engine}`
   const detailId = `${baseId}-detail`
 
-  const pick = (engine: DictionaryEngine): void => {
-    setViewed(engine)
-    if (engine !== active) onChoose(engine)
-  }
-
   const focusEngine = (engine: DictionaryEngine): void => {
     listRef.current?.querySelector<HTMLElement>(`#${CSS.escape(itemId(engine))}`)?.focus()
   }
 
+  // "Use <name>" (or its download): the only way an engine becomes active here.
+  const use = (engine: DictionaryEngine): void => {
+    if (engine === active) return
+    // The button gives way to "Active" (or a dialog), so the keyboard goes back to the engine's
+    // row rather than falling to the page; a dialog hands focus back there too.
+    focusEngine(engine)
+    onChoose(engine)
+  }
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const index = ENGINES.indexOf(viewed)
-    let next: number
-    switch (event.key) {
-      case 'ArrowDown':
-        next = Math.min(index + 1, ENGINES.length - 1)
-        break
-      case 'ArrowUp':
-        next = Math.max(index - 1, 0)
-        break
-      case 'Home':
-        next = 0
-        break
-      case 'End':
-        next = ENGINES.length - 1
-        break
-      case 'Enter':
-      case ' ':
-        event.preventDefault()
-        pick(viewed)
-        return
-      default:
-        return
+    // Enter and Space only view the row, which is viewed already; Space must not scroll the page.
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      return
     }
+    const next = listKeyTarget(event.key, ENGINES.indexOf(viewed), ENGINES.length)
+    if (next === null) return
     event.preventDefault()
     focusEngine(ENGINES[next])
   }
@@ -355,9 +352,8 @@ export function DictionaryChooser({
               engine={engine}
               id={itemId(engine)}
               viewed={engine === viewed}
-              active={engine === active}
-              onFocus={() => setViewed(engine)}
-              onPick={() => pick(engine)}
+              inUse={engine === active}
+              onView={() => setViewed(engine)}
             />
           ))}
         </div>
@@ -368,7 +364,7 @@ export function DictionaryChooser({
           inUse={viewed === active}
           pending={viewed === pending}
           selectedDownload={downloadEngineFor(active)}
-          onUse={() => pick(viewed)}
+          onUse={() => use(viewed)}
         >
           {renderSettings(viewed, viewed === active)}
         </DictionaryDetail>

@@ -115,6 +115,38 @@ Font License, Version 1.1; the full text is in LICENSE-OFL.txt. They are
 bundled in the app's web assets and the website.
 
 
+Engine icons
+------------
+
+The small pictures beside each OCR and dictionary engine in Settings and the
+welcome guide are in frontend/assets/engine-icons/ (README there):
+
+  - yomitan.svg: Yomitan's icon, ext/images/yomitan-icon.svg from
+    https://github.com/yomidevs/yomitan (release 26.8.24.0),
+    GPL-3.0-or-later; a viewBox added so it scales.
+  - yomitan-api.svg: the same Yomitan icon with a curly-brace badge added by
+    Kimochi (the Yomitan API), a modified version under GPL-3.0-or-later.
+  - hachidori.png: Hachidori's icon, icons/hachidori-128.png from
+    https://github.com/bee-san/hachidori (release 0.3.0), GPL-3.0-or-later,
+    resized to 64 px.
+  - tenten.svg: 10ten's icon, images/10ten.svg from
+    https://github.com/birchill/10ten-ja-reader (release v1.28.0),
+    GPL-3.0-or-later; a faint edge added so it shows on dark grounds.
+  - kimochi-cloud.svg: Kimochi's own icon (branding/), for Cloud OCR.
+  - google-lens.svg: the Google Lens icon as published by Google
+    (https://commons.wikimedia.org/wiki/File:Google_Lens_Icon.svg, marked
+    there as public domain), cropped to its artwork.
+  - windows.svg: the four-pane Windows logo, drawn for Kimochi, for OneOCR
+    (the OCR in Windows Snipping Tool).
+Apple Live Text, MeikiOCR and Manga OCR are shown with a lucide glyph
+(ScanText, ISC) or a monogram, not a logo.
+
+Google, Google Lens, Microsoft, Windows, Snipping Tool, Apple and Live Text
+are trademarks of their respective owners. Product names and logos are used
+only to identify the engine Kimochi talks to; this does not imply any
+affiliation with, or endorsement by, their owners.
+
+
 Sounds
 ------
 

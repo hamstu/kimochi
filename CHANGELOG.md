@@ -34,6 +34,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - The dictionary options have clearer names: **Built-in Yomitan** (a copy of Yomitan inside
   Kimochi, set up with its own or your exported dictionaries) and **Yomitan API** (formerly
   "Kimochi pop-up"). Your choice is kept.
+- Choosing an OCR or dictionary engine in Settings no longer switches the moment you click it:
+  clicking an engine shows what it does, and **Use** (for example "Use Google Lens") at the top of
+  its panel switches to it. The engine in use has a green check in the list, and each engine shows
+  its own icon.
 
 ### Fixed
 

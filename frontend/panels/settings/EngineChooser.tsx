@@ -1,26 +1,30 @@
 /**
- * Settings → OCR & Overlay → Engine: a list of the OCR engines beside a panel about one of them.
+ * Settings → OCR & Overlay → Engine (and onboarding's OCR step): a list of the OCR engines beside
+ * a panel about one of them.
  *
  * Two ideas, kept apart:
- * - The ACTIVE engine is the one scans use (`ocrMode`). It is marked by the filled radio dot in
- *   the list and "Active" in the panel. Choosing goes through `useEngineSelection`, as the
- *   sidebar's picker does, so a local engine whose model was never downloaded asks first
- *   (`DownloadConfirmDialog`); while it asks, the item shows as pending, and Cancel puts the dot
- *   back where it was. A pick is shown as active from the click, not from the saved setting, so
- *   the beat spent asking the model's status (and the write afterwards) does not flash "Use this
- *   engine" first.
- * - The VIEWED engine is the one the panel on the right describes (highlighted in the list).
- *   It starts as, and follows, the active engine.
+ * - The VIEWED engine is the one the panel on the right describes (highlighted in the list, and
+ *   the listbox's selected option). Clicking a row, or moving to it with the keyboard, only views
+ *   it: its description, settings and model download, with nothing changed.
+ * - The ACTIVE engine is the one scans use (`ocrMode`). Its row carries a green check (announced
+ *   as "In use", and `aria-current`), and its panel says "Active". An engine is made active only
+ *   from its panel's header, "Use <name>", which goes through `useEngineSelection` as the
+ *   sidebar's picker does: a local engine whose model was never downloaded asks first
+ *   (`DownloadConfirmDialog`), and while it asks the header says "Confirming…"; Cancel leaves the
+ *   engine in use as it was. A pick shows as active from the click, not from the saved setting, so
+ *   the beat spent asking the model's status (and the write afterwards) does not flash the button
+ *   back. An engine this computer cannot run can be viewed, to read why, but its button is
+ *   disabled and points at the reason.
  *
- * Clicking an item (on release, as a click is) views it and makes it active at once; nothing
- * happens on press. The keyboard can look without choosing: the list
- * is one tab stop, the arrow keys (and Home/End) move the highlight and the panel with it, and
- * Enter or Space makes the highlighted engine active. When the panel shows an engine that is not
- * in use (moved to by keyboard, or left there by a cancelled download), its header offers "Use
- * this engine". An engine this computer cannot run can be viewed, to read why, but not chosen.
+ * The viewed engine starts as, and follows, the active one (when it changes from elsewhere, such
+ * as the sidebar). The list is one tab stop: the arrow keys and Home/End move the highlight and
+ * the panel with it; Enter and Space on a row only view it. Tab moves on to the panel, whose
+ * "Use <name>" button chooses; once used, focus goes back to the engine's row (the button turns
+ * into the "Active" badge).
  *
- * Engines and their copy come from `OCR_MODES`; per-engine settings go in `EngineSettings`, and
- * per-engine overflow actions in `engineMenu` below.
+ * Each row leads with the engine's picture (`OcrEngineIcon`). Engines and their copy come from
+ * `OCR_MODES`; per-engine settings go in `EngineSettings`, and per-engine overflow actions in
+ * `engineMenu` below. The decisions are `ui/engine-chooser.ts`.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Check, Cloud, Ellipsis, Monitor, Trash2 } from 'lucide-react'
@@ -44,7 +48,9 @@ import {
   engineSelectable,
   type EngineHint
 } from '@ui/ocr-engines'
+import { listKeyTarget, ocrUseAction, activateLabel } from '@ui/engine-chooser'
 import { OCR_MODES, type OcrMode } from '../../bridge/settings'
+import { OcrEngineIcon } from '../../components/EngineIcon'
 import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
 import { useModelControls, useModelStatus } from '../../bridge/models'
 import { useEngineSelection } from '../../bridge/useEngineSelection'
@@ -67,25 +73,35 @@ function RunsIcon({ mode }: { mode: OcrMode }): ReactNode {
   )
 }
 
+/** The active engine's mark at the end of its row: a green check, read out as "In use". */
+export function InUseCheck(): ReactNode {
+  return (
+    <span className="engine-item-check">
+      <Check aria-hidden />
+      <span className="sr-only">In use</span>
+    </span>
+  )
+}
+
 function EngineItem({
   mode,
   id,
   engines,
   viewed,
-  active,
+  inUse,
   pending,
-  onFocus,
-  onPick
+  onView
 }: {
   mode: OcrMode
   id: string
   engines: Engines
+  /** The panel shows this engine: the listbox's selected option. */
   viewed: boolean
-  /** Shown as chosen: the saved engine, or the pick awaiting confirmation. */
-  active: boolean
+  /** Scans use this engine (or the pick being saved): the check mark. */
+  inUse: boolean
+  /** Chosen, but its model download is being asked about. */
   pending: boolean
-  onFocus: () => void
-  onPick: () => void
+  onView: () => void
 }): ReactNode {
   const info = OCR_MODES[mode]
   const status = useModelStatus(isModelEngine(mode) ? mode : null)
@@ -98,25 +114,18 @@ function EngineItem({
     <div
       id={id}
       role="option"
-      aria-selected={active}
-      aria-disabled={selectable ? undefined : true}
+      aria-selected={viewed}
+      aria-current={inUse ? 'true' : undefined}
       tabIndex={viewed ? 0 : -1}
       className="engine-item"
       data-viewed={viewed ? '' : undefined}
-      data-active={active ? '' : undefined}
-      data-pending={pending ? '' : undefined}
-      onFocus={onFocus}
-      // The mouse acts on release only: a native mousedown would focus the item, and focus moves
-      // the view, so the panel would switch to an engine that is not chosen until the click
-      // completes. Keyboard focus (the arrow keys) still views as it moves.
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={(event) => {
-        // A click views the engine as well as choosing it, so the keyboard carries on from here.
-        event.currentTarget.focus()
-        onPick()
-      }}
+      data-in-use={inUse ? '' : undefined}
+      data-unavailable={selectable ? undefined : ''}
+      // Focus views (the arrow keys, a click); nothing here makes the engine active.
+      onFocus={onView}
+      onClick={(event) => event.currentTarget.focus()}
     >
-      <span className="engine-item-radio" aria-hidden />
+      <OcrEngineIcon mode={mode} className="engine-item-icon" />
       <span className="engine-item-text">
         <span className="engine-item-name">
           {info.name}
@@ -131,6 +140,7 @@ function EngineItem({
           </Tooltip>
         )}
       </span>
+      {inUse && <InUseCheck />}
     </div>
   )
 }
@@ -156,6 +166,8 @@ function EngineDetail({
   const model = useModelControls(isModelEngine(mode) ? mode : null)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const headingId = `${id}-heading`
+  const reasonId = `${id}-reason`
+  const action = ocrUseAction({ inUse, pending, selectable })
   const runsOn = capability?.available ? acceleratorLabel(capability.accelerator) : null
   const capabilities = useCapabilities()
   const windows10 = capabilities.os === 'windows' &&
@@ -181,15 +193,21 @@ function EngineDetail({
           {info.name}
           <RunsIcon mode={mode} />
         </h3>
-        {inUse ? (
+        {action === 'active' ? (
           <Badge tone="accent">Active</Badge>
-        ) : pending ? (
+        ) : action === 'pending' ? (
           <Badge>Confirming…</Badge>
-        ) : selectable ? (
-          <Button size="sm" variant="primary" onClick={onUse}>
-            Use this engine
+        ) : (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={action === 'unavailable'}
+            aria-describedby={action === 'unavailable' ? reasonId : undefined}
+            onClick={onUse}
+          >
+            {activateLabel(info.name)}
           </Button>
-        ) : null}
+        )}
         {engineMenu && (
           <Menu>
             <Tooltip content="More">
@@ -217,7 +235,9 @@ function EngineDetail({
         {runsOn && ` On this computer it runs on ${runsOn}.`}
       </p>
       {!selectable && (
-        <Callout tone="warn">{capability?.reason || 'Not available on this computer.'}</Callout>
+        <Callout tone="warn" id={reasonId}>
+          {capability?.reason || 'Not available on this computer.'}
+        </Callout>
       )}
       {mode === 'oneocr' && capabilities.os === 'windows' && (
         <>
@@ -267,19 +287,24 @@ export function EngineChooser(): ReactNode {
 
   const itemId = (mode: OcrMode): string => `${baseId}-engine-${mode}`
   const detailId = `${baseId}-detail`
-  // Only a pick the download question is open for is pending. A pick still being decided, or
-  // written, already shows as active: `shown` leads `ocrMode` by a round trip, and the panel
-  // follows `shown` so it does not flash "Use this engine" in between.
+  // Only a pick the download question is open for is pending; meanwhile the saved engine is still
+  // the one in use. A pick still being decided, or written, already shows as in use: `shown`
+  // leads `ocrMode` by a round trip, and the panel follows `shown` so it does not flash the
+  // "Use" button back in between.
   const pendingMode = confirmation ? shown : null
-
-  const pick = (mode: OcrMode): void => {
-    setViewed(mode)
-    if (mode === shown || !engineSelectable(engines[mode])) return
-    choose(mode)
-  }
+  const inUseMode = pendingMode ? ocrMode : shown
 
   const focusMode = (mode: OcrMode): void => {
     listRef.current?.querySelector<HTMLElement>(`#${CSS.escape(itemId(mode))}`)?.focus()
+  }
+
+  // "Use <name>": the only way an engine becomes active here.
+  const use = (mode: OcrMode): void => {
+    if (mode === shown || !engineSelectable(engines[mode])) return
+    // The button gives way to "Active" (or the download question), so the keyboard goes back to
+    // the engine's row rather than falling to the page.
+    focusMode(mode)
+    choose(mode)
   }
 
   // The download question opens on its own (after the status arrives), so the dialog has no
@@ -299,29 +324,13 @@ export function EngineChooser(): ReactNode {
   }, [asking])
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const index = modes.indexOf(viewed)
-    let next: number | null = null
-    switch (event.key) {
-      case 'ArrowDown':
-        next = Math.min(index + 1, modes.length - 1)
-        break
-      case 'ArrowUp':
-        next = Math.max(index - 1, 0)
-        break
-      case 'Home':
-        next = 0
-        break
-      case 'End':
-        next = modes.length - 1
-        break
-      case 'Enter':
-      case ' ':
-        event.preventDefault()
-        pick(viewed)
-        return
-      default:
-        return
+    // Enter and Space only view the row, which is viewed already; Space must not scroll the page.
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      return
     }
+    const next = listKeyTarget(event.key, modes.indexOf(viewed), modes.length)
+    if (next === null) return
     event.preventDefault()
     focusMode(modes[next])
   }
@@ -344,10 +353,9 @@ export function EngineChooser(): ReactNode {
               id={itemId(mode)}
               engines={engines}
               viewed={mode === viewed}
-              active={mode === shown}
+              inUse={mode === inUseMode}
               pending={mode === pendingMode}
-              onFocus={() => setViewed(mode)}
-              onPick={() => pick(mode)}
+              onView={() => setViewed(mode)}
             />
           ))}
         </div>
@@ -356,9 +364,9 @@ export function EngineChooser(): ReactNode {
           mode={viewed}
           id={detailId}
           engines={engines}
-          inUse={viewed === shown && viewed !== pendingMode}
+          inUse={viewed === inUseMode}
           pending={viewed === pendingMode}
-          onUse={() => pick(viewed)}
+          onUse={() => use(viewed)}
         />
       </div>
       <DownloadConfirmDialog confirmation={confirmation} />
