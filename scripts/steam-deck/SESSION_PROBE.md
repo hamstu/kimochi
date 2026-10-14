@@ -495,3 +495,60 @@ Steam shortcut. At 12:38:05 PDT the actual app's portal session
 Steam PID 50945 stayed `Sl` with the controls open; only the independent touch
 helper was running, not a Steam-stop input lease. Physical controller/Steam-menu
 acceptance is awaiting the user; do not infer it solely from these native checks.
+
+### Continued native input lockout (2026-10-14, 12:41–12:45 PDT)
+
+User reported both game input and the Steam button still fail with 70b8de6,
+although Kimochi/controller overlay input works. **The preceding changes do not
+constitute physical acceptance or a confirmed fix of this lockout.**
+
+Captured Steam PID 50945 in `Sl`, app PID 64676, only touch helper PID 65371;
+Gamescope selected Kimochi. Stopped the real app/helpers, explicitly resumed
+Steam, restored the harness's root order `413091, 1244090, 769`, and sent the
+known WM_TAKE_FOCUS recovery. User: `Both still fail`.
+
+A read-only physical/virtual input observer saw physical button changes and
+Steam virtual Xbox axis/button reports. Wine reported the real game foreground
+HWND 0x20086 but `__wine_steamclient_GameOverlayActivated` **ACTIVE**, unlike the
+earlier harness failure where it was inactive. Reset that event once as a
+scoped diagnostic recovery, then verified `overlay-event=inactive`. User:
+`Input still fails`. Do not implement event resetting as a production fix or
+claim this flag is the sole cause. Steam remained running throughout.
+
+Saved controller log, routing observer and user journals before the authorized
+fallback session restart. Direct `restart gamescope-session.service` was refused
+(`Operation refused ... configured to refuse manual start/stop`); restarting its
+owning `gamescope-session.target` succeeded. New Gamescope PID 66288, Steam PID
+66547; Kimochi remains stopped for clean baseline testing. This closed the game
+and returned to PIN. No system package/config, controller profile, firmware or
+persistent device-permission changes were made.
+
+Next isolation: establish Steam/game baseline; test registered main-window
+switching without any modal guard; separately test overlay takeover/release.
+The native root-X-server main-window architecture must receive physical
+acceptance; the earlier single-process root-server probe only established
+window metadata, not complete physical-input equivalence to the two-process
+working harness.
+
+### Clean-session native acceptance confirmed (2026-10-14)
+
+After the authorized session restart, the user confirmed Steam/game controls
+were restored. Launched corrected native artifact
+`81ec1cd52eea42f00c43a3e0f9fb69d5b306e26a62876e2e7f618c2d60cc7491`
+through the existing Steam shortcut; app PID 67819, Steam PID 66547 remained
+running (`Sl`). Initial priority was `413091, 3826138355, 769`; no Steam-stop
+watchdog was present while ordinary controls were open.
+
+The user then confirmed **the full native flow works**: switching between
+Kimochi and the game through both Steam's running-app menu and the radial menu,
+scanning game text, and returning to game controls. User: “at no point did I
+lose control in the game, and everything worked really smoothly and nicely.”
+This supersedes the pending physical acceptance of the corrected artifact.
+
+The pre-restart session lockout remains documented, not retroactively explained
+away: non-restart recovery failed, and its ultimate internal Steam state was
+not proven. Clean-session acceptance establishes the corrected build works in
+this tested flow, not that all recovery/sleep/crash/long-duration cases are
+resolved. Those robustness cases, other games/handhelds and desktop compositors
+remain separate acceptance work. No further code changes were required after
+70b8de6 for this successful clean-session test.
