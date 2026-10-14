@@ -282,3 +282,18 @@ non-Wine/nonparticipating windows, and once-per-transition rearming. The relay i
 deployed in observe mode for repeat manual-switch acceptance; guarded controller
 loop acceptance remains a subsequent gate. Changes are confined to the opt-in
 Steam Deck harness, with no production/macOS/Windows implementation changes.
+
+### Focus-relay acceptance and guarded-loop retest
+
+**PASS, user confirmed:** repeated switching with the automatic Wine focus relay
+preserved game input; user reported everything working. Native logs recorded
+validated handoffs after returning from the overlay as well. Reintroduced
+`--input-mode guarded` on the transient overlay service at 11:27 on 2026-10-14,
+keeping the relay enabled. Game and Steam were not restarted. Test requires
+exclusive menu selection, B dismissal with game input recovery, and menu →
+Steam-managed app → both sticks → game. Guarded physical acceptance pending.
+
+Native guarded retest observed menu open at 11:27:59, watchdog paused Steam PID
+50945, Cancel at 11:28:04, relay sent WM_TAKE_FOCUS to game XID 33554433,
+and watchdog resumed Steam. Post-dismiss state was Steam Sl, game app 1244090
+selected. This confirms lifecycle ordering, not physical exclusivity by itself.
