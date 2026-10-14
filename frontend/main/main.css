@@ -1115,3 +1115,7 @@
 .sb-ocr-menu .k-menu-item-check {
   color: var(--k-ok-text);
 }
+
+.gaming-mode-notice { flex: none; border-radius: 0; border-width: 0 0 1px; }
+.gaming-mode-notice-row { display: flex; align-items: center; justify-content: space-between; gap: var(--k-space-3); flex-wrap: wrap; }
+.gaming-mode-chord { white-space: nowrap; }

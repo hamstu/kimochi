@@ -861,13 +861,36 @@ fn controller_nav(app: tauri::AppHandle, active: bool, take_focus: Option<bool>)
     #[cfg(target_os = "linux")]
     if platform::gamescope::active() {
         let previous = gamepad::set_navigation(&app, active, false);
-        let result = platform::steam_input::update(active)
+        let result = platform::gamescope::refresh_input_lease()
             .and_then(|()| app.get_webview_window("overlay").ok_or_else(|| "overlay unavailable".to_owned()))
             .and_then(|window| platform::gamescope::keyboard(&window, active));
         return json!({"previousPid": previous, "gamescopeInput": result.is_ok(), "error": result.err()});
     }
     let previous = gamepad::set_navigation(&app, active, take_focus.unwrap_or(true));
     json!({ "previousPid": previous })
+}
+
+/// Heartbeat for the focused Gaming Mode controls; never changes overlay navigation.
+#[tauri::command]
+fn panel_controller_input(app: tauri::AppHandle, label: String) -> std::result::Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::active() {
+        let window = app.get_webview_window(&label).ok_or("control window unavailable")?;
+        return platform::gamescope::control_heartbeat(&window);
+    }
+    let _ = (app, label);
+    Ok(())
+}
+
+/// Return from Gaming Mode controls to the game without opening another menu.
+#[tauri::command]
+fn return_to_game(app: tauri::AppHandle) {
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::active() {
+        gamepad::set_navigation(&app, false, false);
+        platform::gamescope::yield_to_steam(&app);
+    }
+    let _ = app;
 }
 
 /// The display under the pointer, for Quick Shot: the region is drawn where the
@@ -890,6 +913,11 @@ fn pointer_display() -> Option<platform::DisplayInfo> {
 /// (`macos:window:<window>:<pid>`); a display has nothing to bring forward.
 #[tauri::command]
 async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> {
+    #[cfg(target_os = "linux")]
+    if platform::gamescope::active() && source_id.starts_with("portal:") {
+        return_to_game(app);
+        return Ok(());
+    }
     #[cfg(target_os = "linux")]
     if source_id.starts_with("portal:window:") && platform::gnome::eligible_popup_session() {
         return platform::gnome::request("track", json!({"operation":"activate","sourceId":source_id})).map(|_| ());
@@ -2482,6 +2510,8 @@ fn main() {
             extension_fetch,
             region_keys,
             controller_nav,
+            panel_controller_input,
+            return_to_game,
             hotkeys_load,
             hotkeys_save,
             hotkeys_reapply,

@@ -1,6 +1,6 @@
 //! Gamescope-specific XWayland renderer with independent public portal capture.
 //! Only Kimochi's own overlay properties change; Steam windows are never modified.
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
 use tauri::{Emitter, Manager};
 use x11rb::{
     connection::Connection,
@@ -9,6 +9,37 @@ use x11rb::{
 };
 
 static EDITING: AtomicBool = AtomicBool::new(false);
+static CONTROL_OWNER: Mutex<Option<String>> = Mutex::new(None);
+static YIELDING: AtomicBool = AtomicBool::new(false);
+
+fn set_control_owner(owner: &mut Option<String>, label: &str, focused: bool) {
+    if focused { *owner = Some(label.to_owned()); }
+    else if owner.as_deref() == Some(label) { *owner = None; }
+}
+fn owns_input(navigation: bool, controls: bool, yielding: bool) -> bool {
+    !yielding && (navigation || controls)
+}
+/// Overlay navigation and focused controls share one watchdog: closing either
+/// must not release Steam while the other still owns controller input.
+pub fn refresh_input_lease() -> Result<(), String> {
+    let controls = CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()).is_some();
+    super::steam_input::update(owns_input(crate::gamepad::navigating(), controls, YIELDING.load(Ordering::SeqCst)))
+}
+pub fn control_focus(window: &tauri::WebviewWindow, focused: bool) {
+    if !active() || !controls(window) { return; }
+    set_control_owner(&mut CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()), window.label(), focused);
+    if let Err(error) = refresh_input_lease() { eprintln!("Gamescope controls input: {error}"); }
+}
+/// Renew only from the live, focused control document. If it hangs, the existing
+/// independent watchdog resumes Steam; native polling never renews this lease.
+pub fn control_heartbeat(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if !active() || !controls(window) || YIELDING.load(Ordering::SeqCst) { return Ok(()); }
+    if window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false) {
+        set_control_owner(&mut CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()), window.label(), true);
+        refresh_input_lease()?;
+    }
+    Ok(())
+}
 
 pub fn active() -> bool {
     kimochi_capture::gamescope_portal_now()
@@ -143,13 +174,13 @@ pub fn keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
     if !handles(window) {
         return Ok(());
     }
-    if !on { super::steam_input::update(false)?; }
+    if on { YIELDING.store(false, Ordering::SeqCst); }
     if on {
         hide_controls(window)?;
     }
     input(window, on)?;
     EDITING.store(on, Ordering::SeqCst);
-    Ok(())
+    refresh_input_lease()
 }
 pub fn is_visible(window: &tauri::WebviewWindow) -> bool {
     window.is_visible().unwrap_or(false)
@@ -163,8 +194,10 @@ pub fn show(window: &tauri::WebviewWindow) -> Result<(), String> {
     if active() && controls(window) {
         // Only one own control panel requests Steam-overlay focus at a time.
         hide_controls(window)?;
-        let _ = window.app_handle().emit("controller-nav-cancel", ());
         input(window, true)?;
+        YIELDING.store(false, Ordering::SeqCst);
+        control_focus(window, true);
+        let _ = window.app_handle().emit("controller-nav-cancel", ());
     }
     window.show().map_err(|e| e.to_string())
 }
@@ -174,6 +207,7 @@ pub fn hide(window: &tauri::WebviewWindow) -> Result<(), String> {
         property(window, b"_NET_WM_WINDOW_OPACITY", 0)?;
     }
     if active() && controls(window) {
+        control_focus(window, false);
         input(window, false)?;
     } else if handles(window) {
         keyboard(window, false)?;
@@ -198,6 +232,8 @@ pub fn prepare_exit(app: &tauri::AppHandle, _code: i32) -> bool {
 /// Release every control view before Steam handles its system-menu buttons.
 /// Keep passive annotations mapped, but stop requesting keyboard/input focus.
 pub fn yield_to_steam(app: &tauri::AppHandle) {
+    YIELDING.store(true, Ordering::SeqCst);
+    *CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()) = None;
     super::steam_input::handoff();
     let app = app.clone();
     let dispatch = app.clone();
@@ -211,4 +247,27 @@ pub fn yield_to_steam(app: &tauri::AppHandle) {
         }
         let _ = app.emit("controller-nav-cancel", ());
     });
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+    #[test]
+    fn closing_radial_keeps_focused_controls_owned() {
+        assert!(owns_input(true, false, false));
+        assert!(owns_input(true, true, false));
+        assert!(owns_input(false, true, false));
+        assert!(!owns_input(false, false, false));
+        assert!(!owns_input(true, true, true));
+    }
+    #[test]
+    fn late_blur_does_not_release_the_new_control_window() {
+        let mut owner = None;
+        set_control_owner(&mut owner, "log", true);
+        set_control_owner(&mut owner, "dictionary", true);
+        set_control_owner(&mut owner, "log", false);
+        assert_eq!(owner.as_deref(), Some("dictionary"));
+        set_control_owner(&mut owner, "dictionary", false);
+        assert_eq!(owner, None);
+    }
 }

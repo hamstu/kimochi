@@ -308,6 +308,7 @@ controller = createController({
       center: nativeGamescope ? gamescopeMenuCenter : area ? { x: area.x + area.width / 2, y: area.y + area.height / 2 } : null
     }
   },
+  get panelInputHandoff() { return window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope },
   run: async (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
     if (id === 'controls' || id === 'ocr-settings') {

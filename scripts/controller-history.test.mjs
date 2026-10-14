@@ -53,7 +53,7 @@ class Element {
     this.tagName = tag;
     this.nodeType = tag === "#text" ? 3 : 1;
     this.children = [];
-    this.style = {};
+    this.style = { setProperty(name, value) { this[name] = value; } };
     this.dataset = {};
     this.attributes = new Map();
     this.listeners = new Map();
@@ -88,6 +88,14 @@ class Element {
   set textContent(text) {
     this.replaceChildren();
     this.value = text;
+  }
+  set innerHTML(value) {
+    this.replaceChildren();
+    for (const match of value.matchAll(/class="([^"]+)"/g)) {
+      const child = new Element('span');
+      child.className = match[1];
+      this.append(child);
+    }
   }
   get length() {
     return this.textContent.length;
@@ -143,7 +151,7 @@ class Element {
   }
 }
 
-function controllerHarness(t, history) {
+function controllerHarness(t, history, overrides = {}) {
   const saved = {
     document: globalThis.document,
     window: globalThis.window,
@@ -153,6 +161,7 @@ function controllerHarness(t, history) {
   globalThis.Node = { TEXT_NODE: 3 };
   globalThis.document = {
     createElement: (tag) => new Element(tag),
+    createElementNS: (_, tag) => new Element(tag),
     createTextNode: (text) => new Element("#text", text),
     createRange: () => ({
       setStart(node, offset) {
@@ -237,6 +246,7 @@ function controllerHarness(t, history) {
     log: (record) => {
       logs.push(record);
     },
+    ...overrides,
   });
   t.after(async () => {
     await controller.close();
@@ -382,4 +392,27 @@ test("late archived-word segmentation cannot replace the list after B returns to
   assert.deepEqual(h.nav, [true]);
   await h.press(1);
   assert.deepEqual(h.nav, [true, false]);
+});
+
+test("Gaming Mode opens controls before releasing radial ownership", async (t) => {
+  let panelReady;
+  const events = [];
+  const h = controllerHarness(t, async () => [], {
+    panelInputHandoff: true,
+    run: async id => {
+      events.push(id);
+      await new Promise(resolve => { panelReady = resolve; });
+      events.push('panel-focused');
+    }
+  });
+  await h.controller.toggle();
+  for (let i = 0; i < 5; i++) await h.press(15);
+  await h.press(0);
+  assert.deepEqual(events, ['controls']);
+  assert.deepEqual(h.nav, [true], 'lease must remain live while panel is opening');
+  panelReady();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(events, ['controls', 'panel-focused']);
+  assert.deepEqual(h.nav, [true, false]);
+  assert.equal(h.controller.mode, 'idle');
 });

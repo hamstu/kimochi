@@ -571,13 +571,13 @@ export function SourcePanel({
     // Its foot holds what changes it: the region, and the source itself.
     card = (
       <div className="src-card src-card-live">
-        {isScreen ? (
+        {isScreen && !(capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope') ? (
           <div className="src-card-body">{preview}</div>
         ) : (
           <button
             type="button"
             className="src-card-body"
-            aria-label={`Bring ${title} to the front`}
+            aria-label={isScreen ? 'Return to game' : `Bring ${title} to the front`}
             onClick={() => controller.onActivateSource()}
             onMouseEnter={() => controller.onSourceHover(true)}
             onMouseLeave={() => controller.onSourceHover(false)}

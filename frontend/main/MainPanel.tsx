@@ -29,6 +29,7 @@ import { DEFAULT_WIDTH, MainSidebar, type MainView } from './MainSidebar'
 import { WhatsNewDialog } from './WhatsNewDialog'
 import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
+import { GamingModeNotice } from './GamingModeNotice'
 import './main.css'
 
 function initialView(): MainView {
@@ -159,6 +160,7 @@ export default function MainPanel(): JSX.Element {
           </span>
         </TitleBarPortal>
         <div className="main-frame">
+          <GamingModeNotice />
           {error && (
             <div
               className="native-panel-error"

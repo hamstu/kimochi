@@ -286,6 +286,12 @@ export function createController(context) {
       menu.close();
       return enterWords();
     }
+    // Gaming Mode transfers the live input lease to controls before the radial
+    // closes. Releasing first lets the game receive input during the handoff.
+    if (context.panelInputHandoff && (id === "controls" || id === "ocr-settings")) {
+      try { await context.run(id); } finally { await close(); }
+      return;
+    }
     await close();
     await new Promise((resolve) => setTimeout(resolve, ACTION_DELAY_MS));
     if (id !== "scan") return context.run(id);

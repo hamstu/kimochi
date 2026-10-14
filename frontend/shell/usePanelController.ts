@@ -1,5 +1,7 @@
 /** Focused controls use ordinary gamepad snapshots, independently of overlay navigation. */
 import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useCapabilities } from "../bridge/capabilities";
 import {
   onEvent,
   panel,
@@ -11,6 +13,20 @@ import type { GamepadState } from "../bridge/types";
 import { installPanelController } from "../../ui/panel-controller.js";
 
 export function usePanelController(label: string): void {
+  const capabilities = useCapabilities();
+  const gamingMode = capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope';
+  useEffect(() => {
+    if (!gamingMode) return;
+    const renew = (): void => {
+      if (!document.hasFocus() || document.visibilityState === 'hidden') return;
+      void invoke('panel_controller_input', { label }).catch((error: unknown) => {
+        console.warn('Gaming Mode controls input heartbeat failed', error);
+      });
+    };
+    renew();
+    const timer = window.setInterval(renew, 500);
+    return () => window.clearInterval(timer);
+  }, [gamingMode, label]);
   const [buttons] = useSetting<Record<string, number | null>>(
     "controllerButtons",
     {},

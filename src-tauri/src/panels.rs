@@ -589,8 +589,16 @@ fn attach_events(
     let owned = window.clone();
     crate::gamepad::panel_focus(spec.label, window.is_focused().unwrap_or(false));
     window.on_window_event(move |event| match event {
-        tauri::WindowEvent::Focused(focused) => crate::gamepad::panel_focus(spec.label, *focused),
-        tauri::WindowEvent::Destroyed => crate::gamepad::panel_focus(spec.label, false),
+        tauri::WindowEvent::Focused(focused) => {
+            crate::gamepad::panel_focus(spec.label, *focused);
+            #[cfg(target_os = "linux")]
+            platform::gamescope::control_focus(&owned, *focused);
+        },
+        tauri::WindowEvent::Destroyed => {
+            crate::gamepad::panel_focus(spec.label, false);
+            #[cfg(target_os = "linux")]
+            platform::gamescope::control_focus(&owned, false);
+        },
         tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
             save_bounds(&store, &owned, spec);
             if owned.is_minimized().unwrap_or(false) { crate::gamepad::panel_focus(spec.label, false); }
