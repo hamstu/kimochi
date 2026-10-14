@@ -193,3 +193,44 @@ independent input lease. Observation mode may pass menu controller input through
 to the game; that is expected during isolation, not acceptable final behavior.
 Do not enable the guard until game-only, concurrent Steam app/manual switching,
 and compositor switching without the guard preserve game input independently.
+
+### Isolation results after clean restart
+
+- **PASS, user confirmed:** game-only controller baseline after PIN unlock.
+- **FAIL, user confirmed:** launching the ordinary GTK Steam shortcut, manually
+  switching back through Steam, loses game input **before any overlay is opened**.
+  The guarded input helper was disabled. Therefore the guard and compositor
+  switching are not necessary to reproduce the initial fault.
+- A read-only PE diagnostic opened Proton's named
+  `__wine_steamclient_GameOverlayActivated` event in the game's existing prefix:
+  exact result `overlay-event=inactive`. The proposed stale-overlay-event cause
+  was **not confirmed**, and the event was not reset.
+- A separate no-window XInput diagnostic in that prefix reported slot 0 success
+  and button transitions `00001000` (A), `00002000` (B), `00000004`/`00000008`
+  (D-pad left/right). Slots 1–3 returned `0000048f` (not connected). This proves
+  usable XInput state in a fresh process, not the game's private XInput state.
+- **Diagnostic limitation:** user saw the stub selected during the button test.
+  Root compositor focus writes do not prove coherent Steam UI selection. A
+  synthetic click subsequently reached the stub, not the game; it is **not** a
+  valid game activation/recovery test. Do not infer game-side failure solely
+  from that interval. Earlier user-confirmed manual-switch failure remains valid.
+- Initial `proton run` diagnostic attempts additionally passed through Proton's
+  `steam.exe` launch wrapper and changed Steam's tracked process metadata. Later
+  successful probes invoked Wine directly inside the runtime, using the existing
+  prefix. That initial attempt is a confound for later focus observations;
+  avoid `proton run` for diagnostic utilities attached to a running game's prefix.
+  Logs included `wine: failed to start ...: c000007b` for an initial malformed PE;
+  removing non-loadable ELF metadata before PE linking corrected the utility.
+  The successful diagnostics had no window and sent no controller output.
+
+Relevant upstream report: [Valve steam-for-linux #13418](https://github.com/ValveSoftware/steam-for-linux/issues/13418)
+(open at inspection): game → Discord → game loses controller input. This matches
+our manual-switch symptom but does not establish the same cause or a fix.
+[Proton lsteamclient source](https://github.com/ValveSoftware/Proton/blob/proton_11.0/lsteamclient/steamclient_main.c)
+and [Wine XInput implementation](https://github.com/ValveSoftware/wine/blob/bleeding-edge/dlls/xinput1_3/main.c)
+explain the event suppression investigated above.
+
+Next isolation gate: keep stub running, relaunch only the game, then manually
+switch away/back. This separates second-app launch effects from repeated focus
+changes. Foreground harness lifetime increased to 900 seconds for this test;
+overlay service remains stopped. No forced controller-profile override is used.
