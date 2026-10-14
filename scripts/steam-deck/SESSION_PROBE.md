@@ -38,8 +38,15 @@ PYTHONDONTWRITEBYTECODE=1 python -m unittest discover \
 The earlier results below describe the touch-only baseline. Its claims of no
 Steam signals/root writes and no controller handling are superseded by this
 explicitly opt-in extension. The deployed controller sidecar has a 900-second
-service lifetime; each menu still auto-dismisses after 20 seconds. End-to-end
-physical controller-loop acceptance is pending.
+service lifetime; each menu still auto-dismisses after 20 seconds. End-to-end physical switching/menu navigation was user-confirmed, but **FAIL:
+game controller input was lost afterward**. Do not treat this loop as accepted.
+The sidecar was stopped for diagnosis. Steam was Sl, no watchdog survived,
+Gamescope and X11 focus selected Sea of Stars, and Steam selected its profile.
+A simultaneous read-only physical/virtual trace recorded matching A/B edges on
+hidraw2 and event10. Wine's open event10 descriptor matched the current device
+inode. Steam's normal Resume action did not recover game input. Thus a leftover
+Steam pause/grab is ruled out; the Proton/game input boundary and app-switch
+handoff remain under investigation. No game/session restart has been performed.
 
 ## Original touch-only baseline
 
@@ -157,3 +164,22 @@ The input-recovery production fix is separately committed as `bd75a66` on
 the fixed installed release. The real app stays stopped during the stub test;
 launch it from the original shortcut when returning to normal use. The stub
 expires automatically and can be relaunched from its separate Steam entry.
+
+### Recovery after input-loss failure
+
+User additionally reported all controller input (including Steam/PIN) unavailable
+following sleep/wake. No probe or watchdog was running and Steam was Sl. The
+runtime-only `steam://forceinputappid/1244090` diagnostic had not restored game
+input; it was cleared with `/0` before session recovery. Do not add that override
+to the harness: forcing a game profile can interfere with lock-screen routing.
+
+With explicit user authorization, stopped `gamescope-session.target`; SteamOS
+re-entered Gaming Mode automatically. The old game closed. Fresh Gamescope PID
+50566 and Steam PID 50945 started; Steam logged controller detection and UI
+profile 769 activation. No probe was restarted. The restart also applied an
+already-staged Steam client build change (1788652215 → 1791918634); no update was
+manually installed. This is a material variable for subsequent reproduction.
+Physical PIN/controller recovery remains pending user confirmation. Resume
+acceptance tests in separate stages: game alone, concurrent app/manual switching,
+controller menu without Steam pause, then guarded menu. Verify game input after
+every stage rather than accepting visible switching as proof of input recovery.
