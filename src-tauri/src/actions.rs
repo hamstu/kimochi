@@ -50,6 +50,12 @@ const RESTORES_OVERLAY: &[&str] = &[
 ];
 
 pub fn dispatch(app: &tauri::AppHandle, service: &Shared, name: &str) {
+    #[cfg(target_os = "linux")]
+    if name == "openControllerMenu" && crate::platform::gamescope::controls_routed() {
+        crate::gamepad::set_navigation(app,false,false);
+        crate::platform::gamescope::return_to_game(app);
+        return;
+    }
     let visibility = {
         let mut view = service.view.lock().unwrap();
         view.action_seq += 1;

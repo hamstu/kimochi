@@ -1,7 +1,9 @@
 import test from "node:test";
+import net from "node:net";
 import assert from "node:assert/strict";
 import {
   mkdtemp,
+  chmod,
   writeFile,
   readFile,
   readdir,
@@ -128,4 +130,24 @@ test("release companion contains everything needed for installation including th
   assert.match(contents.stdout, /Kimochi-Gaming-Mode\/kimochi.png/);
   assert.match(contents.stdout, /Kimochi-Gaming-Mode\/INSTALL.txt/);
   assert.match(contents.stdout, /Kimochi-Gaming-Mode\/Kimochi.AppImage/);
+});
+
+
+test("Steam launch tracks the real process and preserves its registered app ID", gnuOnly, async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "kimochi-steam-launch-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const socket = path.join(directory, "gamescope-0");
+  const server = net.createServer();
+  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(socket, resolve); });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const app = path.join(directory, "fake-app");
+  await writeFile(app, '#!/bin/sh\nprintf "%s\\n" "$$" "$DISPLAY" "$KIMOCHI_STEAM_MANAGED" "$KIMOCHI_STEAM_APP_ID" "$SteamAppId"\n');
+  await chmod(app, 0o755);
+  const launcher = fileURLToPath(new URL("./steam-deck/launch-from-steam.sh", import.meta.url));
+  const result = spawnSync("sh", [launcher, app], { encoding: "utf8", env: {
+    ...process.env, DISPLAY: ":1", SteamAppId: "3826138355", KIMOCHI_STEAM_APP_ID: "",
+    KIMOCHI_GAMESCOPE_DISPLAY: socket,
+  }});
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.stdout.trim().split("\n"), [String(result.pid), ":0", "1", "3826138355", "3826138355"]);
 });

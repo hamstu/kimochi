@@ -10,6 +10,7 @@ use x11rb::{
 
 static EDITING: AtomicBool = AtomicBool::new(false);
 static CONTROL_OWNER: Mutex<Option<String>> = Mutex::new(None);
+static ROUTED_AWAY: AtomicBool = AtomicBool::new(false);
 static YIELDING: AtomicBool = AtomicBool::new(false);
 
 fn set_control_owner(owner: &mut Option<String>, label: &str, focused: bool) {
@@ -28,13 +29,25 @@ pub fn refresh_input_lease() -> Result<(), String> {
 }
 pub fn control_focus(window: &tauri::WebviewWindow, focused: bool) {
     if !active() || !controls(window) { return; }
+    if focused && super::gamescope_focus::owns_input(std::process::id()) {
+        YIELDING.store(false, Ordering::SeqCst);
+        ROUTED_AWAY.store(false, Ordering::SeqCst);
+    }
     set_control_owner(&mut CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()), window.label(), focused);
     if let Err(error) = refresh_input_lease() { eprintln!("Gamescope controls input: {error}"); }
 }
 /// Renew only from the live, focused control document. If it hangs, the existing
 /// independent watchdog resumes Steam; native polling never renews this lease.
 pub fn control_heartbeat(window: &tauri::WebviewWindow) -> Result<(), String> {
-    if !active() || !controls(window) || YIELDING.load(Ordering::SeqCst) { return Ok(()); }
+    if !active() || !controls(window) { return Ok(()); }
+    if !super::gamescope_focus::owns_input(std::process::id()) {
+        ROUTED_AWAY.store(true, Ordering::SeqCst);
+        return Ok(());
+    }
+    if YIELDING.load(Ordering::SeqCst) {
+        if !ROUTED_AWAY.swap(false, Ordering::SeqCst) { return Ok(()); }
+        YIELDING.store(false, Ordering::SeqCst);
+    }
     if window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false) {
         set_control_owner(&mut CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()), window.label(), true);
         refresh_input_lease()?;
@@ -44,6 +57,50 @@ pub fn control_heartbeat(window: &tauri::WebviewWindow) -> Result<(), String> {
 
 pub fn active() -> bool {
     kimochi_capture::gamescope_portal_now()
+}
+/// Steam keeps this process alive as the registered app, rather than a thin launcher.
+pub fn managed() -> bool {
+    active() && std::env::var("KIMOCHI_STEAM_MANAGED").as_deref() == Ok("1")
+        && super::gamescope_handoff::own_id().is_some()
+}
+pub(super) fn managed_controls(window: &tauri::WebviewWindow) -> bool {
+    managed() && controls(window)
+}
+pub(super) fn prepare_control(window: &tauri::WebviewWindow) -> Result<(),String> {
+    window.set_focusable(true).map_err(|e|e.to_string())?;
+    window.set_skip_taskbar(false).map_err(|e|e.to_string())?;
+    window.set_always_on_top(false).map_err(|e|e.to_string())?;
+    property(window,b"STEAM_GAME",super::gamescope_handoff::own_id().ok_or("Steam app ID unavailable")?)?;
+    Ok(())
+}
+pub fn start() { super::gamescope_handoff::start(); }
+pub fn controls_routed() -> bool {
+    managed() && !crate::gamepad::navigating()
+        && CONTROL_OWNER.lock().unwrap_or_else(|e|e.into_inner()).is_some()
+        && super::gamescope_focus::owns_input(std::process::id())
+}
+pub fn return_to_game(app: &tauri::AppHandle) {
+    if !managed() { yield_to_steam(app); return; }
+    let Some(game) = super::gamescope_handoff::game_id() else {
+        eprintln!("Gamescope return: select a running game through Steam first"); return;
+    };
+    YIELDING.store(true,Ordering::SeqCst);
+    ROUTED_AWAY.store(false,Ordering::SeqCst);
+    *CONTROL_OWNER.lock().unwrap_or_else(|e|e.into_inner())=None;
+    let _=super::steam_input::update(false);
+    let app=app.clone();
+    let dispatch=app.clone();
+    let _=dispatch.run_on_main_thread(move || {
+        for window in app.webview_windows().into_values() {
+            if controls(&window) {
+                crate::gamepad::panel_focus(window.label(),false);
+                if window.label() != "log" { let _=window.hide(); }
+            } else if window.label()=="overlay" { let _=keyboard(&window,false); }
+        }
+        if let Some(main)=app.get_webview_window("log") { let _=main.show(); }
+        if let Err(error)=super::gamescope_handoff::select(game) { eprintln!("Gamescope return: {error}"); }
+        let _=app.emit("controller-nav-cancel",());
+    });
 }
 pub fn handles(window: &tauri::WebviewWindow) -> bool {
     active() && (window.label() == "overlay" || controls(window))
@@ -98,6 +155,13 @@ fn input(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
         }
 
     }
+    if managed_controls(window) {
+        prepare_control(window)?;
+        property(window,b"STEAM_OVERLAY",0)?;
+        property(window,b"STEAM_INPUT_FOCUS",0)?;
+        if on { super::gamescope_touch::show(window.app_handle()); }
+        return Ok(());
+    }
     window.set_focusable(on).map_err(|e| e.to_string())?;
     property(window, b"STEAM_OVERLAY", u32::from(on))?;
     property(window, b"STEAM_INPUT_FOCUS", u32::from(on))?;
@@ -108,6 +172,7 @@ fn hide_controls(window: &tauri::WebviewWindow) -> Result<(), String> {
     for other in window.app_handle().webview_windows().into_values() {
         if other.label() != window.label()
             && controls(&other)
+            && !(managed() && other.label() == "log")
             && other.is_visible().unwrap_or(false)
         {
             input(&other, false)?;
@@ -179,6 +244,9 @@ pub fn keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
     if on {
         hide_controls(window)?;
     }
+    if on && managed() && window.label()=="overlay" {
+        if let Some(game)=super::gamescope_handoff::game_id() { super::gamescope_handoff::select(game)?; }
+    }
     input(window, on)?;
     EDITING.store(on, Ordering::SeqCst);
     refresh_input_lease()
@@ -200,9 +268,18 @@ pub fn show(window: &tauri::WebviewWindow) -> Result<(), String> {
         control_focus(window, true);
         let _ = window.app_handle().emit("controller-nav-cancel", ());
     }
-    window.show().map_err(|e| e.to_string())
+    window.show().map_err(|e| e.to_string())?;
+    if managed_controls(window) {
+        super::gamescope_handoff::select(super::gamescope_handoff::own_id().ok_or("Steam app ID unavailable")?)?;
+        window.set_focus().map_err(|e|e.to_string())?;
+    }
+    Ok(())
 }
 pub fn hide(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if managed_controls(window) && window.label()=="log" {
+        return_to_game(window.app_handle());
+        return Ok(());
+    }
     if active() && window.label() == "overlay" {
         let _ = window.emit("controller-nav-cancel", ());
         property(window, b"_NET_WM_WINDOW_OPACITY", 0)?;
@@ -213,7 +290,11 @@ pub fn hide(window: &tauri::WebviewWindow) -> Result<(), String> {
     } else if handles(window) {
         keyboard(window, false)?;
     }
-    window.hide().map_err(|e| e.to_string())
+    window.hide().map_err(|e| e.to_string())?;
+    if managed_controls(window) {
+        if let Some(main)=window.app_handle().get_webview_window("log") { show(&main)?; }
+    }
+    Ok(())
 }
 /// XWayland destroy/disconnect passes the focused lifecycle probes; no native
 /// wl_surface workaround or delayed GTK teardown is needed on this transport.
@@ -240,7 +321,7 @@ pub fn yield_to_steam(app: &tauri::AppHandle) {
     let dispatch = app.clone();
     let _ = dispatch.run_on_main_thread(move || {
         for window in app.webview_windows().into_values() {
-            if controls(&window) {
+            if controls(&window) && !managed() {
                 let _ = hide(&window);
             } else if window.label() == "overlay" {
                 let _ = keyboard(&window, false);

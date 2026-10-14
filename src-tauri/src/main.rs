@@ -888,7 +888,7 @@ fn return_to_game(app: tauri::AppHandle) {
     #[cfg(target_os = "linux")]
     if platform::gamescope::active() {
         gamepad::set_navigation(&app, false, false);
-        platform::gamescope::yield_to_steam(&app);
+        platform::gamescope::return_to_game(&app);
     }
     let _ = app;
 }
@@ -2912,6 +2912,8 @@ fn main() {
                 &service,
                 json!({ "check": "hotkeys-applied", "result": shortcuts }),
             );
+            #[cfg(target_os = "linux")]
+            platform::gamescope::start();
             gamepad::start(&handle, &service);
 
             {

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Steam runs this short-lived launcher; the app itself belongs to a user service.
+# Steam tracks the actual app; independent native helpers guard modal input.
 set -eu
 if [ "$#" -eq 0 ]; then
   echo 'Usage: sh launch-from-steam.sh /absolute/path/to/Kimochi.AppImage [arguments...]' >&2
@@ -13,8 +13,7 @@ export KIMOCHI_GAMESCOPE_SCALE=${KIMOCHI_GAMESCOPE_SCALE:-1}
 export KIMOCHI_GAMESCOPE_UI_SCALE=${KIMOCHI_GAMESCOPE_UI_SCALE:-1.5}
 # Steam supplies the launcher's ID. Do not mistake this library entry for the game.
 export KIMOCHI_STEAM_APP_ID=${KIMOCHI_STEAM_APP_ID:-${SteamAppId:-}}
-if systemctl --user is-active --quiet kimochi-gaming-mode.service; then
-  # The existing single-instance handler opens the first app's controls and exits.
-  exec /bin/sh "$script_dir/launch-gaming-mode.sh" "$@"
-fi
-exec /bin/sh "$script_dir/launch-gaming-mode-service.sh" "$@"
+# Keep Steam's launcher process attached to the actual application. Its normal
+# STEAM_GAME controls and external overlays share one native process/data store.
+export KIMOCHI_STEAM_MANAGED=1
+exec /bin/sh "$script_dir/launch-gaming-mode.sh" "$@"

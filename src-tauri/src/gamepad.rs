@@ -150,6 +150,14 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 "buttonStates": buttons,
                 "axisStates": axes,
             });
+            #[cfg(target_os = "linux")]
+            let state = {
+                let mut state = state;
+                if crate::platform::gamescope::active() {
+                    state["controlsInputOwner"] = json!(crate::platform::gamescope::controls_routed());
+                }
+                state
+            };
             // Every change goes out, and the unchanged state now and then, so a window opened
             // since still learns what is connected.
             let stale = broadcast
@@ -221,6 +229,8 @@ pub fn panel_focus(label: &str, focused: bool) {
 /// Whether one of Kimochi's ordinary windows (main, Settings, Diagnostics, Dictionary,
 /// onboarding) has the keyboard. Never the overlay or the pop-up.
 pub fn panel_focused() -> bool {
+    #[cfg(target_os = "linux")]
+    if crate::platform::gamescope::managed() && !crate::platform::gamescope::controls_routed() { return false; }
     PANEL_FOCUS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some()
 }
 

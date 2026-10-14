@@ -267,6 +267,10 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     let gtk_window = w.gtk_window().map_err(|e| e.to_string())?;
     // make_panel is called on the main thread during window setup only.
     unsafe { gtk_widget_realize(gtk_window.as_ptr().cast()) };
+    if super::gamescope::managed_controls(w) {
+        super::gamescope::prepare_control(w)?;
+        return Ok(false);
+    }
     w.set_focusable(false).map_err(|e| e.to_string())?;
     w.set_skip_taskbar(true).map_err(|e| e.to_string())?;
     w.set_always_on_top(true).map_err(|e| e.to_string())?;

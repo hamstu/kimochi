@@ -207,6 +207,10 @@ pub fn run_watchdog() -> bool {
                 break;
             }
             paused = true;
+            if let Err(error) = super::controller_neutral::release() {
+                eprintln!("Gamescope input watchdog: {error}; releasing input");
+                break;
+            }
             eprintln!("Gamescope input watchdog: paused Steam PID {pid}");
         }
     }

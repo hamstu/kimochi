@@ -61,9 +61,13 @@ export function usePanelController(label: string): void {
       onSettingsChanged((key) => {
         if (key === "hotkeys" || key.startsWith("hotkeys.")) refreshChord();
       }),
-      onEvent<GamepadState>("gamepad", (payload) =>
-        controller.snapshot(payload),
-      ),
+      onEvent<GamepadState & { controlsInputOwner?: boolean }>("gamepad", (payload) => {
+        if (gamingMode && payload.controlsInputOwner === false) {
+          controller.reset();
+          return;
+        }
+        controller.snapshot(payload);
+      }),
       onEvent("controller-nav-cancel", () => controller.reset()),
     ];
     const stops: (() => void)[] = [];
@@ -80,5 +84,5 @@ export function usePanelController(label: string): void {
       controller.destroy();
       stops.forEach((stop) => stop());
     };
-  }, [label, buttons]);
+  }, [label, buttons, gamingMode]);
 }

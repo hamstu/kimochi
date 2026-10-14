@@ -364,3 +364,83 @@ PID 56949, neutralized event10 axes to zero and restored Steam Sl on dismissal.
 Ten tests pass, including normal-start guarded default and explicit mode/lifetime
 propagation through on-demand service creation. Physical tilted-stick retest is
 pending; do not count the prior observe-mode attempt against neutral handoff.
+
+## Native Kimochi integration, 2026-10-14
+
+User confirmed the final guarded/neutralized harness works excellently. Native
+integration is on **feat/steam-managed-kimochi**, based on the completed harness
+branch. A focused extra probe established that a normal STEAM_GAME app on root
+XWayland :0 is Steam-managed just like the :1 stub (app 2999444207 selected,
+keyboard routed to :0). Therefore the real app can retain **one Tauri process**,
+shared WebKit data store, dictionary database, settings and OCR service. No
+second controls process, replicated state or new IPC layer is needed.
+
+The Steam launcher now execs the real AppImage (rather than detaching a service)
+with `KIMOCHI_STEAM_MANAGED=1` and Steam's real app ID. Ordinary controls are normal
+focusable STEAM_GAME windows, without STEAM_OVERLAY/STEAM_INPUT_FOCUS. The reader
+remains an external overlay; explicit editing/navigation owns modal input. The
+native Wine relay mirrors the proven ownership/timestamp/protocol checks. The
+independent native pause watchdog neutralizes matching Steam virtual pads after
+SIGSTOP and retains the existing timeout/focus-loss/EOF recovery.
+
+Explicit Return-to-game and the controller-menu chord in focused controls switch
+to the remembered running game. Main stays mapped behind it so Steam's running-app
+switcher can select it again; closing a secondary panel returns to main. Steam
+system-menu buttons release input without forcing a competing game selection.
+One-shot priority updates preserve other entries, without the probe's hardcoded
+413091 prefix. A stale GTK focus state cannot authorize native controls/actions
+or drive controller navigation in background React panels: actual compositor
+ownership is supplied in Linux Gaming Mode gamepad snapshots.
+
+### Changes / scope
+
+- Linux-only `gamescope_handoff.rs`: regular app selection, game identity fallback,
+  one-shot WM_TAKE_FOCUS activation on validated Wine ownership transitions.
+- Linux-only `controller_neutral.rs` and watchdog: scoped evdev neutral frame,
+  no physical/HID writes, no device permission changes.
+- Linux-only `gamescope.rs` / `window.rs`: normal Steam controls, return/show/hide
+  behavior, authoritative input ownership and touch/zoom retained.
+- Linux-gated branches in `main.rs`, `actions.rs`, `gamepad.rs`: startup relay,
+  return command/chord and controller ownership snapshots.
+- `usePanelController.ts`: existing Linux/Gamescope capability gate prevents
+  background controls from navigating on game inputs. Other platforms unchanged.
+- Steam launcher stays attached to native app; an executable launcher regression
+  test checks child PID, display, managed flag and registered app ID.
+- No macOS/Windows native files, vendor assets, lockfiles, dependency/model versions
+  or SteamOS system configuration changed. No PR/main push.
+
+### Build / deployment
+
+- JS: **813 passed, 2 skipped, 0 failed**. Verify, typecheck and lint pass.
+  Current main's verify output is `Verified: dist/ holds no dictionary engine,
+  and the pinned records are exact.` (dictionary distribution changed on main;
+  no vendor manifest or hashes edited here).
+- x86_64 app Clippy passes; Rust tests **266 passed, 2 ignored**.
+- x86_64 capture-core: **67 passed**; Clippy qualified with EXTERNAL MSRV 1.87.
+  First attempt using the app's external MSRV 1.88 hit Rust 1.99's existing
+  `chunks_exact_to_as_chunks` lint (6 library / 9 test errors). Preserved error
+  log, used separate external capture config; no shared-code refactor/allow.
+- App uses external MSRV 1.88 because current main uses as_chunks. Resource-limited
+  existing rootless build container: 2 CPUs, 6 GiB. No tool/dependency upgrades.
+- Built frontend and debug native binary, then repacked the existing validated
+  dependency-complete AppDir (same packaged libraries/runtime; native binary and
+  embedded frontend rebuilt). Nonfatal existing AppStream metadata warnings.
+- Artifact: `Kimochi-steam-managed.AppImage`, SHA-256
+  `a48bcd063607b77b896d82b6f9f0ca520ef87dfb936a2c4aed14bf8ca49eda3b`.
+- Installed as user-local release `releases/1792005105-58907`; previous installed
+  `releases/1791998752-47498` retained for rollback. Settings/dictionaries retained.
+- Stopped probe service/app; launched the original registered Kimochi shortcut
+  (app **3826138355**, launch ID **16433139104729792512**). Native Kimochi PID 58960
+  is tracked by Steam; Sea of Stars PID 54834 remained running. Focusable app list
+  contained **3826138355, 1244090, 769**. No Steam/Gamescope/game restart.
+- Main xid **0x3200020**: 1280×800, STEAM_GAME=3826138355,
+  STEAM_OVERLAY=0, STEAM_INPUT_FOCUS=0, no external-overlay marker,
+  _NET_WM_WINDOW_TYPE_NORMAL, WM_HINTS input=True. Native watchdog logged neutral
+  handoff and controlled Steam pause while controls were focused.
+- Existing Hachidori engine/background/content reported ready in the unchanged
+  user data at `~/.local/share/dev.kimochi.app/evidence.jsonl`.
+
+Physical acceptance of native main/radial/Steam switching, touch, OCR and
+lookup remains pending user verification; harness acceptance is not substituted
+for full-app runtime acceptance. Native logs/build output/property dumps are
+retained under ignored `evidence/steam-deck-bringup/managed-app/`.
