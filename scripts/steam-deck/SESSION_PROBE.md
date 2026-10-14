@@ -234,3 +234,51 @@ Next isolation gate: keep stub running, relaunch only the game, then manually
 switch away/back. This separates second-app launch effects from repeated focus
 changes. Foreground harness lifetime increased to 900 seconds for this test;
 overlay service remains stopped. No forced controller-profile override is used.
+
+### Confirmed Wine activation gap and targeted recovery
+
+App-first launch order also failed, per user. Investigation continued inside the
+actual running game (PID 54834, Proton 11.0) rather than relying on the separate
+XInput process:
+
+- Read-only inspection found controller slot 0 enabled in both loaded XInput
+  DLLs, with changing cached state. Their exported GetState functions retained
+  Wine entry code, rather than a replacement Steam jump at the entry point.
+- A bounded debugger trace caught the game's actual `XInputGetState(0)` and its
+  return: success (`0`) with nonzero packet/axis state. The initial trace stopped
+  on Wine SIGUSR1 before the return and is invalid; corrected tracing passed
+  Wine's internal SIGUSR1/SIGUSR2 through and verified the return address.
+  Debugger detached and removed its temporary breakpoints each time.
+- While Gamescope graphics/input and X11 focus selected Sea of Stars, Wine's
+  `GetForegroundWindow()` returned **0x10020**, untitled, Windows PID **0xd4**.
+  The visible Sea of Stars HWND was **0x20086**, Windows PID **0x134**. A normal
+  Windows `SetForegroundWindow` attempt returned false.
+- The game advertised `WM_TAKE_FOCUS` in `WM_PROTOCOLS`. Sent exactly one ICCCM
+  ClientMessage to its X11 client **0x2000001**, using a fresh X server timestamp.
+  Wine then reported foreground **0x20086 / Sea of Stars**; Gamescope remained on
+  app **1244090**. **PASS, user confirmed: game controls worked again**, without
+  game, Steam or compositor restart. No event flag, Wine binary, game memory,
+  prefix setting, controller profile or system package was modified for recovery.
+
+This matches the activation gap described in
+[Wine's Proton 11 branch](https://github.com/ValveSoftware/wine/blob/e60892cc2398b0a83c332a2078c7b85e47bdb42b/dlls/winex11.drv/event.c#L880):
+`X11DRV_FocusIn` can return without activating when `use_take_focus` is enabled;
+its comment explicitly identifies Gamescope's missing WM_TAKE_FOCUS support.
+The WM_PROTOCOLS handler performs the intended activation. This is a confirmed
+local mechanism/recovery, not proof of the root cause of every report in #13418.
+
+`gamescope_focus_relay.py` implements that handoff for the harness. On each
+ownership transition it requires graphics app == input app == target window's
+STEAM_GAME, matching valid keyboard/mouse display names, a Wine window marker,
+and advertised WM_TAKE_FOCUS. Steam/Kimochi are excluded. It obtains a real server
+timestamp, rechecks ownership, and sends once. No root property writes, grabs,
+forced app selection, controller events or Steam signals occur in the relay.
+It runs separately so its Xlib error handling cannot alter GTK, and exits after
+EOF/no heartbeat (2.5 seconds). A disappearing target is handled as a normal X11
+race. No persistent focus enforcement is added.
+
+Five harness tests pass, including rejection of mismatched/incomplete ownership,
+non-Wine/nonparticipating windows, and once-per-transition rearming. The relay is
+deployed in observe mode for repeat manual-switch acceptance; guarded controller
+loop acceptance remains a subsequent gate. Changes are confined to the opt-in
+Steam Deck harness, with no production/macOS/Windows implementation changes.

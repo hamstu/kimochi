@@ -442,7 +442,19 @@ def main():
                 hide_overlay()
         return True
     GLib.timeout_add(500, touch_heartbeat)
+    focus_relay = None
     if args.role == 'overlay':
+        # Separate process: its Xlib error handler cannot affect GTK.
+        focus_relay = subprocess.Popen([sys.executable, str(Path(__file__).with_name('gamescope_focus_relay.py'))], stdin=subprocess.PIPE, start_new_session=True)
+        def relay_heartbeat():
+            try:
+                focus_relay.stdin.write(b'A')
+                focus_relay.stdin.flush()
+                return True
+            except (OSError, ValueError):
+                report('wine-focus-relay-stopped')
+                return False
+        GLib.timeout_add(500, relay_heartbeat)
         def controller():
             nonlocal game_app_id, selected
             fd = None
@@ -533,6 +545,9 @@ def main():
             send('overlay', 'hide')
         except OSError:
             pass
+    if focus_relay is not None:
+        focus_relay.stdin.close()
+        threading.Thread(target=focus_relay.wait, daemon=True).start()
     server.close()
     report('exited', role=args.role)
 

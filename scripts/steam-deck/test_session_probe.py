@@ -43,5 +43,35 @@ class ControllerReports(unittest.TestCase):
         self.assertEqual(probe.controller_buttons(packet), set())
 
 
+class WineFocusHandoff(unittest.TestCase):
+    def setUp(self):
+        path = Path(__file__).with_name('gamescope_focus_relay.py')
+        spec = importlib.util.spec_from_file_location('focus_relay', path)
+        self.relay = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.relay)
+        self.target = dict(app=1244090, graphics=1244090, keyboard=':1', mouse=':1',
+                           window_app=1244090, wine=True, protocol=True,
+                           excluded={0, 769, 2999444207})
+
+    def test_requires_coherent_game_input_ownership(self):
+        self.assertTrue(self.relay.eligible_target(**self.target))
+        for key, value in [('app',769), ('app',2999444207), ('graphics',769),
+                           ('keyboard',':0'), ('keyboard','evil'), ('mouse',''),
+                           ('window_app',2999444207), ('wine',False), ('protocol',False)]:
+            with self.subTest(key=key,value=value):
+                self.assertFalse(self.relay.eligible_target(**dict(self.target,**{key:value})))
+
+    def test_sends_once_and_rearms_after_menu_or_app_handoff(self):
+        gate = self.relay.Transition()
+        game = (1244090, ':1', 33554433)
+        self.assertFalse(gate.changed(None))
+        self.assertTrue(gate.changed(game))
+        self.assertFalse(gate.changed(game))
+        self.assertFalse(gate.changed(None))
+        self.assertTrue(gate.changed(game))
+        self.assertFalse(gate.changed(game))
+        self.assertTrue(gate.changed((1244090, ':1', 33554434)))
+
+
 if __name__ == '__main__':
     unittest.main()
