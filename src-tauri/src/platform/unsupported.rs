@@ -95,6 +95,10 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     Err(UNSUPPORTED.into())
 }
 
+pub fn source_spaces(_: &[kimochi_capture::Source]) -> std::collections::HashMap<String, String> {
+    Default::default()
+}
+
 pub fn window_bounds(_id: &SourceId) -> Option<(Rect, bool)> {
     None
 }

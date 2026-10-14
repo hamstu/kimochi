@@ -115,7 +115,10 @@ pub fn picker_sources() -> Result<Vec<Source>, String> {
         }
         let pid = window_pid(hwnd);
         let class = class_name(hwnd);
-        let is_cloaked = cloaked(hwnd);
+        // Cloaked because it is on another desktop: open, and readable once the reader goes
+        // there, so listed (off screen) rather than dropped with the suspended UWP surfaces.
+        let elsewhere = cloaked(hwnd) && super::desktops::elsewhere(hwnd).is_some();
+        let is_cloaked = cloaked(hwnd) && !elsewhere;
         let meta = rules::WindowMeta {
             visible,
             iconic,
@@ -146,13 +149,27 @@ pub fn picker_sources() -> Result<Vec<Source>, String> {
             app,
             bounds,
             on_screen: Some(
-                bounds.is_some_and(|b| {
-                    rules::on_screen(visible, iconic, is_cloaked, b.width, b.height)
-                }),
+                !elsewhere
+                    && bounds.is_some_and(|b| {
+                        rules::on_screen(visible, iconic, is_cloaked, b.width, b.height)
+                    }),
             ),
         });
     }
     Ok(sources)
+}
+
+/// The desktop each window source on another virtual desktop is on ("Desktop 2"), keyed
+/// by source id.
+pub fn source_spaces(sources: &[Source]) -> HashMap<String, String> {
+    sources
+        .iter()
+        .filter(|source| source.kind == "window" && source.on_screen == Some(false))
+        .filter_map(|source| {
+            let hwnd = resolve(&SourceId::parse(&source.id)?)?;
+            Some((source.id.clone(), super::desktops::elsewhere(hwnd)?))
+        })
+        .collect()
 }
 
 /// Resolve a window source id to a live handle, or `None` if it is not a Windows window

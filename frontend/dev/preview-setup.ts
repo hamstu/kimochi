@@ -394,7 +394,7 @@ const HANDLERS: Record<string, Handler> = {
       on_screen: s.on_screen
     })),
   source_catalog: () =>
-    SOURCES.map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon })),
+    SOURCES.map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon, space: s.space })),
   source_thumbnail: (a) => {
     const s = SOURCES.find((x) => x.id === a?.sourceId)
     if (!s) return { url: '' }

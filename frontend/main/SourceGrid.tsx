@@ -30,6 +30,8 @@ export interface CatalogSource {
   name: string
   app?: string | null
   icon?: string | null
+  /** Where an off-screen window is open: "Full screen", "Desktop 2". */
+  space?: string | null
 }
 
 const isDisplay = (source: CatalogSource): boolean =>
@@ -96,6 +98,8 @@ function Tile({
             },
             () => {}
           )
+        // On another Space or desktop: nothing is drawn there to preview from here.
+        if (source.space) return
         void thumbnail(source.id, () => live).then(
           (result) => {
             if (live) setUrl(result.url || null)
@@ -113,7 +117,7 @@ function Tile({
       live = false
       observer.disconnect()
     }
-  }, [source.id, source.app, root])
+  }, [source.id, source.app, source.space, root])
   const Icon = isDisplay(source) ? Monitor : AppWindow
   const detail = source.app ? source.name || 'Untitled window' : null
   return (
@@ -121,7 +125,7 @@ function Tile({
       ref={ref}
       className="sg-tile"
       data-current={current ? '' : undefined}
-      title={[source.app, source.name].filter(Boolean).join(' — ')}
+      title={[source.app, source.name, source.space].filter(Boolean).join(' — ')}
       onSelect={onChoose}
     >
       <span className="sg-thumb">
@@ -138,10 +142,15 @@ function Tile({
         ) : (
           <span className="sg-thumb-placeholder">
             <Icon />
-            {failed && <span>No preview</span>}
+            {source.space ? (
+              <span>Previews once it is showing</span>
+            ) : (
+              failed && <span>No preview</span>
+            )}
           </span>
         )}
         {current && <span className="sg-current">Current</span>}
+        {source.space && <span className="sg-space">{source.space}</span>}
       </span>
       <span className="sg-caption">
         {icon ? (

@@ -25,6 +25,7 @@
 //! set_input_regions(&WebviewWindow, Option<&[Rect]>) -> Result<bool, String>  // optional, see below
 //! make_panel(&WebviewWindow) -> Result<bool, String>
 //! picker_sources() -> Result<Vec<Source>, String>
+//! source_spaces(&[Source]) -> HashMap<String, String>  // off-screen windows' Space/desktop name
 //! window_bounds(&SourceId) -> Option<(Rect, bool)>
 //! front_window() -> Option<FrontWindow>
 //! frontmost_app() -> Option<String>

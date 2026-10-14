@@ -5,6 +5,7 @@
 //! per-OS contract described in `platform/mod.rs`, and the shared types it returns live
 //! there.
 pub mod instance;
+mod spaces;
 
 use super::{AppIdentity, DisplayInfo, FrontWindow, Modifiers, PointerSample};
 use block2::RcBlock;
@@ -15,7 +16,7 @@ use objc2::{msg_send, AllocAnyThread, ClassType};
 use objc2_app_kit::{
     NSApplication, NSBitmapImageFileType, NSBitmapImageRep, NSCursor,
     NSCursorFrameResizeDirections, NSCursorFrameResizePosition, NSImage, NSPanel, NSScreen,
-    NSWindow, NSWindowStyleMask, NSWorkspace, NSWorkspaceApplicationKey,
+    NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask, NSWorkspace, NSWorkspaceApplicationKey,
     NSWorkspaceDidActivateApplicationNotification, NSWorkspaceDidWakeNotification,
     NSWorkspaceWillSleepNotification,
 };
@@ -442,13 +443,33 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
         let mask = NSWindowStyleMask((*p).styleMask().0 | NONACTIVATING_PANEL);
         (*p).setStyleMask(mask);
         (*p).setHidesOnDeactivate(false);
+        (*p).setCollectionBehavior(overlay_behavior((*p).collectionBehavior()));
         Ok(true)
     }
+}
+
+/// Where an overlay-family panel may appear: on every Space, full-screen ones included.
+///
+/// A window belongs to the Space it was opened on, so without this the overlay, the
+/// pop-up and the dictionary stayed on the desktop Kimochi started on: a game in its
+/// own full-screen Space got no Quick Shot, no text and no pop-up. Joining all Spaces
+/// puts them on whichever one is showing; `FullScreenAuxiliary` is what lets a window of
+/// another application sit over a full-screen app at all. Ignoring the window cycle keeps
+/// Cmd-` from landing on a transparent surface.
+fn overlay_behavior(current: NSWindowCollectionBehavior) -> NSWindowCollectionBehavior {
+    (current - NSWindowCollectionBehavior::MoveToActiveSpace)
+        | NSWindowCollectionBehavior::CanJoinAllSpaces
+        | NSWindowCollectionBehavior::FullScreenAuxiliary
+        | NSWindowCollectionBehavior::IgnoresCycle
 }
 
 /// Metadata only: avoids ScreenCaptureKit enumeration and all pixel/icon work.
 /// The window server already knows which normal windows are on the current desktop.
 /// Capture still resolves the selected ID through fresh ScreenCaptureKit content.
+///
+/// Windows on another Space are listed too, as off screen: a game in full screen has a
+/// Space of its own and is never on the one Kimochi's window is on, so the picker would
+/// otherwise never offer it. `source_spaces` names where they are.
 pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     objc2::rc::autoreleasepool(|_| unsafe {
         if !CGPreflightScreenCaptureAccess() {
@@ -480,8 +501,11 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
                 }
             })
             .collect();
-        // kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements.
-        let ptr = CGWindowListCopyWindowInfo(1 | (1 << 4), 0);
+        let spaces = spaces::Spaces::current();
+        // kCGWindowListOptionAll | kCGWindowListExcludeDesktopElements when the Spaces can be
+        // told apart, so windows on other Spaces come too; on screen only when they cannot.
+        let options = if spaces.is_some() { 1 << 4 } else { 1 | (1 << 4) };
+        let ptr = CGWindowListCopyWindowInfo(options, 0);
         let list: Retained<objc2_foundation::NSArray<NSDictionary<NSString, AnyObject>>> =
             Retained::from_raw(ptr.cast()).ok_or("native: Could not list windows")?;
         let own = std::process::id();
@@ -523,6 +547,13 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
             if !picker_window_eligible(layer, pid, own, b.size.width, b.size.height, &name) {
                 continue;
             }
+            let on_screen = entry
+                .objectForKey(ns_string!("kCGWindowIsOnscreen"))
+                .is_some_and(|value| msg_send![&*value, boolValue]);
+            // Off screen and on no other Space: hidden, minimised or merely retained.
+            if !on_screen && !spaces.as_ref().is_some_and(|s| s.elsewhere(id).is_some()) {
+                continue;
+            }
             sources.push(kimochi_capture::Source {
                 id: SourceId::window(Platform::MacOs, id, pid).to_string(),
                 kind: "window",
@@ -534,11 +565,27 @@ pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
                     width: b.size.width,
                     height: b.size.height,
                 }),
-                on_screen: Some(true),
+                on_screen: Some(on_screen),
             });
         }
         Ok(sources)
     })
+}
+
+/// Mission Control's name for the Space each off-screen window source is on ("Full screen",
+/// "Desktop 2"), keyed by source id. Windows on the Space that is showing are left out.
+pub fn source_spaces(sources: &[kimochi_capture::Source]) -> std::collections::HashMap<String, String> {
+    let Some(spaces) = spaces::Spaces::current() else {
+        return Default::default();
+    };
+    sources
+        .iter()
+        .filter(|source| source.kind == "window" && source.on_screen == Some(false))
+        .filter_map(|source| {
+            let number = SourceId::parse(&source.id)?.handle_u32()?;
+            Some((source.id.clone(), spaces.elsewhere(number)?))
+        })
+        .collect()
 }
 
 fn picker_window_eligible(layer: u32, pid: u32, own: u32, width: f64, height: f64, title: &str) -> bool {

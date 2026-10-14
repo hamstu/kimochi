@@ -13,6 +13,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- Full-screen games and other desktops work. On macOS the overlay, Quick Shot and the dictionary
+  pop-up now appear over an app in its own full-screen Space, and the source picker lists windows
+  on other Spaces, tagged "Full screen" or "Desktop 2". On Windows they follow you to whichever
+  virtual desktop the game is on, and the picker lists windows on other desktops too. A window
+  on another Space or desktop starts reading when you switch to it.
 - Google Lens is a new OCR engine, and the default for new installs: accurate on Japanese,
   horizontal or vertical, with nothing to download. It sends each capture to Google, so choose a
   local engine in Settings → OCR & Overlay if you'd rather nothing leave your computer. Existing

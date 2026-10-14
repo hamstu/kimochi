@@ -379,6 +379,14 @@ mod wgc {
                 if unsafe { IsIconic(h) }.as_bool() {
                     return Err(minimized());
                 }
+                // On another virtual desktop: Windows Graphics Capture would wait out its
+                // timeout for frames DWM is not composing.
+                if is_cloaked(h) {
+                    return Err(CaptureError::new(
+                        "unavailable",
+                        "Window is on another desktop; switch to that desktop to read it.",
+                    ));
+                }
             }
             Target::Display { hmonitor } => {
                 if !monitors()?.contains(&hmonitor) {

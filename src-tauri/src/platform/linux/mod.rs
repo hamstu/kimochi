@@ -148,6 +148,11 @@ pub fn with_pool<R>(f: impl FnOnce() -> R) -> R {
 /// Displays, then listable windows front to back (`kimochi_capture::x11::Desktop::
 /// sources`). X11 needs no permission to list windows. Wayland has no inventory: the
 /// system picker chooses (`pickerRequired`).
+/// X11 unmaps windows on other workspaces, so the picker never lists one to name.
+pub fn source_spaces(_: &[kimochi_capture::Source]) -> std::collections::HashMap<String, String> {
+    Default::default()
+}
+
 pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
     if on_x11() {
         x11::picker_sources()

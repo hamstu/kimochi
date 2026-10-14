@@ -528,6 +528,15 @@ const PANEL_SUBCLASS_ID: usize = 0x4B49_4D4F; // "KIMO"
 static PANELS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 static EDITING: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
+/// Bring the overlay family onto the virtual desktop `foreground` is on: a window belongs
+/// to one desktop, so without this the overlay, the pop-up and the dictionary stayed
+/// wherever Kimochi started and a game on another desktop got none of them. Called for
+/// every change of foreground window, which a desktop switch always is.
+pub(super) fn follow_desktop(foreground: HWND) {
+    let panels = PANELS.lock().unwrap().clone();
+    super::desktops::follow(foreground, &panels);
+}
+
 fn is_panel(hwnd: HWND) -> bool {
     PANELS.lock().unwrap().contains(&(hwnd.0 as usize))
 }

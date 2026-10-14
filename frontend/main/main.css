@@ -984,6 +984,19 @@
   font-weight: var(--k-weight-semibold);
   line-height: 1.125rem;
 }
+.sg-space {
+  position: absolute;
+  bottom: var(--k-space-1);
+  left: var(--k-space-1);
+  padding: 0 var(--k-space-1-5);
+  border-radius: 999px;
+  background: var(--k-bg);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: 1.125rem;
+}
 .sg-caption {
   display: flex;
   align-items: center;

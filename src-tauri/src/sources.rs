@@ -188,7 +188,7 @@ fn icon_for(service: &Service, app: Option<&str>) -> Option<Arc<str>> {
     encoded
 }
 
-fn entry(source: &Source) -> Value {
+fn entry(source: &Source, space: Option<&String>) -> Value {
     json!({
         "id": source.id,
         // capture-core calls a screen a "display"; the picker contract uses the same word.
@@ -197,6 +197,9 @@ fn entry(source: &Source) -> Value {
         "app": source.app,
         "bounds": source.bounds,
         "on_screen": source.on_screen,
+        // Where an off-screen window is ("Full screen", "Desktop 2"): open, readable once the
+        // reader goes there, but with nothing to preview from here.
+        "space": space,
         "icon": null,
     })
 }
@@ -215,7 +218,8 @@ pub fn catalog() -> Result<Vec<Value>, String> {
             .then_with(|| a.app.cmp(&b.app))
             .then_with(|| a.name.cmp(&b.name))
     });
-    let result: Vec<_> = sources.iter().map(entry).collect();
+    let spaces = platform::source_spaces(&sources);
+    let result: Vec<_> = sources.iter().map(|s| entry(s, spaces.get(&s.id))).collect();
     Ok(result)
 }
 
@@ -548,7 +552,7 @@ pub fn pick_source(service: &Shared) -> Result<Value, String> {
             // The same path as choosing a tile in the grid: keep a region saved for it.
             let selection = select_keeping_crop(service, &source.id)?;
             let desktop = platform::DesktopGeometry::current().source_to_desktop(source.clone());
-            Ok(json!({ "picked": true, "source": entry(&desktop), "selection": selection }))
+            Ok(json!({ "picked": true, "source": entry(&desktop, None), "selection": selection }))
         }
         PickResult::None => Ok(not_picked("cancelled", NOT_SHARED)),
         PickResult::Several => Ok(not_picked(

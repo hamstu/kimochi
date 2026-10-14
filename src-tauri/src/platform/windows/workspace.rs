@@ -155,6 +155,8 @@ unsafe extern "system" fn activate_proc(
     if event != EVENT_SYSTEM_FOREGROUND || hwnd.is_invalid() {
         return;
     }
+    // Per window, before the per-process filter: switching desktops within one app counts.
+    super::window::follow_desktop(hwnd);
     let pid = window_pid(hwnd);
     if pid == 0 {
         return;

@@ -345,6 +345,8 @@ export interface DemoSource {
   icon?: string | null
   bounds: { x: number; y: number; width: number; height: number }
   on_screen: boolean
+  /** An off-screen window's Space or desktop, as the picker labels it. */
+  space?: string
   hue: number
 }
 
@@ -356,6 +358,7 @@ export const SOURCES: DemoSource[] = [
   { id: 'window:103', kind: 'window', name: 'YouTube — Google Chrome', app: 'Google Chrome', hue: 5, on_screen: true, bounds: { x: 0, y: 25, width: 1440, height: 900 } },
   { id: 'window:104', kind: 'window', name: 'mpv — 葬送のフリーレン 第12話.mkv', app: 'mpv', hue: 280, on_screen: true, bounds: { x: 300, y: 100, width: 1280, height: 720 } },
   { id: 'window:105', kind: 'window', name: 'Kindle — よつばと！ 1', app: 'Kindle', hue: 45, on_screen: false, bounds: { x: 400, y: 60, width: 900, height: 1200 } },
+  { id: 'window:108', kind: 'window', name: 'ペルソナ５ ザ・ロイヤル', app: 'P5R', hue: 0, on_screen: false, space: 'Full screen', bounds: { x: 0, y: 0, width: 1512, height: 982 } },
   // Awkward shapes: a tall, thin sidebar and a tiny utility window (smaller than a tile).
   { id: 'window:106', kind: 'window', name: '縦書きリーダー', app: 'Vertical Reader', hue: 190, on_screen: true, bounds: { x: 20, y: 40, width: 180, height: 900 } },
   { id: 'window:107', kind: 'window', name: 'Mini timer', app: 'Timer', hue: 120, on_screen: true, bounds: { x: 900, y: 600, width: 96, height: 60 } }
