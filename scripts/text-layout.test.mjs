@@ -434,3 +434,36 @@ test('a column of ellipses keeps its bubble\'s size, centred on its tight box', 
   close(runs[0].lead + runs[0].fontSize, 29 / 2, 'centred on its box')
   assert.equal(runs[0].spacing, 0)
 })
+
+test('a bubble\'s columns break where the source does, judged together at one pitch', () => {
+  // Manga OCR on a whole spread (キルコ). Shared out column by column, by each region's length over
+  // its breadth and then snapped to a pause, the short first column lost its words to the next.
+  const cases = [
+    // …おい／キルコ嬢の様子／変じゃね？: the pause after … is two characters from the break.
+    ['…おいキルコ嬢の様子変じゃね？', [[1346, 701, 1386, 779], [1321, 703, 1353, 858], [1291, 703, 1324, 818]],
+      ['…おい', 'キルコ嬢の様子', '変じゃね？']],
+    // どうせあの／いつも買ってる／まんが本だろ: breadths of 32, 30 and 25 for one size of glyph.
+    ['どうせあのいつも買ってるまんが本だろ', [[1207, 705, 1239, 818], [1178, 706, 1208, 862], [1152, 706, 1177, 838]],
+      ['どうせあの', 'いつも買ってる', 'まんが本だろ']],
+    // やっぱ／立ち読みなんて／するもんじゃないな。: the first region took in the next one's ruby.
+    ['やっぱ立ち読みなんてするもんじゃないな。', [[576, 288, 624, 373], [554, 291, 586, 450], [524, 291, 556, 498]],
+      ['やっぱ', '立ち読みなんて', 'するもんじゃないな。']],
+    // キルコ嬢、ソレ／買わないんで？: a pause two characters short of the break is not where it is.
+    ['キルコ嬢、ソレ買わないんで？', [[1557, 119, 1595, 274], [1532, 121, 1562, 276]],
+      ['キルコ嬢、ソレ', '買わないんで？']],
+    // あぁ…／オタク over めんどくせぇ…: one column in two pieces, the blank between not counted.
+    ['あぁ…オタクめんどくせぇ…', [[1075, 908, 1109, 988], [1069, 822, 1103, 898], [1047, 908, 1079, 1069]],
+      ['あぁ…オタク', 'めんどくせぇ…']]
+  ]
+  for (const [text, regions, expected] of cases) {
+    const lines = regions.map(([x1, y1, x2, y2]) => ({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 }))
+    const rect = {
+      x: Math.min(...lines.map((l) => l.x)),
+      y: Math.min(...lines.map((l) => l.y)),
+      width: Math.max(...lines.map((l) => l.x + l.width)) - Math.min(...lines.map((l) => l.x)),
+      height: Math.max(...lines.map((l) => l.y + l.height)) - Math.min(...lines.map((l) => l.y))
+    }
+    const [runs] = layoutParts([{ text, rect, lines, block: true, vertical: true }], em)
+    assert.deepEqual(runs.map((run) => run.text), expected)
+  }
+})

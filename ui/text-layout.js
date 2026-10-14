@@ -73,8 +73,11 @@ const PARALLEL = 1.2
  * in a block of joined bubbles: an ellipsis or a column of narrow kana is thinner than a full glyph.
  */
 const OPEN = 0.8
-/** How many characters a line break measured off line lengths may move to land after a pause. */
-const NUDGE = 2
+
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted.length ? sorted[(sorted.length - 1) >> 1] : 1
+}
 
 /** Characters as the reader sees them: one per code point. */
 export const chars = (text) => [...text]
@@ -126,17 +129,25 @@ export function distribute(text, lineRects, vertical) {
   const all = chars(text.replace(/\n/g, ''))
   const length = (rect) => (vertical ? rect.height : rect.width)
   const thick = (rect) => Math.max(1, vertical ? rect.width : rect.height)
-  const capacities = lines.map((rect) => length(rect) / thick(rect))
+  // A block's lines share a pitch, so each holds characters in proportion to its length. Their
+  // breadths say little: ruby, kana and a slanted hand make lines of one size anywhere from three
+  // quarters to one and a half times as broad as each other.
+  const pitch = median(lines.filter((rect) => !rect.open).map(thick))
+  const lengths = lines.map((rect) => (vertical && rect.extent != null ? rect.extent : length(rect)))
   // An open line (see `columns`) has no length of its own: it holds what the others have no room for.
   const open = lines.filter((rect) => rect.open).length
   if (open) {
-    const known = capacities.reduce((sum, value, i) => sum + (lines[i].open ? 0 : value), 0)
-    const rest = Math.max(1, all.length - known) / open
+    const known = lengths.reduce((sum, value, i) => sum + (lines[i].open ? 0 : value), 0)
+    const rest = (Math.max(1, all.length - known / pitch) * pitch) / open
     lines.forEach((rect, i) => {
-      if (rect.open) capacities[i] = rest
+      if (rect.open) lengths[i] = rest
     })
   }
-  const shares = settle(all, apportion(all.length, capacities))
+  // An open line's length is a guess, so it does not count at all.
+  const weights = lines.map((rect) =>
+    rect.open ? 0 : rect.guessed || thick(rect) > BROAD * pitch ? UNSURE : 1
+  )
+  const shares = breaks(all, lengths, weights)
   let at = 0
   return lines
     .map((rect, index) => {
@@ -161,31 +172,112 @@ export function distribute(text, lineRects, vertical) {
  * breadth, each starting at the box's edge.
  */
 /**
- * Shares of `all` moved so a line ends after a pause (BREAK_AFTER) when one lies within NUDGE
- * characters of where the line lengths put the break: lengths measured off a detector's line
- * regions are approximate, and a bubble's lines break after 」 or 、 far more often than a
- * character before or after one. Every line keeps at least one character.
+ * Where a block's lines break, from how long each is.
+ *
+ * The lines of one bubble share a pitch, so the breaks are chosen together: the counts that, at the
+ * one pitch that best fits them, best explain every line's length (least squares, by dynamic
+ * programming over the breaks, refitting the pitch until it settles). Rounding each break on its
+ * own lets one line measured long — a short first column with ruby beside it, やっぱ — take a
+ * character from the next. Japanese line breaking rules are kept: no line ends on an opening
+ * bracket or begins with a closing mark or a pause (、。」…ー), and a break just after a pause is
+ * slightly preferred, as lettering breaks there. Every line keeps at least one character.
+ * Returns each line's share.
  */
-function settle(all, shares) {
-  const ends = []
-  let at = 0
-  for (const share of shares) ends.push((at += share))
+function breaks(all, lengths, weights = lengths.map(() => 1)) {
+  const n = all.length
+  const lines = lengths.length
+  if (!lines) return []
+  const total = lengths.reduce((sum, value) => sum + Math.max(0, value), 0)
+  if (total <= 0 || n < lines) return apportion(n, lengths)
+  // The cells a line of `count` characters ending at `end` fills with ink: a final 。 or 、 sits at
+  // the head of its cell, so the region the detector boxed stops well short of the cell's end.
+  const cells = (count, end) => count - (SHORT_END.has(all[end - 1]) ? SHORT_END_CELLS : 0)
+  const allowed = (cut) =>
+    cut === n || (!OPENING.has(all[cut - 1]) && !NO_START.has(all[cut]))
   const pause = (cut) => BREAK_AFTER.has(all[cut - 1]) && !BREAK_AFTER.has(all[cut])
-  for (let i = 0; i + 1 < ends.length; i++) {
-    const low = (i ? ends[i - 1] : 0) + 1
-    const high = ends[i + 1] - 1
-    const cut = ends[i]
-    if (pause(cut)) continue
-    for (let d = 1; d <= NUDGE; d++) {
-      const found = [cut + d, cut - d].find((c) => c >= low && c <= high && pause(c))
-      if (found != null) {
-        ends[i] = found
-        break
+  // The best counts at one pitch, by dynamic programming over the breaks.
+  const at = (pitch) => {
+    // cost[i][c]: the best cost of setting the first c characters as the first i lines.
+    const cost = Array.from({ length: lines + 1 }, () => new Array(n + 1).fill(Infinity))
+    const from = Array.from({ length: lines + 1 }, () => new Array(n + 1).fill(-1))
+    cost[0][0] = 0
+    for (let i = 1; i <= lines; i++)
+      for (let c = i; c <= n - (lines - i); c++) {
+        if (i < lines ? !allowed(c) : c !== n) continue
+        const bonus = i < lines && pause(c) ? PAUSE_PREFERENCE * pitch * pitch : 0
+        // Latest break first, so of two equally good the earlier lines are the fuller, as they fill.
+        for (let b = c - 1; b >= i - 1; b--) {
+          const miss = lengths[i - 1] - cells(c - b, c) * pitch
+          // Longer lines only miss by more from here: a measured line twice overfilled is done.
+          if (weights[i - 1] > 0 && miss < -(lengths[i - 1] + 2 * pitch)) break
+          if (cost[i - 1][b] === Infinity) continue
+          const value = cost[i - 1][b] + weights[i - 1] * miss * miss - bonus
+          if (value < cost[i][c]) {
+            cost[i][c] = value
+            from[i][c] = b
+          }
+        }
       }
+    if (cost[lines][n] === Infinity) return null
+    const counts = new Array(lines)
+    for (let i = lines, c = n; i > 0; c = from[i][c], i--) counts[i - 1] = c - from[i][c]
+    return counts
+  }
+  const average = total / n
+  // Their cost at the pitch that fits them best, so counts found at different pitches compare.
+  const score = (counts) => {
+    let end = 0
+    const filled = counts.map((count) => cells(count, (end += count)))
+    const fitted =
+      filled.reduce((sum, count, i) => sum + weights[i] * count * lengths[i], 0) /
+      Math.max(1e-9, filled.reduce((sum, count, i) => sum + weights[i] * count * count, 0))
+    const pitch = Math.min(average * 1.3, Math.max(average * 0.7, fitted))
+    let breaksAt = 0
+    return counts.reduce((sum, count, i) => {
+      breaksAt += count
+      const miss = lengths[i] - filled[i] * pitch
+      const bonus = i < lines - 1 && pause(breaksAt) ? PAUSE_PREFERENCE * pitch * pitch : 0
+      return sum + weights[i] * miss * miss - bonus
+    }, 0)
+  }
+  // The pitch is unknown, and one count found too long or short moves it: every pitch from well
+  // under to well over the average is tried, and the counts that fit best at their own pitch win.
+  let shares = null
+  let best = Infinity
+  for (let step = 0; step <= PITCH_STEPS; step++) {
+    const counts = at(average * (0.7 + (0.6 * step) / PITCH_STEPS))
+    if (!counts) continue
+    const value = score(counts)
+    if (value < best) {
+      best = value
+      shares = counts
     }
   }
-  return ends.map((end, i) => end - (i ? ends[i - 1] : 0))
+  // Only text no rule allows to break at all gets the plain proportions.
+  return shares ?? apportion(n, lengths)
 }
+
+/** Marks whose ink sits at the head of their cell in a column, and how much of it they leave blank. */
+const SHORT_END = new Set([...'。、．，'])
+const SHORT_END_CELLS = 0.6
+/**
+ * A line region this much broader than its block's usual one has taken in a neighbour's ruby,
+ * which runs on past its own text: its length counts for little (UNSURE) in setting the breaks.
+ */
+const BROAD = 1.3
+const UNSURE = 0.25
+
+/** Pitches tried, from 0.7 to 1.3 times a block's average, when setting where its lines break. */
+const PITCH_STEPS = 48
+
+/** How much a break just after a pause is preferred, in squared pitches of length error. */
+const PAUSE_PREFERENCE = 0.25
+
+/** What a Japanese line does not begin with: closing marks, pauses, the prolonged sound mark. */
+const NO_START = new Set([...'、。，．・…‥！？!?」』）)〕】〉》ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ～'])
+
+/** Opening brackets: a line never ends on one. */
+const OPENING = new Set([...'「『（(〔【〈《'])
 
 /** A run of nothing but ellipses (or dots for them): not a lone 。 or 、, which is fitted as ink. */
 const DOTS = /^(?:[…‥]+|[．.・]{2,})$/u
@@ -286,6 +378,9 @@ export function estimate(text, rect, vertical) {
  * box to go by (`estimate`); so does a missed column in a block its found columns do not span
  * (SPANNED).
  */
+/** How far two columns' spans along overlap. */
+const shared = (a, b) => Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y))
+
 /**
  * Whether two overlapping regions are neighbouring columns of slanted handwriting rather than one
  * column found in pieces, or two run together: boxed around their slant, such columns come out
@@ -323,7 +418,9 @@ export function columns(lines, text, rect) {
           y,
           width: Math.max(column.x + column.width, other.x + other.width) - x,
           height: Math.max(column.y + column.height, other.y + other.height) - y,
-          segments: [...other.segments, ...column.segments].sort((a, b) => a.y - b.y)
+          segments: [...other.segments, ...column.segments].sort((a, b) => a.y - b.y),
+          // Length the text runs: the pieces', not the blank between them (あぁ… over オタク).
+          extent: (column.extent ?? column.height) + (other.extent ?? other.height) - shared(column, other)
         }
         merged.splice(i, 1)
         joined = true
@@ -357,7 +454,8 @@ export function columns(lines, text, rect) {
         width: column.x - edge,
         height: rect.height,
         segments: [],
-        ...(joined ? { open: true } : {})
+        // Its length is the block's, not its own: open in joined bubbles, guessed in a rectangle.
+        ...(joined ? { open: true } : { guessed: true })
       })
     edge = Math.max(edge, column.x + column.width)
   }
@@ -657,7 +755,7 @@ export function splitPart(part, vertical, measure = null) {
     const lines = vertical && found.length ? columns(found, part.text, part.rect) : found
     if (lines?.length) {
       runs = distribute(part.text, lines, vertical).flatMap(({ text, rect }) => {
-        const { segments, ...bounds } = rect
+        const { segments, extent: _, guessed: __, ...bounds } = rect
         return splitAtGaps({ text, rect: bounds }, segments, vertical, measure)
       })
     } else runs = anchored(estimate(part.text, part.rect, vertical), found, part.rect, vertical)

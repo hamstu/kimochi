@@ -65,6 +65,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   text is set at its natural spacing, keeps its columns and reading order, and breaks columns after
   a pause (……, 。, ？, 」) the way the original does. Slanted handwritten columns stay separate
   columns instead of being run together.
+- In a speech bubble of several columns, each overlay column now starts with the character the
+  original's does. A short first column (…おい) no longer loses its words to the next one, which
+  then came out cramped; the columns are worked out together, and follow Japanese line-breaking
+  rules (no column ends on 「 or starts with 、。」…).
 - Manga OCR reads small snips. A Quick Shot drawn around a single bubble or a few words used to
   come back empty or garbled, because the text finder blew the snip up to page size first. It
   now looks at a snip at its own size, and a lone line it still can't place is read whole. A line
