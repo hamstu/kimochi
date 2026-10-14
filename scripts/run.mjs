@@ -122,16 +122,19 @@ if (
   await import('./prepare-mangaocr.mjs')
   if (darwin && task !== 'dev') {
     // Hardened-runtime library validation requires the bundled dylib to carry
-    // the same signing identity as the app, rather than Microsoft's signature.
+    // the same signing identity as the app, rather than Microsoft's signature. Notarization
+    // also wants a secure timestamp on every Mach-O, so a real identity asks Apple for one;
+    // an ad-hoc signature cannot carry one.
     const runtime = 'src-tauri/resources/meikiocr/runtime'
+    const identity = env.APPLE_SIGNING_IDENTITY ?? '-'
     for (const name of await readdir(runtime)) {
       if (!name.endsWith('.dylib')) continue
       exitOnFailure(
         run('codesign', [
           '--force',
           '--sign',
-          env.APPLE_SIGNING_IDENTITY ?? '-',
-          '--timestamp=none',
+          identity,
+          ...(identity === '-' ? ['--timestamp=none'] : ['--timestamp', '--options', 'runtime']),
           `${runtime}/${name}`
         ])
       )
@@ -241,16 +244,35 @@ if (process.platform === 'linux') {
 // `release` is the optimised, installable app; `bundle` is the faster debug build.
 const bundles = { darwin: 'app', win32: 'nsis', linux: 'deb,appimage' }[process.platform]
 if (!bundles) throw new Error(`No bundle format configured for ${process.platform}`)
+// Windows: tauri.windows.conf.json's signCommand names `node`, which tauri looks up on PATH;
+// a runner service (LocalSystem) can fail that lookup, so name this very node and script.
+const signOverride =
+  process.platform === 'win32'
+    ? [
+        '--config',
+        JSON.stringify({
+          bundle: {
+            windows: {
+              signCommand: {
+                cmd: process.execPath,
+                args: [path.resolve('scripts/sign-windows.mjs'), '%1']
+              }
+            }
+          }
+        })
+      ]
+    : []
 let built = node('@tauri-apps/cli', 'tauri', [
     'build',
     ...(task === 'release' ? [] : ['--debug']),
     '--bundles',
     bundles,
+    ...signOverride,
     ...extra
   ])
 // A first build may just have downloaded the GTK helper. Retry only after its known fix.
 if (built.status !== 0 && linuxBundler && await linuxBundler.prepareLinuxBundler()) {
-  built = node('@tauri-apps/cli', 'tauri', ['build', ...(task === 'release' ? [] : ['--debug']), '--bundles', bundles, ...extra])
+  built = node('@tauri-apps/cli', 'tauri', ['build', ...(task === 'release' ? [] : ['--debug']), '--bundles', bundles, ...signOverride, ...extra])
 }
 exitOnFailure(built)
 // tauri writes under target/<triple>/ only for an explicit --target; KIMOCHI_TARGET alone (as CI
