@@ -1,11 +1,15 @@
 /*
  * An engine's picture (EngineIcon.tsx): a logo, or a neutral tile with a glyph or monogram for
- * the engines that have no logo. One row icon plus a step (1.25rem), so a logo stays legible.
+ * the engines that have no logo. Every picture is the same 22 px square (`--engine-icon-size`).
  */
+:root {
+  --engine-icon-size: 1.375rem;
+}
 .engine-icon {
   flex: none;
-  width: calc(var(--k-icon) + var(--k-space-1));
-  height: calc(var(--k-icon) + var(--k-space-1));
+  width: var(--engine-icon-size);
+  height: var(--engine-icon-size);
+  border-radius: var(--k-radius-sm);
   object-fit: contain;
   user-select: none;
 }
@@ -26,7 +30,9 @@
 .engine-icon-tile:lang(ja) {
   font-family: var(--k-font-jp);
 }
-.engine-icon-tile > svg {
-  width: var(--k-icon-sm);
-  height: var(--k-icon-sm);
+.engine-icon-tile > svg,
+.engine-icon-tile > img {
+  width: var(--k-icon);
+  height: var(--k-icon);
+  object-fit: contain;
 }

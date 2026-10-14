@@ -50,7 +50,7 @@
 
 /* The engine's picture (EngineIcon.tsx), level with the name's line. */
 .engine-item-icon {
-  margin-top: calc((var(--k-leading-md) - var(--k-icon) - var(--k-space-1)) / 2);
+  margin-top: calc((var(--k-leading-md) - var(--engine-icon-size)) / 2);
 }
 
 /* The engine in use: a green check at the end of its row, level with the name. */

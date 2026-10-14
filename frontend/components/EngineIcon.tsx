@@ -3,6 +3,10 @@
  * tile otherwise. Used by the engine choosers in Settings (OCR & Overlay, Dictionary) and by
  * onboarding's dictionary step, so both places show the same pictures.
  *
+ * Every picture is the same 22 px rounded square. Logos that are already a full tile (Yomitan,
+ * 10ten, Kimochi) fill it; bare marks (Google Lens, Hachidori's bird, the Windows logo) sit inside
+ * the neutral tile at the same size as the glyphs, so no logo looks bigger than another.
+ *
  * Logos are the files in frontend/assets/engine-icons/ (sources and licences in the README there
  * and in NOTICE). Apple Live Text has no logo of its own here, so it gets a lucide glyph in the
  * neutral tile; MeikiOCR and Manga OCR publish none, so they get a monogram in the same tile.
@@ -21,28 +25,36 @@ import kimochiCloud from '../assets/engine-icons/kimochi-cloud.svg'
 import windows from '../assets/engine-icons/windows.svg'
 import './engine-icon.css'
 
-type Picture = { src: string } | { glyph: ReactNode } | { monogram: string; lang?: string }
+/** `tile`: a bare mark drawn inside the neutral tile rather than filling the square itself. */
+type Picture = { src: string; tile?: boolean } | { glyph: ReactNode } | { monogram: string; lang?: string }
 
 const OCR_PICTURES: Record<OcrMode, Picture> = {
-  googlelens: { src: googleLens },
+  googlelens: { src: googleLens, tile: true },
   cloud: { src: kimochiCloud },
   meikiocr: { monogram: 'M' },
   mangaocr: { monogram: '漫', lang: 'ja' },
   livetext: { glyph: <ScanText /> },
-  oneocr: { src: windows }
+  oneocr: { src: windows, tile: true }
 }
 
 const DICTIONARY_PICTURES: Record<DictionaryEngine, Picture> = {
   yomitan: { src: yomitan },
   'custom-api': { src: yomitanApi },
-  hachidori: { src: hachidori },
+  hachidori: { src: hachidori, tile: true },
   tenten: { src: tenten }
 }
 
 function EngineIcon({ picture, className }: { picture: Picture; className?: string }): ReactNode {
   const classes = ['engine-icon', className].filter(Boolean).join(' ')
-  if ('src' in picture) {
+  if ('src' in picture && !picture.tile) {
     return <img className={classes} src={picture.src} alt="" aria-hidden draggable={false} />
+  }
+  if ('src' in picture) {
+    return (
+      <span className={`${classes} engine-icon-tile`} aria-hidden>
+        <img src={picture.src} alt="" draggable={false} />
+      </span>
+    )
   }
   return (
     <span className={`${classes} engine-icon-tile`} aria-hidden lang={'lang' in picture ? picture.lang : undefined}>
