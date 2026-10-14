@@ -23,7 +23,8 @@ fn owns_input(navigation: bool, controls: bool, yielding: bool) -> bool {
 /// must not release Steam while the other still owns controller input.
 pub fn refresh_input_lease() -> Result<(), String> {
     let controls = CONTROL_OWNER.lock().unwrap_or_else(|e| e.into_inner()).is_some();
-    super::steam_input::update(owns_input(crate::gamepad::navigating(), controls, YIELDING.load(Ordering::SeqCst)))
+    let routed_here = super::gamescope_focus::owns_input(std::process::id());
+    super::steam_input::update(routed_here && owns_input(crate::gamepad::navigating(), controls, YIELDING.load(Ordering::SeqCst)))
 }
 pub fn control_focus(window: &tauri::WebviewWindow, focused: bool) {
     if !active() || !controls(window) { return; }

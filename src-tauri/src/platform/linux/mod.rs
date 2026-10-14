@@ -39,6 +39,7 @@ pub mod gamescope;
 pub mod gaming_context;
 pub mod steam_input;
 mod gamescope_touch;
+mod gamescope_focus;
 pub mod deck_input;
 mod layer;
 pub mod shortcuts;

@@ -21,39 +21,7 @@ static LEASE: Mutex<Option<Lease>> = Mutex::new(None);
 static TIMER: AtomicBool = AtomicBool::new(false);
 static EXITING: AtomicBool = AtomicBool::new(false);
 fn owns_input() -> bool {
-    let Some(desktop) = super::x11::desktop() else {
-        return false;
-    };
-    let Some(mut window) = desktop
-        .conn
-        .get_input_focus()
-        .ok()
-        .and_then(|cookie| cookie.reply().ok())
-        .map(|reply| reply.focus)
-    else {
-        return false;
-    };
-    // Native GTK file choosers are not Tauri webviews. Include their owned focus
-    // window/ancestors so dictionary import remains touchable.
-    for _ in 0..8 {
-        if let Some(pid) = desktop.pid(window) {
-            return pid == std::process::id();
-        }
-        let Some(parent) = desktop
-            .conn
-            .query_tree(window)
-            .ok()
-            .and_then(|cookie| cookie.reply().ok())
-            .map(|reply| reply.parent)
-        else {
-            return false;
-        };
-        if parent == 0 || parent == window {
-            return false;
-        }
-        window = parent;
-    }
-    false
+    super::gamescope_focus::owns_input(std::process::id())
 }
 fn update(active: bool) -> Result<(), String> {
     let mut lease = LEASE

@@ -93,7 +93,7 @@ pub fn update(active: bool) -> Result<(), String> {
     }
     if lease.is_none() {
         let (pid, token) = steam().ok_or("Steam input: no same-user Steam process found")?;
-        *lease = Some(spawn_lease(&[&pid.to_string(), &token])?);
+        *lease = Some(spawn_lease(&[&pid.to_string(), &token, &std::process::id().to_string()])?);
     }
     lease
         .as_mut()
@@ -159,11 +159,16 @@ pub fn run_watchdog() -> bool {
     if !super::gamescope::active() || identity(pid).as_deref() != Some(token) {
         return true;
     }
+    let Some(owner) = args.get(4).and_then(|value| value.parse::<u32>().ok()) else { return true; };
     signals(c"kimochi-input");
+    let mut last_heartbeat = std::time::Instant::now();
     let mut paused = false;
     let mut resume = None;
     loop {
-        if STOP.load(Ordering::Relaxed) {
+        if STOP.load(Ordering::Relaxed)
+            || !super::gamescope_focus::owns_input(owner)
+            || last_heartbeat.elapsed() >= std::time::Duration::from_millis(2500)
+        {
             break;
         }
         let mut poll = libc::pollfd {
@@ -171,10 +176,9 @@ pub fn run_watchdog() -> bool {
             events: libc::POLLIN,
             revents: 0,
         };
-        let ready = unsafe { libc::poll(&mut poll, 1, 2500) };
-        if ready <= 0 {
-            break;
-        }
+        let ready = unsafe { libc::poll(&mut poll, 1, 100) };
+        if ready < 0 { break; }
+        if ready == 0 { continue; }
         let mut buffer = [0_u8; 32];
         let count = unsafe { libc::read(0, buffer.as_mut_ptr().cast(), buffer.len()) };
         if count <= 0 {
@@ -187,6 +191,9 @@ pub fn run_watchdog() -> bool {
             // Let the physical B/confirm release settle before Steam reads HID again.
             std::thread::sleep(std::time::Duration::from_millis(250));
             break;
+        }
+        if buffer[..count as usize].contains(&b'A') {
+            last_heartbeat = std::time::Instant::now();
         }
         if !paused && buffer[..count as usize].contains(&b'A') {
             if identity(pid).as_deref() != Some(token) {
