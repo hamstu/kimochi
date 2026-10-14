@@ -51,6 +51,46 @@
   align-items: center;
   gap: var(--k-space-0-5);
 }
+/* The session picker: the session's name as footer text, with a chevron that says it opens. */
+.log-session-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  min-width: 0;
+  max-width: 14rem;
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-1-5);
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-medium);
+  cursor: pointer;
+}
+.log-session-trigger:hover,
+.log-session-trigger[data-native-hover],
+.log-session-trigger[data-state="open"] {
+  background: var(--k-press);
+  color: var(--k-text);
+}
+.log-session-trigger:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+.log-session-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-session-trigger > svg {
+  flex: none;
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+  color: var(--k-text-3);
+}
 .log-bar-divider {
   width: 1px;
   height: var(--k-icon-sm);

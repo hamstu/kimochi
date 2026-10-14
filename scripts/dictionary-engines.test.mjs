@@ -172,13 +172,20 @@ test('a switch record is only this reload\'s: stale, future and malformed ones a
   for (const overrides of [
     { engine: 'builtin' },
     { engine: 'toString' },
-    { view: 'log' },
+    { view: 'dictionary' },
     { tab: '' },
     { tab: 7 },
     { at: 'now' },
     { at: Number.NaN }
   ]) {
     assert.equal(decodeEngineSwitch(encodeEngineSwitch(switchRecord(overrides)), 1_000_000), null, JSON.stringify(overrides))
+  }
+})
+
+test('a switch made from the sidebar reopens the Log or Notebook it was made from', () => {
+  for (const view of ['log', 'notebook']) {
+    const record = switchRecord({ view })
+    assert.deepEqual(decodeEngineSwitch(encodeEngineSwitch(record), record.at + 800), record)
   }
 })
 

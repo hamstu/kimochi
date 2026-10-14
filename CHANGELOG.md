@@ -31,6 +31,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- The session picker moved from the sidebar to the Log's footer, beside the ⋯ menu: click the
+  session's name to switch, rename or manage sessions. Its place in the sidebar is now a
+  **Dictionary** picker, for switching dictionary engines without opening Settings (Manage still
+  opens Settings → Dictionary).
 - Kimochi is now signed and notarised on macOS and signed on Windows, so it opens without
   "unidentified developer" or "unknown publisher" warnings.
 - The OCR model picker in the main window lists each engine as Settings does: its icon, its
@@ -45,6 +49,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- On Windows and Linux, a scrollbar no longer flickers in the sidebar every few seconds while
+  the source preview refreshes.
 - Without Screen Recording permission, the source picker now offers **Allow Screen Recording…**,
   which opens System Settings, instead of only an error message.
 - The Yomitan API helper now installs correctly on Windows, for every supported browser.

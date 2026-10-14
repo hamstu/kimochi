@@ -32,6 +32,7 @@ import { SelectionAddButton } from "./components/SelectionAddButton";
 import { AddToNotebookModal } from "./components/AddToNotebookModal";
 import { StatsFooter } from "./components/StatsFooter";
 import { LogMoreMenu } from "./components/LogMoreMenu";
+import { SessionMenu } from "../main/SessionMenu";
 import { ActivityTicker } from "./components/ActivityTicker";
 import { useActivity } from "../bridge/activity";
 import { onEditModalRequest } from "./lib/editModal";
@@ -267,6 +268,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
             </IconButton>
           </Tooltip>
           <span className="log-bar-divider" aria-hidden />
+          <SessionMenu />
           <LogMoreMenu />
         </div>
       </Bar>

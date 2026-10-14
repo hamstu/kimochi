@@ -89,9 +89,15 @@ test('"Use <name>" is the only way to choose, and it is the panel\'s', async () 
   const dictionary = await read('frontend/panels/settings/DictionaryChooser.tsx')
   assert.ok(dictionary.includes('onUse={() => use(viewed)}'), 'the dictionary panel does not choose the engine it shows')
   assert.match(dictionary, /const use = \(engine: DictionaryEngine\): void => \{[\s\S]*?onChoose\(engine\)/)
-  // The Yomitan API's wizard opens when it is chosen, which is now "Use Yomitan API".
-  const tab = await read('frontend/panels/settings/DictionaryTab.tsx')
-  assert.match(tab, /if \(engine === 'custom-api'\) setSetupOpen\(true\)/, 'choosing the Yomitan API no longer opens its setup')
+  // The Yomitan API's wizard opens when it is chosen ("Use Yomitan API", or the sidebar's picker):
+  // both go through useDictionarySwitch, and both render the wizard it opens.
+  const hook = await read('frontend/panels/settings/useDictionarySwitch.ts')
+  assert.match(hook, /if \(engine === 'custom-api'\) setSetupOpen\(true\)/, 'choosing the Yomitan API no longer opens its setup')
+  for (const file of ['frontend/panels/settings/DictionaryTab.tsx', 'frontend/main/MainSidebar.tsx']) {
+    const source = await read(file)
+    assert.ok(source.includes("useDictionarySwitch('"), `${file} does not switch through useDictionarySwitch`)
+    assert.ok(source.includes('<YomitanApiSetupDialog'), `${file} does not render the Yomitan API setup`)
+  }
 })
 
 test('every engine has a picture, and every picture file exists', async () => {

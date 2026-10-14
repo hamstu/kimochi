@@ -156,7 +156,7 @@ test('both engine pickers share the confirmation and list engines by name alone'
   // As Settings lists it: the picture, the name, then where it runs; the tagline is a second line.
   assert.match(
     sidebar,
-    /<OcrEngineIcon mode=\{mode\} \/>\s*<span className="sb-ocr-option-name">\{OCR_MODES\[mode\]\.name\}<\/span>\s*<OcrRunsIcon mode=\{mode\} \/>/,
+    /<OcrEngineIcon mode=\{mode\} \/>\s*<span className="sb-engine-option-name">\{OCR_MODES\[mode\]\.name\}<\/span>\s*<OcrRunsIcon mode=\{mode\} \/>/,
     'the sidebar picker labels engines with more than their name'
   )
   const chooser = await read('frontend/panels/settings/EngineChooser.tsx')

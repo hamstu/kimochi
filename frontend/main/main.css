@@ -257,29 +257,38 @@
   width: 100%;
   height: var(--k-row-h);
 }
-/* The OCR model select: each engine as Settings lists it (picture, name, where it runs), with its
+/* The OCR model and Dictionary selects: each engine as Settings lists it (picture, name, where it runs), with its
    tagline under it in the open list. */
-.sb-ocr-option {
+.sb-engine-option {
   display: inline-flex;
   align-items: center;
   gap: var(--k-space-2);
   min-width: 0;
 }
-.sb-ocr-option-name {
+.sb-engine-option-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: var(--k-weight-medium);
 }
-.sb-ocr-select .sb-ocr-option {
+.sb-engine-select .sb-engine-option {
   flex: 1;
 }
-.sb-ocr-select .engine-icon {
+.sb-engine-select .engine-icon {
   width: 1.125rem;
   height: 1.125rem;
 }
-.sb-ocr-menu .k-menu-item-description {
+/* A line under a field: a switch under way, or why it failed. */
+.sb-note {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.sb-note[data-tone="danger"] {
+  color: var(--k-danger-text);
+}
+.sb-engine-menu .k-menu-item-description {
   padding-left: calc(var(--engine-icon-size) + var(--k-space-2));
 }
 /* A label with a quiet "Manage" link at its right, both on the label's baseline. The link has the
@@ -1132,7 +1141,7 @@
     animation: none;
   }
 }
-.sb-ocr-menu .k-menu-item-check {
+.sb-engine-menu .k-menu-item-check {
   color: var(--k-ok-text);
 }
 

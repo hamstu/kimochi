@@ -1,6 +1,7 @@
 /**
- * Keeps the main window on Settings → Dictionary across the reload a dictionary-engine switch
- * gives it (DICTIONARY_ENGINES.md §2).
+ * Keeps the main window where it was (Settings → Dictionary, or the Log or Notebook the sidebar's
+ * dictionary picker was used from) across the reload a dictionary-engine switch gives it
+ * (DICTIONARY_ENGINES.md §2).
  *
  * `dictionary_engine_apply` reloads the `log` window, and Settings is a view inside it, so without
  * this the reload lands on the Log. The main window registers where it is (`registerMainRoute`);
@@ -45,10 +46,12 @@ export function registerMainRoute(read: () => MainRoute): () => void {
  * Records the switch before native reloads this window. True when a record was written (this is
  * the main window, which the switch reloads); false elsewhere.
  */
-export function rememberEngineSwitch(engine: DictionaryEngine): boolean {
+export function rememberEngineSwitch(engine: DictionaryEngine, from: 'settings' | 'sidebar' = 'settings'): boolean {
   if (!routeOf) return false
   const route = routeOf()
-  const record: EngineSwitchRecord = { engine, view: 'settings', ...route, at: Date.now() }
+  // From the sidebar the window is on the Log or the Notebook, which is also where Back points.
+  const view = from === 'settings' ? 'settings' : route.back
+  const record: EngineSwitchRecord = { engine, view, ...route, at: Date.now() }
   try {
     sessionStorage.setItem(ENGINE_SWITCH_KEY, encodeEngineSwitch(record))
     return true

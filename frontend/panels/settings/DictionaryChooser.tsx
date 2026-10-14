@@ -30,7 +30,7 @@
  * `ui/engine-chooser.ts`.
  */
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Check, Cloud, Download, Ellipsis, ExternalLink, Monitor, Trash2 } from 'lucide-react'
+import { Check, Download, Ellipsis, ExternalLink, Trash2 } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import {
   Badge,
@@ -56,21 +56,11 @@ import { dictionaryUseAction, listKeyTarget, activateLabel } from '@ui/engine-ch
 import { ModelDownload } from './ModelDownload'
 import { InUseCheck } from './EngineChooser'
 import { DictionaryPreview } from '../../components/DictionaryPreview'
-import { DictionaryEngineIcon } from '../../components/EngineIcon'
+import { DictionaryEngineIcon, DictionaryRunsIcon } from '../../components/EngineIcon'
 import './engine-chooser.css'
 import './dictionary-chooser.css'
 
 const ENGINES = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
-
-/** Where the engine runs, as an icon: this computer, or a server across the network. */
-function RunsIcon({ engine }: { engine: DictionaryEngine }): ReactNode {
-  const local = DICTIONARY_ENGINES[engine].runs === 'local'
-  return (
-    <span className="engine-runs" title={local ? 'Runs on this computer' : 'Uses a server'}>
-      {local ? <Monitor aria-label="On this computer" /> : <Cloud aria-label="Uses a server" />}
-    </span>
-  )
-}
 
 function ExperimentalBadge({ engine }: { engine: DictionaryEngine }): ReactNode {
   return DICTIONARY_ENGINES[engine].experimental ? <Badge tone="warn">Experimental</Badge> : null
@@ -112,7 +102,7 @@ function DictionaryItem({
       <span className="engine-item-text">
         <span className="engine-item-name">
           {info.name}
-          <RunsIcon engine={engine} />
+          <DictionaryRunsIcon engine={engine} />
           {missing && (
             <span className="engine-runs" title="Not downloaded yet">
               <Download aria-label="Not downloaded yet" />
@@ -192,7 +182,7 @@ function DictionaryDetail({
       <header className="engine-detail-header">
         <h3 id={headingId} className="k-heading engine-detail-name">
           {info.name}
-          <RunsIcon engine={engine} />
+          <DictionaryRunsIcon engine={engine} />
           <ExperimentalBadge engine={engine} />
         </h3>
         {action === 'active' ? (

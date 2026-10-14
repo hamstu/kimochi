@@ -68,6 +68,7 @@ import { GnomeWindowLink } from './GnomeWindowLink'
 import { GamingApplicationProfile } from './GamingApplicationProfile'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
 import type { ControllerWiring } from '../panels/useController'
+import { keepShape } from '@ui/preview-shape'
 
 type Controller = ControllerWiring['props']
 /** The texthooker's inputs, with OCR split into a chosen window or screen and Quick Shot. */
@@ -176,7 +177,7 @@ function useLiveFrames(
         if (!alive) return
         staleRef.current?.(null)
         if (frame.url) {
-          setSize({ width: frame.width, height: frame.height })
+          setSize((current) => keepShape(current, frame))
           setFrames((current) => [
             ...current.slice(-1),
             { id: next.current++, url: frame.url, ready: false }

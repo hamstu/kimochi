@@ -15,7 +15,7 @@
 import type { ReactNode } from 'react'
 import { Cloud, Monitor, ScanText } from 'lucide-react'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
-import type { DictionaryEngine } from '../bridge/dictionaryEngine'
+import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
 import yomitan from '../assets/engine-icons/yomitan.svg'
 import yomitanApi from '../assets/engine-icons/yomitan-api.svg'
 import hachidori from '../assets/engine-icons/hachidori.png'
@@ -69,6 +69,16 @@ export function OcrRunsIcon({ mode }: { mode: OcrMode }): ReactNode {
   return (
     <span className="engine-runs" title={local ? 'Runs on this computer' : 'Runs online'}>
       {local ? <Monitor aria-label="On this computer" /> : <Cloud aria-label="Online" />}
+    </span>
+  )
+}
+
+/** Where a dictionary engine runs: this computer, or a server across the network. */
+export function DictionaryRunsIcon({ engine }: { engine: DictionaryEngine }): ReactNode {
+  const local = DICTIONARY_ENGINES[engine].runs === 'local'
+  return (
+    <span className="engine-runs" title={local ? 'Runs on this computer' : 'Uses a server'}>
+      {local ? <Monitor aria-label="On this computer" /> : <Cloud aria-label="Uses a server" />}
     </span>
   )
 }

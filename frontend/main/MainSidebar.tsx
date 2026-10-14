@@ -1,29 +1,31 @@
 /**
  * The main window's sidebar: where text comes from (Source, with its live preview and controls),
- * how OCR reads it (OCR model, for the OCR sources) and which session it goes into (Session), each
- * labelled, with Settings pinned to the bottom. OCR model and Session carry a "Manage" link on
- * their label row: to Settings → OCR & Overlay, and to the manage-sessions dialog. The views (Log, Notebook) are tabs
+ * how OCR reads it (OCR model, for the OCR sources) and which dictionary looks words up
+ * (Dictionary), each labelled, with Settings pinned to the bottom. OCR model and Dictionary carry a
+ * "Manage" link on their label row, to their Settings pages. The session picker is in the Log's
+ * footer, beside its ⋯ menu. The views (Log, Notebook) are tabs
  * across the top of the content. In the Settings view the same column lists the settings pages,
  * with a way back. Resizable from its right edge.
  */
 import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
 import { ArrowLeft, Settings } from 'lucide-react'
-import { Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
+import { ConfirmDialog, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
 import { useEngineSelection } from '../bridge/useEngineSelection'
 import { useCapabilities } from '../bridge/capabilities'
-import { OcrEngineIcon, OcrRunsIcon } from '../components/EngineIcon'
+import { DictionaryEngineIcon, DictionaryRunsIcon, OcrEngineIcon, OcrRunsIcon } from '../components/EngineIcon'
+import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
+import { YomitanApiSetupDialog } from '../components/YomitanApiSetup'
+import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import { SETTINGS_NAV } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
-import { SessionMenu } from './SessionMenu'
 import { ModelStatusBadge } from './ModelStatusBadge'
 import { UpdateNotice } from './UpdateNotice'
-import { useLogActions } from './logActions'
 
 export type MainView = 'log' | 'notebook' | 'settings'
 
@@ -96,9 +98,9 @@ const OCR_MODE_LIST = Object.keys(OCR_MODES) as OcrMode[]
 /** An engine as Settings lists it: its picture, its name and where it runs. Also the closed select. */
 function OcrModeLabel({ mode }: { mode: OcrMode }): JSX.Element {
   return (
-    <span className="sb-ocr-option">
+    <span className="sb-engine-option">
       <OcrEngineIcon mode={mode} />
-      <span className="sb-ocr-option-name">{OCR_MODES[mode].name}</span>
+      <span className="sb-engine-option-name">{OCR_MODES[mode].name}</span>
       <OcrRunsIcon mode={mode} />
     </span>
   )
@@ -122,10 +124,10 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
       </div>
       <div className="sb-field">
         <SelectRoot value={shown} onValueChange={(value) => choose(value as OcrMode)}>
-          <SelectTrigger aria-label="OCR model" className="sb-select sb-ocr-select">
+          <SelectTrigger aria-label="OCR model" className="sb-select sb-engine-select">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="sb-ocr-menu">
+          <SelectContent className="sb-engine-menu">
             {OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode)).map((mode) => (
               <SelectItem
                 key={mode}
@@ -142,6 +144,78 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
         </SelectRoot>
       </div>
       <DownloadConfirmDialog confirmation={confirmation} />
+    </div>
+  )
+}
+
+const DICTIONARY_LIST = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
+
+/** A dictionary engine as Settings lists it: its picture, its name and where it runs. */
+function DictionaryLabel({ engine }: { engine: DictionaryEngine }): JSX.Element {
+  return (
+    <span className="sb-engine-option">
+      <DictionaryEngineIcon engine={engine} />
+      <span className="sb-engine-option-name">{DICTIONARY_ENGINES[engine].name}</span>
+      <DictionaryRunsIcon engine={engine} />
+    </span>
+  )
+}
+
+/**
+ * A quick switch of dictionary engine, made exactly as Settings → Dictionary makes it (the same
+ * download question, pending switch, reload and Yomitan API setup), with Manage for the rest.
+ */
+function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
+  const dictionary = useDictionarySwitch('sidebar')
+  const { active, pending, prompt, reloading, applyError } = dictionary
+  const note = applyError
+    ? applyError
+    : reloading === 'self'
+      ? `Switching to ${DICTIONARY_ENGINES[active].name}…`
+      : pending
+        ? `${DICTIONARY_ENGINES[pending].name} is used once it has downloaded.`
+        : null
+  return (
+    <div className="sb-group">
+      <div className="sb-label sb-label-row">
+        <span id="sb-dictionary-label">Dictionary</span>
+        <ManageLink label="Manage dictionary settings" onClick={onOpenSettings} />
+      </div>
+      <div className="sb-field">
+        <SelectRoot value={active} onValueChange={(value) => void dictionary.choose(value as DictionaryEngine)}>
+          <SelectTrigger aria-label="Dictionary" className="sb-select sb-engine-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="sb-engine-menu">
+            {DICTIONARY_LIST.map((engine) => (
+              <SelectItem key={engine} value={engine} description={DICTIONARY_ENGINES[engine].tagline}>
+                <DictionaryLabel engine={engine} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </SelectRoot>
+        {note && (
+          <span className="sb-note" data-tone={applyError ? 'danger' : undefined} role="status">
+            {note}
+          </span>
+        )}
+      </div>
+      <ConfirmDialog
+        open={dictionary.asking !== null}
+        onOpenChange={(open) => {
+          if (!open) dictionary.dismissAsking()
+        }}
+        title={prompt?.title ?? ''}
+        description={prompt?.description}
+        confirmLabel="Download"
+        onConfirm={dictionary.confirmDownload}
+        dismissOnOutsideClick
+      />
+      <YomitanApiSetupDialog
+        open={dictionary.setupOpen}
+        onOpenChange={dictionary.setSetupOpen}
+        url={dictionary.apiUrl}
+      />
     </div>
   )
 }
@@ -179,7 +253,6 @@ export function MainSidebar({
   const [live, setLive] = useState<number | null>(null)
   const style = { width: live ?? width }
   const readsScreen = useReadsScreen()
-  const logActions = useLogActions()
   const handle = <ResizeHandle width={live ?? width} onLive={setLive} onCommit={onResize} />
 
   if (view === 'settings') {
@@ -222,15 +295,7 @@ export function MainSidebar({
           />
         </div>
         {readsScreen && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} />}
-        <div className="sb-group">
-          <div className="sb-label sb-label-row">
-            <span id="sb-session-label">Session</span>
-            <ManageLink label="Manage sessions" onClick={logActions.manageSessions} />
-          </div>
-          <div className="sb-field">
-            <SessionMenu />
-          </div>
-        </div>
+        <DictionaryPicker onOpenSettings={() => onSettingsTab('dictionary')} />
       </div>
       <UpdateNotice />
       <div className="sb-footer">

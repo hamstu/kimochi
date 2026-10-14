@@ -458,8 +458,9 @@ export const ENGINE_SWITCH_TTL_MS = 30_000
 export interface EngineSwitchRecord {
   /** The engine just chosen, for "Now using …". */
   engine: DictionaryEngine
-  /** The main window's view; a switch is made from Settings. */
-  view: 'settings'
+  /** The main window's view to reopen: Settings for a switch made there, else the Log or Notebook
+   * the sidebar's dictionary picker was used from. */
+  view: 'settings' | 'log' | 'notebook'
   /** The Settings page (`settingsActiveTab`), so the first frame is that page, not the default. */
   tab: string
   /** Where Back from Settings returns to. */
@@ -487,7 +488,8 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
   const record = value as Record<string, unknown>
   const { engine, view, tab, back, scrollTop, at } = record
   if (typeof engine !== 'string' || !Object.hasOwn(DICTIONARY_ENGINES, engine)) return null
-  if (view !== 'settings' || typeof tab !== 'string' || !tab) return null
+  if (view !== 'settings' && view !== 'log' && view !== 'notebook') return null
+  if (typeof tab !== 'string' || !tab) return null
   if (typeof at !== 'number' || !Number.isFinite(at)) return null
   // A clock that stepped back a little still counts; a record from the future does not.
   if (now - at > ENGINE_SWITCH_TTL_MS || at - now > 5_000) return null

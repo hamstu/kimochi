@@ -1,6 +1,7 @@
 /**
- * The session picker in the main window's sidebar: which session is being read, and everything
- * that acts on it. Destructive items confirm through `LogActionsProvider`.
+ * The session picker in the Log's footer, beside its ⋯ menu: which session is being read, and
+ * everything that acts on it. Drawn as footer text (the session's name) with a chevron, so it reads
+ * as part of the status bar until clicked. Destructive items confirm through `LogActionsProvider`.
  */
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -60,17 +61,17 @@ export function SessionMenu(): ReactNode {
   return (
     <Menu>
       <MenuTrigger asChild>
-        {/* Drawn as a select field, like the OCR model above it. */}
         <button
           type="button"
-          className="k-select-trigger sb-select"
+          className="log-session-trigger"
           aria-label={`Session: ${name}`}
+          title="Session"
         >
-          <span>{name}</span>
-          <ChevronsUpDown className="k-select-trigger-icon" />
+          <span className="log-session-name">{name}</span>
+          <ChevronsUpDown aria-hidden />
         </button>
       </MenuTrigger>
-      <MenuContent align="start" className="main-session-menu">
+      <MenuContent align="end" side="top" className="main-session-menu">
         <MenuLabel>{name}</MenuLabel>
         <MenuItem icon={<PencilLine />} onSelect={actions.editSession}>
           Rename…
