@@ -2,6 +2,7 @@ export { cn, portalRoot } from './cn'
 export { Button, IconButton, type ButtonProps, type ButtonVariant } from './Button'
 export { Row, RowList, Separator, type RowProps } from './Row'
 export { Bar, BarSpacer } from './Bar'
+export { ResizeHandle } from './ResizeHandle'
 export { Switch } from './Switch'
 export { Checkbox } from './Checkbox'
 export { Input, Textarea } from './TextField'
@@ -20,6 +21,8 @@ export {
 export {
   Menu,
   MenuTrigger,
+  ContextMenu,
+  ContextMenuTrigger,
   MenuContent,
   MenuItem,
   MenuRadioGroup,

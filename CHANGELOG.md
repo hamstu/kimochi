@@ -13,6 +13,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- Right-click a line in the Log for its menu, the same one as its ⋯ button: copy, translate,
+  explain or delete it. With text selected, the menu also copies the selection or adds it to the
+  Notebook. Kimochi's own menu replaces the system's; ⌘C / Ctrl+C still copies a selection.
+- Right-click an entry in the Notebook, or use its ⋯ button, to edit it, copy its name, turn its
+  matching in the Log on or off, or delete it.
 - Manga OCR's text is shown in a manga-style typeface: Zen Kaku Gothic Antique, lighter than the
   overlay's usual bold, with the classic kana shapes manga lettering uses. Text that is big for
   its page, a shout or a heading, is set bold. The font is bundled, so nothing is downloaded.
@@ -39,6 +44,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- The Notebook has a status bar across its foot, like the Log's, with the session picker at its
+  right. Its editor pane can be resized by dragging its edge (double-click to reset); its own foot
+  says when your last edit was saved, beside the entry's mentions and Delete.
+- An empty Notebook offers **Add item**, which asks whether to add a character, a place or a thing.
+  With room to spare, the Notebook's toolbar spells out **Import from VNDB**.
+- Selecting text in the Log no longer pops up an "Add to notebook" button over it; right-click the
+  selection instead.
+- Keyboard keys shown in the app (the Notebook's / search hint and its footer) look like key caps,
+  their symbol centred.
 - The session picker moved from the sidebar to the Log's footer, beside the ⋯ menu: click the
   session's name to switch, rename or manage sessions. Its place in the sidebar is now a
   **Dictionary** picker, for switching dictionary engines without opening Settings (Manage still

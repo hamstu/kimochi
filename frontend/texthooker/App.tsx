@@ -28,10 +28,10 @@ import {
 import "./log.css";
 import { LineRow } from "./components/LineRow";
 import { ExplainModal } from "./components/ExplainModal";
-import { SelectionAddButton } from "./components/SelectionAddButton";
 import { AddToNotebookModal } from "./components/AddToNotebookModal";
 import { StatsFooter } from "./components/StatsFooter";
 import { LogMoreMenu } from "./components/LogMoreMenu";
+import { LineContextMenu } from "./components/LineActionsMenu";
 import { SessionMenu } from "../main/SessionMenu";
 import { ActivityTicker } from "./components/ActivityTicker";
 import { useActivity } from "../bridge/activity";
@@ -223,23 +223,31 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
               </Button>
             </div>
           )}
-          <div
-            className="jp-text scan-region log-lines"
-            translate="no"
-            lang="ja"
-            style={{ fontSize: settings.fontSizePx }}
+          <LineContextMenu
+            lines={snap.lines}
+            translateEnabled={Boolean(settings.deeplApiKey.trim())}
+            onAddToNotebook={setAddText}
           >
-            {snap.lines.slice(-shown).map((line) => (
-              <LineRow
-                key={`${snap.sessions.activeId}:${line.id}`}
-                line={apiMode ? line : { ...line, tokens: null }}
-                yomitanBaseUrl={settings.yomitanApiUrl}
-                showFurigana={settings.showFurigana}
-                disableClickToDefine={!apiMode || settings.disableClickToDefine}
-                translateEnabled={Boolean(settings.deeplApiKey.trim())}
-              />
-            ))}
-          </div>
+            <div
+              className="jp-text scan-region log-lines"
+              translate="no"
+              lang="ja"
+              style={{ fontSize: settings.fontSizePx }}
+            >
+              {snap.lines.slice(-shown).map((line) => (
+                <LineRow
+                  key={`${snap.sessions.activeId}:${line.id}`}
+                  line={apiMode ? line : { ...line, tokens: null }}
+                  yomitanBaseUrl={settings.yomitanApiUrl}
+                  showFurigana={settings.showFurigana}
+                  disableClickToDefine={
+                    !apiMode || settings.disableClickToDefine
+                  }
+                  translateEnabled={Boolean(settings.deeplApiKey.trim())}
+                />
+              ))}
+            </div>
+          </LineContextMenu>
         </main>
         <ActivityTicker visible={visible} />
       </div>
@@ -272,7 +280,6 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
           <LogMoreMenu />
         </div>
       </Bar>
-      <SelectionAddButton containerRef={scroll} enabled onAdd={setAddText} />
       <AddToNotebookModal text={addText} onClose={() => setAddText(null)} />
       <ExplainModal />
     </div>

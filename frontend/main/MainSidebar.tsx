@@ -7,9 +7,9 @@
  * across the top of the content. In the Settings view the same column lists the settings pages,
  * with a way back. Resizable from its right edge.
  */
-import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import { ArrowLeft, Settings } from 'lucide-react'
-import { ConfirmDialog, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
+import { ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
@@ -33,56 +33,6 @@ export type MainView = 'log' | 'notebook' | 'settings'
 const MIN_WIDTH = 160
 const MAX_WIDTH = 360
 export const DEFAULT_WIDTH = 240
-
-/** The sidebar's right edge: drag to resize, double-click to reset. */
-function ResizeHandle({
-  width,
-  onLive,
-  onCommit
-}: {
-  width: number
-  onLive: (width: number | null) => void
-  onCommit: (width: number) => void
-}): JSX.Element {
-  const drag = useRef<{ x: number; width: number; last: number } | null>(null)
-  const clamp = (value: number): number =>
-    Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value)))
-  const end = (event: PointerEvent<HTMLDivElement>): void => {
-    const current = drag.current
-    if (!current) return
-    drag.current = null
-    event.currentTarget.releasePointerCapture(event.pointerId)
-    // Saved once, on release: a setting write per pointer move would flood every window.
-    onCommit(current.last)
-    onLive(null)
-  }
-  return (
-    <div
-      className="main-sidebar-resize"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize sidebar"
-      aria-valuenow={width}
-      aria-valuemin={MIN_WIDTH}
-      aria-valuemax={MAX_WIDTH}
-      onPointerDown={(event) => {
-        if (event.button !== 0) return
-        event.preventDefault()
-        event.currentTarget.setPointerCapture(event.pointerId)
-        drag.current = { x: event.clientX, width, last: width }
-      }}
-      onPointerMove={(event) => {
-        const current = drag.current
-        if (!current) return
-        current.last = clamp(current.width + event.clientX - current.x)
-        onLive(current.last)
-      }}
-      onPointerUp={end}
-      onPointerCancel={end}
-      onDoubleClick={() => onCommit(DEFAULT_WIDTH)}
-    />
-  )
-}
 
 /** The quiet "Manage" link at the right of a group's label, on the label's baseline. */
 function ManageLink({ label, onClick }: { label: string; onClick: () => void }): JSX.Element {
@@ -253,7 +203,17 @@ export function MainSidebar({
   const [live, setLive] = useState<number | null>(null)
   const style = { width: live ?? width }
   const readsScreen = useReadsScreen()
-  const handle = <ResizeHandle width={live ?? width} onLive={setLive} onCommit={onResize} />
+  const handle = (
+    <ResizeHandle
+      width={live ?? width}
+      min={MIN_WIDTH}
+      max={MAX_WIDTH}
+      reset={DEFAULT_WIDTH}
+      label="Resize sidebar"
+      onLive={setLive}
+      onCommit={onResize}
+    />
+  )
 
   if (view === 'settings') {
     return (

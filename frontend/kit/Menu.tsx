@@ -1,14 +1,58 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react'
+import {
+  createContext,
+  forwardRef,
+  useContext,
+  type ComponentPropsWithoutRef,
+  type ElementRef,
+  type ReactNode
+} from 'react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
+import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
 import { Check, ChevronRight } from 'lucide-react'
 import { cn, portalRoot } from './cn'
 import { closeAutoFocusFromKeyboardOnly } from './focus'
 
-export const Menu = MenuPrimitive.Root
+/**
+ * Every part below renders for the menu it sits in: a `Menu` (opened by its trigger) or a
+ * `ContextMenu` (opened by a right-click on its trigger). One list of items can then serve a row's
+ * ⋯ button and a right-click on the row.
+ */
+const InContextMenu = createContext(false)
+/** The Radix parts for the menu being rendered. Both packages export the same part names. */
+const usePrimitive = (): typeof MenuPrimitive =>
+  useContext(InContextMenu) ? (ContextMenuPrimitive as unknown as typeof MenuPrimitive) : MenuPrimitive
+
+export function Menu(props: ComponentPropsWithoutRef<typeof MenuPrimitive.Root>): ReactNode {
+  return (
+    <InContextMenu.Provider value={false}>
+      <MenuPrimitive.Root {...props} />
+    </InContextMenu.Provider>
+  )
+}
 export const MenuTrigger = MenuPrimitive.Trigger
-export const MenuGroup = MenuPrimitive.Group
-export const MenuRadioGroup = MenuPrimitive.RadioGroup
-export const MenuSub = MenuPrimitive.Sub
+
+/** A menu opened by right-clicking its trigger, at the pointer, instead of the system's. */
+export function ContextMenu(props: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Root>): ReactNode {
+  return (
+    <InContextMenu.Provider value={true}>
+      <ContextMenuPrimitive.Root {...props} />
+    </InContextMenu.Provider>
+  )
+}
+export const ContextMenuTrigger = ContextMenuPrimitive.Trigger
+
+export function MenuGroup(props: ComponentPropsWithoutRef<typeof MenuPrimitive.Group>): ReactNode {
+  const P = usePrimitive()
+  return <P.Group {...props} />
+}
+export function MenuRadioGroup(props: ComponentPropsWithoutRef<typeof MenuPrimitive.RadioGroup>): ReactNode {
+  const P = usePrimitive()
+  return <P.RadioGroup {...props} />
+}
+export function MenuSub(props: ComponentPropsWithoutRef<typeof MenuPrimitive.Sub>): ReactNode {
+  const P = usePrimitive()
+  return <P.Sub {...props} />
+}
 
 export const MenuContent = forwardRef<
   ElementRef<typeof MenuPrimitive.Content>,
@@ -17,9 +61,10 @@ export const MenuContent = forwardRef<
   { className, sideOffset = 4, collisionPadding = 8, onCloseAutoFocus, ...props },
   ref
 ) {
+  const P = usePrimitive()
   return (
-    <MenuPrimitive.Portal container={portalRoot()}>
-      <MenuPrimitive.Content
+    <P.Portal container={portalRoot()}>
+      <P.Content
         ref={ref}
         sideOffset={sideOffset}
         collisionPadding={collisionPadding}
@@ -27,7 +72,7 @@ export const MenuContent = forwardRef<
         className={cn('k-menu', className)}
         {...props}
       />
-    </MenuPrimitive.Portal>
+    </P.Portal>
   )
 })
 
@@ -39,8 +84,9 @@ export const MenuItem = forwardRef<
     tone?: 'default' | 'danger'
   }
 >(function MenuItem({ className, icon, shortcut, tone = 'default', children, ...props }, ref) {
+  const P = usePrimitive()
   return (
-    <MenuPrimitive.Item
+    <P.Item
       ref={ref}
       className={cn('k-menu-item', tone === 'danger' && 'k-menu-item-danger', className)}
       {...props}
@@ -48,7 +94,7 @@ export const MenuItem = forwardRef<
       {icon}
       <span className="k-menu-item-label">{children}</span>
       {shortcut && <span className="k-menu-item-shortcut">{shortcut}</span>}
-    </MenuPrimitive.Item>
+    </P.Item>
   )
 })
 
@@ -56,15 +102,16 @@ export const MenuRadioItem = forwardRef<
   ElementRef<typeof MenuPrimitive.RadioItem>,
   ComponentPropsWithoutRef<typeof MenuPrimitive.RadioItem> & { icon?: ReactNode; detail?: ReactNode }
 >(function MenuRadioItem({ className, icon, detail, children, ...props }, ref) {
+  const P = usePrimitive()
   return (
-    <MenuPrimitive.RadioItem ref={ref} className={cn('k-menu-item', className)} {...props}>
+    <P.RadioItem ref={ref} className={cn('k-menu-item', className)} {...props}>
       {icon}
       <span className="k-menu-item-label">{children}</span>
       {detail && <span className="k-menu-item-shortcut">{detail}</span>}
-      <MenuPrimitive.ItemIndicator className="k-menu-item-check">
+      <P.ItemIndicator className="k-menu-item-check">
         <Check />
-      </MenuPrimitive.ItemIndicator>
-    </MenuPrimitive.RadioItem>
+      </P.ItemIndicator>
+    </P.RadioItem>
   )
 })
 
@@ -72,21 +119,26 @@ export const MenuCheckboxItem = forwardRef<
   ElementRef<typeof MenuPrimitive.CheckboxItem>,
   ComponentPropsWithoutRef<typeof MenuPrimitive.CheckboxItem> & { icon?: ReactNode }
 >(function MenuCheckboxItem({ className, icon, children, ...props }, ref) {
+  const P = usePrimitive()
   return (
-    <MenuPrimitive.CheckboxItem ref={ref} className={cn('k-menu-item', className)} {...props}>
+    <P.CheckboxItem ref={ref} className={cn('k-menu-item', className)} {...props}>
       {icon}
       <span className="k-menu-item-label">{children}</span>
-      <MenuPrimitive.ItemIndicator className="k-menu-item-check">
+      <P.ItemIndicator className="k-menu-item-check">
         <Check />
-      </MenuPrimitive.ItemIndicator>
-    </MenuPrimitive.CheckboxItem>
+      </P.ItemIndicator>
+    </P.CheckboxItem>
   )
 })
 
-export const MenuSeparator = (): ReactNode => <MenuPrimitive.Separator className="k-menu-separator" />
-export const MenuLabel = ({ children }: { children: ReactNode }): ReactNode => (
-  <MenuPrimitive.Label className="k-menu-label">{children}</MenuPrimitive.Label>
-)
+export function MenuSeparator(): ReactNode {
+  const P = usePrimitive()
+  return <P.Separator className="k-menu-separator" />
+}
+export function MenuLabel({ children }: { children: ReactNode }): ReactNode {
+  const P = usePrimitive()
+  return <P.Label className="k-menu-label">{children}</P.Label>
+}
 
 /**
  * A row that opens a submenu. `checked` shows the same check as a radio item, for an option that
@@ -96,8 +148,9 @@ export const MenuSubTrigger = forwardRef<
   ElementRef<typeof MenuPrimitive.SubTrigger>,
   ComponentPropsWithoutRef<typeof MenuPrimitive.SubTrigger> & { icon?: ReactNode; checked?: boolean }
 >(function MenuSubTrigger({ className, icon, checked, children, ...props }, ref) {
+  const P = usePrimitive()
   return (
-    <MenuPrimitive.SubTrigger
+    <P.SubTrigger
       ref={ref}
       className={cn('k-menu-item k-menu-sub-trigger', className)}
       data-checked={checked ? '' : undefined}
@@ -111,7 +164,7 @@ export const MenuSubTrigger = forwardRef<
         </span>
       )}
       <ChevronRight className="k-menu-sub-chevron" />
-    </MenuPrimitive.SubTrigger>
+    </P.SubTrigger>
   )
 })
 
@@ -119,9 +172,10 @@ export const MenuSubContent = forwardRef<
   ElementRef<typeof MenuPrimitive.SubContent>,
   ComponentPropsWithoutRef<typeof MenuPrimitive.SubContent>
 >(function MenuSubContent({ className, sideOffset = 6, collisionPadding = 8, ...props }, ref) {
+  const P = usePrimitive()
   return (
-    <MenuPrimitive.Portal container={portalRoot()}>
-      <MenuPrimitive.SubContent
+    <P.Portal container={portalRoot()}>
+      <P.SubContent
         ref={ref}
         sideOffset={sideOffset}
         alignOffset={-4}
@@ -129,6 +183,6 @@ export const MenuSubContent = forwardRef<
         className={cn('k-menu', className)}
         {...props}
       />
-    </MenuPrimitive.Portal>
+    </P.Portal>
   )
 })

@@ -9,6 +9,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  container-type: inline-size;
   background: var(--k-bg);
   color: var(--k-text);
   font-family: var(--k-font-ui);
@@ -75,6 +76,12 @@
   .nb-count,
   .nb-search-end .k-kbd { display: none; }
 }
+/* Import from VNDB: an icon in a narrow strip, written out once there's room for it. */
+.nb-vndb-wide.k-button { display: none; }
+@container (min-width: 46rem) {
+  .nb-vndb-icon.k-button { display: none; }
+  .nb-vndb-wide.k-button { display: inline-flex; }
+}
 
 .nb-callout { margin: var(--k-space-2) var(--k-space-3) 0; }
 
@@ -110,6 +117,22 @@
   white-space: normal;
 }
 .nb-row[data-editing] { background: var(--k-selected); }
+/* The ⋯ menu sits over the row's right end, in room the row keeps free for it. */
+.nb-row-wrap { position: relative; }
+.nb-row-wrap > .nb-row.k-row { padding-right: calc(var(--k-space-3) + var(--k-control-h-sm)); }
+.nb-row-actions.k-button {
+  position: absolute;
+  top: 50%;
+  right: var(--k-space-1-5);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity var(--k-fast), background-color var(--k-fast), color var(--k-fast);
+}
+.nb-row-wrap:hover .nb-row-actions.k-button,
+.nb-row-wrap:focus-within .nb-row-actions.k-button,
+.nb-row-actions.k-button[data-state="open"] { opacity: 1; }
+.nb-row-wrap[data-menu-open] > .nb-row:not([data-editing]),
+.nb-row-wrap:has(.nb-row-actions[data-state="open"]) > .nb-row:not([data-editing]) { background: var(--k-hover); }
 .nb-row .k-row-label { display: flex; flex-direction: column; gap: 0; }
 .nb-row-title { display: flex; align-items: baseline; gap: var(--k-space-2); min-width: 0; white-space: nowrap; }
 .nb-name {
@@ -175,7 +198,8 @@
 .nb-empty { flex: 1; }
 
 /* ------------------------------------------------------------------ footer */
-.nb-foot { gap: var(--k-space-3); padding: 0 var(--k-space-3); }
+/* Across the whole notebook, editor included, like the Log's. */
+.nb-foot { flex: none; gap: var(--k-space-3); padding: 0 var(--k-space-1) 0 var(--k-space-3); }
 .nb-foot .k-kbd { margin-right: var(--k-space-1); }
 .nb-hints { display: flex; align-items: center; gap: var(--k-space-3); color: var(--k-text-3); }
 @container (max-width: 26rem) {
@@ -184,10 +208,13 @@
 
 /* ------------------------------------------------------------------ editor pane */
 .nb-editor {
+  position: relative;
   display: flex;
   flex: none;
   flex-direction: column;
   width: 21rem;
+  /* However wide it's dragged, the list keeps some room. */
+  max-width: calc(100% - 16rem);
   min-height: 0;
   border-left: 1px solid var(--k-line);
   background: var(--k-bg);
@@ -195,6 +222,11 @@
 }
 .nb-editor-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--k-space-4) var(--k-space-3) var(--k-space-4); }
 .nb-editor-foot { gap: var(--k-space-2); padding: 0 var(--k-space-1) 0 var(--k-space-3); }
+.nb-editor-foot > .k-num { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-saved { display: inline-flex; align-items: center; gap: var(--k-space-1); min-width: 0; overflow: hidden; white-space: nowrap; }
+.nb-saved > svg { flex: none; width: var(--k-icon-xs); height: var(--k-icon-xs); color: var(--k-ok-text); }
+.nb-saved > .k-num { overflow: hidden; text-overflow: ellipsis; }
+.nb-saved-sep { color: var(--k-text-3); }
 @keyframes nb-pane-in { from { opacity: 0; transform: translateX(0.5rem); } to { opacity: 1; transform: none; } }
 
 /* Fields shared by the pane and the dialog editor. */

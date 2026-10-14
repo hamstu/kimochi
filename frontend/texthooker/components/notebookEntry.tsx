@@ -27,6 +27,10 @@ export function entryName(entry: NotebookEntry): string {
   return entry.name.trim();
 }
 
+/** The name an entry is shown by, or "New character" while it has none. */
+export const entryTitle = (entry: NotebookEntry): string =>
+  entryName(entry) || `New ${KIND_META[entry.kind].one.toLowerCase()}`;
+
 export function entryReading(entry: NotebookEntry): string {
   const name = entryName(entry);
   const reading =

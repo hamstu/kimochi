@@ -14,7 +14,6 @@ import {
   Bar,
   BarSpacer,
   Button,
-  ConfirmDialog,
   Dialog,
   DialogClose,
   DialogContent,
@@ -27,7 +26,6 @@ import {
   addNote,
   attachImage,
   computeMentions,
-  deleteEntry,
   deleteNote,
   detachImage,
   updateEntry,
@@ -43,11 +41,12 @@ import type {
   PlaceOrThingEntry,
 } from "@texthooker/lib/types";
 import { EntryAvatar } from "./notebookParts";
+import { DeleteEntryDialog } from "./EntryActionsMenu";
 import { NotebookHero } from "./NotebookHero";
 import {
   KIND_META,
-  entryName,
   entryReading,
+  entryTitle,
   useImageUrl,
 } from "./notebookEntry";
 import "../notebook.css";
@@ -61,6 +60,9 @@ interface Props {
    * editor, so the list stays visible and another entry can be picked while editing.
    */
   presentation?: "dialog" | "pane";
+  /** The pane's width, and the handle that resizes it. */
+  paneWidth?: number;
+  resizeHandle?: ReactNode;
 }
 
 /** IME composition (Japanese input) must never commit a field on Enter. */
@@ -71,6 +73,8 @@ export function EditEntryModal({
   entryId,
   onClose,
   presentation = "dialog",
+  paneWidth,
+  resizeHandle,
 }: Props) {
   const entry = useNotebookEntry(entryId ?? "");
   const open = entryId !== null && entry !== undefined;
@@ -78,26 +82,16 @@ export function EditEntryModal({
 
   useEffect(() => setConfirmOpen(false), [entryId]);
 
-  const title = entry
-    ? entryName(entry) || `New ${KIND_META[entry.kind].one.toLowerCase()}`
-    : "";
+  const title = entry ? entryTitle(entry) : "";
   const reading = entry ? entryReading(entry) : "";
 
-  const confirm = entry ? (
-    <ConfirmDialog
-      open={confirmOpen}
+  const confirm = (
+    <DeleteEntryDialog
+      entry={confirmOpen && entry ? entry : null}
       onOpenChange={setConfirmOpen}
-      title={`Delete ${title}?`}
-      description="Its notes and images are removed from this session’s notebook. This can’t be undone."
-      confirmLabel="Delete"
-      tone="danger"
-      onConfirm={() => {
-        setConfirmOpen(false);
-        void deleteEntry(entry.id);
-        onClose();
-      }}
+      onDeleted={onClose}
     />
-  ) : null;
+  );
 
   if (presentation === "pane") {
     if (!open || !entry) return null;
@@ -105,26 +99,41 @@ export function EditEntryModal({
       <aside
         className="nb-editor"
         aria-label={`Edit ${title}`}
+        style={{ width: paneWidth }}
         onKeyDown={(event) => {
-          if (event.key === "Escape" && !confirmOpen && !event.defaultPrevented) {
+          if (
+            event.key === "Escape" &&
+            !confirmOpen &&
+            !event.defaultPrevented
+          ) {
             event.preventDefault();
             onClose();
           }
         }}
       >
-        <EditorHero entry={entry} title={title} reading={reading} onClose={onClose} />
+        <EditorHero
+          entry={entry}
+          title={title}
+          reading={reading}
+          onClose={onClose}
+        />
         <div className="nb-editor-body">
           <EntryForm key={entry.id} entry={entry} />
         </div>
         <Bar position="bottom" className="nb-editor-foot">
-          <Mentions entry={entry} />
+          <Saved entry={entry} />
           <BarSpacer />
-          <Button variant="ghost" size="sm" onClick={() => setConfirmOpen(true)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setConfirmOpen(true)}
+          >
             <Trash2 />
             Delete
           </Button>
         </Bar>
         {confirm}
+        {resizeHandle}
       </aside>
     );
   }
@@ -176,6 +185,46 @@ function Mentions({ entry }: { entry: NotebookEntry }) {
       {count === 0
         ? "No mentions in this session"
         : `${count} mention${count === 1 ? "" : "s"} in this session`}
+    </span>
+  );
+}
+
+/** Edits save as they're typed; the pane's foot says when the last one did, with the mentions. */
+function Saved({ entry }: { entry: NotebookEntry }) {
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now);
+  const opened = useRef(entry.id);
+  const first = useRef(entry);
+  useEffect(() => {
+    // A different entry, or the same one as it was opened: nothing saved yet.
+    if (opened.current !== entry.id) {
+      opened.current = entry.id;
+      first.current = entry;
+      setSavedAt(null);
+    } else if (entry !== first.current) {
+      setSavedAt(Date.now());
+      setNow(Date.now());
+    }
+  }, [entry]);
+  useEffect(() => {
+    if (savedAt === null) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 5000);
+    return () => window.clearInterval(timer);
+  }, [savedAt]);
+  if (savedAt === null) return <Mentions entry={entry} />;
+  const seconds = Math.max(0, Math.round((now - savedAt) / 1000));
+  return (
+    <span className="nb-saved k-num" role="status">
+      <Check />
+      {seconds < 5
+        ? "Saved"
+        : seconds < 60
+          ? `Saved ${Math.floor(seconds / 5) * 5}s ago`
+          : `Saved ${Math.round(seconds / 60)} min ago`}
+      <span className="nb-saved-sep" aria-hidden>
+        ·
+      </span>
+      <Mentions entry={entry} />
     </span>
   );
 }

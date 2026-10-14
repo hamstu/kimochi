@@ -185,12 +185,7 @@ function LineRowInner({
         data-line-text={line.translation}
       >
         <span>{line.translation}</span>
-        <LineActionsMenu
-          line={line}
-          displayText={line.translation}
-          isTranslated
-          translateEnabled={translateEnabled}
-        />
+        <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
     );
   }
@@ -206,12 +201,7 @@ function LineRowInner({
       >
         <span>{line.text}</span>
         {translateNote}
-        <LineActionsMenu
-          line={line}
-          displayText={line.text}
-          isTranslated={false}
-          translateEnabled={translateEnabled}
-        />
+        <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
     );
   }
@@ -236,12 +226,7 @@ function LineRowInner({
           />
         ))}
         {translateNote}
-        <LineActionsMenu
-          line={line}
-          displayText={line.text}
-          isTranslated={false}
-          translateEnabled={translateEnabled}
-        />
+        <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
     );
   }
@@ -283,12 +268,7 @@ function LineRowInner({
         );
       })}
       {translateNote}
-      <LineActionsMenu
-        line={line}
-        displayText={line.text}
-        isTranslated={false}
-        translateEnabled={translateEnabled}
-      />
+      <LineActionsMenu line={line} translateEnabled={translateEnabled} />
     </div>
   );
 }

@@ -30,10 +30,18 @@ import {
   MenuContent,
   MenuItem,
   MenuTrigger,
+  ResizeHandle,
   Row,
   Segmented,
   Tooltip,
 } from "@kit";
+import { SessionMenu } from "../../main/SessionMenu";
+import { useSetting } from "../../bridge/useSetting";
+import {
+  DeleteEntryDialog,
+  EntryActionsMenu,
+  EntryContextMenu,
+} from "./EntryActionsMenu";
 import { VndbImportDialog } from "./VndbImportDialog";
 import { EditEntryModal } from "./EditEntryModal";
 import { EntryAvatar } from "./notebookParts";
@@ -58,6 +66,11 @@ import type {
   NotebookKind,
 } from "@texthooker/lib/types";
 import "../notebook.css";
+
+/** The editor pane's width range and default, in CSS pixels. */
+const EDITOR_MIN = 280;
+const EDITOR_MAX = 640;
+const EDITOR_WIDTH = 336;
 
 type Filter = "all" | NotebookKind;
 
@@ -99,6 +112,13 @@ export function NotebookPanel({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<NotebookEntry | null>(null);
+  const [editorWidth, setEditorWidth] = useSetting<number>(
+    "notebookEditorWidth",
+    EDITOR_WIDTH,
+  );
+  // The width while the pane's edge is being dragged.
+  const [liveWidth, setLiveWidth] = useState<number | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -268,10 +288,7 @@ export function NotebookPanel({
                     <Download />
                     Import from VNDB
                   </Button>
-                  <Button onClick={() => add("person")}>
-                    <Plus />
-                    Add character
-                  </Button>
+                  <AddMenu onAdd={add} label="Add item" />
                 </>
               }
             >
@@ -318,11 +335,26 @@ export function NotebookPanel({
                   options={filterOptions}
                 />
                 <span className="nb-filter-divider" aria-hidden />
+                {/* An icon when the strip is narrow, labelled when there's room (notebook.css). */}
                 <Tooltip content="Import from VNDB">
-                  <IconButton label="Import from VNDB" size="sm" onClick={() => setVndbOpen(true)}>
+                  <IconButton
+                    label="Import from VNDB"
+                    size="sm"
+                    className="nb-vndb-icon"
+                    onClick={() => setVndbOpen(true)}
+                  >
                     <Download />
                   </IconButton>
                 </Tooltip>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="nb-vndb-wide"
+                  onClick={() => setVndbOpen(true)}
+                >
+                  <Download />
+                  Import from VNDB
+                </Button>
                 <AddMenu onAdd={add} />
               </div>
 
@@ -359,55 +391,41 @@ export function NotebookPanel({
                   />
                 ) : null
               ) : (
-                <div
-                  id="nb-list"
-                  ref={listRef}
-                  className="nb-list"
-                  role="listbox"
-                  aria-label="Notebook entries"
-                  onKeyDown={onListKeyDown}
+                <EntryContextMenu
+                  entries={visible}
+                  onEdit={(entry) => {
+                    setActiveId(entry.id);
+                    onEdit(entry.id);
+                  }}
+                  onDelete={setDeleting}
                 >
-                  {groups.map((group) => (
-                    <GroupRows
-                      key={group.kind}
-                      kind={group.kind}
-                      showLabel={filter === "all"}
-                      entries={group.entries}
-                      current={current}
-                      highlight={activeId !== null || editingId !== null}
-                      editingId={editingId}
-                      onPick={(id) => {
-                        setActiveId(id);
-                        onEdit(id);
-                      }}
-                    />
-                  ))}
-                </div>
+                  <div
+                    id="nb-list"
+                    ref={listRef}
+                    className="nb-list"
+                    role="listbox"
+                    aria-label="Notebook entries"
+                    onKeyDown={onListKeyDown}
+                  >
+                    {groups.map((group) => (
+                      <GroupRows
+                        key={group.kind}
+                        kind={group.kind}
+                        showLabel={filter === "all"}
+                        entries={group.entries}
+                        current={current}
+                        highlight={activeId !== null || editingId !== null}
+                        editingId={editingId}
+                        onPick={(id) => {
+                          setActiveId(id);
+                          onEdit(id);
+                        }}
+                        onDelete={setDeleting}
+                      />
+                    ))}
+                  </div>
+                </EntryContextMenu>
               )}
-
-              <Bar position="bottom" className="nb-foot">
-                <span className="k-num">
-                  {visible.length === total
-                    ? `${total} ${total === 1 ? "entry" : "entries"}`
-                    : `${visible.length} of ${total}`}
-                </span>
-                <BarSpacer />
-                <span className="nb-hints">
-                  <span>
-                    <Kbd>↑</Kbd>
-                    <Kbd>↓</Kbd>
-                    Move
-                  </span>
-                  <span>
-                    <Kbd>↵</Kbd>
-                    Edit
-                  </span>
-                  <span>
-                    <Kbd>/</Kbd>
-                    Search
-                  </span>
-                </span>
-              </Bar>
             </>
           )}
         </div>
@@ -416,8 +434,59 @@ export function NotebookPanel({
           presentation="pane"
           entryId={editingId}
           onClose={closeEditor}
+          paneWidth={liveWidth ?? editorWidth}
+          resizeHandle={
+            <ResizeHandle
+              edge="start"
+              width={liveWidth ?? editorWidth}
+              min={EDITOR_MIN}
+              max={EDITOR_MAX}
+              reset={EDITOR_WIDTH}
+              label="Resize editor"
+              onLive={setLiveWidth}
+              onCommit={(width) => void setEditorWidth(width)}
+            />
+          }
         />
       </div>
+
+      {/* Across the whole notebook, under the editor too: the count, the keys and the session. */}
+      <Bar position="bottom" className="nb-foot">
+        {total > 0 ? (
+          <span className="k-num">
+            {visible.length === total
+              ? `${total} ${total === 1 ? "entry" : "entries"}`
+              : `${visible.length} of ${total}`}
+          </span>
+        ) : null}
+        <BarSpacer />
+        {total > 0 ? (
+          <span className="nb-hints">
+            <span>
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd>
+              Move
+            </span>
+            <span>
+              <Kbd>↵</Kbd>
+              Edit
+            </span>
+            <span>
+              <Kbd>/</Kbd>
+              Search
+            </span>
+          </span>
+        ) : null}
+        <SessionMenu />
+      </Bar>
+
+      <DeleteEntryDialog
+        entry={deleting}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        onDeleted={() => {
+          if (deleting?.id === editingId) onCloseEditor();
+        }}
+      />
 
       <VndbImportDialog open={vndbOpen} onOpenChange={setVndbOpen} />
     </div>
@@ -441,6 +510,7 @@ function GroupRows({
   highlight,
   editingId,
   onPick,
+  onDelete,
 }: {
   kind: NotebookKind;
   showLabel: boolean;
@@ -449,6 +519,7 @@ function GroupRows({
   highlight: boolean;
   editingId: string | null;
   onPick: (id: string) => void;
+  onDelete: (entry: NotebookEntry) => void;
 }) {
   return (
     <>
@@ -466,6 +537,7 @@ function GroupRows({
           selected={highlight && entry.id === current}
           editing={entry.id === editingId}
           onPick={() => onPick(entry.id)}
+          onDelete={onDelete}
         />
       ))}
     </>
@@ -478,6 +550,7 @@ function EntryRow({
   selected,
   editing,
   onPick,
+  onDelete,
 }: {
   entry: NotebookEntry;
   /** Holds the list's tab stop. */
@@ -486,6 +559,7 @@ function EntryRow({
   selected: boolean;
   editing: boolean;
   onPick: () => void;
+  onDelete: (entry: NotebookEntry) => void;
 }) {
   const name = entryName(entry);
   const reading = entryReading(entry);
@@ -495,77 +569,88 @@ function EntryRow({
   const noteCount = entry.notes?.length ?? 0;
 
   return (
-    <Row
-      role="option"
-      aria-selected={selected}
-      tabIndex={current ? 0 : -1}
-      data-entry-id={entry.id}
-      data-editing={editing ? "" : undefined}
-      className="nb-row"
-      icon={<EntryAvatar entry={entry} />}
-      onClick={onPick}
-      trailing={
-        <span className="nb-trail">
-          {!entry.matchEnabled ? (
-            <span
-              className="nb-meta"
-              aria-label="Not matched in the Log"
-              title="Not matched in the Log"
-            >
-              <EyeOff />
+    <div className="nb-row-wrap" data-entry-menu={entry.id}>
+      <Row
+        role="option"
+        aria-selected={selected}
+        tabIndex={current ? 0 : -1}
+        data-entry-id={entry.id}
+        data-editing={editing ? "" : undefined}
+        className="nb-row"
+        icon={<EntryAvatar entry={entry} />}
+        onClick={onPick}
+        trailing={
+          <span className="nb-trail">
+            {!entry.matchEnabled ? (
+              <span
+                className="nb-meta"
+                aria-label="Not matched in the Log"
+                title="Not matched in the Log"
+              >
+                <EyeOff />
+              </span>
+            ) : null}
+            {noteCount > 0 ? (
+              <span
+                className="nb-meta"
+                aria-label={`${noteCount} note${noteCount === 1 ? "" : "s"}`}
+                title={`${noteCount} note${noteCount === 1 ? "" : "s"}`}
+              >
+                <StickyNote />
+                {noteCount}
+              </span>
+            ) : null}
+          </span>
+        }
+      >
+        <span className="nb-row-title">
+          {name ? (
+            <span className="nb-name" lang="ja" translate="no">
+              {name}
+            </span>
+          ) : (
+            <span className="nb-name nb-name-empty">
+              New {KIND_META[entry.kind].one.toLowerCase()}
+            </span>
+          )}
+          {reading ? (
+            <span className="nb-reading" lang="ja" translate="no">
+              {reading}
             </span>
           ) : null}
-          {noteCount > 0 ? (
-            <span
-              className="nb-meta"
-              aria-label={`${noteCount} note${noteCount === 1 ? "" : "s"}`}
-              title={`${noteCount} note${noteCount === 1 ? "" : "s"}`}
-            >
-              <StickyNote />
-              {noteCount}
+          {entry.aliases.length > 0 ? (
+            <span className="nb-aliases" lang="ja" translate="no">
+              {entry.aliases.join("、")}
             </span>
           ) : null}
         </span>
-      }
-    >
-      <span className="nb-row-title">
-        {name ? (
-          <span className="nb-name" lang="ja" translate="no">
-            {name}
-          </span>
-        ) : (
-          <span className="nb-name nb-name-empty">
-            New {KIND_META[entry.kind].one.toLowerCase()}
-          </span>
-        )}
-        {reading ? (
-          <span className="nb-reading" lang="ja" translate="no">
-            {reading}
-          </span>
-        ) : null}
-        {entry.aliases.length > 0 ? (
-          <span className="nb-aliases" lang="ja" translate="no">
-            {entry.aliases.join("、")}
-          </span>
-        ) : null}
-      </span>
-      <span className={preview ? "nb-sub" : "nb-sub nb-sub-empty"}>
-        {preview || "No description"}
-      </span>
-    </Row>
+        <span className={preview ? "nb-sub" : "nb-sub nb-sub-empty"}>
+          {preview || "No description"}
+        </span>
+      </Row>
+      <EntryActionsMenu entry={entry} onEdit={onPick} onDelete={onDelete} />
+    </div>
   );
 }
 
-function AddMenu({ onAdd }: { onAdd: (kind: NotebookKind) => void }) {
+/** Add, then choose what: a character, a place or a thing. */
+function AddMenu({
+  onAdd,
+  label,
+}: {
+  onAdd: (kind: NotebookKind) => void;
+  /** The empty notebook's larger button says "Add item"; the toolbar's, "Add". */
+  label?: string;
+}) {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button size="sm">
+        <Button size={label ? undefined : "sm"}>
           <Plus />
-          Add
+          {label ?? "Add"}
         </Button>
       </MenuTrigger>
-      <MenuContent align="end">
+      <MenuContent align={label ? "center" : "end"}>
         {KIND_ORDER.map((kind) => (
           <MenuItem
             key={kind}
