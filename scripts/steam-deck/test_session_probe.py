@@ -73,5 +73,29 @@ class WineFocusHandoff(unittest.TestCase):
         self.assertTrue(gate.changed((1244090, ':1', 33554434)))
 
 
+class NeutralHandoff(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('neutral', Path(__file__).with_name('controller_neutral.py'))
+        self.neutral = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.neutral)
+
+    def test_releases_held_controls_and_preserves_trigger_rest(self):
+        axes = {1: (24000,-32767,32767,0,0,0), 2: (200,0,255,0,0,0),
+                16: (-1,-1,1,0,0,0), 4: (0,-32767,32767,0,0,0)}
+        self.assertEqual(self.neutral.neutral_events(axes,{304,317,318}),
+                         [(1,304,0),(1,317,0),(1,318,0),(3,1,0),(3,2,0),(3,16,0),(0,0,0)])
+
+    def test_neutral_report_is_idempotent_and_ignores_other_axes_keys(self):
+        self.assertEqual(self.neutral.neutral_events({0:(0,-32767,32767),2:(0,0,255),30:(123,0,255)}, {30}), [])
+        self.assertEqual(self.neutral.neutral_axis(0,0,65535),32767)
+
+    def test_never_targets_physical_or_nonsteam_devices(self):
+        accept = self.neutral.is_steam_virtual
+        self.assertTrue(accept((3,0x28de,0x11ff,1),'/sys/devices/virtual/input/input42','Microsoft X-Box 360 pad 0'))
+        self.assertFalse(accept((3,0x28de,0x1205,1),'/sys/devices/virtual/input/input42','Microsoft X-Box 360 pad 0'))
+        self.assertFalse(accept((3,0x28de,0x11ff,1),'/sys/devices/pci0000/input/input42','Microsoft X-Box 360 pad 0'))
+        self.assertFalse(accept((3,0x28de,0x11ff,1),'/sys/devices/virtual/input/input42','Keyboard'))
+
+
 if __name__ == '__main__':
     unittest.main()

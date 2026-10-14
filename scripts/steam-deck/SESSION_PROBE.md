@@ -297,3 +297,33 @@ Native guarded retest observed menu open at 11:27:59, watchdog paused Steam PID
 50945, Cancel at 11:28:04, relay sent WM_TAKE_FOCUS to game XID 33554433,
 and watchdog resumed Steam. Post-dismiss state was Steam Sl, game app 1244090
 selected. This confirms lifecycle ordering, not physical exclusivity by itself.
+
+### Guarded loop acceptance and stale held-state correction
+
+**PASS, user confirmed:** the guarded game → menu → main app → game loop works,
+including game input recovery. User then found a separate takeover edge case:
+tilting a stick while clicking LS+RS left the game menu auto-repeating behind
+the overlay until dismissal. Pausing Steam stops new reports; it does not clear
+the virtual controller's last held state.
+
+The harness now sends an initial watchdog heartbeat immediately, waits for the
+validated Steam PID/start token to report stopped state, then sends one neutral
+evdev frame on matching Steam virtual Xbox devices. It releases currently held
+gamepad buttons, centres stick/hat axes and releases triggers, followed by
+SYN_REPORT. `controller_neutral.py` requires the virtual sysfs path, USB VID/PID
+28de:11ff and expected virtual-pad name; it never writes physical controllers,
+HID feature/output reports, keyboard keys, or unrelated axes. No grabs or device
+permission changes. If the guard ends, pause acknowledgement times out, or no
+writable matching device exists, the menu dismisses and releases its lease.
+Old held values are not replayed on exit; Steam resumes physical reporting.
+
+Native check at 11:32:35: event10 stick axes before `{0:-79,1:1227,3:-569,4:401}`
+and after all zero; triggers/hats also zero. One five-event frame was delivered,
+then dismissal resumed Steam (Sl) and the Wine relay restored game activation.
+Eight Python tests pass, including stale held-state release, trigger/axis rest
+values, idempotence and rejection of physical/non-Steam devices. User's specific
+intentional-tilt reproduction with this new correction remains pending.
+
+The evdev delivery mechanism uses the kernel's existing
+[`evdev_write` → `input_inject_event` path](https://github.com/torvalds/linux/blob/master/drivers/input/evdev.c).
+This is confined to the opt-in harness, not a production platform change.

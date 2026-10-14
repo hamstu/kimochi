@@ -242,6 +242,31 @@ def main():
                 token = fields[19]
                 env = dict(os.environ, DISPLAY=':0', XDG_CURRENT_DESKTOP='gamescope', KIMOCHI_GAMESCOPE_OVERLAY='x11')
                 input_guard = subprocess.Popen([args.touch_watchdog, '--gamescope-input-watchdog', entry.name, token, str(os.getpid())], env=env, stdin=subprocess.PIPE, start_new_session=True)
+                # Pause delivery first, then clear the last held state in the
+                # virtual pad. Otherwise games keep repeating a pre-chord axis.
+                input_guard.stdin.write(b'A')
+                input_guard.stdin.flush()
+                guard = input_guard
+                deadline = time.monotonic() + 1
+                def neutral_handoff():
+                    if input_guard is not guard or not menu_visible:
+                        return False
+                    try:
+                        current = (entry / 'stat').read_text().rsplit(')',1)[1].split()
+                        if current[19] != token or guard.poll() is not None:
+                            raise RuntimeError('input guard ended before neutral handoff')
+                        if current[0] in ('T','t'):
+                            from controller_neutral import neutralize
+                            report('controller-neutral-handoff', devices=neutralize())
+                            return False
+                        if time.monotonic() >= deadline:
+                            raise RuntimeError('Steam pause acknowledgement timed out')
+                        return True
+                    except (OSError, RuntimeError) as error:
+                        report('controller-neutral-failed', error=str(error))
+                        hide_overlay()
+                        return False
+                GLib.timeout_add(10, neutral_handoff)
                 report('input-guard-started', steam=entry.name)
                 return
             except (FileNotFoundError, PermissionError, ProcessLookupError):
