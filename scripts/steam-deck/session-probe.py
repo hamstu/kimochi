@@ -101,18 +101,34 @@ def touch_guard(mode):
         report('touch-guard-restored', mode=original)
 
 
-def main():
+def overlay_command(script, seconds, input_mode, watchdog):
+    command = ['systemd-run', '--user', '--collect', '--unit=kimochi-session-overlay-probe',
+               f'--property=RuntimeMaxSec={seconds}', '--setenv=DISPLAY=:0',
+               '--setenv=GDK_BACKEND=x11', '--setenv=KIMOCHI_SESSION_PROBE=1',
+               '/usr/bin/python3', script, 'overlay', '--seconds', str(seconds),
+               '--input-mode', input_mode]
+    if watchdog:
+        command += ['--touch-watchdog', watchdog]
+    return command
+
+
+def argument_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('role', choices=['app', 'overlay', 'touch-guard'])
-    parser.add_argument('--seconds', type=int, default=300)
-    parser.add_argument('--input-mode', choices=['observe', 'guarded'], default='observe', help='observe never pauses Steam; guarded requires independent watchdog')
+    parser.add_argument('--seconds', type=int, default=3600)
+    parser.add_argument('--input-mode', choices=['observe', 'guarded'], default='guarded', help='observe never pauses Steam; guarded requires independent watchdog')
     parser.add_argument('--touch-mode', type=int, choices=[1, 4], default=1)
     parser.add_argument('--touch-watchdog', help='Existing Kimochi AppImage, used only for its independent touch-mode recovery helper')
+    return parser
+
+
+def main():
+    parser = argument_parser()
     args = parser.parse_args()
     if os.environ.get('KIMOCHI_SESSION_PROBE') != '1':
         parser.error('opt in with KIMOCHI_SESSION_PROBE=1')
-    if not 10 <= args.seconds <= 900:
-        parser.error('--seconds must be 10..900')
+    if not 10 <= args.seconds <= 3600:
+        parser.error('--seconds must be 10..3600')
     if args.role == 'touch-guard':
         touch_guard(args.touch_mode)
         return
@@ -172,9 +188,7 @@ def main():
         except OSError as error:
             if args.role == 'app' and role == 'overlay':
                 # Fresh user service: outside Steam's foreground app lifetime.
-                launch = ['systemd-run', '--user', '--collect', '--unit=kimochi-session-overlay-probe', '--property=RuntimeMaxSec=90', '--setenv=DISPLAY=:0', '--setenv=GDK_BACKEND=x11', '--setenv=KIMOCHI_SESSION_PROBE=1', '/usr/bin/python3', str(Path(__file__).resolve()), 'overlay', '--seconds', '90']
-                if args.touch_watchdog:
-                    launch += ['--touch-watchdog', args.touch_watchdog]
+                launch = overlay_command(str(Path(__file__).resolve()), args.seconds, args.input_mode, args.touch_watchdog)
                 subprocess.run(launch, check=False)
                 attempts = 0
                 def retry():
@@ -258,6 +272,7 @@ def main():
                         if current[0] in ('T','t'):
                             from controller_neutral import neutralize
                             report('controller-neutral-handoff', devices=neutralize())
+                            heading.set_text('Controller menu · game input blocked')
                             return False
                         if time.monotonic() >= deadline:
                             raise RuntimeError('Steam pause acknowledgement timed out')
@@ -390,6 +405,7 @@ def main():
             window.present()
         elif args.role == 'overlay' and command in ('show', 'show-interactive'):
             interactive = command == 'show-interactive'
+            heading.set_text('Controller menu · acquiring input' if args.input_mode == 'guarded' else 'OBSERVE · game input allowed')
             release_touch()
             window.set_accept_focus(interactive)
             prop('STEAM_OVERLAY', int(interactive))
@@ -410,7 +426,7 @@ def main():
             def countdown():
                 nonlocal remaining, dismiss_timer
                 remaining -= 1
-                status.set_text(f'Overlay closes in {remaining}s · touch buttons' if interactive else f'Passive visual probe · closes in {remaining}s')
+                status.set_text(f'{args.input_mode.upper()} · closes in {remaining}s' if interactive else f'Passive visual probe · closes in {remaining}s')
                 if remaining <= 0:
                     dismiss_timer = None
                     hide_overlay()
@@ -561,6 +577,9 @@ def main():
     window.connect('touch-event', pointer)
     window.connect('focus-in-event' , lambda *_: report('focus-in'))
     window.connect('focus-out-event', lambda *_: report('focus-out'))
+    if args.role == 'app':
+        # Steam launch must bring up the controller sidecar too.
+        GLib.idle_add(lambda: (request('overlay', 'hide'), False)[1])
     GLib.timeout_add_seconds(args.seconds, lambda: (Gtk.main_quit(), False)[1])
     report('started', inputMode=args.input_mode, role=args.role, pid=os.getpid(), xid=xid, display=os.environ.get('DISPLAY'), steamAppId=os.environ.get('SteamAppId'), seconds=args.seconds)
     Gtk.main()

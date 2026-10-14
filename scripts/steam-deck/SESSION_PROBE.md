@@ -1,5 +1,20 @@
 # Steam-managed controls / external overlay experiment
 
+## Current launch path
+
+Deploy `session-probe.py`, `gamescope_focus_relay.py`, `controller_neutral.py` and
+`session-probe-launch.sh` together; use the last file as the registered shortcut's
+`launch.sh` beside the Python files. Normal startup explicitly uses **guarded**
+mode and starts its sidecar automatically. Input mode and lifetime are forwarded
+to sidecar restarts. Both processes are bounded to one hour for these interactive
+tests; each menu still auto-dismisses after 20 seconds, and independent input
+recovery still uses a 2.5-second heartbeat timeout. The overlay heading changes
+from acquiring input to **game input blocked** only after the pause/neutral
+handoff succeeds. Observation mode remains an explicit diagnostic option.
+
+This supersedes earlier touch-only/default-observe/90-second-launch descriptions
+below, which document the investigation history.
+
 ## Controller-loop extension (2026-10-14)
 
 The current experimental overlay role reads the Deck's input-only HID reports
@@ -327,3 +342,25 @@ intentional-tilt reproduction with this new correction remains pending.
 The evdev delivery mechanism uses the kernel's existing
 [`evdev_write` → `input_inject_event` path](https://github.com/torvalds/linux/blob/master/drivers/input/evdev.c).
 This is confined to the opt-in harness, not a production platform change.
+
+
+### Steam relaunch regression corrected
+
+User relaunched the shortcut after the manually configured guarded sidecar
+expired and reported game input passing through the menu. Exact captured log:
+`"overlay-shown" ... "inputMode": "observe"`; ExecStart lacked --input-mode and
+used --seconds 90. This was the on-demand launch path resetting to the diagnostic
+default, not evidence that the active guard failed.
+
+Corrected the parser default to guarded and pass input mode, lifetime and helper
+explicitly into the child service. Added a tracked shortcut launcher, automatic
+sidecar startup from the app, and visible guarded/acquiring/blocked UI states.
+Foreground and sidecar lifetime increased to one hour so slow interactive tests
+do not repeatedly lose the harness. No persistent background service was added.
+
+Relaunched through the actual Steam shortcut: app PID 56911 and sidecar PID 56922
+both reported guarded mode/3600 seconds. Native check at 11:51:18 engaged watchdog
+PID 56949, neutralized event10 axes to zero and restored Steam Sl on dismissal.
+Ten tests pass, including normal-start guarded default and explicit mode/lifetime
+propagation through on-demand service creation. Physical tilted-stick retest is
+pending; do not count the prior observe-mode attempt against neutral handoff.

@@ -97,5 +97,20 @@ class NeutralHandoff(unittest.TestCase):
         self.assertFalse(accept((3,0x28de,0x11ff,1),'/sys/devices/virtual/input/input42','Keyboard'))
 
 
+class SteamRelaunch(unittest.TestCase):
+    def test_normal_launch_defaults_to_guarded(self):
+        args = probe.argument_parser().parse_args(['app'])
+        self.assertEqual(args.input_mode, 'guarded')
+        self.assertEqual(args.seconds, 3600)
+
+    def test_overlay_restart_preserves_selected_mode_and_lifetime(self):
+        for mode in ['guarded', 'observe']:
+            command = probe.overlay_command('/probe/session-probe.py',3600,mode,'/runtime/Kimochi.AppImage')
+            self.assertEqual(command[command.index('--input-mode')+1],mode)
+            self.assertEqual(command[command.index('--seconds')+1],'3600')
+            self.assertIn('--property=RuntimeMaxSec=3600',command)
+            self.assertEqual(command[-2:],['--touch-watchdog','/runtime/Kimochi.AppImage'])
+
+
 if __name__ == '__main__':
     unittest.main()
