@@ -1023,6 +1023,26 @@
 .sg-error {
   color: var(--k-danger-text);
 }
+.sg-permission {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+  margin: var(--k-space-3);
+  padding: var(--k-space-3);
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-md);
+  cursor: pointer;
+  outline: none;
+}
+.sg-permission[data-highlighted] {
+  background: var(--k-press);
+}
+.sg-permission-icon {
+  flex: none;
+  width: var(--k-icon);
+  height: var(--k-icon);
+  color: var(--k-warn-text);
+}
 
 /* A narrow sidebar keeps the labels and lets the shortcut and region size go. */
 @container (max-width: 11.5rem) {

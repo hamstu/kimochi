@@ -12,10 +12,16 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { AppWindow, Monitor, ScreenShare } from 'lucide-react'
+import { AppWindow, Monitor, ScreenShare, ShieldAlert } from 'lucide-react'
 import { Button, Callout, Spinner } from '@kit'
 import { invoke } from '@tauri-apps/api/core'
-import { nativeError, startSystemPick, useSystemPick } from '../bridge/tauri'
+import {
+  nativeError,
+  openScreenCapturePreferences,
+  startSystemPick,
+  useSystemPick,
+  type NativeError
+} from '../bridge/tauri'
 import { useCapabilities } from '../bridge/capabilities'
 
 export interface CatalogSource {
@@ -204,6 +210,31 @@ export function SourceGrid({
   return <WindowGrid currentId={currentId} onChoose={onChoose} />
 }
 
+/**
+ * Missing capture permission, as something to click rather than a red line: opens the system's
+ * screen recording settings, as the first-run guide's button does.
+ */
+function GrantCaptureItem({ os }: { os: string }): ReactNode {
+  return (
+    <MenuPrimitive.Item
+      className="sg-permission"
+      onSelect={() => void openScreenCapturePreferences()}
+    >
+      <ShieldAlert className="sg-permission-icon" />
+      <span className="sg-caption-text">
+        <span className="sg-caption-title">
+          {os === 'macos' ? 'Allow Screen Recording…' : 'Allow screen capture…'}
+        </span>
+        <span className="sg-caption-detail">
+          {os === 'macos'
+            ? 'Kimochi needs it to see your windows. Opens System Settings: turn on Kimochi, and reopen Kimochi if macOS asks.'
+            : 'Kimochi needs it to see your windows. Opens your system settings.'}
+        </span>
+      </span>
+    </MenuPrimitive.Item>
+  )
+}
+
 function WindowGrid({
   currentId,
   onChoose
@@ -212,7 +243,7 @@ function WindowGrid({
   onChoose: (source: CatalogSource) => void
 }): ReactNode {
   const [sources, setSources] = useState<CatalogSource[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<NativeError | null>(null)
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const capabilities = useCapabilities()
   // Only a platform with a settings page to send the user to gets told to go there.
@@ -230,7 +261,7 @@ function WindowGrid({
         if (live) setSources(catalog)
       },
       (caught: unknown) => {
-        if (live) setError(nativeError(caught).message)
+        if (live) setError(nativeError(caught))
       }
     )
     return () => {
@@ -252,7 +283,12 @@ function WindowGrid({
 
   return (
     <div className="sg-scroll" ref={setRoot}>
-      {error && <div className="sg-status sg-error">{error}</div>}
+      {error &&
+        (error.kind === 'permission' && capabilities.capture.canOpenSettings ? (
+          <GrantCaptureItem os={capabilities.os} />
+        ) : (
+          <div className="sg-status sg-error">{error.message}</div>
+        ))}
       {!sources && !error && (
         <div className="sg-status" role="status">
           <Spinner label="Finding sources" />

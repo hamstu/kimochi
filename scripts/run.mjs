@@ -96,10 +96,16 @@ if (
   const identities = spawnSync('security', ['find-identity', '-v', '-p', 'codesigning'], {
     encoding: 'utf8'
   })
-  const match = identities.stdout?.match(/([A-F0-9]{40}) "Apple Development:/)
+  // Developer ID first: it is what CI signs with, and macOS keys a permission grant (Screen
+  // Recording) to the signing certificate. A local bundle signed with a different certificate
+  // under the same bundle id leaves a grant System Settings shows as on while the app is denied,
+  // until `tccutil reset ScreenCapture dev.kimochi.app` clears it.
+  const match =
+    identities.stdout?.match(/([A-F0-9]{40}) "(Developer ID Application):/) ??
+    identities.stdout?.match(/([A-F0-9]{40}) "(Apple Development):/)
   if (match) {
     env.APPLE_SIGNING_IDENTITY = match[1]
-    console.log('Using installed Apple Development identity for this local bundle.')
+    console.log(`Using the installed ${match[2]} identity for this local bundle.`)
   }
 }
 

@@ -29,6 +29,16 @@ npm run check:rust   # cargo clippy -D warnings
 
 CI runs the same checks, plus the `capture-core` tests and a bundle, on macOS, Windows and Linux.
 
+On macOS, Screen Recording permission belongs to the certificate an app was signed with, not just
+its bundle id. `npm run bundle` signs with your Developer ID certificate if you have one (else
+Apple Development, else ad-hoc). If you switch between builds signed differently (a local bundle,
+a CI build, an ad-hoc one), System Settings can show Kimochi as allowed while capture is still
+refused. Clear the old grant and allow it again:
+
+```sh
+tccutil reset ScreenCapture dev.kimochi.app
+```
+
 **UI work without the native app.** `npm run preview:ui` serves every window in Chrome against
 mocked native commands, so panels can be designed and checked in a browser. The mocks and the
 preview state live in [frontend/dev/preview-setup.ts](frontend/dev/preview-setup.ts).
