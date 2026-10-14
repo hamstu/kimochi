@@ -183,3 +183,13 @@ Physical PIN/controller recovery remains pending user confirmation. Resume
 acceptance tests in separate stages: game alone, concurrent app/manual switching,
 controller menu without Steam pause, then guarded menu. Verify game input after
 every stage rather than accepting visible switching as proof of input recovery.
+
+### Staged retest after recovery
+
+User confirmed PIN entry and Steam controls work after restart. Harness now
+starts in `--input-mode observe` by default: the physical reader and menu can be
+tested without pausing Steam. `--input-mode guarded` explicitly enables the
+independent input lease. Observation mode may pass menu controller input through
+to the game; that is expected during isolation, not acceptable final behavior.
+Do not enable the guard until game-only, concurrent Steam app/manual switching,
+and compositor switching without the guard preserve game input independently.

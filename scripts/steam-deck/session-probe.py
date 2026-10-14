@@ -105,6 +105,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('role', choices=['app', 'overlay', 'touch-guard'])
     parser.add_argument('--seconds', type=int, default=300)
+    parser.add_argument('--input-mode', choices=['observe', 'guarded'], default='observe', help='observe never pauses Steam; guarded requires independent watchdog')
     parser.add_argument('--touch-mode', type=int, choices=[1, 4], default=1)
     parser.add_argument('--touch-watchdog', help='Existing Kimochi AppImage, used only for its independent touch-mode recovery helper')
     args = parser.parse_args()
@@ -399,13 +400,13 @@ def main():
                 # GTK presentation must reach the server before focus validation.
                 def acquire_safely():
                     try:
-                        if menu_visible: acquire_input()
+                        if menu_visible and args.input_mode == 'guarded': acquire_input()
                     except (OSError, RuntimeError) as error:
                         report('input-guard-failed', error=str(error))
                         hide_overlay()
                     return False
                 GLib.timeout_add(150, acquire_safely)
-            report('overlay-shown', interactive=interactive)
+            report('overlay-shown', interactive=interactive, inputMode=args.input_mode)
         elif args.role == 'overlay' and command == 'hide':
             hide_overlay()
         elif command == 'quit':
@@ -524,7 +525,7 @@ def main():
     window.connect('focus-in-event' , lambda *_: report('focus-in'))
     window.connect('focus-out-event', lambda *_: report('focus-out'))
     GLib.timeout_add_seconds(args.seconds, lambda: (Gtk.main_quit(), False)[1])
-    report('started', role=args.role, pid=os.getpid(), xid=xid, display=os.environ.get('DISPLAY'), steamAppId=os.environ.get('SteamAppId'), seconds=args.seconds)
+    report('started', inputMode=args.input_mode, role=args.role, pid=os.getpid(), xid=xid, display=os.environ.get('DISPLAY'), steamAppId=os.environ.get('SteamAppId'), seconds=args.seconds)
     Gtk.main()
     hide_overlay()
     if args.role == 'app':
