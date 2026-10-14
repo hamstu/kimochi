@@ -316,9 +316,8 @@ test('two narration boxes boxed as one are set as wrapped text, never stretched 
   // both, with a line found for the left column only (y 951 to 1057 of a box from 882 to 1057).
   // Inventing the right column over the box's whole length spread …嘘だろ over 175 px.
   const box = { x: 312, y: 882, width: 55, height: 175 }
-  const text = '．．．嘘だろ．．．？'
+  const text = '…嘘だろ…？'
   const lines = [{ x: 312, y: 951, width: 29, height: 106 }]
-  assert.equal(columns(lines.map((line) => ({ ...line, segments: [] })), text, box), null)
   const [runs] = layoutParts([{ text, rect: box, lines, block: true, vertical: true }], em)
   assert.equal(runs.map((run) => run.text).join(''), text, 'every character, in reading order')
   assert.ok(runs.length > 1)
@@ -330,11 +329,15 @@ test('two narration boxes boxed as one are set as wrapped text, never stretched 
     assert.ok(pitch <= 1.1 * run.fontSize, `pitch ${pitch} for a ${run.fontSize} px glyph`)
     assert.ok(run.rect.y >= box.y - 1e-9 && run.rect.y + run.rect.height <= box.y + box.height + 1e-9)
   }
-  // Broken where the boxes join, after the pause, as the source is lettered.
+  // Broken where the boxes join, after the pause, as the source is lettered: the found column
+  // keeps its place, low on the left, and the right one runs from the top.
   assert.deepEqual(
     runs.map((run) => run.text),
-    ['．．．', '嘘だろ．．．？']
+    ['…', '嘘だろ…？']
   )
+  close(runs[1].rect.y, 951, 'the left column where it was found')
+  close(runs[0].rect.y, 882, 'the right column from the top')
+  assert.ok(runs[0].rect.height < 40, 'the right column only as long as its text')
 })
 
 test('an estimated column starts where the detector found it, when it fits there', () => {
@@ -404,4 +407,30 @@ test('a break measured off line lengths moves to just after a nearby pause', () 
   const runs = distribute('さすが「どこでも勉強ニキ」の異名を持つだけはあるね！', lines, true)
   assert.equal(runs[1].text, '「どこでも勉強ニキ」')
   assert.equal(runs.map((run) => run.text).join(''), 'さすが「どこでも勉強ニキ」の異名を持つだけはあるね！')
+})
+
+test('a column of ellipses keeps its bubble\'s size, centred on its tight box', () => {
+  // Manga OCR on 「……／かう」: the dots boxed 29 px long for two ellipses, beside 「かう」.
+  const [runs] = layoutParts(
+    [
+      {
+        text: '……かう',
+        rect: { x: 73, y: 103, width: 113, height: 88 },
+        lines: [
+          { x: 163, y: 130, width: 23, height: 29 },
+          { x: 73, y: 133, width: 34, height: 58 }
+        ],
+        block: true,
+        vertical: true
+      }
+    ],
+    em
+  )
+  assert.deepEqual(
+    runs.map((run) => run.text),
+    ['……', 'かう']
+  )
+  close(runs[0].fontSize, runs[1].fontSize, 'one size')
+  close(runs[0].lead + runs[0].fontSize, 29 / 2, 'centred on its box')
+  assert.equal(runs[0].spacing, 0)
 })

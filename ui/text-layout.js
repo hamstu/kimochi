@@ -68,6 +68,11 @@ const SPANNED = 0.75
 const PITCH = 1.05
 /** Widest against narrowest of two regions that can be neighbouring columns (see `parallel`). */
 const PARALLEL = 1.2
+/**
+ * Breadth, against the block's glyph size, of an uncovered strip that is taken for a missed column
+ * in a block of joined bubbles: an ellipsis or a column of narrow kana is thinner than a full glyph.
+ */
+const OPEN = 0.8
 /** How many characters a line break measured off line lengths may move to land after a pause. */
 const NUDGE = 2
 
@@ -119,16 +124,29 @@ export function distribute(text, lineRects, vertical) {
     return lines.map((rect, index) => ({ text: broken[index], rect }))
   }
   const all = chars(text.replace(/\n/g, ''))
-  const capacities = lines.map((rect) =>
-    vertical ? rect.height / Math.max(1, rect.width) : rect.width / Math.max(1, rect.height)
-  )
+  const length = (rect) => (vertical ? rect.height : rect.width)
+  const thick = (rect) => Math.max(1, vertical ? rect.width : rect.height)
+  const capacities = lines.map((rect) => length(rect) / thick(rect))
+  // An open line (see `columns`) has no length of its own: it holds what the others have no room for.
+  const open = lines.filter((rect) => rect.open).length
+  if (open) {
+    const known = capacities.reduce((sum, value, i) => sum + (lines[i].open ? 0 : value), 0)
+    const rest = Math.max(1, all.length - known) / open
+    lines.forEach((rect, i) => {
+      if (rect.open) capacities[i] = rest
+    })
+  }
   const shares = settle(all, apportion(all.length, capacities))
   let at = 0
   return lines
     .map((rect, index) => {
       const piece = all.slice(at, at + shares[index]).join('')
       at += shares[index]
-      return { text: piece, rect }
+      if (!rect.open) return { text: piece, rect }
+      // As long as its text set solid at the size its breadth allows, from the block's start.
+      const { open: _, ...bounds } = rect
+      const span = Math.min(length(rect), chars(piece).length * thick(rect) * PITCH)
+      return { text: piece, rect: vertical ? { ...bounds, height: span } : { ...bounds, width: span } }
     })
     .filter((run) => run.text)
 }
@@ -168,6 +186,9 @@ function settle(all, shares) {
   }
   return ends.map((end, i) => end - (i ? ends[i - 1] : 0))
 }
+
+/** A run of nothing but ellipses (or dots for them): not a lone 。 or 、, which is fitted as ink. */
+const DOTS = /^(?:[…‥]+|[．.・]{2,})$/u
 
 /** Punctuation a line of manga or game text usually ends after: a pause, a stop, a closing mark. */
 const BREAK_AFTER = new Set([...'、。，．・…‥！？!?」』）)〕】'])
@@ -279,7 +300,11 @@ function parallel(a, b, size) {
 
 export function columns(lines, text, rect) {
   const count = chars(text.replace(/\n/g, '')).length
-  const { size, lines: expected } = bestFit(count, rect.height, rect.width)
+  const best = bestFit(count, rect.height, rect.width)
+  // No larger than the widest region found: a bubble's box takes in blank around sparse text
+  // (……／かう), and sized by that, the dots' own column would read as ruby.
+  const size = Math.min(best.size, Math.max(...lines.map((line) => line.width)))
+  const expected = best.lines
   if (!(size > 0)) return null
   const merged = []
   for (const line of lines.filter((line) => line.width >= RUBY * size)) {
@@ -310,18 +335,35 @@ export function columns(lines, text, rect) {
   if (!merged.length || merged.some((column) => column.width > MERGED * size)) return null
   // A stretch of the box as wide as a glyph that no column covers is a column the detector missed
   // (the box is the text's, so something is there): it runs the box's full length.
+  //
+  // In a block its found columns do not span (SPANNED: two joined bubbles), nothing says how long a
+  // missed column is, so it is left `open`: it takes the text the found columns have no room for,
+  // set from the block's start at its natural pitch (`distribute`). A narrower strip counts there,
+  // since the box was not fitted to a rectangle of columns.
+  const longest = Math.max(...merged.map((column) => column.height))
+  const joined = longest < SPANNED * rect.height
   const covered = [...merged].sort((a, b) => a.x - b.x)
   const missed = []
   let edge = rect.x
+  const ends = [covered[0], covered[covered.length - 1]]
   for (const column of [...covered, { x: rect.x + rect.width, width: 0 }]) {
-    if (column.x - edge >= size)
-      missed.push({ x: edge, y: rect.y, width: column.x - edge, height: rect.height, segments: [] })
+    // Between two found columns of joined bubbles lies blank bubble, not a missed column: one the
+    // detector missed there is at an edge of the box, beside the columns it did find.
+    const edgeward = !joined || column === ends[0] || column.x === rect.x + rect.width
+    if (edgeward && column.x - edge >= (joined ? OPEN : 1) * size)
+      missed.push({
+        x: edge,
+        y: rect.y,
+        width: column.x - edge,
+        height: rect.height,
+        segments: [],
+        ...(joined ? { open: true } : {})
+      })
     edge = Math.max(edge, column.x + column.width)
   }
-  const longest = Math.max(...merged.map((column) => column.height))
-  if (missed.length && longest < SPANNED * rect.height) return null
   const found = [...merged, ...missed]
-  return found.length < expected ? null : found
+  // A joined block's box says too little about how many columns it holds to doubt the ones found.
+  return joined || found.length >= expected ? found : null
 }
 
 /**
@@ -385,6 +427,12 @@ export function fit(run, vertical, measure, size = null) {
   // Placed so, a run takes its row's size as it is; placed by its ends, only while its glyphs
   // would not overlap more than OVERLAP allows.
   let fontSize = Math.max(1, size ?? natural)
+  // A run of dots alone (…… on its own column) is boxed tight around ink that is mostly blank: it
+  // keeps its row's size, set solid and centred on its box, rather than shrinking to fit it.
+  if (size && DOTS.test(text)) {
+    const length = measure(text) * fontSize
+    return { ...run, fontSize, spacing: 0, lead: (along - length) / 2, shift: 0, natural }
+  }
   const placed = bySegments(run, vertical, measure, fontSize, start, end)
   if (!placed && size) fontSize = Math.max(1, Math.min(size, byAlong * OVERLAP))
   const room = along - (start + end + span) * fontSize

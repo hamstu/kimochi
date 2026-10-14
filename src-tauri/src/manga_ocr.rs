@@ -119,7 +119,39 @@ pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
         serde_json::to_value(engine.recognizer.backend_info()).map_err(|e| e.to_string())?;
     Ok(value)
 }
-fn response(page: PageResult) -> Value {
+/// Manga OCR's dots as the ellipses they were on the page.
+///
+/// Its post-processing (upstream's, kept as is) spells every `…` as three full-width periods, so
+/// a bubble's `……` arrives as `．．．．．．`: six characters a full cell apart in the overlay where
+/// the page has two, and in the Log. A run of three or more becomes one `…` per three (rounded,
+/// at least one); two become `‥`. A lone `．` is a full stop and stays.
+fn ellipses(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut dots = 0usize;
+    let flush = |out: &mut String, dots: usize| match dots {
+        0 => {}
+        1 => out.push('．'),
+        2 => out.push('‥'),
+        n => out.extend(std::iter::repeat_n('…', ((n + 1) / 3).max(1))),
+    };
+    for c in text.chars() {
+        if c == '．' {
+            dots += 1;
+        } else {
+            flush(&mut out, dots);
+            dots = 0;
+            out.push(c);
+        }
+    }
+    flush(&mut out, dots);
+    out
+}
+
+fn response(mut page: PageResult) -> Value {
+    for group in &mut page.groups {
+        group.recognition.text = ellipses(&group.recognition.text);
+    }
+    page.full_text = ellipses(&page.full_text);
     let groups: Vec<_> = page.groups.iter().map(|g| json!({"id":g.id,"text":g.recognition.text,"bbox":g.bbox,"orientation":g.orientation,"confidence":g.detection_confidence,"linePolygons":g.line_polygons,"recognition":g.recognition})).collect();
     let mut annotations = Vec::new();
     for g in &page.groups {
@@ -134,6 +166,18 @@ fn response(page: PageResult) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dots_become_the_ellipses_on_the_page() {
+        assert_eq!(ellipses("．．．．．．かう"), "……かう");
+        assert_eq!(ellipses("．．．嘘だろ．．．？"), "…嘘だろ…？");
+        assert_eq!(ellipses("あ．．"), "あ‥");
+        assert_eq!(ellipses("です．"), "です．");
+        // A miscount of one either way is still the ellipses it was read from.
+        assert_eq!(ellipses("．．．．"), "…");
+        assert_eq!(ellipses("．．．．．"), "……");
+        assert_eq!(ellipses("．．．．．．．"), "……");
+        assert_eq!(ellipses("ひらがな"), "ひらがな");
+    }
     #[test]
     fn empty_page_has_no_invented_geometry() {
         let result = response(PageResult {

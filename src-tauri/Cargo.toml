@@ -11,7 +11,7 @@ libc = "0.2"
 # from (mangaocr carries GPL code). Keep the macOS mangaocr line below on the same rev. To build
 # against local checkouts, or to move a pin, see "Working on the OCR crates" in CONTRIBUTING.md.
 meikiocr = { git = "https://github.com/hamstu/kimochi-meikiocr", rev = "16f2e4eb429c1f2c9a8dc75bb31eb8133e7f4aae" }
-mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "4a4964b6756224379430b715b35b1ceda93e4686" }
+mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "3cda692f93fcc814d626c3c2d67347433b80d33f" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
 # `macos-private-api` stays in this common block: tauri-build requires the common
@@ -55,7 +55,7 @@ tauri-plugin-updater = "2"
 # Formats the offered release's date for the panels. Already in the lock file via the updater.
 time = { version = "0.3", features = ["formatting"] }
 [target.'cfg(target_os = "macos")'.dependencies]
-mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "4a4964b6756224379430b715b35b1ceda93e4686", features = ["metal"] }
+mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "3cda692f93fcc814d626c3c2d67347433b80d33f", features = ["metal"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSPanel", "NSApplication", "NSResponder"] }
 objc2-foundation = "0.3"

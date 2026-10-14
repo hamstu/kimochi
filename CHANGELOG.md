@@ -54,6 +54,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Manga OCR's ellipses are ellipses again. It spelled every … as three full-width periods, so
+  a bubble's …… was drawn as six dots a whole character apart and read that way in the Log; it is
+  now ……, set compactly in vertical text, at the bubble's size.
+- Short vertical text in manga (……／かう, a sound effect like たゆんっ) is no longer shown as
+  horizontal when it's scanned as part of a page: text whose shape can't tell its direction
+  follows the rest of the page. Horizontal titles and captions stay horizontal.
 - Speech bubbles or narration boxes whose outlines run together, read by Manga OCR as one block,
   are no longer lettered with their characters stretched far apart to fill the joined shape. The
   text is set at its natural spacing, keeps its columns and reading order, and breaks columns after
