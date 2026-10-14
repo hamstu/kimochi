@@ -19,7 +19,9 @@
     /* --- per-word mode ---------------------------------------------------
        Transparent boxes sitting exactly over the source's own glyphs. They
        stay invisible until the pointer is near, so the source text is never
-       obscured by our copy of it. */
+       obscured by our copy of it. The text inside is fitted over the source
+       glyphs (text-layout.js) and set in the font it was measured in, and
+       hovering never moves or scales it. */
     .ocr-word {
       position: absolute;
       display: inline-flex;
@@ -27,25 +29,40 @@
       overflow: hidden;
       white-space: nowrap;
       text-align: left;
-      padding-left: 2px;
       color: white;
-      font-family: sans-serif;
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+        'Yu Gothic', 'Meiryo', sans-serif;
       font-weight: bold;
+      font-kerning: none;
       cursor: default;
       border-radius: 6px 6px 0 0;
       transition:
         background-color 0.1s ease-in-out,
         border-bottom 0.1s ease-in-out,
         opacity 0.1s ease-in-out,
-        color 0.1s ease-in-out,
-        transform 0.1s ease-in-out;
+        color 0.1s ease-in-out;
     }
     .ocr-word-text {
       opacity: 0;
     }
+    /* Top-aligned, so it starts at the box's top (or, vertical, its right) edge whatever the
+       line around it; `render.js` offsets it from there to where the fit puts its glyphs. */
     .ocr-word-current {
       display: inline-block;
+      position: relative;
+      vertical-align: top;
       text-align: left;
+    }
+    /* A block's lines (a paragraph or bubble read as several lines): zero-size inline blocks,
+       each offset from the box's corner to its line. Inline, not absolutely positioned, so the
+       box's text stays one flow Yomitan's scanner reads through from line to line (an absolute
+       element ends a scan, see `.ocr-lookahead`); zero-size, so where each flows is known. */
+    .ocr-word .ocr-run {
+      display: inline-block;
+      position: relative;
+      width: 0;
+      height: 0;
+      vertical-align: top;
     }
 
     /* --- grouped mode ----------------------------------------------------
@@ -147,10 +164,9 @@
       visibility: hidden !important;
     }
     /* Each run sits over the line or word it was read from; see text-layout.js. Glyphs are
-       centred across the run by its line height and along it by letter spacing. */
-    .ocr-group .ocr-run {
-      position: absolute;
-      box-sizing: border-box;
+       centred across the run by its line height (and its offset), and placed along it by its
+       offset and letter spacing. */
+    .ocr-run {
       white-space: nowrap;
       text-align: left;
       overflow: visible;
@@ -158,7 +174,11 @@
         'Yu Gothic', 'Meiryo', sans-serif;
       font-kerning: none;
     }
-    .ocr-group.ocr-vertical .ocr-run {
+    .ocr-group .ocr-run {
+      position: absolute;
+      box-sizing: border-box;
+    }
+    .ocr-vertical .ocr-run {
       writing-mode: vertical-rl;
       text-orientation: mixed;
     }
@@ -322,7 +342,6 @@
       }
       .ocr-word.ocr-vertical { padding: 0; align-items: stretch; }
       .ocr-vertical .ocr-word-text { width: 100%; height: 100%; }
-      .ocr-word.ocr-block .ocr-word-current { white-space: pre-wrap; overflow-wrap: anywhere; }
       .ocr-group.ocr-vertical { white-space: pre-wrap; overflow-wrap: anywhere; }
 
   </style>

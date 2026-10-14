@@ -1,0 +1,9 @@
+{
+ "name": "manga",
+ "width": 1654,
+ "height": 1170,
+ "scale": 1,
+ "image": "manga.png",
+ "source": "manga page from the kimochi-mangaocr test fixtures (not committed): no per-glyph truth, scored against the OCR boxes",
+ "lines": []
+}

@@ -24,8 +24,28 @@ export interface Annotation {
   granularity?: string
   /** For a block: the lines found inside it, as polygons of [x, y] points in capture pixels. */
   linePolygons?: number[][][]
+  /** For a block: per line, its words (or characters) with their boxes, `[x1, y1, x2, y2]`. */
+  lineSegments?: { text: string; bbox: number[] }[][]
+  /** For a line or word: its characters (or words) with their boxes. */
+  segments?: { text: string; bbox: number[] }[]
+  /** How far outside the ink the engine draws boxes, in ems (INK_MARGINS in ocr-result.ts). */
+  inkMargin?: number[]
   groupId?: string
   boundingPoly: { vertices: { x?: number; y?: number }[] }
+}
+/** A word or character of a line, mapped like everything else. */
+export type MappedSegment = Rect & { text: string }
+/** An annotation mapped to overlay-local points, with what the layout needs of it. */
+export type MappedBox = Rect & {
+  text: string
+  orientation?: 'horizontal' | 'vertical'
+  isVertical?: boolean
+  granularity?: string
+  groupId?: string
+  lines?: Rect[]
+  lineSegments?: MappedSegment[][]
+  segments?: MappedSegment[]
+  inkMargin?: number[]
 }
 /**
  * Current full capture pixels → desktop points, per axis.
@@ -72,7 +92,14 @@ export function mapAnnotations(
   annotations: Annotation[],
   origin: Rect,
   bounds?: Rect
-): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string; lines?: Rect[] })[] {
+): MappedBox[] {
+  const finite = (r: Rect): boolean =>
+    [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0
+  const segment = (s: { text: string; bbox: number[] }): MappedSegment[] => {
+    const [x1, y1, x2, y2] = s.bbox
+    const r = mapRect(info, origin, { x: x1, y: y1, width: x2 - x1, height: y2 - y1 }, bounds)
+    return typeof s.text === 'string' && finite(r) ? [{ ...r, text: s.text }] : []
+  }
   return annotations.flatMap((a) => {
     const vertices = a.boundingPoly?.vertices
     if (!vertices?.length || !a.description) return []
@@ -92,17 +119,35 @@ export function mapAnnotations(
       mapped.height <= 0
     )
       return []
-    // The lines found inside a block, mapped the same way, for placing its characters.
-    const lines = (a.linePolygons ?? [])
-      .map((polygon) => {
+    // The lines found inside a block, mapped the same way, for placing its characters, with the
+    // words found on each (kept beside their line, so they stay paired when a line is dropped).
+    const placed = (a.linePolygons ?? [])
+      .map((polygon, index) => {
         const px = polygon.map((point) => point[0])
         const py = polygon.map((point) => point[1])
         const x = Math.min(...px)
         const y = Math.min(...py)
-        return mapRect(info, origin, { x, y, width: Math.max(...px) - x, height: Math.max(...py) - y }, bounds)
+        const line = mapRect(info, origin, { x, y, width: Math.max(...px) - x, height: Math.max(...py) - y }, bounds)
+        return { line, words: (a.lineSegments?.[index] ?? []).flatMap(segment) }
       })
-      .filter((line) => [line.x, line.y, line.width, line.height].every(Number.isFinite) && line.width > 0 && line.height > 0)
-    return [{ ...mapped, text: a.description, ...(a.orientation !== undefined ? { orientation: a.orientation } : {}), ...(a.isVertical !== undefined ? { isVertical: a.isVertical } : {}), ...(a.granularity !== undefined ? { granularity: a.granularity } : {}), ...(a.groupId !== undefined ? { groupId: a.groupId } : {}), ...(lines.length ? { lines } : {}) }]
+      .filter(({ line }) => finite(line))
+    const lines = placed.map(({ line }) => line)
+    const lineSegments = placed.map(({ words }) => words)
+    const segments = (a.segments ?? []).flatMap(segment)
+    return [
+      {
+        ...mapped,
+        text: a.description,
+        ...(a.orientation !== undefined ? { orientation: a.orientation } : {}),
+        ...(a.isVertical !== undefined ? { isVertical: a.isVertical } : {}),
+        ...(a.granularity !== undefined ? { granularity: a.granularity } : {}),
+        ...(a.groupId !== undefined ? { groupId: a.groupId } : {}),
+        ...(lines.length ? { lines } : {}),
+        ...(lineSegments.some((words) => words.length) ? { lineSegments } : {}),
+        ...(segments.length ? { segments } : {}),
+        ...(a.inkMargin?.length === 4 ? { inkMargin: a.inkMargin } : {})
+      }
+    ]
   })
 }
 /** Convenience wrapper that drops the full-text annotation at index 0. */
@@ -111,7 +156,7 @@ export function boxes(
   annotations: Annotation[],
   origin: Rect,
   bounds?: Rect
-): (Rect & { text: string; orientation?: 'horizontal' | 'vertical'; isVertical?: boolean; granularity?: string; groupId?: string; lines?: Rect[] })[] {
+): MappedBox[] {
   return mapAnnotations(
     info,
     annotations.length > 1 ? annotations.slice(1) : annotations,

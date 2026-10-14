@@ -46,6 +46,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - The Yomitan API helper now installs correctly on Windows, for every supported browser.
 - The Built-in Yomitan pop-up over the Log no longer has a white border in dark mode: its frame
   now matches the pop-up's own theme, light or dark.
+- Text over the game now lines up with the game's own text, character for character, with every
+  OCR engine and in both overlay modes: long words and lines no longer drift, each line is drawn
+  at one size, a paragraph or speech bubble read as a whole is laid line by line over its own
+  lines, and a space the OCR left out no longer pushes the rest of the line along. Hovering a
+  word lights it without zooming it, so it stays exactly over the word you are reading.
 
 ### Removed
 

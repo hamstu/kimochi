@@ -1,7 +1,9 @@
 /**
- * Grouped text layout: where each line goes and how it is stretched over the original. The
- * pixel result needs a real font, so these pin the arithmetic — character sharing, line
- * estimation and the fit — with a stand-in measure of one em per character.
+ * Overlay text layout: where each line goes and how it is stretched over the original. The
+ * pixel result needs a real font (scripts/overlay-alignment.test.mjs scores that against real
+ * OCR), so these pin the arithmetic — character sharing, line estimation, the fit, one size per
+ * row, cutting at gaps — with a stand-in measure of one em per character, whose ink fills each em
+ * square but for 0.06 em at either end.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -11,12 +13,17 @@ import {
   distribute,
   estimate,
   fit,
+  harmonize,
   layoutGroup,
+  layoutParts,
   readingOrder,
-  INK
+  splitAtGaps,
+  PAD
 } from '../ui/text-layout.js'
 
 const em = (text) => [...text].length
+/** Where the stand-in measure's ink starts and ends in a run of n glyphs, in ems. */
+const EDGE = 0.06
 const close = (actual, expected, label) =>
   assert.ok(Math.abs(actual - expected) < 1e-6, `${label}: ${actual} != ${expected}`)
 
@@ -93,23 +100,128 @@ test('estimated vertical columns start at the right edge', () => {
   close(runs[0].rect.x + runs[0].rect.width, 60, 'first column touches the right edge')
 })
 
-test('a run is sized to its thickness and spaced to its length, glyphs centred in cells', () => {
+test("a run's ink fills its box: sized across, spaced along, starting and ending at the ink", () => {
   const run = fit({ text: 'あいう', rect: { x: 0, y: 0, width: 90, height: 20 } }, false, em)
-  close(run.fontSize, 20 * INK, 'font size')
-  const cell = 90 / 3
-  close(run.spacing, cell - run.fontSize, 'spacing')
-  close(run.lead, run.spacing / 2, 'lead')
-  // Glyph i starts at lead + i * (fontSize + spacing), so its centre is the cell's centre.
-  for (let i = 0; i < 3; i++) {
-    const centre = run.lead + i * (run.fontSize + run.spacing) + run.fontSize / 2
-    close(centre, cell * i + cell / 2, `glyph ${i} centre`)
-  }
+  // The ink (0.92 em tall with the stand-in's ascent and descent) plus a margin either side.
+  close(run.fontSize, 20 / (0.84 + 0.08 + 2 * PAD), 'font size')
+  const f = run.fontSize
+  // Glyph i's origin is lead + i * (f + spacing): the first glyph's ink starts a margin in from
+  // the box, the last one's ends a margin short of it, and the pitch between them is even.
+  close(run.lead + EDGE * f, PAD * f, 'first ink')
+  close(run.lead + 2 * (f + run.spacing) + (1 - EDGE) * f, 90 - PAD * f, 'last ink')
+  assert.ok(run.spacing > 0)
 })
 
 test('a crowded run shrinks its glyphs rather than overlapping them', () => {
   const run = fit({ text: 'あいうえお', rect: { x: 0, y: 0, width: 50, height: 40 } }, false, em)
-  close(run.fontSize, 10, 'font size limited by length')
+  close(run.fontSize, 50 / (5 - 2 * EDGE + 2 * PAD), 'font size limited by length')
   close(run.spacing, 0, 'no spacing left')
+})
+
+test("a glyph's own ink decides where it starts: 「 sits half an em into its cell", () => {
+  // A measure that knows the ink: 「 is drawn only in the right half of its em square.
+  const inked = Object.assign((text) => em(text), {
+    ink: (text) => ({
+      advance: em(text),
+      start: text.startsWith('「') ? 0.5 : EDGE,
+      end: em(text) - EDGE,
+      ascent: 0.84,
+      descent: 0.08,
+      fontAscent: 0.88,
+      fontDescent: 0.12
+    })
+  })
+  const rect = { x: 100, y: 0, width: 300, height: 30 }
+  const plain = fit({ text: '「あい', rect }, false, em)
+  const bracket = fit({ text: '「あい', rect }, false, inked)
+  // The bracket's ink, not its cell, starts at the box: its origin sits further left.
+  assert.ok(bracket.lead < plain.lead)
+  close(bracket.lead + 0.5 * bracket.fontSize, PAD * bracket.fontSize, 'bracket ink at the box')
+})
+
+test("an engine's own margins move the ink: a box that runs on below a line", () => {
+  const rect = { x: 0, y: 0, width: 200, height: 40 }
+  const even = fit({ text: 'あいう', rect }, false, em)
+  // Live Text's boxes run on below the ink: the glyph is smaller, and set higher.
+  const below = fit({ text: 'あいう', rect, margin: [0.05, 0.05, 0.04, 0.3] }, false, em)
+  assert.ok(below.fontSize < even.fontSize)
+  assert.ok(below.shift < even.shift, 'moved up')
+  // For a column the margin before is on the right: more of it moves the ink left.
+  const column = { x: 0, y: 0, width: 40, height: 200 }
+  const right = fit({ text: 'あいう', rect: column, margin: [0.05, 0.05, 0.3, 0.05] }, true, em)
+  assert.ok(right.shift < 0)
+})
+
+test('one size per row: the runs on a line share the median size, a lone mark is not counted', () => {
+  const runs = [
+    { text: 'こんにちは', rect: { x: 0, y: 0, width: 100, height: 20 }, natural: 20 },
+    { text: '、', rect: { x: 100, y: 4, width: 8, height: 8 }, natural: 34 },
+    { text: 'げんき', rect: { x: 110, y: 1, width: 66, height: 22 }, natural: 22 },
+    { text: 'ですか', rect: { x: 180, y: 0, width: 60, height: 21 }, natural: 21 },
+    // The next line down, and a heading twice the size beside it, are rows of their own.
+    { text: 'はい', rect: { x: 0, y: 40, width: 40, height: 20 }, natural: 19 },
+    { text: '見出し', rect: { x: 260, y: -10, width: 150, height: 40 }, natural: 45 }
+  ]
+  assert.deepEqual(harmonize(runs), [21, 21, 21, 21, 19, 45])
+})
+
+test('a whole frame is laid out at once, every row at one size', () => {
+  const parts = [
+    { text: 'こんにちは', rect: { x: 0, y: 0, width: 110, height: 22 } },
+    { text: 'げんき', rect: { x: 120, y: 1, width: 70, height: 20 } }
+  ]
+  const [[first], [second]] = layoutParts(parts, em)
+  close(first.fontSize, second.fontSize, 'one size')
+})
+
+test('a line is cut where its words show a gap OCR left out of the text, separators kept', () => {
+  const run = { text: 'ゆうしゃは スライムを', rect: { x: 0, y: 0, width: 400, height: 20 } }
+  const word = (text, x, width) => ({ text, x, y: 0, width, height: 20 })
+  // Two words 20 px apart, then one 70 px on: a space the text has only as ' '.
+  const pieces = splitAtGaps(
+    run,
+    [word('ゆうしゃ', 0, 80), word('は', 100, 20), word('スライムを', 190, 100)],
+    false
+  )
+  assert.deepEqual(
+    pieces.map((piece) => [piece.text, piece.rect.x, piece.rect.width]),
+    [
+      ['ゆうしゃは ', 0, 120],
+      ['スライムを', 190, 100]
+    ]
+  )
+  // Each piece knows where its words start, in characters, for placing its glyphs by them.
+  assert.deepEqual(
+    pieces[0].segments.map((s) => s.at),
+    [0, 4]
+  )
+  // Words that do not match the text, or no gap, leave the line whole.
+  assert.equal(splitAtGaps(run, [word('ちがう', 0, 60)], false)[0].text, run.text)
+  assert.equal(
+    splitAtGaps(run, [word('ゆうしゃは', 0, 100), word('スライムを', 110, 100)], false).length,
+    1
+  )
+})
+
+test("characters the engine boxed place the glyphs, whatever the run's ends say", () => {
+  // Four characters on a 30 px pitch starting at x = 10 (each boxed a margin outside its ink);
+  // the line's box runs on 40 px past the last one, which the ends alone would spread them over.
+  const f = 20 / (0.84 + 0.08 + 2 * PAD)
+  const segments = [...'あいうえ'].map((text, at) => ({
+    text,
+    at,
+    x: 10 + at * 30 + EDGE * f - PAD * f,
+    y: 0,
+    width: (1 - 2 * EDGE + 2 * PAD) * f,
+    height: 20
+  }))
+  const run = fit(
+    { text: 'あいうえ', rect: { x: 10, y: 0, width: 160, height: 20 }, segments },
+    false,
+    em
+  )
+  close(run.lead, 0, 'first origin on the first character')
+  close(run.fontSize + run.spacing, 30, 'pitch from the characters')
 })
 
 test('a group mixes the evidence it has: boxes as given, blocks split into lines', () => {
@@ -156,8 +268,16 @@ test('character cells tile each run and skip line breaks, one per code unit', ()
   assert.equal(cells.length, 6)
   assert.equal(cells[2], null)
   assert.equal(cells[3], cells[4], 'a surrogate pair shares its cell')
-  close(cells[0].x, 0, 'first cell starts the line')
-  close(cells[1].x + cells[1].width, 60, 'last cell of a line ends it')
+  // Cells tile the line: each glyph's advance and the spacing around it, end to end, the first
+  // centred on the first glyph, whose ink starts at the start of the line.
+  close(cells[0].x + cells[0].width, cells[1].x, 'cells meet')
+  const [run] = layoutGroup(
+    [{ text: 'あい', rect: { x: 0, y: 0, width: 60, height: 20 } }],
+    false,
+    em
+  )
+  close(cells[0].x, run.lead - run.spacing / 2, 'first cell around the first glyph')
+  close(cells[1].x + cells[1].width, run.lead + 2 * run.fontSize + 1.5 * run.spacing, 'last cell')
   assert.deepEqual([cells[0].line, cells[1].line, cells[3].line, cells[5].line], [0, 0, 1, 1])
   close(cells[5].y, 40, 'second line cells sit on the second line')
 })

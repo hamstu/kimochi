@@ -25,7 +25,7 @@
 
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
-import { layoutGroup, characterCells } from './text-layout.js'
+import { layoutParts, characterCells } from './text-layout.js'
 
 const LOOKAHEAD = 10
 const PROXIMITY_MAX_DISTANCE = 300
@@ -44,6 +44,19 @@ export const GROUP_FONT =
   "'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif"
 
 let measurer = null
+/** A canvas set in the overlay's font at 100 px, or false where there is none (tests). */
+function canvas() {
+  if (measurer === null && typeof document !== 'undefined') {
+    measurer = document.createElement('canvas').getContext?.('2d') ?? false
+    if (measurer) {
+      measurer.font = `bold 100px ${GROUP_FONT}`
+      // As drawn: `.ocr-word` and `.ocr-run` turn kerning off (overlay.html).
+      measurer.fontKerning = 'none'
+    }
+  }
+  return measurer
+}
+
 const advances = new Map()
 /**
  * A run's natural advance in ems, in the font it is drawn in. Without a canvas (tests) it falls
@@ -53,16 +66,111 @@ export function measureEms(text) {
   const cached = advances.get(text)
   if (cached !== undefined) return cached
   let ems = 0
-  if (measurer === null && typeof document !== 'undefined') {
-    measurer = document.createElement('canvas').getContext?.('2d') ?? false
-    if (measurer) measurer.font = `bold 100px ${GROUP_FONT}`
-  }
-  if (measurer) ems = measurer.measureText(text).width / 100
+  const context = canvas()
+  if (context) ems = context.measureText(text).width / 100
   else
     for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
   if (advances.size > 2000) advances.clear()
   advances.set(text, ems)
   return ems
+}
+
+const inks = new Map()
+/**
+ * Where a run's ink is, in ems, measured on the real glyphs (see `inkOf` in text-layout.js), or
+ * null without a canvas, or for text with no ink (spaces).
+ */
+export function measureInk(text) {
+  const cached = inks.get(text)
+  if (cached !== undefined) return cached
+  let ink = null
+  const context = canvas()
+  if (context) {
+    const m = context.measureText(text)
+    ink = {
+      advance: m.width / 100,
+      start: -m.actualBoundingBoxLeft / 100,
+      end: m.actualBoundingBoxRight / 100,
+      ascent: m.actualBoundingBoxAscent / 100,
+      descent: m.actualBoundingBoxDescent / 100,
+      fontAscent: m.fontBoundingBoxAscent / 100,
+      fontDescent: m.fontBoundingBoxDescent / 100
+    }
+    const usable =
+      Object.values(ink).every(Number.isFinite) &&
+      ink.end > ink.start &&
+      ink.ascent + ink.descent > 0 &&
+      ink.fontAscent + ink.fontDescent > 0
+    if (!usable) ink = null
+  }
+  if (inks.size > 2000) inks.clear()
+  inks.set(text, ink)
+  return ink
+}
+measureEms.ink = measureInk
+
+/**
+ * One fitted run as an element (`.ocr-run`), placed against an origin.
+ *
+ * Grouped runs are absolutely positioned in their card: the origin is its padding box's corner.
+ * A word box's lines are zero-size inline blocks (overlay.html), so all of the box's text stays
+ * one inline flow a lookup can run through from line to line; each is offset from where it flows,
+ * which is the box's top-left for horizontal text, and its top-right, where a vertical-rl line
+ * starts, for vertical text.
+ */
+function runElement(run, origin, vertical, inline) {
+  const span = document.createElement('span')
+  span.className = 'ocr-run'
+  Object.assign(span.style, runStyle(run, origin, vertical, inline))
+  span.append(document.createTextNode(run.text))
+  return span
+}
+
+/**
+ * Every word-mode box's runs, fitted together (text-layout.js), for boxes as `mapAnnotations`
+ * gives them. `measure` is the overlay font's (tests pass recorded metrics).
+ */
+export function wordLayout(mapped, measure = measureEms) {
+  return layoutParts(mapped.map(partOf), measure)
+}
+
+/** What the layout (text-layout.js) needs of a mapped box: everything OCR said about its text. */
+export function partOf(box) {
+  return {
+    text: box.text,
+    rect: { x: box.x, y: box.y, width: box.width, height: box.height },
+    lines: box.lines ?? [],
+    lineSegments: box.lineSegments,
+    segments: box.segments,
+    margin: box.inkMargin,
+    block: box.granularity === 'block',
+    vertical: box.orientation === 'vertical' || box.isVertical === true
+  }
+}
+
+/** A fitted layout, rounded, so a render that changes nothing can be told from one that does. */
+function runSignature(runs) {
+  const round = (value) => Math.round(value * 100) / 100
+  return runs.map((run) => [
+    run.text,
+    ...[run.rect.x, run.rect.y, run.rect.width, run.rect.height].map(round),
+    ...[run.fontSize, run.spacing, run.lead, run.shift].map(round)
+  ])
+}
+
+/** The inline style that places a fitted run: see `runElement`. */
+function runStyle(run, origin, vertical, inline) {
+  const left = vertical
+    ? (inline ? run.rect.x + run.rect.width : run.rect.x) - origin.x + run.shift
+    : run.rect.x - origin.x + run.lead
+  return {
+    left: `${left}px`,
+    top: `${run.rect.y - origin.y + (vertical ? run.lead : run.shift)}px`,
+    ...(inline ? {} : { width: `${run.rect.width}px`, height: `${run.rect.height}px` }),
+    fontSize: `${run.fontSize}px`,
+    letterSpacing: `${run.spacing}px`,
+    lineHeight: `${vertical ? run.rect.width : run.rect.height}px`
+  }
 }
 
 /**
@@ -161,16 +269,6 @@ export function selectionExtension(selectedText, startIndex, words) {
     }
   }
   return { extension, consumed }
-}
-
-/** Shrink to fit the box, then use letter spacing for the remainder. */
-function calculateFontSize(text, width, height, vertical = false) {
-  if (vertical) [width, height] = [height, width]
-  let fontSize = height * 0.7
-  const charWidth = fontSize * 0.6
-  if (text.length * charWidth > width) fontSize = (width / text.length) * 1.4
-  const letterSpacing = width / text.length - fontSize
-  return { fontSize, letterSpacing: Math.max(-2, Math.min(letterSpacing, 2)) }
 }
 
 /**
@@ -282,27 +380,16 @@ export class TextOverlayRenderer {
 
   /**
    * Where each character of a word-mode box is on the source, one cell per code unit of its text
-   * (see `characterCells`), from the box OCR found and the lines found inside it, fitted the way
-   * grouped text is. Null for anything but a word-mode box.
+   * (see `characterCells`), from the runs the box's text is drawn with. Null for anything but a
+   * word-mode box drawn as one run: a block's lines are each their own text node, which the
+   * controller reads (and outlines, from the drawn text) one at a time.
    */
   charRects(element) {
     const word = this.words.find((candidate) => candidate.element === element)
-    if (!word) return null
+    if (!word?.runs || word.runs.length !== 1 || word.runs[0].text !== word.box.text) return null
     const { box } = word
     const vertical = box.orientation === 'vertical' || box.isVertical === true
-    const runs = layoutGroup(
-      [
-        {
-          text: box.text,
-          rect: { x: box.x, y: box.y, width: box.width, height: box.height },
-          lines: word.lines ?? [],
-          block: box.granularity === 'block'
-        }
-      ],
-      vertical,
-      measureEms
-    )
-    return characterCells(box.text, runs, vertical, measureEms)
+    return characterCells(box.text, word.runs, vertical, measureEms)
   }
 
   /** The pointer has gone somewhere this window cannot see; let the effect fade. */
@@ -459,7 +546,7 @@ export class TextOverlayRenderer {
           text: previous.text,
           current: previous.current,
           box: previous.box,
-          lines: previous.lines,
+          runs: previous.runs,
           centerX: previous.centerX,
           centerY: previous.centerY
         })
@@ -500,6 +587,8 @@ export class TextOverlayRenderer {
     const successors = readingSuccessors(mapped)
     const ahead = lookaheadTexts(mapped, successors)
     const fragment = document.createDocumentFragment()
+    // Every box fitted over the text it was read from, rows set at one size (text-layout.js).
+    const layouts = scanning ? [] : wordLayout(mapped)
 
     mapped.forEach((box, index) => {
       const element = document.createElement('div')
@@ -524,22 +613,20 @@ export class TextOverlayRenderer {
       const vertical = box.orientation === 'vertical' || box.isVertical === true
       const block = box.granularity === 'block' || box.text.includes('\n')
       element.className = `ocr-word${vertical ? ' ocr-vertical' : ''}${block ? ' ocr-block' : ''}`
-      const { fontSize, letterSpacing } = calculateFontSize(box.text, box.width, box.height, vertical)
-      Object.assign(element.style, {
-        fontSize: `${fontSize}px`,
-        letterSpacing: `${letterSpacing}px`,
-        lineHeight: `${box.height}px`
-      })
-
-      if (vertical || block) {
-        const columns = box.text.split('\n')
-        const longest = Math.max(1, ...columns.map(line => [...line].length))
-        // An unbroken bubble wraps into as many columns/rows as its aspect allows.
-        const size = block && columns.length === 1
-          ? Math.sqrt(box.width * box.height / Math.max(1, [...box.text].length) / 1.3)
-          : Math.min((vertical ? box.width : box.height) / (columns.length * 1.3), (vertical ? box.height : box.width) / longest)
-        Object.assign(element.style, { fontSize: `${Math.max(1, Math.min(48, size))}px`, lineHeight: '1.3', letterSpacing: '0px', height: `${box.height}px`, width: `${box.width}px` })
-      }
+      const runs = layouts[index]
+      // A word or a single line is drawn as the box's own text; a block's lines each as a run.
+      const single = runs.length === 1 && runs[0].text === box.text
+      // Where the box's text starts to flow: its top-left, or top-right for a vertical-rl line.
+      const flow = { x: vertical ? box.x + box.width : box.x, y: box.y }
+      Object.assign(
+        element.style,
+        single
+          ? {
+              fontSize: `${runs[0].fontSize}px`,
+              lineHeight: `${vertical ? runs[0].rect.width : runs[0].rect.height}px`
+            }
+          : { fontSize: '0px', lineHeight: '0px' }
+      )
       // The visible word, then the following words: present in the DOM for a lookup
       // to run into, and never seen. Cloud OCR splits words (食べ|ました), and a lookup
       // that stops at the end of this box can only ever find the first half.
@@ -557,20 +644,34 @@ export class TextOverlayRenderer {
       text.className = 'ocr-word-text'
       const current = document.createElement('span')
       current.className = 'ocr-word-current'
-      Object.assign(current.style, {
-        width: `${box.width}px`,
-        height: `${box.height + 10}px`,
-        lineHeight: `${box.height}px`
-      })
-      if (vertical || block) Object.assign(current.style, { height: `${box.height}px`, lineHeight: '1.3', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' })
-      current.textContent = box.text
+      // Held still while hovered: the text stays over the source it was read from.
+      current.style.textAlign = 'left'
+      if (single) {
+        Object.assign(current.style, runStyle(runs[0], flow, vertical, true), {
+          width: `${runs[0].rect.width}px`,
+          height: `${runs[0].rect.height}px`
+        })
+        current.textContent = box.text
+      } else {
+        for (const run of runs) current.append(runElement(run, flow, vertical, true))
+      }
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
       lookahead.textContent = ahead[index]
       text.append(current, lookahead)
       element.append(text)
 
-      element.renderKey = JSON.stringify([this.mode, box.text, box.x, box.y, box.width, box.height, box.orientation, box.groupId])
+      element.renderKey = JSON.stringify([
+        this.mode,
+        box.text,
+        box.x,
+        box.y,
+        box.width,
+        box.height,
+        box.orientation,
+        box.groupId,
+        runSignature(runs)
+      ])
       element.renderText = box.text
       element.renderBox = { x: box.x, y: box.y, width: box.width, height: box.height }
       this.attachInteraction(element, index)
@@ -578,8 +679,8 @@ export class TextOverlayRenderer {
         element,
         text,
         current,
-        // The lines the engine found inside the box, if any, for placing characters on the source.
-        lines: box.lines ?? [],
+        // How the box's text is laid over the source, for placing its characters (`charRects`).
+        runs,
         index,
         // The word after this one in reading order, which is where its lookahead begins.
         next: successors[index],
@@ -598,6 +699,17 @@ export class TextOverlayRenderer {
   renderGroups(annotations, info, origin, grouping, opacity, scanning, bounds) {
     const groups = groupTextAnnotations(annotations, grouping.proximityThreshold ?? 100)
     const fragment = document.createDocumentFragment()
+    // Each line or word goes where OCR found it, fitted to it, every row at one size, the
+    // same way word mode lays its boxes; see text-layout.js.
+    const partsOf = groups.map((group) =>
+      mapAnnotations(info, group.annotations, origin, bounds).map((box) => ({
+        ...partOf(box),
+        vertical: group.orientation === 'vertical'
+      }))
+    )
+    const fitted = scanning ? [] : layoutParts(partsOf.flat(), measureEms)
+    let nextPart = 0
+    const runsOf = partsOf.map((parts) => parts.flatMap(() => fitted[nextPart++] ?? []))
 
     groups.forEach((group, index) => {
       const { boundingBox, text } = group
@@ -662,55 +774,22 @@ export class TextOverlayRenderer {
         return
       }
 
-      // Each line or word goes where OCR found it, fitted along its length; see text-layout.js.
-      const parts = group.annotations.map((annotation) => {
-        const box = getBoundingBox(annotation)
-        const lines = (annotation.linePolygons ?? [])
-          .map((polygon) => {
-            const xs = polygon.map((point) => point[0])
-            const ys = polygon.map((point) => point[1])
-            const x = Math.min(...xs)
-            const y = Math.min(...ys)
-            return mapRect(info, origin, { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }, bounds)
-          })
-          .filter((line) => line.width > 0 && line.height > 0)
-        return {
-          text: annotation.description,
-          rect: mapRect(info, origin, { x: box.minX, y: box.minY, width: box.width, height: box.height }, bounds),
-          lines,
-          block: annotation.granularity === 'block'
-        }
-      })
-      const runs = layoutGroup(parts, vertical, measureEms)
+      const runs = runsOf[index]
       const body = document.createElement('span')
       body.className = 'ocr-runs'
-      const left = rect.x - GROUP_PADDING_X + GROUP_BORDER
-      const top = rect.y - GROUP_PADDING_Y + GROUP_BORDER
-      for (const run of runs) {
-        const span = document.createElement('span')
-        span.className = 'ocr-run'
-        const across = vertical ? run.rect.width : run.rect.height
-        Object.assign(span.style, {
-          left: `${run.rect.x - left}px`,
-          top: `${run.rect.y - top}px`,
-          width: `${run.rect.width}px`,
-          height: `${run.rect.height}px`,
-          fontSize: `${run.fontSize}px`,
-          letterSpacing: `${run.spacing}px`,
-          lineHeight: `${across}px`,
-          [vertical ? 'paddingTop' : 'paddingLeft']: `${Math.max(0, run.lead)}px`
-        })
-        span.append(document.createTextNode(run.text))
-        body.append(span)
+      // The card's padding box, which its runs are absolutely positioned in.
+      const corner = {
+        x: rect.x - GROUP_PADDING_X + GROUP_BORDER,
+        y: rect.y - GROUP_PADDING_Y + GROUP_BORDER
       }
+      for (const run of runs) body.append(runElement(run, corner, vertical, false))
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
       lookahead.textContent = '' // Semantic groups must not extend a lookup into another bubble.
       body.append(lookahead)
       element.append(body)
 
-      const layout = runs.map((run) => [run.text, run.rect.x, run.rect.y, run.rect.width, run.rect.height])
-      element.renderKey = JSON.stringify([this.mode, text, rect, layout, opacity, group.orientation])
+      element.renderKey = JSON.stringify([this.mode, text, rect, runSignature(runs), opacity, group.orientation])
       element.renderText = text
       element.renderBox = rect
       this.attachInteraction(element, index)
@@ -758,7 +837,6 @@ export class TextOverlayRenderer {
     for (const word of this.words) {
       const { box } = word
       const consumed = this.consumedIndices.has(word.index)
-      const extended = this.extension?.index === word.index
       const hovering =
         !this.quiet &&
         !consumed &&
@@ -774,12 +852,10 @@ export class TextOverlayRenderer {
       word.element.style.borderRight = vertical ? style.borderBottom : 'none'
       word.element.style.backgroundColor = style.backgroundColor
       word.element.style.borderRadius = hovering ? '6px' : '6px 6px 0 0'
-      word.element.style.transform = hovering ? 'scale(1.2)' : 'scale(1)'
-      // An extended box grows along the reading axis; scaling it about its start keeps the
-      // stem where OCR read it, with the extension running on over the hidden boxes.
-      word.element.style.transformOrigin = extended ? (vertical ? 'center top' : 'left center') : 'center'
+      // Hovering lights the box and shows its text, and moves and resizes nothing: the text
+      // stays exactly over the source it was read from (an extended box only grows past its
+      // end, over the boxes it hides).
       word.text.style.opacity = String(style.textOpacity)
-      word.current.style.textAlign = hovering && !extended ? 'center' : 'left'
     }
   }
 
@@ -853,4 +929,4 @@ export class TextOverlayRenderer {
   }
 }
 
-export { calculateFontSize, proximityStyle, dispatchEscape, dispatchLookup, getBoundingBox }
+export { proximityStyle, dispatchEscape, dispatchLookup, getBoundingBox }

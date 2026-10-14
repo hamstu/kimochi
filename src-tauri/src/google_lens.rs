@@ -14,7 +14,9 @@
 //!
 //! The result has the shape every native engine returns (see `livetext.rs`): one authoritative
 //! group per Lens paragraph, with the paragraph's lines as `linePolygons` (rotated where Lens
-//! says the text is rotated) and its text as those lines joined by newlines; a `line`
+//! says the text is rotated), each line's words and their boxes as `lineSegments` (which the
+//! overlay places the text by across a gap, such as a space Lens left out of the text), and its
+//! text as those lines joined by newlines; a `line`
 //! annotation per line; the aggregate first. Coordinates are pixels of the frame that was
 //! captured, whatever size the image was sent at.
 use serde_json::{json, Value};
@@ -414,6 +416,20 @@ fn line_text(line: &proto::Line) -> String {
     text.trim().to_string()
 }
 
+/// A line's words with their boxes (`{text, bbox: [x1, y1, x2, y2]}`, axis-aligned, frame
+/// pixels), for the overlay to place the text past a gap Lens left out of it, such as a space.
+fn line_words(line: &proto::Line, upload: &Upload, width: u32, height: u32) -> Vec<Value> {
+    line.words
+        .iter()
+        .filter_map(|word| {
+            let text = word.plain_text.trim();
+            let corners = corners(word.geometry.as_ref(), upload, width, height)?;
+            let bbox = bounds(corners.iter())?;
+            (!text.is_empty()).then(|| json!({"text": text, "bbox": bbox}))
+        })
+        .collect()
+}
+
 fn value_from_response(
     response: &proto::ServerResponse,
     upload: &Upload,
@@ -451,6 +467,16 @@ fn value_from_response(
             .join("\n");
         let id = format!("googlelens-paragraph-{index}");
         let polygons: Vec<[[f64; 2]; 4]> = lines.iter().filter_map(|(_, c)| *c).collect();
+        // The words on each of those lines, one list per polygon, in the same order.
+        let segments: Vec<Vec<Value>> = paragraph
+            .lines
+            .iter()
+            .filter(|line| {
+                !line_text(line).is_empty()
+                    && corners(line.geometry.as_ref(), upload, width, height).is_some()
+            })
+            .map(|line| line_words(line, upload, width, height))
+            .collect();
         let bbox = bounds(polygons.iter().flatten()).or_else(|| {
             corners(paragraph.geometry.as_ref(), upload, width, height)
                 .and_then(|c| bounds(c.iter()))
@@ -474,6 +500,7 @@ fn value_from_response(
             "bbox": bbox,
             "orientation": orientation,
             "linePolygons": polygons,
+            "lineSegments": segments,
         }));
         for (line_text, polygon) in &lines {
             if let Some(polygon) = polygon {
@@ -600,6 +627,21 @@ mod tests {
             (bbox[0] - 750.).abs() < 0.01 && (bbox[2] - 850.).abs() < 0.01,
             "{bbox:?}"
         );
+        // Each line's words come with their own boxes, one list per line polygon.
+        let segments = groups[0]["lineSegments"].as_array().unwrap();
+        assert_eq!(segments.len(), 2);
+        let words: Vec<&str> = segments[0]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|word| word["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(words, ["吾輩", "は", "猫"]);
+        let word: Vec<f64> =
+            serde_json::from_value(segments[0][0]["bbox"].clone()).unwrap();
+        assert!(word.len() == 4 && word[0] < word[2] && word[1] < word[3], "{word:?}");
+        // Words Lens gives no box for are left out, not placed anywhere.
+        assert_eq!(groups[1]["lineSegments"], json!([[]]));
         // Aggregate first, then one line annotation per line, tied to its group.
         let annotations = value["textAnnotations"].as_array().unwrap();
         assert_eq!(annotations.len(), 4);

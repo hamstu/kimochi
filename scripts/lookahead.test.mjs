@@ -344,12 +344,13 @@ test("the box a selection starts in carries the extension and the swallowed boxe
   assert.deepEqual(marks(stem), { ext: "ました", extended: true, consumed: false });
   assert.deepEqual(marks(ending), { ext: undefined, extended: false, consumed: true });
   assert.deepEqual(marks(after), { ext: undefined, extended: false, consumed: false });
-  // The stem is lit and aligned from its start; the hidden box is not lit.
+  // The stem is lit, and stays where it was read: hovering neither scales nor moves it, and its
+  // text keeps its place from the start. The hidden box is not lit.
   renderer.updateProximity();
-  assert.equal(stem.style.transform, "scale(1.2)");
-  assert.equal(stem.style.transformOrigin, "left center");
+  assert.equal(stem.style.backgroundColor, "rgba(0, 0, 0, 0.9)");
+  assert.ok(!stem.style.transform, "a lit box is not scaled");
   assert.equal(stem.querySelector(".ocr-word-current").style.textAlign, "left");
-  assert.equal(ending.style.transform, "scale(1)");
+  assert.equal(ending.style.backgroundColor, "rgba(0, 0, 0, 0)");
   // Text nodes are untouched: Yomitan's Range lives in them.
   assert.equal(stem.querySelector(".ocr-word-current").textContent, "食べ");
   assert.equal(stem.querySelector(".ocr-lookahead").textContent, "ました走っている");
@@ -362,7 +363,7 @@ test("the box a selection starts in carries the extension and the swallowed boxe
   assert.equal(renderer.consumedIndices.size, 0);
   assert.equal(renderer.extension, null);
   renderer.updateProximity();
-  assert.equal(stem.style.transformOrigin, "center");
+  assert.ok(!stem.style.transform);
 });
 
 test("a selection ending inside a successor leaves that box visible", () => {
@@ -388,7 +389,7 @@ test("a selection anchored outside any box, or not starting with its box's text,
   select(renderer, null, null);
 });
 
-test("vertical boxes extend the same way, scaled from their top", () => {
+test("vertical boxes extend the same way, from their top", () => {
   const host = element();
   const renderer = new TextOverlayRenderer(host);
   const tall = { groupId: "v", orientation: "vertical", isVertical: true };
@@ -406,7 +407,7 @@ test("vertical boxes extend the same way, scaled from their top", () => {
   assert.deepEqual(marks(boxOf(host, "ました")), { ext: undefined, extended: false, consumed: true });
   assert.deepEqual(marks(boxOf(host, "日本")), { ext: undefined, extended: false, consumed: false });
   renderer.updateProximity();
-  assert.equal(stem.style.transformOrigin, "center top");
+  assert.ok(!stem.style.transform, "a lit box is not scaled");
   assert.equal(stem.style["--ocr-height"], "30px");
   select(renderer, null, null);
 });
@@ -719,4 +720,59 @@ test("regression: the old zero-size, zero-opacity lookahead stopped every lookup
     DOMTextScanner.getElementSeekInfo(hovered(absolute).lookahead).newlines,
     2,
   );
+});
+
+test("a block drawn line by line is still one flow: a lookup runs on from one line into the next", () => {
+  // A bubble read as one text over two columns (Manga OCR, Google Lens): word mode places each
+  // line over its own, as a zero-size inline block (`.ocr-word .ocr-run`), never out of flow.
+  const inWord = overlayHtml.match(/\.ocr-word \.ocr-run \{([^}]*)\}/)[1];
+  const rules = {
+    "ocr-run": { ...rule("ocr-run"), ...rule("ocr-run", `.ocr-run {${inWord}}`) },
+  };
+  assert.equal(rules["ocr-run"].position, "relative");
+  const host = element();
+  const renderer = new TextOverlayRenderer(host);
+  const column = (x) => [
+    [x, 0],
+    [x + 20, 0],
+    [x + 20, 80],
+    [x, 80],
+  ];
+  renderer.render(
+    view([
+      chunk(
+        "吾輩は猫である",
+        10,
+        0,
+        {
+          groupId: "bubble",
+          granularity: "block",
+          orientation: "vertical",
+          isVertical: true,
+          linePolygons: [column(10), column(40)],
+        },
+        50,
+        80,
+      ),
+    ]),
+  );
+  const root = toDom(
+    { ...element("div"), className: "words", style: { position: "absolute" }, children: host.children },
+    null,
+    rules,
+  );
+  const runs = [];
+  (function walk(node) {
+    if (node.className === "ocr-run") runs.push(node);
+    for (const child of node.childNodes) walk(child);
+  })(root);
+  // Right column first; the text shared out by length, 4 and 3.
+  assert.deepEqual(
+    runs.map((run) => run.childNodes[0].nodeValue),
+    ["吾輩は猫", "である"],
+  );
+  for (const run of runs)
+    assert.deepEqual(DOMTextScanner.getElementSeekInfo(run), { enterable: true, newlines: 0 });
+  const first = runs[0].childNodes[0];
+  assert.equal(new DOMTextScanner(first, 3, false, true).seek(4).content, "猫である");
 });

@@ -8,6 +8,11 @@ import {
   type Annotation,
 } from "./annotations.js";
 export type Orientation = "horizontal" | "vertical";
+/** A piece of a line (a word, or a character) with its own box, in capture pixels. */
+export interface Segment {
+  text: string;
+  bbox: [number, number, number, number];
+}
 export interface OcrGroup {
   id: string;
   text: string;
@@ -15,6 +20,115 @@ export interface OcrGroup {
   orientation: Orientation;
   confidence?: number;
   linePolygons?: number[][][];
+  /** Per line of `linePolygons`, the words found on it with their boxes, when the engine gives them. */
+  lineSegments?: Segment[][];
+}
+
+/**
+ * How far outside the ink each engine draws its boxes, in ems of the glyph size: along the line
+ * at its start and its end, and across it before and after (above and below a horizontal line,
+ * right and left of a vertical column). The overlay fits its own text's ink inside these margins
+ * (text-layout.js), so a box that runs past the ink, as Live Text's does below a line, sizes and
+ * places nothing wrong. Measured on the overlay alignment corpus
+ * (scripts/measure-overlay-alignment.mjs, medians, rounded); an engine not listed gets the
+ * overlay's default of 0.05 all round.
+ */
+export const INK_MARGINS: Record<string, [number, number, number, number]> = {
+  cloud: [0.05, 0.02, 0.05, 0.05],
+  googlelens: [0.06, 0, 0.06, 0.03],
+  livetext: [0.1, 0.18, 0.04, 0.15],
+  meikiocr: [0.12, 0, 0.05, 0],
+  mangaocr: [0.1, 0.15, 0.15, 0.15],
+};
+
+/** Annotations stamped with their engine's ink margins, when it has measured ones. */
+export function withInkMargins(
+  annotations: Annotation[],
+  engine: string,
+): Annotation[] {
+  const margin = INK_MARGINS[engine];
+  return margin ? annotations.map((a) => ({ ...a, inkMargin: margin })) : annotations;
+}
+
+const box = (
+  b: { minX: number; minY: number; maxX: number; maxY: number },
+): [number, number, number, number] => [b.minX, b.minY, b.maxX, b.maxY];
+
+/** Segments in reading order: down a column, along a line. */
+const ordered = (segments: Segment[], vertical: boolean): Segment[] =>
+  [...segments].sort((a, b) =>
+    vertical ? a.bbox[1] - b.bbox[1] : a.bbox[0] - b.bbox[0],
+  );
+
+/**
+ * Where an engine puts the words of a line, as segments: OneOCR returns its lines as groups and
+ * their words as fragments with the group's id; each fragment goes to the line it lies in.
+ */
+function fragmentSegments(
+  group: OcrGroup,
+  fragments: Annotation[],
+): Segment[][] | undefined {
+  const lines = group.linePolygons ?? [];
+  const words = fragments.filter((a) => a.groupId === group.id);
+  if (!lines.length || !words.length) return undefined;
+  const bounds = lines.map((polygon) => [
+    Math.min(...polygon.map((p) => p[0])),
+    Math.min(...polygon.map((p) => p[1])),
+    Math.max(...polygon.map((p) => p[0])),
+    Math.max(...polygon.map((p) => p[1])),
+  ]);
+  const segments: Segment[][] = lines.map(() => []);
+  for (const word of words) {
+    const b = getBoundingBox(word);
+    const line = bounds.findIndex(
+      ([x1, y1, x2, y2]) =>
+        b.centerX >= x1 && b.centerX <= x2 && b.centerY >= y1 && b.centerY <= y2,
+    );
+    if (line >= 0) segments[line].push({ text: word.description, bbox: box(b) });
+  }
+  return segments.map((line) => ordered(line, group.orientation === "vertical"));
+}
+
+const isSegment = (s: unknown): s is Segment =>
+  typeof (s as Segment)?.text === "string" &&
+  Array.isArray((s as Segment).bbox) &&
+  (s as Segment).bbox.length === 4 &&
+  (s as Segment).bbox.every(Number.isFinite);
+
+/**
+ * A block's `lineSegments`: the engine's own (Google Lens), else its word fragments placed on its
+ * lines (OneOCR), one list per line polygon; nothing when neither is there or they do not fit.
+ */
+function lineSegmentsOf(
+  group: OcrGroup,
+  fragments: Annotation[],
+): { lineSegments?: Segment[][] } {
+  const lines = group.linePolygons?.length ?? 0;
+  const own = group.lineSegments;
+  const segments =
+    Array.isArray(own) && own.length === lines
+      ? own.map((line) => (Array.isArray(line) ? line.filter(isSegment) : []))
+      : fragmentSegments(
+          group,
+          fragments.filter((a) => a.granularity === "fragment"),
+        );
+  return lines && segments?.some((line) => line.length) ? { lineSegments: segments } : {};
+}
+
+/** MeikiOCR's per-character boxes, as segments of its line. */
+function characterSegments(a: Annotation): Segment[] | undefined {
+  const characters = (a as { characters?: { character?: unknown; bbox?: unknown }[] })
+    .characters;
+  if (!Array.isArray(characters) || !characters.length) return undefined;
+  const segments = characters.flatMap((c) =>
+    typeof c?.character === "string" &&
+    Array.isArray(c.bbox) &&
+    c.bbox.length === 4 &&
+    c.bbox.every(Number.isFinite)
+      ? [{ text: c.character, bbox: c.bbox as [number, number, number, number] }]
+      : [],
+  );
+  return segments.length === characters.length ? segments : undefined;
 }
 export interface OcrResult {
   schemaVersion: 1;
@@ -236,6 +350,8 @@ export function normalizeOcrResult(
         ...(Array.isArray(g.linePolygons) && g.linePolygons.length
           ? { linePolygons: g.linePolygons }
           : {}),
+        // And the words on each line, which place the text past a gap OCR left out (a space).
+        ...lineSegmentsOf(g, fragments),
         boundingPoly: {
           vertices: [
             { x: g.bbox![0], y: g.bbox![1] },
@@ -248,7 +364,10 @@ export function normalizeOcrResult(
   } else if (annotations.length) {
     const inferred = logicalGroups(annotations);
     groups.push(...inferred.groups);
-    annotations = inferred.annotations;
+    annotations = inferred.annotations.map((a) => {
+      const segments = characterSegments(a);
+      return segments ? { ...a, segments } : a;
+    });
   } else if (raw.fullText?.trim())
     groups.push({
       id: "text-0",
@@ -256,6 +375,7 @@ export function normalizeOcrResult(
       bbox: null,
       orientation: "horizontal",
     });
+  annotations = withInkMargins(annotations, raw.engine || engine);
   const fullText = groups.map((g) => g.text).join("\n") || raw.fullText || "";
   // Preserve the existing aggregate-at-zero contract for downstream code.
   const aggregate = annotations.length

@@ -364,7 +364,8 @@ export function createController(context) {
 
   /**
    * The scan's text in reading order, one unit per text node a lookup ranges over: the box's text
-   * in word mode, and each laid-out line or word of a group in grouped mode.
+   * in word mode (each of its lines, for a block drawn line by line), and each laid-out line or
+   * word of a group in grouped mode.
    */
   function readUnits() {
     if (historical) return history.units();
@@ -372,9 +373,12 @@ export function createController(context) {
     for (const element of context.words.children) {
       if (!element.dataset?.ocrWordBox) continue;
       const vertical = element.classList.contains("ocr-vertical");
-      const holders = element.querySelector(".ocr-word-current")
-        ? [element.querySelector(".ocr-word-current")]
-        : [...element.querySelectorAll(".ocr-run")];
+      const current = element.querySelector(".ocr-word-current");
+      const holders =
+        current &&
+        [...current.childNodes].some((child) => child.nodeType === Node.TEXT_NODE)
+          ? [current]
+          : [...element.querySelectorAll(".ocr-run")];
       for (const holder of holders) {
         const node = [...holder.childNodes].find(
           (child) => child.nodeType === Node.TEXT_NODE,
@@ -536,9 +540,10 @@ export function createController(context) {
   /**
    * Where the word is on the source, one rectangle per line it spans.
    *
-   * A word-mode box's own text is drawn to suit hovering, not to match the source, so its
-   * characters are placed from the OCR geometry instead (`charRects`). Grouped text is already
-   * laid over the source, so there the drawn text is where the word is.
+   * A word-mode box's characters come from the runs its text is fitted with (`charRects`), which
+   * hold even while the box's text is hidden and its lookahead carries the next boxes' words.
+   * Grouped text, and a block's lines, are laid over the source as drawn, so there the drawn text
+   * is where the word is.
    */
   function wordSegments(word, range) {
     const unit = cursor.units[word.unit];
