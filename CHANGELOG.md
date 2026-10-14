@@ -65,6 +65,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   text is set at its natural spacing, keeps its columns and reading order, and breaks columns after
   a pause (……, 。, ？, 」) the way the original does. Slanted handwritten columns stay separate
   columns instead of being run together.
+- A big word in the overlay (キルコ嬢, a lone かう) is set at its own size again, its characters
+  together as on the page. It was shrunk to the size of other text that merely lined up with it
+  elsewhere on the page, and its characters spread far apart to fill its box.
 - In a speech bubble of several columns, each overlay column now starts with the character the
   original's does. A short first column (…おい) no longer loses its words to the next one, which
   then came out cramped; the columns are worked out together, and follow Japanese line-breaking

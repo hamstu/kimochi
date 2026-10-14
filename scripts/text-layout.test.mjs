@@ -467,3 +467,21 @@ test('a bubble\'s columns break where the source does, judged together at one pi
     assert.deepEqual(runs.map((run) => run.text), expected)
   }
 })
+
+test('a big word is not set at the size of a caption that merely shares its column', () => {
+  // キルコ嬢 (a 50 px column) high on the page, and a narration box's 22 px column far below it at
+  // nearly the same x: averaged as one line, キルコ嬢 shrank to 22 px spread over its 163 px.
+  const vertical = (text, [x1, y1, x2, y2]) => ({
+    text,
+    rect: { x: x1, y: y1, width: x2 - x1, height: y2 - y1 },
+    lines: [{ x: x1, y: y1, width: x2 - x1, height: y2 - y1 }],
+    block: true,
+    vertical: true
+  })
+  const [[word], [caption]] = layoutParts(
+    [vertical('キルコ嬢', [119, 383, 169, 546]), vertical('ヤクザに囲まれて', [143, 1006, 173, 1183])],
+    em
+  )
+  assert.ok(word.fontSize > 1.5 * caption.fontSize, `${word.fontSize} against ${caption.fontSize}`)
+  assert.ok(word.spacing < 0.1 * word.fontSize, `spaced ${word.spacing} at ${word.fontSize}`)
+})

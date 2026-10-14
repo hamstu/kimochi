@@ -79,6 +79,12 @@ const median = (values) => {
   return sorted.length ? sorted[(sorted.length - 1) >> 1] : 1
 }
 
+/**
+ * The widest gap, in glyphs, between two runs set as one line by `harmonize`: wide enough for a
+ * cloud engine's words spread across a menu line, narrower than the space between two bubbles.
+ */
+const ROW_GAP = 6
+
 /** Characters as the reader sees them: one per code point. */
 export const chars = (text) => [...text]
 
@@ -605,10 +611,22 @@ export function harmonize(runs) {
   }
   const centre = (run) =>
     run.vertical ? run.rect.x + run.rect.width / 2 : run.rect.y + run.rect.height / 2
+  // How far apart two runs are along their line: one line cut into words has gaps of a glyph or
+  // two at most, while two bubbles that merely share a height (or, in columns, a left edge) are far
+  // apart, and averaging their sizes shrank a big word to a small one's size, its glyphs spaced
+  // out to fill its box (キルコ嬢 set at a caption's size because the caption ran below it).
+  const gap = (a, b) => {
+    const [from, length] = a.vertical ? ['y', 'height'] : ['x', 'width']
+    return Math.max(a.rect[from], b.rect[from]) - Math.min(a.rect[from] + a.rect[length], b.rect[from] + b.rect[length])
+  }
   const together = (a, b) => {
-    if (!!a.vertical !== !!b.vertical) return false
+    if (!!a.vertical !== !!b.vertical || DOTS.test(a.text) || DOTS.test(b.text)) return false
     const large = Math.max(a.natural, b.natural)
-    return large <= Math.min(a.natural, b.natural) * 2 && Math.abs(centre(a) - centre(b)) < large / 2
+    return (
+      large <= Math.min(a.natural, b.natural) * 2 &&
+      Math.abs(centre(a) - centre(b)) < large / 2 &&
+      gap(a, b) < ROW_GAP * large
+    )
   }
   // Runs of several characters make the rows; a lone character only joins one (the nearest it
   // fits), so a 、 whose little ink reads large cannot bridge a line and a heading beside it.
@@ -645,7 +663,8 @@ export function harmonize(runs) {
   })
   const sizeOf = new Map()
   for (const [key, members] of rows) {
-    const long = members.filter((run) => chars(run.text).length > 1)
+    // A run of ellipses is boxed around little ink and measures large: it takes the size, never sets it.
+    const long = members.filter((run) => chars(run.text).length > 1 && !DOTS.test(run.text))
     const sizes = (long.length ? long : members).map((run) => run.natural).sort((a, b) => a - b)
     const middle = sizes.length >> 1
     sizeOf.set(key, sizes.length % 2 ? sizes[middle] : (sizes[middle - 1] + sizes[middle]) / 2)
