@@ -348,3 +348,60 @@ test('an estimated column starts where the detector found it, when it fits there
   close(runs[1].rect.y, 40, 'the left column starts at the found line')
   close(runs[0].rect.y, 0, 'the right column at the top of the box')
 })
+
+test('joined narration boxes keep their own columns, and slanted handwriting keeps its three', () => {
+  // Manga OCR on a Quick Shot: 「先に言って／おくと」 high on the right and 「これは業界が／どうとかの／
+  // 大きな話じゃない」 lower on the left, one block; beside it a handwritten bubble whose slanted
+  // columns are boxed twice as wide as their glyphs and overlap.
+  const block = (text, [x1, y1, x2, y2], polygons) => ({
+    text,
+    rect: { x: x1, y: y1, width: x2 - x1, height: y2 - y1 },
+    lines: polygons.map(([a, b, c, d]) => ({ x: a, y: b, width: c - a, height: d - b })),
+    block: true,
+    vertical: true
+  })
+  const [narration, bubble] = layoutParts(
+    [
+      block('先に言っておくとこれは業界がどうとかの大きな話じゃない', [52, 75, 197, 281], [
+        [145, 75, 170, 141],
+        [173, 76, 197, 178],
+        [80, 122, 100, 223],
+        [106, 121, 129, 243],
+        [53, 123, 73, 280]
+      ]),
+      block('アンコールないからはよ帰れ', [240, 199, 320, 288], [
+        [281, 199, 320, 283],
+        [261, 206, 299, 277],
+        [240, 207, 281, 288]
+      ])
+    ],
+    em
+  )
+  assert.deepEqual(
+    narration.map((run) => run.text),
+    ['先に言って', 'おくと', 'これは業界が', 'どうとかの', '大きな話じゃない']
+  )
+  assert.deepEqual(
+    bubble.map((run) => run.text),
+    ['アンコール', 'ないから', 'はよ帰れ']
+  )
+  for (const runs of [narration, bubble])
+    for (const run of runs) {
+      close(run.fontSize, runs[0].fontSize, 'one size per block')
+      assert.ok(run.fontSize + run.spacing <= 1.25 * run.fontSize, `${run.text} spread out`)
+    }
+})
+
+test('a break measured off line lengths moves to just after a nearby pause', () => {
+  // Manga OCR's four columns of 「さすが／「どこでも勉強ニキ」／の異名を持つだけ／はあるね！」: by length
+  // alone the second ends at ニ and the third starts with キ」.
+  const lines = [
+    { x: 1407, y: 709, width: 36, height: 74 },
+    { x: 1381, y: 709, width: 34, height: 190 },
+    { x: 1355, y: 713, width: 27, height: 165 },
+    { x: 1327, y: 711, width: 27, height: 109 }
+  ]
+  const runs = distribute('さすが「どこでも勉強ニキ」の異名を持つだけはあるね！', lines, true)
+  assert.equal(runs[1].text, '「どこでも勉強ニキ」')
+  assert.equal(runs.map((run) => run.text).join(''), 'さすが「どこでも勉強ニキ」の異名を持つだけはあるね！')
+})

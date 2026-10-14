@@ -66,6 +66,10 @@ const SPANNED = 0.75
  * solid, with the slight tracking manga and game text use, never spread out to fill the box.
  */
 const PITCH = 1.05
+/** Widest against narrowest of two regions that can be neighbouring columns (see `parallel`). */
+const PARALLEL = 1.2
+/** How many characters a line break measured off line lengths may move to land after a pause. */
+const NUDGE = 2
 
 /** Characters as the reader sees them: one per code point. */
 export const chars = (text) => [...text]
@@ -118,7 +122,7 @@ export function distribute(text, lineRects, vertical) {
   const capacities = lines.map((rect) =>
     vertical ? rect.height / Math.max(1, rect.width) : rect.width / Math.max(1, rect.height)
   )
-  const shares = apportion(all.length, capacities)
+  const shares = settle(all, apportion(all.length, capacities))
   let at = 0
   return lines
     .map((rect, index) => {
@@ -138,6 +142,33 @@ export function distribute(text, lineRects, vertical) {
  * wins. Lines are then filled to the edge, as wrapped text is, and spread evenly across the
  * breadth, each starting at the box's edge.
  */
+/**
+ * Shares of `all` moved so a line ends after a pause (BREAK_AFTER) when one lies within NUDGE
+ * characters of where the line lengths put the break: lengths measured off a detector's line
+ * regions are approximate, and a bubble's lines break after 」 or 、 far more often than a
+ * character before or after one. Every line keeps at least one character.
+ */
+function settle(all, shares) {
+  const ends = []
+  let at = 0
+  for (const share of shares) ends.push((at += share))
+  const pause = (cut) => BREAK_AFTER.has(all[cut - 1]) && !BREAK_AFTER.has(all[cut])
+  for (let i = 0; i + 1 < ends.length; i++) {
+    const low = (i ? ends[i - 1] : 0) + 1
+    const high = ends[i + 1] - 1
+    const cut = ends[i]
+    if (pause(cut)) continue
+    for (let d = 1; d <= NUDGE; d++) {
+      const found = [cut + d, cut - d].find((c) => c >= low && c <= high && pause(c))
+      if (found != null) {
+        ends[i] = found
+        break
+      }
+    }
+  }
+  return ends.map((end, i) => end - (i ? ends[i - 1] : 0))
+}
+
 /** Punctuation a line of manga or game text usually ends after: a pause, a stop, a closing mark. */
 const BREAK_AFTER = new Set([...'、。，．・…‥！？!?」』）)〕】'])
 
@@ -229,11 +260,23 @@ export function estimate(text, rect, vertical) {
  * the text lands on the ruby at a third of its size and the rest spreads over a run-together pair.
  * So, against the size the block's text would be set at in its box (`bestFit`): ruby-thin regions
  * are dropped (RUBY), regions that overlap across by more than half the thinner one are one column
- * (their union, with the words on both). A column still thicker than MERGED glyphs, or fewer
+ * (their union, with the words on both) unless they are slanted neighbours (`parallel`). A column still thicker than MERGED glyphs, or fewer
  * columns than the box holds, means the detector could not separate them, which leaves only the
  * box to go by (`estimate`); so does a missed column in a block its found columns do not span
  * (SPANNED).
  */
+/**
+ * Whether two overlapping regions are neighbouring columns of slanted handwriting rather than one
+ * column found in pieces, or two run together: boxed around their slant, such columns come out
+ * about twice as wide as their glyphs and overlap as much as pieces do, but they are as wide as each
+ * other (PARALLEL) and lie a glyph apart. A region that holds a neighbour's column as well is the
+ * wider one.
+ */
+function parallel(a, b, size) {
+  const apart = Math.abs(a.x + a.width / 2 - (b.x + b.width / 2))
+  return apart >= size / 2 && Math.max(a.width, b.width) <= PARALLEL * Math.min(a.width, b.width)
+}
+
 export function columns(lines, text, rect) {
   const count = chars(text.replace(/\n/g, '')).length
   const { size, lines: expected } = bestFit(count, rect.height, rect.width)
@@ -247,7 +290,7 @@ export function columns(lines, text, rect) {
         const other = merged[i]
         const overlap =
           Math.min(column.x + column.width, other.x + other.width) - Math.max(column.x, other.x)
-        if (overlap <= Math.min(column.width, other.width) / 2) continue
+        if (overlap <= Math.min(column.width, other.width) / 2 || parallel(column, other, size)) continue
         const x = Math.min(column.x, other.x)
         const y = Math.min(column.y, other.y)
         column = {
