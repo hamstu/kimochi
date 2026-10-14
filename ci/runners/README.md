@@ -54,7 +54,14 @@ or `Get-Service actions.runner.*` (Windows); logs live in `_diag/` beside the ru
    ```
    Needs rustup for `USER`, Visual Studio Build Tools with the C++ workload (ARM64 tools and
    the Clang component on ARM, since `ring` compiles with clang there), and the WebView2
-   runtime. NSIS is fetched by the Tauri CLI on first use.
+   runtime. NSIS is fetched by the Tauri CLI on first use. For signing, the Azure CLI must be
+   installed at its default path (`artifact-signing-cli` refuses to run without
+   `C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd`, though it signs with the
+   service principal from the secrets): `msiexec /i https://aka.ms/installazurecliwindowsx64 /qn`
+   (the x64 build, which also runs on ARM64). Azure's signing library is x64 C++/CLI, so the
+   .NET 8 x64 runtime is needed too (`https://aka.ms/dotnet/8.0/dotnet-runtime-win-x64.exe
+   /install /quiet`; on ARM64 it installs beside the native one, under `dotnet\x64`). Without it
+   signtool exits with code 3 and prints nothing.
 4. Re-running either script with the same `--name` replaces the registration.
 
 To share the fleet across repositories, register the runners against an organisation instead
@@ -93,3 +100,19 @@ that keeps the newest N.
 
 Every runner needs the `gh` CLI for the upload (the setup scripts install it); the workflow's
 own `GITHUB_TOKEN` is used, nothing to log in.
+
+## Signing
+
+The bundle job signs when the repository has the secrets, and verifies what it signed:
+
+- macOS: `APPLE_CERTIFICATE` (base64 `.p12` of the Developer ID Application certificate) and
+  `APPLE_CERTIFICATE_PASSWORD`, imported into a keychain the job creates and deletes, since the
+  runner's launchd job cannot use the login keychain; `APPLE_SIGNING_IDENTITY`; and the App
+  Store Connect API key for notarisation (`APPLE_API_ISSUER`, `APPLE_API_KEY`,
+  `APPLE_API_KEY_CONTENT`, the `.p8` text). Without `APPLE_CERTIFICATE` bundles are ad-hoc signed.
+- Windows: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` (service principal) and
+  the variables `KIMOCHI_SIGNING_ENDPOINT`, `KIMOCHI_SIGNING_ACCOUNT`, `KIMOCHI_SIGNING_PROFILE`
+  for Azure Artifact Signing (`scripts/sign-windows.mjs`).
+
+The workflow runs on pushes to `main`, tags and manual runs only. Keep it off `pull_request`:
+on self-hosted runners with these secrets, a fork's pull request would run on these machines.
