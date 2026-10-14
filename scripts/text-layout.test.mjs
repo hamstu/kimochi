@@ -310,3 +310,41 @@ test('columns the detector ran together leave the bubble to be estimated, at one
   assert.equal(runs.length, 2)
   close(runs[0].fontSize, runs[1].fontSize, 'one size')
 })
+
+test('two narration boxes boxed as one are set as wrapped text, never stretched over the join', () => {
+  // Manga OCR on 「……」 high on the right joined to 「嘘だろ…？」 low on the left: one block over
+  // both, with a line found for the left column only (y 951 to 1057 of a box from 882 to 1057).
+  // Inventing the right column over the box's whole length spread …嘘だろ over 175 px.
+  const box = { x: 312, y: 882, width: 55, height: 175 }
+  const text = '．．．嘘だろ．．．？'
+  const lines = [{ x: 312, y: 951, width: 29, height: 106 }]
+  assert.equal(columns(lines.map((line) => ({ ...line, segments: [] })), text, box), null)
+  const [runs] = layoutParts([{ text, rect: box, lines, block: true, vertical: true }], em)
+  assert.equal(runs.map((run) => run.text).join(''), text, 'every character, in reading order')
+  assert.ok(runs.length > 1)
+  for (let i = 1; i < runs.length; i++)
+    assert.ok(runs[i - 1].rect.x > runs[i].rect.x, 'columns read right to left')
+  for (const run of runs) {
+    close(run.fontSize, runs[0].fontSize, 'one size')
+    const pitch = run.fontSize + run.spacing
+    assert.ok(pitch <= 1.1 * run.fontSize, `pitch ${pitch} for a ${run.fontSize} px glyph`)
+    assert.ok(run.rect.y >= box.y - 1e-9 && run.rect.y + run.rect.height <= box.y + box.height + 1e-9)
+  }
+  // Broken where the boxes join, after the pause, as the source is lettered.
+  assert.deepEqual(
+    runs.map((run) => run.text),
+    ['．．．', '嘘だろ．．．？']
+  )
+})
+
+test('an estimated column starts where the detector found it, when it fits there', () => {
+  const box = { x: 0, y: 0, width: 60, height: 150 }
+  const lines = [{ x: 0, y: 40, width: 26, height: 110 }]
+  const [runs] = layoutParts([{ text: 'あいう。かきくけ', rect: box, lines, block: true, vertical: true }], em)
+  assert.deepEqual(
+    runs.map((run) => run.text),
+    ['あいう。', 'かきくけ']
+  )
+  close(runs[1].rect.y, 40, 'the left column starts at the found line')
+  close(runs[0].rect.y, 0, 'the right column at the top of the box')
+})

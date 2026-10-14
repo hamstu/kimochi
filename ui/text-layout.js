@@ -53,6 +53,19 @@ const RUBY = 0.6
  * half glyphs, and the size fitted to the box reads small where two digits share one cell.
  */
 const MERGED = 2.5
+/**
+ * How much of a block's length its found columns must run for a column the detector missed to be
+ * taken as running the whole length too. Shorter, the block is not a rectangle of columns: two
+ * bubbles or narration boxes whose outlines joined, one high on the right and one low on the left,
+ * boxed as one. Nothing then says where a missed column ends, and stretching it over the full
+ * length spaces its glyphs far apart; the box is set as wrapped text instead (`estimate`).
+ */
+const SPANNED = 0.75
+/**
+ * Glyph pitch against glyph size where nothing says where a line's glyphs are (`estimate`): set
+ * solid, with the slight tracking manga and game text use, never spread out to fill the box.
+ */
+const PITCH = 1.05
 
 /** Characters as the reader sees them: one per code point. */
 export const chars = (text) => [...text]
@@ -125,6 +138,38 @@ export function distribute(text, lineRects, vertical) {
  * wins. Lines are then filled to the edge, as wrapped text is, and spread evenly across the
  * breadth, each starting at the box's edge.
  */
+/** Punctuation a line of manga or game text usually ends after: a pause, a stop, a closing mark. */
+const BREAK_AFTER = new Set([...'、。，．・…‥！？!?」』）)〕】'])
+
+/**
+ * Characters as `lines` lines of at most `perLine`, broken where the text pauses when it can be.
+ *
+ * Each line ends after the last pause (BREAK_AFTER, at the end of a run of them, so ．．． stays
+ * whole) that leaves the rest room in the lines after it; without one, the line is filled to the
+ * edge, as wrapped text is. Manga letters a bubble's columns that way — 「……」 then 「嘘だろ…？」, not
+ * 「……嘘だろ…」 then 「？」 — and so do most game text boxes.
+ */
+function wrap(all, perLine, lines) {
+  const rows = []
+  let at = 0
+  while (at < all.length) {
+    const left = Math.max(1, lines - rows.length - 1)
+    let end = Math.min(all.length, at + perLine)
+    if (end < all.length) {
+      for (let cut = end; cut > at; cut--) {
+        const pause = BREAK_AFTER.has(all[cut - 1]) && !BREAK_AFTER.has(all[cut])
+        if (pause && all.length - cut <= left * perLine) {
+          end = cut
+          break
+        }
+      }
+    }
+    rows.push(all.slice(at, end).join(''))
+    at = end
+  }
+  return rows
+}
+
 /** The number of lines, and their glyph size, that set `count` characters largest in a box. */
 function bestFit(count, along, across) {
   let best = { size: 0, lines: 1 }
@@ -150,15 +195,16 @@ export function estimate(text, rect, vertical) {
     // line holds as many cells of the chosen size as fit, not an even share of the text.
     const perLine = Math.max(
       Math.ceil(all.length / best.lines),
-      Math.floor(along / best.size + 1e-6)
+      Math.floor(along / (best.size * PITCH) + 1e-6)
     )
-    rows = []
-    for (let i = 0; i < all.length; i += perLine) rows.push(all.slice(i, i + perLine).join(''))
+    rows = wrap(all, perLine, best.lines)
   }
   const longest = Math.max(1, ...rows.map((row) => chars(row).length))
   const size = Math.min(along / longest, across / (rows.length + (rows.length - 1) * (LEADING - 1)))
   const pitch = rows.length > 1 ? (across - size) / (rows.length - 1) : 0
-  const cell = along / longest
+  // Lines start at the box's edge at their natural pitch; one a box's breadth limits is not spread
+  // along its length, where a box drawn around two joined bubbles has room for none of it.
+  const cell = Math.min(along / longest, size * PITCH)
   return rows
     .map((row, index) => {
       const length = chars(row).length * cell
@@ -185,7 +231,8 @@ export function estimate(text, rect, vertical) {
  * are dropped (RUBY), regions that overlap across by more than half the thinner one are one column
  * (their union, with the words on both). A column still thicker than MERGED glyphs, or fewer
  * columns than the box holds, means the detector could not separate them, which leaves only the
- * box to go by (`estimate`).
+ * box to go by (`estimate`); so does a missed column in a block its found columns do not span
+ * (SPANNED).
  */
 export function columns(lines, text, rect) {
   const count = chars(text.replace(/\n/g, '')).length
@@ -228,6 +275,8 @@ export function columns(lines, text, rect) {
       missed.push({ x: edge, y: rect.y, width: column.x - edge, height: rect.height, segments: [] })
     edge = Math.max(edge, column.x + column.width)
   }
+  const longest = Math.max(...merged.map((column) => column.height))
+  if (missed.length && longest < SPANNED * rect.height) return null
   const found = [...merged, ...missed]
   return found.length < expected ? null : found
 }
@@ -484,6 +533,24 @@ export function splitAtGaps(run, segments, vertical, measure = null) {
 }
 
 /**
+ * Estimated columns moved down to start where a column the detector did find starts, when one lies
+ * under them: in a box around two joined bubbles the lower one's text begins well below the box's
+ * top, and the detector usually found that much. Kept inside the box.
+ */
+function anchored(runs, found, rect, vertical) {
+  if (!vertical || !found.length) return runs
+  return runs.map((run) => {
+    const { x, width, height } = run.rect
+    const under = found.find(
+      (line) => Math.min(x + width, line.x + line.width) - Math.max(x, line.x) > width / 2
+    )
+    if (!under) return run
+    const y = Math.max(rect.y, Math.min(under.y, rect.y + rect.height - height))
+    return { ...run, rect: { ...run.rect, y } }
+  })
+}
+
+/**
  * The runs one part is drawn as: itself, or a block's lines (found, or estimated), each cut where
  * the engine's words show a gap (`splitAtGaps`), all with the engine's ink margins.
  */
@@ -502,7 +569,7 @@ export function splitPart(part, vertical, measure = null) {
         const { segments, ...bounds } = rect
         return splitAtGaps({ text, rect: bounds }, segments, vertical, measure)
       })
-    } else runs = estimate(part.text, part.rect, vertical)
+    } else runs = anchored(estimate(part.text, part.rect, vertical), found, part.rect, vertical)
   } else runs = splitAtGaps({ text: part.text, rect: part.rect }, part.segments, vertical, measure)
   return part.margin ? runs.map((run) => ({ ...run, margin: part.margin })) : runs
 }

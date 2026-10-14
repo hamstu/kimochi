@@ -54,6 +54,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Speech bubbles or narration boxes whose outlines run together, read by Manga OCR as one block,
+  are no longer lettered with their characters stretched far apart to fill the joined shape. The
+  text is set at its natural spacing, keeps its columns and reading order, and breaks columns after
+  a pause (……, 。, ？) the way the original does.
 - Manga OCR reads small snips. A Quick Shot drawn around a single bubble or a few words used to
   come back empty or garbled, because the text finder blew the snip up to page size first. It
   now looks at a snip at its own size, and a lone line it still can't place is read whole. A line
