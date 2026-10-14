@@ -259,10 +259,10 @@ jobs:
       KIMOCHI_TARGET: ${{ matrix.target }}
       # macOS: without the Apple secrets, ad-hoc sign the app and the bundled dylib rather than
       # picking up whatever identity the runner's keychain holds.
-      KIMOCHI_ADHOC: ${{ secrets.APPLE_SIGNING_IDENTITY == '' && '1' || '' }}
+      KIMOCHI_ADHOC: ${{ secrets.APPLE_CERTIFICATE == '' && '1' || '' }}
       # Step-level env is not visible to a step's own `if`, so expose the gates at job level.
       HAS_WINDOWS_SIGNING: ${{ secrets.AZURE_TENANT_ID != '' }}
-      HAS_APPLE_SIGNING: ${{ secrets.APPLE_SIGNING_IDENTITY != '' }}
+      HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -342,9 +342,11 @@ jobs:
       # macOS signing and notarisation are tauri's own: given APPLE_SIGNING_IDENTITY it signs the
       # .app with the hardened runtime, and given the App Store Connect API key (issuer, key id and
       # the .p8 file) it notarises the .app and staples the ticket, failing the build when Apple
-      # rejects it. The Developer ID certificate is the one in the runner's login keychain, or, when
-      # APPLE_CERTIFICATE (a base64 .p12) is set, one tauri imports into a temporary keychain.
-      - name: Apple notarisation key
+      # rejects it. The Developer ID certificate (APPLE_CERTIFICATE, a base64 .p12) goes into a
+      # keychain of this job's own: the runner's launchd job runs in a security session of its own
+      # (SessionCreate), where the login keychain is locked, and scripts/run.mjs signs the bundled
+      # dylib before tauri runs, so tauri's own import would come too late.
+      - name: Apple signing keychain and notarisation key
         if: runner.os == 'macOS' && env.HAS_APPLE_SIGNING == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -354,16 +356,30 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          for name in APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_CONTENT; do
-            [[ -n "${!name}" ]] || { echo "APPLE_SIGNING_IDENTITY is set but $name is not" >&2; exit 1; }
+          for name in APPLE_SIGNING_IDENTITY APPLE_CERTIFICATE_PASSWORD APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_CONTENT; do
+            [[ -n "${!name}" ]] || { echo "APPLE_CERTIFICATE is set but $name is not" >&2; exit 1; }
           done
           umask 077
+          keychain="$RUNNER_TEMP/kimochi-signing.keychain-db"
+          password="$(openssl rand -hex 24)"
+          rm -f "$keychain"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" > /dev/null
+          # Searched first, for this job only; the cleanup step below restores the list.
+          security list-keychains -d user > "$RUNNER_TEMP/keychains-before"
+          security list-keychains -d user -s "$keychain" $(sed 's/"//g' "$RUNNER_TEMP/keychains-before")
+          security find-identity -v -p codesigning "$keychain"
           printf '%s\n' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/apple-api-key.p8"
-          # Only the variables that have a value: tauri treats an empty one as set.
+          # Not APPLE_CERTIFICATE: the identity is already in the job's keychain.
           {
             echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple-api-key.p8"
-            for name in APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD; do
-              if [[ -n "${!name}" ]]; then printf '%s<<__APPLE__\n%s\n__APPLE__\n' "$name" "${!name}"; fi
+            for name in APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY; do
+              printf '%s<<__APPLE__\n%s\n__APPLE__\n' "$name" "${!name}"
             done
           } >> "$GITHUB_ENV"
 
@@ -392,9 +408,15 @@ jobs:
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
 
-      - name: Remove the notarisation key
+      - name: Remove the signing keychain and notarisation key
         if: always() && runner.os == 'macOS'
-        run: rm -f "$RUNNER_TEMP/apple-api-key.p8"
+        run: |
+          rm -f "$RUNNER_TEMP/apple-api-key.p8" "$RUNNER_TEMP/certificate.p12"
+          if [[ -f "$RUNNER_TEMP/keychains-before" ]]; then
+            security list-keychains -d user -s $(sed 's/"//g' "$RUNNER_TEMP/keychains-before")
+            rm -f "$RUNNER_TEMP/keychains-before"
+          fi
+          security delete-keychain "$RUNNER_TEMP/kimochi-signing.keychain-db" 2>/dev/null || true
 
       - name: Verify Windows signature
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'

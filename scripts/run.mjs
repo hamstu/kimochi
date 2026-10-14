@@ -244,16 +244,35 @@ if (process.platform === 'linux') {
 // `release` is the optimised, installable app; `bundle` is the faster debug build.
 const bundles = { darwin: 'app', win32: 'nsis', linux: 'deb,appimage' }[process.platform]
 if (!bundles) throw new Error(`No bundle format configured for ${process.platform}`)
+// Windows: tauri.windows.conf.json's signCommand names `node`, which tauri looks up on PATH;
+// a runner service (LocalSystem) can fail that lookup, so name this very node and script.
+const signOverride =
+  process.platform === 'win32'
+    ? [
+        '--config',
+        JSON.stringify({
+          bundle: {
+            windows: {
+              signCommand: {
+                cmd: process.execPath,
+                args: [path.resolve('scripts/sign-windows.mjs'), '%1']
+              }
+            }
+          }
+        })
+      ]
+    : []
 let built = node('@tauri-apps/cli', 'tauri', [
     'build',
     ...(task === 'release' ? [] : ['--debug']),
     '--bundles',
     bundles,
+    ...signOverride,
     ...extra
   ])
 // A first build may just have downloaded the GTK helper. Retry only after its known fix.
 if (built.status !== 0 && linuxBundler && await linuxBundler.prepareLinuxBundler()) {
-  built = node('@tauri-apps/cli', 'tauri', ['build', ...(task === 'release' ? [] : ['--debug']), '--bundles', bundles, ...extra])
+  built = node('@tauri-apps/cli', 'tauri', ['build', ...(task === 'release' ? [] : ['--debug']), '--bundles', bundles, ...signOverride, ...extra])
 }
 exitOnFailure(built)
 // tauri writes under target/<triple>/ only for an explicit --target; KIMOCHI_TARGET alone (as CI
