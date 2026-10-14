@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """No-build, opt-in Steam-owned GTK app + independent XWayland overlay probe.
 
-No OCR/WebKit, controller grabs, Steam signals, foreign-window/root writes or
-system configuration. Touch/mouse routing only; Steam handles app switching.
+No OCR/WebKit or system configuration. Opt-in controller experiment uses
+one-shot Gamescope selection and the installed independent Steam input watchdog.
 """
 import argparse
 import atexit
@@ -19,6 +19,23 @@ import stat
 import subprocess
 import threading
 import time
+
+
+def controller_buttons(packet):
+    """Decode only input reports; feature/output reports are never sent."""
+    if len(packet) != 64 or packet[:4] != bytes([1, 0, 9, 64]):
+        return None
+    held = set()
+    for name, byte, bit in [('a',8,7),('b',8,5),('ls',10,6),('rs',11,2),('up',9,0),('down',9,3),('steam',9,5),('qam',14,2)]:
+        if packet[byte] & (1 << bit): held.add(name)
+    y = struct.unpack_from('<h', packet, 50)[0]
+    if y > 16000: held.add('up')
+    if y < -16000: held.add('down')
+    return held
+
+
+def chord_pressed(held, previous):
+    return {'ls', 'rs'} <= held and not {'ls', 'rs'} <= previous
 
 
 def report(event, **fields):
@@ -137,7 +154,7 @@ def main():
         xlib.XFlush(display)
 
     css = Gtk.CssProvider()
-    css.load_from_data(b'button {font-size:24px;padding:18px;} label {font-size:24px;} .probe-overlay {background:transparent;} .probe-card {background:#142236;color:white;border-radius:16px;padding:24px;}')
+    css.load_from_data(b'button {font-size:24px;padding:18px;} button:focus {background:#2876bd;outline:4px solid white;} label {font-size:24px;} .probe-overlay {background:transparent;} .probe-card {background:#142236;color:white;border-radius:16px;padding:24px;}')
     Gtk.StyleContext.add_provider_for_screen(window.get_screen(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
     content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
     content.get_style_context().add_class('probe-card')
@@ -177,6 +194,58 @@ def main():
                 report('ipc-failed', role=role, command=command, error=str(error))
 
     touch = None
+    input_guard = None
+    menu_visible = False
+    selected = 0
+    probe_app_id = 2999444207
+    game_app_id = None
+
+    def selected_app():
+        result = subprocess.run(['xprop', '-root', 'GAMESCOPE_FOCUSED_APP_GFX'], env=dict(os.environ, DISPLAY=':0'), capture_output=True, text=True)
+        try:
+            return int(result.stdout.split('=')[1].strip())
+        except (ValueError, IndexError):
+            return None
+
+    def switch_app(appid):
+        if not appid:
+            return
+        # One write per explicit user action; never enforce focus in a polling loop.
+        subprocess.run(['xprop', '-root', '-f', 'GAMESCOPECTRL_BASELAYER_APPID', '32c', '-set', 'GAMESCOPECTRL_BASELAYER_APPID', f'413091, {appid}, 769'], env=dict(os.environ, DISPLAY=':0'), check=True)
+        report('switch-request', appid=appid)
+
+    def release_input():
+        nonlocal input_guard
+        if input_guard is not None:
+            try:
+                input_guard.stdin.write(b'R')
+                input_guard.stdin.flush()
+                input_guard.stdin.close()
+            except (OSError, ValueError):
+                pass
+            child, input_guard = input_guard, None
+            threading.Thread(target=child.wait, daemon=True).start()
+
+    def acquire_input():
+        nonlocal input_guard
+        if not args.touch_watchdog:
+            raise RuntimeError('controller menu requires independent native watchdog')
+        for entry in Path('/proc').iterdir():
+            if not entry.name.isdigit(): continue
+            try:
+                if (entry / 'comm').read_text().strip() != 'steam':
+                    continue
+                fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+                if fields[0] in ('T', 't', 'Z'):
+                    raise RuntimeError('Steam already stopped; refusing controller menu')
+                token = fields[19]
+                env = dict(os.environ, DISPLAY=':0', XDG_CURRENT_DESKTOP='gamescope', KIMOCHI_GAMESCOPE_OVERLAY='x11')
+                input_guard = subprocess.Popen([args.touch_watchdog, '--gamescope-input-watchdog', entry.name, token, str(os.getpid())], env=env, stdin=subprocess.PIPE, start_new_session=True)
+                report('input-guard-started', steam=entry.name)
+                return
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                continue
+        raise RuntimeError('Steam not found')
     dismiss_timer = None
 
     def release_touch():
@@ -191,7 +260,10 @@ def main():
             threading.Thread(target=child.wait, daemon=True).start()
 
     def hide_overlay():
+        nonlocal menu_visible
         if args.role == 'overlay':
+            menu_visible = False
+            release_input()
             release_touch()
             prop('_NET_WM_WINDOW_OPACITY', 0)
             prop('STEAM_INPUT_FOCUS', 0)
@@ -269,8 +341,9 @@ def main():
         content.connect('size-allocate', shape)
         def back():
             hide_overlay()
+            switch_app(probe_app_id)
             request('app', 'present')
-        button('Request Kimochi window (experimental)', back)
+        button('Kimochi', back)
         button('Cancel overlay', hide_overlay)
         window.show_all()
         hide_overlay()
@@ -280,9 +353,11 @@ def main():
     os.chmod(endpoint(args.role), 0o600)
     server.listen(4)
     atexit.register(lambda: endpoint(args.role).unlink(missing_ok=True))
+    signal.signal(signal.SIGTERM, lambda *_: GLib.idle_add(Gtk.main_quit))
+    signal.signal(signal.SIGINT, lambda *_: GLib.idle_add(Gtk.main_quit))
 
     def dispatch(command):
-        nonlocal touch, dismiss_timer
+        nonlocal touch, dismiss_timer, menu_visible, selected
         report('ipc-received', command=command)
         if args.role == 'app' and command == 'present':
             window.show_all()
@@ -317,6 +392,19 @@ def main():
                 return True
             countdown()
             dismiss_timer = GLib.timeout_add_seconds(1, countdown)
+            menu_visible = interactive
+            selected = 0
+            if interactive:
+                buttons[0].grab_focus()
+                # GTK presentation must reach the server before focus validation.
+                def acquire_safely():
+                    try:
+                        if menu_visible: acquire_input()
+                    except (OSError, RuntimeError) as error:
+                        report('input-guard-failed', error=str(error))
+                        hide_overlay()
+                    return False
+                GLib.timeout_add(150, acquire_safely)
             report('overlay-shown', interactive=interactive)
         elif args.role == 'overlay' and command == 'hide':
             hide_overlay()
@@ -339,6 +427,12 @@ def main():
                 return
     threading.Thread(target=listen, daemon=True).start()
     def touch_heartbeat():
+        if input_guard is not None:
+            try:
+                input_guard.stdin.write(b'A')
+                input_guard.stdin.flush()
+            except (OSError, ValueError):
+                hide_overlay()
         if touch is not None:
             try:
                 touch.stdin.write(b'A')
@@ -347,6 +441,78 @@ def main():
                 hide_overlay()
         return True
     GLib.timeout_add(500, touch_heartbeat)
+    if args.role == 'overlay':
+        def controller():
+            nonlocal game_app_id, selected
+            fd = None
+            previous = set()
+            last_report = time.monotonic()
+            next_direction = 0
+            while True:
+                try:
+                    if fd is None:
+                        for node in Path('/sys/class/hidraw').glob('*'):
+                            event = (node / 'device/uevent').read_text()
+                            if 'HID_ID=0003:000028DE:00001205' in event and any(line.startswith('HID_PHYS=') and line.endswith('/input2') for line in event.splitlines()):
+                                fd = os.open('/dev/' + node.name, os.O_RDONLY | os.O_NONBLOCK)
+                                report('controller-connected', device=node.name)
+                                break
+                        if fd is None:
+                            time.sleep(1)
+                            continue
+                    packet = None
+                    for _ in range(256):
+                        try:
+                            data = os.read(fd, 64)
+                        except BlockingIOError:
+                            break
+                        if len(data) == 64 and data[:4] == bytes([1, 0, 9, 64]):
+                            packet = data
+                    now = time.monotonic()
+                    if packet is None:
+                        if now - last_report > .5 and menu_visible:
+                            GLib.idle_add(hide_overlay)
+                        time.sleep(.015)
+                        continue
+                    last_report = now
+                    held = controller_buttons(packet)
+                    edge = held - previous
+                    chord = chord_pressed(held, previous)
+                    previous = held
+                    def handle(held=held, edge=edge, chord=chord, now=now):
+                        nonlocal game_app_id, selected, next_direction
+                        if 'steam' in edge or 'qam' in edge:
+                            hide_overlay()
+                            return False
+                        if chord:
+                            if menu_visible:
+                                hide_overlay()
+                            else:
+                                active = selected_app()
+                                if active == probe_app_id:
+                                    switch_app(game_app_id)
+                                elif active and active != 769:
+                                    game_app_id = active
+                                    dispatch('show-interactive')
+                            report('controller-chord', game=game_app_id, visible=menu_visible)
+                        elif menu_visible:
+                            direction = 1 if 'down' in held else -1 if 'up' in held else 0
+                            if direction and (('up' in edge or 'down' in edge) or now >= next_direction):
+                                selected = (selected + direction) % len(buttons)
+                                buttons[selected].grab_focus()
+                                next_direction = now + (.3 if 'up' in edge or 'down' in edge else .12)
+                            if 'b' in edge: hide_overlay()
+                            elif 'a' in edge: buttons[selected].clicked()
+                        return False
+                    GLib.idle_add(handle)
+                    time.sleep(.015)
+                except OSError as error:
+                    report('controller-error', error=str(error))
+                    GLib.idle_add(hide_overlay)
+                    if fd is not None: os.close(fd)
+                    fd = None
+                    time.sleep(1)
+        threading.Thread(target=controller, daemon=True).start()
     window.connect('delete-event', lambda *_: (Gtk.main_quit(), True)[1])
     window.add_events(Gdk.EventMask.TOUCH_MASK | Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK)
     def pointer(_window, event):

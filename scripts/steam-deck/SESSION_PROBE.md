@@ -1,5 +1,48 @@
 # Steam-managed controls / external overlay experiment
 
+## Controller-loop extension (2026-10-14)
+
+The current experimental overlay role reads the Deck's input-only HID reports
+without grabs or output writes. Both stick clicks while a game is selected open
+the menu; D-pad/left-stick selects, A activates, B cancels. Kimochi selects the
+registered stub app, and both sticks there return to the previously selected
+game. Steam/QAM buttons dismiss the menu and release interception. A blue focus
+ring identifies the selected button. Touch buttons remain supported.
+
+**Requires** the existing fixed Kimochi AppImage passed as `--touch-watchdog`.
+Its independent input watchdog temporarily pauses Steam while the external menu
+owns input, restoring it on dismissal, focus loss, missing heartbeat, process
+exit or timeout. The harness never sends stop signals directly. No interception
+is requested while the ordinary Steam-managed app is selected; background game
+isolation in that state remains a physical acceptance gate.
+
+App switching performs a single explicit write to Gamescope's
+`GAMESCOPECTRL_BASELAYER_APPID` on :0. There is no repeated focus enforcement.
+This is an experimental compositor interface, **not a Steam UI switching API**;
+Steam-menu synchronization and handoff still need user verification. The current
+probe uses this test shortcut's app ID 2999444207 and the observed Steam priority
+prefix 413091. These are deliberately not production discovery logic. The last
+game is learned from compositor focus when opening the menu, not a launch URI.
+
+Native checks: one-shot switching selected the stub and then Sea of Stars;
+menu input guard changed Steam from Sl to Tl and dismissal restored Sl. With
+only overlay GTK SIGSTOPped, the independent helper restored Steam within the
+3-second observation interval while GTK remained stopped. No game/Steam/session
+restart occurred. Three pure Python report/chord regression tests pass:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python -m unittest discover \
+  -s scripts/steam-deck -p test_session_probe.py
+```
+
+The earlier results below describe the touch-only baseline. Its claims of no
+Steam signals/root writes and no controller handling are superseded by this
+explicitly opt-in extension. The deployed controller sidecar has a 900-second
+service lifetime; each menu still auto-dismisses after 20 seconds. End-to-end
+physical controller-loop acceptance is pending.
+
+## Original touch-only baseline
+
 `session-probe.py` is an opt-in GTK3/Python stub, not a replacement application.
 The Deck's existing PyGObject/Cairo packages run it directly: no Rust, Node,
 WebKit, OCR runtime, models or build container. Source edits take effect on the
