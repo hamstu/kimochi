@@ -31,7 +31,7 @@
 //! frontmost_pid() -> Option<u32>
 //! app_icon_png(&AppIdentity, target: isize) -> Option<Vec<u8>>
 //! observe_workspace(on_sleep, on_wake, on_activate)
-//! activate_self() -> Result<(), String>
+//! activate_self(prefer: Option<&WebviewWindow>) -> Result<(), String>
 //! activate_process(pid: u32) -> Result<(), String>
 //! open_capture_settings() -> Result<(), String>
 //! run_cli(program, args, stdin, cwd) -> Result<Child, String>

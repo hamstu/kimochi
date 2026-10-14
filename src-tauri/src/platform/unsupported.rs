@@ -122,7 +122,7 @@ pub fn observe_workspace(
 ) {
 }
 
-pub fn activate_self() -> Result<(), String> {
+pub fn activate_self(_prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
     Err(UNSUPPORTED.into())
 }
 

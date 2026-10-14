@@ -285,20 +285,39 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     Ok(true)
 }
 
-/// Activate Kimochi: its frontmost ordinary (non-panel) window, through the window
-/// manager (`_NET_ACTIVE_WINDOW`).
-pub fn activate_self() -> Result<(), String> {
+/// Activate Kimochi through the window manager (`_NET_ACTIVE_WINDOW`): `prefer` (the
+/// overlay the menu is drawn on) if there is one, so the main window stays behind the
+/// game. The window manager answers asynchronously and may refuse a utility window, so
+/// if Kimochi is still not in front a moment later its frontmost ordinary window is
+/// activated instead, which at least stops the game reading the controller.
+pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
     match session().backend {
         Backend::Wayland => Err(
             "unsupported on Wayland: applications cannot activate themselves without an activation token"
                 .into(),
         ),
         Backend::X11 => {
-            let window = x11::own_windows()
-                .into_iter()
-                .next()
-                .ok_or("native: Kimochi has no window to activate")?;
-            x11::activate_window(window)
+            let fallback = || {
+                let window = x11::own_windows()
+                    .into_iter()
+                    .next()
+                    .ok_or("native: Kimochi has no window to activate")?;
+                x11::activate_window(window)
+            };
+            let Some(window) = prefer.filter(|w| w.is_visible().unwrap_or(false)) else {
+                return fallback();
+            };
+            if window.is_focused().unwrap_or(false) {
+                return Ok(());
+            }
+            promote_to_key(window)?;
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                if x11::frontmost_pid() != Some(std::process::id()) {
+                    let _ = fallback();
+                }
+            });
+            Ok(())
         }
     }
 }

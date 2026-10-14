@@ -218,7 +218,9 @@ pub fn panel_focus(label: &str, focused: bool) {
     }
 }
 
-fn panel_focused() -> bool {
+/// Whether one of Kimochi's ordinary windows (main, Settings, Diagnostics, Dictionary,
+/// onboarding) has the keyboard. Never the overlay or the pop-up.
+pub fn panel_focused() -> bool {
     PANEL_FOCUS.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).is_some()
 }
 
@@ -317,9 +319,12 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                 *remembered = Some(pid);
             }
             let handle = app.clone();
+            // The overlay is what takes focus, never the main window: the menu is drawn
+            // over the game, and the reader's other windows stay behind it.
             let _ = app.run_on_main_thread(move || {
-                let _ = crate::platform::activate_self();
-                if let Some(overlay) = handle.get_webview_window("overlay") {
+                let overlay = handle.get_webview_window("overlay");
+                let _ = crate::platform::activate_self(overlay.as_ref());
+                if let Some(overlay) = overlay {
                     let _ = crate::platform::promote_to_key(&overlay);
                 }
             });

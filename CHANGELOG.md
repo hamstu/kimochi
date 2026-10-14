@@ -51,6 +51,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   at one size, a paragraph or speech bubble read as a whole is laid line by line over its own
   lines, and a space the OCR left out no longer pushes the rest of the line along. Hovering a
   word lights it without zooming it, so it stays exactly over the word you are reading.
+- Switching from the game to Kimochi's main window or Settings hides the text over the game, as
+  switching to any other app does; it no longer floats over Kimochi.
+- Opening the controller menu (or the gamepad-mode shortcut) no longer brings Kimochi's main
+  window in front of the game, and a scan from the menu no longer flips the game and Kimochi back
+  and forth: only the menu, the scanned text and the dictionary pop-up appear over the game.
 
 ### Removed
 

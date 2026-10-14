@@ -916,18 +916,150 @@ pub fn frontmost_pid() -> Option<u32> {
 ///
 /// For the controller menu: a game reads its controller only while it is the active
 /// application, so taking activation is what stops the menu's stick and button presses
-/// from also steering the game. `activateIgnoringOtherApps:` is used rather than
-/// `NSRunningApplication`'s `ActivateAllWindows`, which would put the main window and the
-/// Log in front of the game as well. It is deprecated from macOS 14 in favour of
+/// from also steering the game. `prefer` (the overlay) is made key by the caller; on macOS
+/// the application has to be activated as well, since a non-activating panel can become
+/// key while the game stays active and keeps reading the controller.
+///
+/// Activation brings the application's windows forward, so on its own this put the main
+/// window and Settings in front of the game the reader was looking at, under the menu.
+/// Every ordinary window of ours that is behind the game is therefore stepped out of the
+/// way first (`orderOut`) and put back behind the game's window once the activation has
+/// happened; panels (the overlay, the pop-up) are left alone, being what should come
+/// forward. `activateIgnoringOtherApps:` is deprecated from macOS 14 in favour of
 /// cooperative activation, but a background app asking for itself has nobody to yield to
 /// it, and the old call still takes effect. Must run on the main thread.
-pub fn activate_self() -> Result<(), String> {
-    objc2::MainThreadMarker::new().ok_or("activate_self requires the main thread")?;
+pub fn activate_self(_prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
+    let mtm = objc2::MainThreadMarker::new().ok_or("activate_self requires the main thread")?;
+    let app = NSApplication::sharedApplication(mtm);
+    if !app.isActive() {
+        step_aside(&app);
+    }
     unsafe {
-        let shared: *mut AnyObject = msg_send![objc2::class!(NSApplication), sharedApplication];
-        let _: () = msg_send![shared, activateIgnoringOtherApps: true];
+        let _: () = msg_send![&*app, activateIgnoringOtherApps: true];
     }
     Ok(())
+}
+
+/// The ordinary windows `activate_self` ordered out, front to back, and the foreign
+/// window they go back behind. Window numbers rather than windows: `NSWindow` is not `Send`.
+static STEPPED_ASIDE: std::sync::Mutex<Option<(isize, Vec<isize>)>> = std::sync::Mutex::new(None);
+static ACTIVATION_OBSERVER: std::sync::Once = std::sync::Once::new();
+
+/// Should activation never arrive (refused, or Kimochi was already on its way out),
+/// the stepped-aside windows come back after this long anyway.
+const STEP_ASIDE_LIMIT_NS: i64 = 750_000_000;
+
+/// Window numbers of every on-screen window, front to back.
+fn window_order() -> Vec<isize> {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        // kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements.
+        let ptr = CGWindowListCopyWindowInfo(1 | (1 << 4), 0);
+        let Some(list): Option<Retained<objc2_foundation::NSArray<NSDictionary<NSString, AnyObject>>>> =
+            Retained::from_raw(ptr.cast())
+        else {
+            return Vec::new();
+        };
+        list.iter()
+            .filter_map(|entry| {
+                let value = entry.objectForKey(ns_string!("kCGWindowNumber"))?;
+                let number: isize = msg_send![&*value, integerValue];
+                Some(number)
+            })
+            .collect()
+    })
+}
+
+/// Order out each ordinary window of ours that is behind the frontmost application's
+/// window, remembering where they were; `restore_stepped_aside` puts them back.
+fn step_aside(app: &NSApplication) {
+    restore_stepped_aside(app);
+    let own = std::process::id();
+    let Some(front) = frontmost_pid().filter(|pid| *pid != own) else { return };
+    let Some((anchor, _)) = i32::try_from(front).ok().and_then(front_window_number) else { return };
+    let anchor = anchor as isize;
+    let order = window_order();
+    let Some(anchor_at) = order.iter().position(|n| *n == anchor) else { return };
+    let mut behind: Vec<(usize, isize)> = Vec::new();
+    for window in app.windows().iter() {
+        let panel: bool = unsafe { msg_send![&*window, isKindOfClass: NSPanel::class()] };
+        // Level 0 only: a pinned window floats above the game and stays where it is.
+        if panel || !window.isVisible() || window.level() != 0 {
+            continue;
+        }
+        let number = window.windowNumber();
+        if let Some(at) = order.iter().position(|n| *n == number).filter(|at| *at > anchor_at) {
+            behind.push((at, number));
+        }
+    }
+    if behind.is_empty() {
+        return;
+    }
+    behind.sort_unstable();
+    let numbers: Vec<isize> = behind.into_iter().map(|(_, number)| number).collect();
+    for number in &numbers {
+        if let Some(window) = app.windowWithWindowNumber(*number) {
+            window.orderOut(None);
+        }
+    }
+    *STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()) = Some((anchor, numbers));
+    ACTIVATION_OBSERVER.call_once(|| unsafe {
+        let center = objc2_foundation::NSNotificationCenter::defaultCenter();
+        let handler = RcBlock::new(|_: std::ptr::NonNull<NSNotification>| {
+            // On the next turn of the main loop, once AppKit has finished ordering the
+            // activated application's windows.
+            restore_soon(0);
+        });
+        // Lives for the whole process, like the workspace observers.
+        let _ = center.addObserverForName_object_queue_usingBlock(
+            Some(objc2_app_kit::NSApplicationDidBecomeActiveNotification),
+            None,
+            None,
+            &handler,
+        );
+    });
+    restore_soon(STEP_ASIDE_LIMIT_NS);
+}
+
+extern "C" {
+    static _dispatch_main_q: std::ffi::c_void;
+    fn dispatch_time(when: u64, delta: i64) -> u64;
+    fn dispatch_after_f(
+        when: u64,
+        queue: *const std::ffi::c_void,
+        context: *mut std::ffi::c_void,
+        work: extern "C" fn(*mut std::ffi::c_void),
+    );
+}
+
+/// Run `restore_stepped_aside` on the main queue after `delay_ns`.
+fn restore_soon(delay_ns: i64) {
+    extern "C" fn work(_: *mut std::ffi::c_void) {
+        if let Some(mtm) = objc2::MainThreadMarker::new() {
+            restore_stepped_aside(&NSApplication::sharedApplication(mtm));
+        }
+    }
+    unsafe {
+        dispatch_after_f(
+            dispatch_time(0, delay_ns),
+            std::ptr::addr_of!(_dispatch_main_q),
+            std::ptr::null_mut(),
+            work,
+        );
+    }
+}
+
+/// Put the stepped-aside windows back behind the window they were behind, in their
+/// old order, without making any of them key. Once only; later calls find nothing.
+fn restore_stepped_aside(app: &NSApplication) {
+    let Some((anchor, numbers)) = STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()).take() else {
+        return;
+    };
+    let mut relative = anchor;
+    for number in numbers {
+        let Some(window) = app.windowWithWindowNumber(number) else { continue };
+        window.orderWindow_relativeTo(objc2_app_kit::NSWindowOrderingMode::Below, relative);
+        relative = number;
+    }
 }
 
 /// Bring the application owning process `pid` to the front, with all its windows: what clicking a

@@ -412,12 +412,16 @@ pub fn window_id_of(source_id: &str) -> Option<u32> {
 ///  - **an id this build cannot resolve is unknown, not a display.** A malformed id, or
 ///    one minted by another platform's backend, points at nothing here: it is neither
 ///    focused nor present, rather than being waved through as "a screen";
-///  - **our own windows hold the answer.** Hovering the scanned text focuses the
+///  - **our reading windows hold the answer.** Hovering the scanned text focuses the
 ///    overlay, and clicking the dictionary focuses the popup — both make Kimochi
 ///    frontmost. Recomputing then would decide the source had lost focus and hide the
 ///    very text being read, which would also close the popup that took the focus: a
-///    self-dismissal loop. So while one of our windows is in front, the previous
+///    self-dismissal loop. So while one of those windows is in front, the previous
 ///    answer stands. Any *other* application takes precedence immediately;
+///  - **our ordinary windows do not.** `panel_focused` says the main window, Settings
+///    or another ordinary window has the keyboard: the reader switched to Kimochi
+///    itself, the source is behind it, and the text over the source has to go just as
+///    it would for any other application;
 ///  - **no answer is not an answer.** With no frontmost application at all, the
 ///    window server has nothing to say, and the last answer is better than a guess.
 ///
@@ -430,6 +434,7 @@ pub fn source_focus(
     source_id: Option<&str>,
     front: Option<FrontWindow>,
     own_pid: u32,
+    panel_focused: bool,
     bounds: Option<(Rect, bool)>,
     previous: SourceFocus,
 ) -> SourceFocus {
@@ -473,6 +478,7 @@ pub fn source_focus(
         // An explicitly selected own window is OCR fixture content, not a reader panel.
         Some(front) if front.pid == own_pid && window.pid() == Some(own_pid)
             && front.window.as_ref().is_some_and(|w| w.platform() == window.platform() && w.handle() == window.handle()) => SourceFocus { focused: true, ..seen },
+        Some(front) if front.pid == own_pid && panel_focused => SourceFocus { focused: false, ..seen },
         Some(front) if front.pid == own_pid => SourceFocus { held: true, ..seen },
         Some(front) => SourceFocus {
             focused: front
@@ -639,6 +645,7 @@ mod focus_tests {
             Some(source().as_str()),
             front(SOURCE_WINDOW, 9001),
             OWN_PID,
+            false,
             on_screen(),
             SourceFocus::default(),
         );
@@ -655,6 +662,7 @@ mod focus_tests {
             Some(source().as_str()),
             front(SOURCE_WINDOW + 1, 9001),
             OWN_PID,
+            false,
             on_screen(),
             shown(),
         );
@@ -676,6 +684,7 @@ mod focus_tests {
             Some(source().as_str()),
             front(SOURCE_WINDOW, 9001),
             OWN_PID,
+            false,
             minimised,
             shown(),
         );
@@ -684,7 +693,7 @@ mod focus_tests {
 
     #[test]
     fn a_window_that_has_gone_is_not_present() {
-        let focus = source_focus(Some(source().as_str()), front(7777, 9001), OWN_PID, None, shown());
+        let focus = source_focus(Some(source().as_str()), front(7777, 9001), OWN_PID, false, None, shown());
         assert!(!focus.present);
         assert!(!focus.focused);
     }
@@ -695,10 +704,10 @@ mod focus_tests {
         // From a false answer: before the fix an own window in front only held the previous
         // value, so starting from the default (`focused: true`) would pass without the fix.
         let previous = SourceFocus { focused: false, ..SourceFocus::default() };
-        let focus = source_focus(Some(&source), front(SOURCE_WINDOW, OWN_PID), OWN_PID, on_screen(), previous);
+        let focus = source_focus(Some(&source), front(SOURCE_WINDOW, OWN_PID), OWN_PID, false, on_screen(), previous);
         assert!(focus.focused);
         assert!(!focus.held);
-        let panel = source_focus(Some(&source), front(SOURCE_WINDOW + 1, OWN_PID), OWN_PID, on_screen(), focus);
+        let panel = source_focus(Some(&source), front(SOURCE_WINDOW + 1, OWN_PID), OWN_PID, false, on_screen(), focus);
         assert!(panel.focused);
         assert!(panel.held);
     }
@@ -712,11 +721,30 @@ mod focus_tests {
             Some(source().as_str()),
             front(1234, OWN_PID),
             OWN_PID,
+            false,
             on_screen(),
             shown(),
         );
         assert!(focus.focused, "the reader is still reading the same window");
         assert!(focus.held);
+    }
+
+    #[test]
+    fn switching_to_the_main_window_puts_the_source_behind() {
+        // The reader left the game for Kimochi's main window or Settings: the game is
+        // behind it now, and text drawn over the game would float over Kimochi instead.
+        let focus = source_focus(Some(source().as_str()), front(1234, OWN_PID), OWN_PID, true, on_screen(), shown());
+        assert!(!focus.focused);
+        assert!(!focus.held);
+        // Back in the game, the text returns.
+        let back = source_focus(Some(source().as_str()), front(SOURCE_WINDOW, SOURCE_PID), OWN_PID, false, on_screen(), focus);
+        assert!(back.focused);
+    }
+
+    #[test]
+    fn a_display_source_ignores_which_of_our_windows_is_focused() {
+        let focus = source_focus(Some(display().as_str()), front(1, OWN_PID), OWN_PID, true, None, shown());
+        assert!(focus.focused);
     }
 
     #[test]
@@ -730,6 +758,7 @@ mod focus_tests {
             Some(source().as_str()),
             front(1234, OWN_PID),
             OWN_PID,
+            false,
             on_screen(),
             hidden,
         );
@@ -744,7 +773,7 @@ mod focus_tests {
             held: true,
             ..SourceFocus::default()
         };
-        let focus = source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, on_screen(), held);
+        let focus = source_focus(Some(source().as_str()), front(555, 9001), OWN_PID, false, on_screen(), held);
         assert!(!focus.focused);
         assert!(!focus.held);
     }
@@ -759,6 +788,7 @@ mod focus_tests {
                 Some(source().as_str()),
                 front(1234, OWN_PID),
                 OWN_PID,
+                false,
                 on_screen(),
                 focus,
             );
@@ -769,7 +799,7 @@ mod focus_tests {
     #[test]
     fn no_frontmost_application_keeps_the_last_answer() {
         // The window server has nothing to say, and a guess would blink the text.
-        let focus = source_focus(Some(source().as_str()), None, OWN_PID, on_screen(), shown());
+        let focus = source_focus(Some(source().as_str()), None, OWN_PID, false, on_screen(), shown());
         assert!(focus.focused);
         assert!(!focus.held);
     }
@@ -787,6 +817,7 @@ mod focus_tests {
             Some(source().as_str()),
             front(SOURCE_WINDOW, 56963),
             OWN_PID,
+            false,
             on_screen(),
             SourceFocus {
                 focused: false,
@@ -801,13 +832,14 @@ mod focus_tests {
     fn an_application_with_no_ordinary_window_on_screen_is_not_the_source() {
         // A menu-bar agent, or an app whose windows are all minimised: window 0 matches
         // nothing, which is the right answer, and the pid still identifies the owner.
-        let focus = source_focus(Some(source().as_str()), front(0, 9001), OWN_PID, on_screen(), shown());
+        let focus = source_focus(Some(source().as_str()), front(0, 9001), OWN_PID, false, on_screen(), shown());
         assert!(!focus.focused);
 
         let ours = source_focus(
             Some(source().as_str()),
             front(0, OWN_PID),
             OWN_PID,
+            false,
             on_screen(),
             shown(),
         );
@@ -820,7 +852,7 @@ mod focus_tests {
         // A screen capture is of whatever is on that screen: there is no window whose
         // focus could be lost, and window rules would blank it for no reason.
         for front in [None, front(1, 9001), front(2, OWN_PID)] {
-            let focus = source_focus(Some(display().as_str()), front, OWN_PID, None, shown());
+            let focus = source_focus(Some(display().as_str()), front, OWN_PID, false, None, shown());
             assert!(focus.focused);
             assert!(focus.present);
         }
@@ -837,7 +869,7 @@ mod focus_tests {
         };
         for id in ["", "macos:window:", "nonsense", "amiga:display:1", foreign] {
             for front in [None, front(SOURCE_WINDOW, 9001), front(1, OWN_PID)] {
-                let focus = source_focus(Some(id), front, OWN_PID, on_screen(), shown());
+                let focus = source_focus(Some(id), front, OWN_PID, false, on_screen(), shown());
                 assert!(!focus.focused, "{id:?}");
                 assert!(!focus.present, "{id:?}");
                 assert!(!focus.held, "{id:?}");
@@ -847,7 +879,7 @@ mod focus_tests {
 
     #[test]
     fn no_source_at_all_shows_rather_than_hides() {
-        let focus = source_focus(None, front(1, 9001), OWN_PID, None, SourceFocus::default());
+        let focus = source_focus(None, front(1, 9001), OWN_PID, false, None, SourceFocus::default());
         assert!(focus.focused);
         assert!(focus.present);
     }

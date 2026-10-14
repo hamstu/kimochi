@@ -3480,6 +3480,7 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
                 watching.as_deref(),
                 platform::front_window(),
                 own_pid,
+                gamepad::panel_focused(),
                 bounds,
                 previous.unwrap_or_default(),
             );

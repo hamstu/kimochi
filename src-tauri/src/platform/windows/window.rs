@@ -616,9 +616,17 @@ fn main_window_of(pid: u32) -> Option<HWND> {
 /// may keep reading it in the background, which no API here can prevent).
 ///
 /// Windows activates *windows*, not applications, so one of ours has to come forward:
-/// the front-most ordinary (non-panel) window if there is one, otherwise a panel with
-/// its passive guard lifted. Must run on the main thread.
-pub fn activate_self() -> Result<(), String> {
+/// `prefer` (the overlay the menu is drawn on) with its passive guard lifted. Only if it
+/// cannot take the foreground does the front-most ordinary window come forward instead:
+/// that puts the main window over the game, which is the wrong picture but still stops
+/// the game reading the controller. Must run on the main thread.
+pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
+    if let Some(window) = prefer {
+        let target = hwnd(window)?;
+        if promote_to_key(window)? || unsafe { GetForegroundWindow() } == target {
+            return Ok(());
+        }
+    }
     let own = std::process::id();
     let windows = process_windows(own);
     let visible = |h: &HWND| unsafe { IsWindowVisible(*h) }.as_bool();
