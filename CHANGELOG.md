@@ -13,6 +13,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- Manga OCR's text is shown in a manga-style typeface: Zen Kaku Gothic Antique, lighter than the
+  overlay's usual bold, with the classic kana shapes manga lettering uses. Text that is big for
+  its page, a shout or a heading, is set bold. The font is bundled, so nothing is downloaded.
 - Full-screen games and other desktops work. On macOS the overlay, Quick Shot and the dictionary
   pop-up now appear over an app in its own full-screen Space, and the source picker lists windows
   on other Spaces, tagged "Full screen" or "Desktop 2". On Windows they follow you to whichever

@@ -43,71 +43,146 @@ const GROUP_BORDER = 1
 export const GROUP_FONT =
   "'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif"
 
-let measurer = null
-/** A canvas set in the overlay's font at 100 px, or false where there is none (tests). */
-function canvas() {
-  if (measurer === null && typeof document !== 'undefined') {
-    measurer = document.createElement('canvas').getContext?.('2d') ?? false
-    if (measurer) {
-      measurer.font = `bold 100px ${GROUP_FONT}`
-      // As drawn: `.ocr-word` and `.ocr-run` turn kerning off (overlay.html).
-      measurer.fontKerning = 'none'
-    }
-  }
-  return measurer
+/**
+ * The typeface Manga OCR's text is set in: Zen Kaku Gothic Antique, a gothic with the classic
+ * kana of manga lettering, bundled (dist/ui/fonts/manga.css, from scripts/prepare.mjs) so it needs
+ * no network. Light enough at 500 to read over the page; 700 for text big for its page, which in
+ * manga is shouted and lettered bold. The platform gothic stands in until it has loaded.
+ */
+export const MANGA_FONT = `'Zen Kaku Gothic Antique', ${GROUP_FONT}`
+
+/** How each typeface is drawn: its family, its weight, and the heavier weight big text takes. */
+const TYPEFACES = {
+  default: { family: GROUP_FONT, weight: 'bold', bold: 'bold' },
+  manga: { family: MANGA_FONT, weight: '500', bold: '700' }
+}
+const faceOf = (typeface) => TYPEFACES[typeface] ?? TYPEFACES.default
+
+/**
+ * Text at least this many times its page's typical size, or at least BOLD_SIZE px, is set in its
+ * typeface's heavier weight: a heading or a shout, which a manga letters bold.
+ */
+const BOLD_RATIO = 1.5
+const BOLD_SIZE = 48
+
+/** Each run's weight in its typeface (`run.weight`), heavier where it is big for its page. */
+function weigh(layouts, typefaces) {
+  const sizes = layouts
+    .flatMap((runs, index) => (typefaces[index] === 'manga' ? runs.map((run) => run.fontSize) : []))
+    .sort((a, b) => a - b)
+  const typical = sizes.length ? sizes[(sizes.length - 1) >> 1] : Infinity
+  return layouts.map((runs, index) => {
+    const face = faceOf(typefaces[index])
+    return runs.map((run) => {
+      const big = run.fontSize >= Math.min(BOLD_RATIO * typical, BOLD_SIZE)
+      return { ...run, weight: big ? face.bold : face.weight }
+    })
+  })
 }
 
-const advances = new Map()
+const measures = new Map()
 /**
- * A run's natural advance in ems, in the font it is drawn in. Without a canvas (tests) it falls
- * back to one em per full-width character and a little over half for the rest.
+ * A typeface's measure: a run's natural advance in ems as drawn, with `.ink`, where its ink is
+ * (see `inkOf` in text-layout.js), both read off a canvas set in the face at 100 px. Without a
+ * canvas (tests) the advance is one em per full-width character and a little over half for the
+ * rest, and the ink unknown.
  */
-export function measureEms(text) {
-  const cached = advances.get(text)
-  if (cached !== undefined) return cached
-  let ems = 0
-  const context = canvas()
-  if (context) ems = context.measureText(text).width / 100
-  else
-    for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
-  if (advances.size > 2000) advances.clear()
-  advances.set(text, ems)
-  return ems
+export function measureFor(typeface = 'default') {
+  const known = measures.get(typeface)
+  if (known) return known
+  const face = faceOf(typeface)
+  let context = null
+  const canvas = () => {
+    if (context === null && typeof document !== 'undefined') {
+      context = document.createElement('canvas').getContext?.('2d') ?? false
+      if (context) {
+        context.font = `${face.weight} 100px ${face.family}`
+        // As drawn: `.ocr-word` and `.ocr-run` turn kerning off (overlay.html).
+        context.fontKerning = 'none'
+      }
+    }
+    return context
+  }
+  const advances = new Map()
+  const inks = new Map()
+  const measure = (text) => {
+    const cached = advances.get(text)
+    if (cached !== undefined) return cached
+    let ems = 0
+    const drawn = canvas()
+    if (drawn) ems = drawn.measureText(text).width / 100
+    else
+      for (const character of text) ems += /[\u0020-\u024f\uff61-\uff9f]/u.test(character) ? 0.56 : 1
+    if (advances.size > 2000) advances.clear()
+    advances.set(text, ems)
+    return ems
+  }
+  measure.ink = (text) => {
+    const cached = inks.get(text)
+    if (cached !== undefined) return cached
+    let ink = null
+    const drawn = canvas()
+    if (drawn) {
+      const m = drawn.measureText(text)
+      ink = {
+        advance: m.width / 100,
+        start: -m.actualBoundingBoxLeft / 100,
+        end: m.actualBoundingBoxRight / 100,
+        ascent: m.actualBoundingBoxAscent / 100,
+        descent: m.actualBoundingBoxDescent / 100,
+        fontAscent: m.fontBoundingBoxAscent / 100,
+        fontDescent: m.fontBoundingBoxDescent / 100
+      }
+      const usable =
+        Object.values(ink).every(Number.isFinite) &&
+        ink.end > ink.start &&
+        ink.ascent + ink.descent > 0 &&
+        ink.fontAscent + ink.fontDescent > 0
+      if (!usable) ink = null
+    }
+    if (inks.size > 2000) inks.clear()
+    inks.set(text, ink)
+    return ink
+  }
+  // Measured before the face loaded, these are the fallback's: forget them once it has.
+  measure.forget = () => {
+    advances.clear()
+    inks.clear()
+  }
+  measures.set(typeface, measure)
+  return measure
 }
 
-const inks = new Map()
+/** The overlay's own typeface's measure: see `measureFor`. */
+export const measureEms = measureFor('default')
+/** Where a run's ink is in the overlay's own typeface, or null: see `measureFor`. */
+export const measureInk = measureEms.ink
+
 /**
- * Where a run's ink is, in ems, measured on the real glyphs (see `inkOf` in text-layout.js), or
- * null without a canvas, or for text with no ink (spaces).
+ * Whether the bundled typefaces `annotations` are set in have loaded for their characters; if not,
+ * starts loading them and calls `done` when they have. The faces are split by character range and
+ * load on demand, and a canvas measures with the fallback until they arrive, which would size and
+ * space every run for the wrong glyphs.
  */
-export function measureInk(text) {
-  const cached = inks.get(text)
-  if (cached !== undefined) return cached
-  let ink = null
-  const context = canvas()
-  if (context) {
-    const m = context.measureText(text)
-    ink = {
-      advance: m.width / 100,
-      start: -m.actualBoundingBoxLeft / 100,
-      end: m.actualBoundingBoxRight / 100,
-      ascent: m.actualBoundingBoxAscent / 100,
-      descent: m.actualBoundingBoxDescent / 100,
-      fontAscent: m.fontBoundingBoxAscent / 100,
-      fontDescent: m.fontBoundingBoxDescent / 100
-    }
-    const usable =
-      Object.values(ink).every(Number.isFinite) &&
-      ink.end > ink.start &&
-      ink.ascent + ink.descent > 0 &&
-      ink.fontAscent + ink.fontDescent > 0
-    if (!usable) ink = null
-  }
-  if (inks.size > 2000) inks.clear()
-  inks.set(text, ink)
-  return ink
+function typefacesReady(annotations, done) {
+  if (typeof document === 'undefined' || !document.fonts?.check) return true
+  const text = annotations
+    .filter((a) => a.typeface === 'manga')
+    .map((a) => a.description ?? '')
+    .join('')
+  if (!text) return true
+  const face = faceOf('manga')
+  const specs = [face.weight, face.bold].map((weight) => `${weight} 100px ${face.family}`)
+  if (specs.every((spec) => document.fonts.check(spec, text))) return true
+  Promise.all(specs.map((spec) => document.fonts.load(spec, text))).then(
+    () => {
+      measureFor('manga').forget()
+      done()
+    },
+    () => {}
+  )
+  return false
 }
-measureEms.ink = measureInk
 
 /**
  * One fitted run as an element (`.ocr-run`), placed against an origin.
@@ -131,7 +206,18 @@ function runElement(run, origin, vertical, inline) {
  * gives them. `measure` is the overlay font's (tests pass recorded metrics).
  */
 export function wordLayout(mapped, measure = measureEms) {
-  return layoutParts(mapped.map(partOf), measure)
+  return weigh(layoutParts(withTypefaces(mapped.map(partOf), mapped, measure), measure), mapped.map((box) => box.typeface))
+}
+
+/**
+ * Parts measured in their own typefaces (`part.measure`), in the overlay; a caller's own measure
+ * (tests' recorded metrics) measures everything as it is.
+ */
+function withTypefaces(parts, boxes, measure) {
+  if (measure !== measureEms) return parts
+  return parts.map((part, index) =>
+    boxes[index].typeface ? { ...part, measure: measureFor(boxes[index].typeface) } : part
+  )
 }
 
 /** What the layout (text-layout.js) needs of a mapped box: everything OCR said about its text. */
@@ -154,7 +240,8 @@ function runSignature(runs) {
   return runs.map((run) => [
     run.text,
     ...[run.rect.x, run.rect.y, run.rect.width, run.rect.height].map(round),
-    ...[run.fontSize, run.spacing, run.lead, run.shift].map(round)
+    ...[run.fontSize, run.spacing, run.lead, run.shift].map(round),
+    run.weight
   ])
 }
 
@@ -168,6 +255,7 @@ function runStyle(run, origin, vertical, inline) {
     top: `${run.rect.y - origin.y + (vertical ? run.lead : run.shift)}px`,
     ...(inline ? {} : { width: `${run.rect.width}px`, height: `${run.rect.height}px` }),
     fontSize: `${run.fontSize}px`,
+    ...(run.weight ? { fontWeight: run.weight } : {}),
     letterSpacing: `${run.spacing}px`,
     lineHeight: `${vertical ? run.rect.width : run.rect.height}px`
   }
@@ -389,7 +477,7 @@ export class TextOverlayRenderer {
     if (!word?.runs || word.runs.length !== 1 || word.runs[0].text !== word.box.text) return null
     const { box } = word
     const vertical = box.orientation === 'vertical' || box.isVertical === true
-    return characterCells(box.text, word.runs, vertical, measureEms)
+    return characterCells(box.text, word.runs, vertical, box.typeface ? measureFor(box.typeface) : measureEms)
   }
 
   /** The pointer has gone somewhere this window cannot see; let the effect fade. */
@@ -496,6 +584,12 @@ export class TextOverlayRenderer {
       this.clear()
       return
     }
+    // Laid out now in the fallback if a bundled face is still loading, and again once it has.
+    typefacesReady(filtered, () => {
+      if (this.renderSignature !== signature) return
+      this.renderSignature = null
+      this.render(view)
+    })
 
     // Existing recognized words remain usable while another request runs.
     // Loading belongs on the controller, not in place of known text.
@@ -612,7 +706,9 @@ export class TextOverlayRenderer {
 
       const vertical = box.orientation === 'vertical' || box.isVertical === true
       const block = box.granularity === 'block' || box.text.includes('\n')
-      element.className = `ocr-word${vertical ? ' ocr-vertical' : ''}${block ? ' ocr-block' : ''}`
+      element.className = `ocr-word${vertical ? ' ocr-vertical' : ''}${block ? ' ocr-block' : ''}${
+        box.typeface === 'manga' ? ' ocr-manga' : ''
+      }`
       const runs = layouts[index]
       // A word or a single line is drawn as the box's own text; a block's lines each as a run.
       const single = runs.length === 1 && runs[0].text === box.text
@@ -623,6 +719,7 @@ export class TextOverlayRenderer {
         single
           ? {
               fontSize: `${runs[0].fontSize}px`,
+              ...(runs[0].weight ? { fontWeight: runs[0].weight } : {}),
               lineHeight: `${vertical ? runs[0].rect.width : runs[0].rect.height}px`
             }
           : { fontSize: '0px', lineHeight: '0px' }
@@ -707,7 +804,19 @@ export class TextOverlayRenderer {
         vertical: group.orientation === 'vertical'
       }))
     )
-    const fitted = scanning ? [] : layoutParts(partsOf.flat(), measureEms)
+    const boxes = partsOf.flat()
+    const typefaces = groups.flatMap((group, index) =>
+      partsOf[index].map(() => group.annotations[0]?.typeface)
+    )
+    const fitted = scanning
+      ? []
+      : weigh(
+          layoutParts(
+            withTypefaces(boxes, typefaces.map((typeface) => ({ typeface })), measureEms),
+            measureEms
+          ),
+          typefaces
+        )
     let nextPart = 0
     const runsOf = partsOf.map((parts) => parts.flatMap(() => fitted[nextPart++] ?? []))
 
@@ -743,7 +852,9 @@ export class TextOverlayRenderer {
       )
 
       const element = document.createElement('div')
-      element.className = `ocr-group${vertical ? ' ocr-vertical' : ''}`
+      element.className = `ocr-group${vertical ? ' ocr-vertical' : ''}${
+        group.annotations[0]?.typeface === 'manga' ? ' ocr-manga' : ''
+      }`
       element.dataset.ocrWordBox = 'true'
       Object.assign(element.style, {
         left: `${rect.x - GROUP_PADDING_X}px`,

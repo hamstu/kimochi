@@ -34,6 +34,8 @@ export interface Annotation {
   segments?: { text: string; bbox: number[] }[]
   /** How far outside the ink the engine draws boxes, in ems (see INK_MARGINS in ocr-result.ts). */
   inkMargin?: number[]
+  /** The typeface the overlay sets this engine's text in (TYPEFACES in ocr-result.ts). */
+  typeface?: string
 }
 
 export interface BoundingBox {

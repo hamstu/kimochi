@@ -30,6 +30,8 @@ export interface Annotation {
   segments?: { text: string; bbox: number[] }[]
   /** How far outside the ink the engine draws boxes, in ems (INK_MARGINS in ocr-result.ts). */
   inkMargin?: number[]
+  /** The typeface the overlay sets this engine's text in (TYPEFACES in ocr-result.ts). */
+  typeface?: string
   groupId?: string
   boundingPoly: { vertices: { x?: number; y?: number }[] }
 }
@@ -46,6 +48,7 @@ export type MappedBox = Rect & {
   lineSegments?: MappedSegment[][]
   segments?: MappedSegment[]
   inkMargin?: number[]
+  typeface?: string
 }
 /**
  * Current full capture pixels → desktop points, per axis.
@@ -145,7 +148,8 @@ export function mapAnnotations(
         ...(lines.length ? { lines } : {}),
         ...(lineSegments.some((words) => words.length) ? { lineSegments } : {}),
         ...(segments.length ? { segments } : {}),
-        ...(a.inkMargin?.length === 4 ? { inkMargin: a.inkMargin } : {})
+        ...(a.inkMargin?.length === 4 ? { inkMargin: a.inkMargin } : {}),
+        ...(a.typeface ? { typeface: a.typeface } : {})
       }
     ]
   })

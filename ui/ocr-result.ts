@@ -41,13 +41,27 @@ export const INK_MARGINS: Record<string, [number, number, number, number]> = {
   mangaocr: [0.1, 0.15, 0.15, 0.15],
 };
 
-/** Annotations stamped with their engine's ink margins, when it has measured ones. */
+/**
+ * The typeface the overlay sets an engine's text in, where it is not the overlay's own: Manga OCR
+ * reads manga, and its text is drawn in a manga face (MANGA_FONT in render.js).
+ */
+export const TYPEFACES: Record<string, string> = {
+  mangaocr: "manga",
+};
+
+/** Annotations stamped with their engine's ink margins and typeface, where it has them. */
 export function withInkMargins(
   annotations: Annotation[],
   engine: string,
 ): Annotation[] {
   const margin = INK_MARGINS[engine];
-  return margin ? annotations.map((a) => ({ ...a, inkMargin: margin })) : annotations;
+  const typeface = TYPEFACES[engine];
+  if (!margin && !typeface) return annotations;
+  return annotations.map((a) => ({
+    ...a,
+    ...(margin ? { inkMargin: margin } : {}),
+    ...(typeface ? { typeface } : {}),
+  }));
 }
 
 const box = (

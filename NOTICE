@@ -114,6 +114,12 @@ Figtree, Copyright 2022 The Figtree Project Authors
 Font License, Version 1.1; the full text is in LICENSE-OFL.txt. They are
 bundled in the app's web assets and the website.
 
+Zen Kaku Gothic Antique, Copyright 2022 The Zen Project Authors
+(https://github.com/googlefonts/zen-kakugothic), via the @fontsource
+package, is licensed under the SIL Open Font License, Version 1.1 (full
+text in LICENSE-OFL.txt). Its 500 and 700 weights are bundled in the
+overlay's assets, which set Manga OCR's text in it.
+
 
 Engine icons
 ------------

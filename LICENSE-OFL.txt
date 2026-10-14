@@ -1,11 +1,15 @@
 These fonts are bundled in Kimochi's web assets and website, from the
-@fontsource-variable/figtree and @fontsource-variable/noto-sans-jp packages.
+@fontsource-variable/figtree and @fontsource-variable/noto-sans-jp packages,
+and (in the overlay's assets) from @fontsource/zen-kaku-gothic-antique.
 
 Figtree
 Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)
 
 Noto Sans JP
 Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'
+
+Zen Kaku Gothic Antique
+Copyright 2022 The Zen Project Authors (https://github.com/googlefonts/zen-kakugothic)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

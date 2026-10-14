@@ -161,7 +161,8 @@ export function distribute(text, lineRects, vertical) {
       at += shares[index]
       if (!rect.open) return { text: piece, rect }
       // As long as its text set solid at the size its breadth allows, from the block's start.
-      const { open: _, ...bounds } = rect
+      const bounds = { ...rect }
+      delete bounds.open
       const span = Math.min(length(rect), chars(piece).length * thick(rect) * PITCH)
       return { text: piece, rect: vertical ? { ...bounds, height: span } : { ...bounds, width: span } }
     })
@@ -774,7 +775,9 @@ export function splitPart(part, vertical, measure = null) {
     const lines = vertical && found.length ? columns(found, part.text, part.rect) : found
     if (lines?.length) {
       runs = distribute(part.text, lines, vertical).flatMap(({ text, rect }) => {
-        const { segments, extent: _, guessed: __, ...bounds } = rect
+        const { segments, ...bounds } = rect
+        delete bounds.extent
+        delete bounds.guessed
         return splitAtGaps({ text, rect: bounds }, segments, vertical, measure)
       })
     } else runs = anchored(estimate(part.text, part.rect, vertical), found, part.rect, vertical)
@@ -789,22 +792,27 @@ export function splitPart(part, vertical, measure = null) {
  * @param {{text: string, rect: {x: number, y: number, width: number, height: number}, lines?: {x: number, y: number, width: number, height: number}[], lineSegments?: object[][], segments?: object[], margin?: number[], block?: boolean, vertical?: boolean}[]} parts
  *   in overlay coordinates: a block carries the line rectangles found inside it, if any, and the
  *   words found on each (`lineSegments`); a line, the words or characters on it (`segments`);
- *   any part, its engine's ink margins (`margin`, see `fit`)
+ *   any part, its engine's ink margins (`margin`, see `fit`), and the measure of its own typeface
+ *   (`measure`), when it is not set in the overlay's
  * @param {(text: string) => number} measure the natural advance in ems; see `inkOf` for `.ink`
  */
 export function layoutParts(parts, measure) {
-  const pieces = parts.map((part) =>
-    splitPart(part, !!part.vertical, measure).map((run) => ({ ...run, vertical: !!part.vertical }))
+  // A part set in a typeface of its own measures in it (`part.measure`); the rest in `measure`.
+  const measureOf = (index) => parts[index].measure ?? measure
+  const pieces = parts.map((part, index) =>
+    splitPart(part, !!part.vertical, measureOf(index)).map((run) => ({ ...run, vertical: !!part.vertical }))
   )
   const sizes = harmonize(
     pieces.flatMap((runs, index) => {
       const part = parts[index]
       const block = part.vertical && (part.block || part.text.includes('\n')) ? index : undefined
-      return runs.map((run) => ({ ...fit(run, run.vertical, measure), block }))
+      return runs.map((run) => ({ ...fit(run, run.vertical, measureOf(index)), block }))
     })
   )
   let next = 0
-  return pieces.map((runs) => runs.map((run) => fit(run, run.vertical, measure, sizes[next++])))
+  return pieces.map((runs, index) =>
+    runs.map((run) => fit(run, run.vertical, measureOf(index), sizes[next++]))
+  )
 }
 
 /**

@@ -12,7 +12,7 @@
 //
 // The per-directory steps are exported so the dev server (`vite.dev.config.ts`) can redo just the
 // step a source change affects, without wiping `dist/` (and the React build beside it).
-import { cp, mkdir, rm, readdir, readFile, stat } from 'node:fs/promises'
+import { cp, mkdir, rm, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { build } from 'esbuild'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
@@ -89,7 +89,37 @@ export async function prepareUi() {
       target: 'safari17'
     })
   }
+  await prepareMangaFont()
   await checkUiSpecifiers()
+}
+
+/** The overlay's manga typeface (ui/render.js MANGA_FONT), from its Fontsource package. */
+const MANGA_FONT_PACKAGE = 'node_modules/@fontsource/zen-kaku-gothic-antique'
+/** Its weights the overlay draws with: text at 500, text big for its page at 700. */
+const MANGA_FONT_WEIGHTS = [500, 700]
+
+/**
+ * `dist/ui/fonts/manga.css` and the font files it names, so the overlay sets Manga OCR's text in a
+ * manga typeface with no network: the package's `@font-face` rules for the weights the overlay
+ * uses, pointed at copies of their woff2 files beside it (WebKit and WebView2 both read woff2, so
+ * the woff fallbacks are left out), with the font's licence.
+ */
+async function prepareMangaFont() {
+  const out = at('dist/ui/fonts')
+  await mkdir(out, { recursive: true })
+  const rules = []
+  for (const weight of MANGA_FONT_WEIGHTS) {
+    const css = await readFile(at(MANGA_FONT_PACKAGE, `${weight}.css`), 'utf8')
+    rules.push(
+      css
+        .replace(/,\s*url\([^)]*\.woff\)\s*format\('woff'\)/g, '')
+        .replace(/url\(\.\/files\//g, 'url(./')
+    )
+    for (const match of css.matchAll(/url\(\.\/files\/([^)]+\.woff2)\)/g))
+      await cp(at(MANGA_FONT_PACKAGE, 'files', match[1]), path.join(out, match[1]))
+  }
+  await writeFile(path.join(out, 'manga.css'), rules.join('\n'))
+  await cp(at(MANGA_FONT_PACKAGE, 'LICENSE'), path.join(out, 'zen-kaku-gothic-antique.LICENSE.txt'))
 }
 
 /**
