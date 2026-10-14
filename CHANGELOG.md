@@ -38,6 +38,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - The Yomitan API helper now installs correctly on Windows, for every supported browser.
+- The Built-in Yomitan pop-up over the Log no longer has a white border in dark mode: its frame
+  now matches the pop-up's own theme, light or dark.
 
 ### Removed
 

@@ -109,11 +109,15 @@ async function refreshDisplays() {
   }
 }
 await refreshDisplays()
-if (gnomeBridge) {
+// Kimochi's appearance, for a lookup that does not say which theme its page has (desktop OCR on
+// GNOME). Every other lookup brings its page's theme, and the popup frame follows that.
+try {
   appearance = (await invoke('settings_all')).appearance ?? 'system'
-  await window.__TAURI__.event.listen('settings:changed', ({ payload }) => {
+  await window.__TAURI__?.event?.listen('settings:changed', ({ payload }) => {
     if (payload.key === 'appearance') appearance = payload.value
   })
+} catch (error) {
+  report({ check: 'popup-host-appearance-failed', error: String(error?.message ?? error) })
 }
 
 // The viewport Yomitan positions within: the work area of the display the scanned
@@ -341,11 +345,8 @@ Popup.prototype.showContent = async function (details, displayDetails) {
     // Display.window.focus() is appropriate for an in-page iframe, but a remote
     // GTK window would take the reader's Shift hold with it. Hover stays passive;
     // the real window can still receive an explicit click and scroll normally.
-    const pageTheme = displayDetails?.state?.pageTheme ?? resolvedTheme()
-    this._themeController.siteTheme = pageTheme
-    this._themeController.updateTheme()
-    if (displayDetails) displayDetails = { ...displayDetails, focus: false,
-      state: { ...displayDetails.state, pageTheme } }
+    // (The frame's theme follows the content's in stylePopupFrames, below, for every OS.)
+    if (displayDetails) displayDetails = { ...displayDetails, focus: false }
   }
   try {
     await showContent.call(this, details, displayDetails)
@@ -396,7 +397,9 @@ Popup.prototype.hide = function (changeFocus) {
 // parent frame to resize it, which is this window.
 // Build the popup's frame ahead of the first lookup rather than during it.
 const { prewarmPopups, stylePopupFrames } = await import('/spike/popup-bridge.js')
-stylePopupFrames(Popup)
+// This page is transparent, which Yomitan would read as a light site: each frame takes its
+// content's theme instead (the scanned window's), else Kimochi's appearance.
+stylePopupFrames(Popup, { fallbackTheme: resolvedTheme })
 prewarmPopups(Popup, report)
 
 const setFrameSize = Popup.prototype.setFrameSize

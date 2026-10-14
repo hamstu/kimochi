@@ -50,26 +50,85 @@ iframe.yomitan-popup[data-theme=dark] {
 `
 
 /**
- * Restyle every popup frame this realm builds, by adding {@link POPUP_FRAME_CSS} right after
- * Yomitan's own outer stylesheet — in the same place, which may be the popup's closed shadow
- * root, held on the instance as `_shadow`. The reader's own "custom popup outer CSS" is applied
- * after both, so it still wins. Idempotent.
+ * The theme a lookup asked the popup's content to take: Yomitan's frontend measures the scanned
+ * page's ground (`TextScanner` → `pageTheme`) and the `Display` inside the popup resolves its
+ * `site` theme against it. Null when the lookup carries none.
  */
-export function stylePopupFrames(Popup) {
-  if (Popup.prototype[STYLED]) return
-  Popup.prototype[STYLED] = true
+export function pageThemeOf(displayDetails) {
+  const theme = displayDetails?.state?.pageTheme
+  return theme === 'dark' || theme === 'light' ? theme : null
+}
+
+/** Resolve `popup`'s frame theme with `theme` as its site theme (see {@link stylePopupFrames}). */
+export function followTheme(popup, theme) {
+  const controller = popup?._themeController
+  if (!controller || typeof controller.updateTheme !== 'function') return false
+  controller.siteTheme = theme
+  controller.updateTheme()
+  return true
+}
+
+/**
+ * Restyle every popup frame this realm builds, and keep each frame's theme on its content's.
+ *
+ * Style: {@link POPUP_FRAME_CSS} goes right after Yomitan's own outer stylesheet — in the same
+ * place, which may be the popup's closed shadow root, held on the instance as `_shadow`. The
+ * reader's own "custom popup outer CSS" is applied after both, so it still wins.
+ *
+ * Theme: Yomitan resolves the frame's `data-theme` / `data-outer-theme` from the document the
+ * frame sits in, but the content's from the page that was scanned ({@link pageThemeOf}). For a
+ * popup inside its own window those are one page. For the popup host (ui/popup-host.js) they are
+ * not: its page is transparent, which Yomitan reads as light, so a lookup in the dark Log window
+ * got dark content in a white, light-ringed frame. Each `showContent` therefore gives the frame's
+ * theme controller the content's page theme as its site theme — the value the `Display` inside
+ * resolves with — so frame and content agree whatever `popupTheme` / `popupOuterTheme` a profile
+ * holds, defaults included. A lookup without a page theme takes `fallbackTheme()` (the popup host:
+ * Kimochi's appearance), handed to the content too. `ThemeController#siteTheme` is Yomitan's own
+ * override; nothing in Yomitan is modified.
+ *
+ * Idempotent per `Popup` class; a later call may still supply the fallback.
+ *
+ * @param {Function} Popup Yomitan's `Popup` class (js/app/popup.js)
+ * @param {{fallbackTheme?: () => ('dark' | 'light' | null)}} [options]
+ */
+export function stylePopupFrames(Popup, { fallbackTheme } = {}) {
+  const existing = Popup.prototype[STYLED]
+  if (existing) {
+    if (fallbackTheme) existing.fallbackTheme = fallbackTheme
+    return
+  }
+  const styled = { fallbackTheme: fallbackTheme ?? null }
+  Popup.prototype[STYLED] = styled
+
   const inject = Popup.prototype._injectPopupOuterStylesheet
-  if (typeof inject !== 'function') return
-  Popup.prototype._injectPopupOuterStylesheet = async function (...args) {
-    const result = await inject.apply(this, args)
-    const parent = this._shadow ?? document.head
-    if (parent && !parent.querySelector?.('style[data-kimochi-popup-frame]')) {
-      const style = document.createElement('style')
-      style.dataset.kimochiPopupFrame = ''
-      style.textContent = POPUP_FRAME_CSS
-      parent.append(style)
+  if (typeof inject === 'function') {
+    Popup.prototype._injectPopupOuterStylesheet = async function (...args) {
+      const result = await inject.apply(this, args)
+      const parent = this._shadow ?? document.head
+      if (parent && !parent.querySelector?.('style[data-kimochi-popup-frame]')) {
+        const style = document.createElement('style')
+        style.dataset.kimochiPopupFrame = ''
+        style.textContent = POPUP_FRAME_CSS
+        parent.append(style)
+      }
+      return result
     }
-    return result
+  }
+
+  const showContent = Popup.prototype.showContent
+  if (typeof showContent === 'function') {
+    Popup.prototype.showContent = function (details, displayDetails, ...rest) {
+      if (displayDetails) {
+        const theme = pageThemeOf(displayDetails) ?? styled.fallbackTheme?.() ?? null
+        if (theme) {
+          if (displayDetails.state?.pageTheme !== theme) {
+            displayDetails = { ...displayDetails, state: { ...displayDetails.state, pageTheme: theme } }
+          }
+          followTheme(this, theme)
+        }
+      }
+      return showContent.call(this, details, displayDetails, ...rest)
+    }
   }
 }
 
