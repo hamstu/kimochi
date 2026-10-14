@@ -92,16 +92,6 @@
   color: var(--k-text);
 }
 
-/* Where the engine runs: a computer for local engines, a cloud for online ones. */
-.engine-runs {
-  display: inline-flex;
-  flex: none;
-  color: var(--k-text-3);
-}
-.engine-runs > svg {
-  width: var(--k-icon-sm);
-  height: var(--k-icon-sm);
-}
 .engine-detail-name {
   display: flex;
   align-items: center;

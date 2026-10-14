@@ -36,3 +36,14 @@
   height: var(--k-icon);
   object-fit: contain;
 }
+
+/* Where the engine runs: a computer for local engines, a cloud for online ones. */
+.engine-runs {
+  display: inline-flex;
+  flex: none;
+  color: var(--k-text-3);
+}
+.engine-runs > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}

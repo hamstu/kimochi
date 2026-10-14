@@ -31,6 +31,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- The OCR model picker in the main window lists each engine as Settings does: its icon, its
+  name, whether it runs online or on your computer, and a short line about what it is for.
 - The dictionary options have clearer names: **Built-in Yomitan** (a copy of Yomitan inside
   Kimochi, set up with its own or your exported dictionaries) and **Yomitan API** (formerly
   "Kimochi pop-up"). Your choice is kept.

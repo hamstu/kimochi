@@ -374,6 +374,10 @@
 .k-menu-item-danger > svg { color: var(--k-danger-text); }
 .k-menu-item-danger[data-highlighted] { background: var(--k-danger-soft); }
 .k-menu-item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.k-menu-item-described { align-items: flex-start; padding-block: var(--k-space-1-5); }
+.k-menu-item-described > .k-menu-item-check { align-self: center; }
+.k-menu-item-description { display: block; margin-top: 1px; font-size: var(--k-text-xs); line-height: var(--k-leading-xs); color: var(--k-text-2); }
+.k-menu-item-described[data-disabled] .k-menu-item-description { color: var(--k-text-3); }
 .k-menu-item-shortcut { margin-left: auto; padding-left: var(--k-space-4); color: var(--k-text-3); font-size: var(--k-text-sm); font-variant-numeric: tabular-nums; }
 .k-menu-item-check { flex: none; display: grid; place-items: center; width: var(--k-icon-sm); height: var(--k-icon-sm); margin-left: auto; color: var(--k-accent-text); }
 .k-menu-item-check svg { width: var(--k-icon-sm); height: var(--k-icon-sm); }

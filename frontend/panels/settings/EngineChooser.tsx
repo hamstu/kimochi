@@ -27,7 +27,7 @@
  * `engineMenu` below. The decisions are `ui/engine-chooser.ts`.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Check, Cloud, Ellipsis, Monitor, Trash2 } from 'lucide-react'
+import { Check, Ellipsis, Trash2 } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import {
   Badge,
@@ -50,7 +50,7 @@ import {
 } from '@ui/ocr-engines'
 import { listKeyTarget, ocrUseAction, activateLabel } from '@ui/engine-chooser'
 import { OCR_MODES, type OcrMode } from '../../bridge/settings'
-import { OcrEngineIcon } from '../../components/EngineIcon'
+import { OcrEngineIcon, OcrRunsIcon } from '../../components/EngineIcon'
 import { useCapabilities, type PlatformCapabilities } from '../../bridge/capabilities'
 import { useModelControls, useModelStatus } from '../../bridge/models'
 import { useEngineSelection } from '../../bridge/useEngineSelection'
@@ -63,15 +63,6 @@ type Engines = PlatformCapabilities['ocrEngines']
 
 const MODES = Object.keys(OCR_MODES) as OcrMode[]
 
-/** Where the engine runs, as an icon: this computer, or a service across the network. */
-function RunsIcon({ mode }: { mode: OcrMode }): ReactNode {
-  const local = OCR_MODES[mode].runs === 'local'
-  return (
-    <span className="engine-runs" title={local ? 'Runs on this computer' : 'Runs online'}>
-      {local ? <Monitor aria-label="On this computer" /> : <Cloud aria-label="Online" />}
-    </span>
-  )
-}
 
 /** The active engine's mark at the end of its row: a green check, read out as "In use". */
 export function InUseCheck(): ReactNode {
@@ -129,7 +120,7 @@ function EngineItem({
       <span className="engine-item-text">
         <span className="engine-item-name">
           {info.name}
-          <RunsIcon mode={mode} />
+          <OcrRunsIcon mode={mode} />
         </span>
         <span className="engine-item-tagline">{info.tagline}</span>
         {hint && (
@@ -191,7 +182,7 @@ function EngineDetail({
       <header className="engine-detail-header">
         <h3 id={headingId} className="k-heading engine-detail-name">
           {info.name}
-          <RunsIcon mode={mode} />
+          <OcrRunsIcon mode={mode} />
         </h3>
         {action === 'active' ? (
           <Badge tone="accent">Active</Badge>

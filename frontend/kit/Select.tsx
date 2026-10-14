@@ -55,13 +55,23 @@ export const SelectContent = forwardRef<
 
 export const SelectItem = forwardRef<
   ElementRef<typeof SelectPrimitive.Item>,
-  ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & { icon?: ReactNode; detail?: ReactNode }
->(function SelectItem({ className, children, icon, detail, ...props }, ref) {
+  ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    icon?: ReactNode
+    detail?: ReactNode
+    /** A second line under the label, in the list only: the closed select shows just the label. */
+    description?: ReactNode
+  }
+>(function SelectItem({ className, children, icon, detail, description, ...props }, ref) {
   return (
-    <SelectPrimitive.Item ref={ref} className={cn('k-menu-item', className)} {...props}>
+    <SelectPrimitive.Item
+      ref={ref}
+      className={cn('k-menu-item', description != null && 'k-menu-item-described', className)}
+      {...props}
+    >
       {icon}
       <span className="k-menu-item-label">
         <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+        {description != null && <span className="k-menu-item-description">{description}</span>}
       </span>
       {detail && <span className="k-menu-item-shortcut">{detail}</span>}
       <SelectPrimitive.ItemIndicator className="k-menu-item-check">

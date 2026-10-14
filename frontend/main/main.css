@@ -257,6 +257,31 @@
   width: 100%;
   height: var(--k-row-h);
 }
+/* The OCR model select: each engine as Settings lists it (picture, name, where it runs), with its
+   tagline under it in the open list. */
+.sb-ocr-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-width: 0;
+}
+.sb-ocr-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--k-weight-medium);
+}
+.sb-ocr-select .sb-ocr-option {
+  flex: 1;
+}
+.sb-ocr-select .engine-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.sb-ocr-menu .k-menu-item-description {
+  padding-left: calc(var(--engine-icon-size) + var(--k-space-2));
+}
 /* A label with a quiet "Manage" link at its right, both on the label's baseline. The link has the
    label's type metrics and no vertical padding, so the row is exactly as tall as a bare label. */
 .sb-label-row {
@@ -1086,4 +1111,7 @@
   .sb-update {
     animation: none;
   }
+}
+.sb-ocr-menu .k-menu-item-check {
+  color: var(--k-ok-text);
 }

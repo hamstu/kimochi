@@ -8,12 +8,13 @@
  */
 import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
 import { ArrowLeft, Settings } from 'lucide-react'
-import { Row, Select } from '@kit'
+import { Row, SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValue } from '@kit'
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
 import { useEngineSelection } from '../bridge/useEngineSelection'
 import { useCapabilities } from '../bridge/capabilities'
+import { OcrEngineIcon, OcrRunsIcon } from '../components/EngineIcon'
 import { SETTINGS_NAV } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 import type { SettingsTabName } from '../bridge/tauri'
@@ -90,10 +91,18 @@ function ManageLink({ label, onClick }: { label: string; onClick: () => void }):
   )
 }
 
-const OCR_MODE_OPTIONS = (Object.keys(OCR_MODES) as OcrMode[]).map((value) => ({
-  value,
-  label: OCR_MODES[value].label
-}))
+const OCR_MODE_LIST = Object.keys(OCR_MODES) as OcrMode[]
+
+/** An engine as Settings lists it: its picture, its name and where it runs. Also the closed select. */
+function OcrModeLabel({ mode }: { mode: OcrMode }): JSX.Element {
+  return (
+    <span className="sb-ocr-option">
+      <OcrEngineIcon mode={mode} />
+      <span className="sb-ocr-option-name">{OCR_MODES[mode].name}</span>
+      <OcrRunsIcon mode={mode} />
+    </span>
+  )
+}
 
 /**
  * The same engine choice as Settings → OCR & Overlay (and the same download confirmation), with a way there
@@ -112,20 +121,25 @@ function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Eleme
         <ManageLink label="Manage OCR settings" onClick={onOpenSettings} />
       </div>
       <div className="sb-field">
-        <Select
-          aria-label="OCR model"
-          className="sb-select"
-          value={shown}
-          onValueChange={choose}
-          options={OCR_MODE_OPTIONS.filter((option) =>
-            engineListed(option.value, capabilities, ocrMode)
-          ).map((option) =>
-            // Kimochi cloud without an access key is listed only while it is still selected.
-            option.value === 'cloud' && !capabilities.cloudAccess
-              ? { ...option, label: `${option.label} (needs access key)` }
-              : option
-          )}
-        />
+        <SelectRoot value={shown} onValueChange={(value) => choose(value as OcrMode)}>
+          <SelectTrigger aria-label="OCR model" className="sb-select sb-ocr-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="sb-ocr-menu">
+            {OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode)).map((mode) => (
+              <SelectItem
+                key={mode}
+                value={mode}
+                description={
+                  // Kimochi cloud without an access key is listed only while it is still selected.
+                  mode === 'cloud' && !capabilities.cloudAccess ? 'Needs an access key' : OCR_MODES[mode].tagline
+                }
+              >
+                <OcrModeLabel mode={mode} />
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </SelectRoot>
       </div>
       <DownloadConfirmDialog confirmation={confirmation} />
     </div>

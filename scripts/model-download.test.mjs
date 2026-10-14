@@ -153,12 +153,17 @@ test('both engine pickers share the confirmation and list engines by name alone'
   assert.ok(!ocrTab.includes('useEngineSelection'), 'OcrTab picks the engine itself instead of through EngineChooser')
   // The name is the name: where a download stands is a separate hint, never a label suffix.
   const sidebar = await read('frontend/main/MainSidebar.tsx')
-  assert.ok(sidebar.includes('label: OCR_MODES[value].label\n'), 'the sidebar picker labels engines with more than their name')
+  // As Settings lists it: the picture, the name, then where it runs; the tagline is a second line.
+  assert.match(
+    sidebar,
+    /<OcrEngineIcon mode=\{mode\} \/>\s*<span className="sb-ocr-option-name">\{OCR_MODES\[mode\]\.name\}<\/span>\s*<OcrRunsIcon mode=\{mode\} \/>/,
+    'the sidebar picker labels engines with more than their name'
+  )
   const chooser = await read('frontend/panels/settings/EngineChooser.tsx')
   // The name, then where the engine runs as an icon; never a download-state suffix.
   assert.match(
     chooser,
-    /<span className="engine-item-name">\s*\{info\.name\}\s*<RunsIcon mode=\{mode\} \/>\s*<\/span>/,
+    /<span className="engine-item-name">\s*\{info\.name\}\s*<OcrRunsIcon mode=\{mode\} \/>\s*<\/span>/,
     'the list labels engines with more than their name'
   )
   assert.ok(chooser.includes('engineHint(capability, status)'), 'the list no longer shows the download state as a hint')

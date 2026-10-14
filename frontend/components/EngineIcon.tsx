@@ -13,8 +13,8 @@
  * The pictures are decorative: the engine's name always sits beside them.
  */
 import type { ReactNode } from 'react'
-import { ScanText } from 'lucide-react'
-import type { OcrMode } from '../bridge/settings'
+import { Cloud, Monitor, ScanText } from 'lucide-react'
+import { OCR_MODES, type OcrMode } from '../bridge/settings'
 import type { DictionaryEngine } from '../bridge/dictionaryEngine'
 import yomitan from '../assets/engine-icons/yomitan.svg'
 import yomitanApi from '../assets/engine-icons/yomitan-api.svg'
@@ -59,6 +59,16 @@ function EngineIcon({ picture, className }: { picture: Picture; className?: stri
   return (
     <span className={`${classes} engine-icon-tile`} aria-hidden lang={'lang' in picture ? picture.lang : undefined}>
       {'glyph' in picture ? picture.glyph : picture.monogram}
+    </span>
+  )
+}
+
+/** Where the engine runs, as an icon: this computer, or a service across the network. */
+export function OcrRunsIcon({ mode }: { mode: OcrMode }): ReactNode {
+  const local = OCR_MODES[mode].runs === 'local'
+  return (
+    <span className="engine-runs" title={local ? 'Runs on this computer' : 'Runs online'}>
+      {local ? <Monitor aria-label="On this computer" /> : <Cloud aria-label="Online" />}
     </span>
   )
 }
