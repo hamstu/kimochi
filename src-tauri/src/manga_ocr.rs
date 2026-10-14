@@ -104,9 +104,10 @@ pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
         });
     }
     let engine = engine.as_mut().ok_or("Manga OCR initialization failed")?;
+    // A whole page or a snip of one bubble: see `MangaOcr::recognize_region`.
     let page = engine
         .recognizer
-        .recognize_page(
+        .recognize_region(
             &image,
             &mut engine.detector,
             &OcrOptions::default(),

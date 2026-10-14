@@ -3333,7 +3333,7 @@ dependencies = [
 [[package]]
 name = "mangaocr"
 version = "0.1.0"
-source = "git+https://github.com/hamstu/kimochi-mangaocr?rev=e4561afc540d059f49e62fa7e2f31314e681ce50#e4561afc540d059f49e62fa7e2f31314e681ce50"
+source = "git+https://github.com/hamstu/kimochi-mangaocr?rev=4a4964b6756224379430b715b35b1ceda93e4686#4a4964b6756224379430b715b35b1ceda93e4686"
 dependencies = [
  "candle-core",
  "candle-nn",
