@@ -6,10 +6,10 @@
  * The Log stays mounted under the other views: it owns line intake (clipboard, WebSocket, OCR),
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { PanelLeft } from 'lucide-react'
 import { listen } from '@tauri-apps/api/event'
-import { IconButton, Tooltip } from '@kit'
+import { IconButton, Tooltip, Menu, MenuTrigger, MenuContent, MenuItem } from '@kit'
 import { ReaderHost, Transcript } from '@texthooker/App'
 import { NotebookPanel as Notebook } from '@texthooker/components/NotebookPanel'
 import { TitleBarPortal } from '../shell/TitleBarPortal'
@@ -30,6 +30,8 @@ import { WhatsNewDialog } from './WhatsNewDialog'
 import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
 import { GamingModeNotice } from './GamingModeNotice'
+import { panel } from '../bridge/tauri'
+import { MiniPanel } from './MiniPanel'
 import './main.css'
 
 function initialView(): MainView {
@@ -40,10 +42,34 @@ function initialView(): MainView {
 }
 
 export default function MainPanel(): JSX.Element {
+  const capabilities = useCapabilities()
   const [sidebar, setSidebar] = useSetting<boolean>('mainSidebarOpen', true)
   const [sidebarWidth, setSidebarWidth] = useSetting<number>('mainSidebarWidth', DEFAULT_WIDTH)
   // `?view=` picks the first view (used by the UI preview pages).
   const [view, setViewState] = useState<MainView>(initialView)
+  const [mini, setMini] = useState(false)
+  const [miniError, setMiniError] = useState<string | null>(null)
+  const changeMini = useCallback(async (enabled: boolean): Promise<void> => {
+    if (capabilities.os !== 'windows') return
+    try {
+      await panel('log', enabled ? 'mini' : 'expand')
+      setMini(enabled)
+      document.documentElement.toggleAttribute('data-mini', enabled)
+      setMiniError(null)
+    } catch (error) { setMiniError(String(error)) }
+  }, [capabilities.os])
+  useEffect(() => {
+    const pending = listen<boolean>('main:mini', ({ payload }) => {
+      setMini(payload)
+      document.documentElement.toggleAttribute('data-mini', payload)
+    })
+    void panel('log', 'inspect').then((info) => {
+      const enabled = Boolean(info.mini)
+      setMini(enabled)
+      document.documentElement.toggleAttribute('data-mini', enabled)
+    }).catch(() => {})
+    return () => void pending.then((stop) => stop())
+  }, [])
   // After an engine switch the stored page is known before the setting loads: the first frame
   // shows it rather than General.
   const [storedTab, setStoredTab] = useSetting<string>(
@@ -110,23 +136,25 @@ export default function MainPanel(): JSX.Element {
 
   // Other windows (the tray, a pop-up) ask for Settings by event; the page is already stored.
   useEffect(() => {
-    const pending = listen('main:show-settings', () => setViewState('settings'))
+    const pending = listen('main:show-settings', () => {
+      void changeMini(false).then(() => setViewState('settings'))
+    })
     return () => void pending.then((stop) => stop())
-  }, [])
+  }, [changeMini])
 
   // ...and for a new source: the sidebar's Change source menu, opened on its window grid.
   const [chooseRequest, setChooseRequest] = useState(0)
   useEffect(() => {
     const pending = listen('main:choose-source', () => {
+      void changeMini(false)
       void setSidebar(true)
       setViewState((current) => (current === 'settings' ? lastView.current : current))
       setChooseRequest((count) => count + 1)
     })
     return () => void pending.then((stop) => stop())
-  }, [setSidebar])
+  }, [setSidebar, changeMini])
 
   // ⌘1, ⌘2 and ⌘, switch views (Ctrl+1, Ctrl+2 and Ctrl+, off macOS).
-  const capabilities = useCapabilities()
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (!isPrimaryModifier(event, capabilities)) return
@@ -144,6 +172,13 @@ export default function MainPanel(): JSX.Element {
     <ReaderHost>
       <LogActionsProvider>
         <TitleBarPortal>
+          {capabilities.os === 'windows' ? <Menu>
+            <MenuTrigger asChild><IconButton label="Window layout" size="sm"><PanelLeft /></IconButton></MenuTrigger>
+            <MenuContent>
+              <MenuItem onSelect={() => void setSidebar(!sidebar)}>{sidebar ? 'Hide sidebar' : 'Show sidebar'}</MenuItem>
+              <MenuItem onSelect={() => void changeMini(!mini)}>{mini ? 'Expand Kimochi' : 'Mini mode'}</MenuItem>
+            </MenuContent>
+          </Menu> :
           <Tooltip content={sidebar ? 'Hide sidebar' : 'Show sidebar'}>
             <IconButton
               label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
@@ -153,13 +188,16 @@ export default function MainPanel(): JSX.Element {
             >
               <PanelLeft />
             </IconButton>
-          </Tooltip>
+          </Tooltip>}
           <span className="main-title" aria-hidden="true">
             <KimochiLogo size={16} />
             <span>Kimochi</span>
           </span>
         </TitleBarPortal>
-        <div className="main-frame">
+        {miniError && <div role="alert" className="native-panel-error" onClick={() => setMiniError(null)}>{miniError}</div>}
+        {mini && <MiniPanel controller={controller} onExpand={() => void changeMini(false)}
+          onSettings={(tab) => { void changeMini(false).then(() => openSettings(tab)) }} />}
+        <div className="main-frame" style={mini ? { display: 'none' } : undefined}>
           <GamingModeNotice />
           {error && (
             <div

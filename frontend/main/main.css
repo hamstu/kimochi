@@ -1,4 +1,9 @@
 /* Main window: sidebar + view, below the app-drawn title bar. */
+.mini-panel { display: flex; flex-direction: column; gap: var(--k-space-3); padding: var(--k-space-3); overflow: auto; height: 100%; }
+.mini-source, .mini-controls { display: flex; align-items: center; gap: var(--k-space-2); }
+.mini-source-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border: none; background: transparent; color: var(--k-text); font: inherit; cursor: pointer; }
+.mini-auto { display: flex; align-items: center; gap: var(--k-space-1); font-size: var(--k-text-sm); margin-left: auto; white-space: nowrap; }
+html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-label="Keep on top"] { display: none; }
 .main-frame {
   --main-foot-pad: var(--k-space-1);
   --main-foot-h: calc(var(--k-row-h) + var(--main-foot-pad) + 1px);

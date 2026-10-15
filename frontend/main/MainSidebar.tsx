@@ -61,7 +61,7 @@ function OcrModeLabel({ mode }: { mode: OcrMode }): JSX.Element {
  * The same engine choice as Settings → OCR & Overlay (and the same download confirmation), with a way there
  * for the engine's own settings.
  */
-function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
+export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
   return (
@@ -116,7 +116,7 @@ function DictionaryLabel({ engine }: { engine: DictionaryEngine }): JSX.Element 
  * A quick switch of dictionary engine, made exactly as Settings → Dictionary makes it (the same
  * download question, pending switch, reload and Yomitan API setup), with Manage for the rest.
  */
-function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
+export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
   const dictionary = useDictionarySwitch('sidebar')
   const { active, pending, prompt, reloading, applyError } = dictionary
   const note = applyError

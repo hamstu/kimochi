@@ -74,8 +74,11 @@ export type PanelAction =
   | 'pin'
   | 'unpin'
   | 'inspect'
+  | 'mini'
+  | 'expand'
 
 export interface PanelInfo {
+  mini?: boolean
   label: string
   native: { level: number; opaque: boolean; ignores_mouse: boolean }
   bounds: Rect

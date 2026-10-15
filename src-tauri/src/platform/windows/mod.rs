@@ -46,6 +46,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 mod cli;
+pub mod compact;
 mod desktops;
 mod icon;
 mod mouseguard;
@@ -57,6 +58,7 @@ mod workspace;
 pub use cli::run_cli;
 pub use icon::app_icon_png;
 pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
+pub use mouseguard::set_keyboard_guard;
 pub use sources::{
     front_window, frontmost_app, frontmost_pid, picker_sources, source_spaces, window_bounds,
     window_fullscreen,
@@ -113,7 +115,8 @@ pub fn cursor() -> Option<PointerSample> {
     let mut p = POINT::default();
     unsafe { GetCursorPos(&mut p) }.ok()?;
     let held =
-        |vk: VIRTUAL_KEY| (unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16) & 0x8000 != 0;
+        |vk: VIRTUAL_KEY| mouseguard::modifier_down(vk.0)
+            || (unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16) & 0x8000 != 0;
     let primary = if unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0 {
         VK_RBUTTON
     } else {

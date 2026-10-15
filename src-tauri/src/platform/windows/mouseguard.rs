@@ -5,20 +5,22 @@
 use crate::state::Service;
 use kimochi_capture::{Rect, SourceId};
 use std::cell::RefCell;
+use std::time::{Duration, Instant};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
     mpsc::{self, SyncSender},
     Mutex,
 };
 use tauri::{Emitter, Manager};
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM, POINT};
 use windows::Win32::System::{LibraryLoader::GetModuleHandleW, Threading::GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetAncestor, GetMessageW, GetSystemMetrics, IsWindowVisible,
     PeekMessageW, PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
-    WindowFromPoint, GA_ROOT, HC_ACTION, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, SM_SWAPBUTTON,
+    WindowFromPoint, GetCursorPos, GetForegroundWindow, GA_ROOT, HC_ACTION, MSG, MSLLHOOKSTRUCT, KBDLLHOOKSTRUCT, PM_NOREMOVE, SM_SWAPBUTTON,
     WH_MOUSE_LL, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_USER,
+    WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
 #[derive(Clone, Copy)]
@@ -40,6 +42,9 @@ struct Press {
 }
 struct Hook {
     sender: SyncSender<Press>,
+    keys: SyncSender<(u32, bool, bool, bool)>,
+    key_owners: [bool; 256],
+    keys_down: [bool; 256],
     owners: [Option<Target>; 2],
     swapped: bool,
 }
@@ -47,6 +52,45 @@ thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) 
 static TARGETS: Mutex<Vec<Target>> = Mutex::new(Vec::new());
 static RUNNING: Mutex<Option<u32>> = Mutex::new(None);
 static PRIMARY_DOWN: AtomicBool = AtomicBool::new(false);
+static REGION: AtomicBool = AtomicBool::new(false);
+static NAV: AtomicBool = AtomicBool::new(false);
+static BLOCKED_MODIFIERS: AtomicU32 = AtomicU32::new(0);
+static HOVER_LEASE: AtomicBool = AtomicBool::new(false);
+static FOCUS_PENDING: AtomicBool = AtomicBool::new(false);
+static RETURN_WINDOW: Mutex<Option<(usize, usize)>> = Mutex::new(None);
+static LAST_HOVER: Mutex<Option<Instant>> = Mutex::new(None);
+static LAST_FOCUS_TRY: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn modifier_bit(key: u32) -> u32 {
+    match key { 16 | 160 => 1, 161 => 2, 17 | 162 => 4, 163 => 8, _ => 0 }
+}
+
+pub(super) fn modifier_down(key: u16) -> bool {
+    let bits = BLOCKED_MODIFIERS.load(Ordering::Relaxed);
+    match key { 16 => bits & 3 != 0, 17 => bits & 12 != 0, _ => false }
+}
+
+pub fn set_keyboard_guard(region: bool, navigation: bool) {
+    REGION.store(region, Ordering::Relaxed);
+    NAV.store(navigation, Ordering::Relaxed);
+}
+
+fn key_name(key: u32) -> Option<&'static str> {
+    match key {
+        13 => Some("Enter"), 27 => Some("Escape"), 32 => Some(" "),
+        37 => Some("ArrowLeft"), 38 => Some("ArrowUp"),
+        39 => Some("ArrowRight"), 40 => Some("ArrowDown"), _ => None,
+    }
+}
+
+// Preserve OS escape routes. Blocked Shift/Control state is supplied to pointer polling.
+fn protected_key(key: u32) -> bool {
+    matches!(key, 9 | 18 | 91..=92 | 164..=165)
+}
+
+fn captures_key(owned: bool, down: bool, was_down: bool, modal: bool, hover: bool, ours: bool, source: bool) -> bool {
+    owned || down && !was_down && (modal && (ours || source) || hover && source && !ours)
+}
 
 pub(super) fn primary_down() -> Option<bool> {
     PRIMARY_DOWN.load(Ordering::Relaxed).then_some(true)
@@ -108,6 +152,68 @@ pub fn update_mouse_guard(app: &tauri::AppHandle, service: &Service) {
         }
     }
     *TARGETS.lock().unwrap() = targets;
+    update_hover_focus(app);
+}
+
+// A foreground lease also stops games that read input only while active from
+// polling the controller under a hovered dictionary. Never activate the main
+// window, and never pull focus back after an intentional Alt-Tab elsewhere.
+fn update_hover_focus(app: &tauri::AppHandle) {
+    let mut point = POINT::default();
+    let foreground = unsafe { GetForegroundWindow() }.0 as usize;
+    let leased = HOVER_LEASE.load(Ordering::Relaxed);
+    let target = unsafe { GetCursorPos(&mut point) }.ok().and_then(|()| target_at(point))
+        .filter(|target| foreground == target.source || foreground == target.window
+            || leased && super::window_pid(HWND(foreground as *mut _)) == std::process::id());
+    if REGION.load(Ordering::Relaxed) || NAV.load(Ordering::Relaxed) {
+        *LAST_HOVER.lock().unwrap() = Some(Instant::now());
+        return;
+    }
+    if target.is_some() { *LAST_HOVER.lock().unwrap() = Some(Instant::now()); }
+    if target.is_none() && leased && LAST_HOVER.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(120)) { return; }
+    if target.is_none() && leased && crate::gamepad::buttons_held()
+        && LAST_HOVER.lock().unwrap().is_some_and(|t| t.elapsed() < Duration::from_millis(1500)) { return; }
+    if target.is_none() && !HOVER_LEASE.load(Ordering::Relaxed) { return; }
+    if target.is_some() && HOVER_LEASE.load(Ordering::Relaxed) { return; }
+    if !leased {
+        if target.is_none_or(|target| target.source == 0 || target.source != foreground) { return; }
+        let mut retry = LAST_FOCUS_TRY.lock().unwrap();
+        if retry.is_some_and(|t| t.elapsed() < Duration::from_millis(500)) { return; }
+        *retry = Some(Instant::now());
+    }
+    if FOCUS_PENDING.swap(true, Ordering::Relaxed) { return; }
+    let handle = app.clone();
+    if app.run_on_main_thread(move || {
+        if !REGION.load(Ordering::Relaxed) && !NAV.load(Ordering::Relaxed) {
+            let foreground = unsafe { GetForegroundWindow() };
+            let mut previous = RETURN_WINDOW.lock().unwrap();
+            let was_leased = previous.is_some();
+            if let Some(target) = target {
+                if target.source != 0 && foreground.0 as usize == target.source {
+                    let label = if target.popup { "popup-host" } else { "overlay" };
+                    if let Some(window) = handle.get_webview_window(label) {
+                        if super::promote_to_key(&window).unwrap_or(false) {
+                            *previous = Some((target.source, target.window));
+                        }
+                    }
+                }
+            } else if let Some((source, owner)) = previous.take() {
+                if foreground.0 as usize == owner {
+                    super::window::restore_input_focus(HWND(source as *mut _));
+                }
+            }
+            HOVER_LEASE.store(previous.is_some(), Ordering::Relaxed);
+            if was_leased != previous.is_some() {
+              if let Some(service) = handle.try_state::<crate::state::Shared>() {
+                crate::record(&handle, &service, serde_json::json!({
+                    "check": "windows-input-focus", "hover": previous.is_some(),
+                    "foreground": unsafe { GetForegroundWindow() }.0 as usize,
+                }));
+              }
+            }
+        }
+        FOCUS_PENDING.store(false, Ordering::Relaxed);
+    }).is_err() { FOCUS_PENDING.store(false, Ordering::Relaxed); }
 }
 
 pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
@@ -116,6 +222,7 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let (sender, receiver) = mpsc::sync_channel::<Press>(1024);
+    let (keys, key_receiver) = mpsc::sync_channel(1024);
     let (ready_tx, ready_rx) = mpsc::channel();
     std::thread::Builder::new()
         .name("kimochi-mouse-guard".into())
@@ -125,6 +232,9 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
             HOOK.with(|state| {
                 *state.borrow_mut() = Some(Hook {
                     sender,
+                    keys,
+                    key_owners: [false; 256],
+                    keys_down: [false; 256],
                     owners: [None, None],
                     swapped: GetSystemMetrics(SM_SWAPBUTTON) != 0,
                 })
@@ -138,18 +248,36 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
                     return;
                 }
             };
+            let keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), module, 0);
+            if let Err(error) = &keyboard {
+                let _ = UnhookWindowsHookEx(hook);
+                HOOK.with(|state| state.borrow_mut().take());
+                let _ = ready_tx.send(Err(format!("keyboard guard: {error}")));
+                return;
+            }
             let _ = ready_tx.send(Ok(GetCurrentThreadId()));
             while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
             let _ = UnhookWindowsHookEx(hook);
+            if let Ok(keyboard) = keyboard { let _ = UnhookWindowsHookEx(keyboard); }
             HOOK.with(|state| state.borrow_mut().take());
             PRIMARY_DOWN.store(false, Ordering::Relaxed);
+            BLOCKED_MODIFIERS.store(0, Ordering::Relaxed);
         })
         .map_err(|error| error.to_string())?;
     *running = Some(ready_rx.recv().map_err(|error| error.to_string())??);
     let app = app.clone();
+    let key_app = app.clone();
+    std::thread::Builder::new().name("kimochi-key-delivery".into()).spawn(move || {
+        for (key, down, region, nav) in key_receiver {
+            let Some(name) = key_name(key) else { continue };
+            let payload = serde_json::json!({ "key": name, "type": if down { "keydown" } else { "keyup" } });
+            if region && matches!(key, 13 | 27 | 32) { let _ = key_app.emit("region-key", &payload); }
+            if nav && key != 32 { let _ = key_app.emit("controller-key", &payload); }
+        }
+    }).map_err(|e| e.to_string())?;
     std::thread::Builder::new()
         .name("kimochi-mouse-delivery".into())
         .spawn(move || {
@@ -172,6 +300,85 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
         })
         .map_err(|error| error.to_string())?;
     Ok(())
+}
+
+unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 && lparam.0 != 0 {
+        let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+        let up = matches!(wparam.0 as u32, WM_KEYUP | WM_SYSKEYUP);
+        let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+        let key = info.vkCode;
+        if key < 256 && (down || up) && !protected_key(key) {
+            let consumed = HOOK.with(|state| {
+                let mut state = state.borrow_mut();
+                let Some(hook) = state.as_mut() else { return false };
+                let region = REGION.load(Ordering::Relaxed);
+                let nav = NAV.load(Ordering::Relaxed);
+                let foreground = unsafe { GetForegroundWindow() };
+                let ours = super::window_pid(foreground) == std::process::id();
+                let mut point = POINT::default();
+                let hover = unsafe { GetCursorPos(&mut point) }.is_ok() && target_at(point).is_some();
+                let source = TARGETS.try_lock().ok().is_some_and(|targets| targets.iter().any(|t| t.source == foreground.0 as usize));
+                let owned = hook.key_owners[key as usize];
+                let was_down = hook.keys_down[key as usize];
+                hook.keys_down[key as usize] = down;
+                if !captures_key(owned, down, was_down, region || nav, hover, ours, source) { return false; }
+                if down && (region || nav) && key_name(key).is_some()
+                    && hook.keys.try_send((key, true, region, nav)).is_err() { return owned; }
+                if up { let _ = hook.keys.try_send((key, false, region, nav)); }
+                hook.key_owners[key as usize] = down;
+                if down { BLOCKED_MODIFIERS.fetch_or(modifier_bit(key), Ordering::Relaxed); }
+                else { BLOCKED_MODIFIERS.fetch_and(!modifier_bit(key), Ordering::Relaxed); }
+                true
+            });
+            if consumed { return LRESULT(1); }
+        }
+    }
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_claimed_key_keeps_its_release_after_the_menu_closes_or_focus_changes() {
+        assert!(captures_key(false, true, false, true, false, false, true));
+        assert!(captures_key(true, false, true, false, false, false, false));
+        assert!(captures_key(true, true, true, false, false, false, false));
+    }
+
+    #[test]
+    fn keys_held_before_opening_do_not_lose_their_release() {
+        assert!(!captures_key(false, false, true, true, false, true, false));
+        assert!(!captures_key(false, true, true, true, false, true, false));
+    }
+
+    #[test]
+    fn another_application_keeps_its_keys_and_dictionary_fields_keep_typing() {
+        assert!(!captures_key(false, true, false, true, false, false, false));
+        assert!(!captures_key(false, true, false, false, true, true, false));
+        assert!(captures_key(false, true, false, false, true, false, true));
+    }
+
+    #[test]
+    fn system_escape_routes_stay_available_but_menu_modifiers_are_guarded() {
+        for key in [9, 18, 91, 92, 164, 165] { assert!(protected_key(key)); }
+        for key in [13, 16, 17, 27, 37, 160, 163] { assert!(!protected_key(key)); }
+        assert_eq!(modifier_bit(160) | modifier_bit(161), 3);
+        assert_eq!(modifier_bit(162) | modifier_bit(163), 12);
+    }
+}
+
+fn target_at(point: POINT) -> Option<Target> {
+    let root = unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) };
+    TARGETS.try_lock().ok()?.iter().find(|target| {
+        let r = target.rect;
+        f64::from(point.x) >= r.x && f64::from(point.x) < r.x + r.width
+            && f64::from(point.y) >= r.y && f64::from(point.y) < r.y + r.height
+            && unsafe { IsWindowVisible(HWND(target.window as *mut _)) }.as_bool()
+            && (root.0 as usize == target.window || root.0 as usize == target.source)
+    }).copied()
 }
 
 pub fn stop_mouse_guard() {

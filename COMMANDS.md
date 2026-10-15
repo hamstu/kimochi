@@ -134,7 +134,16 @@ Mirrors `src/main/native-windows.ts`.
 | `panel_cursor` | `({kind}) -> ()` |
 
 `action`: `show`, `show_inactive`, `hide`, `drag`, `place`, `minimize`, `restore`,
-`pin`, `unpin`, `inspect`. `show_inactive` presents without stealing focus, which is
+`pin`, `unpin`, `inspect`. Windows main window also accepts `mini` and `expand`:
+temporary compact bounds and forced pin, restored on expand; `PanelInfo.mini` reports
+the current mode. Compact bounds and the forced pin are not saved to settings.
+On Windows, `region_keys(true)` hides the main window; `false` restores it only
+if it was visible when editing began. Windows modal navigation intercepts its
+keyboard input and takes focus on the overlay, returning focus on close. Hovering
+interactive overlay regions also leases focus from the selected source, returning
+it on leave unless the reader switched to another app. Gamepad interception is
+limited to focus handoff; background controller polling is not intercepted.
+`show_inactive` presents without stealing focus, which is
 what passive updates must use so the source application keeps keyboard focus.
 
 `PanelInfo` is `{label, native, bounds, scale, pinned, focused, resizable, visible}`,

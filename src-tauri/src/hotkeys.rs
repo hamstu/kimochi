@@ -11,7 +11,9 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{Emitter, Manager};
+#[cfg(not(target_os = "windows"))]
+use tauri::Emitter;
+use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 /// The longest a suspension can last without being lifted, in case the window that asked
@@ -176,9 +178,12 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
 static REGION_KEYS: AtomicBool = AtomicBool::new(false);
 static NAV_KEYS: AtomicBool = AtomicBool::new(false);
 /// Serialises `sync_keys`, so two callers cannot both decide to register the same key.
+#[cfg(not(target_os = "windows"))]
 static KEYS_SYNC: Mutex<()> = Mutex::new(());
 
+#[cfg(not(target_os = "windows"))]
 const REGION_KEY_NAMES: [&str; 3] = ["Escape", "Enter", "Space"];
+#[cfg(not(target_os = "windows"))]
 const NAV_KEY_NAMES: [&str; 6] = ["Up", "Down", "Left", "Right", "Enter", "Escape"];
 
 /// Escape and Return for the region editor, as global shortcuts while it is open.
@@ -205,6 +210,13 @@ pub fn set_nav_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
 /// Register exactly the keys that the region editor and the controller menu want between
 /// them. Escape and Return are shared, so one handler serves both owners and decides at
 /// press time who hears about it; releasing one owner's keys never takes the other's.
+#[cfg(target_os = "windows")]
+fn sync_keys(_app: &tauri::AppHandle) -> Result<(), String> {
+    crate::platform::set_keyboard_guard(REGION_KEYS.load(Ordering::SeqCst), NAV_KEYS.load(Ordering::SeqCst));
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
 fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
     let _serial = KEYS_SYNC
         .lock()

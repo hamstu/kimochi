@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: add an always-on-top Mini mode from the sidebar button, hide the main window while cropping, and intercept overlay/menu keyboard input before it reaches the game.
+
 - The main window and setup guide start unpinned, so dictionary settings can open above them.
 - Dictionary settings buttons appear only once the extension has initialized; they remain
   available while its dictionary data downloads or needs setup.

@@ -446,6 +446,11 @@ fn force_foreground(target: HWND) -> bool {
     }
 }
 
+/// Return a completed hover lease to its exact source window, not a launcher.
+pub(super) fn restore_input_focus(target: HWND) {
+    if unsafe { IsWindowVisible(target) }.as_bool() { let _ = force_foreground(target); }
+}
+
 /// Across input queues, SetForegroundWindow can return before the target handles
 /// its activation notification. WM_NULL waits for that notification to be handled
 /// without changing the target. Bound the wait for a hung/exiting application, and

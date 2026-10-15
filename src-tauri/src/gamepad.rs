@@ -265,6 +265,8 @@ static NAV_RETURN: Mutex<Option<u32>> = Mutex::new(None);
 
 /// Whether any button on the active controller was down at the last poll.
 static BUTTONS_HELD: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "windows")]
+pub fn buttons_held() -> bool { BUTTONS_HELD.load(Ordering::SeqCst) }
 /// The application to reactivate once every button is up, and when navigation ended.
 static PENDING_RETURN: Mutex<Option<(u32, Instant)>> = Mutex::new(None);
 /// The longest the game waits for its focus back while a button stays down.
@@ -332,12 +334,12 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                 );
             }
         }
-        // A game reads the controller only while it is the active application, which is the
-        // only reason to take activation from it. A menu opened from the keyboard is steered by
-        // global shortcuts and needs none, and taking it is not free on macOS: activating
+        // Taking activation stops games that read controllers only in the foreground.
+        // Windows also takes it for keyboard navigation; its low-level hook keeps the
+        // menu's keys out of the game. On macOS the global shortcuts need none, and activating
         // Kimochi switched away from a full-screen game's Space to the desktop with Kimochi's
         // main window on it. (Linux decides for itself, through its callers.)
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "macos")]
         let take_focus = take_focus && OPENED_BY_PAD.load(Ordering::SeqCst);
         if take_focus {
             let ours = std::process::id();

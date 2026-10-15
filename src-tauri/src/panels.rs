@@ -638,6 +638,8 @@ fn attach_events(
 }
 
 fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpec) {
+    #[cfg(target_os = "windows")]
+    if window.label() == MAIN && platform::compact::active() { return; }
     if window.is_minimized().unwrap_or(false) {
         return;
     }
@@ -703,6 +705,10 @@ fn apply(
 ) -> Result<Value, String> {
     let native_err = |e: tauri::Error| format!("native: {e}");
     match action {
+        #[cfg(target_os = "windows")]
+        "mini" | "expand" if label == MAIN => platform::compact::set(window, action == "mini")?,
+        #[cfg(target_os = "windows")]
+        "unpin" if label == MAIN && platform::compact::active() => {},
         #[cfg(target_os = "linux")]
         "hide" if platform::gamescope::handles(window) => platform::gamescope::hide(window)?,
         #[cfg(target_os = "linux")]
@@ -746,6 +752,8 @@ fn apply(
     }
     if matches!(action, "hide" | "minimize") { crate::gamepad::panel_focus(label, false); }
     let mut state = info(window)?;
+    #[cfg(target_os = "windows")]
+    if label == MAIN { state["mini"] = json!(platform::compact::active()); }
     #[cfg(target_os = "linux")]
     if platform::gamescope::handles(window) {
         state["visible"] = json!(platform::gamescope::is_visible(window));
@@ -753,7 +761,10 @@ fn apply(
     // `is_always_on_top` reads back the old level until AppKit has applied the new one, so
     // report what was asked for; otherwise the pin button shows the previous state.
     if action == "pin" || action == "unpin" {
-        state["pinned"] = json!(action == "pin");
+        state["pinned"] = json!(action == "pin" || {
+            #[cfg(target_os = "windows")] { label == MAIN && platform::compact::active() }
+            #[cfg(not(target_os = "windows"))] { false }
+        });
     }
     if action != "inspect" {
         let _ = app.emit(

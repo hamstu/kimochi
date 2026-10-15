@@ -873,6 +873,8 @@ fn desktop() -> Vec<Rect> {
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
+    #[cfg(target_os = "windows")]
+    platform::compact::crop(&app, on)?;
     #[cfg(target_os = "linux")]
     if platform::wayland_layer_overlay() || platform::gamescope::active() {
         let window = app.get_webview_window("overlay").ok_or("overlay unavailable")?;
