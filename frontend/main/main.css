@@ -210,8 +210,10 @@
   color: var(--k-danger-text);
 }
 
-/* The Log footer: the sidebar foot's height, its controls centred on the same line. */
-.main-view .log-root > .k-bar-bottom {
+/* The Log's and the Notebook's footers: the sidebar foot's height, their controls centred on the
+   same line. */
+.main-view .log-root > .k-bar-bottom,
+.main-view .nb-foot.k-bar-bottom {
   box-sizing: border-box;
   height: var(--main-foot-h);
   padding-bottom: var(--main-foot-pad);
