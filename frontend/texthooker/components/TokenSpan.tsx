@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { buildAnkiConfigForPopover } from "@texthooker/lib/ankiConfig";
 import type { Token } from "@texthooker/lib/types";
+import { selectLookup } from "@texthooker/lib/lookupSelection";
 import { getSettings } from "@texthooker/lib/settings";
 
 interface Props {
@@ -76,6 +77,10 @@ export function TokenSpan({
     // The word's box on the desktop (screen − client is the viewport's origin), so the popup
     // sits above the word rather than wherever on it the click landed.
     const box = e.currentTarget.getBoundingClientRect();
+    // Select the word being defined, as Yomitan does.
+    const word = document.createRange();
+    word.selectNodeContents(e.currentTarget);
+    selectLookup(word);
     try {
       await invoke("show_popover", {
         term: token.text,

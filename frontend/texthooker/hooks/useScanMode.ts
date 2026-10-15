@@ -3,6 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { buildAnkiConfigForPopover } from "@texthooker/lib/ankiConfig";
 import { getSettings } from "@texthooker/lib/settings";
 import { scanFromWindow } from "@texthooker/lib/yomitan";
+import {
+  clearLookupSelectionOnHide,
+  selectLookup,
+} from "@texthooker/lib/lookupSelection";
 
 /** Scanning works on any text inside an element with this class — the lines
     container and the Explain modal both opt in. */
@@ -184,58 +188,6 @@ function buildForwardRange(
   return null; // couldn't cover full length
 }
 
-/* Highlight: overlay one or more absolutely-positioned div boxes over the
-   matched range's client rects. Avoids mutating React-controlled DOM. */
-
-let highlightOverlay: HTMLDivElement | null = null;
-
-function ensureOverlay(): HTMLDivElement {
-  if (highlightOverlay) return highlightOverlay;
-  const layer = document.createElement("div");
-  layer.id = "scan-highlight-layer";
-  // z-index above the Explain dialog (z-50) so highlights stay visible when
-  // scanning inside modals. pointer-events:none keeps it inert.
-  layer.style.cssText =
-    "position:fixed;inset:0;pointer-events:none;z-index:9999;";
-  document.body.appendChild(layer);
-  highlightOverlay = layer;
-  return layer;
-}
-
-function clearScanHighlight() {
-  if (highlightOverlay) {
-    highlightOverlay.innerHTML = "";
-  }
-}
-
-function setScanHighlight(range: Range | null) {
-  if (!range) {
-    clearScanHighlight();
-    return;
-  }
-  const layer = ensureOverlay();
-  layer.innerHTML = "";
-  try {
-    const rects = range.getClientRects();
-    for (let i = 0; i < rects.length; i++) {
-      const r = rects[i];
-      if (r.width === 0 || r.height === 0) continue;
-      const box = document.createElement("div");
-      box.className = "scan-highlight-box";
-      box.style.cssText = `
-        position:fixed;
-        left:${r.left}px;
-        top:${r.top}px;
-        width:${r.width}px;
-        height:${r.height}px;
-      `;
-      layer.appendChild(box);
-    }
-  } catch (err) {
-    console.warn("[scan] highlight rects failed", err);
-  }
-}
-
 /** The matched word's box in desktop coordinates, which `show_popover` places the popup against. */
 function screenAnchor(
   range: Range | null,
@@ -301,7 +253,6 @@ export function useScanMode(enabled = true) {
       lastShown.current = null;
       tickRerunQueued.current = false;
       clearPendingPopover();
-      setScanHighlight(null);
       if (pendingTick.current) {
         clearTimeout(pendingTick.current);
         pendingTick.current = null;
@@ -361,18 +312,13 @@ export function useScanMode(enabled = true) {
         return;
       }
       if (!matched) {
-        // No match here — clear any existing scan highlight and cancel any
-        // not-yet-fired popover lookup (the cursor left that word).
+        // No match here — cancel any not-yet-fired popover lookup (the cursor
+        // left that word). The popup, and its word's selection, stay.
         clearPendingPopover();
-        setScanHighlight(null);
         return;
       }
 
-      // Always refresh the highlight to follow the cursor, even if the matched
-      // term is identical to the last one (the user may be hovering a different
-      // occurrence of the same word).
       const range = buildForwardRange(hit.node, hit.offset, matched.length);
-      setScanHighlight(range);
       const anchor = screenAnchor(range, ev);
       // The same word at the same place is the popup already showing; the same word elsewhere
       // (another occurrence) moves it.
@@ -407,6 +353,8 @@ export function useScanMode(enabled = true) {
         pendingPopover.current = null;
         if (!shiftDown.current) return;
         lastShown.current = key;
+        // Select the word being defined, as Yomitan does.
+        if (range) selectLookup(range);
         invoke("show_popover", {
           term: matched,
           cursorX: ev.screenX,
@@ -455,12 +403,14 @@ export function useScanMode(enabled = true) {
       if (shiftDown.current) schedule();
     };
 
+    const stopClearing = clearLookupSelectionOnHide();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     window.addEventListener("mousemove", onMouseMove);
 
     return () => {
+      stopClearing();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);

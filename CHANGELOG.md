@@ -47,7 +47,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - The Yomitan API's Shift-scan feels like Yomitan's own. Pressing Shift looks up the word under the
   pointer without moving the mouse, the pop-up sits above the word (or below it near the top of the
   screen) instead of over the pointer, so you can slide along a line word by word, and it opens
-  with the entry instead of a loading state first. The pointer no longer turns into a crosshair.
+  with the entry instead of a loading state first. The word being defined is selected, as in
+  Yomitan, until the pop-up closes. The pointer no longer turns into a crosshair.
 - Yomitan API lookups no longer wait behind audio downloads, once Kimochi's helper is updated: in
   the Yomitan API setup (Settings → Dictionary), choose Reinstall, then restart your browser.
 

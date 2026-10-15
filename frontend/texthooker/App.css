@@ -41,14 +41,10 @@ body.scan-mode .jp-text button {
   color: inherit !important;
 }
 
-/* Scan highlight: overlay boxes positioned by the scan hook over the matched
-   range's client rects. Below the text (mix-blend so the chars stay readable). */
-#scan-highlight-layer {
-  pointer-events: none;
-}
-.scan-highlight-box {
-  background-color: var(--color-accent-soft);
-  border-radius: 3px;
+/* Scanned text can be selected: the pop-up selects the word it is defining. */
+.scan-region {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Japanese text-friendly typography for line content */
