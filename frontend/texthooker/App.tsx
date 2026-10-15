@@ -12,7 +12,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { AArrowDown, AArrowUp, ChevronUp, ScrollText } from "lucide-react";
+import { AArrowDown, AArrowUp, ChevronUp, ScrollText, X } from "lucide-react";
 import {
   Bar,
   BarSpacer,
@@ -135,6 +135,8 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     };
   }, []);
   const [inputStatus, setInputStatus] = useState<SocketStatus | null>(null);
+  const [dismissedDictionaryWarning, dismissDictionaryWarning] = useState<string | null>(null);
+  if (lookup.status === "ready" && dismissedDictionaryWarning !== null) dismissDictionaryWarning(null);
   const socketStatus = useCallback(
     (status: SocketStatus | null) => setInputStatus(status),
     [],
@@ -165,7 +167,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
           <span>{inputStatus.message}</span>
         </div>
       )}
-      {(error || (!apiMode && lookup.status === "unavailable")) && (
+      {(error || (!apiMode && lookup.status === "unavailable" && lookup.message !== dismissedDictionaryWarning)) && (
         <div className="log-callouts">
           {error && (
             <Callout tone="danger">
@@ -177,8 +179,11 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
               </span>
             </Callout>
           )}
-          {!apiMode && lookup.status === "unavailable" && (
-            <Callout tone="warn">Dictionary: {lookup.message}</Callout>
+          {!apiMode && lookup.status === "unavailable" && lookup.message !== dismissedDictionaryWarning && (
+            <Callout tone="warn"><span className="log-callout-row">
+              <span>Dictionary: {lookup.message}</span>
+              <IconButton label="Dismiss dictionary warning" size="sm" onClick={() => dismissDictionaryWarning(lookup.message)}><X /></IconButton>
+            </span></Callout>
           )}
         </div>
       )}

@@ -31,6 +31,8 @@
  */
 import { useEffect, useState } from 'react'
 import { NO_ENGINE, NO_ENGINE_MESSAGE, documentEngine, extensionHost } from '../bridge/dictionaryEngine'
+import { documentPlaceholder } from '../bridge/dictionaryEngine'
+import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
 
 const LABEL_ATTRIBUTE = 'data-kimochi-panel'
 const RELAY_PATH = '/ui/panel-yomitan.js'
@@ -53,13 +55,14 @@ let relay: Promise<PanelDictionary> | null = null
 /** The transcript lines, which are all a content script may scan in the Log. */
 const SCAN_SCOPE = '[data-yomitan-scan]'
 /** As long as the Yomitan relay's own probe allows for the overlay to answer. */
-const EXTENSION_START_TIMEOUT_MS = 15000
+const EXTENSION_START_TIMEOUT_MS = 125000
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(message)), ms))
-  ])
+    new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms) })
+  ]).finally(() => clearTimeout(timer))
 }
 
 /**
@@ -142,6 +145,7 @@ export interface LookupState {
  * show an honest state instead of a dictionary that silently never responds.
  */
 export function usePanelDictionary(enabled = true): LookupState {
+  const runtime = useDictionaryReadiness(documentPlaceholder())
   const [state, setState] = useState<LookupState>({
     status: enabled ? 'starting' : 'unavailable',
     message: null
@@ -151,6 +155,7 @@ export function usePanelDictionary(enabled = true): LookupState {
     if (relay) void relay.then(module => module.setEmbeddedEnabled(enabled)).catch(() => undefined)
     if (!enabled) return
     let live = true
+    let retry: ReturnType<typeof setTimeout> | undefined
 
     const begin = async (): Promise<void> => {
       if (!relay) {
@@ -176,18 +181,26 @@ export function usePanelDictionary(enabled = true): LookupState {
                 message: result?.error ?? 'The overlay did not answer.'
               }
         )
+        if (!result?.ready) retry = setTimeout(() => void begin(), 3000)
       } catch (error) {
         // start() is documented not to reject; treat one as unavailable rather than trusting it.
-        if (live) setState({ status: 'unavailable', message: describe(error) })
+        if (live) {
+          setState({ status: 'unavailable', message: describe(error) })
+          retry = setTimeout(() => void begin(), 3000)
+        }
       }
     }
 
     void begin()
     return () => {
       live = false
+      clearTimeout(retry)
     }
   }, [enabled])
 
+  if (enabled && runtime.phase !== 'ready') return {
+    status: runtime.phase === 'failed' ? 'unavailable' : 'starting', message: runtime.message
+  }
   return state
 }
 

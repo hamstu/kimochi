@@ -422,6 +422,7 @@ const HACHIDORI = {
     globalThis.offscreenSeen = []
     chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
       offscreenSeen.push(m)
+      if (m?.type === 'hd_status') { sendResponse(globalThis.engineStatus ?? { ok: true, ready: true, dictionaryCount: 1 }); return false }
       if (m?.case === 'race') sendResponse('fast-offscreen')
       if (m?.case === 'bgsender') sendResponse(sender)
       return false
@@ -446,6 +447,7 @@ async function hachidoriSession(options = {}) {
   const overlay = world.load(world.window({ href: `${APP}/ui/overlay.html`, label: 'overlay', mirror: 'hachidori', tauri: true }))
   const started = await result(overlay, '__kimochiExtensionHost.start({ scope: null, host: true })')
   if (process.env.EXT_DEBUG) console.error(JSON.stringify(started), JSON.stringify(world.reports, null, 1))
+  if (started.ready) await waitFor(() => world.reports.some((r) => r.check === 'dictionary-readiness' && r.phase === 'ready'), 'Hachidori data readiness')
   const background = world.contexts.find((c) => c.location.pathname === '/__kimochi/ext-background.html')
   const offscreen = world.contexts.find((c) => c.location.pathname === '/offscreen.html')
   return { world, overlay, started, background, offscreen, origin }
@@ -467,6 +469,12 @@ const TENTEN = {
       return undefined
     })
     browser.runtime.onConnect.addListener((port) => {
+      if (port.name === 'options' && port.sender.tab?.id === 1) {
+        globalThis.dataPort = port
+        port.postMessage({ type: 'dbstateupdated', state: {
+          words: { state: 'ok' }, kanji: { state: 'ok' }, radicals: { state: 'ok' }, names: { state: 'ok' }, updateState: { type: 'idle' }
+        } })
+      }
       port.onMessage.addListener((msg) => port.postMessage({ echo: msg, tab: port.sender.tab?.id }))
     })
   `,
@@ -500,6 +508,7 @@ async function tentenSession(options = {}) {
   const overlay = world.load(world.window({ href: `${APP}/ui/overlay.html`, label: 'overlay', mirror: 'tenten', tauri: true }))
   const started = await result(overlay, '__kimochiExtensionHost.start({ scope: null, host: true })')
   const background = world.contexts.find((c) => c.location.pathname === '/__kimochi/ext-background.html')
+  if (started.ready) await waitFor(() => world.reports.some((r) => r.check === 'dictionary-readiness' && r.phase === 'ready'), '10ten data readiness')
   return { world, overlay, started, background, origin }
 }
 
@@ -526,6 +535,21 @@ test('the host stands down for Yomitan, builtin and custom-api, and installs for
   assert.equal(result(prelude, 'typeof __kimochiExtensionHost'), 'undefined', 'custom-api from the prelude is Yomitan too')
 })
 
+test('Hachidori and 10ten preserve the Windows WebView2 IPC bridge when installing chrome', () => {
+  for (const engine of ['hachidori', 'tenten']) {
+    const world = new World()
+    const win = world.window({ href: `${APP}/app/panel.html`, label: 'log', mirror: engine })
+    win.__KIMOCHI_PLATFORM__ = { os: 'windows', arch: 'aarch64' }
+    const messages = []
+    const webview = { postMessage: (message) => messages.push(message) }
+    win.chrome = { webview }
+    world.load(win)
+    assert.equal(win.chrome.webview, webview, engine)
+    result(win, 'chrome.webview.postMessage("native IPC")')
+    assert.deepEqual(messages, ['native IPC'])
+    assert.equal(typeof win.chrome.runtime.sendMessage, 'function', 'extension API still installed')
+  }
+})
 test('an extension frame takes its engine from its own origin, which the prelude names', () => {
   const world = new World({ files: { 'tenten://localhost/_locales/en/messages.json': TENTEN_LOCALE } })
   const dictionary = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'dictionary', mirror: 'tenten' }))
@@ -1145,7 +1169,7 @@ test('alarms are absent for Hachidori and timer-backed for 10ten; absent namespa
 // ---------------------------------------------------------------- scan scope, opening pages
 
 test('the scan scope filters the extension\'s hit tests only, and setEnabled(false) blanks them', async () => {
-  const { world } = await tentenSession()
+  const { world, background } = await tentenSession()
   const log = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'log', mirror: 'tenten', tauri: true }))
   await result(log, '__kimochiExtensionHost.start({ scope: "[data-yomitan-scan]" })')
   result(log, `
@@ -1168,6 +1192,29 @@ test('the scan scope filters the extension\'s hit tests only, and setEnabled(fal
   assert.equal(asExtension('document.caretRangeFromPoint(10, 10)'), null, 'disabled')
   result(log, '__kimochiExtensionHost.setEnabled(true)')
   assert.notEqual(asExtension('document.caretRangeFromPoint(10, 10)'), null)
+  result(background, `dataPort.postMessage({ type: 'dbstateupdated', state: {
+    words: { state: 'empty' }, updateState: { type: 'updating', series: 'words', totalProgress: 0.4 }
+  } })`)
+  await waitFor(() => asExtension('document.caretRangeFromPoint(10, 10)') === null, 'lookups disabled while data downloads')
+  result(log, '__kimochiExtensionHost.setEnabled(true)')
+  assert.equal(asExtension('document.caretRangeFromPoint(10, 10)'), null, 'enabling cannot bypass dictionary readiness')
+  result(background, `dataPort.postMessage({ type: 'dbstateupdated', state: {
+    words: { state: 'ok' }, kanji: { state: 'ok' }, radicals: { state: 'ok' }, names: { state: 'ok' }, updateState: { type: 'idle' }
+  } })`)
+  await waitFor(() => asExtension('document.caretRangeFromPoint(10, 10)') !== null, 'lookups recover without a reload')
+})
+
+test('Hachidori installer broadcasts gate lookup and report byte progress without changing the messages', async () => {
+  const { world, overlay, offscreen } = await hachidoriSession()
+  await result(offscreen, `chrome.runtime.sendMessage({ target: 'hachidori-setup-events', type: 'hd_setup_progress',
+    runId: 'setup-1', sequence: 1, finished: false, entries: [{ phase: 'downloading', receivedBytes: 30, totalBytes: 100 }]
+  }).catch(() => {})`)
+  await waitFor(() => world.reports.some((r) => r.check === 'dictionary-readiness' && r.progress === 30), 'installer progress')
+  assert.equal(await result(overlay, '__kimochiExtensionHost.lookupRange(null)'), false, 'lookups wait for installation')
+  await result(offscreen, `chrome.runtime.sendMessage({ target: 'hachidori-setup-events', type: 'hd_setup_progress',
+    runId: 'setup-1', sequence: 2, finished: true, entries: [{ phase: 'installed' }]
+  }).catch(() => {})`)
+  await waitFor(() => world.reports.filter((r) => r.check === 'dictionary-readiness').at(-1)?.phase === 'ready', 'installation recovery')
 })
 
 test('openOptionsPage shows the dictionary panel and relays navigate; the panel hands it to React', async () => {

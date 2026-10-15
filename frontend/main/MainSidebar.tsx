@@ -19,6 +19,7 @@ import { DictionaryEngineIcon, DictionaryRunsIcon, OcrEngineIcon, OcrRunsIcon } 
 import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
 import { YomitanApiSetupDialog } from '../components/YomitanApiSetup'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
+import { DictionaryReadiness } from '../components/DictionaryReadiness'
 import { SETTINGS_NAV } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 import type { SettingsTabName } from '../bridge/tauri'
@@ -144,6 +145,7 @@ function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => void }): J
             ))}
           </SelectContent>
         </SelectRoot>
+        <DictionaryReadiness engine={active} />
         {note && (
           <span className="sb-note" data-tone={applyError ? 'danger' : undefined} role="status">
             {note}

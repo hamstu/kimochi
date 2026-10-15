@@ -9,6 +9,7 @@ mod activity;
 mod application_context;
 mod capture_unavailable;
 mod cloud;
+mod dictionary_runtime;
 mod engine_probe;
 mod extension_store;
 mod extensions;
@@ -344,6 +345,9 @@ fn report(app: tauri::AppHandle, state: State<Shared>, value: Value) {
 /// record anything that happens before a window is there to read it.
 fn record(app: &tauri::AppHandle, service: &Shared, value: Value) {
     use std::io::Write;
+    if dictionary_runtime::update(&value) {
+        let _ = app.emit("dictionary-readiness", &value);
+    }
     service.log(value.clone());
     if let Ok(p) = path(app, "evidence.jsonl") {
         if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -516,6 +520,11 @@ fn dictionary_engine_effective(state: State<Shared>) -> Value {
         "effective": extensions::dictionary_engine(&state.settings),
         "ready": ready,
     })
+}
+
+#[tauri::command]
+fn dictionary_runtime_status(engine: String) -> Value {
+    dictionary_runtime::status(&engine)
 }
 
 /// Makes sure the active extension engine's hidden window exists (DICTIONARY_ENGINES.md
@@ -2443,6 +2452,7 @@ fn main() {
     let commands: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
             dictionary_engine_apply,
             dictionary_engine_effective,
+            dictionary_runtime_status,
             extension_window_ensure,
             extension_store::extension_status,
             extension_store::extension_download_start,

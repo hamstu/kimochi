@@ -267,6 +267,7 @@ export class Hub {
         this.wake()
         return true
       case 'sendMessage':
+        if (rec.kind === 'offscreen') this.observeMessage?.(args.message)
         if (rec.kind === 'content') {
           this.activeContent = ctx
           rec.captureHint = args.capture ?? null
@@ -323,7 +324,7 @@ export class Hub {
       navigate = this.lastOpen.url
       this.lastOpen = null
     }
-    return { hub: this.instance, engine: this.engine, ready: this.engineReady, error: this.engineError, navigate }
+    return { hub: this.instance, engine: this.engine, ready: this.engineReady, error: this.engineError, setup: this.setup, navigate }
   }
 
   status() {

@@ -2070,6 +2070,7 @@ async function openDictionaryPage(url) {
 }
 
 async function startYomitan() {
+  void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase: 'starting', message: 'Starting Yomitan…' })
   if (!hub) throw Error('Extension host shim did not install')
 
   await import('/spike/network-bundle.js')
@@ -2099,8 +2100,8 @@ async function startYomitan() {
     chrome.runtime.onMessage.addListener(listener)
     setTimeout(() => {
       chrome.runtime.onMessage.removeListener(listener)
-      reject(Error('Dictionary backend did not signal readiness within 30s'))
-    }, 30000)
+      reject(Error('Dictionary backend did not signal readiness within two minutes. Open dictionary settings or choose the engine again to retry.'))
+    }, 120000)
   })
   const backend = document.createElement('iframe')
   backend.id = 'backend'
@@ -2153,6 +2154,24 @@ async function startYomitan() {
 
   state.yomitan.ready = true
   settleBackend()
+  let lastReadiness = ''
+  const refreshReadiness = async () => {
+    try {
+      const dictionaries = await api('getDictionaryInfo')
+      const options = await api('optionsGetFull')
+      const profile = options.profiles[options.profileCurrent]
+      const enabled = profile?.options?.dictionaries ?? []
+      const phase = dictionaries.some((dictionary) => enabled.some((entry) => entry.name === dictionary.title && entry.enabled)) ? 'ready' : 'setup-needed'
+      if (phase === lastReadiness) return
+      lastReadiness = phase
+      void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase,
+        message: phase === 'ready' ? 'Yomitan is ready.' : 'Open Yomitan settings to import and enable a Japanese dictionary.' })
+    } catch { /* The backend startup error is reported separately. */ }
+  }
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'applicationDatabaseUpdated' || message.action === 'applicationOptionsUpdated') void refreshReadiness()
+  })
+  await refreshReadiness()
   log({
     check: 'yomitan-ready',
     dictionaries: (await api('getDictionaryInfo')).map((d) => d.title)
@@ -2182,6 +2201,13 @@ async function startExtensionEngine() {
     })
     throw Error(`The ${hostedEngine} extension host did not load`)
   }
+  const applyReadiness = (status) => {
+    if (status.engine !== hostedEngine) return
+    state.yomitan.ready = status.phase === 'ready'
+    state.yomitan.error = status.phase === 'failed' ? status.message : null
+    settleBackend()
+  }
+  await native.listen('dictionary-readiness', ({ payload }) => applyReadiness(payload))
   // Before start, so a popup opened by the very first lookup is already a region.
   host.observePopup(({ visible, rect }) => {
     extensionPopupRect = visible && rect ? rect : null
@@ -2189,9 +2215,8 @@ async function startExtensionEngine() {
   })
   const result = await host.start({ host: true, scope: null })
   if (!result?.ready) throw Error(result?.error ?? `${hostedEngine} did not start`)
-  state.yomitan.ready = true
-  settleBackend()
-  log({ check: 'ext-engine-ready', engine: hostedEngine })
+  applyReadiness(await native.invoke('dictionary_runtime_status', { engine: hostedEngine }))
+  log({ check: 'ext-engine-host-ready', engine: hostedEngine })
 }
 
 /**
@@ -2988,6 +3013,8 @@ async function startNoEngine() {
 
 ;(hostedEngine === NO_ENGINE ? startNoEngine() : extensionHosted ? startExtensionEngine() : startYomitan()).catch((error) => {
   state.yomitan.error = String(error?.message ?? error)
+  if (hostedEngine === 'yomitan') void native.report({ check: 'dictionary-readiness', engine: 'yomitan',
+    phase: 'failed', message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.' })
   settleBackend()
   log({
     check: hostedEngine === NO_ENGINE ? 'dictionary-none' : extensionHosted ? 'dictionary-unavailable' : 'yomitan-unavailable',

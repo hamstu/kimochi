@@ -15,8 +15,9 @@ import { Router, connectRelay, localUpstream, serveRelay } from './links.js'
 import { createNetworkServer, guardPageFetch } from './network.js'
 import { installGlobals } from './frame.js'
 import { describe, extensionOrigin, originOf, randomId, sleep, tabIdFor, within } from './util.js'
+import { watchReadiness } from './readiness.js'
 
-const START_TIMEOUT_MS = 30000
+const START_TIMEOUT_MS = 120000
 /** Windows whose own document runs content scripts and therefore gets `chrome` at document start. */
 const CONTENT_WINDOWS = new Set(['overlay', 'log'])
 
@@ -75,12 +76,18 @@ export function installApp(win, { engine, descriptor }) {
 
   // Relay client: every Kimochi window other than the overlay (and the harness, which is a hub).
   let relay = null
+  let requestedEnabled = true
+  let lookupReady = false
+  const scopeState = { enabled: false, scope: null, lastTarget: null }
+  const applyReadiness = (status) => {
+    lookupReady = status?.phase === 'ready'
+    scopeState.enabled = requestedEnabled && lookupReady
+    if (!scopeState.enabled && driver?.visible()) void driver.dismiss()
+  }
   const isHubWindow = label === 'overlay' || label === undefined
   if (!isHubWindow && label !== 'popup-host' && tauri?.event?.listen) {
-    relay = connectRelay(router, { tauri, label, engine, report, onNavigate: navigate })
+    relay = connectRelay(router, { tauri, label, engine, report, onNavigate: navigate, onSetup: applyReadiness })
   }
-
-  const scopeState = { enabled: true, scope: null, lastTarget: null }
 
   // `chrome` exists from document start where content scripts will run; other windows only relay.
   let context = null
@@ -108,6 +115,14 @@ export function installApp(win, { engine, descriptor }) {
   let relayServer = null
   /** Set after a failed start, so the next one asks native for a fresh extension window. */
   let reloadWindow = false
+  let stopReadiness = null
+  const publishReadiness = (status) => {
+    if (hub) hub.setup = status
+    applyReadiness(status)
+    report({ check: 'dictionary-readiness', ...status })
+    void relayServer?.broadcast({ type: 'setup', setup: status })
+  }
+  if (isHubWindow) report({ check: 'dictionary-readiness', phase: 'starting', message: `Starting ${descriptor.name}…` })
 
   /**
    * The engine's background and offscreen documents live in its hidden extension window
@@ -128,6 +143,7 @@ export function installApp(win, { engine, descriptor }) {
 
   async function startHub() {
     hub = new Hub({ engine, origin, label: 'overlay', invoke, report, openLocally: navigate, win })
+    hub.setup = { phase: 'starting', message: `Starting ${descriptor.name}…` }
     await hub.loadStorage()
     router.setUpstream(localUpstream(hub, router))
     relayServer = await serveRelay(hub, { tauri, label: 'overlay', engine, report })
@@ -146,6 +162,7 @@ export function installApp(win, { engine, descriptor }) {
       }
     } catch (error) {
       hub.engineError = describe(error)
+      publishReadiness({ phase: 'failed', message: `${descriptor.name} could not start. Open its settings or choose the engine again to retry.` })
       report({ check: 'ext-host-ready', ready: false, error: hub.engineError, ...hub.status() })
       throw error
     }
@@ -153,6 +170,10 @@ export function installApp(win, { engine, descriptor }) {
     hub.engineError = null
     void relayServer.broadcast({ type: 'ready', hub: hub.instance })
     report({ check: 'ext-host-ready', ready: true, ...hub.status() })
+    await ensureContentLink()
+    stopReadiness?.()
+    stopReadiness = watchReadiness({ win, engine, chrome: context.chrome, publish: publishReadiness,
+      subscribe: (observe) => { hub.observeMessage = observe } })
   }
 
   // ---------------------------------------------------------------- client (Log)
@@ -179,16 +200,19 @@ export function installApp(win, { engine, descriptor }) {
   let driver = null
   let contentRunning = false
 
+  async function ensureContentLink() {
+    if (!context || contentLink) return
+    contentLink = router.attach(
+      { kind: 'content', url: win.location.href, documentId: randomId(), top: true },
+      (event) => context.handleEvent(event)
+    )
+    await contentLink.registered
+  }
+
   async function startContent(scope) {
     if (!context) return
     scopeState.scope = scope ?? null
-    if (!contentLink) {
-      contentLink = router.attach(
-        { kind: 'content', url: win.location.href, documentId: randomId(), top: true },
-        (event) => context.handleEvent(event)
-      )
-      await contentLink.registered
-    }
+    await ensureContentLink()
     context.setMessages(await loadMessages(origin, descriptor.manifest, win))
     if (driver) return
     installScope(win, { origin, popupSelector: descriptor.popupSelector, state: scopeState })
@@ -253,7 +277,8 @@ export function installApp(win, { engine, descriptor }) {
     return starting
   }
   api.setEnabled = (enabled) => {
-    scopeState.enabled = Boolean(enabled)
+    requestedEnabled = Boolean(enabled)
+    scopeState.enabled = requestedEnabled && lookupReady
     if (!scopeState.enabled && driver?.visible()) void driver.dismiss()
   }
   api.observePopup = (callback) => watchPopup(win, descriptor, callback)

@@ -332,10 +332,7 @@ pub fn with_panel(
     let exists = app.get_webview_window(label).is_some();
     match dispatch_for(spec(label).is_some(), exists) {
         Dispatch::Inline => job(app, &MainTurn(())),
-        Dispatch::Deferred => {
-            let handle = app.clone();
-            let _ = app.run_on_main_thread(move || job(&handle, &MainTurn(())));
-        }
+        Dispatch::Deferred => later(app, job),
     }
 }
 
@@ -385,6 +382,17 @@ pub async fn set_content_height_async(
 /// need to create a window (see [`MainTurn`]). Fire and forget.
 pub fn later(app: &tauri::AppHandle, job: impl FnOnce(&tauri::AppHandle, &MainTurn) + Send + 'static) {
     let handle = app.clone();
+    #[cfg(target_os = "windows")]
+    {
+        // Tauri runs run_on_main_thread inline when called on the main thread.
+        // Queue from a worker so window creation cannot re-enter the IPC/event
+        // callback that requested it: WebView2 deadlocks in that callback.
+        tauri::async_runtime::spawn(async move {
+            let app = handle.clone();
+            let _ = handle.run_on_main_thread(move || job(&app, &MainTurn(())));
+        });
+    }
+    #[cfg(not(target_os = "windows"))]
     let _ = app.run_on_main_thread(move || job(&handle, &MainTurn(())));
 }
 

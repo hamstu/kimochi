@@ -11,6 +11,13 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Dictionary setup now shows engine startup, dictionary downloads and installation in Settings,
+  the sidebar and onboarding. Hachidori and 10ten wait for usable dictionary data before enabling
+  lookups; slow first launches no longer immediately show a timeout. Dictionary warnings recover
+  automatically and can be dismissed.
+
+- On Windows, switching to Hachidori or 10ten no longer hangs when creating the dictionary's background window. Opening a panel for the first time from the tray also defers window creation safely.
+
 ### Added
 
 - Onboarding on macOS asks for Accessibility, after Screen Recording. With it, clicking your

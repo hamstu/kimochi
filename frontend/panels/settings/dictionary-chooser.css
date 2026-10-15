@@ -43,6 +43,10 @@
   gap: var(--k-space-2) var(--k-space-4);
 }
 
+.dictionary-engine-action > .k-callout {
+  flex-basis: 100%;
+}
+
 /* The Yomitan API's sections sit inside the panel, so they lose the page's outer spacing. */
 .dictionary-engine-sections {
   display: flex;

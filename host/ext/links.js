@@ -293,7 +293,7 @@ export async function serveRelay(hub, { tauri, label, engine, report }) {
  * in an order nobody controls), then hands the router an upstream; a `ready` broadcast from a
  * different hub instance means the overlay reloaded, and everything is registered again.
  */
-export function connectRelay(router, { tauri, label, engine, report, onNavigate }) {
+export function connectRelay(router, { tauri, label, engine, report, onNavigate, onSetup }) {
   const send = relaySender(tauri)
   const node = randomId('N')
   const pending = new Map()
@@ -316,6 +316,7 @@ export function connectRelay(router, { tauri, label, engine, report, onNavigate 
   const adopt = (reply) => {
     status.ready = reply.ready
     status.error = reply.error
+    if (reply.setup) onSetup?.(reply.setup)
     if (reply.navigate) onNavigate?.(reply.navigate)
     if (reply.hub === hubInstance) return
     const restarted = hubInstance !== null
@@ -358,6 +359,8 @@ export function connectRelay(router, { tauri, label, engine, report, onNavigate 
       else entry.reject(Error(payload.error))
     } else if (payload.type === 'event') {
       router.dispatch(payload.ctx, payload.event)
+    } else if (payload.type === 'setup') {
+      onSetup?.(payload.setup)
     } else if (payload.type === 'ready') {
       status.ready = true
       if (payload.hub !== hubInstance) void hello()

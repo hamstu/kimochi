@@ -53,6 +53,7 @@ import { WithReaderSettings } from './ReaderSettingsProvider'
 import { NumberField } from './fields'
 import { DictionaryChooser } from './DictionaryChooser'
 import { useDictionarySwitch } from './useDictionarySwitch'
+import { DictionaryReadiness } from '../../components/DictionaryReadiness'
 
 export function DictionaryTab(): ReactNode {
   const {
@@ -89,6 +90,7 @@ export function DictionaryTab(): ReactNode {
       const name = DICTIONARY_ENGINES[engine].name
       return (
         <div className="dictionary-engine-action">
+          {inUse && <DictionaryReadiness engine={engine} />}
           <div className="engine-setting-text">
             <span className="engine-setting-label">{name} settings</span>
             <span className="k-description">

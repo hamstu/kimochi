@@ -562,7 +562,19 @@ surface.
 | `storage_backup` | `({extension}) -> string \| null` |
 | `dictionary_engine_apply` | `({repair?}) -> ()` |
 | `dictionary_engine_effective` | `() -> {selected, effective, ready: {yomitan, hachidori, tenten}}` |
+| `dictionary_runtime_status` | `({engine}) -> {engine, phase, message, progress?}` |
 | `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
+
+`dictionary_runtime_status` and the `dictionary-readiness` event describe **lookup** readiness,
+separately from extension-download readiness. `phase` is `starting`, `downloading`, `installing`,
+`setup-needed`, `ready` or `failed`; `progress` is a percentage when the engine supplies one.
+The overlay publishes changes through `report` (`check: "dictionary-readiness"`); native keeps
+the latest value per engine so newly opened Settings and onboarding see the current state.
+Hachidori uses `hd_status` and observes `hd_setup_progress` without starting any installation.
+10ten uses the same `options` runtime port as its options page (`dbstateupdated`); every data
+series must be `ok` and database updates idle. Yomitan requires an installed, enabled dictionary.
+These adapters leave upstream extension files unchanged. Engine hosts can be reachable before
+their data is ready: settings work during setup, while overlay/transcript lookups stay gated.
 
 `storage_load` / `storage_save` persist `chrome.storage`. Without `extension` they read and
 write Yomitan's `chrome-local.json`, exactly as before; with an engine id they use

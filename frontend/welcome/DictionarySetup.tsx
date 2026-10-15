@@ -13,6 +13,8 @@ import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
 import { YomitanApiWizard } from '../components/YomitanApiSetup'
 import Step from './Step'
 import { StepActions } from './StepActions'
+import { DictionaryReadiness } from '../components/DictionaryReadiness'
+import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
 import style from './WelcomeApp.module.css'
 
 type Job = {
@@ -85,6 +87,8 @@ function YomitanApiSetup(): JSX.Element {
 
 function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
   const name = DICTIONARY_ENGINES[engine].name
+  const runtime = useDictionaryReadiness(engine)
+  const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
   const open = (): void => {
     setError(null)
@@ -92,11 +96,12 @@ function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
   }
   return (
     <Step
-      title={`${name} is ready`}
+      title={`Set up ${name}`}
       lede={`Kimochi looks words up with ${name}. You can switch dictionary engines later in Settings → Dictionary.`}
     >
       <div className={style.block}>
         <p className={style.text}>{ENGINE_SETUP[engine]}</p>
+        <DictionaryReadiness engine={engine} />
         <div>
           <Button onClick={open}>
             <ExternalLink />
@@ -106,8 +111,9 @@ function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
       </div>
       {error && <Callout tone="danger">{error}</Callout>}
       <StepActions>
-        <Button variant="primary" asChild>
-          <Link to={NEXT}>Continue</Link>
+        {runtime.phase !== 'ready' && <Button asChild><Link to={NEXT}>Set up later</Link></Button>}
+        <Button variant="primary" disabled={runtime.phase !== 'ready'} onClick={() => void navigate(NEXT)}>
+          Continue
         </Button>
       </StepActions>
     </Step>

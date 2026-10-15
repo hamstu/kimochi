@@ -59,6 +59,7 @@ import { DictionaryPreview } from '../../components/DictionaryPreview'
 import { DictionaryEngineIcon, DictionaryRunsIcon } from '../../components/EngineIcon'
 import './engine-chooser.css'
 import './dictionary-chooser.css'
+import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 
 const ENGINES = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
 
@@ -168,6 +169,7 @@ function DictionaryDetail({
 }): ReactNode {
   const info = DICTIONARY_ENGINES[engine]
   const headingId = `${id}-heading`
+  const runtime = useDictionaryReadiness(engine)
   const needs = downloadEngineFor(engine)
   const download = useExtensionControls(needs)
   const status = download.status
@@ -186,7 +188,7 @@ function DictionaryDetail({
           <ExperimentalBadge engine={engine} />
         </h3>
         {action === 'active' ? (
-          <Badge tone="accent">Active</Badge>
+          <Badge tone={runtime.phase === 'ready' ? 'accent' : 'warn'}>{runtime.phase === 'ready' ? 'Active' : 'Setting up'}</Badge>
         ) : action === 'pending' ? (
           <Badge>Switching when ready</Badge>
         ) : action === 'use' ? (
