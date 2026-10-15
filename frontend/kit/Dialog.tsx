@@ -6,6 +6,16 @@ import { cn, portalRoot } from './cn'
 import { IconButton } from './Button'
 
 export const Dialog = DialogPrimitive.Root
+
+/**
+ * Centres a dialog: a full-window grid around it, not auto margins on the dialog itself. WebKit on
+ * macOS 26 paints parts of a `position: fixed; inset: 0; margin: auto` box at a wrong offset while
+ * its contents move (dragging rows in Manage sessions); it also avoids a translate, which can blur
+ * text on fractional pixels. Clicks pass through the frame to the overlay.
+ */
+function DialogFrame({ children }: { children: ReactNode }): ReactNode {
+  return <div className="k-dialog-frame">{children}</div>
+}
 export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
 
@@ -39,42 +49,46 @@ export const DialogContent = forwardRef<
   },
   ref
 ) {
+  const content = (
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(variant === 'sheet' ? 'k-sheet' : 'k-dialog', size === 'lg' && 'k-dialog-lg', className)}
+      // Default first focus is the dialog itself, not the Close button (no stray focus ring);
+      // pass onOpenAutoFocus to focus a field instead.
+      onOpenAutoFocus={
+        onOpenAutoFocus ??
+        ((event) => {
+          event.preventDefault()
+          ;(event.currentTarget as HTMLElement | null)?.focus()
+        })
+      }
+      {...props}
+    >
+      <div className="k-dialog-header">
+        <div>
+          <DialogPrimitive.Title className="k-title">{title}</DialogPrimitive.Title>
+          {description ? (
+            <DialogPrimitive.Description className="k-description">{description}</DialogPrimitive.Description>
+          ) : (
+            <DialogPrimitive.Description className="sr-only" />
+          )}
+        </div>
+        {actions}
+        <DialogPrimitive.Close asChild>
+          <IconButton label="Close" size="sm">
+            <X />
+          </IconButton>
+        </DialogPrimitive.Close>
+      </div>
+      <div className="k-dialog-body">{children}</div>
+      {footer && <div className="k-dialog-footer">{footer}</div>}
+    </DialogPrimitive.Content>
+  )
   return (
     <DialogPrimitive.Portal container={portalRoot()}>
       <DialogPrimitive.Overlay className="k-overlay" />
-      <DialogPrimitive.Content
-        ref={ref}
-        className={cn(variant === 'sheet' ? 'k-sheet' : 'k-dialog', size === 'lg' && 'k-dialog-lg', className)}
-        // Default first focus is the dialog itself, not the Close button (no stray focus ring);
-        // pass onOpenAutoFocus to focus a field instead.
-        onOpenAutoFocus={
-          onOpenAutoFocus ??
-          ((event) => {
-            event.preventDefault()
-            ;(event.currentTarget as HTMLElement | null)?.focus()
-          })
-        }
-        {...props}
-      >
-        <div className="k-dialog-header">
-          <div>
-            <DialogPrimitive.Title className="k-title">{title}</DialogPrimitive.Title>
-            {description ? (
-              <DialogPrimitive.Description className="k-description">{description}</DialogPrimitive.Description>
-            ) : (
-              <DialogPrimitive.Description className="sr-only" />
-            )}
-          </div>
-          {actions}
-          <DialogPrimitive.Close asChild>
-            <IconButton label="Close" size="sm">
-              <X />
-            </IconButton>
-          </DialogPrimitive.Close>
-        </div>
-        <div className="k-dialog-body">{children}</div>
-        {footer && <div className="k-dialog-footer">{footer}</div>}
-      </DialogPrimitive.Content>
+      {/* A sheet docks to the right edge itself; a dialog is centred by its frame. */}
+      {variant === 'sheet' ? content : <DialogFrame>{content}</DialogFrame>}
     </DialogPrimitive.Portal>
   )
 })
@@ -111,29 +125,31 @@ export function ConfirmDialog({
           className="k-overlay"
           onClick={dismissOnOutsideClick ? () => onOpenChange(false) : undefined}
         />
-        <AlertPrimitive.Content className="k-dialog" style={{ maxWidth: '24rem' }}>
-          <div className="k-dialog-header">
-            <div>
-              <AlertPrimitive.Title className="k-title">{title}</AlertPrimitive.Title>
-              {description && (
-                <AlertPrimitive.Description className="k-description">{description}</AlertPrimitive.Description>
-              )}
+        <DialogFrame>
+          <AlertPrimitive.Content className="k-dialog" style={{ maxWidth: '24rem' }}>
+            <div className="k-dialog-header">
+              <div>
+                <AlertPrimitive.Title className="k-title">{title}</AlertPrimitive.Title>
+                {description && (
+                  <AlertPrimitive.Description className="k-description">{description}</AlertPrimitive.Description>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="k-dialog-footer" style={{ borderTop: 0, background: 'transparent', paddingTop: 'var(--k-space-2)' }}>
-            <AlertPrimitive.Cancel className="k-button k-button-secondary">{cancelLabel}</AlertPrimitive.Cancel>
-            <AlertPrimitive.Action
-              className={cn('k-button', tone === 'danger' ? 'k-button-danger' : 'k-button-primary')}
-              disabled={busy}
-              onClick={(event) => {
-                event.preventDefault()
-                onConfirm()
-              }}
-            >
-              {confirmLabel}
-            </AlertPrimitive.Action>
-          </div>
-        </AlertPrimitive.Content>
+            <div className="k-dialog-footer" style={{ borderTop: 0, background: 'transparent', paddingTop: 'var(--k-space-2)' }}>
+              <AlertPrimitive.Cancel className="k-button k-button-secondary">{cancelLabel}</AlertPrimitive.Cancel>
+              <AlertPrimitive.Action
+                className={cn('k-button', tone === 'danger' ? 'k-button-danger' : 'k-button-primary')}
+                disabled={busy}
+                onClick={(event) => {
+                  event.preventDefault()
+                  onConfirm()
+                }}
+              >
+                {confirmLabel}
+              </AlertPrimitive.Action>
+            </div>
+          </AlertPrimitive.Content>
+        </DialogFrame>
       </AlertPrimitive.Portal>
     </AlertPrimitive.Root>
   )

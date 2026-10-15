@@ -72,7 +72,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - Sessions can be reordered by dragging again in **Manage sessions**: the row lifts and follows
-  the pointer while the others slide aside, without the rest of the window flickering. From the keyboard, focus a handle, press Space, move with the arrow keys
+  the pointer while the others slide aside. On macOS 26, rows no longer flicker or jump to the
+  wrong place mid-drag; every dialog is now centred in a way that avoids the system's drawing bug. From the keyboard, focus a handle, press Space, move with the arrow keys
   and press Space to drop.
 - Manga OCR's ellipses are ellipses again. It spelled every … as three full-width periods, so
   a bubble's …… was drawn as six dots a whole character apart and read that way in the Log; it is

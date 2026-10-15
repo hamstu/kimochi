@@ -86,7 +86,7 @@ publishes it, and installed copies update to it. Never bump the version or tag b
 | `npm run release:bundle` | Optimised bundle for this OS, under `src-tauri/target/release/bundle/`. |
 | `npm run release -- <x.y.z>` | Cuts a release: bumps the version, moves `CHANGELOG.md`'s Unreleased entries under it, commits, tags `v<x.y.z>` and pushes; CI builds and publishes it (see Releases above). `--dry-run` checks and shows the changes without writing anything. |
 | `npm start` | Launches the **already-built** debug output: `open`s `Kimochi.app` on macOS, starts `target/debug/kimochi(.exe)` elsewhere. Rebuild after changes. |
-| `npm run dev` | Rebuilds `dist/` (`prepare.mjs`), then `tauri dev` with live reload (see the README). Stages OCR assets only if they have never been staged. |
+| `npm run dev` | Rebuilds `dist/` (`prepare.mjs`), then `tauri dev` with live reload (see the README). Stages OCR assets only if they have never been staged. With `KIMOCHI_ALLOW_CAPTURE=1`, the main window and panels of this development build can be screenshotted and screen-recorded (for UI testing); the OCR overlay and pop-ups stay excluded from capture. |
 | `npm run check:rust` | `cargo clippy -D warnings` for `src-tauri`. |
 | `npm run check:all` | `check:rust`, plus `cargo check` of `capture-core` for `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc` and `x86_64-unknown-linux-gnu` (each skipped with a hint unless `rustup target add` has been run). A convenience only: native CI on each OS is the real compile gate. |
 | `npm run prepare:meikiocr -- --target <triple>` | Stage the ONNX Runtime for another Rust target (also `KIMOCHI_TARGET`); `MEIKIOCR_DEST` stages into another directory. `prepare:mangaocr` accepts the same flag (its models are platform-neutral). |

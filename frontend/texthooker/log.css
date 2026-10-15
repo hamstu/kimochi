@@ -500,14 +500,12 @@ body:has(.log-session-lifted) { cursor: grabbing; }
 }
 
 /* ------------------------------------------------------------------ explain */
-/* Centred with inset + margin:auto rather than translate(-50%) so the box sits on whole pixels
-   and long Japanese/markdown text stays crisp. */
+/* Centred by the kit's dialog frame, without a translate, so long Japanese/markdown text stays
+   crisp. */
 .log-explain.k-dialog {
-  inset: 0;
   width: min(48rem, calc(100vw - 2rem));
   height: min(40rem, calc(100vh - 2rem));
   max-height: none;
-  margin: auto;
   transform: none;
   animation: k-fade-in var(--k-base) var(--k-ease-out);
 }

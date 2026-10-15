@@ -435,14 +435,19 @@
   animation: k-fade-in var(--k-base) var(--k-ease-out);
 }
 .dark .k-overlay { background: rgb(0 0 0 / 0.5); }
-.k-dialog {
-  /* Centred with auto margins rather than a translate, which can blur text on fractional pixels. */
+/* The dialog's centring frame (see DialogFrame in Dialog.tsx): a grid over the window that lets
+   clicks through to the overlay. */
+.k-dialog-frame {
   position: fixed;
   inset: 0;
   z-index: 51;
-  margin: auto;
-  height: -webkit-fit-content;
-  height: fit-content;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.k-dialog {
+  position: relative;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   /* Fill the window, less a margin, up to a comfortable measure: panels are small windows, so a
