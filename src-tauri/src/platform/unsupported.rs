@@ -134,7 +134,7 @@ pub fn activate_process(_pid: u32) -> Result<(), String> {
     Err(UNSUPPORTED.into())
 }
 
-pub fn activate_window(_id: &SourceId) -> Result<(), String> {
+pub fn activate_window(_id: &SourceId) -> Result<Value, String> {
     Err(UNSUPPORTED.into())
 }
 

@@ -100,6 +100,13 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Text read from a full-screen app on macOS now lines up with the game. The capture came back
+  3% small with an empty band along the top (the window's hidden title bar), so every word
+  was drawn below and to the left of where it was read.
+- Opening the radial menu with its keyboard shortcut no longer switches away from a full-screen
+  game's Space to Kimochi's. Only a controller takes focus from the game, since the game
+  would otherwise read its buttons too.
+- The overlay's text goes as soon as you switch to another Space, instead of after the slide.
 - Switching Spaces on macOS no longer drags the overlay's text across the screen behind a
   full-screen game, or onto another display. The text hides while the Space slides and
   comes back once the game is in place.

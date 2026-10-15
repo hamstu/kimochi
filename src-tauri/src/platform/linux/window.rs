@@ -327,8 +327,9 @@ pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String
 }
 
 /// Bring a window source to the front. Linux goes by its process, as before.
-pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<(), String> {
+pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<serde_json::Value, String> {
     activate_process(id.pid().filter(|pid| *pid > 0).ok_or("invalid: the window has no process")?)
+        .map(|()| serde_json::json!({ "process": true }))
 }
 
 /// Activate another process's frontmost window (returning focus to the game).

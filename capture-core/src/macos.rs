@@ -47,6 +47,9 @@ const CATALOG_TTL: Duration = Duration::from_secs(2);
 pub struct MacCapture {
     catalog: Option<(Instant, SCShareableContent)>,
     streams: HashMap<String, Live>,
+    /// Windows whose surface is larger than their frame (see `Surface`), by source id, with
+    /// the frame size in pixels they were measured at.
+    surfaces: HashMap<String, ((u32, u32), (u32, u32))>,
 }
 
 impl MacCapture {
@@ -54,6 +57,7 @@ impl MacCapture {
         Self {
             catalog: None,
             streams: HashMap::new(),
+            surfaces: HashMap::new(),
         }
     }
 }
@@ -259,9 +263,13 @@ struct Live {
     stream: Arc<SCStream>,
     slot: Arc<Slot>,
     source: Source,
-    /// The pixel size the stream was configured for.
+    /// The pixel size the stream was configured for: the window's frame, or its whole surface
+    /// when that is larger (see `Surface`).
     width: u32,
     height: u32,
+    /// The window's frame (or the display) in pixels: what a frame is cut down to.
+    frame_width: u32,
+    frame_height: u32,
 }
 
 impl Live {
@@ -271,10 +279,37 @@ impl Live {
     }
 }
 
-fn start_stream(resolved: &Resolved) -> Result<Live> {
+/// The window's drawing surface, when it is larger than the window's frame.
+///
+/// A full-screen app's window is taller than the screen: its title bar waits just above the
+/// top edge until the pointer reveals it (OpenEmu's full-screen window on a 3440x1440 display
+/// draws a 3440x1484 surface). ScreenCaptureKit captures the whole surface and, in a stream
+/// sized to the frame, scales it down to fit (`content_scale` 0.97) in the top-left corner:
+/// the game came out 3% small, under a transparent band, and every word on the overlay was
+/// drawn below and to the left of the one it read. Measured from a frame that was scaled, the
+/// stream is started again at the surface's own size, and frames are cut to the window's frame:
+/// the bottom of the surface, where the hidden title bar is above it.
+fn surface_of(scale: f64, content: screencapturekit::cg::CGRect) -> Option<(u32, u32)> {
+    (scale > 0.05 && scale < 0.995).then(|| {
+        (
+            (content.size.width / scale).round() as u32,
+            (content.size.height / scale).round() as u32,
+        )
+    })
+}
+
+/// Where the window's frame is in a frame of its surface: its bottom-left `frame` pixels.
+fn frame_in_surface(surface: (u32, u32), frame: (u32, u32)) -> [u32; 4] {
+    let width = frame.0.min(surface.0);
+    let height = frame.1.min(surface.1);
+    [0, surface.1 - height, width, height]
+}
+
+fn start_stream(resolved: &Resolved, size: Option<(u32, u32)>) -> Result<Live> {
+    let (width, height) = size.unwrap_or((resolved.width, resolved.height));
     let config = SCStreamConfiguration::new()
-        .with_width(resolved.width)
-        .with_height(resolved.height)
+        .with_width(width)
+        .with_height(height)
         .with_pixel_format(PixelFormat::BGRA)
         .with_shows_cursor(false)
         .with_ignores_shadows_single_window(true)
@@ -333,8 +368,10 @@ fn start_stream(resolved: &Resolved) -> Result<Live> {
         stream,
         slot,
         source: resolved.source.clone(),
-        width: resolved.width,
-        height: resolved.height,
+        width,
+        height,
+        frame_width: resolved.width,
+        frame_height: resolved.height,
     })
 }
 
@@ -342,6 +379,9 @@ fn start_stream(resolved: &Resolved) -> Result<Live> {
 enum Unusable {
     /// The stream has ended or its source has changed shape: start again.
     Restart,
+    /// The window's surface is larger than its frame, and was scaled to fit: start again at
+    /// this size (see `surface_of`).
+    Surface(u32, u32),
     /// Nothing has arrived yet.
     NoFrame,
 }
@@ -385,10 +425,19 @@ fn frame_from_stream(live: &Live, request: &CaptureRequest, start: Instant) -> s
         };
         let width = (on_screen.size.width * scale).round() as u32;
         let height = (on_screen.size.height * scale).round() as u32;
-        if width.abs_diff(live.width) > 1 || height.abs_diff(live.height) > 1 {
+        if width.abs_diff(live.frame_width) > 1 || height.abs_diff(live.frame_height) > 1 {
             return Err(Unusable::Restart);
         }
         bounds = Some(rect(on_screen));
+        let content = info.as_ref().and_then(|i| Some((i.content_scale?, i.content_rect?)));
+        if let Some((width, height)) = content.and_then(|(scale, rect)| surface_of(scale, rect)) {
+            // Scaled to fit: a stream at the frame's size of a larger surface, or a surface
+            // that has grown since.
+            let grown = width.abs_diff(live.width) > 1 || height.abs_diff(live.height) > 1;
+            if grown && width >= live.frame_width && height >= live.frame_height {
+                return Err(Unusable::Surface(width, height));
+            }
+        }
     }
     let Some(buffer) = sample.pixel_buffer() else {
         return Err(Unusable::NoFrame);
@@ -405,11 +454,14 @@ fn frame_from_stream(live: &Live, request: &CaptureRequest, start: Instant) -> s
     if width != live.width || height != live.height || bytes.len() < stride * height as usize {
         return Err(Unusable::Restart);
     }
-    let crop = match crop_rect(request.crop, width, height) {
-        Ok(crop) => crop,
+    // The window's frame within the buffer: all of it, unless the stream is of a larger surface.
+    let [fx, fy, frame_width, frame_height] =
+        frame_in_surface((width, height), (live.frame_width.min(width), live.frame_height.min(height)));
+    let crop = match crop_rect(request.crop, frame_width, frame_height) {
+        Ok([x, y, w, h]) => [x, y, w, h],
         Err(error) => return Ok(Err(error)),
     };
-    let mut pixels = bgra_crop_to_rgba(bytes, stride, crop);
+    let mut pixels = bgra_crop_to_rgba(bytes, stride, [crop[0] + fx, crop[1] + fy, crop[2], crop[3]]);
     unpremultiply(&mut pixels);
     let [_, _, w, h] = crop;
     Ok(Ok(Frame {
@@ -418,8 +470,8 @@ fn frame_from_stream(live: &Live, request: &CaptureRequest, start: Instant) -> s
             width: w,
             height: h,
             stride: w as usize * 4,
-            full_width: width,
-            full_height: height,
+            full_width: frame_width,
+            full_height: frame_height,
             crop_pixels: crop,
             scale_factor: scale,
             source_bounds: bounds,
@@ -436,14 +488,30 @@ fn frame_from_stream(live: &Live, request: &CaptureRequest, start: Instant) -> s
 
 /// A single screenshot, sized `width` x `height` (the GPU scales it when that is
 /// smaller than the source), cropped and converted.
+///
+/// `surface` is the window's whole surface in pixels when it is larger than its frame (see
+/// `surface_of`): the surface is captured at the same scale, then cut to the frame.
 fn one_shot(
     resolved: &Resolved,
-    width: u32,
-    height: u32,
+    frame_width: u32,
+    frame_height: u32,
+    surface: Option<(u32, u32)>,
     crop: Option<Crop>,
     start: Instant,
 ) -> Result<Frame> {
-    let crop = crop_rect(crop, width, height)?;
+    let (width, height) = match surface {
+        Some((sw, sh)) => {
+            let k = f64::from(frame_width) / f64::from(resolved.width);
+            (
+                ((f64::from(sw) * k).round() as u32).max(frame_width),
+                ((f64::from(sh) * k).round() as u32).max(frame_height),
+            )
+        }
+        None => (frame_width, frame_height),
+    };
+    let [fx, fy, _, _] = frame_in_surface((width, height), (frame_width, frame_height));
+    let crop = crop_rect(crop, frame_width, frame_height)?;
+    let cut = [crop[0] + fx, crop[1] + fy, crop[2], crop[3]];
     let config = SCStreamConfiguration::new()
         .with_width(width)
         .with_height(height)
@@ -475,10 +543,10 @@ fn one_shot(
     // rectangle kept is byte-identical and, for a dialogue box on a whole display,
     // a fraction of the work. Proved in `crop_then_convert_matches_convert_then_crop`.
     let [_, _, w, h] = crop;
-    let mut pixels = if crop == [0, 0, width, height] {
+    let mut pixels = if cut == [0, 0, width, height] {
         captured
     } else {
-        crop_pixels(&captured, width, crop)
+        crop_pixels(&captured, width, cut)
     };
     // CoreGraphics bridge returns premultiplied RGBA DeviceRGB. PNG expects straight alpha.
     unpremultiply(&mut pixels);
@@ -488,10 +556,10 @@ fn one_shot(
             width: w,
             height: h,
             stride: w as usize * 4,
-            full_width: width,
-            full_height: height,
+            full_width: frame_width,
+            full_height: frame_height,
             crop_pixels: crop,
-            scale_factor: resolved.scale * f64::from(width) / f64::from(resolved.width),
+            scale_factor: resolved.scale * f64::from(frame_width) / f64::from(resolved.width),
             source_bounds: resolved.source.bounds,
             pixel_format: "RGBA8 straight alpha, top-left rows",
             color_space: "DeviceRGB (SDR; no embedded ICC profile)",
@@ -527,6 +595,15 @@ impl MacCapture {
             }
         }
         resolve(self.catalog(true)?, source_id)?.ok_or_else(stale_source)
+    }
+
+    /// The surface measured for this window at its current frame size; a window that has changed
+    /// size since (out of full screen) is captured at its frame again.
+    fn known_surface(&self, source_id: &str, resolved: &Resolved) -> Option<(u32, u32)> {
+        self.surfaces
+            .get(source_id)
+            .filter(|(frame, _)| *frame == (resolved.width, resolved.height))
+            .map(|(_, surface)| *surface)
     }
 
     fn drop_stream(&mut self, source_id: &str) {
@@ -598,22 +675,40 @@ impl CaptureBackend for MacCapture {
                     Ok(result) => return result,
                     Err(Unusable::NoFrame) => {}
                     Err(Unusable::Restart) => self.drop_stream(&request.source_id),
+                    Err(Unusable::Surface(width, height)) => {
+                        let frame = (live.frame_width, live.frame_height);
+                        self.surfaces.insert(request.source_id.clone(), (frame, (width, height)));
+                        self.drop_stream(&request.source_id);
+                    }
                 }
             }
             let resolved = self.resolve(&request.source_id)?;
+            let surface = self.known_surface(&request.source_id, &resolved);
             if !self.streams.contains_key(&request.source_id) {
                 self.evict_for_new_stream();
-                if let Ok(live) = start_stream(&resolved) {
+                if let Ok(live) = start_stream(&resolved, surface) {
                     self.streams.insert(request.source_id.clone(), live);
                 }
             }
-            if let Some(live) = self.streams.get(&request.source_id) {
-                if let Ok(result) = frame_from_stream(live, request, start) {
-                    return result;
+            // A new stream's first frame may itself report a larger surface: once more, at it.
+            for _ in 0..2 {
+                let Some(live) = self.streams.get(&request.source_id) else { break };
+                match frame_from_stream(live, request, start) {
+                    Ok(result) => return result,
+                    Err(Unusable::Surface(width, height)) => {
+                        let frame = (live.frame_width, live.frame_height);
+                        self.surfaces.insert(request.source_id.clone(), (frame, (width, height)));
+                        self.drop_stream(&request.source_id);
+                        if let Ok(live) = start_stream(&resolved, Some((width, height))) {
+                            self.streams.insert(request.source_id.clone(), live);
+                        }
+                    }
+                    Err(_) => break,
                 }
             }
             // No stream, or it produced nothing usable in time: capture once.
-            one_shot(&resolved, resolved.width, resolved.height, request.crop, start)
+            let surface = self.known_surface(&request.source_id, &resolved);
+            one_shot(&resolved, resolved.width, resolved.height, surface, request.crop, start)
         })
     }
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
@@ -629,12 +724,37 @@ impl CaptureBackend for MacCapture {
                     (u64::from(resolved.height) * u64::from(edge) / u64::from(longest)).max(1) as u32,
                 )
             };
-            one_shot(&resolved, width, height, None, start)
+            let surface = self.known_surface(source_id, &resolved);
+            one_shot(&resolved, width, height, surface, None, start)
         })
     }
     fn close(&mut self) {
         for (_, live) in self.streams.drain() {
             live.stop();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use screencapturekit::cg::{CGPoint, CGRect, CGSize};
+
+    #[test]
+    fn a_full_screen_surface_is_measured_from_its_scaled_frame() {
+        // Recorded from OpenEmu in full screen on a 3440x1440 display.
+        let content = CGRect {
+            origin: CGPoint { x: 0., y: 0. },
+            size: CGSize { width: 3338.005_323_410_034, height: 1_439.999_970_912_933_3 },
+        };
+        assert_eq!(surface_of(0.970_350_384_712_219_2, content), Some((3440, 1484)));
+        assert_eq!(surface_of(1.0, content), None, "an unscaled frame needs no surface");
+    }
+
+    #[test]
+    fn the_frame_is_the_bottom_of_the_surface() {
+        // The hidden title bar is above the screen.
+        assert_eq!(frame_in_surface((3440, 1484), (3440, 1440)), [0, 44, 3440, 1440]);
+        assert_eq!(frame_in_surface((800, 600), (800, 600)), [0, 0, 800, 600]);
     }
 }

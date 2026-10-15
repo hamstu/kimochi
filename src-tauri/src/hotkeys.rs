@@ -155,6 +155,7 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
                 return;
             }
             let service = app.state::<Shared>().inner().clone();
+            crate::gamepad::note_menu_origin(false);
             actions::dispatch(app, &service, &action);
         });
         match result {

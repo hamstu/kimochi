@@ -34,7 +34,7 @@
 //! observe_workspace(on_sleep, on_wake, on_activate)
 //! activate_self(prefer: Option<&WebviewWindow>) -> Result<(), String>
 //! activate_process(pid: u32) -> Result<(), String>
-//! activate_window(&SourceId) -> Result<(), String>   // that window, on its Space/desktop
+//! activate_window(&SourceId) -> Result<Value, String> // that window, on its Space/desktop; a report of how
 //! window_fullscreen(&SourceId) -> Option<bool>       // the OS's own answer; None: cannot say
 //! accessibility_status() -> Option<bool>             // None: no such permission here
 //! request_accessibility() -> Result<bool, String>

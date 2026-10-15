@@ -949,7 +949,10 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
         let _ = tx.send(platform::activate_window(&window));
     })
     .map_err(|e| e.to_string())?;
-    rx.recv().map_err(|e| e.to_string())?
+    let result = rx.recv().map_err(|e| e.to_string())?;
+    let service = app.state::<Shared>().inner().clone();
+    record(&app, &service, json!({ "check": "activate-source", "sourceId": source_id, "report": result.as_ref().ok(), "error": result.as_ref().err() }));
+    result.map(|_| ())
 }
 
 /// Where the pointer is, in desktop points, and the display it is on. Quick Shot polls this to
@@ -1999,6 +2002,7 @@ fn trigger_action(app: tauri::AppHandle, state: State<Shared>, name: String) -> 
     if !actions::ACTIONS.contains(&name.as_str()) {
         return Err(format!("invalid: unknown action {name:?}"));
     }
+    gamepad::note_menu_origin(false);
     actions::dispatch(&app, state.inner(), &name);
     Ok(())
 }

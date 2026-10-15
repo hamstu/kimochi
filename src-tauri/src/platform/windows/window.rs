@@ -688,10 +688,10 @@ pub fn activate_process(pid: u32) -> Result<(), String> {
 /// application can have several, and the reader clicked this one. A window on another virtual
 /// desktop is activated there, and Windows switches to that desktop. Falls back to the process
 /// when the window is gone.
-pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<(), String> {
+pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<Value, String> {
     let Some(target) = super::sources::resolve(id) else {
         return match id.pid().filter(|pid| *pid > 0) {
-            Some(pid) => activate_process(pid),
+            Some(pid) => activate_process(pid).map(|()| json!({ "fallback": true })),
             None => Err("gone: that window is closed".into()),
         };
     };
@@ -701,7 +701,7 @@ pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<(), String> {
         }
     }
     if force_foreground(target) {
-        Ok(())
+        Ok(json!({ "foreground": true }))
     } else {
         Err("native: the window did not come to the front".into())
     }

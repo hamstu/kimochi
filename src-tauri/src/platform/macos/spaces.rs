@@ -120,6 +120,14 @@ impl Spaces {
         })
     }
 
+    /// Whether window `number` is on a Space that some display is showing. False for a window
+    /// on no Space at all (closed, minimised). The window server's own on-screen flag follows
+    /// the slide between Spaces and only changes once it has finished; this changes as soon as
+    /// the switch starts.
+    pub fn showing(&self, number: u32) -> bool {
+        self.of(number).iter().any(|space| self.current.contains(space))
+    }
+
     /// Whether window `number` is a full-screen app's window: on a Space of the full-screen kind.
     /// Asked of the Space rather than the window's size, so it holds while macOS animates the
     /// window into or out of its Space, when its bounds are anything but the display's.

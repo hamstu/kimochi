@@ -176,25 +176,38 @@ pub fn is_full_screen(pid: i32, number: u32) -> Option<bool> {
 
 /// Bring window `number` of process `pid` to the front, switching to its Space if it is on
 /// another. True when either route took; the caller activates the application otherwise.
-pub fn front_window(pid: i32, number: u32) -> bool {
+/// `report` says what each step answered, for the evidence log.
+pub fn front_window(pid: i32, number: u32, report: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    use serde_json::json;
     let mut fronted = false;
+    report.insert("skylight".into(), json!(calls().is_some()));
     if let Some(calls) = calls() {
         let mut psn = ProcessSerialNumber::default();
         unsafe {
-            if (calls.process_for_pid)(pid, &mut psn) == 0
-                && (calls.set_front)(&mut psn, number, USER_GENERATED) == 0
-            {
-                fronted = true;
-                make_key(calls, &mut psn, number);
+            let process = (calls.process_for_pid)(pid, &mut psn);
+            report.insert("process".into(), json!(process));
+            if process == 0 {
+                let front = (calls.set_front)(&mut psn, number, USER_GENERATED);
+                report.insert("front".into(), json!(front));
+                if front == 0 {
+                    fronted = true;
+                    make_key(calls, &mut psn, number);
+                }
             }
         }
     }
-    if let Some(element) = window_element(pid, number) {
+    report.insert("trusted".into(), json!(trusted()));
+    let element = window_element(pid, number);
+    report.insert("element".into(), json!(element.is_some()));
+    if let Some(element) = element {
         unsafe {
             let main = ns_string!("AXMain");
             let raise = ns_string!("AXRaise");
-            let _ = AXUIElementSetAttributeValue(element.0, (main as *const NSString).cast(), kCFBooleanTrue);
-            fronted |= AXUIElementPerformAction(element.0, (raise as *const NSString).cast()) == 0;
+            let main = AXUIElementSetAttributeValue(element.0, (main as *const NSString).cast(), kCFBooleanTrue);
+            let raised = AXUIElementPerformAction(element.0, (raise as *const NSString).cast());
+            report.insert("main".into(), json!(main));
+            report.insert("raise".into(), json!(raised));
+            fronted |= raised == 0;
         }
     }
     fronted

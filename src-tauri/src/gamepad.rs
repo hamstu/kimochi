@@ -251,6 +251,15 @@ const RESEND_UNCHANGED: Duration = Duration::from_millis(500);
 
 /// Controller navigation: the overlay's radial menu is open and the controller drives it.
 static NAV: AtomicBool = AtomicBool::new(false);
+/// The controller menu was last opened from a controller, rather than a keyboard shortcut or
+/// the tray. Only then does opening it take activation from the game (see `set_navigation`).
+static OPENED_BY_PAD: AtomicBool = AtomicBool::new(false);
+
+/// Where the next `openControllerMenu` comes from: a controller chord (`true`), or anything
+/// else. Set by whoever dispatches it.
+pub fn note_menu_origin(by_pad: bool) {
+    OPENED_BY_PAD.store(by_pad, Ordering::SeqCst);
+}
 /// The application that was in front when the menu took activation, to hand it back.
 static NAV_RETURN: Mutex<Option<u32>> = Mutex::new(None);
 
@@ -323,6 +332,13 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                 );
             }
         }
+        // A game reads the controller only while it is the active application, which is the
+        // only reason to take activation from it. A menu opened from the keyboard is steered by
+        // global shortcuts and needs none, and taking it is not free on macOS: activating
+        // Kimochi switched away from a full-screen game's Space to the desktop with Kimochi's
+        // main window on it. (Linux decides for itself, through its callers.)
+        #[cfg(not(target_os = "linux"))]
+        let take_focus = take_focus && OPENED_BY_PAD.load(Ordering::SeqCst);
         if take_focus {
             let ours = std::process::id();
             if let Some(pid) = crate::platform::frontmost_pid().filter(|pid| *pid != ours) {
@@ -331,8 +347,14 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
             let handle = app.clone();
             // The overlay is what takes focus, never the main window: the menu is drawn
             // over the game, and the reader's other windows stay behind it.
+            // The overlay is made key first: it is on every Space, so the activation that
+            // follows finds a window of ours on the Space being shown and stays there, where
+            // activating with the main window as the only candidate switched to its Space.
             let _ = app.run_on_main_thread(move || {
                 let overlay = handle.get_webview_window("overlay");
+                if let Some(overlay) = overlay.as_ref() {
+                    let _ = crate::platform::promote_to_key(overlay);
+                }
                 let _ = crate::platform::activate_self(overlay.as_ref());
                 if let Some(overlay) = overlay {
                     let _ = crate::platform::promote_to_key(&overlay);
@@ -490,6 +512,7 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
         })
         .collect();
     if let Some(name) = chord_to_fire(&bindings, held, rising) {
+        note_menu_origin(true);
         actions::dispatch(app, service, name);
         return;
     }

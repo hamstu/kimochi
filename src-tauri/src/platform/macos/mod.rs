@@ -649,6 +649,10 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
             .objectForKey(ns_string!("kCGWindowIsOnscreen"))
             .map(|value| msg_send![&*value, boolValue])
             .unwrap_or(false);
+        // And on a Space that is showing, which is known as soon as the reader switches rather
+        // than once the slide has finished: text over a game the reader just left went on
+        // being drawn over the Space they went to until then.
+        let on_screen = on_screen && spaces::Spaces::current().is_none_or(|s| s.showing(window_number));
         Some((
             Rect {
                 x: raw.origin.x,
@@ -1116,6 +1120,12 @@ fn restore_stepped_aside(app: &NSApplication) {
 /// Kimochi is the active app when this is asked for (the reader just clicked it), so under macOS
 /// 14's cooperative activation it yields first; older systems take the activation flags alone.
 pub fn activate_process(pid: u32) -> Result<(), String> {
+    activate_app(pid, true)
+}
+
+/// Activate process `pid`, yielding activation first (macOS 14's cooperative activation), and
+/// with `all_windows` bringing every one of its windows forward.
+fn activate_app(pid: u32, all_windows: bool) -> Result<(), String> {
     let pid = i32::try_from(pid).map_err(|_| "invalid: process id out of range".to_string())?;
     unsafe {
         let app: *mut AnyObject = msg_send![
@@ -1131,8 +1141,9 @@ pub fn activate_process(pid: u32) -> Result<(), String> {
         if yields {
             let _: () = msg_send![shared, yieldActivationToApplication: app];
         }
-        // NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps.
-        let activated: bool = msg_send![app, activateWithOptions: 3usize];
+        // NSApplicationActivateIgnoringOtherApps, with NSApplicationActivateAllWindows.
+        let options: usize = if all_windows { 3 } else { 2 };
+        let activated: bool = msg_send![app, activateWithOptions: options];
         if activated {
             Ok(())
         } else {
@@ -1155,14 +1166,21 @@ pub fn window_fullscreen(id: &SourceId) -> Option<bool> {
 /// Bring window source `id` to the front: that window, not just its application, switching to
 /// its Space when it is on another (a full-screen app). Falls back to `activate_process`.
 /// Main thread, as `activate_process`.
-pub fn activate_window(id: &SourceId) -> Result<(), String> {
+pub fn activate_window(id: &SourceId) -> Result<Value, String> {
     let pid = id.pid().filter(|pid| *pid > 0).ok_or("invalid: the window has no process")?;
+    let mut report = serde_json::Map::new();
     if let Some(number) = id.handle_u32() {
-        if focus::front_window(i32::try_from(pid).map_err(|_| "invalid: process id out of range")?, number) {
-            return Ok(());
+        let pid = i32::try_from(pid).map_err(|_| "invalid: process id out of range")?;
+        if focus::front_window(pid, number, &mut report) {
+            // The window is the application's front window now, but macOS 14 switches Spaces
+            // only for an activation: activate the application, and with only its front window
+            // (not all of them, which can pull its other windows' Space instead).
+            report.insert("activated".into(), json!(activate_app(pid as u32, false).err()));
+            return Ok(Value::Object(report));
         }
     }
-    activate_process(pid)
+    report.insert("fallback".into(), json!(activate_process(pid).err()));
+    Ok(Value::Object(report))
 }
 
 /// Accessibility: `Some(granted)`; this platform has the permission.

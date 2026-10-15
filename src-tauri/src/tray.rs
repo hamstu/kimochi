@@ -247,7 +247,10 @@ pub fn dispatch(app: &tauri::AppHandle, service: &Shared, action: &str) -> Resul
             panels::act_existing(app, &settings, panels::MAIN, "show", None)?;
         }
         "quit" => app.exit(0),
-        name if actions::ACTIONS.contains(&name) => actions::dispatch(app, service, name),
+        name if actions::ACTIONS.contains(&name) => {
+            crate::gamepad::note_menu_origin(false);
+            actions::dispatch(app, service, name)
+        }
         // Remaining tray toggles are view state owned by the overlay; it listens for
         // the event rather than Rust guessing at renderer state.
         _ => {}
