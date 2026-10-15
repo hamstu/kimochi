@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import { Check, ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
@@ -19,6 +18,7 @@ import {
   DialogContent,
   IconButton,
   Input,
+  isComposing,
   Switch,
   Textarea,
 } from "@kit";
@@ -65,10 +65,6 @@ interface Props {
   resizeHandle?: ReactNode;
 }
 
-/** IME composition (Japanese input) must never commit a field on Enter. */
-const composing = (event: ReactKeyboardEvent): boolean =>
-  event.nativeEvent.isComposing || event.keyCode === 229;
-
 export function EditEntryModal({
   entryId,
   onClose,
@@ -103,6 +99,7 @@ export function EditEntryModal({
         onKeyDown={(event) => {
           if (
             event.key === "Escape" &&
+            !isComposing(event) &&
             !confirmOpen &&
             !event.defaultPrevented
           ) {
@@ -479,11 +476,16 @@ function AliasesField({
           placeholder={value.length ? "" : "オカリン, 助手"}
           onChange={(e) => {
             const next = e.target.value;
-            if (ALIAS_SPLIT.test(next)) commit(next);
+            // A 、 typed mid-conversion splits when the IME commits it.
+            if (
+              ALIAS_SPLIT.test(next) &&
+              !(e.nativeEvent as InputEvent).isComposing
+            )
+              commit(next);
             else setDraft(next);
           }}
           onKeyDown={(e) => {
-            if (composing(e)) return;
+            if (isComposing(e)) return;
             if (e.key === "Enter") {
               e.preventDefault();
               commit(draft);
@@ -491,6 +493,10 @@ function AliasesField({
               e.preventDefault();
               onChange(value.slice(0, -1));
             }
+          }}
+          onCompositionEnd={(e) => {
+            if (ALIAS_SPLIT.test(e.currentTarget.value))
+              commit(e.currentTarget.value);
           }}
           onBlur={() => commit(draft)}
         />
@@ -534,7 +540,7 @@ function NotesSection({ entry }: { entry: NotebookEntry }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (composing(e)) return;
+            if (isComposing(e)) return;
             if (e.key === "Enter") {
               e.preventDefault();
               commitDraft();
@@ -575,7 +581,7 @@ function NoteRow({ entryId, note }: { entryId: string; note: NotebookNote }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (composing(e)) return;
+            if (isComposing(e)) return;
             if (e.key === "Enter") {
               e.preventDefault();
               commit();

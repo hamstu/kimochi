@@ -35,6 +35,7 @@ import {
   DialogContent,
   IconButton,
   Input,
+  isComposing,
 } from "@kit";
 import {
   deleteSession,
@@ -229,6 +230,7 @@ export function SessionManagerModal({
                           void commitName(session, event.target.value)
                         }
                         onKeyDown={(event) => {
+                          if (isComposing(event)) return;
                           if (event.key === "Enter") event.currentTarget.blur();
                           if (event.key === "Escape") {
                             // Revert the draft without closing the dialog.

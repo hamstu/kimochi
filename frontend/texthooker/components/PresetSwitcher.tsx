@@ -24,6 +24,7 @@ import {
   SelectValue,
   SettingsRow,
   SettingsSection,
+  isComposing,
 } from "@kit";
 
 /** Named snapshots of settings + replacements (not currently mounted). */
@@ -197,6 +198,7 @@ export function PresetSwitcher() {
             autoFocus
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
+              if (isComposing(e)) return;
               if (e.key === "Enter") void handleSaveAs();
               if (e.key === "Escape") {
                 setNewNameMode(false);

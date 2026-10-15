@@ -4,6 +4,7 @@ import * as AlertPrimitive from '@radix-ui/react-alert-dialog'
 import { X } from 'lucide-react'
 import { cn, portalRoot } from './cn'
 import { IconButton } from './Button'
+import { isComposing } from './ime'
 
 export const Dialog = DialogPrimitive.Root
 
@@ -45,6 +46,7 @@ export const DialogContent = forwardRef<
     variant = 'dialog',
     actions,
     onOpenAutoFocus,
+    onEscapeKeyDown,
     ...props
   },
   ref
@@ -62,6 +64,11 @@ export const DialogContent = forwardRef<
           ;(event.currentTarget as HTMLElement | null)?.focus()
         })
       }
+      // Escape that cancels an IME conversion in a field must not close the dialog.
+      onEscapeKeyDown={(event) => {
+        if (isComposing(event)) event.preventDefault()
+        else onEscapeKeyDown?.(event)
+      }}
       {...props}
     >
       <div className="k-dialog-header">
@@ -126,7 +133,13 @@ export function ConfirmDialog({
           onClick={dismissOnOutsideClick ? () => onOpenChange(false) : undefined}
         />
         <DialogFrame>
-          <AlertPrimitive.Content className="k-dialog" style={{ maxWidth: '24rem' }}>
+          <AlertPrimitive.Content
+            className="k-dialog"
+            style={{ maxWidth: '24rem' }}
+            onEscapeKeyDown={(event) => {
+              if (isComposing(event)) event.preventDefault()
+            }}
+          >
             <div className="k-dialog-header">
               <div>
                 <AlertPrimitive.Title className="k-title">{title}</AlertPrimitive.Title>

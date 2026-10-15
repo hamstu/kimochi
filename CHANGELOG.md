@@ -79,6 +79,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Japanese input (IME) works in the Notebook and every other text field: the text you are
+  converting stays in place instead of breaking into stray kana. Enter, Escape and the arrow keys
+  go to the IME while you are converting, so Escape no longer closes the editor or a dialog, and
+  Enter no longer opens a search result.
+
 - Sessions can be reordered by dragging again in **Manage sessions**: the row lifts and follows
   the pointer while the others slide aside. On macOS 26, rows no longer flicker or jump to the
   wrong place mid-drag; every dialog is now centred in a way that avoids the system's drawing bug. From the keyboard, focus a handle, press Space, move with the arrow keys

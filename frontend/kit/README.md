@@ -37,7 +37,7 @@ The shared design system for every Kimochi window. Import components from `@kit`
 | `Row`, `RowList`, `Separator inset` | Full-bleed action/navigation lists. |
 | `Bar position="top" \| "bottom"`, `BarSpacer` | 28px tool bars and footers. |
 | `Switch`, `Checkbox` | On/off settings use `Switch`; `Checkbox` only for multi-select lists. |
-| `Input`, `Textarea` (`mono` for URLs/keys) | Text entry. |
+| `Input`, `Textarea` (`mono` for URLs/keys) | Text entry. Safe for Japanese IME input: a controlled value that comes back late through an async save never resets the text being composed. Key handlers on fields skip keys that belong to a composition with `isComposing(event)`. |
 | `Select` (options list) or `SelectRoot`/`SelectTrigger`/`SelectContent`/`SelectItem` | Choosing one of many. `variant="ghost"` inside bars. |
 | `Menu`, `MenuTrigger`, `MenuContent`, `MenuItem`, `MenuRadioItem`, `MenuSeparator`, `MenuLabel` | Action menus (line actions, session menu). |
 | `Popover`, `PopoverContent` (`menu` prop for menu styling) | Anchored panels. |

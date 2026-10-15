@@ -34,6 +34,7 @@ import {
   Row,
   Segmented,
   Tooltip,
+  isComposing,
 } from "@kit";
 import { SessionMenu } from "../../main/SessionMenu";
 import { useSetting } from "../../bridge/useSetting";
@@ -175,7 +176,10 @@ export function NotebookPanel({
     const onKey = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       if (
-        (event.key === "/" && !mod && !isTypingTarget(event.target)) ||
+        (event.key === "/" &&
+          !mod &&
+          !isComposing(event) &&
+          !isTypingTarget(event.target)) ||
         (mod && event.key.toLowerCase() === "f")
       ) {
         event.preventDefault();
@@ -221,6 +225,7 @@ export function NotebookPanel({
   };
 
   const onSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (isComposing(event)) return;
     if (event.key === "ArrowDown" && current) {
       event.preventDefault();
       move(current);

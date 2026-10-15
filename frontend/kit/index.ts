@@ -6,6 +6,7 @@ export { ResizeHandle } from './ResizeHandle'
 export { Switch } from './Switch'
 export { Checkbox } from './Checkbox'
 export { Input, Textarea } from './TextField'
+export { isComposing, useSteadyValue } from './ime'
 export {
   Select,
   SelectRoot,
