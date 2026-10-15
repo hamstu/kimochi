@@ -30,6 +30,7 @@ extern "C" {
     fn AXUIElementCopyAttributeValue(element: CFTypeRef, attribute: CFTypeRef, value: *mut CFTypeRef) -> i32;
     fn AXUIElementSetAttributeValue(element: CFTypeRef, attribute: CFTypeRef, value: CFTypeRef) -> i32;
     fn AXUIElementPerformAction(element: CFTypeRef, action: CFTypeRef) -> i32;
+    fn AXUIElementSetMessagingTimeout(element: CFTypeRef, seconds: f32) -> i32;
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]
@@ -135,6 +136,9 @@ fn window_element(pid: i32, number: u32) -> Option<Owned> {
         if app.0.is_null() {
             return None;
         }
+        // An application that is not answering would otherwise hold the caller (the main
+        // thread, for a click) for the default six seconds.
+        AXUIElementSetMessagingTimeout(app.0, 0.5);
         let mut value: CFTypeRef = std::ptr::null();
         let attribute = ns_string!("AXWindows");
         if AXUIElementCopyAttributeValue(app.0, (attribute as *const NSString).cast(), &mut value) != 0 {
