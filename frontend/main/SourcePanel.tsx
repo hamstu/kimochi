@@ -471,12 +471,16 @@ let handledChooseRequest = 0
 export function SourcePanel({
   controller,
   onOpenSettings,
-  chooseRequest = 0
+  chooseRequest = 0,
+  mini = false,
+  onChooseSource
 }: {
   controller: Controller
   onOpenSettings: () => void
   /** Bumped to open the menu on the window grid. */
   chooseRequest?: number
+  mini?: boolean
+  onChooseSource?: () => void
 }): ReactNode {
   const [mode, choose] = useInputSource()
   const [open, setOpen] = useState(false)
@@ -563,6 +567,7 @@ export function SourcePanel({
     />
   )
   const onMenuOpen = (next: boolean): void => {
+    if (mini && next) { onChooseSource?.(); return }
     setOpen(next)
     if (!next) setGridOpen(false)
   }
@@ -619,7 +624,13 @@ export function SourcePanel({
     // Its foot holds what changes it: the region, and the source itself.
     card = (
       <div className="src-card src-card-live">
-        {isScreen && !(capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope') ? (
+        {mini ? (
+          <button type="button" className="src-card-body" onClick={onChooseSource}
+            aria-label={`Source: ${title}. Change source`}>
+            <CardHead icon={isScreen ? <Monitor /> : <SourceIcon source={source} />}
+              title={title} />
+          </button>
+        ) : isScreen && !(capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope') ? (
           <div className="src-card-body">{preview}</div>
         ) : (
           <button

@@ -41,7 +41,7 @@ pub fn set(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
             window,
             crate::platform::clamp_to_visible(Rect {
                 width: 320.,
-                height: 330.,
+                height: 560.,
                 ..bounds
             }),
         )?;

@@ -19,8 +19,7 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 export const HTTP_SCOPE: string[] = [
   'http://localhost:19633/**',
   'http://127.0.0.1:19633/**',
-  'http://localhost:8765/**',
-  'http://127.0.0.1:8765/**',
+  'http://*:8765/**',
   'https://github.com/**',
   'https://*.githubusercontent.com/**',
   'https://api.jiten.moe/**',
@@ -34,6 +33,7 @@ function matchesPattern(url: URL, pattern: string): boolean {
   const target = new URL(pattern.replace('/**', '/'))
   if (target.protocol !== url.protocol) return false
   if (target.port !== url.port) return false
+  if (target.hostname === '*') return true
   if (target.hostname.startsWith('*.')) return url.hostname.endsWith(target.hostname.slice(1))
   return target.hostname === url.hostname
 }

@@ -7,6 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { build } from 'esbuild'
 
 const capability = JSON.parse(
   await readFile(new URL('../src-tauri/capabilities/network.json', import.meta.url), 'utf8')
@@ -37,6 +38,27 @@ test('the frontend HTTP scope matches the Rust capability', () => {
     scopeFromCapability.slice().sort(),
     'frontend/bridge/net.ts HTTP_SCOPE has drifted from src-tauri/capabilities/network.json'
   )
+})
+
+test('AnkiConnect allows remote hosts on its port, with the same decision in panels and extension hosts', async () => {
+  const { scopeFromCapability, scopeAllows } = await import('./ext-dev-server.mjs')
+  const scope = scopeFromCapability(capability)
+  const bundled = await build({
+    stdin: { contents: source, loader: 'ts' }, bundle: true, format: 'esm', write: false,
+    plugins: [{ name: 'unused-http-transport', setup(builder) {
+      builder.onResolve({ filter: /^@tauri-apps\/plugin-http$/ }, () => ({ path: 'http', namespace: 'stub' }))
+      builder.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents: 'export const fetch = () => { throw Error("not used") }' }))
+    } }]
+  })
+  const { isWithinHttpScope } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`)
+  for (const url of ['http://192.0.2.42:8765/', 'http://anki.example:8765/', 'http://localhost:8765/', 'http://127.0.0.1:8765/']) {
+    assert.equal(scopeAllows(scope, url), true, url)
+    assert.equal(isWithinHttpScope(url), true, url)
+  }
+  for (const url of ['http://192.0.2.42:8766/', 'http://anki.example/', 'https://example.com/', 'file:///tmp/data']) {
+    assert.equal(scopeAllows(scope, url), false, url)
+    assert.equal(isWithinHttpScope(url), false, url)
+  }
 })
 
 test('the Yomitan API client goes through the native command, not the plugin scope', async () => {

@@ -188,7 +188,9 @@ export function MainSidebar({
   settingsTab,
   onSettingsTab,
   onBack,
-  chooseRequest
+  chooseRequest,
+  mini = false,
+  onChooseSource
 }: {
   width: number
   onResize: (width: number) => void
@@ -200,10 +202,12 @@ export function MainSidebar({
   onBack: () => void
   /** Bumped to open the source menu on its window grid. */
   chooseRequest: number
+  mini?: boolean
+  onChooseSource?: () => void
 }): JSX.Element {
   // The width while a drag is in progress; the saved width otherwise.
   const [live, setLive] = useState<number | null>(null)
-  const style = { width: live ?? width }
+  const style = mini ? undefined : { width: live ?? width }
   const readsScreen = useReadsScreen()
   const handle = (
     <ResizeHandle
@@ -244,7 +248,7 @@ export function MainSidebar({
   }
 
   return (
-    <aside className="main-sidebar" aria-label="Sidebar" style={style}>
+    <aside className="main-sidebar" aria-label="Sidebar" data-mini={mini || undefined} style={style}>
       <div className="sb-scroll">
         <div className="sb-group">
           <div className="sb-label" id="sb-source-label">
@@ -254,6 +258,8 @@ export function MainSidebar({
             controller={controller}
             onOpenSettings={onOpenSourceSettings}
             chooseRequest={chooseRequest}
+            mini={mini}
+            onChooseSource={onChooseSource}
           />
         </div>
         {readsScreen && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} />}
@@ -265,7 +271,7 @@ export function MainSidebar({
           Settings
         </Row>
       </div>
-      {handle}
+      {!mini && handle}
     </aside>
   )
 }

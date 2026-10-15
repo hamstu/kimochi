@@ -11,6 +11,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows Mini mode now uses the familiar sidebar controls without the source screenshot, with a separate title-bar toggle and an expandable source picker.
+- Dictionary extensions can connect to AnkiConnect on another computer using its address on port 8765.
+
 - Windows: add an always-on-top Mini mode from the sidebar button, hide the main window while cropping, and intercept overlay/menu keyboard input before it reaches the game.
 
 - The main window and setup guide start unpinned, so dictionary settings can open above them.

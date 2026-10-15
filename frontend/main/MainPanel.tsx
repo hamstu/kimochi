@@ -7,9 +7,9 @@
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
-import { PanelLeft } from 'lucide-react'
+import { Maximize2, Minimize2, PanelLeft } from 'lucide-react'
 import { listen } from '@tauri-apps/api/event'
-import { IconButton, Tooltip, Menu, MenuTrigger, MenuContent, MenuItem } from '@kit'
+import { IconButton, Tooltip } from '@kit'
 import { ReaderHost, Transcript } from '@texthooker/App'
 import { NotebookPanel as Notebook } from '@texthooker/components/NotebookPanel'
 import { TitleBarPortal } from '../shell/TitleBarPortal'
@@ -31,7 +31,6 @@ import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
 import { GamingModeNotice } from './GamingModeNotice'
 import { panel } from '../bridge/tauri'
-import { MiniPanel } from './MiniPanel'
 import './main.css'
 
 function initialView(): MainView {
@@ -172,13 +171,7 @@ export default function MainPanel(): JSX.Element {
     <ReaderHost>
       <LogActionsProvider>
         <TitleBarPortal>
-          {capabilities.os === 'windows' ? <Menu>
-            <MenuTrigger asChild><IconButton label="Window layout" size="sm"><PanelLeft /></IconButton></MenuTrigger>
-            <MenuContent>
-              <MenuItem onSelect={() => void setSidebar(!sidebar)}>{sidebar ? 'Hide sidebar' : 'Show sidebar'}</MenuItem>
-              <MenuItem onSelect={() => void changeMini(!mini)}>{mini ? 'Expand Kimochi' : 'Mini mode'}</MenuItem>
-            </MenuContent>
-          </Menu> :
+          {!mini &&
           <Tooltip content={sidebar ? 'Hide sidebar' : 'Show sidebar'}>
             <IconButton
               label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
@@ -189,15 +182,18 @@ export default function MainPanel(): JSX.Element {
               <PanelLeft />
             </IconButton>
           </Tooltip>}
+          {capabilities.os === 'windows' && <IconButton
+            label={mini ? 'Expand Kimochi' : 'Mini mode'} size="sm"
+            onClick={() => void changeMini(!mini)}>
+            {mini ? <Maximize2 /> : <Minimize2 />}
+          </IconButton>}
           <span className="main-title" aria-hidden="true">
             <KimochiLogo size={16} />
             <span>Kimochi</span>
           </span>
         </TitleBarPortal>
         {miniError && <div role="alert" className="native-panel-error" onClick={() => setMiniError(null)}>{miniError}</div>}
-        {mini && <MiniPanel controller={controller} onExpand={() => void changeMini(false)}
-          onSettings={(tab) => { void changeMini(false).then(() => openSettings(tab)) }} />}
-        <div className="main-frame" style={mini ? { display: 'none' } : undefined}>
+        <div className="main-frame">
           <GamingModeNotice />
           {error && (
             <div
@@ -210,20 +206,28 @@ export default function MainPanel(): JSX.Element {
             </div>
           )}
           <div className="main-layout">
-            {sidebar && (
+            {(sidebar || mini) && (
               <MainSidebar
                 width={sidebarWidth}
                 onResize={setSidebarWidth}
-                view={view}
+                view={mini ? 'log' : view}
+                mini={mini}
+                onChooseSource={() => {
+                  void changeMini(false).then(() => {
+                    void setSidebar(true)
+                    setViewState(lastView.current)
+                    setChooseRequest((count) => count + 1)
+                  })
+                }}
                 controller={controller}
-                onOpenSourceSettings={() => openSettings('sources')}
+                onOpenSourceSettings={() => { void changeMini(false).then(() => openSettings('sources')) }}
                 chooseRequest={chooseRequest}
                 settingsTab={settingsTab}
-                onSettingsTab={openSettings}
+                onSettingsTab={(tab) => { void changeMini(false).then(() => openSettings(tab)) }}
                 onBack={() => setView(lastView.current)}
               />
             )}
-            <div className="main-view">
+            <div className="main-view" style={mini ? { display: 'none' } : undefined}>
               {view !== 'settings' && <ViewTabs view={view} onView={setView} />}
               <Transcript visible={view === 'log'} onOpenNotebook={openNotebook} />
               {view === 'notebook' && (
