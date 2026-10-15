@@ -92,6 +92,57 @@ export async function segmentText(text, parse) {
 }
 
 /**
+ * The boxes a reader steps through, in reading order.
+ *
+ * Only boxes with Japanese in them: the Log is written on the same rule (`isJapanese` in
+ * scene.ts), so background patterns OCR reads as symbols or digits (a carpet's squares) are
+ * neither published nor stopped on. And in reading order by where each box is, not in the order
+ * OCR listed them: horizontal text in rows from the top, left to right; vertical text in columns
+ * from the right, top to bottom. `vertical` is the scan's direction (see `dominantVertical`).
+ *
+ * @template {{text: string, box?: {x: number, y: number, width: number, height: number}}} U
+ * @param {U[]} units
+ * @param {boolean} vertical
+ * @returns {U[]}
+ */
+export function readingUnits(units, vertical) {
+  const kept = units.filter((unit) => JAPANESE.test(unit.text))
+  if (!kept.every((unit) => unit.box)) return kept
+  return kept
+    .map((unit, index) => ({ unit, index }))
+    .sort((a, b) => {
+      const p = a.unit.box
+      const q = b.unit.box
+      // Boxes that share a row (a column) are side by side; otherwise one comes first.
+      if (vertical) {
+        const overlap = Math.min(p.x + p.width, q.x + q.width) - Math.max(p.x, q.x)
+        if (overlap > Math.min(p.width, q.width) * 0.5) return p.y - q.y || a.index - b.index
+        return q.x + q.width - (p.x + p.width) || a.index - b.index
+      }
+      const overlap = Math.min(p.y + p.height, q.y + q.height) - Math.max(p.y, q.y)
+      if (overlap > Math.min(p.height, q.height) * 0.5) return p.x - q.x || a.index - b.index
+      return p.y - q.y || a.index - b.index
+    })
+    .map(({ unit }) => unit)
+}
+
+/**
+ * Whether the scan as a whole runs vertically: the direction most of its characters run in.
+ * One direction for all of it, so the arrow keys mean the same on every word; a stray box read
+ * the other way (a lone glyph is as tall as it is wide) cannot turn "next" into "back".
+ */
+export function dominantVertical(units) {
+  let vertical = 0
+  let horizontal = 0
+  for (const unit of units) {
+    const length = [...unit.text].length
+    if (unit.vertical) vertical += length
+    else horizontal += length
+  }
+  return vertical > horizontal
+}
+
+/**
  * A cursor over the words of several boxes.
  *
  * @param {{text: string, vertical: boolean, tokens: {start: number, end: number, text: string, word: boolean}[]}[]} units
@@ -100,6 +151,8 @@ export async function segmentText(text, parse) {
 export class WordCursor {
   constructor(units) {
     this.units = units
+    /** The direction of the whole scan; see `dominantVertical`. */
+    this.verticalText = dominantVertical(units)
     /** Every stoppable word, in reading order. */
     this.words = []
     /** Every line, in reading order, with the indices of its words. */
@@ -133,8 +186,7 @@ export class WordCursor {
   }
 
   get vertical() {
-    const word = this.current
-    return word ? Boolean(this.units[word.unit]?.vertical) : false
+    return this.verticalText
   }
 
   /** Move by `delta` words, stopping at either end. Returns whether the cursor moved. */
@@ -188,4 +240,12 @@ export class WordCursor {
   }
 }
 
-export default { WordCursor, segmentText, tokensFromParse, tokensFromSegmenter, isWordText }
+export default {
+  WordCursor,
+  segmentText,
+  tokensFromParse,
+  tokensFromSegmenter,
+  isWordText,
+  readingUnits,
+  dominantVertical
+}

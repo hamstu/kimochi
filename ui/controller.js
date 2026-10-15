@@ -14,7 +14,13 @@
  */
 import { ControllerInput } from "./controller-input.js";
 import { RadialMenu, ICONS } from "./radial-menu.js";
-import { WordCursor, segmentText, SCAN_LENGTH } from "./word-nav.js";
+import {
+  WordCursor,
+  dominantVertical,
+  readingUnits,
+  segmentText,
+  SCAN_LENGTH,
+} from "./word-nav.js";
 import { ControllerHistory } from "./controller-history.js";
 
 /** Lets the menu's exit animation start before the chosen action changes the screen. */
@@ -390,10 +396,19 @@ export function createController(context) {
           (child) => child.nodeType === Node.TEXT_NODE,
         );
         if (!node?.textContent) continue;
-        units.push({ element, node, text: node.textContent, vertical });
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const { left, top, width, height } = range.getBoundingClientRect();
+        units.push({
+          element,
+          node,
+          text: node.textContent,
+          vertical,
+          box: { x: left, y: top, width, height },
+        });
       }
     }
-    return units;
+    return readingUnits(units, dominantVertical(units));
   }
 
   /** Lean the right stick: scroll the popup until it is back at rest. */
@@ -589,7 +604,8 @@ export function createController(context) {
       segments.push(segment);
     }
     highlight = segments[0];
-    const vertical = cursor.vertical;
+    // Drawn the way this word's own box runs; the keys follow the scan's direction instead.
+    const vertical = Boolean(cursor.units[word.unit]?.vertical);
     const pad = 3;
     rects.forEach((rect, index) => {
       const segment = segments[index];

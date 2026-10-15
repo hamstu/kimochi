@@ -16,7 +16,9 @@ import {
   WordCursor,
   segmentText,
   tokensFromParse,
-  tokensFromSegmenter
+  tokensFromSegmenter,
+  readingUnits,
+  dominantVertical
 } from '../ui/word-nav.js'
 import { itemAt, itemFor } from '../ui/radial-menu.js'
 import { scrollSpeed } from '../ui/controller.js'
@@ -263,6 +265,51 @@ test('a scan with no words leaves the cursor empty', () => {
   const cursor = new WordCursor([unit('.')])
   assert.equal(cursor.current, null)
   assert.equal(cursor.move('right'), false)
+})
+
+test('a stray box read the other way cannot loop the cursor: right always moves on', () => {
+  // A line of dialogue, then a lone glyph from the background (as tall as it is wide, so read
+  // as vertical), then the next line.
+  const cursor = new WordCursor([unit('この|刀|を'), unit('ロ', true), unit('買って|行け')])
+  const seen = [cursor.current.text]
+  while (cursor.move('right')) seen.push(cursor.current.text)
+  assert.deepEqual(seen, ['この', '刀', 'を', 'ロ', '買って', '行け'])
+})
+
+test('the scan runs in the direction most of its characters do', () => {
+  assert.equal(dominantVertical([unit('この|刀|を'), unit('ロ', true)]), false)
+  assert.equal(dominantVertical([unit('この|刀|を', true), unit('ロ')]), true)
+})
+
+const boxed = (text, x, y, width = 100, height = 20, vertical = false) => ({
+  text,
+  vertical,
+  box: { x, y, width, height }
+})
+
+test('units are read by position, rows from the top and left to right', () => {
+  const order = readingUnits(
+    [boxed('二行目', 10, 60), boxed('右', 300, 12), boxed('一行目', 10, 10)],
+    false
+  ).map((u) => u.text)
+  assert.deepEqual(order, ['一行目', '右', '二行目'])
+})
+
+test('vertical units are read in columns from the right, top to bottom', () => {
+  const column = (text, x, y) => boxed(text, x, y, 20, 100, true)
+  const order = readingUnits(
+    [column('左', 10, 10), column('右下', 50, 120), column('右上', 50, 10)],
+    true
+  ).map((u) => u.text)
+  assert.deepEqual(order, ['右上', '右下', '左'])
+})
+
+test('units with no Japanese (background read as symbols or digits) are skipped', () => {
+  const order = readingUnits(
+    [boxed('■■', 10, 200), boxed('88', 10, 240), boxed('買って行かんか?', 10, 10)],
+    false
+  ).map((u) => u.text)
+  assert.deepEqual(order, ['買って行かんか?'])
 })
 
 // --- menu ----------------------------------------------------------------------

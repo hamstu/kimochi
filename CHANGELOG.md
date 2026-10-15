@@ -84,6 +84,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Stepping through the overlay's words with the keyboard or a controller follows the text in order
+  to the end. Background patterns OCR reads as symbols (a carpet's squares) are skipped, as they
+  are in the Log, and a stray box can no longer trap the cursor going back and forth between it
+  and the end of a line.
+
 - Shift-scan with the Yomitan API works over the overlay, as it does with the other dictionaries:
   hold Shift over the game's text and the word under the pointer is looked up and selected, no
   click needed. It used to look up a whole box's text, and only after a click.
