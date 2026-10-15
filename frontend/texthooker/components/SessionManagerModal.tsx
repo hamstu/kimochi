@@ -1,5 +1,5 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GripVertical, Trash2 } from "lucide-react";
 import {
@@ -70,16 +70,19 @@ export function SessionManagerModal({
   // The session being dragged: drawn in an overlay that follows the pointer, its row left behind
   // as the gap the others slide around.
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Read by the sync below without making the end of a drag a reason to sync.
+  const dragging = useRef(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The reader sends a fresh copy of the sessions with every update (stats, new lines), so only
-  // a real change to them is taken up, and never mid-drag.
+  // a real change to them is taken up, and never mid-drag. A drop shows its new order at once;
+  // the saved order arrives a moment later and matches it.
   const sessionsKey = sessions
     .map((session) => `${session.id}\u0000${session.name}`)
     .join("\u0001");
   useEffect(() => {
-    if (!open || draggingId) return;
+    if (!open || dragging.current) return;
     setOrdered(sessions);
     setDraftNames((current) => {
       const next: Record<string, string> = {};
@@ -89,7 +92,7 @@ export function SessionManagerModal({
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `sessions` is followed through its key.
-  }, [open, sessionsKey, draggingId]);
+  }, [open, sessionsKey]);
 
   useEffect(() => {
     if (deleteId && !sessions.some((session) => session.id === deleteId)) {
@@ -101,11 +104,17 @@ export function SessionManagerModal({
     if (open) return;
     setDeleteId(null);
     setDraggingId(null);
+    dragging.current = false;
     setError(null);
   }, [open]);
 
-  const onDragEnd = async ({ active, over }: DragEndEvent) => {
+  const endDrag = () => {
+    dragging.current = false;
     setDraggingId(null);
+  };
+
+  const onDragEnd = async ({ active, over }: DragEndEvent) => {
+    endDrag();
     if (!over || active.id === over.id) return;
     const from = ordered.findIndex((session) => session.id === active.id);
     const to = ordered.findIndex((session) => session.id === over.id);
@@ -178,11 +187,12 @@ export function SessionManagerModal({
             collisionDetection={closestCenter}
             onDragStart={({ active }) => {
               setDeleteId(null);
+              dragging.current = true;
               setDraggingId(String(active.id));
               // A text selection left in the dialog would otherwise go along as a native drag.
               window.getSelection()?.removeAllRanges();
             }}
-            onDragCancel={() => setDraggingId(null)}
+            onDragCancel={endDrag}
             onDragEnd={(event) => void onDragEnd(event)}
           >
             <SortableContext
