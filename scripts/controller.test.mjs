@@ -18,7 +18,8 @@ import {
   tokensFromParse,
   tokensFromSegmenter,
   readingUnits,
-  dominantVertical
+  dominantVertical,
+  segmentAcross
 } from '../ui/word-nav.js'
 import { itemAt, itemFor } from '../ui/radial-menu.js'
 import { scrollSpeed } from '../ui/controller.js'
@@ -310,6 +311,31 @@ test('units with no Japanese (background read as symbols or digits) are skipped'
     false
   ).map((u) => u.text)
   assert.deepEqual(order, ['買って行かんか?'])
+})
+
+test('without a dictionary, kanji keep the kana of their inflection', () => {
+  const words = (text) => tokensFromSegmenter(text).filter((t) => t.word).map((t) => t.text)
+  assert.deepEqual(words('作った剣でも'), ['作った', '剣でも'])
+  assert.deepEqual(words('食べさせられた'), ['食べさせられた'])
+  assert.deepEqual(words('刀の'), ['刀', 'の'])
+})
+
+test('a word OCR split across two boxes is one stop, starting in the first', async () => {
+  // Boxes 「この刀かじポッシュの作 and った剣でも: the verb spans them.
+  const split = async (text) => tokensFromSegmenter(text)
+  const units = await segmentAcross([{ text: 'ポッシュの作' }, { text: 'った剣でも' }], split)
+  const cursor = new WordCursor(units.map((u) => ({ ...u, vertical: false })))
+  const seen = [cursor.current]
+  while (cursor.step(1)) seen.push(cursor.current)
+  assert.deepEqual(
+    seen.map((w) => [w.unit, w.start, w.end]),
+    [
+      [0, 0, 4], // ポッシュ
+      [0, 4, 5], // の
+      [0, 5, 8], // 作った, running two characters into the next box
+      [1, 2, 5] // 剣でも
+    ]
+  )
 })
 
 // --- menu ----------------------------------------------------------------------

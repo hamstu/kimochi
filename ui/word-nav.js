@@ -60,13 +60,56 @@ export function tokensFromSegmenter(text, Segmenter = globalThis.Intl?.Segmenter
     }, [])
   }
   const segmenter = new Segmenter('ja', { granularity: 'word' })
-  return [...segmenter.segment(text)].map(({ segment, index, isWordLike }) => ({
-    start: index,
-    end: index + segment.length,
-    text: segment,
-    word: Boolean(isWordLike) && isWordText(segment)
-  }))
+  const segments = (piece, offset) =>
+    [...segmenter.segment(piece)].map(({ segment, index, isWordLike }) => ({
+      start: offset + index,
+      end: offset + index + segment.length,
+      text: segment,
+      word: Boolean(isWordLike) && isWordText(segment)
+    }))
+  // ICU's breaker cuts inflected words to pieces (作|っ|た, 食|べ|ま|した), and a stop on 作 alone
+  // highlights and looks up the kanji instead of the verb. So kanji keep the kana that follow them
+  // (okurigana and inflection: 作った, 食べました); a long run of kana after them is more than
+  // that, and only its first piece joins. Kana that follow no kanji, and everything else, are
+  // split by ICU as before.
+  const tokens = []
+  const run = (from, test) => {
+    let to = from
+    while (to < text.length && test(text[to])) to++
+    return to
+  }
+  let at = 0
+  while (at < text.length) {
+    if (!KANJI.test(text[at])) {
+      const next = run(at, (c) => !KANJI.test(c))
+      tokens.push(...segments(text.slice(at, next), at))
+      at = next
+      continue
+    }
+    let end = run(at, (c) => KANJI.test(c))
+    const kana = run(end, (c) => HIRAGANA.test(c))
+    if (kana > end && !PARTICLE_START.test(text[end])) {
+      if (kana - end <= OKURIGANA_MAX) end = kana
+      else end = segments(text.slice(end, kana), end)[0]?.end ?? end
+    }
+    tokens.push({ start: at, end, text: text.slice(at, end), word: true })
+    at = end
+    // What follows the chunk in the same kana run is split by ICU.
+    const rest = run(at, (c) => HIRAGANA.test(c))
+    if (rest > at) {
+      tokens.push(...segments(text.slice(at, rest), at))
+      at = rest
+    }
+  }
+  return tokens
 }
+
+const KANJI = /[\p{Script=Han}々〆ヶ]/u
+const HIRAGANA = /\p{Script=Hiragana}/u
+/** The longest run of kana after kanji taken whole as its okurigana and inflection (食べさせられた). */
+const OKURIGANA_MAX = 6
+/** Kana that start a particle after a noun, never a verb's ending: 剣を, 刀の, 国が. */
+const PARTICLE_START = /[をのがへはや]/
 
 /**
  * Split `text` into tokens, asking `parse` (Yomitan's `parseText`) first.
@@ -143,6 +186,39 @@ export function dominantVertical(units) {
 }
 
 /**
+ * Each unit's tokens, found with the text after it in reading order, so a word OCR split across
+ * two boxes is found whole: its token starts in one unit and ends past it, and the next unit's
+ * text it covers is no stop of its own.
+ *
+ * @param {{text: string}[]} units in reading order
+ * @param {(text: string) => Promise<{start: number, end: number, text: string, word: boolean}[]>} split
+ */
+export async function segmentAcross(units, split) {
+  const ahead = (index) => {
+    let text = ''
+    for (let next = index + 1; next < units.length && text.length < SCAN_LENGTH; next++) text += units[next].text
+    return text.slice(0, SCAN_LENGTH)
+  }
+  const found = await Promise.all(
+    units.map(async (unit, index) => {
+      // Only the last line runs on: a block's earlier lines end where they end.
+      const runOn = unit.text.includes('\n') ? '' : ahead(index)
+      const tokens = await split(unit.text + runOn)
+      return tokens.filter((token) => token.start < unit.text.length)
+    })
+  )
+  // How far into a unit the previous unit's last word already reaches.
+  let covered = 0
+  return units.map((unit, index) => {
+    const tokens = found[index].map((token) => (token.start < covered ? { ...token, word: false } : token))
+    const lastWord = [...tokens].reverse().find((token) => token.word)
+    covered = Math.max(0, covered - unit.text.length)
+    if (lastWord && lastWord.end > unit.text.length) covered = lastWord.end - unit.text.length
+    return { ...unit, tokens }
+  })
+}
+
+/**
  * A cursor over the words of several boxes.
  *
  * @param {{text: string, vertical: boolean, tokens: {start: number, end: number, text: string, word: boolean}[]}[]} units
@@ -159,16 +235,20 @@ export class WordCursor {
     this.lines = []
     units.forEach((unit, unitIndex) => {
       let lineStart = 0
-      unit.text.split('\n').forEach((line) => {
+      const lines = unit.text.split('\n')
+      lines.forEach((line, lineIndex) => {
         const lineEnd = lineStart + line.length
         const entry = { unit: unitIndex, start: lineStart, end: lineEnd, words: [] }
+        // A word on a box's last line may run on into the next box (OCR split it: 作|った), and
+        // then `end` is past this box's text; see `segmentAcross`.
+        const last = lineIndex === lines.length - 1
         for (const token of unit.tokens) {
           if (!token.word || token.start < lineStart || token.start >= lineEnd) continue
           entry.words.push(this.words.length)
           this.words.push({
             unit: unitIndex,
             start: token.start,
-            end: Math.min(token.end, lineEnd),
+            end: last ? token.end : Math.min(token.end, lineEnd),
             text: token.text,
             line: this.lines.length,
             column: token.start - lineStart
@@ -247,5 +327,6 @@ export default {
   tokensFromSegmenter,
   isWordText,
   readingUnits,
-  dominantVertical
+  dominantVertical,
+  segmentAcross
 }

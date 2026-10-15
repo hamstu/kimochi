@@ -18,6 +18,7 @@ import {
   WordCursor,
   dominantVertical,
   readingUnits,
+  segmentAcross,
   segmentText,
   SCAN_LENGTH,
 } from "./word-nav.js";
@@ -62,6 +63,7 @@ export function scrollSpeed(y) {
  * @param {(range: Range) => Promise<boolean>} context.lookupRange open the dictionary engine's popup
  *   on a range (Yomitan's frontend, or the extension host's `lookupRange`)
  * @param {(term: string, x: number, y: number, sentence: string) => Promise<void>} context.lookupTerm open the Yomitan API pop-up
+ * @param {(text: string) => Promise<unknown>} context.apiParse the Yomitan API's `/tokenize` (its parse results)
  * @param {() => void} context.dismiss close whichever popup is open
  * @param {(element: HTMLElement) => ({x: number, y: number, width: number, height: number, line: number}|null)[]|null} context.charRects
  *   where each character of a word-mode box is on the source, by code unit; null in grouped mode
@@ -441,23 +443,26 @@ export function createController(context) {
     const ticket = ++generation;
     context.redraw();
     showHud("Reading the text…");
+    // Words split the way the dictionary in use would match them: the Yomitan API's own
+    // `/tokenize` with its dictionaries; else the built-in Yomitan's parser; else (Hachidori,
+    // 10ten) the platform's segmenter, kanji kept with their kana (`tokensFromSegmenter`).
     const api = context.dictionary();
-    const parse = api
-      ? (text) =>
-          api("parseText", {
-            text,
-            optionsContext: { current: true },
-            scanLength: SCAN_LENGTH,
-            useInternalParser: true,
-            useMecabParser: false,
-          })
-      : null;
+    const parse =
+      context.popupType() === "custom-api"
+        ? context.apiParse
+        : api
+          ? (text) =>
+              api("parseText", {
+                text,
+                optionsContext: { current: true },
+                scanLength: SCAN_LENGTH,
+                useInternalParser: true,
+                useMecabParser: false,
+              })
+          : null;
     const units = readUnits();
-    const segmented = await Promise.all(
-      units.map(async (unit) => ({
-        ...unit,
-        tokens: await segmentText(unit.text, parse),
-      })),
+    const segmented = await segmentAcross(units, (text) =>
+      segmentText(text, parse),
     );
     if (ticket !== generation || mode !== "words") return;
     cursor = new WordCursor(segmented);
@@ -527,11 +532,29 @@ export function createController(context) {
   }
 
   function rangeFor(word) {
-    const unit = cursor.units[word.unit];
+    return spanRange(word.unit, word.start, word.end - word.start);
+  }
+
+  /**
+   * `length` characters from (unit, start), running on through the next units in reading order
+   * where they reach past the unit's end (a word OCR split across boxes, or a lookup reading on),
+   * as far as the text goes.
+   */
+  function spanRange(unitIndex, start, length) {
+    const unit = cursor.units[unitIndex];
     if (!unit.node.isConnected) return null;
     const range = document.createRange();
-    range.setStart(unit.node, word.start);
-    range.setEnd(unit.node, Math.min(word.end, unit.node.length));
+    range.setStart(unit.node, start);
+    let remaining = length;
+    for (let index = unitIndex; index < cursor.units.length; index++) {
+      const node = cursor.units[index].node;
+      if (!node.isConnected) break;
+      const from = index === unitIndex ? start : 0;
+      const take = Math.min(node.length - from, remaining);
+      range.setEnd(node, from + take);
+      remaining -= take;
+      if (remaining <= 0) break;
+    }
     return range;
   }
 
@@ -567,19 +590,26 @@ export function createController(context) {
    * is where the word is.
    */
   function wordSegments(word, range) {
-    const unit = cursor.units[word.unit];
-    const cells = unit.history ? null : context.charRects?.(unit.element);
-    if (cells) {
-      const lines = new Map();
-      for (let index = word.start; index < word.end; index++) {
-        const cell = cells[index];
+    const lines = new Map();
+    // The word's characters in its own box, then any it runs on into the next boxes.
+    let start = word.start;
+    let remaining = word.end - word.start;
+    for (let index = word.unit; index < cursor.units.length && remaining > 0; index++) {
+      const unit = cursor.units[index];
+      const cells = unit.history ? null : context.charRects?.(unit.element);
+      if (!cells) return [wordRect(range)];
+      const end = Math.min(unit.text.length, start + remaining);
+      for (let at = start; at < end; at++) {
+        const cell = cells[at];
         if (!cell) continue;
-        if (!lines.has(cell.line)) lines.set(cell.line, []);
-        lines.get(cell.line).push(cell);
+        const key = `${index}:${cell.line}`;
+        if (!lines.has(key)) lines.set(key, []);
+        lines.get(key).push(cell);
       }
-      if (lines.size) return [...lines.values()].map(union);
+      remaining -= end - start;
+      start = 0;
     }
-    return [wordRect(range)];
+    return lines.size ? [...lines.values()].map(union) : [wordRect(range)];
   }
 
   /** The outline pieces, one per line, reusing what is there so a one-line move glides. */
@@ -671,21 +701,21 @@ export function createController(context) {
     const range = rangeFor(word);
     if (!range) return;
     const unit = cursor.units[word.unit];
+    // From the word on, past the end of its box when the text runs on, as a mouse lookup reads:
+    // every dictionary finds the longest match from there itself (作った, not 作).
+    const ahead = spanRange(word.unit, word.start, SCAN_LENGTH);
     try {
       if (context.popupType() === "custom-api") {
         const rect = wordRect(range);
         const origin = context.status().origin ?? { x: 0, y: 0 };
         await context.lookupTerm(
-          unit.text.slice(word.start),
+          ahead?.toString() || unit.text.slice(word.start),
           origin.x + rect.left + rect.width / 2,
           origin.y + rect.top + rect.height / 2,
           unit.text,
         );
       } else {
-        // From the word to the end of its box: Yomitan finds the longest match itself, and
-        // gets to read past the parser's split when deinflection allows a longer one.
-        range.setEnd(unit.node, unit.node.length);
-        await context.lookupRange(range);
+        await context.lookupRange(ahead ?? range);
       }
     } catch (error) {
       context.log({

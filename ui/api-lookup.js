@@ -13,6 +13,17 @@ import { createScanner } from './scan-text.js'
 let showTerm = null
 /** Hides it and forgets the scan, once installed. */
 let hideTerm = null
+/** The Yomitan API's `/tokenize`, once installed. */
+let tokenizeText = null
+
+/**
+ * The Yomitan API's parse of `text` (`parseText` results, as Yomitan's own parser gives them), so
+ * the controller's word cursor stops on the words the API's dictionaries match.
+ */
+export async function apiTokenize(text) {
+  if (!tokenizeText) throw Error('The Yomitan API pop-up is not ready')
+  return tokenizeText(text)
+}
 
 /** The controller's word cursor: look `term` up as if it had been clicked at (x, y). */
 export async function lookupTerm(term, x, y, sentence) {
@@ -122,6 +133,8 @@ export async function installApiLookup() {
   )
 
   showTerm = open
+  tokenizeText = (text) =>
+    invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: 16 } })
   hideTerm = () => {
     if (!apiMode()) return
     scanner.stop()

@@ -1,5 +1,5 @@
 import { createDictionarySetup } from './setup-dictionaries.js'
-import { dismissApiLookup, installApiLookup, lookupTerm } from './api-lookup.js'
+import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm } from './api-lookup.js'
 import { createController } from './controller.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
@@ -336,6 +336,7 @@ controller = createController({
       ? (await extensionHost()?.lookupRange(range)) ?? false
       : (await import('/spike/frontend-mode.js')).lookupRange(range),
   lookupTerm,
+  apiParse: (text) => apiTokenize(text),
   charRects: (element) => (renderer.mode === 'words' ? renderer.charRects(element) : null),
   quietText: (quiet) => renderer.setQuiet(quiet),
   setText: (visible) => setOverlayText(visible),
