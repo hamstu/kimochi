@@ -44,6 +44,8 @@ type ShowPayload =
   | {
       kind: "loaded";
       term: string;
+      /** A new word's first result; false when the same lookup's media arrives. */
+      fresh: boolean;
       /** All matched entries, longest match first (Yomitan-style). */
       entries: YomitanAnkiFields[];
       audioMedia: AnkiMediaItem[];
@@ -117,15 +119,17 @@ function PopoverApp() {
 
     void register<ShowPayload>("popover:show", (e) => {
       setPayload(e.payload);
-      // A new lookup starts with a "loading" payload (notebook payloads arrive
-      // standalone). Reset the Cmd+Enter nonce so a leftover value can't
-      // auto-fire an Anki add when the new term's (keyed, freshly mounted)
-      // entry buttons appear, and discard any followed cross-reference links so
-      // a re-hover shows the freshly-scanned term — not where we drilled to.
-      if (e.payload.kind === "loading" || e.payload.kind === "notebook") {
+      // A new lookup starts with a "loading", "error" or fresh "loaded" payload
+      // (notebook payloads arrive standalone). Reset the Cmd+Enter nonce so a
+      // leftover value can't auto-fire an Anki add when the new term's (keyed,
+      // freshly mounted) entry buttons appear, discard any followed
+      // cross-reference links so a re-hover shows the freshly-scanned term — not
+      // where we drilled to — and start the new word at the top.
+      if (e.payload.kind !== "loaded" || e.payload.fresh) {
         setAnkiTriggerNonce(undefined);
         xrefGen.current += 1;
         setXrefStack([]);
+        document.querySelector(".popover-scroll")?.scrollTo(0, 0);
       }
       // Show window if hidden (Rust also shows it; both are idempotent).
       setVisible(true);
@@ -178,15 +182,13 @@ function PopoverApp() {
   // visible until the user explicitly hits Escape or another show_popover /
   // hide_popover command updates it. This keeps scan-mode gliding smooth.
 
-  // When the user moves the cursor over the popover, take focus so clicks,
-  // scroll, and Esc work on it. (Rust shows the window without focus by default
-  // so it doesn't steal focus during scan-mode glides.)
-  useEffect(() => {
-    const onEnter = () => {
-      void invoke("reader_popup_focus");
-    };
-    window.addEventListener("mouseenter", onEnter);
-    return () => window.removeEventListener("mouseenter", onEnter);
+  // When the user moves the cursor onto the card, take focus so clicks, scroll,
+  // and Esc work on it. (Rust shows the window without focus by default so it
+  // doesn't steal focus during scan-mode glides.) Only the card: the window's
+  // transparent shadow margin around it must not take focus from the page
+  // being scanned.
+  const focusPopup = useCallback(() => {
+    void invoke("reader_popup_focus");
   }, []);
 
   // Render
@@ -318,7 +320,7 @@ function PopoverApp() {
 
   return (
     <div className={`popover-shell ${visible ? "visible" : ""}`}>
-      <div className="popover-card">
+      <div className="popover-card" onMouseEnter={focusPopup}>
         <div className={`popover-scroll${isNotebook ? " popover-scroll-flush" : ""}`}>
           {isNotebook && notebookEntry ? (
             <NotebookEntryCard

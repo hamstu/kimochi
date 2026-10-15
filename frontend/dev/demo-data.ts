@@ -386,6 +386,7 @@ export function appIcon(app: string | null | undefined): string | null {
 export const POPOVER_SAMPLE = {
   kind: 'loaded' as const,
   term: '世界線',
+  fresh: true,
   entries: [
     {
       expression: '世界線',

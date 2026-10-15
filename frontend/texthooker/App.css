@@ -34,11 +34,8 @@
 .texthooker-settings input {
   max-width: 100%;
 }
-/* Shift-hover scan mode — global cursor + suppress token button hover/click. */
-body.scan-mode,
-body.scan-mode * {
-  cursor: crosshair !important;
-}
+/* Shift-hover scan mode: suppress token button hover/click. The cursor stays as it is, as with
+   the other dictionaries. */
 body.scan-mode .jp-text button {
   background-color: transparent !important;
   color: inherit !important;

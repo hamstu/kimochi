@@ -15,11 +15,11 @@ const SCAN_BLOCK_SELECTOR =
   ".line, p, li, h1, h2, h3, h4, td, th, blockquote, pre";
 
 const SCAN_WINDOW = 16;
-const THROTTLE_MS = 50;
+const THROTTLE_MS = 25;
 /** How long the cursor must rest on a new term before we fire the popover
-    lookup. Keeps scan-mode glides from launching a full /ankiFields fetch for
-    every word the cursor crosses on its way to the target. */
-const POPOVER_DWELL_MS = 100;
+    lookup. Short: a lookup takes tens of milliseconds and a newer one
+    supersedes it, so this only skips the words a fast glide crosses. */
+const POPOVER_DWELL_MS = 40;
 
 interface CaretHit {
   node: Text;
@@ -236,10 +236,30 @@ function setScanHighlight(range: Range | null) {
   }
 }
 
+/** The matched word's box in desktop coordinates, which `show_popover` places the popup against. */
+function screenAnchor(
+  range: Range | null,
+  ev: { x: number; y: number; screenX: number; screenY: number },
+) {
+  if (!range) return null;
+  const r = range.getBoundingClientRect();
+  if (!r.width && !r.height) return null;
+  // screen − client is where this document's viewport sits on the desktop.
+  return {
+    x: r.left + ev.screenX - ev.x,
+    y: r.top + ev.screenY - ev.y,
+    width: r.width,
+    height: r.height,
+  };
+}
+
 export function useScanMode(enabled = true) {
   const shiftDown = useRef(false);
-  const lastScanTerm = useRef<string | null>(null);
+  /** The term and position of the popup last shown, so resting on it doesn't reopen it. */
+  const lastShown = useRef<string | null>(null);
   const lastTickAt = useRef(0);
+  /** The pointer's last position, kept while Shift is up too, so pressing Shift over a word
+      scans it without the mouse having to move. */
   const lastEvent = useRef<{
     x: number;
     y: number;
@@ -254,20 +274,12 @@ export function useScanMode(enabled = true) {
   const tickRerunQueued = useRef(false);
   // Dwell gate for the popover lookup (see POPOVER_DWELL_MS).
   const pendingPopover = useRef<{
-    term: string;
+    key: string;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
-    console.log("[scan] hook mount");
-
-    const enterScan = () => {
-      if (shiftDown.current) return;
-      shiftDown.current = true;
-      document.body.classList.add("scan-mode");
-      console.log("[scan] ENTER (shift down)");
-    };
 
     const clearPendingPopover = () => {
       if (pendingPopover.current) {
@@ -276,11 +288,17 @@ export function useScanMode(enabled = true) {
       }
     };
 
+    const enterScan = () => {
+      if (shiftDown.current) return;
+      shiftDown.current = true;
+      document.body.classList.add("scan-mode");
+    };
+
     const exitScan = () => {
       if (!shiftDown.current) return;
       shiftDown.current = false;
       document.body.classList.remove("scan-mode");
-      lastScanTerm.current = null;
+      lastShown.current = null;
       tickRerunQueued.current = false;
       clearPendingPopover();
       setScanHighlight(null);
@@ -288,21 +306,18 @@ export function useScanMode(enabled = true) {
         clearTimeout(pendingTick.current);
         pendingTick.current = null;
       }
-      console.log("[scan] EXIT (shift up)");
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      console.log("[scan] keydown", e.key, "shift?", e.shiftKey);
-      if (e.key === "Shift") enterScan();
+      if (e.key !== "Shift" || shiftDown.current) return;
+      enterScan();
+      // Scan where the pointer already is.
+      if (lastEvent.current) schedule();
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      console.log("[scan] keyup", e.key);
       if (e.key === "Shift") exitScan();
     };
-    const onBlur = () => {
-      console.log("[scan] window blur");
-      exitScan();
-    };
+    const onBlur = () => exitScan();
 
     async function tick() {
       pendingTick.current = null;
@@ -328,51 +343,19 @@ export function useScanMode(enabled = true) {
     }
 
     async function doTick() {
-      if (!shiftDown.current) {
-        console.log("[scan] tick aborted: shift not down");
-        return;
-      }
-      if (!lastEvent.current) {
-        console.log("[scan] tick aborted: no mouse event captured");
-        return;
-      }
+      if (!shiftDown.current || !lastEvent.current) return;
       const ev = lastEvent.current;
-      console.log(
-        "[scan] tick @",
-        ev.x,
-        ev.y,
-        "screen",
-        ev.screenX,
-        ev.screenY,
-      );
 
       const hit = caretFromPoint(ev.x, ev.y);
-      if (!hit) {
-        console.log("[scan] caretFromPoint returned null");
-        return;
-      }
-      console.log(
-        "[scan] caret hit:",
-        hit.node.nodeName,
-        "offset",
-        hit.offset,
-        "data:",
-        JSON.stringify(hit.node.data.slice(0, 16)),
-      );
-
-      if (!hit.node.parentElement?.closest?.(SCAN_REGION_SELECTOR)) {
-        console.log("[scan] caret node not in a scan region; skipping");
+      if (!hit || !hit.node.parentElement?.closest?.(SCAN_REGION_SELECTOR)) {
         return;
       }
 
       const windowText = readForwardText(hit.node, hit.offset, SCAN_WINDOW);
-      console.log("[scan] window text:", JSON.stringify(windowText));
       if (!windowText) return;
 
       const settings = getSettings();
-      console.log("[scan] yomitan URL:", settings.yomitanApiUrl);
       const matched = await scanFromWindow(settings.yomitanApiUrl, windowText);
-      console.log("[scan] matched:", JSON.stringify(matched));
       if (!shiftDown.current) {
         // Shift was released while the request was in flight — drop the result.
         return;
@@ -390,20 +373,23 @@ export function useScanMode(enabled = true) {
       // occurrence of the same word).
       const range = buildForwardRange(hit.node, hit.offset, matched.length);
       setScanHighlight(range);
+      const anchor = screenAnchor(range, ev);
+      // The same word at the same place is the popup already showing; the same word elsewhere
+      // (another occurrence) moves it.
+      const key = `${matched}@${Math.round(anchor?.x ?? ev.screenX)},${Math.round(anchor?.y ?? ev.screenY)}`;
 
-      if (matched === lastScanTerm.current) {
-        console.log("[scan] same as last term, skipping invoke");
+      if (key === lastShown.current) {
         clearPendingPopover();
         return;
       }
-      if (pendingPopover.current?.term === matched) {
-        // Lookup for this term is already scheduled; let the dwell timer run.
+      if (pendingPopover.current?.key === key) {
+        // Lookup for this word is already scheduled; let the dwell timer run.
         return;
       }
 
-      // New term under the cursor — (re)start the dwell timer. Only when the
-      // cursor rests on the term do we fire the popover lookup, so gliding
-      // across a line doesn't launch one lookup per word crossed.
+      // New word under the cursor — (re)start the dwell timer. Only when the
+      // cursor rests on it do we fire the popover lookup, so gliding across a
+      // line doesn't launch one lookup per word crossed.
       clearPendingPopover();
       const lineEl = hit.node.parentElement?.closest?.(
         ".line",
@@ -420,13 +406,12 @@ export function useScanMode(enabled = true) {
       const timer = setTimeout(() => {
         pendingPopover.current = null;
         if (!shiftDown.current) return;
-        lastScanTerm.current = matched;
-        const at = lastEvent.current ?? ev;
-        console.log("[scan] invoking show_popover for", matched);
+        lastShown.current = key;
         invoke("show_popover", {
           term: matched,
-          cursorX: at.screenX,
-          cursorY: at.screenY,
+          cursorX: ev.screenX,
+          cursorY: ev.screenY,
+          anchor,
           width: settings.popoverWidth,
           height: settings.popoverHeight,
           baseUrl: settings.yomitanApiUrl,
@@ -436,31 +421,12 @@ export function useScanMode(enabled = true) {
           audioAutoplay: settings.audioEnabled && settings.audioAutoplay,
           audioVolume: settings.audioVolume,
           ankiConfig: buildAnkiConfigForPopover(settings),
-        })
-          .then(() => console.log("[scan] show_popover OK"))
-          .catch((err) => console.warn("[scan] show_popover failed", err));
+        }).catch((err) => console.warn("[scan] show_popover failed", err));
       }, POPOVER_DWELL_MS);
-      pendingPopover.current = { term: matched, timer };
+      pendingPopover.current = { key, timer };
     }
 
-    const onMouseMove = (e: MouseEvent) => {
-      // Use event.shiftKey as the source of truth — keydown can be missed
-      // when the window doesn't have focus, but mousemove always carries
-      // the current modifier state.
-      if (e.shiftKey && !shiftDown.current) {
-        console.log("[scan] shift detected via mousemove modifier");
-        enterScan();
-      } else if (!e.shiftKey && shiftDown.current) {
-        console.log("[scan] shift released via mousemove modifier");
-        exitScan();
-      }
-      if (!shiftDown.current) return;
-      lastEvent.current = {
-        x: e.clientX,
-        y: e.clientY,
-        screenX: e.screenX,
-        screenY: e.screenY,
-      };
+    function schedule() {
       const now = performance.now();
       const since = now - lastTickAt.current;
       if (since >= THROTTLE_MS) {
@@ -472,6 +438,21 @@ export function useScanMode(enabled = true) {
           void tick();
         }, THROTTLE_MS - since);
       }
+    }
+
+    const onMouseMove = (e: MouseEvent) => {
+      lastEvent.current = {
+        x: e.clientX,
+        y: e.clientY,
+        screenX: e.screenX,
+        screenY: e.screenY,
+      };
+      // Use event.shiftKey as the source of truth — keydown can be missed
+      // when the window doesn't have focus, but mousemove always carries
+      // the current modifier state.
+      if (e.shiftKey) enterScan();
+      else exitScan();
+      if (shiftDown.current) schedule();
     };
 
     window.addEventListener("keydown", onKeyDown);

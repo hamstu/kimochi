@@ -44,6 +44,13 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- The Yomitan API's Shift-scan feels like Yomitan's own. Pressing Shift looks up the word under the
+  pointer without moving the mouse, the pop-up sits above the word (or below it near the top of the
+  screen) instead of over the pointer, so you can slide along a line word by word, and it opens
+  with the entry instead of a loading state first. The pointer no longer turns into a crosshair.
+- Yomitan API lookups no longer wait behind audio downloads, once Kimochi's helper is updated: in
+  the Yomitan API setup (Settings → Dictionary), choose Reinstall, then restart your browser.
+
 - The Notebook has a status bar across its foot, like the Log's, with the session picker at its
   right. Its editor pane can be resized by dragging its edge (double-click to reset); its own foot
   says when your last edit was saved, beside the entry's mentions and Delete.

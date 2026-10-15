@@ -73,11 +73,20 @@ export function TokenSpan({
     e.preventDefault();
     e.stopPropagation();
     const settings = getSettings();
+    // The word's box on the desktop (screen − client is the viewport's origin), so the popup
+    // sits above the word rather than wherever on it the click landed.
+    const box = e.currentTarget.getBoundingClientRect();
     try {
       await invoke("show_popover", {
         term: token.text,
         cursorX: e.screenX,
         cursorY: e.screenY,
+        anchor: {
+          x: box.left + e.screenX - e.clientX,
+          y: box.top + e.screenY - e.clientY,
+          width: box.width,
+          height: box.height,
+        },
         width: settings.popoverWidth,
         height: settings.popoverHeight,
         baseUrl: yomitanBaseUrl,

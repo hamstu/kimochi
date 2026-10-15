@@ -1,13 +1,12 @@
 // popover.rs — orchestrates showing/positioning the popover window and
 // pushes Yomitan lookup data to it via events.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 
 const POPOVER_LABEL: &str = "reader-popup";
-const GAP: f64 = 14.0; // px from cursor to popover edge
 
 /// Transparent margin baked into the window around the visible card so the
 /// card's CSS drop-shadow is not clipped by the window bounds. It must equal
@@ -16,6 +15,14 @@ const GAP: f64 = 14.0; // px from cursor to popover edge
 /// and its shadow (which reaches 16px down, 10px sideways) lives in the margin.
 /// A clipped shadow shows up as a hard grey band under the card.
 const SHADOW_PAD: f64 = 16.0;
+
+/// Space between the word (or cursor) and the card. It is wider than SHADOW_PAD so the window's
+/// transparent margin stops short of the word: a margin under the pointer takes its mouse events,
+/// which ends a Shift-scan glide and focuses the popup.
+const GAP: f64 = SHADOW_PAD + 4.0;
+
+/// How long a lookup may take before the popup opens on a loading state instead of the entry.
+const SHOW_WAIT: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// Used by the desktop pointer poll to avoid work while the popup is hidden.
 static POPOVER_VISIBLE: AtomicBool = AtomicBool::new(false);
@@ -86,6 +93,9 @@ pub enum ShowPayload {
     },
     Loaded {
         term: String,
+        /// The lookup's first result (a new word), as opposed to the same lookup's media
+        /// arriving later; the popup resets its navigation for a fresh one.
+        fresh: bool,
         /// All matched entries, longest match first (Yomitan-style: exact
         /// compound, then progressively shorter sub-terms).
         entries: Vec<Value>,
@@ -117,6 +127,48 @@ pub enum ShowPayload {
     },
 }
 
+/// A box in desktop coordinates (the matched word, from the page that asked for the lookup). The
+/// page also sends its width, which placement doesn't need.
+#[derive(Deserialize, Clone, Copy, Debug)]
+pub struct Anchor {
+    pub x: f64,
+    pub y: f64,
+    pub height: f64,
+}
+
+/// The card's top-left for a `width` × `height` card in the work area `(x, y, w, h)`: above the
+/// word with its left edges aligned, as Yomitan and Hachidori place theirs, or below it when there
+/// is no room above. Without a word box, it centres on the cursor.
+fn place_card(
+    anchor: Option<Anchor>,
+    cursor: (f64, f64),
+    width: f64,
+    height: f64,
+    work: (f64, f64, f64, f64),
+) -> (f64, f64) {
+    let (mon_x, mon_y, mon_w, mon_h) = work;
+    let (left, top, bottom) = match anchor {
+        Some(a) => (a.x, a.y, a.y + a.height),
+        None => (cursor.0 - width / 2.0, cursor.1, cursor.1),
+    };
+
+    let x = left.min(mon_x + mon_w - width - 8.0).max(mon_x + 8.0);
+
+    let space_above = top - mon_y;
+    let space_below = mon_y + mon_h - bottom;
+    let y = if space_above >= height + GAP + 8.0 {
+        top - height - GAP
+    } else if space_below >= height + GAP + 8.0 {
+        bottom + GAP
+    } else if space_above >= space_below {
+        mon_y + 8.0
+    } else {
+        mon_y + mon_h - height - 8.0
+    };
+    let y = y.min(mon_y + mon_h - height - 8.0).max(mon_y + 8.0);
+    (x, y)
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // Preserve Super Texthooker invoke payload compatibility.
 pub async fn show_popover(
@@ -135,7 +187,18 @@ pub async fn show_popover(
     anki_config: Option<Value>,
     kind: Option<String>,
     notebook_entry: Option<Value>,
+    anchor: Option<Anchor>,
 ) -> Result<(), String> {
+    let is_notebook = kind.as_deref() == Some("notebook");
+    // Start the lookup now: it usually lands while the window is being placed, and the popup then
+    // opens on the entry rather than flashing a loading state first.
+    let mut fields = (!is_notebook).then(|| {
+        let (base_url, term) = (base_url.clone(), term.clone());
+        tokio::spawn(async move {
+            crate::reader::yomitan::ankifields_value(&base_url, &term, false).await
+        })
+    });
+
     for _ in 0..100 {
         if READY.load(Ordering::SeqCst) {
             break;
@@ -146,6 +209,23 @@ pub async fn show_popover(
         return Err("Dictionary popup is still loading; retry shortly".into());
     }
     let gen = LOOKUP_GEN.fetch_add(1, Ordering::Relaxed) + 1;
+    // Wait for the lookup before moving the window, so the popup showing now stays put with its
+    // word until the next one is ready to replace it.
+    let mut first: Option<Result<Vec<Value>, String>> = None;
+    if let Some(handle) = fields.as_mut() {
+        first = tokio::time::timeout(SHOW_WAIT, handle)
+            .await
+            .ok()
+            .map(|joined| {
+                joined
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| r)
+                    .map(|v| extract_entries(&v))
+            });
+        if LOOKUP_GEN.load(Ordering::Relaxed) != gen {
+            return Ok(()); // a newer lookup took over while this one ran
+        }
+    }
     // Whole logical pixels, so the card's 1px ring lands on the pixel grid
     // instead of straddling two device pixels (which reads as a double line).
     let width = width.clamp(240., 1200.).round();
@@ -191,33 +271,13 @@ pub async fn show_popover(
         })
         .unwrap_or((0., 0., 1920., 1080.));
 
-    // Horizontal: center on cursor, clamp to the monitor it sits on.
-    let mut x = cursor_x - width / 2.0;
-    if x < mon_x + 8.0 {
-        x = mon_x + 8.0;
-    }
-    if x + width > mon_x + mon_w - 8.0 {
-        x = mon_x + mon_w - width - 8.0;
-    }
-
-    // Vertical: prefer above cursor; flip below if not enough room.
-    let space_above = cursor_y - mon_y;
-    let space_below = mon_y + mon_h - cursor_y;
-    let mut y = if space_above >= height + GAP + 8.0 {
-        cursor_y - height - GAP
-    } else if space_below >= height + GAP + 8.0 {
-        cursor_y + GAP
-    } else if space_above >= space_below {
-        mon_y + 8.0
-    } else {
-        mon_y + mon_h - height - 8.0
-    };
-    if y < mon_y + 8.0 {
-        y = mon_y + 8.0;
-    }
-    if y + height > mon_y + mon_h - 8.0 {
-        y = mon_y + mon_h - height - 8.0;
-    }
+    let (x, y) = place_card(
+        anchor,
+        (cursor_x, cursor_y),
+        width,
+        height,
+        (mon_x, mon_y, mon_w, mon_h),
+    );
 
     // (x, y) above target the CARD's top-left. Subtract SHADOW_PAD so the
     // window's transparent margin sits behind the card. Tauri converts logical
@@ -239,10 +299,39 @@ pub async fn show_popover(
         let _ = on_popup_main(&app, move |w| crate::platform::desktop_place(&w, rect)).await;
     }
 
-    let is_notebook = kind.as_deref() == Some("notebook");
+    let audio_autoplay_v = audio_autoplay.unwrap_or(true);
+    let audio_volume_v = audio_volume.unwrap_or(0.9);
+    let loaded = {
+        let (term, sentence, anki_config, base_url) = (
+            term.clone(),
+            sentence.clone(),
+            anki_config.clone(),
+            base_url.clone(),
+        );
+        move |fresh: bool, entries: Vec<Value>, audio_media, dictionary_media| ShowPayload::Loaded {
+            term: term.clone(),
+            fresh,
+            entries,
+            audio_media,
+            dictionary_media,
+            sentence: sentence.clone(),
+            audio_autoplay: audio_autoplay_v,
+            audio_volume: audio_volume_v,
+            anki_config: anki_config.clone(),
+            base_url: base_url.clone(),
+        }
+    };
+    let failed = {
+        let (term, sentence) = (term.clone(), sentence.clone());
+        move |message: String| ShowPayload::Error {
+            term: term.clone(),
+            message,
+            sentence: sentence.clone(),
+        }
+    };
 
-    // Emit the initial payload. For notebook, we emit the final payload now and
-    // skip the Yomitan fetch below. For everything else, emit Loading first.
+    // The initial payload. A notebook entry carries everything; a lookup that finished within
+    // SHOW_WAIT opens on its entry; a slower one opens on a loading state.
     if is_notebook {
         let entry = notebook_entry
             .clone()
@@ -254,14 +343,19 @@ pub async fn show_popover(
                 sentence: sentence.clone(),
             },
         );
-    } else {
-        let _ = app.emit(
-            "popover:show",
-            ShowPayload::Loading {
+    } else if fields.is_some() {
+        let payload = match &first {
+            Some(Ok(entries)) => loaded(true, entries.clone(), Vec::new(), Vec::new()),
+            Some(Err(err)) => failed(err.clone()),
+            None => ShowPayload::Loading {
                 term: term.clone(),
                 sentence: sentence.clone(),
             },
-        );
+        };
+        if LOOKUP_GEN.load(Ordering::Relaxed) != gen {
+            return Ok(());
+        }
+        let _ = app.emit("popover:show", payload);
     }
 
     on_popup_main(&app, move |window| {
@@ -277,68 +371,55 @@ pub async fn show_popover(
     })
     .await?;
 
-    if is_notebook {
+    let Some(handle) = fields else {
         // Notebook popovers carry all their data in the initial event.
         return Ok(());
-    }
+    };
 
-    // Spawn the lookup so it doesn't block the command. Two phases:
-    //   1. fields only (fast, ~50ms) → popover fills immediately
-    //   2. fields + media (audio downloads can take >1s cold) → re-emit with
+    // Two phases:
+    //   1. fields only (fast, ~20ms), usually already shown above
+    //   2. fields + media (audio downloads can take seconds) → re-emit with
     //      audio/dictionary media attached; the frontend reconciles in place.
     let app2 = app.clone();
     let term2 = term.clone();
-    let sentence2 = sentence.clone();
     let fetch_media = include_media.unwrap_or(false);
-    let audio_autoplay_v = audio_autoplay.unwrap_or(true);
-    let audio_volume_v = audio_volume.unwrap_or(0.9);
-    let anki_config_v = anki_config.clone();
-    let base_url_v = base_url.clone();
     tauri::async_runtime::spawn(async move {
         let is_current = || LOOKUP_GEN.load(Ordering::Relaxed) == gen;
 
-        let entries = match crate::reader::yomitan::ankifields_value(&base_url, &term2, false).await
-        {
-            Ok(v) => extract_entries(&v),
-            Err(err) => {
-                if is_current() {
-                    let _ = app2.emit(
-                        "popover:show",
-                        ShowPayload::Error {
-                            term: term2,
-                            message: err,
-                            sentence: sentence2,
-                        },
-                    );
+        let entries = match first {
+            Some(Ok(entries)) => entries,
+            Some(Err(_)) => return,
+            None => {
+                let result = handle
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| r)
+                    .map(|v| extract_entries(&v));
+                if !is_current() {
+                    return;
                 }
-                return;
+                match result {
+                    Ok(entries) => {
+                        let _ = app2.emit(
+                            "popover:show",
+                            loaded(true, entries.clone(), Vec::new(), Vec::new()),
+                        );
+                        entries
+                    }
+                    Err(err) => {
+                        let _ = app2.emit("popover:show", failed(err));
+                        return;
+                    }
+                }
             }
         };
-        if !is_current() {
-            return;
-        }
-        let _ = app2.emit(
-            "popover:show",
-            ShowPayload::Loaded {
-                term: term2.clone(),
-                entries: entries.clone(),
-                audio_media: Vec::new(),
-                dictionary_media: Vec::new(),
-                sentence: sentence2.clone(),
-                audio_autoplay: audio_autoplay_v,
-                audio_volume: audio_volume_v,
-                anki_config: anki_config_v.clone(),
-                base_url: base_url_v.clone(),
-            },
-        );
 
         if !fetch_media || entries.is_empty() {
             return;
         }
-        // Phase 2 is heavy (audio downloads can take >1s and tie up the local
-        // Yomitan host). Wait for the cursor to settle on this term before
-        // starting it, so scan-mode glides over many words don't queue a
-        // backlog of media fetches the user already moved past.
+        // Phase 2 is heavy. Wait for the cursor to settle on this term before
+        // starting it, so scan-mode glides over many words don't start media
+        // fetches the user already moved past.
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         if !is_current() {
             return;
@@ -351,17 +432,12 @@ pub async fn show_popover(
             }
             let _ = app2.emit(
                 "popover:show",
-                ShowPayload::Loaded {
-                    term: term2,
-                    entries: extract_entries(&v),
-                    audio_media: extract_media(&v, "audioMedia"),
-                    dictionary_media: extract_media(&v, "dictionaryMedia"),
-                    sentence: sentence2,
-                    audio_autoplay: audio_autoplay_v,
-                    audio_volume: audio_volume_v,
-                    anki_config: anki_config_v,
-                    base_url: base_url_v,
-                },
+                loaded(
+                    false,
+                    extract_entries(&v),
+                    extract_media(&v, "audioMedia"),
+                    extract_media(&v, "dictionaryMedia"),
+                ),
             );
         }
     });
@@ -475,6 +551,7 @@ pub async fn smoke(app: AppHandle) -> Result<(), String> {
             None,
             Some("notebook".into()),
             Some(entry.clone()),
+            None,
         )
         .await?;
         reader_popup_focus(app.clone()).await?;
@@ -506,4 +583,49 @@ pub async fn smoke(app: AppHandle) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WORK: (f64, f64, f64, f64) = (0., 25., 1440., 875.);
+
+    fn word(x: f64, y: f64) -> Option<Anchor> {
+        Some(Anchor { x, y, height: 30. })
+    }
+
+    #[test]
+    fn sits_above_the_word_with_left_edges_aligned() {
+        let (x, y) = place_card(word(300., 600.), (340., 615.), 400., 300., WORK);
+        assert_eq!(x, 300.);
+        assert_eq!(y, 600. - GAP - 300.);
+    }
+
+    #[test]
+    fn its_window_margin_stays_off_the_word() {
+        let (_, y) = place_card(word(300., 600.), (340., 615.), 400., 300., WORK);
+        assert!(y + 300. + SHADOW_PAD < 600.);
+        let (_, y) = place_card(word(300., 100.), (340., 115.), 400., 300., WORK);
+        assert!(y - SHADOW_PAD > 130.);
+    }
+
+    #[test]
+    fn flips_below_when_there_is_no_room_above() {
+        let (_, y) = place_card(word(300., 100.), (340., 115.), 400., 300., WORK);
+        assert_eq!(y, 130. + GAP);
+    }
+
+    #[test]
+    fn stays_on_screen_at_the_right_edge() {
+        let (x, _) = place_card(word(1400., 600.), (1410., 615.), 400., 300., WORK);
+        assert_eq!(x, 1440. - 400. - 8.);
+    }
+
+    #[test]
+    fn without_a_word_centres_on_the_cursor() {
+        let (x, y) = place_card(None, (700., 600.), 400., 300., WORK);
+        assert_eq!(x, 500.);
+        assert_eq!(y, 600. - GAP - 300.);
+    }
 }

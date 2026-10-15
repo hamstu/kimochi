@@ -187,6 +187,14 @@ function HelperStep({
               ? 'Nothing more to install.'
               : 'Kimochi uses it as it is: there is nothing to replace.'}
           </p>
+          {host.method === 'kimochi' && (
+            <p className="yomitan-setup-aside">
+              Reinstalling fetches its latest version; restart your browser afterwards so it runs.{' '}
+              <button type="button" className="k-link" disabled={install.state === 'installing'} onClick={onInstall}>
+                Reinstall
+              </button>
+            </p>
+          )}
           {host.method !== 'kimochi' && (
             <p className="yomitan-setup-aside">
               Kimochi&apos;s helper is a single program with no Python to keep installed. Installing
