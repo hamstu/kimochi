@@ -47,8 +47,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - A notebook entry's header shows its picture in a portrait box beside the name, over a dotted
   band tinted by the entry's kind, instead of stretching it across the top. Small pictures stay
   sharp and portraits keep their heads.
-- Hovering the source card no longer outlines the window in blue: it shows the window's last
-  picture where the window is, blurred while a fresh one is taken, then sharp.
+- Hovering the source card shows the window's last picture inside its blue outline blurred
+  while a fresh one is taken, then sharp, rather than an out-of-date picture as if it were live.
 - Coming back from Settings, the source card shows its last picture at once instead of waiting
   for a new one.
 - The dictionary pop-ups follow Kimochi's Appearance setting (Settings → General) rather than the

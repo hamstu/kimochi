@@ -3,8 +3,8 @@
  * Showing the user what is about to be scanned.
  *
  * A port of src/renderer/src/components/SourceHoverOverlay.tsx: hovering the
- * controller's source button shows the captured window's picture where the window
- * is, and hovering Select Region outlines the saved crop in green. Both are passive markings —
+ * controller's source button outlines the captured window in blue over its
+ * picture, and hovering Select Region outlines the saved crop in green. Both are passive markings —
  * never interactive, never part of the click-through hit regions — so they can
  * sit over the source without getting in the way.
  *
