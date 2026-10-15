@@ -665,6 +665,17 @@
   flex-direction: column;
   gap: var(--k-space-2);
 }
+/* Game Mode is throttling the overlay: a small warning under the overlay switch. */
+.src-notice {
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.src-notice-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+}
 .src-scan {
   width: 100%;
   height: var(--k-row-h);

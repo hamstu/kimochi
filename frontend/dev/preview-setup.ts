@@ -47,6 +47,7 @@
  *   ?accessibility=denied  macOS Accessibility not granted yet (default: granted; `none` for
  *                          a platform without it)
  *   ?fullscreen=1       the chosen window is a full-screen app
+ *   ?gamemode=1         macOS Game Mode is throttling the overlay (its notice under Show overlay)
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
  *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
@@ -109,6 +110,8 @@ function demoCapture(): unknown {
 
 const settings: Record<string, unknown> = {
   ...structuredClone(SETTINGS_DEFAULTS),
+  // The Game Mode notice shows under an overlay that is on.
+  ...(params.get('gamemode') === '1' ? { liveOverlayEnabled: true } : {}),
   superTexthooker: {
     inputSource: params.get('input') ?? 'ocr',
     deeplApiKey: 'preview-demo-key',
@@ -242,6 +245,7 @@ function viewState(label: string): Record<string, unknown> {
     logs: [],
     regions: {},
     sourceFocus: { focused: true, present: true, held: false },
+    overlayThrottled: params.get('gamemode') === '1',
     origin: CURRENT_SOURCE.bounds,
     interactive: false,
     dictionary: false,

@@ -509,6 +509,10 @@ pub struct View {
     pub overlay_visible: bool,
     pub text_overlay_visible: bool,
     pub debug_overlay_visible: bool,
+    /// The overlay measured itself being redrawn about ten times a second while a full-screen
+    /// app was in front: macOS Game Mode throttles every other app's display updates. The main
+    /// window says so beside Show overlay.
+    pub overlay_throttled: bool,
     /// Raw frontmost application name, unfiltered. Consumers apply their own rules
     /// (Kimochi's own windows are neutral; unknown focus must not hide text).
     pub frontmost_app: Option<String>,

@@ -388,6 +388,45 @@ setInterval(() => {
 }, 500)
 
 /**
+ * Whether macOS is throttling this page: Game Mode, while a full-screen game is in front, lets
+ * every other app's display updates (and so WebKit's rendering) run about ten times a second.
+ * Nothing an app can set exempts it, and macOS publishes no Game Mode state, so it is measured:
+ * the animation frames this page gets in half a second, checked every few seconds while the
+ * chosen window is a full-screen app in front. The main window shows a notice while it holds.
+ */
+let overlayThrottled = false
+function animationFrameRate(ms) {
+  return new Promise((resolve) => {
+    let count = 0
+    const start = performance.now()
+    const tick = (now) => {
+      count++
+      if (now - start < ms) requestAnimationFrame(tick)
+      else resolve((count * 1000) / (now - start))
+    }
+    requestAnimationFrame(tick)
+    // A page that gets no frames at all is throttled too.
+    setTimeout(() => resolve((count * 1000) / ms), ms * 3)
+  })
+}
+async function checkThrottled() {
+  if (window.__KIMOCHI_PLATFORM__?.os !== 'macos') return
+  let next = overlayThrottled
+  if (!state.sourceWindow?.fullscreen) next = false
+  else if (state.sourceFocus?.focused) {
+    const rate = await animationFrameRate(500)
+    // Throttled pages get about 10; anything near the display's rate is not.
+    if (rate <= 20) next = true
+    else if (rate >= 40) next = false
+  }
+  if (next === overlayThrottled) return
+  overlayThrottled = next
+  log({ check: 'overlay-throttled', throttled: next })
+  void native.setViewFlags({ overlayThrottled: next }).catch(() => undefined)
+}
+setInterval(() => void checkThrottled(), 4000)
+
+/**
  * Automatic OCR stands still while the controller menu is open or the reader is stepping
  * through words: nothing is captured, nothing new is drawn under the cursor, and a recognition
  * already out is set aside rather than applied. Leaving controller mode picks it straight back

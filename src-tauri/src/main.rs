@@ -631,6 +631,7 @@ fn snapshot_value(service: &Service) -> Value {
         "overlayVisible": v.overlay_visible,
         "textOverlayVisible": v.text_overlay_visible,
         "debugOverlayVisible": v.debug_overlay_visible,
+        "overlayThrottled": v.overlay_throttled,
         // Raw and unfiltered: consumers decide what our own windows mean.
         "frontmostApp": v.frontmost_app,
         "action": v.last_action.as_ref().map(|name| json!({"name": name, "seq": v.action_seq})),
@@ -745,6 +746,7 @@ fn view_flags(state: State<Shared>, flags: HashMap<String, bool>) {
             "textOverlayVisible" => v.text_overlay_visible = value,
             "debugOverlayVisible" => v.debug_overlay_visible = value,
             "overlayVisible" => v.overlay_visible = value,
+            "overlayThrottled" => v.overlay_throttled = value,
             _ => {}
         }
     }
@@ -3157,7 +3159,7 @@ fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
             let fingerprint = {
                 let v = service.view.lock().unwrap();
                 format!(
-                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}",
+                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}|{}",
                     v.revision,
                     v.action_seq,
                     v.scanning,
@@ -3170,6 +3172,7 @@ fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
                     v.logs.len(),
                     (&v.status, &v.frontmost_app),
                     v.source_focus,
+                    v.overlay_throttled,
                 )
             };
             if fingerprint == previous {

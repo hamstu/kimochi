@@ -38,6 +38,7 @@ import {
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
 import {
   Button,
+  Callout,
   Menu,
   MenuContent,
   MenuItem,
@@ -71,11 +72,15 @@ import { GnomeWindowLink } from './GnomeWindowLink'
 import { GamingApplicationProfile } from './GamingApplicationProfile'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
 import type { ControllerWiring } from '../panels/useController'
+import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { keepShape } from '@ui/preview-shape'
 
 type Controller = ControllerWiring['props']
 /** The texthooker's inputs, with OCR split into a chosen window or screen and Quick Shot. */
 type Mode = InputSource | 'quickshot'
+
+/** Apple's guide to Game Mode, which says how to turn it off. */
+const GAME_MODE_HELP = 'https://support.apple.com/en-us/105118'
 
 /** How often the live preview asks for a new frame, and how soon it retries after `busy:`. */
 const REFRESH_MS = 2500
@@ -715,6 +720,25 @@ export function SourcePanel({
     </Button>
   )
 
+  // Game Mode throttles the overlay only over a full-screen game, and only on macOS; the overlay
+  // measures it, and the notice is held to that case here too.
+  const gameModeNotice =
+    capabilities.os === 'macos' && fullScreen && overlayOn && state.overlayThrottled ? (
+      <Callout tone="warn" className="src-notice">
+        <span>
+          <strong>Game Mode is on.</strong> The overlay will be throttled by macOS until you turn it
+          off.
+        </span>
+        <button
+          type="button"
+          className="k-link src-notice-link"
+          onClick={() => void openUrl(GAME_MODE_HELP).catch(() => undefined)}
+        >
+          How to turn off Game Mode
+        </button>
+      </Callout>
+    ) : null
+
   const overlayUnavailable = capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
   const overlayRow = (
     <button
@@ -766,6 +790,7 @@ export function SourcePanel({
             </button>
             {overlayRow}
           </div>
+          {gameModeNotice}
         </div>
       )}
 
@@ -776,6 +801,7 @@ export function SourcePanel({
         <div className="src-controls">
           {scanButton}
           <div className="src-rows">{overlayRow}</div>
+          {gameModeNotice}
         </div>
       )}
     </div>

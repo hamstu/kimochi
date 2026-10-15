@@ -47,6 +47,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- On macOS, when Game Mode is slowing the overlay over a full-screen game, the sidebar says so
+  under Show overlay, with a link to Apple's guide to turning it off. Game Mode lets the
+  game's window refresh at full speed and every other app's about ten times a second.
 - Full-screen apps are recognised: a game in full screen on macOS, or a borderless full-screen
   window. The source card says "Full screen", hovering it no longer covers your screen with a
   preview, and clicking it takes you to the game's Space or desktop.

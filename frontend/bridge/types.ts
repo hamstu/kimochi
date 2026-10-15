@@ -169,6 +169,8 @@ export interface ViewState {
   overlayVisible?: boolean
   textOverlayVisible?: boolean
   debugOverlayVisible?: boolean
+  /** macOS is throttling the overlay's drawing (Game Mode, with a full-screen game in front). */
+  overlayThrottled?: boolean
   permission?: 'granted' | 'denied' | 'unknown'
   /** Raw and unfiltered; consumers decide what Kimochi's own windows mean. */
   frontmostApp?: string | null
