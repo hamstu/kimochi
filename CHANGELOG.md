@@ -44,6 +44,13 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- A notebook entry's header shows its picture in a portrait box beside the name, over a dotted
+  band tinted by the entry's kind, instead of stretching it across the top. Small pictures stay
+  sharp and portraits keep their heads.
+- Hovering the source card no longer outlines the window in blue: it shows the window's last
+  picture where the window is, blurred while a fresh one is taken, then sharp.
+- Coming back from Settings, the source card shows its last picture at once instead of waiting
+  for a new one.
 - The dictionary pop-ups follow Kimochi's Appearance setting (Settings → General) rather than the
   system's, so a dark Kimochi on a light Mac gets dark pop-ups. This includes Yomitan over the
   overlay, which used to always come up light. A pop-up theme set in a dictionary's own settings

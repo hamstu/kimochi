@@ -117,9 +117,11 @@ test('a later hover shows the last picture at once, then the fresh one, releasin
   clock = 5000
   const second = preview.start()
   assert.equal(preview.url, 'blob:1', 'the stale picture shows while the new capture runs')
+  assert.equal(preview.fresh, false, 'the stale picture is drawn blurred')
   calls[1].resolve({ key: 'win-1', url: 'blob:2' })
   await second
   assert.equal(preview.url, 'blob:2')
+  assert.equal(preview.fresh, true)
   assert.deepEqual(released, ['blob:1'])
   assert.ok(!seen.includes(null) || seen.lastIndexOf(null) < seen.indexOf('blob:1', 1))
 })

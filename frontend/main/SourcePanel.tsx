@@ -140,6 +140,12 @@ interface Frame {
 }
 
 /**
+ * The last frame of each source, kept for the life of the window: going to Settings and back
+ * remounts the card, which then starts from this picture instead of an empty, shimmering well.
+ */
+const lastFrames = new Map<string, { url: string; size: { width: number; height: number } }>()
+
+/**
  * The chosen source, refreshed every few seconds while the window is visible. Each new frame is
  * stacked over the last and faded in; the old one goes once the fade ends. A failed or busy capture
  * keeps the last frame, so the card never flashes empty.
@@ -152,9 +158,14 @@ function useLiveFrames(
   size: { width: number; height: number } | null
   onLoad: (id: number) => void
 } {
-  const [frames, setFrames] = useState<Frame[]>([])
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null)
-  const next = useRef(0)
+  const [frames, setFrames] = useState<Frame[]>(() => {
+    const last = lastFrames.get(sourceId)
+    return last ? [{ id: 0, url: last.url, ready: true }] : []
+  })
+  const [size, setSize] = useState<{ width: number; height: number } | null>(
+    () => lastFrames.get(sourceId)?.size ?? null
+  )
+  const next = useRef(1)
   const staleRef = useRef(onStale)
   useEffect(() => {
     staleRef.current = onStale
@@ -177,7 +188,11 @@ function useLiveFrames(
         if (!alive) return
         staleRef.current?.(null)
         if (frame.url) {
-          setSize((current) => keepShape(current, frame))
+          setSize((current) => {
+            const shape = keepShape(current, frame)
+            lastFrames.set(sourceId, { url: frame.url, size: shape })
+            return shape
+          })
           setFrames((current) => [
             ...current.slice(-1),
             { id: next.current++, url: frame.url, ready: false }

@@ -206,13 +206,13 @@
       box-sizing: border-box;
       pointer-events: none;
     }
+    /* The window's box: no colour of its own, only a hairline and a lift, so the picture
+       inside it is the marking. */
     .hover-window {
-      border: 3px solid #3b82f6;
-      background: rgba(59, 130, 246, 0.06);
+      border: 3px solid transparent;
       box-shadow:
-        0 0 20px rgba(59, 130, 246, 0.5),
-        0 0 40px rgba(59, 130, 246, 0.25),
-        inset 0 0 30px rgba(59, 130, 246, 0.1);
+        inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+        0 10px 40px rgba(0, 0, 0, 0.35);
     }
     /* The hovered window's own pixels, at its exact on-screen box (beneath the
        outline, whose border sits just outside it). Fades in once decoded. */
@@ -225,10 +225,18 @@
       pointer-events: none;
       user-select: none;
       opacity: 0;
-      transition: opacity 0.18s ease-out;
+      /* The blur stays inside the window's box rather than feathering past it. */
+      clip-path: inset(0 round 5px);
+      transition:
+        opacity 0.35s ease-out,
+        filter 0.45s ease-out;
     }
     #hover > .hover-window-image.loaded {
       opacity: 1;
+    }
+    /* The last picture, while a fresh one is captured: it may be out of date, so blurred. */
+    #hover > .hover-window-image.stale {
+      filter: blur(14px) saturate(0.85);
     }
     /* Bringing the window to the front: the markings zoom, blur and fade about the
        window's centre (each element is placed at the window's box). */

@@ -1,83 +1,115 @@
-/* Notebook entry hero: shared by the reader popover card and the Notebook editor pane. */
+/* Notebook entry hero: shared by the reader popover card and the Notebook editor pane. A portrait
+   box at the left, the name beside it, over a band tinted by the entry's kind. */
 .nb-hero {
+  /* The kind's colour; the band, the dots and the empty portrait are drawn from it. */
+  --nb-tone-2: var(--accent-a2);
+  --nb-tone-3: var(--accent-a3);
+  --nb-tone-5: var(--accent-a5);
+  --nb-tone-7: var(--accent-a7);
+  --nb-tone-11: var(--accent-a11);
   position: relative;
+  isolation: isolate;
   display: flex;
   flex: none;
-  flex-direction: column;
-  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 1em;
   /* em-based off its font size, so the popover card can scale it with the Log's text size. */
   font-size: var(--k-text-md);
-  height: 6.75em;
   overflow: hidden;
-  padding: 0.92em 1.23em;
-  background: var(--gray-a3);
+  padding: 1em 1.23em;
+  background:
+    linear-gradient(135deg, var(--nb-tone-5), var(--nb-tone-2) 55%, transparent 100%),
+    var(--k-raised);
+  border-bottom: 1px solid var(--k-line);
   color: var(--k-text);
 }
-.nb-hero[data-kind="person"]:not([data-image]) {
-  background: var(--k-accent-soft);
+.nb-hero[data-kind="place"] {
+  --nb-tone-2: var(--teal-a2);
+  --nb-tone-3: var(--teal-a3);
+  --nb-tone-5: var(--teal-a5);
+  --nb-tone-7: var(--teal-a7);
+  --nb-tone-11: var(--teal-a11);
+}
+.nb-hero[data-kind="thing"] {
+  --nb-tone-2: var(--amber-a2);
+  --nb-tone-3: var(--amber-a3);
+  --nb-tone-5: var(--amber-a5);
+  --nb-tone-7: var(--amber-a7);
+  --nb-tone-11: var(--amber-a11);
+}
+/* A dot grid in the kind's colour, strongest behind the portrait and fading to the right. */
+.nb-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(circle, var(--nb-tone-7) 0.8px, transparent 1.2px) 0 0 / 8px 8px;
+  -webkit-mask-image: linear-gradient(100deg, black 10%, transparent 75%);
+  mask-image: linear-gradient(100deg, black 10%, transparent 75%);
+  pointer-events: none;
 }
 .notebook-card .nb-hero { font-size: 1em; }
-.nb-hero[data-size="editor"] { height: 8em; }
-/* The popover's picture hero is near-square, so a portrait's face fits; the editor's keeps a
-   fixed height to leave room for the form. */
-.nb-hero[data-image] { height: auto; aspect-ratio: 5 / 4; color: white; background: #0b0c10; }
-.nb-hero[data-image][data-size="editor"] { height: 16em; aspect-ratio: auto; }
 
+/* The portrait: a fixed box the picture is fitted into, kept toward its top so a head stays in. */
+.nb-hero-portrait {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 4.6em;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: var(--k-radius-lg);
+  /* Opaque, so the band's dots do not show through an empty portrait. */
+  background: linear-gradient(var(--nb-tone-3), var(--nb-tone-3)), var(--k-raised);
+  box-shadow:
+    0 0 0 1px var(--nb-tone-5),
+    0 1px 2px rgb(0 0 0 / 0.14),
+    0 6px 16px -6px rgb(0 0 0 / 0.35);
+}
+.nb-hero[data-size="editor"] .nb-hero-portrait { width: 6.25em; }
 .nb-hero-image {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: 50% 22%;
 }
-/* Scrim for the name: dark at the base, clear above the lower third. */
-.nb-hero[data-image]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    rgb(8 9 14 / 0.78) 0%,
-    rgb(8 9 14 / 0.42) 30%,
-    rgb(8 9 14 / 0) 58%
-  );
-  pointer-events: none;
-}
-/* Without a picture: a large, faint monogram (characters) or kind icon at the right. */
+/* Without a picture: a monogram (characters) or the kind's icon, in the kind's colour. */
 .nb-hero-mark {
-  position: absolute;
-  bottom: -0.08em;
-  right: 0.9em;
   display: grid;
   place-items: center;
   font-family: var(--k-font-jp);
-  font-size: 5.5em;
+  font-size: 2.1em;
   font-weight: var(--k-weight-semibold);
   line-height: 1;
-  color: var(--accent-a4);
-  pointer-events: none;
+  color: var(--nb-tone-11);
   -webkit-user-select: none;
   user-select: none;
 }
-.nb-hero:not([data-kind="person"]) .nb-hero-mark { color: var(--gray-a5); }
-.nb-hero-mark svg { width: 0.62em; height: 0.62em; margin-bottom: 0.14em; stroke-width: 1.5; }
+.nb-hero[data-size="editor"] .nb-hero-mark { font-size: 2.8em; }
+.nb-hero-mark svg { width: 0.75em; height: 0.75em; stroke-width: 1.6; }
 
 .nb-hero-text {
   position: relative;
-  z-index: 1;
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.15em;
   min-width: 0;
-  padding-right: 6em;
+  padding-bottom: 0.1em;
 }
-.nb-hero[data-image] .nb-hero-text { padding-right: 0; }
+/* Room under the top-right controls: the name sits at the base, the controls at the top. */
+.nb-hero[data-actions] { padding-top: 2.6em; }
 .nb-hero-name {
   margin: 0;
+  /* A long name wraps once beside the portrait before it is cut short. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-family: var(--k-font-jp);
   font-size: 1.85em;
   line-height: 1.25;
@@ -86,7 +118,6 @@
   -webkit-user-select: text;
   user-select: text;
 }
-.nb-hero[data-image] .nb-hero-name { text-shadow: 0 1px 12px rgb(0 0 0 / 0.35); }
 .nb-hero-sub {
   margin: 0;
   overflow: hidden;
@@ -97,7 +128,6 @@
   color: var(--k-text-2);
 }
 .nb-hero-sub [lang="ja"] { font-family: var(--k-font-jp); }
-.nb-hero[data-image] .nb-hero-sub { color: rgb(255 255 255 / 0.82); }
 
 .nb-hero-actions {
   position: absolute;
@@ -106,13 +136,4 @@
   z-index: 2;
   display: flex;
   gap: var(--k-space-1);
-}
-/* Controls over a picture get a solid dark chip so they read on any image. */
-.nb-hero[data-image] .nb-hero-actions .k-button {
-  color: white;
-  background: rgb(8 9 14 / 0.5);
-}
-.nb-hero[data-image] .nb-hero-actions .k-button:hover,
-.nb-hero[data-image] .nb-hero-actions .k-button[data-native-hover] {
-  background: rgb(8 9 14 / 0.72);
 }

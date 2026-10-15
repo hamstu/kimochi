@@ -3,8 +3,8 @@
  * Showing the user what is about to be scanned.
  *
  * A port of src/renderer/src/components/SourceHoverOverlay.tsx: hovering the
- * controller's source button outlines the captured window in blue, and hovering
- * Select Region outlines the saved crop in green. Both are passive markings —
+ * controller's source button shows the captured window's picture where the window
+ * is, and hovering Select Region outlines the saved crop in green. Both are passive markings —
  * never interactive, never part of the click-through hit regions — so they can
  * sit over the source without getting in the way.
  *
@@ -29,8 +29,9 @@ export const HOVER_PREVIEW_REUSE_MS = 2000
  * reject; either way the outline is unaffected — no picture is the fallback.
  *
  * The last picture of each source is kept: `capture` calls `show(key)` as soon
- * as it knows the source, so the outline gets the last picture at once and the
- * new one replaces it when it lands, instead of waiting through every capture.
+ * as it knows the source, so the last picture shows at once, marked not `fresh`
+ * (drawn blurred: it may be out of date), and the new one replaces it when it
+ * lands, instead of waiting through every capture.
  * A url that is replaced is handed to `release` (an object url to revoke).
  */
 export class HoverPreview {
@@ -48,6 +49,7 @@ export class HoverPreview {
     this.reuseMs = reuseMs
     this.generation = 0
     this.url = null
+    this.fresh = true
     this.cached = null
   }
 
@@ -63,7 +65,7 @@ export class HoverPreview {
             : null,
         show: (key) => {
           if (generation === this.generation && this.cached?.key === key) {
-            this.setUrl(this.cached.url)
+            this.setUrl(this.cached.url, false)
           }
         }
       })
@@ -87,9 +89,10 @@ export class HoverPreview {
     this.setUrl(null)
   }
 
-  setUrl(url) {
-    if (this.url === url) return
+  setUrl(url, fresh = true) {
+    if (this.url === url && this.fresh === fresh) return
     this.url = url
+    this.fresh = fresh
     this.onChange?.()
   }
 }
@@ -141,11 +144,13 @@ export class HoverOverlay {
 
   /**
    * @param {{visible: boolean, showWindowOutline: boolean, showCropRegion: boolean,
-   *          windowImage?: string|null, bounds: object|null, crop: object|null,
+   *          windowImage?: string|null, windowImageStale?: boolean,
+   *          bounds: object|null, crop: object|null,
    *          origin: object|null}} view
    */
   update(view) {
-    const { visible, showWindowOutline, showCropRegion, windowImage, bounds, crop, origin } = view
+    const { visible, showWindowOutline, showCropRegion, windowImage, windowImageStale, bounds, crop, origin } =
+      view
     if (!visible || !bounds || !origin) {
       this.clear()
       return
@@ -155,7 +160,7 @@ export class HoverOverlay {
     const top = bounds.y - origin.y
 
     const outlined = showWindowOutline && bounds.width > 0 && bounds.height > 0
-    this.updateWindowImage(outlined ? windowImage : null, left, top, bounds)
+    this.updateWindowImage(outlined ? windowImage : null, left, top, bounds, Boolean(windowImageStale))
 
     if (outlined) {
       this.windowOutline ??= this.element('hover-window')
@@ -188,8 +193,11 @@ export class HoverOverlay {
    * scale, Windows DPI scale), so drawing it at the window's bounds in desktop
    * points — the same box the outline surrounds — maps it 1:1 onto the screen. It sits beneath the outline
    * (inserted first) and fades in only once decoded, so the outline never waits.
+   *
+   * A `stale` picture (the last one, while a fresh capture is on its way) is drawn blurred; the
+   * fresh one fades in sharp over it, or, being the same picture, loses its blur in place.
    */
-  updateWindowImage(url, left, top, bounds) {
+  updateWindowImage(url, left, top, bounds, stale = false) {
     if (!url) {
       this.windowImage?.remove()
       for (const element of this.container.querySelectorAll('.hover-window-image.leaving')) {
@@ -215,7 +223,8 @@ export class HoverOverlay {
           // A replaced or removed image may still finish loading; ignore it.
           if (this.windowImage !== image) return
           image.classList.add('loaded')
-          setTimeout(() => previous?.remove(), 200)
+          // Under the new one until its fade (0.35s, overlay.html) is done.
+          setTimeout(() => previous?.remove(), 400)
         },
         { once: true }
       )
@@ -224,6 +233,7 @@ export class HoverOverlay {
       else this.container.prepend(image)
       this.windowImage = image
     }
+    this.windowImage.classList.toggle('stale', stale)
     for (const image of this.container.querySelectorAll('.hover-window-image')) {
       Object.assign(image.style, {
         left: `${left}px`,

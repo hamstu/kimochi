@@ -483,6 +483,7 @@ function drawHover() {
     showWindowOutline: state.hover.source && state.hover.isWindow,
     showCropRegion: state.hover.selectRegion,
     windowImage: state.hover.source && state.hover.isWindow ? hoverPreview.url : null,
+    windowImageStale: !hoverPreview.fresh,
     bounds: state.sourceBounds,
     crop: state.crop,
     origin: state.origin
