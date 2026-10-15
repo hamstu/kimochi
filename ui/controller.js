@@ -64,6 +64,8 @@ export function scrollSpeed(y) {
  *   on a range (Yomitan's frontend, or the extension host's `lookupRange`)
  * @param {(term: string, x: number, y: number, sentence: string) => Promise<void>} context.lookupTerm open the Yomitan API pop-up
  * @param {(text: string) => Promise<unknown>} context.apiParse the Yomitan API's `/tokenize` (its parse results)
+ * @param {() => ({startContainer: Node, startOffset: number, endContainer: Node, endOffset: number}|null)} [context.matchedRange]
+ *   the text the open popup's lookup matched, where an extension engine marks it
  * @param {() => void} context.dismiss close whichever popup is open
  * @param {(element: HTMLElement) => ({x: number, y: number, width: number, height: number, line: number}|null)[]|null} context.charRects
  *   where each character of a word-mode box is on the source, by code unit; null in grouped mode
@@ -716,12 +718,45 @@ export function createController(context) {
         );
       } else {
         await context.lookupRange(ahead ?? range);
+        void fitToMatch(word);
       }
     } catch (error) {
       context.log({
         check: "controller-lookup-failed",
         error: String(error?.message ?? error),
       });
+    }
+  }
+
+  /**
+   * Fit the outline to what the dictionary matched. Hachidori and 10ten mark the match on the page
+   * (`context.matchedRange`); when it starts where the word does and is a different length (the
+   * fallback split is a guess: 剣でも for 剣), the word becomes the match. Waits for the popup a
+   * little, since the lookup resolves before the engine has drawn it.
+   */
+  async function fitToMatch(word) {
+    if (!context.matchedRange) return;
+    const unit = cursor.units[word.unit];
+    for (let tries = 0; tries < 20; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (cursor?.current !== word) return; // moved on
+      const match = context.matchedRange();
+      if (!match) continue;
+      if (match.startContainer !== unit.node || match.startOffset !== word.start) return;
+      // The match's length in this unit's text and the units it runs on into.
+      let length = 0;
+      for (let index = word.unit; index < cursor.units.length; index++) {
+        const node = cursor.units[index].node;
+        const from = index === word.unit ? word.start : 0;
+        if (node === match.endContainer) {
+          length += match.endOffset - from;
+          if (cursor.fit(length)) render();
+          context.log({ check: "controller-fit-match", length });
+          return;
+        }
+        length += node.length - from;
+      }
+      return;
     }
   }
 

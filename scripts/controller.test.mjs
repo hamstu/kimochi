@@ -338,6 +338,27 @@ test('a word OCR split across two boxes is one stop, starting in the first', asy
   )
 })
 
+test('fitting a word to a shorter match makes the rest the next stop', () => {
+  const cursor = new WordCursor([unit('刀|剣でも|買う')])
+  cursor.step(1)
+  assert.equal(cursor.fit(1), true) // the dictionary matched 剣
+  assert.equal(cursor.current.text, '剣')
+  const seen = []
+  while (cursor.step(1)) seen.push(cursor.current.text)
+  assert.deepEqual(seen, ['でも', '買う'])
+})
+
+test('fitting a word to a longer match drops the stops it covers, into the next box too', () => {
+  const cursor = new WordCursor([unit('思い|返'), unit('せば|今')])
+  assert.equal(cursor.fit(5), true) // 思い返せば
+  assert.equal(cursor.current.end, 5)
+  const seen = []
+  while (cursor.step(1)) seen.push(cursor.current.text)
+  assert.deepEqual(seen, ['今'])
+  // A match the same length as the word changes nothing.
+  assert.equal(cursor.fit(1), false)
+})
+
 // --- menu ----------------------------------------------------------------------
 
 test('the stick points at items clockwise from the top', () => {

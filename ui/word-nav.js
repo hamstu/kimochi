@@ -279,6 +279,52 @@ export class WordCursor {
   }
 
   /**
+   * Make the current word `length` characters long: what the dictionary actually matched there,
+   * when that differs from the split (剣でも matched as 剣; 思い matched as 思い返せば). Words it now
+   * covers stop being stops; what it gives up becomes one, so stepping on lands there. A word may
+   * run on into the following units, as a split one does.
+   */
+  fit(length) {
+    const word = this.current
+    if (!word || length <= 0 || word.start + length === word.end) return false
+    const unitText = this.units[word.unit].text
+    const end = word.start + length
+    const removed = new Set()
+    if (end > word.end) {
+      // Grown: drop the stops it now covers, in its unit and the ones it runs on into.
+      this.words.forEach((other, index) => {
+        if (other === word) return
+        let offset = 0
+        for (let unit = word.unit; unit < other.unit; unit++) offset += this.units[unit].text.length
+        const at = other.start + offset
+        if (index > this.index && at < end) removed.add(index)
+      })
+    }
+    const remainder =
+      end < word.end && word.end <= unitText.length ? unitText.slice(end, word.end) : ''
+    word.end = end
+    word.text = unitText.slice(word.start, Math.min(end, unitText.length))
+    const words = this.words.filter((_, index) => !removed.has(index))
+    let index = words.indexOf(word)
+    if (isWordText(remainder)) {
+      // Shrunk: the rest of the split is a stop of its own, next.
+      words.splice(index + 1, 0, {
+        unit: word.unit,
+        start: end,
+        end: end + remainder.length,
+        text: remainder,
+        line: word.line,
+        column: word.column + length
+      })
+    }
+    this.words = words
+    this.index = index
+    for (const line of this.lines) line.words = []
+    words.forEach((other, i) => this.lines[other.line].words.push(i))
+    return true
+  }
+
+  /**
    * Move to the next (`delta` 1) or previous (-1) line that has a word on it, landing on the
    * word nearest the current one's place along the line.
    */

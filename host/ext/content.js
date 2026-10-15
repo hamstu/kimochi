@@ -282,6 +282,36 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
   return {
     visible,
     /**
+     * The text the open popup's lookup matched, as the engine marks it on the page
+     * (`descriptor.matchHighlights`, else the selection when `matchSelection`): the start of its
+     * first range and the end of its last. Null while nothing is marked.
+     */
+    matched() {
+      if (!visible()) return null
+      for (const name of descriptor.matchHighlights ?? []) {
+        const ranges = [...(win.CSS?.highlights?.get(name) ?? [])]
+        if (!ranges.length) continue
+        const first = ranges[0]
+        const last = ranges[ranges.length - 1]
+        return {
+          startContainer: first.startContainer,
+          startOffset: first.startOffset,
+          endContainer: last.endContainer,
+          endOffset: last.endOffset
+        }
+      }
+      if (!descriptor.matchSelection) return null
+      const selection = win.getSelection()
+      if (!selection || selection.isCollapsed || selection.rangeCount !== 1) return null
+      const range = selection.getRangeAt(0)
+      return {
+        startContainer: range.startContainer,
+        startOffset: range.startOffset,
+        endContainer: range.endContainer,
+        endOffset: range.endOffset
+      }
+    },
+    /**
      * Hachidori: select the range and send `scanTextAtSelection` (content.js `runKeybindAction`:
      * it needs a single non-collapsed selection and `hoverEnabled`); if no popup follows, the
      * reader's own `scanSelectedText` (exposed through `HDReaderReady`), then a synthetic

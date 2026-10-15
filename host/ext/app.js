@@ -278,6 +278,7 @@ export function installApp(win, { engine, descriptor }) {
       return false
     }
   }
+  api.matchedRange = () => driver?.matched() ?? null
   api.popupControl = (control) => driver?.popupControl(control ?? {})
   api.dismiss = () => void driver?.dismiss()
   api.openOptionsPage = () => {

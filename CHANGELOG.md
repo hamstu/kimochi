@@ -86,8 +86,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - The overlay's word cursor stops on whole words, with every dictionary: 作った, not 作. With the
   Yomitan API it splits words with your Yomitan's own dictionaries; with the others, kanji keep
-  the kana of their inflection. A word OCR split across two boxes is one stop, and every lookup
-  reads on past the end of its box, as the mouse does.
+  the kana of their inflection, and after each lookup the outline fits exactly what Hachidori or
+  10ten matched. A word OCR split across two boxes is one stop, and every lookup reads on past the
+  end of its box, as the mouse does.
 
 - Stepping through the overlay's words with the keyboard or a controller follows the text in order
   to the end. Background patterns OCR reads as symbols (a carpet's squares) are skipped, as they

@@ -36,6 +36,11 @@ export const ENGINES = {
     // synthetic pointer feed (the overlay's native pointer, lookupRange's fallback) must send
     // `mousemove`; a `pointermove` alone is never seen.
     pointerEvents: ['mousemove'],
+    // How it marks the text a lookup matched: a CSS custom highlight, content.js `HIGHLIGHT_NAME`
+    // (painted by `HDPopup.createSourceHighlighter`). Its selection is no guide: lookupRange makes
+    // one itself.
+    matchHighlights: ['gsm-hoshidicts-match'],
+    matchSelection: false,
     storageSeed: {},
     // §5.4.1: what chrome.storage says is kept in the origin's own storage, and how to check it.
     // dictionaryState lists each imported dictionary with its directory in the engine's IDBFS
@@ -70,6 +75,11 @@ export const ENGINES = {
     // content.ts `window.addEventListener('pointermove', this.onPointerMove, …)`; its mousemove
     // listener only serves Safari's duplicate-event workaround and the hold-to-show keys.
     pointerEvents: ['pointermove'],
+    // How it marks the text a lookup matched (content/text-highlighter.ts `highlightRegularNode`):
+    // a CSS custom highlight, by highlight style, or a DOM selection where the Highlight API
+    // cannot be used.
+    matchHighlights: ['tenten-selection', 'tenten-selection-blue'],
+    matchSelection: true,
     // tab-manager.ts `#getStoredEnabledState`: 10ten stays off until its toolbar button is
     // pressed, and Kimochi has no toolbar. Seeded once, on the first load of the storage file.
     storageSeed: { local: { enabled: true } },

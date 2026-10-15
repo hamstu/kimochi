@@ -337,6 +337,9 @@ controller = createController({
       : (await import('/spike/frontend-mode.js')).lookupRange(range),
   lookupTerm,
   apiParse: (text) => apiTokenize(text),
+  // What an extension engine's lookup matched (Hachidori, 10ten); Yomitan's own selection already
+  // widens the overlay's boxes.
+  matchedRange: () => (extensionHosted ? (extensionHost()?.matchedRange?.() ?? null) : null),
   charRects: (element) => (renderer.mode === 'words' ? renderer.charRects(element) : null),
   quietText: (quiet) => renderer.setQuiet(quiet),
   setText: (visible) => setOverlayText(visible),
