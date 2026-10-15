@@ -390,21 +390,47 @@ body.scan-mode .line-actions-trigger.k-button {
 .log-session-row:hover {
   background: var(--k-hover);
 }
-/* The row being dragged lifts above the others, which slide aside as it passes (dnd-kit). */
+/* Dragging (dnd-kit): the row's place stays as a faint gap the others slide around, and a picture
+   of the row follows the pointer above them. Text never selects or drags natively here. */
+.log-sessions {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.log-sessions .log-session-name {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.log-sessions[data-sorting] .log-session-row:hover {
+  background: transparent;
+}
 .log-session-row[data-dragging] {
-  z-index: 2;
+  opacity: 0.3;
+}
+.log-session-lifted {
   border-radius: var(--k-radius-md);
   background: var(--k-raised);
   box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  cursor: grabbing;
 }
-.log-session-row[data-dragging]::after,
-.log-session-row[data-dragging] + .log-session-row::after { opacity: 0; }
+.log-session-lifted .log-session-grip {
+  color: var(--k-text);
+}
+.log-session-face-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 calc(var(--k-space-2) - 2px);
+  color: var(--k-text);
+  font-size: var(--k-text-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .log-session-grip.k-button {
   cursor: grab;
   touch-action: none;
   color: var(--k-text-3);
 }
-.log-session-row[data-dragging] .log-session-grip.k-button { cursor: grabbing; color: var(--k-text); }
+body:has(.log-session-lifted) { cursor: grabbing; }
 .log-session-grip.k-button:active {
   cursor: grabbing;
 }

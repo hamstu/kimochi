@@ -1,8 +1,10 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { GripVertical, Trash2 } from "lucide-react";
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
@@ -18,13 +20,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
-  restrictToParentElement,
   restrictToVerticalAxis,
+  restrictToWindowEdges,
 } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import {
   Badge,
   Button,
+  portalRoot,
   Callout,
   ConfirmDialog,
   Dialog,
@@ -64,11 +67,19 @@ export function SessionManagerModal({
     }),
   );
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // The session being dragged: drawn in an overlay that follows the pointer, its row left behind
+  // as the gap the others slide around.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The reader sends a fresh copy of the sessions with every update (stats, new lines), so only
+  // a real change to them is taken up, and never mid-drag.
+  const sessionsKey = sessions
+    .map((session) => `${session.id}\u0000${session.name}`)
+    .join("\u0001");
   useEffect(() => {
-    if (!open) return;
+    if (!open || draggingId) return;
     setOrdered(sessions);
     setDraftNames((current) => {
       const next: Record<string, string> = {};
@@ -77,7 +88,8 @@ export function SessionManagerModal({
       }
       return next;
     });
-  }, [open, sessions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `sessions` is followed through its key.
+  }, [open, sessionsKey, draggingId]);
 
   useEffect(() => {
     if (deleteId && !sessions.some((session) => session.id === deleteId)) {
@@ -88,10 +100,12 @@ export function SessionManagerModal({
   useEffect(() => {
     if (open) return;
     setDeleteId(null);
+    setDraggingId(null);
     setError(null);
   }, [open]);
 
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
+    setDraggingId(null);
     if (!over || active.id === over.id) return;
     const from = ordered.findIndex((session) => session.id === active.id);
     const to = ordered.findIndex((session) => session.id === over.id);
@@ -139,6 +153,7 @@ export function SessionManagerModal({
     }
   };
 
+  const draggingSession = ordered.find((session) => session.id === draggingId);
   const deletingSession = sessions.find((session) => session.id === deleteId);
 
   return (
@@ -161,15 +176,26 @@ export function SessionManagerModal({
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-            onDragStart={() => setDeleteId(null)}
+            onDragStart={({ active }) => {
+              setDeleteId(null);
+              setDraggingId(String(active.id));
+              // A text selection left in the dialog would otherwise go along as a native drag.
+              window.getSelection()?.removeAllRanges();
+            }}
+            onDragCancel={() => setDraggingId(null)}
             onDragEnd={(event) => void onDragEnd(event)}
           >
             <SortableContext
               items={ordered.map((session) => session.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="log-sessions" role="list">
+              <div
+                className="log-sessions"
+                role="list"
+                data-sorting={draggingId ? "" : undefined}
+                // Only dnd-kit drags here; WebKit's own drag of text or elements never starts.
+                onDragStart={(event) => event.preventDefault()}
+              >
                 {ordered.map((session, index) => {
                   const isActive = session.id === activeId;
                   return (
@@ -230,6 +256,22 @@ export function SessionManagerModal({
                 })}
               </div>
             </SortableContext>
+            {createPortal(
+              <DragOverlay
+                modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
+                zIndex={70}
+              >
+                {draggingSession ? (
+                  <SessionRowFace
+                    name={
+                      draftNames[draggingSession.id] ?? draggingSession.name
+                    }
+                    active={draggingSession.id === activeId}
+                  />
+                ) : null}
+              </DragOverlay>,
+              portalRoot() ?? document.body,
+            )}
           </DndContext>
 
           {error ? (
@@ -285,10 +327,7 @@ function SortableSession({
       role="listitem"
       className="log-session-row"
       data-dragging={isDragging ? "" : undefined}
-      style={{
-        transform: CSS.Translate.toString(transform),
-        transition,
-      }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
     >
       <Button
         ref={setActivatorNodeRef}
@@ -303,6 +342,22 @@ function SortableSession({
         <GripVertical />
       </Button>
       {children}
+    </div>
+  );
+}
+
+/** The dragged row as it floats under the pointer: a picture of the row, not its controls. */
+function SessionRowFace({ name, active }: { name: string; active: boolean }) {
+  return (
+    <div className="log-session-row log-session-lifted" aria-hidden>
+      <span className="log-session-grip k-button k-button-ghost k-button-sm k-button-icon">
+        <GripVertical />
+      </span>
+      <span className="log-session-face-name">{name}</span>
+      {active ? <Badge tone="accent">Active</Badge> : null}
+      <span className="log-session-delete k-button k-button-ghost k-button-sm k-button-icon">
+        <Trash2 />
+      </span>
     </div>
   );
 }
