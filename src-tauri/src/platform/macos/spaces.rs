@@ -61,6 +61,8 @@ pub struct Spaces {
     current: Vec<u64>,
     /// How each Space is named in Mission Control: "Desktop 2", or "Full screen".
     labels: HashMap<u64, String>,
+    /// The Spaces that are a full-screen app's own.
+    full_screen: std::collections::HashSet<u64>,
 }
 
 impl Spaces {
@@ -72,6 +74,7 @@ impl Spaces {
                 Retained::from_raw((calls.display_spaces)(connection).cast())?;
             let mut current = Vec::new();
             let mut labels = HashMap::new();
+            let mut full_screen = std::collections::HashSet::new();
             for display in displays.iter() {
                 let id = |space: &NSDictionary<NSString, AnyObject>| -> Option<u64> {
                     let value = space.objectForKey(ns_string!("ManagedSpaceID"))?;
@@ -91,6 +94,7 @@ impl Spaces {
                         .map(|value| msg_send![&*value, longLongValue])
                         .unwrap_or(0);
                     let label = if kind == FULL_SCREEN_SPACE {
+                        full_screen.insert(space_id);
                         "Full screen".to_owned()
                     } else {
                         desktop += 1;
@@ -99,7 +103,7 @@ impl Spaces {
                     labels.insert(space_id, label);
                 }
             }
-            Some(Spaces { connection, window_spaces: calls.window_spaces, current, labels })
+            Some(Spaces { connection, window_spaces: calls.window_spaces, current, labels, full_screen })
         })
     }
 
@@ -114,6 +118,13 @@ impl Spaces {
             };
             spaces.iter().map(|n| n.unsignedLongLongValue()).collect()
         })
+    }
+
+    /// Whether window `number` is a full-screen app's window: on a Space of the full-screen kind.
+    /// Asked of the Space rather than the window's size, so it holds while macOS animates the
+    /// window into or out of its Space, when its bounds are anything but the display's.
+    pub fn is_full_screen(&self, number: u32) -> bool {
+        self.of(number).iter().any(|space| self.full_screen.contains(space))
     }
 
     /// Mission Control's name for the Space window `number` is on, when that Space is not showing:

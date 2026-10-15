@@ -52,7 +52,7 @@ mod x11;
 
 use rules::{Backend, Session};
 pub use window::{
-    activate_process, activate_self, bounds, inspect, make_panel, order_front, panel_cursor,
+    activate_process, activate_self, activate_window, bounds, inspect, make_panel, order_front, panel_cursor,
     panel_pointer, place, promote_to_key, set_input_regions,
 };
 pub use workspace::observe_workspace;
@@ -213,6 +213,20 @@ pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
 }
 
 // ---------------------------------------------------------------- system links
+
+/// Linux leaves "is it full screen" to the shared rule (the window fills its display).
+pub fn window_fullscreen(_id: &SourceId) -> Option<bool> {
+    None
+}
+
+/// Linux has no permission like macOS's Accessibility: `None`.
+pub fn accessibility_status() -> Option<bool> {
+    None
+}
+
+pub fn request_accessibility() -> Result<bool, String> {
+    Err("unsupported: Linux has no Accessibility permission to grant".into())
+}
 
 pub fn open_capture_settings() -> Result<(), String> {
     Err("not applicable: Linux has no screen recording setting to open".into())

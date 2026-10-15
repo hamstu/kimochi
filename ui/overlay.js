@@ -107,6 +107,12 @@ const state = {
   /** Live bounds of the captured source, tracked natively between scans. */
   sourceBounds: null,
   /**
+   * The rest of what native tracks about a window source (`source-bounds`): `fullscreen` (it
+   * fills its display: a full-screen app, or a borderless window), `onScreen`, and `settling`
+   * (a full-screen app's Space sliding in or out; its text is hidden until it is at rest).
+   */
+  sourceWindow: null,
+  /**
    * Whether the captured window is still in front and still there, from native.
    * Null until the first answer arrives; unknown shows text rather than hiding it.
    */
@@ -412,18 +418,23 @@ function draw() {
     renderer.clear()
     return
   }
+  // A full-screen app's Space is sliding: its text would crawl behind the picture.
+  const settling = Boolean(state.sourceWindow?.settling) && !state.detached
   const visible =
-    controller.holdsText ||
+    !settling &&
+    (controller.holdsText ||
     (isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) &&
       (waylandLayer ||
-        shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp)))
+        shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp))))
 
   const reason = !isOverlayTextVisible(
     setting('liveOverlayEnabled'),
     state.flags.textOverlayVisible
   )
     ? 'disabled'
-    : !visible
+    : settling
+      ? 'source-settling'
+      : !visible
       ? 'source-inactive'
       : !state.geometry
         ? 'no-geometry'
@@ -477,12 +488,22 @@ function draw() {
   }
 }
 
+/**
+ * Whether hovering the source card marks the window. Not when it fills its display: the
+ * picture would cover the reader's whole screen, the way it would for a display. Nor when it
+ * is on another Space or desktop: it would be drawn over whatever the reader has in front.
+ */
+function hoverMarksWindow() {
+  return state.hover.isWindow && !state.sourceWindow?.fullscreen && state.sourceWindow?.onScreen !== false
+}
+
 function drawHover() {
+  const marked = state.hover.source && hoverMarksWindow()
   hover.update({
-    visible: state.hover.selectRegion || state.hover.source,
-    showWindowOutline: state.hover.source && state.hover.isWindow,
+    visible: state.hover.selectRegion || marked,
+    showWindowOutline: marked,
     showCropRegion: state.hover.selectRegion,
-    windowImage: state.hover.source && state.hover.isWindow ? hoverPreview.url : null,
+    windowImage: marked ? hoverPreview.url : null,
     windowImageStale: !hoverPreview.fresh,
     bounds: state.sourceBounds,
     crop: state.crop,
@@ -610,6 +631,7 @@ async function followSource(source) {
   if (id === watchedSourceId) return
   watchedSourceId = id
   state.sourceBounds = null
+  state.sourceWindow = null
   await native.watchSource(id ?? null)
 }
 
@@ -1270,7 +1292,7 @@ async function onAction(name) {
     case 'hoverSourceOn':
     case 'hoverSourceOff':
       state.hover.source = name.endsWith('On')
-      if (state.hover.source && state.hover.isWindow) hoverPreview.start()
+      if (state.hover.source && hoverMarksWindow()) hoverPreview.start()
       else hoverPreview.stop()
       return drawHover()
     default:
@@ -2712,9 +2734,28 @@ await native.listen('source-bounds', async ({ payload }) => {
   // late event from the previous window must not drag the current one's text.
   if (payload.sourceId && watchedSourceId && payload.sourceId !== watchedSourceId) return
 
+  const window = {
+    fullscreen: Boolean(payload.fullscreen),
+    onScreen: payload.onScreen !== false,
+    settling: Boolean(payload.settling)
+  }
+  const was = state.sourceWindow
+  const changed =
+    !was || was.fullscreen !== window.fullscreen || was.onScreen !== window.onScreen || was.settling !== window.settling
+  state.sourceWindow = window
+  if (changed) {
+    trace('overlay-source-window', window)
+    // A window that went full screen or to another Space is no longer one to mark on hover.
+    if (state.hover.source && !hoverMarksWindow()) hoverPreview.stop()
+    drawHover()
+  }
+
   const previous = state.sourceBounds
   const bounds = payload.bounds
-  if (previous && !movedOrResized(previous, bounds)) return
+  if (previous && !movedOrResized(previous, bounds)) {
+    if (changed) draw()
+    return
+  }
   state.sourceBounds = bounds
   // Quick Shot text belongs to the display region it was read from, not to this window.
   if (state.detached) return

@@ -2,13 +2,23 @@
  * Settings → Sources: where the Log's lines come from, how sessions follow the source, and where
  * OCR scans are also sent. The same input choice is the main window's source menu.
  */
-import type { ReactNode } from 'react'
-import { Aperture, Camera, Check, Clipboard, Radio } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Aperture, Camera, Check, Clipboard, ExternalLink, Radio } from 'lucide-react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
-import { Input, Select, SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
+import {
+  Button,
+  Input,
+  Select,
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+  StatusDot,
+  Switch
+} from '@kit'
 import { updateSettings } from '@texthooker/lib/settings'
 import type { Settings } from '@texthooker/lib/types'
 import { useSetting } from '../../bridge/useSetting'
+import { accessibilityStatus, requestAccessibility } from '../../bridge/tauri'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { OutputSections } from './OutputSections'
 
@@ -55,6 +65,50 @@ const CLIPBOARD_POLL = [
   { value: '500', label: '500 ms' },
   { value: '1000', label: '1 s' }
 ]
+
+/**
+ * Accessibility on macOS, where onboarding offers it once: what lets a click on the source
+ * bring that exact window forward. Nothing on platforms without the permission.
+ */
+function AccessibilitySection(): ReactNode {
+  const [granted, setGranted] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    const check = (): void => {
+      void accessibilityStatus()
+        .then((next) => alive && setGranted(next))
+        .catch(() => undefined)
+    }
+    check()
+    // Granted in System Settings while this page is open: follow it.
+    const timer = setInterval(check, 2000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+  if (granted === null) return null
+  return (
+    <SettingsSection title="Windows">
+      <SettingsRow
+        label="Accessibility"
+        description="Lets a click on your source bring that exact window to the front, even a game in full screen on a Space of its own. Without it, Kimochi brings the application forward instead."
+      >
+        {granted ? (
+          <span className="settings-status">
+            <StatusDot tone="ok" />
+            Allowed
+          </span>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => void requestAccessibility().catch(() => undefined)}>
+            Open System Settings
+            <ExternalLink />
+          </Button>
+        )}
+      </SettingsRow>
+    </SettingsSection>
+  )
+}
 
 export function SourcesTab(): ReactNode {
   const [quickShot, setQuickShot] = useSetting<boolean>('quickShotEnabled', false)
@@ -151,6 +205,7 @@ export function SourcesTab(): ReactNode {
           )
         }}
       </WithReaderSettings>
+      <AccessibilitySection />
       <OutputSections />
     </SettingsPage>
   )

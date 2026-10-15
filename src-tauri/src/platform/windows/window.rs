@@ -684,6 +684,29 @@ pub fn activate_process(pid: u32) -> Result<(), String> {
     }
 }
 
+/// Bring window source `id` itself to the front, rather than its process's main window: an
+/// application can have several, and the reader clicked this one. A window on another virtual
+/// desktop is activated there, and Windows switches to that desktop. Falls back to the process
+/// when the window is gone.
+pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<(), String> {
+    let Some(target) = super::sources::resolve(id) else {
+        return match id.pid().filter(|pid| *pid > 0) {
+            Some(pid) => activate_process(pid),
+            None => Err("gone: that window is closed".into()),
+        };
+    };
+    unsafe {
+        if IsIconic(target).as_bool() {
+            let _ = ShowWindow(target, SW_RESTORE);
+        }
+    }
+    if force_foreground(target) {
+        Ok(())
+    } else {
+        Err("native: the window did not come to the front".into())
+    }
+}
+
 /// Exposed for `icon.rs`.
 pub(super) fn representative_window(pid: u32) -> Option<HWND> {
     main_window_of(pid)

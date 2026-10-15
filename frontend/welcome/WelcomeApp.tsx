@@ -2,8 +2,8 @@
  * The onboarding window: Kimochi's own panel chrome (the same title bar as the main window), one
  * step at a time above a persistent action bar.
  *
- *   intro → capture (Screen Recording permission, or the system picker) → OCR engine →
- *   dictionary engine (choose + download) → that engine's setup → done
+ *   intro → capture (Screen Recording permission, or the system picker) → Accessibility (macOS)
+ *   → OCR engine → dictionary engine (choose + download) → that engine's setup → done
  *
  * Steps are hash routes, so a reload (switching dictionary engine reloads every reader window,
  * this one included) lands back on the same step. The bar holds Back on the left with the step
@@ -13,7 +13,13 @@ import { useEffect, useState, type JSX } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { ChevronLeft, ExternalLink } from 'lucide-react'
 import { Button, Callout, StatusDot } from '@kit'
-import { onEvent, openScreenCapturePreferences, useSystemPick } from '../bridge/tauri'
+import {
+  accessibilityStatus,
+  onEvent,
+  openScreenCapturePreferences,
+  requestAccessibility,
+  useSystemPick
+} from '../bridge/tauri'
 import type { PanelStateEvent } from '../bridge/types'
 import { useCapabilities } from '../bridge/capabilities'
 import { useExtensionStatus } from '../bridge/extensions'
@@ -33,12 +39,13 @@ import { useCaptureStep, useHasScreenRecordingPermission } from './useHasScreenR
 import { completeOnboarding } from './welcome-actions'
 import style from './WelcomeApp.module.css'
 
-type StepId = 'intro' | 'capture' | 'ocr' | 'engine' | 'dictionaries' | 'done'
+type StepId = 'intro' | 'capture' | 'accessibility' | 'ocr' | 'engine' | 'dictionaries' | 'done'
 
 const STEP_OF: Record<string, StepId> = {
   '/': 'intro',
   '/screen-recording-permission': 'capture',
   '/system-picker': 'capture',
+  '/accessibility': 'accessibility',
   '/ocr': 'ocr',
   '/engine': 'engine',
   '/dictionaries': 'dictionaries',
@@ -57,9 +64,39 @@ function useDictionaryReady(): boolean | null {
   return status ? status.state === 'ready' : null
 }
 
-/** The flow for this computer: the capture step only where something needs doing. */
-function useFlow(pathname: string): { steps: StepId[]; captureRoute: string | null; back: string | null } {
+/**
+ * Accessibility, where the platform has it (macOS): `granted`, `needed`, or `none` (no such
+ * permission here, or not known yet). Polled while `watch`, so the step updates once the reader
+ * turns Kimochi on in System Settings.
+ */
+function useAccessibility(watch: boolean): 'granted' | 'needed' | 'none' {
+  const [status, setStatus] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    const check = (): void => {
+      void accessibilityStatus()
+        .then((next) => alive && setStatus(next))
+        .catch(() => alive && setStatus(null))
+    }
+    check()
+    const timer = watch ? setInterval(check, 2000) : undefined
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [watch])
+  return status === null ? 'none' : status ? 'granted' : 'needed'
+}
+
+/** The flow for this computer: the capture and Accessibility steps only where something needs doing. */
+function useFlow(pathname: string): {
+  steps: StepId[]
+  captureRoute: string | null
+  accessibilityRoute: string | null
+  back: string | null
+} {
   const captureStep = useCaptureStep()
+  const accessibility = useAccessibility(pathname === '/accessibility')
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
   const dictionaryReady = useDictionaryReady()
   const captureRoute = gaming
@@ -70,9 +107,11 @@ function useFlow(pathname: string): { steps: StepId[]; captureRoute: string | nu
         ? '/system-picker'
         : null
   const current = STEP_OF[pathname]
+  const accessibilityRoute = !gaming && accessibility === 'needed' ? '/accessibility' : null
   const steps: StepId[] = [
     'intro',
     ...(captureRoute || current === 'capture' ? (['capture'] as const) : []),
+    ...(accessibilityRoute || current === 'accessibility' ? (['accessibility'] as const) : []),
     'ocr',
     'engine',
     'dictionaries',
@@ -81,7 +120,8 @@ function useFlow(pathname: string): { steps: StepId[]; captureRoute: string | nu
   const BACK: Record<string, string> = {
     '/screen-recording-permission': '/',
     '/system-picker': '/',
-    '/ocr': captureRoute ?? '/',
+    '/accessibility': captureRoute ?? '/',
+    '/ocr': accessibilityRoute ?? captureRoute ?? '/',
     '/engine': '/ocr',
     '/dictionaries': '/engine',
     '/dictionary-settings': '/dictionaries',
@@ -89,12 +129,12 @@ function useFlow(pathname: string): { steps: StepId[]; captureRoute: string | nu
     '/done': dictionaryReady === false ? '/engine' : '/dictionaries',
     '/main': '/done'
   }
-  return { steps, captureRoute, back: BACK[pathname] ?? null }
+  return { steps, captureRoute, accessibilityRoute, back: BACK[pathname] ?? null }
 }
 
 // ---------------------------------------------------------------- capture
 
-function ScreenPermissionScreen(): JSX.Element {
+function ScreenPermissionScreen({ next }: { next: string }): JSX.Element {
   const hasPermission = useHasScreenRecordingPermission()
   const { restartAfterGrant } = useCapabilities().capture
   return (
@@ -122,6 +162,50 @@ function ScreenPermissionScreen(): JSX.Element {
       <StepActions>
         {hasPermission ? (
           <Button variant="primary" asChild>
+            <Link to={next}>Continue</Link>
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" asChild>
+              <Link to={next}>Skip for now</Link>
+            </Button>
+            <Button variant="primary" onClick={() => void openScreenCapturePreferences()}>
+              Open System Settings
+              <ExternalLink />
+            </Button>
+          </>
+        )}
+      </StepActions>
+    </Step>
+  )
+}
+
+/**
+ * Accessibility (macOS): what lets a click on the source bring that exact window forward,
+ * including a game in full screen on a Space of its own. Optional; without it Kimochi brings
+ * the application forward instead.
+ */
+function AccessibilityScreen(): JSX.Element {
+  const granted = useAccessibility(true) === 'granted'
+  return (
+    <Step
+      title="Allow Accessibility"
+      lede={
+        <>
+          With Accessibility, clicking your source in Kimochi brings that exact window to the
+          front, even a game in full screen on a Space of its own. Kimochi uses it only to find
+          and bring forward the window you read from. Turn Kimochi on in System Settings →
+          Privacy &amp; Security → Accessibility.
+        </>
+      }
+    >
+      <p className={style.status} role="status">
+        <StatusDot tone={granted ? 'ok' : 'warn'} />
+        {granted ? 'Accessibility is allowed.' : 'Not allowed yet. This updates on its own.'}
+      </p>
+      <StepActions>
+        {granted ? (
+          <Button variant="primary" asChild>
             <Link to="/ocr">Continue</Link>
           </Button>
         ) : (
@@ -129,7 +213,7 @@ function ScreenPermissionScreen(): JSX.Element {
             <Button variant="ghost" asChild>
               <Link to="/ocr">Skip for now</Link>
             </Button>
-            <Button variant="primary" onClick={() => void openScreenCapturePreferences()}>
+            <Button variant="primary" onClick={() => void requestAccessibility().catch(() => undefined)}>
               Open System Settings
               <ExternalLink />
             </Button>
@@ -305,7 +389,8 @@ function StepDots({ steps, current }: { steps: StepId[]; current: StepId | undef
 export default function WelcomeApp(): JSX.Element {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { steps, captureRoute, back } = useFlow(pathname)
+  const { steps, captureRoute, accessibilityRoute, back } = useFlow(pathname)
+  const afterCapture = accessibilityRoute ?? '/ocr'
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
 
@@ -351,8 +436,9 @@ export default function WelcomeApp(): JSX.Element {
         <div className={style.content} data-step={STEP_OF[pathname] ?? 'other'}>
           <div key={pathname} className={style.page}>
             <Routes>
-              <Route index element={<IntroStep next={gaming ? '/ocr' : (captureRoute ?? '/ocr')} />} />
-              <Route path="/screen-recording-permission" element={<ScreenPermissionScreen />} />
+              <Route index element={<IntroStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />} />
+              <Route path="/screen-recording-permission" element={<ScreenPermissionScreen next={afterCapture} />} />
+              <Route path="/accessibility" element={<AccessibilityScreen />} />
               <Route path="/system-picker" element={<SystemPickerScreen />} />
               <Route path="/ocr" element={<OcrScreen />} />
               <Route path="/engine" element={<EngineSetup />} />

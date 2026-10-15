@@ -40,10 +40,13 @@
  *   ?popover=message  show what the parent frame posts instead of the sample (`listenForPopover`)
  *
  * Onboarding (welcome.html):
- *   ?step=intro|permission|picker|ocr|engine|dictionaries|dictionary-settings|done|error
+ *   ?step=intro|permission|accessibility|picker|ocr|engine|dictionaries|dictionary-settings|done|error
  *                    open that step (error: the last step's save failed). Every step stays
  *                    navigable from there; ?platform=linux makes the capture step the picker
  *   ?permission=denied  macOS Screen Recording not granted yet (default: granted)
+ *   ?accessibility=denied  macOS Accessibility not granted yet (default: granted; `none` for
+ *                          a platform without it)
+ *   ?fullscreen=1       the chosen window is a full-screen app
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
  *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
@@ -452,6 +455,18 @@ const HANDLERS: Record<string, Handler> = {
     ),
   permission: () => true,
   permission_status: () => (params.get('permission') === 'denied' ? 'denied' : 'granted'),
+  accessibility_status: () =>
+    params.get('accessibility') === 'none' ? null : params.get('accessibility') !== 'denied',
+  request_accessibility: () => false,
+  source_window_state: () =>
+    params.get('nosource') === '1'
+      ? null
+      : {
+          sourceId: CURRENT_SOURCE.id,
+          fullscreen: params.get('fullscreen') === '1',
+          onScreen: true,
+          settling: false
+        },
   capture_preview: () => ({ frame: demoCapture(), error: null }),
   capture_frame: () => demoCapture(),
   scan: () => null,
@@ -661,6 +676,7 @@ function listenToEmbedder(): void {
 const WELCOME_ROUTES: Record<string, string> = {
   intro: '/',
   permission: '/screen-recording-permission',
+  accessibility: '/accessibility',
   picker: '/system-picker',
   ocr: '/ocr',
   engine: '/engine',

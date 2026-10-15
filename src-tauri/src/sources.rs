@@ -588,7 +588,8 @@ fn crop_differs(a: Option<&Crop>, b: Option<&Crop>) -> bool {
 
 fn selection_crop_key(service: &Service, kind: &str, name: &str, app: Option<&str>) -> String {
     let context = if descriptor_type(kind) == "screen" { crate::application_context::current(service) } else { None };
-    crate::application_context::crop_key(context.as_ref(), descriptor_key(kind, name, app))
+    let key = crate::application_context::crop_key(context.as_ref(), descriptor_key(kind, name, app));
+    crate::state::shaped_crop_key(key, kind, service.source_fullscreen.load(Ordering::Relaxed))
 }
 
 fn saved_crop_for_key(service: &Service, key: &str) -> Option<Crop> {
@@ -657,7 +658,9 @@ pub fn saved_crop(service: &Service, kind: &str, name: &str, app: Option<&str>) 
 
 pub fn saved_crop_with_context(service: &Service, kind: &str, name: &str, app: Option<&str>, context: Option<&crate::application_context::ApplicationContext>) -> Option<Crop> {
     let context = if descriptor_type(kind) == "screen" { context } else { None };
-    saved_crop_for_key(service, &crate::application_context::crop_key(context, descriptor_key(kind, name, app)))
+    let key = crate::application_context::crop_key(context, descriptor_key(kind, name, app));
+    let key = crate::state::shaped_crop_key(key, kind, service.source_fullscreen.load(Ordering::Relaxed));
+    saved_crop_for_key(service, &key)
 }
 
 #[cfg(test)]

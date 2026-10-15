@@ -535,6 +535,10 @@ pub struct Service {
     pub selection: Mutex<Option<String>>,
     /// The source id whose geometry is currently being tracked, if any.
     pub watching: Mutex<Option<String>>,
+    /// The tracked window fills its display: a full-screen app (its own Space on macOS) or a
+    /// borderless full-screen window. Set by the source watch; it picks which of the window's
+    /// two saved crops applies (see `shaped_crop_key`).
+    pub source_fullscreen: AtomicBool,
     /// Per-sender relay sequence, so a receiver can drop a redelivered message.
     pub relay_seq: Mutex<HashMap<String, u64>>,
     pub scanning: AtomicBool,
@@ -580,6 +584,32 @@ pub fn descriptor_key(kind: &str, name: &str, app: Option<&str>) -> String {
         Some(app) if !app.trim().is_empty() => app.trim().to_string(),
         _ if !name.trim().is_empty() => name.trim().to_string(),
         _ => format!("{}:unknown", descriptor_type(kind)),
+    }
+}
+
+/// The crop key for a window in its current shape. A window that goes full screen changes
+/// shape completely (a 4:3 window becomes an ultrawide display with the game pillarboxed in
+/// it), so a region drawn on one shape is meaningless on the other: each shape keeps its own,
+/// and going back to a window brings its region back.
+pub fn shaped_crop_key(key: String, kind: &str, fullscreen: bool) -> String {
+    if fullscreen && descriptor_type(kind) == "window" {
+        format!("{key} (full screen)")
+    } else {
+        key
+    }
+}
+
+#[cfg(test)]
+mod crop_key_tests {
+    use super::*;
+
+    #[test]
+    fn a_full_screen_window_keeps_its_own_crop() {
+        assert_eq!(shaped_crop_key("OpenEmu".into(), "window", false), "OpenEmu");
+        assert_eq!(shaped_crop_key("OpenEmu".into(), "window", true), "OpenEmu (full screen)");
+        // A display is always the whole screen: one crop.
+        assert_eq!(shaped_crop_key("Display".into(), "display", true), "Display");
+        assert_eq!(shaped_crop_key("Display".into(), "screen", true), "Display");
     }
 }
 

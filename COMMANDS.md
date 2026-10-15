@@ -250,6 +250,9 @@ crop changes on the same source**, since the old text no longer matches the new 
 | `enumerate` | `() -> [Source]` |
 | `permission` | `() -> bool` — **requests** Screen Recording access |
 | `permission_status` | `() -> "granted" \| "not_granted"` — read-only, never prompts |
+| `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
+| `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
+| `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |
 | `capture_frame` | `({request}) -> {id, info, url}` |
 | `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, and `'livetext'` / `'oneocr'` on their OS) |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
@@ -354,11 +357,20 @@ read.
 `textOverlayVisible`, `debugOverlayVisible` and `overlayVisible` into the snapshot, so
 panels can render those toggles without each keeping its own copy.
 
-`watch_source` emits `source-bounds` `{sourceId, bounds, onScreen}` when the tracked
-window moves, resizes or changes on-screen state. It polls `CGWindowListCopyWindowInfo`
-for one window id rather than re-running a full `SCShareableContent` enumeration per
-tick, which would be far too expensive at this cadence, and needs no Screen Recording
-permission because it reads geometry, not pixels.
+`watch_source` emits `source-bounds` `{sourceId, bounds, onScreen, fullscreen, settling,
+display}` when the tracked window moves, resizes, changes on-screen state or goes in or out
+of full screen. It polls `CGWindowListCopyWindowInfo` for one window id ten times a second
+rather than re-running a full `SCShareableContent` enumeration per tick, which would be far
+too expensive at this cadence, and needs no Screen Recording permission because it reads
+geometry, not pixels. `fullscreen` is a full-screen app (on macOS, a window on a full-screen
+Space) or a window that fills its display; `display` is that display. `settling` is a
+full-screen app away from its display while macOS slides its Space in or out: `bounds` then
+stay where it last rested, and the overlay hides its text until it settles. Going in or out of
+full screen clears the scan and switches the window's crop to the one saved for that shape.
+
+`activate_source` brings the window itself forward (`platform::activate_window`), switching
+to its Space or virtual desktop; on macOS through SkyLight, plus `AXRaise` when Accessibility
+is allowed, and the application otherwise.
 
 A second watch emits `source-focus` `{focused, present, held}` when the answer to
 "should the scanned text be on screen at all" changes, and mirrors it into the snapshot

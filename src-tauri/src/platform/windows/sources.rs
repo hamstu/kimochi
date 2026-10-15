@@ -10,9 +10,11 @@ use windows::Win32::Foundation::{HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{
     DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
 };
+use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetAncestor, GetClassNameW, GetForegroundWindow, GetWindow, GetWindowLongW,
-    GetWindowRect, IsIconic, IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE, GW_OWNER,
+    GetWindowRect, IsIconic, IsWindow, IsWindowVisible, GA_ROOTOWNER, GWL_EXSTYLE, GWL_STYLE,
+    GW_OWNER, WS_CAPTION,
 };
 
 /// Every top-level window, front to back (`EnumWindows` order is z-order).
@@ -175,7 +177,7 @@ pub fn source_spaces(sources: &[Source]) -> HashMap<String, String> {
 /// Resolve a window source id to a live handle, or `None` if it is not a Windows window
 /// id, the window is gone, or the handle now belongs to a different process (USER
 /// recycles handle values, so the pid in the id is checked, not trusted).
-fn resolve(id: &SourceId) -> Option<HWND> {
+pub(super) fn resolve(id: &SourceId) -> Option<HWND> {
     if id.platform() != Platform::Windows || !id.is_window() {
         return None;
     }
@@ -207,6 +209,23 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
         rect.height,
     );
     Some((rect, shown))
+}
+
+/// Whether window source `id` is a borderless full-screen window: it covers the monitor it is
+/// on and has no title bar. A maximised window covers its monitor too when the taskbar hides
+/// itself, but keeps its caption. Exclusive full screen is not something an overlay can sit
+/// over at all, and is not told apart here. `None` when the window is gone.
+pub fn window_fullscreen(id: &SourceId) -> Option<bool> {
+    let hwnd = resolve(id)?;
+    let rect = frame_bounds(hwnd)?;
+    let style = unsafe { GetWindowLongW(hwnd, GWL_STYLE) } as u32;
+    let captioned = style & WS_CAPTION.0 == WS_CAPTION.0;
+    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    let mut info = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+    if !unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool() {
+        return None;
+    }
+    Some(!captioned && super::super::covers_display(rect, super::rect_of(info.rcMonitor)))
 }
 
 /// The window the reader is working in, and its process.

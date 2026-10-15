@@ -13,6 +13,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- Onboarding on macOS asks for Accessibility, after Screen Recording. With it, clicking your
+  source brings that exact window to the front, even a game in full screen. It's optional,
+  and you can turn it on later in Settings → Sources.
 - Right-click a line in the Log for its menu, the same one as its ⋯ button: copy, translate,
   explain or delete it. With text selected, the menu also copies the selection or adds it to the
   Notebook. Kimochi's own menu replaces the system's; ⌘C / Ctrl+C still copies a selection.
@@ -44,6 +47,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- Full-screen apps are recognised: a game in full screen on macOS, or a borderless full-screen
+  window. The source card says "Full screen", hovering it no longer covers your screen with a
+  preview, and clicking it takes you to the game's Space or desktop.
+- A window keeps one crop area for windowed mode and another for full screen, so going full
+  screen no longer stretches the crop you drew on the window. Going back restores it.
+- The overlay follows a moved window within a tenth of a second instead of a quarter.
 - A notebook entry's header shows its picture in a portrait box beside the name, over a dotted
   band tinted by the entry's kind, instead of stretching it across the top. Small pictures stay
   sharp and portraits keep their heads.
@@ -91,6 +100,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Switching Spaces on macOS no longer drags the overlay's text across the screen behind a
+  full-screen game, or onto another display. The text hides while the Space slides and
+  comes back once the game is in place.
 - The overlay's word cursor stops on whole words, with every dictionary: 作った, not 作. With the
   Yomitan API it splits words with your Yomitan's own dictionaries; with the others, kanji keep
   the kana of their inflection, and after each lookup the outline fits exactly what Hachidori or

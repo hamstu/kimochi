@@ -134,6 +134,22 @@ pub fn activate_process(_pid: u32) -> Result<(), String> {
     Err(UNSUPPORTED.into())
 }
 
+pub fn activate_window(_id: &SourceId) -> Result<(), String> {
+    Err(UNSUPPORTED.into())
+}
+
+pub fn window_fullscreen(_id: &SourceId) -> Option<bool> {
+    None
+}
+
+pub fn accessibility_status() -> Option<bool> {
+    None
+}
+
+pub fn request_accessibility() -> Result<bool, String> {
+    Err(UNSUPPORTED.into())
+}
+
 pub fn open_capture_settings() -> Result<(), String> {
     Err("not applicable".into())
 }

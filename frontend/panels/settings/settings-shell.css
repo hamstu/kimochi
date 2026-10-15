@@ -33,3 +33,12 @@
 .settings-page-scroll[hidden] {
   display: none;
 }
+
+/* A permission's state in place of its control: a dot and a word. */
+.settings-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+}

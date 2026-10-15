@@ -295,6 +295,7 @@ fn save_preferences(app: tauri::AppHandle, state: State<Shared>, prefs: Prefs) -
         if let Some((kind, name, app_name)) = selected_descriptor(&state) {
             let context = if kind == "screen" { application_context::current(&state) } else { None };
             let key = application_context::crop_key(context.as_ref(), state::descriptor_key(&kind, &name, app_name.as_deref()));
+            let key = state::shaped_crop_key(key, &kind, state.source_fullscreen.load(Ordering::Relaxed));
             state
                 .settings
                 .set_path(&["cropRegions", &key], serde_json::to_value(crop).unwrap())?;
@@ -925,7 +926,7 @@ fn pointer_display() -> Option<platform::DisplayInfo> {
         .cloned()
 }
 
-/// Bring a window source's application to the front. Window ids carry the owning process
+/// Bring a window source to the front. Window ids carry the owning process
 /// (`macos:window:<window>:<pid>`); a display has nothing to bring forward.
 #[tauri::command]
 async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> {
@@ -938,14 +939,14 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
     if source_id.starts_with("portal:window:") && platform::gnome::eligible_popup_session() {
         return platform::gnome::request("track", json!({"operation":"activate","sourceId":source_id})).map(|_| ());
     }
-    let pid = SourceId::parse(&source_id)
-        .filter(|id| id.is_window() && id.is_local())
-        .and_then(|id| id.pid())
-        .filter(|pid| *pid > 0)
+    let window = SourceId::parse(&source_id)
+        .filter(|id| id.is_window() && id.is_local() && id.pid().is_some_and(|pid| pid > 0))
         .ok_or("invalid: only a window source can be brought to the front")?;
     let (tx, rx) = std::sync::mpsc::channel();
+    // The window itself, switching to its Space or desktop: a full-screen app is in one of
+    // its own, and its application may have other windows elsewhere.
     app.run_on_main_thread(move || {
-        let _ = tx.send(platform::activate_process(pid));
+        let _ = tx.send(platform::activate_window(&window));
     })
     .map_err(|e| e.to_string())?;
     rx.recv().map_err(|e| e.to_string())?
@@ -2518,6 +2519,9 @@ fn main() {
             source_preview,
             source_hover_preview,
             source_live_thumbnail,
+            source_window_state,
+            accessibility_status,
+            request_accessibility,
             commit_source,
             open_source_picker,
             pointer_display,
@@ -2626,6 +2630,7 @@ fn main() {
                 settings: store.clone(),
                 selection: Mutex::new(None),
                 watching: Mutex::new(None),
+                source_fullscreen: AtomicBool::new(false),
                 relay_seq: Mutex::new(HashMap::new()),
                 scanning: AtomicBool::new(false),
                 thumbnails: Mutex::new(HashMap::new()),
@@ -3579,14 +3584,25 @@ fn spawn_display_watch(handle: tauri::AppHandle, settings: Arc<Settings>) {
     });
 }
 
-/// Follows the tracked window's geometry. Polls CoreGraphics for one window id
-/// rather than re-enumerating shareable content, which would be far too expensive at
-/// this cadence.
+/// The tracked window's last announced state, for a page that opens after the announcement
+/// (the main window coming back from Settings).
+static SOURCE_STATE: Mutex<Option<(String, platform::WindowState)>> = Mutex::new(None);
+
+/// Follows the tracked window: where it is, whether it is on screen, and whether it fills its
+/// display (see `platform::WindowState`). Polls the window server for one window id rather
+/// than re-enumerating shareable content, which would be far too expensive at this cadence.
+///
+/// Ten samples a second: text follows a moved window, and comes back after a full-screen
+/// app's Space has slid into place, within a tenth of a second rather than a quarter.
+///
+/// When the window goes full screen or comes back from it, the crop that applies changes
+/// with it (`state::shaped_crop_key`) and the text on screen was read from the other shape,
+/// so the scan is cleared as a change of crop would clear it.
 fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
-        let mut last: Option<(Rect, bool)> = None;
+        let mut last: Option<(String, platform::WindowState)> = None;
         loop {
-            std::thread::sleep(Duration::from_millis(250));
+            std::thread::sleep(Duration::from_millis(100));
             let watching = service.watching.lock().unwrap().clone();
             let Some(source_id) = watching else {
                 last = None;
@@ -3595,25 +3611,66 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             let Some(window) = SourceId::parse(&source_id).filter(|id| id.is_window()) else {
                 continue;
             };
-            let Some((rect, on_screen)) = platform::desktop_window_bounds(&window) else {
+            let previous = last.as_ref().filter(|(id, _)| *id == source_id).map(|(_, state)| *state);
+            let Some(state) = platform::desktop_window_state(&window, previous.as_ref()) else {
                 continue;
             };
-            let changed = last.is_none_or(|(prev, was_on)| {
-                was_on != on_screen
-                    || (prev.x - rect.x).abs() > 0.5
-                    || (prev.y - rect.y).abs() > 0.5
-                    || (prev.width - rect.width).abs() > 0.5
-                    || (prev.height - rect.height).abs() > 0.5
-            });
-            if changed {
-                last = Some((rect, on_screen));
-                let _ = handle.emit(
-                    "source-bounds",
-                    json!({ "sourceId": source_id, "bounds": rect, "onScreen": on_screen }),
+            if previous.is_some_and(|p| !p.differs(&state)) {
+                continue;
+            }
+            let was_fullscreen = service.source_fullscreen.swap(state.fullscreen, Ordering::Relaxed);
+            if previous.is_some() && was_fullscreen != state.fullscreen {
+                let mut view = service.view.lock().unwrap();
+                view.scan = None;
+                view.regions.clear();
+                view.revision += 1;
+                drop(view);
+                record(
+                    &handle,
+                    &service,
+                    json!({ "check": "source-shape-changed", "fullscreen": state.fullscreen, "bounds": state.bounds }),
                 );
             }
+            last = Some((source_id.clone(), state));
+            *SOURCE_STATE.lock().unwrap() = last.clone();
+            let _ = handle.emit("source-bounds", source_state_payload(&source_id, &state));
         }
     });
+}
+
+fn source_state_payload(source_id: &str, state: &platform::WindowState) -> Value {
+    json!({
+        "sourceId": source_id,
+        "bounds": state.bounds,
+        "onScreen": state.on_screen,
+        "fullscreen": state.fullscreen,
+        "settling": state.settling,
+        "display": state.display,
+    })
+}
+
+/// The tracked window's state as last announced by `source-bounds`, or null when no window is
+/// tracked (a display, or nothing chosen).
+#[tauri::command]
+fn source_window_state(state: State<Shared>) -> Value {
+    let watching = state.watching.lock().unwrap().clone();
+    match (watching, SOURCE_STATE.lock().unwrap().as_ref()) {
+        (Some(id), Some((last, window))) if id == *last => source_state_payload(&id, window),
+        _ => Value::Null,
+    }
+}
+
+/// Whether Kimochi may use Accessibility: true or false on macOS, null where there is no such
+/// permission. A query; it never prompts.
+#[tauri::command]
+fn accessibility_status() -> Option<bool> {
+    platform::accessibility_status()
+}
+
+/// Ask for Accessibility: the system's prompt and its Privacy & Security pane.
+#[tauri::command]
+fn request_accessibility() -> Reply<bool> {
+    platform::request_accessibility()
 }
 
 #[cfg(test)]

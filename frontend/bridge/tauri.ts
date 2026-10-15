@@ -207,6 +207,21 @@ export const sourceLiveThumbnail = (
   sourceId: string
 ): Promise<{ url: string; width: number; height: number }> =>
   invoke('source_live_thumbnail', { sourceId })
+/** What native tracks about the chosen window (`source-bounds`), or null for a display. */
+export interface SourceWindowState {
+  sourceId: string
+  /** It fills its display: a full-screen app, or a borderless full-screen window. */
+  fullscreen: boolean
+  onScreen: boolean
+  settling: boolean
+}
+export const sourceWindowState = (): Promise<SourceWindowState | null> =>
+  invoke<SourceWindowState | null>('source_window_state')
+/** Accessibility on macOS: true or false; null where the platform has no such permission. */
+export const accessibilityStatus = (): Promise<boolean | null> =>
+  invoke<boolean | null>('accessibility_status')
+/** The system's Accessibility prompt and its Privacy & Security pane; whether it is granted now. */
+export const requestAccessibility = (): Promise<boolean> => invoke<boolean>('request_accessibility')
 /** An application's icon as a data URL, or null when it has none. Natively cached per app. */
 export const sourceIcon = (appName: string): Promise<{ icon: string | null }> =>
   invoke<{ icon: string | null }>('source_icon', { appName })

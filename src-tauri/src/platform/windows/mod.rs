@@ -57,12 +57,24 @@ mod workspace;
 pub use cli::run_cli;
 pub use icon::app_icon_png;
 pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
-pub use sources::{front_window, frontmost_app, frontmost_pid, picker_sources, source_spaces, window_bounds};
+pub use sources::{
+    front_window, frontmost_app, frontmost_pid, picker_sources, source_spaces, window_bounds,
+    window_fullscreen,
+};
 pub use window::{
-    activate_process, activate_self, bounds, inspect, make_panel, order_front, panel_cursor,
+    activate_process, activate_self, activate_window, bounds, inspect, make_panel, order_front, panel_cursor,
     panel_pointer, place, promote_to_key, start_fullscreen_watch,
 };
 pub use workspace::observe_workspace;
+
+/// Windows has no permission like macOS's Accessibility: `None`.
+pub fn accessibility_status() -> Option<bool> {
+    None
+}
+
+pub fn request_accessibility() -> Result<bool, String> {
+    Err("unsupported: Windows has no Accessibility permission to grant".into())
+}
 
 // ---------------------------------------------------------------- input regions
 

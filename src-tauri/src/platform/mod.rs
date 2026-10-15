@@ -34,6 +34,10 @@
 //! observe_workspace(on_sleep, on_wake, on_activate)
 //! activate_self(prefer: Option<&WebviewWindow>) -> Result<(), String>
 //! activate_process(pid: u32) -> Result<(), String>
+//! activate_window(&SourceId) -> Result<(), String>   // that window, on its Space/desktop
+//! window_fullscreen(&SourceId) -> Option<bool>       // the OS's own answer; None: cannot say
+//! accessibility_status() -> Option<bool>             // None: no such permission here
+//! request_accessibility() -> Result<bool, String>
 //! open_capture_settings() -> Result<(), String>
 //! run_cli(program, args, stdin, cwd) -> Result<Child, String>
 //! capabilities() -> Value
@@ -627,6 +631,125 @@ pub fn desktop_frame_info(info: &kimochi_capture::FrameInfo) -> kimochi_capture:
     DesktopGeometry::current().frame_info_to_desktop(info)
 }
 
+// ---------------------------------------------------------------- full screen
+//
+// A window that fills its display is read like a display: nothing to outline on hover (the
+// outline would be the whole screen), a crop of its own (see `state::shaped_crop_key`), and
+// on macOS a Space of its own that the window server animates it into and out of.
+
+/// What the source watch knows about the tracked window, in desktop points.
+#[derive(Serialize, Clone, Copy, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowState {
+    /// Where the window is; while `settling`, where it was last at rest.
+    pub bounds: Rect,
+    pub on_screen: bool,
+    /// The window fills its display: a full-screen app, or a borderless full-screen window.
+    pub fullscreen: bool,
+    /// A full-screen window that is not where full screen puts it. macOS slides a full-screen
+    /// app's Space in and out when the reader switches Spaces, and the window server reports
+    /// every step of the slide as the window's bounds: followed at the watch's rate, text
+    /// crawled across the screen behind the picture, and the overlay hopped displays when the
+    /// window's centre crossed one. Text is hidden until the window is at rest again.
+    pub settling: bool,
+    /// The display the window fills, when it fills one.
+    pub display: Option<Rect>,
+}
+
+impl WindowState {
+    /// Whether the overlay and its text would draw differently: what the watch announces.
+    pub fn differs(&self, other: &WindowState) -> bool {
+        let moved = |a: &Rect, b: &Rect| {
+            (a.x - b.x).abs() > 0.5
+                || (a.y - b.y).abs() > 0.5
+                || (a.width - b.width).abs() > 0.5
+                || (a.height - b.height).abs() > 0.5
+        };
+        moved(&self.bounds, &other.bounds)
+            || self.on_screen != other.on_screen
+            || self.fullscreen != other.fullscreen
+            || self.settling != other.settling
+    }
+}
+
+/// The window covers the whole display (a borderless full-screen window), and is on it.
+pub fn covers_display(window: Rect, display: Rect) -> bool {
+    const SLACK: f64 = 1.;
+    window.width > 0.
+        && window.height > 0.
+        && display.width > 0.
+        && display.height > 0.
+        && window.x <= display.x + SLACK
+        && window.y <= display.y + SLACK
+        && window.x + window.width >= display.x + display.width - SLACK
+        && window.y + window.height >= display.y + display.height - SLACK
+        && centred_on(window, display)
+}
+
+/// Where a full-screen app's window is at rest: the whole display, or on a MacBook with a
+/// notch, the display below the camera housing (the menu bar's height). Only asked of windows
+/// the OS says are full screen: a zoomed window under the menu bar would also pass it.
+fn rests_full_screen(window: Rect, display: Rect) -> bool {
+    const SLACK: f64 = 1.;
+    const TOP_INSET: f64 = 48.;
+    window.width > 0.
+        && display.width > 0.
+        && (window.x - display.x).abs() <= SLACK
+        && (window.width - display.width).abs() <= SLACK
+        && (window.y + window.height - display.y - display.height).abs() <= SLACK
+        && window.y >= display.y - SLACK
+        && window.y <= display.y + TOP_INSET
+}
+
+fn centred_on(window: Rect, display: Rect) -> bool {
+    let (cx, cy) = (window.x + window.width / 2., window.y + window.height / 2.);
+    cx >= display.x && cx < display.x + display.width && cy >= display.y && cy < display.y + display.height
+}
+
+/// One sample of the tracked window, from its bounds, whether it is on screen, the OS's own
+/// answer to "is it full screen" (`None`: the OS cannot say), the displays, and the previous
+/// sample (whose bounds a settling window keeps).
+pub fn window_state(
+    bounds: Rect,
+    on_screen: bool,
+    native_fullscreen: Option<bool>,
+    displays: &[Rect],
+    previous: Option<&WindowState>,
+) -> WindowState {
+    let covered = displays.iter().copied().find(|d| covers_display(bounds, *d));
+    let resting = displays.iter().copied().find(|d| rests_full_screen(bounds, *d));
+    let native = native_fullscreen == Some(true);
+    // Away from where full screen puts it: in an animation, or slid off with its Space. Either
+    // way its place is the one it last rested at; it is only settling while it is on screen.
+    // Only an exact fit counts for it: mid-slide, an ultrawide window can cover a smaller
+    // display beside its own.
+    if native && resting.is_none() {
+        return WindowState {
+            bounds: previous.map_or(bounds, |p| p.bounds),
+            on_screen,
+            fullscreen: true,
+            settling: on_screen,
+            display: previous.and_then(|p| p.display),
+        };
+    }
+    WindowState {
+        bounds,
+        on_screen,
+        fullscreen: native || covered.is_some(),
+        settling: false,
+        display: if native { resting } else { covered },
+    }
+}
+
+/// `window_state` for a source, in desktop points; `None` when the window is gone.
+pub fn desktop_window_state(
+    id: &kimochi_capture::SourceId,
+    previous: Option<&WindowState>,
+) -> Option<WindowState> {
+    let (bounds, on_screen) = desktop_window_bounds(id)?;
+    Some(window_state(bounds, on_screen, window_fullscreen(id), &desktop_displays(), previous))
+}
+
 fn clamp_within(rect: Rect, screens: &[DisplayInfo]) -> Rect {
     if screens.is_empty() {
         return rect;
@@ -902,6 +1025,41 @@ mod tests {
             width,
             height,
         }
+    }
+
+    const ULTRAWIDE: Rect = Rect { x: 1728., y: 0., width: 3440., height: 1440. };
+    const LAPTOP: Rect = Rect { x: 0., y: 0., width: 1728., height: 1117. };
+
+    #[test]
+    fn a_window_filling_its_display_is_full_screen_without_the_os_saying_so() {
+        let state = window_state(ULTRAWIDE, true, None, &[LAPTOP, ULTRAWIDE], None);
+        assert!(state.fullscreen && !state.settling);
+        assert_eq!(state.display.unwrap().x, 1728.);
+        let window = window_state(rect(1900., 100., 1200., 900.), true, None, &[LAPTOP, ULTRAWIDE], None);
+        assert!(!window.fullscreen && window.display.is_none());
+        // A zoomed window under the menu bar is not full screen unless the OS says it is.
+        let zoomed = window_state(rect(0., 38., 1728., 1079.), true, None, &[LAPTOP], None);
+        assert!(!zoomed.fullscreen);
+        let notch = window_state(rect(0., 38., 1728., 1079.), true, Some(true), &[LAPTOP], None);
+        assert!(notch.fullscreen && !notch.settling, "a full-screen app below the notch is at rest");
+    }
+
+    #[test]
+    fn a_full_screen_window_sliding_between_spaces_keeps_its_place() {
+        // Recorded on macOS: switching Spaces reports the window at each step of the slide.
+        let rest = window_state(ULTRAWIDE, true, Some(true), &[LAPTOP, ULTRAWIDE], None);
+        for x in [1808., 4910., 5227., -1258., 478.] {
+            let step = window_state(rect(x, 0., 3440., 1440.), true, Some(true), &[LAPTOP, ULTRAWIDE], Some(&rest));
+            assert!(step.settling && step.fullscreen, "x = {x}");
+            assert_eq!(step.bounds.x, 1728., "the text stays put while x = {x}");
+            assert!(step.differs(&rest), "settling is announced");
+        }
+        // Off its Space it is not shown at all, which is not settling.
+        let away = window_state(rect(5227., 0., 3440., 1440.), false, Some(true), &[LAPTOP, ULTRAWIDE], Some(&rest));
+        assert!(!away.settling);
+        assert_eq!(away.bounds.x, 1728., "nor does it move once off screen");
+        let back = window_state(ULTRAWIDE, true, Some(true), &[LAPTOP, ULTRAWIDE], Some(&rest));
+        assert!(!back.settling && !back.differs(&rest));
     }
 
     #[test]

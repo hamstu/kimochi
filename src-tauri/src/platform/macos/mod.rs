@@ -4,6 +4,7 @@
 //! This is the macOS half of `crate::platform`: every public item here is part of the
 //! per-OS contract described in `platform/mod.rs`, and the shared types it returns live
 //! there.
+mod focus;
 pub mod instance;
 mod spaces;
 
@@ -1138,6 +1139,40 @@ pub fn activate_process(pid: u32) -> Result<(), String> {
             Err("native: the application did not come to the front".into())
         }
     }
+}
+
+/// Whether window `id` is a full-screen app's window: on a full-screen Space, or, where
+/// Accessibility is allowed and the Spaces cannot be read, the window's own `AXFullScreen`.
+/// `None` when neither can say; the shared rule then goes by whether it fills its display.
+pub fn window_fullscreen(id: &SourceId) -> Option<bool> {
+    let number = id.handle_u32()?;
+    if let Some(spaces) = spaces::Spaces::current() {
+        return Some(spaces.is_full_screen(number));
+    }
+    focus::is_full_screen(i32::try_from(id.pid()?).ok()?, number)
+}
+
+/// Bring window source `id` to the front: that window, not just its application, switching to
+/// its Space when it is on another (a full-screen app). Falls back to `activate_process`.
+/// Main thread, as `activate_process`.
+pub fn activate_window(id: &SourceId) -> Result<(), String> {
+    let pid = id.pid().filter(|pid| *pid > 0).ok_or("invalid: the window has no process")?;
+    if let Some(number) = id.handle_u32() {
+        if focus::front_window(i32::try_from(pid).map_err(|_| "invalid: process id out of range")?, number) {
+            return Ok(());
+        }
+    }
+    activate_process(pid)
+}
+
+/// Accessibility: `Some(granted)`; this platform has the permission.
+pub fn accessibility_status() -> Option<bool> {
+    Some(focus::trusted())
+}
+
+/// Ask for Accessibility (the system prompt, and its Settings pane). Whether it is granted now.
+pub fn request_accessibility() -> Result<bool, String> {
+    Ok(focus::request())
 }
 
 // ---------------------------------------------------------------- system links

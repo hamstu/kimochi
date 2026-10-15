@@ -57,9 +57,12 @@ import { useViewState } from '../bridge/state'
 import { useHotkeys } from '../bridge/useHotkeys'
 import {
   nativeError,
+  onEvent,
   sourceLiveThumbnail,
+  sourceWindowState,
   startSystemPick,
-  useSystemPick
+  useSystemPick,
+  type SourceWindowState
 } from '../bridge/tauri'
 import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
@@ -241,6 +244,27 @@ function useLiveFrames(
         })
       )
   }
+}
+
+/**
+ * Whether the chosen window fills its display (a full-screen app, or a borderless full-screen
+ * window): then it reads like a screen. Asked once on mount, since the card is remounted coming
+ * back from Settings, then followed.
+ */
+function useFullScreen(sourceId: string): boolean {
+  const [state, setState] = useState<SourceWindowState | null>(null)
+  useEffect(() => {
+    let alive = true
+    void sourceWindowState()
+      .then((next) => alive && setState(next))
+      .catch(() => undefined)
+    const off = onEvent<SourceWindowState>('source-bounds', (next) => alive && setState(next))
+    return () => {
+      alive = false
+      void off.then((unlisten) => unlisten())
+    }
+  }, [sourceId])
+  return Boolean(state && state.sourceId === sourceId && state.fullscreen)
 }
 
 function LivePreview({
@@ -489,6 +513,7 @@ export function SourcePanel({
   useEffect(() => onSettingsChange((next) => setWebsocketUrl(next.websocketUrl)), [])
 
   const source = controller.currentSource
+  const fullScreen = useFullScreen(source?.type === 'window' ? source.sourceId : '')
   // A window or screen that has not been picked yet reads as no source at all.
   const empty = mode === 'ocr' && !source
   const scanKey = hotkeys.triggerScan?.enabled
@@ -553,9 +578,11 @@ export function SourcePanel({
     const title = isScreen ? source.name || 'Screen' : source.appName || source.name || 'Window'
     const detail = isScreen
       ? 'Whole screen'
-      : source.name && source.name !== title
-        ? source.name
-        : 'Window'
+      : fullScreen
+        ? 'Full screen'
+        : source.name && source.name !== title
+          ? source.name
+          : 'Window'
     const preview = (
       <>
         <LivePreview
@@ -570,7 +597,7 @@ export function SourcePanel({
             isScreen ? undefined : (
               <span className="src-front" aria-hidden>
                 <ArrowUpRight />
-                Bring to front
+                {fullScreen ? 'Go to full screen' : 'Bring to front'}
               </span>
             )
           }
@@ -593,7 +620,13 @@ export function SourcePanel({
           <button
             type="button"
             className="src-card-body"
-            aria-label={isScreen ? 'Return to game' : `Bring ${title} to the front`}
+            aria-label={
+              isScreen
+                ? 'Return to game'
+                : fullScreen
+                  ? `Go to ${title} in full screen`
+                  : `Bring ${title} to the front`
+            }
             onClick={() => controller.onActivateSource()}
             onMouseEnter={() => controller.onSourceHover(true)}
             onMouseLeave={() => controller.onSourceHover(false)}
