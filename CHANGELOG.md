@@ -103,6 +103,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- On macOS, clicking the source card for a game in full screen now goes to the game's Space,
+  even when the game's app has another window on your current desktop (OpenEmu's library).
 - Text read from a full-screen app on macOS now lines up with the game. The capture came back
   3% small with an empty band along the top (the window's hidden title bar), so every word
   was drawn below and to the left of where it was read.

@@ -16,7 +16,7 @@
 //!    complements the first rather than replacing it. It also answers `AXFullScreen`.
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_foundation::{ns_string, NSArray, NSDictionary, NSNumber, NSString};
+use objc2_foundation::{ns_string, NSArray, NSData, NSDictionary, NSNumber, NSString};
 use std::ffi::{c_char, c_void};
 use std::sync::OnceLock;
 
@@ -56,6 +56,7 @@ type GetProcessForPid = unsafe extern "C" fn(i32, *mut ProcessSerialNumber) -> i
 type SetFrontProcess = unsafe extern "C" fn(*mut ProcessSerialNumber, u32, u32) -> i32;
 type PostEventRecord = unsafe extern "C" fn(*mut ProcessSerialNumber, *mut u8) -> i32;
 type GetWindow = unsafe extern "C" fn(CFTypeRef, *mut u32) -> i32;
+type CreateWithRemoteToken = unsafe extern "C" fn(CFTypeRef) -> CFTypeRef;
 
 struct Calls {
     process_for_pid: GetProcessForPid,
@@ -88,6 +89,19 @@ fn element_window() -> Option<GetWindow> {
         find(c"_AXUIElementGetWindow").map(|f| std::mem::transmute::<*mut c_void, GetWindow>(f))
     })
 }
+
+/// `_AXUIElementCreateWithRemoteToken`: an accessibility element from its process and number.
+fn remote_element() -> Option<CreateWithRemoteToken> {
+    static CALL: OnceLock<Option<CreateWithRemoteToken>> = OnceLock::new();
+    *CALL.get_or_init(|| unsafe {
+        find(c"_AXUIElementCreateWithRemoteToken")
+            .map(|f| std::mem::transmute::<*mut c_void, CreateWithRemoteToken>(f))
+    })
+}
+
+/// How many element numbers to try for a window on another Space. Window elements are created
+/// early in an application's life and numbered from zero; the switcher AltTab looks this far.
+const ELEMENT_SEARCH: u64 = 1000;
 
 /// `kCPSUserGenerated`: as if the reader had clicked the window.
 const USER_GENERATED: u32 = 0x200;
@@ -159,6 +173,61 @@ fn window_element(pid: i32, number: u32) -> Option<Owned> {
     }
 }
 
+/// The accessibility element of window `number` wherever it is, including on a Space that is not
+/// showing, which `AXWindows` leaves out: a full-screen game's window, while the reader is on the
+/// desktop with its application's other windows. Built from the process and each element number
+/// in turn (`_AXUIElementCreateWithRemoteToken`) until one is that window.
+fn window_element_anywhere(pid: i32, number: u32) -> Option<Owned> {
+    if let Some(found) = window_element(pid, number) {
+        return Some(found);
+    }
+    if !trusted() {
+        return None;
+    }
+    let (create, get_window) = (remote_element()?, element_window()?);
+    // The token: process id, zero, the "coco" tag, then the element number.
+    let mut token = [0u8; 20];
+    token[0..4].copy_from_slice(&pid.to_ne_bytes());
+    token[8..12].copy_from_slice(&0x636f_636fi32.to_ne_bytes());
+    let started = std::time::Instant::now();
+    for element_id in 0..ELEMENT_SEARCH {
+        // A click waits on this; an application slow to answer is not searched for long.
+        if started.elapsed() > std::time::Duration::from_millis(400) {
+            return None;
+        }
+        token[12..20].copy_from_slice(&element_id.to_ne_bytes());
+        let found = objc2::rc::autoreleasepool(|_| unsafe {
+            let data = NSData::with_bytes(&token);
+            let element = create(Retained::as_ptr(&data).cast());
+            if element.is_null() {
+                return None;
+            }
+            let element = Owned(element);
+            AXUIElementSetMessagingTimeout(element.0, 0.1);
+            let mut id = 0u32;
+            // A window's parts answer with its id too; only the window itself is raised.
+            (get_window(element.0, &mut id) == 0 && id == number && is_window(&element)).then_some(element)
+        });
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
+/// Whether an element's role is `AXWindow`.
+fn is_window(element: &Owned) -> bool {
+    unsafe {
+        let mut value: CFTypeRef = std::ptr::null();
+        let attribute = ns_string!("AXRole");
+        if AXUIElementCopyAttributeValue(element.0, (attribute as *const NSString).cast(), &mut value) != 0 {
+            return false;
+        }
+        let value = Owned(value);
+        (*(value.0 as *const NSString)).to_string() == "AXWindow"
+    }
+}
+
 /// `AXFullScreen` of the window, when Accessibility is allowed and the window is reachable.
 pub fn is_full_screen(pid: i32, number: u32) -> Option<bool> {
     let element = window_element(pid, number)?;
@@ -180,6 +249,23 @@ pub fn is_full_screen(pid: i32, number: u32) -> Option<bool> {
 pub fn front_window(pid: i32, number: u32, report: &mut serde_json::Map<String, serde_json::Value>) -> bool {
     use serde_json::json;
     let mut fronted = false;
+    // The window itself first, so it is its application's front window before anything
+    // activates the application: activated with another of its windows on the Space being
+    // shown (OpenEmu's library, beside its game in full screen), macOS stays on that Space.
+    report.insert("trusted".into(), json!(trusted()));
+    let element = window_element_anywhere(pid, number);
+    report.insert("element".into(), json!(element.is_some()));
+    if let Some(element) = element {
+        unsafe {
+            let main = ns_string!("AXMain");
+            let raise = ns_string!("AXRaise");
+            let main = AXUIElementSetAttributeValue(element.0, (main as *const NSString).cast(), kCFBooleanTrue);
+            let raised = AXUIElementPerformAction(element.0, (raise as *const NSString).cast());
+            report.insert("main".into(), json!(main));
+            report.insert("raise".into(), json!(raised));
+            fronted |= raised == 0;
+        }
+    }
     report.insert("skylight".into(), json!(calls().is_some()));
     if let Some(calls) = calls() {
         let mut psn = ProcessSerialNumber::default();
@@ -194,20 +280,6 @@ pub fn front_window(pid: i32, number: u32, report: &mut serde_json::Map<String, 
                     make_key(calls, &mut psn, number);
                 }
             }
-        }
-    }
-    report.insert("trusted".into(), json!(trusted()));
-    let element = window_element(pid, number);
-    report.insert("element".into(), json!(element.is_some()));
-    if let Some(element) = element {
-        unsafe {
-            let main = ns_string!("AXMain");
-            let raise = ns_string!("AXRaise");
-            let main = AXUIElementSetAttributeValue(element.0, (main as *const NSString).cast(), kCFBooleanTrue);
-            let raised = AXUIElementPerformAction(element.0, (raise as *const NSString).cast());
-            report.insert("main".into(), json!(main));
-            report.insert("raise".into(), json!(raised));
-            fronted |= raised == 0;
         }
     }
     fronted
