@@ -22,7 +22,7 @@ pub struct PanelSpec {
     pub min_width: f64,
     pub min_height: f64,
     pub resizable: bool,
-    /// Electron starts controls and Log pinned; every other panel unpinned.
+    /// Default pin state; a saved explicit preference takes precedence.
     pub pinned: bool,
     /// Built during setup rather than on first show.
     pub eager: bool,
@@ -83,7 +83,6 @@ pub static PANELS: &[PanelSpec] = &[
     // Notebook as a second view. It keeps the `log` label because that label is also its
     // texthooker ownership, its Yomitan frame band and its popup host.
     PanelSpec {
-        pinned: true,
         eager: true,
         min_width: 480.,
         min_height: 280.,
@@ -108,12 +107,10 @@ pub static PANELS: &[PanelSpec] = &[
         min_height: 420.,
         ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.)
     },
-    // The onboarding guide, in the same app-drawn chrome as every panel. A first run must not
-    // lose it behind another window, so it opens centred and kept on top (the title bar's pin
-    // turns that off, and it stays movable by its title bar). Sized so no step scrolls at the
+    // The onboarding guide opens centred, without pinning it above dictionary setup windows.
+    // The title bar's pin is still available. Sized so no step scrolls at the
     // default size; the minimum still fits every step, scrolling inside the step if it must.
     PanelSpec {
-        pinned: true,
         centred: true,
         min_width: 600.,
         min_height: 520.,
@@ -945,16 +942,16 @@ mod tests {
     }
 
     #[test]
-    fn electron_pin_defaults_are_preserved() {
-        assert!(spec("log").unwrap().pinned);
+    fn ordinary_panels_start_unpinned() {
+        assert!(!spec("log").unwrap().pinned);
         assert!(!spec("settings").unwrap().pinned);
         assert!(!spec("diagnostics").unwrap().pinned);
     }
 
     #[test]
-    fn onboarding_opens_centred_on_top_in_kimochi_chrome() {
+    fn onboarding_opens_centred_unpinned_in_kimochi_chrome() {
         let welcome = spec("welcome").unwrap();
-        assert!(welcome.pinned, "onboarding starts always on top");
+        assert!(!welcome.pinned, "onboarding must not cover dictionary setup windows");
         assert!(welcome.centred, "onboarding is centred when shown");
         assert!(!welcome.decorated, "onboarding draws the panel chrome");
         assert!(welcome.resizable);

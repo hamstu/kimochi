@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- The main window and setup guide start unpinned, so dictionary settings can open above them.
+- Dictionary settings buttons appear only once the extension has initialized; they remain
+  available while its dictionary data downloads or needs setup.
+
 - Dictionary setup now shows engine startup, dictionary downloads and installation in Settings,
   the sidebar and onboarding. Hachidori and 10ten wait for usable dictionary data before enabling
   lookups; slow first launches no longer immediately show a timeout. Dictionary warnings recover

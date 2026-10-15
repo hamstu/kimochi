@@ -5,6 +5,8 @@ import { hostEngineOf, type DictionaryEngine } from "./dictionaryEngine";
 
 export interface DictionaryReadiness {
   engine: string;
+  /** The settings host initialized; dictionary data may still be downloading. */
+  settingsReady: boolean;
   phase:
     | "starting"
     | "downloading"
@@ -46,8 +48,8 @@ export function useDictionaryReadiness(
     };
   }, [host]);
   if (engine === "custom-api")
-    return { engine: host, phase: "ready", message: "" };
+    return { engine: host, phase: "ready", settingsReady: true, message: "" };
   return status?.engine === host
     ? status
-    : { engine: host, phase: "starting", message: "Starting the dictionary…" };
+    : { engine: host, phase: "starting", settingsReady: false, message: "Starting the dictionary…" };
 }

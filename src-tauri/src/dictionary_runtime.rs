@@ -27,5 +27,5 @@ pub fn update(value: &Value) -> bool {
 
 pub fn status(engine: &str) -> Value {
     states().lock().unwrap_or_else(|p| p.into_inner()).get(engine).cloned()
-        .unwrap_or_else(|| json!({"engine": engine, "phase": "starting", "message": "Starting the dictionary…"}))
+        .unwrap_or_else(|| json!({"engine": engine, "phase": "starting", "settingsReady": false, "message": "Starting the dictionary…"}))
 }

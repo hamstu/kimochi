@@ -102,12 +102,12 @@ function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
       <div className={style.block}>
         <p className={style.text}>{ENGINE_SETUP[engine]}</p>
         <DictionaryReadiness engine={engine} />
-        <div>
+        {runtime.settingsReady && <div>
           <Button onClick={open}>
             <ExternalLink />
             Open {name} settings
           </Button>
-        </div>
+        </div>}
       </div>
       {error && <Callout tone="danger">{error}</Callout>}
       <StepActions>

@@ -2070,7 +2070,7 @@ async function openDictionaryPage(url) {
 }
 
 async function startYomitan() {
-  void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase: 'starting', message: 'Starting Yomitan…' })
+  void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase: 'starting', settingsReady: false, message: 'Starting Yomitan…' })
   if (!hub) throw Error('Extension host shim did not install')
 
   await import('/spike/network-bundle.js')
@@ -2164,7 +2164,7 @@ async function startYomitan() {
       const phase = dictionaries.some((dictionary) => enabled.some((entry) => entry.name === dictionary.title && entry.enabled)) ? 'ready' : 'setup-needed'
       if (phase === lastReadiness) return
       lastReadiness = phase
-      void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase,
+      void native.report({ check: 'dictionary-readiness', engine: 'yomitan', phase, settingsReady: true,
         message: phase === 'ready' ? 'Yomitan is ready.' : 'Open Yomitan settings to import and enable a Japanese dictionary.' })
     } catch { /* The backend startup error is reported separately. */ }
   }
@@ -3014,7 +3014,7 @@ async function startNoEngine() {
 ;(hostedEngine === NO_ENGINE ? startNoEngine() : extensionHosted ? startExtensionEngine() : startYomitan()).catch((error) => {
   state.yomitan.error = String(error?.message ?? error)
   if (hostedEngine === 'yomitan') void native.report({ check: 'dictionary-readiness', engine: 'yomitan',
-    phase: 'failed', message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.' })
+    phase: 'failed', settingsReady: false, message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.' })
   settleBackend()
   log({
     check: hostedEngine === NO_ENGINE ? 'dictionary-none' : extensionHosted ? 'dictionary-unavailable' : 'yomitan-unavailable',

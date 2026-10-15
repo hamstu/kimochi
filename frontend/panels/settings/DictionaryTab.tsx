@@ -54,6 +54,7 @@ import { NumberField } from './fields'
 import { DictionaryChooser } from './DictionaryChooser'
 import { useDictionarySwitch } from './useDictionarySwitch'
 import { DictionaryReadiness } from '../../components/DictionaryReadiness'
+import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 
 export function DictionaryTab(): ReactNode {
   const {
@@ -73,6 +74,7 @@ export function DictionaryTab(): ReactNode {
     setupOpen,
     setSetupOpen
   } = useDictionarySwitch('settings')
+  const runtime = useDictionaryReadiness(active)
 
   const handleApiUrlChange = useCallback(
     (value: string): void => {
@@ -99,7 +101,7 @@ export function DictionaryTab(): ReactNode {
                 : `${name}'s own settings open here once it is the active engine.`}
             </span>
           </div>
-          {inUse && (
+          {inUse && runtime.settingsReady && (
             <Button
               size="sm"
               onClick={() => {

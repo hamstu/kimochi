@@ -562,11 +562,13 @@ surface.
 | `storage_backup` | `({extension}) -> string \| null` |
 | `dictionary_engine_apply` | `({repair?}) -> ()` |
 | `dictionary_engine_effective` | `() -> {selected, effective, ready: {yomitan, hachidori, tenten}}` |
-| `dictionary_runtime_status` | `({engine}) -> {engine, phase, message, progress?}` |
+| `dictionary_runtime_status` | `({engine}) -> {engine, phase, settingsReady, message, progress?}` |
 | `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
 
 `dictionary_runtime_status` and the `dictionary-readiness` event describe **lookup** readiness,
-separately from extension-download readiness. `phase` is `starting`, `downloading`, `installing`,
+separately from extension-download readiness. `settingsReady` becomes true once the host's
+background/offscreen contexts have initialized, so its settings can open while data downloads.
+Settings buttons stay hidden until then. `phase` is `starting`, `downloading`, `installing`,
 `setup-needed`, `ready` or `failed`; `progress` is a percentage when the engine supplies one.
 The overlay publishes changes through `report` (`check: "dictionary-readiness"`); native keeps
 the latest value per engine so newly opened Settings and onboarding see the current state.

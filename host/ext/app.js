@@ -117,12 +117,13 @@ export function installApp(win, { engine, descriptor }) {
   let reloadWindow = false
   let stopReadiness = null
   const publishReadiness = (status) => {
+    status = { ...status, settingsReady: Boolean(hub?.engineReady) }
     if (hub) hub.setup = status
     applyReadiness(status)
     report({ check: 'dictionary-readiness', ...status })
     void relayServer?.broadcast({ type: 'setup', setup: status })
   }
-  if (isHubWindow) report({ check: 'dictionary-readiness', phase: 'starting', message: `Starting ${descriptor.name}…` })
+  if (isHubWindow) report({ check: 'dictionary-readiness', phase: 'starting', settingsReady: false, message: `Starting ${descriptor.name}…` })
 
   /**
    * The engine's background and offscreen documents live in its hidden extension window

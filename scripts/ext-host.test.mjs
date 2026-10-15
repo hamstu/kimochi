@@ -634,6 +634,9 @@ test('the overlay hub starts the background and offscreen documents and reports 
   assert.equal(ready.background, 'ready')
   assert.equal(ready.offscreen, 'ready')
   assert.equal(ready.engine, 'hachidori')
+  const setup = world.reports.filter((r) => r.check === 'dictionary-readiness')
+  assert.equal(setup[0].settingsReady, false, 'settings stay hidden during initialization')
+  assert.equal(setup.at(-1).settingsReady, true, 'settings open once the host initialized')
   // A second start is the same promise; the host is idempotent.
   assert.equal(result(overlay, '__kimochiExtensionHost.start({host: true}) === __kimochiExtensionHost.start({host: true})'), true)
   // The install record lives in the host's own section, invisible to the extension.
@@ -1196,6 +1199,9 @@ test('the scan scope filters the extension\'s hit tests only, and setEnabled(fal
     words: { state: 'empty' }, updateState: { type: 'updating', series: 'words', totalProgress: 0.4 }
   } })`)
   await waitFor(() => asExtension('document.caretRangeFromPoint(10, 10)') === null, 'lookups disabled while data downloads')
+  const downloading = world.reports.filter((r) => r.check === 'dictionary-readiness').at(-1)
+  assert.equal(downloading.phase, 'downloading')
+  assert.equal(downloading.settingsReady, true, '10ten settings remain usable during data downloads')
   result(log, '__kimochiExtensionHost.setEnabled(true)')
   assert.equal(asExtension('document.caretRangeFromPoint(10, 10)'), null, 'enabling cannot bypass dictionary readiness')
   result(background, `dataPort.postMessage({ type: 'dbstateupdated', state: {
