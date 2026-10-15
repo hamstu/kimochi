@@ -4,9 +4,7 @@ import {
   isDuplicateInRecent,
   lastLineText,
   replaceLastLineText,
-  updateLineTokens,
 } from "./store";
-import { tokenize } from "@texthooker/lib/yomitan";
 import { getSettings } from "@texthooker/lib/settings";
 import { applyReplacements } from "./replacements";
 import { recordCharDelta, recordLine } from "./stats";
@@ -66,19 +64,6 @@ export const ingestText = async (
       if (merged && ingestId)
         merged.ingestIds = [...(merged.ingestIds || []), ingestId];
       recordCharDelta(value.length - prev.length);
-      if (
-        merged &&
-        settings.tokenizeOnArrival &&
-        settings.dictionaryMode === "custom-api"
-      ) {
-        await (async () => {
-          const tokens = await tokenize(settings.yomitanApiUrl, value);
-          // Stale-text guard: only apply if the line's text hasn't changed.
-          if (tokens && merged.text === value) {
-            updateLineTokens(merged.id, tokens);
-          }
-        })();
-      }
       return;
     }
   }
@@ -91,12 +76,4 @@ export const ingestText = async (
   if (!line) return;
   if (ingestId) line.ingestIds = [ingestId];
   recordLine(value.length);
-
-  // 10 — tokenize with stale-text guard
-  if (settings.tokenizeOnArrival && settings.dictionaryMode === "custom-api") {
-    const tokens = await tokenize(settings.yomitanApiUrl, value);
-    if (tokens && line.text === value) {
-      updateLineTokens(line.id, tokens);
-    }
-  }
 };

@@ -237,12 +237,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
               {snap.lines.slice(-shown).map((line) => (
                 <LineRow
                   key={`${snap.sessions.activeId}:${line.id}`}
-                  line={apiMode ? line : { ...line, tokens: null }}
-                  yomitanBaseUrl={settings.yomitanApiUrl}
-                  showFurigana={settings.showFurigana}
-                  disableClickToDefine={
-                    !apiMode || settings.disableClickToDefine
-                  }
+                  line={line}
                   translateEnabled={Boolean(settings.deeplApiKey.trim())}
                 />
               ))}

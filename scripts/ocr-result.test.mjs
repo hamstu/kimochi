@@ -148,3 +148,29 @@ test("OneOCR's semantic line overrides jittered glyph gaps without inserting Jap
   assert.equal(result.textAnnotations[1].granularity, "block");
   assert.deepEqual(result.textAnnotations[1].linePolygons, [polygon]);
 });
+
+test("normalising a saved result again keeps the engine's words, not one box per group", () => {
+  // A cloud result: words, no groups. A reloaded overlay redraws the saved, normalised scan.
+  const words = ["今日", "は", "いい", "天気", "です", "ね"].map((d, i) =>
+    annotation(d, 100 + i * 60, 100, 55, 40),
+  );
+  const raw = {
+    fullText: "今日はいい天気ですね",
+    textAnnotations: [annotation("今日はいい天気ですね", 100, 100, 360, 40), ...words],
+  };
+  const live = normalizeOcrResult(raw, "cloud");
+  assert.equal(live.textAnnotations.length - 1, 6);
+  assert.ok(live.groups.every((g) => g.inferred));
+  assert.deepEqual(normalizeOcrResult(live, "cloud"), live);
+});
+
+test("groups an engine supplied are still drawn as its blocks", () => {
+  const raw = {
+    fullText: "猫",
+    groups: [{ id: "b0", text: "猫", bbox: [0, 0, 40, 40], orientation: "horizontal" }],
+    textAnnotations: [annotation("猫", 0, 0, 40, 40, { granularity: "line" })],
+  };
+  const once = normalizeOcrResult(raw, "googlelens");
+  assert.equal(once.textAnnotations[1].granularity, "block");
+  assert.deepEqual(normalizeOcrResult(once, "googlelens").textAnnotations, once.textAnnotations);
+});

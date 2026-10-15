@@ -1,5 +1,5 @@
 import { createDictionarySetup } from './setup-dictionaries.js'
-import { installApiLookup, lookupTerm } from './api-lookup.js'
+import { dismissApiLookup, installApiLookup, lookupTerm } from './api-lookup.js'
 import { createController } from './controller.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
@@ -2043,6 +2043,8 @@ async function startYomitan() {
   await ready
   // Before the frontend exists, so no popup can be built without being seen.
   await capturePopups()
+  // The overlay has no ground of its own: Yomitan's popups take Kimochi's appearance instead.
+  await (await import('/spike/popup-bridge.js')).siteThemeFromAppearance()
   await installApiLookup()
   await import('/js/app/content-script-wrapper.js')
 
@@ -2173,6 +2175,7 @@ async function importFixtureDictionary() {
  * dismissal sends commands and synthetic events).
  */
 function dismissPopup() {
+  dismissApiLookup()
   if (extensionHosted) {
     const host = extensionHost()
     if (host && (extensionPopupRect || host.isPopupVisible?.())) host.dismiss()

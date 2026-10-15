@@ -120,7 +120,6 @@ const allowed: Record<string, string[]> = {
     "setLineTranslation",
     "setLineTranslationVisible",
     "setLineExplanation",
-    "updateLineTokens",
   ],
   notebook: [
     "createPerson",

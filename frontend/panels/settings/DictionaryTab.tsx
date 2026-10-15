@@ -189,38 +189,6 @@ function KimochiPopupSections({ settings }: { settings: Settings }): ReactNode {
   const volume = Math.round(settings.audioVolume * 100)
   return (
     <div className="texthooker dictionary-engine-sections">
-      <SettingsSection title="In the Log">
-        <SettingsRow
-          label="Click a word to look it up"
-          controlId="dictionary-click"
-          description="Off makes the text selectable instead. Shift-hover still looks words up."
-        >
-          <Switch
-            id="dictionary-click"
-            checked={!settings.disableClickToDefine}
-            onCheckedChange={(v) => void updateSettings({ disableClickToDefine: !v })}
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Split lines into words on arrival"
-          controlId="dictionary-tokenize"
-          description="Otherwise a line is split the first time you point at it."
-        >
-          <Switch
-            id="dictionary-tokenize"
-            checked={settings.tokenizeOnArrival}
-            onCheckedChange={(v) => void updateSettings({ tokenizeOnArrival: v })}
-          />
-        </SettingsRow>
-        <SettingsRow label="Show furigana" controlId="dictionary-furigana">
-          <Switch
-            id="dictionary-furigana"
-            checked={settings.showFurigana}
-            onCheckedChange={(v) => void updateSettings({ showFurigana: v })}
-          />
-        </SettingsRow>
-      </SettingsSection>
-
       <SettingsSection title="Pop-up size">
         <SettingsRow label="Width" controlId="dictionary-pop-w" description="In pixels, 280 to 900.">
           <NumberField

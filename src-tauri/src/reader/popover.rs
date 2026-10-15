@@ -27,6 +27,20 @@ const SHOW_WAIT: std::time::Duration = std::time::Duration::from_millis(150);
 /// Used by the desktop pointer poll to avoid work while the popup is hidden.
 static POPOVER_VISIBLE: AtomicBool = AtomicBool::new(false);
 
+/// Where the card was last placed, in desktop points: `(x, y, width, height)`.
+static CARD: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
+
+/// Whether the visible pop-up's card covers a desktop point. The overlay's pointer feed counts
+/// such a point as blocked, as it does an extension's pop-up: a Shift-scan through the card would
+/// look up the text under it, and reading or scrolling the card would change it.
+pub fn covers(x: f64, y: f64) -> bool {
+    POPOVER_VISIBLE.load(Ordering::Relaxed)
+        && CARD
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_some_and(|(cx, cy, w, h)| x >= cx && x < cx + w && y >= cy && y < cy + h)
+}
+
 /// Monotonic lookup generation. Bumped on every show_popover (and hide), so
 /// in-flight fetches from a superseded lookup can detect they're stale and
 /// skip emitting — the lookup now runs in two phases (fields fast, media
@@ -278,6 +292,7 @@ pub async fn show_popover(
         height,
         (mon_x, mon_y, mon_w, mon_h),
     );
+    *CARD.lock().unwrap_or_else(|p| p.into_inner()) = Some((x, y, width, height));
 
     // (x, y) above target the CARD's top-left. Subtract SHADOW_PAD so the
     // window's transparent margin sits behind the card. Tauri converts logical

@@ -28,6 +28,26 @@
 const OBSERVED = Symbol.for('kimochi.popupBridge.observed')
 const PREWARMED = Symbol.for('kimochi.popupBridge.prewarmed')
 const STYLED = Symbol.for('kimochi.popupBridge.styled')
+const APPEARANCE = Symbol.for('kimochi.popupBridge.appearance')
+
+/**
+ * Give a page with no ground of its own Kimochi's appearance as its Yomitan "site" theme.
+ *
+ * Yomitan's default theme is `site`: it reads the scanned page's background colour
+ * (`ThemeController#computeSiteTheme`) and themes the popup to match. The overlay is a transparent
+ * window over the game, which reads as white, so every overlay lookup came up light whatever
+ * Kimochi was set to. Native applies Kimochi's Appearance to the whole app (`apply_appearance` in
+ * main.rs), so `prefers-color-scheme` here is that setting; the site theme becomes it too, and
+ * follows it when it changes (Yomitan re-resolves on the media query's change). Only this realm's
+ * `ThemeController` is affected; nothing in Yomitan is modified.
+ */
+export async function siteThemeFromAppearance() {
+  const { ThemeController } = await import('/js/app/theme-controller.js')
+  if (ThemeController.prototype[APPEARANCE]) return
+  ThemeController.prototype[APPEARANCE] = true
+  ThemeController.prototype.computeSiteTheme = () =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
 
 /**
  * The popup frame in Kimochi's own pop-up style: the built-in dictionary pop-up's radius, hairline

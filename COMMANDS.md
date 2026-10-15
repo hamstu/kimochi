@@ -730,7 +730,7 @@ normally means the browser is closed, the setting is off, or the browser suspend
 | `yomitan_api_check` | `({url}) -> ApiStatus` |
 | `install_yomitan_native_host` | `() -> string` (the installer's output) |
 | `yomitan_probe` | `({baseUrl}) -> latencyMs` (the Log's reader: a `/tokenize` round trip) |
-| `yomitan_tokenize`, `yomitan_ankifields` | the Log's reader requests to the API |
+| `yomitan_tokenize`, `yomitan_ankifields` | the API pop-up's Shift-scan, in the Log and the overlay (`ui/scan-text.ts`), and its entries |
 
 `yomitan_host_status` only reads. It looks for `yomitan_api.json` in every browser's
 `NativeMessagingHosts` folder (macOS `~/Library/Application Support/<Google/Chrome, Chromium,

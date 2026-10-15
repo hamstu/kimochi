@@ -3,19 +3,12 @@ import { API_URLS } from "../../vendor/shared-constants";
 
 export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket";
 
-export interface Token {
-  text: string;
-  reading: string;
-  clickable: boolean;
-}
-
 export interface Line {
   ocr?: { scanId: string; groupId: string; groupIndex: number; groupCount: number; engine?: string; orientation: "horizontal" | "vertical" };
   /** Durable OCR replay IDs; separate from optional text-based deduplication. */
   ingestIds?: string[];
   id: number;
   text: string;
-  tokens: Token[] | null;
   source: LineSource;
   ts: number;
   /** Cached DeepL translation. Persisted with lines.json so a line is only
@@ -65,13 +58,8 @@ export interface Settings {
   webhookPort: number;
   fontSizePx: number;
   alwaysOnTop: boolean;
-  showFurigana: boolean;
-  /** When true, clicking a token does NOT open the definition popover.
-      Shift-hover (scan mode) still works. Tokens become plain selectable text. */
-  disableClickToDefine: boolean;
   clipboardEnabled: boolean;
   clipboardPollMs: number;
-  tokenizeOnArrival: boolean;
   popoverWidth: number;
   popoverHeight: number;
 
@@ -165,11 +153,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   webhookPort: 7890,
   fontSizePx: 14,
   alwaysOnTop: false,
-  showFurigana: false,
-  disableClickToDefine: false,
   clipboardEnabled: false,
   clipboardPollMs: 200,
-  tokenizeOnArrival: true,
   popoverWidth: 480,
   popoverHeight: 360,
 

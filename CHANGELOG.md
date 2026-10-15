@@ -44,6 +44,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- The dictionary pop-ups follow Kimochi's Appearance setting (Settings → General) rather than the
+  system's, so a dark Kimochi on a light Mac gets dark pop-ups. This includes Yomitan over the
+  overlay, which used to always come up light. A pop-up theme set in a dictionary's own settings
+  still wins.
+
 - The Yomitan API's Shift-scan feels like Yomitan's own. Pressing Shift looks up the word under the
   pointer without moving the mouse, the pop-up sits above the word (or below it near the top of the
   screen) instead of over the pointer, so you can slide along a line word by word, and it opens
@@ -78,6 +83,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   its own icon.
 
 ### Fixed
+
+- Shift-scan with the Yomitan API works over the overlay, as it does with the other dictionaries:
+  hold Shift over the game's text and the word under the pointer is looked up and selected, no
+  click needed. It used to look up a whole box's text, and only after a click.
+- Switching dictionaries no longer changes the overlay's text: Cloud OCR's separate words used to
+  merge into one box per paragraph when the overlay reloaded for the new dictionary.
 
 - Japanese input (IME) works in the Notebook and every other text field: the text you are
   converting stays in place instead of breaking into stray kana. Enter, Escape and the arrow keys
@@ -132,6 +143,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   and forth: only the menu, the scanned text and the dictionary pop-up appear over the game.
 
 ### Removed
+
+- The Yomitan API's word splitting in the Log: clickable words, furigana and "Split lines into
+  words on arrival". Lines in the Log are plain text with every dictionary; Shift-hover looks
+  words up.
 
 - Text to speech (read aloud) and Kimochi's own Cloud OCR are unavailable in public builds for
   now. If Cloud OCR is your selected engine, scans say it needs an access key: choose another

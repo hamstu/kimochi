@@ -22,6 +22,12 @@ export interface OcrGroup {
   linePolygons?: number[][][];
   /** Per line of `linePolygons`, the words found on it with their boxes, when the engine gives them. */
   lineSegments?: Segment[][];
+  /**
+   * Grouped here from the engine's words (`logicalGroups`), not supplied by the engine. A result
+   * normalised again (a reloaded overlay redrawing the saved scan) groups its words afresh rather
+   * than drawing these as the engine's blocks, which would merge every word of a group into one box.
+   */
+  inferred?: true;
 }
 
 /**
@@ -309,7 +315,8 @@ export function normalizeOcrResult(
   raw: Partial<OcrResult>,
   engine: string,
 ): OcrResult {
-  const supplied = Array.isArray(raw.groups) && raw.groups.length > 0;
+  const supplied =
+    Array.isArray(raw.groups) && raw.groups.some((g) => g && !g.inferred);
   const ids = new Set<string>();
   const groups: OcrGroup[] = supplied
     ? raw
@@ -377,7 +384,9 @@ export function normalizeOcrResult(
       }));
   } else if (annotations.length) {
     const inferred = logicalGroups(annotations);
-    groups.push(...inferred.groups);
+    groups.push(
+      ...inferred.groups.map((g) => ({ ...g, inferred: true as const })),
+    );
     annotations = inferred.annotations.map((a) => {
       const segments = characterSegments(a);
       return segments ? { ...a, segments } : a;

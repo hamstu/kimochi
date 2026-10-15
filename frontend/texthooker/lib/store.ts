@@ -20,10 +20,6 @@ export const setLineExplanation = (
   ...args: Parameters<typeof Core.setLineExplanation>
 ): Promise<Awaited<ReturnType<typeof Core.setLineExplanation>>> =>
   call("store", "setLineExplanation", args);
-export const updateLineTokens = (
-  ...args: Parameters<typeof Core.updateLineTokens>
-): Promise<Awaited<ReturnType<typeof Core.updateLineTokens>>> =>
-  call("store", "updateLineTokens", args);
 
 export const snapshotLines = () => getSnapshot().lines;
 export const lineCount = () => snapshotLines().length;

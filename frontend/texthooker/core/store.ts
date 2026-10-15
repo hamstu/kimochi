@@ -7,7 +7,7 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { getSettings, onSettingsChange } from "../lib/settings";
 import { currentLinesPath } from "./sessions";
-import type { Line, LineSource, Token } from "../lib/types";
+import type { Line, LineSource } from "../lib/types";
 
 const DIR = BaseDirectory.AppLocalData;
 const DEBOUNCE_MS = 2000;
@@ -138,14 +138,12 @@ export function appendLine(opts: {
   text: string;
   source: LineSource;
   ts?: number;
-  tokens?: Token[] | null;
 }): Line | null {
   const text = opts.text;
   if (!text || !text.trim()) return null;
   const line: Line = {
     id: nextId++,
     text,
-    tokens: opts.tokens ?? null,
     source: opts.source,
     ...(opts.ocr ? { ocr: opts.ocr } : {}),
     ts: opts.ts ?? Date.now(),
@@ -162,22 +160,11 @@ export function appendLine(opts: {
   return line;
 }
 
-export function updateLineTokens(id: number, tokens: Token[]) {
-  const idx = lines.findIndex((l) => l.id === id);
-  if (idx === -1) return;
-  // Replace with a fresh object so React.memo sees a new reference.
-  const updated: Line = { ...lines[idx], tokens };
-  lines[idx] = updated;
-  emit({ type: "update", line: updated });
-  scheduleSave();
-}
-
-/** Replace the last line's text (used by start-merge). Clears tokens so the
- *  caller can re-tokenize with the new text. */
+/** Replace the last line's text (used by start-merge). */
 export function replaceLastLineText(text: string): Line | null {
   if (lines.length === 0) return null;
   const idx = lines.length - 1;
-  const updated: Line = { ...lines[idx], text, tokens: null };
+  const updated: Line = { ...lines[idx], text };
   lines[idx] = updated;
   emit({ type: "update", line: updated });
   scheduleSave();

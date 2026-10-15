@@ -191,6 +191,9 @@ fn settings_set(
     if key.starts_with("hotkeys") {
         hotkeys::apply(&app, &state.settings);
     }
+    if key == "appearance" {
+        apply_appearance(&app, Some(&value));
+    }
     // Choosing a local engine whose models are missing starts their download (the pickers
     // only save that choice after the user confirms the download).
     if key == "ocrMode" {
@@ -199,6 +202,19 @@ fn settings_set(
         }
     }
     Ok(())
+}
+
+/// Kimochi's Appearance setting, applied to the app itself rather than to each page: every
+/// window's `prefers-color-scheme` then answers with it, so the dictionaries' pop-ups (Yomitan,
+/// Hachidori, 10ten, Kimochi's own), which read that, follow Kimochi rather than the system
+/// without any change to them. "system" (or no setting) hands the choice back to the OS.
+fn apply_appearance(app: &tauri::AppHandle, value: Option<&Value>) {
+    let theme = match value.and_then(Value::as_str) {
+        Some("light") => Some(tauri::Theme::Light),
+        Some("dark") => Some(tauri::Theme::Dark),
+        _ => None,
+    };
+    app.set_theme(theme);
 }
 
 #[tauri::command]
@@ -2571,6 +2587,8 @@ fn main() {
             #[cfg(target_os = "linux")]
             platform::gnome::start(handle.clone());
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
+            // Before any window is built, so none shows the system's appearance first.
+            apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
             // Before anything asks whether a local engine's models are ready.
             model_store::install(&handle).map_err(std::io::Error::other)?;
             // Before any window is built: the windows' engine and Yomitan's files come from it.
@@ -3411,7 +3429,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                             // the popup happens to be covering.
                             v.regions.iter().any(|(label, rects)| {
                                 label != OVERLAY && rects.iter().any(|r| r.contains(x, y))
-                            }),
+                            }) || reader::popover::covers(x, y),
                         )
                     };
                     if wanted && (over || was_over_overlay) {
