@@ -1,6 +1,27 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { GripVertical, Trash2 } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import {
+  restrictToParentElement,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Badge,
   Button,
@@ -26,8 +47,6 @@ interface Props {
   sessions: SessionMeta[];
 }
 
-type DropPosition = "before" | "after";
-
 export function SessionManagerModal({
   activeId,
   open,
@@ -36,11 +55,14 @@ export function SessionManagerModal({
 }: Props) {
   const [ordered, setOrdered] = useState(sessions);
   const [draftNames, setDraftNames] = useState<Record<string, string>>({});
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<{
-    id: string;
-    position: DropPosition;
-  } | null>(null);
+  // Pointer drags start after a few pixels, so a click on the handle stays a click. The keyboard
+  // lifts a row with Space or Enter, moves it with the arrows and drops it with Space or Enter.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,43 +87,17 @@ export function SessionManagerModal({
 
   useEffect(() => {
     if (open) return;
-    setDraggedId(null);
-    setDropTarget(null);
     setDeleteId(null);
     setError(null);
   }, [open]);
 
-  const moveSession = async (id: string, direction: -1 | 1) => {
-    const from = ordered.findIndex((session) => session.id === id);
-    const to = from + direction;
-    if (from === -1 || to < 0 || to >= ordered.length) return;
-    const next = ordered.slice();
-    [next[from], next[to]] = [next[to], next[from]];
+  const onDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = ordered.findIndex((session) => session.id === active.id);
+    const to = ordered.findIndex((session) => session.id === over.id);
+    if (from === -1 || to === -1) return;
+    const next = arrayMove(ordered, from, to);
     setOrdered(next);
-    setError(null);
-    try {
-      await reorderSessions(next.map((session) => session.id));
-    } catch (err) {
-      setOrdered(sessions);
-      setError(errorMessage(err, "Couldn't reorder sessions."));
-    }
-  };
-
-  const dropSession = async (targetId: string, position: DropPosition) => {
-    if (!draggedId || draggedId === targetId) {
-      setDraggedId(null);
-      setDropTarget(null);
-      return;
-    }
-
-    const moved = ordered.find((session) => session.id === draggedId);
-    if (!moved) return;
-    const next = ordered.filter((session) => session.id !== draggedId);
-    const targetIndex = next.findIndex((session) => session.id === targetId);
-    next.splice(targetIndex + (position === "after" ? 1 : 0), 0, moved);
-    setOrdered(next);
-    setDraggedId(null);
-    setDropTarget(null);
     setError(null);
     try {
       await reorderSessions(next.map((session) => session.id));
@@ -150,7 +146,7 @@ export function SessionManagerModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           title="Manage sessions"
-          description="Drag a handle to reorder, or focus it and use the arrow keys. Click a name to rename it."
+          description="Drag a handle to reorder, or focus it, press Space and use the arrow keys. Click a name to rename it."
           footer={
             <>
               <span className="log-footer-count k-num">
@@ -162,118 +158,79 @@ export function SessionManagerModal({
             </>
           }
         >
-          <div className="log-sessions" role="list">
-            {ordered.map((session, index) => {
-              const isActive = session.id === activeId;
-              const drop =
-                dropTarget?.id === session.id ? dropTarget.position : undefined;
-              return (
-                <div
-                  key={session.id}
-                  role="listitem"
-                  className="log-session-row"
-                  data-dragging={draggedId === session.id ? "" : undefined}
-                  data-drop={drop}
-                  onDragOver={(event) => {
-                    if (!draggedId || draggedId === session.id) return;
-                    event.preventDefault();
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const position =
-                      event.clientY < rect.top + rect.height / 2
-                        ? "before"
-                        : "after";
-                    event.dataTransfer.dropEffect = "move";
-                    setDropTarget({ id: session.id, position });
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    void dropSession(
-                      session.id,
-                      dropTarget?.position ?? "before",
-                    );
-                  }}
-                >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon
-                    draggable
-                    className="log-session-grip"
-                    aria-label={`Move ${session.name}. Position ${index + 1} of ${ordered.length}. Use up and down arrow keys to reorder.`}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", session.id);
-                      setDraggedId(session.id);
-                      setDeleteId(null);
-                    }}
-                    onDragEnd={() => {
-                      setDraggedId(null);
-                      setDropTarget(null);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "ArrowUp") {
-                        event.preventDefault();
-                        void moveSession(session.id, -1);
-                      } else if (event.key === "ArrowDown") {
-                        event.preventDefault();
-                        void moveSession(session.id, 1);
-                      }
-                    }}
-                  >
-                    <GripVertical />
-                  </Button>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            onDragStart={() => setDeleteId(null)}
+            onDragEnd={(event) => void onDragEnd(event)}
+          >
+            <SortableContext
+              items={ordered.map((session) => session.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="log-sessions" role="list">
+                {ordered.map((session, index) => {
+                  const isActive = session.id === activeId;
+                  return (
+                    <SortableSession
+                      key={session.id}
+                      id={session.id}
+                      label={`Move ${session.name}. Position ${index + 1} of ${ordered.length}.`}
+                    >
+                      <Input
+                        size="sm"
+                        className="log-session-name"
+                        aria-label={`Session name${isActive ? " (active session)" : ""}`}
+                        value={draftNames[session.id] ?? session.name}
+                        onChange={(event) =>
+                          setDraftNames((current) => ({
+                            ...current,
+                            [session.id]: event.target.value,
+                          }))
+                        }
+                        onBlur={(event) =>
+                          void commitName(session, event.target.value)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") event.currentTarget.blur();
+                          if (event.key === "Escape") {
+                            // Revert the draft without closing the dialog.
+                            event.stopPropagation();
+                            event.preventDefault();
+                            event.currentTarget.value = session.name;
+                            setDraftNames((current) => ({
+                              ...current,
+                              [session.id]: session.name,
+                            }));
+                            event.currentTarget.blur();
+                          }
+                        }}
+                      />
 
-                  <Input
-                    size="sm"
-                    className="log-session-name"
-                    aria-label={`Session name${isActive ? " (active session)" : ""}`}
-                    value={draftNames[session.id] ?? session.name}
-                    onChange={(event) =>
-                      setDraftNames((current) => ({
-                        ...current,
-                        [session.id]: event.target.value,
-                      }))
-                    }
-                    onBlur={(event) =>
-                      void commitName(session, event.target.value)
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                      if (event.key === "Escape") {
-                        // Revert the draft without closing the dialog.
-                        event.stopPropagation();
-                        event.preventDefault();
-                        event.currentTarget.value = session.name;
-                        setDraftNames((current) => ({
-                          ...current,
-                          [session.id]: session.name,
-                        }));
-                        event.currentTarget.blur();
-                      }
-                    }}
-                  />
-
-                  {isActive ? <Badge tone="accent">Active</Badge> : null}
-                  <IconButton
-                    label={
-                      sessions.length === 1
-                        ? "Create another session before deleting this one"
-                        : `Delete ${session.name}`
-                    }
-                    size="sm"
-                    className="log-session-delete"
-                    onClick={() => {
-                      setDeleteId(session.id);
-                      setError(null);
-                    }}
-                    disabled={sessions.length === 1 || deleting}
-                  >
-                    <Trash2 />
-                  </IconButton>
-                </div>
-              );
-            })}
-          </div>
+                      {isActive ? <Badge tone="accent">Active</Badge> : null}
+                      <IconButton
+                        label={
+                          sessions.length === 1
+                            ? "Create another session before deleting this one"
+                            : `Delete ${session.name}`
+                        }
+                        size="sm"
+                        className="log-session-delete"
+                        onClick={() => {
+                          setDeleteId(session.id);
+                          setError(null);
+                        }}
+                        disabled={sessions.length === 1 || deleting}
+                      >
+                        <Trash2 />
+                      </IconButton>
+                    </SortableSession>
+                  );
+                })}
+              </div>
+            </SortableContext>
+          </DndContext>
 
           {error ? (
             <Callout tone="danger" className="log-dialog-error">
@@ -300,6 +257,53 @@ export function SessionManagerModal({
         onConfirm={() => void confirmDelete()}
       />
     </>
+  );
+}
+
+/** A session's row: dragged by its handle, the others sliding aside to make room. */
+function SortableSession({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      role="listitem"
+      className="log-session-row"
+      data-dragging={isDragging ? "" : undefined}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+      }}
+    >
+      <Button
+        ref={setActivatorNodeRef}
+        variant="ghost"
+        size="sm"
+        icon
+        className="log-session-grip"
+        {...attributes}
+        {...listeners}
+        aria-label={label}
+      >
+        <GripVertical />
+      </Button>
+      {children}
+    </div>
   );
 }
 

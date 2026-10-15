@@ -71,6 +71,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Sessions can be reordered by dragging again in **Manage sessions**: the row lifts and the others
+  slide aside as you drag. From the keyboard, focus a handle, press Space, move with the arrow keys
+  and press Space to drop.
 - Manga OCR's ellipses are ellipses again. It spelled every … as three full-width periods, so
   a bubble's …… was drawn as six dots a whole character apart and read that way in the Log; it is
   now ……, set compactly in vertical text, at the bubble's size.

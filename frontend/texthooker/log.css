@@ -390,26 +390,21 @@ body.scan-mode .line-actions-trigger.k-button {
 .log-session-row:hover {
   background: var(--k-hover);
 }
+/* The row being dragged lifts above the others, which slide aside as it passes (dnd-kit). */
 .log-session-row[data-dragging] {
-  opacity: 0.4;
+  z-index: 2;
+  border-radius: var(--k-radius-md);
+  background: var(--k-raised);
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
 }
-.log-session-row[data-drop="before"]::before,
-.log-session-row[data-drop="after"]::before {
-  content: "";
-  position: absolute;
-  left: var(--k-space-2);
-  right: var(--k-space-2);
-  z-index: 1;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--k-accent);
-}
-.log-session-row[data-drop="before"]::before { top: -1px; }
-.log-session-row[data-drop="after"]::before { bottom: -1px; }
+.log-session-row[data-dragging]::after,
+.log-session-row[data-dragging] + .log-session-row::after { opacity: 0; }
 .log-session-grip.k-button {
   cursor: grab;
+  touch-action: none;
   color: var(--k-text-3);
 }
+.log-session-row[data-dragging] .log-session-grip.k-button { cursor: grabbing; color: var(--k-text); }
 .log-session-grip.k-button:active {
   cursor: grabbing;
 }
