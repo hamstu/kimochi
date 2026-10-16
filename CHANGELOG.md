@@ -11,6 +11,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- macOS: the controller menu opened from a keyboard shortcut now takes the keyboard too, so the game no longer reacts to the arrows, Return or Escape while you use the menu.
+- Kimochi now opens in front and focused when you launch it.
+- macOS: opening the controller menu or the word cursor no longer brings Kimochi's main window up over the game, and clicking the source card reliably brings the window in front of Kimochi.
 - Prevent a blank, click-through window from appearing at startup on Windows.
 
 - Automatically enter always-on-top Mini mode when the selected source becomes full screen, across supported platforms. Mini mode now also works on macOS and Linux.

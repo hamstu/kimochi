@@ -54,6 +54,7 @@ extern "C" {
     fn CGEventCreate(source: *const std::ffi::c_void) -> *const std::ffi::c_void;
     fn CGEventGetLocation(event: *const std::ffi::c_void) -> Point;
     fn CGEventSourceButtonState(state: i32, button: u32) -> bool;
+    fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
     fn CGEventGetFlags(event: *const std::ffi::c_void) -> u64;
     fn CGWindowListCopyWindowInfo(option: u32, relative_to: u32) -> *mut std::ffi::c_void;
     /// Reads a CFDictionary-encoded CGRect, so window bounds need no manual
@@ -957,6 +958,14 @@ mod tests {
     }
 }
 
+/// Whether one of the controller menu's keys (the arrows, Return, keypad Enter, Space,
+/// Escape) is down, so the game gets its focus back only once they are up.
+pub fn menu_keys_held() -> bool {
+    [123u16, 124, 125, 126, 36, 76, 49, 53]
+        .iter()
+        .any(|key| unsafe { CGEventSourceKeyState(0, *key) })
+}
+
 /// The process id of the frontmost application, whoever it is.
 pub fn frontmost_pid() -> Option<u32> {
     NSWorkspace::sharedWorkspace()
@@ -980,16 +989,48 @@ pub fn frontmost_pid() -> Option<u32> {
 /// forward. `activateIgnoringOtherApps:` is deprecated from macOS 14 in favour of
 /// cooperative activation, but a background app asking for itself has nobody to yield to
 /// it, and the old call still takes effect. Must run on the main thread.
-pub fn activate_self(_prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
+///
+/// With `prefer`, SkyLight makes Kimochi frontmost without ordering any of its windows and
+/// makes `prefer` key (`focus::front_keeping_order`): the overlay already floats over the game,
+/// and the main window stays behind it. The rest is the fallback for a macOS without it.
+/// `last_self_activation` says which way the last call went, for the evidence log.
+pub fn activate_self(prefer: Option<&tauri::WebviewWindow>) -> Result<(), String> {
     let mtm = objc2::MainThreadMarker::new().ok_or("activate_self requires the main thread")?;
     let app = NSApplication::sharedApplication(mtm);
+    let mut report = serde_json::Map::new();
+    if let Some(window) = prefer {
+        // Activation brings Kimochi's main window up with it (AppKit orders an activated
+        // application's main window front, whoever asked for the activation): the windows
+        // behind the game are noted and put straight back behind it when activation lands.
+        if !app.isActive() {
+            step_aside(&app, false);
+        }
+        report.insert("heldBehind".into(), json!(STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|(_, n)| n.len())));
+        let number = unsafe { (*(window.ns_window().map_err(|e| e.to_string())? as *mut NSWindow)).windowNumber() };
+        let own = std::process::id() as i32;
+        let kept = u32::try_from(number).is_ok_and(|number| focus::front_keeping_order(own, number, &mut report));
+        report.insert("keptOrder".into(), json!(kept));
+        if kept {
+            *LAST_SELF_ACTIVATION.lock().unwrap_or_else(|p| p.into_inner()) = Value::Object(report);
+            return Ok(());
+        }
+    }
+    report.insert("fallback".into(), json!(true));
+    *LAST_SELF_ACTIVATION.lock().unwrap_or_else(|p| p.into_inner()) = Value::Object(report);
     if !app.isActive() {
-        step_aside(&app);
+        step_aside(&app, true);
     }
     unsafe {
         let _: () = msg_send![&*app, activateIgnoringOtherApps: true];
     }
     Ok(())
+}
+
+static LAST_SELF_ACTIVATION: std::sync::Mutex<Value> = std::sync::Mutex::new(Value::Null);
+
+/// How the last `activate_self` went: SkyLight with the window order kept, or the fallback.
+pub fn last_self_activation() -> Value {
+    LAST_SELF_ACTIVATION.lock().unwrap_or_else(|p| p.into_inner()).clone()
 }
 
 /// The ordinary windows `activate_self` ordered out, front to back, and the foreign
@@ -1021,9 +1062,10 @@ fn window_order() -> Vec<isize> {
     })
 }
 
-/// Order out each ordinary window of ours that is behind the frontmost application's
-/// window, remembering where they were; `restore_stepped_aside` puts them back.
-fn step_aside(app: &NSApplication) {
+/// Remember each ordinary window of ours that is behind the frontmost application's window,
+/// and, with `order_out`, take it off screen; `restore_stepped_aside` puts them back behind
+/// that window once Kimochi's activation has landed.
+fn step_aside(app: &NSApplication, order_out: bool) {
     restore_stepped_aside(app);
     let own = std::process::id();
     let Some(front) = frontmost_pid().filter(|pid| *pid != own) else { return };
@@ -1048,17 +1090,23 @@ fn step_aside(app: &NSApplication) {
     }
     behind.sort_unstable();
     let numbers: Vec<isize> = behind.into_iter().map(|(_, number)| number).collect();
-    for number in &numbers {
-        if let Some(window) = app.windowWithWindowNumber(*number) {
-            window.orderOut(None);
+    if order_out {
+        for number in &numbers {
+            if let Some(window) = app.windowWithWindowNumber(*number) {
+                window.orderOut(None);
+            }
         }
     }
     *STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()) = Some((anchor, numbers));
     ACTIVATION_OBSERVER.call_once(|| unsafe {
         let center = objc2_foundation::NSNotificationCenter::defaultCenter();
         let handler = RcBlock::new(|_: std::ptr::NonNull<NSNotification>| {
-            // On the next turn of the main loop, once AppKit has finished ordering the
-            // activated application's windows.
+            // At once, in case AppKit has already brought them up, and again on the next turn
+            // of the main loop, once it has certainly finished ordering the activated
+            // application's windows.
+            if let Some(mtm) = objc2::MainThreadMarker::new() {
+                put_back(&NSApplication::sharedApplication(mtm));
+            }
             restore_soon(0);
         });
         // Lives for the whole process, like the workspace observers.
@@ -1103,7 +1151,13 @@ fn restore_soon(delay_ns: i64) {
 /// Put the stepped-aside windows back behind the window they were behind, in their
 /// old order, without making any of them key. Once only; later calls find nothing.
 fn restore_stepped_aside(app: &NSApplication) {
-    let Some((anchor, numbers)) = STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()).take() else {
+    put_back(app);
+    STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()).take();
+}
+
+/// Order the stepped-aside windows behind the window they were behind, keeping them owed.
+fn put_back(app: &NSApplication) {
+    let Some((anchor, numbers)) = STEPPED_ASIDE.lock().unwrap_or_else(|p| p.into_inner()).clone() else {
         return;
     };
     let mut relative = anchor;
@@ -1114,13 +1168,20 @@ fn restore_stepped_aside(app: &NSApplication) {
     }
 }
 
-/// Bring the application owning process `pid` to the front, with all its windows: what clicking a
-/// window source in the sidebar does, since it may be behind other windows.
+/// Give the active application back to process `pid` when the controller menu closes.
 ///
-/// Kimochi is the active app when this is asked for (the reader just clicked it), so under macOS
-/// 14's cooperative activation it yields first; older systems take the activation flags alone.
+/// Its front window on the Space being shown comes forward alone (`focus::front_only`): the
+/// controller menu hands the keyboard back to the game without raising the application's other
+/// windows over it, such as an emulator's library. Activating the application is the fallback.
 pub fn activate_process(pid: u32) -> Result<(), String> {
-    activate_app(pid, true)
+    if let Ok(process) = i32::try_from(pid) {
+        if let Some((number, _)) = front_window_number(process).filter(|(number, _)| *number != 0) {
+            if focus::front_only(process, number, &mut serde_json::Map::new()) {
+                return Ok(());
+            }
+        }
+    }
+    activate_app(pid, false)
 }
 
 /// Activate process `pid`, yielding activation first (macOS 14's cooperative activation), and
@@ -1164,8 +1225,8 @@ pub fn window_fullscreen(id: &SourceId) -> Option<bool> {
 }
 
 /// Bring window source `id` to the front: that window, not just its application, switching to
-/// its Space when it is on another (a full-screen app). Falls back to `activate_process`.
-/// Main thread, as `activate_process`.
+/// its Space when it is on another (a full-screen app). Falls back to activating the whole application.
+/// Main thread.
 pub fn activate_window(id: &SourceId) -> Result<Value, String> {
     let pid = id.pid().filter(|pid| *pid > 0).ok_or("invalid: the window has no process")?;
     let mut report = serde_json::Map::new();
@@ -1176,10 +1237,16 @@ pub fn activate_window(id: &SourceId) -> Result<Value, String> {
             // only for an activation: activate the application, and with only its front window
             // (not all of them, which can pull its other windows' Space instead).
             report.insert("activated".into(), json!(activate_app(pid as u32, false).err()));
+            // Activation lands asynchronously; a raise sent before it can leave the window
+            // behind ours. Raised once more after it has, off the main thread.
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(120));
+                let _ = focus::raise_again(pid, number);
+            });
             return Ok(Value::Object(report));
         }
     }
-    report.insert("fallback".into(), json!(activate_process(pid).err()));
+    report.insert("fallback".into(), json!(activate_app(pid, true).err()));
     Ok(Value::Object(report))
 }
 

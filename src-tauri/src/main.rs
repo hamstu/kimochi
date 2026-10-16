@@ -2016,7 +2016,6 @@ fn trigger_action(app: tauri::AppHandle, state: State<Shared>, name: String) -> 
     if !actions::ACTIONS.contains(&name.as_str()) {
         return Err(format!("invalid: unknown action {name:?}"));
     }
-    gamepad::note_menu_origin(false);
     actions::dispatch(&app, state.inner(), &name);
     Ok(())
 }
@@ -2762,8 +2761,9 @@ fn main() {
                 let store = store.clone();
                 let initial_panel = initial_panel.to_string();
                 move |app, turn| {
-                    let action = if initial_panel == panels::MAIN { "show_inactive" } else { "show" };
-                    let _ = panels::act(turn, app, &store, &initial_panel, action, None);
+                    // Kimochi opens in front and focused, like any app the reader just launched;
+                    // shown inactive it sat behind everything, last in the app switcher.
+                    let _ = panels::act(turn, app, &store, &initial_panel, "show", None);
                 }
             });
 

@@ -105,6 +105,8 @@ const ELEMENT_SEARCH: u64 = 1000;
 
 /// `kCPSUserGenerated`: as if the reader had clicked the window.
 const USER_GENERATED: u32 = 0x200;
+/// `kCPSNoWindows`: make the process frontmost without ordering any of its windows forward.
+const NO_WINDOWS: u32 = 0x400;
 
 /// Whether Kimochi may use Accessibility. A query: never prompts.
 pub fn trusted() -> bool {
@@ -255,34 +257,74 @@ pub fn front_window(pid: i32, number: u32, report: &mut serde_json::Map<String, 
     report.insert("trusted".into(), json!(trusted()));
     let element = window_element_anywhere(pid, number);
     report.insert("element".into(), json!(element.is_some()));
-    if let Some(element) = element {
+    if let Some(element) = element.as_ref() {
         unsafe {
             let main = ns_string!("AXMain");
-            let raise = ns_string!("AXRaise");
             let main = AXUIElementSetAttributeValue(element.0, (main as *const NSString).cast(), kCFBooleanTrue);
-            let raised = AXUIElementPerformAction(element.0, (raise as *const NSString).cast());
+            let raised = raise(element);
             report.insert("main".into(), json!(main));
             report.insert("raise".into(), json!(raised));
             fronted |= raised == 0;
         }
     }
     report.insert("skylight".into(), json!(calls().is_some()));
-    if let Some(calls) = calls() {
-        let mut psn = ProcessSerialNumber::default();
-        unsafe {
-            let process = (calls.process_for_pid)(pid, &mut psn);
-            report.insert("process".into(), json!(process));
-            if process == 0 {
-                let front = (calls.set_front)(&mut psn, number, USER_GENERATED);
-                report.insert("front".into(), json!(front));
-                if front == 0 {
-                    fronted = true;
-                    make_key(calls, &mut psn, number);
-                }
-            }
-        }
+    fronted |= front_only(pid, number, report);
+    // And raised again, last, as AltTab does: making the process frontmost does not reorder
+    // windows, and a raise sent while Kimochi was still the active application did not always
+    // stay above Kimochi's own window (OpenEmu became active with its game left behind the
+    // sidebar until the card had been clicked a few times).
+    if let Some(element) = element.as_ref() {
+        report.insert("raiseAfter".into(), json!(raise(element)));
     }
     fronted
+}
+
+/// Raise window `number` of process `pid` once more if it is on the Space that is showing; the
+/// AX error code, `None` without an element. For after the activation has landed.
+pub fn raise_again(pid: i32, number: u32) -> Option<i32> {
+    window_element(pid, number).map(|element| raise(&element))
+}
+
+/// `AXRaise` on a window element; the AX error code, 0 for success.
+fn raise(element: &Owned) -> i32 {
+    let action = ns_string!("AXRaise");
+    unsafe { AXUIElementPerformAction(element.0, (action as *const NSString).cast()) }
+}
+
+/// Make process `pid` frontmost with window `number` in front and key, through SkyLight
+/// alone: none of its other windows move, where activating the application raises them all
+/// (OpenEmu's library over its game; Kimochi's main window flashing over the game when the
+/// controller menu takes the keyboard). False when SkyLight is missing or refused.
+pub fn front_only(pid: i32, number: u32, report: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    front_with(pid, number, USER_GENERATED, report)
+}
+
+/// Make process `pid` frontmost with none of its windows moving, and window `number` (already
+/// where it should be, like the overlay above the game) key. For Kimochi taking the keyboard
+/// for the controller menu: bringing the overlay forward still let its main window come up
+/// over the game.
+pub fn front_keeping_order(pid: i32, number: u32, report: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    front_with(pid, number, NO_WINDOWS, report)
+}
+
+fn front_with(pid: i32, number: u32, mode: u32, report: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+    use serde_json::json;
+    let Some(calls) = calls() else { return false };
+    let mut psn = ProcessSerialNumber::default();
+    unsafe {
+        let process = (calls.process_for_pid)(pid, &mut psn);
+        report.insert("process".into(), json!(process));
+        if process != 0 {
+            return false;
+        }
+        let front = (calls.set_front)(&mut psn, number, mode);
+        report.insert("front".into(), json!(front));
+        if front != 0 {
+            return false;
+        }
+        make_key(calls, &mut psn, number);
+    }
+    true
 }
 
 /// The window server's "make key window" event record, posted as a press and a release.

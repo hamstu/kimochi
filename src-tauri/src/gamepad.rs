@@ -251,15 +251,6 @@ const RESEND_UNCHANGED: Duration = Duration::from_millis(500);
 
 /// Controller navigation: the overlay's radial menu is open and the controller drives it.
 static NAV: AtomicBool = AtomicBool::new(false);
-/// The controller menu was last opened from a controller, rather than a keyboard shortcut or
-/// the tray. Only then does opening it take activation from the game (see `set_navigation`).
-static OPENED_BY_PAD: AtomicBool = AtomicBool::new(false);
-
-/// Where the next `openControllerMenu` comes from: a controller chord (`true`), or anything
-/// else. Set by whoever dispatches it.
-pub fn note_menu_origin(by_pad: bool) {
-    OPENED_BY_PAD.store(by_pad, Ordering::SeqCst);
-}
 /// The application that was in front when the menu took activation, to hand it back.
 static NAV_RETURN: Mutex<Option<u32>> = Mutex::new(None);
 
@@ -289,7 +280,13 @@ fn reactivate(app: &tauri::AppHandle, pid: u32) {
 fn hand_back_when_released(app: &tauri::AppHandle) {
     let mut pending = pending_return();
     let Some((pid, since)) = *pending else { return };
-    if BUTTONS_HELD.load(Ordering::SeqCst) && since.elapsed() < RETURN_WAIT_LIMIT {
+    // On macOS the menu's keys are global shortcuts, which a game reading the keyboard
+    // directly (OpenEmu) still sees: the key that closed the menu waits too.
+    #[cfg(target_os = "macos")]
+    let held = BUTTONS_HELD.load(Ordering::SeqCst) || crate::platform::menu_keys_held();
+    #[cfg(not(target_os = "macos"))]
+    let held = BUTTONS_HELD.load(Ordering::SeqCst);
+    if held && since.elapsed() < RETURN_WAIT_LIMIT {
         return;
     }
     *pending = None;
@@ -335,12 +332,9 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
             }
         }
         // Taking activation stops games that read controllers only in the foreground.
-        // Windows also takes it for keyboard navigation; its low-level hook keeps the
-        // menu's keys out of the game. On macOS the global shortcuts need none, and activating
-        // Kimochi switched away from a full-screen game's Space to the desktop with Kimochi's
-        // main window on it. (Linux decides for itself, through its callers.)
-        #[cfg(target_os = "macos")]
-        let take_focus = take_focus && OPENED_BY_PAD.load(Ordering::SeqCst);
+        // Keyboard navigation takes it too: Windows' low-level hook keeps the menu's keys out
+        // of the game, but macOS's global shortcuts don't stop a game that reads the keyboard
+        // directly (OpenEmu). (Linux decides for itself, through its callers.)
         if take_focus {
             let ours = std::process::id();
             if let Some(pid) = crate::platform::frontmost_pid().filter(|pid| *pid != ours) {
@@ -361,6 +355,9 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                 if let Some(overlay) = overlay {
                     let _ = crate::platform::promote_to_key(&overlay);
                 }
+                #[cfg(target_os = "macos")]
+                let service = handle.state::<Shared>().inner().clone();
+                crate::record(&handle, &service, json!({ "check": "controller-nav-focus", "activation": crate::platform::last_self_activation() }));
             });
         }
         return *remembered;
@@ -370,7 +367,11 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
     }
     let previous = remembered.take();
     if let Some(pid) = previous {
-        if BUTTONS_HELD.load(Ordering::SeqCst) {
+        #[cfg(target_os = "macos")]
+        let held = BUTTONS_HELD.load(Ordering::SeqCst) || crate::platform::menu_keys_held();
+        #[cfg(not(target_os = "macos"))]
+        let held = BUTTONS_HELD.load(Ordering::SeqCst);
+        if held {
             *pending_return() = Some((pid, Instant::now()));
         } else {
             reactivate(app, pid);
@@ -514,7 +515,6 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
         })
         .collect();
     if let Some(name) = chord_to_fire(&bindings, held, rising) {
-        note_menu_origin(true);
         actions::dispatch(app, service, name);
         return;
     }
