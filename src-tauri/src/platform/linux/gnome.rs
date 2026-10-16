@@ -43,8 +43,10 @@ pub fn status() -> Value {
 }
 
 pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
-    if !eligible() { return Err("GNOME integration requires GNOME Wayland without native layer-shell".into()); }
+    // Capability probes are valid on every Linux desktop. Only actual GNOME
+    // operations require eligibility; otherwise optional integration breaks lookup.
     if operation == "status" { return Ok(status()); }
+    if !eligible() { return Err("GNOME integration requires GNOME Wayland without native layer-shell".into()); }
     if operation == "install" || operation == "update" { return install(); }
     if operation == "crop" || operation == "track" || operation == "shortcuts" || operation == "controller" {
         let conn = connection()?;
@@ -67,6 +69,16 @@ pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
         proxy.call::<_, _, ()>(method, &(payload.to_string(),)).map_err(|e| e.to_string())?;
     }
     Ok(json!({"ok":true}))
+}
+
+#[cfg(test)]
+mod status_tests {
+    #[test]
+    fn optional_integration_status_is_queryable_on_any_desktop() {
+        let status = super::request("status", serde_json::Value::Null)
+            .expect("an unsupported desktop reports unavailable, not an IPC error");
+        assert!(status["available"].is_boolean());
+    }
 }
 
 fn install() -> Result<Value, String> {

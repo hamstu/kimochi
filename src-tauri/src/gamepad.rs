@@ -356,8 +356,10 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                     let _ = crate::platform::promote_to_key(&overlay);
                 }
                 #[cfg(target_os = "macos")]
-                let service = handle.state::<Shared>().inner().clone();
-                crate::record(&handle, &service, json!({ "check": "controller-nav-focus", "activation": crate::platform::last_self_activation() }));
+                {
+                    let service = handle.state::<Shared>().inner().clone();
+                    crate::record(&handle, &service, json!({ "check": "controller-nav-focus", "activation": crate::platform::last_self_activation() }));
+                }
             });
         }
         return *remembered;
