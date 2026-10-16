@@ -114,6 +114,7 @@ export function watchReadiness({
     if (!stopped) timer = win.setTimeout(job, delay);
   };
   const poll = async () => {
+    let delay = 2000;
     try {
       const reply = await chrome.runtime.sendMessage({
         target: "hoshidicts-offscreen",
@@ -121,7 +122,11 @@ export function watchReadiness({
         requestId: `kimochi-status-${Date.now()}`,
       });
       engineStatus = reply;
-      send(hachidoriReadiness(reply, installation));
+      const status = hachidoriReadiness(reply, installation);
+      send(status);
+      // Loading an installed engine is brief. Do not hide its completion behind
+      // the idle poll interval; actual download progress comes through setup events.
+      if (!installation && (status.phase === "starting" || status.phase === "installing")) delay = 250;
     } catch {
       send({
         phase: "starting",
@@ -129,7 +134,7 @@ export function watchReadiness({
           "Waiting for Hachidori’s dictionary engine. Its settings remain available.",
       });
     }
-    schedule(poll);
+    schedule(poll, delay);
   };
   const connect = () => {
     try {

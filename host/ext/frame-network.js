@@ -105,7 +105,7 @@ export function installFrameNetwork(win, { upstream, denied, report, base = null
     const url = new win.URL(href)
     // A relative string is handed on resolved, so a worker shim's own location never leaks in.
     const local = typeof input === 'string' || input instanceof win.URL ? href : input
-    if (!/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return nativeFetch(local, init)
+    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return nativeFetch(local, init)
     if (deniedHost(url.hostname, denied)) {
       report({ check: 'ext-host-host-refused', host: url.hostname })
       return Promise.reject(new TypeError('Failed to fetch'))
@@ -113,5 +113,11 @@ export function installFrameNetwork(win, { upstream, denied, report, base = null
     return remoteFetch(local, init, href)
   }
   return { onFrame }
+}
+
+/** Windows maps native protocols to HTTP. IPC must never invoke plugin-http through itself. */
+export function isNativeRequest(win, url) {
+  return win.__KIMOCHI_PLATFORM__?.os === 'windows' && url.protocol === 'http:' &&
+    ['ipc.localhost', 'capture.localhost'].includes(url.hostname)
 }
 

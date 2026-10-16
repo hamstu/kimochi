@@ -70,6 +70,24 @@ const data = (state = "ok") =>
   Object.fromEntries(
     ["words", "kanji", "radicals", "names"].map((name) => [name, { state }]),
   );
+
+test("an installed Hachidori engine is checked promptly while loading, then returns to idle polling", async () => {
+  const scheduled = [];
+  const statuses = [];
+  const replies = [{ ready: false }, { ready: true, dictionaryCount: 1 }];
+  const stop = watchReadiness({
+    win: { addEventListener() {}, clearTimeout() {}, setTimeout(job, delay) { scheduled.push({ job, delay }); return 1; } },
+    engine: "hachidori",
+    chrome: { runtime: { sendMessage: async () => replies.shift() } },
+    publish: (status) => statuses.push(status),
+  });
+  await Promise.resolve();
+  assert.equal(scheduled[0].delay, 250);
+  await scheduled[0].job();
+  assert.equal(statuses.at(-1).phase, "ready");
+  assert.equal(scheduled[1].delay, 2000);
+  stop();
+});
 test("10ten waits for every data series and the end of database writes", () => {
   assert.equal(
     tentenReadiness({ ...data("init"), updateState: { type: "idle" } }).phase,

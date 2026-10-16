@@ -33,7 +33,7 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { describe } from './util.js'
 
 export { deniedHost, installFrameNetwork } from './frame-network.js'
-import { deniedHost } from './frame-network.js'
+import { deniedHost, isNativeRequest } from './frame-network.js'
 
 /**
  * The parent side: perform one request for a child frame and stream it back over its port.
@@ -98,7 +98,7 @@ export function installDirectNetwork(win, { denied, report }) {
     } catch {
       return nativeFetch(input, init)
     }
-    if (!/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return nativeFetch(input, init)
+    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return nativeFetch(input, init)
     if (deniedHost(url.hostname, denied)) {
       report({ check: 'ext-host-host-refused', host: url.hostname })
       return Promise.reject(new TypeError('Failed to fetch'))

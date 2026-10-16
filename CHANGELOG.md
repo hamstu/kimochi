@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: fix Hachidori and 10ten startup stalls caused by routing native IPC through the extension HTTP adapter.
+
 - Windows Mini mode now uses the familiar sidebar controls without the source screenshot, with a separate title-bar toggle and an expandable source picker.
 - Dictionary extensions can connect to AnkiConnect on another computer using its address on port 8765.
 
