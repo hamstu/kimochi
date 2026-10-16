@@ -155,7 +155,9 @@ pub static PANELS: &[PanelSpec] = &[
     // main window's sidebar, and offering the old screen as a second, stale path would be
     // worse than removing it.
     PanelSpec {
-        eager: true,
+        // A hidden WebView2 fixture can leave an opaque composition surface on
+        // Windows. Build this diagnostic window only when it is requested there.
+        eager: !cfg!(target_os = "windows"),
         ..panel(
             "fixture",
             "Kimochi Japanese Fixture",

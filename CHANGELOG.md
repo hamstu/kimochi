@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Prevent a blank, click-through window from appearing at startup on Windows.
+
 - Automatically enter always-on-top Mini mode when the selected source becomes full screen, across supported platforms. Mini mode now also works on macOS and Linux.
 - Windows: keep Mini mode above full-screen games while using dictionary popups, and restore its pin if the window manager drops it.
 
