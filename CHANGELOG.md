@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Speed up dictionary lookups with direct streaming between windows, keep Hachidori hover requests from building a backlog, and stop idle popups from continuously re-measuring themselves.
+
 - macOS: the controller menu opened from a keyboard shortcut now takes the keyboard too, so the game no longer reacts to the arrows, Return or Escape while you use the menu.
 - Kimochi now opens in front and focused when you launch it.
 - macOS: opening the controller menu or the word cursor no longer brings Kimochi's main window up over the game, and clicking the source card reliably brings the window in front of Kimochi.

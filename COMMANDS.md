@@ -525,8 +525,17 @@ History add/delete go through Rust with the 50-entry cap applied there, so the o
 and the Log panel cannot race each other with read-modify-write cycles on one key. Each
 change re-emits `settings:changed` for `scannedTextHistory`.
 
-`ext_relay` emits `ext-relay` `{from: <sender label>, payload}` to `target`, or to every
-window when `target` is null. Deliberately generic: no Yomitan knowledge lives in Rust.
+`ext_relay_listen` registers a Tauri `Channel` for the calling window, replacing its receiver on
+document reload. `ext_relay` sends `{from: <sender label>, to: target, seq, payload}` directly
+over that channel for addressed messages, using Tauri's fast body transport for large results.
+Without a channel it emits `ext-relay:<target>`
+for an addressed message, or `ext-relay` when `target` is null. Receivers subscribe to
+both their addressed event and the broadcast event. Separate event names keep large replies
+out of unrelated WebViews; receivers still check addresses and deduplicate per-sender sequences.
+Deliberately generic: no Yomitan knowledge lives in Rust.
+`ext_relay_bytes` is the same addressed transport with a UTF-8 JSON binary request body and an
+`x-kimochi-target` header. Native validates JSON without constructing its object tree, stamps the
+envelope, and forwards it through the channel. A receiver without a channel uses the event fallback.
 It exists so the Log panel and the dictionary settings window can reach the single
 dictionary backend in the overlay without standing up a second one.
 
@@ -705,7 +714,8 @@ next to `__TAURI__` there. Two things contain it:
 - **Invoke guard.** App commands are not (the app defines no ACL manifest), so `main.rs`
   wraps `generate_handler!`: a call from a webview whose label starts with `ext-` is
   rejected with `invalid: <command> is not available to an extension window` unless the
-  command is in `extensions::EXTENSION_WINDOW_COMMANDS`, which is `ext_relay` and `report`.
+  command is in `extensions::EXTENSION_WINDOW_COMMANDS`: `ext_relay`, `ext_relay_listen`,
+  `ext_relay_bytes` and `report`.
   Storage, capture and window commands are the hub's, in the overlay, and are refused
   there. Each refused command is recorded once per launch as
   `{check: 'extension-window-command-refused', window, command}`.

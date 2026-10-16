@@ -110,11 +110,14 @@ export function observePopup(win, descriptor, callback) {
   let last = null
   let scheduled = false
   let observedRoot = null
+  let stopped = false
+  const observedParts = new Set()
   const resize = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(() => schedule()) : null
   const inner = new win.MutationObserver(() => schedule())
   const sameRect = (a, b) => (a === null && b === null) || (a && b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height)
   const measure = () => {
     scheduled = false
+    if (stopped) return
     const host = doc.querySelector(descriptor.popupSelector)
     const root = host?.shadowRoot ?? host ?? null
     if (root !== observedRoot) {
@@ -123,8 +126,24 @@ export function observePopup(win, descriptor, callback) {
       if (root) inner.observe(root, { subtree: true, childList: true, attributes: true })
     }
     if (resize && root) {
+      // Observing an element delivers an initial resize notification, even if
+      // its size has not changed. Re-observing every measurement loops forever.
+      const parts = new Set(root.querySelectorAll(descriptor.popupParts))
+      for (const element of observedParts) {
+        if (!parts.has(element)) {
+          resize.unobserve(element)
+          observedParts.delete(element)
+        }
+      }
+      for (const element of parts) {
+        if (!observedParts.has(element)) {
+          observedParts.add(element)
+          resize.observe(element)
+        }
+      }
+    } else if (resize && observedParts.size) {
       resize.disconnect()
-      for (const element of root.querySelectorAll(descriptor.popupParts)) resize.observe(element)
+      observedParts.clear()
     }
     const rect = popupRect(win, descriptor)
     if (sameRect(rect, last)) return
@@ -146,6 +165,7 @@ export function observePopup(win, descriptor, callback) {
   win.addEventListener('resize', schedule)
   schedule()
   return () => {
+    stopped = true
     outer.disconnect()
     inner.disconnect()
     resize?.disconnect()

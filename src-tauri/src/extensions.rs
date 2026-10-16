@@ -54,7 +54,7 @@ pub fn background_url(id: &str) -> String {
 /// diagnostics (`report`). Storage, capture and window commands are the hub's, in the
 /// overlay. Plugin commands are not app commands: `capabilities/extension-windows.json`
 /// grants these windows event listening and the scoped plugin-http and nothing more.
-pub const EXTENSION_WINDOW_COMMANDS: &[&str] = &["ext_relay", "report"];
+pub const EXTENSION_WINDOW_COMMANDS: &[&str] = &["ext_relay", "ext_relay_listen", "ext_relay_bytes", "report"];
 
 /// The invoke guard's decision for `command` from the webview `label`.
 pub fn command_allowed(label: &str, command: &str) -> Result<(), String> {
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn extension_windows_may_only_relay_and_report() {
-        for command in ["ext_relay", "report"] {
+        for command in ["ext_relay", "ext_relay_listen", "ext_relay_bytes", "report"] {
             assert!(command_allowed("ext-hachidori", command).is_ok(), "{command}");
             assert!(command_allowed("ext-tenten", command).is_ok(), "{command}");
         }

@@ -146,8 +146,10 @@ export function runListeners(targets, message, sender, copy) {
 }
 
 /**
- * Listen to native's `ext-relay` event. The JS listener receives every emit whatever its target,
- * so the address filter here is the only one there is; native stamps a per-sender `seq`, and
+ * Listen to native's channel, broadcast and window-addressed relay events. Channels transfer
+ * large replies without evaluating huge JS events. Separate event names keep
+ * large replies out of unrelated WebViews; the address filter also guards older hosts and the
+ * browser harness. Native stamps a per-sender `seq`, and
  * delivery is not exactly-once, so a sequence number already seen from a sender is dropped (a
  * redelivered port acknowledgement fails the whole call, a redelivered broadcast fires every
  * listener twice). `onDuplicate(from, seq)` is told about each drop.
@@ -155,7 +157,7 @@ export function runListeners(targets, message, sender, copy) {
 export async function listenRelay(tauri, label, onPayload, onDuplicate = () => {}) {
   if (!tauri?.event?.listen) return
   const seen = new Map()
-  await tauri.event.listen('ext-relay', ({ payload }) => {
+  const receive = ({ payload }) => {
     if (!payload?.payload) return
     const { from, to, seq } = payload
     if (from === label) return
@@ -168,7 +170,12 @@ export async function listenRelay(tauri, label, onPayload, onDuplicate = () => {
       seen.set(from, seq)
     }
     onPayload(payload.payload, from)
-  })
+  }
+  if (typeof tauri.core?.Channel === 'function') {
+    const channel = new tauri.core.Channel((payload) => receive({ payload }))
+    await tauri.core.invoke('ext_relay_listen', { channel })
+  }
+  await Promise.all(['ext-relay', `ext-relay:${label}`].map((event) => tauri.event.listen(event, receive)))
 }
 
 /**

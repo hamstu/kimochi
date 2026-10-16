@@ -2859,14 +2859,12 @@ function movedOrResized(a, b) {
 }
 // Gamepad input is polled natively (src-tauri/src/gamepad.rs) and dispatched
 // through that same action path, so this window must not poll it as well.
-await native.listen('ext-relay', ({ payload }) => {
-  // A webview's JS listener takes every emit regardless of target, so the address in
-  // the message is the only filter. Untargeted relays are still delivered to everyone
-  // on purpose; nothing sends one today.
+const receiveExtensionRelay = ({ payload }) => {
   if (!payload?.from || payload.from === 'overlay') return
   if (typeof payload.to === 'string' && payload.to !== 'overlay') return
   void handleRelay(payload.from, payload.payload)
-})
+}
+await Promise.all(['ext-relay', 'ext-relay:overlay'].map((event) => native.listen(event, receiveExtensionRelay)))
 
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return

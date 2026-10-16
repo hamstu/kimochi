@@ -1069,6 +1069,61 @@ fn app_quit(app: tauri::AppHandle) {
 /// Relays JSON between window labels. Deliberately generic: no Yomitan knowledge
 /// lives in Rust, and the extension host builds its RPC on top of this.
 #[tauri::command]
+fn ext_relay_listen(
+    window: tauri::WebviewWindow,
+    state: State<Shared>,
+    channel: tauri::ipc::Channel<tauri::ipc::InvokeResponseBody>,
+) {
+    let previous = state.relay_channels.lock().unwrap()
+        .insert(window.label().into(), channel);
+    drop(previous);
+}
+
+/// A JSON body stays serialized across native; only the receiving JS context decodes it.
+#[tauri::command]
+fn ext_relay_bytes(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<Shared>,
+    request: tauri::ipc::Request<'_>,
+) -> Reply<()> {
+    let target = request.headers().get("x-kimochi-target")
+        .and_then(|value| value.to_str().ok())
+        .ok_or("invalid: relay target missing")?.to_string();
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("invalid: relay requires a binary JSON body".into());
+    };
+    let channel = state.relay_channels.lock().unwrap().get(&target).cloned();
+    let Some(channel) = channel else {
+        let payload = serde_json::from_slice(bytes).map_err(|e| format!("invalid: {e}"))?;
+        return ext_relay(app, window, state, Some(target), payload);
+    };
+    let seq = {
+        let mut counters = state.relay_seq.lock().unwrap();
+        let counter = counters.entry(window.label().to_string()).or_insert(0);
+        *counter += 1;
+        *counter
+    };
+    let message = relay_envelope(window.label(), &target, seq, bytes)?;
+    channel.send(tauri::ipc::InvokeResponseBody::Json(message))
+        .map_err(|e| format!("native: {e}"))
+}
+
+fn relay_envelope(from: &str, to: &str, seq: u64, bytes: &[u8]) -> Reply<String> {
+    // Validate without allocating a Value tree. Never splice unchecked input into
+    // a channel's JSON response (small responses may be evaluated directly).
+    let _: serde::de::IgnoredAny = serde_json::from_slice(bytes)
+        .map_err(|e| format!("invalid: {e}"))?;
+    let payload = std::str::from_utf8(bytes).map_err(|e| format!("invalid: {e}"))?;
+    let mut message = json!({"from":from, "to":to, "seq":seq}).to_string();
+    message.pop();
+    message.push_str(",\"payload\":");
+    message.push_str(payload);
+    message.push('}');
+    Ok(message)
+}
+
+#[tauri::command]
 fn ext_relay(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
@@ -1086,21 +1141,27 @@ fn ext_relay(
         *counter += 1;
         *counter
     };
-    // The address travels in the message, and every receiver checks it.
-    //
-    // A webview's JS `listen` registers for *any* target, so `emit_to` is not the
-    // filter it looks like: every window receives every relay. That was invisible
-    // while the only traffic was request/response with the overlay — an answer for
-    // another window matched no pending request and was dropped — and became fatal
-    // the moment two windows carried a stateful port between them, because each end
-    // received its own messages back and answered them.
+    // Scope by event name: Tauri's default JS listeners receive emit_to too.
+    // Broadcasting large dictionary results to unrelated WebViews makes each of
+    // them parse the payload before its JS address filter can discard it.
+    let event = target.as_ref().map(|label| format!("ext-relay:{label}"))
+        .unwrap_or_else(|| "ext-relay".into());
     let message = json!({
         "from": window.label(),
         "to": target,
         "seq": seq,
         "payload": payload,
     });
-    app.emit("ext-relay", message)
+    // Channels transfer large JSON through Tauri's response-body transport rather
+    // than evaluating a huge JavaScript event in WebView2 for every dictionary result.
+    let channel = target.as_ref()
+        .and_then(|label| state.relay_channels.lock().unwrap().get(label).cloned());
+    if let Some(channel) = channel {
+        let message = serde_json::to_string(&message).map_err(|e| format!("native: {e}"))?;
+        return channel.send(tauri::ipc::InvokeResponseBody::Json(message))
+            .map_err(|e| format!("native: {e}"));
+    }
+    app.emit(&event, message)
         .map_err(|e| format!("native: {e}"))
 }
 
@@ -2389,6 +2450,14 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Self-updates (updater.rs); the check, download and install are our own commands.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(service) = window.try_state::<Shared>() {
+                    let previous = service.relay_channels.lock().unwrap().remove(window.label());
+                    drop(previous);
+                }
+            }
+        })
         // Asynchronous, and answered from a worker thread: a captured image is PNG-encoded on
         // request, which for a full-size window takes long enough to stall every window if it
         // ran on the main thread (a region drag stuttered each time the picture refreshed).
@@ -2562,6 +2631,8 @@ fn main() {
             history_clear,
             history_merge_reset,
             ext_relay,
+            ext_relay_listen,
+            ext_relay_bytes,
             window_bounds,
             popup_window,
             yomitan_request,
@@ -2650,6 +2721,7 @@ fn main() {
                 watching: Mutex::new(None),
                 source_fullscreen: AtomicBool::new(false),
                 relay_seq: Mutex::new(HashMap::new()),
+                relay_channels: Mutex::new(HashMap::new()),
                 scanning: AtomicBool::new(false),
                 thumbnails: Mutex::new(HashMap::new()),
                 icons: Mutex::new(HashMap::new()),
@@ -3711,6 +3783,18 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn relay_envelope_preserves_json_and_escapes_addresses() {
+        let payload = json!({"text":"日本語", "nested":[null, true, {"quote":"\"\\\n"}]});
+        let bytes = serde_json::to_vec(&payload).unwrap();
+        let encoded = relay_envelope("ext-\"source", "overlay", 42, &bytes).unwrap();
+        let decoded: Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, json!({"from":"ext-\"source", "to":"overlay", "seq":42, "payload":payload}));
+        for invalid in [b"null};alert(1);//".as_slice(), b"{} {}", b"{bad}", b"\"\xff\""] {
+            assert!(relay_envelope("source", "overlay", 1, invalid).is_err());
+        }
+    }
 
     #[test]
     fn the_selected_source_carries_its_kind() {

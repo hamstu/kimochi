@@ -46,7 +46,9 @@ function relaySender(tauri) {
     const key = target ?? '*'
     const next = (chains.get(key) ?? Promise.resolve())
       .catch(() => {})
-      .then(() => tauri.core.invoke('ext_relay', { target, payload }))
+      .then(() => typeof tauri.core.Channel === 'function' && typeof target === 'string'
+        ? tauri.core.invoke('ext_relay_bytes', new TextEncoder().encode(JSON.stringify(payload)), { headers: { 'x-kimochi-target': target } })
+        : tauri.core.invoke('ext_relay', { target, payload }))
     chains.set(key, next)
     return next
   }

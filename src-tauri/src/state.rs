@@ -545,6 +545,8 @@ pub struct Service {
     pub source_fullscreen: AtomicBool,
     /// Per-sender relay sequence, so a receiver can drop a redelivered message.
     pub relay_seq: Mutex<HashMap<String, u64>>,
+    /// One streaming relay receiver per WebView; replaced when its document reloads.
+    pub relay_channels: Mutex<HashMap<String, tauri::ipc::Channel<tauri::ipc::InvokeResponseBody>>>,
     pub scanning: AtomicBool,
     pub thumbnails: Mutex<HashMap<String, Thumbnail>>,
     /// Application icons keyed by localized name. `None` records a miss so a window

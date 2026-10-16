@@ -154,7 +154,7 @@ class World {
       core: { invoke: async (command, args) => this.invoke(label, command, args) },
       event: {
         listen: async (name, callback) => {
-          if (name === 'ext-relay') this.listeners.push({ label, callback })
+          if (name === 'ext-relay' || name === `ext-relay:${label}`) this.listeners.push({ label, name, callback })
           return () => {}
         }
       }
@@ -178,7 +178,10 @@ class World {
         this.seq.set(label, seq)
         const message = { from: label, to: args.target ?? null, seq, payload: structuredClone(args.payload) }
         setTimeout(() => {
-          for (const listener of [...this.listeners]) listener.callback({ payload: structuredClone(message) })
+          const name = args.target ? `ext-relay:${args.target}` : 'ext-relay'
+          for (const listener of [...this.listeners]) {
+            if (!listener.name || listener.name === name) listener.callback({ payload: structuredClone(message) })
+          }
         }, 0)
         return null
       }
@@ -452,6 +455,35 @@ async function hachidoriSession(options = {}) {
   const offscreen = world.contexts.find((c) => c.location.pathname === '/offscreen.html')
   return { world, overlay, started, background, offscreen, origin }
 }
+
+test('Hachidori content coalesces obsolete interactive lookups before relaying to its worker', async () => {
+  const { overlay, offscreen } = await hachidoriSession()
+  result(offscreen, `
+    globalThis.lookupJobs = []
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type !== 'hd_lookup') return false
+      return new Promise((resolve) => lookupJobs.push({ message, resolve }))
+    })
+  `)
+  const complete = result(overlay, `Promise.allSettled(Array.from({length: 20}, (_, i) =>
+    chrome.runtime.sendMessage({target:'hoshidicts-offscreen', type:'hd_lookup', requestId:'lookup-'+i, text:'word-'+i})))`)
+  await waitFor(() => result(offscreen, 'lookupJobs.length') === 1, 'first hover lookup')
+  result(offscreen, 'lookupJobs[0].resolve({requestId:lookupJobs[0].message.requestId, ok:true})')
+  await waitFor(() => result(offscreen, 'lookupJobs.length') === 2, 'newest hover lookup')
+  assert.equal(result(offscreen, 'lookupJobs[1].message.text'), 'word-19')
+  result(offscreen, 'lookupJobs[1].resolve({requestId:lookupJobs[1].message.requestId, ok:true})')
+  const replies = await complete
+  assert.equal(replies[0].value.requestId, 'lookup-0')
+  assert.equal(replies[19].value.requestId, 'lookup-19')
+  assert.equal(replies.filter((reply) => reply.status === 'rejected').length, 18)
+  assert.match(replies[1].reason.message, /superseded/)
+  // Programmatic requests do not use content.js's interactive request IDs.
+  const ordinary = result(overlay, `Promise.all(Array.from({length: 3}, (_, i) =>
+    chrome.runtime.sendMessage({target:'hoshidicts-offscreen', type:'hd_lookup', requestId:'api-'+i})))`)
+  await waitFor(() => result(offscreen, 'lookupJobs.length') === 5, 'independent API lookups')
+  result(offscreen, 'lookupJobs.slice(2).forEach(job=>job.resolve({ok:true}))')
+  assert.equal((await ordinary).length, 3)
+})
 
 /** Fake 10ten: tab-manager.ts's `enable?` / `enabled` handshake and a content listener. */
 const TENTEN = {

@@ -10,6 +10,7 @@
 import { getMessage } from './i18n.js'
 import { callbackApi } from './primitives.js'
 import { importLocalZip, isLocalZipImport } from './local-archive.js'
+import { createLookupQueue } from './lookup-queue.js'
 import { ChromeEvent, NO_RECEIVER, describe, json, platformInfo, randomId } from './util.js'
 
 /**
@@ -80,6 +81,10 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
     }
   }
   const call = (op, args) => link.call(op, args)
+  // Hachidori invalidates old hover results in content.js, but its WASM worker
+  // still executes every queued request. Keep only the newest waiting word.
+  // Other requests (including parallel dictionary-tab reads) retain Chrome semantics.
+  const lookups = createLookupQueue((request) => call('sendMessage', request))
 
   // ---------------------------------------------------------------- messages and ports
 
@@ -332,6 +337,10 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
       // A content context says which transcript line it is reading, for `captureVisibleTab`.
       sendMessage: api((...args) => {
         const message = json(messageArgs(args))
+        if (engine === 'hachidori' && kind === 'content' && message?.target === 'hoshidicts-offscreen' &&
+          message.type === 'hd_lookup' && /^lookup-\d+$/.test(message.requestId)) {
+          return lookups.submit({ message, capture: hint() })
+        }
         const send = (value) => call('sendMessage', { message: value, capture: hint() })
         return engine === 'hachidori' && kind === 'page' && isLocalZipImport(message)
           ? importLocalZip(win, message, send, report) : send(message)
@@ -515,6 +524,7 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
     },
     /** Every port this document holds hangs up when it goes away, as Chrome does. */
     disconnectAll() {
+      lookups.close()
       for (const { port } of [...ports.values()]) port.disconnect()
     }
   }
