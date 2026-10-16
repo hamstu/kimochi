@@ -46,7 +46,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 mod cli;
-pub mod compact;
 mod desktops;
 mod icon;
 mod mouseguard;

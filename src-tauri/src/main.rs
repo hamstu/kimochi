@@ -9,6 +9,7 @@ mod activity;
 mod application_context;
 mod capture_unavailable;
 mod cloud;
+mod compact;
 mod dictionary_runtime;
 mod engine_probe;
 mod extension_store;
@@ -874,7 +875,7 @@ fn desktop() -> Vec<Rect> {
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
     #[cfg(target_os = "windows")]
-    platform::compact::crop(&app, on)?;
+    crate::compact::crop(&app, on)?;
     #[cfg(target_os = "linux")]
     if platform::wayland_layer_overlay() || platform::gamescope::active() {
         let window = app.get_webview_window("overlay").ok_or("overlay unavailable")?;
@@ -3620,24 +3621,31 @@ static SOURCE_STATE: Mutex<Option<(String, platform::WindowState)>> = Mutex::new
 fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut last: Option<(String, platform::WindowState)> = None;
+        let mut ticks = 0_u32;
         loop {
             std::thread::sleep(Duration::from_millis(100));
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(5) { compact::maintain_pin(&handle); }
             let watching = service.watching.lock().unwrap().clone();
             let Some(source_id) = watching else {
+                compact::forget_source();
                 last = None;
                 continue;
             };
             let Some(window) = SourceId::parse(&source_id).filter(|id| id.is_window()) else {
+                compact::forget_source();
                 continue;
             };
             let previous = last.as_ref().filter(|(id, _)| *id == source_id).map(|(_, state)| *state);
             let Some(state) = platform::desktop_window_state(&window, previous.as_ref()) else {
+                compact::forget_source();
                 continue;
             };
             if previous.is_some_and(|p| !p.differs(&state)) {
                 continue;
             }
             let was_fullscreen = service.source_fullscreen.swap(state.fullscreen, Ordering::Relaxed);
+            compact::observe_source(&handle, &service, &source_id, &state);
             if previous.is_some() && was_fullscreen != state.fullscreen {
                 let mut view = service.view.lock().unwrap();
                 view.scan = None;

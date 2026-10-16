@@ -36,7 +36,6 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
             .map_err(|e| e.to_string())?])
         .build()
         .map_err(|e| e.to_string())?;
-    #[cfg(target_os = "windows")]
     menu.insert(&MenuItemBuilder::with_id("miniMode", "Mini mode")
         .build(app).map_err(|e| e.to_string())?, 1).map_err(|e| e.to_string())?;
     let store = settings.clone();
@@ -53,7 +52,6 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
             let id = event.id().as_ref().to_string();
             let _ = app.emit("tray:action", serde_json::json!({ "action": id }));
             match id.as_str() {
-                #[cfg(target_os = "windows")]
                 "miniMode" => {
                     if let Some(service) = app.try_state::<Shared>() {
                         let _ = panels::act_existing(app, &service.settings, panels::MAIN, "mini", None);

@@ -747,7 +747,23 @@ pub fn desktop_window_state(
     previous: Option<&WindowState>,
 ) -> Option<WindowState> {
     let (bounds, on_screen) = desktop_window_bounds(id)?;
-    Some(window_state(bounds, on_screen, window_fullscreen(id), &desktop_displays(), previous))
+    let native = window_fullscreen(id);
+    let displays = desktop_displays();
+    let state = window_state(bounds, on_screen, native, &displays, previous);
+    #[cfg(target_os = "windows")]
+    let state = windows_native_state(state, bounds, native, &displays);
+    Some(state)
+}
+
+// The Windows caption check explicitly rejects maximized normal windows. Do not
+// override that answer with geometry, or mistake an oversized capture for a Space animation.
+#[cfg(target_os = "windows")]
+fn windows_native_state(mut state: WindowState, bounds: Rect, native: Option<bool>, displays: &[Rect]) -> WindowState {
+    state.bounds = bounds;
+    state.fullscreen = native.unwrap_or(state.fullscreen);
+    state.settling = false;
+    state.display = state.fullscreen.then(|| displays.iter().copied().find(|display| covers_display(bounds, *display))).flatten();
+    state
 }
 
 fn clamp_within(rect: Rect, screens: &[DisplayInfo]) -> Rect {
@@ -1016,6 +1032,22 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_caption_rejection_and_oversized_fullscreen_are_not_space_transitions() {
+        let bounds = super::Rect { x: 0., y: 0., width: 1920., height: 1080. };
+        let initial = super::window_state(bounds, true, Some(false), &[bounds], None);
+        assert!(initial.fullscreen);
+        let corrected = super::windows_native_state(initial, bounds, Some(false), &[bounds]);
+        assert!(!corrected.fullscreen);
+        let oversized = super::Rect { height: 1120., ..bounds };
+        let initial = super::window_state(oversized, true, Some(true), &[bounds], None);
+        let corrected = super::windows_native_state(initial, oversized, Some(true), &[bounds]);
+        assert!(corrected.fullscreen);
+        assert!(!corrected.settling);
+        assert_eq!((corrected.bounds.x, corrected.bounds.y, corrected.bounds.width, corrected.bounds.height),
+            (oversized.x, oversized.y, oversized.width, oversized.height));
+    }
     use super::*;
 
     fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {

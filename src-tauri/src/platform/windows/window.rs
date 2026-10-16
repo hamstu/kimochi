@@ -291,7 +291,7 @@ pub fn start_fullscreen_watch(app: &tauri::AppHandle, service: crate::state::Sha
             if app.get_webview_window("overlay").is_none() {
                 break;
             }
-            if fullscreen_foreground().is_none() || pending.swap(true, Ordering::Relaxed) {
+            if (!crate::compact::active() && fullscreen_foreground().is_none()) || pending.swap(true, Ordering::Relaxed) {
                 continue;
             }
             let handle = app.clone();
@@ -329,7 +329,14 @@ fn fullscreen_foreground() -> Option<HWND> {
 }
 
 fn repair_fullscreen_order(app: &tauri::AppHandle, service: &crate::state::Service) {
-    let Some(foreground) = fullscreen_foreground() else {
+    let selected = || {
+        if !crate::compact::active() || window_pid(unsafe { GetForegroundWindow() }) != std::process::id() { return None; }
+        let source = service.watching.lock().unwrap().as_deref().and_then(kimochi_capture::SourceId::parse)?;
+        if super::window_fullscreen(&source) != Some(true) { return None; }
+        if !super::window_bounds(&source)?.1 { return None; }
+        super::sources::resolve(&source).filter(|hwnd| ex_style(*hwnd) & WS_EX_TOPMOST.0 != 0)
+    };
+    let Some(foreground) = fullscreen_foreground().or_else(selected) else {
         return;
     };
     let order = super::sources::top_level_windows();
@@ -341,16 +348,15 @@ fn repair_fullscreen_order(app: &tauri::AppHandle, service: &crate::state::Servi
         .iter()
         .enumerate()
         .filter_map(|(rank, hwnd)| {
-            if ex_style(*hwnd) & WS_EX_TOPMOST.0 == 0
+            let window = windows.values().find(|w| w.hwnd().ok() == Some(*hwnd))?;
+            let mini = window.label() == crate::panels::MAIN && crate::compact::active();
+            if (ex_style(*hwnd) & WS_EX_TOPMOST.0 == 0 && !mini)
                 || !unsafe { IsWindowVisible(*hwnd) }.as_bool()
                 || unsafe { IsIconic(*hwnd) }.as_bool()
             {
                 return None;
             }
-            windows
-                .values()
-                .find(|w| w.hwnd().ok() == Some(*hwnd))
-                .map(|w| (rank, *hwnd, w.label().to_owned()))
+            Some((rank, *hwnd, window.label().to_owned()))
         })
         .collect();
     if !pinned.iter().any(|(rank, _, _)| *rank > source_rank) {

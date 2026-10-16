@@ -11,6 +11,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Automatically enter always-on-top Mini mode when the selected source becomes full screen, across supported platforms. Mini mode now also works on macOS and Linux.
+- Windows: keep Mini mode above full-screen games while using dictionary popups, and restore its pin if the window manager drops it.
+
 - Windows: fix Hachidori and 10ten startup stalls caused by routing native IPC through the extension HTTP adapter.
 
 - Windows Mini mode now uses the familiar sidebar controls without the source screenshot, with a separate title-bar toggle and an expandable source picker.

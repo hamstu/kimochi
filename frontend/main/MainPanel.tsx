@@ -49,14 +49,13 @@ export default function MainPanel(): JSX.Element {
   const [mini, setMini] = useState(false)
   const [miniError, setMiniError] = useState<string | null>(null)
   const changeMini = useCallback(async (enabled: boolean): Promise<void> => {
-    if (capabilities.os !== 'windows') return
     try {
       await panel('log', enabled ? 'mini' : 'expand')
       setMini(enabled)
       document.documentElement.toggleAttribute('data-mini', enabled)
       setMiniError(null)
     } catch (error) { setMiniError(String(error)) }
-  }, [capabilities.os])
+  }, [])
   useEffect(() => {
     const pending = listen<boolean>('main:mini', ({ payload }) => {
       setMini(payload)
@@ -182,7 +181,7 @@ export default function MainPanel(): JSX.Element {
               <PanelLeft />
             </IconButton>
           </Tooltip>}
-          {capabilities.os === 'windows' && <IconButton
+          {<IconButton
             label={mini ? 'Expand Kimochi' : 'Mini mode'} size="sm"
             onClick={() => void changeMini(!mini)}>
             {mini ? <Maximize2 /> : <Minimize2 />}

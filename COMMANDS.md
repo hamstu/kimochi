@@ -134,9 +134,12 @@ Mirrors `src/main/native-windows.ts`.
 | `panel_cursor` | `({kind}) -> ()` |
 
 `action`: `show`, `show_inactive`, `hide`, `drag`, `place`, `minimize`, `restore`,
-`pin`, `unpin`, `inspect`. Windows main window also accepts `mini` and `expand`:
+`pin`, `unpin`, `inspect`. The main window also accepts `mini` and `expand`:
 temporary compact bounds and forced pin, restored on expand; `PanelInfo.mini` reports
 the current mode. Compact bounds and the forced pin are not saved to settings.
+Selecting a full-screen source or entering full screen switches to Mini mode once
+the source is visible and settled. Expanding manually lasts until a new full-screen
+transition or a different source; leaving full screen does not force expansion.
 On Windows, `region_keys(true)` hides the main window; `false` restores it only
 if it was visible when editing began. Windows modal navigation intercepts its
 keyboard input and takes focus on the overlay, returning focus on close. Hovering
