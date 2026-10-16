@@ -86,8 +86,8 @@ pub fn verification() -> Option<Verified> {
 pub fn on_verified(hook: impl Fn() + Send + Sync + 'static) {
     PROBE.on_verified(hook);
 }
-pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
-    let image = mangaocr::decode_image(png).map_err(|e| format!("Manga OCR image: {e}"))?;
+pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
+    let image = image.rgb().map_err(|e| format!("Manga OCR {e}"))?;
     // Checked on every scan, not just the first: models deleted since are refused cleanly.
     let root = assets(app).map_err(|reason| format!("Manga OCR is not ready: {reason}"))?;
     let state = app.state::<MangaState>();

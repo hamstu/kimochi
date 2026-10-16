@@ -1594,12 +1594,12 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
         "livetext" => return livetext::recognize(image),
         #[cfg(not(target_os = "macos"))]
         "livetext" => return Err("Apple Live Text is available on macOS only.".into()),
+        "meikiocr" | "local" => return meiki_ocr::recognize(app, image),
+        "mangaocr" => return manga_ocr::recognize(app, image),
         _ => {}
     }
     let png = image.png()?;
     match mode.as_str() {
-        "meikiocr" | "local" => meiki_ocr::recognize(app, &png),
-        "mangaocr" => manga_ocr::recognize(app, &png),
         "googlelens" => google_lens::recognize(&png),
         #[cfg(target_os = "windows")]
         "oneocr" => oneocr::recognize(app, &png),
@@ -1619,11 +1619,16 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
         None
     };
     let image = base64::engine::general_purpose::STANDARD.encode(png);
-    let client = reqwest::blocking::Client::builder()
-        .user_agent("Kimochi-POC/0.1")
-        .timeout(Duration::from_secs(45))
-        .build()
-        .map_err(|_| "native: could not initialize OCR HTTP client")?;
+    // Keep the pool across scans: creating a client per image discards TCP/TLS sessions.
+    // Endpoint and authorization remain per request, including after a settings change.
+    static CLIENT: std::sync::OnceLock<Reply<reqwest::blocking::Client>> = std::sync::OnceLock::new();
+    let client = CLIENT.get_or_init(|| {
+        reqwest::blocking::Client::builder()
+            .user_agent("Kimochi-POC/0.1")
+            .timeout(Duration::from_secs(45))
+            .build()
+            .map_err(|_| "native: could not initialize OCR HTTP client".to_string())
+    }).as_ref().map_err(Clone::clone)?;
     let mut request = client.post(endpoint);
     if let Some(key) = &key {
         request = cloud::authorize(request, key);
@@ -1699,8 +1704,8 @@ async fn ocr_frame(
         }
         let started = std::time::Instant::now();
         let value = match engine.as_str() {
-            "meikiocr" | "local" => meiki_ocr::recognize(&app, &png)?,
-            "mangaocr" => manga_ocr::recognize(&app, &png)?,
+            "meikiocr" | "local" => meiki_ocr::recognize(&app, &image)?,
+            "mangaocr" => manga_ocr::recognize(&app, &image)?,
             "googlelens" => google_lens::recognize(&png)?,
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png)?,
@@ -3783,6 +3788,64 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn cloud_ocr_reuses_connections_and_reads_endpoint_per_request() {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(8);
+            let mut connections = 0;
+            let mut paths = Vec::new();
+            while paths.len() < 2 && Instant::now() < deadline {
+                let Ok((stream, _)) = listener.accept() else {
+                    std::thread::sleep(Duration::from_millis(5));
+                    continue;
+                };
+                connections += 1;
+                // Accepted sockets inherit the listener's nonblocking mode on Windows.
+                stream.set_nonblocking(false).unwrap();
+                stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+                let mut stream = BufReader::new(stream);
+                while paths.len() < 2 {
+                    let mut line = String::new();
+                    if stream.read_line(&mut line).unwrap_or(0) == 0 { break; }
+                    let path = line.split_whitespace().nth(1).unwrap().to_string();
+                    let mut length = 0;
+                    loop {
+                        line.clear();
+                        stream.read_line(&mut line).unwrap();
+                        if line == "\r\n" { break; }
+                        let lower = line.to_ascii_lowercase();
+                        assert!(!lower.starts_with("authorization:"));
+                        if let Some(value) = lower.strip_prefix("content-length:") {
+                            length = value.trim().parse().unwrap();
+                        }
+                    }
+                    let mut body = vec![0; length];
+                    stream.read_exact(&mut body).unwrap();
+                    assert_eq!(serde_json::from_slice::<Value>(&body).unwrap()["imageBase64"], "AQID");
+                    paths.push(path);
+                    let response = r#"{"textAnnotations":[]}"#;
+                    write!(stream.get_mut(), "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}", response.len(), response).unwrap();
+                    stream.get_mut().flush().unwrap();
+                }
+            }
+            (connections, paths)
+        });
+        let file = std::env::temp_dir().join(format!("kimochi-http-pool-{}.json", std::process::id()));
+        let settings = Settings::load(file.clone());
+        for path in ["/first", "/second"] {
+            settings.set("endpoint", json!(format!("http://{address}{path}"))).unwrap();
+            assert_eq!(post_ocr(&settings, &[1, 2, 3]).unwrap(), json!({"textAnnotations": []}));
+        }
+        let (connections, paths) = server.join().unwrap();
+        let _ = std::fs::remove_file(file);
+        assert_eq!(paths, ["/first", "/second"]);
+        assert_eq!(connections, 1, "successive scans reuse the HTTP connection");
+    }
 
     #[test]
     fn relay_envelope_preserves_json_and_escapes_addresses() {

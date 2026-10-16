@@ -5,7 +5,7 @@
  * (`windows/panel/PanelApp.tsx`). Tauri windows carry a label instead, so this switches on
  * `getCurrentWindow().label` — the same single-shell arrangement.
  */
-import { StrictMode } from "react";
+import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
@@ -16,19 +16,26 @@ import "../shell/panel.css";
 import Providers from "./providers";
 import PanelShell from "../shell/PanelShell";
 import MainPanel from "../main/MainPanel";
-import SettingsPanel from "../panels/SettingsPanel";
-import DiagnosticsPanel from "../panels/DiagnosticsPanel";
-import DictionarySettingsPanel from "../panels/DictionarySettingsPanel";
 import DictionaryPanelShell from "../shell/DictionaryPanelShell";
 import { preloadPanelDictionary } from "../shell/panelDictionary";
+
+import { SettingsPanel, DiagnosticsPanel, DictionarySettingsPanel } from "../panels/deferred";
 
 /** Titles and components, matching `PanelApp.tsx`'s `titles` / `components` maps. */
 const PANELS = {
   log: { title: "Kimochi", Component: MainPanel, hideTitle: true },
   settings: { title: "Settings", Component: SettingsPanel, hideTitle: false },
-  diagnostics: { title: "Diagnostics", Component: DiagnosticsPanel, hideTitle: true },
+  diagnostics: {
+    title: "Diagnostics",
+    Component: DiagnosticsPanel,
+    hideTitle: true,
+  },
   // Titled by the engine; see `DictionaryPanelShell`.
-  dictionary: { title: "Dictionary", Component: DictionarySettingsPanel, hideTitle: false },
+  dictionary: {
+    title: "Dictionary",
+    Component: DictionarySettingsPanel,
+    hideTitle: false,
+  },
 } as const;
 
 type KnownLabel = keyof typeof PANELS;
@@ -38,13 +45,25 @@ const label = getCurrentWindow().label;
 // Panel windows have no devtools open in ordinary use: an uncaught error (a blank window) goes to
 // the app's diagnostics record, as the Yomitan relay's own checks do.
 const reportError = (kind: string, error: unknown): void => {
-  const message = error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error);
+  const message =
+    error instanceof Error
+      ? `${error.message}\n${error.stack ?? ""}`
+      : String(error);
   void invoke("report", {
-    value: { check: "panel-error", window: label, kind, message: message.slice(0, 2000) },
+    value: {
+      check: "panel-error",
+      window: label,
+      kind,
+      message: message.slice(0, 2000),
+    },
   }).catch(() => undefined);
 };
-window.addEventListener("error", (event) => reportError("error", event.error ?? event.message));
-window.addEventListener("unhandledrejection", (event) => reportError("rejection", event.reason));
+window.addEventListener("error", (event) =>
+  reportError("error", event.error ?? event.message),
+);
+window.addEventListener("unhandledrejection", (event) =>
+  reportError("rejection", event.reason),
+);
 const known = (label in PANELS ? label : "log") as KnownLabel;
 const { title, Component, hideTitle } = PANELS[known];
 
@@ -68,16 +87,18 @@ createRoot(document.getElementById("root")!, {
 }).render(
   <StrictMode>
     <Providers>
-      {known === "dictionary" ? (
-        // The dictionary window's title follows the active engine.
-        <DictionaryPanelShell label={label} hideTitle={hideTitle}>
-          <Component />
-        </DictionaryPanelShell>
-      ) : (
-        <PanelShell label={label} title={title} hideTitle={hideTitle}>
-          <Component />
-        </PanelShell>
-      )}
+      <Suspense fallback={<div role="status">Loading…</div>}>
+        {known === "dictionary" ? (
+          // The dictionary window's title follows the active engine.
+          <DictionaryPanelShell label={label} hideTitle={hideTitle}>
+            <Component />
+          </DictionaryPanelShell>
+        ) : (
+          <PanelShell label={label} title={title} hideTitle={hideTitle}>
+            <Component />
+          </PanelShell>
+        )}
+      </Suspense>
     </Providers>
   </StrictMode>,
 );

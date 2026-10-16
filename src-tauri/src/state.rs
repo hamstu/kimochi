@@ -52,6 +52,17 @@ impl Image {
             .clone()
             .map_err(|error| format!("{}: {}", error.code, error.message))
     }
+
+    /// Local models read captured pixels directly. Keep encoded-only previews working too.
+    pub fn rgb(&self) -> Result<image::RgbImage, String> {
+        if let Some(frame) = &self.raw {
+            return crate::text_observer::rgb_image(frame)
+                .map_err(|error| format!("image: {}", error.message));
+        }
+        image::load_from_memory_with_format(&self.png()?, image::ImageFormat::Png)
+            .map(|image| image.to_rgb8())
+            .map_err(|error| format!("image: {error}"))
+    }
 }
 
 /// Pixels never touch disk and never leave the process except through an explicit
@@ -1422,6 +1433,46 @@ mod tests {
             png,
             "reader retains its pixels independently"
         );
+    }
+
+    fn rgb_fixture(width: u32, height: u32) -> Image {
+        Image::captured(kimochi_capture::Frame {
+            info: kimochi_capture::FrameInfo {
+                source_id: "rgb-fixture".into(), width, height,
+                stride: width as usize * 4, full_width: width, full_height: height,
+                crop_pixels: [0, 0, width, height], scale_factor: 1.0,
+                source_bounds: None, pixel_format: "rgba8", color_space: "srgb",
+                resolve_ms: 0.0, acquisition_ms: 0.0, pixels_ms: 0.0, total_ms: 0.0,
+            },
+            pixels: (0..width as usize * height as usize * 4)
+                .map(|i| (i.wrapping_mul(73) ^ (i >> 8)) as u8).collect(),
+        }, Value::Null)
+    }
+
+    #[test]
+    fn local_rgb_matches_png_decoding_without_encoding_the_capture() {
+        let image = rgb_fixture(17, 13);
+        let raw = image.rgb().unwrap();
+        assert!(image.png.get().is_none(), "local inference does not need PNG encoding");
+        let encoded = Image::encoded(image.png().unwrap(), Value::Null);
+        assert_eq!(raw, encoded.rgb().unwrap());
+        assert!(Image::encoded(vec![1, 2, 3], Value::Null).rgb().is_err());
+    }
+
+    #[test]
+    #[ignore = "manual conversion benchmark; run with --release --ignored --nocapture"]
+    fn benchmark_local_rgb_preparation() {
+        use std::{hint::black_box, time::Instant};
+        for (width, height) in [(1349, 272), (1920, 1080)] {
+            let image = rgb_fixture(width, height);
+            let encoded = Image::encoded(image.png().unwrap(), Value::Null);
+            assert_eq!(image.rgb().unwrap(), encoded.rgb().unwrap());
+            for (name, input) in [("png-decode", &encoded), ("raw-rgb", &image)] {
+                let start = Instant::now();
+                for _ in 0..30 { black_box(input.rgb().unwrap()); }
+                println!("{width}x{height} {name}: {:.3} ms/frame", start.elapsed().as_secs_f64() * 1000.0 / 30.0);
+            }
+        }
     }
 
     #[test]

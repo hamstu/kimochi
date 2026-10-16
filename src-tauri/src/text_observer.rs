@@ -317,7 +317,7 @@ fn text_lines(lines: &[meikiocr::TextLine], width: u32, height: u32) -> Vec<Text
 }
 
 /// The frame's RGBA rows (with their stride) as the RGB image Meiki reads.
-fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImage> {
+pub(crate) fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImage> {
     let (width, height) = (frame.info.width as usize, frame.info.height as usize);
     let stride = frame.info.stride.max(width * 4);
     if width == 0 || height == 0 || frame.pixels.len() < stride * (height - 1) + width * 4 {

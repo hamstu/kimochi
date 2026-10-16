@@ -36,6 +36,7 @@ import {
   X
 } from 'lucide-react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   Button,
   Callout,
@@ -192,6 +193,13 @@ function useLiveFrames(
       // A hidden window shows nothing; resumed by the visibility listener below.
       if (document.visibilityState !== 'visible') return
       try {
+        // WebView2 can keep reporting "visible" after the native window is hidden.
+        // Keep a cheap wake-up check, rather than capturing an invisible preview forever.
+        if (!(await getCurrentWindow().isVisible())) {
+          if (alive) schedule(REFRESH_MS)
+          return
+        }
+        if (!alive) return
         const frame = await sourceLiveThumbnail(sourceId)
         if (!alive) return
         staleRef.current?.(null)

@@ -6,12 +6,11 @@
  * The Log stays mounted under the other views: it owns line intake (clipboard, WebSocket, OCR),
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { Maximize2, Minimize2, PanelLeft } from 'lucide-react'
 import { listen } from '@tauri-apps/api/event'
 import { IconButton, Tooltip } from '@kit'
 import { ReaderHost, Transcript } from '@texthooker/App'
-import { NotebookPanel as Notebook } from '@texthooker/components/NotebookPanel'
 import { TitleBarPortal } from '../shell/TitleBarPortal'
 import KimochiLogo from '../components/KimochiLogo'
 import { useSetting } from '../bridge/useSetting'
@@ -32,6 +31,10 @@ import '../panels/settings-panel.css'
 import { GamingModeNotice } from './GamingModeNotice'
 import { panel } from '../bridge/tauri'
 import './main.css'
+
+const Notebook = lazy(() =>
+  import('@texthooker/components/NotebookPanel').then((m) => ({ default: m.NotebookPanel }))
+)
 
 function initialView(): MainView {
   const view = new URLSearchParams(location.search).get('view')
@@ -230,11 +233,13 @@ export default function MainPanel(): JSX.Element {
               {view !== 'settings' && <ViewTabs view={view} onView={setView} />}
               <Transcript visible={view === 'log'} onOpenNotebook={openNotebook} />
               {view === 'notebook' && (
-                <Notebook
-                  editingId={editing}
-                  onEdit={setEditing}
-                  onCloseEditor={() => setEditing(null)}
-                />
+                <Suspense fallback={<div role="status">Loading notebook…</div>}>
+                  <Notebook
+                    editingId={editing}
+                    onEdit={setEditing}
+                    onCloseEditor={() => setEditing(null)}
+                  />
+                </Suspense>
               )}
               {view === 'settings' && (
                 <ReaderSettingsProvider>

@@ -3,8 +3,8 @@
 //! Three users of the runtime live here: the manual scan (`recognize`, one shared
 //! engine in `MeikiState`), the automatic-scan observer (`text_observer.rs`, its
 //! own engine on its own worker), and the availability probe (`availability`,
-//! one short-lived engine on a background thread). They share only the process-wide
-//! ONNX Runtime initialisation and, on DirectML, one run lock.
+//! a background check). When MeikiOCR is selected, the check warms the manual engine;
+//! otherwise its temporary engine is dropped. The observer has its own sessions.
 use crate::engine_probe::{self, Loaded, Probe, Verified};
 use crate::model_store;
 use meikiocr::{Backend, MeikiOcr, ModelPaths, OcrOptions, TextLine};
@@ -133,21 +133,42 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
     if cfg!(target_os = "macos") {
         return (true, None);
     }
+    let probe_app = app.clone();
     let probe = move || {
-        // The probe's engine is dropped once built: verifying must not leave a
-        // second resident copy of the sessions for users who never scan with Meiki.
+        let describe = |engine: &MeikiOcr| {
+            let info = engine.backend_info();
+            let mut diagnostics = RUNTIME_DIAGNOSTICS.get().cloned().unwrap_or_default();
+            diagnostics.extend(
+                info.fallback_reasons
+                    .iter()
+                    .map(|r| format!("fallback: {r}")),
+            );
+            Loaded {
+                accelerator: accelerator(info.selected),
+                diagnostics,
+            }
+        };
+        // Verification already pays for loading the sessions. For the selected engine,
+        // keep that work: the first scan must not build an identical engine again.
+        // The same lock as scans/unload also prevents duplicate concurrent loads.
+        let selected = probe_app.try_state::<crate::state::Shared>()
+            .is_some_and(|service| matches!(
+                service.settings.get_or::<String>("ocrMode", String::new()).as_str(),
+                "meikiocr" | "local"
+            ));
+        if selected {
+            if let Some(state) = probe_app.try_state::<MeikiState>() {
+                let mut slot = state.0.lock()
+                    .map_err(|_| "MeikiOCR worker unavailable".to_string())?;
+                if slot.is_none() {
+                    *slot = Some(load_engine(&assets)?);
+                }
+                return Ok(describe(slot.as_ref().ok_or("MeikiOCR initialization failed")?));
+            }
+        }
+        // Unselected engines do not keep a resident copy merely for capabilities.
         let engine = load_engine(&assets)?;
-        let info = engine.backend_info();
-        let mut diagnostics = RUNTIME_DIAGNOSTICS.get().cloned().unwrap_or_default();
-        diagnostics.extend(
-            info.fallback_reasons
-                .iter()
-                .map(|r| format!("fallback: {r}")),
-        );
-        Ok(Loaded {
-            accelerator: accelerator(info.selected),
-            diagnostics,
-        })
+        Ok(describe(&engine))
     };
     match PROBE.verified_or_start("meikiocr", engine_probe::PROBE_TIMEOUT, probe) {
         Some(verified) => (verified.available, verified.reason),
@@ -250,10 +271,8 @@ pub(crate) fn infer(
     })
 }
 
-pub fn recognize(app: &tauri::AppHandle, png: &[u8]) -> Result<Value, String> {
-    let image = image::load_from_memory_with_format(png, image::ImageFormat::Png)
-        .map_err(|e| format!("MeikiOCR image: {e}"))?
-        .to_rgb8();
+pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
+    let image = image.rgb().map_err(|e| format!("MeikiOCR {e}"))?;
     let assets = presence(app).map_err(|reason| format!("MeikiOCR is not ready: {reason}"))?;
     initialize_runtime(&assets.runtime)?;
     let state = app.state::<MeikiState>();

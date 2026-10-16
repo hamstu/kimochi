@@ -11,6 +11,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Load settings pages, diagnostics and the Notebook on demand, and avoid duplicate settings reads during startup.
+- Stop refreshing source screenshots while the main window is hidden, reducing background capture work.
+- Prepare local MeikiOCR and Manga OCR scans directly from captured pixels instead of decoding them from PNG, and reuse cloud OCR connections between scans.
+- Windows and Linux: keep the selected MeikiOCR engine warm after its startup check so the first scan does not load the models twice.
+
 - Speed up dictionary lookups with direct streaming between windows, keep Hachidori hover requests from building a backlog, and stop idle popups from continuously re-measuring themselves.
 
 - macOS: the controller menu opened from a keyboard shortcut now takes the keyboard too, so the game no longer reacts to the arrows, Return or Escape while you use the menu.
