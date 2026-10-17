@@ -127,11 +127,13 @@ afterwards):
 | `KIMOCHI_MIN_FREE_GB` | 15 | Wipe them when the drive has less free; `0` turns the check off |
 | `KIMOCHI_FREE_SPACE_PATH` | the checkout | Where to measure free space |
 
-The arcade PC's G: SSD holds both the Windows runner's work directory and the WSL distro's vhdx,
-so `arcade-pc` has `KIMOCHI_CACHE_MAX_GB=12`, `KIMOCHI_MIN_FREE_GB=10`, and `arcade-pc-wsl` has
-`KIMOCHI_CACHE_MAX_GB=12`, `KIMOCHI_MIN_FREE_GB=0`, `KIMOCHI_FREE_SPACE_PATH=/mnt/g`: deleting
-inside WSL never returns space to G: (the watchdog's compaction does), while the Windows runner's
-wipe frees G: at once.
+On the arcade PC the G: SSD (111 GB) holds the WSL distro's vhdx, which only shrinks when the
+watchdog compacts it, so `arcade-pc-wsl` has `KIMOCHI_CACHE_MAX_GB=15`, `KIMOCHI_MIN_FREE_GB=0`
+and `KIMOCHI_FREE_SPACE_PATH=/mnt/g` (deleting inside WSL gives nothing back to G:). The Windows
+runner's work directory is on C: (`C:\actions-runner-work`, set as `workFolder` in the runner's
+`.runner` file; the runner itself stays in `G:\actions-runner`) and uses the defaults.
+After moving a work directory, delete its `*/target` directories: build scripts record absolute
+paths, so a moved cache fails with "failed to read plugin permissions" pointing at the old path.
 
 ## OCR crates
 

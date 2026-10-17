@@ -5,7 +5,7 @@ the machine (a Windows service running as LocalSystem, so no password is needed)
 
 .EXAMPLE
 $env:RUNNER_TOKEN = '<registration token from ci/runners/token.sh>'
-powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name arcade-pc -Labels kimochi -Dir G:\actions-runner
+powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name arcade-pc -Labels kimochi -Dir G:\actions-runner -Work C:\actions-runner-work
 
 Run from an elevated PowerShell. Re-running replaces the existing registration with the same
 name. Jobs run as LocalSystem with their own Rust toolchain under <Dir>\_rust (RUSTUP_HOME /
@@ -18,6 +18,8 @@ param(
   [string]$Labels = '',
   [string]$Url = 'https://github.com/hamstu/kimochi-tauri',
   [string]$Dir = 'C:\actions-runner',
+  # Where jobs check out and build: relative to $Dir, or an absolute path on another drive.
+  [string]$Work = '_work',
   [switch]$NoService
 )
 $ErrorActionPreference = 'Stop'
@@ -103,7 +105,7 @@ if (-not (Test-Path '.\bin\Runner.Listener.exe') -or $installed -ne $version) {
 }
 
 # ------------------------------------------------------------------ register + service
-$args = @('--unattended', '--replace', '--url', $Url, '--token', $env:RUNNER_TOKEN, '--name', $Name, '--work', '_work')
+$args = @('--unattended', '--replace', '--url', $Url, '--token', $env:RUNNER_TOKEN, '--name', $Name, '--work', $Work)
 if ($Labels) { $args += @('--labels', $Labels) }
 if (-not $NoService) { $args += @('--runasservice', '--windowslogonaccount', 'NT AUTHORITY\SYSTEM') }
 Log "Registering '$Name' with $Url (labels: $Labels)"
