@@ -8,17 +8,16 @@ $env:RUNNER_TOKEN = '<registration token from ci/runners/token.sh>'
 powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name arcade-pc -Labels kimochi -Dir G:\actions-runner
 
 Run from an elevated PowerShell. Re-running replaces the existing registration with the same
-name. Jobs run as LocalSystem, so the script points them at the named user's Rust toolchain
-(RUSTUP_HOME / CARGO_HOME through the runner's .env file) and prepends that user's cargo bin,
-Git and Node to the job PATH (.path file).
+name. Jobs run as LocalSystem with their own Rust toolchain under <Dir>\_rust (RUSTUP_HOME /
+CARGO_HOME through the runner's .env file), separate from any user's, so a developer running
+`tauri dev` on the same machine never locks files a job needs (or the reverse). The script
+prepends that cargo bin, Git and Node to the job PATH (.path file).
 #>
 param(
   [string]$Name = $env:COMPUTERNAME,
   [string]$Labels = '',
   [string]$Url = 'https://github.com/hamstu/kimochi-tauri',
   [string]$Dir = 'C:\actions-runner',
-  # The user whose rustup/cargo installation jobs use.
-  [string]$ToolchainUser = '',
   [switch]$NoService
 )
 $ErrorActionPreference = 'Stop'
@@ -30,16 +29,22 @@ function Log($m) { Write-Host "==> $m" -ForegroundColor Cyan }
 $arch = switch ($env:PROCESSOR_ARCHITECTURE) { 'ARM64' { 'arm64' } 'AMD64' { 'x64' } default { throw "unsupported architecture $($env:PROCESSOR_ARCHITECTURE)" } }
 
 # ------------------------------------------------------------------ toolchain for jobs
-if (-not $ToolchainUser) {
-  $candidates = Get-ChildItem C:\Users -Directory | Where-Object { Test-Path (Join-Path $_.FullName '.cargo\bin\cargo.exe') }
-  if ($candidates.Count -ne 1) { throw 'Pass -ToolchainUser: could not pick a single user with ~\.cargo\bin\cargo.exe' }
-  $ToolchainUser = $candidates[0].Name
-}
-$userHome = "C:\Users\$ToolchainUser"
-$cargoHome = "$userHome\.cargo"
-$rustupHome = "$userHome\.rustup"
-if (-not (Test-Path "$cargoHome\bin\cargo.exe")) { throw "No cargo at $cargoHome\bin; install rustup for $ToolchainUser first (https://rustup.rs)" }
+# The runner's own rustup, never a user's: a user's `cargo` (e.g. `tauri dev`) keeps the shared
+# rustup.exe proxy open, and a job that then reinstalls or updates rustup fails with
+# "Access is denied" (and a job's update could break the user's session the same way).
+$cargoHome = "$Dir\_rust\cargo"
+$rustupHome = "$Dir\_rust\rustup"
 $env:CARGO_HOME = $cargoHome; $env:RUSTUP_HOME = $rustupHome
+if (-not (Test-Path "$cargoHome\bin\rustup.exe")) {
+  $rustupArch = if ($arch -eq 'arm64') { 'aarch64' } else { 'x86_64' }
+  Log "Installing rustup into $cargoHome"
+  New-Item -ItemType Directory -Force -Path $cargoHome, $rustupHome | Out-Null
+  $init = Join-Path $env:TEMP 'rustup-init.exe'
+  Invoke-WebRequest -Uri "https://win.rustup.rs/$rustupArch" -OutFile $init
+  & $init -y --no-modify-path --profile minimal --default-toolchain stable
+  if ($LASTEXITCODE -ne 0) { throw "rustup-init failed with $LASTEXITCODE" }
+  Remove-Item $init
+}
 & "$cargoHome\bin\rustup.exe" show active-toolchain 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) { Log 'Setting the default Rust toolchain to stable'; & "$cargoHome\bin\rustup.exe" default stable }
 & "$cargoHome\bin\rustup.exe" component add clippy | Out-Null
@@ -105,7 +110,7 @@ Log "Registering '$Name' with $Url (labels: $Labels)"
 & .\config.cmd @args
 if ($LASTEXITCODE -ne 0) { throw "config.cmd failed with $LASTEXITCODE" }
 
-# Jobs run as LocalSystem: give them the user's Rust toolchain and the tools on this machine.
+# Jobs run as LocalSystem: give them the runner's Rust toolchain and the tools on this machine.
 # tauri's bundler verifies signatures with the Windows SDK signtool even with a custom
 # signCommand, and its registry-based lookup does not find it under LocalSystem.
 $kitArch = if ($arch -eq 'arm64') { 'arm64' } else { 'x64' }

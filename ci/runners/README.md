@@ -29,7 +29,8 @@ replacement machine only needs the same labels.
 - macOS: a launchd agent in `~/Library/LaunchAgents/actions.runner.*.plist`, started at login.
 - Linux: a systemd unit `actions.runner.*.service`, started at boot, running as `hamstu`.
 - Windows: a Windows service `actions.runner.*`, start type Automatic, running as LocalSystem.
-  Jobs use the named user's rustup/cargo through the runner's `.env` and `.path` files.
+  Jobs use the runner's own rustup/cargo in `<runner dir>\_rust` (through the runner's `.env` and
+  `.path` files), never a user's, so `tauri dev` on the same machine can't lock files a job needs.
 - Parallels VMs: `prlctl set <vm> --autostart start-host` starts the VM with Parallels. The Omarchy
   VM was left as is.
 - WSL: WSL only runs while something holds it open, so `install-wsl-keepalive.ps1` registers a
@@ -50,9 +51,9 @@ or `Get-Service actions.runner.*` (Windows); logs live in `_diag/` beside the ru
 3. Windows, in an elevated PowerShell:
    ```powershell
    $env:RUNNER_TOKEN = '...'
-   powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name NAME -Labels kimochi -Dir C:\actions-runner -ToolchainUser USER
+   powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name NAME -Labels kimochi -Dir C:\actions-runner
    ```
-   Needs rustup for `USER`, Visual Studio Build Tools with the C++ workload (ARM64 tools and
+   Installs its own rustup under `<Dir>\_rust`. Needs Visual Studio Build Tools with the C++ workload (ARM64 tools and
    the Clang component on ARM, since `ring` compiles with clang there), and the WebView2
    runtime. NSIS is fetched by the Tauri CLI on first use. For signing, the Azure CLI must be
    installed at its default path (`artifact-signing-cli` refuses to run without
