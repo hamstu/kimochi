@@ -10,7 +10,12 @@ export interface Line {
   ocr?: { scanId: string; groupId: string; groupIndex: number; groupCount: number; engine?: string; orientation: "horizontal" | "vertical" };
   /** Durable OCR replay IDs; separate from optional text-based deduplication. */
   ingestIds?: string[];
+  /** Numbers the line within its session on this computer (another computer's lines are
+      renumbered as they arrive). */
   id: number;
+  /** Identifies the line across computers for Sync. Lines written before uids existed are given
+      one derived from their session, id, time and text (`derivedLineUid`). */
+  uid?: string;
   text: string;
   source: LineSource;
   ts: number;

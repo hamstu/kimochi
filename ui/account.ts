@@ -1,8 +1,8 @@
 /**
- * Kimochi accounts as the webviews see them (`account_status`, the `account-changed`,
- * `account-link` and `account-backup` events from `src-tauri/src/account.rs`), and the pure
- * decisions the panels make from them. The token never reaches a webview: only the cached user,
- * usage and backup state do.
+ * Kimochi accounts as the webviews see them (`account_status`, the `account-changed` and
+ * `account-link` events from `src-tauri/src/account.rs`), and the pure decisions the panels make
+ * from them. A token never reaches a webview: only the cached users, usage and which account
+ * (profile) is in use do.
  */
 
 export type Plan = 'free' | 'plus' | 'owner'
@@ -36,13 +36,32 @@ export interface AccountStatus {
    * build's `KIMOCHI_SERVER` picks it over `serverSettings.mode`.
    */
   server?: AccountServer | null
-  backup?: { running: boolean; lastBackupAt?: number | null; lastError?: string | null }
+  /** The server "Add account" signs in to (development builds choose it in Settings → Account). */
+  linkServer?: AccountServer | null
+  /** Every account signed in to on this computer, most recently used first. */
+  accounts?: AccountSummary[]
+  /** The profile in use: `key` null is the Local profile (no account). */
+  profile?: { key: string | null; root: string; needsSignIn: boolean } | null
+  /** A switch between accounts is in progress. */
+  switching?: boolean
 }
 
 export interface AccountServer {
   mode: 'cloud' | 'local'
   url: string
   forced: boolean
+}
+
+/** One account in the switcher. */
+export interface AccountSummary {
+  key: string
+  user: AccountUser | null
+  server: AccountServer | null
+  /** Its token is still here (signing out keeps the account listed, and its data). */
+  signedIn: boolean
+  active: boolean
+  /** False while `KIMOCHI_SERVER` pins the other server. */
+  available: boolean
 }
 
 export type LinkStatus = 'pending' | 'approved' | 'denied' | 'expired' | 'cancelled' | 'error'
@@ -53,35 +72,51 @@ export interface LinkEvent {
   message?: string | null
 }
 
-export interface BackupEvent {
-  phase: 'scanning' | 'uploading' | 'downloading' | 'restarting' | 'done' | 'error'
-  done: number
-  total: number
-  error?: string | null
-}
-
-/** `accountBackup` in settings.json: what the automatic backup and Back up now include. */
-export interface BackupOptions {
-  prefs: boolean
-  sessions: boolean
-}
-
-export const DEFAULT_BACKUP_OPTIONS: BackupOptions = { prefs: false, sessions: false }
-
-export const SIGNED_OUT: AccountStatus = { signedIn: false, backup: { running: false } }
+export const SIGNED_OUT: AccountStatus = { signedIn: false, accounts: [], profile: null }
 
 /** Accept whatever native sent; anything unexpected reads as signed out. */
 export function normalizeStatus(raw: unknown): AccountStatus {
   if (!raw || typeof raw !== 'object') return SIGNED_OUT
   const value = raw as Partial<AccountStatus>
+  const profile = value.profile && typeof value.profile === 'object' ? value.profile : null
   return {
     signedIn: value.signedIn === true,
     user: value.user ?? null,
     usage: value.usage ?? null,
     linking: value.linking ?? null,
     server: normalizeServer(value.server),
-    backup: value.backup ?? { running: false }
+    linkServer: normalizeServer(value.linkServer),
+    accounts: Array.isArray(value.accounts) ? value.accounts.flatMap(normalizeSummary) : [],
+    profile: profile
+      ? {
+          key: typeof profile.key === 'string' ? profile.key : null,
+          root: typeof profile.root === 'string' ? profile.root : '',
+          needsSignIn: profile.needsSignIn === true
+        }
+      : null,
+    switching: value.switching === true
   }
+}
+
+function normalizeSummary(raw: unknown): AccountSummary[] {
+  if (!raw || typeof raw !== 'object') return []
+  const value = raw as Partial<AccountSummary>
+  if (typeof value.key !== 'string') return []
+  return [
+    {
+      key: value.key,
+      user: value.user ?? null,
+      server: normalizeServer(value.server),
+      signedIn: value.signedIn === true,
+      active: value.active === true,
+      available: value.available !== false
+    }
+  ]
+}
+
+/** The active account's summary, if an account (not the Local profile) is in use. */
+export function activeAccount(status: AccountStatus): AccountSummary | null {
+  return status.accounts?.find((a) => a.active) ?? null
 }
 
 function normalizeServer(raw: unknown): AccountServer | null {
@@ -127,7 +162,7 @@ const METRIC_LABELS: Record<UsageMetric, { label: string; unit: string }> = {
   tts: { label: 'Read aloud', unit: 'read-alouds' },
   translate: { label: 'Translation', unit: 'translations' },
   explain: { label: 'Explanations', unit: 'explanations' },
-  storage: { label: 'Backup storage', unit: '' }
+  storage: { label: 'Sync storage', unit: '' }
 }
 
 export const PLAN_LABELS: Record<Plan, string> = { free: 'Free', plus: 'Plus', owner: 'Owner' }
@@ -191,37 +226,6 @@ export function usageRows(usage: Usage | null | undefined): UsageRow[] {
 export function resetLine(usage: Usage | null | undefined): string | null {
   const date = shortDate(usage?.period?.end)
   return date ? `Monthly allowances reset on ${date}.` : null
-}
-
-/** "Backed up 5 minutes ago" / "Not backed up yet". */
-export function lastBackupLine(at: number | null | undefined, now: number): string {
-  if (!at) return 'Not backed up yet.'
-  const minutes = Math.round((now - at) / 60_000)
-  if (minutes < 1) return 'Backed up just now.'
-  if (minutes < 60) return `Backed up ${minutes} minute${minutes === 1 ? '' : 's'} ago.`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `Backed up ${hours} hour${hours === 1 ? '' : 's'} ago.`
-  const date = new Date(at)
-  return `Backed up on ${MONTHS[date.getMonth()]} ${date.getDate()}.`
-}
-
-/** The progress line while a backup or restore runs. */
-export function backupProgressLine(event: BackupEvent | null): string | null {
-  if (!event) return null
-  switch (event.phase) {
-    case 'scanning':
-      return 'Checking what changed…'
-    case 'uploading':
-      return event.total > 0 ? `Uploading ${event.done} of ${event.total}…` : 'Uploading…'
-    case 'downloading':
-      return event.total > 0 ? `Downloading ${event.done} of ${event.total}…` : 'Downloading…'
-    case 'restarting':
-      return 'Restarting Kimochi…'
-    case 'done':
-      return null
-    case 'error':
-      return null
-  }
 }
 
 /** What the person signed in is called on the Account page. */

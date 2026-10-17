@@ -5,6 +5,10 @@ use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
 mod account;
+mod profile;
+mod sync;
+mod sync_core;
+mod sync_log;
 mod actions;
 mod activity;
 mod application_context;
@@ -124,6 +128,7 @@ fn reader_settings_patch(app: tauri::AppHandle, state: State<Shared>, patch: Val
         json!({"key":"superTexthooker", "value":value}),
     )
     .map_err(|e| e.to_string())?;
+    sync::local_changed();
     if let Some(pinned) = patch.get("alwaysOnTop").and_then(Value::as_bool) {
         panels::act_existing(
             &app,
@@ -186,25 +191,32 @@ fn settings_set(
 ) -> Reply<()> {
     state.settings.set(&key, value.clone())?;
     let _ = app.emit("settings:changed", json!({ "key": key, "value": value }));
+    setting_side_effects(&app, &state.settings, &key, &value);
+    sync::local_changed();
+    Ok(())
+}
+
+/// What a settings write sets in motion beyond `settings:changed`: shared by `settings_set` and
+/// by Sync putting another computer's preferences (or another account's) in place.
+pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settings>, key: &str, value: &Value) {
     if key.starts_with("texthookerSettings") {
         if let Some(texthooker) = app.try_state::<Arc<texthooker::Texthooker>>() {
             texthooker.settings_changed();
         }
     }
     if key.starts_with("hotkeys") {
-        hotkeys::apply(&app, &state.settings);
+        hotkeys::apply(app, settings);
     }
     if key == "appearance" {
-        apply_appearance(&app, Some(&value));
+        apply_appearance(app, Some(value));
     }
     // Choosing a local engine whose models are missing starts their download (the pickers
     // only save that choice after the user confirms the download).
     if key == "ocrMode" {
         if let Some(mode) = value.as_str() {
-            model_store::on_engine_selected(&app, mode);
+            model_store::on_engine_selected(app, mode);
         }
     }
-    Ok(())
 }
 
 /// Kimochi's Appearance setting, applied to the app itself rather than to each page: every
@@ -2660,9 +2672,18 @@ fn main() {
             account::account_sign_out,
             account::account_refresh,
             account::account_open_web,
-            account::account_backup_now,
-            account::account_restore,
             account::account_set_server,
+            account::account_switch,
+            account::account_remove,
+            account::profile_current,
+            sync::sync_status,
+            sync::sync_now,
+            sync::sync_log,
+            sync::sync_log_clear,
+            sync::sync_conflict_resolve,
+            sync::sync_hold_ready,
+            sync::sync_local_changed,
+            sync::sync_export,
             system_state,
             app_quit,
             open_screen_capture_preferences,
@@ -2705,11 +2726,6 @@ fn main() {
             let handle = app.handle().clone();
             #[cfg(target_os = "linux")]
             platform::gnome::start(handle.clone());
-            // A restore downloaded before the last restart goes in place before anything reads
-            // the settings or the Log's files.
-            if let (Ok(data), Ok(local)) = (handle.path().app_data_dir(), handle.path().app_local_data_dir()) {
-                account::apply_pending_restore(&data, &local);
-            }
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // Before any window is built, so none shows the system's appearance first.
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
@@ -2765,6 +2781,8 @@ fn main() {
                 }),
             });
             app.manage(service.clone());
+            // Before any window is built: the windows ask which profile's files to open.
+            account::install(&handle).map_err(std::io::Error::other)?;
             {
                 // Self-updates: the shared status every window reads, and (in a bundle) the
                 // quiet periodic check. The reporter writes to the evidence log like the engine
@@ -3100,7 +3118,6 @@ fn main() {
             // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
             // user starts it from Settings → OCR, where the button names the size.
             spawn_capabilities_watch(handle.clone(), service.clone());
-            account::install(&handle).map_err(std::io::Error::other)?;
             setup_deep_links(&handle);
             Ok(())
         })

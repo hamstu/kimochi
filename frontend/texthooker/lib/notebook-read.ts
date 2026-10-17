@@ -1,6 +1,7 @@
 import { getEntry } from "./notebook";
 import { buildPatternsFor } from "./nameMatch";
 import { readFile, BaseDirectory } from "@tauri-apps/plugin-fs";
+import { inProfile, loadProfileRoot } from "../core/profile";
 import type {
   NotebookImage,
   NotebookEntry,
@@ -11,7 +12,8 @@ const DIR = BaseDirectory.AppLocalData;
 export async function readImageBytes(
   image: NotebookImage,
 ): Promise<Uint8Array> {
-  return await readFile(image.path, { baseDir: DIR });
+  await loadProfileRoot();
+  return await readFile(inProfile(image.path), { baseDir: DIR });
 }
 
 export async function readImageAsObjectURL(

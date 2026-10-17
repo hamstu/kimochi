@@ -23,9 +23,11 @@
  *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
  *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
  *   ?account=<state> the Kimochi account (preview-account.ts): signedout (default), linking,
- *                    signedin, full, suspended; Settings → Account (?tab=account). Signed in
- *                    (signedin, full, suspended) means `cloudAccess`: Cloud OCR is offered and
- *                    read-aloud shows; signed out (the default) both are hidden
+ *                    signedin, full, suspended, multi (two accounts), local (an account on this
+ *                    computer, Local in use); Settings → Account (?tab=account). Signed in
+ *                    (signedin, full, suspended, multi) means `cloudAccess`: Cloud OCR is offered
+ *                    and read-aloud shows; signed out (the default) both are hidden
+ *   ?sync=<state>    Sync while signed in: idle (default), offline, error, conflicts
  *   ?server=<mode>   the account's server, switched in Settings → Account (`account_set_server`):
  *                    cloud (default), local, forced (local, pinned by KIMOCHI_SERVER)
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
@@ -758,7 +760,7 @@ function setupWelcome(): void {
 
 export async function setupPreview(page: PreviewPage): Promise<string> {
   const label = page === 'panel' ? (params.get('window') ?? 'log') : PAGE_LABELS[page]
-  mockWindows(label, 'log', 'settings', 'diagnostics')
+  mockWindows(label, 'log', 'settings', 'diagnostics', 'sync-log')
   installIpc(label)
   startSeededDownloads()
   document.documentElement.dataset.preview = label

@@ -7,7 +7,7 @@ import { Notice } from './Notice'
 import { SubmitButton, dangerButtonExtra } from './SubmitButton'
 import { Meter } from './Meter'
 import { AccountSection, Badge, ConfirmButton, StatusLine, useLoad } from './parts'
-import { api, ApiError, oauthStartUrl, type MetricName, type Provider, type User } from '../../lib/api'
+import { api, ApiError, EXPORT_URL, oauthStartUrl, type MetricName, type Provider, type User } from '../../lib/api'
 import {
   deleteConfirmMatches,
   formatDay,
@@ -144,7 +144,7 @@ export function UsageSection({ user }: { user: User }) {
       </div>
       {user.status === 'suspended' && (
         <Notice tone="warn" className="mt-4">
-          This account is suspended, so the hosted services are paused. You can still see your account and backups.
+          This account is suspended, so the hosted services are paused. You can still see your account, and Sync keeps working.
         </Notice>
       )}
       <div className="mt-6">
@@ -397,63 +397,63 @@ export function SignInMethodsSection({ user }: { user: User }) {
   )
 }
 
-/* ------------------------------------------------------------------ backup */
+/* ------------------------------------------------------------------ sync */
 
-export function BackupSection() {
-  const backup = useLoad(api.backup)
-  const data = backup.data
+export function SyncSection() {
+  const sync = useLoad(api.sync)
+  const data = sync.data
   const sessions = data?.sessions ?? []
   return (
     <AccountSection
-      id="backup"
-      title="Backup"
-      description="When backup is on in Kimochi (Settings → Account), your preferences and reading sessions are copied here so you can restore them on another computer."
+      id="sync"
+      title="Sync"
+      description="While you're signed in, Kimochi keeps your sessions, notebook, presets and preferences in sync between your computers. Everything also stays on each computer."
     >
-      {backup.loading && !data ? (
+      {sync.loading && !data ? (
         <p className="text-small text-ink-3" role="status">
           Loading…
         </p>
-      ) : backup.error ? (
-        <Notice tone="danger">{errorText(backup.error)}</Notice>
+      ) : sync.error ? (
+        <Notice tone="danger">{errorText(sync.error)}</Notice>
       ) : data ? (
         <div className="grid gap-6">
           <Meter label="Storage" used={data.used} limit={data.limit} format={formatStorage} />
-          {data.files.length === 0 ? (
-            <p className="text-ink-2">Nothing is backed up yet.</p>
+          {data.records === 0 ? (
+            <p className="text-ink-2">Nothing has synced yet. Sign in in Kimochi (Settings → Account) to start.</p>
           ) : (
             <div>
               <h3 className="text-small font-medium text-ink">
-                Backed-up sessions <span className="text-ink-3 tnum">({sessions.length})</span>
+                Synced sessions <span className="text-ink-3 tnum">({sessions.length})</span>
               </h3>
-              {sessions.length > 0 ? (
+              {sessions.length > 0 && (
                 <ul className="mt-2 divide-y divide-hairline rounded-lg shadow-[inset_0_0_0_1px_var(--k-line)]">
                   {sessions.map((s) => (
                     <li key={s.id} className="flex items-baseline justify-between gap-3 px-4 py-2.5 text-small">
                       <span className="min-w-0 text-ink break-words">{s.name || 'Untitled session'}</span>
-                      {typeof s.lineCount === 'number' && (
-                        <span className="shrink-0 text-ink-3 tnum">
-                          {s.lineCount.toLocaleString('en-US')} {s.lineCount === 1 ? 'line' : 'lines'}
-                        </span>
-                      )}
+                      <span className="shrink-0 text-ink-3 tnum">
+                        {s.lineCount.toLocaleString('en-US')} {s.lineCount === 1 ? 'line' : 'lines'}
+                      </span>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="mt-1 text-small text-ink-2">
-                  <span className="tnum">{data.files.length}</span> backed-up {data.files.length === 1 ? 'file' : 'files'}, no session list yet.
-                </p>
               )}
             </div>
           )}
-          {data.files.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3">
+            <a href={EXPORT_URL} download className={buttonClass('secondary', 'md')}>
+              Download all my data
+            </a>
+            <span className="text-small text-ink-3">A ZIP of plain JSON files and your notebook images.</span>
+          </div>
+          {data.records > 0 && (
             <ConfirmButton
-              label="Delete all backups"
-              question="Delete every backed-up session and image from Kimochi’s servers? Your copies on your computers are not touched. Saved preferences stay until you delete your account."
-              confirmLabel="Delete backups"
+              label="Delete synced data"
+              question="Delete everything Kimochi has synced from its servers? The copies on your computers are not touched, and signed-in computers send theirs again when they next sync."
+              confirmLabel="Delete synced data"
               busyLabel="Deleting…"
               onConfirm={async () => {
-                await api.deleteBackup()
-                backup.reload()
+                await api.deleteSync()
+                sync.reload()
               }}
             />
           )}
@@ -498,7 +498,7 @@ export function DeleteAccountSection({ user }: { user: User }) {
     <AccountSection
       id="delete"
       title="Delete account"
-      description="Removes your account, usage history, preferences and every backup, and signs out every linked app. This can’t be undone."
+      description="Removes your account, usage history and everything synced, and signs out every linked app. This can’t be undone."
     >
       <form onSubmit={onDelete} className="grid gap-3">
         <Field

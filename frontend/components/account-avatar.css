@@ -1,0 +1,31 @@
+/* An account's picture or initial (AccountAvatar.tsx): a small circle on the accent's soft tint. */
+.k-account-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--k-control-h-sm);
+  height: var(--k-control-h-sm);
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--k-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--gray-a3);
+  color: var(--k-accent-text);
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-semibold);
+  line-height: 1;
+  user-select: none;
+}
+.k-account-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.k-account-avatar > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+/* The Local profile: neutral, not an account's colour. */
+.k-account-avatar-local {
+  background: var(--k-sunken);
+  color: var(--k-text-2);
+}

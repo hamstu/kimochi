@@ -1,6 +1,6 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS test. */
 // Kimochi accounts as the panels see them (ui/account.ts): who translates a line, the usage
-// meters, and the backup lines on Settings → Account.
+// meters, the accounts list and Sync on Settings → Account.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -12,12 +12,13 @@ const {
   usageRows,
   resetLine,
   shortDate,
-  lastBackupLine,
   normalizeStatus,
-  backupProgressLine,
+  activeAccount,
   accountLines,
   accountInitial
 } = await load('account.ts')
+const { lastSyncLine, syncStateLine, normalizeSyncStatus, conflictTitle, logLine, logText, appendLog } =
+  await load('sync.ts')
 
 test('automatic translation is Kimochi cloud while signed in, otherwise the DeepL key', () => {
   assert.equal(translationRoute('auto', '', true), 'kimochi')
@@ -72,21 +73,39 @@ test('allowances reset on the first of next month, in UTC', () => {
   assert.equal(resetLine(null), null)
 })
 
-test('the last backup reads as a relative time', () => {
+test('the last sync reads as a relative time, and the state as a sentence', () => {
   const now = Date.UTC(2026, 9, 16, 12, 0)
-  assert.equal(lastBackupLine(null, now), 'Not backed up yet.')
-  assert.equal(lastBackupLine(now - 20_000, now), 'Backed up just now.')
-  assert.equal(lastBackupLine(now - 60_000, now), 'Backed up 1 minute ago.')
-  assert.equal(lastBackupLine(now - 5 * 60_000, now), 'Backed up 5 minutes ago.')
-  assert.equal(lastBackupLine(now - 3 * 3_600_000, now), 'Backed up 3 hours ago.')
-  assert.match(lastBackupLine(now - 3 * 86_400_000, now), /^Backed up on Oct 1[23]\.$/)
+  assert.equal(lastSyncLine(null, now), 'Not synced yet.')
+  assert.equal(lastSyncLine(now - 20_000, now), 'Synced just now.')
+  assert.equal(lastSyncLine(now - 60_000, now), 'Synced 1 minute ago.')
+  assert.equal(lastSyncLine(now - 5 * 60_000, now), 'Synced 5 minutes ago.')
+  assert.equal(lastSyncLine(now - 3 * 3_600_000, now), 'Synced 3 hours ago.')
+  assert.match(lastSyncLine(now - 3 * 86_400_000, now), /^Synced on Oct 1[23]\.$/)
+  const status = normalizeSyncStatus({ state: 'offline', lastSyncAt: now - 60_000, pending: 2 })
+  assert.match(syncStateLine(status, now), /^Offline: .* 2 changes waiting to sync\.$/)
+  assert.equal(syncStateLine(normalizeSyncStatus({ state: 'syncing' }), now), 'Syncing…')
+  assert.equal(syncStateLine(normalizeSyncStatus({ state: 'idle', lastSyncAt: now - 60_000, pending: 1 }), now), 'Synced 1 minute ago. 1 change waiting to sync.')
 })
 
-test('backup progress names the step', () => {
-  assert.equal(backupProgressLine({ phase: 'uploading', done: 2, total: 5 }), 'Uploading 2 of 5…')
-  assert.equal(backupProgressLine({ phase: 'downloading', done: 0, total: 0 }), 'Downloading…')
-  assert.equal(backupProgressLine({ phase: 'done', done: 1, total: 1 }), null)
-  assert.equal(backupProgressLine(null), null)
+test('sync status from native is read strictly', () => {
+  const status = normalizeSyncStatus({
+    state: 'weird',
+    conflicts: [{ id: 'c1', collection: 'sessions', recordId: 's1', data: { name: 'Novel' }, detectedAt: 5 }, { nope: 1 }, null]
+  })
+  assert.equal(status.state, 'off')
+  assert.equal(status.conflicts.length, 1)
+  assert.equal(conflictTitle(status.conflicts[0]), 'Session “Novel”')
+  assert.equal(conflictTitle({ ...status.conflicts[0], collection: 'prefs', recordId: 'superTexthooker/fontSizePx', data: 20 }), 'Setting superTexthooker.fontSizePx')
+  assert.equal(normalizeSyncStatus(null).state, 'off')
+})
+
+test('the sync log is plain, timestamped and bounded', () => {
+  const at = new Date(2026, 9, 17, 9, 5, 7, 42).getTime()
+  assert.equal(logLine({ t: at, kind: 'push', text: 'sent' }), '2026-10-17 09:05:07.042  push     sent')
+  assert.equal(logText([{ t: at, kind: 'a', text: 'x' }, { t: at, kind: 'b', text: 'y' }]).split('\n').length, 2)
+  let entries = []
+  for (let i = 0; i < 10; i++) entries = appendLog(entries, { t: i, kind: 'info', text: String(i) }, 4)
+  assert.deepEqual(entries.map((e) => e.text), ['6', '7', '8', '9'])
 })
 
 test('anything unexpected from native reads as signed out', () => {
@@ -94,8 +113,27 @@ test('anything unexpected from native reads as signed out', () => {
   assert.equal(normalizeStatus({ signedIn: 'yes' }).signedIn, false)
   const status = normalizeStatus({ signedIn: true, user: { displayName: 'A' } })
   assert.equal(status.signedIn, true)
-  assert.equal(status.backup.running, false)
+  assert.deepEqual(status.accounts, [])
   assert.equal(status.server, null)
+})
+
+test('the accounts on this computer are read strictly, and one is in use', () => {
+  const status = normalizeStatus({
+    signedIn: true,
+    accounts: [
+      { key: 'cloud-u1', user: { id: 'u1' }, server: { mode: 'cloud', url: 'x' }, signedIn: true, active: true },
+      { key: 'local-u2', server: { mode: 'local', url: 'y' }, signedIn: false, active: false, available: false },
+      { user: { id: 'no key' } },
+      'junk'
+    ],
+    profile: { key: 'cloud-u1', root: 'profiles/cloud-u1', needsSignIn: false }
+  })
+  assert.deepEqual(status.accounts.map((a) => a.key), ['cloud-u1', 'local-u2'])
+  assert.equal(activeAccount(status).key, 'cloud-u1')
+  assert.equal(status.accounts[1].available, false)
+  assert.equal(status.accounts[0].available, true, 'available unless native says otherwise')
+  assert.equal(status.profile.root, 'profiles/cloud-u1')
+  assert.equal(activeAccount(normalizeStatus({ signedIn: false })), null, 'the Local profile')
 })
 
 test('the server an account belongs to is read strictly', () => {

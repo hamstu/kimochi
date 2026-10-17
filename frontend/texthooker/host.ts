@@ -13,6 +13,69 @@ import { ingestText } from "./core/ingest";
 import { loadSettings, getSettings } from "./lib/settings";
 import { acceptSnapshot, type ReaderSnapshot } from "./bridge";
 import { matchedSession, sourceKey, type SourceName } from "./source-sessions";
+import { loadProfileRoot, setWritesPaused } from "./core/profile";
+
+/** What a Sync merge changed on disk (`sync_core::Changed`). */
+interface SyncChanged {
+  sessions: boolean;
+  lines: string[];
+  notebook: string[];
+  presets: boolean;
+}
+const releases = new Map<number, (changed: SyncChanged | null) => void>();
+let pokeTimer: ReturnType<typeof setTimeout> | null = null;
+/** The files changed: Sync sends them a few quiet seconds later (it debounces again natively). */
+function pokeSync(): void {
+  if (pokeTimer) return;
+  pokeTimer = setTimeout(() => {
+    pokeTimer = null;
+    void invoke("sync_local_changed", { reason: "write" }).catch(() => undefined);
+  }, 1000);
+  if (typeof pokeTimer === "object" && pokeTimer !== null && "unref" in pokeTimer)
+    pokeTimer.unref();
+}
+/**
+ * `sync:hold`: write what is pending, stop writing, tell native, and wait for `sync:release`
+ * while Sync merges another computer's changes into the files; then reload what changed. Runs in
+ * the queue, so no Log operation interleaves.
+ */
+async function holdForSync(id: number): Promise<void> {
+  await sessions.flushSessions();
+  await flush();
+  setWritesPaused(true);
+  let changed: SyncChanged | null = null;
+  try {
+    const released = new Promise<SyncChanged | null>((resolve) => {
+      const timer = setTimeout(() => {
+        releases.delete(id);
+        resolve(null);
+      }, 90_000);
+      releases.set(id, (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      });
+    });
+    await invoke("sync_hold_ready", { id });
+    changed = await released;
+  } finally {
+    setWritesPaused(false);
+  }
+  const active = sessions.getActiveSession().id;
+  // No answer: reload everything, whatever Sync managed to write.
+  const what = changed ?? { sessions: true, lines: [active], notebook: [active], presets: true };
+  const activeChanged = what.sessions ? await sessions.reloadSessions() : false;
+  const sid = sessions.getActiveSession().id;
+  if (activeChanged) {
+    await store.onActiveSessionChanged();
+    await notebook.onActiveSessionChanged();
+  } else {
+    if (what.lines.includes(sid)) await store.reloadLines();
+    if (what.notebook.includes(sid)) await notebook.onActiveSessionChanged();
+  }
+  if (what.presets) await presets.loadPresets();
+  // Anything held back while paused.
+  await flush();
+}
 let startup: Promise<void> | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 let currentSource: SourceName | null = null;
@@ -154,6 +217,8 @@ const allowed: Record<string, string[]> = {
 export function startHost(): Promise<void> {
   if (!startup)
     startup = (async () => {
+      // Which account's Log this is: every file path starts with its profile folder.
+      await loadProfileRoot();
       await loadSettings();
       await sessions.migrateIfNeeded();
       await sessions.loadSessions();
@@ -171,6 +236,21 @@ export function startHost(): Promise<void> {
       });
       bindings = await getSetting("texthookerSourceSessions", {});
       seen = await getSetting("texthookerIngestedHistory", []);
+      store.onLinesFlushed(pokeSync);
+      await listen<{ id: number; changed: SyncChanged }>("sync:release", (e) => {
+        releases.get(e.payload.id)?.(e.payload.changed);
+        releases.delete(e.payload.id);
+      });
+      await listen<{ id: number }>("sync:hold", (e) => {
+        void enqueue(async () => {
+          await holdForSync(e.payload.id);
+          broadcast();
+        }).catch(reportError);
+      });
+      if (typeof window !== "undefined" && typeof window.addEventListener === "function")
+        window.addEventListener("focus", () => {
+          void invoke("sync_local_changed", { reason: "focus" }).catch(() => undefined);
+        });
       await listen<{
         id: string;
         module: string;
@@ -212,6 +292,7 @@ export function startHost(): Promise<void> {
                 await setSetting("texthookerSourceSessions", bindings);
               }
               await flush();
+              pokeSync();
             }
             broadcast();
             await emit("reader:response", { id, value });

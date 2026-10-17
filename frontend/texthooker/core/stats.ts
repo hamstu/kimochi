@@ -1,4 +1,5 @@
 import { writeTextFile } from "./files";
+import { inProfile } from "./profile";
 import {
   BaseDirectory,
   exists,
@@ -41,8 +42,8 @@ export function subscribeStats(fn: StatsListener): () => void {
 
 async function ensureDir() {
   try {
-    if (!(await exists("", { baseDir: DIR }))) {
-      await mkdir("", { baseDir: DIR, recursive: true });
+    if (!(await exists(inProfile(""), { baseDir: DIR }))) {
+      await mkdir(inProfile(""), { baseDir: DIR, recursive: true });
     }
   } catch {
     /* best-effort */
@@ -52,9 +53,9 @@ async function ensureDir() {
 export async function loadStats(): Promise<Stats> {
   await ensureDir();
   try {
-    const present = await exists(FILE, { baseDir: DIR });
+    const present = await exists(inProfile(FILE), { baseDir: DIR });
     if (present) {
-      const raw = await readTextFile(FILE, { baseDir: DIR });
+      const raw = await readTextFile(inProfile(FILE), { baseDir: DIR });
       const parsed = JSON.parse(raw) as Partial<Stats>;
       current = {
         ...STATS_DEFAULTS,
@@ -83,7 +84,7 @@ export async function flushStats(): Promise<void> {
   if (!dirty) return;
   dirty = false;
   try {
-    await writeTextFile(FILE, JSON.stringify(current), { baseDir: DIR });
+    await writeTextFile(inProfile(FILE), JSON.stringify(current), { baseDir: DIR });
   } catch (err) {
     console.error("flushStats failed", err);
     dirty = true;

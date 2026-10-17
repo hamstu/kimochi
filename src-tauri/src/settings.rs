@@ -55,8 +55,6 @@ pub fn defaults() -> Value {
         },
         "overlayOpacity": 80,
         "liveOverlayEnabled": false,
-        // Kimochi account backup (account.rs): off until the user turns it on.
-        "accountBackup": { "prefs": false, "sessions": false },
         // New installs only: `load` keeps an existing settings file on the engine it had.
         "ocrMode": "googlelens"
         // `endpoint` is intentionally absent: an unset endpoint follows

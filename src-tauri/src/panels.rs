@@ -107,6 +107,13 @@ pub static PANELS: &[PanelSpec] = &[
         min_height: 420.,
         ..panel("diagnostics", "Diagnostics", PANEL_PAGE, 680., 720.)
     },
+    // Sync's activity as a copyable, timestamped log (Settings → Account → Sync → View sync log).
+    PanelSpec {
+        centred: true,
+        min_width: 480.,
+        min_height: 320.,
+        ..panel("sync-log", "Sync log", PANEL_PAGE, 760., 520.)
+    },
     // The onboarding guide opens centred, without pinning it above dictionary setup windows.
     // The title bar's pin is still available. Sized so no step scrolls at the
     // default size; the minimum still fits every step, scrolling inside the step if it must.

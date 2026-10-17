@@ -45,25 +45,23 @@ export interface Device {
   current: boolean
 }
 
-export interface BackupFile {
-  path: string
-  size: number
-  sha256: string
-  updatedAt: string
-}
-
-export interface BackupSession {
+export interface SyncSession {
   id: string
   name: string
-  lineCount?: number
+  lineCount: number
 }
 
-export interface Backup {
-  files: BackupFile[]
+/** `GET /api/account/sync`: what this account has synced from Kimochi. */
+export interface SyncSummary {
   used: number
   limit: number | null
-  sessions?: BackupSession[]
+  records: number
+  seq: number
+  sessions: SyncSession[]
 }
+
+/** Everything the account has synced, as a ZIP (same origin, so the session cookie goes along). */
+export const EXPORT_URL = '/api/account/export'
 
 export type LinkStatus = 'pending' | 'approved' | 'denied' | 'expired'
 
@@ -161,8 +159,8 @@ export const api = {
   deleteAccount: (confirm: string) => request<void>('DELETE', '/api/account', { confirm }),
   devices: () => request<{ devices: Device[] }>('GET', '/api/account/devices').then((r) => r.devices),
   revokeDevice: (id: string) => request<void>('DELETE', `/api/account/devices/${enc(id)}`),
-  backup: () => request<Backup>('GET', '/api/account/backup'),
-  deleteBackup: () => request<void>('DELETE', '/api/account/backup'),
+  sync: () => request<SyncSummary>('GET', '/api/account/sync'),
+  deleteSync: () => request<void>('DELETE', '/api/account/sync'),
   usage: () => request<Usage>('GET', '/api/v1/usage'),
 
   // Linking the app

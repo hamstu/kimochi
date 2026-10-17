@@ -19,7 +19,7 @@ import MainPanel from "../main/MainPanel";
 import DictionaryPanelShell from "../shell/DictionaryPanelShell";
 import { preloadPanelDictionary } from "../shell/panelDictionary";
 
-import { SettingsPanel, DiagnosticsPanel, DictionarySettingsPanel } from "../panels/deferred";
+import { SettingsPanel, DiagnosticsPanel, DictionarySettingsPanel, SyncLogPanel } from "../panels/deferred";
 
 /** Titles and components, matching `PanelApp.tsx`'s `titles` / `components` maps. */
 const PANELS = {
@@ -30,6 +30,8 @@ const PANELS = {
     Component: DiagnosticsPanel,
     hideTitle: true,
   },
+  // Sync's activity, from Settings → Account → Sync.
+  "sync-log": { title: "Sync log", Component: SyncLogPanel, hideTitle: false },
   // Titled by the engine; see `DictionaryPanelShell`.
   dictionary: {
     title: "Dictionary",
