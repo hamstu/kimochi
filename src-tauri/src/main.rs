@@ -13,6 +13,7 @@ mod actions;
 mod activity;
 mod application_context;
 mod capture_unavailable;
+mod chrome_storage;
 mod cloud;
 mod compact;
 mod cover;
@@ -100,12 +101,18 @@ fn path(app: &tauri::AppHandle, name: &str) -> Reply<std::path::PathBuf> {
     Ok(d.join(name))
 }
 
-fn save(app: &tauri::AppHandle, name: &str, v: &impl Serialize) -> Reply<()> {
-    let p = path(app, name)?;
-    let tmp = p.with_extension("tmp");
-    std::fs::write(&tmp, serde_json::to_vec(v).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    std::fs::rename(tmp, p).map_err(|e| e.to_string())
+/// The app data directory, created if needed.
+fn data_dir(app: &tauri::AppHandle) -> Reply<std::path::PathBuf> {
+    let d = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    Ok(d)
+}
+
+fn now_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
 }
 
 #[tauri::command]
@@ -376,42 +383,42 @@ fn record(app: &tauri::AppHandle, service: &Shared, value: Value) {
 }
 
 /// `chrome.storage` persistence. No `extension` is Yomitan's `chrome-local.json`; an
-/// extension engine id (`[a-z0-9-]{1,32}`) gets its own `chrome-local-<id>.json`.
+/// extension engine id (`[a-z0-9-]{1,32}`) gets its own `chrome-local-<id>.json`. A file that
+/// does not parse is set aside and its previous good copy loaded; it is never answered with `{}`
+/// (`chrome_storage`).
 #[tauri::command]
-fn storage_load(app: tauri::AppHandle, extension: Option<String>) -> Reply<Value> {
+fn storage_load(app: tauri::AppHandle, state: State<Shared>, extension: Option<String>) -> Reply<Value> {
     let file = extensions::storage_file(extension.as_deref())?;
-    match std::fs::read(path(&app, &file)?) {
-        Ok(b) => serde_json::from_slice(&b).map_err(|e| e.to_string()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
-        Err(e) => Err(e.to_string()),
+    let loaded = chrome_storage::load(&data_dir(&app)?, &file, now_ms()).inspect_err(|e| {
+        record(&app, &state, json!({ "check": "storage-load-failed", "file": file, "error": e }));
+    })?;
+    if let Some(recovered) = loaded.recovered {
+        record(&app, &state, recovered);
     }
+    Ok(loaded.value)
 }
 
+/// Writes atomically and durably, keeping the replaced version as `<file>.prev`.
 #[tauri::command]
 fn storage_save(app: tauri::AppHandle, extension: Option<String>, value: Value) -> Reply<()> {
-    save(&app, &extensions::storage_file(extension.as_deref())?, &value)
+    chrome_storage::save(&data_dir(&app)?, &extensions::storage_file(extension.as_deref())?, &value)
 }
 
 /// Copies an extension engine's `chrome-local-<id>.json` to `chrome-local-<id>.json.bak-<ms>`
 /// and answers the backup's file name; `null` when there is no file to back up. The extension
 /// host calls it before resetting metadata that describes data missing from this launch's
 /// WebKit store (DICTIONARY_ENGINES.md §5.4.1). An extension id is required: Yomitan's file is
-/// never backed up or rewritten by this path.
+/// never backed up or rewritten by this path. Only the newest `chrome_storage::KEEP_COPIES`
+/// backups of a file are kept.
 #[tauri::command]
 fn storage_backup(app: tauri::AppHandle, state: State<Shared>, extension: String) -> Reply<Option<String>> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let name = extensions::backup_file(&extension, now)?;
-    let source = path(&app, &extensions::storage_file(Some(&extension))?)?;
-    if !source.exists() {
-        return Ok(None);
+    let name = extensions::backup_file(&extension, now_ms())?;
+    let file = extensions::storage_file(Some(&extension))?;
+    let made = chrome_storage::backup(&data_dir(&app)?, &file, &name)?;
+    if made.is_some() {
+        record(&app, &state, json!({ "check": "storage-backup", "extension": extension, "file": name }));
     }
-    let target = path(&app, &name)?;
-    std::fs::copy(&source, &target).map_err(|e| format!("native: {e}"))?;
-    record(&app, &state, json!({ "check": "storage-backup", "extension": extension, "file": name }));
-    Ok(Some(name))
+    Ok(made)
 }
 
 /// The windows that run a dictionary extension host, in the order a switch reloads them.
@@ -2736,6 +2743,9 @@ fn main() {
             #[cfg(target_os = "linux")]
             platform::initialize_wayland_overlay();
             let handle = app.handle().clone();
+            // Before any window loads: the WebView must never expire the dictionary engines'
+            // website data (IndexedDB, OPFS), wherever it lives. Recorded once the log exists.
+            let website_data = platform::keep_website_data();
             #[cfg(target_os = "linux")]
             platform::gnome::start(handle.clone());
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
@@ -2793,6 +2803,7 @@ fn main() {
                 }),
             });
             app.manage(service.clone());
+            record(&handle, &service, website_data);
             // Before any window is built: the windows ask which profile's files to open.
             account::install(&handle).map_err(std::io::Error::other)?;
             {

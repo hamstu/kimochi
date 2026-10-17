@@ -165,6 +165,11 @@ class World {
     this.invoked.push({ label, command, args: structuredClone(args) })
     switch (command) {
       case 'storage_load':
+        // `loadFailures`: that many reads fail (an I/O error native could not answer) first.
+        if (this.loadFailures > 0) {
+          this.loadFailures -= 1
+          throw Error('native: could not read chrome-local file: Resource temporarily unavailable')
+        }
         return structuredClone(this.storage[args.extension] ?? {})
       case 'storage_save':
         this.saves.push(structuredClone(args))
@@ -1006,6 +1011,51 @@ test("10ten: lastDbUpdateTime without a jpdict database here is reset; with one 
   assert.ok(!present.world.reports.some((r) => r.check === 'ext-host-storage-desync'))
   assert.equal(present.world.storage.tenten.local.lastDbUpdateTime, 1791794983805)
 })
+
+// The storage file must never be replaced with an empty one because one read of it failed: it is
+// the only list of the user's installed dictionaries (both engines share this hub code).
+for (const engine of ['hachidori', 'tenten']) {
+  const session = engine === 'hachidori' ? hachidoriSession : tentenSession
+  const userFile = () =>
+    engine === 'hachidori'
+      ? claimedFile({ store: 'S-HERE' })
+      : { tenten: { local: { enabled: true, lastDbUpdateTime: 1791794983805 }, sync: {}, host: { installed: { version: '1.28.0' }, store: 'S-HERE' } } }
+
+  test(`${engine}: a storage file that cannot be read is never overwritten with the seed`, async () => {
+    const { world, started } = await session({
+      storage: userFile(),
+      prepare: (w) => {
+        w.loadFailures = Infinity
+        w.webkit[engine].localStorage.set('kimochi.extensionStore', 'S-HERE')
+      }
+    })
+    assert.deepEqual({ ...started }, { ready: true })
+    const failed = world.reports.find((r) => r.check === 'ext-host-storage-load-failed')
+    assert.equal(failed.action, 'read-only')
+    assert.equal(world.invoked.filter((i) => i.command === 'storage_load').length, 3)
+    // Not one write, not one reset, whatever the extension and the probe did this session.
+    assert.equal(world.saves.length, 0)
+    assert.equal(world.backups.length, 0)
+    assert.ok(!world.reports.some((r) => r.check === 'ext-host-storage-desync' || r.check === 'ext-host-storage-seeded'))
+    assert.deepEqual(world.storage[engine], userFile()[engine])
+  })
+
+  test(`${engine}: a read that fails once is retried and the user's file is used`, async () => {
+    const { world, started } = await session({
+      storage: userFile(),
+      prepare: (w) => {
+        w.loadFailures = 1
+        w.webkit[engine].localStorage.set('kimochi.extensionStore', 'S-HERE')
+        if (engine === 'hachidori') w.webkit.hachidori.databases = idbfs(GEN_A, GEN_B)
+        else w.webkit.tenten.databases = { jpdict: { words: new Map([[1, {}]]), version: new Map() } }
+      }
+    })
+    assert.deepEqual({ ...started }, { ready: true })
+    assert.ok(!world.reports.some((r) => r.check === 'ext-host-storage-load-failed' || r.check === 'ext-host-storage-seeded'))
+    if (engine === 'hachidori') assert.equal(world.storage.hachidori.local.dictionaryState.dictionaries.length, 2)
+    else assert.equal(world.storage.tenten.local.lastDbUpdateTime, 1791794983805)
+  })
+}
 
 test('a later launch fires onStartup instead of onInstalled', async () => {
   const storage = { hachidori: { local: {}, sync: {}, host: { installed: { version: HACHIDORI_VERSION } } } }

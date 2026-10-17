@@ -12,8 +12,11 @@
 import { captureArgs, encodeFrame } from './capture.js'
 import { ENGINES } from './engines.js'
 import { selectStorage, storageChanges } from './primitives.js'
-import { NO_RECEIVER, PORT_CLOSED, describe, json, originOf, randomId, tabIdFor, within } from './util.js'
+import { NO_RECEIVER, PORT_CLOSED, describe, json, originOf, randomId, sleep, tabIdFor, within } from './util.js'
 
+/** `storage_load` tries before a session gives up on the file and runs without writing it. */
+const LOAD_ATTEMPTS = 3
+const LOAD_RETRY_MS = 200
 const EXTENSION_KINDS = new Set(['background', 'offscreen', 'page'])
 /** A target that never says whether it has listeners is treated as having none after this. */
 const DELIVERY_ACK_MS = 10000
@@ -46,6 +49,8 @@ export class Hub {
     this.waiters = new Set()
     this.saveChain = Promise.resolve()
     this.pendingSave = null
+    /** Why the storage file could not be read; while set, this session never writes the file. */
+    this.storageUnreadable = null
     this.lastOpen = null
     this.engineReady = false
     this.engineError = null
@@ -61,17 +66,38 @@ export class Hub {
    * extension. `storage_load` answers `{}` when the file does not exist, which is the only time
    * the descriptor's `storageSeed` is applied; the seeded file is written at once so a launch that
    * never writes cannot seed twice.
+   *
+   * A load that *fails* is not a missing file: the file may list every installed dictionary and
+   * only this read went wrong. Seeding and saving then (as an earlier build did) replaced the
+   * user's file with an empty one. So a failed load is retried, and if it still fails the session
+   * runs on the seed in memory and never writes the file (`persist` stands down). Native already
+   * recovers a corrupt file from its previous good copy (`storage_load`), so this is for a read
+   * that could not be answered at all.
    */
   async loadStorage() {
-    let file = {}
-    try {
-      file = (await this.invoke('storage_load', { extension: this.engine })) ?? {}
-    } catch (error) {
-      this.report({ check: 'ext-host-storage-load-failed', error: describe(error) })
+    let file = null
+    let failure = null
+    for (let attempt = 1; attempt <= LOAD_ATTEMPTS; attempt++) {
+      try {
+        file = (await this.invoke('storage_load', { extension: this.engine })) ?? {}
+        failure = null
+        break
+      } catch (error) {
+        failure = error
+        if (attempt < LOAD_ATTEMPTS) await sleep(LOAD_RETRY_MS * attempt)
+      }
+    }
+    const seed = this.descriptor.storageSeed ?? {}
+    if (failure) {
+      this.storageUnreadable = describe(failure)
+      this.store.local = json(seed.local ?? {})
+      this.store.sync = json(seed.sync ?? {})
+      this.hostState = {}
+      this.report({ check: 'ext-host-storage-load-failed', engine: this.engine, action: 'read-only', error: this.storageUnreadable })
+      return
     }
     const fresh = !file || typeof file !== 'object' || !('local' in file)
     if (fresh) {
-      const seed = this.descriptor.storageSeed ?? {}
       this.store.local = json(seed.local ?? {})
       this.store.sync = json(seed.sync ?? {})
       this.hostState = {}
@@ -84,8 +110,12 @@ export class Hub {
     }
   }
 
-  /** Writes coalesce: a write that arrives while one is in flight rides the next save. */
+  /**
+   * Writes coalesce: a write that arrives while one is in flight rides the next save. After a
+   * failed load nothing is written (`loadStorage`): memory holds a stand-in, the file is the user's.
+   */
   persist() {
+    if (this.storageUnreadable) return Promise.resolve()
     if (!this.pendingSave) {
       const next = this.saveChain.catch(() => {}).then(() => {
         this.pendingSave = null
@@ -710,6 +740,8 @@ export class Hub {
     const spec = this.descriptor.persistence
     const tag = this.hostState.store ?? null
     const outcome = { action: 'in-sync', tag, store, fresh, checked, missing: missing.length, error }
+    // An unreadable file was never loaded: nothing here describes it, so nothing may be reset.
+    if (this.storageUnreadable) return { ...outcome, action: 'kept' }
     if (spec && !error && missing.length > 0) {
       const keys = spec.metadataKeys.filter((key) => key in this.store.local)
       let backup = null
