@@ -228,3 +228,17 @@ export function backupProgressLine(event: BackupEvent | null): string | null {
 export function accountName(user: AccountUser | null | undefined): string {
   return user?.displayName?.trim() || user?.email || 'Kimochi account'
 }
+
+/** The sidebar's account bar: the name over the email, or the email alone when there is no name. */
+export function accountLines(user: AccountUser | null | undefined): { primary: string; secondary: string | null } {
+  const name = user?.displayName?.trim() || null
+  const email = user?.email?.trim() || null
+  if (name) return { primary: name, secondary: email && email !== name ? email : null }
+  return { primary: email ?? 'Kimochi account', secondary: null }
+}
+
+/** The letter in the avatar circle when the account has no picture. */
+export function accountInitial(user: AccountUser | null | undefined): string {
+  const first = Array.from(accountName(user).trim())[0] ?? 'K'
+  return first.toLocaleUpperCase()
+}

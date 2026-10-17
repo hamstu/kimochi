@@ -1,7 +1,8 @@
 /**
  * The main window's sidebar: where text comes from (Source, with its live preview and controls),
  * how OCR reads it (OCR model, for the OCR sources) and which dictionary looks words up
- * (Dictionary), each labelled, with Settings pinned to the bottom. OCR model and Dictionary carry a
+ * (Dictionary), each labelled, with Settings pinned to the bottom (under the update notice and,
+ * when signed in, the Kimochi account). OCR model and Dictionary carry a
  * "Manage" link on their label row, to their Settings pages. The session picker is in the Log's
  * footer, beside its ⋯ menu. The views (Log, Notebook) are tabs
  * across the top of the content. In the Settings view the same column lists the settings pages,
@@ -28,6 +29,7 @@ import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
 import { ModelStatusBadge } from './ModelStatusBadge'
 import { UpdateNotice } from './UpdateNotice'
+import { AccountBar } from './AccountBar'
 
 export type MainView = 'log' | 'notebook' | 'settings'
 
@@ -269,6 +271,7 @@ export function MainSidebar({
         <DictionaryPicker onOpenSettings={() => onSettingsTab('dictionary')} />
       </div>
       <UpdateNotice />
+      {!mini && <AccountBar onOpen={() => onSettingsTab('account')} />}
       <div className="sb-footer">
         <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
           Settings

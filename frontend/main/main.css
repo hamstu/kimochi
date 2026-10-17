@@ -179,6 +179,56 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   flex: 1;
   padding-bottom: calc(var(--k-space-1-5) + var(--main-foot-pad));
 }
+/* The Kimochi account, between the update notice and Settings: avatar, name and email. The
+   avatar is centred on the rows' icon column, so the name lines up with "Settings". */
+.sb-account {
+  flex: none;
+  border-top: 1px solid var(--k-line);
+}
+.sb-account-row {
+  padding-block: var(--k-space-1-5);
+}
+.sb-account-row > .k-row-label {
+  display: flex;
+  flex-direction: column;
+}
+.sb-account-name,
+.sb-account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-account-name {
+  color: var(--k-text);
+  font-weight: var(--k-weight-medium);
+}
+.sb-account-email {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.sb-account-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--k-control-h-sm);
+  height: var(--k-control-h-sm);
+  margin-inline: calc(var(--k-space-1) * -1);
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--k-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--gray-a3);
+  color: var(--k-accent-text);
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-semibold);
+  line-height: 1;
+  user-select: none;
+}
+.sb-account-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 /* Back meets the title bar: it takes over the column's top padding, so its label stays put. */
 .sb-back {
   margin-top: calc(var(--k-space-1) * -1);

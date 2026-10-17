@@ -14,7 +14,9 @@ const {
   shortDate,
   lastBackupLine,
   normalizeStatus,
-  backupProgressLine
+  backupProgressLine,
+  accountLines,
+  accountInitial
 } = await load('account.ts')
 
 test('automatic translation is Kimochi cloud while signed in, otherwise the DeepL key', () => {
@@ -114,4 +116,16 @@ test('the account token never reaches a webview', async () => {
   const status = rust.slice(rust.indexOf('fn status_value'), rust.indexOf('fn announce()'))
   assert.ok(status.length > 0, 'status_value is where it was')
   assert.doesNotMatch(status, /"token"|\.token\b/)
+})
+
+test('the sidebar account bar shows the name over the email, or the email alone', () => {
+  const user = { id: 'u', email: 'reader@example.com', displayName: 'Hamish', plan: 'free', status: 'active' }
+  assert.deepEqual(accountLines(user), { primary: 'Hamish', secondary: 'reader@example.com' })
+  assert.deepEqual(accountLines({ ...user, displayName: '  ' }), { primary: 'reader@example.com', secondary: null })
+  assert.deepEqual(accountLines({ ...user, displayName: 'Hamish', email: null }), { primary: 'Hamish', secondary: null })
+  assert.deepEqual(accountLines({ ...user, displayName: null, email: null }), { primary: 'Kimochi account', secondary: null })
+  assert.equal(accountInitial(user), 'H')
+  assert.equal(accountInitial({ ...user, displayName: null }), 'R')
+  assert.equal(accountInitial({ ...user, displayName: 'はな' }), 'は')
+  assert.equal(accountInitial(null), 'K')
 })

@@ -6,6 +6,9 @@
  *   ?account=signedout|linking|signedin|full|suspended   the starting state (default: signedout)
  *   ?server=cloud|local|forced   the server (development builds' switch in Settings → Account;
  *                                `forced` is local pinned by KIMOCHI_SERVER). Default: cloud.
+ *   ?avatar=1   the account has a picture (as Google and Discord sign-ins give); without it the
+ *               sidebar's account bar shows the name's first letter.
+ *   ?name=0     the account has no display name (the email stands in).
  *
  * `full` is signed in with this month's scans used up and the backup storage nearly full;
  * `suspended` is a suspended account. Signing in from `signedout` shows the code, and the
@@ -46,12 +49,17 @@ function usage(full: boolean): Usage {
   }
 }
 
+/** A stand-in profile picture, drawn here so the preview needs no network. */
+const PREVIEW_AVATAR = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6a87a"/><stop offset="1" stop-color="#c2527a"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/><circle cx="24" cy="19" r="8" fill="#fff" opacity=".9"/><path d="M8 46c2-10 9-15 16-15s14 5 16 15z" fill="#fff" opacity=".9"/></svg>'
+)}`
+
 const USER = {
   id: 'usr_preview',
   email: 'reader@example.com',
   emailVerified: true,
-  displayName: 'Hamish',
-  avatarUrl: null,
+  displayName: params.get('name') === '0' ? null : 'Hamish',
+  avatarUrl: params.get('avatar') === '1' ? PREVIEW_AVATAR : null,
   plan: 'free' as const,
   status: 'active' as const
 }

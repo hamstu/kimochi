@@ -16,6 +16,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Signed in, you can use Kimochi cloud OCR, read aloud, translation and explanations within free monthly allowances; Settings → Account shows how much of each you've used and when they reset.
 - Translation can use Kimochi cloud or your own DeepL key (Settings → Translation & AI → Translate with), and Explain can use Kimochi cloud instead of a command-line model.
 - Back up your preferences and sessions (lines, notebook and images) to your account, automatically or with Back up now, and restore them on this or another computer. Your DeepL key and other secrets are never uploaded.
+- While you're signed in, the sidebar shows your Kimochi account (picture, name and email) just above Settings; click it to open Settings → Account.
 
 - Load settings pages, diagnostics and the Notebook on demand, and avoid duplicate settings reads during startup.
 - Settings in the main window: the page list stays in place while you scroll a page again, and pages switch with a quick fade instead of a "Loading settings…" line.
