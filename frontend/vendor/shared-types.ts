@@ -113,6 +113,8 @@ export type TokenizeResponse = {
 
 export type AudioSettings = {
   voiceId: string
+  /** The ElevenLabs speech model (Kimochi addition; absent means the server's default, eleven_v3). */
+  model?: string
 }
 
 // Google Vision API types

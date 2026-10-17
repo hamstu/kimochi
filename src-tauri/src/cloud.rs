@@ -154,12 +154,13 @@ pub async fn tts_speak(
     }
     let token = account::token().ok_or_else(|| format!("native: {NO_ACCOUNT_TTS}"))?;
     let url = format!("{}/api/v1/tts", settings::server_base(&state.settings));
+    let model = tts_model(&state.settings.get_or("audioSettings.model", String::new()));
     tauri::async_runtime::spawn_blocking(move || {
         let client = blocking_client(Duration::from_secs(30))?;
         let response = client
             .post(url)
             .bearer_auth(&token)
-            .json(&json!({ "text": text, "voiceId": voice_id }))
+            .json(&json!({ "text": text, "voiceId": voice_id, "model": model }))
             .send()
             .map_err(|_| "native: text-to-speech request failed (connection/TLS/timeout)")?;
         if !response.status().is_success() {
@@ -325,9 +326,25 @@ pub async fn explain(
     Ok(())
 }
 
+/// The ElevenLabs speech models read aloud may ask for; the first is the default.
+pub const TTS_MODELS: [&str; 3] = ["eleven_v3", "eleven_v4", "eleven_v4_turbo"];
+
+/// The chosen speech model, or the default for an unset or unknown value.
+fn tts_model(chosen: &str) -> &'static str {
+    TTS_MODELS.iter().copied().find(|m| *m == chosen).unwrap_or(TTS_MODELS[0])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unknown_speech_model_falls_back_to_the_default() {
+        assert_eq!(tts_model("eleven_v4"), "eleven_v4");
+        assert_eq!(tts_model("eleven_v4_turbo"), "eleven_v4_turbo");
+        assert_eq!(tts_model(""), "eleven_v3");
+        assert_eq!(tts_model("gpt-voice"), "eleven_v3");
+    }
 
     #[test]
     fn quota_errors_read_as_a_sentence() {

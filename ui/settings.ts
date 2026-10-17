@@ -90,7 +90,7 @@ export interface Settings {
     sendToWebSocket: boolean
     webSocketUrl: string
   }
-  audioSettings: { voiceId: string }
+  audioSettings: { voiceId: string; model?: string }
   serverSettings: { mode: ServerMode }
   gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number }
   controllerButtons: ControllerButtons

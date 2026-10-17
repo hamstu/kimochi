@@ -25,6 +25,12 @@ import { WithReaderSettings } from './ReaderSettingsProvider'
 import { NumberField } from './fields'
 
 const VOICE_OPTIONS = AVAILABLE_VOICES.map((voice) => ({ value: voice.id, label: voice.name }))
+// The ElevenLabs speech models Kimochi's server accepts (`TTS_MODELS` in src-tauri/src/cloud.rs).
+const MODEL_OPTIONS = [
+  { value: 'eleven_v3', label: 'Eleven v3' },
+  { value: 'eleven_v4', label: 'Eleven v4' },
+  { value: 'eleven_v4_turbo', label: 'Eleven v4 Turbo' }
+]
 
 export function LogTab(): ReactNode {
   const [audioSettings, setAudioSettings] = useSetting<AudioSettings>('audioSettings', {
@@ -63,6 +69,19 @@ export function LogTab(): ReactNode {
                     value={audioSettings.voiceId}
                     onValueChange={(voiceId) => void setAudioSettings({ ...audioSettings, voiceId })}
                     options={VOICE_OPTIONS}
+                  />
+                </SettingsRow>
+              )}
+              {cloudAccess && (
+                <SettingsRow
+                  label="Voice model"
+                  description="Eleven v4 is newer and more expressive; v4 Turbo answers faster."
+                >
+                  <Select
+                    aria-label="Voice model"
+                    value={audioSettings.model ?? 'eleven_v3'}
+                    onValueChange={(model) => void setAudioSettings({ ...audioSettings, model })}
+                    options={MODEL_OPTIONS}
                   />
                 </SettingsRow>
               )}

@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Read aloud can use ElevenLabs' newer Eleven v4 or v4 Turbo voices (Settings → Log → Voice model).
 - Optional Kimochi accounts. Sign in or create one from Settings → Account: Kimochi opens your browser, you confirm the code it shows, and Kimochi comes back signed in. Nothing else in Kimochi needs an account.
 - Signed in, you can use Kimochi cloud OCR, read aloud, translation and explanations within free monthly allowances; Settings → Account shows how much of each you've used and when they reset.
 - Translation can use Kimochi cloud or your own DeepL key (Settings → Translation & AI → Translate with), and Explain can use Kimochi cloud instead of a command-line model.
