@@ -1,8 +1,12 @@
 import { getActiveSession } from "./sessions";
-/* DeepL translation for lines. The HTTP call happens Rust-side
-   (src-tauri/src/translate.rs); the key comes from settings at call time. */
+/* Translation for lines: DeepL with the user's own key (src-tauri/src/reader/translate.rs, the key
+   from settings at call time) or Kimochi cloud with a signed-in account (`cloud_translate`, the
+   token held in Rust). `translationProvider` picks; "auto" is Kimochi cloud while signed in. */
 
 import { invoke } from "@tauri-apps/api/core";
+import { translationRoute } from "../../../ui/account";
+import { loadAccount } from "../../bridge/account";
+import { nativeError } from "../../bridge/tauri";
 import { getSettings } from "./settings";
 import { setLineTranslation, setLineTranslationVisible } from "./store";
 import type { Line } from "./types";
@@ -80,13 +84,25 @@ export async function showTranslation(line: Line): Promise<void> {
   if (statuses.get(line.id)?.state === "loading") return; // already in flight
   setStatus(line.id, { state: "loading" });
   try {
-    const apiKey = getSettings().deeplApiKey.trim();
-    if (!apiKey) throw new Error("DeepL API key is not set");
+    const settings = getSettings();
+    const apiKey = settings.deeplApiKey.trim();
+    const { signedIn } = await loadAccount();
+    const route = translationRoute(settings.translationProvider, apiKey, signedIn);
+    if (!route)
+      throw new Error(
+        settings.translationProvider === "kimochi"
+          ? "Sign in from Settings → Account to translate with Kimochi cloud"
+          : "Set a DeepL API key or sign in to Kimochi in Settings",
+      );
     const sessionId = getActiveSession().id;
-    const translated = await invoke<string>("deepl_translate", {
-      text: line.text,
-      apiKey,
-    });
+    const translated =
+      route === "kimochi"
+        ? await invoke<string>("cloud_translate", { text: line.text }).catch(
+            (error: unknown) => {
+              throw new Error(nativeError(error).message);
+            },
+          )
+        : await invoke<string>("deepl_translate", { text: line.text, apiKey });
     setStatus(line.id, null);
     if (getActiveSession().id === sessionId)
       await setLineTranslation(line.id, translated, true);

@@ -3,7 +3,7 @@
  *
  * Deltas:
  *  - the TTS POST goes through Rust (`bridge/tts.ts` → `tts_speak`), which holds the Kimochi
- *    cloud access key; without a key (`cloudAccess` false) the button is not rendered at all;
+ *    account token; when signed out (`cloudAccess` false) the button is not rendered at all;
  *  - failures now surface in the button's tooltip instead of only reaching the console, since a
  *    silent speaker button is indistinguishable from a broken one;
  *  - the `window.playAudio` global is gone: the `playAudio` hotkey is handled by the overlay
@@ -50,7 +50,7 @@ export function AudioPlayer({ text, disabled = false, onPlay }: AudioPlayerProps
   }
 
   const isDisabled = disabled || isPlaying
-  // Text to speech runs on Kimochi cloud, which needs an access key.
+  // Text to speech runs on Kimochi cloud, which needs a signed-in Kimochi account.
   if (!cloudAccess) return null
 
   return (

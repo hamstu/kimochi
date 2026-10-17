@@ -269,14 +269,14 @@ test('an OS-specific engine is offered only on its OS', () => {
     for (const mode of ['googlelens', 'cloud', 'meikiocr', 'mangaocr']) assert.equal(engineOffered(mode, os), true)
 })
 
-test('Kimochi cloud is listed only with an access key, or while it is still selected', () => {
-  const withKey = { os: 'macos', cloudAccess: true }
-  const withoutKey = { os: 'macos', cloudAccess: false }
-  assert.equal(engineListed('cloud', withKey, 'meikiocr'), true)
-  assert.equal(engineListed('cloud', withoutKey, 'meikiocr'), false)
-  assert.equal(engineListed('cloud', withoutKey, 'cloud'), true, 'the selected engine stays visible')
-  assert.equal(engineListed('meikiocr', withoutKey, 'cloud'), true)
-  assert.equal(engineListed('oneocr', withoutKey, 'meikiocr'), false, 'still OS-specific')
+test('Kimochi cloud is listed only when signed in, or while it is still selected', () => {
+  const signedIn = { os: 'macos', cloudAccess: true }
+  const signedOut = { os: 'macos', cloudAccess: false }
+  assert.equal(engineListed('cloud', signedIn, 'meikiocr'), true)
+  assert.equal(engineListed('cloud', signedOut, 'meikiocr'), false)
+  assert.equal(engineListed('cloud', signedOut, 'cloud'), true, 'the selected engine stays visible')
+  assert.equal(engineListed('meikiocr', signedOut, 'cloud'), true)
+  assert.equal(engineListed('oneocr', signedOut, 'meikiocr'), false, 'still OS-specific')
 })
 
 test('cloudAccess defaults to false and is read from the payload', () => {

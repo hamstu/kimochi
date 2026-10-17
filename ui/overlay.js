@@ -1947,7 +1947,7 @@ async function setOverlayText(visible) {
 async function playLatest() {
   const latest = listHistory()[0]?.text ?? ''
   if (!latest) return
-  // Text to speech runs on Kimochi cloud, which needs an access key.
+  // Text to speech runs on Kimochi cloud, which needs a signed-in Kimochi account.
   if (!(await native.capabilities()).cloudAccess) return
   try {
     await speak(latest, { audioSettings: setting('audioSettings') })

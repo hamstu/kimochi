@@ -82,23 +82,23 @@ exists but never recorded `ocrMode` loads as `'cloud'`, the engine it was using.
 by default — see below).
 
 **The OCR endpoint follows `serverSettings.mode` unless genuinely overridden.** A custom
-`endpoint` wins; otherwise the URL is derived as `<base>/detect-text` from the mode
+`endpoint` wins; otherwise the URL is derived as `<base>/api/v1/ocr` from the mode
 (`https://kimochi-server.hamish.workers.dev` or `http://localhost:3000`, from
 `src/shared/constants.ts`). An `endpoint` that merely *equals* one of those two built-in
-defaults does **not** count as custom — otherwise an inherited cloud default, or one the
+defaults (or their retired `<base>/detect-text` form) does **not** count as custom — otherwise an inherited cloud default, or one the
 POC's preferences round-tripped, would permanently pin the app to cloud and make the
 Local toggle silently do nothing. `preferences()` reports the resolved endpoint, so the
 value shown is the value a scan will use.
 
-**Kimochi's own server needs an access key.** Cloud OCR and text to speech run on the
-owner's paid accounts. Rust reads the key from `KIMOCHI_CLOUD_KEY`, else from
-`~/.config/kimochi/cloud-key` (same path on every OS, under the home directory; trimmed),
-whenever a request needs it, and sends it as `X-Kimochi-Key` to both built-in bases (cloud
-and `localhost:3000`). A custom `endpoint` never receives it. Without a key the request is
-refused before anything is sent ("Kimochi cloud OCR needs an access key…"), and a `401` from
-the server is reported as the key missing or rejected. The key never reaches a webview, a log
-or a diagnostic: the frontend learns only `cloudAccess` (a boolean) from
-`platform_capabilities`, which also reports `ocrEngines.cloud` unavailable without it. The UI
+**Kimochi's own server needs a signed-in Kimochi account.** Nobody is authenticated any other
+way: Rust sends the account's token (see Kimochi account below) as `Authorization: Bearer` to
+the metered `/api/v1/*` endpoints on either built-in base (cloud and `localhost:3000`). A
+custom `endpoint` never receives it. Without an account the request is refused before anything
+is sent ("Kimochi cloud OCR needs a Kimochi account. Sign in from Settings → Account…"), and a
+`401` from the server signs the account out locally. The token never reaches a webview, a log or
+a diagnostic: the frontend learns only `cloudAccess` (a boolean: someone is signed in) from
+`platform_capabilities`, which also reports `ocrEngines.cloud` unavailable when signed out, and
+is re-sent as `platform-capabilities` on sign-in and sign-out. The UI
 then lists Cloud OCR only while it is still the selected engine (shown as unavailable; the
 setting is not migrated) and hides read-aloud and its voice setting.
 
@@ -328,7 +328,7 @@ slot is bounded (one published, one latest), shares bytes through an `Arc` rathe
 copying pixels, and is released by `clear`. Source previews are stored separately and
 bounded on their own.
 
-`scan` (the command) retains its POC signature, remains the Rust-side `/detect-text`
+`scan` (the command) retains its POC signature, remains the Rust-side OCR
 path, and is the one place that still publishes its own result — it is a self-contained
 diagnostic path with no caller-side guard to respect. Note the consequence: a result
 arriving by that route reaches the view **without** passing a caller's freshness check,
@@ -539,11 +539,11 @@ envelope, and forwards it through the channel. A receiver without a channel uses
 It exists so the Log panel and the dictionary settings window can reach the single
 dictionary backend in the overlay without standing up a second one.
 
-`tts_speak` POSTs `{text, voiceId}` to `<server base>/tts` (ElevenLabs behind it) with the
-Kimochi cloud access key and returns the audio bytes; the webviews play them through an object
-URL. It refuses without a key, before sending anything (see the access-key note under
-Settings), and reports a `401` as the key missing or rejected. It replaced the webview-side
-POST through the HTTP plugin so the key never reaches JS.
+`tts_speak` POSTs `{text, voiceId}` to `<server base>/api/v1/tts` with the signed-in account's
+token (ElevenLabs behind it) and returns the audio bytes; the webviews play them through an
+object URL. It refuses when signed out, before sending anything (see the account note under
+Settings), and a `401` signs the account out locally. It replaced the webview-side POST through
+the HTTP plugin so the token never reaches JS.
 
 `yomitan_request` POSTs JSON to a user-configured Yomitan-compatible API and returns its
 JSON — the transport for the Dictionary tab's Test button, tokenize and termEntries.
@@ -722,6 +722,91 @@ next to `__TAURI__` there. Two things contain it:
 
 `ext_relay` accepts any window label as sender and target, so the extension windows relay
 like the Log; nothing native checks a sender's origin.
+
+## Kimochi account
+
+Optional accounts on Kimochi's server (contract: `kimochi-server/API.md`), in
+`src-tauri/src/account.rs`. The token (`kmc_…`) lives only in Rust, in the app data folder
+(beside `settings.json`, mode 600 on Unix), and is sent only as `Authorization: Bearer` to
+`settings::server_base` (so `serverSettings.mode: 'local'` uses `http://localhost:3000`). No
+command or event carries it. Each server base has its own sign-in, in its own file:
+`account.json` for Kimochi cloud (the file earlier versions wrote, so an existing sign-in stays
+cloud's) and `account-local.json` for the local server. Status, linking, refresh, sign-out, backup,
+restore and the automatic backup all use the current base's file, so one server's token is never
+sent to the other.
+
+In a debug build, `KIMOCHI_SERVER=local|cloud` in the environment overrides
+`serverSettings.mode` (`npm run dev:local` sets `local`); release builds ignore it.
+
+| Command | Signature |
+| --- | --- |
+| `account_status` | `() -> AccountStatus` |
+| `account_link_start` | `() -> {code, verifyUrl, expiresIn}` — `POST /api/v1/link/start` with the computer's name and OS, opens `verifyUrl` in the browser, and polls `/api/v1/link/poll` every `interval` s on a thread until approved, denied, expired or cancelled |
+| `account_link_open` | `() -> ()` — opens the pending `verifyUrl` again |
+| `account_link_cancel` | `() -> AccountStatus` |
+| `account_sign_out` | `() -> AccountStatus` — deletes `account.json` first, then `POST /api/v1/sign-out` (best effort, so it works offline) |
+| `account_refresh` | `() -> AccountStatus` — `GET /api/v1/me` and `/api/v1/usage` |
+| `account_open_web` | `() -> ()` — opens `<server base>/account` |
+| `account_backup_now` | `() -> AccountStatus` — a backup now, of what `accountBackup` enables |
+| `account_restore` | `({prefs, sessions}) -> ()` — downloads the backup and restarts the app |
+| `account_set_server` | `({mode: 'cloud' \| 'local'}) -> AccountStatus` — **debug builds only** (an `invalid:` error in release, and while `KIMOCHI_SERVER` pins the server): writes `serverSettings.mode`, emits `settings:changed`, cancels a sign-in in progress, then emits `account-changed` (the new server's account) and `platform-capabilities` (its `cloudAccess`). Applies at once, no restart |
+| `cloud_translate` | `({text}) -> string` — `POST /api/v1/translate` (JA → EN-US), account only |
+
+```ts
+AccountStatus = {
+  signedIn,
+  user?, usage?,                         // the cached /me user and /usage answer
+  linking?: {code, verifyUrl, expiresAt}, // a sign-in waiting for the browser (expiresAt: ms)
+  server?: {mode, url, forced},           // the server this account is for; forced: KIMOCHI_SERVER (debug)
+  backup: {running, lastBackupAt?, lastError?}
+}
+```
+
+Events: `account-changed` (an `AccountStatus`, on every change), `account-link` `{status, code,
+message?}` (`pending` | `approved` | `denied` | `expired` | `cancelled` | `error`) and
+`account-backup` `{phase, done, total, error?}` (`scanning` | `uploading` | `downloading` |
+`restarting` | `done` | `error`). On approval the main window comes forward on Settings → Account
+(`settingsActiveTab: 'account'` plus `main:show-settings`). A `401` to the token anywhere signs
+out locally. After a metered call the usage is refreshed in the background.
+
+**Errors** from the metered endpoints are worded in `cloud::describe_failure`: `402
+quota_exceeded` ("You've used this month's 500 Kimochi cloud scans. They reset on Nov 1.";
+`storage` names the backup limit), `403` (suspended: the server's message), `503
+not_configured`, `429`, and anything else with its status.
+
+**Explain via Kimochi cloud.** `explain_run` with `provider: 'kimochi'` POSTs `{prompt}` to
+`/api/v1/explain` and emits the streamed text as `explain:chunk`, then `explain:done` (or
+`explain:error`, including for the server's trailing `[error: …]` line), with the same
+requestId and the same cancel and supersede rules as the CLI providers.
+
+**Translation.** The Log's `translationProvider` (`superTexthooker`; `'auto'` (default) |
+`'deepl'` | `'kimochi'`) picks `cloud_translate` or `deepl_translate`; `auto` is Kimochi cloud
+while signed in, otherwise the DeepL key.
+
+**Backup** (opt in: `accountBackup.{prefs,sessions}`, both `false`). Preferences are one
+`PUT /api/v1/prefs` document `{version: 1, settings, presets, stats}`: `settings.json` without
+secrets (any key named like an API key, token, secret or password, at any depth, e.g.
+`deeplApiKey`) and without per-machine keys (window places, the capture source and portal grant,
+the scan history, the server mode), then `presets.json` (secrets stripped) and `stats.json`.
+Sessions are `sessions.json` and each session's `lines.json`, `notebook.json` and `images/*`, by
+the same relative paths, uploaded with `PUT /api/v1/backup/files/<path>` only when their SHA-256
+differs from `GET /api/v1/backup`; `sessions.json` goes last, joined with the backup's own list
+so a second computer never drops the first one's sessions. Files over 50 MB are skipped. The
+automatic backup checks once a minute and runs once the data folder has changed since the last
+backup and then stayed the same for about two minutes (or after fifteen minutes of changes).
+
+**Restore** downloads into `<AppLocalData>/restore-pending/` (verifying each file's SHA-256)
+and restarts; at the next launch, before `settings.json` is loaded or any window exists,
+`apply_pending_restore` puts it in place: the backup's settings with this machine's secrets and
+per-machine keys kept, `presets.json`/`stats.json` replaced, and `sessions.json` merged by
+session id (a session only here stays; one only in the backup is added; one in both keeps
+whichever has the later `updatedAt`, and only then are its files replaced).
+
+**Deep link.** `tauri-plugin-deep-link` registers `kimochi://` (`plugins.deep-link` in
+`tauri.conf.json`; installed by the bundles, registered at runtime by an AppImage or a debug
+build on Windows and Linux). On Windows and Linux the single-instance plugin (feature
+`deep-link`) forwards a second launch's URL to the running copy. `kimochi://account` brings the
+main window forward on Settings → Account; any other `kimochi://` URL just brings it forward.
 
 ## Activity feed
 
@@ -1017,7 +1102,8 @@ fail silently at runtime.
 dictionary settings window go through the same plugin —
 allowing only the local Yomitan API (`19633`) and AnkiConnect (`8765`), plus the dictionary hosts the engines
 download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`). It is deliberately not a general internet grant. Kimochi's own server (cloud OCR,
-text to speech) is deliberately absent: it takes an access key, so only Rust calls it. Google Lens
+text to speech, translation, explanations, accounts and backup) is deliberately absent: it takes
+an account token, so only Rust calls it. Google Lens
 (`ocrMode: 'googlelens'`) needs nothing here either: `ocr_frame` posts the frame to
 `lensfrontend-pa.googleapis.com` from Rust (`src-tauri/src/google_lens.rs`), never from a webview.
 

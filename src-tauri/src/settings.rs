@@ -55,6 +55,8 @@ pub fn defaults() -> Value {
         },
         "overlayOpacity": 80,
         "liveOverlayEnabled": false,
+        // Kimochi account backup (account.rs): off until the user turns it on.
+        "accountBackup": { "prefs": false, "sessions": false },
         // New installs only: `load` keeps an existing settings file on the engine it had.
         "ocrMode": "googlelens"
         // `endpoint` is intentionally absent: an unset endpoint follows
@@ -250,15 +252,55 @@ impl Settings {
 /// Server bases from `src/shared/constants.ts`.
 pub const CLOUD_SERVER: &str = "https://kimochi-server.hamish.workers.dev";
 pub const LOCAL_SERVER: &str = "http://localhost:3000";
+/// The account-metered OCR endpoint on either built-in base.
+const OCR_PATH: &str = "/api/v1/ocr";
 
-pub fn server_base(settings: &Settings) -> String {
+/// The environment variable a development build's launcher (`npm run dev:local`) sets to pick the
+/// server over `serverSettings.mode`. Release builds ignore it.
+pub const SERVER_ENV: &str = "KIMOCHI_SERVER";
+
+/// `local` or `cloud` from a `KIMOCHI_SERVER` value; anything else is no choice.
+fn parse_server_mode(value: &str) -> Option<&'static str> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "local" => Some("local"),
+        "cloud" => Some("cloud"),
+        _ => None,
+    }
+}
+
+/// The server mode `KIMOCHI_SERVER` forces, in a debug build only.
+pub fn server_mode_override() -> Option<&'static str> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    parse_server_mode(&std::env::var(SERVER_ENV).ok()?)
+}
+
+/// `serverSettings.mode` as stored: `local` or `cloud` (anything else reads as cloud).
+fn configured_server_mode(settings: &Settings) -> &'static str {
     let mode: String = settings.get_or("serverSettings.mode", "cloud".to_string());
+    if mode == "local" {
+        "local"
+    } else {
+        "cloud"
+    }
+}
+
+/// The server mode in use: the environment's in a debug build that sets one, else the setting's.
+pub fn server_mode(settings: &Settings) -> &'static str {
+    server_mode_override().unwrap_or_else(|| configured_server_mode(settings))
+}
+
+pub fn base_for_mode(mode: &str) -> &'static str {
     if mode == "local" {
         LOCAL_SERVER
     } else {
         CLOUD_SERVER
     }
-    .to_string()
+}
+
+pub fn server_base(settings: &Settings) -> String {
+    base_for_mode(server_mode(settings)).to_string()
 }
 
 /// The OCR endpoint actually used for a request.
@@ -269,7 +311,7 @@ pub fn server_base(settings: &Settings) -> String {
 /// one the POC's preferences round-tripped) would permanently pin the app to cloud and
 /// make the Local toggle do nothing.
 pub fn resolve_endpoint(settings: &Settings) -> String {
-    let derived = format!("{}/detect-text", server_base(settings));
+    let derived = format!("{}{OCR_PATH}", server_base(settings));
     let configured: Option<String> = settings
         .get("endpoint")
         .ok()
@@ -282,12 +324,14 @@ pub fn resolve_endpoint(settings: &Settings) -> String {
     }
 }
 
-/// Whether `endpoint` is one of Kimochi's own servers (cloud or local), which take the
-/// access key, rather than a custom endpoint, which never receives it.
+/// Whether `endpoint` is one of Kimochi's own servers (cloud or local), which take the signed-in
+/// account's token, rather than a custom endpoint, which never receives it. The retired
+/// `<base>/detect-text` form still counts as built-in, so a settings file that stored it follows
+/// the mode (to `/api/v1/ocr`) instead of pinning a dead URL as custom.
 pub fn is_builtin_endpoint(endpoint: &str) -> bool {
     [CLOUD_SERVER, LOCAL_SERVER]
         .iter()
-        .any(|base| endpoint == format!("{base}/detect-text"))
+        .any(|base| endpoint == format!("{base}{OCR_PATH}") || endpoint == format!("{base}/detect-text"))
 }
 
 /// Map the POC's flat `preferences.json` onto the new schema. Read-only: the old file
@@ -566,21 +610,38 @@ mod tests {
         // Unset endpoint: follows the mode.
         assert!(resolve_endpoint(&s).starts_with(CLOUD_SERVER));
         s.set("serverSettings.mode", json!("local")).unwrap();
-        assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/detect-text"));
+        assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/api/v1/ocr"));
+        assert!(is_builtin_endpoint(&resolve_endpoint(&s)));
 
-        // An inherited built-in default must not pin the app to cloud.
+        // An inherited built-in default must not pin the app to cloud, including the retired
+        // `/detect-text` form older settings files stored.
+        s.set("endpoint", json!(format!("{CLOUD_SERVER}/api/v1/ocr")))
+            .unwrap();
+        assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/api/v1/ocr"));
         s.set("endpoint", json!(format!("{CLOUD_SERVER}/detect-text")))
             .unwrap();
-        assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/detect-text"));
+        assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/api/v1/ocr"));
 
         // A real custom endpoint wins over the mode.
         s.set("endpoint", json!("https://ocr.example.test/detect-text"))
             .unwrap();
         assert_eq!(resolve_endpoint(&s), "https://ocr.example.test/detect-text");
+        assert!(!is_builtin_endpoint(&resolve_endpoint(&s)));
 
         // Blank is treated as unset, not as a custom empty endpoint.
         s.set("endpoint", json!("  ")).unwrap();
-        assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/detect-text"));
+        assert_eq!(resolve_endpoint(&s), format!("{LOCAL_SERVER}/api/v1/ocr"));
+    }
+
+    #[test]
+    fn the_server_environment_value_is_read_strictly() {
+        assert_eq!(parse_server_mode("local"), Some("local"));
+        assert_eq!(parse_server_mode(" Cloud\n"), Some("cloud"));
+        assert_eq!(parse_server_mode(""), None);
+        assert_eq!(parse_server_mode("staging"), None);
+        assert_eq!(base_for_mode("local"), LOCAL_SERVER);
+        assert_eq!(base_for_mode("cloud"), CLOUD_SERVER);
+        assert_eq!(base_for_mode("anything"), CLOUD_SERVER);
     }
 
     #[test]

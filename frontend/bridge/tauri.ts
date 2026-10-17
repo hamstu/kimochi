@@ -157,7 +157,7 @@ export const panel = (
     : invoke<PanelInfo>('panel', { label, action, rect })
 /** Settings pages, in rail order. Older builds stored other names; see `settingsTabOf`. */
 export type SettingsTabName =
-  'general' | 'sources' | 'ocr' | 'log' | 'dictionary' | 'assist' | 'controls'
+  'general' | 'sources' | 'ocr' | 'log' | 'dictionary' | 'assist' | 'controls' | 'account'
 
 /** Shows Settings, on one page when given: a view of the main window. */
 export async function openSettings(tab?: SettingsTabName): Promise<void> {
@@ -183,7 +183,7 @@ export const displays = (): Promise<DisplayInfo[]> => invoke<DisplayInfo[]>('dis
 export const platformCapabilities = (): Promise<PlatformCapabilities> =>
   invoke<PlatformCapabilities>('platform_capabilities')
 
-/** Read `text` aloud through Kimochi cloud; the audio bytes. Refused without an access key. */
+/** Read `text` aloud through Kimochi cloud; the audio bytes. Refused without an account (or key). */
 export const ttsSpeak = (text: string, voiceId: string): Promise<ArrayBuffer> =>
   invoke<ArrayBuffer>('tts_speak', { text, voiceId })
 

@@ -52,6 +52,8 @@ axum = "0.8"
 tower-http = { version = "0.6", features = ["cors"] }
 # Self-updates from GitHub Releases (updater.rs): the check, the signed download and the swap.
 tauri-plugin-updater = "2"
+# The `kimochi://` URL scheme (account.rs): the website's "Open Kimochi" button after signing in.
+tauri-plugin-deep-link = "2"
 # Formats the offered release's date for the panels. Already in the lock file via the updater.
 time = { version = "0.3", features = ["formatting"] }
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -89,7 +91,8 @@ glib = "0.18"
 raw-window-handle = "0.6"
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # macOS coordinates instances itself (platform/macos/instance.rs).
-tauri-plugin-single-instance = "2"
+# `deep-link`: a second launch carrying a `kimochi://` URL hands it to the running copy.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [features]
 mangaocr-cuda = ["mangaocr/cuda"]

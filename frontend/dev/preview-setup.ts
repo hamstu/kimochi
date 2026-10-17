@@ -6,7 +6,7 @@
  *
  * URL parameters:
  *   ?window=<label>  panel window label (log, settings, diagnostics, yomitan)
- *   ?tab=<id>        settings tab (general, sources, ocr, log, dictionary, assist, controls)
+ *   ?tab=<id>        settings tab (general, sources, ocr, log, dictionary, assist, controls, account)
  *   ?view=notebook   main window: start on the Notebook view
  *   ?sidebar=0       main window: sidebar hidden
  *   ?theme=light|dark|system  seeds the `appearance` setting (default: system, i.e. the browser's
@@ -22,8 +22,12 @@
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
  *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
  *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
- *   ?cloud=1         a Kimochi cloud access key is present (`cloudAccess`): Cloud OCR is offered and
- *                    read-aloud shows; without it (the default, as in public builds) both are hidden
+ *   ?account=<state> the Kimochi account (preview-account.ts): signedout (default), linking,
+ *                    signedin, full, suspended; Settings → Account (?tab=account). Signed in
+ *                    (signedin, full, suspended) means `cloudAccess`: Cloud OCR is offered and
+ *                    read-aloud shows; signed out (the default) both are hidden
+ *   ?server=<mode>   the account's server, switched in Settings → Account (`account_set_server`):
+ *                    cloud (default), local, forced (local, pinned by KIMOCHI_SERVER)
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
  *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
@@ -79,6 +83,7 @@ import { MODEL_HANDLERS, onModelSettingSet } from './preview-models'
 import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
 import { UPDATE_HANDLERS } from './preview-updates'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
+import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -220,15 +225,21 @@ function previewCapabilities(): PlatformCapabilities {
   return mac
 }
 
-/** `?cloud=1`: a Kimochi cloud access key, as native reports it (the key itself never leaves Rust). */
+/**
+ * A signed-in `?account=`: Kimochi cloud, as native reports it (the token itself never leaves
+ * Rust).
+ */
 function withCloudAccess(capabilities: PlatformCapabilities): PlatformCapabilities {
-  if (params.get('cloud') === '1') return { ...capabilities, cloudAccess: true }
+  if (PREVIEW_SIGNED_IN) return { ...capabilities, cloudAccess: true }
   return {
     ...capabilities,
     cloudAccess: false,
     ocrEngines: {
       ...capabilities.ocrEngines,
-      cloud: { available: false, reason: 'Kimochi cloud OCR needs an access key.' }
+      cloud: {
+        available: false,
+        reason: 'Sign in to a Kimochi account (Settings → Account) to use Kimochi cloud OCR.'
+      }
     }
   }
 }
@@ -348,6 +359,7 @@ const HANDLERS: Record<string, Handler> = {
   ...EXTENSION_HANDLERS,
   ...UPDATE_HANDLERS,
   ...YOMITAN_API_HANDLERS,
+  ...ACCOUNT_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => {
@@ -371,7 +383,7 @@ const HANDLERS: Record<string, Handler> = {
   platform_capabilities: () => CAPABILITIES,
   tts_speak: () => {
     if (!CAPABILITIES.cloudAccess)
-      throw 'native: Read aloud needs a Kimochi cloud access key, and this copy of Kimochi does not have one.'
+      throw 'native: Read aloud runs on Kimochi cloud. Sign in from Settings → Account to use it.'
     throw 'native: text to speech is not available in the browser preview'
   },
 

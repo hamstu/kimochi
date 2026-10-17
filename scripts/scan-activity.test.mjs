@@ -69,9 +69,12 @@ test('native error prefixes become plain sentences with the right tone', () => {
     'OCR failed: OCR HTTP 429: quota exceeded',
     'error'
   ])
-  const noKey =
-    'Kimochi cloud OCR needs an access key, and this copy of Kimochi does not have one. Choose another OCR engine in Settings → OCR & Overlay.'
-  assert.deepEqual(said(scanFailed(`native: ${noKey}`, 'recognise', 'cloud')), [noKey, 'warn'])
+  const signedOut =
+    'Kimochi cloud OCR needs a Kimochi account. Sign in from Settings → Account, or choose another OCR engine in Settings → OCR & Overlay.'
+  assert.deepEqual(said(scanFailed(`native: ${signedOut}`, 'recognise', 'cloud')), [signedOut, 'warn'])
+  const signedOutRemotely =
+    'Kimochi signed out of your account on this computer because the server no longer accepts it. Sign in again from Settings → Account.'
+  assert.deepEqual(said(scanFailed(`native: ${signedOutRemotely}`, 'recognise', 'cloud')), [signedOutRemotely, 'warn'])
   assert.deepEqual(said(scanFailed('native: capture failed', 'capture', 'cloud')), [
     'Capture failed: capture failed',
     'error'

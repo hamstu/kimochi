@@ -1,8 +1,9 @@
 # Kimochi website
 
 The marketing site for Kimochi: a static Vite 7 + React 19 + TypeScript + Tailwind 4 single-page
-app with client-side routes (`react-router`, `BrowserRouter`). No backend. The only network call
-is to the public GitHub API, made at runtime to find the latest release.
+app with client-side routes (`react-router`, `BrowserRouter`). The marketing pages make one
+network call, to the public GitHub API, to find the latest release. The account pages (`/account`,
+`/link`) call the Kimochi server's `/api` on the same origin (see "Account pages").
 
 ## Run
 
@@ -28,10 +29,13 @@ site/
   src/
     main.tsx              BrowserRouter + App
     App.tsx               routes + per-route document titles (TITLES map)
-    pages/                one component per route: Home, Privacy, Terms, Compare, NotFound
-    components/           Layout, Section, Prose, Button, DownloadButton, ThemeToggle
+    pages/                one component per route: Home, Privacy, Terms, Compare, NotFound,
+                          Account*, LinkApp (see "Account pages")
+    components/           Layout, Section, Prose, Button, DownloadButton, ThemeToggle,
+                          AccountNavLink; account/ (forms, meters, dashboard sections)
     demo/                 the interactive demo (LiveDemo.tsx; see "Demo" below)
-    lib/                  theme.ts, releases.ts (fetch + detection), assets.js (pure picker)
+    lib/                  theme.ts, releases.ts (fetch + detection), assets.js (pure picker),
+                          api.ts (account API client), session.tsx (useSession), account.js (pure)
     styles/               tokens.css (colour roles, light/dark), index.css (Tailwind + @theme)
     assets/               images imported by components (import url from '../assets/x.png')
   test/                   node --test files (*.test.mjs)
@@ -150,6 +154,54 @@ outside `site/`).
 The run pauses offscreen and in hidden tabs; with `prefers-reduced-motion` it shows one still
 frame with the popup open. The game screen sizes everything in container units (`demo.css`), so it
 scales as one picture; at phone width the panes stack and the game stays 16:10.
+
+## Account pages
+
+Optional Kimochi accounts (cloud OCR, read aloud, translation, explanations, backup). The API
+contract is `kimochi-server/API.md` (a sibling repo); the server is a Cloudflare Worker that in
+production serves **both** this site (`site/dist`, Workers Static Assets with SPA fallback) and
+`/api/*` on one origin. So the site calls relative `/api/...` URLs with
+`credentials: 'same-origin'`, and the web session is a first-party HttpOnly cookie the pages never
+read. State-changing requests carry the browser's `Origin`, which the server checks against its
+`PUBLIC_URL`.
+
+| Route | Page | What it does |
+| --- | --- | --- |
+| `/account` | `Account.tsx` | Dashboard (redirects to sign-in when signed out): profile, plan and monthly usage meters, linked Kimochi apps (sign out each), sign-in methods (password, Google, Discord), backup (storage, sessions, delete all), delete account, sign out. Sections live in `components/account/sections.tsx`. |
+| `/account/sign-in` | `AccountSignIn.tsx` | Email + password, Continue with Google/Discord, links to sign-up and forgot. Honours `?returnTo=` (same-origin paths only, via `safeReturnTo`) and shows OAuth `?error=` codes in plain language. |
+| `/account/sign-up` | `AccountSignUp.tsx` | Name (optional), email, password (10–200 chars). |
+| `/account/forgot` | `AccountForgot.tsx` | Sends a reset link (always reports success, as the API does). |
+| `/account/reset?token=` | `AccountReset.tsx` | Choose a new password; signs in and ends other sessions. |
+| `/account/verify?token=` | `AccountVerify.tsx` | Confirms the email on load (single-use token, guarded against StrictMode's double effect). |
+| `/link?code=` | `LinkApp.tsx` | The app's device-link confirmation: signs in first if needed (returning here), shows the code large with the device name and platform, Approve / Deny, then "Open Kimochi" (`kimochi://account`). Expired or unknown codes, and arriving without a code, show a code entry form. |
+
+- **`src/lib/api.ts`**: the typed client (`api.signIn(…)`, `api.usage()`, …) and types (`User`,
+  `Usage`, `Device`, `Backup`, `LinkRequest`). Failures throw `ApiError { status, code, message }`
+  from the server's `{ error, message }`; no server at all (network error, or a non-JSON 404/5xx)
+  becomes code `network`. OAuth starts are full-page links: `oauthStartUrl(provider, returnTo)`.
+- **`src/lib/session.tsx`**: `<SessionProvider>` (wraps the routes in `App.tsx`) loads
+  `GET /api/auth/me` once; `useSession()` gives `{ status: 'loading' | 'signed-in' | 'signed-out',
+  user, unreachable, refresh, setUser }`. The header's `AccountNavLink` reads it ("Account" /
+  "Sign in").
+- **`src/lib/account.js`**: pure, tested helpers (`test/account.test.mjs`): `safeReturnTo`,
+  `normalizeLinkCode` (`abcd efgh` → `ABCD-EFGH`), `formatCodeInput`, `messageForCode` (API and
+  OAuth error codes → sentences), `formatStorage`, `usageFraction`, `resetDay`/`formatResetDay`,
+  `relativeTime`, `platformLabel`, `planLabel`, `deleteConfirmMatches`. Plan limits are never
+  hard-coded: meters use what `GET /api/v1/usage` and `GET /api/account/backup` return.
+- **UI pieces** in `components/account/`: `AuthShell` (narrow page that focuses its h1 after
+  navigation), `Field` (label, hint, inline error, `aria-describedby`), `Notice` (tinted callout),
+  `SubmitButton` (disabled + `aria-busy` + spinner), `Meter`, `OAuthButtons`, and `parts.tsx`
+  (`AccountSection`, `Badge`, `ConfirmButton`). The one primary button per surface is the form's
+  submit on auth pages and Approve on `/link`; the dashboard uses secondary buttons only, with
+  danger text for destructive ones.
+
+**Run against a local server.** In `kimochi-server`, start `wrangler dev` on
+`http://127.0.0.1:3000` with `PUBLIC_URL=http://127.0.0.1:1450` in `.dev.vars`. Then
+`npm run site:dev`: Vite proxies `/api` to port 3000 (`server.proxy` in `vite.config.ts`, also
+for `site:preview`) **without** `changeOrigin`, so `Host` and `Origin` stay `127.0.0.1:1450`, the
+Origin check passes, and cookies and OAuth redirects stay on the site's origin. Emails are not
+sent in development; read the links from `GET /api/dev/outbox`. Without the server the account
+pages say they cannot reach it, and the marketing pages work as before.
 
 ## What other agents must know
 

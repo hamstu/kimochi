@@ -31,7 +31,8 @@ export function LogTab(): ReactNode {
     voiceId: DEFAULT_VOICE_ID
   })
   const [confirmReset, setConfirmReset] = useState(false)
-  // Read aloud runs on Kimochi cloud, which needs an access key; without one its voice is moot.
+  // Read aloud runs on Kimochi cloud, which needs a signed-in Kimochi account; without one its
+  // voice is moot.
   const { cloudAccess } = useCapabilities()
 
   return (

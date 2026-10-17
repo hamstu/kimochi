@@ -1,5 +1,8 @@
 /* Shared TypeScript types. */
 import { API_URLS } from "../../vendor/shared-constants";
+import type { TranslationProvider } from "../../../ui/account";
+
+export type { TranslationProvider };
 
 export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket";
 
@@ -22,7 +25,8 @@ export interface Line {
   explanation?: string;
 }
 
-export type ExplainProvider = "codex" | "claude";
+/** "kimochi" streams from Kimochi cloud (needs a signed-in account); the others run a local CLI. */
+export type ExplainProvider = "codex" | "claude" | "kimochi";
 
 export type ThemePref = "dark" | "light" | "system";
 export type ResolvedTheme = "dark" | "light";
@@ -101,9 +105,10 @@ export interface Settings {
   ankiFieldMappings: AnkiFieldMapping[];
   ankiTags: string[];
 
-  // Translation (DeepL)
-  /** Stored only in settings.json (AppLocalData) — never bundled or committed.
-      Translate UI is enabled only when this is non-empty. */
+  // Translation (DeepL with the user's key, or Kimochi cloud with an account)
+  /** Who translates: "auto" is Kimochi cloud while signed in, otherwise the DeepL key. */
+  translationProvider: TranslationProvider;
+  /** Stored only in settings.json (AppLocalData) — never bundled or committed. */
   deeplApiKey: string;
 
   // Explain (local LLM CLI)
@@ -185,6 +190,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   ankiFieldMappings: [],
   ankiTags: ["super-texthooker"],
 
+  translationProvider: "auto",
   deeplApiKey: "",
 
   explainProvider: "codex",

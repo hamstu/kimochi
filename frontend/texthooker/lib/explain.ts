@@ -1,7 +1,8 @@
 import { getActiveSession } from "./sessions";
-/* Explain: run a local LLM CLI (codex or claude) on a line + its preceding
-   context and stream the answer into the Explain modal. The process itself is
-   spawned Rust-side (src-tauri/src/explain.rs); results arrive as events. */
+/* Explain: run a local LLM CLI (codex or claude), or Kimochi cloud, on a line
+   + its preceding context and stream the answer into the Explain modal. The
+   process (or request) runs Rust-side (src-tauri/src/reader/explain.rs);
+   results arrive as events. */
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -112,7 +113,9 @@ async function runExplain(line: Line): Promise<void> {
   const model =
     provider === "claude"
       ? settings.explainClaudeModel.trim()
-      : settings.explainCodexModel.trim();
+      : provider === "codex"
+        ? settings.explainCodexModel.trim()
+        : "";
 
   const requestId = ++requestCounter;
   activeRequestId = requestId;

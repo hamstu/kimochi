@@ -70,9 +70,10 @@ export interface PlatformCapabilities {
   }
   ocrEngines: Record<OcrEngineKey, OcrEngineCapability>
   /**
-   * Whether this machine has a Kimochi cloud access key (`~/.config/kimochi/cloud-key` or
-   * `KIMOCHI_CLOUD_KEY`). Only this boolean reaches the webviews, never the key. Without it
-   * Kimochi cloud OCR is not offered and read-aloud (text to speech) is hidden.
+   * Whether Kimochi cloud is usable here, which means a Kimochi account is signed in
+   * (Settings → Account). Only this boolean reaches the webviews, never the token. Without it
+   * Kimochi cloud OCR is not offered and read-aloud (text to speech) is hidden. Re-sent on
+   * sign-in and sign-out.
    */
   cloudAccess: boolean
   /** The existing `observer_status` payload. */

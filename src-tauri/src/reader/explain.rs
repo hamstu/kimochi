@@ -1,5 +1,6 @@
 // explain.rs — run a local LLM CLI (codex or claude) to explain a sentence,
-// streaming output back to the frontend as events.
+// streaming output back to the frontend as events. Provider "kimochi" streams
+// from Kimochi cloud instead (`cloud::explain`), with the same events.
 //
 // Commands are spawned through `platform::run_cli`, which on macOS goes through
 // `zsh -ilc` so the user's interactive shell PATH applies (fnm/nvm shims and
@@ -92,6 +93,16 @@ pub async fn explain_run(
     model: Option<String>,
     prompt: String,
 ) -> Result<(), String> {
+    if provider == "kimochi" {
+        // Kimochi cloud streams over HTTP instead of a CLI. Taking over as the active run stops a
+        // superseded run (CLI or HTTP) from emitting; a CLI still running is killed.
+        ACTIVE_REQUEST.store(request_id, Ordering::SeqCst);
+        kill_current().await;
+        return crate::cloud::explain(app, request_id, prompt, move || {
+            ACTIVE_REQUEST.load(Ordering::SeqCst) == request_id
+        })
+        .await;
+    }
     let model = model.unwrap_or_default();
     if !model.is_empty() {
         validate_model(&model)?;

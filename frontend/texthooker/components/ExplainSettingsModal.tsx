@@ -12,6 +12,7 @@ import {
 import { updateSettings } from "@texthooker/lib/settings";
 import { DEFAULT_EXPLAIN_PROMPT } from "@texthooker/lib/types";
 import type { ExplainProvider, Settings } from "@texthooker/lib/types";
+import { useAccount } from "../../bridge/account";
 
 interface Props {
   open: boolean;
@@ -29,6 +30,7 @@ const CLAUDE_MODELS = [
 ];
 
 export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
+  const { signedIn } = useAccount();
   const [promptDraft, setPromptDraft] = useState(settings.explainPrompt);
   const [codexModelDraft, setCodexModelDraft] = useState(
     settings.explainCodexModel,
@@ -54,7 +56,7 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
       <DialogContent
         size="lg"
         title="Explain settings"
-        description="The command-line model that explains a line, and the prompt it gets."
+        description="The model that explains a line, and the prompt it gets."
       >
         <div className="explain-settings">
           <div className="k-settings-group">
@@ -66,12 +68,22 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
                   void updateSettings({ explainProvider: v as ExplainProvider })
                 }
                 options={[
+                  { value: "kimochi", label: "Kimochi cloud" },
                   { value: "codex", label: "Codex CLI" },
                   { value: "claude", label: "Claude CLI" },
                 ]}
               />
             </SettingsRow>
-            {settings.explainProvider === "claude" ? (
+            {settings.explainProvider === "kimochi" ? (
+              <SettingsRow
+                label="Kimochi cloud"
+                description={
+                  signedIn
+                    ? "Runs on Kimochi's server within your account's monthly explanations."
+                    : "Needs a Kimochi account: sign in from Settings → Account."
+                }
+              />
+            ) : settings.explainProvider === "claude" ? (
               <SettingsRow label="Claude model">
                 <Select
                   aria-label="Claude model"

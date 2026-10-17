@@ -84,8 +84,8 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
                 key={mode}
                 value={mode}
                 description={
-                  // Kimochi cloud without an access key is listed only while it is still selected.
-                  mode === 'cloud' && !capabilities.cloudAccess ? 'Needs an access key' : OCR_MODES[mode].tagline
+                  // Kimochi cloud without an account (or key) is listed only while it is still selected.
+                  mode === 'cloud' && !capabilities.cloudAccess ? 'Sign in under Settings → Account' : OCR_MODES[mode].tagline
                 }
               >
                 <OcrModeLabel mode={mode} />

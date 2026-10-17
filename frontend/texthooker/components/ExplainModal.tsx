@@ -23,9 +23,11 @@ export function ExplainModal() {
 
   const settings = getSettings();
   const providerLabel =
-    settings.explainProvider === "claude"
-      ? `Claude · ${settings.explainClaudeModel || "default"}`
-      : `Codex${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ""}`;
+    settings.explainProvider === "kimochi"
+      ? "Kimochi cloud"
+      : settings.explainProvider === "claude"
+        ? `Claude · ${settings.explainClaudeModel || "default"}`
+        : `Codex${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ""}`;
 
   const busy = state.status === "loading" || state.status === "streaming";
 
@@ -67,7 +69,13 @@ export function ExplainModal() {
         ) : state.status === "loading" ? (
           <div className="log-explain-waiting">
             <Spinner label="Waiting" />
-            Waiting for {settings.explainProvider === "claude" ? "Claude" : "Codex"}…
+            Waiting for{" "}
+            {settings.explainProvider === "kimochi"
+              ? "Kimochi cloud"
+              : settings.explainProvider === "claude"
+                ? "Claude"
+                : "Codex"}
+            …
           </div>
         ) : (
           <>

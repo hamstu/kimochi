@@ -1,8 +1,8 @@
 /**
  * Text-to-speech, ADAPTED from `src/renderer/src/components/AudioPlayer.tsx`.
- * Delta: the POST happens in Rust (`tts_speak`), which holds the Kimochi cloud access key and
- * never hands it to the webview; the returned audio is played through an object URL exactly as
- * before. Without a key the command refuses before sending anything, and the UI hides read-aloud
+ * Delta: the POST happens in Rust (`tts_speak`), which holds the Kimochi account token and never
+ * hands it to the webview; the returned audio is played through an object URL exactly as before.
+ * When signed out the command refuses before sending anything, and the UI hides read-aloud
  * (`cloudAccess` in the platform capabilities).
  */
 import { nativeError, ttsSpeak } from './tauri'

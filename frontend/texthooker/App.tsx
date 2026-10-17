@@ -46,6 +46,8 @@ import { useScanMode } from "./hooks/useScanMode";
 import { useLineHotkeys } from "./hooks/useLineHotkeys";
 import { usePanelDictionary } from "../shell/panelDictionary";
 import { openSettings } from "../bridge/tauri";
+import { useAccount } from "../bridge/account";
+import { translationAvailable } from "../../ui/account";
 
 /** Starts the session owner, then renders its children; shows progress or the failure meanwhile. */
 export function ReaderHost({ children }: { children: ReactNode }) {
@@ -95,6 +97,13 @@ interface TranscriptProps {
 export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   const [snap, setSnap] = useState(getSnapshot);
   const [settings, setSettings] = useState(getSettings);
+  // Translate is offered when the chosen provider can be used: a DeepL key, or a Kimochi account.
+  const { signedIn } = useAccount();
+  const translateEnabled = translationAvailable(
+    settings.translationProvider,
+    settings.deeplApiKey,
+    signedIn,
+  );
   const [error, setError] = useState("");
   useEffect(() => {
     const fail = (event: PromiseRejectionEvent) =>
@@ -230,7 +239,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
           )}
           <LineContextMenu
             lines={snap.lines}
-            translateEnabled={Boolean(settings.deeplApiKey.trim())}
+            translateEnabled={translateEnabled}
             onAddToNotebook={setAddText}
           >
             <div
@@ -243,7 +252,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
                 <LineRow
                   key={`${snap.sessions.activeId}:${line.id}`}
                   line={line}
-                  translateEnabled={Boolean(settings.deeplApiKey.trim())}
+                  translateEnabled={translateEnabled}
                 />
               ))}
             </div>

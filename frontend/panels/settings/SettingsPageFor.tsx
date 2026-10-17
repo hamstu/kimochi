@@ -22,6 +22,9 @@ const AssistTab = lazy(() =>
 const ControlsTab = lazy(() =>
   import("./ControlsTab").then((m) => ({ default: m.ControlsTab })),
 );
+const AccountTab = lazy(() =>
+  import("./AccountTab").then((m) => ({ default: m.AccountTab })),
+);
 
 const PAGES: Record<SettingsTabName, ComponentType> = {
   general: GeneralTab,
@@ -31,6 +34,7 @@ const PAGES: Record<SettingsTabName, ComponentType> = {
   dictionary: DictionaryTab,
   assist: AssistTab,
   controls: ControlsTab,
+  account: AccountTab,
 };
 
 export function SettingsPageFor({ tab }: { tab: SettingsTabName }): ReactNode {

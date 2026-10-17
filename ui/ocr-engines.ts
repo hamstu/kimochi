@@ -78,10 +78,10 @@ export function engineOffered(mode: string, os: PlatformOs): boolean {
 }
 
 /**
- * Whether an engine appears in the pickers: offered on this OS, and Kimochi cloud only with an
- * access key (`cloudAccess`). An engine that is still the selected one stays listed even without
- * the key, so the picker shows what is chosen (as unavailable, with its reason); the setting is
- * never changed behind the user's back.
+ * Whether an engine appears in the pickers: offered on this OS, and Kimochi cloud only when a
+ * Kimochi account is signed in (`cloudAccess`). An engine that is still the selected one stays
+ * listed even when signed out, so the picker shows what is chosen (as unavailable, with its
+ * reason); the setting is never changed behind the user's back.
  */
 export function engineListed(
   mode: string,

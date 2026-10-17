@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { Menu, X } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
+import { AccountNavLink } from './AccountNavLink'
 
 export const GITHUB_URL = 'https://github.com/hamstu/kimochi-tauri'
 
@@ -70,6 +71,7 @@ export function Layout() {
                 </NavLink>
               )
             )}
+            <AccountNavLink className={navLinkClass} />
           </nav>
           <div className="ml-auto flex items-center gap-2 md:ml-2">
             <ThemeToggle />
@@ -98,6 +100,7 @@ export function Layout() {
                   {l.label}
                 </Link>
               ))}
+              <AccountNavLink className={`${navLinkClass} -mx-2.5 py-2.5`} onClick={() => setOpen(false)} />
             </div>
           </nav>
         )}

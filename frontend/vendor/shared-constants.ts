@@ -1,6 +1,7 @@
 /**
  * VERBATIM COPY of `src/shared/constants.ts` from the Electron app (do not hand-edit).
- * Kept byte-identical apart from this header and relative import paths.
+ * Kept byte-identical apart from this header, relative import paths and Kimochi server paths:
+ * the server's OCR and TTS endpoints are the account-only `/api/v1/ocr` and `/api/v1/tts`.
  */
 /**
  * Centralized constants for the application
@@ -29,8 +30,8 @@ export const SERVER_URLS = {
 export function getServerUrls(mode: ServerMode) {
   const baseUrl = SERVER_URLS[mode]
   return {
-    GOOGLE_VISION: `${baseUrl}/detect-text`,
-    TTS: `${baseUrl}/tts`
+    GOOGLE_VISION: `${baseUrl}/api/v1/ocr`,
+    TTS: `${baseUrl}/api/v1/tts`
   }
 }
 
@@ -41,10 +42,10 @@ export const API_URLS = {
   YOMITAN_FALLBACK: `${LOCAL_HOST}:8765`,
 
   // Google Cloud Vision OCR service (default to cloud)
-  GOOGLE_VISION: `${CLOUD_SERVER}/detect-text`,
+  GOOGLE_VISION: `${CLOUD_SERVER}/api/v1/ocr`,
 
   // TTS (Text-to-Speech) service (default to cloud)
-  TTS: `${CLOUD_SERVER}/tts`,
+  TTS: `${CLOUD_SERVER}/api/v1/tts`,
 
   // EasyOCR service
   EASYOCR: `${LOCAL_HOST}:8000/ocr`,

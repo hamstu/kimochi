@@ -6,6 +6,7 @@ import {
   ScanText,
   ScrollText,
   SlidersHorizontal,
+  UserRound,
   Waypoints
 } from 'lucide-react'
 import type { SettingsTabName } from '../../bridge/tauri'
@@ -18,7 +19,8 @@ export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName 
   { value: 'log', label: 'Log', icon: <ScrollText /> },
   { value: 'dictionary', label: 'Dictionary', icon: <BookOpen /> },
   { value: 'assist', label: 'Translation & AI', icon: <Languages /> },
-  { value: 'controls', label: 'Shortcuts & Controls', icon: <Gamepad2 /> }
+  { value: 'controls', label: 'Shortcuts & Controls', icon: <Gamepad2 /> },
+  { value: 'account', label: 'Account', icon: <UserRound /> }
 ]
 
 /** Page names stored by earlier builds, mapped onto the pages that now hold their settings. */

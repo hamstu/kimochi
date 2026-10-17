@@ -16,6 +16,7 @@
     "release": "node scripts/cut-release.mjs",
     "release:bundle": "node scripts/run.mjs release",
     "dev": "node scripts/run.mjs dev",
+    "dev:local": "node scripts/dev-local.mjs",
     "start": "node scripts/run.mjs launch",
     "pretest": "node scripts/sync-extension.mjs --all --if-missing",
     "test": "node --test --test-timeout=120000 scripts/*.test.mjs",

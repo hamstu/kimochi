@@ -2,9 +2,9 @@
 /**
  * Text to speech, ported from src/renderer/src/components/AudioPlayer.tsx.
  *
- * The request is made in Rust (`tts_speak`), which holds the Kimochi cloud
- * access key and never hands it to this window. Without a key the command
- * refuses before sending anything, and callers check `cloudAccess` first.
+ * The request is made in Rust (`tts_speak`), which holds the Kimochi account
+ * token and never hands it to this window. When signed out the command refuses before sending
+ * anything, and callers check `cloudAccess` first.
  */
 
 import { DEFAULT_VOICE_ID } from './settings.js'

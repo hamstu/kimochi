@@ -3,30 +3,11 @@
  * engine needs set up beyond being chosen. This is the extension point for per-engine settings:
  * give a new engine a case in `EngineSettings` and lay its settings out with `EngineSetting`.
  */
-import { useCallback, useState, type ReactNode } from 'react'
-import { ConfirmDialog, Select } from '@kit'
-import type { ServerSettings } from '../../vendor/shared-types'
-import { DEFAULT_SERVER_MODE, SERVER_URLS, type ServerMode } from '../../vendor/shared-constants'
+import type { ReactNode } from 'react'
 import type { OcrMode } from '../../bridge/settings'
-import { useSetting } from '../../bridge/useSetting'
-import { nativeError, quitApp } from '../../bridge/tauri'
 import type { ModelControls } from '../../bridge/models'
+import { DEV_BUILD } from '../../bridge/devBuild'
 import { ModelDownload } from './ModelDownload'
-
-/**
- * Whether this is a local development build. `import.meta.env.DEV` covers the Vite dev servers
- * (`tauri dev` and `npm run preview:ui`); a debug native build loading a `vite build` (`npm run
- * bundle`) says so through `__KIMOCHI_PLATFORM__.debug` (`platform_prelude` in
- * `src-tauri/src/platform`).
- */
-const DEV_BUILD =
-  import.meta.env.DEV ||
-  (window as { __KIMOCHI_PLATFORM__?: { debug?: boolean } }).__KIMOCHI_PLATFORM__?.debug === true
-
-const SERVER_OPTIONS = [
-  { value: 'cloud', label: 'Cloud (recommended)' },
-  { value: 'local', label: 'Local (localhost:3000)' }
-] as const
 
 /** One setting inside the detail panel: label and description, the control beside them. */
 export function EngineSetting({
@@ -49,55 +30,12 @@ export function EngineSetting({
   )
 }
 
-/** Cloud OCR's server: a developer's switch, so only in a local development build. */
-function CloudServerSetting(): ReactNode {
-  const [serverSettings, setServerSettings] = useSetting<ServerSettings>('serverSettings', {
-    mode: DEFAULT_SERVER_MODE
-  })
-  // Changing the server needs a restart, so it is confirmed first (local UI state, not persisted).
-  const [pendingServerMode, setPendingServerMode] = useState<ServerMode | null>(null)
-
-  const confirmServerModeChange = useCallback(async (): Promise<void> => {
-    if (!pendingServerMode) return
-    await setServerSettings({ mode: pendingServerMode })
-    setPendingServerMode(null)
-    quitApp().catch((error) => console.error('Quit failed:', nativeError(error).message))
-  }, [pendingServerMode, setServerSettings])
-
+/** Development builds: where Kimochi's server (production or local) is switched. */
+function CloudServerNote(): ReactNode {
   return (
-    <>
-      <EngineSetting
-        label="OCR server"
-        description={
-          <>
-            Using{' '}
-            <span className="k-mono">
-              {serverSettings.mode === 'cloud' ? SERVER_URLS.cloud : SERVER_URLS.local}
-            </span>
-            . Changing it restarts Kimochi.
-          </>
-        }
-      >
-        <Select
-          aria-label="OCR server"
-          value={serverSettings.mode}
-          onValueChange={(value) => {
-            if (value !== serverSettings.mode) setPendingServerMode(value as ServerMode)
-          }}
-          options={SERVER_OPTIONS}
-        />
-      </EngineSetting>
-      <ConfirmDialog
-        open={pendingServerMode !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingServerMode(null)
-        }}
-        title="Restart required"
-        description="Changing the OCR server requires restarting Kimochi. The app will quit and you'll need to reopen it manually."
-        confirmLabel="Quit & apply"
-        onConfirm={() => void confirmServerModeChange()}
-      />
-    </>
+    <p className="k-description">
+      Development build: switch between the production and local server in Settings → Account.
+    </p>
   )
 }
 
@@ -116,7 +54,7 @@ export function EngineSettings({
 }): ReactNode {
   switch (mode) {
     case 'cloud':
-      return DEV_BUILD ? <CloudServerSetting /> : null
+      return DEV_BUILD ? <CloudServerNote /> : null
     case 'meikiocr':
     case 'mangaocr':
       return <ModelDownload controls={model} emphasis={emphasis} />

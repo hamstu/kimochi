@@ -21,7 +21,7 @@ A reading companion that lives beside the game rather than a separate study app:
 - Long reading sessions with a game or VN in the foreground; Kimochi windows (compact remote/controller, Log, Settings, Notebook, source picker, tray popover, dictionary popups) float beside or above it, often pinned on top.
 - Windows are small and dense by necessity. They are often inactive while the game has focus, so hover and click-through behaviour for inactive windows matters.
 - Japanese text (log lines, dictionary entries) is the primary content; UI chrome is secondary.
-- Inputs: OCR (on-device engines; Kimochi cloud with an access key), clipboard, WebSocket texthookers. Dictionaries are Yomitan's, imported through Yomitan's own settings UI.
+- Inputs: OCR (on-device engines; Kimochi cloud with a signed-in Kimochi account), clipboard, WebSocket texthookers. Dictionaries are Yomitan's, imported through Yomitan's own settings UI.
 
 ## Capabilities and Constraints
 

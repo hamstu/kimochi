@@ -11,6 +11,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Optional Kimochi accounts. Sign in or create one from Settings → Account: Kimochi opens your browser, you confirm the code it shows, and Kimochi comes back signed in. Nothing else in Kimochi needs an account.
+- Signed in, you can use Kimochi cloud OCR, read aloud, translation and explanations within free monthly allowances; Settings → Account shows how much of each you've used and when they reset.
+- Translation can use Kimochi cloud or your own DeepL key (Settings → Translation & AI → Translate with), and Explain can use Kimochi cloud instead of a command-line model.
+- Back up your preferences and sessions (lines, notebook and images) to your account, automatically or with Back up now, and restore them on this or another computer. Your DeepL key and other secrets are never uploaded.
+
 - Load settings pages, diagnostics and the Notebook on demand, and avoid duplicate settings reads during startup.
 - Stop refreshing source screenshots while the main window is hidden, reducing background capture work.
 - Prepare local MeikiOCR and Manga OCR scans directly from captured pixels instead of decoding them from PNG, and reuse cloud OCR connections between scans.
@@ -223,9 +228,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   words on arrival". Lines in the Log are plain text with every dictionary; Shift-hover looks
   words up.
 
-- Text to speech (read aloud) and Kimochi's own Cloud OCR are unavailable in public builds for
-  now. If Cloud OCR is your selected engine, scans say it needs an access key: choose another
-  engine in Settings → OCR & Overlay. The OwOCR (WebSocket OCR) engine has been removed; if it
+- Text to speech (read aloud) and Kimochi's own Cloud OCR need a Kimochi account. If Cloud OCR
+  is your selected engine and you aren't signed in, scans say so: sign in from Settings → Account
+  or choose another engine in Settings → OCR & Overlay. The OwOCR (WebSocket OCR) engine has been removed; if it
   was selected, Kimochi uses the default engine instead.
 - Auto-scan is now started from your controller (the gamepad trigger in Settings → OCR &
   Overlay) or a scan shortcut; the keyboard "Trigger keys" option is gone on every platform.

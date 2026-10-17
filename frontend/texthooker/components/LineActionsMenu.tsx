@@ -52,7 +52,7 @@ function LineMenuItems({
   onAddToNotebook?: (text: string) => void;
 }) {
   const audioSlot = useRef<HTMLSpanElement>(null);
-  // Read aloud runs on Kimochi cloud, which needs an access key.
+  // Read aloud runs on Kimochi cloud, which needs a signed-in Kimochi account.
   const { cloudAccess } = useCapabilities();
   const isTranslated = Boolean(line.showTranslation && line.translation);
   const displayText = isTranslated ? line.translation! : line.text;
@@ -60,8 +60,8 @@ function LineMenuItems({
   return (
     <>
       {/* Read aloud: the row activates the shared AudioPlayer button, which keeps its own
-          playing state and error tooltip. The menu stays open while it plays. Only with a
-          Kimochi cloud access key. */}
+          playing state and error tooltip. The menu stays open while it plays. Only when signed in
+          to a Kimochi account (Kimochi cloud access). */}
       {cloudAccess && (
         <MenuItem
           icon={

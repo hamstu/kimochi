@@ -4,6 +4,7 @@ mod reader;
 use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
+mod account;
 mod actions;
 mod activity;
 mod application_context;
@@ -1612,9 +1613,9 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
 /// POST one PNG using the shared cloud endpoint validation.
 fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
     let endpoint = settings::resolve_endpoint(settings);
-    // Kimochi's own server takes the access key; a custom endpoint never sees it.
-    let key = if settings::is_builtin_endpoint(&endpoint) {
-        Some(cloud::key().ok_or_else(|| format!("native: {}", cloud::NO_KEY_OCR))?)
+    // Kimochi's own server takes the signed-in account's token; a custom endpoint never sees it.
+    let token = if settings::is_builtin_endpoint(&endpoint) {
+        Some(account::token().ok_or_else(|| format!("native: {}", cloud::NO_ACCOUNT_OCR))?)
     } else {
         None
     };
@@ -1630,15 +1631,18 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
             .map_err(|_| "native: could not initialize OCR HTTP client".to_string())
     }).as_ref().map_err(Clone::clone)?;
     let mut request = client.post(endpoint);
-    if let Some(key) = &key {
-        request = cloud::authorize(request, key);
+    if let Some(token) = &token {
+        request = request.bearer_auth(token);
     }
     let response = request
         .json(&json!({ "imageBase64": image }))
         .send()
         .map_err(|_| "native: OCR network request failed (connection/TLS/timeout)")?;
-    if key.is_some() && response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err(format!("native: {}", cloud::REJECTED));
+    if token.is_some() {
+        if !response.status().is_success() {
+            return Err(cloud::failure(cloud::Feature::Ocr, response));
+        }
+        account::usage_changed();
     }
     if !response.status().is_success() {
         let status = response.status().as_u16();
@@ -1909,13 +1913,15 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     {
         payload["ocrEngines"]["livetext"] = livetext::capability();
     }
-    // Kimochi cloud runs on the owner's paid accounts and needs an access key. Only whether
-    // one is present reaches the webviews, never the key.
+    // Kimochi cloud needs a signed-in Kimochi account. Only whether someone is signed in reaches
+    // the webviews, never the token.
     let cloud_access = cloud::access();
     payload["cloudAccess"] = json!(cloud_access);
     if !cloud_access {
-        payload["ocrEngines"]["cloud"] =
-            json!({ "available": false, "reason": "Kimochi cloud OCR needs an access key." });
+        payload["ocrEngines"]["cloud"] = json!({
+            "available": false,
+            "reason": "Sign in to a Kimochi account (Settings → Account) to use Kimochi cloud OCR."
+        });
     }
     // An engine held back only by its models stays selectable: choosing it asks to download them.
     for engine in model_store::Engine::ALL {
@@ -2439,6 +2445,8 @@ fn main() {
     // Elsewhere the first instance wins and a second launch just brings back its main
     // panel. Registered before every other plugin, as the plugin requires.
     #[cfg(not(target_os = "macos"))]
+    // With its `deep-link` feature, a second launch carrying a `kimochi://` URL is handed to the
+    // deep-link plugin's handler below before this runs.
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
         if let Some(service) = app.try_state::<Shared>() {
             let settings = service.settings.clone();
@@ -2447,6 +2455,8 @@ fn main() {
         }
     }));
     let builder = builder
+        // `kimochi://account` (the website's "Open Kimochi" after signing in); see account.rs.
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -2642,6 +2652,17 @@ fn main() {
             popup_window,
             yomitan_request,
             cloud::tts_speak,
+            cloud::cloud_translate,
+            account::account_status,
+            account::account_link_start,
+            account::account_link_cancel,
+            account::account_link_open,
+            account::account_sign_out,
+            account::account_refresh,
+            account::account_open_web,
+            account::account_backup_now,
+            account::account_restore,
+            account::account_set_server,
             system_state,
             app_quit,
             open_screen_capture_preferences,
@@ -2684,6 +2705,11 @@ fn main() {
             let handle = app.handle().clone();
             #[cfg(target_os = "linux")]
             platform::gnome::start(handle.clone());
+            // A restore downloaded before the last restart goes in place before anything reads
+            // the settings or the Log's files.
+            if let (Ok(data), Ok(local)) = (handle.path().app_data_dir(), handle.path().app_local_data_dir()) {
+                account::apply_pending_restore(&data, &local);
+            }
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // Before any window is built, so none shows the system's appearance first.
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
@@ -3074,6 +3100,8 @@ fn main() {
             // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
             // user starts it from Settings → OCR, where the button names the size.
             spawn_capabilities_watch(handle.clone(), service.clone());
+            account::install(&handle).map_err(std::io::Error::other)?;
+            setup_deep_links(&handle);
             Ok(())
         })
         .build(context())
@@ -3100,6 +3128,27 @@ fn context() -> tauri::Context {
     let embedded = context.set_assets(Box::new(extension_store::NoAssets));
     context.set_assets(Box::new(extension_store::EngineAssets::new(embedded)));
     context
+}
+
+/// `kimochi://` URLs: those opened while Kimochi runs (forwarded by the single-instance plugin on
+/// Windows and Linux) and the one it was launched with.
+fn setup_deep_links(app: &tauri::AppHandle) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+    // A bundle registers the scheme when it is installed (Info.plist, the NSIS installer, the
+    // .deb's desktop file). An AppImage and a development build register it themselves.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    if cfg!(debug_assertions) || std::env::var_os("APPIMAGE").is_some() {
+        let _ = app.deep_link().register_all();
+    }
+    let handle = app.clone();
+    app.deep_link().on_open_url(move |event| {
+        let urls: Vec<String> = event.urls().iter().map(|u| u.to_string()).collect();
+        account::handle_urls(&handle, &urls);
+    });
+    if let Ok(Some(urls)) = app.deep_link().get_current() {
+        let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
+        account::handle_urls(app, &urls);
+    }
 }
 
 /// Only an explicitly completed setup skips onboarding; absent or malformed values are first run.

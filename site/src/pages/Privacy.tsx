@@ -7,19 +7,24 @@ export function Privacy() {
   return (
     <Prose
       title="Privacy"
-      lede="Kimochi is a desktop app with no accounts and no analytics. Most of what it does happens on your computer. This page lists exactly what leaves it, and when."
-      updated="2026-10-13"
+      lede="Kimochi is a desktop app with no analytics, and accounts are optional. Most of what it does happens on your computer. This page lists exactly what leaves it, and when."
+      updated="2026-10-16"
     >
       <h2 id="summary">The short version</h2>
       <ul>
-        <li>There is no Kimochi account, sign-in or user database.</li>
+        <li>
+          A Kimochi account is optional. The app works fully without one. If
+          you create one, we store what is listed under{" "}
+          <a href="#accounts">Accounts</a>, and deleting the account removes it.
+        </li>
         <li>
           The app has no analytics, telemetry, crash reporting or advertising.
           It does not report how you use it.
         </li>
         <li>
           Your captures, log, notebook, statistics and settings are stored on
-          your computer and are not uploaded anywhere.
+          your computer. They are not uploaded anywhere unless you sign in and
+          turn on backup.
         </li>
         <li>
           Some features use the internet. When they do, they send only what that
@@ -89,15 +94,15 @@ export function Privacy() {
 
       <h3>Kimochi cloud OCR</h3>
       <p>
-        Kimochi&rsquo;s own cloud OCR is not offered in public builds for now:
-        it needs an access key that only the developer has. Where it is
-        enabled and selected, each scan (manual or with Auto OCR) sends an
+        Kimochi&rsquo;s own cloud OCR is available when you are signed in to a
+        Kimochi account (see <a href="#accounts">Accounts</a>). When it is
+        selected, each scan (manual or with Auto OCR) sends an
         image of the captured region to our server at{" "}
         <code>kimochi-server.hamish.workers.dev</code>, hosted on Cloudflare
         Workers, which passes it to{" "}
         <a href="https://cloud.google.com/vision">Google Cloud Vision</a> for
         text recognition and returns the result. Our server does not store the
-        images or the text. Cloudflare and Google process the request under
+        images or the text; it only adds one to your monthly count. Cloudflare and Google process the request under
         their own terms; Google&rsquo;s policies describe how it handles images
         sent to Cloud Vision.
       </p>
@@ -117,14 +122,14 @@ export function Privacy() {
 
       <h3>Text to speech</h3>
       <p>
-        Text to speech is likewise not offered in public builds for now. Where
-        it is enabled and you play audio for a line, Kimochi sends that
-        line&rsquo;s text and
-        the selected voice to our server, which asks{" "}
+        Read aloud is likewise available when you are signed in. When you play
+        audio for a line, Kimochi sends that line&rsquo;s text and the selected
+        voice to our server, which asks{" "}
         <a href="https://elevenlabs.io/privacy-policy">ElevenLabs</a> to
         generate speech and returns the audio. Only the text you choose to hear
-        is sent. Our server keeps at most the most recent clip in memory, to
-        avoid generating it twice, and does not store it.
+        is sent. The generated audio is cached (in Cloudflare R2, named by a
+        fingerprint of the voice and text, not by who asked) so the same line
+        is not generated twice for anyone.
       </p>
 
       <h3>Model downloads</h3>
@@ -163,7 +168,16 @@ export function Privacy() {
           sends the line you translate to DeepL under your account.
         </li>
         <li>
-          <strong>Explain</strong> runs an AI command-line tool you have
+          <strong>Kimochi translation and explanations</strong>, when you are
+          signed in and choose them, send the line (and, for explanations, the
+          surrounding context the app includes in its prompt) to our server,
+          which passes it to DeepL or to an AI model provider (Anthropic or
+          OpenAI) through Cloudflare AI Gateway. The gateway keeps request logs,
+          tagged with your account id, which we use to run the service and
+          watch costs. Our server does not otherwise store the text.
+        </li>
+        <li>
+          <strong>Explain</strong> with your own tool runs an AI command-line tool you have
           installed and signed in to yourself (Codex or Claude Code). The
           sentence you ask about is sent to that provider under your own account
           and its terms.
@@ -185,10 +199,54 @@ export function Privacy() {
         control.
       </p>
 
+      <h2 id="accounts">Accounts</h2>
+      <p>
+        You can use Kimochi without an account. An account adds Kimochi&rsquo;s
+        hosted services (cloud OCR, read aloud, translation and explanations,
+        within free monthly allowances) and, if you turn it on, backup of your
+        preferences and sessions. If you create one, we store:
+      </p>
+      <ul>
+        <li>
+          <strong>Who you are:</strong> your email address, the display name
+          you choose, and either a hashed password (we never see or keep the
+          password itself) or the id of the Google or Discord account you
+          connect, plus the name and email it shares.
+        </li>
+        <li>
+          <strong>Sign-ins:</strong> the browsers and Kimochi apps signed in to
+          your account, with their device name, platform and when they were
+          last used, so you can sign them out.
+        </li>
+        <li>
+          <strong>Usage counts:</strong> how many scans, read-alouds,
+          translations and explanations you used each month, to apply the
+          allowances. Not the images or text themselves.
+        </li>
+        <li>
+          <strong>Backup, only if you turn it on:</strong> your preferences, and
+          your sessions with their lines, notebook and captured images.
+        </li>
+      </ul>
+      <p>
+        This is kept on Cloudflare: account data in Cloudflare D1, backed-up
+        files in Cloudflare R2. Emails we send (confirming your address,
+        resetting a password) go through an email delivery service. We do not
+        sell or share account data, or use it for advertising.
+      </p>
+      <p>
+        You can delete your backups, or your whole account, from the{" "}
+        <Link to="/account">account page</Link> at any time. Deleting the
+        account removes everything listed above straight away, including
+        every backed-up file, and signs out every linked app.
+      </p>
+
       <h2 id="website">This website</h2>
       <p>
-        This site is a set of static pages. It sets no cookies of its own and
-        runs no analytics or advertising. It remembers your light or dark theme
+        This site is a set of static pages plus the account pages. It runs no
+        analytics or advertising. If you sign in, it sets one cookie that keeps
+        you signed in (for up to 30 days of inactivity), and a short-lived one
+        while you sign in with Google or Discord; otherwise it sets none. It remembers your light or dark theme
         choice in your browser&rsquo;s local storage, which never leaves your
         device.
       </p>
@@ -208,7 +266,7 @@ export function Privacy() {
       <h2 id="children">Children</h2>
       <p>
         Kimochi is not directed at children and collects no personal information
-        from anyone. If you are under the age at which you can consent to online
+        unless you create an account. If you are under the age at which you can consent to online
         services where you live, please use the optional online features with a
         parent or guardian&rsquo;s permission.
       </p>
