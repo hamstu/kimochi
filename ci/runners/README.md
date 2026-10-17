@@ -27,18 +27,50 @@ replacement machine only needs the same labels.
 ## How a runner stays up
 
 - macOS: a launchd agent in `~/Library/LaunchAgents/actions.runner.*.plist`, started at login.
-- Linux: a systemd unit `actions.runner.*.service`, started at boot, running as `hamstu`.
+- Linux: a systemd unit `actions.runner.*.service`, started at boot, running as `hamstu`, with a
+  `restart.conf` drop-in (`Restart=always`) that `setup-runner.sh` adds.
 - Windows: a Windows service `actions.runner.*`, start type Automatic, running as LocalSystem.
   Jobs use the runner's own rustup/cargo in `<runner dir>\_rust` (through the runner's `.env` and
   `.path` files), never a user's, so `tauri dev` on the same machine can't lock files a job needs.
 - Parallels VMs: `prlctl set <vm> --autostart start-host` starts the VM with Parallels. The Omarchy
   VM was left as is.
-- WSL: WSL only runs while something holds it open, so `install-wsl-keepalive.ps1` registers a
-  hidden scheduled task at logon of the Windows user that keeps the distro (and its systemd
-  runner service) alive.
+- WSL: see [WSL runner](#wsl-runner) below.
 
 The runner application updates itself. Check a machine with `./svc.sh status` (macOS/Linux)
 or `Get-Service actions.runner.*` (Windows); logs live in `_diag/` beside the runner.
+
+## WSL runner
+
+WSL only runs while a session holds the distro open, and only in its owner's Windows session.
+`install-wsl-keepalive.ps1` (elevated, on the Windows host; needs OpenSSH Server) sets up:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User hamst -SshPort 2222
+```
+
+- `WSL keepalive (Ubuntu)`: a SYSTEM task at boot (nobody needs to log on) that SSHes to the
+  machine's own sshd as the user and holds `wsl.exe -d Ubuntu -u root -- sleep infinity`.
+- `WSL watchdog (Ubuntu)`: a SYSTEM task at boot and every 5 minutes running
+  `wsl-watchdog.ps1`. It restarts the keepalive when it has exited, probes the distro with
+  `/usr/local/sbin/runner-health` (restarting the runner unit if inactive) and, after two failed
+  probes in a row, resets WSL (`wsl --shutdown`, restart `WSLService`, start the keepalive). It
+  also warns when C: or the distro's drive has under 10 GB free (Application log, source
+  `WslWatchdog`, event 1001). Log: `C:\ProgramData\wsl-keepalive\watchdog.log`.
+- `vmIdleTimeout=-1` and `instanceIdleTimeout=-1` in the user's `.wslconfig`, and the
+  `Restart=always` drop-in for the runner unit inside the distro.
+
+Failure seen on the arcade PC (2026-10-15): the distro's `ext4.vhdx` had grown until C: was
+full; the distro died and every start then failed with `Wsl/Service/CreateInstance/E_FAIL`
+(error code 6, failure step 2) while the WSL utility VM stayed up. Only `wsl --shutdown` plus a
+`WSLService` restart cleared it, which is what the watchdog now does. The distro now lives on the
+G: SSD (`G:\wsl\Ubuntu`, moved with `wsl --manage Ubuntu --move`), away from C:.
+
+The vhdx grows but never shrinks on its own. To reclaim space: inside the distro delete
+regenerable data (`_work/*/src-tauri/target`, `~/.npm/_cacache`, `apt-get clean`) and run
+`sudo fstrim -v /`; then on Windows (elevated) disable both keepalive tasks and the watchdog,
+`wsl --shutdown`, `Stop-Service WSLService`, and in `diskpart`: `select vdisk file=<ext4.vhdx>`,
+`attach vdisk readonly`, `compact vdisk`, `detach vdisk`; re-enable and start the tasks. Sparse
+vhdx mode (`wsl --manage --set-sparse`) needs `--allow-unsafe` and is left off.
 
 ## Adding or re-registering a machine
 

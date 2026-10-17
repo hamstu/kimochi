@@ -144,6 +144,12 @@ if [[ $SERVICE == 1 ]]; then
   else
     log "Installing systemd service (starts at boot) as $(id -un)"
     sudo ./svc.sh install "$(id -un)"
+    # svc.sh's unit never restarts the listener if it dies; make it.
+    unit=$(cat .service)
+    sudo mkdir -p "/etc/systemd/system/$unit.d"
+    printf '[Unit]\nStartLimitIntervalSec=0\n[Service]\nRestart=always\nRestartSec=15\n' |
+      sudo tee "/etc/systemd/system/$unit.d/restart.conf" >/dev/null
+    sudo systemctl daemon-reload
     sudo ./svc.sh start
   fi
 fi
