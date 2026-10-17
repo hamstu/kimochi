@@ -123,6 +123,39 @@ pub fn with_pool<R>(f: impl FnOnce() -> R) -> R {
     objc2::rc::autoreleasepool(|_| f())
 }
 
+/// Turn off WebKit's Intelligent Tracking Prevention for the app's (default) website data store.
+///
+/// ITP deletes all script-writable storage (IndexedDB, localStorage, OPFS) of a site that has had
+/// no user interaction for seven days of use, and it treats every origin of the store as a
+/// website. Hachidori's and 10ten's dictionaries live on `hachidori://localhost` and
+/// `tenten://localhost`, whose documents run in hidden windows nobody ever clicks; they share the
+/// site `localhost` with the bundle's app origin (`tauri://localhost`) and survive there while the
+/// user clicks a Kimochi window, but not under `npm run dev`, whose app origin is
+/// `http://127.0.0.1:<port>`: its store recorded `localhost` with no interaction and ten data
+/// removals, and the imported dictionaries vanished every day or two. Kimochi is not a browser;
+/// none of its origins is a tracker. Must run on the main thread. Answers whether ITP is now off.
+pub fn disable_tracking_prevention() -> Result<bool, String> {
+    use objc2::runtime::{AnyClass, Bool, Sel};
+    with_pool(|| unsafe {
+        let class = AnyClass::get(c"WKWebsiteDataStore").ok_or("WKWebsiteDataStore is not loaded")?;
+        let store: *mut AnyObject = msg_send![class, defaultDataStore];
+        let store = store.as_ref().ok_or("no default WKWebsiteDataStore")?;
+        let setter = Sel::register(c"_setResourceLoadStatisticsEnabled:");
+        let getter = Sel::register(c"_resourceLoadStatisticsEnabled");
+        let can_set: Bool = msg_send![store, respondsToSelector: setter];
+        if !can_set.as_bool() {
+            return Err("this WebKit has no _setResourceLoadStatisticsEnabled:".into());
+        }
+        let _: () = msg_send![store, _setResourceLoadStatisticsEnabled: Bool::NO];
+        let can_get: Bool = msg_send![store, respondsToSelector: getter];
+        if !can_get.as_bool() {
+            return Ok(true);
+        }
+        let enabled: Bool = msg_send![store, _resourceLoadStatisticsEnabled];
+        Ok(!enabled.as_bool())
+    })
+}
+
 pub fn displays() -> Vec<Rect> {
     unsafe {
         let mut ids = [0; 16];

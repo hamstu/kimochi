@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Fixed: dictionaries installed in Hachidori or 10ten could disappear after a few days on macOS, so you had to install them again. macOS was clearing their storage as if it were an unused website; Kimochi now tells it not to. Kimochi also guards the files that list your dictionaries and settings for every dictionary engine (Yomitan included): they are written safely, a damaged one is restored from its previous copy instead of being emptied, and a file that can't be read is never overwritten.
 - Scanned text now stays over your game while you use Kimochi's main window (or mini mode, or Settings), as long as no Kimochi window is on top of the text — for example with Kimochi on another monitor, tucked in a corner, or moved to the side. It still hides when a Kimochi window covers it, and whenever you switch to another app. On Steam Deck and Wayland it hides whenever Kimochi is in front, as before.
 - Read aloud can use ElevenLabs' newer Eleven v4 or v4 Turbo voices (Settings → Log → Voice model).
 - Optional Kimochi accounts. Sign in or create one from Settings → Account: Kimochi opens your browser, you confirm the code it shows, and Kimochi comes back signed in. Nothing else in Kimochi needs an account.

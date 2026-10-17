@@ -81,6 +81,24 @@ mod unsupported;
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub use unsupported::*;
 
+/// Keep the WebViews' website data (the dictionary engines' IndexedDB, OPFS and localStorage)
+/// from being deleted by the WebView itself. Call once at startup, on the main thread, before any
+/// window loads. Answers the evidence record.
+///
+/// macOS: WebKit's tracking prevention deletes the storage of origins nobody interacts with,
+/// which is exactly what the hidden extension windows are (`disable_tracking_prevention`).
+/// Windows (WebView2) and Linux (WebKitGTK, where ITP is off unless enabled) have no such expiry.
+pub fn keep_website_data() -> Value {
+    #[cfg(target_os = "macos")]
+    let outcome: Result<bool, String> = macos::disable_tracking_prevention();
+    #[cfg(not(target_os = "macos"))]
+    let outcome: Result<bool, String> = Ok(true);
+    match outcome {
+        Ok(off) => json!({ "check": "website-data-retention", "trackingPreventionOff": off }),
+        Err(error) => json!({ "check": "website-data-retention", "trackingPreventionOff": false, "error": error }),
+    }
+}
+
 /// One display, in desktop coordinates (top-left origin).
 #[derive(Serialize, Clone, Debug)]
 pub struct DisplayInfo {

@@ -616,11 +616,23 @@ their data is ready: settings work during setup, while overlay/transcript lookup
 `storage_load` / `storage_save` persist `chrome.storage`. Without `extension` they read and
 write Yomitan's `chrome-local.json`, exactly as before; with an engine id they use
 `chrome-local-<id>.json` beside it. The id must match `[a-z0-9-]{1,32}` or the call fails
-with `invalid:`, so it can never name a path. A missing file loads as `{}`.
+with `invalid:`, so it can never name a path (`src-tauri/src/chrome_storage.rs`):
+
+- `storage_save` writes a temp file unique to the write, flushes it to disk and renames it over
+  the file, after keeping the replaced version as `<file>.prev` (a hard link). A crash or a
+  second Kimochi process writing at the same time leaves a whole file, old or new.
+- `storage_load` answers `{}` only when the file and its `.prev` are both missing. A file that
+  is not a JSON object is moved aside to `<file>.corrupt-<epoch ms>` and `.prev` is loaded (and
+  put back in place); a missing file with a `.prev` loads the `.prev`. Either records
+  `{check: 'storage-recovered', file, from, reason: 'corrupt' | 'missing', error, quarantined}`.
+  With no usable `.prev`, or on any other read error, it fails (`storage-load-failed` is
+  recorded) and never answers `{}`: callers must then not write. The extension hub retries three
+  times and then runs the session on its seed without saving (`ext-host-storage-load-failed`,
+  `action: 'read-only'`); Yomitan's start fails rather than writing default options.
 
 `storage_backup` copies an extension engine's `chrome-local-<id>.json` to
 `chrome-local-<id>.json.bak-<epoch ms>` beside it and answers that name (`null` when there
-is no file). `extension` is required and must be an engine id, so Yomitan's file is never
+is no file). Only the newest 10 `.bak-` copies of a file are kept (likewise `.corrupt-`). `extension` is required and must be an engine id, so Yomitan's file is never
 backed up or rewritten through it. The overlay's hub calls it before resetting metadata that
 describes extension data missing from this launch's WebKit store: the file is shared by every
 launch (it is named by the app identifier), the WebKit store is not (a bundle and the bare dev
