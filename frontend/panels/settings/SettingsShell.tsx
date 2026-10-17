@@ -4,6 +4,7 @@
  */
 import type { ReactNode } from 'react'
 import * as Tabs from '@radix-ui/react-tabs'
+import { preloadSettingsPage } from './settingsPages'
 import './settings-shell.css'
 
 export interface SettingsNavItem {
@@ -33,7 +34,13 @@ export function SettingsShell({
     >
       <Tabs.List className="settings-rail" aria-label="Settings categories">
         {items.map((item) => (
-          <Tabs.Trigger key={item.value} value={item.value} className="k-row settings-rail-row">
+          <Tabs.Trigger
+            key={item.value}
+            value={item.value}
+            className="k-row settings-rail-row"
+            onPointerEnter={() => preloadSettingsPage(item.value)}
+            onFocus={() => preloadSettingsPage(item.value)}
+          >
             {item.icon}
             <span className="k-row-label">{item.label}</span>
           </Tabs.Trigger>

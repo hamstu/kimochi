@@ -34,6 +34,31 @@
   display: none;
 }
 
+/* A page fades in as it mounts: on first load and on every switch. Only opacity and a short rise,
+   so the scroller's height and the nav never move. */
+.settings-page-scroll > .k-settings-page {
+  animation: settings-page-in var(--k-base) var(--k-ease-out) both;
+}
+@keyframes settings-page-in {
+  from { opacity: 0; transform: translateY(0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-page-scroll > .k-settings-page { animation: none; }
+}
+
+/* While a page's chunk loads: a spinner where the page title will be, after a short delay. */
+.settings-page-loading {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--k-space-8);
+}
+.settings-page-loading > .k-spinner {
+  animation:
+    k-fade-in var(--k-base) var(--k-ease-out) both,
+    k-spin 700ms linear infinite;
+}
+
 /* A permission's state in place of its control: a dot and a word. */
 .settings-status {
   display: inline-flex;

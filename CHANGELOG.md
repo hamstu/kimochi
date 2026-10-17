@@ -17,6 +17,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Back up your preferences and sessions (lines, notebook and images) to your account, automatically or with Back up now, and restore them on this or another computer. Your DeepL key and other secrets are never uploaded.
 
 - Load settings pages, diagnostics and the Notebook on demand, and avoid duplicate settings reads during startup.
+- Settings in the main window: the page list stays in place while you scroll a page again, and pages switch with a quick fade instead of a "Loading settings…" line.
 - Stop refreshing source screenshots while the main window is hidden, reducing background capture work.
 - Prepare local MeikiOCR and Manga OCR scans directly from captured pixels instead of decoding them from PNG, and reuse cloud OCR connections between scans.
 - Windows and Linux: keep the selected MeikiOCR engine warm after its startup check so the first scan does not load the models twice.

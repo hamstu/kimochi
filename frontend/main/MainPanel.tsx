@@ -134,6 +134,13 @@ export default function MainPanel(): JSX.Element {
     })
     return () => cancelAnimationFrame(frame)
   }, [])
+  // Another Settings page starts at its top, as each page does in the Settings window.
+  const shownTab = useRef(settingsTab)
+  useLayoutEffect(() => {
+    if (shownTab.current === settingsTab) return
+    shownTab.current = settingsTab
+    if (settingsScroll.current) settingsScroll.current.scrollTop = 0
+  }, [settingsTab])
 
   // Other windows (the tray, a pop-up) ask for Settings by event; the page is already stored.
   useEffect(() => {

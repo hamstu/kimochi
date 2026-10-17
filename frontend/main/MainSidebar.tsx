@@ -22,6 +22,7 @@ import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import { DictionaryReadiness } from '../components/DictionaryReadiness'
 import { SETTINGS_NAV } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
+import { preloadSettingsPage } from '../panels/settings/settingsPages'
 import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
@@ -235,6 +236,8 @@ export function MainSidebar({
                 icon={item.icon}
                 selected={item.value === settingsTab}
                 onClick={() => onSettingsTab(item.value)}
+                onPointerEnter={() => preloadSettingsPage(item.value)}
+                onFocus={() => preloadSettingsPage(item.value)}
               >
                 {item.label}
               </Row>
