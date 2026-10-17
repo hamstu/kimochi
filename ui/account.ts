@@ -233,12 +233,23 @@ export function accountName(user: AccountUser | null | undefined): string {
   return user?.displayName?.trim() || user?.email || 'Kimochi account'
 }
 
-/** The sidebar's account bar: the name over the email, or the email alone when there is no name. */
+/** An account in the switcher's menu and on the Account page: the name over the email, or the email alone. */
 export function accountLines(user: AccountUser | null | undefined): { primary: string; secondary: string | null } {
   const name = user?.displayName?.trim() || null
   const email = user?.email?.trim() || null
   if (name) return { primary: name, secondary: email && email !== name ? email : null }
   return { primary: email ?? 'Kimochi account', secondary: null }
+}
+
+/**
+ * The sidebar's account bar, one line: the display name, or the part of the email before "@"
+ * when there is no name.
+ */
+export function accountBarName(user: AccountUser | null | undefined): string {
+  const name = user?.displayName?.trim()
+  if (name) return name
+  const email = user?.email?.trim() || ''
+  return email.split('@')[0]?.trim() || email || 'Kimochi account'
 }
 
 /** The letter in the avatar circle when the account has no picture. */

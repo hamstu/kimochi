@@ -1,8 +1,9 @@
 /**
  * The main window's sidebar: where text comes from (Source, with its live preview and controls),
  * how OCR reads it (OCR model, for the OCR sources) and which dictionary looks words up
- * (Dictionary), each labelled, with Settings pinned to the bottom (under the update notice and,
- * when signed in, the Kimochi account). OCR model and Dictionary carry a
+ * (Dictionary), each labelled, with Settings pinned to the bottom under the update notice (while
+ * an account is in use, the account switcher takes its place, with Settings in its menu; mini mode
+ * keeps Settings). OCR model and Dictionary carry a
  * "Manage" link on their label row, to their Settings pages. The session picker is in the Log's
  * footer, beside its ⋯ menu. The views (Log, Notebook) are tabs
  * across the top of the content. In the Settings view the same column lists the settings pages,
@@ -29,6 +30,8 @@ import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
 import { ModelStatusBadge } from './ModelStatusBadge'
 import { UpdateNotice } from './UpdateNotice'
+import { activeAccount } from '@ui/account'
+import { useAccount } from '../bridge/account'
 import { AccountBar } from './AccountBar'
 
 export type MainView = 'log' | 'notebook' | 'settings'
@@ -212,6 +215,8 @@ export function MainSidebar({
   const [live, setLive] = useState<number | null>(null)
   const style = mini ? undefined : { width: live ?? width }
   const readsScreen = useReadsScreen()
+  // While an account is in use, its switcher takes Settings' place in the foot.
+  const signedIn = activeAccount(useAccount()) !== null
   const handle = (
     <ResizeHandle
       width={live ?? width}
@@ -271,11 +276,14 @@ export function MainSidebar({
         <DictionaryPicker onOpenSettings={() => onSettingsTab('dictionary')} />
       </div>
       <UpdateNotice />
-      {!mini && <AccountBar onOpen={() => onSettingsTab('account')} />}
       <div className="sb-footer">
-        <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
-          Settings
-        </Row>
+        {!mini && signedIn ? (
+          <AccountBar onOpen={() => onSettingsTab('account')} onSettings={() => onSettingsTab(settingsTab)} />
+        ) : (
+          <Row icon={<Settings />} onClick={() => onSettingsTab(settingsTab)}>
+            Settings
+          </Row>
+        )}
       </div>
       {!mini && handle}
     </aside>

@@ -15,6 +15,7 @@ const {
   normalizeStatus,
   activeAccount,
   accountLines,
+  accountBarName,
   accountInitial
 } = await load('account.ts')
 const { lastSyncLine, syncStateLine, normalizeSyncStatus, conflictTitle, logLine, logText, appendLog } =
@@ -156,7 +157,16 @@ test('the account token never reaches a webview', async () => {
   assert.doesNotMatch(status, /"token"|\.token\b/)
 })
 
-test('the sidebar account bar shows the name over the email, or the email alone', () => {
+test('the sidebar account bar shows the name, or the email before "@"', () => {
+  const user = { id: 'u', email: 'reader@example.com', displayName: 'Hamish', plan: 'free', status: 'active' }
+  assert.equal(accountBarName(user), 'Hamish')
+  assert.equal(accountBarName({ ...user, displayName: '  ' }), 'reader')
+  assert.equal(accountBarName({ ...user, displayName: null, email: '@example.com' }), '@example.com')
+  assert.equal(accountBarName({ ...user, displayName: null, email: null }), 'Kimochi account')
+  assert.equal(accountBarName(null), 'Kimochi account')
+})
+
+test('the account menu shows the name over the email, or the email alone', () => {
   const user = { id: 'u', email: 'reader@example.com', displayName: 'Hamish', plan: 'free', status: 'active' }
   assert.deepEqual(accountLines(user), { primary: 'Hamish', secondary: 'reader@example.com' })
   assert.deepEqual(accountLines({ ...user, displayName: '  ' }), { primary: 'reader@example.com', secondary: null })

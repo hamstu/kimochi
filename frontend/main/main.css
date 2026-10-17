@@ -179,40 +179,30 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   flex: 1;
   padding-bottom: calc(var(--k-space-1-5) + var(--main-foot-pad));
 }
-/* The Kimochi account, between the update notice and Settings: avatar, name and email. The
-   avatar is centred on the rows' icon column, so the name lines up with "Settings". */
-.sb-account {
-  flex: none;
-  border-top: 1px solid var(--k-line);
+/* The Kimochi account switcher, in Settings' place in the foot while an account is in use: one
+   line, avatar and name, the foot's height exactly. The avatar is a little larger than an icon
+   and centred on the rows' icon column; the name keeps a little more room from it. */
+.sb-footer > .sb-account-row {
+  min-height: 0;
 }
-.sb-account-row {
-  padding-block: var(--k-space-1-5);
-}
-.sb-account-row > .k-row-label {
-  display: flex;
-  flex-direction: column;
-}
-.sb-account-name,
-.sb-account-email {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sb-account-name {
-  color: var(--k-text);
-  font-weight: var(--k-weight-medium);
-}
-.sb-account-email {
-  color: var(--k-text-3);
+.sb-account-avatar.k-account-avatar {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-inline: calc((var(--k-icon) - 1.25rem) / 2);
   font-size: var(--k-text-xs);
-  line-height: var(--k-leading-xs);
-}
-.sb-account-avatar {
-  margin-inline: calc(var(--k-space-1) * -1);
 }
 .sb-account-row > .k-row-label {
   min-width: 0;
   flex: 1;
+  padding-inline-start: var(--k-space-1);
+}
+.sb-account-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--k-text);
+  font-weight: var(--k-weight-medium);
 }
 /* The switcher's affordance, and Sync's attention dot beside it. */
 .sb-account-trailing {

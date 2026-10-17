@@ -5,12 +5,16 @@
  *
  *   ?account=signedout|linking|signedin|full|suspended|multi|local   the starting state (default:
  *               signedout). `multi` has a second account (on the local server) not in use;
- *               `local` has an account on this computer but uses the Local profile.
+ *               `local` has an account on this computer but uses the Local profile. Signed in
+ *               (`signedin`, `full`, `suspended`, `multi`), the foot of the sidebar is the account
+ *               switcher (avatar and name, Settings in its menu); otherwise it is the Settings row.
+ *               Add `&update=available` to see the update notice above it.
  *   ?server=cloud|local|forced   the server new sign-ins go to (development builds' switch in
  *               Settings → Account; `forced` is local pinned by KIMOCHI_SERVER). Default: cloud.
  *   ?sync=idle|offline|error|conflicts   Sync's state while signed in (default: idle).
  *   ?avatar=1   the account has a picture; without it the switcher shows the name's first letter.
- *   ?name=0     the account has no display name (the email stands in).
+ *   ?name=0     the account has no display name (the switcher shows the email before "@").
+ *   ?name=long  a display name too long for the sidebar (it ends in an ellipsis).
  *
  * `full` is signed in with this month's scans used up and sync storage nearly full; `suspended` is
  * a suspended account. Signing in from `signedout` shows the code, and the "browser" approves it
@@ -58,7 +62,8 @@ const USER: AccountUser = {
   id: 'usr_preview',
   email: 'reader@example.com',
   emailVerified: true,
-  displayName: params.get('name') === '0' ? null : 'Hamish',
+  displayName:
+    params.get('name') === '0' ? null : params.get('name') === 'long' ? 'Hamish Macpherson-Featherstonehaugh' : 'Hamish',
   avatarUrl: params.get('avatar') === '1' ? PREVIEW_AVATAR : null,
   plan: 'free',
   status: seed === 'suspended' ? 'suspended' : 'active'
