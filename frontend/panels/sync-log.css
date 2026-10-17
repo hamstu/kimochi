@@ -1,0 +1,49 @@
+/* The Sync log window (SyncLogPanel.tsx): a bar of actions over a well of monospaced lines. */
+.sync-log {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--k-bg);
+}
+.sync-log-status {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sync-log-count {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  white-space: nowrap;
+}
+.sync-log-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--k-sunken);
+}
+.sync-log-text {
+  margin: 0;
+  padding: var(--k-space-2) var(--k-space-3);
+  color: var(--k-text);
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+}
+.sync-log-line[data-kind='error'] {
+  color: var(--k-danger-text);
+}
+.sync-log-line[data-kind='conflict'] {
+  color: var(--k-warn-text);
+}
+.sync-log-line[data-kind='net'],
+.sync-log-line[data-kind='profile'] {
+  color: var(--k-text-2);
+}

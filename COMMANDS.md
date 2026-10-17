@@ -157,6 +157,7 @@ where `native` reports `{level, opaque, ignores_mouse}`.
 | `controller` | `app/panel.html` | Fixed width, sizes to content, pinned by default |
 | `log` | `app/panel.html` | Pinned by default |
 | `settings`, `capture`, `debug`, `stream` | `app/panel.html` | Label-parameterised React shell |
+| `sync-log` | `app/panel.html` | The sync log (see Sync); centred |
 | `source-picker` | `app/source-picker.html` | The only source UX |
 | `welcome` | `app/welcome.html` | Onboarding |
 | `tray-popover` | `app/tray-popover.html` | Fixed size, dismisses on blur |
@@ -739,52 +740,80 @@ like the Log; nothing native checks a sender's origin.
 ## Kimochi account
 
 Optional accounts on Kimochi's server (contract: `kimochi-server/API.md`), in
-`src-tauri/src/account.rs`. The token (`kmc_…`) lives only in Rust, in the app data folder
-(beside `settings.json`, mode 600 on Unix), and is sent only as `Authorization: Bearer` to
-`settings::server_base` (so `serverSettings.mode: 'local'` uses `http://localhost:3000`). No
-command or event carries it. Each server base has its own sign-in, in its own file:
-`account.json` for Kimochi cloud (the file earlier versions wrote, so an existing sign-in stays
-cloud's) and `account-local.json` for the local server. Status, linking, refresh, sign-out, backup,
-restore and the automatic backup all use the current base's file, so one server's token is never
-sent to the other.
+`src-tauri/src/account.rs` (accounts, switching) and `src-tauri/src/profile.rs` (profiles).
+
+**Accounts.** This computer can be signed in to several accounts at once (on Kimochi cloud and,
+in a debug build, the local server); one is active. `accounts.json` in the app data folder lists
+them (key `<cloud|local>-<user id>`, server mode, user id, cached user and usage, never a token)
+and which is active (`null`: none). Each token (`kmc_…`) lives alone in `accounts/<key>.json`
+(mode 600 on Unix) and is sent only as `Authorization: Bearer` to its own account's server. No
+command or event carries it. The server in use (`serverSettings.mode`) follows the active
+account; `account::token()` answers only for the active account on that server. The single
+`account.json` / `account-local.json` of earlier versions are imported once: the account that was
+in use becomes active, with a copy of the Local profile as its data.
+
+**Profiles.** Every account has its own profile folder, `<AppLocalData>/profiles/<key>/`, holding
+`sessions.json`, `sessions/`, `presets.json`, `stats.json`, `profile-settings.json` and its
+`sync/` state; the Local profile (no account) is `<AppLocalData>` itself, as before. Settings are
+one live `settings.json`: machine keys (`profile::MACHINE_KEYS`: window places, capture source,
+scan history, server choice, OCR engine, dictionary engine, …) and every secret (`is_private`)
+belong to the computer and are shared by all profiles; everything else is the profile's and is
+swapped on a switch (the profile not in use keeps it in its `profile-settings.json`).
+`texthookerSourceSessions` follows the profile but is not synced. A switch (`account_switch`):
+holds the Log so its pending writes reach the old profile, saves the current preferences to the
+old profile, prepares the new one, writes its preferences into the live settings (emitting
+`settings:changed` per key), sets `serverSettings.mode`, and reloads the windows that show
+profile data (`log`, `settings`, `diagnostics`, `tray-popover`, `sync-log`). An account's profile is
+made the first time it is used here: a **copy** of the Local profile when the account has nothing
+synced (`GET /api/v1/sync/status` `records: 0`), otherwise filled from the server before the
+windows reload (or empty when the server cannot be reached; it fills in once online). Each case
+is written to the sync log. Nothing is merged across accounts.
+
+The webviews address profile files as `<root>/<path>` under `BaseDirectory.AppLocalData`, with
+`root` from `profile_current` (`frontend/texthooker/core/profile.ts`); paths stored inside the
+files (a notebook image's `path`) stay profile-relative.
 
 In a debug build, `KIMOCHI_SERVER=local|cloud` in the environment overrides
-`serverSettings.mode` (`npm run dev:local` sets `local`); release builds ignore it.
+`serverSettings.mode` (`npm run dev:local` sets `local`); release builds ignore it, and accounts
+on the other server cannot be switched to while it is set.
 
 | Command | Signature |
 | --- | --- |
 | `account_status` | `() -> AccountStatus` |
-| `account_link_start` | `() -> {code, verifyUrl, expiresIn}` — `POST /api/v1/link/start` with the computer's name and OS, opens `verifyUrl` in the browser, and polls `/api/v1/link/poll` every `interval` s on a thread until approved, denied, expired or cancelled |
+| `account_link_start` | `() -> {code, verifyUrl, expiresIn}` — adds an account: `POST /api/v1/link/start` on the sign-in server (`linkServer`) with the computer's name and OS, opens `verifyUrl` in the browser, and polls `/api/v1/link/poll` every `interval` s on a thread until approved (then the account is saved and switched to), denied, expired or cancelled |
 | `account_link_open` | `() -> ()` — opens the pending `verifyUrl` again |
 | `account_link_cancel` | `() -> AccountStatus` |
-| `account_sign_out` | `() -> AccountStatus` — deletes `account.json` first, then `POST /api/v1/sign-out` (best effort, so it works offline) |
-| `account_refresh` | `() -> AccountStatus` — `GET /api/v1/me` and `/api/v1/usage` |
-| `account_open_web` | `() -> ()` — opens `<server base>/account` |
-| `account_backup_now` | `() -> AccountStatus` — a backup now, of what `accountBackup` enables |
-| `account_restore` | `({prefs, sessions}) -> ()` — downloads the backup and restarts the app |
-| `account_set_server` | `({mode: 'cloud' \| 'local'}) -> AccountStatus` — **debug builds only** (an `invalid:` error in release, and while `KIMOCHI_SERVER` pins the server): writes `serverSettings.mode`, emits `settings:changed`, cancels a sign-in in progress, then emits `account-changed` (the new server's account) and `platform-capabilities` (its `cloudAccess`). Applies at once, no restart |
+| `account_switch` | `({key: string \| null}) -> AccountStatus` — makes that account's profile (`null`: the Local profile) the one in use; see Profiles. Refused (`invalid:`) for an account on the server `KIMOCHI_SERVER` rules out |
+| `account_sign_out` | `({key?}) -> AccountStatus` — default the active account: switches to the Local profile if it was active, deletes its token file, then `POST /api/v1/sign-out` (best effort, so it works offline). The account stays listed (`signedIn: false`) with its profile |
+| `account_remove` | `({key}) -> AccountStatus` — signs out, deletes `profiles/<key>/` and forgets the account (what has synced stays on the server) |
+| `account_refresh` | `() -> AccountStatus` — `GET /api/v1/me` and `/api/v1/usage` for the active account |
+| `account_open_web` | `() -> ()` — opens `<active account's server>/account` |
+| `account_set_server` | `({mode: 'cloud' \| 'local'}) -> AccountStatus` — **debug builds only** (an `invalid:` error in release, and while `KIMOCHI_SERVER` pins the server): the server new sign-ins go to (`accountLinkServer`, a machine setting); with no account active it is also `serverSettings.mode` (emitting `settings:changed`). Cancels a sign-in in progress, then emits `account-changed` and `platform-capabilities` |
+| `profile_current` | `() -> {key: string \| null, root: string}` — the profile in use; `root` is `""` for Local or `profiles/<key>` |
 | `cloud_translate` | `({text}) -> string` — `POST /api/v1/translate` (JA → EN-US), account only |
 
 ```ts
 AccountStatus = {
-  signedIn,
-  user?, usage?,                         // the cached /me user and /usage answer
+  signedIn,                               // the active account has a token here
+  user?, usage?,                          // the active account's cached /me user and /usage answer
   linking?: {code, verifyUrl, expiresAt}, // a sign-in waiting for the browser (expiresAt: ms)
-  server?: {mode, url, forced},           // the server this account is for; forced: KIMOCHI_SERVER (debug)
-  backup: {running, lastBackupAt?, lastError?}
+  server?: {mode, url, forced},           // the server in use; forced: KIMOCHI_SERVER (debug)
+  linkServer?: {mode, url, forced},       // where "Add account" signs in
+  accounts: [{key, user, server, signedIn, active, available}], // most recently used first
+  profile: {key, root, needsSignIn},      // needsSignIn: the active account's token was revoked
+  switching: boolean
 }
 ```
 
-Events: `account-changed` (an `AccountStatus`, on every change), `account-link` `{status, code,
-message?}` (`pending` | `approved` | `denied` | `expired` | `cancelled` | `error`) and
-`account-backup` `{phase, done, total, error?}` (`scanning` | `uploading` | `downloading` |
-`restarting` | `done` | `error`). On approval the main window comes forward on Settings → Account
-(`settingsActiveTab: 'account'` plus `main:show-settings`). A `401` to the token anywhere signs
-out locally. After a metered call the usage is refreshed in the background.
+Events: `account-changed` (an `AccountStatus`, on every change) and `account-link` `{status,
+code, message?}` (`pending` | `approved` | `denied` | `expired` | `cancelled` | `error`). On
+approval the main window comes forward on Settings → Account (`settingsActiveTab: 'account'`
+plus `main:show-settings`). A `401` to the active account's token forgets the token (the account
+stays active with `needsSignIn`). After a metered call the usage is refreshed in the background.
 
 **Errors** from the metered endpoints are worded in `cloud::describe_failure`: `402
 quota_exceeded` ("You've used this month's 500 Kimochi cloud scans. They reset on Nov 1.";
-`storage` names the backup limit), `403` (suspended: the server's message), `503
+`storage` names the sync storage limit), `403` (suspended: the server's message), `503
 not_configured`, `429`, and anything else with its status.
 
 **Explain via Kimochi cloud.** `explain_run` with `provider: 'kimochi'` POSTs `{prompt}` to
@@ -796,30 +825,87 @@ requestId and the same cancel and supersede rules as the CLI providers.
 `'deepl'` | `'kimochi'`) picks `cloud_translate` or `deepl_translate`; `auto` is Kimochi cloud
 while signed in, otherwise the DeepL key.
 
-**Backup** (opt in: `accountBackup.{prefs,sessions}`, both `false`). Preferences are one
-`PUT /api/v1/prefs` document `{version: 1, settings, presets, stats}`: `settings.json` without
-secrets (any key named like an API key, token, secret or password, at any depth, e.g.
-`deeplApiKey`) and without per-machine keys (window places, the capture source and portal grant,
-the scan history, the server mode), then `presets.json` (secrets stripped) and `stats.json`.
-Sessions are `sessions.json` and each session's `lines.json`, `notebook.json` and `images/*`, by
-the same relative paths, uploaded with `PUT /api/v1/backup/files/<path>` only when their SHA-256
-differs from `GET /api/v1/backup`; `sessions.json` goes last, joined with the backup's own list
-so a second computer never drops the first one's sessions. Files over 50 MB are skipped. The
-automatic backup checks once a minute and runs once the data folder has changed since the last
-backup and then stayed the same for about two minutes (or after fifteen minutes of changes).
-
-**Restore** downloads into `<AppLocalData>/restore-pending/` (verifying each file's SHA-256)
-and restarts; at the next launch, before `settings.json` is loaded or any window exists,
-`apply_pending_restore` puts it in place: the backup's settings with this machine's secrets and
-per-machine keys kept, `presets.json`/`stats.json` replaced, and `sessions.json` merged by
-session id (a session only here stays; one only in the backup is added; one in both keeps
-whichever has the later `updatedAt`, and only then are its files replaced).
-
 **Deep link.** `tauri-plugin-deep-link` registers `kimochi://` (`plugins.deep-link` in
 `tauri.conf.json`; installed by the bundles, registered at runtime by an AppImage or a debug
 build on Windows and Linux). On Windows and Linux the single-instance plugin (feature
 `deep-link`) forwards a second launch's URL to the running copy. `kimochi://account` brings the
 main window forward on Settings → Account; any other `kimochi://` URL just brings it forward.
+
+## Sync
+
+The active account's profile kept the same on every computer signed in to it
+(`src-tauri/src/sync.rs` runs it, `sync_core.rs` is the logic, `sync_log.rs` the log; server
+contract: `kimochi-server/API.md` → Sync). Signed in means syncing; there is no switch. The Local
+profile never syncs.
+
+**When.** A cycle runs about 4 s after the last local change (at most 30 s after the first): the
+Log calls `sync_local_changed` after it writes its files, and every settings write pokes it.
+Also at start, when the main window gains focus (`reason: 'focus'`, at most every 15 s), on
+`sync_now`, and every 60 s. Each cycle starts with `GET /api/v1/sync/status`; offline, it still
+notes what changed (with the time) and logs going offline once, and `Back online` when it is.
+
+**Records** (`collection`, `id` → JSON): `prefs` (one per settings leaf of the profile's synced
+keys, path segments joined by `/`, JSON Pointer escaping), `sessions` (`<sid>`), `lines`
+(`<sid>/<uid>`), `notebook` (`<sid>/<entryId>`, each image as `sha256` of a blob), `presets`
+(name, secrets stripped), `stats` (`<deviceId>`: this computer's totals, pushed, never merged) and
+`conflicts`. A line's `uid` is random for new lines; lines written before uids get one derived
+from session id, numeric id, time and text (FNV-1a 64, `l` + 16 hex digits, the same in Rust
+and `store.ts`), written to the file the next time it is saved. A line deleted on purpose
+(Delete, Clear, a fuller OCR reading replacing fragments) is remembered in `lines.json`'s
+`deleted: [{uid, at}]` (the last 5000); a line the line limit trims is not a delete.
+
+**State** (`<profile>/sync/state.json`): the server cursor and, per record, the `rev` and content
+hash last agreed with the server, plus the clock stamp of each local change not yet accepted.
+`<profile>/sync/conflicts.json` holds the conflict copies; `<profile>/sync/trash/` holds session
+folders deleted by another computer for 30 days. The device id is `<AppData>/device-id`.
+
+**Merging.** Only one side changed → that side. Both changed → the newer hybrid-logical-clock
+stamp wins (ties by device id) and the other version is kept as a `conflicts` record, synced to
+every computer, restorable or dismissible (`sync_conflict_resolve`). Lines merge field by field
+(only a different `text` is a conflict). An edit beats a concurrent delete. The first sync of a
+record (no shadow): preferences and presets take the account's version; sessions and notebook
+entries the one with the later `updatedAt`. Deleted sessions' lines and entries are deleted too.
+Settings that are machine keys or secrets are never sent and are ignored if received.
+
+**The Log's files.** The `log` window owns the profile's files while it runs. To merge into them
+Sync emits `sync:hold` `{id}` to it; the Log (`host.ts`) finishes its queued work, writes what is
+pending, pauses its writes and answers `sync_hold_ready({id})` (20 s timeout: the cycle is
+retried later). Sync writes the files (each atomically), then emits `sync:release` `{id, changed:
+{sessions, lines: [sid], notebook: [sid], presets}}`, and the Log reloads what changed (the open
+Log updates in place) and resumes. Preferences are applied to the live settings directly
+(`settings:changed` per top-level key, with the same side effects as `settings_set`).
+
+| Command | Signature |
+| --- | --- |
+| `sync_status` | `() -> SyncStatus` |
+| `sync_now` | `() -> SyncStatus` — a cycle now |
+| `sync_local_changed` | `({reason?: 'write' \| 'focus'}) -> ()` |
+| `sync_hold_ready` | `({id}) -> ()` — the Log holds its writes for `sync:hold` `id` |
+| `sync_conflict_resolve` | `({id, action: 'restore' \| 'dismiss'}) -> SyncStatus` — restore puts the kept version back as a new change (it then syncs and wins), dismiss drops it; both remove the conflict everywhere |
+| `sync_export` | `({path}) -> number` — saves `GET /api/v1/sync/export` (a ZIP of every synced record as JSON plus the image blobs; see API.md) to `path`; the byte count |
+| `sync_log` | `() -> [{t, kind, text}]` — the sync log, oldest first |
+| `sync_log_clear` | `() -> ()` — emits `sync-log-cleared` |
+
+```ts
+SyncStatus = {
+  state: 'off' | 'idle' | 'syncing' | 'offline' | 'error' | 'signed-out',
+  account: string | null,                 // the active profile key
+  lastSyncAt: number | null, pending: number, origin: 'copied-local' | 'server' | 'empty' | null,
+  lastError: string | null, used: number | null, limit: number | null,  // sync storage, bytes
+  conflicts: [{id, collection, recordId, data, hlc, deviceId, winnerHlc, detectedAt}],
+  deviceId: string
+}
+```
+
+Events: `sync-status` (a `SyncStatus`), `sync-log` (one `{t, kind, text}` entry as it is added;
+`kind`: `info`, `pull`, `push`, `merge`, `conflict`, `error`, `net`, `profile`), `sync-log-cleared`,
+and to the `log` window `sync:hold` / `sync:release`.
+
+**The sync log** keeps the last 2000 entries in memory and in `<AppLocalData>/sync-log.jsonl`
+(compacted once it passes 2500 lines), each entry's text cut to 600 characters. It never contains a
+token. The `sync-log` panel (`app/panel.html`, 760 × 520, centred; opened with `panel('sync-log',
+'show')` from Settings → Account → Sync) shows it as monospaced lines with Copy all, Clear and
+Sync now.
 
 ## Activity feed
 

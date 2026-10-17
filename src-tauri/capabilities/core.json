@@ -5,6 +5,7 @@
     "log",
     "settings",
     "diagnostics",
+    "sync-log",
     "welcome",
     "tray-popover",
     "fixture",

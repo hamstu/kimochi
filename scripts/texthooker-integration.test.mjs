@@ -37,7 +37,7 @@ function bundle() {
   }).then((built) => built.outputFiles[0].text);
   return bundled;
 }
-async function harness(initial = {}, persistedFiles = new Map()) {
+async function harness(initial = {}, persistedFiles = new Map(), options = {}) {
   const settings = {
     yomitanSettings: { popupType: "builtin", customApiUrl: "" },
     ...initial,
@@ -72,10 +72,18 @@ async function harness(initial = {}, persistedFiles = new Map()) {
       return () => listeners.get("settings:changed")?.delete(wrapped);
     },
     invoked: [],
+    holds: [],
     async invoke(command, args) {
       env.invoked.push(command);
       if (command === "hide_popover") return;
       if (command === "history_merge_reset") return;
+      if (command === "profile_current")
+        return { key: null, root: options.profileRoot ?? "" };
+      if (command === "sync_local_changed") return;
+      if (command === "sync_hold_ready") {
+        env.holds.push(args.id);
+        return;
+      }
       if (command === "reader_settings_patch")
         return env.setSetting("superTexthooker", {
           ...settings.superTexthooker,
@@ -456,4 +464,65 @@ test("game sidecar context reuses its reader session across portal IDs and keeps
     h.snapshot().lines.map((line) => line.text),
     ["猫", "鳥"],
   );
+});
+
+const waitFor = async (check) => {
+  for (let i = 0; i < 200 && !check(); i++)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(check(), "timed out");
+};
+const linesFile = (h, sid) => JSON.parse(h.files.get(`sessions/${sid}/lines.json`));
+
+test("an account's profile keeps the Log in its own folder", async () => {
+  const h = await harness({}, new Map(), { profileRoot: "profiles/cloud-u1" });
+  await h.setSetting("scannedTextHistory", [entry("1", "Game A")]);
+  await h.drain();
+  const sid = h.snapshot().sessions.activeId;
+  assert.ok(h.files.has("profiles/cloud-u1/sessions.json"));
+  assert.ok(h.files.has(`profiles/cloud-u1/sessions/${sid}/lines.json`));
+  assert.ok(!h.files.has("sessions.json"), "the Local profile is untouched");
+});
+
+test("lines carry uids for Sync, old lines get the same uid Rust derives, and deletes are remembered", async () => {
+  const files = new Map([
+    [
+      "sessions.json",
+      JSON.stringify({ version: 1, activeId: "s1", sessions: [{ id: "s1", name: "Old", description: "", createdAt: 1, updatedAt: 1 }] }),
+    ],
+    [
+      "sessions/s1/lines.json",
+      JSON.stringify({ version: 1, lines: [{ id: 7, text: "猫", source: "ocr", ts: 1700000000000 }] }),
+    ],
+  ]);
+  const h = await harness({ superTexthooker: { inputSource: "ocr" } }, files);
+  // The same vector as sync_core's `lines_without_uids_get_the_same_uid_everywhere`.
+  assert.equal(h.snapshot().lines[0].uid, "lac08c75e3214c5be");
+  await h.setSetting("scannedTextHistory", [{ id: "n1", text: "犬", timestamp: 2 }]);
+  await h.drain();
+  const fresh = h.snapshot().lines.find((l) => l.text === "犬");
+  assert.match(fresh.uid, /^[0-9a-f-]{36}$/);
+  await h.call("store", "deleteLine", [7]);
+  const file = linesFile(h, "s1");
+  assert.deepEqual(file.deleted.map((d) => d.uid), ["lac08c75e3214c5be"]);
+  assert.equal(file.lines[0].uid, fresh.uid, "uids are written to the file");
+});
+
+test("Sync's hold pauses the Log's writes, and its release reloads the merged lines", async () => {
+  const h = await harness();
+  await h.setSetting("scannedTextHistory", [entry("1", "Game A")]);
+  await h.drain();
+  const sid = h.snapshot().sessions.activeId;
+  await h.emit("sync:hold", { id: 1 });
+  await waitFor(() => h.holds.includes(1));
+  // Meanwhile a Log operation waits its turn rather than writing over the merge.
+  const pending = h.call("sessions", "renameSession", [sid, "Renamed"]);
+  const merged = linesFile(h, sid);
+  merged.lines.push({ id: 2, uid: "from-other-computer", text: "二", source: "ocr", ts: 9e12 });
+  h.files.set(`sessions/${sid}/lines.json`, JSON.stringify(merged));
+  await h.emit("sync:release", { id: 1, changed: { sessions: false, lines: [sid], notebook: [], presets: false } });
+  await pending;
+  await h.drain();
+  assert.deepEqual(h.snapshot().lines.map((l) => l.text), ["猫が好きです", "二"]);
+  assert.equal(h.snapshot().sessions.sessions.find((s) => s.id === sid).name, "Renamed");
+  assert.equal(linesFile(h, sid).lines.length, 2, "the merged file is kept");
 });

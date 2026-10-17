@@ -1,4 +1,5 @@
 import { writeTextFile } from "./files";
+import { inProfile } from "./profile";
 import {
   BaseDirectory,
   exists,
@@ -63,8 +64,8 @@ export function getPresetsState(): PresetsFile {
 
 async function ensureDir() {
   try {
-    if (!(await exists("", { baseDir: DIR }))) {
-      await mkdir("", { baseDir: DIR, recursive: true });
+    if (!(await exists(inProfile(""), { baseDir: DIR }))) {
+      await mkdir(inProfile(""), { baseDir: DIR, recursive: true });
     }
   } catch {
     /* best-effort */
@@ -74,7 +75,7 @@ async function ensureDir() {
 async function persist() {
   await ensureDir();
   try {
-    await writeTextFile(FILE, JSON.stringify(state, null, 2), { baseDir: DIR });
+    await writeTextFile(inProfile(FILE), JSON.stringify(state, null, 2), { baseDir: DIR });
   } catch (err) {
     console.error("presets persist failed", err);
     throw err;
@@ -114,9 +115,9 @@ function sanitize(raw: unknown): PresetsFile {
 export async function loadPresets(): Promise<PresetsFile> {
   await ensureDir();
   try {
-    const present = await exists(FILE, { baseDir: DIR });
+    const present = await exists(inProfile(FILE), { baseDir: DIR });
     if (present) {
-      const raw = await readTextFile(FILE, { baseDir: DIR });
+      const raw = await readTextFile(inProfile(FILE), { baseDir: DIR });
       state = sanitize(JSON.parse(raw));
     } else {
       // Seed the file with the user's current settings + replacements as

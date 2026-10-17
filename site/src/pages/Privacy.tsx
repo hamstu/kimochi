@@ -23,8 +23,8 @@ export function Privacy() {
         </li>
         <li>
           Your captures, log, notebook, statistics and settings are stored on
-          your computer. They are not uploaded anywhere unless you sign in and
-          turn on backup.
+          your computer. They are not uploaded anywhere unless you sign in to
+          an account, which syncs them between your computers.
         </li>
         <li>
           Some features use the internet. When they do, they send only what that
@@ -203,8 +203,8 @@ export function Privacy() {
       <p>
         You can use Kimochi without an account. An account adds Kimochi&rsquo;s
         hosted services (cloud OCR, read aloud, translation and explanations,
-        within free monthly allowances) and, if you turn it on, backup of your
-        preferences and sessions. If you create one, we store:
+        within free monthly allowances) and sync of your sessions, notebook,
+        presets and preferences between your computers. If you create one, we store:
       </p>
       <ul>
         <li>
@@ -224,21 +224,21 @@ export function Privacy() {
           allowances. Not the images or text themselves.
         </li>
         <li>
-          <strong>Backup, only if you turn it on:</strong> your preferences, and
+          <strong>Synced data, while a Kimochi app is signed in:</strong> your preferences (never your API keys or other secrets), presets, reading totals, and
           your sessions with their lines, notebook and captured images.
         </li>
       </ul>
       <p>
-        This is kept on Cloudflare: account data in Cloudflare D1, backed-up
-        files in Cloudflare R2. Emails we send (confirming your address,
+        This is kept on Cloudflare: account data and synced records in Cloudflare D1, images
+        in Cloudflare R2. Emails we send (confirming your address,
         resetting a password) go through an email delivery service. We do not
         sell or share account data, or use it for advertising.
       </p>
       <p>
-        You can delete your backups, or your whole account, from the{" "}
+        You can download everything synced, delete it, or delete your whole account, from the{" "}
         <Link to="/account">account page</Link> at any time. Deleting the
         account removes everything listed above straight away, including
-        every backed-up file, and signs out every linked app.
+        everything synced, and signs out every linked app.
       </p>
 
       <h2 id="website">This website</h2>

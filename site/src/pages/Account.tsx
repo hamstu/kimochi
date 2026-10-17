@@ -4,7 +4,7 @@ import { LogOut } from 'lucide-react'
 import { Notice } from '../components/account/Notice'
 import { SubmitButton } from '../components/account/SubmitButton'
 import {
-  BackupSection,
+  SyncSection,
   DeleteAccountSection,
   DevicesSection,
   ProfileSection,
@@ -108,7 +108,7 @@ export function Account() {
         <UsageSection user={user} />
         <DevicesSection />
         <SignInMethodsSection user={user} />
-        <BackupSection />
+        <SyncSection />
         <DeleteAccountSection user={user} />
       </div>
     </div>

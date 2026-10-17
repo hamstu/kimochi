@@ -1,4 +1,5 @@
 import { writeTextFile } from "./files";
+import { inProfile, writesPaused } from "./profile";
 import {
   BaseDirectory,
   exists,
@@ -151,6 +152,8 @@ export async function loadNotebook(): Promise<NotebookFile> {
 
 export async function flushNotebook(): Promise<void> {
   if (!dirty) return;
+  // Sync is merging into the file: this window writes after it reloads.
+  if (writesPaused()) return;
   dirty = false;
   try {
     await ensureNotebookParent();
@@ -300,7 +303,7 @@ export async function deleteEntry(id: string): Promise<void> {
   // Best-effort: remove image files belonging to the entry.
   for (const img of state.entries[idx].images) {
     try {
-      await remove(img.path, { baseDir: DIR });
+      await remove(inProfile(img.path), { baseDir: DIR });
     } catch {
       // best-effort
     }
@@ -364,7 +367,7 @@ export async function attachImage(
     (ext || "png").replace(/^\./, "").toLowerCase().slice(0, 5) || "png";
   const path = `sessions/${sid}/images/${id}.${cleanExt}`;
   const buf = new Uint8Array(await blob.arrayBuffer());
-  await writeFile(path, buf, { baseDir: DIR });
+  await writeFile(inProfile(path), buf, { baseDir: DIR });
   const image: NotebookImage = { id, path, addedAt: nowTs() };
   const entries = state.entries.slice();
   entries[idx] = {
@@ -387,7 +390,7 @@ export async function detachImage(
   const img = entry.images.find((i) => i.id === imageId);
   if (!img) return;
   try {
-    await remove(img.path, { baseDir: DIR });
+    await remove(inProfile(img.path), { baseDir: DIR });
   } catch {
     // best-effort
   }
@@ -413,7 +416,7 @@ function mimeForExt(ext: string): string {
 export async function readImageBytes(
   image: NotebookImage,
 ): Promise<Uint8Array> {
-  return await readFile(image.path, { baseDir: DIR });
+  return await readFile(inProfile(image.path), { baseDir: DIR });
 }
 
 export async function readImageAsObjectURL(

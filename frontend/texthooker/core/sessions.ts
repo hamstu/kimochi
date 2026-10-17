@@ -1,4 +1,5 @@
 import { writeTextFile } from "./files";
+import { inProfile, writesPaused } from "./profile";
 import { invoke } from "@tauri-apps/api/core";
 import {
   BaseDirectory,
@@ -58,15 +59,15 @@ function newId(): string {
 }
 
 function sessionLinesPath(sid: string): string {
-  return `sessions/${sid}/lines.json`;
+  return inProfile(`sessions/${sid}/lines.json`);
 }
 
 function sessionNotebookPath(sid: string): string {
-  return `sessions/${sid}/notebook.json`;
+  return inProfile(`sessions/${sid}/notebook.json`);
 }
 
 async function ensureSessionDirs(sid: string) {
-  await mkdir(`sessions/${sid}/images`, { baseDir: DIR, recursive: true });
+  await mkdir(inProfile(`sessions/${sid}/images`), { baseDir: DIR, recursive: true });
 }
 
 async function writeEmptyLines(sid: string) {
@@ -86,9 +87,14 @@ async function writeEmptyNotebook(sid: string) {
 
 async function persistNow(throwOnError = true) {
   if (!manifest) return;
+  if (writesPaused()) {
+    // Sync is merging into the files; the manifest is reloaded afterwards.
+    dirty = true;
+    return;
+  }
   dirty = false;
   try {
-    await writeTextFile(MANIFEST_FILE, JSON.stringify(manifest), {
+    await writeTextFile(inProfile(MANIFEST_FILE), JSON.stringify(manifest), {
       baseDir: DIR,
     });
   } catch (err) {
@@ -109,25 +115,25 @@ function scheduleSave() {
 
 export async function migrateIfNeeded(): Promise<void> {
   try {
-    if (!(await exists("", { baseDir: DIR }))) {
-      await mkdir("", { baseDir: DIR, recursive: true });
+    if (!(await exists(inProfile(""), { baseDir: DIR }))) {
+      await mkdir(inProfile(""), { baseDir: DIR, recursive: true });
     }
   } catch {
     // best-effort
   }
 
-  if (await exists(MANIFEST_FILE, { baseDir: DIR })) return;
+  if (await exists(inProfile(MANIFEST_FILE), { baseDir: DIR })) return;
 
   const now = Date.now();
   const sid = newId();
   await ensureSessionDirs(sid);
 
   // Archive any existing top-level lines.json — per plan, "Archive and start fresh".
-  if (await exists(LEGACY_LINES_FILE, { baseDir: DIR })) {
+  if (await exists(inProfile(LEGACY_LINES_FILE), { baseDir: DIR })) {
     try {
       // If a prior backup exists, leave it alone and just remove the current file by overwriting nothing.
       // plugin-fs rename overwrites a non-directory target.
-      await rename(LEGACY_LINES_FILE, LEGACY_BACKUP_FILE, {
+      await rename(inProfile(LEGACY_LINES_FILE), inProfile(LEGACY_BACKUP_FILE), {
         oldPathBaseDir: DIR,
         newPathBaseDir: DIR,
       });
@@ -151,12 +157,12 @@ export async function migrateIfNeeded(): Promise<void> {
 }
 
 export async function loadSessions(): Promise<SessionsManifest> {
-  if (!(await exists(MANIFEST_FILE, { baseDir: DIR }))) {
+  if (!(await exists(inProfile(MANIFEST_FILE), { baseDir: DIR }))) {
     // Defensive — migrateIfNeeded should have already run.
     await migrateIfNeeded();
   }
   try {
-    const raw = await readTextFile(MANIFEST_FILE, { baseDir: DIR });
+    const raw = await readTextFile(inProfile(MANIFEST_FILE), { baseDir: DIR });
     const parsed = JSON.parse(raw) as SessionsManifest;
     if (
       parsed &&
@@ -232,7 +238,7 @@ export function currentNotebookPath(): string {
 }
 
 export function currentImagesDir(): string {
-  return `sessions/${getManifest().activeId}/images`;
+  return inProfile(`sessions/${getManifest().activeId}/images`);
 }
 
 export async function createSession(name?: string): Promise<SessionMeta> {
@@ -379,7 +385,7 @@ export async function deleteSession(id: string): Promise<void> {
   emit();
 
   try {
-    await remove(`sessions/${id}`, { baseDir: DIR, recursive: true });
+    await remove(inProfile(`sessions/${id}`), { baseDir: DIR, recursive: true });
   } catch (err) {
     // The session is already absent from the manifest. Leaving orphaned data is
     // safer than restoring a session whose files may only be partly removed.
@@ -409,4 +415,38 @@ export function subscribeSessions(fn: Sub): () => void {
   return () => {
     subs.delete(fn);
   };
+}
+
+/** Write a debounced rename or description now (before Sync holds the files). */
+export async function flushSessions(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (dirty) await persistNow(false);
+}
+
+/**
+ * Re-read `sessions.json` after Sync merged into it. Returns whether the active session changed
+ * (it was deleted on another computer), so the caller reloads its lines and notebook.
+ */
+export async function reloadSessions(): Promise<boolean> {
+  const previous = manifest?.activeId;
+  try {
+    const raw = await readTextFile(inProfile(MANIFEST_FILE), { baseDir: DIR });
+    const parsed = JSON.parse(raw) as SessionsManifest;
+    if (!parsed || !Array.isArray(parsed.sessions) || parsed.sessions.length === 0)
+      return false;
+    if (!parsed.sessions.some((s) => s.id === parsed.activeId))
+      parsed.activeId = parsed.sessions[0].id;
+    // This window's session stays chosen while it still exists.
+    if (previous && parsed.sessions.some((s) => s.id === previous))
+      parsed.activeId = previous;
+    manifest = { ...parsed, version: 1 };
+  } catch (err) {
+    console.warn("reloadSessions failed", err);
+    return false;
+  }
+  emit();
+  return manifest.activeId !== previous;
 }

@@ -1,8 +1,8 @@
 /**
- * The Kimochi account (`account_status` and the other `account_*` commands, the `account-changed`,
- * `account-link` and `account-backup` events; see COMMANDS.md → Kimochi account), shared by every
- * component in a window. Linking, backup and restore run in Rust; this only mirrors their state
- * and sends the commands. The token never reaches a webview.
+ * Kimochi accounts (`account_status` and the other `account_*` commands, the `account-changed` and
+ * `account-link` events; see COMMANDS.md → Kimochi account), shared by every component in a
+ * window. Linking, switching and signing out run in Rust; this only mirrors their state and sends
+ * the commands. A token never reaches a webview.
  */
 import { useEffect, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -11,17 +11,16 @@ import {
   SIGNED_OUT,
   type AccountServer,
   type AccountStatus,
-  type BackupEvent,
+  type AccountSummary,
   type LinkEvent
 } from '@ui/account'
 import { onEvent } from './tauri'
 
-export type { AccountServer, AccountStatus, BackupEvent, LinkEvent }
+export type { AccountServer, AccountStatus, AccountSummary, LinkEvent }
 
 let current: AccountStatus = SIGNED_OUT
 let loaded = false
 let lastLink: LinkEvent | null = null
-let lastBackup: BackupEvent | null = null
 const subscribers = new Set<() => void>()
 let watching = false
 let loading: Promise<AccountStatus> | null = null
@@ -43,10 +42,6 @@ function watch(): void {
     onEvent<unknown>('account-changed', (payload) => set(normalizeStatus(payload))).catch(() => undefined)
     onEvent<LinkEvent>('account-link', (payload) => {
       lastLink = payload
-      notify()
-    }).catch(() => undefined)
-    onEvent<BackupEvent>('account-backup', (payload) => {
-      lastBackup = payload
       notify()
     }).catch(() => undefined)
   } catch {
@@ -88,14 +83,8 @@ export function useLinkEvent(): LinkEvent | null {
   return useSyncExternalStore(subscribe, () => lastLink, () => lastLink)
 }
 
-/** The last `account-backup` progress event. */
-export function useBackupEvent(): BackupEvent | null {
-  return useSyncExternalStore(subscribe, () => lastBackup, () => lastBackup)
-}
-
 export function clearAccountEvents(): void {
   lastLink = null
-  lastBackup = null
   notify()
 }
 
@@ -105,7 +94,7 @@ const withStatus = (call: Promise<unknown>): Promise<AccountStatus> =>
     return current
   })
 
-/** Start signing in: opens the browser and returns the code to show. */
+/** Add an account: opens the browser and returns the code to show. */
 export const accountLinkStart = async (): Promise<{ code: string; verifyUrl: string; expiresIn: number }> => {
   lastLink = null
   const reply = await invoke<{ code: string; verifyUrl: string; expiresIn: number }>('account_link_start')
@@ -114,24 +103,24 @@ export const accountLinkStart = async (): Promise<{ code: string; verifyUrl: str
 }
 export const accountLinkCancel = (): Promise<AccountStatus> => withStatus(invoke('account_link_cancel'))
 export const accountLinkOpen = (): Promise<void> => invoke('account_link_open')
-export const accountSignOut = (): Promise<AccountStatus> => withStatus(invoke('account_sign_out'))
+/** Sign out of an account (default: the one in use); its data stays on this computer. */
+export const accountSignOut = (key?: string): Promise<AccountStatus> =>
+  withStatus(invoke('account_sign_out', { key: key ?? null }))
+/** Sign out and delete that account's data from this computer (it stays on the server). */
+export const accountRemove = (key: string): Promise<AccountStatus> => withStatus(invoke('account_remove', { key }))
+/**
+ * Switch to an account's profile (`null`: the Local profile). The windows showing the Log reload
+ * once it is in place.
+ */
+export const accountSwitch = (key: string | null): Promise<AccountStatus> =>
+  withStatus(invoke('account_switch', { key }))
 export const accountRefresh = (): Promise<AccountStatus> => withStatus(invoke('account_refresh'))
 export const accountOpenWeb = (): Promise<void> => invoke('account_open_web')
-export const accountBackupNow = (): Promise<AccountStatus> => {
-  lastBackup = null
-  return withStatus(invoke('account_backup_now'))
-}
 /**
- * Development builds only: switch Kimochi's server at once (no restart). Each server has its own
- * sign-in; `account-changed` follows with the new server's account.
+ * Development builds only: the server "Add account" signs in to (and, signed out, the server in
+ * use). Accounts keep their own server.
  */
 export const accountSetServer = (mode: 'cloud' | 'local'): Promise<AccountStatus> => {
   lastLink = null
-  lastBackup = null
   return withStatus(invoke('account_set_server', { mode }))
-}
-/** Downloads the backup and restarts Kimochi to put it in place. */
-export const accountRestore = (prefs: boolean, sessions: boolean): Promise<void> => {
-  lastBackup = null
-  return invoke('account_restore', { prefs, sessions })
 }

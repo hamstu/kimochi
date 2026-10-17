@@ -1,5 +1,6 @@
 /*
- * Settings → Account (AccountTab.tsx): the sign-in code while linking, and the usage meters.
+ * Settings → Account (AccountTab.tsx): the accounts list, the sign-in code while linking, the usage
+ * and storage meters, and Sync.
  */
 .account-code {
   display: flex;
@@ -52,23 +53,16 @@
   background: var(--k-danger);
 }
 
-.account-restore-options {
-  display: flex;
-  flex-direction: column;
+/* An account's avatar beside its name in the accounts list. */
+.account-who {
+  display: inline-flex;
+  align-items: center;
   gap: var(--k-space-2);
 }
-.account-restore-option {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--k-space-2);
-  font-size: var(--k-text-md);
-  line-height: var(--k-leading-md);
-  color: var(--k-text);
+.account-conflict-when {
+  color: var(--k-text-3);
 }
-.account-restore-option .k-checkbox {
-  margin-top: var(--k-space-0-5);
-  flex: none;
+.account-conflict-error {
+  color: var(--k-danger-text, var(--k-danger));
 }
-.account-restore-detail {
-  display: block;
-}
+

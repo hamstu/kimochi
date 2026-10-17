@@ -6,11 +6,14 @@ import {
   readTextFile,
 } from "@tauri-apps/plugin-fs";
 import { getSettings, onSettingsChange } from "../lib/settings";
-import { currentLinesPath } from "./sessions";
+import { currentLinesPath, getManifest } from "./sessions";
+import { writesPaused } from "./profile";
 import type { Line, LineSource } from "../lib/types";
 
 const DIR = BaseDirectory.AppLocalData;
 const DEBOUNCE_MS = 2000;
+/** The deletions `lines.json` remembers for Sync (oldest dropped first). */
+const MAX_DELETED = 5000;
 
 function maxLinesNow(): number {
   const v = getSettings().maxLines;
@@ -19,6 +22,8 @@ function maxLinesNow(): number {
 
 type StoreEvent =
   | { type: "load"; lines: Line[] }
+  /** Sync merged another computer's lines into the file: the same session, reloaded. */
+  | { type: "sync"; lines: Line[] }
   | { type: "append"; line: Line }
   | { type: "update"; line: Line }
   | { type: "remove"; id: number }
@@ -27,7 +32,14 @@ type StoreEvent =
 
 type Sub = (e: StoreEvent) => void;
 
+/** A line deleted on purpose (not trimmed by the line limit): Sync deletes it everywhere. */
+interface DeletedLine {
+  uid: string;
+  at: number;
+}
+
 let lines: Line[] = [];
+let deleted: DeletedLine[] = [];
 let nextId = 1;
 let dirty = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,6 +62,40 @@ export function subscribe(fn: Sub): () => void {
   };
 }
 
+const FNV_OFFSET = BigInt("0xcbf29ce484222325");
+const FNV_PRIME = BigInt("0x100000001b3");
+const MASK = BigInt("0xffffffffffffffff");
+
+/** FNV-1a, 64-bit, over UTF-8: the same function as `sync_core::fnv64` in Rust. */
+export function fnv64(text: string): bigint {
+  let h = FNV_OFFSET;
+  for (const byte of new TextEncoder().encode(text)) {
+    h ^= BigInt(byte);
+    h = (h * FNV_PRIME) & MASK;
+  }
+  return h;
+}
+
+/**
+ * The uid of a line written before lines had one: derived from what identifies it in its session,
+ * exactly as Sync derives it for sessions the Log has not opened (`derived_line_uid`).
+ */
+export function derivedLineUid(sid: string, line: Pick<Line, "id" | "ts" | "text">): string {
+  return `l${fnv64(`${sid}\n${line.id}\n${line.ts}\n${line.text}`).toString(16).padStart(16, "0")}`;
+}
+
+function newUid(): string {
+  return crypto.randomUUID();
+}
+
+function activeSessionId(): string {
+  try {
+    return getManifest().activeId;
+  } catch {
+    return "";
+  }
+}
+
 async function ensureSessionDir() {
   // The active session's directory must exist before we write its lines.json.
   try {
@@ -63,35 +109,61 @@ async function ensureSessionDir() {
   }
 }
 
+async function readLinesFile(): Promise<{ lines: Line[]; deleted: DeletedLine[]; backfilled: boolean }> {
+  const file = currentLinesPath();
+  if (!(await exists(file, { baseDir: DIR }))) return { lines: [], deleted: [], backfilled: false };
+  const raw = await readTextFile(file, { baseDir: DIR });
+  const parsed = JSON.parse(raw) as { lines?: Line[]; deleted?: DeletedLine[] };
+  if (!parsed || !Array.isArray(parsed.lines)) {
+    throw new Error(
+      "Invalid session transcript; existing data has been left untouched",
+    );
+  }
+  const sid = activeSessionId();
+  let backfilled = false;
+  const loaded = parsed.lines
+    .filter((l) => l && typeof l.text === "string")
+    .map((l) => {
+      if (typeof l.uid === "string" && l.uid) return l;
+      backfilled = true;
+      return { ...l, uid: derivedLineUid(sid, l) };
+    });
+  const gone = Array.isArray(parsed.deleted)
+    ? parsed.deleted.filter((d) => d && typeof d.uid === "string")
+    : [];
+  return { lines: loaded, deleted: gone, backfilled };
+}
+
 export async function loadLines(): Promise<Line[]> {
   await ensureSessionDir();
-  const file = currentLinesPath();
   try {
-    const present = await exists(file, { baseDir: DIR });
-    if (!present) {
-      lines = [];
-      nextId = 1;
-      emit({ type: "load", lines: [] });
-      return lines;
-    }
-    const raw = await readTextFile(file, { baseDir: DIR });
-    const parsed = JSON.parse(raw) as { lines?: Line[] };
-    if (parsed && Array.isArray(parsed.lines)) {
-      lines = parsed.lines.filter(
-        (l) => l && typeof l.text === "string",
-      ) as Line[];
-      nextId = lines.reduce((m, l) => Math.max(m, l.id || 0), 0) + 1;
-    } else {
-      throw new Error(
-        "Invalid session transcript; existing data has been left untouched",
-      );
-    }
+    const read = await readLinesFile();
+    lines = read.lines;
+    deleted = read.deleted;
+    nextId = lines.reduce((m, l) => Math.max(m, l.id || 0), 0) + 1;
+    // Lines from before uids get theirs written once, so they never change afterwards.
+    if (read.backfilled) scheduleSave();
   } catch (err) {
     console.warn("loadLines failed", err);
     throw err;
   }
   emit({ type: "load", lines: lines.slice() });
   return lines.slice();
+}
+
+/** After Sync merged into the active session's file: the merged lines, in place of ours. */
+export async function reloadLines(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  dirty = false;
+  const read = await readLinesFile();
+  lines = read.lines;
+  deleted = read.deleted;
+  nextId = lines.reduce((m, l) => Math.max(m, l.id || 0), 0) + 1;
+  if (read.backfilled) scheduleSave();
+  emit({ type: "sync", lines: lines.slice() });
 }
 
 /** Called by sessions.ts when the user switches sessions. Resets in-memory
@@ -105,6 +177,7 @@ export async function onActiveSessionChanged(): Promise<void> {
   }
   dirty = false;
   lines = [];
+  deleted = [];
   nextId = 1;
   await loadLines();
 }
@@ -118,12 +191,22 @@ function scheduleSave() {
   }, DEBOUNCE_MS);
 }
 
+/** Lines written since the last flush, for Sync to notice. */
+type FlushListener = () => void;
+const flushListeners = new Set<FlushListener>();
+export function onLinesFlushed(fn: FlushListener): () => void {
+  flushListeners.add(fn);
+  return () => flushListeners.delete(fn);
+}
+
 export async function flushLines(): Promise<void> {
   if (!dirty) return;
+  // Sync is merging into the file: this window writes after it reloads.
+  if (writesPaused()) return;
   dirty = false;
   try {
     const file = currentLinesPath();
-    const body = JSON.stringify({ version: 1, lines });
+    const body = JSON.stringify({ version: 1, lines, deleted });
     await ensureSessionDir();
     await writeTextFile(file, body, { baseDir: DIR });
   } catch (err) {
@@ -131,6 +214,13 @@ export async function flushLines(): Promise<void> {
     dirty = true;
     throw err;
   }
+  for (const fn of flushListeners) fn();
+}
+
+function rememberDeleted(removed: Line[]) {
+  const at = Date.now();
+  for (const line of removed) if (line.uid) deleted.push({ uid: line.uid, at });
+  if (deleted.length > MAX_DELETED) deleted.splice(0, deleted.length - MAX_DELETED);
 }
 
 export function appendLine(opts: {
@@ -143,6 +233,7 @@ export function appendLine(opts: {
   if (!text || !text.trim()) return null;
   const line: Line = {
     id: nextId++,
+    uid: newUid(),
     text,
     source: opts.source,
     ...(opts.ocr ? { ocr: opts.ocr } : {}),
@@ -151,6 +242,7 @@ export function appendLine(opts: {
   lines.push(line);
   const cap = maxLinesNow();
   if (lines.length > cap) {
+    // Trimmed, not deleted: other computers keep these lines.
     const dropped = lines.length - cap;
     lines.splice(0, dropped);
     emit({ type: "trim", dropped });
@@ -207,12 +299,13 @@ export function setLineTranslationVisible(id: number, visible: boolean) {
 export function deleteLine(id: number) {
   const idx = lines.findIndex((l) => l.id === id);
   if (idx === -1) return;
-  lines.splice(idx, 1);
+  rememberDeleted(lines.splice(idx, 1));
   emit({ type: "remove", id });
   scheduleSave();
 }
 
 export function clearLines() {
+  rememberDeleted(lines);
   lines = [];
   nextId = 1;
   dirty = true;

@@ -1,65 +1,80 @@
-//! Optional Kimochi accounts: linking this computer to an account, the account's cached state,
-//! and backup and restore of preferences and sessions.
+//! Optional Kimochi accounts: the accounts this computer has signed in to, which one is in use,
+//! and switching between them (each has its own profile, `profile.rs`).
 //!
-//! The account token (`kmc_…`) lives only here, in the app's data folder (mode 600 on Unix), one
-//! file per server base (`file_name`: `account.json` for Kimochi cloud, `account-local.json` for
-//! a local development server), and is sent only as `Authorization: Bearer` to that server
-//! (`settings::server_base`). Each server has its own sign-in, so switching servers in a
-//! development build never sends one server's token to the other. Like the owner's access key in `cloud.rs`, it never reaches a
-//! webview, a log or a diagnostic: the webviews learn the cached user, the usage and whether
-//! someone is signed in (`account_status`, `account-changed`), never the token.
+//! **Accounts.** `accounts.json` in the app data folder lists every account signed in to here
+//! (its server, user id, the cached user and usage, never a token) and which one is active.
+//! Each account's token (`kmc_…`) lives alone in `accounts/<key>.json` (mode 600 on Unix) and is
+//! sent only as `Authorization: Bearer` to that account's server. Several accounts can be signed
+//! in at once, on Kimochi cloud and (in a development build) a local server; one is active. Like
+//! the owner's access key in `cloud.rs`, a token never reaches a webview, a log or a diagnostic.
+//!
+//! **Profiles.** Signed out, Kimochi uses the Local profile (the data folder every earlier version
+//! used). Each account has a profile of its own: switching swaps the Log, the notebook, presets,
+//! stats and preferences, flushing the Log's pending writes first and reloading the windows that
+//! show them. Nothing is merged across accounts. An account's profile is made the first time it
+//! is used here: a copy of the Local profile when the account has nothing synced yet (so a new
+//! sign-up keeps its work), otherwise filled from the server.
+//!
+//! Signing out of an account forgets its token and returns to the Local profile; its profile
+//! stays on disk until "Remove from this computer".
 //!
 //! Linking is the server's device flow (`/api/v1/link/start`, then `/api/v1/link/poll` every
 //! `interval` seconds on a thread of its own) with the confirmation page opened in the browser.
 //! The `kimochi://account` URL the website's "Open Kimochi" button carries is handled here too.
-use crate::{cloud, panels, platform, settings, state::Shared};
+use crate::{cloud, panels, platform, profile, settings, state::Shared, sync, sync_core};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// The account file for Kimochi cloud; also the name the single account file always had.
-const FILE: &str = "account.json";
-/// The account file for a local development server (`settings::LOCAL_SERVER`).
-const LOCAL_FILE: &str = "account-local.json";
+const INDEX: &str = "accounts.json";
+const TOKENS: &str = "accounts";
+/// Files of the single sign-in per server that earlier versions kept; imported once.
+const LEGACY: &[(&str, &str)] = &[("account.json", "cloud"), ("account-local.json", "local")];
 const USER_AGENT: &str = "Kimochi/0.1";
-/// The staging folder a restore downloads into; applied at the next launch (`apply_pending_restore`).
-const RESTORE_DIR: &str = "restore-pending";
-const RESTORE_MARKER: &str = "ready.json";
-/// The server's limit for `PUT /api/v1/prefs`.
-const PREFS_LIMIT: usize = 256 * 1024;
-/// The server's limit for one backed-up file.
-const FILE_LIMIT: u64 = 50 * 1024 * 1024;
 
-/// What `account.json` holds. The token never leaves this module except as a request header.
-#[derive(Serialize, Deserialize, Clone, Default)]
+/// One account signed in to on this computer (or signed out of, keeping its profile).
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-struct Stored {
-    token: String,
+pub struct Entry {
+    pub key: String,
+    /// `cloud` or `local`: which built-in server.
+    pub mode: String,
+    pub user_id: String,
     #[serde(default)]
-    user: Value,
+    pub user: Value,
     #[serde(default)]
-    usage: Option<Value>,
+    pub usage: Option<Value>,
     #[serde(default)]
-    backup: BackupMemo,
+    pub added_at: u64,
+    #[serde(default)]
+    pub last_used_at: u64,
 }
 
-/// What the last backup did, so the next one uploads only what changed.
-#[derive(Serialize, Deserialize, Clone, Default)]
+impl Entry {
+    pub fn base(&self) -> &'static str {
+        settings::base_for_mode(&self.mode)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-struct BackupMemo {
-    /// Epoch ms of the last backup that finished.
-    last_backup_at: Option<u64>,
-    last_error: Option<String>,
-    /// SHA-256 of the last preferences document uploaded.
-    prefs_hash: Option<String>,
-    /// The data folder as it was at the last finished backup (`fingerprint`).
-    fingerprint: Option<String>,
+struct Index {
+    #[serde(default)]
+    version: u32,
+    /// The active account's key; `None` is the Local profile.
+    #[serde(default)]
+    active: Option<String>,
+    #[serde(default)]
+    accounts: Vec<Entry>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TokenFile {
+    token: String,
 }
 
 struct Link {
@@ -69,24 +84,20 @@ struct Link {
     expires_at_ms: u64,
 }
 
-/// The account file last read, and what it holds. Reloaded whenever the server base changes.
-struct Slot {
-    file: PathBuf,
-    stored: Option<Stored>,
-}
-
 struct Account {
     app: AppHandle,
-    /// The folder of `settings.json`, where the account files live.
+    /// The folder of `settings.json`, where `accounts.json` and the token files live.
     data_dir: PathBuf,
-    /// Where the Log keeps `presets.json`, `stats.json`, `sessions.json` and `sessions/`.
+    /// The local data folder: the Local profile, and `profiles/` beneath it.
     local_dir: PathBuf,
-    slot: Mutex<Slot>,
+    index: Mutex<Index>,
     link: Mutex<Option<Link>>,
     /// Bumped by every start and cancel; a poll thread stops once it is no longer current.
     link_seq: AtomicU64,
-    backup_running: AtomicBool,
     usage_pending: AtomicBool,
+    /// A switch in progress (the panels show it, and a second one waits).
+    switching: Mutex<()>,
+    switching_flag: AtomicBool,
 }
 
 static ACCOUNT: OnceLock<Account> = OnceLock::new();
@@ -106,90 +117,18 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-/// Load the saved account and start the automatic backup. Called once from `setup`, after the
-/// shared service is managed.
-pub fn install(app: &AppHandle) -> Result<(), String> {
-    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let local_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
-    let _ = ACCOUNT.set(Account {
-        app: app.clone(),
-        data_dir,
-        local_dir,
-        // An empty path matches no server: the first look loads the current server's file.
-        slot: Mutex::new(Slot { file: PathBuf::new(), stored: None }),
-        link: Mutex::new(None),
-        link_seq: AtomicU64::new(0),
-        backup_running: AtomicBool::new(false),
-        usage_pending: AtomicBool::new(false),
-    });
-    spawn_auto_backup();
-    // The cached user and usage can be a month old: refresh them quietly once the app is up.
-    if signed_in() {
-        std::thread::spawn(|| {
-            std::thread::sleep(Duration::from_secs(5));
-            let _ = refresh_blocking();
-        });
-    }
-    Ok(())
+fn token_path(data_dir: &Path, key: &str) -> PathBuf {
+    data_dir.join(TOKENS).join(format!("{key}.json"))
 }
 
-/// The account file for `base`, in the data folder. Kimochi cloud keeps `account.json`, the one
-/// file there was before sign-ins were kept per server, so an existing sign-in stays cloud's.
-fn file_name(base: &str) -> String {
-    if base == settings::CLOUD_SERVER {
-        FILE.to_string()
-    } else if base == settings::LOCAL_SERVER {
-        LOCAL_FILE.to_string()
-    } else {
-        format!("account-{}.json", &sha256_hex(base.as_bytes())[..12])
-    }
+fn read_token(data_dir: &Path, key: &str) -> Option<String> {
+    let bytes = std::fs::read(token_path(data_dir, key)).ok()?;
+    serde_json::from_slice::<TokenFile>(&bytes).ok().map(|t| t.token).filter(|t| !t.is_empty())
 }
 
-fn load(file: &Path) -> Option<Stored> {
-    std::fs::read(file)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Stored>(&bytes).ok())
-        .filter(|s| !s.token.is_empty())
-}
-
-/// Point `slot` at `base`'s account file in `data_dir`, reading it if the slot held another's.
-fn select(slot: &mut Slot, data_dir: &Path, base: &str) {
-    let file = data_dir.join(file_name(base));
-    if slot.file != file {
-        slot.stored = load(&file);
-        slot.file = file;
-    }
-}
-
-/// The slot holding `base`'s account.
-fn slot_for<'a>(account: &'a Account, base: &str) -> std::sync::MutexGuard<'a, Slot> {
-    let mut slot = lock(&account.slot);
-    select(&mut slot, &account.data_dir, base);
-    slot
-}
-
-/// What is saved for `base`'s server.
-fn stored_for(base: &str) -> Option<Stored> {
-    let account = ACCOUNT.get()?;
-    slot_for(account, base).stored.clone()
-}
-
-fn token_for(base: &str) -> Option<String> {
-    stored_for(base).map(|s| s.token)
-}
-
-/// The account token for the server in use, if this computer is signed in there. Only for
-/// request headers.
-pub fn token() -> Option<String> {
-    token_for(&base().ok()?)
-}
-
-pub fn signed_in() -> bool {
-    token().is_some()
-}
-
-fn persist(stored: Option<&Stored>, file: &Path) -> Result<(), String> {
-    let Some(stored) = stored else {
+/// Write a private file (mode 600 on Unix) through a temp file; `None` removes it.
+fn write_private(file: &Path, bytes: Option<&[u8]>) -> Result<(), String> {
+    let Some(bytes) = bytes else {
         return match std::fs::remove_file(file) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
             _ => Ok(()),
@@ -198,7 +137,6 @@ fn persist(stored: Option<&Stored>, file: &Path) -> Result<(), String> {
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    let bytes = serde_json::to_vec_pretty(stored).map_err(|e| e.to_string())?;
     let tmp = file.with_extension("tmp");
     let _ = std::fs::remove_file(&tmp);
     {
@@ -211,61 +149,249 @@ fn persist(stored: Option<&Stored>, file: &Path) -> Result<(), String> {
             options.mode(0o600);
         }
         let mut out = options.open(&tmp).map_err(|e| e.to_string())?;
-        out.write_all(&bytes).map_err(|e| e.to_string())?;
+        out.write_all(bytes).map_err(|e| e.to_string())?;
         out.sync_all().map_err(|e| e.to_string())?;
     }
     std::fs::rename(&tmp, file).map_err(|e| e.to_string())
 }
 
-/// Change `base`'s stored account and save it. `None` from `edit` signs out of that server.
-fn update(base: &str, edit: impl FnOnce(Option<Stored>) -> Option<Stored>) -> Result<(), String> {
-    let account = account()?;
-    let mut slot = slot_for(account, base);
-    let next = edit(slot.stored.take());
-    let result = persist(next.as_ref(), &slot.file);
-    slot.stored = next;
-    result
+fn save_token(data_dir: &Path, key: &str, token: Option<&str>) -> Result<(), String> {
+    let bytes = token
+        .map(|t| serde_json::to_vec(&TokenFile { token: t.to_string() }))
+        .transpose()
+        .map_err(|e| e.to_string())?;
+    write_private(&token_path(data_dir, key), bytes.as_deref())
 }
 
-/// What the webviews may know: never the token.
-fn status_value() -> Value {
-    let Some(account) = ACCOUNT.get() else {
-        return json!({ "signedIn": false, "backup": { "running": false } });
-    };
-    let server = server_value();
-    let stored = base().ok().and_then(|base| stored_for(&base));
-    let linking = lock(&account.link).as_ref().map(|link| {
-        json!({ "code": link.code, "verifyUrl": link.verify_url, "expiresAt": link.expires_at_ms })
-    });
-    let running = account.backup_running.load(Ordering::SeqCst);
-    match stored {
-        Some(s) => json!({
-            "signedIn": true,
-            "user": s.user,
-            "usage": s.usage,
-            "linking": linking,
-            "server": server,
-            "backup": {
-                "running": running,
-                "lastBackupAt": s.backup.last_backup_at,
-                "lastError": s.backup.last_error,
-            },
-        }),
-        None => json!({ "signedIn": false, "linking": linking, "server": server, "backup": { "running": running } }),
+fn load_index(data_dir: &Path) -> Option<Index> {
+    profile::read_json(&data_dir.join(INDEX)).and_then(|v| serde_json::from_value(v).ok())
+}
+
+fn save_index(data_dir: &Path, index: &Index) -> Result<(), String> {
+    write_private(&data_dir.join(INDEX), Some(&serde_json::to_vec_pretty(index).map_err(|e| e.to_string())?))
+}
+
+fn mode_of(base: &str) -> &'static str {
+    if base == settings::LOCAL_SERVER {
+        "local"
+    } else {
+        "cloud"
     }
 }
 
-/// The server the account belongs to: `{mode, url, forced}`, `forced` when a development build's
-/// `KIMOCHI_SERVER` picks it over the setting.
-fn server_value() -> Value {
-    let Some(service) = ACCOUNT.get().and_then(|a| a.app.try_state::<Shared>()) else {
-        return Value::Null;
+/// Import the one-sign-in-per-server files of earlier versions. The account that was in use
+/// becomes active, and its profile starts as a copy of the Local profile: that is the data it was
+/// signed in with. Returns the log lines to record.
+fn migrate_legacy(data_dir: &Path, local_dir: &Path, current_mode: &str) -> (Index, Vec<String>) {
+    let mut index = Index { version: 1, ..Default::default() };
+    let mut notes = Vec::new();
+    for (file, mode) in LEGACY {
+        let path = data_dir.join(file);
+        let Some(stored) = profile::read_json(&path) else { continue };
+        let token = stored["token"].as_str().unwrap_or("").to_string();
+        let user = stored.get("user").cloned().unwrap_or(Value::Null);
+        let Some(user_id) = user["id"].as_str().map(str::to_string) else { continue };
+        if token.is_empty() {
+            continue;
+        }
+        let key = profile::profile_key(mode, &user_id);
+        if save_token(data_dir, &key, Some(&token)).is_err() {
+            continue;
+        }
+        index.accounts.push(Entry {
+            key: key.clone(),
+            mode: (*mode).to_string(),
+            user_id,
+            user,
+            usage: stored.get("usage").cloned().filter(|u| !u.is_null()),
+            added_at: now_ms(),
+            last_used_at: now_ms(),
+        });
+        if *mode == current_mode {
+            let dir = profile::profile_dir(local_dir, Some(&key));
+            if !dir.exists() {
+                match profile::copy_profile_data(local_dir, &dir) {
+                    Ok(copied) => {
+                        let mut state = sync_core::State { origin: Some("copied-local".into()), ..Default::default() };
+                        state.version = 1;
+                        let _ = sync_core::save_state(&dir, &state);
+                        notes.push(format!(
+                            "Kept your Log with the account you were signed in to: copied the Local profile ({copied} files) into {key}"
+                        ));
+                    }
+                    Err(e) => notes.push(format!("Could not copy the Local profile into {key}: {e}")),
+                }
+            }
+            index.active = Some(key);
+        }
+    }
+    (index, notes)
+}
+
+/// Load the accounts, choose the profile, and start Sync. Called once from `setup`, after the
+/// shared service is managed and before any webview asks for its profile.
+pub fn install(app: &AppHandle) -> Result<(), String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let local_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let mut notes = Vec::new();
+    let index = match load_index(&data_dir) {
+        Some(index) => index,
+        None => {
+            let mode = app
+                .try_state::<Shared>()
+                .map(|s| settings::server_mode(&s.settings))
+                .unwrap_or("cloud");
+            let (index, migrated) = migrate_legacy(&data_dir, &local_dir, mode);
+            notes = migrated;
+            if save_index(&data_dir, &index).is_ok() {
+                for (file, _) in LEGACY {
+                    let _ = std::fs::remove_file(data_dir.join(file));
+                }
+            }
+            index
+        }
     };
-    let mode = settings::server_mode(&service.settings);
+    let active = index.active.clone();
+    let _ = ACCOUNT.set(Account {
+        app: app.clone(),
+        data_dir: data_dir.clone(),
+        local_dir: local_dir.clone(),
+        index: Mutex::new(index),
+        link: Mutex::new(None),
+        link_seq: AtomicU64::new(0),
+        usage_pending: AtomicBool::new(false),
+        switching: Mutex::new(()),
+        switching_flag: AtomicBool::new(false),
+    });
+    sync::install(app, &data_dir, &local_dir);
+    for note in notes {
+        sync::log("profile", &note);
+    }
+    // The active account's server is the server in use.
+    if let Some(entry) = active.as_deref().and_then(entry_for) {
+        follow_server(&entry);
+    }
+    // The cached user and usage can be a month old: refresh them quietly once the app is up.
+    if signed_in() {
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_secs(5));
+            let _ = refresh_blocking();
+        });
+    }
+    Ok(())
+}
+
+fn entry_for(key: &str) -> Option<Entry> {
+    let account = ACCOUNT.get()?;
+    lock(&account.index).accounts.iter().find(|e| e.key == key).cloned()
+}
+
+/// The account in use, if any (signed in or not).
+pub fn active_entry() -> Option<Entry> {
+    let account = ACCOUNT.get()?;
+    let key = lock(&account.index).active.clone()?;
+    entry_for(&key)
+}
+
+/// The active profile's key (`None`: the Local profile).
+pub fn active_key() -> Option<String> {
+    ACCOUNT.get().and_then(|a| lock(&a.index).active.clone())
+}
+
+/// The folder of the profile in use.
+pub fn active_profile_dir() -> Option<PathBuf> {
+    let account = ACCOUNT.get()?;
+    Some(profile::profile_dir(&account.local_dir, active_key().as_deref()))
+}
+
+fn token_of(key: &str) -> Option<String> {
+    read_token(&account().ok()?.data_dir, key)
+}
+
+/// The account token for the server in use, if the active account is signed in there. Only for
+/// request headers.
+pub fn token() -> Option<String> {
+    let entry = active_entry()?;
+    if entry.base() != base().ok()? {
+        return None;
+    }
+    token_of(&entry.key)
+}
+
+pub fn signed_in() -> bool {
+    token().is_some()
+}
+
+/// What Sync needs of the active account: its profile, server and token.
+pub struct SyncTarget {
+    pub key: String,
+    pub base: String,
+    pub token: String,
+    pub dir: PathBuf,
+}
+
+pub fn sync_target() -> Option<SyncTarget> {
+    let entry = active_entry()?;
+    let token = token()?;
+    Some(SyncTarget {
+        dir: profile::profile_dir(&account().ok()?.local_dir, Some(&entry.key)),
+        base: entry.base().to_string(),
+        key: entry.key,
+        token,
+    })
+}
+
+fn server_value(mode: &str) -> Value {
+    json!({ "mode": mode, "url": settings::base_for_mode(mode), "forced": settings::server_mode_override().is_some() })
+}
+
+/// What the webviews may know: never a token.
+fn status_value() -> Value {
+    let Some(account) = ACCOUNT.get() else {
+        return json!({ "signedIn": false, "accounts": [] });
+    };
+    let index = lock(&account.index).clone();
+    let current_mode = account
+        .app
+        .try_state::<Shared>()
+        .map(|s| settings::server_mode(&s.settings))
+        .unwrap_or("cloud");
+    let link_mode = link_mode();
+    let linking = lock(&account.link).as_ref().map(|link| {
+        json!({ "code": link.code, "verifyUrl": link.verify_url, "expiresAt": link.expires_at_ms })
+    });
+    let active = index.active.as_deref().and_then(|k| index.accounts.iter().find(|e| e.key == k));
+    let mut accounts: Vec<&Entry> = index.accounts.iter().collect();
+    accounts.sort_by_key(|e| std::cmp::Reverse(e.last_used_at));
+    let accounts: Vec<Value> = accounts
+        .into_iter()
+        .map(|e| {
+            json!({
+                "key": e.key,
+                "user": e.user,
+                "server": server_value(&e.mode),
+                "signedIn": read_token(&account.data_dir, &e.key).is_some(),
+                "active": Some(&e.key) == index.active.as_ref(),
+                // A forced server (KIMOCHI_SERVER) rules out the other server's accounts.
+                "available": settings::server_mode_override().is_none_or(|m| m == e.mode),
+            })
+        })
+        .collect();
+    let signed_in = active.is_some_and(|e| read_token(&account.data_dir, &e.key).is_some());
     json!({
-        "mode": mode,
-        "url": settings::base_for_mode(mode),
-        "forced": settings::server_mode_override().is_some(),
+        "signedIn": signed_in,
+        "user": active.map(|e| e.user.clone()),
+        "usage": active.and_then(|e| e.usage.clone()),
+        "linking": linking,
+        "server": server_value(active.map(|e| e.mode.as_str()).unwrap_or(current_mode)),
+        "linkServer": server_value(link_mode),
+        "accounts": accounts,
+        "profile": {
+            "key": index.active,
+            "root": profile::profile_root(index.active.as_deref()),
+            "needsSignIn": active.is_some() && !signed_in,
+        },
+        "switching": account.switching_flag.load(Ordering::SeqCst),
     })
 }
 
@@ -291,7 +417,21 @@ fn base() -> Result<String, String> {
     Ok(settings::server_base(&service.settings))
 }
 
-fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
+/// The server a new sign-in links against: `accountLinkServer` (the development build's picker),
+/// else the server in use. `KIMOCHI_SERVER` overrides both.
+fn link_mode() -> &'static str {
+    if let Some(forced) = settings::server_mode_override() {
+        return forced;
+    }
+    let Some(service) = ACCOUNT.get().and_then(|a| a.app.try_state::<Shared>()) else { return "cloud" };
+    match service.settings.get_or::<String>("accountLinkServer", String::new()).as_str() {
+        "local" if cfg!(debug_assertions) => "local",
+        "cloud" => "cloud",
+        _ => settings::server_mode(&service.settings),
+    }
+}
+
+pub fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(timeout)
@@ -299,11 +439,10 @@ fn client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
         .map_err(|_| "native: could not initialize the account HTTP client".to_string())
 }
 
-const OFFLINE: &str = "native: Kimochi cloud could not be reached (connection/TLS/timeout). Check your internet connection and try again.";
+pub const OFFLINE: &str = "native: Kimochi cloud could not be reached (connection/TLS/timeout). Check your internet connection and try again.";
 
-/// A failed answer from `base` as a sentence, signing out of that server locally when it no
-/// longer accepts the token.
-fn failure(feature: cloud::Feature, base: &str, response: reqwest::blocking::Response) -> String {
+/// A failed answer from `base` as a sentence, forgetting the token when it is no longer accepted.
+pub fn failure(feature: cloud::Feature, base: &str, response: reqwest::blocking::Response) -> String {
     let status = response.status().as_u16();
     let body = response.text().unwrap_or_default();
     if status == 401 {
@@ -313,7 +452,7 @@ fn failure(feature: cloud::Feature, base: &str, response: reqwest::blocking::Res
 }
 
 /// The server answered 401 to the account token: it was revoked (on the website, by a password
-/// reset) or expired. Forget it here, as a sign-out would.
+/// reset) or expired. Forget it here; the account stays active and asks to be signed in again.
 pub fn signed_out_remotely() {
     if let Ok(base) = base() {
         signed_out_remotely_from(&base);
@@ -321,12 +460,24 @@ pub fn signed_out_remotely() {
 }
 
 fn signed_out_remotely_from(base: &str) {
-    if token_for(base).is_none() {
+    let Some(entry) = active_entry().filter(|e| e.base() == base) else { return };
+    let Ok(account) = account() else { return };
+    if read_token(&account.data_dir, &entry.key).is_none() {
         return;
     }
-    let _ = update(base, |_| None);
+    let _ = save_token(&account.data_dir, &entry.key, None);
+    sync::log("error", "The server no longer accepts this computer's sign-in; sign in again to keep syncing");
     announce();
     announce_capabilities();
+}
+
+fn update_entry(key: &str, edit: impl FnOnce(&mut Entry)) -> Result<(), String> {
+    let account = account()?;
+    let mut index = lock(&account.index);
+    if let Some(entry) = index.accounts.iter_mut().find(|e| e.key == key) {
+        edit(entry);
+    }
+    save_index(&account.data_dir, &index)
 }
 
 /// Refresh the cached usage a moment after a metered call, at most one at a time.
@@ -340,57 +491,220 @@ pub fn usage_changed() {
         if let Some(account) = ACCOUNT.get() {
             account.usage_pending.store(false, Ordering::SeqCst);
         }
-        let _ = refresh_usage_blocking();
+        let _ = refresh_usage();
     });
 }
 
-fn refresh_usage_blocking() -> Result<(), String> {
-    refresh_usage_for(&base()?)
-}
-
-fn refresh_usage_for(base: &str) -> Result<(), String> {
-    let token = token_for(base).ok_or("native: not signed in")?;
+fn get_json(base: &str, token: &str, path: &str) -> Result<Value, String> {
     let http = client(Duration::from_secs(15))?;
     let response = http
-        .get(format!("{base}/api/v1/usage"))
-        .bearer_auth(&token)
+        .get(format!("{base}{path}"))
+        .bearer_auth(token)
         .send()
         .map_err(|_| OFFLINE.to_string())?;
     if !response.status().is_success() {
         return Err(failure(cloud::Feature::Account, base, response));
     }
-    let usage: Value = response.json().map_err(|_| "native: Kimochi cloud sent an unreadable answer")?;
-    update(base, |stored| {
-        stored.map(|mut s| {
-            s.usage = Some(usage);
-            s
-        })
-    })?;
+    response.json().map_err(|_| "native: Kimochi cloud sent an unreadable answer".to_string())
+}
+
+fn refresh_usage() -> Result<(), String> {
+    let entry = active_entry().ok_or("native: not signed in")?;
+    let token = token().ok_or("native: not signed in")?;
+    let usage = get_json(entry.base(), &token, "/api/v1/usage")?;
+    update_entry(&entry.key, |e| e.usage = Some(usage))?;
     announce();
     Ok(())
 }
 
 fn refresh_blocking() -> Result<Value, String> {
-    let base = base()?;
-    let token = token_for(&base).ok_or("native: not signed in")?;
-    let http = client(Duration::from_secs(15))?;
-    let response = http
-        .get(format!("{base}/api/v1/me"))
-        .bearer_auth(&token)
-        .send()
-        .map_err(|_| OFFLINE.to_string())?;
-    if !response.status().is_success() {
-        return Err(failure(cloud::Feature::Account, &base, response));
-    }
-    let me: Value = response.json().map_err(|_| "native: Kimochi cloud sent an unreadable answer")?;
+    let entry = active_entry().ok_or("native: not signed in")?;
+    let token = token().ok_or("native: not signed in")?;
+    let me = get_json(entry.base(), &token, "/api/v1/me")?;
     let user = me.get("user").cloned().unwrap_or(Value::Null);
-    update(&base, |stored| {
-        stored.map(|mut s| {
-            s.user = user;
-            s
-        })
-    })?;
-    refresh_usage_for(&base)?;
+    update_entry(&entry.key, |e| e.user = user)?;
+    refresh_usage()?;
+    Ok(status_value())
+}
+
+// ---------------------------------------------------------------- switching profiles
+
+/// The windows that show a profile's data; they reload after a switch.
+const PROFILE_WINDOWS: &[&str] = &[panels::MAIN, "settings", "diagnostics", "tray-popover", "sync-log"];
+
+fn settings_store() -> Result<std::sync::Arc<settings::Settings>, String> {
+    let account = account()?;
+    Ok(account
+        .app
+        .try_state::<Shared>()
+        .ok_or("native: Kimochi is still starting")?
+        .settings
+        .clone())
+}
+
+/// Put a profile's preferences in place of the current ones, keeping this computer's own keys.
+fn load_profile_settings(app: &AppHandle, store: &std::sync::Arc<settings::Settings>, dir: &Path) -> Result<(), String> {
+    let saved = profile::read_json(&dir.join(profile::SETTINGS_FILE)).unwrap_or_else(|| json!({}));
+    let target = profile::with_defaults(&settings::defaults(), &saved);
+    let updates = profile::switch_updates(&store.all(), &target);
+    if updates.is_empty() {
+        return Ok(());
+    }
+    let paths: Vec<(Vec<&str>, Value)> = updates.iter().map(|(k, v)| (vec![k.as_str()], v.clone())).collect();
+    let refs: Vec<(&[&str], Value)> = paths.iter().map(|(p, v)| (p.as_slice(), v.clone())).collect();
+    store.set_many(&refs)?;
+    for (key, _) in &updates {
+        let value = store.get_path(&[key.as_str()]).ok().flatten().unwrap_or(Value::Null);
+        let _ = app.emit("settings:changed", json!({ "key": key, "value": value }));
+        crate::setting_side_effects(app, store, key, &value);
+    }
+    Ok(())
+}
+
+/// The server in use follows the active account.
+fn follow_server(entry: &Entry) {
+    let Ok(store) = settings_store() else { return };
+    if settings::server_mode_override().is_some() || settings::server_mode(&store) == entry.mode {
+        return;
+    }
+    if store.set("serverSettings.mode", json!(entry.mode)).is_ok() {
+        if let Ok(account) = account() {
+            let value = store.get("serverSettings").ok().flatten().unwrap_or(Value::Null);
+            let _ = account.app.emit("settings:changed", json!({ "key": "serverSettings", "value": value }));
+        }
+    }
+}
+
+fn server_status(base: &str, token: &str) -> Result<sync_core::Status, String> {
+    let value = get_json(base, token, "/api/v1/sync/status")?;
+    serde_json::from_value(value).map_err(|_| "native: Kimochi cloud sent an unreadable answer".to_string())
+}
+
+/// Make an account's profile the first time it is used here.
+fn prepare_profile(account: &Account, entry: &Entry) -> Result<(), String> {
+    let dir = profile::profile_dir(&account.local_dir, Some(&entry.key));
+    if dir.join(profile::SETTINGS_FILE).exists() || dir.join("sessions.json").exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let who = entry.user["email"].as_str().unwrap_or(&entry.user_id).to_string();
+    let token = read_token(&account.data_dir, &entry.key);
+    let remote = token.as_deref().map(|t| server_status(entry.base(), t));
+    let mut state = sync_core::State { version: 1, ..Default::default() };
+    match remote {
+        Some(Ok(status)) if status.records == 0 => {
+            let copied = profile::copy_profile_data(&account.local_dir, &dir)?;
+            state.origin = Some("copied-local".into());
+            sync::log(
+                "profile",
+                &format!("First sign-in to {who} here and the account has nothing synced yet: copied this computer's Local profile ({copied} files) into it. The Local profile is unchanged."),
+            );
+        }
+        Some(Ok(status)) => {
+            profile::write_json(&dir.join(profile::SETTINGS_FILE), &profile::profile_part(&settings::defaults()))?;
+            state.origin = Some("server".into());
+            sync::log(
+                "profile",
+                &format!("First sign-in to {who} here: starting from the account's synced data ({} records) instead of this computer's Local profile", status.records),
+            );
+            sync_core::save_state(&dir, &state)?;
+            if let Err(e) = sync::initial_sync(&entry.key, entry.base(), token.as_deref().unwrap_or(""), &dir) {
+                sync::log("error", &format!("Downloading {who}'s data did not finish ({}); it continues in the background", e.trim_start_matches("native: ")));
+            }
+            return Ok(());
+        }
+        _ => {
+            profile::write_json(&dir.join(profile::SETTINGS_FILE), &profile::profile_part(&settings::defaults()))?;
+            state.origin = Some("empty".into());
+            sync::log(
+                "profile",
+                &format!("First sign-in to {who} here, but the server could not be reached to see what the account holds: starting empty; its data arrives once Kimochi is online"),
+            );
+        }
+    }
+    sync_core::save_state(&dir, &state)
+}
+
+/// Switch to `target` (`None`: the Local profile): flush the Log, keep the current preferences
+/// with the current profile, put the target's in place, and reload the windows.
+fn activate(target: Option<String>) -> Result<(), String> {
+    let account = account()?;
+    let _switch = lock(&account.switching);
+    let current = lock(&account.index).active.clone();
+    if current == target {
+        return Ok(());
+    }
+    let entry = match &target {
+        Some(key) => Some(entry_for(key).ok_or("invalid: that account is not on this computer")?),
+        None => None,
+    };
+    if let (Some(forced), Some(entry)) = (settings::server_mode_override(), &entry) {
+        if entry.mode != forced {
+            return Err(format!("invalid: {}={forced} picks the server for this run; that account is on the other one", settings::SERVER_ENV));
+        }
+    }
+    account.switching_flag.store(true, Ordering::SeqCst);
+    announce();
+    let result = sync::paused(|| -> Result<(), String> {
+        let store = settings_store()?;
+        // The Log's pending writes reach the current profile's files first.
+        sync::flush_host();
+        let from = profile::profile_dir(&account.local_dir, current.as_deref());
+        profile::write_json(&from.join(profile::SETTINGS_FILE), &profile::profile_part(&store.all()))?;
+        if let Some(entry) = &entry {
+            prepare_profile(account, entry)?;
+        }
+        let to = profile::profile_dir(&account.local_dir, target.as_deref());
+        load_profile_settings(&account.app, &store, &to)?;
+        {
+            let mut index = lock(&account.index);
+            index.active = target.clone();
+            if let Some(key) = &target {
+                if let Some(e) = index.accounts.iter_mut().find(|e| &e.key == key) {
+                    e.last_used_at = now_ms();
+                }
+            }
+            save_index(&account.data_dir, &index)?;
+        }
+        if let Some(entry) = &entry {
+            follow_server(entry);
+        }
+        let name = entry
+            .as_ref()
+            .map(|e| e.user["email"].as_str().unwrap_or(&e.key).to_string())
+            .unwrap_or_else(|| "Local (no account)".into());
+        sync::log("profile", &format!("Switched to {name}"));
+        Ok(())
+    });
+    account.switching_flag.store(false, Ordering::SeqCst);
+    result?;
+    reload_windows(&account.app);
+    announce();
+    announce_capabilities();
+    sync::profile_changed();
+    Ok(())
+}
+
+fn reload_windows(app: &AppHandle) {
+    for label in PROFILE_WINDOWS {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.eval("window.location.reload()");
+        }
+    }
+}
+
+/// The profile root the webviews' file paths start with (`""`: the Local profile).
+#[tauri::command]
+pub fn profile_current() -> Value {
+    let key = active_key();
+    json!({ "key": key, "root": profile::profile_root(key.as_deref()) })
+}
+
+#[tauri::command]
+pub async fn account_switch(key: Option<String>) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || activate(key))
+        .await
+        .map_err(|e| e.to_string())??;
     Ok(status_value())
 }
 
@@ -423,6 +737,10 @@ fn device_name() -> String {
     } else {
         name.chars().take(64).collect()
     }
+}
+
+pub fn computer_name() -> String {
+    device_name()
 }
 
 #[allow(deprecated)] // the shell plugin's `open` is the opener the app already uses
@@ -508,9 +826,11 @@ struct LinkStart {
     interval: Option<u64>,
 }
 
+/// Add an account: link this computer to it on the sign-in server (`linkServer`).
 #[tauri::command]
 pub async fn account_link_start(app: AppHandle) -> Result<Value, String> {
-    let base = base()?;
+    let mode = link_mode();
+    let base = settings::base_for_mode(mode).to_string();
     let start_base = base.clone();
     let start = tauri::async_runtime::spawn_blocking(move || -> Result<LinkStart, String> {
         let base = start_base;
@@ -546,10 +866,35 @@ pub async fn account_link_start(app: AppHandle) -> Result<Value, String> {
     let interval = Duration::from_secs(start.interval.unwrap_or(2).clamp(1, 30));
     let deadline = Instant::now() + Duration::from_secs(start.expires_in);
     let (code, poll_token) = (start.code.clone(), start.poll_token);
-    // The poll stays with the server it started on; switching servers cancels it.
     std::thread::spawn(move || poll(seq, base, code, poll_token, interval, deadline));
 
     Ok(json!({ "code": start.code, "verifyUrl": start.verify_url, "expiresIn": start.expires_in }))
+}
+
+/// A sign-in approved: keep the account and its token, and switch to it.
+fn approved(base: &str, token: String, user: Value) -> Result<(), String> {
+    let account = account()?;
+    let user_id = user["id"].as_str().ok_or("native: Kimochi cloud sent no user id")?.to_string();
+    let mode = mode_of(base);
+    let key = profile::profile_key(mode, &user_id);
+    save_token(&account.data_dir, &key, Some(&token))?;
+    {
+        let mut index = lock(&account.index);
+        match index.accounts.iter_mut().find(|e| e.key == key) {
+            Some(entry) => entry.user = user,
+            None => index.accounts.push(Entry {
+                key: key.clone(),
+                mode: mode.to_string(),
+                user_id,
+                user,
+                usage: None,
+                added_at: now_ms(),
+                last_used_at: now_ms(),
+            }),
+        }
+        save_index(&account.data_dir, &index)?;
+    }
+    activate(Some(key))
 }
 
 fn poll(seq: u64, base: String, code: String, poll_token: String, interval: Duration, deadline: Instant) {
@@ -617,22 +962,16 @@ fn poll(seq: u64, base: String, code: String, poll_token: String, interval: Dura
                 }
                 let user = body.get("user").cloned().unwrap_or(Value::Null);
                 end_link(seq);
-                // A fresh account starts a fresh backup memo.
-                let saved = update(&base, |_| {
-                    Some(Stored { token, user, usage: None, backup: BackupMemo::default() })
-                });
-                if let Err(e) = saved {
-                    link_event("error", &code, Some(&format!("Signed in, but the account could not be saved: {e}")));
+                if let Err(e) = approved(&base, token, user) {
+                    link_event("error", &code, Some(&format!("Signed in, but switching to the account failed: {}", e.trim_start_matches("native: ").trim_start_matches("invalid: "))));
                     announce();
                     return;
                 }
                 link_event("approved", &code, None);
-                announce();
-                announce_capabilities();
                 if let Some(account) = ACCOUNT.get() {
                     bring_forward(&account.app, true);
                 }
-                let _ = refresh_usage_for(&base);
+                let _ = refresh_usage();
                 return;
             }
             status @ ("denied" | "expired") => {
@@ -660,9 +999,9 @@ pub fn account_link_cancel() -> Result<Value, String> {
     Ok(status_value())
 }
 
-/// Development builds only: switch Kimochi's server (`serverSettings.mode`) at once. Each server
-/// has its own sign-in, so the account shown, `cloudAccess` and every request follow the switch
-/// without a restart. A sign-in in progress is cancelled.
+/// Development builds only: the server "Add account" signs in to (`accountLinkServer`). Signed
+/// out, it is also the server in use. Accounts carry their own server, so switching to one
+/// follows it regardless.
 #[tauri::command]
 pub fn account_set_server(mode: String) -> Result<Value, String> {
     if !cfg!(debug_assertions) {
@@ -678,30 +1017,18 @@ pub fn account_set_server(mode: String) -> Result<Value, String> {
         ));
     }
     let account = account()?;
-    let service = account
-        .app
-        .try_state::<Shared>()
-        .ok_or("native: Kimochi is still starting")?;
+    let store = settings_store()?;
     if let Some(code) = cancel_link(account) {
         link_event("cancelled", &code, None);
     }
-    service.settings.set("serverSettings.mode", json!(mode))?;
-    let value = service
-        .settings
-        .get("serverSettings")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| json!({ "mode": mode }));
-    let _ = account
-        .app
-        .emit("settings:changed", json!({ "key": "serverSettings", "value": value }));
+    store.set("accountLinkServer", json!(mode))?;
+    if active_key().is_none() {
+        store.set("serverSettings.mode", json!(mode))?;
+        let value = store.get("serverSettings").ok().flatten().unwrap_or_else(|| json!({ "mode": mode }));
+        let _ = account.app.emit("settings:changed", json!({ "key": "serverSettings", "value": value }));
+    }
     announce();
     announce_capabilities();
-    if signed_in() {
-        std::thread::spawn(|| {
-            let _ = refresh_blocking();
-        });
-    }
     Ok(status_value())
 }
 
@@ -710,15 +1037,27 @@ pub fn account_status() -> Value {
     status_value()
 }
 
+/// Sign out of an account (default: the active one): its token is forgotten here and revoked on
+/// the server; its profile stays. Signing out of the active account returns to the Local profile.
 #[tauri::command]
-pub async fn account_sign_out() -> Result<Value, String> {
-    let base = base()?;
-    let token = token_for(&base);
+pub async fn account_sign_out(key: Option<String>) -> Result<Value, String> {
+    let key = key.or_else(active_key).ok_or("invalid: no account is signed in")?;
+    let entry = entry_for(&key).ok_or("invalid: that account is not on this computer")?;
+    let account = account()?;
+    let token = read_token(&account.data_dir, &key);
+    if active_key().as_deref() == Some(key.as_str()) {
+        let target = None;
+        tauri::async_runtime::spawn_blocking(move || activate(target))
+            .await
+            .map_err(|e| e.to_string())??;
+    }
     // The local sign-out is what counts: the file goes even when the server cannot be reached.
-    update(&base, |_| None)?;
+    save_token(&account.data_dir, &key, None)?;
+    sync::log("profile", &format!("Signed out of {}; its data stays on this computer", entry.user["email"].as_str().unwrap_or(&key)));
     announce();
     announce_capabilities();
     if let Some(token) = token {
+        let base = entry.base().to_string();
         let _ = tauri::async_runtime::spawn_blocking(move || {
             if let Ok(http) = client(Duration::from_secs(5)) {
                 let _ = http.post(format!("{base}/api/v1/sign-out")).bearer_auth(&token).send();
@@ -726,6 +1065,29 @@ pub async fn account_sign_out() -> Result<Value, String> {
         })
         .await;
     }
+    Ok(status_value())
+}
+
+/// Sign out of an account and delete its profile from this computer (its data stays in the
+/// account, on the server).
+#[tauri::command]
+pub async fn account_remove(key: String) -> Result<Value, String> {
+    if entry_for(&key).is_none() {
+        return Err("invalid: that account is not on this computer".into());
+    }
+    account_sign_out(Some(key.clone())).await?;
+    let account = account()?;
+    let dir = profile::profile_dir(&account.local_dir, Some(&key));
+    if dir.starts_with(account.local_dir.join(profile::PROFILES_DIR)) && dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|e| format!("native: could not delete the profile: {e}"))?;
+    }
+    {
+        let mut index = lock(&account.index);
+        index.accounts.retain(|e| e.key != key);
+        save_index(&account.data_dir, &index)?;
+    }
+    sync::log("profile", &format!("Removed {key} and its data from this computer"));
+    announce();
     Ok(status_value())
 }
 
@@ -741,7 +1103,8 @@ pub async fn account_refresh() -> Result<Value, String> {
 
 #[tauri::command]
 pub fn account_open_web(app: AppHandle) -> Result<(), String> {
-    open_in_browser(&app, &format!("{}/account", base()?))
+    let base = active_entry().map(|e| e.base().to_string()).map_or_else(base, Ok)?;
+    open_in_browser(&app, &format!("{base}/account"))
 }
 
 /// "Open browser again" while linking.
@@ -751,844 +1114,9 @@ pub fn account_link_open(app: AppHandle) -> Result<(), String> {
     open_in_browser(&app, &url.ok_or("invalid: no sign-in is in progress")?)
 }
 
-// ---------------------------------------------------------------- backup
-
-/// Settings keys that never go to the backup and are never replaced by a restore: per-machine
-/// state (window places, the capture source, the portal grant) and the transient scan history.
-const LOCAL_ONLY: &[&str] = &[
-    "windowPositions",
-    "nativeWindowBounds",
-    "capture",
-    "lastSelectedSource",
-    "notebookEditRequest",
-    "lastSeenVersion",
-    "hasCompletedOnboarding",
-    "scannedTextHistory",
-    "serverSettings",
-    "endpoint",
-];
-
-/// A secret by its name: the DeepL key, an AnkiConnect key, any API key, token, secret or
-/// password. Matched on any level of the document, so a key added later is covered too.
-fn is_private(key: &str) -> bool {
-    let k = key.to_ascii_lowercase();
-    k == "key"
-        || k.ends_with("apikey")
-        || k.ends_with("api_key")
-        || k.ends_with("accesskey")
-        || k.ends_with("authkey")
-        || k.ends_with("connectkey")
-        || k.contains("token")
-        || k.contains("secret")
-        || k.contains("password")
-}
-
-/// A copy of `value` without any private key, at any depth.
-fn strip_private(value: &Value) -> Value {
-    match value {
-        Value::Object(map) => Value::Object(
-            map.iter()
-                .filter(|(k, _)| !is_private(k))
-                .map(|(k, v)| (k.clone(), strip_private(v)))
-                .collect(),
-        ),
-        Value::Array(items) => Value::Array(items.iter().map(strip_private).collect()),
-        other => other.clone(),
-    }
-}
-
-/// `settings.json` as it is backed up: no secrets, no per-machine keys.
-fn backup_settings(settings: &Value) -> Value {
-    let mut out = strip_private(settings);
-    if let Some(map) = out.as_object_mut() {
-        for key in LOCAL_ONLY {
-            map.remove(*key);
-        }
-    }
-    out
-}
-
-/// Put `local`'s private keys back into `restored`, at the same places.
-fn keep_private(local: &Value, restored: &mut Value) {
-    let (Some(local), Some(restored)) = (local.as_object(), restored.as_object_mut()) else {
-        return;
-    };
-    for (key, value) in local {
-        if is_private(key) {
-            restored.insert(key.clone(), value.clone());
-        } else if let Some(inner) = restored.get_mut(key) {
-            keep_private(value, inner);
-        }
-    }
-}
-
-/// The settings a restore writes: the backup's, keeping this machine's secrets and per-machine keys.
-fn restore_settings(local: &Value, backup: &Value) -> Value {
-    let mut out = backup_settings(backup);
-    if !out.is_object() {
-        return local.clone();
-    }
-    keep_private(local, &mut out);
-    if let (Some(map), Some(local)) = (out.as_object_mut(), local.as_object()) {
-        for key in LOCAL_ONLY {
-            if let Some(value) = local.get(*key) {
-                map.insert((*key).to_string(), value.clone());
-            }
-        }
-    }
-    out
-}
-
-/// A backup path as the contract allows it: relative, `/`-separated, 1–6 segments of
-/// `[A-Za-z0-9._-]`, never `.` or `..`.
-pub fn valid_backup_path(path: &str) -> bool {
-    let segments: Vec<&str> = path.split('/').collect();
-    (1..=6).contains(&segments.len())
-        && segments.iter().all(|s| {
-            !s.is_empty()
-                && *s != "."
-                && *s != ".."
-                && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-        })
-}
-
-/// Whether a backed-up path is one of the files Kimochi keeps, in its data folder's layout.
-fn known_backup_file(path: &str) -> bool {
-    if !valid_backup_path(path) {
-        return false;
-    }
-    let parts: Vec<&str> = path.split('/').collect();
-    matches!(
-        parts.as_slice(),
-        ["sessions.json" | "presets.json" | "stats.json"]
-            | ["sessions", _, "lines.json" | "notebook.json"]
-            | ["sessions", _, "images", _]
-    )
-}
-
-fn session_ids(manifest: &Value) -> Vec<String> {
-    manifest
-        .get("sessions")
-        .and_then(Value::as_array)
-        .map(|sessions| {
-            sessions
-                .iter()
-                .filter_map(|s| s.get("id").and_then(Value::as_str).map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-/// `sessions.json` after a restore: the backup's sessions joined to this machine's by id. A
-/// session only this machine has stays; one only the backup has is added; one both have takes
-/// whichever was changed last (`updatedAt`). Returns the manifest and the ids whose files come
-/// from the backup.
-fn merge_manifest(local: Option<&Value>, backup: &Value) -> (Value, HashSet<String>) {
-    let empty = Vec::new();
-    let local_sessions = local
-        .and_then(|l| l.get("sessions"))
-        .and_then(Value::as_array)
-        .unwrap_or(&empty);
-    let backup_sessions = backup.get("sessions").and_then(Value::as_array).unwrap_or(&empty);
-    let by_id = |list: &Vec<Value>| -> HashMap<String, Value> {
-        list.iter()
-            .filter_map(|s| Some((s.get("id")?.as_str()?.to_string(), s.clone())))
-            .collect()
-    };
-    let backup_by_id = by_id(backup_sessions);
-    let updated = |s: &Value| s.get("updatedAt").and_then(Value::as_f64).unwrap_or(0.0);
-    let mut taken = HashSet::new();
-    let mut seen = HashSet::new();
-    let mut sessions = Vec::new();
-    for session in local_sessions {
-        let Some(id) = session.get("id").and_then(Value::as_str) else { continue };
-        seen.insert(id.to_string());
-        match backup_by_id.get(id) {
-            Some(remote) if updated(remote) > updated(session) => {
-                taken.insert(id.to_string());
-                sessions.push(remote.clone());
-            }
-            _ => sessions.push(session.clone()),
-        }
-    }
-    for session in backup_sessions {
-        let Some(id) = session.get("id").and_then(Value::as_str) else { continue };
-        if seen.insert(id.to_string()) {
-            taken.insert(id.to_string());
-            sessions.push(session.clone());
-        }
-    }
-    let ids: HashSet<&str> = sessions.iter().filter_map(|s| s.get("id")?.as_str()).collect();
-    let active = [local, Some(backup)]
-        .into_iter()
-        .flatten()
-        .filter_map(|m| m.get("activeId").and_then(Value::as_str))
-        .find(|id| ids.contains(id))
-        .map(str::to_string)
-        .or_else(|| sessions.first().and_then(|s| s.get("id")?.as_str().map(str::to_string)))
-        .unwrap_or_default();
-    (json!({ "version": 1, "activeId": active, "sessions": sessions }), taken)
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
-}
-
-fn backup_options() -> (bool, bool) {
-    let Some(account) = ACCOUNT.get() else { return (false, false) };
-    let Some(service) = account.app.try_state::<Shared>() else { return (false, false) };
-    (
-        service.settings.get_or("accountBackup.prefs", false),
-        service.settings.get_or("accountBackup.sessions", false),
-    )
-}
-
-fn read_json(path: &Path) -> Option<Value> {
-    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
-}
-
-/// The preferences document `PUT /api/v1/prefs` takes.
-fn prefs_document(account: &Account) -> Result<Value, String> {
-    let service = account.app.try_state::<Shared>().ok_or("native: Kimochi is still starting")?;
-    Ok(json!({
-        "version": 1,
-        "settings": backup_settings(&service.settings.all()),
-        "presets": read_json(&account.local_dir.join("presets.json")).map(|p| strip_private(&p)),
-        "stats": read_json(&account.local_dir.join("stats.json")),
-    }))
-}
-
-/// The session files to back up, by backup path, from `sessions.json`'s sessions.
-fn session_files(local_dir: &Path) -> BTreeMap<String, PathBuf> {
-    let mut files = BTreeMap::new();
-    let manifest_path = local_dir.join("sessions.json");
-    let Some(manifest) = read_json(&manifest_path) else { return files };
-    files.insert("sessions.json".to_string(), manifest_path);
-    for sid in session_ids(&manifest) {
-        if !valid_backup_path(&sid) {
-            continue;
-        }
-        let dir = local_dir.join("sessions").join(&sid);
-        for name in ["lines.json", "notebook.json"] {
-            if dir.join(name).is_file() {
-                files.insert(format!("sessions/{sid}/{name}"), dir.join(name));
-            }
-        }
-        if let Ok(images) = std::fs::read_dir(dir.join("images")) {
-            for entry in images.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                let path = format!("sessions/{sid}/images/{name}");
-                if entry.path().is_file() && valid_backup_path(&path) {
-                    files.insert(path, entry.path());
-                }
-            }
-        }
-    }
-    files
-}
-
-/// Cheap: the files' sizes and modification times plus the preferences' hash. Equal to the
-/// last backup's means there is nothing to upload.
-fn fingerprint(account: &Account, prefs: bool, sessions: bool) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{prefs}{sessions}"));
-    if prefs {
-        if let Ok(doc) = prefs_document(account) {
-            hasher.update(serde_json::to_vec(&doc).unwrap_or_default());
-        }
-    }
-    if sessions {
-        for (path, file) in session_files(&account.local_dir) {
-            let meta = std::fs::metadata(&file).ok();
-            let modified = meta
-                .as_ref()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
-            hasher.update(format!("{path}:{}:{modified};", meta.map(|m| m.len()).unwrap_or(0)));
-        }
-    }
-    hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
-}
-
-fn progress(phase: &str, done: usize, total: usize, error: Option<&str>) {
-    let Some(account) = ACCOUNT.get() else { return };
-    let _ = account.app.emit(
-        "account-backup",
-        json!({ "phase": phase, "done": done, "total": total, "error": error }),
-    );
-}
-
-struct Running;
-impl Running {
-    fn claim() -> Result<Self, String> {
-        let account = account()?;
-        if account.backup_running.swap(true, Ordering::SeqCst) {
-            return Err("busy: a backup or restore is already running".into());
-        }
-        announce();
-        Ok(Running)
-    }
-}
-impl Drop for Running {
-    fn drop(&mut self) {
-        if let Some(account) = ACCOUNT.get() {
-            account.backup_running.store(false, Ordering::SeqCst);
-        }
-        announce();
-    }
-}
-
-#[derive(Deserialize)]
-struct RemoteFile {
-    path: String,
-    sha256: String,
-}
-
-#[derive(Deserialize)]
-struct RemoteList {
-    files: Vec<RemoteFile>,
-}
-
-fn remote_list(http: &reqwest::blocking::Client, base: &str, token: &str) -> Result<RemoteList, String> {
-    let response = http
-        .get(format!("{base}/api/v1/backup"))
-        .bearer_auth(token)
-        .send()
-        .map_err(|_| OFFLINE.to_string())?;
-    if !response.status().is_success() {
-        return Err(failure(cloud::Feature::Backup, base, response));
-    }
-    response
-        .json()
-        .map_err(|_| "native: Kimochi cloud sent an unreadable backup list".to_string())
-}
-
-fn download(http: &reqwest::blocking::Client, base: &str, token: &str, path: &str) -> Result<Vec<u8>, String> {
-    let response = http
-        .get(format!("{base}/api/v1/backup/files/{path}"))
-        .bearer_auth(token)
-        .send()
-        .map_err(|_| OFFLINE.to_string())?;
-    if !response.status().is_success() {
-        return Err(failure(cloud::Feature::Backup, base, response));
-    }
-    response
-        .bytes()
-        .map(|b| b.to_vec())
-        .map_err(|_| "native: a backed-up file could not be downloaded".to_string())
-}
-
-fn upload(http: &reqwest::blocking::Client, base: &str, token: &str, path: &str, bytes: Vec<u8>) -> Result<(), String> {
-    let response = http
-        .put(format!("{base}/api/v1/backup/files/{path}"))
-        .bearer_auth(token)
-        .header("X-Content-SHA256", sha256_hex(&bytes))
-        .header("Content-Type", "application/octet-stream")
-        .body(bytes)
-        .send()
-        .map_err(|_| OFFLINE.to_string())?;
-    if !response.status().is_success() {
-        return Err(failure(cloud::Feature::Backup, base, response));
-    }
-    Ok(())
-}
-
-/// Back up what the settings ask for, uploading only what changed. `force` (Back up now) skips
-/// the "nothing changed since the last backup" shortcut and compares with the server instead.
-fn backup_blocking(force: bool) -> Result<Value, String> {
-    let account = account()?;
-    // The backup belongs to the server it started on, even if the server is switched meanwhile.
-    let base = base()?;
-    let stored = stored_for(&base).ok_or("invalid: sign in to back up")?;
-    let token = stored.token;
-    let (prefs, sessions) = backup_options();
-    if !prefs && !sessions {
-        return Err("invalid: turn on backup of preferences or sessions first".into());
-    }
-    let print = fingerprint(account, prefs, sessions);
-    let mut memo = stored.backup;
-    if !force && memo.fingerprint.as_deref() == Some(print.as_str()) {
-        return Ok(status_value());
-    }
-    if force {
-        memo.prefs_hash = None;
-    }
-    let _running = Running::claim()?;
-    let result = run_backup(account, &base, &token, prefs, sessions, &memo);
-    let finished = now_ms();
-    let _ = update(&base, |stored| {
-        stored.map(|mut s| {
-            match &result {
-                Ok(prefs_hash) => {
-                    s.backup.last_backup_at = Some(finished);
-                    s.backup.last_error = None;
-                    s.backup.fingerprint = Some(print.clone());
-                    if prefs_hash.is_some() {
-                        s.backup.prefs_hash = prefs_hash.clone();
-                    }
-                }
-                Err(e) => s.backup.last_error = Some(e.trim_start_matches("native: ").to_string()),
-            }
-            s
-        })
-    });
-    match result {
-        Ok(_) => {
-            progress("done", 1, 1, None);
-            usage_changed();
-            Ok(status_value())
-        }
-        Err(e) => {
-            progress("error", 0, 0, Some(e.trim_start_matches("native: ")));
-            Err(e)
-        }
-    }
-}
-
-/// Returns the preferences hash uploaded (or kept).
-fn run_backup(account: &Account, base: &str, token: &str, prefs: bool, sessions: bool, memo: &BackupMemo) -> Result<Option<String>, String> {
-    let http = client(Duration::from_secs(120))?;
-    progress("scanning", 0, 0, None);
-    let mut prefs_hash = None;
-    if prefs {
-        let doc = prefs_document(account)?;
-        let bytes = serde_json::to_vec(&json!({ "prefs": doc })).map_err(|e| e.to_string())?;
-        if bytes.len() > PREFS_LIMIT {
-            return Err("native: Your preferences are too large to back up (over 256 KB).".into());
-        }
-        let hash = sha256_hex(&bytes);
-        if memo.prefs_hash.as_deref() != Some(hash.as_str()) {
-            let response = http
-                .put(format!("{base}/api/v1/prefs"))
-                .bearer_auth(token)
-                .header("Content-Type", "application/json")
-                .body(bytes)
-                .send()
-                .map_err(|_| OFFLINE.to_string())?;
-            if !response.status().is_success() {
-                return Err(failure(cloud::Feature::Backup, base, response));
-            }
-        }
-        prefs_hash = Some(hash);
-    }
-    if !sessions {
-        progress("uploading", 1, 1, None);
-        return Ok(prefs_hash);
-    }
-    let remote = remote_list(&http, base, token)?;
-    let remote: HashMap<String, String> = remote.files.into_iter().map(|f| (f.path, f.sha256)).collect();
-    let files = session_files(&account.local_dir);
-    // sessions.json goes last, after the files it names, and joined to the backup's own list so
-    // a second computer backing up never drops the first one's sessions from it.
-    let mut changed: Vec<(String, Vec<u8>)> = Vec::new();
-    let mut manifest: Option<Vec<u8>> = None;
-    for (path, file) in &files {
-        let Ok(meta) = std::fs::metadata(file) else { continue };
-        if meta.len() > FILE_LIMIT {
-            continue; // the server refuses files over 50 MB; skip rather than fail the rest
-        }
-        let Ok(bytes) = std::fs::read(file) else { continue };
-        if path == "sessions.json" {
-            manifest = Some(bytes);
-            continue;
-        }
-        if remote.get(path).map(String::as_str) != Some(sha256_hex(&bytes).as_str()) {
-            changed.push((path.clone(), bytes));
-        }
-    }
-    if let Some(local) = manifest {
-        let local_value: Option<Value> = serde_json::from_slice(&local).ok();
-        let merged = match (remote.get("sessions.json"), local_value) {
-            (Some(remote_hash), Some(local_value)) if *remote_hash != sha256_hex(&local) => {
-                let remote_manifest = download(&http, base, token, "sessions.json")
-                    .ok()
-                    .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
-                match remote_manifest {
-                    Some(remote_manifest) => {
-                        let mut joined = union_manifest(&local_value, &remote_manifest);
-                        if let Some(active) = local_value.get("activeId") {
-                            joined["activeId"] = active.clone();
-                        }
-                        serde_json::to_vec(&joined).unwrap_or(local)
-                    }
-                    None => local,
-                }
-            }
-            _ => local,
-        };
-        if remote.get("sessions.json").map(String::as_str) != Some(sha256_hex(&merged).as_str()) {
-            changed.push(("sessions.json".into(), merged));
-        }
-    }
-    let total = changed.len();
-    progress("uploading", 0, total, None);
-    for (done, (path, bytes)) in changed.into_iter().enumerate() {
-        upload(&http, base, token, &path, bytes)?;
-        progress("uploading", done + 1, total, None);
-    }
-    Ok(prefs_hash)
-}
-
-/// Both lists' sessions; this computer's copy wins where both have one.
-fn union_manifest(local: &Value, remote: &Value) -> Value {
-    let mut sessions: Vec<Value> = local.get("sessions").and_then(Value::as_array).cloned().unwrap_or_default();
-    let ids: HashSet<String> = session_ids(local).into_iter().collect();
-    for session in remote.get("sessions").and_then(Value::as_array).into_iter().flatten() {
-        if session.get("id").and_then(Value::as_str).is_some_and(|id| !ids.contains(id)) {
-            sessions.push(session.clone());
-        }
-    }
-    let mut out = local.clone();
-    out["sessions"] = Value::Array(sessions);
-    out
-}
-
-#[tauri::command]
-pub async fn account_backup_now() -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(|| backup_blocking(true))
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-/// Every minute: once the data folder has changed since the last backup and then stayed the
-/// same for two minutes (or fifteen minutes have passed with changes), back it up.
-fn spawn_auto_backup() {
-    std::thread::spawn(|| {
-        let mut seen: Option<String> = None;
-        let mut settled_since = Instant::now();
-        loop {
-            std::thread::sleep(Duration::from_secs(60));
-            let Some(account) = ACCOUNT.get() else { continue };
-            let (prefs, sessions) = backup_options();
-            // The server in use now: its sign-in and its memo of the last backup.
-            let Some(stored) = base().ok().and_then(|base| stored_for(&base)) else { continue };
-            if !(prefs || sessions) || account.backup_running.load(Ordering::SeqCst) {
-                continue;
-            }
-            let print = fingerprint(account, prefs, sessions);
-            let memo = stored.backup;
-            if memo.fingerprint.as_deref() == Some(print.as_str()) {
-                seen = Some(print);
-                continue;
-            }
-            if seen.as_deref() != Some(print.as_str()) {
-                seen = Some(print);
-                settled_since = Instant::now();
-                let overdue = memo
-                    .last_backup_at
-                    .is_none_or(|at| now_ms().saturating_sub(at) >= 15 * 60 * 1000);
-                if !overdue {
-                    continue;
-                }
-            } else if settled_since.elapsed() < Duration::from_secs(110) {
-                continue;
-            }
-            let _ = backup_blocking(false);
-        }
-    });
-}
-
-// ---------------------------------------------------------------- restore
-
-/// Download the backup into a staging folder, then restart: the webviews hold the Log's data in
-/// memory, so the files are put in place at the next launch, before any window opens.
-#[tauri::command]
-pub async fn account_restore(app: AppHandle, prefs: bool, sessions: bool) -> Result<(), String> {
-    if !prefs && !sessions {
-        return Err("invalid: choose preferences, sessions or both to restore".into());
-    }
-    tauri::async_runtime::spawn_blocking(move || restore_blocking(prefs, sessions))
-        .await
-        .map_err(|e| e.to_string())??;
-    progress("restarting", 1, 1, None);
-    std::thread::sleep(Duration::from_millis(600));
-    crate::shutdown_platform();
-    app.restart();
-}
-
-fn restore_blocking(prefs: bool, sessions: bool) -> Result<(), String> {
-    let account = account()?;
-    let base = base()?;
-    let token = token_for(&base).ok_or("invalid: sign in to restore a backup")?;
-    let _running = Running::claim()?;
-    let result = (|| -> Result<(), String> {
-        let http = client(Duration::from_secs(120))?;
-        let staging = account.local_dir.join(RESTORE_DIR);
-        let _ = std::fs::remove_dir_all(&staging);
-        std::fs::create_dir_all(staging.join("files")).map_err(|e| e.to_string())?;
-        progress("downloading", 0, 0, None);
-        let mut found = false;
-        if prefs {
-            let response = http
-                .get(format!("{base}/api/v1/prefs"))
-                .bearer_auth(&token)
-                .send()
-                .map_err(|_| OFFLINE.to_string())?;
-            match response.status().as_u16() {
-                404 => {}
-                s if (200..300).contains(&s) => {
-                    let body: Value = response.json().map_err(|_| "native: the backed-up preferences are unreadable")?;
-                    let doc = body.get("prefs").cloned().unwrap_or(Value::Null);
-                    if doc.is_object() {
-                        std::fs::write(staging.join("prefs.json"), serde_json::to_vec(&doc).map_err(|e| e.to_string())?)
-                            .map_err(|e| e.to_string())?;
-                        found = true;
-                    }
-                }
-                _ => return Err(failure(cloud::Feature::Backup, &base, response)),
-            }
-        }
-        if sessions {
-            let list = remote_list(&http, &base, &token)?;
-            let wanted: Vec<RemoteFile> = list
-                .files
-                .into_iter()
-                .filter(|f| known_backup_file(&f.path) && (f.path == "sessions.json" || f.path.starts_with("sessions/")))
-                .collect();
-            let total = wanted.len();
-            progress("downloading", 0, total, None);
-            for (done, file) in wanted.iter().enumerate() {
-                let bytes = download(&http, &base, &token, &file.path)?;
-                if !sha256_hex(&bytes).eq_ignore_ascii_case(&file.sha256) {
-                    return Err(format!("native: {} did not download intact; try again.", file.path));
-                }
-                let target = staged_path(&staging.join("files"), &file.path);
-                if let Some(dir) = target.parent() {
-                    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-                }
-                std::fs::write(&target, bytes).map_err(|e| e.to_string())?;
-                progress("downloading", done + 1, total, None);
-            }
-            found |= total > 0;
-        }
-        if !found {
-            let _ = std::fs::remove_dir_all(&staging);
-            return Err("invalid: there is no backup to restore yet".into());
-        }
-        std::fs::write(
-            staging.join(RESTORE_MARKER),
-            serde_json::to_vec(&json!({ "prefs": prefs, "sessions": sessions, "at": now_ms() })).unwrap_or_default(),
-        )
-        .map_err(|e| e.to_string())
-    })();
-    if let Err(e) = &result {
-        progress("error", 0, 0, Some(e.trim_start_matches("native: ")));
-    }
-    result
-}
-
-/// `root` joined with an already validated backup path.
-fn staged_path(root: &Path, path: &str) -> PathBuf {
-    path.split('/').fold(root.to_path_buf(), |dir, part| dir.join(part))
-}
-
-/// Put a downloaded restore in place. Runs at launch, before `settings.json` is loaded and before
-/// any window exists. A failure leaves the staging folder renamed for inspection and the data
-/// folder as it was where the failure happened.
-pub fn apply_pending_restore(data_dir: &Path, local_dir: &Path) {
-    let staging = local_dir.join(RESTORE_DIR);
-    if !staging.join(RESTORE_MARKER).is_file() {
-        if staging.exists() {
-            let _ = std::fs::remove_dir_all(&staging); // an interrupted download
-        }
-        return;
-    }
-    match apply_restore(&staging, data_dir, local_dir) {
-        Ok(()) => {
-            let _ = std::fs::remove_dir_all(&staging);
-        }
-        Err(e) => {
-            eprintln!("account: the restore could not be applied: {e}");
-            let _ = std::fs::rename(&staging, local_dir.join(format!("restore-failed-{}", now_ms())));
-        }
-    }
-}
-
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let tmp = path.with_extension("restore-tmp");
-    std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
-}
-
-fn apply_restore(staging: &Path, data_dir: &Path, local_dir: &Path) -> Result<(), String> {
-    if let Some(doc) = read_json(&staging.join("prefs.json")) {
-        if let Some(backup) = doc.get("settings").filter(|s| s.is_object()) {
-            let file = data_dir.join("settings.json");
-            let local = read_json(&file).unwrap_or_else(|| Value::Object(Map::new()));
-            let merged = restore_settings(&local, backup);
-            write_atomic(&file, &serde_json::to_vec(&merged).map_err(|e| e.to_string())?)?;
-        }
-        for name in ["presets", "stats"] {
-            let Some(value) = doc.get(name).filter(|v| v.is_object()) else { continue };
-            let mut value = value.clone();
-            if name == "presets" {
-                // Presets are stored without secrets; keep the local file's, if any.
-                if let Some(local) = read_json(&local_dir.join("presets.json")) {
-                    keep_private(&local, &mut value);
-                }
-            }
-            write_atomic(
-                &local_dir.join(format!("{name}.json")),
-                &serde_json::to_vec(&value).map_err(|e| e.to_string())?,
-            )?;
-        }
-    }
-    let files = staging.join("files");
-    let Some(backup_manifest) = read_json(&files.join("sessions.json")) else { return Ok(()) };
-    let local_manifest = read_json(&local_dir.join("sessions.json"));
-    let (merged, taken) = merge_manifest(local_manifest.as_ref(), &backup_manifest);
-    for sid in &taken {
-        if !valid_backup_path(sid) {
-            continue;
-        }
-        let from = files.join("sessions").join(sid);
-        if !from.is_dir() {
-            continue;
-        }
-        let to = local_dir.join("sessions").join(sid);
-        for name in ["lines.json", "notebook.json"] {
-            if from.join(name).is_file() {
-                let bytes = std::fs::read(from.join(name)).map_err(|e| e.to_string())?;
-                write_atomic(&to.join(name), &bytes)?;
-            }
-        }
-        std::fs::create_dir_all(to.join("images")).map_err(|e| e.to_string())?;
-        if let Ok(images) = std::fs::read_dir(from.join("images")) {
-            for entry in images.flatten() {
-                let bytes = std::fs::read(entry.path()).map_err(|e| e.to_string())?;
-                write_atomic(&to.join("images").join(entry.file_name()), &bytes)?;
-            }
-        }
-    }
-    // A session the backup lists without files gets empty ones, as a new session would.
-    if let Some(sessions) = merged.get("sessions").and_then(Value::as_array) {
-        for sid in sessions.iter().filter_map(|s| s.get("id")?.as_str()) {
-            if !valid_backup_path(sid) {
-                continue;
-            }
-            let dir = local_dir.join("sessions").join(sid);
-            if !dir.join("lines.json").exists() {
-                write_atomic(&dir.join("lines.json"), br#"{"version":1,"lines":[]}"#)?;
-            }
-            let _ = std::fs::create_dir_all(dir.join("images"));
-        }
-    }
-    write_atomic(
-        &local_dir.join("sessions.json"),
-        &serde_json::to_vec(&merged).map_err(|e| e.to_string())?,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn secrets_are_stripped_at_any_depth() {
-        let settings = json!({
-            "appearance": "dark",
-            "hotkeys": { "scan": { "accelerator": "Cmd+J" } },
-            "superTexthooker": { "deeplApiKey": "secret-1", "ankiConnectKey": "secret-2", "fontSizePx": 16 },
-            "capture": { "portalRestoreToken": "t" },
-            "voice": { "apiKey": "x", "voiceId": "keep" },
-            "windowPositions": { "log": [1, 2] },
-            "scannedTextHistory": ["a"],
-        });
-        let out = backup_settings(&settings);
-        let text = out.to_string();
-        for secret in ["secret-1", "secret-2", "portalRestoreToken", "apiKey"] {
-            assert!(!text.contains(secret), "{secret} leaked: {text}");
-        }
-        assert_eq!(out["superTexthooker"]["fontSizePx"], 16);
-        assert_eq!(out["voice"]["voiceId"], "keep");
-        assert_eq!(out["hotkeys"]["scan"]["accelerator"], "Cmd+J", "hotkeys is not a key");
-        assert!(out.get("windowPositions").is_none());
-        assert!(out.get("scannedTextHistory").is_none());
-    }
-
-    #[test]
-    fn a_restore_keeps_this_machines_secrets_and_places() {
-        let local = json!({
-            "superTexthooker": { "deeplApiKey": "mine", "fontSizePx": 14 },
-            "windowPositions": { "log": [5, 5] },
-            "appearance": "light",
-        });
-        let backup = json!({
-            "superTexthooker": { "deeplApiKey": "", "fontSizePx": 20 },
-            "windowPositions": { "log": [9, 9] },
-            "appearance": "dark",
-        });
-        let out = restore_settings(&local, &backup);
-        assert_eq!(out["superTexthooker"]["deeplApiKey"], "mine");
-        assert_eq!(out["superTexthooker"]["fontSizePx"], 20);
-        assert_eq!(out["appearance"], "dark");
-        assert_eq!(out["windowPositions"]["log"], json!([5, 5]));
-    }
-
-    #[test]
-    fn backup_paths_follow_the_contract() {
-        for ok in ["sessions.json", "sessions/abc-123/lines.json", "sessions/a/images/x_1.png", "a/b/c/d/e/f"] {
-            assert!(valid_backup_path(ok), "{ok}");
-        }
-        for bad in ["", "/abs", "a//b", "../x", "sessions/../x", "a/./b", "a b", "a/b/c/d/e/f/g", "é", "a\\b", "x/"] {
-            assert!(!valid_backup_path(bad), "{bad}");
-        }
-        assert!(known_backup_file("sessions/s1/notebook.json"));
-        assert!(known_backup_file("sessions/s1/images/1.png"));
-        assert!(!known_backup_file("settings.json"));
-        assert!(!known_backup_file("sessions/s1/other.json"));
-        assert!(!known_backup_file("sessions/s1/images/deeper/x.png"));
-    }
-
-    #[test]
-    fn restored_sessions_merge_by_id() {
-        let local = json!({
-            "version": 1,
-            "activeId": "only-local",
-            "sessions": [
-                { "id": "only-local", "updatedAt": 5 },
-                { "id": "both-newer-here", "updatedAt": 50 },
-                { "id": "both-newer-there", "updatedAt": 10 },
-            ]
-        });
-        let backup = json!({
-            "version": 1,
-            "activeId": "only-backup",
-            "sessions": [
-                { "id": "both-newer-here", "updatedAt": 40, "name": "backup" },
-                { "id": "both-newer-there", "updatedAt": 20, "name": "backup" },
-                { "id": "only-backup", "updatedAt": 1 },
-            ]
-        });
-        let (merged, taken) = merge_manifest(Some(&local), &backup);
-        let ids: Vec<&str> = merged["sessions"].as_array().unwrap().iter().map(|s| s["id"].as_str().unwrap()).collect();
-        assert_eq!(ids, ["only-local", "both-newer-here", "both-newer-there", "only-backup"]);
-        assert_eq!(merged["activeId"], "only-local");
-        assert_eq!(merged["sessions"][2]["name"], "backup");
-        assert!(merged["sessions"][1].get("name").is_none(), "the newer local copy stays");
-        let mut taken: Vec<_> = taken.into_iter().collect();
-        taken.sort();
-        assert_eq!(taken, ["both-newer-there", "only-backup"]);
-
-        let (fresh, taken) = merge_manifest(None, &backup);
-        assert_eq!(fresh["activeId"], "only-backup");
-        assert_eq!(taken.len(), 3);
-    }
-
-    #[test]
-    fn a_backup_never_drops_another_computers_sessions() {
-        let local = json!({ "version": 1, "activeId": "a", "sessions": [{ "id": "a", "name": "here" }] });
-        let remote = json!({ "version": 1, "activeId": "b", "sessions": [{ "id": "a", "name": "there" }, { "id": "b" }] });
-        let out = union_manifest(&local, &remote);
-        assert_eq!(out["sessions"].as_array().unwrap().len(), 2);
-        assert_eq!(out["sessions"][0]["name"], "here");
-        assert_eq!(out["activeId"], "a");
-    }
 
     #[test]
     fn deep_links_name_the_account_page() {
@@ -1600,96 +1128,45 @@ mod tests {
     }
 
     #[test]
-    fn a_restore_is_applied_from_staging() {
-        let root = std::env::temp_dir().join(format!("kimochi-restore-test-{}", now_ms()));
-        let (data, local) = (root.join("data"), root.join("local"));
-        let staging = local.join(RESTORE_DIR);
-        std::fs::create_dir_all(staging.join("files/sessions/s2/images")).unwrap();
-        std::fs::create_dir_all(local.join("sessions/s1")).unwrap();
-        std::fs::create_dir_all(&data).unwrap();
-        std::fs::write(data.join("settings.json"), r#"{"superTexthooker":{"deeplApiKey":"k"},"appearance":"light"}"#).unwrap();
-        std::fs::write(local.join("sessions.json"), r#"{"version":1,"activeId":"s1","sessions":[{"id":"s1","updatedAt":1}]}"#).unwrap();
-        std::fs::write(local.join("sessions/s1/lines.json"), "local").unwrap();
-        std::fs::write(
-            staging.join("prefs.json"),
-            r#"{"version":1,"settings":{"appearance":"dark","superTexthooker":{}},"stats":{"version":1}}"#,
-        )
-        .unwrap();
-        std::fs::write(staging.join("files/sessions.json"), r#"{"version":1,"activeId":"s2","sessions":[{"id":"s2","updatedAt":3}]}"#).unwrap();
-        std::fs::write(staging.join("files/sessions/s2/lines.json"), "restored").unwrap();
-        std::fs::write(staging.join("files/sessions/s2/images/a.png"), "png").unwrap();
-        std::fs::write(staging.join(RESTORE_MARKER), "{}").unwrap();
-
-        apply_pending_restore(&data, &local);
-
-        let settings = read_json(&data.join("settings.json")).unwrap();
-        assert_eq!(settings["appearance"], "dark");
-        assert_eq!(settings["superTexthooker"]["deeplApiKey"], "k");
-        assert_eq!(read_json(&local.join("stats.json")).unwrap()["version"], 1);
-        let manifest = read_json(&local.join("sessions.json")).unwrap();
-        assert_eq!(manifest["sessions"].as_array().unwrap().len(), 2);
-        assert_eq!(manifest["activeId"], "s1");
-        assert_eq!(std::fs::read_to_string(local.join("sessions/s1/lines.json")).unwrap(), "local");
-        assert_eq!(std::fs::read_to_string(local.join("sessions/s2/lines.json")).unwrap(), "restored");
-        assert_eq!(std::fs::read_to_string(local.join("sessions/s2/images/a.png")).unwrap(), "png");
-        assert!(!staging.exists());
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn each_server_keeps_its_own_account_file() {
-        // Kimochi cloud keeps the file every earlier version wrote, so a sign-in carries over.
-        assert_eq!(file_name(settings::CLOUD_SERVER), FILE);
-        assert_eq!(file_name(settings::LOCAL_SERVER), LOCAL_FILE);
-        assert_ne!(file_name(settings::CLOUD_SERVER), file_name(settings::LOCAL_SERVER));
-        // Any other base gets a stable name of its own, never one of the two above.
-        let other = file_name("http://127.0.0.1:8787");
-        assert_eq!(other, file_name("http://127.0.0.1:8787"));
-        assert!(other.starts_with("account-") && other.ends_with(".json"));
-        assert_ne!(other, FILE);
-        assert_ne!(other, LOCAL_FILE);
-        assert_ne!(other, file_name("http://127.0.0.1:8788"));
-    }
-
-    #[test]
-    fn the_slot_follows_the_server_base() {
-        let dir = std::env::temp_dir().join(format!("kimochi-account-slots-{}", now_ms()));
-        let cloud = Stored { token: "kmc_cloud".into(), ..Default::default() };
-        let local = Stored { token: "kmc_local".into(), ..Default::default() };
-        persist(Some(&cloud), &dir.join(FILE)).unwrap();
-        persist(Some(&local), &dir.join(LOCAL_FILE)).unwrap();
-        let slot = Mutex::new(Slot { file: PathBuf::new(), stored: None });
-        let token = |base: &str| {
-            let mut slot = lock(&slot);
-            select(&mut slot, &dir, base);
-            slot.stored.as_ref().map(|s| s.token.clone())
-        };
-        assert_eq!(token(settings::CLOUD_SERVER).as_deref(), Some("kmc_cloud"));
-        assert_eq!(token(settings::LOCAL_SERVER).as_deref(), Some("kmc_local"));
-        assert_eq!(token(settings::CLOUD_SERVER).as_deref(), Some("kmc_cloud"));
-        // Signing out of one server leaves the other's sign-in alone.
-        std::fs::remove_file(dir.join(LOCAL_FILE)).unwrap();
-        assert_eq!(token(settings::LOCAL_SERVER), None);
-        assert_eq!(token(settings::CLOUD_SERVER).as_deref(), Some("kmc_cloud"));
-        // A base with no file is signed out.
-        assert_eq!(token("http://127.0.0.1:8787"), None);
+    fn token_files_are_private_and_per_account() {
+        let dir = std::env::temp_dir().join(format!("kimochi-account-tokens-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn the_account_file_is_private() {
-        let dir = std::env::temp_dir().join(format!("kimochi-account-test-{}", now_ms()));
-        let file = dir.join(FILE);
-        let stored = Stored { token: "kmc_test".into(), ..Default::default() };
-        persist(Some(&stored), &file).unwrap();
+        save_token(&dir, "cloud-u1", Some("kmc_a")).unwrap();
+        save_token(&dir, "local-u1", Some("kmc_b")).unwrap();
+        assert_eq!(read_token(&dir, "cloud-u1").as_deref(), Some("kmc_a"));
+        assert_eq!(read_token(&dir, "local-u1").as_deref(), Some("kmc_b"));
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+            let mode = std::fs::metadata(token_path(&dir, "cloud-u1")).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
         }
-        persist(None, &file).unwrap();
-        assert!(!file.exists());
-        persist(None, &file).unwrap();
+        save_token(&dir, "cloud-u1", None).unwrap();
+        save_token(&dir, "cloud-u1", None).unwrap();
+        assert_eq!(read_token(&dir, "cloud-u1"), None);
+        assert_eq!(read_token(&dir, "local-u1").as_deref(), Some("kmc_b"), "signing out of one leaves the other");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_earlier_sign_in_becomes_the_active_account_with_its_data() {
+        let root = std::env::temp_dir().join(format!("kimochi-account-migrate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (data, local) = (root.join("data"), root.join("local"));
+        std::fs::create_dir_all(local.join("sessions/s1")).unwrap();
+        std::fs::create_dir_all(&data).unwrap();
+        std::fs::write(local.join("sessions.json"), r#"{"version":1,"activeId":"s1","sessions":[{"id":"s1"}]}"#).unwrap();
+        std::fs::write(local.join("sessions/s1/lines.json"), r#"{"version":1,"lines":[]}"#).unwrap();
+        std::fs::write(data.join("account.json"), r#"{"token":"kmc_cloud","user":{"id":"usr_1","email":"a@b.c"}}"#).unwrap();
+        std::fs::write(data.join("account-local.json"), r#"{"token":"kmc_local","user":{"id":"usr_2"}}"#).unwrap();
+        let (index, notes) = migrate_legacy(&data, &local, "cloud");
+        assert_eq!(index.accounts.len(), 2);
+        assert_eq!(index.active.as_deref(), Some("cloud-usr_1"));
+        assert_eq!(read_token(&data, "local-usr_2").as_deref(), Some("kmc_local"));
+        assert!(local.join("profiles/cloud-usr_1/sessions/s1/lines.json").exists());
+        assert!(local.join("sessions.json").exists(), "the Local profile is untouched");
+        assert!(!local.join("profiles/local-usr_2").exists(), "only the account in use takes the data");
+        assert_eq!(notes.len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

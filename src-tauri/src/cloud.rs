@@ -32,7 +32,7 @@ pub enum Feature {
     Tts,
     Translate,
     Explain,
-    Backup,
+    Sync,
     Account,
 }
 
@@ -43,7 +43,7 @@ impl Feature {
             Feature::Tts => "Read aloud",
             Feature::Translate => "Kimochi cloud translation",
             Feature::Explain => "Kimochi cloud explanations",
-            Feature::Backup => "Backup",
+            Feature::Sync => "Sync",
             Feature::Account => "Kimochi cloud",
         }
     }
@@ -99,7 +99,7 @@ fn quota_message(body: &Value) -> Option<String> {
     let limit = body.get("limit")?.as_f64()?;
     if metric == "storage" {
         return Some(format!(
-            "Your Kimochi backup is full ({}). Remove sessions from it under Manage account on the web, or back up preferences only.",
+            "Your Kimochi sync storage is full ({}). Sync is paused until you free space under Manage account on the web; everything stays on this computer.",
             bytes_label(limit)
         ));
     }
@@ -359,7 +359,7 @@ mod tests {
             "You've used this month's 30 Kimochi cloud explanations. They reset on Jan 1."
         );
         let body = r#"{"error":"quota_exceeded","metric":"storage","limit":250000000,"used":1}"#;
-        assert!(describe_failure(Feature::Backup, 402, body, true).starts_with("Your Kimochi backup is full (250 MB)"));
+        assert!(describe_failure(Feature::Sync, 402, body, true).starts_with("Your Kimochi sync storage is full (250 MB)"));
         // A 402 without the fields falls back to the server's sentence.
         assert_eq!(describe_failure(Feature::Tts, 402, r#"{"message":"Out of read-alouds."}"#, true), "Out of read-alouds.");
     }

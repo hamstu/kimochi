@@ -208,26 +208,31 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   line-height: var(--k-leading-xs);
 }
 .sb-account-avatar {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: var(--k-control-h-sm);
-  height: var(--k-control-h-sm);
   margin-inline: calc(var(--k-space-1) * -1);
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--k-accent-soft);
-  box-shadow: inset 0 0 0 1px var(--gray-a3);
-  color: var(--k-accent-text);
-  font-size: var(--k-text-sm);
-  font-weight: var(--k-weight-semibold);
-  line-height: 1;
-  user-select: none;
 }
-.sb-account-avatar > img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.sb-account-row > .k-row-label {
+  min-width: 0;
+  flex: 1;
+}
+/* The switcher's affordance, and Sync's attention dot beside it. */
+.sb-account-trailing {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  color: var(--k-text-3);
+}
+.sb-account-chevron {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.sb-account-menu {
+  min-width: 16rem;
+}
+.sb-account-menu-avatar {
+  width: var(--k-icon);
+  height: var(--k-icon);
+  font-size: var(--k-text-xs);
 }
 /* Back meets the title bar: it takes over the column's top padding, so its label stays put. */
 .sb-back {
