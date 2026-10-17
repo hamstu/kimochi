@@ -272,6 +272,7 @@ crop changes on the same source**, since the old text no longer matches the new 
 | `clear` | `() -> ()` |
 | `snapshot` | `() -> ViewState` |
 | `regions` | `({rects}) -> ()` |
+| `overlay_text_boxes` | `({rects}) -> ()` — the overlay's text boxes in desktop points, drawn or not; ignored from any other window |
 | `view_flags` | `({flags}) -> ()` |
 | `place_overlay` | `({rect}) -> ()` |
 | `desktop` | `() -> [Rect]` |
@@ -384,7 +385,7 @@ full screen clears the scan and switches the window's crop to the one saved for 
 to its Space or virtual desktop; on macOS through SkyLight, plus `AXRaise` when Accessibility
 is allowed, and the application otherwise.
 
-A second watch emits `source-focus` `{focused, present, held}` when the answer to
+A second watch emits `source-focus` `{focused, present, held, covered, source_front}` when the answer to
 "should the scanned text be on screen at all" changes, and mirrors it into the snapshot
 as `sourceFocus`. It is a question about a **window**, not an application: two windows
 of one app are two sources and only one of them is being read. The comparison is
@@ -399,7 +400,19 @@ in front, because there is no window whose focus could be lost. While one of Kim
 **own** windows is the frontmost ordinary window the previous answer is *held*, because
 hovering the scanned text focuses the overlay and clicking the dictionary focuses the
 popup — recomputing then would hide the text being read and close the popup that took
-the focus. Any other application takes precedence immediately. With no frontmost
+the focus. While one of Kimochi's **ordinary** windows has the keyboard (the main window,
+mini mode, Settings, Diagnostics, Dictionary settings, onboarding), the text stays only
+while none of those windows covers it: the answer is then `source_front` — whether the
+captured window was in front the last time another application was — unless a visible,
+unminimised Kimochi window intersects one of the overlay's text boxes, in which case it
+is false with `covered: true`. Both sides are cached in desktop points and kept current
+by events (`cover.rs`): each window's move, resize, focus, minimise, show and hide, and
+the overlay's `overlay_text_boxes`, which it sends whenever its text or the source moves,
+*whether or not the text is drawn* — hidden text that reported nothing would count as
+uncovered and come straight back. A change that flips the answer wakes the watch at once.
+Where window frames are not trustworthy (Wayland, and gamescope / Steam Deck Gaming Mode)
+every visible Kimochi window counts as covering, which is the old rule: the text goes
+whenever Kimochi itself is in front. Any other application takes precedence immediately. With no frontmost
 application at all the last answer stands rather than a guess being made, and an
 application with no ordinary window on screen answers with window `0`, which matches no
 real window while still identifying who has focus.

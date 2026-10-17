@@ -77,6 +77,11 @@ fn on_x11() -> bool {
     session().backend == Backend::X11
 }
 
+/// An X11 session (including XWayland under gamescope), where windows have real frames.
+pub(crate) fn x11_session() -> bool {
+    on_x11()
+}
+
 // ---------------------------------------------------------------- pointer
 
 /// Pointer position, primary button and held modifiers from one `QueryPointer`.

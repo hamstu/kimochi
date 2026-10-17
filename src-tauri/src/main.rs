@@ -11,6 +11,7 @@ mod application_context;
 mod capture_unavailable;
 mod cloud;
 mod compact;
+mod cover;
 mod dictionary_runtime;
 mod engine_probe;
 mod extension_store;
@@ -746,6 +747,16 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
 #[tauri::command]
 fn dictionary(state: State<Shared>, open: bool) {
     state.view.lock().unwrap().dictionary = open;
+}
+
+/// Where the overlay's text is, in desktop points, whether or not it is drawn. Compared
+/// with Kimochi's own window frames (`cover`) so the text can stay up while Kimochi is
+/// in front but off it. Only the overlay's own answer counts.
+#[tauri::command]
+fn overlay_text_boxes(window: tauri::WebviewWindow, rects: Vec<Rect>) {
+    if window.label() == OVERLAY {
+        cover::set_text(rects);
+    }
 }
 
 #[tauri::command]
@@ -2593,6 +2604,7 @@ fn main() {
             permission,
             capture_pick_source,
             regions,
+            overlay_text_boxes,
             place_overlay,
             desktop,
             displays,
@@ -3682,6 +3694,7 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
                 platform::front_window(),
                 own_pid,
                 gamepad::panel_focused(),
+                cover::covered_now(),
                 bounds,
                 previous.unwrap_or_default(),
             );
@@ -3693,7 +3706,10 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
             // Controller mode's keys are global; switching to any other app ends it.
             let source_pid = watched.as_ref().and_then(SourceId::pid);
             gamepad::release_if_elsewhere(&handle, platform::frontmost_pid(), source_pid);
-            std::thread::sleep(Duration::from_millis(150));
+            // Woken early when one of Kimochi's windows moves, resizes, hides or takes
+            // focus, or the overlay's text moves, so covering and uncovering the text
+            // answer at once.
+            cover::wait(Duration::from_millis(150));
         }
     });
 }

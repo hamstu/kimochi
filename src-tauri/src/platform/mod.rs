@@ -806,6 +806,32 @@ pub fn frontmost_pid_for(name: &str) -> Option<u32> {
     (current == name).then(frontmost_pid).flatten()
 }
 
+/// Whether Kimochi's own window frames (`desktop_bounds`) say where those windows really
+/// are on screen, so `cover` can tell one that is off the scanned text from one over it.
+///
+/// True on macOS and Windows. On Linux only on a plain X11 desktop: Wayland never says
+/// where a window is (a frame there is always at the origin), and gamescope — Steam Deck's
+/// Gaming Mode — composites the focused application over the game whatever its X11 frame
+/// says. Where this is false any visible Kimochi window counts as covering the text, which
+/// is the behaviour from before the rule existed.
+#[cfg(target_os = "linux")]
+pub fn own_frames_reliable() -> bool {
+    use std::sync::OnceLock;
+    static GAMESCOPE_SESSION: OnceLock<bool> = OnceLock::new();
+    let gamescope_session = *GAMESCOPE_SESSION.get_or_init(|| {
+        std::env::var("XDG_CURRENT_DESKTOP")
+            .is_ok_and(|d| d.split(':').any(|name| name.eq_ignore_ascii_case("gamescope")))
+            || std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some()
+    });
+    linux::x11_session() && !gamescope_session && !gamescope::active()
+}
+
+/// See the Linux version: macOS and Windows always report real window frames.
+#[cfg(not(target_os = "linux"))]
+pub fn own_frames_reliable() -> bool {
+    true
+}
+
 /// Whether the pointer arriving on the dictionary may take the keyboard. True only
 /// where a window can become key without activating the application (an AppKit
 /// non-activating panel). Elsewhere `promote_to_key` activates Kimochi, so it is

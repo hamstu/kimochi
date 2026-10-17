@@ -244,6 +244,8 @@ export const controllerNav = (active) => invoke('controller_nav', { active })
 /** Every action's shortcut and gamepad binding, defaults merged with the user's. */
 export const hotkeysLoad = () => optional('hotkeys_load', undefined, null)
 export const setRegions = (rects) => invoke('regions', { rects })
+/** Where the overlay's text is, drawn or not (see `cover.rs`). */
+export const setTextBoxes = (rects) => optional('overlay_text_boxes', { rects })
 export const snapshot = () => invoke('snapshot')
 export const panel = (label, action, rect = null) => invoke('panel', { label, action, rect })
 export const setDictionaryOpen = (open) => optional('dictionary', { open })

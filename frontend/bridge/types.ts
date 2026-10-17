@@ -152,7 +152,7 @@ export interface ViewState {
    * screen. `held` means one of Kimochi's own windows is in front, so the previous
    * answer is standing rather than being recomputed.
    */
-  sourceFocus?: { focused: boolean; present: boolean; held: boolean }
+  sourceFocus?: { focused: boolean; present: boolean; held: boolean; covered?: boolean }
   origin: Rect | null
   interactive: boolean
   dictionary: boolean

@@ -21,7 +21,7 @@ import { createController } from './controller.js'
  * costs lookups and says so, instead of leaving the user with no OCR at all.
  */
 
-import { sourceDisplay, toOverlayLocal } from './geometry.js'
+import { mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
 import { scanPointerInit } from './scan-input.js'
 import { visibleAnnotations } from './annotations.js'
 import { AutoScanner } from './autoscan.js'
@@ -446,10 +446,51 @@ function holdAutoScan() {
   scanner.pauseRecognitionFor(3000)
 }
 
+/**
+ * Where the text is on the desktop, in desktop points, whether or not it is drawn.
+ *
+ * Native compares these with Kimochi's own window frames: while the reader is in Kimochi,
+ * the text stays as long as none of its windows is on top of it. So this has to describe
+ * hidden text too — reporting nothing while hidden would make the text "uncovered" and
+ * bring it straight back under the window that hid it.
+ */
+function textBoxes() {
+  if (waylandDisabled || waylandLayer) return []
+  if (!state.info || !state.origin || !state.annotations.length) return []
+  if (!isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)) return []
+  const bounds = state.detached
+    ? (state.info.source_bounds ?? null)
+    : (state.sourceBounds ?? state.info.source_bounds ?? null)
+  try {
+    const shown = visibleAnnotations(state.annotations, setting('textOverlayGrouping'))
+    return mapAnnotations(state.info, shown, state.origin, bounds ?? undefined).map((box) => ({
+      x: state.origin.x + box.x,
+      y: state.origin.y + box.y,
+      width: box.width,
+      height: box.height
+    }))
+  } catch {
+    return []
+  }
+}
+
+let lastTextBoxes = null
+function publishTextBoxes() {
+  const rects = textBoxes()
+  const signature = JSON.stringify(rects.map((r) => [r.x, r.y, r.width, r.height].map(Math.round)))
+  if (signature === lastTextBoxes) return
+  lastTextBoxes = signature
+  void native.setTextBoxes(rects).catch((error) => {
+    lastTextBoxes = null
+    log({ check: 'overlay-text-boxes-error', error: String(error?.message ?? error) })
+  })
+}
+
 let gnomeOverlay = null
 let gnomeControllerWords = false
 let lastVisibilityTrace = null
 function draw() {
+  publishTextBoxes()
   if (waylandDisabled) { renderer.clear(); void gnomeOverlay?.update(); return }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
@@ -2897,6 +2938,7 @@ await native.listen('source-focus', ({ payload }) => {
     focused: payload.focused,
     present: payload.present,
     held: payload.held ?? false,
+    covered: payload.covered ?? false,
     // Which two windows were compared. Ids only, never a title: an application can
     // order an auxiliary window in front of the one being read, and that is the only
     // thing that distinguishes it from the reader genuinely leaving.

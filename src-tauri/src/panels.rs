@@ -600,20 +600,26 @@ fn attach_events(
     let store = settings.clone();
     let owned = window.clone();
     crate::gamepad::panel_focus(spec.label, window.is_focused().unwrap_or(false));
+    // Where each of Kimochi's windows is, kept current from its own events, so whether one
+    // covers the scanned text is a comparison of cached rectangles (`cover`).
+    crate::cover::note(window);
     window.on_window_event(move |event| match event {
         tauri::WindowEvent::Focused(focused) => {
             crate::gamepad::panel_focus(spec.label, *focused);
+            crate::cover::note(&owned);
             #[cfg(target_os = "linux")]
             platform::gamescope::control_focus(&owned, *focused);
         },
         tauri::WindowEvent::Destroyed => {
             crate::gamepad::panel_focus(spec.label, false);
+            crate::cover::note_gone(spec.label);
             #[cfg(target_os = "linux")]
             platform::gamescope::control_focus(&owned, false);
         },
         tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
             save_bounds(&store, &owned, spec);
             if owned.is_minimized().unwrap_or(false) { crate::gamepad::panel_focus(spec.label, false); }
+            crate::cover::note(&owned);
         }
         tauri::WindowEvent::CloseRequested { api, .. } if spec.label == MAIN => {
             crate::gamepad::panel_focus(spec.label, false);
@@ -629,6 +635,7 @@ fn attach_events(
             save_bounds(&store, &owned, spec);
             // A hidden Settings window can no longer finish recording a shortcut.
             crate::hotkeys::resume(&handle, &store);
+            crate::cover::note_gone(spec.label);
             #[cfg(target_os = "linux")]
             let _ = platform::gamescope::hide(&owned);
             #[cfg(not(target_os = "linux"))]
@@ -749,7 +756,12 @@ fn apply(
         "inspect" => {}
         _ => return Err(format!("invalid: unknown window action {action:?}")),
     }
-    if matches!(action, "hide" | "minimize") { crate::gamepad::panel_focus(label, false); }
+    if matches!(action, "hide" | "minimize") {
+        crate::gamepad::panel_focus(label, false);
+        crate::cover::note_gone(label);
+    } else if action != "inspect" {
+        crate::cover::note(window);
+    }
     let mut state = info(window)?;
     if label == MAIN { state["mini"] = json!(crate::compact::active()); }
     #[cfg(target_os = "linux")]

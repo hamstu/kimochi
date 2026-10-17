@@ -191,7 +191,8 @@ export default function DebugPanel(): JSX.Element {
               ? [
                   state.sourceFocus.focused ? 'in front' : 'behind',
                   state.sourceFocus.present ? 'on screen' : 'gone',
-                  state.sourceFocus.held ? '(held: Kimochi is frontmost)' : ''
+                  state.sourceFocus.held ? '(held: Kimochi is frontmost)' : '',
+                  state.sourceFocus.covered ? '(a Kimochi window covers the text)' : ''
                 ]
                   .filter(Boolean)
                   .join(', ')
