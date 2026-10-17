@@ -10,7 +10,12 @@ task that install-wsl-keepalive.ps1 registers. Each run:
      install-wsl-keepalive.ps1), which restarts the runner's systemd unit if it is inactive;
   4. if the distro does not answer twice in a row, resets WSL: stops the keepalive, runs
      `wsl --shutdown`, restarts WSLService, starts the keepalive again. That clears the state
-     where the utility VM is up but every start fails with Wsl/Service/CreateInstance/E_FAIL.
+     where the utility VM is up but every start fails with Wsl/Service/CreateInstance/E_FAIL;
+  5. with -CompactBelowGB set, compacts the distro's vhdx when its drive has less free than that,
+     the runner is idle and the last compaction was over a day ago: fstrim inside, stop WSL,
+     diskpart `compact vdisk`, start WSL again (a few minutes). The vhdx only ever grows (ext4
+     spreads writes over its whole virtual size and Windows never takes freed blocks back), so
+     without this it creeps up to fill the drive however small the build caches are kept.
 
 Logs to C:\ProgramData\wsl-keepalive\watchdog.log.
 #>
@@ -18,12 +23,14 @@ param(
   [string]$Distro = 'Ubuntu',
   [string]$User = 'hamst',
   [int]$SshPort = 2222,
-  [int]$MinFreeGB = 10
+  [int]$MinFreeGB = 10,
+  [int]$CompactBelowGB = 0
 )
 $ErrorActionPreference = 'Continue'
 $dir = 'C:\ProgramData\wsl-keepalive'
 $log = "$dir\watchdog.log"
 $state = "$dir\watchdog.failures"
+$compactStamp = "$dir\watchdog.compacted"
 $keepalive = "WSL keepalive ($Distro)"
 $ssh = "$env:SystemRoot\System32\OpenSSH\ssh.exe"
 
@@ -62,6 +69,41 @@ function Describe($r) {
   "exit $($r.Code): $(($lines | ForEach-Object { $_.Trim() }) -join ' | ')"
 }
 
+function Compact-IfLow {
+  $vhdx = Join-Path $basePath 'ext4.vhdx'
+  $drive = $basePath.Substring(0, 1)
+  $free = [math]::Round((Get-PSDrive $drive).Free / 1GB, 1)
+  if ($free -ge $CompactBelowGB -or -not (Test-Path $vhdx)) { return }
+  if ((Test-Path $compactStamp) -and (Get-Item $compactStamp).LastWriteTime -gt (Get-Date).AddDays(-1)) { return }
+  $w = AsUser "wsl.exe -d $Distro -u root --exec /usr/bin/pgrep -c -x Runner.Worker"
+  $n = if ($w) { [regex]::Match($w.Text, '(?m)^\s*(\d+)\s*$') } else { $null }
+  if (-not $n -or -not $n.Success -or [int]$n.Groups[1].Value -gt 0) { Log "compaction wanted (${drive}: $free GB free) but a job is running; later"; return }
+  Set-Content $compactStamp (Get-Date -Format s)
+  $before = [math]::Round((Get-Item $vhdx).Length / 1GB, 1)
+  Alert "Drive ${drive}: has $free GB free; compacting $vhdx ($before GB). WSL ($Distro) stops for a few minutes."
+  $null = AsUser "wsl.exe -d $Distro -u root --exec /usr/bin/systemctl stop actions.runner.*"
+  $t = AsUser "wsl.exe -d $Distro -u root --exec /usr/sbin/fstrim -v /" 600
+  Log "fstrim: $(Describe $t)"
+  Disable-ScheduledTask -TaskName $keepalive | Out-Null  # later watchdog runs skip while disabled
+  try {
+    Stop-ScheduledTask -TaskName $keepalive -ErrorAction SilentlyContinue
+    $null = AsUser 'wsl.exe --shutdown'
+    Start-Sleep -Seconds 5
+    Stop-Service WSLService -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+    $script = "$dir\compact.txt"
+    "select vdisk file=`"$vhdx`"`r`nattach vdisk readonly`r`ncompact vdisk`r`ndetach vdisk`r`n" | Set-Content -Encoding ascii $script
+    $out = & diskpart /s $script 2>&1 | Where-Object { $_ -match 'successfully|error|failed' }
+    Log "diskpart: $($out -join ' | ')"
+  } finally {
+    Start-Service WSLService -ErrorAction SilentlyContinue
+    Enable-ScheduledTask -TaskName $keepalive | Out-Null
+    Start-ScheduledTask -TaskName $keepalive
+  }
+  $after = [math]::Round((Get-Item $vhdx).Length / 1GB, 1)
+  Log "compacted $vhdx $before -> $after GB; ${drive}: now $([math]::Round((Get-PSDrive $drive).Free / 1GB, 1)) GB free"
+}
+
 # 1. Disk space.
 $basePath = $null
 Get-ChildItem "Registry::HKEY_USERS\*\Software\Microsoft\Windows\CurrentVersion\Lxss\*" -ErrorAction SilentlyContinue |
@@ -90,6 +132,7 @@ $m = if ($r) { [regex]::Match($r.Text, 'RUNNER=(\S+)( restarted)?') } else { $nu
 if ($m -and $m.Success -and $m.Groups[1].Value -ne 'missing') {
   if ($m.Groups[2].Success) { Log "runner unit was $($m.Groups[1].Value); restarted it" }
   if (Test-Path $state) { Remove-Item $state; Log 'distro healthy again' }
+  if ($CompactBelowGB -gt 0 -and $basePath) { Compact-IfLow }
   exit 0
 }
 $why = Describe $r

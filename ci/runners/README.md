@@ -45,7 +45,7 @@ WSL only runs while a session holds the distro open, and only in its owner's Win
 `install-wsl-keepalive.ps1` (elevated, on the Windows host; needs OpenSSH Server) sets up:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User hamst -SshPort 2222
+powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User hamst -SshPort 2222 -CompactBelowGB 12
 ```
 
 - `WSL keepalive (Ubuntu)`: a SYSTEM task at boot (nobody needs to log on) that SSHes to the
@@ -55,7 +55,10 @@ powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -D
   `/usr/local/sbin/runner-health` (restarting the runner unit if inactive) and, after two failed
   probes in a row, resets WSL (`wsl --shutdown`, restart `WSLService`, start the keepalive). It
   also warns when C: or the distro's drive has under 10 GB free (Application log, source
-  `WslWatchdog`, event 1001). Log: `C:\ProgramData\wsl-keepalive\watchdog.log`.
+  `WslWatchdog`, event 1001). With `-CompactBelowGB N` it also compacts the vhdx (the manual
+  steps below) when the distro's drive has under N GB free, no job is running and the last
+  compaction was over a day ago; WSL, and anything else running in the distro, is down for about
+  five minutes. Log: `C:\ProgramData\wsl-keepalive\watchdog.log`.
 - `vmIdleTimeout=-1` and `instanceIdleTimeout=-1` in the user's `.wslconfig`, and the
   `Restart=always` drop-in for the runner unit inside the distro.
 
@@ -65,7 +68,9 @@ full; the distro died and every start then failed with `Wsl/Service/CreateInstan
 `WSLService` restart cleared it, which is what the watchdog now does. The distro now lives on the
 G: SSD (`G:\wsl\Ubuntu`, moved with `wsl --manage Ubuntu --move`), away from C:.
 
-The vhdx grows but never shrinks on its own. To reclaim space: inside the distro delete
+The vhdx grows but never shrinks on its own: ext4 spreads writes over its whole 1 TB virtual
+size, so the file creeps towards used space plus everything ever written, whatever the build
+caches are capped at. To reclaim space by hand: inside the distro delete
 regenerable data (`_work/*/src-tauri/target`, `~/.npm/_cacache`, `apt-get clean`) and run
 `sudo fstrim -v /`; then on Windows (elevated) disable both keepalive tasks and the watchdog,
 `wsl --shutdown`, `Stop-Service WSLService`, and in `diskpart`: `select vdisk file=<ext4.vhdx>`,
@@ -123,9 +128,10 @@ afterwards):
 | `KIMOCHI_FREE_SPACE_PATH` | the checkout | Where to measure free space |
 
 The arcade PC's G: SSD holds both the Windows runner's work directory and the WSL distro's vhdx,
-so `arcade-pc` has `KIMOCHI_CACHE_MAX_GB=15`, `KIMOCHI_MIN_FREE_GB=10`, and `arcade-pc-wsl` has
-`KIMOCHI_CACHE_MAX_GB=15`, `KIMOCHI_MIN_FREE_GB=0` (deleting inside WSL never returns space to
-G:; the cap keeps the vhdx from growing, and the Windows runner gives space back when G: runs low).
+so `arcade-pc` has `KIMOCHI_CACHE_MAX_GB=12`, `KIMOCHI_MIN_FREE_GB=10`, and `arcade-pc-wsl` has
+`KIMOCHI_CACHE_MAX_GB=12`, `KIMOCHI_MIN_FREE_GB=0`, `KIMOCHI_FREE_SPACE_PATH=/mnt/g`: deleting
+inside WSL never returns space to G: (the watchdog's compaction does), while the Windows runner's
+wipe frees G: at once.
 
 ## OCR crates
 
