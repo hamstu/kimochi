@@ -83,7 +83,7 @@ by default — see below).
 
 **The OCR endpoint follows `serverSettings.mode` unless genuinely overridden.** A custom
 `endpoint` wins; otherwise the URL is derived as `<base>/api/v1/ocr` from the mode
-(`https://kimochi-server.hamish.workers.dev` or `http://localhost:3000`, from
+(`https://kimochiapp.com` or `http://localhost:3000`, from
 `src/shared/constants.ts`). An `endpoint` that merely *equals* one of those two built-in
 defaults (or their retired `<base>/detect-text` form) does **not** count as custom — otherwise an inherited cloud default, or one the
 POC's preferences round-tripped, would permanently pin the app to cloud and make the

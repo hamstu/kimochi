@@ -14,7 +14,7 @@
  */
 
 const LOCAL_HOST = 'http://localhost'
-const CLOUD_SERVER = 'https://kimochi-server.hamish.workers.dev'
+const CLOUD_SERVER = 'https://kimochiapp.com'
 
 // Server mode options
 export type ServerMode = 'cloud' | 'local'

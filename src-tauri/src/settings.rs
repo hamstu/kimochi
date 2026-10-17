@@ -248,7 +248,7 @@ impl Settings {
 }
 
 /// Server bases from `src/shared/constants.ts`.
-pub const CLOUD_SERVER: &str = "https://kimochi-server.hamish.workers.dev";
+pub const CLOUD_SERVER: &str = "https://kimochiapp.com";
 pub const LOCAL_SERVER: &str = "http://localhost:3000";
 /// The account-metered OCR endpoint on either built-in base.
 const OCR_PATH: &str = "/api/v1/ocr";

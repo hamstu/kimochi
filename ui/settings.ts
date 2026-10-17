@@ -111,7 +111,7 @@ export interface Settings {
 export const DEFAULT_VOICE_ID = 'j210dv0vWm7fCknyQpbA'
 export const SERVER_URLS: Record<ServerMode, string> = {
   local: 'http://localhost:3000',
-  cloud: 'https://kimochi-server.hamish.workers.dev'
+  cloud: 'https://kimochiapp.com'
 }
 export const MAX_HISTORY_ENTRIES = 50
 

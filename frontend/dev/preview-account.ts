@@ -29,7 +29,7 @@ const seed = params.get('account') ?? 'signedout'
 const serverSeed = params.get('server') ?? 'cloud'
 const syncSeed = params.get('sync') ?? 'idle'
 
-const SERVER_URL = { cloud: 'https://kimochi-server.hamish.workers.dev', local: 'http://localhost:3000' }
+const SERVER_URL = { cloud: 'https://kimochiapp.com', local: 'http://localhost:3000' }
 const serverFor = (mode: 'cloud' | 'local', forced = false): AccountServer => ({ mode, url: SERVER_URL[mode], forced })
 let linkServer = serverFor(serverSeed === 'cloud' ? 'cloud' : 'local', serverSeed === 'forced')
 

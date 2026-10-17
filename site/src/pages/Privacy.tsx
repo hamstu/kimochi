@@ -98,7 +98,7 @@ export function Privacy() {
         Kimochi account (see <a href="#accounts">Accounts</a>). When it is
         selected, each scan (manual or with Auto OCR) sends an
         image of the captured region to our server at{" "}
-        <code>kimochi-server.hamish.workers.dev</code>, hosted on Cloudflare
+        <code>kimochiapp.com</code>, hosted on Cloudflare
         Workers, which passes it to{" "}
         <a href="https://cloud.google.com/vision">Google Cloud Vision</a> for
         text recognition and returns the result. Our server does not store the
