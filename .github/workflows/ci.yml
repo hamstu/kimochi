@@ -178,9 +178,12 @@ jobs:
         with:
           path: kimochi-tauri
           clean: false
-      # Drop stale build output but keep the expensive, regenerable caches.
+      # Drop stale build output but keep the expensive, regenerable caches, wiping those weekly
+      # or when they outgrow the machine (ci/runners/prune-build-cache.sh).
       - name: Clean workspace
-        run: git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
+        run: |
+          git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
+          bash ci/runners/prune-build-cache.sh
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -273,6 +276,7 @@ jobs:
           git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
           # Only this run's bundles (and updater artifacts) may be uploaded.
           rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle ../updater
+          bash ci/runners/prune-build-cache.sh
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'

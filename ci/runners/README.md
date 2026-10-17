@@ -107,6 +107,26 @@ Runners are persistent, so the workflow checks out with `clean: false` and keeps
 runs. Everything else is `git clean`ed. Delete `_work/kimochi-tauri` beside a runner for a
 cold build. Expect 10–20 GB per machine for the work directory.
 
+Cargo never deletes stale artifacts, so a kept target directory only grows (25 GB on the Ubuntu
+VM within a week). Every `checks` and `bundle` job therefore runs `prune-build-cache.sh` first,
+which wipes the Rust target directories (the next build is a cold one) when they are older than
+7 days, larger than 25 GB together, or the drive has under 15 GB free; it also drops runner
+`_diag` logs older than 30 days. Running inside the jobs means it never deletes a cache a build
+is using. Override the limits per machine in the runner's `.env` (restart the runner service
+afterwards):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `KIMOCHI_CACHE_MAX_DAYS` | 7 | Wipe the target directories this long after the last wipe |
+| `KIMOCHI_CACHE_MAX_GB` | 25 | Wipe them when they exceed this |
+| `KIMOCHI_MIN_FREE_GB` | 15 | Wipe them when the drive has less free; `0` turns the check off |
+| `KIMOCHI_FREE_SPACE_PATH` | the checkout | Where to measure free space |
+
+The arcade PC's G: SSD holds both the Windows runner's work directory and the WSL distro's vhdx,
+so `arcade-pc` has `KIMOCHI_CACHE_MAX_GB=15`, `KIMOCHI_MIN_FREE_GB=10`, and `arcade-pc-wsl` has
+`KIMOCHI_CACHE_MAX_GB=15`, `KIMOCHI_MIN_FREE_GB=0` (deleting inside WSL never returns space to
+G:; the cap keeps the vhdx from growing, and the Windows runner gives space back when G: runs low).
+
 ## OCR crates
 
 The public `kimochi-meikiocr` and `kimochi-mangaocr` crates are git dependencies pinned to exact
