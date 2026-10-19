@@ -9,6 +9,14 @@ export type LogMessage =
   | { type: 'line'; text: string }
   | { type: 'theme'; value: 'light' | 'dark' }
   | { type: 'interactive'; value: boolean }
+  | { type: 'sidebar'; value: boolean }
+
+/** A title-bar drag inside the Log, in screen coordinates (the harness's `embedDrag`). */
+export interface LogDrag {
+  phase: 'start' | 'move' | 'end'
+  x: number
+  y: number
+}
 
 export type PostToLog = (message: LogMessage) => void
 
@@ -29,6 +37,8 @@ interface LogFrameProps {
   load: boolean
   /** Filled with a sender the demo uses to drive the Log. */
   postRef: RefObject<PostToLog | null>
+  /** The visitor dragging the Log by its title bar. */
+  onDrag?: (drag: LogDrag) => void
   className?: string
 }
 
@@ -37,7 +47,7 @@ interface LogFrameProps {
  * default. It never takes focus or scrolls the page on its own: the frame is out of the tab order,
  * and the harness (`?embed=1`) ignores the app's programmatic focus until the visitor clicks in it.
  */
-export function LogFrame({ platform, theme, load, postRef, className = '' }: LogFrameProps) {
+export function LogFrame({ platform, theme, load, postRef, onDrag, className = '' }: LogFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const [ok, setOk] = useState<boolean | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -70,6 +80,18 @@ export function LogFrame({ platform, theme, load, postRef, className = '' }: Log
   useEffect(() => {
     if (loaded) postRef.current?.({ type: 'theme', value: theme })
   }, [theme, loaded, postRef])
+
+  const onDragRef = useRef(onDrag)
+  onDragRef.current = onDrag
+  useEffect(() => {
+    const receive = (event: MessageEvent): void => {
+      if (event.origin !== location.origin || event.source !== frameRef.current?.contentWindow) return
+      const data = event.data as ({ kimochiDemoEvent?: number; type?: string } & LogDrag) | null
+      if (data?.kimochiDemoEvent === 1 && data.type === 'drag') onDragRef.current?.(data)
+    }
+    addEventListener('message', receive)
+    return () => removeEventListener('message', receive)
+  }, [])
 
   return (
     <div className={`relative overflow-hidden bg-raised ${WINDOW_SHAPE[platform]} ${className}`}>

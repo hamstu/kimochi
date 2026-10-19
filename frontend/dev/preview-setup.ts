@@ -396,6 +396,7 @@ const HANDLERS: Record<string, Handler> = {
   },
   panel_drag: (a) => {
     console.info(`[preview] panel_drag(${String(a?.label)})`)
+    embedDrag?.()
     return panelInfo(String(a?.label))
   },
   panel_content_height: ok,
@@ -537,6 +538,13 @@ const HANDLERS: Record<string, Handler> = {
   yomitan_ankifields: () => ({ fields: [], audioMedia: [], dictionaryMedia: [] }),
   // Native reloads the reader windows; there are none to reload in the preview.
   dictionary_engine_apply: () => note('dictionary_engine_apply', null),
+  // The preview's dictionary answers from these mocks, so whichever engine is asked about is up.
+  dictionary_runtime_status: (a) => ({
+    engine: (a?.engine as string) ?? 'yomitan',
+    phase: 'ready',
+    settingsReady: true,
+    message: 'Ready.'
+  }),
 
   // anki
   anki_probe: () => 18,
@@ -624,8 +632,16 @@ type EmbedMessage =
   | { kimochiDemo: 1; type: 'line'; text: string; engine?: string }
   | { kimochiDemo: 1; type: 'theme'; value: 'light' | 'dark' }
   | { kimochiDemo: 1; type: 'interactive'; value: boolean }
+  | { kimochiDemo: 1; type: 'sidebar'; value: boolean }
 
 let embedScan = 0
+
+/**
+ * Embedded, a title-bar drag (`panel_drag`) is the embedding page's to perform: it moves the
+ * iframe like a window. The drag is reported in screen coordinates, which stay put while the
+ * iframe moves under the pointer: `{kimochiDemoEvent: 1, type: 'drag', phase, x, y}`.
+ */
+let embedDrag: (() => void) | null = null
 
 /**
  * Commands from the same-origin parent: `scan` shows a scan starting on the activity ticker, `line`
@@ -637,7 +653,29 @@ function listenToEmbedder(): void {
   let interactive = false
   // No focus moves until the visitor clicks in the page (or the parent says so), and never a
   // scrollIntoView that reaches the parent page.
-  addEventListener('pointerdown', () => (interactive = true), { capture: true })
+  let pressed: { x: number; y: number } | null = null
+  addEventListener(
+    'pointerdown',
+    (event) => {
+      interactive = true
+      pressed = { x: event.screenX, y: event.screenY }
+    },
+    { capture: true }
+  )
+  const tell = (phase: 'start' | 'move' | 'end', x: number, y: number): void =>
+    parent.postMessage({ kimochiDemoEvent: 1, type: 'drag', phase, x, y }, location.origin)
+  embedDrag = () => {
+    if (!pressed) return
+    tell('start', pressed.x, pressed.y)
+    // A press that began in this page keeps sending it the pointer, even outside the iframe.
+    const move = (event: MouseEvent): void => tell('move', event.screenX, event.screenY)
+    const up = (event: MouseEvent): void => {
+      removeEventListener('mousemove', move)
+      tell('end', event.screenX, event.screenY)
+    }
+    addEventListener('mousemove', move)
+    addEventListener('mouseup', up, { once: true })
+  }
   const focus = HTMLElement.prototype.focus
   HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
     if (interactive) focus.call(this, { ...options, preventScroll: true })
@@ -681,6 +719,8 @@ function listenToEmbedder(): void {
       publish('appearance', message.value)
     } else if (message.type === 'interactive') {
       interactive = message.value
+    } else if (message.type === 'sidebar') {
+      publish('mainSidebarOpen', message.value)
     }
   })
 }

@@ -17,6 +17,8 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
 
 const BASE = '/demo/'
 const RELAY = 'ui/panel-yomitan.js'
+/** The module that imports the relay (`RELAY_PATH`). */
+const RELAY_IMPORTER = 'frontend/shell/panelDictionary.ts'
 
 /** Same stub the preview server answers `/ui/panel-yomitan.js` with (vite.preview.config.ts). */
 const PANEL_YOMITAN_STUB = `const ok = { ready: true }
@@ -31,12 +33,19 @@ export default { setEmbeddedEnabled, start, isBackendReachable }
  * that path is not ours, so point it under /demo/ and emit the stub there.
  */
 function relayStub(): Plugin {
+  let rewritten = false
   return {
     name: 'kimochi-demo-relay-stub',
     apply: 'build',
     transform(code, id) {
-      if (!id.endsWith('frontend/shell/panelYomitan.ts')) return null
+      if (!id.endsWith(RELAY_IMPORTER)) return null
+      rewritten = true
       return code.replace(/(['"])\/ui\/panel-yomitan\.js\1/, JSON.stringify(BASE + RELAY))
+    },
+    buildEnd() {
+      // The importer moved once (panelYomitan.ts → panelDictionary.ts) and the demo's Log then
+      // showed "Failed to fetch dynamically imported module" until someone noticed.
+      if (!rewritten) this.error(`${RELAY_IMPORTER} was not transformed: the relay import moved`)
     },
     generateBundle() {
       this.emitFile({ type: 'asset', fileName: RELAY, source: PANEL_YOMITAN_STUB })

@@ -84,7 +84,8 @@ export function DesktopBar({ platform }: { platform: DesktopPlatform }) {
         <span>File</span>
         <span>Edit</span>
         <span>Window</span>
-        <span className="ml-auto tnum">9:41</span>
+        {/* Room on the right for the demo's maximise button. */}
+        <span className="mr-6 ml-auto tnum">9:41</span>
       </div>
     )
   if (platform === 'linux')

@@ -494,6 +494,27 @@
     radial-gradient(90% 70% at 100% 100%, var(--k-hover), transparent 60%),
     var(--k-bar);
 }
+
+/* Maximise / restore, in the stage's top-right corner. */
+.kd-max {
+  color: var(--k-text-2);
+  background: color-mix(in oklab, var(--k-bar) 70%, transparent);
+  transition: color 120ms, background-color 120ms;
+}
+.kd-max:hover {
+  color: var(--k-text);
+  background: var(--k-hover);
+}
+.kd-max:focus-visible {
+  outline: 2px solid var(--k-accent);
+  outline-offset: 1px;
+}
+
+/* A maximised window's resize grip: two short diagonal strokes in the corner. */
+.kd-resize {
+  --grip: color-mix(in oklab, var(--k-text) 35%, transparent);
+  background: linear-gradient(135deg, transparent 55%, var(--grip) 55% 62%, transparent 62% 72%, var(--grip) 72% 79%, transparent 79%);
+}
 .kd-cm-hints span {
   display: inline-flex;
   align-items: center;

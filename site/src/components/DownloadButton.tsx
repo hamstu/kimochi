@@ -95,11 +95,15 @@ export function DownloadButton({ align = 'start', showAll = true, className = ''
           icon={<Download size={18} aria-hidden />}
           aria-busy={state.status === 'loading'}
         >
-          {state.status === 'loading' ? 'Download Kimochi' : 'Download from GitHub'}
+          Download
         </Button>
-        <p className="min-h-5 text-meta text-ink-3" aria-live="polite">
-          {state.status === 'error' ? state.message : 'Finding the latest release…'}
-        </p>
+        {/* No release to offer (none published yet, or GitHub unreachable): the button just goes to
+            the releases page, without a note about why. */}
+        {state.status === 'loading' && (
+          <p className="min-h-5 text-meta text-ink-3" aria-live="polite">
+            Finding the latest release…
+          </p>
+        )}
       </div>
     )
   }
