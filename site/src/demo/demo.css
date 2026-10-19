@@ -560,6 +560,21 @@
   transform: scale(0.86);
 }
 
+/* The Easter egg's app: a warm card with one button. */
+.kd-egg {
+  background:
+    radial-gradient(80% 70% at 50% 0%, color-mix(in oklab, #f2c45f 22%, transparent), transparent 70%),
+    var(--k-raised);
+}
+.kd-egg-go {
+  color: #fff;
+  background: var(--k-accent);
+  transition: background-color 120ms;
+}
+.kd-egg-go:hover {
+  background: color-mix(in oklab, var(--k-accent) 85%, #000);
+}
+
 /* Play: a big round button in the middle of the paused desk. */
 .kd-play {
   color: #fff;

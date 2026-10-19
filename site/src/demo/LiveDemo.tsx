@@ -9,11 +9,18 @@
  * From `lg` up the desktop is a small desktop of its own, paused behind a play button. Play runs a
  * session from the start with a virtual pointer: open the game from its desktop icon, open Kimochi,
  * choose the game as the source (the real Change source menu, inside the iframe), turn on Auto OCR,
- * and from then on the game's lines are read, boxed and looked up while the pointer follows the
- * words. The windows are free windows: drag them by their title bars (the Log's drag is reported
- * from its iframe), resize them from the corner, click one to bring it to the front. The stage can
- * also be maximised to fill the browser (Esc or the button restores it). Narrower screens, and
- * reduced motion, get the two windows stacked, already set up.
+ * click back on the game, and from then on the pointer follows the words being looked up. The
+ * visitor's first click of their own retires the virtual pointer for good.
+ *
+ * The windows behave like windows, through a few light shims (frontend/dev/preview-setup.ts):
+ * drag them by their title bars (the Log's drag is reported from its iframe), resize them from the
+ * corner, click one to bring it to the front, close them (the desktop icons open them again), and
+ * Kimochi's mini mode shrinks its window. Positions are fractions of the desk, so maximising the
+ * stage to fill the browser (Esc or the button restores it) scales everything with it. The Log is
+ * told which windows are open, so its source menu offers only those; it reports its source and
+ * switches back, so the game is read only while Kimochi watches it with Auto OCR on, and the overlay
+ * shows only with Show overlay on. An Easter egg in the corner opens a small app that can be read
+ * too. Narrower screens, and reduced motion, get the two windows stacked, already set up.
  *
  * The platform comes in as a prop: the visitor's OS for the Desktop tab, `deck` for Gaming mode.
  * Steam Deck: one handheld screen and the controller flow (both sticks → radial menu → Scan → D-pad
@@ -33,13 +40,13 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react'
-import { Maximize2, Minimize2, Play, RotateCcw } from 'lucide-react'
+import { ArrowUp, Maximize2, Minimize2, Play, RotateCcw } from 'lucide-react'
 import { GAME } from './content'
 import { guessPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
 import { deckFrames, desktopFrames, usePlayer, type Frame } from './script'
 import { GameScreen } from './GameScreen'
 import { DeckBody, DeckHud } from './DeckStage'
-import { LogFrame, type LogDrag, type PostToLog } from './LogFrame'
+import { LogFrame, type LogEvent, type PostToLog } from './LogFrame'
 import { DesktopBar, Taskbar, TitleBar, WINDOW_SHAPE } from './chrome'
 import { PLAY_LINES } from './content'
 import './demo.css'
@@ -53,31 +60,40 @@ export interface LiveDemoProps {
 const DESKTOP_FRAMES = desktopFrames()
 const DECK_FRAMES = deckFrames()
 
-type WindowId = 'game' | 'log'
+/** The harness's source ids for the site's own windows (preview-setup.ts). */
+const GAME_SOURCE = 'window:101'
+const EGG_SOURCE = 'window:900'
+const EGG_LINE = '遊んでくれて、ありがとう！本物のKimochiで、好きなゲームを日本語で読もう。'
+
+type WindowId = 'game' | 'log' | 'egg'
+/** A window's place as fractions of the desk; the game's height follows its width (16:10 + title). */
 interface Placement {
   x: number
   y: number
-  width: number
-  /** The Log's height; the game's follows its width (a 16:10 screen under a title bar). */
-  height: number
+  w: number
+  h: number
 }
 type Layout = Record<WindowId, Placement>
+interface Size {
+  width: number
+  height: number
+}
 
-const GAP = 24
 const TITLE = 32
-const MIN = { game: { width: 360, height: 0 }, log: { width: 380, height: 320 } }
+/** Kimochi's mini mode, as the app sizes it (src-tauri/src/compact.rs). */
+const MINI = { width: 320, height: 560 }
+const MIN = { width: 300, height: 260 }
 
-/** Where the windows sit on a desk of `width` × `height`: the game left, the Log right, overlapping. */
-function initialLayout(width: number, height: number): Layout {
-  const logWidth = Math.round(Math.min(640, Math.max(540, width * 0.36)))
-  const logHeight = Math.max(MIN.log.height, height - GAP * 2)
-  const room = width - logWidth - GAP * 3
-  const fit = (height - GAP * 2 - TITLE) * 1.6
-  const gameWidth = Math.round(Math.max(MIN.game.width, Math.min(fit, Math.max(room, width * 0.6))))
-  const gameHeight = gameWidth / 1.6 + TITLE
+const gameHeight = (w: number, desk: Size): number => (w * desk.width) / 1.6 + TITLE
+
+/** Where the windows open: Kimochi large on the right (about five-eighths), the game bottom-left. */
+function initialLayout(desk: Size): Layout {
+  let gw = 0.42
+  if (gameHeight(gw, desk) > desk.height * 0.62) gw = ((desk.height * 0.62 - TITLE) * 1.6) / desk.width
   return {
-    game: { x: GAP, y: Math.max(GAP, Math.round((height - gameHeight) / 2)), width: gameWidth, height: 0 },
-    log: { x: width - GAP - logWidth, y: GAP, width: logWidth, height: logHeight }
+    log: { x: 0.32, y: 0.06, w: 0.64, h: 0.8 },
+    game: { x: 0.035, y: 1 - 0.05 - gameHeight(gw, desk) / desk.height, w: gw, h: 0 },
+    egg: { x: 0.3, y: 0.18, w: 0.36, h: 0.46 }
   }
 }
 
@@ -134,18 +150,33 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   }, [near])
 
   const deck = platform === 'deck'
-  // The scripted session: a desktop from lg up, without reduced motion.
-  const flow = !deck && wide && !reduced
+  const [max, setMax] = useState(false)
+  // Free windows on a desk: from lg up, or maximised.
+  const free = !deck && (wide || max)
+  // The scripted session: on the desk, without reduced motion.
+  const flow = free && !reduced
   const [phase, setPhase] = useState<Phase>('idle')
   const [run, setRun] = useState(0)
-  const [open, setOpen] = useState<Record<WindowId, boolean>>({ game: false, log: false })
+  const [open, setOpen] = useState<Record<WindowId, boolean>>({ game: false, log: false, egg: false })
+  // Kimochi's Quit, as opposed to its window being hidden or minimised: nothing is read until it is
+  // opened again.
+  const [quit, setQuit] = useState(false)
   const [pointer, setPointer] = useState<Pointer>({ x: 0, y: 0, ms: 0, down: false, shown: false })
+  // The visitor took over: the virtual pointer is gone until the demo is played again.
+  const [retired, setRetired] = useState(false)
   const [logReady, setLogReady] = useState(false)
+  const [logState, setLogState] = useState<{ sourceId: string | null; autoOcr: boolean; overlay: boolean }>({
+    sourceId: null,
+    autoOcr: false,
+    overlay: false
+  })
 
-  // A new platform, or leaving the flow, starts over.
+  // A new platform, or a different kind of stage, starts over.
   useEffect(() => {
     setPhase('idle')
-    setOpen({ game: false, log: false })
+    setOpen({ game: false, log: false, egg: false })
+    setQuit(false)
+    setRetired(false)
     setPointer((p) => ({ ...p, shown: false }))
   }, [platform, flow])
 
@@ -159,34 +190,70 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     if (frame.emit === 'line') postRef.current?.({ type: 'line', text: PLAY_LINES[frame.line].text })
   }, [])
 
-  // Gaming mode plays on its own; the desktop plays once its session is under way.
-  const started = deck || (flow ? phase === 'running' : phase !== 'idle')
-  const running = onScreen && !reduced && userCursor === null && started
+  // Kimochi is reading a window: it is running (not quit), and that window is its source with Auto
+  // OCR on. Off the desk the windows are always open.
+  const watching = (id: WindowId, source: string): boolean =>
+    (!free || (open[id] && !quit)) && logState.sourceId === source && logState.autoOcr
+  const started = deck || phase !== 'idle'
+  const reading = deck || (started && watching('game', GAME_SOURCE))
+  const running = onScreen && !reduced && userCursor === null && reading
   const playing = usePlayer(frames, running, onEnter, `${platform}:${run}`)
   const frame = reduced ? stillFrame(frames) : playing
+  const overlay = deck || reduced || ((!free || (open.game && !quit)) && logState.sourceId === GAME_SOURCE && logState.overlay)
 
   // A visitor's pick belongs to the line it was made on.
   useEffect(() => setUserCursor(null), [frame.line, platform])
 
+  // The Easter egg's app is read once each time Kimochi starts watching it.
+  const eggRead = started && watching('egg', EGG_SOURCE)
+  useEffect(() => {
+    if (!eggRead || !onScreen) return
+    const scan = setTimeout(() => postRef.current?.({ type: 'scan' }), 700)
+    const line = setTimeout(() => postRef.current?.({ type: 'line', text: EGG_LINE }), 1600)
+    return () => {
+      clearTimeout(scan)
+      clearTimeout(line)
+    }
+  }, [eggRead, onScreen])
+
   // ---------------------------------------------------------------- desk and windows
-  const [max, setMax] = useState(false)
   const deskRef = useRef<HTMLDivElement>(null)
+  const [desk, setDesk] = useState<Size | null>(null)
   const [layout, setLayout] = useState<Layout | null>(null)
   const layoutRef = useRef(layout)
   layoutRef.current = layout
-  const [order, setOrder] = useState<WindowId[]>(['game', 'log'])
+  const deskSize = useRef(desk)
+  deskSize.current = desk
+  const [order, setOrder] = useState<WindowId[]>(['egg', 'game', 'log'])
   // While the page drags or resizes a window, a shield over the Log keeps its iframe from taking
   // the pointer.
   const [busy, setBusy] = useState(false)
-  const front = (id: WindowId): void => setOrder((o) => (o.at(-1) === id ? o : [...o.filter((w) => w !== id), id]))
-  const free = !deck && (wide || max)
+  const front = useCallback(
+    (id: WindowId): void => setOrder((o) => (o.at(-1) === id ? o : [...o.filter((w) => w !== id), id])),
+    []
+  )
+  const beforeMini = useRef<Placement | null>(null)
 
   useLayoutEffect(() => {
-    const desk = deskRef.current
-    if (!free || !desk) return setLayout(null)
-    const place = (): void => setLayout(initialLayout(desk.clientWidth, desk.clientHeight))
-    place()
-  }, [free, max, platform])
+    const el = deskRef.current
+    if (!free || !el) {
+      setDesk(null)
+      return
+    }
+    const measure = (): void => setDesk({ width: el.clientWidth, height: el.clientHeight })
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [free])
+
+  // Laid out once per desk (and per replay); afterwards fractions keep it in proportion.
+  const hasDesk = desk !== null
+  useLayoutEffect(() => {
+    const d = deskSize.current
+    if (!d) return setLayout(null)
+    setLayout((l) => l ?? initialLayout(d))
+  }, [hasDesk, platform, run])
 
   useEffect(() => {
     if (!max) return
@@ -203,40 +270,34 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     }
   }, [max])
 
-  /** Keeps a window's title bar reachable: at least 48px of it stays on the desk. */
-  const clamp = (p: Placement): Placement => {
-    const desk = deskRef.current
-    if (!desk) return p
-    return {
-      ...p,
-      x: Math.min(Math.max(p.x, 48 - p.width), desk.clientWidth - 48),
-      y: Math.min(Math.max(p.y, 0), desk.clientHeight - TITLE)
-    }
-  }
+  /** Keeps a window's title bar reachable: some of it stays on the desk. */
+  const clamp = (p: Placement, d: Size): Placement => ({
+    ...p,
+    x: Math.min(Math.max(p.x, 48 / d.width - p.w), 1 - 48 / d.width),
+    y: Math.min(Math.max(p.y, 0), 1 - TITLE / d.height)
+  })
 
   /** A drag (move, or resize from the corner) of a window by the page's own pointer. */
   const track = (id: WindowId, kind: 'move' | 'resize') => (event: ReactPointerEvent<HTMLElement>) => {
-    if (!layout || event.button !== 0) return
+    if (!layout || !desk || event.button !== 0) return
     if (kind === 'move' && (event.target as Element).closest('button, a')) return
     event.preventDefault()
     event.stopPropagation()
+    if (phase === 'running') setRetired(true)
     front(id)
     const start = { x: event.clientX, y: event.clientY, place: layout[id] }
     const target = event.currentTarget
     target.setPointerCapture(event.pointerId)
     setBusy(true)
     const move = (e: PointerEvent): void => {
-      const dx = e.clientX - start.x
-      const dy = e.clientY - start.y
+      const d = deskSize.current ?? desk
+      const dx = (e.clientX - start.x) / d.width
+      const dy = (e.clientY - start.y) / d.height
       const p = start.place
       const next =
         kind === 'move'
-          ? clamp({ ...p, x: p.x + dx, y: p.y + dy })
-          : {
-              ...p,
-              width: Math.max(MIN[id].width, p.width + dx),
-              height: id === 'log' ? Math.max(MIN.log.height, p.height + dy) : 0
-            }
+          ? clamp({ ...p, x: p.x + dx, y: p.y + dy }, d)
+          : { ...p, w: Math.max(MIN.width / d.width, p.w + dx), h: Math.max(MIN.height / d.height, p.h + dy) }
       setLayout((l) => (l ? { ...l, [id]: next } : l))
     }
     const up = (): void => {
@@ -248,53 +309,96 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     target.addEventListener('pointercancel', up, { once: true })
   }
 
-  // The Log's own title bar, reported from inside its iframe in screen coordinates.
+  // ---------------------------------------------------------------- what the Log reports
   const logDrag = useRef<{ x: number; y: number; place: Placement } | null>(null)
-  const onLogDrag = useCallback(
-    (drag: LogDrag) => {
-      if (drag.phase === 'start') {
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+  const onLogEvent = (event: LogEvent): void => {
+    if (event.type === 'state') {
+      setLogState({ sourceId: event.sourceId, autoOcr: event.autoOcr, overlay: event.overlay })
+    } else if (event.type === 'interact') {
+      front('log')
+      if (phaseRef.current === 'running') setRetired(true)
+    } else if (event.type === 'activate') {
+      if (event.sourceId === GAME_SOURCE) front('game')
+      if (event.sourceId === EGG_SOURCE) front('egg')
+    } else if (event.type === 'window') {
+      const action = event.action
+      if (action === 'close' || action === 'hide' || action === 'minimize') {
+        setOpen((o) => ({ ...o, log: false }))
+        if (action === 'close') setQuit(true)
+        return
+      }
+      // The saved size is read and written here, not in the state updater (which may run twice).
+      const d = deskSize.current
+      const l = layoutRef.current
+      if (!l || !d) return
+      if (action === 'mini') {
+        if (!beforeMini.current) beforeMini.current = l.log
+        const mini = { ...l.log, w: MINI.width / d.width, h: Math.min(MINI.height / d.height, 1 - l.log.y) }
+        setLayout((cur) => (cur ? { ...cur, log: mini } : cur))
+      } else {
+        const back = beforeMini.current
+        beforeMini.current = null
+        if (back) setLayout((cur) => (cur ? { ...cur, log: back } : cur))
+      }
+    } else if (event.type === 'drag') {
+      const d = deskSize.current
+      if (event.phase === 'start') {
         front('log')
         const l = layoutRef.current
-        logDrag.current = l ? { x: drag.x, y: drag.y, place: l.log } : null
+        logDrag.current = l ? { x: event.x, y: event.y, place: l.log } : null
         return
       }
       const start = logDrag.current
-      if (!start) return
-      if (drag.phase === 'end') logDrag.current = null
-      setLayout((l) =>
-        l ? { ...l, log: clamp({ ...start.place, x: start.place.x + drag.x - start.x, y: start.place.y + drag.y - start.y }) } : l
+      if (!start || !d) return
+      if (event.phase === 'end') logDrag.current = null
+      const next = clamp(
+        { ...start.place, x: start.place.x + (event.x - start.x) / d.width, y: start.place.y + (event.y - start.y) / d.height },
+        d
       )
-    },
-    []
-  )
+      setLayout((l) => (l ? { ...l, log: next } : l))
+    }
+  }
+
+  // The Log offers only the site's windows that are open.
+  const openSources = [open.game && GAME_SOURCE, open.egg && EGG_SOURCE].filter(Boolean).join(',')
+  useEffect(() => {
+    if (!free || !logReady) return
+    postRef.current?.({ type: 'sources', open: openSources ? openSources.split(',') : [] })
+  }, [free, logReady, openSources])
 
   // ---------------------------------------------------------------- the scripted session
 
   /** A point on the desk for an element inside the Log's iframe (its centre), or null. */
   const pointInLog = (selector: string, match?: (el: Element) => boolean): { x: number; y: number; el: HTMLElement } | null => {
     const iframe = iframeRef.current
-    const desk = deskRef.current
+    const deskEl = deskRef.current
     const doc = iframe?.contentDocument
-    if (!iframe || !desk || !doc) return null
+    if (!iframe || !deskEl || !doc) return null
     const el = [...doc.querySelectorAll<HTMLElement>(selector)].find((e) => (match ? match(e) : true) && e.getClientRects().length > 0)
     if (!el) return null
     const f = iframe.getBoundingClientRect()
-    const d = desk.getBoundingClientRect()
+    const d = deskEl.getBoundingClientRect()
     const r = el.getBoundingClientRect()
     return { x: f.left - d.left + r.left + r.width / 2, y: f.top - d.top + r.top + r.height / 2, el }
   }
 
-  /** A point on the desk for an element of the page itself (its centre). */
-  const pointOnDesk = (el: Element | null): { x: number; y: number } | null => {
-    const desk = deskRef.current
-    if (!el || !desk) return null
-    const d = desk.getBoundingClientRect()
+  /** A point on the desk inside an element of the page itself (`fx`, `fy` of the way across it). */
+  const pointOnDesk = (el: Element | null, fx = 0.5, fy = 0.5): { x: number; y: number } | null => {
+    const d = deskRef.current
+    if (!el || !d) return null
+    const dr = d.getBoundingClientRect()
     const r = el.getBoundingClientRect()
-    return { x: r.left - d.left + r.width / 2, y: r.top - d.top + r.height / 2 }
+    return { x: r.left - dr.left + r.width * fx, y: r.top - dr.top + r.height * fy }
   }
+
+  const steps = useRef({ pointInLog, pointOnDesk, front })
+  steps.current = { pointInLog, pointOnDesk, front }
 
   useEffect(() => {
     if (!flow || phase !== 'intro') return
+    const { pointInLog: inLog, pointOnDesk: onDesk, front: raise } = steps.current
     const ctrl = new AbortController()
     const { signal } = ctrl
     const wait = (ms: number): Promise<void> => sleep(ms, signal)
@@ -314,7 +418,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     /** Waits for an element inside the Log, polling, up to `ms`. */
     const findInLog = async (selector: string, match?: (el: Element) => boolean, ms = 4000) => {
       for (let t = 0; t < ms; t += 100) {
-        const hit = pointInLog(selector, match)
+        const hit = inLog(selector, match)
         if (hit) return hit
         await wait(100)
       }
@@ -330,24 +434,26 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
         el.dispatchEvent(new win.PointerEvent('pointerup', { ...init, buttons: 0 }))
       } else el.click()
     }
+    const windowEl = (id: WindowId): Element | null => deskRef.current?.querySelector(`[data-window="${id}"]`) ?? null
 
     void (async () => {
-      const desk = deskRef.current
-      if (!desk) return
-      setPointer({ x: desk.clientWidth * 0.5, y: desk.clientHeight * 0.62, ms: 0, down: false, shown: true })
+      const el = deskRef.current
+      if (!el) return
+      setPointer({ x: el.clientWidth * 0.5, y: el.clientHeight * 0.62, ms: 0, down: false, shown: true })
       await wait(350)
       // 1. Open the game from its desktop icon.
-      await moveTo(pointOnDesk(desk.querySelector('[data-icon="game"]')), 900)
+      await moveTo(onDesk(el.querySelector('[data-icon="game"]')), 900)
       await press(2)
       setOpen((o) => ({ ...o, game: true }))
-      front('game')
+      raise('game')
       await wait(1100)
       // 2. Open Kimochi.
-      await moveTo(pointOnDesk(desk.querySelector('[data-icon="kimochi"]')), 900)
+      await moveTo(onDesk(el.querySelector('[data-icon="kimochi"]')), 900)
       await press(2)
       setOpen((o) => ({ ...o, log: true }))
-      front('log')
-      await wait(1200)
+      setQuit(false)
+      raise('log')
+      await wait(1100)
       // 3. Choose a source → Window or screen → the game.
       const card = await findInLog('.src-empty')
       await moveTo(card, 800)
@@ -359,63 +465,70 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       await press()
       tap(type.el, 'click')
       await wait(700)
-      const tile = await findInLog('.sg-tile', (el) => /steins/i.test(el.getAttribute('title') ?? ''))
+      const tile = await findInLog('.sg-tile', (e) => /steins/i.test(e.getAttribute('title') ?? ''))
       await moveTo(tile, 750)
       await press()
       tap(tile.el, 'click')
       await wait(900)
       // 4. Auto OCR on.
-      const auto = await findInLog('button[role="switch"]', (el) => /Auto OCR/.test(el.textContent ?? ''))
+      const auto = await findInLog('button[role="switch"]', (e) => /Auto OCR/.test(e.textContent ?? ''))
       await moveTo(auto, 750)
       await press()
       tap(auto.el, 'click')
-      await wait(500)
-      // 5. The game's lines start arriving; the pointer goes back to the game.
-      front('game')
+      await wait(600)
+      // 5. Back to the game: click its uncovered side to bring it forward, and read.
+      await moveTo(onDesk(windowEl('game'), 0.22, 0.55), 800)
+      await press()
+      raise('game')
       setPhase('running')
     })().catch((error: unknown) => {
       if ((error as Error)?.name === 'AbortError') return
       // Something inside the Log did not show up as expected: skip ahead rather than stall.
-      setOpen({ game: true, log: true })
+      setOpen((o) => ({ ...o, game: true, log: true }))
       setPhase('running')
     })
     return () => ctrl.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, phase, run])
 
   // While the session plays, the pointer follows the word being looked up, else rests by the box.
   useEffect(() => {
-    if (!flow || phase !== 'running') return
-    const desk = deskRef.current
-    if (!desk) return
+    if (!flow || phase !== 'running' || retired) return
+    const deskEl = deskRef.current
+    if (!deskEl) return
     const t = setTimeout(() => {
-      const word = desk.querySelector('.kd-word.kd-current')
-      const box = desk.querySelector('.kd-box')
-      const target = word ? pointOnDesk(word) : box ? pointOnDesk(box) : null
+      const { pointOnDesk: onDesk } = steps.current
+      const word = deskEl.querySelector('[data-window="game"] .kd-word.kd-current')
+      const box = deskEl.querySelector('[data-window="game"] .kd-box')
+      const target = word ? onDesk(word) : box ? onDesk(box, 0.7, 0.8) : null
       if (!target) return
-      const offset = word ? { x: 4, y: 10 } : { x: 120, y: 60 }
+      const offset = word ? { x: 4, y: 10 } : { x: 0, y: 0 }
       setPointer((c) => ({ ...c, x: target.x + offset.x, y: target.y + offset.y, ms: 650, shown: true }))
     }, 60)
     return () => clearTimeout(t)
-  }, [flow, phase, frame])
+  }, [flow, phase, frame, retired])
 
-  // The visitor's own pointer on the desk hides the virtual one for a moment.
-  const [userActive, setUserActive] = useState(false)
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onDeskMove = (): void => {
-    if (phase !== 'running') return
-    setUserActive(true)
-    if (idleTimer.current) clearTimeout(idleTimer.current)
-    idleTimer.current = setTimeout(() => setUserActive(false), 3000)
+  /** The visitor's own click on the desk, once the session is under way, retires the pointer. */
+  const onDeskDown = (event: ReactPointerEvent): void => {
+    if (event.isTrusted && phase === 'running') setRetired(true)
   }
 
   const play = (): void => {
     setUserCursor(null)
+    setRetired(false)
     if (!flow) return setPhase('running')
-    setOpen({ game: false, log: false })
+    setOpen({ game: false, log: false, egg: false })
+    setQuit(false)
+    setLayout(null)
     setLogReady(false)
     setRun((r) => r + 1)
     setPhase('intro')
+  }
+
+  const toDownload = (): void => {
+    setMax(false)
+    requestAnimationFrame(() =>
+      document.getElementById('get-kimochi')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    )
   }
 
   const screen = useMemo(
@@ -426,22 +539,23 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
         paused={!onScreen}
         userCursor={userCursor}
         onUserCursor={setUserCursor}
+        overlay={overlay}
       >
         {deck && <DeckHud frame={frame} />}
       </GameScreen>
     ),
-    [frame, deck, onScreen, userCursor]
+    [frame, deck, onScreen, userCursor, overlay]
   )
 
   const placed = (id: WindowId): CSSProperties | undefined => {
-    if (!free || !layout) return undefined
+    if (!free || !layout || !desk) return undefined
     const p = layout[id]
     return {
       position: 'absolute',
-      left: p.x,
-      top: p.y,
-      width: p.width,
-      height: id === 'log' ? p.height : undefined,
+      left: p.x * desk.width,
+      top: p.y * desk.height,
+      width: p.w * desk.width,
+      height: id === 'game' ? undefined : p.h * desk.height,
       zIndex: order.indexOf(id) + 1
     }
   }
@@ -453,8 +567,14 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
         className="kd-resize absolute right-0 bottom-0 z-10 size-4 cursor-nwse-resize"
       />
     ) : null
-  // In the flow, a window shows once it has been opened.
-  const shown = (id: WindowId): boolean => !flow || open[id]
+  // On the desk, a window shows once it has been opened.
+  const shown = (id: WindowId): boolean => !free || open[id]
+  const openWindow = (id: WindowId): void => {
+    setOpen((o) => ({ ...o, [id]: true }))
+    if (id === 'log') setQuit(false)
+    front(id)
+  }
+  const close = (id: WindowId) => (free ? () => setOpen((o) => ({ ...o, [id]: false })) : undefined)
   const logParams: Record<string, string> = flow ? { nosource: '1', auto: '0', sidebar: '1' } : { sidebar: free ? '1' : '0' }
   const showPlay = !deck && !reduced && phase === 'idle'
 
@@ -496,20 +616,22 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
             <DesktopBar platform={platform} />
             <div
               ref={deskRef}
-              onPointerMove={onDeskMove}
-              className={
-                free
-                  ? 'relative min-h-[560px] flex-1'
-                  : 'relative grid min-h-0 flex-1 gap-4 p-3 sm:p-5'
-              }
+              onPointerDown={onDeskDown}
+              className={free ? 'relative min-h-[560px] flex-1' : 'relative grid min-h-0 flex-1 gap-4 p-3 sm:p-5'}
             >
-              {flow && (
-                <div className={`kd-icons absolute top-4 flex flex-col gap-4 ${platform === 'macos' ? 'right-5' : 'left-5'}`}>
-                  <DesktopIcon id="game" label={GAME.app} icon={<span className="kd-game-icon block size-9 rounded-lg" />} onOpen={() => setOpen((o) => ({ ...o, game: true }))} />
-                  <DesktopIcon id="kimochi" label="Kimochi" icon={<img src="/icon.svg" alt="" className="size-10" />} onOpen={() => setOpen((o) => ({ ...o, log: true }))} />
-                </div>
+              {free && (
+                <>
+                  <div className="absolute top-4 left-5 flex flex-col gap-4">
+                    <DesktopIcon id="game" label={GAME.app} icon={<span className="kd-game-icon block size-9 rounded-lg" />} onOpen={() => openWindow('game')} />
+                    <DesktopIcon id="kimochi" label="Kimochi" icon={<img src="/icon.svg" alt="" className="size-10" />} onOpen={() => openWindow('log')} />
+                  </div>
+                  <div className="absolute right-5 bottom-4">
+                    <DesktopIcon id="egg" label="おまけ" icon={<EggMark />} onOpen={() => openWindow('egg')} />
+                  </div>
+                </>
               )}
               <div
+                data-window="game"
                 className={`min-w-0 overflow-hidden ${WINDOW_SHAPE[platform]} ${shown('game') ? 'kd-win-open' : 'kd-win-closed'}`}
                 style={placed('game')}
                 onPointerDown={free ? () => front('game') : undefined}
@@ -519,12 +641,14 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
                     platform={platform}
                     title={GAME.app}
                     icon={<span className="kd-game-icon block size-3.5 rounded-[3px]" aria-hidden="true" />}
+                    onClose={close('game')}
                   />
                 </div>
                 {screen}
                 {corner('game')}
               </div>
               <div
+                data-window="log"
                 className={`${free ? '' : 'relative h-[440px] min-h-0'} ${shown('log') ? 'kd-win-open' : 'kd-win-closed'}`}
                 style={placed('log')}
                 onPointerDown={free ? () => front('log') : undefined}
@@ -534,7 +658,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
                   theme={theme}
                   load={loadLog}
                   postRef={postRef}
-                  onDrag={onLogDrag}
+                  onEvent={onLogEvent}
                   params={logParams}
                   reloadKey={run}
                   iframeRef={iframeRef}
@@ -544,6 +668,33 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
                 {busy && <span className="absolute inset-0 z-10" aria-hidden="true" />}
                 {corner('log')}
               </div>
+              {free && (
+                <div
+                  data-window="egg"
+                  className={`flex flex-col overflow-hidden bg-raised ${WINDOW_SHAPE[platform]} ${open.egg ? 'kd-win-open' : 'kd-win-closed'}`}
+                  style={placed('egg')}
+                  onPointerDown={() => front('egg')}
+                >
+                  <div onPointerDown={track('egg', 'move')}>
+                    <TitleBar platform={platform} title="おまけ" icon={<EggMark small />} onClose={close('egg')} />
+                  </div>
+                  <div className="kd-egg flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+                    <p lang="ja" className="text-[1.5rem] leading-snug font-semibold text-ink">
+                      遊んでくれて、
+                      <br />
+                      ありがとう！
+                    </p>
+                    <p lang="ja" className="text-[0.95rem] text-ink-2">
+                      本物のKimochiで、好きなゲームを日本語で読もう。
+                    </p>
+                    <button type="button" onClick={toDownload} lang="ja" className="kd-egg-go inline-flex items-center gap-2 rounded-lg px-4 py-2 text-small font-semibold">
+                      ダウンロードへ
+                      <ArrowUp size={14} aria-hidden />
+                    </button>
+                  </div>
+                  {corner('egg')}
+                </div>
+              )}
               {flow && (
                 <svg
                   aria-hidden="true"
@@ -552,7 +703,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
                   style={{
                     transform: `translate(${pointer.x}px, ${pointer.y}px)`,
                     transitionDuration: `${pointer.ms}ms`,
-                    opacity: pointer.shown && !userActive ? 1 : 0
+                    opacity: pointer.shown && !retired ? 1 : 0
                   }}
                 >
                   <path d="M2 1.5v18.2l4.6-4.4 3 6.8 3.1-1.4-3-6.6h6.4z" />
@@ -562,7 +713,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
                 <button
                   type="button"
                   onClick={play}
-                  disabled={flow && !logReady && loadLog}
+                  disabled={flow && loadLog && !logReady}
                   aria-label="Play the demo"
                   className="kd-play absolute top-1/2 left-1/2 z-[70] grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"
                 >
@@ -581,9 +732,30 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
 /** A desktop icon: picture over a label; a double-click opens it (the virtual pointer's way too). */
 function DesktopIcon({ id, label, icon, onOpen }: { id: string; label: string; icon: ReactNode; onOpen: () => void }) {
   return (
-    <button type="button" data-icon={id} onDoubleClick={onOpen} className="kd-icon flex w-20 flex-col items-center gap-1.5 rounded-md p-1.5">
+    <button
+      type="button"
+      data-icon={id}
+      onDoubleClick={onOpen}
+      onKeyDown={(e) => e.key === 'Enter' && onOpen()}
+      className="kd-icon flex w-20 flex-col items-center gap-1.5 rounded-md p-1.5"
+    >
       <span className="grid size-11 place-items-center">{icon}</span>
-      <span className="max-w-full truncate px-1 text-[11px] font-medium">{label}</span>
+      <span className="max-w-full truncate px-1 text-[11px] font-medium" lang={/[^\x20-\x7e]/.test(label) ? 'ja' : undefined}>
+        {label}
+      </span>
     </button>
+  )
+}
+
+/** The Easter egg: a speckled egg. */
+function EggMark({ small = false }: { small?: boolean }) {
+  return (
+    <svg viewBox="0 0 32 40" className={small ? 'size-3.5' : 'h-10 w-8'} aria-hidden="true">
+      <path d="M16 1.5C8.5 1.5 2.5 15 2.5 25a13.5 13.5 0 0 0 27 0C29.5 15 23.5 1.5 16 1.5z" fill="#fff4dc" stroke="#e8c98a" strokeWidth="1.5" />
+      <circle cx="11" cy="20" r="1.8" fill="#e6a8a0" />
+      <circle cx="20" cy="15" r="1.4" fill="#9fc6e8" />
+      <circle cx="19" cy="27" r="2" fill="#b9dca2" />
+      <circle cx="10" cy="30" r="1.2" fill="#f2c45f" />
+    </svg>
   )
 }

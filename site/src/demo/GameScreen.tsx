@@ -13,6 +13,8 @@ interface GameScreenProps {
   /** The visitor's own pick (hover / tap), which overrides the script. */
   userCursor: number | null
   onUserCursor: (index: number | null) => void
+  /** Kimochi's overlay is on (Show overlay): without it, no scan sweep, word boxes or pop-ups. */
+  overlay?: boolean
   children?: ReactNode
 }
 
@@ -40,13 +42,13 @@ function useLeaving<T>(value: T | null, ms: number): [T | null, boolean] {
  * The synthetic visual novel with Kimochi's overlay on top: dialogue box, scan sweep, word boxes,
  * the dictionary popup, and (Steam Deck) the controller menu.
  */
-export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, children }: GameScreenProps) {
+export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, overlay = true, children }: GameScreenProps) {
   const line = PLAY_LINES[frame.line]
-  const user = userCursor !== null
+  const user = userCursor !== null && overlay
   const text = user ? 'shown' : frame.text
-  const boxes = user || frame.boxes
-  const cursor = user ? userCursor : frame.cursor
-  const popup = user || frame.popup
+  const boxes = overlay && (user || frame.boxes)
+  const cursor = user ? userCursor : overlay ? frame.cursor : null
+  const popup = overlay && (user || frame.popup)
   const [menu, menuLeaving] = useLeaving(user ? null : frame.menu, 200)
 
   const screenRef = useRef<HTMLDivElement>(null)
@@ -145,13 +147,13 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, c
             )
           })}
         </p>
-        {frame.scan && !user && <div className="kd-shimmer" />}
+        {overlay && frame.scan && !user && <div className="kd-shimmer" />}
         <svg className="kd-advance" viewBox="0 0 12 10" aria-hidden="true">
           <path d="M1 1h10L6 9z" fill="currentColor" />
         </svg>
       </div>
 
-      {frame.scan && !user && <div key={`scan-${frame.line}`} className="kd-sweep" />}
+      {overlay && frame.scan && !user && <div key={`scan-${frame.line}`} className="kd-sweep" />}
 
       {menu && <RadialMenu selected={menu.sel} chosen={menu.chosen} leaving={menuLeaving} />}
 

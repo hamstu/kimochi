@@ -37,7 +37,10 @@ export function Hero() {
           Kimochi grabs the Japanese off your screen and puts it back over the game. Hover a word
           to see what it means. No alt-tabbing.
         </p>
-        <DownloadButton align="center" className="mt-10" />
+        {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
+        <div id="get-kimochi" className="mt-10 scroll-mt-24">
+          <DownloadButton align="center" />
+        </div>
       </div>
     </section>
   )

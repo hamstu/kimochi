@@ -15,47 +15,68 @@ export const WINDOW_SHAPE: Record<DesktopPlatform, string> = {
   linux: 'rounded-[12px] shadow-frame ring-1 ring-black/20'
 }
 
-function Traffic() {
+/** A title bar's close control: a real button when the window can close, else decoration. */
+function Close({ onClose, className, children }: { onClose?: () => void; className: string; children?: ReactNode }) {
+  if (!onClose) return <span className={className} aria-hidden="true">{children}</span>
   return (
-    <span className="flex gap-[7px]" aria-hidden="true">
-      <span className="size-3 rounded-full kd-tl-close ring-1 ring-black/10" />
-      <span className="size-3 rounded-full kd-tl-min ring-1 ring-black/10" />
-      <span className="size-3 rounded-full kd-tl-max ring-1 ring-black/10" />
+    <button type="button" aria-label="Close window" onClick={onClose} onPointerDown={(e) => e.stopPropagation()} className={className}>
+      {children}
+    </button>
+  )
+}
+
+function Traffic({ onClose }: { onClose?: () => void }) {
+  return (
+    <span className="flex gap-[7px]">
+      <Close onClose={onClose} className="size-3 rounded-full kd-tl-close ring-1 ring-black/10" />
+      <span className="size-3 rounded-full kd-tl-min ring-1 ring-black/10" aria-hidden="true" />
+      <span className="size-3 rounded-full kd-tl-max ring-1 ring-black/10" aria-hidden="true" />
     </span>
   )
 }
 
-function Caption() {
+function Caption({ onClose }: { onClose?: () => void }) {
   const box = 'grid h-full w-11 place-items-center text-ink-2'
   return (
-    <span className="flex h-full" aria-hidden="true">
-      <span className={box}>
+    <span className="flex h-full">
+      <span className={box} aria-hidden="true">
         <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" /></svg>
       </span>
-      <span className={box}>
+      <span className={box} aria-hidden="true">
         <svg width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" /></svg>
       </span>
-      <span className={box}>
-        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" /></svg>
-      </span>
+      <Close onClose={onClose} className={`${box} hover:bg-[#c42b1c] hover:text-white`}>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" /></svg>
+      </Close>
     </span>
   )
 }
 
-function GnomeClose() {
+function GnomeClose({ onClose }: { onClose?: () => void }) {
   return (
-    <span className="grid size-6 place-items-center rounded-full bg-hover text-ink" aria-hidden="true">
-      <svg width="8" height="8" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-    </span>
+    <Close onClose={onClose} className="grid size-6 place-items-center rounded-full bg-hover text-ink">
+      <svg width="8" height="8" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+    </Close>
   )
 }
 
 /** The game window's title bar. */
-export function TitleBar({ platform, title, icon }: { platform: DesktopPlatform; title: string; icon: ReactNode }) {
+export function TitleBar({
+  platform,
+  title,
+  icon,
+  onClose
+}: {
+  platform: DesktopPlatform
+  title: string
+  icon: ReactNode
+  /** Makes the close control work. */
+  onClose?: () => void
+}) {
   if (platform === 'macos')
     return (
       <div className="relative flex h-7 items-center bg-bar px-3 text-[12px] font-semibold text-ink-2">
-        <Traffic />
+        <Traffic onClose={onClose} />
         <span className="absolute inset-x-20 truncate text-center">{title}</span>
       </div>
     )
@@ -64,13 +85,13 @@ export function TitleBar({ platform, title, icon }: { platform: DesktopPlatform;
       <div className="flex h-8 items-center bg-bar pl-3 text-[12px] text-ink">
         <span className="mr-2 flex">{icon}</span>
         <span className="flex-1 truncate">{title}</span>
-        <Caption />
+        <Caption onClose={onClose} />
       </div>
     )
   return (
     <div className="relative flex h-[38px] items-center justify-end bg-bar px-2 text-[13px] font-semibold text-ink">
       <span className="absolute inset-x-12 truncate text-center">{title}</span>
-      <GnomeClose />
+      <GnomeClose onClose={onClose} />
     </div>
   )
 }
@@ -84,8 +105,8 @@ export function DesktopBar({ platform }: { platform: DesktopPlatform }) {
         <span>File</span>
         <span>Edit</span>
         <span>Window</span>
-        {/* Room on the right for the demo's maximise button. */}
-        <span className="mr-6 ml-auto tnum">9:41</span>
+        {/* Room on the right for the demo's replay and maximise buttons. */}
+        <span className="mr-14 ml-auto tnum">9:41</span>
       </div>
     )
   if (platform === 'linux')

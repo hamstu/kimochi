@@ -10,6 +10,7 @@ export type LogMessage =
   | { type: 'theme'; value: 'light' | 'dark' }
   | { type: 'interactive'; value: boolean }
   | { type: 'sidebar'; value: boolean }
+  | { type: 'sources'; open: string[] }
 
 /** A title-bar drag inside the Log, in screen coordinates (the harness's `embedDrag`). */
 export interface LogDrag {
@@ -17,6 +18,14 @@ export interface LogDrag {
   x: number
   y: number
 }
+
+/** What the embedded Log tells the demo (the harness's `tellEmbedder`). */
+export type LogEvent =
+  | ({ type: 'drag' } & LogDrag)
+  | { type: 'state'; sourceId: string | null; autoOcr: boolean; overlay: boolean }
+  | { type: 'window'; action: 'mini' | 'expand' | 'minimize' | 'hide' | 'close' }
+  | { type: 'activate'; sourceId: string | null }
+  | { type: 'interact' }
 
 export type PostToLog = (message: LogMessage) => void
 
@@ -37,8 +46,8 @@ interface LogFrameProps {
   load: boolean
   /** Filled with a sender the demo uses to drive the Log. */
   postRef: RefObject<PostToLog | null>
-  /** The visitor dragging the Log by its title bar. */
-  onDrag?: (drag: LogDrag) => void
+  /** Everything the Log reports: title-bar drags, its state, window actions, the visitor's clicks. */
+  onEvent?: (event: LogEvent) => void
   /** More harness parameters (see frontend/dev/preview-setup.ts), e.g. `{nosource: '1'}`. */
   params?: Record<string, string>
   /** Changing it reloads the window from scratch (a replayed demo). */
@@ -60,7 +69,7 @@ export function LogFrame({
   theme,
   load,
   postRef,
-  onDrag,
+  onEvent,
   params: extra,
   reloadKey = 0,
   iframeRef,
@@ -111,13 +120,13 @@ export function LogFrame({
     if (loaded) postRef.current?.({ type: 'theme', value: theme })
   }, [theme, loaded, postRef])
 
-  const onDragRef = useRef(onDrag)
-  onDragRef.current = onDrag
+  const onEventRef = useRef(onEvent)
+  onEventRef.current = onEvent
   useEffect(() => {
     const receive = (event: MessageEvent): void => {
       if (event.origin !== location.origin || event.source !== frameRef.current?.contentWindow) return
-      const data = event.data as ({ kimochiDemoEvent?: number; type?: string } & LogDrag) | null
-      if (data?.kimochiDemoEvent === 1 && data.type === 'drag') onDragRef.current?.(data)
+      const data = event.data as ({ kimochiDemoEvent?: number } & LogEvent) | null
+      if (data?.kimochiDemoEvent === 1) onEventRef.current?.(data)
     }
     addEventListener('message', receive)
     return () => removeEventListener('message', receive)

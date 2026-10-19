@@ -82,7 +82,8 @@ import {
   THUMBNAIL_EDGE,
   appIcon,
   seedFilesystem,
-  thumbnailSvg
+  thumbnailSvg,
+  type DemoSource
 } from './demo-data'
 import { MODEL_HANDLERS, onModelSettingSet } from './preview-models'
 import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
@@ -98,6 +99,29 @@ const PAGE_LABELS: Record<Exclude<PreviewPage, 'panel'>, string> = {
   'reader-popup': 'reader-popup',
   welcome: 'welcome',
   'tray-popover': 'tray-popover'
+}
+
+const EMBED = params.get('embed') === '1'
+
+/**
+ * Embedded in the site's demo, the desktop is the site's: its own windows (the game, and the
+ * Easter-egg app) come and go as the visitor opens and closes them (`sources` from the parent), so
+ * only open ones are offered; the demo's other app windows are left out, the screens stay.
+ */
+const EGG_SOURCE: DemoSource = {
+  id: 'window:900',
+  kind: 'window',
+  name: 'ありがとう',
+  app: 'おまけ',
+  hue: 40,
+  on_screen: true,
+  bounds: { x: 300, y: 200, width: 640, height: 400 }
+}
+const ALL_SOURCES: DemoSource[] = EMBED ? [...SOURCES, EGG_SOURCE] : SOURCES
+let openWindows: string[] | null = null
+function catalog(): DemoSource[] {
+  if (!EMBED) return SOURCES
+  return ALL_SOURCES.filter((s) => s.kind === 'display' || (openWindows ?? ['window:101']).includes(s.id))
 }
 
 const CURRENT_SOURCE =
@@ -268,6 +292,29 @@ let pageLabel = 'log'
 function pushState(): void {
   live.revision += 1
   void emit('state', viewState(pageLabel))
+  tellEmbedder({ type: 'state', sourceId: live.source?.id ?? null, autoOcr: live.autoOcr, overlay: live.textOverlayVisible })
+}
+
+/** Embedded: tell the site's demo something (`{kimochiDemoEvent: 1, type, …}`). */
+function tellEmbedder(message: Record<string, unknown>): void {
+  if (EMBED) parent.postMessage({ kimochiDemoEvent: 1, ...message }, location.origin)
+}
+
+/** The window the chosen source was, kept while it is closed so it comes back when reopened. */
+let closedSource: DemoSource | null = null
+
+/** The parent's desktop changed: a window opened or closed. */
+function setOpenWindows(ids: string[]): void {
+  openWindows = ids
+  if (live.source?.kind === 'window' && !ids.includes(live.source.id)) {
+    closedSource = live.source
+    live.source = null
+    pushState()
+  } else if (!live.source && closedSource && ids.includes(closedSource.id)) {
+    live.source = closedSource
+    closedSource = null
+    pushState()
+  }
 }
 
 function viewState(label: string): Record<string, unknown> {
@@ -331,9 +378,12 @@ const DISPLAYS = [
   }
 ]
 
+let liveMini = false
+
 function panelInfo(label: string): Record<string, unknown> {
   return {
     label,
+    mini: label === 'log' && liveMini,
     native: { level: 3, opaque: false, ignores_mouse: false },
     bounds: { x: 200, y: 120, width: innerWidth, height: innerHeight },
     scale: devicePixelRatio,
@@ -410,6 +460,10 @@ const HANDLERS: Record<string, Handler> = {
   // panels
   panel: (a) => {
     console.info(`[preview] panel(${String(a?.label)}, ${String(a?.action)})`)
+    const action = String(a?.action)
+    if (action === 'mini' || action === 'expand') liveMini = action === 'mini'
+    // Embedded, the site's desktop sizes, hides and shows the window.
+    if (['mini', 'expand', 'minimize', 'hide'].includes(action)) tellEmbedder({ type: 'window', action })
     return panelInfo(String(a?.label))
   },
   panel_drag: (a) => {
@@ -424,7 +478,7 @@ const HANDLERS: Record<string, Handler> = {
 
   // sources / capture
   enumerate: () =>
-    SOURCES.map((s) => ({
+    catalog().map((s) => ({
       id: s.id,
       kind: s.kind,
       name: s.name,
@@ -434,9 +488,9 @@ const HANDLERS: Record<string, Handler> = {
       on_screen: s.on_screen
     })),
   source_catalog: () =>
-    SOURCES.map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon, space: s.space })),
+    catalog().map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon, space: s.space })),
   source_thumbnail: (a) => {
-    const s = SOURCES.find((x) => x.id === a?.sourceId)
+    const s = ALL_SOURCES.find((x) => x.id === a?.sourceId)
     if (!s) return { url: '' }
     const { width, height } = s.bounds
     const scale = Math.min(1, THUMBNAIL_EDGE / Math.max(width, height))
@@ -444,21 +498,22 @@ const HANDLERS: Record<string, Handler> = {
   },
   // Each call a slightly different frame, so the sidebar's crossfade is visible.
   source_live_thumbnail: (a) => {
-    const s = SOURCES.find((x) => x.id === a?.sourceId) ?? CURRENT_SOURCE
+    const s = ALL_SOURCES.find((x) => x.id === a?.sourceId) ?? CURRENT_SOURCE
     const { width, height } = s.bounds
     const hue = (s.hue + (liveTick++ % 6) * 24) % 360
     return { url: thumbnailSvg(s.name, hue, s.kind, width, height, 0.5), width, height }
   },
   source_preview: (a) => {
-    const s = SOURCES.find((x) => x.id === a?.sourceId) ?? CURRENT_SOURCE
+    const s = ALL_SOURCES.find((x) => x.id === a?.sourceId) ?? CURRENT_SOURCE
     const { width, height } = s.bounds
     return { url: thumbnailSvg(s.name, s.hue, s.kind, width, height), width, height }
   },
   source_icon: (a) => ({ icon: appIcon(a?.appName as string) }),
   commit_source: (a) => {
-    const chosen = SOURCES.find((x) => x.id === a?.sourceId)
+    const chosen = ALL_SOURCES.find((x) => x.id === a?.sourceId)
     if (chosen) {
       live.source = chosen
+      closedSource = null
       publish('lastSelectedSource', {
         type: chosen.kind === 'display' ? 'screen' : 'window',
         name: chosen.name,
@@ -471,11 +526,15 @@ const HANDLERS: Record<string, Handler> = {
   },
   clear_source: () => {
     live.source = null
+    closedSource = null
     publish('lastSelectedSource', null)
     pushState()
     return { sourceId: null, previous: null }
   },
-  activate_source: (a) => note('activate_source', a?.sourceId),
+  activate_source: (a) => {
+    tellEmbedder({ type: 'activate', sourceId: a?.sourceId ?? null })
+    return note('activate_source', a?.sourceId)
+  },
   select_source: ok,
   selected_source: () => ({ sourceId: CURRENT_SOURCE.id }),
   open_source_picker: ok,
@@ -548,7 +607,10 @@ const HANDLERS: Record<string, Handler> = {
     }
     return note('trigger_action', a?.name)
   },
-  app_quit: ok,
+  app_quit: () => {
+    tellEmbedder({ type: 'window', action: 'close' })
+    return null
+  },
   dictionary: ok,
   texthooker_send: ok,
   open_screen_capture_preferences: ok,
@@ -689,6 +751,7 @@ type EmbedMessage =
   | { kimochiDemo: 1; type: 'theme'; value: 'light' | 'dark' }
   | { kimochiDemo: 1; type: 'interactive'; value: boolean }
   | { kimochiDemo: 1; type: 'sidebar'; value: boolean }
+  | { kimochiDemo: 1; type: 'sources'; open: string[] }
 
 let embedScan = 0
 
@@ -715,6 +778,8 @@ function listenToEmbedder(): void {
     (event) => {
       interactive = true
       pressed = { x: event.screenX, y: event.screenY }
+      // The visitor's own click (the demo's scripted pointer dispatches untrusted events).
+      if (event.isTrusted) tellEmbedder({ type: 'interact' })
     },
     { capture: true }
   )
@@ -777,6 +842,8 @@ function listenToEmbedder(): void {
       interactive = message.value
     } else if (message.type === 'sidebar') {
       publish('mainSidebarOpen', message.value)
+    } else if (message.type === 'sources') {
+      setOpenWindows(message.open)
     }
   })
 }
@@ -922,7 +989,14 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   if (page === 'welcome') setupWelcome()
 
   const embed = params.get('embed') === '1'
-  if (embed) listenToEmbedder()
+  if (embed) {
+    listenToEmbedder()
+    // Keep on top means nothing on a page.
+    const style = document.createElement('style')
+    style.textContent = 'button[aria-label="Keep on top"], button[aria-label="Unpin window"] { display: none !important; }'
+    document.head.append(style)
+    tellEmbedder({ type: 'state', sourceId: live.source?.id ?? null, autoOcr: live.autoOcr, overlay: live.textOverlayVisible })
+  }
   if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed })
   if (params.get('activity') === '1') playActivity()
 
