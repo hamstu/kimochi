@@ -437,6 +437,7 @@ const HANDLERS: Record<string, Handler> = {
   },
   source_icon: (a) => ({ icon: appIcon(a?.appName as string) }),
   commit_source: ok,
+  clear_source: ok,
   activate_source: (a) => note('activate_source', a?.sourceId),
   select_source: ok,
   selected_source: () => ({ sourceId: CURRENT_SOURCE.id }),

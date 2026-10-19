@@ -412,6 +412,21 @@ fn commit_with_key(service: &Shared, source_id: &str, crop: Option<Crop>, saved_
     Ok(json!({ "sourceId": source.id, "crop": crop, "key": key }))
 }
 
+/// Reads nothing: no source is selected, now or at the next launch. Each source's saved crop is
+/// kept, so choosing it again brings its region back. The scan on screen belonged to the source,
+/// so it goes too.
+pub fn clear(service: &Shared) -> Result<Value, String> {
+    service.settings.set_many(&[(&["lastSelectedSource"], Value::Null)])?;
+    let previous = service.selection.lock().unwrap().take();
+    if previous.is_some() {
+        let mut view = service.view.lock().unwrap();
+        view.scan = None;
+        view.regions.clear();
+        view.revision += 1;
+    }
+    Ok(json!({ "sourceId": Value::Null, "previous": previous }))
+}
+
 // ---------------------------------------------------------------- system picker
 
 /// Set while a system picker is open, so a second request is answered rather than queued.

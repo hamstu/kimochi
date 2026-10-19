@@ -231,6 +231,8 @@ export const selectSource = (sourceId: string): Promise<void> =>
 /** Forget the source's region: the whole window or display is read. */
 export const clearSourceCrop = (sourceId: string): Promise<void> =>
   invoke('commit_source', { sourceId, crop: null, keepCrop: false })
+/** Read nothing: deselect the source (each source's saved region is kept for next time). */
+export const clearSource = (): Promise<void> => invoke('clear_source')
 /** Bring a window source's application to the front. */
 export const activateSource = (sourceId: string): Promise<void> =>
   invoke('activate_source', { sourceId })

@@ -466,6 +466,49 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   transform: translate(-50%, -50%);
 }
 
+/* Clear source: a small round button over the picture's top-right corner, shown while the pointer
+   is anywhere on the card (the picture, the crop area and change source buttons). */
+.src-clear {
+  position: absolute;
+  top: var(--k-space-1-5);
+  right: var(--k-space-1-5);
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  cursor: default;
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity var(--k-fast) var(--k-ease-out),
+    transform var(--k-fast) var(--k-ease-out),
+    background-color var(--k-fast);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.src-clear > svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.src-card-live:hover .src-clear,
+.src-card-live:focus-within .src-clear {
+  opacity: 1;
+  transform: none;
+}
+.src-clear:hover {
+  background: rgb(0 0 0 / 0.75);
+}
+.src-clear:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+
 /* Nothing chosen: a dashed, empty well that asks for a source. */
 .src-empty {
   align-items: center;

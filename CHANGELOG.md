@@ -12,6 +12,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - Kimochi accounts and cloud features now live at kimochiapp.com.
+- You can clear the source: hover the source card and click the × on its picture, or choose Clear source in the Change source menu. Kimochi then reads nothing until you pick one again, and remembers each source's crop area for when you do.
 - Editing a source's region now offers **Save and Scan** (the default, also Return) or just **Save**. Either way the old overlay text is cleared; with Auto OCR on it simply reads the new region. Fixed: every region edit ended in "Scan discarded: the source changed while it was running".
 - Fixed: after trying Hachidori or 10ten, switching back to the built-in Yomitan left dictionary lookups not working until you restarted Kimochi.
 - Fixed: dictionaries installed in Hachidori or 10ten could disappear after a few days on macOS, so you had to install them again. macOS was clearing their storage as if it were an unused website; Kimochi now tells it not to. Kimochi also guards the files that list your dictionaries and settings for every dictionary engine (Yomitan included): they are written safely, a damaged one is restored from its previous copy instead of being emptied, and a file that can't be read is never overwritten.

@@ -12,6 +12,7 @@ import { useViewState } from '../bridge/state'
 import { useSetting } from '../bridge/useSetting'
 import {
   activateSource,
+  clearSource,
   clearSourceCrop,
   selectSource,
   nativeError,
@@ -70,6 +71,8 @@ interface RemoteControlProps {
   onSelectSource: (sourceId: string) => void
   /** Forget the current source's region. */
   onClearCrop: () => void
+  /** Deselect the source: nothing is read until one is chosen again. */
+  onClearSource: () => void
 }
 
 export function useController(): ControllerWiring {
@@ -159,6 +162,11 @@ export function useController(): ControllerWiring {
     onClearCrop: () => {
       const sourceId = state.source?.sourceId
       if (sourceId) attempt('Clear crop area', () => clearSourceCrop(sourceId))
+    },
+    onClearSource: () => {
+      // The source's outline would otherwise stay up over a window that is no longer the source.
+      void triggerAction('hoverSourceDismiss').catch(() => undefined)
+      attempt('Clear source', () => clearSource())
     },
     onSourceHover: (hovered) =>
       void triggerAction(hovered ? 'hoverSourceOn' : 'hoverSourceOff').catch(() => undefined)

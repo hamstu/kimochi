@@ -204,6 +204,7 @@ rather than showing the previous session's selection.
 | `source_thumbnail` | `({sourceId}) -> {url}` |
 | `source_preview` | `({sourceId}) -> {url, width, height}` |
 | `commit_source` | `({sourceId, crop}) -> {sourceId, crop, key}` |
+| `clear_source` | `() -> {sourceId: null, previous}` |
 | `open_source_picker` | `({editCurrent}) -> PanelInfo` |
 | `source_picker_state` | `() -> {sourceId, crop, editCurrent}` |
 
@@ -255,6 +256,10 @@ It persists `cropRegions`, `cropScanEnabled` and `lastSelectedSource` in **one s
 transaction**, keyed per source descriptor — application name, then window title, then
 normalised kind. It invalidates the previous scan when the source changes **or when the
 crop changes on the same source**, since the old text no longer matches the new region.
+
+`clear_source` deselects the source: `lastSelectedSource` becomes null, so nothing is restored at
+the next launch either, and the scan on screen is dropped (a new revision). Saved crops stay, so
+choosing that source again brings its region back.
 
 ## Capture and OCR
 

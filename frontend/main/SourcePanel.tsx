@@ -403,6 +403,7 @@ function SourceMenuContent({
   onChooseSource,
   onSystemPick,
   onLinkWindow,
+  onClearSource,
   onOpenSettings
 }: {
   mode: Mode | null
@@ -415,6 +416,8 @@ function SourceMenuContent({
   onChooseSource: (sourceId: string) => void
   onSystemPick: () => void
   onLinkWindow?: () => void
+  /** Present while a window or screen is chosen. */
+  onClearSource?: () => void
   onOpenSettings: () => void
 }): ReactNode {
   const [windowType, ...others] = TYPES
@@ -464,6 +467,11 @@ function SourceMenuContent({
         </MenuPrimitive.Item>
       ))}
       <MenuSeparator />
+      {onClearSource && (
+        <MenuItem icon={<X />} onSelect={onClearSource}>
+          Clear source
+        </MenuItem>
+      )}
       <MenuItem icon={<Settings />} onSelect={onOpenSettings}>
         Source settings
       </MenuItem>
@@ -568,6 +576,14 @@ export function SourcePanel({
         closeMenu()
         void startSystemPick()
       }}
+      onClearSource={
+        mode === 'ocr' && source
+          ? () => {
+              closeMenu()
+              controller.onClearSource()
+            }
+          : undefined
+      }
       onOpenSettings={() => {
         closeMenu()
         onOpenSettings()
@@ -656,6 +672,19 @@ export function SourcePanel({
             onMouseLeave={() => controller.onSourceHover(false)}
           >
             {preview}
+          </button>
+        )}
+        {/* Over the picture's top-right corner, shown while the pointer is on the card. A sibling of
+            the body, not inside it: the body is itself a button. */}
+        {!mini && (
+          <button
+            type="button"
+            className="src-clear"
+            aria-label="Clear source"
+            title="Clear source"
+            onClick={() => controller.onClearSource()}
+          >
+            <X />
           </button>
         )}
         <div className="src-actions">

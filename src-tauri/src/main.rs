@@ -1274,6 +1274,12 @@ async fn commit_source(
     .map_err(|e| e.to_string())?
 }
 
+/// Deselect the source: nothing is read until one is chosen again (see `sources::clear`).
+#[tauri::command]
+fn clear_source(state: State<Shared>) -> Reply<Value> {
+    sources::clear(&state)
+}
+
 /// Choose a new source: the main window comes forward with its sidebar's Change source menu
 /// open on the grid of windows and displays. There is no separate picker window; regions are
 /// drawn over the source itself (the overlay's `setCropArea`).
@@ -2671,6 +2677,7 @@ fn main() {
             accessibility_status,
             request_accessibility,
             commit_source,
+            clear_source,
             open_source_picker,
             pointer_display,
             pointer_location,
