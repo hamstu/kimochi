@@ -539,8 +539,10 @@ History add/delete go through Rust with the 50-entry cap applied there, so the o
 and the Log panel cannot race each other with read-modify-write cycles on one key. Each
 change re-emits `settings:changed` for `scannedTextHistory`.
 
-`ext_relay_listen` registers a Tauri `Channel` for the calling window, replacing its receiver on
-document reload. `ext_relay` sends `{from: <sender label>, to: target, seq, payload}` directly
+`ext_relay_listen` registers a Tauri `Channel` for the calling window. Native forgets it when
+that window's page starts loading again (reload or navigation) and when the window closes, so a
+page that does not register one (Yomitan's overlay host) gets events, never a dead channel left by
+the previous page. `ext_relay` sends `{from: <sender label>, to: target, seq, payload}` directly
 over that channel for addressed messages, using Tauri's fast body transport for large results.
 Without a channel it emits `ext-relay:<target>`
 for an addressed message, or `ext-relay` when `target` is null. Receivers subscribe to

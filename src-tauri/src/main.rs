@@ -2495,6 +2495,21 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Self-updates (updater.rs); the check, download and install are our own commands.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // A relay channel belongs to the page that registered it (`ext_relay_listen`), not to
+        // its window: once the page reloads or navigates, a channel left behind swallows every
+        // relay to that window, because a channel is preferred over the event a page without
+        // one listens to. Yomitan's overlay host registers none, so after switching from
+        // 10ten or Hachidori back to Yomitan, the panels' backend requests reached the dead
+        // 10ten page and lookups outside the overlay never started. Each page registers
+        // afresh if it uses one.
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                if let Some(service) = webview.try_state::<Shared>() {
+                    let previous = service.relay_channels.lock().unwrap().remove(webview.label());
+                    drop(previous);
+                }
+            }
+        })
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 if let Some(service) = window.try_state::<Shared>() {
