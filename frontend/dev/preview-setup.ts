@@ -72,7 +72,7 @@
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit, listen } from '@tauri-apps/api/event'
-import { SETTINGS_DEFAULTS, nextOverlayToggle } from '@ui/settings'
+import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, nextOverlayToggle } from '@ui/settings'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
 import {
@@ -393,6 +393,112 @@ function panelInfo(label: string): Record<string, unknown> {
   }
 }
 
+// ---------------------------------------------------------------- demo stops (?embed=1)
+
+/**
+ * Embedded, what the demo cannot really do stops at the site's "Try the real thing" window (its
+ * offer to download) instead of half-working: `{kimochiDemoEvent: 1, type: 'unavailable', feature}`.
+ * Only the visitor's own clicks and keys are stopped, never the demo's script or the page's own
+ * background calls.
+ *
+ * New features need no entry here to stay safe: a command this file does not mock, or a setting
+ * outside `DEMO_SETTINGS`, that the visitor's click reaches is stopped the same way. The lists below
+ * are for what IS mocked (for the UI preview pages) but means nothing on the site.
+ */
+const DEMO_STOPPED_COMMANDS: Record<string, string> = {
+  open_source_picker: 'The system picker',
+  capture_pick_source: 'The system picker',
+  dictionary_engine_apply: 'Switching dictionaries',
+  hotkeys_save: 'Shortcuts',
+  open_screen_capture_preferences: 'Screen recording',
+  request_accessibility: 'Accessibility',
+  model_download_start: 'Downloading OCR models',
+  extension_download_start: 'Downloading dictionaries',
+  install_yomitan_native_host: 'The Yomitan API',
+  account_link_start: 'Kimochi accounts',
+  account_open_web: 'Kimochi accounts',
+  sync_now: 'Sync',
+  update_check: 'Updates',
+  anki_add_note: 'Adding cards to Anki',
+  anki_gui_browse: 'Anki',
+  deepl_translate: 'Translation',
+  cloud_translate: 'Translation',
+  explain_run: 'Explanations',
+  tts_speak: 'Read aloud',
+  vndb_search_vns: 'VNDB'
+}
+
+/** `trigger_action` names that need a real screen: the region editor, scans on demand. */
+const DEMO_STOPPED_ACTIONS: Record<string, string> = {
+  setCropArea: 'Choosing a scan area',
+  selectAndScan: 'Scanning a selected area',
+  triggerScan: 'Scanning on demand',
+  toggleDebugOverlay: 'Diagnostics'
+}
+
+/** Settings the demo shows the effect of; any other the visitor changes is stopped. */
+const DEMO_SETTINGS = new Set([
+  'appearance',
+  'interfaceScale',
+  'mainSidebarOpen',
+  'mainSidebarWidth',
+  'liveOverlayEnabled',
+  'lastSelectedSource',
+  'settingsActiveTab',
+  'superTexthooker',
+  'texthookerSourceSessions',
+  'texthookerIngestedHistory'
+])
+
+/** What a stopped setting is called on the site, for the ones the demo's own controls reach. */
+const DEMO_SETTING_LABELS: Record<string, string> = {
+  ocrMode: 'Switching OCR models',
+  yomitanSettings: 'Switching dictionaries'
+}
+
+/** When the visitor last pressed or typed in this page (trusted events only). */
+let lastGesture = -Infinity
+const byVisitor = (): boolean => performance.now() - lastGesture < 2000
+
+function demoStop(feature: string): null {
+  tellEmbedder({ type: 'unavailable', feature })
+  return null
+}
+
+/** The demo's stop for this call, or null to let it through. */
+function stoppedFeature(cmd: string, args: Args, mocked: boolean): string | null {
+  if (!byVisitor()) return null
+  if (cmd in DEMO_STOPPED_COMMANDS) return DEMO_STOPPED_COMMANDS[cmd]
+  if (cmd === 'trigger_action') return DEMO_STOPPED_ACTIONS[String(args?.name)] ?? null
+  // Clearing a crop area: the demo's sources have none.
+  if (cmd === 'commit_source' && args?.keepCrop === false) return 'Choosing a scan area'
+  if (cmd === 'panel' && args?.action === 'show' && args?.label !== 'log') return 'That window'
+  if (cmd === 'settings_set' && !DEMO_SETTINGS.has(String(args?.key)))
+    return DEMO_SETTING_LABELS[String(args?.key)] ?? 'Changing that setting'
+  // Something new the demo knows nothing about.
+  if (!mocked && !cmd.startsWith('plugin:')) return 'That'
+  return null
+}
+
+function installDemoStops(): void {
+  const mark = (event: Event): void => {
+    if (event.isTrusted) lastGesture = performance.now()
+  }
+  addEventListener('pointerdown', mark, { capture: true })
+  addEventListener('keydown', mark, { capture: true })
+  ;(window as unknown as { __kimochiDemoStop: (feature: string) => boolean }).__kimochiDemoStop = (feature) => {
+    demoStop(feature)
+    return true
+  }
+  // A visitor's earlier switch is mirrored in this origin's storage, and the demo only has Yomitan:
+  // without this, every later visit would look for the Hachidori or 10ten host.
+  try {
+    localStorage.removeItem(DICTIONARY_ENGINE_KEY)
+  } catch {
+    // Storage blocked: nothing was mirrored either.
+  }
+}
+
 // ---------------------------------------------------------------- IPC
 
 let liveTick = 0
@@ -695,6 +801,18 @@ function installIpc(label: string): void {
   mockIPC(
     (cmd, args) => {
       const handler = HANDLERS[cmd]
+      if (EMBED) {
+        const feature = stoppedFeature(cmd, args as Args, Boolean(handler))
+        if (feature) {
+          // A stopped setting snaps back to what it was, once `useSetting` listens again (it
+          // ignores changes for 100 ms after its own write).
+          if (cmd === 'settings_set') {
+            const key = String((args as Args)?.key)
+            setTimeout(() => publish(key, settings[key]), 150)
+          }
+          return demoStop(feature)
+        }
+      }
       if (handler) return handler(args as Args, label)
       if (cmd === 'plugin:window|is_visible') return true
       if (cmd === 'plugin:window|is_focused') return true
@@ -1045,6 +1163,7 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   const embed = params.get('embed') === '1'
   if (embed) {
     listenToEmbedder()
+    installDemoStops()
     quietWebSockets()
     // Keep on top means nothing on a page.
     const style = document.createElement('style')

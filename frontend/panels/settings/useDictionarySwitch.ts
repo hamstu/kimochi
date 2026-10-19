@@ -27,6 +27,7 @@ import {
 import { extensionAction, extensionStatus, type ExtensionStatus } from '../../bridge/extensions'
 import { downloadEngineFor, extensionDownloadPrompt, normalizeExtensionStatus } from '@ui/extension-download'
 import { engineSwitchRecord, forgetEngineSwitch, rememberEngineSwitch } from '../../main/engineSwitch'
+import { demoStops } from '../../bridge/demo'
 
 /** How long "Reloading the reader windows…" stays up after native has answered. */
 export const RELOAD_NOTE_MS = 2500
@@ -123,6 +124,7 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   const ticket = useRef(0)
   const handleChoose = useCallback(
     async (engine: DictionaryEngine): Promise<void> => {
+      if (engine !== saved && demoStops('Switching dictionaries')) return
       const mine = ++ticket.current
       setApplyError(null)
       let status: ExtensionStatus | null = null

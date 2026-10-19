@@ -26,6 +26,8 @@ export type LogEvent =
   | { type: 'window'; action: 'mini' | 'expand' | 'minimize' | 'hide' | 'close' }
   | { type: 'activate'; sourceId: string | null }
   | { type: 'interact' }
+  /** The visitor reached something only the app can do (the harness's demo stops). */
+  | { type: 'unavailable'; feature: string }
 
 export type PostToLog = (message: LogMessage) => void
 

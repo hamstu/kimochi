@@ -49,6 +49,7 @@ import { DeckBody, DeckHud } from './DeckStage'
 import { LogFrame, type LogEvent, type PostToLog } from './LogFrame'
 import { DesktopBar, Taskbar, TitleBar, WINDOW_SHAPE } from './chrome'
 import { EGG_LINE, EggApp } from './EggApp'
+import { TryRealThing } from './TryRealThing'
 import { PLAY_LINES } from './content'
 import './demo.css'
 
@@ -151,6 +152,8 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
 
   const deck = platform === 'deck'
   const [max, setMax] = useState(false)
+  /** What the visitor reached that only the app can do, offered as a download. */
+  const [unavailable, setUnavailable] = useState<string | null>(null)
   // Free windows on a desk: from lg up, or maximised.
   const free = !deck && (wide || max)
   // The scripted session: on the desk, without reduced motion.
@@ -323,6 +326,8 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   const onLogEvent = (event: LogEvent): void => {
     if (event.type === 'state') {
       setLogState({ sourceId: event.sourceId, autoOcr: event.autoOcr, overlay: event.overlay })
+    } else if (event.type === 'unavailable') {
+      setUnavailable(event.feature)
     } else if (event.type === 'interact') {
       front('log')
       if (phaseRef.current === 'running') setRetired(true)
@@ -544,11 +549,11 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     setPhase('intro')
   }
 
+  // Out of the maximised demo first, once the page can scroll again.
   const toDownload = (): void => {
+    setUnavailable(null)
     setMax(false)
-    requestAnimationFrame(() =>
-      document.getElementById('get-kimochi')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    )
+    setTimeout(() => document.getElementById('get-kimochi')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
   }
 
   const screen = useMemo(
@@ -730,6 +735,9 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
             </div>
             {platform === 'windows' && <Taskbar />}
           </>
+        )}
+        {unavailable && !deck && (
+          <TryRealThing platform={platform} feature={unavailable} onTry={toDownload} onClose={() => setUnavailable(null)} />
         )}
       </div>
     </div>

@@ -30,6 +30,7 @@ import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
 import { GamingModeNotice } from './GamingModeNotice'
 import { panel } from '../bridge/tauri'
+import { demoStops } from '../bridge/demo'
 import './main.css'
 
 const Notebook = lazy(() =>
@@ -87,6 +88,7 @@ export default function MainPanel(): JSX.Element {
   const [whatsNew, setWhatsNew] = useWhatsNewOnLaunch()
 
   const setView = (next: MainView): void => {
+    if (next === 'settings' && demoStops('Settings')) return
     if (next !== 'settings') lastView.current = next
     setViewState(next)
   }
@@ -145,6 +147,7 @@ export default function MainPanel(): JSX.Element {
   // Other windows (the tray, a pop-up) ask for Settings by event; the page is already stored.
   useEffect(() => {
     const pending = listen('main:show-settings', () => {
+      if (demoStops('Settings')) return
       void changeMini(false).then(() => setViewState('settings'))
     })
     return () => void pending.then((stop) => stop())
