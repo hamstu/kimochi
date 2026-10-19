@@ -40,7 +40,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react'
-import { ArrowUp, Maximize2, Minimize2, Play, RotateCcw } from 'lucide-react'
+import { Maximize2, Minimize2, Play, RotateCcw } from 'lucide-react'
 import { GAME } from './content'
 import { guessPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
 import { deckFrames, desktopFrames, usePlayer, type Frame } from './script'
@@ -48,6 +48,7 @@ import { GameScreen } from './GameScreen'
 import { DeckBody, DeckHud } from './DeckStage'
 import { LogFrame, type LogEvent, type PostToLog } from './LogFrame'
 import { DesktopBar, Taskbar, TitleBar, WINDOW_SHAPE } from './chrome'
+import { EGG_LINE, EggApp } from './EggApp'
 import { PLAY_LINES } from './content'
 import './demo.css'
 
@@ -63,7 +64,6 @@ const DECK_FRAMES = deckFrames()
 /** The harness's source ids for the site's own windows (preview-setup.ts). */
 const GAME_SOURCE = 'window:101'
 const EGG_SOURCE = 'window:900'
-const EGG_LINE = '遊んでくれて、ありがとう！本物のKimochiで、好きなゲームを日本語で読もう。'
 
 type WindowId = 'game' | 'log' | 'egg'
 /** A window's place as fractions of the desk; the game's height follows its width (16:10 + title). */
@@ -205,16 +205,23 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   useEffect(() => setUserCursor(null), [frame.line, platform])
 
   // The Easter egg's app is read once each time Kimochi starts watching it.
+  // Once read, its words take the overlay's boxes, until Kimochi stops watching it.
   const eggRead = started && watching('egg', EGG_SOURCE)
+  const [eggScanned, setEggScanned] = useState(false)
   useEffect(() => {
+    setEggScanned(false)
     if (!eggRead || !onScreen) return
     const scan = setTimeout(() => postRef.current?.({ type: 'scan' }), 700)
-    const line = setTimeout(() => postRef.current?.({ type: 'line', text: EGG_LINE }), 1600)
+    const line = setTimeout(() => {
+      postRef.current?.({ type: 'line', text: EGG_LINE })
+      setEggScanned(true)
+    }, 1600)
     return () => {
       clearTimeout(scan)
       clearTimeout(line)
     }
   }, [eggRead, onScreen])
+  const eggBoxes = eggScanned && eggRead && logState.overlay
 
   // ---------------------------------------------------------------- desk and windows
   const deskRef = useRef<HTMLDivElement>(null)
@@ -491,21 +498,34 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   }, [flow, phase, run])
 
   // While the session plays, the pointer follows the word being looked up, else rests by the box.
+  // A scripted lookup opens only once the pointer has reached its word (`arrived`).
+  const [arrived, setArrived] = useState<Frame | null>(null)
   useEffect(() => {
     if (!flow || phase !== 'running' || retired) return
     const deskEl = deskRef.current
     if (!deskEl) return
+    const MOVE = 650
+    let landed: ReturnType<typeof setTimeout> | undefined
     const t = setTimeout(() => {
       const { pointOnDesk: onDesk } = steps.current
-      const word = deskEl.querySelector('[data-window="game"] .kd-word.kd-current')
+      const word = frame.cursor !== null ? deskEl.querySelector(`[data-window="game"] [data-token="${frame.cursor}"]`) : null
       const box = deskEl.querySelector('[data-window="game"] .kd-box')
       const target = word ? onDesk(word) : box ? onDesk(box, 0.7, 0.8) : null
       if (!target) return
       const offset = word ? { x: 4, y: 10 } : { x: 0, y: 0 }
-      setPointer((c) => ({ ...c, x: target.x + offset.x, y: target.y + offset.y, ms: 650, shown: true }))
+      setPointer((c) => ({ ...c, x: target.x + offset.x, y: target.y + offset.y, ms: MOVE, shown: true }))
+      landed = setTimeout(() => setArrived(frame), MOVE)
     }, 60)
-    return () => clearTimeout(t)
+    return () => {
+      clearTimeout(t)
+      clearTimeout(landed)
+    }
   }, [flow, phase, frame, retired])
+  // On the scripted desk, a frame's lookup waits for the pointer, and stops for good once the
+  // visitor has taken over (their own hovering still opens words).
+  const scripted = flow && phase === 'running'
+  const shownFrame: Frame =
+    scripted && (retired || arrived !== frame) ? { ...frame, cursor: null, popup: false } : frame
 
   /** The visitor's own click on the desk, once the session is under way, retires the pointer. */
   const onDeskDown = (event: ReactPointerEvent): void => {
@@ -534,7 +554,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   const screen = useMemo(
     () => (
       <GameScreen
-        frame={frame}
+        frame={shownFrame}
         variant={deck ? 'deck' : 'desktop'}
         paused={!onScreen}
         userCursor={userCursor}
@@ -544,7 +564,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
         {deck && <DeckHud frame={frame} />}
       </GameScreen>
     ),
-    [frame, deck, onScreen, userCursor, overlay]
+    [frame, shownFrame, deck, onScreen, userCursor, overlay]
   )
 
   const placed = (id: WindowId): CSSProperties | undefined => {
@@ -678,20 +698,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
                   <div onPointerDown={track('egg', 'move')}>
                     <TitleBar platform={platform} title="おまけ" icon={<EggMark small />} onClose={close('egg')} />
                   </div>
-                  <div className="kd-egg flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
-                    <p lang="ja" className="text-[1.5rem] leading-snug font-semibold text-ink">
-                      遊んでくれて、
-                      <br />
-                      ありがとう！
-                    </p>
-                    <p lang="ja" className="text-[0.95rem] text-ink-2">
-                      本物のKimochiで、好きなゲームを日本語で読もう。
-                    </p>
-                    <button type="button" onClick={toDownload} lang="ja" className="kd-egg-go inline-flex items-center gap-2 rounded-lg px-4 py-2 text-small font-semibold">
-                      ダウンロードへ
-                      <ArrowUp size={14} aria-hidden />
-                    </button>
-                  </div>
+                  <EggApp boxes={eggBoxes} onDownload={toDownload} />
                   {corner('egg')}
                 </div>
               )}

@@ -137,6 +137,7 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
                 ref={(el) => {
                   tokenRefs.current[i] = el
                 }}
+                data-token={i}
                 className={`kd-word ${known ? 'kd-known' : 'kd-plain'} ${cursor === i ? 'kd-current' : ''}`}
                 style={{ ['--w' as string]: w }}
                 onPointerEnter={known ? (e) => e.pointerType === 'mouse' && onUserCursor(i) : undefined}

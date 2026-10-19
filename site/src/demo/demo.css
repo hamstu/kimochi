@@ -560,8 +560,19 @@
   transform: scale(0.86);
 }
 
-/* The Easter egg's app: a warm card with one button. */
+/* The Easter egg's app: a warm card with one button. Its words take the overlay's boxes once
+   Kimochi has read it, in the accent colour on this light-or-dark card. */
+.kd-egg .kd-word::after {
+  border-color: color-mix(in oklab, var(--k-accent) 70%, transparent);
+  background: color-mix(in oklab, var(--k-accent) 8%, transparent);
+}
+.kd-egg .kd-word.kd-current::after {
+  border-color: var(--k-accent);
+  background: color-mix(in oklab, var(--k-accent) 22%, transparent);
+  box-shadow: 0 0 1.4cqw color-mix(in oklab, var(--k-accent) 55%, transparent);
+}
 .kd-egg {
+  container-type: inline-size;
   background:
     radial-gradient(80% 70% at 50% 0%, color-mix(in oklab, #f2c45f 22%, transparent), transparent 70%),
     var(--k-raised);
