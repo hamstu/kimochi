@@ -510,6 +510,71 @@
   outline-offset: 1px;
 }
 
+/* A window opening on the demo desk (the scripted session), and one not opened yet. */
+.kd-win-open {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition: opacity 220ms ease-out, transform 260ms cubic-bezier(0.16, 1, 0.3, 1), visibility 0s;
+}
+.kd-win-closed {
+  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+}
+
+/* Desktop icons: the game and Kimochi, double-clicked by the virtual pointer (or the visitor). */
+.kd-icon {
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+}
+.kd-icon:hover,
+.kd-icon:focus-visible {
+  background: rgb(255 255 255 / 0.12);
+  outline: none;
+}
+.kd-icon img,
+.kd-icon .kd-game-icon {
+  filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.35));
+}
+
+/* The virtual pointer: a macOS-style arrow that glides between targets and dips when it clicks. */
+.kd-pointer {
+  width: 20px;
+  height: 24px;
+  margin: -2px 0 0 -3px;
+  transition-property: transform, opacity;
+  transition-timing-function: cubic-bezier(0.45, 0, 0.2, 1);
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+}
+.kd-pointer path {
+  fill: #111;
+  stroke: #fff;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  transform-origin: 2px 2px;
+  transition: transform 90ms ease-out;
+}
+.kd-pointer-down path {
+  transform: scale(0.86);
+}
+
+/* Play: a big round button in the middle of the paused desk. */
+.kd-play {
+  color: #fff;
+  background: color-mix(in oklab, var(--k-accent) 88%, transparent);
+  box-shadow: 0 0 0 10px color-mix(in oklab, var(--k-accent) 22%, transparent), 0 16px 40px -10px rgb(0 0 0 / 0.5);
+  transition: transform 150ms ease-out, background-color 150ms;
+}
+.kd-play:hover {
+  transform: translate(-50%, -50%) scale(1.05);
+  background: var(--k-accent);
+}
+.kd-play:disabled {
+  opacity: 0.6;
+}
+
 /* A maximised window's resize grip: two short diagonal strokes in the corner. */
 .kd-resize {
   --grip: color-mix(in oklab, var(--k-text) 35%, transparent);

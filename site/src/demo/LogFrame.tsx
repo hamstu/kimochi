@@ -39,6 +39,14 @@ interface LogFrameProps {
   postRef: RefObject<PostToLog | null>
   /** The visitor dragging the Log by its title bar. */
   onDrag?: (drag: LogDrag) => void
+  /** More harness parameters (see frontend/dev/preview-setup.ts), e.g. `{nosource: '1'}`. */
+  params?: Record<string, string>
+  /** Changing it reloads the window from scratch (a replayed demo). */
+  reloadKey?: number
+  /** Filled with the iframe, for a demo that points at (and clicks) the real controls inside. */
+  iframeRef?: RefObject<HTMLIFrameElement | null>
+  /** Called once the window has loaded. */
+  onLoaded?: () => void
   className?: string
 }
 
@@ -47,7 +55,18 @@ interface LogFrameProps {
  * default. It never takes focus or scrolls the page on its own: the frame is out of the tab order,
  * and the harness (`?embed=1`) ignores the app's programmatic focus until the visitor clicks in it.
  */
-export function LogFrame({ platform, theme, load, postRef, onDrag, className = '' }: LogFrameProps) {
+export function LogFrame({
+  platform,
+  theme,
+  load,
+  postRef,
+  onDrag,
+  params: extra,
+  reloadKey = 0,
+  iframeRef,
+  onLoaded,
+  className = ''
+}: LogFrameProps) {
   const frameRef = useRef<HTMLIFrameElement>(null)
   const [ok, setOk] = useState<boolean | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -60,13 +79,24 @@ export function LogFrame({ platform, theme, load, postRef, onDrag, className = '
 
   // The theme is read once per platform so a theme change does not reload the window.
   const [src, setSrc] = useState<string | null>(null)
+  const extraKey = JSON.stringify(extra ?? {})
   useEffect(() => {
     if (!load || !ok) return
-    const params = new URLSearchParams({ window: 'log', embed: '1', sidebar: '0', theme: themeRef.current })
+    const params = new URLSearchParams({ window: 'log', embed: '1', sidebar: '0', theme: themeRef.current, ...JSON.parse(extraKey) })
     if (platform !== 'macos') params.set('platform', platform)
+    if (reloadKey) params.set('run', String(reloadKey))
     setLoaded(false)
     setSrc(`${LOG_URL}?${params}`)
-  }, [load, ok, platform])
+  }, [load, ok, platform, extraKey, reloadKey])
+
+  useEffect(() => {
+    if (iframeRef) iframeRef.current = frameRef.current
+  })
+  const onLoadedRef = useRef(onLoaded)
+  onLoadedRef.current = onLoaded
+  useEffect(() => {
+    if (loaded) onLoadedRef.current?.()
+  }, [loaded])
 
   useEffect(() => {
     postRef.current = loaded

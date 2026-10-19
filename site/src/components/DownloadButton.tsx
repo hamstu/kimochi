@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Download, ExternalLink } from 'lucide-react'
-import { Button } from './Button'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
+import { AppleMark, LinuxMark, WindowsMark } from './PlatformMarks'
 import {
   RELEASES_URL,
-  ReleaseFetchError,
   assetLabel,
   classifyAsset,
   detectPlatform,
@@ -17,17 +16,10 @@ import {
 } from '../lib/releases'
 
 export interface DownloadButtonProps {
-  /** Alignment of the button and its meta line. Default "start". */
+  /** Alignment of the button and the lines under it. Default "start". */
   align?: 'start' | 'center'
-  /** Show the "Other platforms" disclosure listing every installer. Default true. */
-  showAll?: boolean
   className?: string
 }
-
-type State =
-  | { status: 'loading' }
-  | { status: 'ready'; release: Release }
-  | { status: 'error'; message: string }
 
 function archLabel(p: Platform): string {
   if (p.os === 'macos') return p.arch === 'x64' ? 'Intel' : 'Apple silicon'
@@ -36,135 +28,145 @@ function archLabel(p: Platform): string {
   return ''
 }
 
-/**
- * How the release is named in the meta line: its tag ("v0.2.0"), or "Development build" plus the
- * build date for the rolling nightly pre-release.
- */
-function releaseLabel(release: Release): string {
-  if (release.channel !== 'nightly') return release.tag
-  const date = release.publishedAt ? new Date(release.publishedAt) : null
-  const when =
-    date && !Number.isNaN(date.getTime())
-      ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-      : ''
-  return when ? `Development build · ${when}` : 'Development build'
+/** The release's version for the button: its tag ("v0.2.0"), or "Nightly" for the development build. */
+function versionLabel(release: Release): string {
+  return release.channel === 'nightly' ? 'Nightly' : release.tag
 }
 
+function OsMark({ os, className }: { os: Platform['os']; className: string }) {
+  if (os === 'macos') return <AppleMark className={className} />
+  if (os === 'windows') return <WindowsMark className={className} />
+  if (os === 'linux') return <LinuxMark className={className} />
+  return null
+}
+
+const OTHER_OSES = ['macos', 'windows', 'linux'] as const
+
 /**
- * Resolves the latest GitHub release (or, before the first tagged release, the nightly
- * development build) at runtime and offers the installer for the visitor's OS
- * and CPU. Falls back to the GitHub releases page when the API is unreachable, rate-limited, or
- * there is no build for this platform.
+ * The download button: the visitor's OS mark, "Download Kimochi" and the version, linking to the
+ * installer for their OS and CPU, with every other installer one click away in the chevron's menu.
+ * The release is resolved at runtime from GitHub (the nightly development build until the first
+ * tagged release). Without one (none published yet, or GitHub unreachable) the button and the menu
+ * go to the releases page, and nothing explains why.
  */
-export function DownloadButton({ align = 'start', showAll = true, className = '' }: DownloadButtonProps) {
+export function DownloadButton({ align = 'start', className = '' }: DownloadButtonProps) {
   const [platform, setPlatform] = useState<Platform>(detectPlatformSync)
-  const [state, setState] = useState<State>({ status: 'loading' })
+  const [release, setRelease] = useState<Release | null>(null)
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let alive = true
     detectPlatform().then((p) => alive && setPlatform(p))
     const ctrl = new AbortController()
     fetchLatestRelease(ctrl.signal)
-      .then((release) => alive && setState({ status: 'ready', release }))
-      .catch((err: unknown) => {
-        if (!alive) return
-        const kind = err instanceof ReleaseFetchError ? err.kind : 'network'
-        const message =
-          kind === 'rate-limited'
-            ? 'GitHub is rate-limiting requests right now.'
-            : kind === 'no-release'
-              ? 'No build has been published yet.'
-              : 'Could not reach GitHub.'
-        setState({ status: 'error', message })
-      })
+      .then((r) => alive && setRelease(r))
+      .catch(() => undefined)
     return () => {
       alive = false
       ctrl.abort()
     }
   }, [])
 
-  const center = align === 'center'
-  const wrap = `flex flex-col gap-3 ${center ? 'items-center text-center' : 'items-start'} ${className}`
+  useEffect(() => {
+    if (!open) return
+    const onDown = (event: MouseEvent): void => {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
-  if (state.status !== 'ready') {
-    return (
-      <div className={wrap}>
-        <Button
-          href={RELEASES_URL}
-          size="lg"
-          icon={<Download size={18} aria-hidden />}
-          aria-busy={state.status === 'loading'}
-        >
-          Download
-        </Button>
-        {/* No release to offer (none published yet, or GitHub unreachable): the button just goes to
-            the releases page, without a note about why. */}
-        {state.status === 'loading' && (
-          <p className="min-h-5 text-meta text-ink-3" aria-live="polite">
-            Finding the latest release…
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  const { release } = state
-  const asset = pickAsset(release.assets, platform)
-  const installers = release.assets.filter((a) => classifyAsset(a.name))
+  const asset = release ? pickAsset(release.assets, platform) : null
+  const installers = release ? release.assets.filter((a) => classifyAsset(a.name)) : []
+  const href = asset?.browser_download_url ?? release?.url ?? RELEASES_URL
   const arch = archLabel(platform)
-  const label = releaseLabel(release)
-  const platformName = platform.os === 'unknown' ? null : `${osLabel(platform.os)}${arch ? ` (${arch})` : ''}`
+  const center = align === 'center'
 
   return (
-    <div className={wrap}>
-      {asset ? (
-        <Button href={asset.browser_download_url} size="lg" icon={<Download size={18} aria-hidden />}>
-          Download for {osLabel(platform.os)}
-        </Button>
-      ) : (
-        <Button href={release.url} size="lg" icon={<ExternalLink size={18} aria-hidden />}>
-          View all downloads
-        </Button>
-      )}
-      <p className="text-meta text-ink-3 tnum">
-        {asset ? (
-          <>
-            {label} · {platformName} · {formatBytes(asset.size)}
-          </>
-        ) : platformName ? (
-          <>
-            {label} · No build for {platformName} yet
-          </>
-        ) : (
-          <>{label} · Kimochi runs on macOS, Windows and Linux</>
-        )}
-      </p>
-      {showAll && installers.length > 0 && (
-        <details className={`group text-small w-full max-w-md`}>
-          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-1 text-ink-2 hover:text-ink [&::-webkit-details-marker]:hidden">
-            Other platforms
-            <span aria-hidden className="transition-transform group-open:rotate-90">
-              ›
+    <div className={`flex flex-col gap-3 ${center ? 'items-center text-center' : 'items-start'} ${className}`}>
+      <div ref={wrapRef} className="relative inline-flex rounded-xl bg-accent text-accent-contrast shadow-[0_8px_24px_-8px_color-mix(in_oklab,var(--k-accent)_60%,transparent)]">
+        <a
+          href={href}
+          className="inline-flex h-14 items-center gap-3 rounded-l-xl pr-5 pl-6 text-[1.0625rem] font-semibold no-underline transition-colors duration-100 hover:bg-white/10"
+        >
+          <OsMark os={platform.os} className="size-5" />
+          <span>Download Kimochi</span>
+          {release && (
+            <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-[0.8125rem] font-medium tnum">
+              {versionLabel(release)}
             </span>
-          </summary>
-          <ul className="mt-2 divide-y divide-hairline border-y border-hairline text-left">
-            {installers.map((a) => (
-              <li key={a.name}>
-                <a
-                  href={a.browser_download_url}
-                  className="flex items-center justify-between gap-4 px-1 py-2 no-underline hover:bg-hover"
-                >
-                  <span className="min-w-0 truncate text-ink">{assetLabel(a.name)}</span>
-                  <span className="shrink-0 text-meta text-ink-3 tnum">{formatBytes(a.size)}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-          <a href={release.url} className="mt-2 inline-block px-1 text-meta text-accent-ink">
-            {release.channel === 'nightly' ? 'Build notes and all files' : 'Release notes and all files'}
-          </a>
-        </details>
-      )}
+          )}
+        </a>
+        <button
+          type="button"
+          aria-label="Other platforms"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center rounded-r-xl border-l border-white/20 px-3 transition-colors duration-100 hover:bg-white/10"
+        >
+          <ChevronDown size={16} aria-hidden className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+        </button>
+
+        {open && (
+          <div className="absolute top-full right-0 z-50 mt-2 min-w-[17rem] overflow-hidden rounded-lg border border-hairline bg-raised text-left shadow-pop">
+            {installers.length > 0 ? (
+              <ul className="py-1">
+                {installers.map((a) => (
+                  <li key={a.name}>
+                    <a
+                      href={a.browser_download_url}
+                      onClick={() => setOpen(false)}
+                      className="flex items-center justify-between gap-4 px-3.5 py-2 text-small text-ink no-underline hover:bg-hover"
+                    >
+                      <span className="min-w-0 truncate">{assetLabel(a.name)}</span>
+                      <span className="shrink-0 text-meta text-ink-3 tnum">{formatBytes(a.size)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="py-1">
+                {OTHER_OSES.map((os) => (
+                  <li key={os}>
+                    <a
+                      href={RELEASES_URL}
+                      onClick={() => setOpen(false)}
+                      className={`flex items-center gap-3 px-3.5 py-2 text-small text-ink no-underline hover:bg-hover ${os === platform.os ? 'font-semibold' : ''}`}
+                    >
+                      <span className="text-ink-3">
+                        <OsMark os={os} className="size-4" />
+                      </span>
+                      Download for {osLabel(os)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+      <p className="text-small text-ink-3 tnum">
+        {asset && (
+          <>
+            {osLabel(platform.os)}
+            {arch ? ` (${arch})` : ''} · {formatBytes(asset.size)} ·{' '}
+          </>
+        )}
+        <a
+          href={release?.url ?? RELEASES_URL}
+          className="text-ink-3 underline decoration-hairline underline-offset-4 hover:text-ink-2 hover:decoration-current"
+        >
+          Release notes
+        </a>
+      </p>
     </div>
   )
 }

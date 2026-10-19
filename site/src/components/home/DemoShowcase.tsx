@@ -1,19 +1,64 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { LiveDemo } from '../../demo/LiveDemo'
-import { guessPlatform, type Platform } from '../../demo/env'
+import { guessPlatform } from '../../demo/env'
+import { AppleMark, DeckMark, LinuxMark, WindowsMark } from '../PlatformMarks'
 import { PlatformStrip } from './PlatformStrip'
 
+type Tab = 'desktop' | 'gaming'
+
 /**
- * The "Runs on" strip and the live demo under it: the strip is the demo's platform selector,
- * starting on the visitor's OS. `id="demo"` is the header nav's anchor.
+ * "Runs on", then the live preview: a Desktop tab dressed as the visitor's own OS, and Gaming mode
+ * (a handheld in Steam Deck's Gaming Mode). `id="demo"` is the header nav's anchor.
  */
 export function DemoShowcase() {
-  const [platform, setPlatform] = useState<Platform>(guessPlatform)
+  const [tab, setTab] = useState<Tab>('desktop')
+  const [desktop] = useState(guessPlatform)
+  const mark = desktop === 'windows' ? <WindowsMark className="size-4" /> : desktop === 'linux' ? <LinuxMark className="size-4" /> : <AppleMark className="size-4" />
+  const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
+    { id: 'desktop', label: 'Desktop', icon: mark },
+    { id: 'gaming', label: 'Gaming mode', icon: <DeckMark className="size-4" /> }
+  ]
   return (
-    <section id="demo" aria-label="Live demo">
-      <PlatformStrip value={platform} onChange={setPlatform} />
-      <div id="demo-stage" role="tabpanel" aria-labelledby={`platform-${platform}`} className="container-page pt-8 pb-16 md:pt-10 md:pb-24">
-        <LiveDemo platform={platform} />
+    <section id="demo" aria-labelledby="demo-heading">
+      <PlatformStrip />
+      <div className="container-page pt-16 pb-16 md:pt-24 md:pb-24">
+        <header className="mb-8 flex flex-col gap-6 md:mb-10 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-3xl">
+            <p className="mb-3 text-meta tracking-[0.08em] text-accent-ink uppercase">Live preview</p>
+            <h2 id="demo-heading" className="text-title text-ink">
+              Watch it read
+            </h2>
+            <p className="mt-4 max-w-[60ch] text-lede text-ink-2">
+              Press play for a session from start to finish. The windows are real, so drag them around and
+              hover the words.
+            </p>
+          </div>
+          <div role="tablist" aria-label="Preview" className="flex shrink-0 gap-1 self-start rounded-lg border border-hairline bg-bar p-1 md:self-auto">
+            {tabs.map((t) => {
+              const selected = t.id === tab
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  id={`demo-tab-${t.id}`}
+                  aria-selected={selected}
+                  aria-controls="demo-stage"
+                  onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-small font-medium transition-colors duration-100 ${
+                    selected ? 'bg-raised text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08),inset_0_0_0_1px_var(--k-line)]' : 'text-ink-2 hover:text-ink'
+                  }`}
+                >
+                  <span className={selected ? 'text-ink' : 'text-ink-3'}>{t.icon}</span>
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
+        </header>
+        <div id="demo-stage" role="tabpanel" aria-labelledby={`demo-tab-${tab}`}>
+          <LiveDemo platform={tab === 'gaming' ? 'deck' : desktop} />
+        </div>
       </div>
     </section>
   )

@@ -14,7 +14,10 @@
  *   ?scale=small|medium|large|xlarge  seeds the `interfaceScale` setting
  *   ?input=ocr|clipboard|websocket  main window: the Log's input source
  *   ?quickshot=1     main window: Quick Shot (with input=ocr)
- *   ?nosource=1      main window: no window or screen chosen yet
+ *   ?nosource=1      main window: no window or screen chosen yet (choosing one in Change source
+ *                    selects it: the view state follows `commit_source`, `clear_source` and the
+ *                    Auto OCR and Show overlay switches)
+ *   ?auto=0          Auto OCR starts off (default: on)
  *   ?crop=1          main window: the chosen source has a crop region
  *   ?source=<id>     main window: the chosen demo source (e.g. window:106, a tall one)
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
@@ -69,7 +72,7 @@
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
-import { SETTINGS_DEFAULTS } from '@ui/settings'
+import { SETTINGS_DEFAULTS, nextOverlayToggle } from '@ui/settings'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
 import {
@@ -141,7 +144,10 @@ const settings: Record<string, unknown> = {
   mainSidebarOpen: params.get('sidebar') !== '0',
   quickShotEnabled: params.get('quickshot') === '1',
   ...(params.get('theme') ? { appearance: params.get('theme') } : {}),
-  ...(params.get('scale') ? { interfaceScale: params.get('scale') } : {})
+  ...(params.get('scale') ? { interfaceScale: params.get('scale') } : {}),
+  // The marketing demo reads as the app does on a desktop: MeikiOCR (what its Log lines say they
+  // were read with) and the overlay on.
+  ...(params.get('embed') === '1' ? { ocrMode: 'meikiocr', liveOverlayEnabled: true } : {})
 }
 ;(globalThis as Record<string, unknown>).__previewSettings = settings
 
@@ -250,9 +256,24 @@ const CAPABILITIES = withCloudAccess(previewCapabilities())
 
 // ---------------------------------------------------------------- view state
 
+/** What the switches and the source menu change; `pushState` sends the new view to the page. */
+const live = {
+  revision: 1,
+  source: params.get('nosource') === '1' ? null : CURRENT_SOURCE,
+  autoOcr: params.get('auto') !== '0',
+  textOverlayVisible: true
+}
+let pageLabel = 'log'
+
+function pushState(): void {
+  live.revision += 1
+  void emit('state', viewState(pageLabel))
+}
+
 function viewState(label: string): Record<string, unknown> {
+  const source = live.source
   return {
-    revision: 1,
+    revision: live.revision,
     status: 'Ready',
     scan: null,
     logs: [],
@@ -263,16 +284,13 @@ function viewState(label: string): Record<string, unknown> {
     interactive: false,
     dictionary: false,
     dismiss: 0,
-    source:
-      params.get('nosource') === '1'
-        ? null
-        : {
-            sourceId: CURRENT_SOURCE.id,
-            type: 'window',
-            name: CURRENT_SOURCE.name,
-            appName: CURRENT_SOURCE.app,
-            icon: appIcon(CURRENT_SOURCE.app)
-          },
+    source: source && {
+      sourceId: source.id,
+      type: source.kind === 'display' ? 'screen' : 'window',
+      name: source.name,
+      appName: source.app,
+      icon: source.app ? appIcon(source.app) : undefined
+    },
     crop:
       params.get('crop') === '1'
         ? {
@@ -286,9 +304,9 @@ function viewState(label: string): Record<string, unknown> {
         : null,
     cropEnabled: params.get('crop') === '1',
     isScanning: false,
-    autoOcrEnabled: true,
+    autoOcrEnabled: live.autoOcr,
     overlayVisible: true,
-    textOverlayVisible: true,
+    textOverlayVisible: live.textOverlayVisible,
     debugOverlayVisible: label === 'diagnostics',
     permission: 'granted',
     frontmostApp: CURRENT_SOURCE.app,
@@ -437,8 +455,26 @@ const HANDLERS: Record<string, Handler> = {
     return { url: thumbnailSvg(s.name, s.hue, s.kind, width, height), width, height }
   },
   source_icon: (a) => ({ icon: appIcon(a?.appName as string) }),
-  commit_source: ok,
-  clear_source: ok,
+  commit_source: (a) => {
+    const chosen = SOURCES.find((x) => x.id === a?.sourceId)
+    if (chosen) {
+      live.source = chosen
+      publish('lastSelectedSource', {
+        type: chosen.kind === 'display' ? 'screen' : 'window',
+        name: chosen.name,
+        appName: chosen.app,
+        sourceId: chosen.id
+      })
+      pushState()
+    }
+    return { sourceId: a?.sourceId ?? null, crop: null, key: '' }
+  },
+  clear_source: () => {
+    live.source = null
+    publish('lastSelectedSource', null)
+    pushState()
+    return { sourceId: null, previous: null }
+  },
   activate_source: (a) => note('activate_source', a?.sourceId),
   select_source: ok,
   selected_source: () => ({ sourceId: CURRENT_SOURCE.id }),
@@ -497,7 +533,21 @@ const HANDLERS: Record<string, Handler> = {
   },
 
   // actions
-  trigger_action: (a) => note('trigger_action', a?.name),
+  trigger_action: (a) => {
+    if (a?.name === 'toggleAutoOcr') {
+      live.autoOcr = !live.autoOcr
+      pushState()
+    } else if (a?.name === 'toggleTextOverlay') {
+      const next = nextOverlayToggle({
+        liveOverlayEnabled: Boolean(settings.liveOverlayEnabled),
+        textOverlayVisible: live.textOverlayVisible
+      })
+      if (next.liveOverlayEnabled !== settings.liveOverlayEnabled) publish('liveOverlayEnabled', next.liveOverlayEnabled)
+      live.textOverlayVisible = next.textOverlayVisible
+      pushState()
+    }
+    return note('trigger_action', a?.name)
+  },
   app_quit: ok,
   dictionary: ok,
   texthooker_send: ok,
@@ -514,8 +564,14 @@ const HANDLERS: Record<string, Handler> = {
   hotkeys_suspend: ok,
 
   // reader / popover
-  show_popover: (a) => note('show_popover', a),
-  hide_popover: ok,
+  show_popover: (a) => {
+    if (params.get('embed') === '1' && a?.kind === 'notebook') showEmbeddedPopover(a)
+    return note('show_popover', a)
+  },
+  hide_popover: () => {
+    hideEmbeddedPopover()
+    return null
+  },
   reader_popup_ready: () => {
     if (params.get('popover') === 'message') {
       listenForPopover()
@@ -725,6 +781,63 @@ function listenToEmbedder(): void {
   })
 }
 
+// ---------------------------------------------------------------- notebook pop-up (?embed=1)
+
+/**
+ * The app opens a notebook chip's card in its own pop-up window (`show_popover`). Embedded there
+ * is no such window, so the real pop-up page (reader-popup.html, which shows what its parent posts)
+ * opens in an iframe beside the pointer, inside this page. A click elsewhere or Escape closes it.
+ */
+let popoverFrame: HTMLIFrameElement | null = null
+let lastPointer = { x: 0, y: 0 }
+addEventListener('pointerdown', (event) => (lastPointer = { x: event.clientX, y: event.clientY }), { capture: true })
+
+function hideEmbeddedPopover(): void {
+  popoverFrame?.remove()
+  popoverFrame = null
+}
+
+function showEmbeddedPopover(a: Record<string, unknown>): void {
+  hideEmbeddedPopover()
+  const width = Math.min(Number(a.width) || 360, innerWidth - 16)
+  const height = Math.min(Number(a.height) || 320, innerHeight - 16)
+  const left = Math.max(8, Math.min(lastPointer.x - width / 2, innerWidth - width - 8))
+  const below = lastPointer.y + 14
+  const top = below + height <= innerHeight - 8 ? below : Math.max(8, lastPointer.y - height - 14)
+  const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  const frame = document.createElement('iframe')
+  frame.src = `reader-popup.html?popover=message&empty=1&theme=${theme}`
+  frame.title = 'Notebook entry'
+  Object.assign(frame.style, {
+    position: 'fixed',
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+    border: '0',
+    borderRadius: '10px',
+    boxShadow: '0 12px 32px rgb(0 0 0 / 0.28)',
+    zIndex: '2147483647',
+    colorScheme: 'normal'
+  })
+  const payload = { kind: 'notebook', entry: a.notebookEntry, sentence: a.sentence ?? null }
+  const onReady = (event: MessageEvent): void => {
+    if (event.source !== frame.contentWindow || event.data?.type !== 'kimochi-preview-popover-ready') return
+    removeEventListener('message', onReady)
+    frame.contentWindow?.postMessage({ type: 'kimochi-preview-popover', theme, payload }, location.origin)
+  }
+  addEventListener('message', onReady)
+  document.body.append(frame)
+  popoverFrame = frame
+}
+
+addEventListener('pointerdown', (event) => {
+  if (popoverFrame && !(event.target as Element | null)?.closest?.('.notebook-chip')) hideEmbeddedPopover()
+})
+addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') hideEmbeddedPopover()
+})
+
 // ---------------------------------------------------------------- dictionary relay stub
 
 // `preloadPanelDictionary` imports `/ui/panel-yomitan.js` (the engine resolves to Yomitan here: no
@@ -801,6 +914,7 @@ function setupWelcome(): void {
 
 export async function setupPreview(page: PreviewPage): Promise<string> {
   const label = page === 'panel' ? (params.get('window') ?? 'log') : PAGE_LABELS[page]
+  pageLabel = label
   mockWindows(label, 'log', 'settings', 'diagnostics', 'sync-log')
   installIpc(label)
   startSeededDownloads()

@@ -67,7 +67,8 @@ const config: UserConfig = mergeConfig(previewConfig, {
   plugins: [relayStub()]
 })
 
-// Replace (not merge) the app's four window inputs: only the harness panel page is embedded.
-config.build = { ...config.build, rollupOptions: { ...config.build?.rollupOptions, input: { panel: here('frontend/dev/panel.html') } } }
+// Replace (not merge) the app's four window inputs: only the harness panel page is embedded, plus
+// the pop-up page its notebook chips open in (`showEmbeddedPopover` in preview-setup.ts).
+config.build = { ...config.build, rollupOptions: { ...config.build?.rollupOptions, input: { panel: here('frontend/dev/panel.html'), 'reader-popup': here('frontend/dev/reader-popup.html') } } }
 
 export default config

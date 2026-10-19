@@ -1,4 +1,3 @@
-import { GITHUB_URL } from '../Layout'
 import { DownloadButton } from '../DownloadButton'
 import { KanaRain } from './KanaRain'
 
@@ -38,13 +37,7 @@ export function Hero() {
           Kimochi grabs the Japanese off your screen and puts it back over the game. Hover a word
           to see what it means. No alt-tabbing.
         </p>
-        <DownloadButton align="center" showAll={false} className="mt-10" />
-        <a
-          href={GITHUB_URL}
-          className="mt-3 text-small text-ink-3 underline decoration-hairline underline-offset-4 hover:text-ink-2 hover:decoration-current"
-        >
-          Free and open source
-        </a>
+        <DownloadButton align="center" className="mt-10" />
       </div>
     </section>
   )
