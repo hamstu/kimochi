@@ -578,13 +578,24 @@
 /* Play: a big round button in the middle of the paused desk. */
 .kd-play {
   color: #fff;
-  background: color-mix(in oklab, var(--k-accent) 88%, transparent);
-  box-shadow: 0 0 0 10px color-mix(in oklab, var(--k-accent) 22%, transparent), 0 16px 40px -10px rgb(0 0 0 / 0.5);
-  transition: transform 150ms ease-out, background-color 150ms;
+  /* The app icon's fill (public/icon.svg: k-fill under its k-sheen). */
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 55%),
+    linear-gradient(to bottom, #5a7ce6, #3e63dd 45%, #2c4cbf);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.5),
+    inset 0 -1px 0 rgb(0 0 0 / 0.35),
+    0 16px 40px -10px rgb(0 0 0 / 0.55);
+  /* Centred by Tailwind's translate property; the hover scales on its own property, from the
+     centre, so the button never moves out from under the pointer. */
+  transition: scale 160ms ease-out, filter 160ms;
 }
 .kd-play:hover {
-  transform: translate(-50%, -50%) scale(1.05);
-  background: var(--k-accent);
+  scale: 1.06;
+  filter: brightness(1.06);
+}
+.kd-play:active {
+  scale: 0.98;
 }
 .kd-play:disabled {
   opacity: 0.6;
