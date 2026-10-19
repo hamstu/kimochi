@@ -1,18 +1,17 @@
 import type { ComponentType } from 'react'
 import { AutoScanVisual } from './visuals/AutoScanVisual'
 import { ControllerVisual } from './visuals/ControllerVisual'
+import { DictionariesVisual } from './visuals/DictionariesVisual'
 import { DictionaryVisual } from './visuals/DictionaryVisual'
 import { EnginesVisual } from './visuals/EnginesVisual'
 import { LogVisual } from './visuals/LogVisual'
 import { NotebookVisual } from './visuals/NotebookVisual'
 import { OverlayVisual } from './visuals/OverlayVisual'
-import { StatsVisual } from './visuals/StatsVisual'
 
 export interface Feature {
   /** Stable key (also usable as an anchor). */
   id: string
-  /** Short label above the title, e.g. the window or concept name. */
-  kicker: string
+  /** The feature's name, shown as the card's title. */
   title: string
   body: string
   /** A self-contained drawing in src/components/home/visuals/, rendered in a <VisualFrame>. */
@@ -27,58 +26,50 @@ export interface Feature {
 export const features: Feature[] = [
   {
     id: 'overlay',
-    kicker: 'Overlay',
-    title: 'Text, right where it was',
+    title: 'Overlay',
     body: 'The words go back on top of the game, right where they were. Hover one to look it up.',
     Visual: OverlayVisual
   },
   {
     id: 'auto-ocr',
-    kicker: 'Auto OCR',
-    title: 'Waits for the line to finish',
+    title: 'Auto OCR',
     body: 'Hit Scan, or let it watch. It waits for the text to finish typing out, then reads it.',
     Visual: AutoScanVisual
   },
   {
     id: 'log',
-    kicker: 'Log',
-    title: 'Every line, saved',
+    title: 'Log',
     body: 'Skipped a line too fast? Scroll back. Pick up tomorrow where you left off.',
     Visual: LogVisual
   },
   {
     id: 'dictionary',
-    kicker: 'Dictionary',
-    title: 'Look it up, hear it, keep it',
-    body: 'Yomitan is built in. Hear a line read out, ask what it means, or send it to Anki in one click.',
+    title: 'Look up and save',
+    body: 'Hear a line read out, ask what it means, or send a word to Anki in one click.',
     Visual: DictionaryVisual
   },
   {
+    id: 'dictionaries',
+    title: 'Dictionaries',
+    body: 'Pick the dictionary you like: the built-in Yomitan with your own dictionaries, Hachidori, 10ten, or the Yomitan you already use, through its API.',
+    Visual: DictionariesVisual
+  },
+  {
     id: 'notebook',
-    kicker: 'Notebook',
-    title: 'Who’s who',
+    title: 'Notebook',
     body: 'Jot down characters, places and terms. Kimochi spots them in new lines, so you stop forgetting names.',
     Visual: NotebookVisual
   },
   {
     id: 'engines',
-    kicker: 'OCR engines',
-    title: 'Pick your OCR',
+    title: 'OCR engines',
     body: 'Live Text on a Mac, OneOCR on Windows, or local models on your GPU. Texthookers work too.',
     Visual: EnginesVisual
   },
   {
     id: 'controller',
-    kicker: 'Steam Deck',
-    title: 'Couch friendly',
+    title: 'Steam Deck',
     body: 'Works in Gaming Mode. Click both sticks, scan, pick a word with the D-pad, then B and you’re back.',
     Visual: ControllerVisual
-  },
-  {
-    id: 'stats',
-    kicker: 'Sessions and stats',
-    title: 'Watch it add up',
-    body: 'Time read, lines, characters. It’s nice seeing the number go up.',
-    Visual: StatsVisual
   }
 ]

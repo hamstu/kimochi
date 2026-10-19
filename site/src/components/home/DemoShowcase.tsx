@@ -26,12 +26,8 @@ export function DemoShowcase() {
           <div className="max-w-3xl">
             <p className="mb-3 text-meta tracking-[0.08em] text-accent-ink uppercase">Live preview</p>
             <h2 id="demo-heading" className="text-title text-ink">
-              Watch it read
+              See it in action
             </h2>
-            <p className="mt-4 max-w-[60ch] text-lede text-ink-2">
-              Press play for a session from start to finish. The windows are real, so drag them around and
-              hover the words.
-            </p>
           </div>
           <div role="tablist" aria-label="Preview" className="flex shrink-0 gap-1 self-start rounded-lg border border-hairline bg-bar p-1 md:self-auto">
             {tabs.map((t) => {
