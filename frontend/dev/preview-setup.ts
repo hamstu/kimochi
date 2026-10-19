@@ -71,7 +71,7 @@
  *                    (see `listenToEmbedder`)
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
-import { emit } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 import { SETTINGS_DEFAULTS, nextOverlayToggle } from '@ui/settings'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
@@ -420,6 +420,11 @@ function listenForPopover(): void {
       emit('popover:show', data.payload)
     )
   })
+  // The notebook card's "Notebook →" asks the main window to open the entry, then hides the pop-up;
+  // embedded, both go to the page that opened this one (`showEmbeddedPopover`).
+  void listen<{ entryId: string }>('notebook:edit-request', ({ payload }) =>
+    window.parent.postMessage({ type: 'kimochi-preview-popover-notebook', entryId: payload.entryId }, location.origin)
+  )
   window.parent.postMessage({ type: 'kimochi-preview-popover-ready' }, '*')
 }
 
@@ -632,6 +637,7 @@ const HANDLERS: Record<string, Handler> = {
   },
   hide_popover: () => {
     hideEmbeddedPopover()
+    if (params.get('popover') === 'message') window.parent.postMessage({ type: 'kimochi-preview-popover-hide' }, location.origin)
     return null
   },
   reader_popup_ready: () => {
@@ -888,6 +894,8 @@ function quietWebSockets(): void {
  * opens in an iframe beside the pointer, inside this page. A click elsewhere or Escape closes it.
  */
 let popoverFrame: HTMLIFrameElement | null = null
+/** The last pop-up's window, kept after it closes: it hides itself before asking for the notebook. */
+let popoverWindow: Window | null = null
 let lastPointer = { x: 0, y: 0 }
 addEventListener('pointerdown', (event) => (lastPointer = { x: event.clientX, y: event.clientY }), { capture: true })
 
@@ -895,6 +903,9 @@ function hideEmbeddedPopover(): void {
   popoverFrame?.remove()
   popoverFrame = null
 }
+
+/** The pop-up page's transparent margin around its card, for the card's shadow (popover.css). */
+const POPOVER_PAD = 16
 
 function showEmbeddedPopover(a: Record<string, unknown>): void {
   hideEmbeddedPopover()
@@ -907,17 +918,18 @@ function showEmbeddedPopover(a: Record<string, unknown>): void {
   const frame = document.createElement('iframe')
   frame.src = `reader-popup.html?popover=message&empty=1&theme=${theme}`
   frame.title = 'Notebook entry'
+  // Sized and placed like the app's pop-up window: the card, plus a transparent margin for its own
+  // border and shadow. The frame's colour scheme matches the page inside, or Chrome paints it opaque.
   Object.assign(frame.style, {
     position: 'fixed',
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${width}px`,
-    height: `${height}px`,
+    left: `${left - POPOVER_PAD}px`,
+    top: `${top - POPOVER_PAD}px`,
+    width: `${width + POPOVER_PAD * 2}px`,
+    height: `${height + POPOVER_PAD * 2}px`,
     border: '0',
-    borderRadius: '10px',
-    boxShadow: '0 12px 32px rgb(0 0 0 / 0.28)',
+    background: 'transparent',
     zIndex: '2147483647',
-    colorScheme: 'normal'
+    colorScheme: theme
   })
   const payload = { kind: 'notebook', entry: a.notebookEntry, sentence: a.sentence ?? null }
   const onReady = (event: MessageEvent): void => {
@@ -928,10 +940,20 @@ function showEmbeddedPopover(a: Record<string, unknown>): void {
   addEventListener('message', onReady)
   document.body.append(frame)
   popoverFrame = frame
+  popoverWindow = frame.contentWindow
 }
 
 addEventListener('pointerdown', (event) => {
   if (popoverFrame && !(event.target as Element | null)?.closest?.('.notebook-chip')) hideEmbeddedPopover()
+})
+addEventListener('message', (event: MessageEvent) => {
+  if (!popoverWindow || event.source !== popoverWindow) return
+  if (event.data?.type === 'kimochi-preview-popover-hide') hideEmbeddedPopover()
+  if (event.data?.type === 'kimochi-preview-popover-notebook') {
+    hideEmbeddedPopover()
+    // What the app's pop-up sends the main window: open the Notebook on this entry.
+    void emit('notebook:edit-request', { entryId: event.data.entryId })
+  }
 })
 addEventListener('keydown', (event) => {
   if (event.key === 'Escape') hideEmbeddedPopover()
