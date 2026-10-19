@@ -248,6 +248,21 @@ test('letting go does not commit: the box waits to be adjusted and confirmed', a
   assert.deepEqual((await pending).local, { x: 100, y: 100, width: 200, height: 100 })
 })
 
+test('the result says which confirm committed it: Return is the primary, the alternate button its own', async () => {
+  const primary = new RegionSelect({ alternateLabel: 'Save' })
+  const first = primary.start({ bounds: BOUNDS })
+  select(surface(), { x: 100, y: 100 }, { x: 300, y: 200 })
+  assert.equal((await first).action, 'primary')
+
+  const alternate = new RegionSelect({ alternateLabel: 'Save' })
+  const second = alternate.start({ bounds: BOUNDS })
+  drag(surface(), { x: 100, y: 100 }, { x: 300, y: 200 })
+  alternate.confirm('alternate')
+  const result = await second
+  assert.equal(result.action, 'alternate')
+  assert.deepEqual(result.local, { x: 100, y: 100, width: 200, height: 100 })
+})
+
 test('dragging inside moves the box, and dragging an edge or corner resizes it', async () => {
   const selector = new RegionSelect()
   const pending = selector.start({ bounds: BOUNDS })

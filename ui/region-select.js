@@ -174,15 +174,18 @@ function zoneOf(point, rect) {
 export class RegionSelect {
   /**
    * @param {{onHitRects?: Function, container?: HTMLElement, cancelOnMisclick?: boolean,
-   *   confirmLabel?: string, theme?: 'light' | 'dark', area?: object, initial?: object,
-   *   picture?: object}} options `area`, `initial` and `picture` are rectangles in surface
-   *   points; see above.
+   *   confirmLabel?: string, alternateLabel?: string, theme?: 'light' | 'dark', area?: object,
+   *   initial?: object, picture?: object}} options `area`, `initial` and `picture` are
+   *   rectangles in surface points; see above. `alternateLabel` adds a second, outlined confirm
+   *   button left of the primary one; the result's `action` says which committed it (`primary`
+   *   for Return and a double-click too).
    */
   constructor({
     onHitRects,
     container,
     cancelOnMisclick = false,
     confirmLabel = 'Confirm',
+    alternateLabel = null,
     theme,
     area = null,
     initial = null,
@@ -200,6 +203,7 @@ export class RegionSelect {
     this._mount = container ?? null
     this._cancelOnMisclick = cancelOnMisclick
     this._confirmLabel = confirmLabel
+    this._alternateLabel = alternateLabel
     this._theme = theme
     this._bounds = null
     this._container = null
@@ -360,13 +364,17 @@ export class RegionSelect {
     })
   }
 
-  /** Commits the current box, if there is one worth committing. */
-  confirm() {
+  /**
+   * Commits the current box, if there is one worth committing.
+   * @param {'primary' | 'alternate'} [action] which confirm button committed it
+   */
+  confirm(action = 'primary') {
     if (!this._settle || !this._editing || !bigEnough(this._rect)) return
     const local = { ...this._rect }
     this._settle(
       this._bounds
         ? {
+            action,
             local,
             desktop: {
               x: local.x + this._bounds.x,
@@ -376,7 +384,7 @@ export class RegionSelect {
             },
             bounds: { ...this._bounds }
           }
-        : { local, desktop: null, bounds: null }
+        : { action, local, desktop: null, bounds: null }
     )
   }
 
@@ -855,16 +863,23 @@ export class RegionSelect {
       gap: '4px',
       marginLeft: '6px'
     })
-    const button = (label, primary, onPress) => {
+    // `style`: primary (filled white), outline (the alternate confirm) or quiet (Esc).
+    const button = (label, style, onPress) => {
       const element = assign(document.createElement('button'), {
         height: '20px',
         padding: '0 8px',
         border: '0',
         borderRadius: '4px',
         font: `600 11px/1 ${UI}`,
-        color: primary ? theme.accent : '#fff',
-        backgroundColor: primary ? '#fff' : 'rgba(255, 255, 255, 0.16)',
-        boxShadow: primary ? `0 1px 0 ${theme.shade}` : 'none',
+        color: style === 'primary' ? theme.accent : '#fff',
+        backgroundColor:
+          style === 'primary' ? '#fff' : style === 'outline' ? 'transparent' : 'rgba(255, 255, 255, 0.16)',
+        boxShadow:
+          style === 'primary'
+            ? `0 1px 0 ${theme.shade}`
+            : style === 'outline'
+              ? 'inset 0 0 0 1px rgba(255, 255, 255, 0.7)'
+              : 'none',
         cursor: 'pointer'
       })
       element.type = 'button'
@@ -878,8 +893,9 @@ export class RegionSelect {
       return element
     }
     actions.append(
-      button('Esc', false, () => this.cancel()),
-      button(`${this._confirmLabel} ⏎`, true, () => this.confirm())
+      button('Esc', 'quiet', () => this.cancel()),
+      ...(this._alternateLabel ? [button(this._alternateLabel, 'outline', () => this.confirm('alternate'))] : []),
+      button(`${this._confirmLabel} ⏎`, 'primary', () => this.confirm())
     )
     foot.append(size, origin, spacer, actions)
     foot.addEventListener('pointerdown', (event) => this._beginMove(event))

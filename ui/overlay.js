@@ -121,6 +121,8 @@ const state = {
   hover: { selectRegion: false, source: false, isWindow: false },
   /** While true the overlay claims the whole display so a drag can be seen. */
   regionSelecting: false,
+  /** From opening a source's region editor until its new crop is saved and taken in. */
+  regionCommitting: false,
   /**
    * The text on screen came from a Quick Shot: a display region, not the chosen source. It stays
    * where it was captured instead of following the source window around.
@@ -1269,8 +1271,10 @@ function syncAutoScanner() {
   scanner.updateSettings(settings)
   // Quick Shot has no source to watch, so there is nothing for the loop to scan. Nor while a
   // region is being edited: the old region is about to be replaced, and the loop's frame checks
-  // run on this page, where they would stutter the drag.
-  const wanted = state.flags.autoOcrEnabled && !isQuickShot() && !state.regionSelecting
+  // run on this page, where they would stutter the drag. Nor until an edited region has been
+  // saved and taken in: a round started against the old crop would only be discarded.
+  const wanted =
+    state.flags.autoOcrEnabled && !isQuickShot() && !state.regionSelecting && !state.regionCommitting
   if (wanted && !scanner.isRunning) {
     scanner.reset()
     scanner.start()
@@ -1448,15 +1452,17 @@ async function followPointer(selector, onDisplay) {
  * editor's cursor bubble beside the cursor. With `onDisplay` (Quick Shot), the overlay also follows
  * the cursor onto another display while nothing is drawn yet, and `onDisplay` is told where it went.
  *
- * `area`, `initial` and `picture` pass through to the editor (see ui/region-select.js); `onStart`
- * gets the running editor, for a caller that keeps its picture fresh.
+ * `area`, `initial`, `picture` and `alternateLabel` pass through to the editor (see
+ * ui/region-select.js); `onStart` gets the running editor, for a caller that keeps its picture
+ * fresh. The rectangle comes back with the editor's `action`: `alternate` when the
+ * `alternateLabel` button committed it, else `primary`.
  *
  * @param {string} confirmLabel
  * @param {{onDisplay?: (display: object) => object|null|void, area?: object, initial?: object,
- *   picture?: object, onStart?: (selector: object) => void}} [options]
- * @returns {Promise<{x:number,y:number,width:number,height:number}|null>}
+ *   picture?: object, alternateLabel?: string, onStart?: (selector: object) => void}} [options]
+ * @returns {Promise<{x:number,y:number,width:number,height:number,action:string}|null>}
  */
-async function editRegion(confirmLabel, { onDisplay, area, initial, picture, onStart } = {}) {
+async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alternateLabel, onStart } = {}) {
   let RegionSelect
   try {
     ;({ RegionSelect } = await import('./region-select.js'))
@@ -1493,6 +1499,7 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, onS
     const selector = new RegionSelect({
       container: document.body,
       confirmLabel,
+      alternateLabel,
       theme,
       area,
       initial,
@@ -1504,7 +1511,7 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, onS
     const result = await running.catch(() => null)
     selector.destroy()
     const rect = result?.local
-    return rect && rect.width >= 1 && rect.height >= 1 ? rect : null
+    return rect && rect.width >= 1 && rect.height >= 1 ? { ...rect, action: result.action ?? 'primary' } : null
   } finally {
     // Whatever happened, the overlay must stop swallowing clicks, and the game gets its
     // Escape and Return back.
@@ -1576,7 +1583,8 @@ async function placeOverlayOn(bounds) {
 
 /**
  * Edit the current source's region over the source itself — the one region editor, shared with
- * Quick Shot — then save it, and scan it unless Auto OCR is already reading.
+ * Quick Shot — then save it. Save and Scan (the default) also scans it, unless Auto OCR is already
+ * reading; Save only clears the old text.
  *
  * A screen is edited in place and is not a fixed choice: the editor follows the cursor to any
  * display, and the display the region is drawn on becomes the source. A window is shown as its
@@ -1590,6 +1598,7 @@ async function editSourceRegion() {
     log({ check: 'region-edit-skipped', reason: 'no source selected' })
     return
   }
+  state.regionCommitting = true
   try {
     // The view's own description of the selection says what it is; the id is read
     // (never pattern-matched on a platform name) only when the view has not caught up.
@@ -1610,19 +1619,28 @@ async function editSourceRegion() {
     }
     // Committing changes the selection, so anything in flight belongs to the old one.
     generation.bump()
-    if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (waylandLayer || waylandDisabled)) {
-      // Consume the committed crop before a scan snapshots its generation. The native
-      // state event otherwise arrives during OCR and invalidates this very result.
-      await processView(await native.snapshot())
-      for (let attempt = 0; handling || pendingView; attempt++) {
-        if (attempt >= 100) throw new Error('Committed crop did not synchronize with the reader.')
-        await new Promise((resolve) => setTimeout(resolve, 20))
-      }
+    // Consume the committed crop before anything scans. The native state event otherwise
+    // arrives during the next OCR, bumps the generation again and discards that very result
+    // ("Scan discarded: the source changed while it was running", after every crop edit).
+    await processView(await native.snapshot())
+    for (let attempt = 0; handling || pendingView; attempt++) {
+      if (attempt >= 100) throw new Error('Committed crop did not synchronize with the reader.')
+      await new Promise((resolve) => setTimeout(resolve, 20))
     }
-    if (!state.flags.autoOcrEnabled) await performScan()
+    // Text read from the old region no longer matches what is on screen, even when the
+    // region came back unchanged.
+    clearSelectionText()
+    // Auto OCR reads the new region by itself once this lets go of it (`finally`). Otherwise Save and
+    // Scan (the editor's default, and every editor without the choice) scans; Save leaves the
+    // next scan to the user.
+    if (!state.flags.autoOcrEnabled && saved !== 'save') await performScan()
   } catch (error) {
     log({ check: 'region-edit-error', error: String(error?.message ?? error) })
     publish({ status: `Editing the region failed: ${error?.message ?? error}` })
+  } finally {
+    // Auto OCR starts afresh here, on the new region.
+    state.regionCommitting = false
+    syncAutoScanner()
   }
 }
 
@@ -1738,7 +1756,8 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
       width: frame.width * fit,
       height: frame.height * fit
     }
-    const rect = await editRegion(quick ? 'Scan' : 'Save', {
+    const rect = await editRegion(quick ? 'Scan' : SAVE_AND_SCAN, {
+      alternateLabel: quick ? undefined : 'Save',
       area: bounds,
       initial: !quick && state.crop ? cropToLocal(state.crop, origin, bounds) : null,
       picture: kind === 'window' ? bounds : undefined,
@@ -1758,8 +1777,8 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
     if (crop.width <= 0 || crop.height <= 0) return false
     if (quick) return crop
     await native.commitSource(sourceId, crop)
-    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer' })
-    return true
+    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer', action: rect.action })
+    return savedAction(rect)
   } finally {
     state.regionSelecting = false
     syncAutoScanner()
@@ -1767,6 +1786,11 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
     await publishRegions()
   }
 }
+
+/** The region editor's default button, and what an editor returns for each of its two buttons. */
+const SAVE_AND_SCAN = 'Save and Scan'
+/** `scan` for Save and Scan (Return), `save` for Save. */
+const savedAction = (rect) => (rect.action === 'alternate' ? 'save' : 'scan')
 
 async function editScreenRegion(sourceId) {
   const displays = await native.displays()
@@ -1781,7 +1805,8 @@ async function editScreenRegion(sourceId) {
       ? cropToLocal(state.crop, display.bounds, display.bounds)
       : null
   let target = start
-  const rect = await editRegion('Save', {
+  const rect = await editRegion(SAVE_AND_SCAN, {
+    alternateLabel: 'Save',
     initial: initialFor(start),
     onDisplay: (next) => {
       target = next
@@ -1793,8 +1818,8 @@ async function editScreenRegion(sourceId) {
   if (crop.width <= 0 || crop.height <= 0) return false
   const chosen = displaySourceId(target)
   await native.commitSource(chosen, crop)
-  log({ check: 'region-saved', kind: 'display', sourceId: chosen, switched: chosen !== sourceId, crop })
-  return true
+  log({ check: 'region-saved', kind: 'display', sourceId: chosen, switched: chosen !== sourceId, crop, action: rect.action })
+  return savedAction(rect)
 }
 
 async function editWindowRegion(sourceId) {
@@ -1849,7 +1874,8 @@ async function editWindowRegion(sourceId) {
     }
   }
 
-  const rect = await editRegion('Save', {
+  const rect = await editRegion(SAVE_AND_SCAN, {
+    alternateLabel: 'Save',
     area,
     picture,
     initial: state.crop ? cropToLocal(state.crop, origin, bounds) : null,
@@ -1864,8 +1890,8 @@ async function editWindowRegion(sourceId) {
   }
   if (crop.width <= 0 || crop.height <= 0) return false
   await native.commitSource(sourceId, crop)
-  log({ check: 'region-saved', kind: 'window', sourceId, crop })
-  return true
+  log({ check: 'region-saved', kind: 'window', sourceId, crop, action: rect.action })
+  return savedAction(rect)
 }
 
 /**
@@ -2564,6 +2590,16 @@ function hitRects() {
   return rects
 }
 
+/** Drops the text read from the selection, from the overlay and the scanner's memory. */
+function clearSelectionText() {
+  state.annotations = []
+  state.info = null
+  state.appliedScanId = null
+  state.detached = false
+  renderer.clear()
+  scanner.reset()
+}
+
 let handling = false
 let lastSelection = null
 
@@ -2653,14 +2689,7 @@ async function processView(view) {
     if (generation.bumpIfChanged(lastSelection, selection)) {
       // A different source or crop invalidates anything in flight, and the
       // text on screen belongs to the previous selection.
-      if (lastSelection !== null) {
-        state.annotations = []
-        state.info = null
-        state.appliedScanId = null
-        state.detached = false
-        renderer.clear()
-        scanner.reset()
-      }
+      if (lastSelection !== null) clearSelectionText()
       lastSelection = selection
     }
     state.crop = view.crop ?? null
