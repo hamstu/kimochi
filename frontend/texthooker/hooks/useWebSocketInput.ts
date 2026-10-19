@@ -18,11 +18,11 @@ export function useWebSocketInput(
       ]);
       if (next === key) return;
       key = next;
+      // The old connection's status goes with it, whatever happens while it is closed.
+      onStatus(null);
       disconnect();
-      if (settings.inputSource !== "websocket") {
-        onStatus(null);
-        return;
-      }
+      disconnect = () => {};
+      if (settings.inputSource !== "websocket") return;
       disconnect = connectTextSocket(
         settings.websocketUrl,
         (text) => {

@@ -15,9 +15,11 @@ export function connectTextSocket(
   onText: (text: string) => void,
   onStatus: (status: SocketStatus) => void,
   create: (url: string) => Socket = (url) => new WebSocket(url),
+  // Wrapped, not passed bare: `timers.clear(t)` calls it with `timers` as `this`, which browsers
+  // reject ("Illegal invocation"), so disconnecting threw before the caller cleared its status.
   timers = {
     set: (fn: () => void, ms: number) => setTimeout(fn, ms),
-    clear: clearTimeout,
+    clear: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
   },
 ): () => void {
   let stopped = false;

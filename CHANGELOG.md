@@ -12,6 +12,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - Kimochi accounts and cloud features now live at kimochiapp.com.
+- Fixed: after trying WebSocket input, switching the Log to another source left "WebSocket unavailable. Retrying…" at the top of the Log.
 - You can clear the source: hover the source card and click the × on its picture, or choose Clear source in the Change source menu. Kimochi then reads nothing until you pick one again, and remembers each source's crop area for when you do.
 - Editing a source's region now offers **Save and Scan** (the default, also Return) or just **Save**. Either way the old overlay text is cleared; with Auto OCR on it simply reads the new region. Fixed: every region edit ended in "Scan discarded: the source changed while it was running".
 - Fixed: after trying Hachidori or 10ten, switching back to the built-in Yomitan left dictionary lookups not working until you restarted Kimochi.

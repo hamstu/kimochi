@@ -848,6 +848,38 @@ function listenToEmbedder(): void {
   })
 }
 
+// ---------------------------------------------------------------- WebSocket input (?embed=1)
+
+/**
+ * A visitor who picks WebSocket in the site's demo has no texthooker to connect to, and a retrying
+ * socket would only put an error on the page: sockets to other hosts open at once and stay silent.
+ * The page's own host (Vite's dev connection) still gets a real one.
+ */
+function quietWebSockets(): void {
+  const Real = window.WebSocket
+  class QuietSocket extends EventTarget {
+    readyState = 1
+    url: string
+    onopen: ((event: Event) => void) | null = null
+    onmessage: ((event: MessageEvent) => void) | null = null
+    onerror: ((event: Event) => void) | null = null
+    onclose: ((event: CloseEvent) => void) | null = null
+    constructor(url: string) {
+      super()
+      this.url = url
+      setTimeout(() => this.onopen?.(new Event('open')), 50)
+    }
+    send(): void {}
+    close(): void {
+      this.readyState = 3
+    }
+  }
+  window.WebSocket = function (url: string | URL, protocols?: string | string[]) {
+    if (new URL(String(url), location.href).host === location.host) return new Real(url, protocols)
+    return new QuietSocket(String(url))
+  } as unknown as typeof WebSocket
+}
+
 // ---------------------------------------------------------------- notebook pop-up (?embed=1)
 
 /**
@@ -991,6 +1023,7 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   const embed = params.get('embed') === '1'
   if (embed) {
     listenToEmbedder()
+    quietWebSockets()
     // Keep on top means nothing on a page.
     const style = document.createElement('style')
     style.textContent = 'button[aria-label="Keep on top"], button[aria-label="Unpin window"] { display: none !important; }'

@@ -146,3 +146,32 @@ test("real loopback WebSocket delivers Japanese text through the production clie
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("stopping a retrying socket with the default timers works where clearTimeout needs its own `this`", () => {
+  // Browsers and WebViews throw "Illegal invocation" when clearTimeout is called as a method of
+  // another object; Node does not, so stand in for the browser here.
+  const original = globalThis.clearTimeout;
+  globalThis.clearTimeout = function (id) {
+    if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+    return original(id);
+  };
+  try {
+    const sockets = [];
+    const statuses = [];
+    const stop = connectTextSocket(
+      "ws://127.0.0.1:9",
+      () => {},
+      (status) => statuses.push(status.state),
+      () => {
+        const socket = { close() {} };
+        sockets.push(socket);
+        return socket;
+      },
+    );
+    sockets[0].onerror?.();
+    assert.equal(statuses.at(-1), "retrying");
+    assert.doesNotThrow(stop);
+  } finally {
+    globalThis.clearTimeout = original;
+  }
+});
