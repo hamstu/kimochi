@@ -7,8 +7,8 @@ export function NotFound() {
         <p lang="ja" className="text-display text-ink-3">
           迷子
         </p>
-        <h1 className="mt-4 text-title text-ink">Page not found</h1>
-        <p className="mt-3 text-ink-2">That page does not exist, or it moved.</p>
+        <h1 className="mt-4 text-title text-ink">Nothing here</h1>
+        <p className="mt-3 text-ink-2">This page wandered off.</p>
         <Button href="/" variant="secondary" className="mt-8">
           Back to home
         </Button>

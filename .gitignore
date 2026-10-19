@@ -36,3 +36,6 @@ site/public/demo/
 !/DESIGN.md
 !/PRODUCT.md
 !/CLAUDE.md
+
+# Local secrets (e.g. REACTBITS_LICENSE_KEY for the site)
+.env.local

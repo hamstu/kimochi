@@ -28,57 +28,57 @@ export const features: Feature[] = [
   {
     id: 'overlay',
     kicker: 'Overlay',
-    title: 'The text, right where it was',
-    body: 'Kimochi draws the recognised lines back over the game, in place. Point at a word to look it up; your eyes never leave the scene.',
+    title: 'Text, right where it was',
+    body: 'The words go back on top of the game, right where they were. Hover one to look it up.',
     Visual: OverlayVisual
   },
   {
     id: 'auto-ocr',
-    kicker: 'Scan and Auto OCR',
-    title: 'Reads when the text settles',
-    body: 'Press Scan when you want a line, or let Auto OCR watch the window. It waits for the text to stop typing out, then reads it once.',
+    kicker: 'Auto OCR',
+    title: 'Waits for the line to finish',
+    body: 'Hit Scan, or let it watch. It waits for the text to finish typing out, then reads it.',
     Visual: AutoScanVisual
   },
   {
     id: 'log',
     kicker: 'Log',
-    title: 'Every line, kept',
-    body: 'A running transcript of the session. Scroll back to a line you rushed past, select any word, copy it out, or pick up tomorrow where you stopped.',
+    title: 'Every line, saved',
+    body: 'Skipped a line too fast? Scroll back. Pick up tomorrow where you left off.',
     Visual: LogVisual
   },
   {
     id: 'dictionary',
     kicker: 'Dictionary',
-    title: 'Look up, listen, save to Anki',
-    body: 'Lookups use Yomitan and your own dictionaries, bundled and verified. Hear a word or a whole line spoken, ask for an explanation, and send a card to Anki in one click.',
+    title: 'Look it up, hear it, keep it',
+    body: 'Yomitan is built in. Hear a line read out, ask what it means, or send it to Anki in one click.',
     Visual: DictionaryVisual
   },
   {
     id: 'notebook',
     kicker: 'Notebook',
-    title: 'Who is who, and where',
-    body: 'Each session keeps a notebook of characters, places and terms. Entries are recognised in new lines, so names and readings stop being a mystery.',
+    title: 'Who’s who',
+    body: 'Jot down characters, places and terms. Kimochi spots them in new lines, so you stop forgetting names.',
     Visual: NotebookVisual
   },
   {
     id: 'engines',
     kicker: 'OCR engines',
-    title: 'The right reader for the game',
-    body: 'Apple Live Text on a Mac, OneOCR on Windows 11, or MeikiOCR and manga-ocr running locally on your GPU. Texthookers work too, over the clipboard or a WebSocket.',
+    title: 'Pick your OCR',
+    body: 'Live Text on a Mac, OneOCR on Windows, or local models on your GPU. Texthookers work too.',
     Visual: EnginesVisual
   },
   {
     id: 'controller',
     kicker: 'Steam Deck',
-    title: 'Made for the couch too',
-    body: 'In Gaming Mode, both sticks open a radial menu. Scan, step through words with the D-pad, press A for the reading and B to get back to the game.',
+    title: 'Couch friendly',
+    body: 'Works in Gaming Mode. Click both sticks, scan, pick a word with the D-pad, then B and you’re back.',
     Visual: ControllerVisual
   },
   {
     id: 'stats',
     kicker: 'Sessions and stats',
-    title: 'See the reading add up',
-    body: 'Sessions track reading time, lines and characters read, so a long route turns into a number you can watch grow.',
+    title: 'Watch it add up',
+    body: 'Time read, lines, characters. It’s nice seeing the number go up.',
     Visual: StatsVisual
   }
 ]

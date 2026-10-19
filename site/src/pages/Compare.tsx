@@ -31,30 +31,27 @@ function CellText({ cell }: { cell: Cell }) {
 export function Compare() {
   return (
     <Prose
-      title="How Kimochi compares"
-      lede="Kimochi, Kamui, Game Sentence Miner and owocr all help you read Japanese games. They make different trade-offs, so pick the one that fits how you play."
+      title="Kimochi and friends"
+      lede="There are a few good tools for reading Japanese games. Here’s how they line up, so you can pick whatever suits you."
       updated={RESEARCHED}
     >
       <p>
-        This page tries to be fair. Each of these tools has real strengths, and
-        several of them work well together. The facts below come from each
-        project&rsquo;s own repository, site or documentation, linked under{" "}
-        <a href="#sources">Sources</a>. Where we could not confirm something,
-        the cell says so and carries an <Unverified /> tag. If anything here is
-        wrong or out of date, please{" "}
+        We tried to keep this fair. Everything below comes from each
+        project&rsquo;s own docs (see <a href="#sources">Sources</a>), and
+        anything we couldn&rsquo;t confirm is tagged <Unverified />. Spot
+        something wrong?{" "}
         <a href="https://github.com/hamstu/kimochi-tauri/issues">
-          open an issue
+          Open an issue
         </a>{" "}
-        and we will fix it.
+        and we&rsquo;ll fix it.
       </p>
       <p>
-        A note on lineage: Kimochi owes a lot to{" "}
+        Kimochi owes a lot to{" "}
         <a href="https://github.com/AuroraWright/owocr">owocr</a> by Aurora
-        Wright. Parts of Kimochi&rsquo;s approach to OCR were inspired by it,
-        Kimochi can take owocr&rsquo;s output over WebSocket, and its Windows
-        OneOCR support builds on Aurora Wright&rsquo;s{" "}
-        <a href="https://github.com/AuroraWright/oneocr">oneocr</a> project.
-        Game Sentence Miner also runs a fork of owocr.
+        Wright. Some of its OCR ideas came from there, it can take owocr&rsquo;s
+        output over WebSocket, and its Windows OneOCR support builds on{" "}
+        <a href="https://github.com/AuroraWright/oneocr">oneocr</a>. GSM runs a
+        fork of owocr too.
       </p>
 
       <h2 id="table">At a glance</h2>
@@ -91,58 +88,47 @@ export function Compare() {
         </table>
       </div>
       <p className="text-small">
-        Checked on <time dateTime={RESEARCHED}>{RESEARCHED}</time>. These
-        projects move quickly; check their own pages for the latest.
+        Checked <time dateTime={RESEARCHED}>{RESEARCHED}</time>. These
+        projects move fast, so check their pages for the latest.
       </p>
 
-      <h2 id="when">Which one fits</h2>
+      <h2 id="when">Which one?</h2>
 
-      <h3>Choose Game Sentence Miner if Anki mining is the point</h3>
+      <h3>Game Sentence Miner, if you live in Anki</h3>
       <p>
-        GSM is built around making rich flashcards: it records the voiced line
-        and trims it with voice detection, grabs screenshots or GIFs, and can
-        add AI translations with your own key. It accepts text hooks from Agent,
-        Textractor and LunaTranslator as well as OCR, has a wide choice of local
-        and cloud engines, an overlay with Yomitan lookups, and an active,
-        established community. It expects OBS Studio for capture, which is more
-        setup, but it pays off if you already stream or record. If your goal is
-        a deck full of sentence cards with audio, GSM does more of that than
-        Kimochi does.
+        GSM is all about great flashcards: the voiced line trimmed to fit,
+        screenshots or GIFs, AI translations with your own key. It takes text
+        hooks as well as OCR, has loads of engines, an overlay with Yomitan,
+        and a big, active community. It needs OBS, which is more setup, but if
+        you want a deck full of sentence cards with audio, it does more of that
+        than Kimochi.
       </p>
 
-      <h3>Choose owocr if you want a flexible OCR engine for your own setup</h3>
+      <h3>owocr, if you like building your own setup</h3>
       <p>
-        owocr is a focused, scriptable OCR tool: it watches the screen, a
-        window, OBS, the clipboard or a folder, runs one of many engines, and
-        sends the text to the clipboard, a WebSocket or a file. It does not try
-        to be a reader or a flashcard tool, which makes it a good fit if you
-        already have a texthooker page and Yomitan in the browser and just need
-        reliable Japanese OCR feeding them. It also has the broadest engine list
-        of the four.
+        owocr just does OCR, and does it well. It watches the screen, a window,
+        OBS, the clipboard or a folder, runs one of many engines, and sends the
+        text wherever you want. Great if you already have a texthooker page and
+        Yomitan in the browser. Biggest engine list of the lot.
       </p>
 
-      <h3>Choose Kamui if you want a polished, hosted experience</h3>
+      <h3>Kamui, if you want it all handled for you</h3>
       <p>
-        Kamui is a commercial product with a web app and a Windows desktop app.
-        Reviewers note quick setup with no API keys to arrange, cloud OCR with
-        good accuracy on unusual fonts, a colour-coded sentence breakdown, AI
-        translation and one-click Anki cards. It is a paid subscription, and its
-        OCR runs in the cloud, so you trade cost and some privacy for
-        convenience and support from a company.
+        Kamui is a paid app, on the web and Windows. Quick to set up, no API
+        keys, solid cloud OCR, a colour-coded sentence breakdown, AI translation
+        and one-click Anki cards. You pay a subscription and your captures go
+        to the cloud, but there&rsquo;s a company behind it.
       </p>
 
-      <h3>Choose Kimochi if you want reading help in one desktop app</h3>
+      <h3>Kimochi, if you want it all in one app</h3>
       <p>
-        Kimochi puts capture, OCR, an overlay on the game, a running log,
-        Yomitan, Anki export and a per-session notebook of
-        characters and places into one set of small windows, without OBS or a
-        browser in the loop. It offers on-device engines (Apple Live Text,
-        MeikiOCR, Manga OCR, OneOCR) as well as Google Lens, and gamepad controls
-        for the overlay. It is free and GPL-3.0 licensed, but it is young:
-        builds are pre-release, Steam Deck support is early, and its Anki
-        features are simpler than GSM&rsquo;s. See the{" "}
-        <Link to="/#features">features</Link> or the{" "}
-        <Link to="/privacy">privacy policy</Link> for what leaves your machine.
+        Capture, OCR, the overlay, a log, Yomitan, Anki and a notebook, in a few
+        small windows. No OBS, no browser tabs. Local engines or Google Lens,
+        and a controller works too. It&rsquo;s free and open source, but
+        it&rsquo;s young: no proper release yet, Steam Deck support is early,
+        and the Anki side is simpler than GSM&rsquo;s. More on the{" "}
+        <Link to="/#features">home page</Link>, or see what leaves your machine
+        in the <Link to="/privacy">privacy policy</Link>.
       </p>
 
       <h2 id="sources">Sources</h2>
@@ -154,8 +140,8 @@ export function Compare() {
         ))}
       </ul>
       <p className="text-small">
-        Kamui, Game Sentence Miner and owocr are the work of their respective
-        authors and are not affiliated with Kimochi.
+        Kamui, Game Sentence Miner and owocr belong to their own authors and
+        aren&rsquo;t affiliated with Kimochi.
       </p>
     </Prose>
   );

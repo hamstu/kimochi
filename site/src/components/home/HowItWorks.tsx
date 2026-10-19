@@ -1,23 +1,23 @@
 const STEPS = [
   {
     n: '一',
-    title: 'Pick a source',
-    body: 'Choose the game’s window or a screen, and crop to the text box if you like.'
+    title: 'Pick the game',
+    body: 'Choose its window. Crop to the text box if you want.'
   },
   {
     n: '二',
-    title: 'Scan, or let it watch',
-    body: 'Press Scan for a line, or turn on Auto OCR and it reads each new line as it settles.'
+    title: 'Scan',
+    body: 'Press Scan, or turn on Auto OCR and forget about it.'
   },
   {
     n: '三',
-    title: 'Read in place',
-    body: 'The overlay sits on the game and the Log keeps the whole session behind it.'
+    title: 'Read',
+    body: 'The text shows up on the game, and in the Log.'
   },
   {
     n: '四',
-    title: 'Look up, listen, keep',
-    body: 'Open a word’s reading, hear it, add it to Anki or to the session’s notebook.'
+    title: 'Look stuff up',
+    body: 'Hover a word. Hear it, save it, keep going.'
   }
 ]
 

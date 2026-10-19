@@ -23,13 +23,13 @@ export function Home() {
         id="features"
         divider
         eyebrow="Features"
-        heading="Everything beside the game, nothing in the way"
-        lede="Small, quiet windows around the one you are playing: capture, overlay, transcript, dictionary and notebook, joined up."
+        heading="Stays out of your way"
+        lede="A few small windows that sit beside your game."
       >
         <FeatureGrid />
       </Section>
 
-      <Section id="how" divider eyebrow="How it works" heading="Four steps, then you just read">
+      <Section id="how" divider eyebrow="How it works" heading="Pretty simple, really">
         <HowItWorks />
       </Section>
 
@@ -43,8 +43,8 @@ export function Home() {
         id="download"
         align="center"
         eyebrow="Download"
-        heading="Start reading"
-        lede="Builds are published on GitHub for macOS, Windows and Linux. Until the first tagged release, the button offers the latest development build, rebuilt from every change."
+        heading="Give it a go"
+        lede="Free, for macOS, Windows and Linux. There’s no proper release yet, so this grabs the latest dev build."
       >
         <DownloadButton align="center" />
       </Section>

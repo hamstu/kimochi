@@ -3,13 +3,14 @@ import { Cloud, HardDrive } from 'lucide-react'
 const LOCAL = [
   ['Apple Live Text', 'macOS, nothing to download'],
   ['OneOCR', 'Built into Windows 11'],
-  ['MeikiOCR and manga-ocr', 'Local models, downloaded on demand, verified'],
+  ['MeikiOCR and manga-ocr', 'Local models, downloaded when you pick them'],
   ['Dictionaries, Log, Notebook', 'Stored on your machine']
 ]
 
 const ONLINE = [
-  ['Google Lens', 'The default engine: sends each captured region to Google to read it'],
-  ['Explain', 'Uses the Claude or Codex CLI you have installed, when you ask']
+  ['Google Lens', 'The default. Sends each capture to Google'],
+  ['Kimochi account', 'Optional. Sync, read aloud and the like'],
+  ['Explain', 'Your own Claude or Codex, when you ask']
 ]
 
 function Rows({ rows }: { rows: string[][] }) {
@@ -30,13 +31,11 @@ export function PrivacyNote() {
   return (
     <div className="grid gap-10 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-16">
       <div>
-        <p className="mb-3 text-meta tracking-[0.08em] text-accent-ink uppercase">Engines and privacy</p>
-        <h2 className="text-title text-ink">On your machine, if you like</h2>
+        <p className="mb-3 text-meta tracking-[0.08em] text-accent-ink uppercase">Privacy</p>
+        <h2 className="text-title text-ink">Your call</h2>
         <p className="mt-4 text-lede text-ink-2">
-          Kimochi starts on Google Lens, which reads each capture online. Every other engine runs on
-          your own computer, on its GPU where it can: pick one of those in Settings and what you
-          read stays with you. Google Lens and explanations are the only features that send
-          anything out.
+          Out of the box Kimochi uses Google Lens, which reads captures online. Every other engine
+          runs on your own computer. No analytics, no tracking, and an account is optional.
         </p>
       </div>
       <div className="space-y-8">
