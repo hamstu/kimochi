@@ -8,6 +8,7 @@
  */
 @import "@fontsource-variable/figtree/wght.css";
 @import "@fontsource-variable/noto-sans-jp/wght.css";
+@import "@fontsource-variable/caveat/wght.css";
 
 :root {
   color-scheme: light;

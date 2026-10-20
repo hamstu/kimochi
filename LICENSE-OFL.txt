@@ -1,6 +1,7 @@
 These fonts are bundled in Kimochi's web assets and website, from the
 @fontsource-variable/figtree and @fontsource-variable/noto-sans-jp packages,
-and (in the overlay's assets) from @fontsource/zen-kaku-gothic-antique.
+in the overlay's assets from @fontsource/zen-kaku-gothic-antique, and on the
+website only from @fontsource-variable/caveat.
 
 Figtree
 Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)
@@ -10,6 +11,9 @@ Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name 'Sour
 
 Zen Kaku Gothic Antique
 Copyright 2022 The Zen Project Authors (https://github.com/googlefonts/zen-kakugothic)
+
+Caveat
+Copyright 2014 The Caveat Project Authors (https://github.com/googlefonts/caveat)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

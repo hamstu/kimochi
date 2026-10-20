@@ -1,12 +1,13 @@
 import type { ComponentType } from 'react'
-import { AutoScanVisual } from './visuals/AutoScanVisual'
 import { ControllerVisual } from './visuals/ControllerVisual'
 import { DictionariesVisual } from './visuals/DictionariesVisual'
 import { DictionaryVisual } from './visuals/DictionaryVisual'
 import { EnginesVisual } from './visuals/EnginesVisual'
 import { LogVisual } from './visuals/LogVisual'
+import { MiniModeVisual } from './visuals/MiniModeVisual'
 import { NotebookVisual } from './visuals/NotebookVisual'
 import { OverlayVisual } from './visuals/OverlayVisual'
+import { SessionsVisual } from './visuals/SessionsVisual'
 
 export interface Feature {
   /** Stable key (also usable as an anchor). */
@@ -31,16 +32,22 @@ export const features: Feature[] = [
     Visual: OverlayVisual
   },
   {
-    id: 'auto-ocr',
-    title: 'Auto OCR',
-    body: 'Designed primarily for games, Auto OCR will allow you to sit back and let Kimochi take care of watching and scanning new text.',
-    Visual: AutoScanVisual
+    id: 'mini-mode',
+    title: 'Mini mode',
+    body: 'Shrink Kimochi down to just its controls: your source, Auto OCR, the overlay, your OCR model and dictionary, in a slim window that sits beside your game. Expand it again whenever you want the Log.',
+    Visual: MiniModeVisual
   },
   {
     id: 'log',
     title: 'Log',
     body: 'Skipped a line too fast? Scroll back. Pick up tomorrow where you left off. Kimochi always remembers. No need for external texthooker pages. 👌',
     Visual: LogVisual
+  },
+  {
+    id: 'sessions',
+    title: 'Sessions',
+    body: 'Keep a separate log for every game, visual novel or manga, each with its own lines and reading stats. Kimochi can switch sessions for you by window name, and you can rename, reorder or clear them any time.',
+    Visual: SessionsVisual
   },
   {
     id: 'dictionary',

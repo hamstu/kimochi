@@ -41,6 +41,8 @@
   --font-sans: var(--k-font-ui);
   --font-jp: var(--k-font-jp);
   --font-mono: var(--k-font-mono);
+  /* Handwriting, for the maker's hello on the home page only. */
+  --font-script: "Caveat Variable", "Caveat", cursive;
 
   --radius-sm: var(--k-radius-sm);
   --radius-md: var(--k-radius-md);
@@ -248,4 +250,11 @@
 .prose-k th {
   color: var(--k-text);
   font-weight: var(--k-weight-medium);
+}
+
+/* The maker's band on the home page (AboutMe): the app icon's blue, lit from the top left. */
+.kd-about {
+  background:
+    radial-gradient(70% 90% at 15% 0%, rgb(255 255 255 / 0.14), transparent 60%),
+    linear-gradient(160deg, #5a7ce6, #3e63dd 45%, #2c4cbf);
 }
