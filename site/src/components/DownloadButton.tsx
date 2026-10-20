@@ -12,6 +12,7 @@ import {
   osLabel,
   pickAsset,
   type Platform,
+  versionLabel,
   type Release
 } from '../lib/releases'
 
@@ -26,11 +27,6 @@ function archLabel(p: Platform): string {
   if (p.arch === 'arm64') return 'ARM64'
   if (p.arch === 'x64') return 'x64'
   return ''
-}
-
-/** The release's version for the button: its tag ("v0.2.0"), or "Nightly" for the development build. */
-function versionLabel(release: Release): string {
-  return release.channel === 'nightly' ? 'Nightly' : release.tag
 }
 
 function OsMark({ os, className }: { os: Platform['os']; className: string }) {

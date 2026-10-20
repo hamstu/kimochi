@@ -82,6 +82,11 @@ async function fetchRelease(url: string, signal?: AbortSignal): Promise<GitHubRe
  * result is cached in sessionStorage for 10 min. Throws ReleaseFetchError; callers fall back to
  * RELEASES_URL.
  */
+/** The release's version to show: its tag ("v0.2.0"), or "Nightly" for the development build. */
+export function versionLabel(release: Release): string {
+  return release.channel === 'nightly' ? 'Nightly' : release.tag
+}
+
 export async function fetchLatestRelease(signal?: AbortSignal): Promise<Release> {
   const cached = readCache()
   if (cached) return cached

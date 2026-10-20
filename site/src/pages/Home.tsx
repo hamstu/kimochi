@@ -21,14 +21,14 @@ export function Home() {
       <Section
         id="features"
         divider
-        eyebrow="Features"
-        heading="Stays out of your way"
-        lede="A few small windows that sit beside your game."
+        eyebrow="主な機能"
+        heading="Features"
+        lede="Kimochi is packed with useful features, all bundled into a beautiful, clean interface"
       >
         <FeatureGrid />
       </Section>
 
-      <Section id="how" divider eyebrow="How it works" heading="Pretty simple, really">
+      <Section id="how" divider eyebrow="ご利用の流れ" heading="How it Works">
         <HowItWorks />
       </Section>
 
@@ -37,8 +37,8 @@ export function Home() {
       <Section
         id="download"
         align="center"
-        eyebrow="Download"
-        heading="Give it a go"
+        eyebrow="ダウンロード"
+        heading="I hope you'll give it a try."
         lede="Free, for macOS, Windows and Linux."
       >
         <DownloadButton align="center" />

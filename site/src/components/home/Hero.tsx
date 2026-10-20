@@ -1,5 +1,21 @@
 import { DownloadButton } from '../DownloadButton'
 import { KanaRain } from './KanaRain'
+import { useEffect, useState } from 'react'
+import { fetchLatestRelease, versionLabel } from '../../lib/releases'
+
+/** The version on offer beside the wordmark ("v0.2.0", or "Nightly"); nothing until it is known. */
+function HeroVersion() {
+  const [version, setVersion] = useState<string | null>(null)
+  useEffect(() => {
+    const ctrl = new AbortController()
+    fetchLatestRelease(ctrl.signal)
+      .then((release) => setVersion(versionLabel(release)))
+      .catch(() => undefined)
+    return () => ctrl.abort()
+  }, [])
+  if (!version) return null
+  return <span className="text-small font-normal tracking-normal text-ink-3 tnum">{version}</span>
+}
 
 /**
  * The home hero: the app icon, wordmark, promise, lede and the download button, centred, over a
@@ -28,14 +44,12 @@ export function Hero() {
         />
         <p className="mt-7 flex items-baseline gap-2.5 text-[1.375rem] font-semibold tracking-[-0.015em] text-ink">
           Kimochi
-          <span lang="ja" className="text-small font-normal tracking-normal text-ink-3">
-            気持ち
-          </span>
+          <HeroVersion />
         </p>
         <h1 className="mt-5 max-w-[18ch] text-display text-ink">Read your games in Japanese.</h1>
         <p className="mt-6 max-w-[44rem] text-lede text-ink-2">
-          Kimochi grabs the Japanese off your screen and puts it back over the game. Hover a word
-          to see what it means. No alt-tabbing.
+          Kimochi grabs the Japanese on your screen so it's easy to look up definitions in your
+          favorite dictionary, understand the meaning, and make flash cards for Anki.
         </p>
         {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
         <div id="get-kimochi" className="mt-10 scroll-mt-24">

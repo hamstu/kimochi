@@ -16,7 +16,7 @@ export function DemoShowcase() {
   const mark = desktop === 'windows' ? <WindowsMark className="size-4" /> : desktop === 'linux' ? <LinuxMark className="size-4" /> : <AppleMark className="size-4" />
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'desktop', label: 'Desktop', icon: mark },
-    { id: 'gaming', label: 'Gaming mode', icon: <DeckMark className="size-4" /> }
+    { id: 'gaming', label: 'Handheld-Mode', icon: <DeckMark className="size-4" /> }
   ]
   return (
     <section id="demo" aria-labelledby="demo-heading">
@@ -24,9 +24,9 @@ export function DemoShowcase() {
       <div className="container-page pt-16 pb-16 md:pt-24 md:pb-24">
         <header className="mb-8 flex flex-col gap-6 md:mb-10 md:flex-row md:items-end md:justify-between">
           <div className="max-w-3xl">
-            <p className="mb-3 text-meta tracking-[0.08em] text-accent-ink uppercase">Live preview</p>
+            <p className="mb-3 text-meta tracking-[0.08em] text-accent-ink uppercase">デモを試す</p>
             <h2 id="demo-heading" className="text-title text-ink">
-              See it in action
+              Try the Live Demo
             </h2>
           </div>
           <div role="tablist" aria-label="Preview" className="flex shrink-0 gap-1 self-start rounded-lg border border-hairline bg-bar p-1 md:self-auto">

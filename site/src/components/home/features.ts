@@ -26,50 +26,50 @@ export interface Feature {
 export const features: Feature[] = [
   {
     id: 'overlay',
-    title: 'Overlay',
-    body: 'The words go back on top of the game, right where they were. Hover one to look it up.',
+    title: 'Cross Platform Overlay',
+    body: "When the overlay is on, you'll be able to hover directly over the words in your game, app, YouTube video, manga, or anything else on your screen.",
     Visual: OverlayVisual
   },
   {
     id: 'auto-ocr',
     title: 'Auto OCR',
-    body: 'Hit Scan, or let it watch. It waits for the text to finish typing out, then reads it.',
+    body: 'Designed primarily for games, Auto OCR will allow you to sit back and let Kimochi take care of watching and scanning new text.',
     Visual: AutoScanVisual
   },
   {
     id: 'log',
     title: 'Log',
-    body: 'Skipped a line too fast? Scroll back. Pick up tomorrow where you left off.',
+    body: 'Skipped a line too fast? Scroll back. Pick up tomorrow where you left off. Kimochi always remembers. No need for external texthooker pages. 👌',
     Visual: LogVisual
   },
   {
     id: 'dictionary',
     title: 'Look up and save',
-    body: 'Hear a line read out, ask what it means, or send a word to Anki in one click.',
+    body: "Whether it's in the overlay or in the log, you'll be able to easily look up definitions with your favorite dictionary tool.",
     Visual: DictionaryVisual
   },
   {
     id: 'dictionaries',
     title: 'Dictionaries',
-    body: 'Pick the dictionary you like: the built-in Yomitan with your own dictionaries, Hachidori, 10ten, or the Yomitan you already use, through its API.',
+    body: 'Pick the dictionary you like: Kimochi supports an embedded copy of Yomitan, Hachidori, 10ten, or you can point at your own Yomitan and existing dictionaries through the Yomitan API. ✨',
     Visual: DictionariesVisual
   },
   {
     id: 'notebook',
     title: 'Notebook',
-    body: 'Jot down characters, places and terms. Kimochi spots them in new lines, so you stop forgetting names.',
+    body: 'I built this one for myself, especially! Select some text from the log to add characters, places or terms to a shared notebook. Link images and notes, too. Kimochi then highlights it as clickable in your log for easy remembering.',
     Visual: NotebookVisual
   },
   {
     id: 'engines',
     title: 'OCR engines',
-    body: 'Live Text on a Mac, OneOCR on Windows, or local models on your GPU. Texthookers work too.',
+    body: "Kimochi gives you complete control over choosing the OCR engine and provides several options depending on what you're doing (e.g., if you prefer Cloud vs. Local).",
     Visual: EnginesVisual
   },
   {
     id: 'controller',
-    title: 'Steam Deck',
-    body: 'Works in Gaming Mode. Click both sticks, scan, pick a word with the D-pad, then B and you’re back.',
+    title: 'Gaming Mode',
+    body: "In Gaming Mode you can activate Kimochi's shortcut (Click both sticks) to scan. Then pick a word with the D-pad for quick look-ups. Hit B and you’re back in the game.",
     Visual: ControllerVisual
   }
 ]

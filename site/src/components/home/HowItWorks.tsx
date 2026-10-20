@@ -2,22 +2,22 @@ const STEPS = [
   {
     n: '一',
     title: 'Pick the game',
-    body: 'Choose its window. Crop to the text box if you want.'
+    body: 'Choose a window or screen source. Add a crop area if you want.'
   },
   {
     n: '二',
     title: 'Scan',
-    body: 'Press Scan, or turn on Auto OCR and forget about it.'
+    body: "Press Scan, or turn on Auto OCR. Turn on the overlay if you're feeling funky. 😉"
   },
   {
     n: '三',
     title: 'Read',
-    body: 'The text shows up on the game, and in the Log.'
+    body: 'The text shows up on the game (when the overlay is enabled), and in the Log.'
   },
   {
     n: '四',
     title: 'Look stuff up',
-    body: 'Hover a word. Hear it, save it, keep going.'
+    body: 'Hover a word. Hear it, save it, keep going. 🤘'
   }
 ]
 

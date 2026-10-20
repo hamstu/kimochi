@@ -29,7 +29,7 @@ export function AutoScanVisual() {
                 <span className="absolute inset-0 animate-ping rounded-full bg-ok opacity-60 motion-reduce:hidden" />
                 <span className="relative size-1.5 rounded-full bg-ok" />
               </span>
-              Watching · text settled, read once
+              Watching
             </p>
           </div>
         </div>
