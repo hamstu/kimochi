@@ -12,12 +12,13 @@
  *  - `useNativeHover()` supplies hover and cursor feedback while the window is inactive.
  */
 import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } from 'react'
-import { Minus, Pin, PinOff, X } from 'lucide-react'
+import { Minus, Pin, PinOff, Volume2, VolumeX, X } from 'lucide-react'
 import { nativeError, panel, panelContentHeight, onEvent, quitApp } from '../bridge/tauri'
 import type { PanelStateEvent } from '../bridge/types'
 import { usePanelController } from './usePanelController'
 import { useNativeHover } from './useNativeHover'
 import { TitleBarSlotContext } from './titleBarSlot'
+import { useSetting } from '../bridge/useSetting'
 
 interface PanelShellProps {
   label: string
@@ -40,6 +41,8 @@ export default function PanelShell({
   const panelRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [soundEffects, setSoundEffects] = useSetting<boolean>('soundEffects', true)
+  const soundOn = soundEffects !== false
 
   useNativeHover()
   usePanelController(label)
@@ -131,10 +134,21 @@ export default function PanelShell({
         {hideTitle ? null : <span className="native-titlebar-title">{title}</span>}
         <div ref={setSlot} className="native-titlebar-slot" />
         <div className="native-window-actions">
+          {/* The same setting as Settings → General → Sound effects. Muting is silent; turning
+              sound back on plays its own sound, the one that plays while the setting is off. */}
+          <button
+            title={soundOn ? 'Mute sound effects' : 'Turn on sound effects'}
+            aria-label={soundOn ? 'Mute sound effects' : 'Turn on sound effects'}
+            data-sound={soundOn ? 'none' : 'sound-on'}
+            onClick={() => void setSoundEffects(!soundOn)}
+          >
+            {soundOn ? <Volume2 /> : <VolumeX />}
+          </button>
           <button
             title={pinned ? 'Unpin window' : 'Keep on top'}
             aria-label={pinned ? 'Unpin window' : 'Keep on top'}
             aria-pressed={pinned}
+            data-sound={pinned ? 'pin-off' : 'pin-on'}
             onClick={() => run(pinned ? 'unpin' : 'pin')}
           >
             {pinned ? <Pin /> : <PinOff />}

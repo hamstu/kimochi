@@ -751,6 +751,8 @@ export function SourcePanel({
       // While Auto OCR reads on its own the button steps back; it is not the thing to press.
       variant={mode === 'ocr' && controller.isAutoOCREnabled ? 'secondary' : 'primary'}
       className="src-scan"
+      // The scan has its own start sound (ui/sounds.ts), so no click on top of it.
+      data-sound="none"
       disabled={scanDisabled}
       onClick={() => controller.onTriggerScan()}
     >

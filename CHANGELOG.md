@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- New sound effects: a soft click for buttons, a little switch for toggles, and their own sounds for showing and hiding the sidebar, mini mode, and keeping a window on top. The new speaker button in each window's title bar, next to the pin, turns all sound effects on and off (also in Settings → General).
 - Kimochi accounts and cloud features now live at kimochiapp.com.
 - Fixed: after trying WebSocket input, switching the Log to another source left "WebSocket unavailable. Retrying…" at the top of the Log.
 - You can clear the source: hover the source card and click the × on its picture, or choose Clear source in the Change source menu. Kimochi then reads nothing until you pick one again, and remembers each source's crop area for when you do.

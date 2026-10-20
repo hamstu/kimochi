@@ -12,3 +12,23 @@ http://creativecommons.org/publicdomain/zero/1.0/
 
 You may use these assets in personal and commercial projects. Credit (Kenney or
 www.kenney.nl) would be nice but is not mandatory.
+
+---
+
+Interface sounds
+
+Synthesized in code with Earshot 0.3.0 (https://github.com/Leonxlnx/earshot, MIT), from its
+sound bank (`earshot sfx render <id>`), then mixed to mono, levelled against the scan sounds and
+encoded to MP3. No recordings are involved.
+
+  click.mp3          pro_click/soft
+  toggle-on.mp3      toggle/micro
+  toggle-off.mp3     toggle/micro --seed 7
+  menu-open.mp3      pro_pop/thup
+  sidebar-show.mp3   fit/whoosh.short/bamboo_swish --dur 0.36
+  sidebar-hide.mp3   fit/whoosh.short/bamboo_swish --dur 0.36 --pitch F3
+  mini-enter.mp3     pro_pop_in/round
+  mini-exit.mp3      pro_pop_in/airy --pitch E3
+  pin-on.mp3         pro_pop_in/knock
+  pin-off.mp3        pro_tap/knock
+  sound-on.mp3       pluck/kalimba_soft --dur 0.9 --pitch E5

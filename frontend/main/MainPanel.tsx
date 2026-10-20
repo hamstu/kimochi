@@ -189,6 +189,7 @@ export default function MainPanel(): JSX.Element {
               label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
               size="sm"
               className="main-sidebar-toggle"
+              data-sound={sidebar ? 'sidebar-hide' : 'sidebar-show'}
               onClick={() => void setSidebar(!sidebar)}
             >
               <PanelLeft />
@@ -196,6 +197,7 @@ export default function MainPanel(): JSX.Element {
           </Tooltip>}
           {<IconButton
             label={mini ? 'Expand Kimochi' : 'Mini mode'} size="sm"
+            data-sound={mini ? 'mini-exit' : 'mini-enter'}
             onClick={() => void changeMini(!mini)}>
             {mini ? <Maximize2 /> : <Minimize2 />}
           </IconButton>}

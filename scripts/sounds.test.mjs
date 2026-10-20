@@ -8,7 +8,11 @@ const {
   POOL_SIZE,
   SOUND_NAMES,
   SOUND_VOLUME,
+  controlSound,
   createAudioPlayer,
+  installInteractionSounds,
+  pressSound,
+  readControl,
   createSoundPlayer,
   errorMayRing,
   outcomeSound,
@@ -210,4 +214,139 @@ test('a refused or throwing play is swallowed', async () => {
   assert.equal(broken('scan-start'), null)
   // Let the rejected play() settle: an unhandled rejection would fail the run.
   await new Promise((resolve) => setTimeout(resolve, 0))
+})
+
+test('buttons click, switches sound where they are going, closed menus open', () => {
+  assert.equal(controlSound({ role: 'button' }), 'click')
+  assert.equal(controlSound({ role: 'link' }), 'click')
+  assert.equal(controlSound({ role: 'menuitem' }), 'click')
+  // Read before the click lands: an unchecked switch is being turned on.
+  assert.equal(controlSound({ role: 'switch', checked: 'false' }), 'toggle-on')
+  assert.equal(controlSound({ role: 'switch', checked: 'true' }), 'toggle-off')
+  assert.equal(controlSound({ role: 'checkbox', checked: 'indeterminate' }), 'toggle-on')
+  assert.equal(controlSound({ role: 'menuitemcheckbox', checked: 'true' }), 'toggle-off')
+  assert.equal(controlSound({ role: 'button', popup: 'menu' }), 'menu-open')
+  assert.equal(controlSound({ role: 'button', popup: 'menu', expanded: true }), 'click')
+  assert.equal(controlSound({ role: 'button', disabled: true }), null)
+  assert.equal(controlSound(null), null)
+})
+
+test('data-sound overrides the control, and none or an unknown name is silent', () => {
+  assert.equal(controlSound({ role: 'button', explicit: 'sidebar-hide' }), 'sidebar-hide')
+  assert.equal(controlSound({ role: 'switch', checked: 'true', explicit: 'pin-on' }), 'pin-on')
+  assert.equal(controlSound({ role: 'button', explicit: 'none' }), null)
+  assert.equal(controlSound({ role: 'button', explicit: 'kaboom' }), null)
+})
+
+/** Just enough of an Element for `readControl`: attributes, a tag, a parent, and `closest`. */
+function element(tag, attributes = {}, parent = null) {
+  const node = {
+    tagName: tag.toUpperCase(),
+    parent,
+    getAttribute: (name) => (name in attributes ? attributes[name] : null),
+    closest(selector) {
+      for (let at = node; at; at = at.parent) if (selector.split(', ').some((s) => at.matches(s))) return at
+      return null
+    },
+    matches(selector) {
+      const attr = /^(\w*)\[([\w-]+)(?:="([^"]*)")?\]$/.exec(selector)
+      if (!attr) return node.tagName.toLowerCase() === selector
+      const [, t, name, value] = attr
+      if (t && node.tagName.toLowerCase() !== t) return false
+      return name in attributes && (value === undefined || attributes[name] === value)
+    }
+  }
+  return node
+}
+
+test('a click inside a control reads the control and the nearest data-sound', () => {
+  const region = element('div', { 'data-sound': 'none' })
+  const button = element('button', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' })
+  const icon = element('svg', {}, button)
+  assert.deepEqual(readControl(icon), {
+    explicit: undefined,
+    role: 'button',
+    checked: null,
+    popup: 'menu',
+    expanded: false,
+    disabled: false
+  })
+  const muted = element('button', {}, region)
+  assert.equal(controlSound(readControl(muted)), null)
+  const toggle = element('button', { role: 'switch', 'aria-checked': 'true' })
+  assert.equal(controlSound(readControl(element('span', {}, toggle))), 'toggle-off')
+  // Text, a field, the window ground: not controls, no sound.
+  assert.equal(readControl(element('p')), null)
+  assert.equal(readControl(null), null)
+})
+
+test('interaction sounds follow the setting, except the one that turns sound on', () => {
+  const listeners = new Map()
+  const root = {
+    addEventListener: (type, fn, capture) => listeners.set(type, { fn, capture }),
+    removeEventListener: (type) => listeners.delete(type)
+  }
+  let on = true
+  const played = []
+  const uninstall = installInteractionSounds(root, { enabled: () => on, play: (name) => played.push(name) })
+  // Capturing, so a switch still shows its old state when the sound is chosen.
+  assert.equal(listeners.get('click').capture, true)
+  const click = (target) => listeners.get('click').fn({ target })
+  assert.ok(listeners.has('pointerdown') && listeners.has('keydown'))
+  click(element('button'))
+  on = false
+  click(element('button'))
+  click(element('button', { 'data-sound': 'sound-on' }))
+  assert.deepEqual(played, ['click', 'sound-on'])
+  uninstall()
+  assert.equal(listeners.has('click'), false)
+})
+
+test('menus and selects sound on the press that opens them; other controls wait for the click', () => {
+  const menu = { role: 'button', popup: 'menu' }
+  const select = { role: 'combobox', popup: 'listbox' }
+  assert.equal(pressSound(menu), 'menu-open')
+  assert.equal(pressSound(select), 'menu-open')
+  assert.equal(pressSound({ ...menu, expanded: true }), null)
+  assert.equal(pressSound({ role: 'button' }), null)
+  assert.equal(pressSound({ role: 'switch', checked: 'false' }), null)
+  assert.equal(pressSound({ ...menu, disabled: true }), null)
+  // The keys Radix opens each with.
+  assert.equal(pressSound(menu, 'Enter'), 'menu-open')
+  assert.equal(pressSound(menu, ' '), 'menu-open')
+  assert.equal(pressSound(menu, 'ArrowDown'), 'menu-open')
+  assert.equal(pressSound(menu, 'ArrowUp'), null)
+  assert.equal(pressSound(select, 'ArrowUp'), 'menu-open')
+  assert.equal(pressSound(select, 'a'), null)
+  assert.equal(pressSound({ role: 'button', popup: 'dialog' }, 'ArrowDown'), null)
+})
+
+test('a select reads as a listbox trigger', () => {
+  const select = element('button', { role: 'combobox', 'aria-expanded': 'false' })
+  assert.equal(readControl(select).popup, 'listbox')
+  assert.equal(readControl(element('button', { disabled: '' })).disabled, true)
+})
+
+test('a trigger that sounded on its press does not sound again on its click', () => {
+  const listeners = new Map()
+  const root = { addEventListener: (type, fn) => listeners.set(type, fn), removeEventListener() {} }
+  const played = []
+  installInteractionSounds(root, { enabled: () => true, play: (name) => played.push(name) })
+  const fire = (type, target, extra = {}) => listeners.get(type)({ target, button: 0, ctrlKey: false, ...extra })
+  const user = element('button', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' })
+  const popover = element('button', { 'aria-haspopup': 'dialog', 'aria-expanded': 'false' })
+  const plain = element('button')
+  // A dropdown: the press opens it and no click follows.
+  fire('pointerdown', element('svg', {}, user))
+  // A popover: the press sounds, its click (which opens it) does not.
+  fire('pointerdown', popover)
+  fire('click', popover)
+  // Enter on a popover: keydown sounds, the click Enter makes does not.
+  fire('keydown', popover, { key: 'Enter' })
+  fire('click', popover)
+  // Ordinary buttons: nothing on the press, a click on the click; a right press is ignored.
+  fire('pointerdown', plain)
+  fire('pointerdown', user, { button: 2 })
+  fire('click', plain)
+  assert.deepEqual(played, ['menu-open', 'menu-open', 'menu-open', 'click'])
 })

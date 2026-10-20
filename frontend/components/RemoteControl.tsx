@@ -253,6 +253,7 @@ function RemoteControl({
               {/* Manual scan */}
               <button
                 className={styles.button}
+                data-sound="none"
                 onClick={onTriggerScan}
                 disabled={!hasSource || isAutoOCREnabled || isScanning}
               >

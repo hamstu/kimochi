@@ -64,7 +64,7 @@ export function GeneralTab(): ReactNode {
         <SettingsRow
           label="Sound effects"
           controlId="general-sound-effects"
-          description="Play a sound when a scan starts, finishes or fails."
+          description="Play sounds for scans, buttons, switches and window changes. The speaker in each title bar turns them on and off too."
         >
           <Switch
             id="general-sound-effects"
