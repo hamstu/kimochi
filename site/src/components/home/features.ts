@@ -3,6 +3,7 @@ import { ControllerVisual } from './visuals/ControllerVisual'
 import { DictionariesVisual } from './visuals/DictionariesVisual'
 import { DictionaryVisual } from './visuals/DictionaryVisual'
 import { EnginesVisual } from './visuals/EnginesVisual'
+import { InputsVisual } from './visuals/InputsVisual'
 import { LogVisual } from './visuals/LogVisual'
 import { MiniModeVisual } from './visuals/MiniModeVisual'
 import { NotebookVisual } from './visuals/NotebookVisual'
@@ -72,6 +73,12 @@ export const features: Feature[] = [
     title: 'OCR engines',
     body: "Kimochi gives you complete control over choosing the OCR engine and provides several options depending on what you're doing (e.g., if you prefer Cloud vs. Local).",
     Visual: EnginesVisual
+  },
+  {
+    id: 'texthookers',
+    title: 'Texthookers and clipboard',
+    body: 'Already hooking text out of a visual novel? Point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats.',
+    Visual: InputsVisual
   },
   {
     id: 'controller',

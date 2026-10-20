@@ -1,5 +1,7 @@
 import { Check, Plus } from 'lucide-react'
 import { GITHUB_URL } from '../Layout'
+import { Button } from '../Button'
+import { useSession } from '../../lib/session'
 
 /** Everything in Kimochi itself: free, no account, no limits. */
 const FREE = [
@@ -24,6 +26,8 @@ const CLOUD = [
  * so it is plain the plan is extra. The price is a placeholder until pricing is set.
  */
 export function OpenSource() {
+  const { status } = useSession()
+  const signedIn = status === 'signed-in'
   return (
     <div className="grid gap-5 md:grid-cols-2">
       <div className="flex flex-col rounded-2xl border border-hairline bg-raised p-6 md:p-8">
@@ -71,6 +75,13 @@ export function OpenSource() {
             </li>
           ))}
         </ul>
+        {/* An account can be made here before Kimochi is installed; the app signs in to it later. */}
+        <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-2 pt-7">
+          <Button href={signedIn ? '/account' : '/account/sign-up'} size="lg">
+            {signedIn ? 'Go to your account' : 'Create an account'}
+          </Button>
+          {!signedIn && <span className="text-small text-ink-3">Free to create. Sign in from the app any time.</span>}
+        </div>
       </div>
     </div>
   )
