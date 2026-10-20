@@ -419,8 +419,11 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       setPointer((c) => ({ ...c, x: p.x, y: p.y, ms, shown: true }))
       await wait(ms + 80)
     }
-    const press = async (times = 1): Promise<void> => {
+    // `sound`: a click on the demo's own desktop (an icon, a window), which has no sound of its
+    // own. Clicks inside Kimochi are not given one: its controls already sound.
+    const press = async (times = 1, sound = false): Promise<void> => {
       for (let i = 0; i < times; i++) {
+        if (sound) postRef.current?.({ type: 'sound', name: 'click' })
         setPointer((c) => ({ ...c, down: true }))
         await wait(110)
         setPointer((c) => ({ ...c, down: false }))
@@ -455,13 +458,13 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       await wait(350)
       // 1. Open the game from its desktop icon.
       await moveTo(onDesk(el.querySelector('[data-icon="game"]')), 900)
-      await press(2)
+      await press(2, true)
       setOpen((o) => ({ ...o, game: true }))
       raise('game')
       await wait(1100)
       // 2. Open Kimochi.
       await moveTo(onDesk(el.querySelector('[data-icon="kimochi"]')), 900)
-      await press(2)
+      await press(2, true)
       setOpen((o) => ({ ...o, log: true }))
       setQuit(false)
       raise('log')
@@ -490,7 +493,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       await wait(600)
       // 5. Back to the game: click its uncovered side to bring it forward, and read.
       await moveTo(onDesk(windowEl('game'), 0.22, 0.55), 800)
-      await press()
+      await press(1, true)
       raise('game')
       setPhase('running')
     })().catch((error: unknown) => {

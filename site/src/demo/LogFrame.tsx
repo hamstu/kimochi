@@ -11,6 +11,8 @@ export type LogMessage =
   | { type: 'interactive'; value: boolean }
   | { type: 'sidebar'; value: boolean }
   | { type: 'sources'; open: string[] }
+  /** Play one of the app's sounds (by name) in the Log's page, which has them. */
+  | { type: 'sound'; name: string }
 
 /** A title-bar drag inside the Log, in screen coordinates (the harness's `embedDrag`). */
 export interface LogDrag {

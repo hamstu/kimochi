@@ -73,6 +73,7 @@
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit, listen } from '@tauri-apps/api/event'
 import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, nextOverlayToggle } from '@ui/settings'
+import { SOUND_NAMES, createSoundPlayer, type SoundName } from '@ui/sounds'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
 import {
@@ -876,8 +877,16 @@ type EmbedMessage =
   | { kimochiDemo: 1; type: 'interactive'; value: boolean }
   | { kimochiDemo: 1; type: 'sidebar'; value: boolean }
   | { kimochiDemo: 1; type: 'sources'; open: string[] }
+  | { kimochiDemo: 1; type: 'sound'; name: string }
 
 let embedScan = 0
+
+/**
+ * The app's sounds, played in this page: the overlay's chime when a scan's lines reach the Log
+ * (the app's overlay is not here to ring it), and `sound` from the parent for the demo's scripted
+ * clicks on its own desktop. The `soundEffects` setting applies, as in the app.
+ */
+const embedSound = createSoundPlayer({ enabled: () => settings.soundEffects })
 
 /**
  * Embedded, a title-bar drag (`panel_drag`) is the embedding page's to perform: it moves the
@@ -960,6 +969,8 @@ function listenToEmbedder(): void {
         args: [message.text, 'ocr', Date.now(), scanId, ocr]
       })
       void emit('activity', { text: 'Added 1 line', tone: 'ok', key: 'scan', at: Date.now() })
+      // An automatic scan's lines: the chime the overlay plays for them (`outcomeSound`).
+      embedSound('scan-done', { auto: true })
     } else if (message.type === 'theme') {
       publish('appearance', message.value)
     } else if (message.type === 'interactive') {
@@ -968,6 +979,8 @@ function listenToEmbedder(): void {
       publish('mainSidebarOpen', message.value)
     } else if (message.type === 'sources') {
       setOpenWindows(message.open)
+    } else if (message.type === 'sound') {
+      if ((SOUND_NAMES as readonly string[]).includes(message.name)) embedSound(message.name as SoundName)
     }
   })
 }
