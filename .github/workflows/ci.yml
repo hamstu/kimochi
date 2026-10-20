@@ -32,6 +32,16 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    # A push to main that only touches the website or documentation builds nothing: the app and
+    # nightly are unchanged by it. Later patterns win, so CHANGELOG.md (compiled into the app's
+    # "What's new") and COMMANDS.md (read by the tests) still build. GitHub does not apply path
+    # filters to tag pushes, so a release always builds.
+    paths:
+      - '**'
+      - '!site/**'
+      - '!**/*.md'
+      - 'CHANGELOG.md'
+      - 'COMMANDS.md'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
