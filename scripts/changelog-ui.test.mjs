@@ -154,8 +154,10 @@ test('whatsNewEntries: with no released section, Unreleased is shown as the runn
   assert.deepEqual(whatsNewEntries('## [Unreleased]\n\n', '0.1.0'), [])
 })
 
-test('whatsNewEntries: the repository CHANGELOG.md yields something to show', async () => {
+test('whatsNewEntries: the repository CHANGELOG.md yields something to show once it lists anything', async () => {
   const text = await readFile(`${root}CHANGELOG.md`, 'utf8')
+  // Before the first release the file may hold nothing but an empty Unreleased.
+  if (!/^- /m.test(text)) return assert.deepEqual(whatsNewEntries(text, '0.0.0-test'), [])
   assert.ok(whatsNewEntries(text, '0.0.0-test').length > 0)
 })
 
