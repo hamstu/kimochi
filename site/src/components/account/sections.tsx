@@ -3,21 +3,18 @@ import { useNavigate } from 'react-router'
 import { Laptop } from 'lucide-react'
 import { Button, buttonClass } from '../Button'
 import { Field } from './Field'
+import { Meter } from './Meter'
 import { Notice } from './Notice'
 import { SubmitButton, dangerButtonExtra } from './SubmitButton'
-import { Meter } from './Meter'
 import { AccountSection, Badge, ConfirmButton, StatusLine, useLoad } from './parts'
-import { api, ApiError, EXPORT_URL, oauthStartUrl, type MetricName, type Provider, type User } from '../../lib/api'
+import { api, ApiError, EXPORT_URL, oauthStartUrl, type Provider, type User } from '../../lib/api'
 import {
   deleteConfirmMatches,
   formatDay,
-  formatResetDay,
   formatStorage,
   messageForCode,
-  planLabel,
   platformLabel,
-  relativeTime,
-  resetDay
+  relativeTime
 } from '../../lib/account.js'
 import { useSession } from '../../lib/session'
 import { MAX_PASSWORD, MIN_PASSWORD, passwordProblem } from '../../pages/AccountSignUp'
@@ -114,64 +111,6 @@ export function ProfileSection({ user }: { user: User }) {
             </div>
           )}
         </div>
-      </div>
-    </AccountSection>
-  )
-}
-
-/* ------------------------------------------------------------------ usage */
-
-const MONTHLY: { key: Exclude<MetricName, 'storage'>; label: string; unit: string }[] = [
-  { key: 'ocr', label: 'Cloud OCR', unit: 'scans' },
-  { key: 'translate', label: 'Translation', unit: 'requests' },
-  { key: 'tts', label: 'Read aloud', unit: 'lines' },
-  { key: 'explain', label: 'Explanations', unit: 'answers' }
-]
-
-export function UsageSection({ user }: { user: User }) {
-  const usage = useLoad(api.usage)
-  const reset = usage.data ? resetDay(usage.data.period.end) : null
-  const plan = usage.data?.plan ?? user.plan
-  return (
-    <AccountSection
-      id="usage"
-      title="Plan and usage"
-      description="Kimochi’s hosted services count against a monthly allowance. Everything else in the app is unlimited and free."
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-ink">{planLabel(plan)} plan</span>
-        {user.status === 'suspended' && <Badge tone="warn">Suspended</Badge>}
-      </div>
-      {user.status === 'suspended' && (
-        <Notice tone="warn" className="mt-4">
-          This account is suspended, so the hosted services are paused. You can still see your account, and Sync keeps working.
-        </Notice>
-      )}
-      <div className="mt-6">
-        {usage.loading && !usage.data ? (
-          <p className="text-small text-ink-3" role="status">
-            Loading usage…
-          </p>
-        ) : usage.error ? (
-          <Notice tone="danger">
-            {errorText(usage.error)}{' '}
-            <button type="button" className="text-accent-ink underline" onClick={usage.reload}>
-              Try again
-            </button>
-          </Notice>
-        ) : usage.data ? (
-          <div className="grid gap-5">
-            {MONTHLY.map((m) => {
-              const metric = usage.data!.metrics[m.key]
-              return metric ? <Meter key={m.key} label={m.label} unit={m.unit} used={metric.used} limit={metric.limit} /> : null
-            })}
-            {reset && (
-              <p className="text-small text-ink-3">
-                This month&rsquo;s counts reset on <time dateTime={reset.toISOString()}>{formatResetDay(reset)}</time> (00:00 UTC).
-              </p>
-            )}
-          </div>
-        ) : null}
       </div>
     </AccountSection>
   )
@@ -407,7 +346,7 @@ export function SyncSection() {
     <AccountSection
       id="sync"
       title="Sync"
-      description="While you're signed in, Kimochi keeps your sessions, notebook, presets and preferences in sync between your computers. Everything also stays on each computer."
+      description="With Kimochi Cloud, Kimochi keeps your sessions, notebook, presets and preferences in sync between your computers. Everything also stays on each computer."
     >
       {sync.loading && !data ? (
         <p className="text-small text-ink-3" role="status">

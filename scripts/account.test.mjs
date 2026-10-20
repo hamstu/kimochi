@@ -16,12 +16,13 @@ const {
   activeAccount,
   accountLines,
   accountBarName,
-  accountInitial
+  accountInitial,
+  planNote
 } = await load('account.ts')
 const { lastSyncLine, syncStateLine, normalizeSyncStatus, conflictTitle, logLine, logText, appendLog } =
   await load('sync.ts')
 
-test('automatic translation is Kimochi cloud while signed in, otherwise the DeepL key', () => {
+test('automatic translation is Kimochi cloud with Kimochi Cloud, otherwise the DeepL key', () => {
   assert.equal(translationRoute('auto', '', true), 'kimochi')
   assert.equal(translationRoute('auto', 'key:fx', true), 'kimochi')
   assert.equal(translationRoute('auto', 'key:fx', false), 'deepl')
@@ -116,6 +117,22 @@ test('anything unexpected from native reads as signed out', () => {
   assert.equal(status.signedIn, true)
   assert.deepEqual(status.accounts, [])
   assert.equal(status.server, null)
+})
+
+test('Kimochi Cloud shows only for a signed-in account that has it', () => {
+  assert.equal(normalizeStatus({ signedIn: true, cloud: true }).cloud, true)
+  assert.equal(normalizeStatus({ signedIn: true }).cloud, false, 'a free account')
+  assert.equal(normalizeStatus({ signedIn: false, cloud: true }).cloud, false, 'signed out')
+  assert.equal(normalizeStatus(null).cloud, false)
+})
+
+test('a trial or a cancelled plan says when it ends', () => {
+  const trial = { billing: { status: 'trialing', trialEnd: '2026-11-03T12:00:00Z', cancelAt: null } }
+  assert.equal(planNote(trial), 'Free until Nov 3.')
+  assert.equal(planNote({ billing: { ...trial.billing, cancelAt: '2026-11-03T12:00:00Z' } }), 'Trial ends Nov 3.')
+  assert.equal(planNote({ billing: { status: 'active', trialEnd: null, cancelAt: '2027-01-09T00:00:00Z' } }), 'Ends Jan 9.')
+  assert.equal(planNote({ billing: { status: 'active', trialEnd: null, cancelAt: null } }), null)
+  assert.equal(planNote(null), null)
 })
 
 test('the accounts on this computer are read strictly, and one is in use', () => {

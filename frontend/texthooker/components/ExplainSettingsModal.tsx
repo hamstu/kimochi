@@ -30,7 +30,7 @@ const CLAUDE_MODELS = [
 ];
 
 export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
-  const { signedIn } = useAccount();
+  const { cloud } = useAccount();
   const [promptDraft, setPromptDraft] = useState(settings.explainPrompt);
   const [codexModelDraft, setCodexModelDraft] = useState(
     settings.explainCodexModel,
@@ -67,20 +67,21 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
                 onValueChange={(v) =>
                   void updateSettings({ explainProvider: v as ExplainProvider })
                 }
+                // Kimochi cloud needs Kimochi Cloud; still listed while it is the choice.
                 options={[
                   { value: "kimochi", label: "Kimochi cloud" },
                   { value: "codex", label: "Codex CLI" },
                   { value: "claude", label: "Claude CLI" },
-                ]}
+                ].filter((o) => o.value !== "kimochi" || cloud || settings.explainProvider === "kimochi")}
               />
             </SettingsRow>
             {settings.explainProvider === "kimochi" ? (
               <SettingsRow
                 label="Kimochi cloud"
                 description={
-                  signedIn
-                    ? "Runs on Kimochi's server within your account's monthly explanations."
-                    : "Needs a Kimochi account: sign in from Settings → Account."
+                  cloud
+                    ? "Runs on Kimochi's server within your Kimochi Cloud monthly explanations."
+                    : "Needs Kimochi Cloud: see Settings → Account."
                 }
               />
             ) : settings.explainProvider === "claude" ? (

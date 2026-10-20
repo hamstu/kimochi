@@ -187,7 +187,7 @@ export function platformLabel(platform) {
 }
 
 /** @type {Record<string, string>} */
-const PLANS = { free: 'Free', plus: 'Plus', owner: 'Owner' }
+const PLANS = { free: 'Free', trial: 'Kimochi Cloud trial', cloud: 'Kimochi Cloud', owner: 'Owner' }
 
 /**
  * @param {string | null | undefined} plan

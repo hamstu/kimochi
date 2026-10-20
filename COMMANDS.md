@@ -814,6 +814,7 @@ on the other server cannot be switched to while it is set.
 ```ts
 AccountStatus = {
   signedIn,                               // the active account has a token here
+  cloud,                                  // ...and has Kimochi Cloud (trial, plan, lifetime, grant): its features show and Sync runs
   user?, usage?,                          // the active account's cached /me user and /usage answer
   linking?: {code, verifyUrl, expiresAt}, // a sign-in waiting for the browser (expiresAt: ms)
   server?: {mode, url, forced},           // the server in use; forced: KIMOCHI_SERVER (debug)
@@ -823,6 +824,11 @@ AccountStatus = {
   switching: boolean
 }
 ```
+
+`cloudAccess` in `platform_capabilities` is the same `cloud`. A free account sees no Kimochi cloud
+feature and does not sync; the server answers `403 plan_required` if asked anyway, which makes
+native re-read the user (as it also does every 30 minutes), so a plan bought or ended on the website
+shows without a restart.
 
 Events: `account-changed` (an `AccountStatus`, on every change) and `account-link` `{status,
 code, message?}` (`pending` | `approved` | `denied` | `expired` | `cancelled` | `error`). On

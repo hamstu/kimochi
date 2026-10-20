@@ -97,12 +97,12 @@ interface TranscriptProps {
 export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   const [snap, setSnap] = useState(getSnapshot);
   const [settings, setSettings] = useState(getSettings);
-  // Translate is offered when the chosen provider can be used: a DeepL key, or a Kimochi account.
-  const { signedIn } = useAccount();
+  // Translate is offered when the chosen provider can be used: a DeepL key, or Kimochi Cloud.
+  const { cloud } = useAccount();
   const translateEnabled = translationAvailable(
     settings.translationProvider,
     settings.deeplApiKey,
-    signedIn,
+    cloud,
   );
   const [error, setError] = useState("");
   useEffect(() => {

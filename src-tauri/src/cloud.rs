@@ -22,7 +22,7 @@ pub const NO_ACCOUNT_EXPLAIN: &str = "Explanations from Kimochi cloud need a Kim
 
 /// Whether Kimochi cloud is usable here (someone is signed in): all the frontend is told.
 pub fn access() -> bool {
-    account::token().is_some()
+    account::has_cloud()
 }
 
 /// Which service a failure belongs to, for its wording.
@@ -126,6 +126,9 @@ pub fn failure(feature: Feature, response: reqwest::blocking::Response) -> Strin
     let body = response.text().unwrap_or_default();
     if status == 401 {
         account::signed_out_remotely();
+    }
+    if account::is_plan_required(status, &body) {
+        account::plan_required();
     }
     format!("native: {}", describe_failure(feature, status, &body, true))
 }
@@ -271,6 +274,9 @@ pub async fn explain(
         let body = response.text().await.unwrap_or_default();
         if status == 401 {
             account::signed_out_remotely();
+        }
+        if account::is_plan_required(status, &body) {
+            account::plan_required();
         }
         if current() {
             emit("explain:error", describe_failure(Feature::Explain, status, &body, true));

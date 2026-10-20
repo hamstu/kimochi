@@ -26,26 +26,26 @@ const PROVIDERS: { value: TranslationProvider; label: string }[] = [
   { value: 'deepl', label: 'Your DeepL key' }
 ]
 
-function providerDescription(settings: Settings, signedIn: boolean): string {
-  const route = translationRoute(settings.translationProvider, settings.deeplApiKey, signedIn)
+function providerDescription(settings: Settings, cloud: boolean): string {
+  const route = translationRoute(settings.translationProvider, settings.deeplApiKey, cloud)
   switch (settings.translationProvider) {
     case 'kimochi':
-      return signedIn
-        ? 'Uses your Kimochi account’s monthly translations.'
-        : 'Needs a Kimochi account: sign in from Settings → Account.'
+      return cloud
+        ? 'Uses your Kimochi Cloud monthly translations.'
+        : 'Needs Kimochi Cloud: see Settings → Account.'
     case 'deepl':
       return route ? 'Uses your own DeepL API key.' : 'Add your DeepL API key below.'
     default:
       return route === 'kimochi'
-        ? 'Kimochi cloud while you’re signed in, otherwise your DeepL key. Now: Kimochi cloud.'
+        ? 'Kimochi cloud with Kimochi Cloud, otherwise your DeepL key. Now: Kimochi cloud.'
         : route === 'deepl'
-          ? 'Kimochi cloud while you’re signed in, otherwise your DeepL key. Now: your DeepL key.'
-          : 'Kimochi cloud while you’re signed in, otherwise your DeepL key. Neither is set up yet.'
+          ? 'Your DeepL key.'
+          : 'Add your DeepL API key below.'
   }
 }
 
 function AssistSections({ settings }: { settings: Settings }): ReactNode {
-  const { signedIn } = useAccount()
+  const { cloud } = useAccount()
   const [deeplDraft, setDeeplDraft] = useState(settings.deeplApiKey)
   const [explainOpen, setExplainOpen] = useState(false)
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the draft follows outside changes
@@ -54,9 +54,9 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
 
   const explainSummary =
     settings.explainProvider === 'kimochi'
-      ? signedIn
+      ? cloud
         ? 'Kimochi cloud'
-        : 'Kimochi cloud (sign in from Settings → Account)'
+        : 'Kimochi cloud (needs Kimochi Cloud, see Settings → Account)'
       : settings.explainProvider === 'claude'
         ? `Claude CLI · ${settings.explainClaudeModel}`
         : `Codex CLI${settings.explainCodexModel ? ` · ${settings.explainCodexModel}` : ''}`
@@ -64,18 +64,19 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
   return (
     <div className="texthooker">
       <SettingsSection title="Translation">
-        <SettingsRow label="Translate with" description={providerDescription(settings, signedIn)}>
+        <SettingsRow label="Translate with" description={providerDescription(settings, cloud)}>
           <Select
             aria-label="Translate with"
             value={provider}
             onValueChange={(value) =>
               void updateSettings({ translationProvider: value as TranslationProvider })
             }
-            options={PROVIDERS}
+            // Kimochi cloud is offered with Kimochi Cloud; still listed while it is the choice.
+            options={PROVIDERS.filter((p) => p.value !== 'kimochi' || cloud || provider === 'kimochi')}
           />
-          {provider === 'kimochi' && !signedIn && (
+          {provider === 'kimochi' && !cloud && (
             <Button size="sm" onClick={() => void openSettings('account')}>
-              Sign in…
+              Account…
             </Button>
           )}
         </SettingsRow>

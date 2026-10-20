@@ -271,13 +271,18 @@ pub fn install(app: &AppHandle) -> Result<(), String> {
     if let Some(entry) = active.as_deref().and_then(entry_for) {
         follow_server(&entry);
     }
-    // The cached user and usage can be a month old: refresh them quietly once the app is up.
-    if signed_in() {
-        std::thread::spawn(|| {
-            std::thread::sleep(Duration::from_secs(5));
-            let _ = refresh_blocking();
-        });
-    }
+    // The cached user and usage can be a month old: refresh them quietly once the app is up, and
+    // again every so often, so a plan bought, cancelled or ended on the website shows (or hides
+    // Kimochi Cloud) without a restart.
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_secs(5));
+        loop {
+            if signed_in() {
+                let _ = refresh_blocking();
+            }
+            std::thread::sleep(PLAN_REFRESH);
+        }
+    });
     Ok(())
 }
 
@@ -322,6 +327,21 @@ pub fn signed_in() -> bool {
     token().is_some()
 }
 
+/// Whether a cached user has Kimochi Cloud: the server's `cloud` flag, or for a user cached
+/// before it existed, a plan that includes it.
+pub fn user_has_cloud(user: &Value) -> bool {
+    match user.get("cloud").and_then(Value::as_bool) {
+        Some(cloud) => cloud,
+        None => matches!(user.get("plan").and_then(Value::as_str), Some("trial" | "cloud" | "owner" | "plus")),
+    }
+}
+
+/// Signed in to an account with Kimochi Cloud (trial, paid, lifetime or granted). Without it the
+/// metered services are hidden and Sync does not run; the server refuses both anyway.
+pub fn has_cloud() -> bool {
+    signed_in() && active_entry().is_some_and(|e| user_has_cloud(&e.user))
+}
+
 /// What Sync needs of the active account: its profile, server and token.
 pub struct SyncTarget {
     pub key: String,
@@ -333,6 +353,9 @@ pub struct SyncTarget {
 pub fn sync_target() -> Option<SyncTarget> {
     let entry = active_entry()?;
     let token = token()?;
+    if !user_has_cloud(&entry.user) {
+        return None;
+    }
     Some(SyncTarget {
         dir: profile::profile_dir(&account().ok()?.local_dir, Some(&entry.key)),
         base: entry.base().to_string(),
@@ -380,6 +403,8 @@ fn status_value() -> Value {
     let signed_in = active.is_some_and(|e| read_token(&account.data_dir, &e.key).is_some());
     json!({
         "signedIn": signed_in,
+        // Kimochi Cloud (a trial, a plan, lifetime or a grant): what shows its features.
+        "cloud": signed_in && active.is_some_and(|e| user_has_cloud(&e.user)),
         "user": active.map(|e| e.user.clone()),
         "usage": active.and_then(|e| e.usage.clone()),
         "linking": linking,
@@ -448,6 +473,9 @@ pub fn failure(feature: cloud::Feature, base: &str, response: reqwest::blocking:
     if status == 401 {
         signed_out_remotely_from(base);
     }
+    if is_plan_required(status, &body) {
+        plan_required();
+    }
     format!("native: {}", cloud::describe_failure(feature, status, &body, true))
 }
 
@@ -478,6 +506,29 @@ fn update_entry(key: &str, edit: impl FnOnce(&mut Entry)) -> Result<(), String> 
         edit(entry);
     }
     save_index(&account.data_dir, &index)
+}
+
+/// How often a signed-in account's user (and so its plan) is re-read.
+const PLAN_REFRESH: Duration = Duration::from_secs(30 * 60);
+
+/// The server refused a request for want of Kimochi Cloud (`plan_required`): the cached plan is
+/// out of date, so re-read it now; the features hide once it arrives.
+pub fn plan_required() {
+    let Some(account) = ACCOUNT.get() else { return };
+    if token().is_none() || account.usage_pending.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(|| {
+        let _ = refresh_blocking();
+        if let Some(account) = ACCOUNT.get() {
+            account.usage_pending.store(false, Ordering::SeqCst);
+        }
+    });
+}
+
+/// Whether a failed answer is the server's `plan_required`.
+pub fn is_plan_required(status: u16, body: &str) -> bool {
+    status == 403 && body.contains("\"plan_required\"")
 }
 
 /// Refresh the cached usage a moment after a metered call, at most one at a time.
@@ -522,8 +573,20 @@ fn refresh_blocking() -> Result<Value, String> {
     let token = token().ok_or("native: not signed in")?;
     let me = get_json(entry.base(), &token, "/api/v1/me")?;
     let user = me.get("user").cloned().unwrap_or(Value::Null);
+    let had_cloud = user_has_cloud(&entry.user);
+    let cloud = user_has_cloud(&user);
     update_entry(&entry.key, |e| e.user = user)?;
-    refresh_usage()?;
+    if cloud != had_cloud {
+        // Kimochi Cloud came or went: the windows show or hide its features, and Sync starts or stops.
+        sync::log("account", if cloud { "Kimochi Cloud is on for this account" } else { "Kimochi Cloud is off for this account" });
+        announce_capabilities();
+        sync::kick();
+    }
+    if cloud {
+        refresh_usage()?;
+    } else {
+        announce();
+    }
     Ok(status_value())
 }
 
@@ -1117,6 +1180,25 @@ pub fn account_link_open(app: AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cloud_comes_from_the_server_flag_or_an_older_plan() {
+        assert!(user_has_cloud(&json!({ "plan": "trial", "cloud": true })));
+        assert!(!user_has_cloud(&json!({ "plan": "free", "cloud": false })));
+        // The flag wins over the plan name, so new plans need no app update.
+        assert!(user_has_cloud(&json!({ "plan": "patron", "cloud": true })));
+        // Cached before the flag existed.
+        assert!(user_has_cloud(&json!({ "plan": "plus" })));
+        assert!(!user_has_cloud(&json!({ "plan": "free" })));
+        assert!(!user_has_cloud(&Value::Null));
+    }
+
+    #[test]
+    fn plan_required_is_a_403_with_that_code() {
+        assert!(is_plan_required(403, r#"{"error":"plan_required","message":"x"}"#));
+        assert!(!is_plan_required(403, r#"{"error":"forbidden"}"#));
+        assert!(!is_plan_required(402, r#"{"error":"plan_required"}"#));
+    }
 
     #[test]
     fn deep_links_name_the_account_page() {

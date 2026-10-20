@@ -36,9 +36,8 @@ export function OrDivider() {
 export function AccountPitch() {
   return (
     <p>
-      Accounts are optional: Kimochi works fully without one. Signing in adds Kimochi&rsquo;s cloud OCR,
-      read aloud, translation and explanations within free monthly allowances, and lets you back up your
-      preferences and sessions.
+      Accounts are optional: Kimochi works fully without one. An account is where Kimochi Cloud lives:
+      cloud OCR, read aloud, translation, AI explanations and Sync, with a 14-day free trial.
     </p>
   )
 }

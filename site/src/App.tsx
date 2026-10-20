@@ -12,6 +12,7 @@ import { AccountSignUp } from './pages/AccountSignUp'
 import { AccountForgot } from './pages/AccountForgot'
 import { AccountReset } from './pages/AccountReset'
 import { AccountVerify } from './pages/AccountVerify'
+import { AccountAdmin } from './pages/AccountAdmin'
 import { LinkApp } from './pages/LinkApp'
 import { SessionProvider } from './lib/session'
 
@@ -27,6 +28,7 @@ const TITLES: Record<string, string> = {
   '/account/forgot': 'Reset password · Kimochi',
   '/account/reset': 'Choose a new password · Kimochi',
   '/account/verify': 'Confirm email · Kimochi',
+  '/account/admin': 'Admin · Kimochi',
   '/link': 'Sign in to Kimochi · Kimochi'
 }
 
@@ -53,6 +55,7 @@ export function App() {
           <Route path="account/forgot" element={<AccountForgot />} />
           <Route path="account/reset" element={<AccountReset />} />
           <Route path="account/verify" element={<AccountVerify />} />
+          <Route path="account/admin" element={<AccountAdmin />} />
           <Route path="link" element={<LinkApp />} />
           <Route path="*" element={<NotFound />} />
         </Route>

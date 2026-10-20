@@ -86,13 +86,13 @@ export async function showTranslation(line: Line): Promise<void> {
   try {
     const settings = getSettings();
     const apiKey = settings.deeplApiKey.trim();
-    const { signedIn } = await loadAccount();
-    const route = translationRoute(settings.translationProvider, apiKey, signedIn);
+    const { cloud } = await loadAccount();
+    const route = translationRoute(settings.translationProvider, apiKey, cloud);
     if (!route)
       throw new Error(
         settings.translationProvider === "kimochi"
-          ? "Sign in from Settings → Account to translate with Kimochi cloud"
-          : "Set a DeepL API key or sign in to Kimochi in Settings",
+          ? "Translating with Kimochi cloud needs Kimochi Cloud (Settings → Account)"
+          : "Set a DeepL API key in Settings → Translation & AI",
       );
     const sessionId = getActiveSession().id;
     const translated =

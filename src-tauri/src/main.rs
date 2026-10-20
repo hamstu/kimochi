@@ -1949,15 +1949,17 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     {
         payload["ocrEngines"]["livetext"] = livetext::capability();
     }
-    // Kimochi cloud needs a signed-in Kimochi account. Only whether someone is signed in reaches
-    // the webviews, never the token.
+    // Kimochi cloud needs a signed-in Kimochi account with Kimochi Cloud (a trial, a plan or
+    // lifetime). Only whether it has it reaches the webviews, never the token.
     let cloud_access = cloud::access();
     payload["cloudAccess"] = json!(cloud_access);
     if !cloud_access {
-        payload["ocrEngines"]["cloud"] = json!({
-            "available": false,
-            "reason": "Sign in to a Kimochi account (Settings → Account) to use Kimochi cloud OCR."
-        });
+        let reason = if account::signed_in() {
+            "Kimochi cloud OCR is part of Kimochi Cloud. See Settings → Account to start a free trial."
+        } else {
+            "Sign in to a Kimochi account (Settings → Account) to use Kimochi cloud OCR."
+        };
+        payload["ocrEngines"]["cloud"] = json!({ "available": false, "reason": reason });
     }
     // An engine held back only by its models stays selectable: choosing it asks to download them.
     for engine in model_store::Engine::ALL {

@@ -24,6 +24,7 @@ import {
 import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
 import { deleteLine } from "@texthooker/lib/store";
 import { openExplain } from "@texthooker/lib/explain";
+import { getSettings } from "@texthooker/lib/settings";
 import { showOriginal, showTranslation } from "@texthooker/lib/translate";
 import type { Line } from "@texthooker/lib/types";
 
@@ -112,9 +113,12 @@ function LineMenuItems({
           Translate
         </MenuItem>
       ) : null}
-      <MenuItem icon={<Sparkles />} onSelect={() => openExplain(line)}>
-        Explain
-      </MenuItem>
+      {/* Explanations from Kimochi cloud need Kimochi Cloud; the CLI providers always work. */}
+      {(cloudAccess || getSettings().explainProvider !== "kimochi") && (
+        <MenuItem icon={<Sparkles />} onSelect={() => openExplain(line)}>
+          Explain
+        </MenuItem>
+      )}
       <MenuSeparator />
       <MenuItem
         icon={<Trash2 />}

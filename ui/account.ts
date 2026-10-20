@@ -5,7 +5,7 @@
  * (profile) is in use do.
  */
 
-export type Plan = 'free' | 'plus' | 'owner'
+export type Plan = 'free' | 'trial' | 'cloud' | 'owner' | 'plus'
 
 export interface AccountUser {
   id: string
@@ -14,6 +14,14 @@ export interface AccountUser {
   displayName: string | null
   avatarUrl?: string | null
   plan: Plan
+  /** Whether the account has Kimochi Cloud (absent in users cached before it existed). */
+  cloud?: boolean
+  billing?: {
+    source: 'subscription' | 'lifetime' | 'grant' | null
+    status: string | null
+    trialEnd: string | null
+    cancelAt: string | null
+  } | null
   status: 'active' | 'suspended'
 }
 
@@ -27,6 +35,11 @@ export interface Usage {
 
 export interface AccountStatus {
   signedIn: boolean
+  /**
+   * Signed in to an account with Kimochi Cloud: what shows cloud OCR, read aloud, Kimochi cloud
+   * translation and explanations, and Sync. A free account sees none of them.
+   */
+  cloud: boolean
   user?: AccountUser | null
   usage?: Usage | null
   /** A sign-in waiting for the browser: the code to show and where to confirm it. */
@@ -72,7 +85,7 @@ export interface LinkEvent {
   message?: string | null
 }
 
-export const SIGNED_OUT: AccountStatus = { signedIn: false, accounts: [], profile: null }
+export const SIGNED_OUT: AccountStatus = { signedIn: false, cloud: false, accounts: [], profile: null }
 
 /** Accept whatever native sent; anything unexpected reads as signed out. */
 export function normalizeStatus(raw: unknown): AccountStatus {
@@ -81,6 +94,7 @@ export function normalizeStatus(raw: unknown): AccountStatus {
   const profile = value.profile && typeof value.profile === 'object' ? value.profile : null
   return {
     signedIn: value.signedIn === true,
+    cloud: value.signedIn === true && value.cloud === true,
     user: value.user ?? null,
     usage: value.usage ?? null,
     linking: value.linking ?? null,
@@ -128,23 +142,23 @@ function normalizeServer(raw: unknown): AccountServer | null {
 
 // ---------------------------------------------------------------- translation
 
-/** Settings → Translation & AI: who translates a line. `auto` is Kimochi cloud when signed in. */
+/** Settings → Translation & AI: who translates a line. `auto` is Kimochi cloud when the account has it. */
 export type TranslationProvider = 'auto' | 'deepl' | 'kimochi'
 
 /** The service a translation goes to, or null when neither is usable. */
 export function translationRoute(
   provider: TranslationProvider | undefined,
   deeplKey: string,
-  signedIn: boolean
+  cloud: boolean
 ): 'deepl' | 'kimochi' | null {
   const hasKey = deeplKey.trim().length > 0
   switch (provider) {
     case 'deepl':
       return hasKey ? 'deepl' : null
     case 'kimochi':
-      return signedIn ? 'kimochi' : null
+      return cloud ? 'kimochi' : null
     default:
-      return signedIn ? 'kimochi' : hasKey ? 'deepl' : null
+      return cloud ? 'kimochi' : hasKey ? 'deepl' : null
   }
 }
 
@@ -152,8 +166,8 @@ export function translationRoute(
 export const translationAvailable = (
   provider: TranslationProvider | undefined,
   deeplKey: string,
-  signedIn: boolean
-): boolean => translationRoute(provider, deeplKey, signedIn) !== null
+  cloud: boolean
+): boolean => translationRoute(provider, deeplKey, cloud) !== null
 
 // ---------------------------------------------------------------- usage
 
@@ -165,7 +179,24 @@ const METRIC_LABELS: Record<UsageMetric, { label: string; unit: string }> = {
   storage: { label: 'Sync storage', unit: '' }
 }
 
-export const PLAN_LABELS: Record<Plan, string> = { free: 'Free', plus: 'Plus', owner: 'Owner' }
+export const PLAN_LABELS: Record<Plan, string> = {
+  free: 'Free',
+  trial: 'Kimochi Cloud trial',
+  cloud: 'Kimochi Cloud',
+  owner: 'Owner',
+  plus: 'Kimochi Cloud'
+}
+
+/** "Free until Nov 3" for a trial, "Ends Nov 3" for a cancelled plan, else null. */
+export function planNote(user: AccountUser | null | undefined): string | null {
+  const b = user?.billing
+  if (!b) return null
+  if (b.status === 'trialing' && b.trialEnd) {
+    return b.cancelAt ? `Trial ends ${shortDate(b.trialEnd)}.` : `Free until ${shortDate(b.trialEnd)}.`
+  }
+  if (b.cancelAt) return `Ends ${shortDate(b.cancelAt)}.`
+  return null
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 

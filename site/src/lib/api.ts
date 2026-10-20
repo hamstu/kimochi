@@ -6,7 +6,7 @@
  */
 import { messageForCode } from './account.js'
 
-export type Plan = 'free' | 'plus' | 'owner'
+export type Plan = 'free' | 'trial' | 'cloud' | 'owner'
 export type Provider = 'google' | 'discord'
 
 export interface User {
@@ -16,11 +16,30 @@ export interface User {
   displayName: string | null
   avatarUrl: string | null
   plan: Plan
+  /** Whether the account has Kimochi Cloud (trial, paid, lifetime, or granted). */
+  cloud: boolean
+  billing: Billing
   status: 'active' | 'suspended'
   hasPassword: boolean
   providers: Provider[]
   createdAt: string
 }
+
+/** Where Kimochi Cloud comes from, and what happens next (all dates ISO). */
+export interface Billing {
+  source: 'subscription' | 'lifetime' | 'grant' | null
+  /** Stripe's subscription status: trialing, active, past_due, canceled… */
+  status: string | null
+  interval: 'month' | 'year' | null
+  trialEnd: string | null
+  periodEnd: string | null
+  /** When a cancelled subscription ends. */
+  cancelAt: string | null
+  hasCustomer: boolean
+  trialAvailable: boolean
+}
+
+export type Choice = 'monthly' | 'yearly' | 'lifetime'
 
 export type MetricName = 'ocr' | 'translate' | 'tts' | 'explain' | 'storage'
 
@@ -32,6 +51,7 @@ export interface Metric {
 
 export interface Usage {
   plan: Plan
+  cloud: boolean
   period: { start: string; end: string }
   metrics: Record<MetricName, Metric>
 }
@@ -72,6 +92,22 @@ export interface LinkRequest {
   createdAt: string
   status: LinkStatus
 }
+
+export interface AdminOverview {
+  plans: Partial<Record<Plan, number>>
+  subscriptions: { interval: string | null; status: string; count: number }[]
+  lifetime: number
+  recent: { email: string | null; status: string; interval: string | null; updatedAt: string }[]
+}
+
+export interface AdminLimits {
+  plans: Plan[]
+  metrics: MetricName[]
+  limits: Record<Plan, Record<MetricName, number | null>>
+  defaults: Record<Plan, Record<MetricName, number | null>>
+}
+
+export type AdminUser = User & { grant: 'cloud' | 'owner' | null }
 
 export class ApiError extends Error {
   readonly status: number
@@ -162,6 +198,22 @@ export const api = {
   sync: () => request<SyncSummary>('GET', '/api/account/sync'),
   deleteSync: () => request<void>('DELETE', '/api/account/sync'),
   usage: () => request<Usage>('GET', '/api/v1/usage'),
+
+  // Kimochi Cloud billing (Stripe Checkout and the Customer Portal)
+  checkout: (plan: Choice, returnTo: 'home' | 'account') =>
+    request<{ url: string }>('POST', '/api/billing/checkout', { plan, returnTo }).then((r) => r.url),
+  billingPortal: () => request<{ url: string }>('POST', '/api/billing/portal').then((r) => r.url),
+  billingRefresh: () => request<{ user: User }>('POST', '/api/billing/refresh').then((r) => r.user),
+
+  // Owner only
+  adminOverview: () => request<AdminOverview>('GET', '/api/admin/overview'),
+  adminLimits: () => request<AdminLimits>('GET', '/api/admin/limits'),
+  adminSetLimits: (limits: Partial<Record<Plan, Partial<Record<MetricName, number | null>>>>) =>
+    request<{ limits: AdminLimits['limits'] }>('PUT', '/api/admin/limits', { limits }).then((r) => r.limits),
+  adminUser: (email: string) =>
+    request<{ user: AdminUser; usage: Usage }>('GET', `/api/admin/users?email=${enc(email)}`),
+  adminSetUser: (b: { email: string; grant?: 'cloud' | 'owner' | null; status?: 'active' | 'suspended' }) =>
+    request<{ user: AdminUser }>('POST', '/api/admin/users/plan', b).then((r) => r.user),
 
   // Linking the app
   linkRequest: (code: string) => request<LinkRequest>('GET', `/api/link/${enc(code)}`),

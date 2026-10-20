@@ -41,7 +41,7 @@ function usage(full: boolean): Usage {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
   return {
-    plan: 'free',
+    plan: 'cloud',
     period: { start: start.toISOString(), end: end.toISOString() },
     metrics: {
       ocr: { used: full ? 500 : 132, limit: 500 },
@@ -65,7 +65,13 @@ const USER: AccountUser = {
   displayName:
     params.get('name') === '0' ? null : params.get('name') === 'long' ? 'Hamish Macpherson-Featherstonehaugh' : 'Hamish',
   avatarUrl: params.get('avatar') === '1' ? PREVIEW_AVATAR : null,
-  plan: 'free',
+  // `&plan=free` previews an account without Kimochi Cloud, `&plan=trial` one on its trial.
+  plan: params.get('plan') === 'free' ? 'free' : params.get('plan') === 'trial' ? 'trial' : 'cloud',
+  cloud: params.get('plan') !== 'free',
+  billing:
+    params.get('plan') === 'trial'
+      ? { source: 'subscription', status: 'trialing', trialEnd: new Date(Date.now() + 10 * 86_400_000).toISOString(), cancelAt: null }
+      : null,
   status: seed === 'suspended' ? 'suspended' : 'active'
 }
 const OTHER: AccountUser = {
@@ -74,7 +80,8 @@ const OTHER: AccountUser = {
   emailVerified: true,
   displayName: null,
   avatarUrl: null,
-  plan: 'free',
+  plan: 'cloud',
+  cloud: true,
   status: 'active'
 }
 
@@ -110,6 +117,7 @@ function status(): AccountStatus {
   const active = accounts.find((a) => a.active) ?? null
   return {
     signedIn: Boolean(active?.signedIn),
+    cloud: Boolean(active?.signedIn) && active?.user?.cloud !== false,
     user: active?.user ?? null,
     usage: active ? usage(seed === 'full') : null,
     linking,

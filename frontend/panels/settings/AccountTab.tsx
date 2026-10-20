@@ -29,6 +29,7 @@ import {
   activeAccount,
   formatBytes,
   PLAN_LABELS,
+  planNote,
   resetLine,
   usageRows,
   type AccountStatus,
@@ -166,7 +167,7 @@ function SignedOut(): ReactNode {
     <SettingsSection title="Kimochi account">
       <SettingsRow
         label="Kimochi cloud"
-        description="Signing in unlocks cloud OCR, read aloud, translation and explanations within free monthly allowances, and keeps your sessions, notebook and preferences in sync across your computers."
+        description="An account is where Kimochi Cloud lives: cloud OCR, read aloud, translation, AI explanations, and your sessions, notebook and preferences in sync across your computers. Try it free for 14 days."
       >
         <Button variant="primary" size="sm" disabled={busy} onClick={start}>
           Sign in or create an account
@@ -372,7 +373,8 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
   const [error, setError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const rows = usageRows(account.usage)
-  const plan = account.usage?.plan ?? user?.plan
+  const plan = user?.plan ?? account.usage?.plan
+  const note = planNote(user)
   const refresh = (): void => {
     setRefreshing(true)
     setError('')
@@ -385,8 +387,10 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
       <SettingsSection title="Kimochi account">
         <SettingsRow
           label={accountName(user)}
-          badge={plan ? <Badge tone={plan === 'free' ? 'neutral' : 'accent'}>{PLAN_LABELS[plan]}</Badge> : undefined}
-          description={user?.displayName && user.email ? user.email : 'Signed in on this computer.'}
+          badge={plan ? <Badge tone={account.cloud ? 'accent' : 'neutral'}>{PLAN_LABELS[plan] ?? plan}</Badge> : undefined}
+          description={[user?.displayName && user.email ? user.email : 'Signed in on this computer.', note]
+            .filter(Boolean)
+            .join(' ')}
         >
           <Button size="sm" onClick={() => void accountOpenWeb().catch((caught: unknown) => setError(message(caught)))}>
             <ExternalLink />
@@ -402,35 +406,56 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
         {error && <Callout tone="danger">{error}</Callout>}
       </SettingsSection>
 
-      <SettingsSection
-        title="This month"
-        description={resetLine(account.usage) ?? 'Your allowances appear here once Kimochi cloud answers.'}
-        actions={
-          <Button size="sm" variant="ghost" disabled={refreshing} onClick={refresh}>
-            <RefreshCw />
-            Refresh
-          </Button>
-        }
-      >
-        {rows.length > 0 ? (
-          rows.map((row) => (
-            <SettingsRow
-              key={row.metric}
-              label={row.label}
-              description={
-                <>
-                  <span className="k-num">{row.amount}</span>
-                  <Meter row={row} />
-                </>
-              }
-            />
-          ))
-        ) : (
-          <SettingsRow label="Usage" description="Not loaded yet. Refresh to try again." />
-        )}
-      </SettingsSection>
+      {/* Without Kimochi Cloud there is no usage to show and nothing syncs: one row says where to get it. */}
+      {account.cloud ? (
+        <>
+          <SettingsSection
+            title="This month"
+            description={resetLine(account.usage) ?? 'Your allowances appear here once Kimochi cloud answers.'}
+            actions={
+              <Button size="sm" variant="ghost" disabled={refreshing} onClick={refresh}>
+                <RefreshCw />
+                Refresh
+              </Button>
+            }
+          >
+            {rows.length > 0 ? (
+              rows.map((row) => (
+                <SettingsRow
+                  key={row.metric}
+                  label={row.label}
+                  description={
+                    <>
+                      <span className="k-num">{row.amount}</span>
+                      <Meter row={row} />
+                    </>
+                  }
+                />
+              ))
+            ) : (
+              <SettingsRow label="Usage" description="Not loaded yet. Refresh to try again." />
+            )}
+          </SettingsSection>
 
-      <SyncSection />
+          <SyncSection />
+        </>
+      ) : (
+        <SettingsSection title="Kimochi Cloud">
+          <SettingsRow
+            label="Not on this account"
+            description="Kimochi Cloud adds cloud OCR, read aloud, translation, AI explanations and Sync. Start a 14-day free trial on the website; Kimochi picks it up within a few minutes, or press Refresh."
+          >
+            <Button size="sm" variant="primary" onClick={() => void accountOpenWeb().catch((caught: unknown) => setError(message(caught)))}>
+              <ExternalLink />
+              See plans
+            </Button>
+            <Button size="sm" variant="ghost" disabled={refreshing} onClick={refresh}>
+              <RefreshCw />
+              Refresh
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
+      )}
 
       <SettingsSection>
         <SettingsRow
