@@ -16,8 +16,9 @@ const FREE = [
 /** What an account's paid plan adds: the parts that cost money to run. */
 const CLOUD = [
   'Translation of any line, right in the app',
+  'On-demand AI Explanations ✨',
   'Read aloud in high-quality ElevenLabs voices',
-  'Cloud OCR for the hardest text',
+  'Cloud OCR with Google Vision',
   'Sync of your logs and notebook across devices'
 ]
 
