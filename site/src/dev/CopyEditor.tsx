@@ -26,6 +26,7 @@ interface Change {
 const STORE = 'kimochi-site-copy-edits'
 const ON = 'kimochi-site-copy-editing'
 const ATTR = 'data-copy-edit'
+const MARKS = 'kimochi-site-copy-marks'
 
 /** Blocks whose own text is copy. The outermost one with text of its own is the editable unit. */
 const BLOCKS =
@@ -102,6 +103,12 @@ function CopyEditor() {
   const [open, setOpen] = useState(false)
   const [changes, setChanges] = useState<Change[]>(() => load(STORE, []))
   const [copied, setCopied] = useState(false)
+  // The yellow on changed text; off to see the page as it will look.
+  const [marks, setMarks] = useState(() => load(MARKS, true))
+  useEffect(() => {
+    save(MARKS, marks)
+    document.documentElement.toggleAttribute('data-copy-marks-off', !marks)
+  }, [marks])
   const originals = useRef(new WeakMap<HTMLElement, string>())
   const [path, setPath] = useState(location.pathname)
 
@@ -252,6 +259,10 @@ function CopyEditor() {
             <span className="font-semibold">Copy editor</span>
             <span className="text-ink-3">dev only</span>
             <label className="ml-auto flex cursor-pointer items-center gap-2 text-ink-2">
+              Highlight
+              <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} className="accent-[var(--k-accent)]" />
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-ink-2">
               Editing
               <input type="checkbox" checked={editing} onChange={(e) => setEditing(e.target.checked)} className="accent-[var(--k-accent)]" />
             </label>
@@ -325,7 +336,7 @@ const STYLE = `
 [${ATTR}] { outline: 1px dashed transparent; outline-offset: 3px; border-radius: 2px; cursor: text; transition: outline-color 100ms; }
 [${ATTR}]:hover { outline-color: color-mix(in oklab, var(--k-accent) 55%, transparent); }
 [${ATTR}]:focus { outline: 2px solid var(--k-accent); }
-[data-copy-changed] { background: color-mix(in oklab, #f2c45f 22%, transparent); }
+html:not([data-copy-marks-off]) [data-copy-changed] { background: color-mix(in oklab, #f2c45f 22%, transparent); }
 `
 
 /** Mounts the editor in its own root, outside the site's React tree. */
