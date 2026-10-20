@@ -3,6 +3,7 @@
  * main window (`frontend/main/MainPanel.tsx`) composes these with its sidebar and the Notebook.
  */
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -27,6 +28,7 @@ import {
 } from "@kit";
 import "./log.css";
 import { LineRow } from "./components/LineRow";
+import { dayLabel, dayStarts } from "./lib/logDays";
 import { ExplainModal } from "./components/ExplainModal";
 import { AddToNotebookModal } from "./components/AddToNotebookModal";
 import { StatsFooter } from "./components/StatsFooter";
@@ -168,6 +170,10 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
     retrying: "warn",
     invalid: "danger",
   };
+  const shownLines = snap.lines.slice(-shown);
+  // A divider above each day's first line, once the session spans more than one day.
+  const newDays = dayStarts(snap.lines, shownLines);
+
   return (
     <div className="texthooker app-root log-root" hidden={!visible}>
       {inputStatus && (
@@ -248,12 +254,15 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
               lang="ja"
               style={{ fontSize: settings.fontSizePx }}
             >
-              {snap.lines.slice(-shown).map((line) => (
-                <LineRow
-                  key={`${snap.sessions.activeId}:${line.id}`}
-                  line={line}
-                  translateEnabled={translateEnabled}
-                />
+              {shownLines.map((line, i) => (
+                <Fragment key={`${snap.sessions.activeId}:${line.id}`}>
+                  {newDays.has(i) && (
+                    <div className="log-day" role="separator" aria-label={dayLabel(line.ts)}>
+                      <span>{dayLabel(line.ts)}</span>
+                    </div>
+                  )}
+                  <LineRow line={line} translateEnabled={translateEnabled} />
+                </Fragment>
               ))}
             </div>
           </LineContextMenu>

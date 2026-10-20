@@ -174,10 +174,14 @@
 }
 
 /* A transcript line is a full-bleed row (the remote's grammar): hover lifts the whole row,
-   hairlines are inset to the text column, and the actions trigger sits at the row's end. */
+   hairlines are inset to the time column, and the actions trigger sits at the row's end. The
+   gutter on the left holds the line's time. */
+.log-lines {
+  --line-gutter: 3.25rem;
+}
 .log-lines .line {
   position: relative;
-  padding: 0.3em calc(var(--k-control-h-sm) + var(--k-space-5)) 0.3em var(--k-space-4);
+  padding: 0.3em calc(var(--k-control-h-sm) + var(--k-space-5)) 0.3em var(--line-gutter);
   overflow-wrap: anywhere;
   transition: background-color var(--k-fast);
 }
@@ -185,7 +189,7 @@
   content: "";
   position: absolute;
   top: 0;
-  left: var(--k-space-4);
+  left: var(--k-space-3);
   right: var(--k-space-4);
   height: 1px;
   background: var(--k-line);
@@ -206,6 +210,106 @@
 }
 body.scan-mode .log-lines .line:hover {
   background: transparent;
+}
+
+/* The line's time, centred on its first text line at any transcript size (like the actions
+   slot). The text is the pseudo-element's, so selecting, copying and dictionary lookups never
+   pick it up. Hover shows the full date (LineRow.tsx). */
+.line-time {
+  position: absolute;
+  top: 0.3em;
+  left: var(--k-space-3);
+  display: flex;
+  align-items: center;
+  height: 1.85em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.line-translated .line-time {
+  height: 1.7em;
+}
+.line-time::before {
+  content: attr(data-time);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  font-feature-settings: "tnum";
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--k-text-3);
+  transition: color var(--k-fast);
+}
+.log-lines .line:hover .line-time::before,
+.log-lines .line[data-menu-open] .line-time::before {
+  color: var(--k-text-2);
+}
+
+/* The accent rail at the window's edge: it slides in while a row is hovered or its menu is open.
+   Drawn over the row, not a border, so the text never moves. */
+.line-rail {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 2px;
+  background: var(--k-accent);
+  opacity: 0;
+  transform: translateX(-100%) scaleY(0.4);
+  transition:
+    transform var(--k-base) var(--k-ease-out),
+    opacity var(--k-base) var(--k-ease-out);
+  pointer-events: none;
+}
+.log-lines .line:hover > .line-rail,
+.log-lines .line[data-menu-open] > .line-rail,
+.log-lines .line:has(.line-actions-trigger[data-state="open"]) > .line-rail {
+  opacity: 1;
+  transform: none;
+}
+body.scan-mode .log-lines .line:hover > .line-rail {
+  opacity: 0;
+  transform: translateX(-100%) scaleY(0.4);
+}
+@media (prefers-reduced-motion: reduce) {
+  .line-rail {
+    transform: none;
+    transition: opacity var(--k-fast);
+  }
+}
+
+/* Mini mode keeps every pixel for the text: no time column. */
+html[data-mini] .log-lines {
+  --line-gutter: var(--k-space-4);
+}
+html[data-mini] .line-time {
+  display: none;
+}
+
+/* A day divider, once the session's lines span more than one day (lib/logDays.ts): the date on
+   a hairline, with room above and below. */
+.log-day {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+  padding: var(--k-space-5) var(--k-space-4) var(--k-space-2) var(--k-space-3);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  font-feature-settings: normal;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: var(--k-text-3);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.log-day:first-child {
+  padding-top: var(--k-space-2);
+}
+.log-day::before,
+.log-day::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--k-line);
 }
 
 /* Actions slot: the height of the row's first text line, so the trigger centres on it at any

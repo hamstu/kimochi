@@ -1,4 +1,5 @@
 import { memo, useMemo, useSyncExternalStore } from "react";
+import { Tooltip } from "@kit";
 import { NotebookMatchChip } from "./NotebookMatchChip";
 import { LineActionsMenu } from "./LineActionsMenu";
 import { getMatcher, matchLine, type Match } from "@texthooker/lib/nameMatch";
@@ -9,6 +10,7 @@ import {
   subscribeTranslateStatus,
 } from "@texthooker/lib/translate";
 import type { Line } from "@texthooker/lib/types";
+import { lineDate, lineTime } from "@texthooker/lib/logDays";
 
 interface Props {
   line: Line;
@@ -37,6 +39,28 @@ function buildRenderPieces(line: Line, matches: Match[]): RenderPiece[] {
   }
   if (i < text.length) pieces.push({ kind: "plain", start: i, end: text.length });
   return pieces;
+}
+
+/**
+ * The row's gutter: its time, with the full date on hover, and the accent rail that slides in
+ * while the row is hovered or its menu is open. CSS draws the time from `data-time`, so it is
+ * never selected, copied or looked up with the line's text.
+ */
+function LineGutter({ ts }: { ts: number }) {
+  return (
+    <>
+      <span className="line-rail" aria-hidden />
+      {ts ? (
+        <Tooltip content={lineDate(ts)} delayDuration={300}>
+          <time
+            className="line-time"
+            dateTime={new Date(ts).toISOString()}
+            data-time={lineTime(ts)}
+          />
+        </Tooltip>
+      ) : null}
+    </>
+  );
 }
 
 function LineRowInner({ line, translateEnabled }: Props) {
@@ -77,6 +101,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
         data-line-id={line.id}
         data-line-text={line.text}
       >
+        <LineGutter ts={line.ts} />
         <span className="line-pending">{line.text}</span>
         <span className="line-note line-pending" role="status">
           translating…
@@ -104,6 +129,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
         data-line-id={line.id}
         data-line-text={line.translation}
       >
+        <LineGutter ts={line.ts} />
         <span>{line.translation}</span>
         <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
@@ -119,6 +145,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
         data-line-id={line.id}
         data-line-text={line.text}
       >
+        <LineGutter ts={line.ts} />
         <span>{line.text}</span>
         {translateNote}
         <LineActionsMenu line={line} translateEnabled={translateEnabled} />
@@ -132,9 +159,10 @@ function LineRowInner({ line, translateEnabled }: Props) {
     <div
       className="line"
       {...groupProps}
-        data-line-id={line.id}
+      data-line-id={line.id}
       data-line-text={line.text}
     >
+      <LineGutter ts={line.ts} />
       {pieces.map((piece, i) => {
         if (piece.kind === "match" && piece.match) {
           return (
