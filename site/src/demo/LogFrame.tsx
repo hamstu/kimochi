@@ -13,6 +13,8 @@ export type LogMessage =
   | { type: 'sources'; open: string[] }
   /** Play one of the app's sounds (by name) in the Log's page, which has them. */
   | { type: 'sound'; name: string }
+  /** Silence every sound in the Log's page (the demo is out of sight), or bring them back. */
+  | { type: 'muted'; value: boolean }
 
 /** A title-bar drag inside the Log, in screen coordinates (the harness's `embedDrag`). */
 export interface LogDrag {

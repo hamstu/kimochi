@@ -186,6 +186,10 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   const [userCursor, setUserCursor] = useState<number | null>(null)
   const frames = deck ? DECK_FRAMES : DESKTOP_FRAMES
   const postRef = useRef<PostToLog | null>(null)
+  // No sound from a demo the visitor cannot see: scrolled away, or another tab.
+  useEffect(() => {
+    postRef.current?.({ type: 'muted', value: !onScreen })
+  }, [onScreen, logReady])
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
   const onEnter = useCallback((frame: Frame) => {

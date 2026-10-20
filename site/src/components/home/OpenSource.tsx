@@ -63,7 +63,7 @@ export function OpenSource() {
           <span className="text-[2.5rem] leading-none font-semibold tracking-[-0.02em] text-ink tnum">$5</span>
           <span className="text-small text-ink-3">a month</span>
         </p>
-        <p className="mt-3 text-body text-ink-2">A few extras that cost money to run, with a Kimochi account.</p>
+        <p className="mt-3 text-body text-ink-2">Support the cause, and get some cool features.</p>
         <ul className="mt-6 flex flex-col gap-2.5">
           <li className="flex gap-2.5 text-body text-ink-2">
             <Check size={18} className="mt-0.5 shrink-0 text-ok" aria-hidden />

@@ -878,6 +878,7 @@ type EmbedMessage =
   | { kimochiDemo: 1; type: 'sidebar'; value: boolean }
   | { kimochiDemo: 1; type: 'sources'; open: string[] }
   | { kimochiDemo: 1; type: 'sound'; name: string }
+  | { kimochiDemo: 1; type: 'muted'; value: boolean }
 
 let embedScan = 0
 
@@ -887,6 +888,19 @@ let embedScan = 0
  * clicks on its own desktop. The `soundEffects` setting applies, as in the app.
  */
 const embedSound = createSoundPlayer({ enabled: () => settings.soundEffects })
+
+/**
+ * Muted while the demo is out of sight (`muted` from the parent): every sound this page would play,
+ * the app's own click sounds included, is skipped at `play()` rather than per caller, so a sound
+ * added later is muted too.
+ */
+let embedMuted = false
+function muteMedia(): void {
+  const play = HTMLMediaElement.prototype.play
+  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+    return embedMuted ? Promise.resolve() : play.call(this)
+  }
+}
 
 /**
  * Embedded, a title-bar drag (`panel_drag`) is the embedding page's to perform: it moves the
@@ -979,6 +993,8 @@ function listenToEmbedder(): void {
       publish('mainSidebarOpen', message.value)
     } else if (message.type === 'sources') {
       setOpenWindows(message.open)
+    } else if (message.type === 'muted') {
+      embedMuted = message.value
     } else if (message.type === 'sound') {
       if ((SOUND_NAMES as readonly string[]).includes(message.name)) embedSound(message.name as SoundName)
     }
@@ -1176,6 +1192,7 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   const embed = params.get('embed') === '1'
   if (embed) {
     listenToEmbedder()
+    muteMedia()
     installDemoStops()
     quietWebSockets()
     // Keep on top means nothing on a page.
