@@ -242,6 +242,15 @@
   margin: calc(var(--k-space-2) * -1) 0 calc(var(--k-space-5) * -1);
 }
 
+/* ------------------------------------------------------------------ dictionaries already set up */
+.dictionaries {
+  display: grid;
+  gap: var(--k-space-1);
+  margin: 0;
+  padding-left: var(--k-space-5);
+  color: var(--k-text-2);
+}
+
 /* ------------------------------------------------------------------ dictionary settings */
 .embedded {
   display: flex;

@@ -26,6 +26,8 @@ type Job = {
   progress?: { index?: number; count?: number }
 }
 type CatalogItem = { id: string; title: string; description: string }
+/** An installed dictionary, and whether the current profile looks words up with it. */
+type Installed = { title: string; importSuccess?: boolean; enabled?: boolean }
 
 async function request<T>(params: object): Promise<T> {
   const host = (
@@ -137,10 +139,19 @@ function YomitanSetup(): JSX.Element {
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
+  // What is installed already (null while it is asked): someone going through the guide again,
+  // or who imported before reaching this step, is not offered a dictionary they do not need.
+  const [installed, setInstalled] = useState<Installed[] | null>(null)
   useEffect(() => {
-    void request<{ catalog: CatalogItem[] }>({ command: 'catalog' })
-      .then((result) => setCatalog(result.catalog))
-      .catch((caught) => setError(String(caught)))
+    void request<{ catalog: CatalogItem[]; dictionaries?: Installed[] }>({ command: 'catalog' })
+      .then((result) => {
+        setCatalog(result.catalog)
+        setInstalled((result.dictionaries ?? []).filter((item) => item.importSuccess !== false))
+      })
+      .catch((caught) => {
+        setError(String(caught))
+        setInstalled([])
+      })
   }, [])
   const [starting, setStarting] = useState(false)
   useEffect(() => {
@@ -177,17 +188,51 @@ function YomitanSetup(): JSX.Element {
   }
   const busy = starting || (job !== null && !['complete', 'failed'].includes(job.stage))
   const done = job?.stage === 'complete'
+  const ready = installed?.filter((item) => item.enabled) ?? []
+  // Offered only once the check is back and found nothing to look words up with (or a setup
+  // started here is under way or finished, to keep its progress in place).
+  const offer = installed !== null && (ready.length === 0 || job !== null)
   // One recommended dictionary (Jitendex): its setup is the step's main action, in the bar.
-  const only = catalog.length === 1 ? catalog[0] : null
+  const only = offer && catalog.length === 1 ? catalog[0] : null
   const offerInBar = only !== null && !busy && !done
   const line = job ? jobLine(job) : null
   const count = job?.progress?.count ?? 0
   return (
     <Step
-      title="Add a dictionary"
-      lede="Built-in Yomitan is downloaded and runs inside Kimochi, so there is no browser extension to install. It needs at least one dictionary to look words up: set one up here, or import the dictionaries and settings you exported from Yomitan in your browser."
+      title={offer || installed === null ? 'Add a dictionary' : 'Your dictionaries are ready'}
+      lede={
+        offer || installed === null
+          ? 'Built-in Yomitan is downloaded and runs inside Kimochi, so there is no browser extension to install. It needs at least one dictionary to look words up: set one up here, or import the dictionaries and settings you exported from Yomitan in your browser.'
+          : 'Built-in Yomitan already has dictionaries to look words up with, so there is nothing to set up. You can add or change them any time in Settings → Dictionary.'
+      }
     >
-      {catalog.map((item) => (
+      {installed === null && !error && (
+        <p className="k-description" role="status">
+          Checking your dictionaries…
+        </p>
+      )}
+      {!offer && ready.length > 0 && (
+        <div className={style.block}>
+          <p className={style.status}>
+            <StatusDot tone="ok" />
+            {ready.length === 1 ? '1 dictionary is' : `${ready.length} dictionaries are`} enabled in
+            your current profile.
+          </p>
+          <ul className={style.dictionaries}>
+            {ready.map((item) => (
+              <li key={item.title}>{item.title}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {offer && ready.length === 0 && (installed?.length ?? 0) > 0 && (
+        <Callout tone="warn">
+          {installed?.length === 1 ? 'A dictionary is' : `${installed?.length} dictionaries are`}{' '}
+          installed, but none is enabled in your current profile. Enable one in dictionary settings,
+          or set one up here.
+        </Callout>
+      )}
+      {(offer ? catalog : []).map((item) => (
         <div key={item.id} className={style.block}>
           <p className={style.text}>
             <strong>{item.title}</strong> · {item.description}
@@ -224,7 +269,7 @@ function YomitanSetup(): JSX.Element {
       )}
       {(error || job?.error) && <Callout tone="danger">{error || job?.error}</Callout>}
       <p className={style.aside}>
-        Already have dictionaries or a Yomitan settings backup?{' '}
+        {offer ? 'Already have dictionaries or a Yomitan settings backup?' : 'Want more?'}{' '}
         <Link to="/dictionary-settings" className={style.link}>
           Import or manage dictionaries
         </Link>

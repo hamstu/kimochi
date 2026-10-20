@@ -62,8 +62,9 @@
  *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
  *                    official, unknown, kimochi, broken, host, ready, fail; for the wizard in
  *                    onboarding and in Settings → Dictionary (?tab=dictionary&popup=custom-api)
- *   ?dict=fail|none  Jitendex quick setup fails while importing, or Yomitan's backend is not
- *                    reachable (default: Set up Jitendex runs through every stage in about 6 s)
+ *   ?dict=fail|none|installed  Jitendex quick setup fails while importing, or Yomitan's backend is not
+ *                    reachable, or dictionaries are set up already (default: Set up Jitendex
+ *                    runs through every stage in about 6 s)
  *   ?embed=1         embedded in the marketing site's live demo (vite.demo.config.ts builds this page
  *                    into site/public/demo/): the lines the site's game plays are left out of the
  *                    seeded log, the page never moves focus until clicked and never scrolls its
@@ -1130,6 +1131,8 @@ const WELCOME_ROUTES: Record<string, string> = {
 function installDictionarySetup(): void {
   if (params.get('dict') === 'none') return
   const fail = params.get('dict') === 'fail'
+  // `?dict=installed`: dictionaries already set up, as on a second run through the guide.
+  const installed = params.get('dict') === 'installed'
   let started = 0
   const job = (): Record<string, unknown> => {
     const t = Date.now() - started
@@ -1156,7 +1159,13 @@ function installDictionarySetup(): void {
                   'Japanese–English definitions. Downloads on demand; nothing is installed without your choice.'
               }
             ],
-            dictionaries: []
+            dictionaries: installed
+              ? [
+                  { title: 'Jitendex.org [2026-10-01]', importSuccess: true, enabled: true },
+                  { title: 'JMnedict [2026-09-14]', importSuccess: true, enabled: true },
+                  { title: 'KANJIDIC [2026-09-14]', importSuccess: true, enabled: false }
+                ]
+              : []
           }
         case 'start':
           started = Date.now()

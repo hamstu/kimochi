@@ -136,8 +136,25 @@ export function createDictionarySetup({
           matches: result.dictionaryEntries?.length ?? 0,
         };
       }
-      if (command === "catalog")
-        return { catalog, dictionaries: await api("getDictionaryInfo") };
+      if (command === "catalog") {
+        // What is installed, and which of it the current profile looks words up with, so the
+        // guide offers a dictionary only to someone who has none ready.
+        const dictionaries = await api("getDictionaryInfo");
+        const options = await api("optionsGetFull");
+        const profile = options?.profiles?.[options.profileCurrent]?.options;
+        const enabled = new Set(
+          (profile?.dictionaries ?? [])
+            .filter((item) => item.enabled)
+            .map((item) => item.name),
+        );
+        return {
+          catalog,
+          dictionaries: dictionaries.map((item) => ({
+            ...item,
+            enabled: enabled.has(item.title),
+          })),
+        };
+      }
       if (command === "status") {
         const job = jobs.get(id);
         if (!job) throw Error("Unknown dictionary setup job");

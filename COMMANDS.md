@@ -1272,6 +1272,8 @@ invalidate old scan geometry and in-flight frontend OCR. OCR engine remains glob
 
 The overlay's one Yomitan backend serves app-owned `__setupDictionaries` relay
 requests: `catalog`, `start({dictionaryId})`, `status({id})`, and `practice`.
+`catalog` returns the recommended dictionaries and the installed ones, each marked `enabled`
+when the current profile looks words up with it.
 `start` returns a job ID immediately; download/import outlives the requesting panel,
 then verifies import success/counts and enables the dictionary through granular
 profile updates. Jobs live for the app process, not across crashes/restarts.

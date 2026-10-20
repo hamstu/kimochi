@@ -215,3 +215,42 @@ test("catalog can add a second dictionary without changing job behavior", async 
   );
   assert.deepEqual(enabled, ["Other [1]"]);
 });
+test("catalog reports installed dictionaries and which the current profile uses", async () => {
+  const { jobs } = harness({
+    existing: [
+      { title: "Keep me", importSuccess: true },
+      { title: "JMnedict [2026-01-01]", importSuccess: true },
+    ],
+  });
+  const { catalog, dictionaries } = await jobs.handle({ command: "catalog" });
+  assert.equal(catalog[0].id, "jitendex");
+  // The harness's current profile lists "Keep me", disabled, and nothing else.
+  assert.deepEqual(
+    dictionaries.map(({ title, enabled }) => [title, enabled]),
+    [
+      ["Keep me", false],
+      ["JMnedict [2026-01-01]", false],
+    ],
+  );
+});
+test("a dictionary enabled in the current profile is reported ready", async () => {
+  const jobs = createDictionarySetup({
+    api: async (action) => {
+      if (action === "getDictionaryInfo")
+        return [{ title: "Jitendex.org [2026-10-03]", importSuccess: true }];
+      if (action === "optionsGetFull")
+        return {
+          profileCurrent: 0,
+          profiles: [
+            {
+              options: {
+                dictionaries: [{ name: "Jitendex.org [2026-10-03]", enabled: true }],
+              },
+            },
+          ],
+        };
+    },
+  });
+  const { dictionaries } = await jobs.handle({ command: "catalog" });
+  assert.equal(dictionaries[0].enabled, true);
+});
