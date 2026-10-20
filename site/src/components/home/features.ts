@@ -83,7 +83,7 @@ export const features: Feature[] = [
   {
     id: 'controller',
     title: 'Gaming Mode',
-    body: "In Gaming Mode you can activate Kimochi's shortcut (Click both sticks) to scan. Then pick a word with the D-pad for quick look-ups. Hit B and you’re back in the game.",
+    body: "In Gaming Mode you can activate Kimochi's shortcut (Click both sticks) to scan. Then pick a word with the D-pad for quick look-ups. Hit B and you’re back in the game. This works great on something like a Steam Deck!",
     Visual: ControllerVisual
   }
 ]
