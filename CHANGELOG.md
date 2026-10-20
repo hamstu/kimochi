@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- The welcome guide's dictionary step lists the dictionary engines beside a panel about the one you're looking at, the same way the OCR step does, and saves your choice as soon as you pick it.
 - Each line in the Log now shows the time it was read; hover the time to see the full date. When a session runs over more than one day, a divider marks where each day starts. Hovering a line (or opening its menu) slides in a blue marker at its edge.
 - New sound effects: a soft click for buttons, a little switch for toggles, and their own sounds for showing and hiding the sidebar, mini mode, and keeping a window on top. The new speaker button in each window's title bar, next to the pin, turns all sound effects on and off (also in Settings → General).
 - Kimochi accounts and cloud features now live at kimochiapp.com.

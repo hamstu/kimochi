@@ -1,174 +1,84 @@
 /**
  * Onboarding's dictionary-engine step. Kimochi ships no dictionary engine (EXTENSION_DOWNLOADS.md):
- * a first run chooses one here (Built-in Yomitan recommended), downloads it with the same progress block as
- * the OCR models (pause, resume, retry, cancel), and can continue once it is ready. Offline, the
- * failure is shown with Retry, and another engine can be picked instead. Skipping is possible but
- * explicit, behind a warning that nothing will look words up until an engine is chosen in
- * Settings → Dictionary.
+ * a first run chooses one here (Built-in Yomitan recommended) with the same list-and-panel chooser
+ * as Settings → Dictionary (`DictionaryChooser`), as the OCR step uses the OCR one. Choosing goes
+ * through `useDictionarySwitch`, as there: an engine that is downloaded is switched to at once; one
+ * that is not is downloaded from its panel (the button names the size, so it is not asked about
+ * again) and switched to once ready. Switching to an engine with another host reloads the reader
+ * windows, this one included; the hash route keeps it on this step, now showing the new engine.
  *
- * The action bar carries the step's next move: Download for an engine not yet downloaded,
- * Continue once it is ready (disabled while it downloads), and Skip beside it.
+ * The action bar carries the step's next move: Download for the chosen engine when it is not yet
+ * downloaded, Continue once it is ready (disabled while it downloads or switches), and Skip beside
+ * it. Skipping is possible but explicit, behind a warning that nothing will look words up until an
+ * engine is chosen in Settings → Dictionary. Offline, the failure is shown with Retry, and another
+ * engine can be picked instead.
  *
- * Continuing with an engine other than the one the setting names saves it, mirrors it and asks
- * native to reload the reader windows (`dictionary_engine_apply`), this one included: the hash
- * route is moved to the next step first, so the reload lands there. The engine the setting already
- * names (Yomitan, by default) needs none of that: native moves the windows to it the moment its
- * download is ready.
- *
- * The Yomitan API is offered too. It needs Yomitan's download (for splitting text into words), so
- * it downloads that, and its setup step is the Yomitan API wizard. Moving between Built-in Yomitan
- * and the Yomitan API reloads nothing: they share the Yomitan host.
+ * The Yomitan API is offered too. It needs Yomitan's download (for splitting text into words), and
+ * its setup step is the Yomitan API wizard. Moving between Built-in Yomitan and the Yomitan API
+ * reloads nothing: they share the Yomitan host.
  */
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import { useNavigate } from 'react-router'
-import { Badge, Button, Callout, ChoiceGroup, ConfirmDialog } from '@kit'
-import { nativeError } from '../bridge/tauri'
-import { setSetting } from '../bridge/settings'
-import {
-  DICTIONARY_ENGINES,
-  applyDictionaryEngine,
-  dictionaryEngineOf,
-  hostEngineOf,
-  mirrorDictionaryEngine,
-  popupTypeOf,
-  useDictionaryEngine,
-  type DictionaryEngine
-} from '../bridge/dictionaryEngine'
-import { useExtensionControls, useExtensionStatus } from '../bridge/extensions'
-import { formatBytes } from '@ui/model-download'
-import {
-  EXTENSION_ENGINES,
-  downloadButtonLabel,
-  downloadEngineFor,
-  type ExtensionEngine
-} from '@ui/extension-download'
-import { ModelDownload } from '../panels/settings/ModelDownload'
-import { DictionaryPreview } from '../components/DictionaryPreview'
-import { DictionaryEngineIcon } from '../components/EngineIcon'
+import { Button, Callout, ConfirmDialog } from '@kit'
+import { DICTIONARY_ENGINES } from '../bridge/dictionaryEngine'
+import { useExtensionControls } from '../bridge/extensions'
+import { downloadButtonLabel, downloadEngineFor } from '@ui/extension-download'
+import { DictionaryChooser } from '../panels/settings/DictionaryChooser'
+import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import Step from './Step'
 import { StepActions } from './StepActions'
-import style from './WelcomeApp.module.css'
 
 /** Where onboarding goes once an engine is ready: its own setup step. */
 export const AFTER_ENGINE = '/dictionaries'
 /** Where a skip goes: past the dictionary steps. */
 export const AFTER_SKIP = '/done'
 
-/** The size, or "Downloaded", at the end of an engine's card. */
-function EngineSize({ engine }: { engine: ExtensionEngine }): JSX.Element | null {
-  const status = useExtensionStatus(engine)
-  if (!status) return null
-  const text =
-    status.state === 'ready'
-      ? 'Downloaded'
-      : status.overallTotal > 0
-        ? formatBytes(status.overallTotal)
-        : null
-  return text ? <span className={style.engineSize}>{text}</span> : null
-}
-
 export default function EngineSetup(): JSX.Element {
   const navigate = useNavigate()
-  const [, settings] = useDictionaryEngine()
-  const saved = dictionaryEngineOf(settings.popupType)
-  const [chosen, setChosen] = useState<DictionaryEngine>(saved)
-  // The setting arrives after the first render: follow it until the user picks.
-  const [touched, setTouched] = useState(false)
-  if (!touched && chosen !== saved) setChosen(saved)
-  const controls = useExtensionControls(downloadEngineFor(chosen))
+  const { active, saved, pending, asking, confirmDownload, choose, reloading, applyError } =
+    useDictionarySwitch('settings')
+  // The panel's button already says "Download · 15 MB": that click is the answer.
+  useEffect(() => {
+    if (asking) confirmDownload()
+  }, [asking, confirmDownload])
+  // The engine the bar moves on with: one waiting for its download, else the one in use.
+  const target = pending ?? active
+  const controls = useExtensionControls(downloadEngineFor(target))
   const status = controls.status
-  const ready = status?.state === 'ready'
-  const [error, setError] = useState<string | null>(null)
-  const [switching, setSwitching] = useState(false)
+  const ready = status === null || status.state === 'ready'
+  const switching = reloading !== null || active !== saved || pending !== null
   const [askSkip, setAskSkip] = useState(false)
+  const name = DICTIONARY_ENGINES[target].name
 
-  const choose = (engine: DictionaryEngine): void => {
-    setError(null)
-    setTouched(true)
-    setChosen(engine)
-  }
-
-  const proceed = async (): Promise<void> => {
-    setError(null)
-    if (saved === chosen) {
-      // Native already runs (or is moving the windows to) this engine.
-      void navigate(AFTER_ENGINE)
-      return
-    }
-    setSwitching(true)
-    try {
-      await setSetting('yomitanSettings', { ...settings, popupType: popupTypeOf(chosen) })
-    } catch (caught) {
-      setSwitching(false)
-      setError(`Could not save your choice: ${nativeError(caught).message}`)
-      return
-    }
-    mirrorDictionaryEngine(chosen)
-    // Before the reload, so it lands on the next step.
-    void navigate(AFTER_ENGINE)
-    // Built-in Yomitan and the Yomitan API share a host: nothing to reload.
-    if (hostEngineOf(chosen) === hostEngineOf(saved)) return
-    try {
-      await applyDictionaryEngine()
-    } catch (caught) {
-      setSwitching(false)
-      setError(
-        `Saved, but the reader windows could not be reloaded: ${nativeError(caught).message}. Restart Kimochi to finish switching.`
-      )
-    }
-  }
-
-  const info = DICTIONARY_ENGINES[chosen]
-  const inProgress = status !== null && !ready && status.state !== 'absent'
   return (
     <Step
       title="Choose a pop-up dictionary"
       lede="Kimochi looks words up with a pop-up dictionary engine. Choose one and Kimochi downloads it from its official release. You can switch at any time in Settings → Dictionary."
     >
-      <ChoiceGroup<DictionaryEngine>
-        aria-label="Dictionary engine"
-        className={style.engines}
-        value={chosen}
-        onValueChange={choose}
-        options={[...EXTENSION_ENGINES, 'custom-api' as const].map((engine) => ({
-          value: engine,
-          icon: <DictionaryEngineIcon engine={engine} />,
-          label: (
-            <>
-              <span className={style.engineName}>{DICTIONARY_ENGINES[engine].name}</span>
-              <EngineSize engine={downloadEngineFor(engine)} />
-            </>
-          ),
-          detail: (
-            <>
-              {DICTIONARY_ENGINES[engine].tagline}
-              {engine === 'yomitan' && (
-                <Badge tone="accent" className={style.engineBadge}>
-                  Recommended
-                </Badge>
-              )}
-            </>
-          )
-        }))}
+      <DictionaryChooser
+        active={active}
+        pending={pending}
+        recommended="yomitan"
+        onChoose={(engine) => void choose(engine)}
+        renderSettings={() => null}
+        status={
+          applyError ? (
+            <Callout tone="danger">{applyError}</Callout>
+          ) : reloading ? (
+            <span role="status">Switching to {DICTIONARY_ENGINES[active].name}…</span>
+          ) : null
+        }
       />
-      <p className={style.engineDescription}>{info.description}</p>
-      <DictionaryPreview engine={chosen} />
-      {inProgress && <ModelDownload controls={controls} emphasis={false} label="Download" />}
       {status?.state === 'failed' && (
         <p className="k-description">Check your connection and press Retry, or choose another engine.</p>
       )}
-      {!inProgress && controls.error && <Callout tone="danger">{controls.error}</Callout>}
-      {error && <Callout tone="danger">{error}</Callout>}
+      {controls.error && <Callout tone="danger">{controls.error}</Callout>}
 
       <StepActions>
         <Button variant="ghost" onClick={() => setAskSkip(true)}>
           Skip for now
         </Button>
-        {ready || !status ? (
-          <Button variant="primary" disabled={switching} onClick={() => void proceed()}>
-            {switching ? `Switching to ${info.name}…` : 'Continue'}
-          </Button>
-        ) : status.state === 'absent' ? (
+        {status?.state === 'absent' ? (
           <Button
             variant="primary"
             disabled={controls.pending !== null}
@@ -177,8 +87,12 @@ export default function EngineSetup(): JSX.Element {
             {downloadButtonLabel(status)}
           </Button>
         ) : (
-          <Button variant="primary" disabled>
-            Continue
+          <Button
+            variant="primary"
+            disabled={!ready || switching}
+            onClick={() => void navigate(AFTER_ENGINE)}
+          >
+            {ready && switching ? `Switching to ${name}…` : 'Continue'}
           </Button>
         )}
       </StepActions>

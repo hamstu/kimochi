@@ -72,6 +72,7 @@ function DictionaryItem({
   id,
   viewed,
   inUse,
+  recommended,
   onView
 }: {
   engine: DictionaryEngine
@@ -80,6 +81,8 @@ function DictionaryItem({
   viewed: boolean
   /** Lookups use this engine (or the pick being saved): the check mark. */
   inUse: boolean
+  /** Badged "Recommended" (onboarding's step). */
+  recommended: boolean
   onView: () => void
 }): ReactNode {
   const info = DICTIONARY_ENGINES[engine]
@@ -111,6 +114,11 @@ function DictionaryItem({
           )}
         </span>
         <span className="engine-item-tagline">{info.tagline}</span>
+        {recommended && (
+          <Badge tone="accent" className="engine-item-badge">
+            Recommended
+          </Badge>
+        )}
       </span>
       {inUse && <InUseCheck />}
     </div>
@@ -276,7 +284,8 @@ export function DictionaryChooser({
   pending = null,
   onChoose,
   renderSettings,
-  status
+  status,
+  recommended = null
 }: {
   /** The engine shown as chosen: the caller's pick, ahead of the saved setting. */
   active: DictionaryEngine
@@ -287,6 +296,8 @@ export function DictionaryChooser({
   renderSettings: (engine: DictionaryEngine, inUse: boolean) => ReactNode
   /** A line under the frame: the reload note, or an error. */
   status?: ReactNode
+  /** An engine to badge "Recommended" in the list. */
+  recommended?: DictionaryEngine | null
 }): ReactNode {
   const baseId = useId()
   const listRef = useRef<HTMLDivElement>(null)
@@ -345,6 +356,7 @@ export function DictionaryChooser({
               id={itemId(engine)}
               viewed={engine === viewed}
               inUse={engine === active}
+              recommended={engine === recommended}
               onView={() => setViewed(engine)}
             />
           ))}

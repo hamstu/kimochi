@@ -79,3 +79,9 @@
     animation: none;
   }
 }
+
+/* Onboarding's "Recommended", on its own line under the tagline. */
+.engine-item-badge {
+  align-self: flex-start;
+  margin-top: var(--k-space-1);
+}

@@ -242,47 +242,6 @@
   margin: calc(var(--k-space-2) * -1) 0 calc(var(--k-space-5) * -1);
 }
 
-/* ------------------------------------------------------------------ dictionary engine */
-.engines {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.engines :global(.k-choice) {
-  gap: var(--k-space-1-5);
-  padding: var(--k-space-3);
-}
-.engines :global(.k-choice-detail) {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--k-space-2);
-  font-size: var(--k-text-sm);
-  line-height: var(--k-leading-sm);
-  text-align: left;
-}
-.engineName {
-  font-weight: var(--k-weight-semibold);
-}
-.engineSize {
-  margin-left: auto;
-  font-size: var(--k-text-xs);
-  font-weight: var(--k-weight-medium);
-  font-variant-numeric: tabular-nums;
-  color: var(--k-text-3);
-}
-.engineBadge {
-  flex: none;
-}
-.engineDescription {
-  max-width: 34rem;
-  min-height: calc(var(--k-leading-md) * 3);
-  margin: 0;
-  line-height: var(--k-leading-md);
-  color: var(--k-text-2);
-  text-wrap: pretty;
-}
-
 /* ------------------------------------------------------------------ dictionary settings */
 .embedded {
   display: flex;
