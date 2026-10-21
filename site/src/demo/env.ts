@@ -1,4 +1,5 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useState, useSyncExternalStore, type RefObject } from 'react'
+import { useClientValue, useMediaQuery } from '../lib/client'
 
 const DARK = '(prefers-color-scheme: dark)'
 
@@ -8,39 +9,38 @@ function resolveTheme(): 'light' | 'dark' {
   return matchMedia(DARK).matches ? 'dark' : 'light'
 }
 
-/** The site's resolved theme: `data-theme` on <html> when forced, else the OS preference. */
+function subscribeTheme(update: () => void): () => void {
+  const media = matchMedia(DARK)
+  media.addEventListener('change', update)
+  const observer = new MutationObserver(update)
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  return () => {
+    media.removeEventListener('change', update)
+    observer.disconnect()
+  }
+}
+
+/**
+ * The site's resolved theme: `data-theme` on <html> when forced, else the OS preference ("light"
+ * in prerendered HTML).
+ */
 export function useResolvedTheme(): 'light' | 'dark' {
-  const [theme, setTheme] = useState(resolveTheme)
-  useEffect(() => {
-    const update = (): void => setTheme(resolveTheme())
-    const media = matchMedia(DARK)
-    media.addEventListener('change', update)
-    const observer = new MutationObserver(update)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => {
-      media.removeEventListener('change', update)
-      observer.disconnect()
-    }
-  }, [])
-  return theme
+  return useSyncExternalStore(subscribeTheme, resolveTheme, () => 'light')
 }
 
 export function useReducedMotion(): boolean {
-  const query = '(prefers-reduced-motion: reduce)'
-  const [reduced, setReduced] = useState(() => matchMedia(query).matches)
-  useEffect(() => {
-    const media = matchMedia(query)
-    const update = (): void => setReduced(media.matches)
-    media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
-  }, [])
-  return reduced
+  return useMediaQuery('(prefers-reduced-motion: reduce)')
+}
+
+function subscribeVisibility(update: () => void): () => void {
+  document.addEventListener('visibilitychange', update)
+  return () => document.removeEventListener('visibilitychange', update)
 }
 
 /** Whether the element is on screen (with a margin) and the tab is visible. */
 export function useOnScreen(ref: RefObject<Element | null>, rootMargin = '0px'): boolean {
   const [inView, setInView] = useState(false)
-  const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
+  const visible = useSyncExternalStore(subscribeVisibility, () => document.visibilityState === 'visible', () => true)
   useEffect(() => {
     const el = ref.current
     if (!el) return
@@ -48,18 +48,17 @@ export function useOnScreen(ref: RefObject<Element | null>, rootMargin = '0px'):
     observer.observe(el)
     return () => observer.disconnect()
   }, [ref, rootMargin])
-  useEffect(() => {
-    const update = (): void => setVisible(document.visibilityState === 'visible')
-    document.addEventListener('visibilitychange', update)
-    return () => document.removeEventListener('visibilitychange', update)
-  }, [])
   return inView && visible
 }
 
 export type Platform = 'macos' | 'windows' | 'linux' | 'deck'
 
-/** The visitor's desktop OS, for the initial tab. */
-export function guessPlatform(): Platform {
+/** The visitor's desktop OS, for the initial tab ("macos" in prerendered HTML). */
+export function useGuessedPlatform(): Platform {
+  return useClientValue(guessPlatform, 'macos')
+}
+
+function guessPlatform(): Platform {
   const ua = navigator.userAgent
   if (/Windows/i.test(ua)) return 'windows'
   if (/Linux|X11|CrOS/i.test(ua) && !/Android/i.test(ua)) return 'linux'

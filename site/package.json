@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1450",
-    "build": "vite build",
+    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir .ssr && node scripts/prerender.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 1451",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "check:prerender": "node scripts/check-prerender.mjs"
   },
   "dependencies": {
     "@fontsource-variable/caveat": "^5.3.0",

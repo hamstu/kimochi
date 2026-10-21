@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { LiveDemo } from '../../demo/LiveDemo'
-import { guessPlatform } from '../../demo/env'
+import { useGuessedPlatform } from '../../demo/env'
 import { AppleMark, DeckMark, LinuxMark, WindowsMark } from '../PlatformMarks'
 import { PlatformStrip } from './PlatformStrip'
 
@@ -12,7 +12,7 @@ type Tab = 'desktop' | 'gaming'
  */
 export function DemoShowcase() {
   const [tab, setTab] = useState<Tab>('desktop')
-  const [desktop] = useState(guessPlatform)
+  const desktop = useGuessedPlatform()
   const mark = desktop === 'windows' ? <WindowsMark className="size-4" /> : desktop === 'linux' ? <LinuxMark className="size-4" /> : <AppleMark className="size-4" />
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'desktop', label: 'Desktop', icon: mark },

@@ -30,6 +30,7 @@
 kimochi_install() {
   set -eu
 
+  # TODO(hamish): the repo is private, so these GitHub URLs 404 without credentials.
   repo=${KIMOCHI_INSTALL_REPO:-hamstu/kimochi-tauri}
   api=${KIMOCHI_INSTALL_API:-https://api.github.com/repos/$repo/releases}
   raw=${KIMOCHI_INSTALL_RAW:-https://raw.githubusercontent.com/$repo}

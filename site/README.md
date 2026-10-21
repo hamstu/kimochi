@@ -1,7 +1,8 @@
 # Kimochi website
 
-The marketing site for Kimochi: a static Vite 7 + React 19 + TypeScript + Tailwind 4 single-page
-app with client-side routes (`react-router`, `BrowserRouter`). The marketing pages make one
+The marketing site for Kimochi: a static Vite 7 + React 19 + TypeScript + Tailwind 4 app with
+client-side routes (`react-router`, `BrowserRouter`), prerendered at build time so every marketing
+page ships as real HTML with its own head tags (see "Prerendering and SEO"). The marketing pages make one
 network call, to the public GitHub API, to find the latest release. The account pages (`/account`,
 `/link`) call the Kimochi server's `/api` on the same origin (see "Account pages").
 
@@ -10,31 +11,39 @@ network call, to the public GitHub API, to find the latest release. The account 
 ```sh
 npm install --prefix site     # once
 npm run site:dev              # http://127.0.0.1:1450 (from the repo root)
-npm run site:build            # demo:build (the real Log, into public/demo/) then static output in site/dist
-npm run site:preview          # serve site/dist at http://127.0.0.1:1451
+npm run site:build            # demo:build (the real Log, into public/demo/) then the prerendered site in site/dist
+npm run site:preview          # serve site/dist at http://127.0.0.1:1451 (unknown paths answer 404)
+npm --prefix site run check:prerender   # after a build: every route's head tags, JSON-LD and static HTML
 npm --prefix site test        # node --test site/test/*.test.mjs
 npm --prefix site run typecheck
 ```
 
-Hosting: serve `site/dist` from the domain root and rewrite unknown paths to `/index.html` (SPA
-fallback) so `/privacy`, `/terms` and `/compare` load on a hard refresh. Root `eslint` ignores
+Hosting: serve `site/dist` from the domain root. Every route is a file (`/compare` →
+`compare.html`, `/account/sign-in` → `account/sign-in.html`), and unknown paths should get
+`404.html` with status 404, not an SPA fallback. `public/_headers` sets an immutable cache on
+`/assets/*` and `X-Robots-Tag: noindex` on account pages (Cloudflare Workers Static Assets reads it). Root `eslint` ignores
 `site/**`; the site has its own `tsconfig.json` (strict, `noUnusedLocals`, `checkJs`).
 
 ## Layout
 
 ```
 site/
-  index.html              title, meta description, Open Graph, theme-color, pre-paint theme script
-  public/                 favicon.svg (placeholder; copy branding/icon.svg here), robots.txt
+  index.html              the page template: head:start/head:end (replaced per route), theme-color, pre-paint theme script
+  public/                 icons (from `npm run icons`), robots.txt, llms.txt, site.webmanifest, _headers, install.sh
+  scripts/                prerender.mjs (writes every route's HTML + sitemap.xml), check-prerender.mjs
+  SEO_TODO.md             open questions for the owner (also marked TODO(hamish) in the code)
   src/
-    main.tsx              BrowserRouter + App
-    App.tsx               routes + per-route document titles (TITLES map)
-    pages/                one component per route: Home, Privacy, Terms, Compare, DownloadLinux, NotFound,
+    main.tsx              BrowserRouter + App; hydrates prerendered HTML, renders empty shells
+    entry-server.tsx      the prerender entry: render(url) with StaticRouter
+    App.tsx               routes; keeps the head in step on client-side navigation
+    content/              compare.ts (the /compare table), faq.js (/faq, the home FAQ and its JSON-LD)
+    pages/                one component per route: Home, Faq, Privacy, Terms, Compare, DownloadLinux, NotFound,
                           Account*, LinkApp (see "Account pages")
     components/           Layout, Section, Prose, Button, DownloadButton, ThemeToggle,
                           AccountNavLink; account/ (forms, meters, dashboard sections)
     demo/                 the interactive demo (LiveDemo.tsx; see "Demo" below)
-    lib/                  theme.ts, releases.ts (fetch + detection), assets.js (pure picker),
+    lib/                  seo.js (routes, titles, descriptions, JSON-LD, sitemap), client.ts (hydration-safe
+                          browser reads), theme.ts, releases.ts (fetch + detection), assets.js (pure picker),
                           api.ts (account API client), session.tsx (useSession), account.js (pure)
     styles/               tokens.css (colour roles, light/dark), index.css (Tailwind + @theme)
     assets/               images imported by components (import url from '../assets/x.png')
@@ -44,7 +53,8 @@ site/
 ## Conventions
 
 **Pages.** A route is a component in `src/pages/<Name>.tsx`, exported by name
-(`export function Privacy()`), registered in `App.tsx` and given a title in `TITLES`. Pages render
+(`export function Privacy()`), registered in `App.tsx` and given an entry in `ROUTES` in
+`src/lib/seo.js` (title, description, indexed or not, prerendered or a shell). Pages render
 inside `Layout` (sticky header, footer); they never render their own header or footer.
 
 **Home sections** use `<Section>` so vertical rhythm stays consistent:
@@ -138,6 +148,29 @@ aliases like `#ubuntu`, `#fedora` work), then Updating, Uninstalling and "If Kim
 section, installer/apt/AppImage commands, .deb/AppImage picking, the button's href) live in
 `src/lib/linux.js` (`test/linux.test.mjs`); `components/CopyCommand.tsx` is the command well with
 its Copy button.
+
+## Prerendering and SEO
+
+`npm run build` is three steps: `vite build` (the client, into `dist/`), `vite build --ssr
+src/entry-server.tsx` (into `.ssr/`), then `scripts/prerender.mjs`, which renders each route in
+`ROUTES` (`src/lib/seo.js`) into a copy of `dist/index.html`: the route's head tags (title,
+description, canonical, Open Graph and Twitter with an absolute image, JSON-LD) between
+`head:start` and `head:end`, and, for `render: 'full'` pages, the app's HTML in `#root`. It also
+writes `404.html` (NotFound) and `sitemap.xml` (indexed routes). `src/main.tsx` hydrates pages that
+arrive with content and renders the account shells (`render: 'shell'`, `noindex`) from scratch.
+The dev server skips all this and renders in the browser as before.
+
+JSON-LD: WebSite and Person (Hamish, Canada) on every indexed page, SoftwareApplication on home,
+/compare and /faq, FAQPage on /faq (built from `src/content/faq.js`). `public/llms.txt` is the
+plain-text summary for language models; keep it in step with the home page.
+
+**Hydration rule.** The first browser render must match the prerendered HTML. Don't read the
+browser (`localStorage`, `matchMedia`, `navigator`, `location`, `document`) in render or in a
+`useState` initializer; use `useClientValue(read, serverValue)` or `useMediaQuery(query)` from
+`src/lib/client.ts` (or `useDetectedPlatform()` from `releases.ts`), or read it in an effect.
+`useGuessedPlatform`, `useResolvedTheme`, `useReducedMotion` (demo) and `useTheme` already follow
+this. After a change, `npm run build && npm run preview` and check the console for React error
+#418 (hydration mismatch).
 
 ## Demo
 

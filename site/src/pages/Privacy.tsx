@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { Prose } from "../components/Prose";
 
+// TODO(hamish): this repo is private, so the GitHub links on this page 404 for visitors.
 const ISSUES = "https://github.com/hamstu/kimochi-tauri/issues";
 
 export function Privacy() {
@@ -282,7 +283,7 @@ export function Privacy() {
       <h2 id="contact">Contact</h2>
       <p>
         Questions or concerns: open an issue on <a href={ISSUES}>GitHub</a>, or
-        email {/* TODO(owner): replace with a real contact address. */}
+        email {/* TODO(hamish): replace with a real contact address. */}
         <strong>[contact email]</strong>.
       </p>
     </Prose>

@@ -5,14 +5,14 @@ import { CopyCommand } from '../components/CopyCommand'
 import { Button } from '../components/Button'
 import { DeckMark, LinuxMark } from '../components/PlatformMarks'
 import { GITHUB_URL } from '../components/Layout'
+import { useClientValue } from '../lib/client'
+import { SITE_URL } from '../lib/seo.js'
 import {
   RELEASES_URL,
-  detectPlatform,
-  detectPlatformSync,
   fetchLatestRelease,
   formatBytes,
-  type Platform,
-  type Release
+  type Release,
+  useDetectedPlatform
 } from '../lib/releases'
 import {
   LINUX_SECTIONS,
@@ -46,9 +46,12 @@ const TABS: Record<LinuxSection, { title: string; detail: string; mark: ReactNod
   }
 }
 
-/** The site's origin, read at runtime: the install script lives at `<origin>/install.sh`. */
+/**
+ * The site's origin, read at runtime: the install script lives at `<origin>/install.sh`. The
+ * prerendered page shows the production origin.
+ */
 function useOrigin(): string {
-  return typeof window === 'undefined' ? '' : window.location.origin
+  return useClientValue(() => window.location.origin, SITE_URL)
 }
 
 function useRelease(): { release: Release | null; settled: boolean } {
@@ -68,28 +71,18 @@ function useRelease(): { release: Release | null; settled: boolean } {
   return state
 }
 
-function usePlatform(): Platform {
-  const [platform, setPlatform] = useState<Platform>(detectPlatformSync)
-  useEffect(() => {
-    let alive = true
-    detectPlatform().then((p) => alive && setPlatform(p))
-    return () => {
-      alive = false
-    }
-  }, [])
-  return platform
-}
-
 /** The chosen section follows the URL hash (`#steam-deck`, `#debian`, `#other`, or an alias). */
 function useSection(): [LinuxSection, (next: LinuxSection) => void] {
   const { hash } = useLocation()
-  const [section, setSection] = useState<LinuxSection>(() => linuxSectionFromHash(hash) ?? 'steam-deck')
+  // The prerendered page has no hash: it shows the Steam Deck section until hydrated.
+  const fromHash = useClientValue(() => linuxSectionFromHash(hash), null)
+  const [picked, setPicked] = useState<LinuxSection | null>(null)
   useEffect(() => {
-    const fromHash = linuxSectionFromHash(hash)
-    if (fromHash) setSection(fromHash)
+    if (linuxSectionFromHash(hash)) setPicked(null)
   }, [hash])
+  const section = picked ?? fromHash ?? 'steam-deck'
   const choose = (next: LinuxSection): void => {
-    setSection(next)
+    setPicked(next)
     // Keep the link shareable without a router navigation (which would scroll the page).
     try {
       window.history.replaceState(window.history.state, '', `#${next}`)
@@ -326,7 +319,7 @@ function LibraryTile() {
 
 export function DownloadLinux() {
   const origin = useOrigin()
-  const platform = usePlatform()
+  const platform = useDetectedPlatform()
   const { release, settled } = useRelease()
   const [section, setSection] = useSection()
   const arch: Arch = platform.arch === 'arm64' ? 'arm64' : 'x64'

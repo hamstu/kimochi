@@ -88,7 +88,7 @@ export function Terms() {
 
       <h2 id="law">8. Governing law</h2>
       <p>
-        {/* TODO(owner): choose the governing law, e.g. a Canadian province. */}
+        {/* TODO(hamish): choose the governing law, e.g. a Canadian province. */}
         These terms are governed by the laws of <strong>[jurisdiction]</strong>,
         without regard to conflict-of-law rules. Nothing here removes rights you
         have under the consumer protection laws of the place where you live.
@@ -104,6 +104,7 @@ export function Terms() {
 
       <h2 id="contact">10. Contact</h2>
       <p>
+        {/* TODO(hamish): the issues link is in the private repo and 404s; add a contact address. */}
         Questions about these terms: open an issue on{" "}
         <a href="https://github.com/hamstu/kimochi-tauri/issues">GitHub</a>.
       </p>

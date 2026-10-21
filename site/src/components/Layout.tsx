@@ -4,6 +4,7 @@ import { Menu, X } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { AccountNavLink } from './AccountNavLink'
 
+// TODO(hamish): private repo, so this and the Source on GitHub links 404 for visitors.
 export const GITHUB_URL = 'https://github.com/hamstu/kimochi-tauri'
 
 /** Header nav. Hash links target sections on the home page (Section id="features" etc.). */
@@ -113,6 +114,12 @@ export function Layout() {
       <footer className="border-t border-hairline bg-bar">
         <div className="container-page flex flex-col gap-4 py-8 text-small text-ink-2 sm:flex-row sm:items-center sm:justify-between">
           <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link to="/faq" className="no-underline hover:text-ink">
+              FAQ
+            </Link>
+            <Link to="/compare" className="no-underline hover:text-ink">
+              Compare
+            </Link>
             <Link to="/privacy" className="no-underline hover:text-ink">
               Privacy
             </Link>

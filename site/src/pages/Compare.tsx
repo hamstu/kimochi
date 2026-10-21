@@ -40,6 +40,7 @@ export function Compare() {
         project&rsquo;s own docs (see <a href="#sources">Sources</a>), and
         anything we couldn&rsquo;t confirm is tagged <Unverified />. Spot
         something wrong?{" "}
+        {/* TODO(hamish): the issues link is in the private repo and 404s for visitors. */}
         <a href="https://github.com/hamstu/kimochi-tauri/issues">
           Open an issue
         </a>{" "}
@@ -55,11 +56,11 @@ export function Compare() {
       </p>
 
       <h2 id="table">At a glance</h2>
-      {/* Wider than the 65ch column on large screens so four tools fit side by side. */}
+      {/* Wider than the 65ch column on large screens so the tools fit side by side. */}
       <div className="relative left-1/2 w-[min(72rem,calc(100vw-2rem))] -translate-x-1/2 sm:w-[min(72rem,calc(100vw-3rem))]">
         <table>
           <caption className="sr-only">
-            Feature comparison of Kimochi, Kamui, Game Sentence Miner and owocr
+            Feature comparison of Kimochi, Kamui, Game Sentence Miner, owocr and YomiNinja
           </caption>
           <thead>
             <tr>
@@ -112,6 +113,17 @@ export function Compare() {
         Yomitan in the browser. Biggest engine list of the lot.
       </p>
 
+      <h3>YomiNinja, if you want a free overlay with Yomitan or 10ten</h3>
+      <p>
+        YomiNinja puts the text it reads over the screen, so you can hover it
+        with Yomitan or 10ten, which come pre-installed. It runs on Windows,
+        macOS and Linux, with PaddleOCR, Manga OCR and Apple Vision on your
+        machine or Google Lens and Cloud Vision online. Auto OCR can watch a
+        dialogue box, and a WebSocket feeds texthooker pages. It reads Chinese
+        and Korean too. Anki integration is still on its planned list, and its
+        latest release is from August 2025.
+      </p>
+
       <h3>Kamui, if you want it all handled for you</h3>
       <p>
         Kamui is a paid app, on the web and Windows. Quick to set up, no API
@@ -140,7 +152,8 @@ export function Compare() {
         ))}
       </ul>
       <p className="text-small">
-        Kamui, Game Sentence Miner and owocr belong to their own authors and
+        Kamui, Game Sentence Miner, owocr and YomiNinja belong to their own
+        authors and
         aren&rsquo;t affiliated with Kimochi.
       </p>
     </Prose>

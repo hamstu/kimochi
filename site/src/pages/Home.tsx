@@ -7,10 +7,12 @@ import { HowItWorks } from '../components/home/HowItWorks'
 import { OpenSource } from '../components/home/OpenSource'
 import { AboutMe } from '../components/home/AboutMe'
 import { Testimonials } from '../components/home/TestimonialsSection'
+import { WhatIsKimochi } from '../components/home/WhatIsKimochi'
+import { HomeFaq } from '../components/home/HomeFaq'
 
 /**
- * Home. Section order: hero, the platform strip + live demo (DemoShowcase), features, how it
- * works, free and open source (OpenSource), who makes it (AboutMe), testimonials (hidden while empty), download. Keep the ids features, demo and download: the header nav links
+ * Home. Section order: hero, what is Kimochi (one plain paragraph), the platform strip + live demo (DemoShowcase), features, how it
+ * works, free and open source (OpenSource), who makes it (AboutMe), testimonials (hidden while empty), the first FAQ questions, download. Keep the ids features, demo and download: the header nav links
  * to them. Feature copy and visuals: src/components/home/features.ts. Quotes:
  * src/components/home/testimonials.ts.
  */
@@ -18,6 +20,7 @@ export function Home() {
   return (
     <>
       <Hero />
+      <WhatIsKimochi />
       <DemoShowcase />
 
       <Section
@@ -48,6 +51,10 @@ export function Home() {
 
       <Testimonials />
 
+      <Section id="faq" divider eyebrow="よくある質問" heading="Questions">
+        <HomeFaq />
+      </Section>
+
       <Section
         id="download"
         align="center"
@@ -55,6 +62,8 @@ export function Home() {
         heading="I hope you'll give it a try."
         lede="Free, for macOS, Windows and Linux."
       >
+        {/* TODO(hamish): the download (GitHub releases of the private repo) 404s for visitors. Make
+            the repo public, or replace this with launch sign-up once you pick an email service. */}
         <DownloadButton align="center" />
       </Section>
     </>

@@ -1,2 +1,6 @@
+# Account pages are crawlable on purpose: they carry noindex (meta tag and X-Robots-Tag), which
+# crawlers only see if they may fetch them.
 User-agent: *
 Allow: /
+
+Sitemap: https://kimochiapp.com/sitemap.xml

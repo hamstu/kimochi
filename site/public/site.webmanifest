@@ -1,0 +1,14 @@
+{
+  "name": "Kimochi",
+  "short_name": "Kimochi",
+  "description": "Read your games in Japanese: a Japanese OCR overlay for games.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#ffffff",
+  "theme_color": "#3e63dd",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/og-icon.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
