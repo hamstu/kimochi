@@ -157,8 +157,8 @@ scales as one picture; at phone width the panes stack and the game stays 16:10.
 
 ## Account pages
 
-Optional Kimochi accounts (cloud OCR, read aloud, translation, explanations, backup). The API
-contract is `kimochi-server/API.md` (a sibling repo); the server is a Cloudflare Worker that in
+Optional Kimochi accounts (cloud OCR, read aloud, translation, explanations, backup). The API is
+served by the Kimochi server (its source is not public), a Cloudflare Worker that in
 production serves **both** this site (`site/dist`, Workers Static Assets with SPA fallback) and
 `/api/*` on one origin. So the site calls relative `/api/...` URLs with
 `credentials: 'same-origin'`, and the web session is a first-party HttpOnly cookie the pages never
@@ -195,25 +195,21 @@ read. State-changing requests carry the browser's `Origin`, which the server che
   submit on auth pages and Approve on `/link`; the dashboard uses secondary buttons only, with
   danger text for destructive ones.
 
-**Run against a local server.** In `kimochi-server`, start `wrangler dev` on
-`http://127.0.0.1:3000` with `PUBLIC_URL=http://127.0.0.1:1450` in `.dev.vars`. Then
+**Run against a local server** (maintainers, who have the server's source). Start the server's
+`wrangler dev` on `http://127.0.0.1:3000` with `PUBLIC_URL=http://127.0.0.1:1450`. Then
 `npm run site:dev`: Vite proxies `/api` to port 3000 (`server.proxy` in `vite.config.ts`, also
 for `site:preview`) **without** `changeOrigin`, so `Host` and `Origin` stay `127.0.0.1:1450`, the
 Origin check passes, and cookies and OAuth redirects stay on the site's origin. Emails are not
 sent in development; read the links from `GET /api/dev/outbox`. Without the server the account
 pages say they cannot reach it, and the marketing pages work as before.
 
-## What other agents must know
+## Keep in mind
 
-- Only edit inside `site/`. Do not edit `src/components/Layout.tsx`, `src/styles/*` or
-  `src/lib/*` without a reason; add new shared pieces as new files in `src/components/`.
-- Home page: fill `src/pages/Home.tsx` with `<Section>`s; keep the ids `features`, `demo`,
-  `download`, keep `<LiveDemo />` inside `#demo` and a `<DownloadButton />` inside `#download`.
-- Demo: replace `src/demo/LiveDemo.tsx`, keeping `export function LiveDemo(props)` with all props
-  optional. It should fill its container's width (16:10 on desktop; it may grow taller on phones)
-  and must not cause horizontal scroll at 360px. Put demo images in `src/assets/` or
-  `src/demo/`.
-- Privacy / Terms / Compare: replace the placeholder body inside `<Prose>`; keep the exported
-  component name. Use `updated="YYYY-MM-DD"` on Privacy and Terms.
-- Favicon: copy `branding/icon.svg` to `site/public/favicon.svg` (the header wordmark uses it).
+- Add shared pieces as new files in `src/components/` rather than growing `Layout.tsx`,
+  `src/styles/*` or `src/lib/*`.
+- Home page: keep the ids `features`, `demo` and `download` (the header links to them), keep
+  `<LiveDemo />` inside `#demo` and a `<DownloadButton />` inside `#download`.
+- The demo fills its container's width (16:10 on desktop; it may grow taller on phones) and must
+  not cause horizontal scroll at 360px.
+- Privacy and Terms carry `updated="YYYY-MM-DD"`; change it with their content.
 - Verify with `npm --prefix site run typecheck && npm --prefix site test && npm --prefix site run build`.

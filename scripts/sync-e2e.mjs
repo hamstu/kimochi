@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS script. */
 /**
- * Sync end to end against a local Kimochi server (`npm run dev` in kimochi-server, on :3000):
+ * Sync end to end against a local Kimochi server (on :3000; see `npm run dev:local`):
  * signs in a test account on the website API, links two "computers" to it (and one to a second
  * account), then runs the ignored Rust test `sync::tests::e2e_two_computers_against_a_server`,
  * which syncs two profile folders through the server: union of lines, a concurrent rename kept

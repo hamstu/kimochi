@@ -1,6 +1,6 @@
 /**
  * Kimochi Cloud's prices as the site shows them, and starting a purchase. The amounts must match
- * the Stripe prices kimochi-server/scripts/stripe-setup.sh creates (lookup keys
+ * the Stripe prices the Kimochi server is set up with (lookup keys
  * kimochi_cloud_monthly / _yearly / _lifetime); Stripe Checkout always charges its own price.
  */
 import { api, type Choice } from './api'

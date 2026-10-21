@@ -1,5 +1,5 @@
 /**
- * Typed client for the Kimochi account API (kimochi-server/API.md). The site and the API share
+ * Typed client for the Kimochi server's account API. The site and the API share
  * an origin, so every call is a relative `/api/...` URL with the session cookie
  * (`credentials: 'same-origin'`). Errors are thrown as `ApiError` carrying the server's
  * `{ error, message }`; a network failure becomes code `network`.

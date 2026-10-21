@@ -1477,7 +1477,7 @@ pub mod tests {
     use super::*;
     use std::cell::{Cell, RefCell};
 
-    /// The server's rules (kimochi-server `src/sync.ts`), in memory.
+    /// The Kimochi server's sync rules, in memory.
     #[derive(Default)]
     pub struct MemServer {
         pub seq: Cell<u64>,

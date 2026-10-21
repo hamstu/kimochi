@@ -221,7 +221,7 @@ process.on('SIGHUP', () => interrupted(129))
 const serverDir = path.resolve(process.env.KIMOCHI_SERVER_DIR || path.join(root, '..', 'kimochi-server'))
 if (!existsSync(path.join(serverDir, 'wrangler.toml'))) {
   await fail(
-    `No Kimochi server at ${serverDir} (no wrangler.toml). Clone it beside this repository as ../kimochi-server, or set KIMOCHI_SERVER_DIR.`
+    `No Kimochi server at ${serverDir} (no wrangler.toml). Check it out beside this repository as ../kimochi-server, or set KIMOCHI_SERVER_DIR (the server's source is not public).`
   )
 }
 for (const [dir, hint] of [

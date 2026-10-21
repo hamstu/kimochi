@@ -1,6 +1,6 @@
 //! Sync: the active account's profile kept the same on every computer signed in to it, in the
 //! background. The logic is `sync_core.rs`; this file runs it (a thread of its own), talks to the
-//! server (`/api/v1/sync/*`, kimochi-server `API.md` → Sync), holds the Log window's writes while a
+//! server (the Kimochi server's `/api/v1/sync/*`), holds the Log window's writes while a
 //! merge changes its files, and keeps the sync log (`sync_log.rs`).
 //!
 //! Signed in means syncing; there is no switch. A cycle runs a few seconds after something

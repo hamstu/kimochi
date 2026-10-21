@@ -758,7 +758,7 @@ like the Log; nothing native checks a sender's origin.
 
 ## Kimochi account
 
-Optional accounts on Kimochi's server (contract: `kimochi-server/API.md`), in
+Optional accounts on the Kimochi server (`https://kimochiapp.com`), in
 `src-tauri/src/account.rs` (accounts, switching) and `src-tauri/src/profile.rs` (profiles).
 
 **Accounts.** This computer can be signed in to several accounts at once (on Kimochi cloud and,
@@ -859,8 +859,8 @@ main window forward on Settings → Account; any other `kimochi://` URL just bri
 ## Sync
 
 The active account's profile kept the same on every computer signed in to it
-(`src-tauri/src/sync.rs` runs it, `sync_core.rs` is the logic, `sync_log.rs` the log; server
-contract: `kimochi-server/API.md` → Sync). Signed in means syncing; there is no switch. The Local
+(`src-tauri/src/sync.rs` runs it, `sync_core.rs` is the logic, `sync_log.rs` the log; it talks to
+the Kimochi server's `/api/v1/sync/*` endpoints). Signed in means syncing; there is no switch. The Local
 profile never syncs.
 
 **When.** A cycle runs about 4 s after the last local change (at most 30 s after the first): the
@@ -907,7 +907,7 @@ Log updates in place) and resumes. Preferences are applied to the live settings 
 | `sync_local_changed` | `({reason?: 'write' \| 'focus'}) -> ()` |
 | `sync_hold_ready` | `({id}) -> ()` — the Log holds its writes for `sync:hold` `id` |
 | `sync_conflict_resolve` | `({id, action: 'restore' \| 'dismiss'}) -> SyncStatus` — restore puts the kept version back as a new change (it then syncs and wins), dismiss drops it; both remove the conflict everywhere |
-| `sync_export` | `({path}) -> number` — saves `GET /api/v1/sync/export` (a ZIP of every synced record as JSON plus the image blobs; see API.md) to `path`; the byte count |
+| `sync_export` | `({path}) -> number` — saves `GET /api/v1/sync/export` (a ZIP of every synced record as JSON plus the image blobs) to `path`; the byte count |
 | `sync_log` | `() -> [{t, kind, text}]` — the sync log, oldest first |
 | `sync_log_clear` | `() -> ()` — emits `sync-log-cleared` |
 
