@@ -49,7 +49,7 @@
  *   ?popover=message  show what the parent frame posts instead of the sample (`listenForPopover`)
  *
  * Onboarding (welcome.html):
- *   ?step=intro|permission|accessibility|picker|ocr|engine|dictionaries|dictionary-settings|done|error
+ *   ?step=intro|permission|accessibility|picker|ocr|engine|dictionaries|dictionary-settings|steam|done|error
  *                    open that step (error: the last step's save failed). Every step stays
  *                    navigable from there; ?platform=linux makes the capture step the picker
  *   ?permission=denied  macOS Screen Recording not granted yet (default: granted)
@@ -59,6 +59,8 @@
  *   ?gamemode=1         macOS Game Mode is throttling the overlay (its notice under Show overlay)
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
+ *   ?steam=<state>   the Steam library (preview-steam.ts): deck, notrunning, fail, pending, added,
+ *                    gaming; the welcome guide's Steam step (?step=steam) and Settings → General
  *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
  *                    official, unknown, kimochi, broken, host, ready, fail; for the wizard in
  *                    onboarding and in Settings → Dictionary (?tab=dictionary&popup=custom-api)
@@ -92,6 +94,7 @@ import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
 import { UPDATE_HANDLERS } from './preview-updates'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
+import { STEAM_HANDLERS } from './preview-steam'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -543,6 +546,7 @@ const HANDLERS: Record<string, Handler> = {
   ...UPDATE_HANDLERS,
   ...YOMITAN_API_HANDLERS,
   ...ACCOUNT_HANDLERS,
+  ...STEAM_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => {
@@ -893,13 +897,22 @@ const embedSound = createSoundPlayer({ enabled: () => settings.soundEffects })
 /**
  * Muted while the demo is out of sight (`muted` from the parent): every sound this page would play,
  * the app's own click sounds included, is skipped at `play()` rather than per caller, so a sound
- * added later is muted too.
+ * added later is muted too. The same sound starting again within `DOUBLE_MS` is dropped as well:
+ * however two paths come to play it (a scripted click and the control's own sound, a replay
+ * racing the old page), the demo never doubles one up.
  */
 let embedMuted = false
+const DOUBLE_MS = 120
 function muteMedia(): void {
   const play = HTMLMediaElement.prototype.play
+  const lastStart = new Map<string, number>()
   HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
-    return embedMuted ? Promise.resolve() : play.call(this)
+    if (embedMuted) return Promise.resolve()
+    const now = performance.now()
+    const key = this.currentSrc || this.src
+    if (now - (lastStart.get(key) ?? -Infinity) < DOUBLE_MS) return Promise.resolve()
+    lastStart.set(key, now)
+    return play.call(this)
   }
 }
 
@@ -1123,6 +1136,7 @@ const WELCOME_ROUTES: Record<string, string> = {
   engine: '/engine',
   dictionaries: '/dictionaries',
   'dictionary-settings': '/dictionary-settings',
+  steam: '/steam',
   done: '/done',
   error: '/main'
 }

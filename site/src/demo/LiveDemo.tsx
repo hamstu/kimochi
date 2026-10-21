@@ -424,10 +424,11 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       await wait(ms + 80)
     }
     // `sound`: a click on the demo's own desktop (an icon, a window), which has no sound of its
-    // own. Clicks inside Kimochi are not given one: its controls already sound.
+    // own. Clicks inside Kimochi are not given one: its controls already sound. A double-click
+    // sounds once, like an app's sound effect, not twice like a mouse.
     const press = async (times = 1, sound = false): Promise<void> => {
       for (let i = 0; i < times; i++) {
-        if (sound) postRef.current?.({ type: 'sound', name: 'click' })
+        if (sound && i === 0) postRef.current?.({ type: 'sound', name: 'click' })
         setPointer((c) => ({ ...c, down: true }))
         await wait(110)
         setPointer((c) => ({ ...c, down: false }))
