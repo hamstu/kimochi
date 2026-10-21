@@ -67,8 +67,21 @@ function sgText(omitPlayed: boolean): DemoLine[] {
   return DEMO_CONTENT.lines.filter((line) => !(omitPlayed && line.play))
 }
 
+/**
+ * When the session's lines were read. The site's demo (`omitPlayed`) puts them yesterday evening,
+ * worked out at page load, so the lines it plays arrive today under the Log's day divider; the dev
+ * preview keeps them in the last hour.
+ */
+function sgStart(omitPlayed: boolean): number {
+  if (!omitPlayed) return NOW - 42 * 60_000
+  const evening = new Date(NOW)
+  evening.setDate(evening.getDate() - 1)
+  evening.setHours(20, 30, 0, 0)
+  return evening.getTime()
+}
+
 function sgLines(omitPlayed = false): Line[] {
-  const start = NOW - 42 * 60_000
+  const start = sgStart(omitPlayed)
   return sgText(omitPlayed).map(({ text, translation, showTranslation, explanation }, index) => ({
     id: index + 1,
     text,
