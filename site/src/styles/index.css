@@ -259,6 +259,30 @@
     linear-gradient(160deg, #5a7ce6, #3e63dd 45%, #2c4cbf);
 }
 
+/* The Cloud plan toggle's well (PlanToggle): a deeper shade of the card in light mode, near-black in dark. */
+.plan-toggle {
+  --toggle-ink: var(--k-text-2);
+  --toggle-ink-hover: var(--k-text);
+  background: color-mix(in oklab, var(--k-accent) 11%, var(--k-raised));
+  box-shadow:
+    inset 0 1px 2px color-mix(in oklab, var(--k-accent) 18%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--k-accent) 16%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .plan-toggle {
+    --toggle-ink: rgb(255 255 255 / 0.6);
+    --toggle-ink-hover: #fff;
+    background: #15171c;
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+  }
+}
+:root[data-theme="dark"] .plan-toggle {
+  --toggle-ink: rgb(255 255 255 / 0.6);
+  --toggle-ink-hover: #fff;
+  background: #15171c;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
 /* The Overlay feature card's scene: a light desktop in light mode, the dark game scene in dark. */
 .overlay-scene {
   --scene-sky:

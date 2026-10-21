@@ -27,8 +27,9 @@ const CLOUD = [
 ]
 
 /**
- * Monthly / Yearly / Lifetime as a segmented control: a dark well with the chosen plan in an accent
- * pill that slides between the three equal segments.
+ * Monthly / Yearly / Lifetime as a segmented control: a well a shade off the card (dark in dark
+ * mode; .plan-toggle in index.css) with the chosen plan in an accent pill that slides between the
+ * three equal segments.
  */
 export function PlanToggle({ value, onChange }: { value: Choice; onChange: (choice: Choice) => void }) {
   const index = CHOICES.indexOf(value)
@@ -36,7 +37,7 @@ export function PlanToggle({ value, onChange }: { value: Choice; onChange: (choi
     <div
       role="radiogroup"
       aria-label="Billing"
-      className="relative grid w-full grid-cols-3 rounded-xl bg-[#15171c] p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.5)] ring-1 ring-black/10"
+      className="plan-toggle relative grid w-full grid-cols-3 rounded-xl p-1"
     >
       <span
         aria-hidden
@@ -51,7 +52,7 @@ export function PlanToggle({ value, onChange }: { value: Choice; onChange: (choi
           aria-checked={value === choice}
           onClick={() => onChange(choice)}
           className={`relative rounded-lg px-3 py-2 text-small font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-            value === choice ? 'text-white' : 'text-white/60 hover:text-white'
+            value === choice ? 'text-white' : 'text-[var(--toggle-ink)] hover:text-[var(--toggle-ink-hover)]'
           }`}
         >
           {PRICES[choice].label}
