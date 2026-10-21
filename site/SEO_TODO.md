@@ -18,50 +18,36 @@ Everything here needs a decision or a fact only Hamish has. Each item is also ma
 2. **The Download CTA has no fallback.** No email capture was built: choose a service first, then
    replace the hero and `#download` buttons with launch sign-up (`src/components/home/Hero.tsx`,
    `src/pages/Home.tsx`).
-3. **Production 404s (kimochi-server, not this repo).** The Worker's `wrangler.toml` has
-   `not_found_handling = "single-page-application"`, so unknown paths still answer 200 with the home
-   page. Every route now has its own file in `site/dist` (`compare.html`, `account/sign-in.html`, …,
-   plus `404.html`), so it can change to:
-
-   ```toml
-   [assets]
-   not_found_handling = "404-page"
-   ```
-
-   Then `/nope` gets `404.html` with status 404, `/compare` serves `compare.html` and `/compare/`
-   redirects to `/compare`. Check `/account/reset?token=…` and `/link?code=…` after deploying.
-   `site/public/_headers` (immutable cache for `/assets/*`, `X-Robots-Tag: noindex` on account
-   pages) is picked up by Workers Static Assets without a config change.
-
 ## Facts to settle (they show up in AI answers)
 
-4. **Currency.** The site shows "$"; JSON-LD says USD (`src/lib/seo.js`, PRICE_CURRENCY).
-5. **Free allowance vs trial.** The privacy page says an account adds hosted services "within free
+3. **Currency.** The site shows "$"; JSON-LD says USD (`src/lib/seo.js`, PRICE_CURRENCY).
+4. **Free allowance vs trial.** The privacy page says an account adds hosted services "within free
    monthly allowances"; the pricing shows only a 14-day trial (FAQ `price`).
-6. **macOS minimum and Intel Macs.** Home says "Apple silicon", /compare says "macOS 14+". Also:
+5. **macOS minimum and Intel Macs.** Home says "Apple silicon", /compare says "macOS 14+". Also:
    which Linux distros, and the minimum Windows version (OneOCR needs Windows 11) (FAQ `platforms`).
-7. **Release status.** Target release window (or "no date yet"), how to get notified, whether the
+6. **Release status.** Target release window (or "no date yet"), how to get notified, whether the
     nightly builds are public (FAQ `release`).
-8. **Who it's for.** Beginners who can't read kana yet, or intermediate learners? (FAQ `who-is-it-for`)
-9. **Texthookers.** Which ones are tested (Textractor, LunaTranslator, Agent…)? (FAQ
+7. **Who it's for.** Beginners who can't read kana yet, or intermediate learners? (FAQ `who-is-it-for`)
+8. **Texthookers.** Which ones are tested (Textractor, LunaTranslator, Agent…)? (FAQ
     `anki-and-texthookers`)
-10. **Phones, tablets, other languages.** Planned or out of scope? (FAQ `mobile-and-languages`)
-11. **Feedback channels.** Email is hamstu@gmail.com; add GitHub discussions or Discord if you start them (FAQ `feedback`).
+9. **Phones, tablets, other languages.** Planned or out of scope? (FAQ `mobile-and-languages`)
+10. **Feedback channels.** Email is hamstu@gmail.com; add GitHub discussions or Discord if you start them (FAQ `feedback`).
 
 ## Nice to have
 
-12. **Social card.** A 1200×630 `og:image` (screenshot plus wordmark). The pages use the 512×512
+11. **Social card.** A 1200×630 `og:image` (screenshot plus wordmark). The pages use the 512×512
     app icon with `summary_large_image` for now (`src/lib/seo.js`, OG_IMAGE).
-13. **`sameAs` links** for the Person and SoftwareApplication JSON-LD: public GitHub, Discord,
+12. **`sameAs` links** for the Person and SoftwareApplication JSON-LD: public GitHub, Discord,
     YouTube, Bluesky/X once they exist; `downloadUrl` once the repo is public (`src/lib/seo.js`).
-14. **HSTS and "Always Use HTTPS"** in Cloudflare (from the audit; not set from this repo).
+13. **HSTS and "Always Use HTTPS"** in Cloudflare (from the audit; not set from this repo).
 
 ## How to check
 
 ```sh
 npm --prefix site run build             # client + SSR build, then scripts/prerender.mjs
 npm --prefix site run check:prerender   # every route: own title, description, canonical/noindex, JSON-LD, static content
-npm --prefix site run preview           # http://127.0.0.1:1451; unknown paths answer 404
+npm --prefix site run preview           # http://127.0.0.1:1451; unknown paths answer 404 (as in production,
+                                        # where kimochi-server serves dist/ with not_found_handling = "404-page")
 curl -sI http://127.0.0.1:1451/nope     # HTTP/1.1 404
 curl -s http://127.0.0.1:1451/faq | grep -o '<script type="application/ld+json">.\{0,120\}'
 ```
