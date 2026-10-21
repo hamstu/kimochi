@@ -75,7 +75,10 @@ if [[ $DEPS == 1 ]]; then
         libavif-dev
     elif command -v pacman >/dev/null; then
       log "Installing pacman packages"
-      sudo pacman -Sy --needed --noconfirm \
+      # No -y: refreshing the databases without upgrading everything (-Syu) is a partial upgrade,
+      # which once installed clang 23 beside llvm-libs 22 and broke bindgen. Upgrade with -Syu
+      # first if a package is missing from the current databases.
+      sudo pacman -S --needed --noconfirm \
         curl wget file git base-devel pkgconf openssl clang patchelf \
         webkit2gtk-4.1 xdotool libayatana-appindicator librsvg pipewire gtk3 fuse2 github-cli \
         gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad libavif
