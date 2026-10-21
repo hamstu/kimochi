@@ -14,12 +14,19 @@ export function FaqAnswer({ item }: { item: FaqItem }) {
       ))}
       {item.links && (
         <p className="flex flex-wrap gap-x-5 gap-y-1">
-          {item.links.map((l) => (
-            <Link key={l.href} to={l.href} className="inline-flex items-center gap-1">
-              {l.label}
-              <ArrowRight size={14} aria-hidden />
-            </Link>
-          ))}
+          {item.links.map((l) =>
+            l.href.startsWith('/') ? (
+              <Link key={l.href} to={l.href} className="inline-flex items-center gap-1">
+                {l.label}
+                <ArrowRight size={14} aria-hidden />
+              </Link>
+            ) : (
+              <a key={l.href} href={l.href} className="inline-flex items-center gap-1">
+                {l.label}
+                <ArrowRight size={14} aria-hidden />
+              </a>
+            )
+          )}
         </p>
       )}
       {import.meta.env.DEV && item.todo && (

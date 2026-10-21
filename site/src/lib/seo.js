@@ -157,8 +157,7 @@ const WEBSITE = {
   publisher: { '@id': PERSON_ID }
 }
 
-// TODO(hamish): confirm the Cloud prices are in USD (the site shows "$"). The yearly plan is $60,
-// shown on the site as "$5 a month"; the monthly plan is $6.
+// TODO(hamish): confirm the Cloud prices are in USD (the site shows "$").
 const PRICE_CURRENCY = 'USD'
 
 const APP = {
@@ -180,7 +179,7 @@ const APP = {
   offers: [
     { '@type': 'Offer', name: 'Kimochi', price: '0', priceCurrency: PRICE_CURRENCY, description: 'Free forever. No account, no limits.' },
     { '@type': 'Offer', name: 'Kimochi Cloud (monthly)', price: '6', priceCurrency: PRICE_CURRENCY, description: 'Billed monthly. 14-day free trial.' },
-    { '@type': 'Offer', name: 'Kimochi Cloud (yearly)', price: '60', priceCurrency: PRICE_CURRENCY, description: 'Billed yearly. 14-day free trial.' },
+    { '@type': 'Offer', name: 'Kimochi Cloud (yearly)', price: '60', priceCurrency: PRICE_CURRENCY, description: 'Billed yearly ($5 a month, two months free). 14-day free trial.' },
     { '@type': 'Offer', name: 'Kimochi Cloud (lifetime)', price: '125', priceCurrency: PRICE_CURRENCY, description: 'One payment.' }
   ]
   // Leave out softwareVersion and datePublished until there is a tagged release.

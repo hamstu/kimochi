@@ -44,14 +44,13 @@ export const FAQ = [
     q: 'Is Kimochi free? What does Kimochi Cloud cost?',
     a: [
       'Yes, Kimochi is free forever, with no account and no limits on the core app: the overlay, Auto OCR, on-device and online OCR engines, the Log, Sessions, the Notebook, dictionaries, one-click Anki cards and Gaming Mode.',
-      'Kimochi Cloud is optional and costs $6 a month, $60 a year, or $125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial.'
+      'Kimochi Cloud is optional and costs $6 a month, $60 a year (two months free, so $5 a month), or $125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial.'
     ],
     links: [{ href: '/#open-source', label: 'Plans on the home page' }],
-    // TODO(hamish): currency (USD?); the yearly plan shows as "$5 a month" next to the $6 monthly price;
-    // do accounts get a free monthly allowance of Cloud features (the privacy page says "within free
-    // monthly allowances", the pricing shows a trial)?
+    // TODO(hamish): currency (USD?); do accounts get a free monthly allowance of Cloud features (the
+    // privacy page says "within free monthly allowances", the pricing shows a trial)?
     todo:
-      'Confirm the currency (USD?). The yearly plan reads “$5 a month” beside the $6 monthly plan: settle which number to lead with. Is there a free monthly allowance of Cloud features? The privacy page says “within free monthly allowances”, the pricing shows only a trial.'
+      'Confirm the currency (USD?). Is there a free monthly allowance of Cloud features? The privacy page says “within free monthly allowances”, the pricing shows only a trial.'
   },
   {
     id: 'platforms',
@@ -146,8 +145,9 @@ export const FAQ = [
   {
     id: 'feedback',
     q: 'How do I report a bug or give feedback?',
-    a: ['Open an issue on Kimochi’s GitHub repository.'],
-    // TODO(hamish): the repo is private; add the real channels (contact email, GitHub issues/discussions, Discord).
-    todo: 'The GitHub repo is private and the privacy page still says “[contact email]”. Add the real channels: email, GitHub issues or discussions, Discord if you start one.'
+    a: ['Email Hamish at hamstu@gmail.com, or open an issue on Kimochi’s GitHub repository.'],
+    links: [{ href: 'mailto:hamstu@gmail.com', label: 'Email hamstu@gmail.com' }],
+    // TODO(hamish): the repo is private, so its issues 404; add GitHub discussions or Discord if you start them.
+    todo: 'The GitHub repo is private, so its issues link 404s until it is public. Add GitHub discussions or Discord here if you start them.'
   }
 ]

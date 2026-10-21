@@ -9,7 +9,7 @@ export function Privacy() {
     <Prose
       title="Privacy"
       lede="Kimochi is a desktop app with no analytics, and accounts are optional. Most of what it does happens on your computer. This page lists exactly what leaves it, and when."
-      updated="2026-10-16"
+      updated="2026-10-21"
     >
       <h2 id="summary">The short version</h2>
       <ul>
@@ -282,9 +282,9 @@ export function Privacy() {
 
       <h2 id="contact">Contact</h2>
       <p>
-        Questions or concerns: open an issue on <a href={ISSUES}>GitHub</a>, or
-        email {/* TODO(hamish): replace with a real contact address. */}
-        <strong>[contact email]</strong>.
+        Questions or concerns: email{" "}
+        <a href="mailto:hamstu@gmail.com">hamstu@gmail.com</a>, or open an
+        issue on <a href={ISSUES}>GitHub</a>.
       </p>
     </Prose>
   );

@@ -33,37 +33,28 @@ Everything here needs a decision or a fact only Hamish has. Each item is also ma
    `site/public/_headers` (immutable cache for `/assets/*`, `X-Robots-Tag: noindex` on account
    pages) is picked up by Workers Static Assets without a config change.
 
-## Placeholders on the site
-
-4. **`[contact email]`** in the privacy policy (`src/pages/Privacy.tsx`). The terms' Contact section
-   only links to the private repo's issues (`src/pages/Terms.tsx`).
-5. **`[jurisdiction]`** in the terms, §8 Governing law (`src/pages/Terms.tsx`).
-
 ## Facts to settle (they show up in AI answers)
 
-6. **Cloud price: $5 or $6?** Monthly is $6; the yearly plan shows as "$5 a month" ($60 a year).
-   Decide which number leads, so answers don't say "$5 a month" for the monthly plan
-   (`src/lib/billing.ts`, FAQ `price`).
-7. **Currency.** The site shows "$"; JSON-LD says USD (`src/lib/seo.js`, PRICE_CURRENCY).
-8. **Free allowance vs trial.** The privacy page says an account adds hosted services "within free
+4. **Currency.** The site shows "$"; JSON-LD says USD (`src/lib/seo.js`, PRICE_CURRENCY).
+5. **Free allowance vs trial.** The privacy page says an account adds hosted services "within free
    monthly allowances"; the pricing shows only a 14-day trial (FAQ `price`).
-9. **macOS minimum and Intel Macs.** Home says "Apple silicon", /compare says "macOS 14+". Also:
+6. **macOS minimum and Intel Macs.** Home says "Apple silicon", /compare says "macOS 14+". Also:
    which Linux distros, and the minimum Windows version (OneOCR needs Windows 11) (FAQ `platforms`).
-10. **Release status.** Target release window (or "no date yet"), how to get notified, whether the
+7. **Release status.** Target release window (or "no date yet"), how to get notified, whether the
     nightly builds are public (FAQ `release`).
-11. **Who it's for.** Beginners who can't read kana yet, or intermediate learners? (FAQ `who-is-it-for`)
-12. **Texthookers.** Which ones are tested (Textractor, LunaTranslator, Agent…)? (FAQ
+8. **Who it's for.** Beginners who can't read kana yet, or intermediate learners? (FAQ `who-is-it-for`)
+9. **Texthookers.** Which ones are tested (Textractor, LunaTranslator, Agent…)? (FAQ
     `anki-and-texthookers`)
-13. **Phones, tablets, other languages.** Planned or out of scope? (FAQ `mobile-and-languages`)
-14. **Feedback channels.** Email, GitHub issues or discussions, Discord (FAQ `feedback`).
+10. **Phones, tablets, other languages.** Planned or out of scope? (FAQ `mobile-and-languages`)
+11. **Feedback channels.** Email is hamstu@gmail.com; add GitHub discussions or Discord if you start them (FAQ `feedback`).
 
 ## Nice to have
 
-15. **Social card.** A 1200×630 `og:image` (screenshot plus wordmark). The pages use the 512×512
+12. **Social card.** A 1200×630 `og:image` (screenshot plus wordmark). The pages use the 512×512
     app icon with `summary_large_image` for now (`src/lib/seo.js`, OG_IMAGE).
-16. **`sameAs` links** for the Person and SoftwareApplication JSON-LD: public GitHub, Discord,
+13. **`sameAs` links** for the Person and SoftwareApplication JSON-LD: public GitHub, Discord,
     YouTube, Bluesky/X once they exist; `downloadUrl` once the repo is public (`src/lib/seo.js`).
-17. **HSTS and "Always Use HTTPS"** in Cloudflare (from the audit; not set from this repo).
+14. **HSTS and "Always Use HTTPS"** in Cloudflare (from the audit; not set from this repo).
 
 ## How to check
 

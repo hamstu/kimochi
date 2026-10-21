@@ -2,6 +2,9 @@
  * Kimochi Cloud's prices as the site shows them, and starting a purchase. The amounts must match
  * the Stripe prices the Kimochi server is set up with (lookup keys
  * kimochi_cloud_monthly / _yearly / _lifetime); Stripe Checkout always charges its own price.
+ * Each plan leads with what it charges ($6 a month, $60 a year, $125 once); the yearly plan's
+ * monthly equivalent ($5) is only ever the note under it, so no one reads "$5 a month" as the
+ * monthly price. Keep FAQ (src/content/faq.js), JSON-LD (src/lib/seo.js) and public/llms.txt in step.
  */
 import { api, type Choice } from './api'
 
@@ -20,7 +23,7 @@ export interface PriceInfo {
 
 export const PRICES: Record<Choice, PriceInfo> = {
   monthly: { choice: 'monthly', label: 'Monthly', amount: '$6', per: 'a month', note: 'Billed monthly. Cancel any time.' },
-  yearly: { choice: 'yearly', label: 'Yearly', amount: '$5', per: 'a month', note: '$60 billed yearly. Two months free.' },
+  yearly: { choice: 'yearly', label: 'Yearly', amount: '$60', per: 'a year', note: 'That’s $5 a month, with two months free.' },
   lifetime: { choice: 'lifetime', label: 'Lifetime', amount: '$125', per: 'once', note: 'Pay once, keep Kimochi Cloud for good.' }
 }
 
