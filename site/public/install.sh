@@ -1,8 +1,8 @@
 #!/bin/sh
 # Kimochi installer for Linux (Steam Deck Desktop Mode, Ubuntu, Fedora, Arch, ...).
 #
-#   curl -fsSL https://<kimochi-site>/install.sh | sh
-#   curl -fsSL https://<kimochi-site>/install.sh | sh -s -- --uninstall
+#   curl -fsSL https://kimochiapp.com/install.sh | sh
+#   curl -fsSL https://kimochiapp.com/install.sh | sh -s -- --uninstall
 #
 # Installs the newest Kimochi AppImage for this CPU in your home directory (no sudo; SteamOS's
 # read-only system partition is never touched), adds it to the application menu, and starts it.
@@ -84,8 +84,8 @@ usage() {
   cat <<'USAGE'
 Install or update Kimochi for this user (no sudo needed).
 
-  curl -fsSL https://<kimochi-site>/install.sh | sh
-  curl -fsSL https://<kimochi-site>/install.sh | sh -s -- [options]
+  curl -fsSL https://kimochiapp.com/install.sh | sh
+  curl -fsSL https://kimochiapp.com/install.sh | sh -s -- [options]
 
 Options:
   --uninstall          Remove Kimochi and its menu entries (your data is kept)
@@ -288,7 +288,7 @@ install() {
   say "  Menu entry: $entry"
   say "  Your settings and dictionaries are kept across updates and reinstalls."
   say "  Kimochi updates itself from inside the app; you can also run this installer again."
-  say "  To remove it, run this installer again with --uninstall (sh -s -- --uninstall)."
+  say "  To remove it: curl -fsSL https://kimochiapp.com/install.sh | sh -s -- --uninstall"
   if [ -f /usr/share/applications/Kimochi.desktop ]; then
     say ""
     warn "the Kimochi .deb package is also installed. Its menu entry is now hidden behind this one; remove it with: sudo apt remove kimochi"
