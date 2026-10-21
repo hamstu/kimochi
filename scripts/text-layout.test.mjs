@@ -485,3 +485,48 @@ test('a big word is not set at the size of a caption that merely shares its colu
   assert.ok(word.fontSize > 1.5 * caption.fontSize, `${word.fontSize} against ${caption.fontSize}`)
   assert.ok(word.spacing < 0.1 * word.fontSize, `spaced ${word.spacing} at ${word.fontSize}`)
 })
+
+test("a bubble whose lines were each read on its own keeps every character on its own line", () => {
+  // Three columns as lettered: the middle one is short, the left one ends in compact punctuation.
+  // Shared out by length, characters drift between columns; read one by one, they cannot.
+  const said = ['ご主人さま', 'トカゲは', 'おキライなのかしら！？']
+  const lines = [
+    { x: 60, y: 0, width: 30, height: 150 },
+    { x: 30, y: 0, width: 30, height: 150 },
+    { x: 0, y: 0, width: 30, height: 270 }
+  ]
+  const part = {
+    text: said.join(''),
+    rect: { x: 0, y: 0, width: 90, height: 270 },
+    lines,
+    block: true,
+    vertical: true
+  }
+  const guessed = layoutParts([part], em)[0].map((run) => run.text)
+  assert.notDeepEqual(guessed, said, 'proportional sharing would move characters here')
+  const [runs] = layoutParts([{ ...part, lineTexts: said }], em)
+  assert.deepEqual(
+    runs.map((run) => run.text),
+    said
+  )
+  assert.deepEqual(
+    runs.map((run) => run.rect.x),
+    [60, 30, 0]
+  )
+  // One size for the bubble's columns, as before (a crowded one may shrink rather than overlap).
+  close(runs[0].fontSize, runs[1].fontSize, 'one size')
+  // The cells the word cursor outlines follow the same runs.
+  const cells = characterCells(part.text, runs, true, em)
+  assert.equal(cells[5].line, 1)
+  assert.equal(cells[9].line, 2)
+})
+
+test('per-line text that does not match the lines found is not used', () => {
+  const lines = [
+    { x: 30, y: 0, width: 30, height: 120 },
+    { x: 0, y: 0, width: 30, height: 120 }
+  ]
+  const part = { text: 'あいうえおかきく', rect: { x: 0, y: 0, width: 60, height: 120 }, lines, block: true, vertical: true }
+  const [runs] = layoutParts([{ ...part, lineTexts: ['あいうえおかきく'] }], em)
+  assert.equal(runs.length, 2)
+})

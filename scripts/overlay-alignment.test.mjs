@@ -180,10 +180,11 @@ test('every box, from every engine, is laid out inside itself with finite number
 
 /**
  * Manga OCR's detector reports line regions, not lines: in `bubble` (a real Quick Shot of one
- * speech bubble, two blocks of two columns with ruby beside every column) a ruby column, one
- * column in three pieces, and two columns and their ruby run together; in `vertical` two of three
- * columns. Shared out over those as lines, the text was set at three sizes from 11 to 63 px in
- * one bubble and drawn over the ruby. It is set as columns, a bubble at one size, over its text.
+ * speech bubble, two blocks of two columns with ruby beside every column, recorded before Manga
+ * OCR read each line on its own) a ruby column, one column in three pieces, and two columns and
+ * their ruby run together. Shared out over those as lines, the text was set at three sizes from 11
+ * to 63 px in one bubble and drawn over the ruby. It is set as columns, a bubble at one size, over
+ * its text. `vertical` is read as mokuro reads it, a column at a time, each set on its own.
  */
 test('Manga OCR: a speech bubble is lettered as columns at one size, over its own text', () => {
   const fixture = fixtures.find((f) => f.sample === 'bubble' && f.engine === 'mangaocr')
@@ -206,7 +207,7 @@ test('Manga OCR: a speech bubble is lettered as columns at one size, over its ow
   const [x1, y1] = [Math.max(...truth.map((g) => g.x + g.w)), Math.max(...truth.map((g) => g.y + g.h))]
   for (const g of runs.flatMap(drawn))
     assert.ok(g.cx > x0 - size / 2 && g.cx < x1 + size / 2 && g.cy > y0 - size / 2 && g.cy < y1 + size / 2, `${g.c} at ${g.cx.toFixed(0)},${g.cy.toFixed(0)}`)
-  for (const [sample, along] of [['bubble', 0.8], ['vertical', 0.3]]) {
+  for (const [sample, along] of [['bubble', 0.8], ['vertical', 0.12]]) {
     const row = scored.find((r) => r.sample === sample && r.engine === 'mangaocr')
     assert.ok(row.coverage >= 0.6, `${sample}: coverage ${row.coverage.toFixed(2)}`)
     assert.ok(row.alongMean <= along, `${sample}: mean along ${row.alongMean.toFixed(3)}`)

@@ -23,6 +23,11 @@ export interface OcrGroup {
   /** Per line of `linePolygons`, the words found on it with their boxes, when the engine gives them. */
   lineSegments?: Segment[][];
   /**
+   * Per line of `linePolygons`, its text, when the engine read each line on its own (Manga OCR,
+   * as mokuro does). The overlay sets each line's text on its line as it is.
+   */
+  lines?: string[];
+  /**
    * Grouped here from the engine's words (`logicalGroups`), not supplied by the engine. A result
    * normalised again (a reloaded overlay redrawing the saved scan) groups its words afresh rather
    * than drawing these as the engine's blocks, which would merge every word of a group into one box.
@@ -133,6 +138,17 @@ function lineSegmentsOf(
           fragments.filter((a) => a.granularity === "fragment"),
         );
   return lines && segments?.some((line) => line.length) ? { lineSegments: segments } : {};
+}
+
+/** A block's `lines`, as `lineTexts`, when there is one string for each of its line polygons. */
+function lineTextsOf(group: OcrGroup): { lineTexts?: string[] } {
+  const lines = group.lines;
+  return Array.isArray(lines) &&
+    lines.length > 0 &&
+    lines.length === group.linePolygons?.length &&
+    lines.every((line) => typeof line === "string")
+    ? { lineTexts: lines }
+    : {};
 }
 
 /** MeikiOCR's per-character boxes, as segments of its line. */
@@ -373,6 +389,8 @@ export function normalizeOcrResult(
           : {}),
         // And the words on each line, which place the text past a gap OCR left out (a space).
         ...lineSegmentsOf(g, fragments),
+        // And each line's own text, where the engine read the lines one by one.
+        ...lineTextsOf(g),
         boundingPoly: {
           vertices: [
             { x: g.bbox![0], y: g.bbox![1] },

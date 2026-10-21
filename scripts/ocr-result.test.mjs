@@ -174,3 +174,19 @@ test("groups an engine supplied are still drawn as its blocks", () => {
   assert.equal(once.textAnnotations[1].granularity, "block");
   assert.deepEqual(normalizeOcrResult(once, "googlelens").textAnnotations, once.textAnnotations);
 });
+
+test("Manga OCR's lines, each read on its own, reach the overlay with the lines they were read from", () => {
+  const right = [[60, 0], [90, 0], [90, 150], [60, 150]];
+  const left = [[30, 0], [60, 0], [60, 120], [30, 120]];
+  const raw = {
+    fullText: "ご主人さまトカゲは",
+    groups: [
+      { id: "block-0", text: "ご主人さまトカゲは", bbox: [30, 0, 90, 150], orientation: "vertical", linePolygons: [right, left], lines: ["ご主人さま", "トカゲは"] },
+      { id: "block-1", text: "あ", bbox: [0, 200, 30, 240], orientation: "vertical", linePolygons: [right, left], lines: ["あ"] },
+    ],
+  };
+  const result = normalizeOcrResult(raw, "mangaocr");
+  assert.deepEqual(result.textAnnotations[1].lineTexts, ["ご主人さま", "トカゲは"]);
+  // One string short of its lines: not trusted, the layout shares the text out as before.
+  assert.equal(result.textAnnotations[2].lineTexts, undefined);
+});

@@ -26,6 +26,8 @@ export interface Annotation {
   linePolygons?: number[][][]
   /** For a block: per line, its words (or characters) with their boxes, `[x1, y1, x2, y2]`. */
   lineSegments?: { text: string; bbox: number[] }[][]
+  /** For a block: per line, its text, when the engine read each line on its own. */
+  lineTexts?: string[]
   /** For a line or word: its characters (or words) with their boxes. */
   segments?: { text: string; bbox: number[] }[]
   /** How far outside the ink the engine draws boxes, in ems (INK_MARGINS in ocr-result.ts). */
@@ -46,6 +48,7 @@ export type MappedBox = Rect & {
   groupId?: string
   lines?: Rect[]
   lineSegments?: MappedSegment[][]
+  lineTexts?: string[]
   segments?: MappedSegment[]
   inkMargin?: number[]
   typeface?: string
@@ -131,11 +134,15 @@ export function mapAnnotations(
         const x = Math.min(...px)
         const y = Math.min(...py)
         const line = mapRect(info, origin, { x, y, width: Math.max(...px) - x, height: Math.max(...py) - y }, bounds)
-        return { line, words: (a.lineSegments?.[index] ?? []).flatMap(segment) }
+        return { line, words: (a.lineSegments?.[index] ?? []).flatMap(segment), said: a.lineTexts?.[index] }
       })
       .filter(({ line }) => finite(line))
     const lines = placed.map(({ line }) => line)
     const lineSegments = placed.map(({ words }) => words)
+    // Each line's own text, only while every line kept has one.
+    const lineTexts = placed.every(({ said }) => typeof said === 'string')
+      ? placed.map(({ said }) => said as string)
+      : []
     const segments = (a.segments ?? []).flatMap(segment)
     return [
       {
@@ -147,6 +154,7 @@ export function mapAnnotations(
         ...(a.groupId !== undefined ? { groupId: a.groupId } : {}),
         ...(lines.length ? { lines } : {}),
         ...(lineSegments.some((words) => words.length) ? { lineSegments } : {}),
+        ...(lineTexts.length ? { lineTexts } : {}),
         ...(segments.length ? { segments } : {}),
         ...(a.inkMargin?.length === 4 ? { inkMargin: a.inkMargin } : {}),
         ...(a.typeface ? { typeface: a.typeface } : {})

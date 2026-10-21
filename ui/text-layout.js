@@ -16,10 +16,13 @@
  * Runs come from the best evidence available, in order:
  *
  *   1. a box per line or per word (cloud OCR, MeikiOCR): each box is a run
- *   2. a box per paragraph or bubble with the lines found inside it (Google Lens, Live Text,
- *      OneOCR, Manga OCR): each line is a run, and a bubble's text, which may arrive unbroken, is
- *      shared out across its lines in proportion to their length
- *   3. a box per bubble and nothing more: the number of lines and the size that fill the box best
+ *   2. a box per bubble with each line found inside it read on its own (Manga OCR, which reads
+ *      pages as mokuro does): each line is a run with exactly its own text, so no character
+ *      moves to a line it was not read from
+ *   3. a box per paragraph or bubble with the lines found inside it (Google Lens, Live Text,
+ *      OneOCR): each line is a run, and a bubble's text, which may arrive unbroken, is shared
+ *      out across its lines in proportion to their length
+ *   4. a box per bubble and nothing more: the number of lines and the size that fill the box best
  *      are worked out, and the text is set as that many evenly spaced lines
  *
  * Pure: the caller supplies `measure`, the text's natural advance in ems (and, from a canvas, its
@@ -766,7 +769,15 @@ function anchored(runs, found, rect, vertical) {
 export function splitPart(part, vertical, measure = null) {
   if (!part.text) return []
   let runs
-  if (part.block || part.text.includes('\n')) {
+  const said = part.lineTexts
+  if (said?.length && said.length === part.lines?.length) {
+    // Each line read on its own: its text is set on it as it is, in the engine's reading order.
+    runs = part.lines.flatMap((rect, index) =>
+      said[index]
+        ? splitAtGaps({ text: said[index], rect }, part.lineSegments?.[index], vertical, measure)
+        : []
+    )
+  } else if (part.block || part.text.includes('\n')) {
     // The words found on each line travel with it through the reading-order sort.
     const found = (part.lines ?? []).map((line, index) => ({
       ...line,
@@ -789,9 +800,10 @@ export function splitPart(part, vertical, measure = null) {
  * Everything on screen, fitted together: each part's runs, in order, with the runs on one
  * visual row set at one size. The one fitting routine both overlay modes draw from.
  *
- * @param {{text: string, rect: {x: number, y: number, width: number, height: number}, lines?: {x: number, y: number, width: number, height: number}[], lineSegments?: object[][], segments?: object[], margin?: number[], block?: boolean, vertical?: boolean}[]} parts
- *   in overlay coordinates: a block carries the line rectangles found inside it, if any, and the
- *   words found on each (`lineSegments`); a line, the words or characters on it (`segments`);
+ * @param {{text: string, rect: {x: number, y: number, width: number, height: number}, lines?: {x: number, y: number, width: number, height: number}[], lineSegments?: object[][], lineTexts?: string[], segments?: object[], margin?: number[], block?: boolean, vertical?: boolean}[]} parts
+ *   in overlay coordinates: a block carries the line rectangles found inside it, if any, the
+ *   words found on each (`lineSegments`) and, when each was read on its own, its text
+ *   (`lineTexts`); a line, the words or characters on it (`segments`);
  *   any part, its engine's ink margins (`margin`, see `fit`), and the measure of its own typeface
  *   (`measure`), when it is not set in the overlay's
  * @param {(text: string) => number} measure the natural advance in ems; see `inkOf` for `.ink`

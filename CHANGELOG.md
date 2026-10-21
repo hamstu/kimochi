@@ -11,6 +11,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Manga OCR now reads each column of a speech bubble on its own, the way mokuro does, so every
+  character stays in the column it was printed in instead of slipping to the end of the one
+  before. Bubbles that touch are told apart more reliably, and long columns are no longer cut short.
 - Steam Deck: the welcome guide can add Kimochi to your Steam library, with its own artwork, so you
   can start it from Gaming Mode alongside your game. Settings → General has the same button.
 - Linux: Kimochi now shows up under Education in your apps menu, with a description.

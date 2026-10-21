@@ -150,9 +150,12 @@ fn ellipses(text: &str) -> String {
 fn response(mut page: PageResult) -> Value {
     for group in &mut page.groups {
         group.recognition.text = ellipses(&group.recognition.text);
+        for line in &mut group.lines {
+            *line = ellipses(line);
+        }
     }
     page.full_text = ellipses(&page.full_text);
-    let groups: Vec<_> = page.groups.iter().map(|g| json!({"id":g.id,"text":g.recognition.text,"bbox":g.bbox,"orientation":g.orientation,"confidence":g.detection_confidence,"linePolygons":g.line_polygons,"recognition":g.recognition})).collect();
+    let groups: Vec<_> = page.groups.iter().map(|g| json!({"id":g.id,"text":g.recognition.text,"bbox":g.bbox,"orientation":g.orientation,"confidence":g.detection_confidence,"linePolygons":g.line_polygons,"lines":g.lines,"fontSize":g.font_size,"recognition":g.recognition})).collect();
     let mut annotations = Vec::new();
     for g in &page.groups {
         let [x1, y1, x2, y2] = g.bbox;

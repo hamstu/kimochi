@@ -30,6 +30,8 @@ export interface Annotation {
   linePolygons?: number[][][]
   /** For a block: per line, the words (or characters) on it with their boxes, when known. */
   lineSegments?: { text: string; bbox: number[] }[][]
+  /** For a block: per line, its text, when the engine read each line on its own (Manga OCR). */
+  lineTexts?: string[]
   /** For a line or word: its characters (or words) with their boxes, when known. */
   segments?: { text: string; bbox: number[] }[]
   /** How far outside the ink the engine draws boxes, in ems (see INK_MARGINS in ocr-result.ts). */
