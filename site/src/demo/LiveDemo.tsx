@@ -645,7 +645,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
           </div>
         ) : (
           <>
-            <DesktopBar platform={platform} />
+            <DesktopBar platform={platform} replay={flow && phase === 'running'} />
             <div
               ref={deskRef}
               onPointerDown={onDeskDown}
@@ -731,7 +731,11 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
               {showPlay && (
                 <button
                   type="button"
-                  onClick={play}
+                  // Playing fills the screen, for the full effect; Esc or the corner button restores it.
+                  onClick={() => {
+                    setMax(true)
+                    play()
+                  }}
                   disabled={flow && loadLog && !logReady}
                   aria-label="Play the demo"
                   className="kd-play absolute top-1/2 left-1/2 z-[70] grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"

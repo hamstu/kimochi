@@ -97,7 +97,7 @@ export function TitleBar({
 }
 
 /** A thin desktop strip so each platform reads at a glance (menu bar, taskbar, GNOME top bar). */
-export function DesktopBar({ platform }: { platform: DesktopPlatform }) {
+export function DesktopBar({ platform, replay = false }: { platform: DesktopPlatform; replay?: boolean }) {
   if (platform === 'macos')
     return (
       <div className="flex h-6 shrink-0 items-center gap-4 bg-bar/80 px-4 text-[11px] text-ink-2 backdrop-blur" aria-hidden="true">
@@ -105,8 +105,8 @@ export function DesktopBar({ platform }: { platform: DesktopPlatform }) {
         <span>File</span>
         <span>Edit</span>
         <span>Window</span>
-        {/* Room on the right for the demo's replay and maximise buttons. */}
-        <span className="mr-14 ml-auto tnum">9:41</span>
+        {/* Room on the right for the demo's maximise button (and replay, while it shows). */}
+        <span className={`ml-auto tnum ${replay ? 'mr-14' : 'mr-7'}`}>9:41</span>
       </div>
     )
   if (platform === 'linux')

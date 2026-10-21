@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 /**
  * Shared pieces for the feature visuals: stylised, honest miniatures of Kimochi's real windows,
@@ -44,24 +44,6 @@ export function MiniWindow({
         <span className="min-w-0 flex-1 truncate">{title}</span>
         {trailing}
       </div>
-      {children}
-    </div>
-  )
-}
-
-/**
- * The game. A game frame looks the same whatever the site theme, so it is a dark, indigo-tinted
- * scene derived from the accent token rather than a theme role.
- */
-export const gameSceneStyle: CSSProperties = {
-  background:
-    'radial-gradient(120% 90% at 78% 8%, color-mix(in oklab, var(--k-accent) 45%, transparent), transparent 60%),' +
-    'linear-gradient(165deg, color-mix(in oklab, var(--k-accent) 30%, black) 0%, color-mix(in oklab, var(--k-accent) 8%, black) 100%)'
-}
-
-export function GameScene({ children, className = '' }: { children?: ReactNode; className?: string }) {
-  return (
-    <div className={`relative overflow-hidden rounded-lg shadow-pop ${className}`} style={gameSceneStyle}>
       {children}
     </div>
   )

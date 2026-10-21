@@ -258,3 +258,44 @@
     radial-gradient(70% 90% at 15% 0%, rgb(255 255 255 / 0.14), transparent 60%),
     linear-gradient(160deg, #5a7ce6, #3e63dd 45%, #2c4cbf);
 }
+
+/* The Overlay feature card's scene: a light desktop in light mode, the dark game scene in dark. */
+.overlay-scene {
+  --scene-sky:
+    radial-gradient(120% 90% at 78% 8%, color-mix(in oklab, var(--k-accent) 22%, transparent), transparent 60%),
+    linear-gradient(165deg, color-mix(in oklab, var(--k-accent) 10%, white) 0%, color-mix(in oklab, var(--k-accent) 4%, var(--k-bar)) 100%);
+  --scene-shape: color-mix(in oklab, var(--k-accent) 28%, var(--k-bar));
+  --scene-box: color-mix(in oklab, white 82%, transparent);
+  --scene-box-ring: color-mix(in oklab, var(--k-text) 10%, transparent);
+  --scene-ink: var(--k-text);
+  --scene-guide: color-mix(in oklab, var(--k-text) 35%, transparent);
+  --scene-chip: color-mix(in oklab, white 80%, transparent);
+  --scene-chip-ink: var(--k-text-2);
+  background: var(--scene-sky);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .overlay-scene {
+    --scene-sky:
+      radial-gradient(120% 90% at 78% 8%, color-mix(in oklab, var(--k-accent) 45%, transparent), transparent 60%),
+      linear-gradient(165deg, color-mix(in oklab, var(--k-accent) 30%, black) 0%, color-mix(in oklab, var(--k-accent) 8%, black) 100%);
+    --scene-shape: rgb(0 0 0 / 0.55);
+    --scene-box: rgb(0 0 0 / 0.55);
+    --scene-box-ring: rgb(255 255 255 / 0.1);
+    --scene-ink: #fff;
+    --scene-guide: rgb(255 255 255 / 0.45);
+    --scene-chip: rgb(0 0 0 / 0.45);
+    --scene-chip-ink: rgb(255 255 255 / 0.8);
+  }
+}
+:root[data-theme="dark"] .overlay-scene {
+  --scene-sky:
+    radial-gradient(120% 90% at 78% 8%, color-mix(in oklab, var(--k-accent) 45%, transparent), transparent 60%),
+    linear-gradient(165deg, color-mix(in oklab, var(--k-accent) 30%, black) 0%, color-mix(in oklab, var(--k-accent) 8%, black) 100%);
+  --scene-shape: rgb(0 0 0 / 0.55);
+  --scene-box: rgb(0 0 0 / 0.55);
+  --scene-box-ring: rgb(255 255 255 / 0.1);
+  --scene-ink: #fff;
+  --scene-guide: rgb(255 255 255 / 0.45);
+  --scene-chip: rgb(0 0 0 / 0.45);
+  --scene-chip-ink: rgb(255 255 255 / 0.8);
+}

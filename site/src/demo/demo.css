@@ -524,14 +524,15 @@
   pointer-events: none;
 }
 
-/* Desktop icons: the game and Kimochi, double-clicked by the virtual pointer (or the visitor). */
+/* Desktop icons: the game and Kimochi, double-clicked by the virtual pointer (or the visitor).
+   Labels follow the theme, like the wallpaper: dark ink on light, light ink on dark. */
 .kd-icon {
-  color: #fff;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+  color: var(--k-text);
+  text-shadow: 0 1px 2px color-mix(in oklab, var(--k-bar) 85%, transparent);
 }
 .kd-icon:hover,
 .kd-icon:focus-visible {
-  background: rgb(255 255 255 / 0.12);
+  background: color-mix(in oklab, var(--k-text) 8%, transparent);
   outline: none;
 }
 .kd-icon img,
