@@ -132,8 +132,7 @@ export function installWorkerNetwork(win, { origin, server, report }) {
  * of it has size 0 and `FileReaderSync.readAsArrayBuffer` throws `NotFoundError` ("The object can
  * not be found here."). Each import's commit then fails as "importing the dictionary failed. The
  * object can not be found here.", which is what Kimochi's first-run setup showed for most of the
- * five recommended dictionaries until they were retried (reproduced in a bare WKWebView:
- * evidence/dictionary-engines/hachidori-install-*.json).
+ * five recommended dictionaries until they were retried (reproduced in a bare WKWebView).
  *
  * So in WebKit the shim lets the worker build those Blobs as before but puts the bytes they were
  * made from into IndexedDB instead: a record whose `contents` is a Uint8Array is exactly what

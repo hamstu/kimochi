@@ -1,7 +1,5 @@
-<!-- TODO(owner): https://kimochi.app is a placeholder; no production domain is configured in site/ yet. -->
-
 <p align="center">
-  <a href="https://kimochi.app"><img src="branding/icon-macos.png" width="144" height="144" alt="Kimochi icon"></a>
+  <a href="https://kimochiapp.com"><img src="branding/icon-macos.png" width="144" height="144" alt="Kimochi icon"></a>
 </p>
 
 <h1 align="center">Kimochi</h1>
@@ -16,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://kimochi.app"><b>Download Kimochi and learn more at kimochi.app →</b></a>
+  <a href="https://kimochiapp.com"><b>Download Kimochi and learn more at kimochiapp.com →</b></a>
 </p>
 
 <!-- TODO(owner): add one screenshot here. -->
@@ -41,7 +39,7 @@ Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux buil
 
 ## Install
 
-Download the app from [kimochi.app](https://kimochi.app). Builds are published on
+Download the app from [kimochiapp.com](https://kimochiapp.com). Builds are published on
 [GitHub Releases](https://github.com/hamstu/kimochi-tauri/releases), and the app updates itself.
 
 ## Building from source

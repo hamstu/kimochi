@@ -98,8 +98,8 @@ OneOCR (Windows, optional)
 
 Kimochi does not include or redistribute anything from Microsoft for OneOCR.
 The OneOCR engine uses oneocr.dll, oneocr.onemodel and onnxruntime.dll that
-you supply yourself from your own copy of Windows Snipping Tool (see
-docs/ONEOCR.md); your use of those files is governed by Microsoft's terms for
+you supply yourself from your own copy of Windows Snipping Tool (Settings
+explains how when you choose OneOCR); your use of those files is governed by Microsoft's terms for
 that software. Kimochi ships only its own GPL-3.0-only helper process
 (oneocr-worker/), which loads them.
 
