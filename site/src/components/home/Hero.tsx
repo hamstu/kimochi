@@ -30,9 +30,12 @@ const RAIN_MASK = {
 
 export function Hero() {
   return (
-    <section className="relative isolate overflow-hidden">
+    // z-10 and no overflow clip here: the download button's menu hangs below the hero, over the demo.
+    <section className="relative isolate z-10">
       {/* Kana rain behind the top of the hero, fading out before the headline and lede. */}
-      <KanaRain className="absolute inset-x-0 top-0 -z-10 h-[34rem] w-full opacity-75 md:h-[40rem]" style={RAIN_MASK} />
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <KanaRain className="absolute inset-x-0 top-0 h-[34rem] w-full opacity-75 md:h-[40rem]" style={RAIN_MASK} />
+      </div>
 
       <div className="container-page flex flex-col items-center pt-16 pb-16 text-center md:pt-24 md:pb-24">
         <img

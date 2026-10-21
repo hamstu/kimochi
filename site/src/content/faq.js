@@ -1,5 +1,5 @@
 /**
- * The FAQ: /faq shows every question, the home page HOME_FAQ_COUNT after the first, and /faq's FAQPage
+ * The FAQ: /faq shows every question, the home page the first HOME_FAQ_COUNT, and /faq's FAQPage
  * JSON-LD is built from the same text (src/lib/seo.js). Every answer uses only facts already on
  * the site, and opens with the direct answer so it can be quoted on its own.
  *
@@ -12,7 +12,7 @@
  */
 
 /** How many questions the home page shows. */
-export const HOME_FAQ_COUNT = 6
+export const HOME_FAQ_COUNT = 7
 
 /** @type {FaqItem[]} */
 export const FAQ = [

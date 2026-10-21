@@ -7,20 +7,19 @@ import { HowItWorks } from '../components/home/HowItWorks'
 import { OpenSource } from '../components/home/OpenSource'
 import { AboutMe } from '../components/home/AboutMe'
 import { Testimonials } from '../components/home/TestimonialsSection'
-import { WhatIsKimochi } from '../components/home/WhatIsKimochi'
 import { HomeFaq } from '../components/home/HomeFaq'
 
 /**
- * Home. Section order: hero, what is Kimochi (one plain paragraph), the platform strip + live demo (DemoShowcase), features, how it
- * works, free and open source (OpenSource), who makes it (AboutMe), testimonials (hidden while empty), the first FAQ questions, download. Keep the ids features, demo and download: the header nav links
- * to them. Feature copy and visuals: src/components/home/features.ts. Quotes:
+ * Home. Section order: hero, the platform strip + live demo (DemoShowcase), features, how it
+ * works, free and open source with the plans (OpenSource), who makes it (AboutMe), testimonials
+ * (hidden while empty), the first FAQ questions, download. The header and footer nav (NAV_LINKS in
+ * Layout.tsx) follow this order and link to the section ids: keep them in step. Feature copy and visuals: src/components/home/features.ts. Quotes:
  * src/components/home/testimonials.ts.
  */
 export function Home() {
   return (
     <>
       <Hero />
-      <WhatIsKimochi />
       <DemoShowcase />
 
       <Section

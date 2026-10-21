@@ -86,11 +86,11 @@ function ChoosePlan({ user }: { user: User }) {
   const trial = user.billing.trialAvailable
   return (
     <div className="rounded-xl border border-[color-mix(in_oklab,var(--k-accent)_40%,transparent)] bg-[color-mix(in_oklab,var(--k-accent)_6%,var(--k-raised))] p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-meta tracking-[0.08em] text-accent-ink uppercase">Kimochi Cloud</p>
+      <p className="text-meta tracking-[0.08em] text-accent-ink uppercase">Kimochi Cloud</p>
+      <div className="mt-3 max-w-sm">
         <PlanToggle value={choice} onChange={setChoice} />
       </div>
-      <p className="mt-3 flex items-baseline gap-1.5">
+      <p className="mt-4 flex items-baseline gap-1.5">
         <span className="text-[1.75rem] leading-none font-semibold text-ink tnum">{price.amount}</span>
         <span className="text-small text-ink-3">{price.per}</span>
         <span className="ml-1 text-small text-ink-3">· {price.note}</span>

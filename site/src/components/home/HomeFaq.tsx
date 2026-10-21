@@ -4,14 +4,14 @@ import { FaqAnswer } from '../FaqAnswer'
 import { FAQ, HOME_FAQ_COUNT } from '../../content/faq.js'
 
 /**
- * Questions from src/content/faq.js as disclosures, then a link to /faq. The first one (What is
- * Kimochi?) is skipped: WhatIsKimochi answers it near the top of the page.
+ * The first HOME_FAQ_COUNT questions from src/content/faq.js as disclosures, across the page's
+ * width, then a link to /faq.
  */
 export function HomeFaq() {
   return (
-    <div className="max-w-3xl">
+    <div>
       <div className="divide-y divide-hairline border-y border-hairline">
-        {FAQ.slice(1, 1 + HOME_FAQ_COUNT).map((item) => (
+        {FAQ.slice(0, HOME_FAQ_COUNT).map((item) => (
           <details key={item.id} className="group">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-heading text-ink [&::-webkit-details-marker]:hidden">
               <h3 className="text-heading">{item.q}</h3>
