@@ -36,7 +36,7 @@ use std::sync::OnceLock;
 pub mod dictionary_images;
 pub mod gnome;
 pub mod gamescope;
-pub mod gaming_context;
+pub mod gaming_sources;
 pub mod steam_input;
 mod gamescope_touch;
 mod gamescope_focus;
@@ -159,7 +159,9 @@ pub fn source_spaces(_: &[kimochi_capture::Source]) -> std::collections::HashMap
 }
 
 pub fn picker_sources() -> Result<Vec<kimochi_capture::Source>, String> {
-    if on_x11() {
+    if gaming_sources::active() {
+        Ok(gaming_sources::sources())
+    } else if on_x11() {
         x11::picker_sources()
     } else {
         Err(format!(
@@ -210,7 +212,9 @@ pub fn frontmost_pid() -> Option<u32> {
 /// without an icon property (the UI falls back to its glyph). GNOME resolves the
 /// paired native app through its installed GIcon.
 pub fn app_icon_png(app: &AppIdentity, target: isize) -> Option<Vec<u8>> {
-    if on_x11() {
+    if gaming_sources::active() {
+        gaming_sources::icon_png(&app.name, target)
+    } else if on_x11() {
         x11::app_icon_png(&app.name, app.pid, target)
     } else {
         gnome::paired_app_icon_png(&app.name, target)
@@ -269,7 +273,10 @@ fn os_version() -> String {
 pub fn capabilities() -> Value {
     let s = session();
     let x11 = s.backend == Backend::X11;
-    let portal = gamescope::active() || !x11;
+    // Gaming Mode reads Gamescope's apps directly when its PipeWire node is there; the
+    // portal (one composed screen, no catalog) is the fallback.
+    let gaming = gaming_sources::active();
+    let portal = !gaming && (gamescope::active() || !x11);
     let gnome_status = gnome::status();
     let gnome = gnome_status["available"].as_bool().unwrap_or(false);
     let tracking = gnome && gnome_status["windowTracking"].as_bool().unwrap_or(false);
@@ -283,7 +290,7 @@ pub fn capabilities() -> Value {
             "layerShell": s.layer_shell,
             "nativeLayerShell": layer::available(),
             "nativeGamescope": gamescope::active(),
-            "captureBackend": if portal { "xdg-portal-pipewire" } else { "x11-getimage" },
+            "captureBackend": if gaming { "gamescope-pipewire" } else if portal { "xdg-portal-pipewire" } else { "x11-getimage" },
             "nativeGnomeShell": gnome,
             "xwayland": s.xwayland || gamescope::active(),
         },
@@ -303,8 +310,9 @@ pub fn capabilities() -> Value {
             "catalog": !portal,
             "thumbnails": !portal,
             "icons": !portal || tracking,
-            "followWindowBounds": !portal || tracking,
-            "foregroundTracking": !portal,
+            // A Gaming Mode app fills the output; nothing moves to follow.
+            "followWindowBounds": !gaming && (!portal || tracking),
+            "foregroundTracking": !gaming && !portal,
         },
         "overlay": {
             "available": x11 || layer::available() || gnome,

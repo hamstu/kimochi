@@ -12,7 +12,7 @@ libc = "0.2"
 # against local checkouts, or to move a pin, see "Working on the OCR crates" in CONTRIBUTING.md.
 meikiocr = { git = "https://github.com/hamstu/kimochi-meikiocr", rev = "16f2e4eb429c1f2c9a8dc75bb31eb8133e7f4aae" }
 mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "ab871d47efba3db9edaa55649a03fb9f95e1538f" }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
 # `macos-private-api` stays in this common block: tauri-build requires the common
 # declaration's features to match tauri.conf.json (`macOSPrivateApi: true`), so it

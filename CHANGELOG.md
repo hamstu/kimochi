@@ -16,6 +16,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   before. Bubbles that touch are told apart more reliably, and long columns are no longer cut short.
 - Steam Deck: the welcome guide can add Kimochi to your Steam library, with its own artwork, so you
   can start it from Gaming Mode alongside your game. Settings → General has the same button.
+- Steam Deck: in Gaming Mode, Change source lists your running games by name, with their Steam
+  icons and live previews, and Kimochi reads the game you choose even while Kimochi itself is in
+  front. Screen no longer shows a preview of Kimochi inside Kimochi.
 - Linux: Kimochi now shows up under Education in your apps menu, with a description.
 - Linux: dictionaries with AVIF images, such as Jitendex, now import on every distribution,
   Steam Deck included, instead of failing with "Could not load image".

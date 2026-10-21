@@ -81,8 +81,18 @@ pub fn controls_routed() -> bool {
         && super::gamescope_focus::owns_input(std::process::id())
 }
 pub fn return_to_game(app: &tauri::AppHandle) {
-    if !managed() { yield_to_steam(app); return; }
-    let Some(game) = super::gamescope_handoff::game_id() else {
+    return_to(app, None);
+}
+/// Hand input back to Steam and show `target` (a running app ID), or the game.
+pub fn return_to(app: &tauri::AppHandle, target: Option<u32>) {
+    if !managed() {
+        yield_to_steam(app);
+        if let Some(target) = target {
+            if let Err(error) = super::gamescope_handoff::select(target) { eprintln!("Gamescope switch: {error}"); }
+        }
+        return;
+    }
+    let Some(game) = target.or_else(super::gamescope_handoff::game_id) else {
         eprintln!("Gamescope return: select a running game through Steam first"); return;
     };
     YIELDING.store(true,Ordering::SeqCst);

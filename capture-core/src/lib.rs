@@ -27,6 +27,11 @@ mod linux_portal;
 #[cfg(target_os = "linux")]
 pub use linux_portal::PortalCapture;
 pub use linux_portal::{set_portal_token_store, MemoryTokenStore, TokenStore, PICKER_TIMEOUT};
+// Gaming Mode: Gamescope's PipeWire node, per app. Ids and catalog rules compile
+// everywhere; the backend is Linux-only.
+pub mod linux_gamescope;
+#[cfg(target_os = "linux")]
+pub use linux_gamescope::GamescopeCapture;
 
 pub mod hash;
 pub mod ids;
@@ -178,7 +183,9 @@ pub fn platform_backend() -> Result<Box<dyn CaptureBackend>> {
     }
     #[cfg(target_os = "linux")]
     {
-        if wayland_session_now() {
+        if gamescope_capture_now() {
+            Ok(Box::new(GamescopeCapture::new()))
+        } else if wayland_session_now() {
             Ok(Box::new(PortalCapture::new()))
         } else {
             Ok(Box::new(X11Capture::connect()?))
@@ -192,6 +199,12 @@ pub fn platform_backend() -> Result<Box<dyn CaptureBackend>> {
         ))
     }
 }
+/// Gaming Mode with Gamescope's PipeWire node: sources are its running apps, no picker.
+#[cfg(target_os = "linux")]
+pub fn gamescope_capture_now() -> bool {
+    Platform::current() == Platform::Gamescope
+}
+
 pub fn elapsed_ms(start: Instant) -> f64 {
     start.elapsed().as_secs_f64() * 1000.0
 }

@@ -133,15 +133,7 @@ export interface ScanResult {
  * Every added field is optional here so the panels degrade to a usable state rather than crashing
  * if the backend has not shipped it yet.
  */
-export interface ApplicationContext {
-  id: string
-  name: string
-  provider: string
-  manual: boolean
-}
-
 export interface ViewState {
-  applicationContext?: ApplicationContext | null
   revision: number
   status: string
   scan: ScanResult | null
@@ -164,7 +156,6 @@ export interface ViewState {
     name: string
     appName?: string | null
     icon?: string | null
-    applicationContext?: ApplicationContext | null
   } | null
   crop?: NativeCrop | null
   cropEnabled?: boolean

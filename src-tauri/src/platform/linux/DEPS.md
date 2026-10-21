@@ -82,6 +82,11 @@ Module wiring (done): `platform/mod.rs` selects `mod linux; pub use linux::*;` u
   source submenu offers "Use Current Source" and "Choose New Source…"; the latter
   closes the old portal session and clears its token before opening a fresh picker.
   Cancel clears a spent token; non-cancellation failures retain their exact error.
+- **Gaming Mode.** With Gamescope's PipeWire node present, capture-core returns
+  `GamescopeCapture` instead of the portal: no picker, a catalog of running apps
+  (`gamescope:window:{appid}:{pid}`, plus `gamescope:display:0`), named and iconed from
+  Steam's files by `gaming_sources.rs` (read only), activated through
+  `GAMESCOPECTRL_BASELAYER_APPID`. The portal stays the fallback.
 - **Ids.** `x11:window:{xid}:{pid}` (decimal xid), `x11:window:{xid}` for clients
   without `_NET_WM_PID`; `x11:display:{first RandR output XID}` (0 = whole root when
   RandR is missing). Minted only by `kimochi_capture::x11`, shared with the capture

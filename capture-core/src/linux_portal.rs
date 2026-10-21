@@ -304,7 +304,7 @@ pub(crate) fn plane_to_rgba(
 // ----- Backend ---------------------------------------------------------------------------
 
 #[cfg(target_os = "linux")]
-mod backend {
+pub(crate) mod backend {
     use super::{
         crop_region, frame_scale, parse_stream_id, plane_to_rgba, store_token, stored_token,
         PixelOrder, PortalStream, StreamKind, PICKER_TIMEOUT,
@@ -633,7 +633,7 @@ mod backend {
 
     // ----- PipeWire ----------------------------------------------------------------
 
-    fn pixel_order(format: spa::param::video::VideoFormat) -> Option<PixelOrder> {
+    pub(crate) fn pixel_order(format: spa::param::video::VideoFormat) -> Option<PixelOrder> {
         use spa::param::video::VideoFormat as F;
         Some(match format {
             F::BGRx => PixelOrder::Bgrx,
@@ -660,15 +660,20 @@ mod backend {
             .map(|(cursor, _)| cursor.into_inner())
     }
 
+    fn enum_format() -> Option<Vec<u8>> {
+        enum_format_with(Vec::new())
+    }
+
     /// EnumFormat: raw video in one of our four layouts, any size, 10 fps preferred
     /// (OCR needs no more, and every frame is a CPU copy), at most 30. No modifier
-    /// property, so producers stay on SHM buffers.
-    fn enum_format() -> Option<Vec<u8>> {
+    /// property, so producers stay on SHM buffers. `extra` adds producer-specific
+    /// properties (Gamescope's focus app ID).
+    pub(crate) fn enum_format_with(extra: Vec<Property>) -> Option<Vec<u8>> {
         use spa::param::format::{FormatProperties, MediaSubtype, MediaType};
         use spa::param::ParamType;
         use spa::utils::{Fraction, Rectangle, SpaTypes};
         let [a, b, c, d] = PixelOrder::PREFERRED.map(spa_format);
-        let object = spa::pod::object!(
+        let mut object = spa::pod::object!(
             SpaTypes::ObjectParamFormat,
             ParamType::EnumFormat,
             spa::pod::property!(FormatProperties::MediaType, Id, MediaType::Video),
@@ -712,11 +717,12 @@ mod backend {
                 Fraction { num: 30, denom: 1 }
             ),
         );
+        object.properties.extend(extra);
         serialize(Value::Object(object))
     }
 
     /// Buffers: CPU-mappable memory only (no DMA-BUF).
-    fn buffers_param() -> Option<Vec<u8>> {
+    pub(crate) fn buffers_param() -> Option<Vec<u8>> {
         let types = (1u32 << spa::sys::SPA_DATA_MemPtr) | (1u32 << spa::sys::SPA_DATA_MemFd);
         serialize(Value::Object(Object {
             type_: spa::utils::SpaTypes::ObjectParamBuffers.as_raw(),

@@ -1256,19 +1256,23 @@ and log out/in when GNOME cannot discover the newly installed extension. No auto
 `gnome-overlay-lookup` forwards native word click or Shift hover to the existing Yomitan backend.
 The extension displays plain dictionary text; full Yomitan popup controls are not implemented.
 
-## Gaming Mode reading identity
+## Gaming Mode sources
 
-`application_context_get() -> {available, context}` reports the reading application
-independently of the capture source. `context` is null or `{id,name,provider,manual}`.
-Currently automatic detection is Linux/Gamescope-only and reads the graphics game,
-not input focus. Screen source descriptors and history carry optional
-`applicationContext`; their real portal `sourceId` and kind remain unchanged.
+In Gaming Mode, when Gamescope's PipeWire node is present, capture uses it directly instead of the
+portal (`capabilities.session.captureBackend: "gamescope-pipewire"`, `capture.pickerRequired:
+false`, `sources.catalog`/`thumbnails`/`icons: true`). `source_catalog` lists
+`gamescope:window:{appid}:{pid}` for each running game or app (Gamescope's
+`GAMESCOPE_FOCUSABLE_APPS`, without Steam's client and Kimochi), named as Steam's library names it
+(`appmanifest_<appid>.acf`, or the non-Steam shortcut), and `gamescope:display:0` ("Screen",
+whatever is in front). `source_icon` returns Steam's cached icon for those names. Capturing an app
+asks Gamescope to compose only that app (its `focus_appid` format property), so a game is read even
+while Kimochi is in front; the one stream switches apps on demand. While another client (Steam's
+game recording) reads the node, capturing an app other than the streamed one fails with `busy`.
+`activate_source` on an app switches Gamescope to it and hands input back to Steam; on the screen
+it is `return_to_game`. At launch the saved source is restored if that app is running, else the
+game being played, else the screen.
 
-`application_context_set({context:{id,name}|null})` stores a validated named manual
-profile, or resumes detection with null. IDs/names must be bounded and contain no
-control characters. Unsupported sessions reject changes. Crops use
-`application:<id>` and reader sessions match that stable ID. Context changes
-invalidate old scan geometry and in-flight frontend OCR. OCR engine remains global.
+## Dictionary setup relay
 
 The overlay's one Yomitan backend serves app-owned `__setupDictionaries` relay
 requests: `catalog`, `start({dictionaryId})`, `status({id})`, and `practice`.

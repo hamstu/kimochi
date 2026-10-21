@@ -181,6 +181,8 @@ pub struct Shortcut {
     pub exe: String,
     pub launch_options: String,
     pub shortcut_path: String,
+    /// The icon file the user picked for the entry, if any.
+    pub icon: String,
 }
 
 /// Steam's legacy shortcut ID (before entries stored `appid`): CRC-32 of exe + name, top bit set.
@@ -218,6 +220,7 @@ pub fn shortcuts(bytes: &[u8]) -> Result<Vec<Shortcut>, String> {
                 exe,
                 launch_options: text("LaunchOptions"),
                 shortcut_path: text("ShortcutPath"),
+                icon: text("icon"),
             })
         })
         .collect())
@@ -343,6 +346,71 @@ pub fn most_recent_user(loginusers: &str) -> Option<u32> {
         // Newer clients may leave MostRecent out when only one account has signed in.
         (None, [(id, _)]) => account(id),
         _ => None,
+    }
+}
+
+// ---------------------------------------------------------------- running apps' names and icons
+
+/// The library folders `steamapps/libraryfolders.vdf` lists (each has its own `steamapps/`).
+pub fn library_paths(libraryfolders: &str) -> Vec<PathBuf> {
+    let root = text_vdf(libraryfolders);
+    root.get("libraryfolders")
+        .map(|folders| {
+            folders
+                .entries()
+                .iter()
+                .filter_map(|(_, folder)| folder.get("path").and_then(vdf::Node::as_str))
+                .map(PathBuf::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// An installed game's name, from its `appmanifest_<appid>.acf`.
+pub fn manifest_name(acf: &str) -> Option<String> {
+    let root = text_vdf(acf);
+    let name = root.get("AppState")?.get("name")?.as_str()?.trim();
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
+/// The game's small icon in `appcache/librarycache/<appid>/`: Steam stores it under its
+/// SHA-1 (40 hex digits) as a `.jpg`, beside named art like `header.jpg`.
+pub fn cached_icon<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    names.into_iter().find(|name| {
+        name.strip_suffix(".jpg")
+            .is_some_and(|stem| stem.len() == 40 && stem.bytes().all(|b| b.is_ascii_hexdigit()))
+    })
+}
+
+/// A running app's name and icon file, as Steam's library shows them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AppInfo {
+    pub name: String,
+    pub icon: Option<PathBuf>,
+}
+
+/// What Steam calls `app_id` (an installed game or a non-Steam shortcut) and its icon. Linux
+/// only; read only. Cached for the process: names and icons do not change while a game runs.
+pub fn app_info(app_id: u32) -> Option<AppInfo> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::collections::HashMap;
+        use std::sync::Mutex;
+        static CACHE: Mutex<Option<HashMap<u32, Option<AppInfo>>>> = Mutex::new(None);
+        if let Some(found) = CACHE.lock().unwrap().get_or_insert_with(HashMap::new).get(&app_id) {
+            return found.clone();
+        }
+        let found = host::app_info(app_id);
+        // An app not found yet may be a shortcut Steam has not written down: ask again later.
+        if found.is_some() {
+            CACHE.lock().unwrap().get_or_insert_with(HashMap::new).insert(app_id, found.clone());
+        }
+        found
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app_id;
+        None
     }
 }
 
@@ -632,6 +700,54 @@ mod host {
         })
     }
 
+    /// See `super::app_info`.
+    pub(super) fn app_info(app_id: u32) -> Option<AppInfo> {
+        let home = home()?;
+        for root in roots(&home) {
+            let mut libraries = vec![root.path.clone()];
+            if let Ok(text) = std::fs::read_to_string(root.path.join("steamapps/libraryfolders.vdf")) {
+                for path in library_paths(&text) {
+                    if !libraries.contains(&path) {
+                        libraries.push(path);
+                    }
+                }
+            }
+            let manifest = format!("steamapps/appmanifest_{app_id}.acf");
+            if let Some(name) = libraries
+                .iter()
+                .find_map(|library| std::fs::read_to_string(library.join(&manifest)).ok())
+                .and_then(|acf| manifest_name(&acf))
+            {
+                let cache = root.path.join("appcache/librarycache");
+                let folder = cache.join(app_id.to_string());
+                let names: Vec<String> = std::fs::read_dir(&folder)
+                    .map(|dir| dir.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+                    .unwrap_or_default();
+                let icon = cached_icon(names.iter().map(String::as_str))
+                    .map(|name| folder.join(name))
+                    .or_else(|| Some(cache.join(format!("{app_id}_icon.jpg"))).filter(|p| p.is_file()));
+                return Some(AppInfo { name, icon });
+            }
+            let Some(user) = user_dir(&root.path) else { continue };
+            let Ok(bytes) = std::fs::read(user.join("config/shortcuts.vdf")) else { continue };
+            let Some(shortcut) = shortcuts(&bytes).ok().and_then(|list| list.into_iter().find(|s| s.app_id == app_id)) else {
+                continue;
+            };
+            let image = |p: &Path| {
+                p.is_file()
+                    && p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                        ["png", "jpg", "jpeg"].contains(&e.to_ascii_lowercase().as_str())
+                    })
+            };
+            let grid = user.join("config/grid");
+            let icon = Some(PathBuf::from(shortcut.icon.trim_matches('"')))
+                .filter(|p| image(p))
+                .or_else(|| ["png", "jpg"].iter().map(|e| grid.join(format!("{app_id}_icon.{e}"))).find(|p| image(p)));
+            return Some(AppInfo { name: shortcut.name, icon });
+        }
+        None
+    }
+
     fn entry(user: &Path, markers: &[String]) -> Option<Shortcut> {
         let bytes = std::fs::read(user.join("config/shortcuts.vdf")).ok()?;
         let list = shortcuts(&bytes).ok()?;
@@ -909,6 +1025,34 @@ mod host {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_library_folders_manifest_names_and_cached_icons() {
+        let folders = r#""libraryfolders"
+{
+	"0"
+	{
+		"path"		"/home/deck/.local/share/Steam"
+		"apps" { "391540" "163095879" }
+	}
+	"1"
+	{
+		"path"		"/run/media/deck/sd/SteamLibrary"
+	}
+}"#;
+        assert_eq!(
+            library_paths(folders),
+            vec![PathBuf::from("/home/deck/.local/share/Steam"), PathBuf::from("/run/media/deck/sd/SteamLibrary")]
+        );
+        let acf = "\"AppState\"\n{\n\t\"appid\"\t\t\"1244090\"\n\t\"name\"\t\t\"Sea of Stars: Sunset Edition\"\n}";
+        assert_eq!(manifest_name(acf).as_deref(), Some("Sea of Stars: Sunset Edition"));
+        assert_eq!(manifest_name("\"AppState\" { \"name\" \"\" }"), None);
+        assert_eq!(
+            cached_icon(["header.jpg", "logo.png", "529d0f064196911482aeeb8f42ffcc1ff77fed67.jpg"]),
+            Some("529d0f064196911482aeeb8f42ffcc1ff77fed67.jpg")
+        );
+        assert_eq!(cached_icon(["library_600x900.jpg", "0ac7828eda69a8e2950c994aca095ebf2ad5e74b"]), None);
+    }
 
     /// A binary VDF writer for fixtures, mirroring Steam's layout.
     enum F<'a> {
