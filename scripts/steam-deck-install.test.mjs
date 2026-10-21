@@ -108,6 +108,49 @@ test(
     assert.ok(desktop.includes('%% \\$ \\` \\"'));
   },
 );
+test(
+  "--link points a new release at the running executable and keeps an existing copied install",
+  gnuOnly,
+  async (t) => {
+    const f = await fixture(t);
+    await chmod(f.artifact, 0o755);
+    // An existing tarball install (a copied AppImage), as on a Deck set up before Add to Steam.
+    assert.equal(f.run().status, 0);
+    const root = path.join(f.data, "kimochi/gaming-mode");
+    const launch = await readFile(path.join(root, "launch.sh"), "utf8");
+    const copied = await readlink(path.join(root, "current"));
+    const linked = spawnSync("sh", [installer, "--link", f.artifact], {
+      encoding: "utf8",
+      env: { ...process.env, XDG_DATA_HOME: f.data },
+    });
+    assert.equal(linked.status, 0, linked.stderr);
+    const current = await readlink(path.join(root, "current"));
+    assert.notEqual(current, copied);
+    assert.equal(await readlink(path.join(root, current, "Kimochi.AppImage")), f.artifact);
+    // Existing Steam shortcuts point at launch.sh: same path, same content.
+    assert.equal(await readFile(path.join(root, "launch.sh"), "utf8"), launch);
+    assert.equal((await readdir(path.join(root, "releases"))).length, 2);
+    const desktop = await readFile(
+      path.join(f.data, "applications/kimochi-gaming-mode.desktop"),
+      "utf8",
+    );
+    // Steam names a shortcut added from a desktop file after its Name.
+    assert.match(desktop, /^Name=Kimochi$/m);
+    const portal = await readFile(path.join(f.data, "applications/dev.kimochi.app.desktop"), "utf8");
+    assert.match(portal, /^NoDisplay=true$/m);
+  },
+);
+test("--link refuses a relative path", gnuOnly, async (t) => {
+  const f = await fixture(t);
+  await chmod(f.artifact, 0o755);
+  const result = spawnSync("sh", [installer, "--link", path.basename(f.artifact)], {
+    cwd: path.dirname(f.artifact),
+    encoding: "utf8",
+    env: { ...process.env, XDG_DATA_HOME: f.data },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /absolute path/);
+});
 test("release companion contains everything needed for installation including the icon", async (t) => {
   const f = await fixture(t);
   const output = path.join(f.data, "companion.tar.gz");

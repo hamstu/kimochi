@@ -22,7 +22,7 @@ Kimochi Gaming Mode
 One-time setup in Desktop Mode:
 1. Extract this archive and open a terminal in Kimochi-Gaming-Mode.
 2. Run: sh install-gaming-mode.sh ./Kimochi.AppImage
-3. Steam: Add a Game > Add a Non-Steam Game > Kimochi Gaming Mode.
+3. Steam: Add a Game > Add a Non-Steam Game > Kimochi (the entry in kimochi/gaming-mode).
 4. Return to Gaming Mode. Launch Kimochi from your Steam library, then your game.
 
 Press both sticks to open Kimochi's radial menu. B returns control to the game.

@@ -13,6 +13,7 @@ import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
 import { YomitanApiWizard } from '../components/YomitanApiSetup'
 import Step from './Step'
 import { StepActions } from './StepActions'
+import { STEAM_ROUTE } from './steamRoute'
 import { DictionaryReadiness } from '../components/DictionaryReadiness'
 import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
 import style from './WelcomeApp.module.css'
@@ -43,7 +44,7 @@ async function request<T>(params: object): Promise<T> {
 }
 
 /** Where the guide goes after the dictionary step. */
-const NEXT = '/done'
+const NEXT = STEAM_ROUTE
 
 /**
  * Onboarding's dictionary step. Yomitan's quick setup (Jitendex) only applies to Built-in Yomitan;

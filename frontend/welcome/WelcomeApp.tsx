@@ -3,7 +3,8 @@
  * step at a time above a persistent action bar.
  *
  *   intro → capture (Screen Recording permission, or the system picker) → Accessibility (macOS)
- *   → OCR engine → dictionary engine (choose + download) → that engine's setup → done
+ *   → OCR engine → dictionary engine (choose + download) → that engine's setup
+ *   → Steam library (a Steam Deck / SteamOS in Desktop Mode) → done
  *
  * Steps are hash routes, so a reload (switching dictionary engine reloads every reader window,
  * this one included) lands back on the same step. The bar holds Back on the left with the step
@@ -24,6 +25,7 @@ import type { PanelStateEvent } from '../bridge/types'
 import { useCapabilities } from '../bridge/capabilities'
 import { useExtensionStatus } from '../bridge/extensions'
 import { useDictionaryEngine } from '../bridge/dictionaryEngine'
+import { offersSteamStep, useSteamLibrary } from '../bridge/steamLibrary'
 import DictionarySettingsPanel from '../panels/DictionarySettingsPanel'
 import { EngineChooser } from '../panels/settings/EngineChooser'
 import { SystemPickerButton } from '../main/SourceGrid'
@@ -31,6 +33,8 @@ import macOSScreenPerms from './assets/howto-screen-macos.png'
 import DictionarySetup, { DictionaryPractice } from './DictionarySetup'
 import EngineSetup from './EngineSetup'
 import IntroStep from './IntroStep'
+import SteamLibraryStep from './SteamLibraryStep'
+import { STEAM_ROUTE } from './steamRoute'
 import KimochiLogo from '../components/KimochiLogo'
 import Step from './Step'
 import { StepActions } from './StepActions'
@@ -39,7 +43,15 @@ import { useCaptureStep, useHasScreenRecordingPermission } from './useHasScreenR
 import { completeOnboarding } from './welcome-actions'
 import style from './WelcomeApp.module.css'
 
-type StepId = 'intro' | 'capture' | 'accessibility' | 'ocr' | 'engine' | 'dictionaries' | 'done'
+type StepId =
+  | 'intro'
+  | 'capture'
+  | 'accessibility'
+  | 'ocr'
+  | 'engine'
+  | 'dictionaries'
+  | 'steam'
+  | 'done'
 
 const STEP_OF: Record<string, StepId> = {
   '/': 'intro',
@@ -50,6 +62,7 @@ const STEP_OF: Record<string, StepId> = {
   '/engine': 'engine',
   '/dictionaries': 'dictionaries',
   '/dictionary-settings': 'dictionaries',
+  [STEAM_ROUTE]: 'steam',
   '/done': 'done',
   '/main': 'done'
 }
@@ -99,6 +112,7 @@ function useFlow(pathname: string): {
   const accessibility = useAccessibility(pathname === '/accessibility')
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
   const dictionaryReady = useDictionaryReady()
+  const steam = useSteamLibrary().offered
   const captureRoute = gaming
     ? null
     : captureStep === 'permission'
@@ -115,6 +129,7 @@ function useFlow(pathname: string): {
     'ocr',
     'engine',
     'dictionaries',
+    ...(steam ? (['steam'] as const) : []),
     'done'
   ]
   const BACK: Record<string, string> = {
@@ -126,7 +141,8 @@ function useFlow(pathname: string): {
     '/dictionaries': '/engine',
     '/dictionary-settings': '/dictionaries',
     // A skipped engine has no setup step to go back to.
-    '/done': dictionaryReady === false ? '/engine' : '/dictionaries',
+    [STEAM_ROUTE]: dictionaryReady === false ? '/engine' : '/dictionaries',
+    '/done': steam ? STEAM_ROUTE : dictionaryReady === false ? '/engine' : '/dictionaries',
     '/main': '/done'
   }
   return { steps, captureRoute, accessibilityRoute, back: BACK[pathname] ?? null }
@@ -302,6 +318,29 @@ function NoDictionaryWarning(): JSX.Element | null {
   )
 }
 
+/**
+ * A Steam Deck / SteamOS in Desktop Mode: where to read from here. Said once the guide knows
+ * whether Kimochi is in the Steam library (added on the Steam step, or before).
+ */
+function DeckNextSteps(): JSX.Element | null {
+  const { status, offered } = useSteamLibrary()
+  if (!status?.supported || !(status.steamDeck || status.steamOs) || status.gamingMode) return null
+  if (status.added)
+    return (
+      <p className={style.text}>
+        You can use Kimochi here in Desktop Mode now, or return to Gaming Mode: Kimochi is in your
+        Steam library.
+      </p>
+    )
+  if (!offered && !offersSteamStep(status)) return null
+  return (
+    <p className={style.text}>
+      You can use Kimochi here in Desktop Mode now. To read in Gaming Mode, add Kimochi to your
+      Steam library from Settings → General whenever you like.
+    </p>
+  )
+}
+
 function DoneScreen(): JSX.Element {
   const capabilities = useCapabilities()
   const gaming =
@@ -332,6 +371,7 @@ function DoneScreen(): JSX.Element {
           navigation, to see its meaning. Press B to go back to your game.
         </li>
       </ol>
+      <DeckNextSteps />
       <DictionaryPractice />
       <StepActions>
         <Button variant="primary" asChild>
@@ -444,6 +484,7 @@ export default function WelcomeApp(): JSX.Element {
               <Route path="/engine" element={<EngineSetup />} />
               <Route path="/dictionaries" element={<DictionarySetup />} />
               <Route path="/dictionary-settings" element={<DictionarySettingsScreen />} />
+              <Route path={STEAM_ROUTE} element={<SteamLibraryStep />} />
               {/* The practice step became part of the last one. */}
               <Route path="/practice" element={<Navigate to="/done" replace />} />
               <Route path="/done" element={<DoneScreen />} />

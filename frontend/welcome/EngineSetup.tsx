@@ -27,11 +27,12 @@ import { DictionaryChooser } from '../panels/settings/DictionaryChooser'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import Step from './Step'
 import { StepActions } from './StepActions'
+import { STEAM_ROUTE } from './steamRoute'
 
 /** Where onboarding goes once an engine is ready: its own setup step. */
 export const AFTER_ENGINE = '/dictionaries'
-/** Where a skip goes: past the dictionary steps. */
-export const AFTER_SKIP = '/done'
+/** Where a skip goes: past the dictionary steps (to the Steam library step, where it applies). */
+export const AFTER_SKIP = STEAM_ROUTE
 
 export default function EngineSetup(): JSX.Element {
   const navigate = useNavigate()

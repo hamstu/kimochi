@@ -41,6 +41,7 @@ mod scan_trace;
 mod settings;
 mod sources;
 mod state;
+mod steam_library;
 mod text_observer;
 mod texthooker;
 mod tray;
@@ -2734,6 +2735,8 @@ fn main() {
             open_screen_capture_preferences,
             platform_capabilities,
             gnome_overlay,
+            steam_library::steam_library_status,
+            steam_library::steam_library_add,
             activity::activity_post,
             model_store::model_status,
             model_store::model_download_start,
@@ -2774,6 +2777,7 @@ fn main() {
             let website_data = platform::keep_website_data();
             #[cfg(target_os = "linux")]
             platform::gnome::start(handle.clone());
+            steam_library::start();
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // Before any window is built, so none shows the system's appearance first.
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());

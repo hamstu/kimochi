@@ -1277,3 +1277,38 @@ when the current profile looks words up with it.
 `start` returns a job ID immediately; download/import outlives the requesting panel,
 then verifies import success/counts and enables the dictionary through granular
 profile updates. Jobs live for the app process, not across crashes/restarts.
+
+## Steam library (Linux)
+
+`src-tauri/src/steam_library.rs`. Both commands are registered on every platform; outside Linux
+they answer `supported: false` / `state: "unsupported"`.
+
+`steam_library_status() -> SteamLibraryStatus`:
+`{supported, steamDeck, steamOs, steamInstalled, steamRunning, gamingMode, added, appId, artwork, launcher, reason}`.
+`steamDeck` is DMI `board_vendor` Valve with `product_name` Jupiter or Galileo; `steamOs` is
+os-release `ID=steamos`. `steamInstalled` means a Steam root (`~/.local/share/Steam`,
+`~/.steam/steam`, or the Flatpak's) exists; `steamRunning` that a `steam` process of this user does.
+`gamingMode` is gamescope. `added`/`appId` come from a read-only parse of the signed-in user's
+binary `userdata/<id>/config/shortcuts.vdf` (the user `config/loginusers.vdf` marks `MostRecent`, or
+the only one): an entry whose Exe, LaunchOptions or ShortcutPath names the gaming-mode launcher
+(`kimochi/gaming-mode/launch.sh`), `applications/kimochi-gaming-mode.desktop` or this executable.
+`artwork`: all four grid images exist for that app ID. `launcher`: `$XDG_DATA_HOME/kimochi/gaming-mode/current`
+points at this executable (`$APPIMAGE`, else the binary) with the embedded scripts.
+
+`steam_library_add() -> {state, message, appId, status}`, `state` one of `added`, `pending`,
+`steamNotRunning`, `failed`, `unsupported`; `status` is the status afterwards. Runs off the main
+thread, one at a time. It (1) refreshes the launcher bundle when it is not current by running the
+embedded `scripts/steam-deck/install-gaming-mode.sh --link <executable>` (a new `releases/<id>`
+holding a symlink, `current` swapped atomically, `launch.sh` unchanged, earlier releases kept,
+`kimochi-gaming-mode.desktop` with `Name=Kimochi`, `dev.kimochi.app.desktop` only when absent);
+(2) if the entry already exists, only fills in missing art (no duplicate entry); (3) if Steam is
+not running, returns `steamNotRunning` (the launcher stays installed for the manual route);
+(4) asks the running client to add the desktop file: `steamos-add-to-steam <desktop>` when on
+`PATH`, else touch `/tmp/addnonsteamgamefile` and `steam steam://addnonsteamgame/<percent-encoded path>`
+(`flatpak run com.valvesoftware.Steam …` for the Flatpak); never writes `shortcuts.vdf`; (5) polls
+`shortcuts.vdf` for up to 20 s and writes the missing grid art (`<appid>p.png` 600×900,
+`<appid>.png` 920×430, `<appid>_hero.png` 1920×620, `<appid>_logo.png`) into
+`userdata/<id>/config/grid/`, never replacing an existing image. No entry in time: `pending`.
+Records `{"check":"steam-library-add", state, message, appId}` in the evidence log. At launch
+(`steam_library::start`, Linux) the same missing-art fill runs once for an existing entry.
+Steam shows new grid art after it restarts (switching to Gaming Mode).

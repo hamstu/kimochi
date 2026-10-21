@@ -49,7 +49,7 @@
  *   ?popover=message  show what the parent frame posts instead of the sample (`listenForPopover`)
  *
  * Onboarding (welcome.html):
- *   ?step=intro|permission|accessibility|picker|ocr|engine|dictionaries|dictionary-settings|done|error
+ *   ?step=intro|permission|accessibility|picker|ocr|engine|dictionaries|dictionary-settings|steam|done|error
  *                    open that step (error: the last step's save failed). Every step stays
  *                    navigable from there; ?platform=linux makes the capture step the picker
  *   ?permission=denied  macOS Screen Recording not granted yet (default: granted)
@@ -59,6 +59,8 @@
  *   ?gamemode=1         macOS Game Mode is throttling the overlay (its notice under Show overlay)
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
+ *   ?steam=<state>   the Steam library (preview-steam.ts): deck, notrunning, fail, pending, added,
+ *                    gaming; the welcome guide's Steam step (?step=steam) and Settings → General
  *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
  *                    official, unknown, kimochi, broken, host, ready, fail; for the wizard in
  *                    onboarding and in Settings → Dictionary (?tab=dictionary&popup=custom-api)
@@ -92,6 +94,7 @@ import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
 import { UPDATE_HANDLERS } from './preview-updates'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
+import { STEAM_HANDLERS } from './preview-steam'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
 
@@ -543,6 +546,7 @@ const HANDLERS: Record<string, Handler> = {
   ...UPDATE_HANDLERS,
   ...YOMITAN_API_HANDLERS,
   ...ACCOUNT_HANDLERS,
+  ...STEAM_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => {
@@ -1132,6 +1136,7 @@ const WELCOME_ROUTES: Record<string, string> = {
   engine: '/engine',
   dictionaries: '/dictionaries',
   'dictionary-settings': '/dictionary-settings',
+  steam: '/steam',
   done: '/done',
   error: '/main'
 }

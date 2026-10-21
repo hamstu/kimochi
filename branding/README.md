@@ -14,6 +14,7 @@ The brackets are set by `RETICLE` in `compose.mjs`, as fractions of the tile wid
 | `favicon.svg` | Bare キ, no brackets (at 16px they would squeeze the glyph to ~7px). Uses `currentColor`. Standalone it uses indigo `#3e63dd` in light mode and `#9eb1ff` in dark mode. If you inline it in HTML, delete its `<style>` so it inherits colour from the page | `site/public/favicon.svg` |
 | `tray-template.svg` | 16pt black キ for the macOS menu bar, no brackets for the same reason | `tray-template.png`, `tray-template@2x.png` |
 | `sketches/*.svg` | `0-final-macos` and `0-final-square` are copies of the shipped design. The rest are the alternatives that were considered (vertical gradient without brackets, diagonal gradient, dark ground, bare glyph). Each has a `.png` preview, and `contact-sheet.png` shows them all | Previews only |
+| `steam/*.svg`, `steam-library.mjs` | Steam library artwork: portrait capsule (600×900), wide capsule (920×430), hero (1920×620, no text) and transparent logo, built from `icon.svg` plus the Figtree / Noto Sans JP wordmark as outlines (OFL, LICENSE-OFL.txt). `steam-library.mjs` writes the SVGs | `resources/steam-library/*.png` (installed into Steam's grid folder by Add to Steam) and the welcome step's `frontend/welcome/assets/steam-capsule.png`, via `npm run icons` (or `npm run icons -- --steam` for these alone) |
 | `compose.mjs` | Writes all of the SVGs above from shared parameters: squircle geometry, colours, glyph size and optical centring | Optional |
 
 ## Regenerating

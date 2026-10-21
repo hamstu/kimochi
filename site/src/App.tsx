@@ -5,6 +5,7 @@ import { Home } from './pages/Home'
 import { Privacy } from './pages/Privacy'
 import { Terms } from './pages/Terms'
 import { Compare } from './pages/Compare'
+import { DownloadLinux } from './pages/DownloadLinux'
 import { NotFound } from './pages/NotFound'
 import { Account } from './pages/Account'
 import { AccountSignIn } from './pages/AccountSignIn'
@@ -22,6 +23,7 @@ const TITLES: Record<string, string> = {
   '/privacy': 'Privacy · Kimochi',
   '/terms': 'Terms · Kimochi',
   '/compare': 'Compare · Kimochi',
+  '/download/linux': 'Install on Linux · Kimochi',
   '/account': 'Account · Kimochi',
   '/account/sign-in': 'Sign in · Kimochi',
   '/account/sign-up': 'Create an account · Kimochi',
@@ -49,6 +51,7 @@ export function App() {
           <Route path="privacy" element={<Privacy />} />
           <Route path="terms" element={<Terms />} />
           <Route path="compare" element={<Compare />} />
+          <Route path="download/linux" element={<DownloadLinux />} />
           <Route path="account" element={<Account />} />
           <Route path="account/sign-in" element={<AccountSignIn />} />
           <Route path="account/sign-up" element={<AccountSignUp />} />

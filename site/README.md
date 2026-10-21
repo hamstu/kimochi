@@ -29,7 +29,7 @@ site/
   src/
     main.tsx              BrowserRouter + App
     App.tsx               routes + per-route document titles (TITLES map)
-    pages/                one component per route: Home, Privacy, Terms, Compare, NotFound,
+    pages/                one component per route: Home, Privacy, Terms, Compare, DownloadLinux, NotFound,
                           Account*, LinkApp (see "Account pages")
     components/           Layout, Section, Prose, Button, DownloadButton, ThemeToggle,
                           AccountNavLink; account/ (forms, meters, dashboard sections)
@@ -127,6 +127,17 @@ then `.deb` then `.rpm`, with every generic build before the `-arch` one. It sho
 limit, network error, no published build, a phone, or no build for the platform, it links to
 https://github.com/hamstu/kimochi-tauri/releases instead. The API only answers for a public
 repository; drafts are invisible to it.
+
+**Linux install guide.** On Linux the button goes to `/download/linux` (`pages/DownloadLinux.tsx`)
+instead of a file, because the right install depends on the system; the chevron menu still lists
+every file plus a "Linux install guide" item. The page has a segmented chooser (ARIA tabs) for
+Steam Deck, Ubuntu/Debian and everything else, each an anchor (`#steam-deck`, `#debian`, `#other`;
+aliases like `#ubuntu`, `#fedora` work), then Updating, Uninstalling and "If Kimochi won't start"
+(`#wont-start`). The one-line installer command is built from `window.location.origin`
+(`curl -fsSL <origin>/install.sh | sh`, script in `public/install.sh`). Pure helpers (hash →
+section, installer/apt/AppImage commands, .deb/AppImage picking, the button's href) live in
+`src/lib/linux.js` (`test/linux.test.mjs`); `components/CopyCommand.tsx` is the command well with
+its Copy button.
 
 ## Demo
 

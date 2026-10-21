@@ -11,6 +11,9 @@
 //    rounding), so macOS needs a source with the squircle and margins already drawn,
 //    while Windows and Linux want the full square.
 // 3. Writes the menu bar template PNGs, the website icons and the sketch previews.
+// 4. Rasterises the Steam library artwork (branding/steam/*.svg, written by
+//    branding/steam-library.mjs) into resources/steam-library/ and the welcome guide's preview.
+//    `npm run icons -- --steam` runs this step alone.
 import { Resvg } from "@resvg/resvg-js";
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -55,6 +58,23 @@ function tauriIcon(sourcePng) {
     throw err;
   }
   return out;
+}
+
+// Steam library artwork: what "Add to Steam" installs into Steam's grid folder (embedded in the
+// Linux build, src-tauri/src/steam_library.rs), plus the welcome step's half-size preview.
+function steamArtwork() {
+  console.log("Steam library artwork");
+  const masters = join(branding, "steam");
+  const out = join(root, "resources", "steam-library");
+  for (const [name, width] of [["capsule", 600], ["wide", 920], ["hero", 1920], ["logo", 1180]]) {
+    write(join(out, `${name}.png`), render(join(masters, `${name}.svg`), width));
+  }
+  write(join(root, "frontend", "welcome", "assets", "steam-capsule.png"), render(join(masters, "capsule.svg"), 300));
+}
+
+if (process.argv.includes("--steam")) {
+  steamArtwork();
+  process.exit(0);
 }
 
 console.log("Rasterising masters");
@@ -134,6 +154,8 @@ write(
   join(sketches, "contact-sheet.png"),
   new Resvg(sheet, { font: { loadSystemFonts: true } }).render().asPng(),
 );
+
+steamArtwork();
 
 if (!existsSync(join(tauriIcons, "icon.icns"))) throw new Error("icon.icns missing after generation");
 console.log("Done.");
