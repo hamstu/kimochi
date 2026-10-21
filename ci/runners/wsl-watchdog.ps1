@@ -21,8 +21,8 @@ Logs to C:\ProgramData\wsl-keepalive\watchdog.log.
 #>
 param(
   [string]$Distro = 'Ubuntu',
-  [string]$User = 'hamst',
-  [int]$SshPort = 2222,
+  [string]$User = $env:USERNAME,
+  [int]$SshPort = 22,
   [int]$MinFreeGB = 10,
   [int]$CompactBelowGB = 0
 )

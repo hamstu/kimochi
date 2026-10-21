@@ -13,7 +13,7 @@ when that drive gets low and the runner is idle). Inside the distro it installs 
 (the watchdog's probe) and a drop-in giving the runner unit Restart=always, and it turns off WSL's
 idle shutdown in the user's .wslconfig.
 
-  powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User hamst -SshPort 2222
+  powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User <user> -SshPort <port>
 
 Run elevated. The user must be a local administrator (the key is added to
 administrators_authorized_keys), and OpenSSH Server must already be installed and running.

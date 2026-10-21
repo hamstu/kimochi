@@ -11,14 +11,17 @@ Runner fleet: https://github.com/hamstu/kimochi-tauri/settings/actions/runners
 
 ## The fleet
 
-| Runner | Machine | Labels | Builds |
-| --- | --- | --- | --- |
-| `typhon` | This Mac (Apple Silicon) | `macOS`, `ARM64` | macOS, plus the `plan` and `release` jobs |
-| `win11-arm-vm` | Parallels "Windows 11" VM on the Mac | `Windows`, `ARM64` | Windows ARM64 |
-| `ubuntu-arm-vm` | Parallels "Ubuntu 24.04.3 ARM64" VM on the Mac | `Linux`, `ARM64`, `ubuntu` | Linux ARM64 |
-| `omarchy-arm-vm` | Parallels "Omarchy ARM" VM on the Mac (Arch) | `Linux`, `ARM64`, `arch` | Linux ARM64, only when a manual run ticks "Arch" |
-| `arcade-pc` | Windows 11 x64 PC (SSH host `arcade-pc`) | `Windows`, `X64` | Windows x64 |
-| `arcade-pc-wsl` | WSL Ubuntu inside the arcade PC (SSH host `arcade-pc-wsl`) | `Linux`, `X64`, `ubuntu` | Linux x64 |
+A Mac (Apple Silicon) runs the macOS runner and, in Parallels VMs, the ARM64 Windows and Linux
+ones; a Windows 11 x64 PC runs the x64 Windows runner and, in WSL, the x64 Linux one.
+
+| Machine | Labels | Builds |
+| --- | --- | --- |
+| macOS, Apple Silicon | `macOS`, `ARM64` | macOS, plus the `plan` and `release` jobs |
+| Windows 11 ARM64 VM | `Windows`, `ARM64` | Windows ARM64 |
+| Ubuntu 24.04 ARM64 VM | `Linux`, `ARM64`, `ubuntu` | Linux ARM64 |
+| Arch Linux ARM64 VM | `Linux`, `ARM64`, `arch` | Linux ARM64, only when a manual run ticks "Arch" |
+| Windows 11 x64 PC | `Windows`, `X64` | Windows x64 |
+| WSL Ubuntu on that PC | `Linux`, `X64`, `ubuntu` | Linux x64 |
 
 Every runner also carries the `kimochi` label and the automatic `self-hosted` one. The
 workflow picks machines by OS + architecture (+ distro) labels, never by name, so a
@@ -27,13 +30,12 @@ replacement machine only needs the same labels.
 ## How a runner stays up
 
 - macOS: a launchd agent in `~/Library/LaunchAgents/actions.runner.*.plist`, started at login.
-- Linux: a systemd unit `actions.runner.*.service`, started at boot, running as `hamstu`, with a
+- Linux: a systemd unit `actions.runner.*.service`, started at boot, running as the build user, with a
   `restart.conf` drop-in (`Restart=always`) that `setup-runner.sh` adds.
 - Windows: a Windows service `actions.runner.*`, start type Automatic, running as LocalSystem.
   Jobs use the runner's own rustup/cargo in `<runner dir>\_rust` (through the runner's `.env` and
   `.path` files), never a user's, so `tauri dev` on the same machine can't lock files a job needs.
-- Parallels VMs: `prlctl set <vm> --autostart start-host` starts the VM with Parallels. The Omarchy
-  VM was left as is.
+- Parallels VMs: `prlctl set <vm> --autostart start-host` starts the VM with Parallels.
 - WSL: see [WSL runner](#wsl-runner) below.
 
 The runner application updates itself. Check a machine with `./svc.sh status` (macOS/Linux)
@@ -45,7 +47,7 @@ WSL only runs while a session holds the distro open, and only in its owner's Win
 `install-wsl-keepalive.ps1` (elevated, on the Windows host; needs OpenSSH Server) sets up:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User hamst -SshPort 2222 -CompactBelowGB 12
+powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User <user> -SshPort <port> -CompactBelowGB 12
 ```
 
 - `WSL keepalive (Ubuntu)`: a SYSTEM task at boot (nobody needs to log on) that SSHes to the
@@ -62,11 +64,11 @@ powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -D
 - `vmIdleTimeout=-1` and `instanceIdleTimeout=-1` in the user's `.wslconfig`, and the
   `Restart=always` drop-in for the runner unit inside the distro.
 
-Failure seen on the arcade PC (2026-10-15): the distro's `ext4.vhdx` had grown until C: was
+Failure seen on the x64 Windows runner (October 2026): the distro's `ext4.vhdx` had grown until C: was
 full; the distro died and every start then failed with `Wsl/Service/CreateInstance/E_FAIL`
 (error code 6, failure step 2) while the WSL utility VM stayed up. Only `wsl --shutdown` plus a
-`WSLService` restart cleared it, which is what the watchdog now does. The distro now lives on the
-G: SSD (`G:\wsl\Ubuntu`, moved with `wsl --manage Ubuntu --move`), away from C:.
+`WSLService` restart cleared it, which is what the watchdog now does. The distro now lives on a
+second SSD (moved with `wsl --manage Ubuntu --move`), away from C:.
 
 The vhdx grows but never shrinks on its own: ext4 spreads writes over its whole 1 TB virtual
 size, so the file creeps towards used space plus everything ever written, whatever the build
@@ -127,11 +129,11 @@ afterwards):
 | `KIMOCHI_MIN_FREE_GB` | 15 | Wipe them when the drive has less free; `0` turns the check off |
 | `KIMOCHI_FREE_SPACE_PATH` | the checkout | Where to measure free space |
 
-On the arcade PC the G: SSD (111 GB) holds the WSL distro's vhdx, which only shrinks when the
-watchdog compacts it, so `arcade-pc-wsl` has `KIMOCHI_CACHE_MAX_GB=15`, `KIMOCHI_MIN_FREE_GB=0`
-and `KIMOCHI_FREE_SPACE_PATH=/mnt/g` (deleting inside WSL gives nothing back to G:). The Windows
-runner's work directory is on C: (`C:\actions-runner-work`, set as `workFolder` in the runner's
-`.runner` file; the runner itself stays in `G:\actions-runner`) and uses the defaults.
+Where a small drive holds the WSL distro's vhdx, which only shrinks when the watchdog compacts
+it, the WSL runner sets a lower `KIMOCHI_CACHE_MAX_GB`, `KIMOCHI_MIN_FREE_GB=0` and
+`KIMOCHI_FREE_SPACE_PATH` to that drive's mount (deleting inside WSL gives nothing back to it). A
+Windows runner's work directory can live on another drive than the runner (set `workFolder` in
+the runner's `.runner` file).
 After moving a work directory, delete its `*/target` directories: build scripts record absolute
 paths, so a moved cache fails with "failed to read plugin permissions" pointing at the old path.
 

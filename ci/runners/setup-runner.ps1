@@ -5,7 +5,7 @@ the machine (a Windows service running as LocalSystem, so no password is needed)
 
 .EXAMPLE
 $env:RUNNER_TOKEN = '<registration token from ci/runners/token.sh>'
-powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name arcade-pc -Labels kimochi -Dir G:\actions-runner -Work C:\actions-runner-work
+powershell -ExecutionPolicy Bypass -File ci\runners\setup-runner.ps1 -Name win-x64 -Labels kimochi -Dir D:\actions-runner -Work C:\actions-runner-work
 
 Run from an elevated PowerShell. Re-running replaces the existing registration with the same
 name. Jobs run as LocalSystem with their own Rust toolchain under <Dir>\_rust (RUSTUP_HOME /
