@@ -158,7 +158,10 @@ Sounds
 
 The scan sounds in ui/sounds/ are from Kenney (https://www.kenney.nl),
 "Interface Sounds" and "UI Audio", CC0 1.0 (public domain dedication),
-re-encoded and lightly processed. See ui/sounds/LICENSE.txt.
+re-encoded and lightly processed. The interface sounds (clicks, switches,
+menus and the like) were synthesized with Earshot
+(https://github.com/Leonxlnx/earshot, MIT) and contain no recordings. See
+ui/sounds/LICENSE.txt.
 
 
 Libraries
