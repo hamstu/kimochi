@@ -207,6 +207,8 @@ jobs:
           sudo apt-get update
           # pipewire-bin: /usr/share/pipewire/client.conf, which scripts/linux-appimage.mjs
           # copies into the AppImage with the modules it names.
+          # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
+          # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -227,7 +229,8 @@ jobs:
             gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
-            gstreamer1.0-pulseaudio
+            gstreamer1.0-pulseaudio \
+            libavif-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -299,6 +302,8 @@ jobs:
           sudo apt-get update
           # pipewire-bin: /usr/share/pipewire/client.conf, which scripts/linux-appimage.mjs
           # copies into the AppImage with the modules it names.
+          # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
+          # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -319,12 +324,19 @@ jobs:
             gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
-            gstreamer1.0-pulseaudio
+            gstreamer1.0-pulseaudio \
+            libavif-dev
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+
+      # Every Linux build links libavif for dictionary images (Jitendex): fail in seconds, naming
+      # the package, rather than at the end of the bundle. Arch runners install their own packages.
+      - name: Check AVIF support
+        if: runner.os == 'Linux'
+        run: node scripts/linux-appimage.mjs --check-avif
 
       - name: Install OneOCR helper Rust targets
         if: runner.os == 'Windows'

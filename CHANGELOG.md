@@ -10,3 +10,6 @@ the new version with the date. Format: [Keep a Changelog](https://keepachangelog
 Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`, `### Removed`.
 
 ## [Unreleased]
+
+- Linux: dictionaries with AVIF images, such as Jitendex, now import on every distribution,
+  Steam Deck included, instead of failing with "Could not load image".

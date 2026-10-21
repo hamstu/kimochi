@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { hashOverlapsHeaders } from './linux-appimage.mjs'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { hashOverlapsHeaders, verifyDictionaryImages } from './linux-appimage.mjs'
 
 // Minimal ELF64 section metadata, using the real failed library's header/hash offsets.
 function elf(programHeaders, hashOffset = 0x1f0) {
@@ -27,4 +30,30 @@ test('GNU hash remains safe until an added program header overlaps it', () => {
 test('non-ELF and incomplete section tables are ignored', () => {
   assert.equal(hashOverlapsHeaders(Buffer.from('plain text')), false)
   assert.equal(hashOverlapsHeaders(elf(8).subarray(0, 100)), false)
+})
+
+// A finished AppDir: libavif in usr/lib, and an AppRun whose `--check-avif` answer `run` fakes.
+async function appdir(t, { libavif = true } = {}) {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'kimochi-appdir-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'usr/lib'), { recursive: true })
+  if (libavif) await writeFile(path.join(root, 'usr/lib/libavif.so.16'), '')
+  return root
+}
+const answers = (status, stdout) => (command, args) => {
+  assert.match(command, /AppRun$/)
+  assert.equal(args[0], '--check-avif')
+  assert.match(args[1], /sample\.avif$/)
+  return { status, stdout, stderr: '' }
+}
+const decoded = 'AVIF ok: sample.avif decoded to a 140-byte PNG with libavif 1.0.4 (dav1d [dec]:1.4.1, aom [enc/dec]:3.8.2)'
+
+test('an AppDir whose binary decodes AVIF with a bundled AV1 decoder passes', async (t) => {
+  await verifyDictionaryImages(await appdir(t), answers(0, decoded))
+})
+
+test('an AppDir without libavif, a decode, or an AV1 decoder fails the build', async (t) => {
+  await assert.rejects(verifyDictionaryImages(await appdir(t, { libavif: false }), answers(0, decoded)), /carries no libavif/)
+  await assert.rejects(verifyDictionaryImages(await appdir(t), answers(1, 'AVIF check failed: AVIF decode failed: No codec available')), /cannot decode AVIF: .*No codec/)
+  await assert.rejects(verifyDictionaryImages(await appdir(t), answers(0, 'AVIF ok: sample.avif with libavif 1.0.4 (rav1e [enc]:0.7.1)')), /no AV1 decoder/)
 })

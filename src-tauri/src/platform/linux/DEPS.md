@@ -301,13 +301,17 @@ itself still needs a new login; ordinary implementation updates use unique modul
 paths and reload in place. The UI reports whether the expected revision is actually
 running rather than treating an enable command's success as proof.
 
-On Ubuntu builds of WebKitGTK without AVIF decoding, dictionary imports use the
-system GdkPixbuf AVIF loader as a Linux-only fallback. Install `heif-gdk-pixbuf`
-and `libheif-plugin-aomdec` (declared in the Debian package). Images are converted
-to PNG only after the browser decoder fails; vendor sources and original
-archives remain untouched. AppImage staging requires the loader and deploys its
-dynamic AVIF decoder plugins and dependencies with a bundle-local
-`LIBHEIF_PLUGIN_PATH`.
+On WebKitGTK builds without AVIF decoding (Ubuntu's, and the one the AppImage
+bundles), dictionary imports fall back to libavif 1.x, which the app links
+directly (`libavif-dev` to build; `libavif16` in the Debian package; Arch's
+`libavif`). Images are converted to PNG only after the browser decoder fails;
+vendor sources and original archives remain untouched. linuxdeploy bundles
+libavif and its AV1 decoder (dav1d/aom) into the AppImage like any linked
+library, with no GdkPixbuf loader or plugin path, so it behaves the same on
+Ubuntu, Arch (whose GdkPixbuf decodes through glycin) and SteamOS. A build host
+without libavif 1.x fails fast (`node scripts/linux-appimage.mjs --check-avif`),
+and every AppImage build ends by decoding a sample AVIF with its own binary
+(`kimochi --check-avif <file>`), which also works on an installed AppImage.
 
 
 ### GNOME source metadata, action shortcuts, and controller host

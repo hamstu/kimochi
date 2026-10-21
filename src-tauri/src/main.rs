@@ -2475,6 +2475,8 @@ fn open_screen_capture_preferences() -> Reply<()> {
 fn main() {
     #[cfg(target_os = "linux")]
     if platform::steam_input::run_watchdog() { return; }
+    #[cfg(target_os = "linux")]
+    if platform::dictionary_images::run_check() { return; }
     // Before anything claims a shortcut, the gamepad or a capture stream: any other copy
     // of Kimochi, of any build, is asked to quit first. See platform/macos/instance.rs.
     #[cfg(target_os = "macos")]

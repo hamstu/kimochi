@@ -51,10 +51,11 @@ You need Node 22+ and stable Rust, plus per OS:
 - **Windows 10 22H2 or 11** (x64 or ARM64): the Visual Studio Build Tools "Desktop development
   with C++" workload. For the OneOCR helpers also `rustup target add x86_64-pc-windows-msvc
   aarch64-pc-windows-msvc` and the MSVC ARM64 build tools.
-- **Ubuntu 22.04+**: `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file
+- **Ubuntu 24.04+**: `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file
   libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config
   libpipewire-0.3-dev libpipewire-0.3-modules pipewire-bin libspa-0.2-dev libclang-dev libudev-dev
-  libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad`
+  libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+  libavif-dev`
   (details in [src-tauri/src/platform/linux/DEPS.md](src-tauri/src/platform/linux/DEPS.md)).
 
 The OCR engines are separate crates ([kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr),

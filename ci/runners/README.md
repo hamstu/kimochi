@@ -86,7 +86,10 @@ vhdx mode (`wsl --manage --set-sparse`) needs `--allow-unsafe` and is left off.
    ```sh
    RUNNER_TOKEN=... ci/runners/setup-runner.sh --name NAME --labels kimochi[,ubuntu|arch] --deps
    ```
-   `--deps` installs rustup and the Tauri system packages (apt or pacman).
+   `--deps` installs rustup and the Tauri system packages (apt or pacman). Linux builds also
+   link libavif 1.x for dictionary images (`libavif-dev` on Ubuntu, `libavif` on Arch);
+   `node scripts/linux-appimage.mjs --check-avif` says whether a machine has it, and the bundle
+   job runs that check first.
 3. Windows, in an elevated PowerShell:
    ```powershell
    $env:RUNNER_TOKEN = '...'

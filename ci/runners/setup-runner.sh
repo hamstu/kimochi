@@ -71,13 +71,14 @@ if [[ $DEPS == 1 ]]; then
         curl wget file git build-essential pkg-config libssl-dev libclang-dev patchelf \
         libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
         libpipewire-0.3-dev libspa-0.2-dev libudev-dev gh \
-        libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio
+        libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio \
+        libavif-dev
     elif command -v pacman >/dev/null; then
       log "Installing pacman packages"
       sudo pacman -Sy --needed --noconfirm \
         curl wget file git base-devel pkgconf openssl clang patchelf \
         webkit2gtk-4.1 xdotool libayatana-appindicator librsvg pipewire gtk3 fuse2 github-cli \
-        gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad
+        gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad libavif
     else
       echo "no apt-get or pacman; install the Tauri Linux prerequisites by hand" >&2
     fi

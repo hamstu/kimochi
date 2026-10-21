@@ -73,30 +73,38 @@ export async function bundleLinuxAudio(appdir, env) {
   console.log(`Bundled ${names.length} GStreamer audio plugins and their scanner.`)
 }
 
-// HEIF discovers its AVIF decoder dynamically, outside linuxdeploy's ELF scan.
-export async function bundleLinuxDictionaryImages(appdir, env) {
-  const configured = spawnSync('pkg-config', ['--variable=gdk_pixbuf_moduledir', 'gdk-pixbuf-2.0'], { encoding: 'utf8' })
-  const loaderDirectory = configured.stdout.trim()
-  if (!loaderDirectory) return // Some desktops use Glycin instead of legacy loaders.
-  const loader = path.join(loaderDirectory, 'libpixbufloader-heif.so')
-  if (!(await exists(loader))) {
-    console.log('No legacy AVIF loader; dictionary images require browser decoding on this build.')
-    return
-  }
-  const libraryDirectory = path.resolve(loaderDirectory, '../../..')
-  const plugins = path.join(libraryDirectory, 'libheif/plugins')
-  if (!(await exists(plugins))) return // Older libheif builds include their decoder.
-  const decoderNames = (await readdir(plugins)).filter(name => /^libheif-(aomdec|dav1d).*\.so(?:\..*)?$/.test(name))
-  if (!decoderNames.length) throw new Error('AVIF decoder missing; install libheif-plugin-aomdec')
-  const destination = path.join(appdir, 'usr/lib/libheif')
-  await mkdir(destination, { recursive: true })
-  for (const name of decoderNames) await copyFile(path.join(plugins, name), path.join(destination, name))
-  const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
-  const deployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${destination}`], { stdio: 'inherit', env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1' } })
-  if (deployed.error || deployed.status !== 0) throw deployed.error ?? new Error(`AVIF decoder deployment failed (${deployed.status})`)
-  const hook = path.join(appdir, 'apprun-hooks/linuxdeploy-plugin-gtk.sh')
-  await writeFile(hook, (await readFile(hook, 'utf8')) + '\nexport LIBHEIF_PLUGIN_PATH="$APPDIR/usr/lib/libheif"\n')
-  console.log(`Bundled ${decoderNames.length} AVIF decoder plugins.`)
+const avifSample = fileURLToPath(new URL('../src-tauri/src/platform/linux/testdata/sample.avif', import.meta.url))
+
+/**
+ * The build host's libavif, which the app links to decode dictionary AVIF images (Jitendex, the
+ * recommended dictionary, ships them) where WebKitGTK cannot. linuxdeploy bundles it and its AV1
+ * decoder like any linked library. Throws, naming the package, when the host lacks it or has a
+ * libavif older than 1.0, whose ABI the app's bindings do not match.
+ */
+export function linuxAvifSource() {
+  const version = spawnSync('pkg-config', ['--modversion', 'libavif'], { encoding: 'utf8' })
+  if (version.status !== 0) throw new Error('libavif unavailable, which decodes dictionary images; install libavif-dev (Arch: libavif)')
+  if (spawnSync('pkg-config', ['--atleast-version=1.0.0', 'libavif']).status !== 0) throw new Error(`libavif ${version.stdout.trim()} is older than 1.0; dictionary images need libavif 1.x`)
+  return { version: version.stdout.trim() }
+}
+
+/**
+ * Fails the build unless the AppDir carries libavif and its own binary decodes a sample AVIF with
+ * an AV1 decoder, through AppRun, so with the libraries the AppImage will load.
+ */
+export async function verifyDictionaryImages(appdir, run = spawnSync) {
+  const libraries = await readdir(path.join(appdir, 'usr/lib')).catch(() => [])
+  if (!libraries.some((name) => /^libavif\.so\.\d+/.test(name))) throw new Error('AppImage carries no libavif; AVIF dictionary images would not load')
+  const checked = run(path.join(appdir, 'AppRun'), ['--check-avif', avifSample], { encoding: 'utf8', env: { ...process.env, APPDIR: appdir } })
+  const output = `${checked.stdout ?? ''}${checked.stderr ?? ''}`.trim()
+  if (checked.error || checked.status !== 0) throw new Error(`The AppImage cannot decode AVIF: ${checked.error?.message ?? output}`)
+  if (!/\[[^\]]*dec[^\]]*\]/.test(output)) throw new Error(`The AppImage's libavif has no AV1 decoder: ${output}`)
+  console.log(output)
+}
+
+// `node scripts/linux-appimage.mjs --check-avif`: CI's quick check, right after installing packages.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv[2] === '--check-avif') {
+  console.log(`AVIF dictionary images: libavif ${linuxAvifSource().version}`)
 }
 
 export async function repairLinuxAppImages({ target, release, env }) {
@@ -107,7 +115,7 @@ export async function repairLinuxAppImages({ target, release, env }) {
   if (appdirs.length !== 1 || images.length !== 1) throw new Error(`Expected one AppDir and AppImage in ${directory}`)
   const appdir = path.join(directory, appdirs[0])
   await bundleLinuxAudio(appdir, env)
-  await bundleLinuxDictionaryImages(appdir, env)
+  linuxAvifSource()
   // PipeWire loads its support.system implementation dynamically. The compiled-in
   // Ubuntu multiarch path is absent on SteamOS/Arch, even when PipeWire is installed.
   const spaDirectory = spawnSync('pkg-config', ['--variable=plugindir', 'libspa-0.2'], { encoding: 'utf8' })
@@ -174,6 +182,8 @@ export SPA_PLUGIN_DIR="$APPDIR/usr/lib/spa-0.2"
 export PIPEWIRE_MODULE_DIR="$APPDIR/usr/lib/pipewire-0.3"
 export PIPEWIRE_CONFIG_DIR="$APPDIR/usr/share/pipewire"
 `)
+  // Last, on the finished AppDir: its own binary decodes AVIF with the bundled libraries.
+  await verifyDictionaryImages(appdir)
   const repacked = path.join(directory, `${images[0]}.repacked`)
   const result = spawnSync(path.join(cache, 'linuxdeploy-plugin-appimage.AppImage'), [`--appdir=${appdir}`], {
     stdio: 'inherit', cwd: directory,
