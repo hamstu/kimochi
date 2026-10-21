@@ -58,8 +58,11 @@ env:
 jobs:
   # Which machines build, and whether optimised or debug. A tag always releases (even a manual
   # run started on one); a manual run on a branch chooses; a push to main bundles.
+  # Only this repository has the self-hosted runners and the signing secrets: in a fork the plan
+  # job is skipped, and with it every job that needs it, instead of waiting a day for a runner.
   plan:
     name: Plan
+    if: github.repository == 'hamstu/kimochi-tauri'
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write
