@@ -30,10 +30,10 @@ if (shot.layout === 'og') {
   document.body.classList.add('og')
   stage.insertAdjacentHTML(
     'afterbegin',
-    `<div class="og-copy"><div class="og-mark"><img src="/__shots/icon.svg" alt="" /><b>Kimochi</b><span>Docs</span></div>
-     <h1>Read your games in Japanese.</h1>
-     <p>Install, set up OCR and dictionaries, and read with the overlay, the Log and the Notebook.</p>
-     <p class="og-url">docs.kimochiapp.com</p></div>`
+    `<div class="og-copy"><div class="og-mark"><img src="/__shots/icon.svg" alt="" /><b>Kimochi</b>${shot.copy.mark ? `<span>${shot.copy.mark}</span>` : ''}</div>
+     <h1>${shot.copy.title}</h1>
+     <p>${shot.copy.lede}</p>
+     <p class="og-url">${shot.copy.url}</p></div>`
   )
 }
 let crop = shot.crop ?? { x: 0, y: 0, width, height }

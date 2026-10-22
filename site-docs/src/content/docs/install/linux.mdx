@@ -5,7 +5,6 @@ description: Install Kimochi on Linux with the one-line installer, the AppImage 
 
 import { Tabs, TabItem, Steps } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
-import Todo from '../../../components/Todo.astro'
 
 Kimochi has Linux builds for **x64** and **ARM64**, as an **AppImage** (any distribution) and a
 **.deb** (Ubuntu, Debian, Mint, Pop!_OS). The marketing site's
@@ -80,13 +79,35 @@ Drawing over other apps on Wayland needs the desktop's layer-shell support. On d
 enables screen annotations, dictionary pop-ups and desktop region selection (one monitor). Without
 either, **Crop area → Set crop area…** opens a crop editor inside Kimochi's window.
 
-<Todo>TODO(hamish): which desktops show the overlay on Wayland today (KDE Plasma, Hyprland, Sway…)? DEPS.md says Ubuntu 24.04 GNOME's library probe returned unsupported. And which distributions should the docs list as tested (SEO_TODO #5)?</Todo>
+The overlay is tested on **Hyprland** (on Omarchy) and on **GNOME 46** with the GNOME overlay
+extension. Other desktops with layer-shell support, such as KDE Plasma and Sway, should work but
+aren't tested yet.
 
 ### Global shortcuts on Hyprland
 
-On Hyprland, bind Kimochi's shortcuts in the compositor's own config.
+Hyprland lists Kimochi's shortcuts but doesn't assign their keys, so bind them in your own config.
+The first two lines bind **Scan** and the **Controller menu** (use any keys you like); the last two
+let the dictionary see <kbd>Shift</kbd> for lookups over other apps, without taking it from them.
 
-<Todo>TODO(hamish): what exactly should a Hyprland user put in their config for the Scan and Controller menu shortcuts?</Todo>
+With Hyprland 0.56's Lua config (`~/.config/hypr/bindings.lua`, as on Omarchy):
+
+```lua
+hl.bind("CTRL + SHIFT + 8", hl.dsp.global("Kimochi:dev.kimochi.app.triggerScan"))
+hl.bind("CTRL + SHIFT + SPACE", hl.dsp.global("Kimochi:dev.kimochi.app.openControllerMenu"))
+hl.bind("Shift_L", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftLeft"), { non_consuming = true, transparent = true, ignore_mods = true })
+hl.bind("Shift_R", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftRight"), { non_consuming = true, transparent = true, ignore_mods = true })
+```
+
+With the classic `hyprland.conf`:
+
+```ini
+bind = CTRL SHIFT, 8, global, Kimochi:dev.kimochi.app.triggerScan
+bind = CTRL SHIFT, SPACE, global, Kimochi:dev.kimochi.app.openControllerMenu
+bindnti = , Shift_L, global, Kimochi:dev.kimochi.app.dictionaryShiftLeft
+bindnti = , Shift_R, global, Kimochi:dev.kimochi.app.dictionaryShiftRight
+```
+
+Reload Hyprland (or log out and back in) after editing.
 
 ## Updating
 

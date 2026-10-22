@@ -4,7 +4,6 @@ description: Install Kimochi on Windows 10 or 11, x64 or ARM64.
 ---
 
 import { Steps } from '@astrojs/starlight/components'
-import Todo from '../../../components/Todo.astro'
 
 Kimochi runs on **Windows 10 22H2 or Windows 11**, on **x64** or **ARM64**.
 
@@ -20,9 +19,8 @@ Kimochi runs on **Windows 10 22H2 or Windows 11**, on **x64** or **ARM64**.
 
 </Steps>
 
-Windows builds are signed. Updates install from inside the app and relaunch it.
-
-<Todo>TODO(hamish): does SmartScreen warn on first run with the Azure Artifact Signing certificate? If so, add "More info → Run anyway" here. Also confirm the minimum Windows version (the README's build prerequisites say 10 22H2).</Todo>
+Kimochi needs **Windows 10 22H2 or later**. Windows builds are signed, so Windows opens them without
+a warning. Updates install from inside the app and relaunch it.
 
 ## OneOCR, the Windows OCR engine
 
@@ -37,6 +35,7 @@ choose **OneOCR** in **Settings → OCR & Overlay**. See [OCR engines](/reading/
 
 ## Uninstalling
 
-Uninstall Kimochi from **Settings → Apps → Installed apps** like any other app.
-
-<Todo>TODO(hamish): where does Kimochi keep its data on Windows (presumably %APPDATA%\dev.kimochi.app and %LOCALAPPDATA%\dev.kimochi.app), and does the uninstaller remove it?</Todo>
+Uninstall Kimochi from **Settings → Apps → Installed apps** like any other app. The uninstaller
+asks whether to **Delete the application data** too; tick it to remove your settings, Log,
+dictionaries and downloaded engines from `%APPDATA%\dev.kimochi.app` and
+`%LOCALAPPDATA%\dev.kimochi.app`.

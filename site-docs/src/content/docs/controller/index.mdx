@@ -4,12 +4,14 @@ description: "Use a gamepad with Kimochi: the controller menu over the game, wor
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
-import Todo from '../../../components/Todo.astro'
 
 Kimochi reads gamepads natively, so buttons work while the game has focus. Gamepad support is on by
 default (**Settings → Shortcuts & Controls → Gamepad → Enable gamepad support**).
 
-<Todo>TODO(hamish): Settings warns that gamepad support "has not been verified on this platform" until a button lights up. Which controllers and platforms are known to work (Xbox, DualSense, Switch Pro, Steam Deck)?</Todo>
+Kimochi has been tested with a PlayStation 4 controller on macOS, Windows and Linux, and any
+standard gamepad should work. Until a button press lights up in Settings, it notes that gamepad
+support hasn't been verified on your system yet. If your controller doesn't respond, please
+[open an issue](https://github.com/hamstu/kimochi-tauri/issues) with its make and model.
 
 ## The controller menu
 

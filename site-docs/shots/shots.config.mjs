@@ -526,12 +526,32 @@ export const SHOTS = [
   }
 ]
 
-/** The social card (public/og.png), 1200×630. */
-export const OG = {
-  id: 'og',
-  layout: 'og',
-  page: 'panel.html?window=log',
-  size: MAIN,
-  ready: '.line',
-  pad: 0
-}
+/**
+ * The social cards, 1200×630: the docs' (site-docs/public/og.png) and the marketing site's
+ * (site/public/og.png). `out` is relative to the repository root.
+ */
+const OG_SHOT = { layout: 'og', page: 'panel.html?window=log', size: MAIN, ready: '.line', pad: 0 }
+export const OG = [
+  {
+    ...OG_SHOT,
+    id: 'og',
+    out: 'site-docs/public/og.png',
+    copy: {
+      mark: 'Docs',
+      title: 'Read your games in Japanese.',
+      lede: 'Install, set up OCR and dictionaries, and read with the overlay, the Log and the Notebook.',
+      url: 'docs.kimochiapp.com'
+    }
+  },
+  {
+    ...OG_SHOT,
+    id: 'og-site',
+    out: 'site/public/og.png',
+    copy: {
+      mark: '',
+      title: 'Read your games in Japanese.',
+      lede: 'Free and open source for macOS, Windows and Linux. OCR, an overlay, pop-up dictionaries and Anki.',
+      url: 'kimochiapp.com'
+    }
+  }
+]

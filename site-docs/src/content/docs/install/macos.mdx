@@ -5,11 +5,9 @@ description: Install Kimochi on a Mac and allow Screen Recording (and, optionall
 
 import { Steps } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
-import Todo from '../../../components/Todo.astro'
 
-Kimochi needs **macOS 14 or later** on a Mac with **Apple silicon**.
-
-<Todo>TODO(hamish): Intel Macs. CI builds Apple silicon only; should the docs say Intel Macs are not supported, or is an Intel build planned? (SEO_TODO #5.)</Todo>
+Kimochi needs **macOS 14 or later** on a Mac with **Apple silicon**. A build for Intel Macs is
+planned.
 
 <Steps>
 
@@ -57,7 +55,12 @@ switch, with a link to [Apple's guide to turning it off](https://support.apple.c
 
 ## Uninstalling
 
-Quit Kimochi and move it from Applications to the Bin. Your settings, Log and downloaded engines are
-in `~/Library/Application Support/dev.kimochi.app/`; delete that folder too to remove them.
+Quit Kimochi and move it from Applications to the Bin. To remove your data as well, delete these
+folders (in Finder, **Go → Go to Folder…** and paste each path):
 
-<Todo>TODO(hamish): uninstalling on macOS isn't documented anywhere in the repo. Is "move to the Bin, delete the data folder" complete (dictionaries live in the webview's storage; is there a WebKit folder to remove as well)?</Todo>
+| Folder | What's in it |
+| --- | --- |
+| `~/Library/Application Support/dev.kimochi.app/` | Settings, the Log, sessions, the Notebook, downloaded engines and models |
+| `~/Library/WebKit/dev.kimochi.app/` | The dictionaries you imported (the app's web storage) |
+| `~/Library/Caches/dev.kimochi.app/` | Caches |
+| `~/Library/HTTPStorages/dev.kimochi.app/` | Web cookies and storage for sign-in |

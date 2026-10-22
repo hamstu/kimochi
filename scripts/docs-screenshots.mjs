@@ -16,7 +16,8 @@
  *   marks: glowing outlines, a dimmed surround (focus), numbered badges, callout notes, a cursor.
  * - Shots are declared in site-docs/shots/shots.config.mjs. Each is written as lossless WebP
  *   (`<id>-light.webp`, `<id>-dark.webp`); Astro's image pipeline turns them into AVIF/WebP at 1×
- *   and 2× when the docs build. The social card (site-docs/public/og.png) is drawn the same way.
+ *   and 2× when the docs build. The social cards (site-docs/public/og.png, `og`;
+ *   site/public/og.png, `og-site`) are drawn the same way.
  *
  * Needs `npm ci` (root), `npm ci --prefix site` (for site shots) and `npm ci --prefix site-docs`
  * (sharp). Chrome is found as in scripts/cdp.mjs (`$CHROME` overrides).
@@ -219,7 +220,7 @@ async function main() {
     return
   }
   const shots = opts.only ? SHOTS.filter((s) => opts.only.includes(s.id)) : SHOTS
-  if (opts.only?.some((id) => !SHOTS.some((s) => s.id === id) && id !== 'og'))
+  if (opts.only?.some((id) => !SHOTS.some((s) => s.id === id) && !OG.some((card) => card.id === id)))
     throw Error(`Unknown shot in --only: ${opts.only.join(', ')} (see --list)`)
   const themes = opts.theme ? [opts.theme] : ['light', 'dark']
   await mkdir(OUT, { recursive: true })
@@ -250,11 +251,12 @@ async function main() {
         }
       }
     }
-    if (!opts.only || opts.only.includes('og')) {
-      // The social card: 1200×630 at 1×, light, the main window beside the wordmark.
+    // The social cards: 1200×630 at 1×, light, the main window beside the wordmark.
+    for (const card of OG) {
+      if (opts.only && !opts.only.includes(card.id)) continue
       await page.send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 630, deviceScaleFactor: 1, mobile: false })
-      const png = await shoot(page, servers, OG, 'light')
-      const out = path.join(docs, 'public/og.png')
+      const png = await shoot(page, servers, card, 'light')
+      const out = path.join(root, card.out)
       await writeFile(out, await sharp(png).resize(1200, 630).flatten({ background: '#ffffff' }).png({ compressionLevel: 9 }).toBuffer())
       console.log(`✓ ${path.relative(root, out)}  1200×630`)
     }

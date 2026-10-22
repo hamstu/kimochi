@@ -3,7 +3,6 @@ title: Files and data
 description: Where Kimochi keeps its settings, Log, dictionaries and downloads, and what each holds.
 ---
 
-import Todo from '../../../components/Todo.astro'
 
 Kimochi keeps everything on your computer, in its data folder, under the app id `dev.kimochi.app`:
 
@@ -11,9 +10,7 @@ Kimochi keeps everything on your computer, in its data folder, under the app id 
 | --- | --- |
 | macOS | `~/Library/Application Support/dev.kimochi.app/` |
 | Linux | `~/.local/share/dev.kimochi.app/`, plus `~/.config/dev.kimochi.app/` and `~/.cache/dev.kimochi.app/` |
-| Windows | See the note below |
-
-<Todo>TODO(hamish): confirm the Windows data folders (Tauri's defaults would be %APPDATA%\dev.kimochi.app and %LOCALAPPDATA%\dev.kimochi.app).</Todo>
+| Windows | `%APPDATA%\dev.kimochi.app\` and `%LOCALAPPDATA%\dev.kimochi.app\` |
 
 ## What's in it
 
@@ -30,11 +27,14 @@ Kimochi keeps everything on your computer, in its data folder, under the app id 
 Captured images are held in memory while Kimochi reads them and aren't saved to disk (images you add
 to the Notebook are). Deleting the data folder removes all of it.
 
-<Todo>TODO(hamish): on macOS, where does the webview's IndexedDB (the dictionaries) live, so the docs can say how to back it up or remove it?</Todo>
+Imported dictionaries live in the app's web storage, outside the data folder: on macOS in
+`~/Library/WebKit/dev.kimochi.app/`, on Windows inside `%LOCALAPPDATA%\dev.kimochi.app\` (the
+`EBWebView` folder), and on Linux alongside the data folder. To keep a copy, use Yomitan's own
+**Backup** (below).
 
 ## Backing up
 
-- **With an account**, Sync keeps a copy on the server, and **Settings → Account → Export your data**
+- **With Kimochi Cloud**, Sync keeps a copy on the server, and **Settings → Account → Export your data**
   saves it as a ZIP. See [Sync and backup](/cloud/sync/).
 - **Without one**, copy the data folder while Kimochi is closed.
 - Yomitan dictionaries and settings can be exported from Yomitan's own settings (its **Backup**

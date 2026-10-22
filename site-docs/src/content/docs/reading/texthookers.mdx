@@ -4,7 +4,6 @@ description: Feed the Log from a texthooker over WebSocket or the clipboard, and
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
-import Todo from '../../../components/Todo.astro'
 
 If you already hook text out of a visual novel, Kimochi can take those lines instead of reading the
 screen. They land in the same Log, with the same lookups, Notebook and stats.
@@ -33,7 +32,7 @@ Use a `ws://` or `wss://` address without credentials.
 
 <Screenshot id="websocket-card" alt="The sidebar with the WebSocket source and its URL." width={240} />
 
-<Todo>TODO(hamish): which texthookers are tested (Textractor with a WebSocket extension, LunaTranslator, Agent, owocr…)? The FAQ says owocr's output works over WebSocket. Add a short "with X, set Y" table once confirmed (SEO_TODO #8).</Todo>
+Any texthooker that can send its text over a WebSocket works this way, as does owocr's output.
 
 ## Sending scans to other tools
 
