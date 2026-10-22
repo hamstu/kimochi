@@ -4,6 +4,7 @@ import { Menu, X } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { AccountNavLink } from './AccountNavLink'
 import { LINUX_GUIDE_PATH } from '../lib/linux.js'
+import { DOCS_URL } from '../lib/docs.js'
 
 // TODO(hamish): private repo, so this and the Source on GitHub links 404 for visitors.
 export const GITHUB_URL = 'https://github.com/hamstu/kimochi-tauri'
@@ -22,8 +23,9 @@ export const NAV_LINKS: { label: string; to: string }[] = [
   { label: 'Download', to: '/#download' }
 ]
 
-/** The footer's second column: the site's other pages. */
+/** The footer's second column: the site's other pages (and the docs, on their own subdomain). */
 const MORE_LINKS: { label: string; to: string }[] = [
+  { label: 'Documentation', to: DOCS_URL },
   { label: 'All questions', to: '/faq' },
   { label: 'Compare', to: '/compare' },
   { label: 'Linux install guide', to: LINUX_GUIDE_PATH },
@@ -63,9 +65,15 @@ function FooterColumn({ title, links, extra }: { title: string; links: { label: 
       <ul className="mt-3 flex flex-col gap-2">
         {links.map((l) => (
           <li key={l.to}>
-            <Link to={l.to} className={footerLinkClass}>
-              {l.label}
-            </Link>
+            {l.to.startsWith('/') ? (
+              <Link to={l.to} className={footerLinkClass}>
+                {l.label}
+              </Link>
+            ) : (
+              <a href={l.to} className={footerLinkClass}>
+                {l.label}
+              </a>
+            )}
           </li>
         ))}
         {extra && <li>{extra}</li>}
@@ -98,6 +106,9 @@ export function Layout() {
                 {l.label}
               </Link>
             ))}
+            <a href={DOCS_URL} className={navLinkClass}>
+              Docs
+            </a>
             <AccountNavLink className={navLinkClass} />
           </nav>
           <div className="ml-auto flex items-center gap-2 lg:ml-2">
@@ -127,6 +138,9 @@ export function Layout() {
                   {l.label}
                 </Link>
               ))}
+              <a href={DOCS_URL} className={`${navLinkClass} -mx-2.5 py-2.5`}>
+                Docs
+              </a>
               <AccountNavLink className={`${navLinkClass} -mx-2.5 py-2.5`} onClick={() => setOpen(false)} />
             </div>
           </nav>

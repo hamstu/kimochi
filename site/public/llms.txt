@@ -12,3 +12,4 @@ Kimochi is not the "Kimochi" emotions journal, the "Kimochi" AI companion app or
 - [Install on Linux](https://kimochiapp.com/download/linux): Steam Deck, Ubuntu and Debian, other distributions
 - [Privacy](https://kimochiapp.com/privacy): exactly what leaves your computer, feature by feature
 - [Terms](https://kimochiapp.com/terms)
+- [Documentation](https://docs.kimochiapp.com/): installing on each platform, OCR engines, the overlay, dictionaries, the Log and Notebook, Anki, controllers, Kimochi Cloud, settings, shortcuts and troubleshooting

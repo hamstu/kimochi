@@ -18,6 +18,8 @@ export interface Feature {
   body: string
   /** A self-contained drawing in src/components/home/visuals/, rendered in a <VisualFrame>. */
   Visual: ComponentType
+  /** The docs page that explains it (a path on docs.kimochiapp.com, see src/lib/docs.js). */
+  docs?: string
 }
 
 /**
@@ -30,60 +32,70 @@ export const features: Feature[] = [
     id: 'overlay',
     title: 'Cross Platform Overlay',
     body: "When the overlay is on, you'll be able to hover directly over the words in your game, app, YouTube video, manga, or anything else on your screen.",
-    Visual: OverlayVisual
+    Visual: OverlayVisual,
+    docs: '/reading/overlay/'
   },
   {
     id: 'mini-mode',
     title: 'Mini mode',
     body: 'Shrink Kimochi down to just its controls: your source, Auto OCR, the overlay, your OCR model and dictionary, in a slim window that sits beside your game. Expand it again whenever you want the Log.',
-    Visual: MiniModeVisual
+    Visual: MiniModeVisual,
+    docs: '/reading/mini-mode/'
   },
   {
     id: 'log',
     title: 'Log',
     body: 'Skipped a line too fast? Scroll back. Pick up tomorrow where you left off. Kimochi always remembers. No need for external texthooker pages. 👌',
-    Visual: LogVisual
+    Visual: LogVisual,
+    docs: '/log/the-log/'
   },
   {
     id: 'sessions',
     title: 'Sessions',
     body: 'Keep a separate log for every game, visual novel or manga, each with its own lines and reading stats. Kimochi can switch sessions for you by window name, and you can rename, reorder or clear them any time.',
-    Visual: SessionsVisual
+    Visual: SessionsVisual,
+    docs: '/log/sessions/'
   },
   {
     id: 'dictionary',
     title: 'Look up and save',
     body: "Whether it's in the overlay or in the log, you'll be able to easily look up definitions with your favorite dictionary tool.",
-    Visual: DictionaryVisual
+    Visual: DictionaryVisual,
+    docs: '/lookups/looking-up/'
   },
   {
     id: 'dictionaries',
     title: 'Dictionaries',
     body: 'Pick the dictionary you like: Kimochi supports an embedded copy of Yomitan, Hachidori, 10ten, or you can point at your own Yomitan and existing dictionaries through the Yomitan API. ✨',
-    Visual: DictionariesVisual
+    Visual: DictionariesVisual,
+    docs: '/lookups/dictionaries/'
   },
   {
     id: 'notebook',
     title: 'Notebook',
     body: 'I built this one for myself, especially! Select some text from the log to add characters, places or terms to a shared notebook. Link images and notes, too. Kimochi then highlights it as clickable in your log for easy remembering.',
-    Visual: NotebookVisual
+    Visual: NotebookVisual,
+    docs: '/log/notebook/'
   },
   {
     id: 'engines',
     title: 'OCR engines',
     body: "Kimochi gives you complete control over choosing the OCR engine and provides several options depending on what you're doing (e.g., if you prefer Cloud vs. Local).",
-    Visual: EnginesVisual
+    Visual: EnginesVisual,
+    docs: '/reading/ocr-engines/'
   },
   {
     id: 'texthookers',
     title: 'Texthookers and clipboard',
     body: 'Already hooking text out of a visual novel? Point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats.',
-    Visual: InputsVisual
+    Visual: InputsVisual,
+    docs: '/reading/texthookers/'
   },
   {
     id: 'controller',
     title: 'Gaming Mode',
     body: "In Gaming Mode you can activate Kimochi's shortcut (Click both sticks) to scan. Then pick a word with the D-pad for quick look-ups. Hit B and you’re back in the game. This works great on something like a Steam Deck!",
-    Visual: ControllerVisual
+    Visual: ControllerVisual,
+    docs: '/controller/gaming-mode/'
   }
 ]

@@ -11,6 +11,8 @@
  * @typedef {{ id: string, q: string, a: string[], links?: FaqLink[], todo?: string }} FaqItem
  */
 
+import { docsUrl } from '../lib/docs.js'
+
 /** How many questions the home page shows. */
 export const HOME_FAQ_COUNT = 7
 
@@ -37,7 +39,8 @@ export const FAQ = [
     q: 'How does Kimochi work?',
     a: [
       'There are four steps. Pick the game window or screen, and crop it if you like. Press Scan, or turn on Auto OCR. The text shows up in Kimochi’s Log, and over the game if the overlay is on. Then hover a word to look it up, hear it, or save it. Every line is kept in a Log you can scroll back through, with a separate session for each game.'
-    ]
+    ],
+    links: [{ href: docsUrl('/quick-start/'), label: 'Quick start in the docs' }]
   },
   {
     id: 'price',
@@ -58,7 +61,10 @@ export const FAQ = [
     a: [
       'Kimochi runs on macOS, Windows (x64 and ARM64) and Linux, and has a Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in early testing.'
     ],
-    links: [{ href: '/download/linux', label: 'Installing on Linux and Steam Deck' }],
+    links: [
+      { href: '/download/linux', label: 'Installing on Linux and Steam Deck' },
+      { href: docsUrl('/install/'), label: 'Installation guide' }
+    ],
     // TODO(hamish): minimum macOS version and Intel Macs (home says "Apple silicon", compare says
     // "macOS 14+"); which Linux distros; minimum Windows version (OneOCR needs Windows 11).
     todo:
@@ -87,7 +93,8 @@ export const FAQ = [
     q: 'Do I need an account?',
     a: [
       'No. Kimochi works fully without an account. You only need one for Kimochi Cloud: cloud OCR, read aloud, translation, AI explanations and sync. You can sign up with email, Google or Discord, and you can download or delete everything from your account page at any time.'
-    ]
+    ],
+    links: [{ href: docsUrl('/cloud/'), label: 'Accounts and plans' }]
   },
   {
     id: 'engines-and-dictionaries',
@@ -95,6 +102,10 @@ export const FAQ = [
     a: [
       'OCR engines: Google Lens (the default, online), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), OneOCR (Windows 11, built in), or your own custom OCR endpoint.',
       'Dictionaries: a built-in copy of Yomitan with your own dictionaries, Hachidori, 10ten, or the Yomitan in your browser through the Yomitan API.'
+    ],
+    links: [
+      { href: docsUrl('/reading/ocr-engines/'), label: 'OCR engines' },
+      { href: docsUrl('/lookups/dictionaries/'), label: 'Dictionaries' }
     ]
   },
   {
@@ -102,6 +113,10 @@ export const FAQ = [
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
       'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Kimochi can also take owocr’s output over WebSocket.'
+    ],
+    links: [
+      { href: docsUrl('/lookups/anki/'), label: 'Anki' },
+      { href: docsUrl('/reading/texthookers/'), label: 'Texthookers' }
     ],
     // TODO(hamish): list known-working texthookers (Textractor, LunaTranslator, Agent) only if tested.
     todo: 'List the texthookers known to work (Textractor, LunaTranslator, Agent…), only the ones you have tested.'
@@ -126,7 +141,8 @@ export const FAQ = [
     q: 'Can I use Kimochi with a controller or on the Steam Deck?',
     a: [
       'Yes, though Steam Deck support is early. In Gaming Mode, click both sticks (L3 + R3) to scan, pick a word with the D-pad, press A for the reading, and press B to go back to the game.'
-    ]
+    ],
+    links: [{ href: docsUrl('/controller/'), label: 'Controller and Gaming Mode' }]
   },
   {
     id: 'open-source',
@@ -146,7 +162,10 @@ export const FAQ = [
     id: 'feedback',
     q: 'How do I report a bug or give feedback?',
     a: ['Email Hamish at hamstu@gmail.com, or open an issue on Kimochi’s GitHub repository.'],
-    links: [{ href: 'mailto:hamstu@gmail.com', label: 'Email hamstu@gmail.com' }],
+    links: [
+      { href: 'mailto:hamstu@gmail.com', label: 'Email hamstu@gmail.com' },
+      { href: docsUrl('/help/troubleshooting/'), label: 'Troubleshooting' }
+    ],
     // TODO(hamish): the repo is private, so its issues 404; add GitHub discussions or Discord if you start them.
     todo: 'The GitHub repo is private, so its issues link 404s until it is public. Add GitHub discussions or Discord here if you start them.'
   }
