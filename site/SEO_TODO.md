@@ -39,7 +39,6 @@ Everything here needs a decision or a fact only Hamish has. Each item is also ma
     app icon with `summary_large_image` for now (`src/lib/seo.js`, OG_IMAGE).
 12. **`sameAs` links** for the Person and SoftwareApplication JSON-LD: public GitHub, Discord,
     YouTube, Bluesky/X once they exist; `downloadUrl` once the repo is public (`src/lib/seo.js`).
-13. **HSTS and "Always Use HTTPS"** in Cloudflare (from the audit; not set from this repo).
 
 ## How to check
 
