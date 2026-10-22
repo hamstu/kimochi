@@ -21,6 +21,7 @@ const viewport = document.getElementById('viewport')
 const frame = document.getElementById('app')
 const marks = document.getElementById('marks')
 const notes = document.getElementById('notes')
+const badges = document.getElementById('badges')
 
 const [width, height] = shot.size ?? [900, 560]
 
@@ -175,11 +176,12 @@ function mark() {
       badge.className = 'badge'
       badge.textContent = String(m.n)
       const at = m.at ?? 'top-left'
+      const [dx, dy] = m.nudge ?? [0, 0]
       place(badge, {
-        x: at.endsWith('right') ? b.x + b.width : b.x,
-        y: at.startsWith('bottom') ? b.y + b.height : b.y
+        x: (at.endsWith('right') ? b.x + b.width : b.x) + dx,
+        y: (at.startsWith('bottom') ? b.y + b.height : b.y) + dy
       })
-      marks.append(badge)
+      badges.append(badge)
     } else if (m.type === 'note') {
       const note = document.createElement('div')
       note.className = 'note'

@@ -23,7 +23,8 @@
  *             { type: 'focus', target }                      dims everything else, with a glow
  *                                                            (glow: false for none)
  *             { type: 'glow', target, dim: true }            the same, spelled from a glow
- *             { type: 'badge', target, n, at? }              numbered dot on a corner
+ *             { type: 'badge', target, n, at?, nudge? }      numbered dot on a corner, moved by
+                                                            nudge [dx, dy] px off the text it marks
  *             { type: 'note', target, text, n?, side? }      callout label with a leader line
  *             { type: 'cursor', target, fx?, fy? }           a mouse pointer over the target
  *   themes    limit to ['light'] or ['dark']
@@ -68,13 +69,13 @@ export const SHOTS = [
     size: MAIN,
     ready: '.line',
     marks: [
-      { type: 'badge', target: { selector: '.src-card', pad: 2 }, n: 1 },
-      { type: 'badge', target: { selector: '.src-rows', pad: 2 }, n: 2 },
-      { type: 'badge', target: { selector: '#sb-ocr-label', pad: 4 }, n: 3 },
-      { type: 'badge', target: { selector: '#sb-dictionary-label', pad: 4 }, n: 4 },
+      { type: 'badge', target: { selector: '.src-card', pad: 2 }, n: 1, nudge: [-10, 0] },
+      { type: 'badge', target: { selector: '.src-rows', pad: 2 }, n: 2, nudge: [-10, 0] },
+      { type: 'badge', target: { selector: '#sb-ocr-label', pad: 4 }, n: 3, nudge: [-10, 0] },
+      { type: 'badge', target: { selector: '#sb-dictionary-label', pad: 4 }, n: 4, nudge: [-10, 0] },
       { type: 'badge', target: { selector: '.main-tab', index: 0, pad: -4 }, n: 5 },
-      { type: 'badge', target: { selector: '.line', index: 0 }, n: 6 },
-      { type: 'badge', target: { selector: '.log-stats', pad: 4 }, n: 7 }
+      { type: 'badge', target: { selector: '.line', text: 'ラジ館' }, n: 6, at: 'top-right', nudge: [-28, 22] },
+      { type: 'badge', target: { selector: '.log-stats', pad: 4 }, n: 7, nudge: [-12, 0] }
     ]
   },
   {

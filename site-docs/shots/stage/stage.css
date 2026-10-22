@@ -120,24 +120,32 @@ body {
   box-shadow: 0 0 0 200vmax var(--dim);
 }
 
+/* Badges sit over the window but outside its clip, so one on the window's edge stays whole (the
+   stage's padding leaves room for it). */
+#badges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
 .badge {
   position: absolute;
-  width: 24px;
-  height: 24px;
-  margin: -12px 0 0 -12px;
+  width: 31px;
+  height: 31px;
+  margin: -15.5px 0 0 -15.5px;
   border-radius: 999px;
   display: grid;
   place-items: center;
   background: var(--accent);
   color: #fff;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 620;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 0 0 2px #fff, 0 4px 12px rgb(15 17 26 / 0.3);
-  z-index: 4;
+  box-shadow: 0 0 0 2.5px #fff, 0 4px 12px rgb(15 17 26 / 0.3);
 }
 :root[data-theme='dark'] .badge {
-  box-shadow: 0 0 0 2px #111113, 0 4px 12px rgb(0 0 0 / 0.5);
+  box-shadow: 0 0 0 2.5px #111113, 0 4px 12px rgb(0 0 0 / 0.5);
 }
 
 /* Callout labels live on the stage (outside the window clip), so they can sit in the margin. */
