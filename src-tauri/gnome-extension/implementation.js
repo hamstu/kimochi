@@ -297,13 +297,22 @@ export default class KimochiOverlay extends Extension {
         this._bus?.emit_signal('TrackResult',new GLib.Variant('(s)',[JSON.stringify({sourceId:p.sourceId,linked:Boolean(win),reason,window:win?this._trackedStatus():null})]));
     }
 
+    // Mutter46 allocates a monitor-sized window stream and intersects VideoCrop
+    // with it. A tiled client's shadow buffer can exceed that height/width.
+    // Preserve its real origin; only the captured extent is clipped.
+    _captureBounds(win) {
+        const r=win.get_buffer_rect();
+        const monitor=typeof win.get_monitor==='function'?Main.layoutManager.monitors[win.get_monitor()]:null;
+        return {x:r.x,y:r.y,width:Math.min(r.width,monitor?.width??r.width),height:Math.min(r.height,monitor?.height??r.height)};
+    }
+
     _matchWindow(data,pid) {
         const normalize=s=>String(s??'').trim().toLocaleLowerCase();
         const name=normalize(data.name);
         const usableName=name&&!['shared window','window'].includes(name);
         const candidates=global.get_window_actors().map(a=>a.meta_window).filter(w=>{
             if(w.get_pid()===pid||!w.get_compositor_private())return false;
-            const r=w.get_buffer_rect(),scale=w.get_compositor_private().get_resource_scale();
+            const r=this._captureBounds(w),scale=w.get_compositor_private().get_resource_scale();
             return scale>0&&Math.abs(r.width*scale-data.width)<=2&&Math.abs(r.height*scale-data.height)<=2;
         });
         const named=usableName?candidates.filter(w=>normalize(w.get_title())===name):[];
@@ -395,7 +404,7 @@ export default class KimochiOverlay extends Extension {
     _trackedStatus() {
         const t=this._tracked,w=t?.window;if(!w)return null;
         if(!w.get_compositor_private()||w.get_stable_sequence()!==t.sequence){this._forgetTracked();return null;}
-        const r=w.get_buffer_rect(),focused=global.display.focus_window;
+        const r=this._captureBounds(w),focused=global.display.focus_window;
         const popup=focused===this._nativePopup||focused===this._controller?.window;
         const appActive=focused&&t.pid&&focused.get_pid()===t.pid&&focused!==this._surface?.window&&!popup;
         // Match the shared cover rule: only TEXT overlap hides annotations.
@@ -442,11 +451,11 @@ export default class KimochiOverlay extends Extension {
             } else if (data.operation === 'editor') {
                 if (!this._crop || data.id !== this._crop.id || !this._crop.webview) throw new Error('Shared editor lease is unavailable');
                 const c=this._crop;
-                invocation.return_value(new GLib.Variant('(s)',[JSON.stringify({id:c.id,monitor:c.monitor,area:c.area,initial:c.rect,label:c.label,theme:c.theme})]));return;
+                invocation.return_value(new GLib.Variant('(s)',[JSON.stringify({id:c.id,monitor:c.monitor,area:c.visibleArea??c.area,initial:c.rect,label:c.label,theme:c.theme})]));return;
             } else if (data.operation === 'complete') {
                 const c=this._crop,r=data.rect;
                 if(!c||data.id!==c.id||!c.webview) throw new Error('Shared editor lease is unavailable');
-                if(r){const a=c.area;if(![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<1||r.height<1||r.x<a.x-1||r.y<a.y-1||r.x+r.width>a.x+a.width+1||r.y+r.height>a.y+a.height+1)throw new Error('Crop is outside the shared source');c.rect=r;}
+                if(r){const a=c.visibleArea??c.area;if(![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<1||r.height<1||r.x<a.x-1||r.y<a.y-1||r.x+r.width>a.x+a.width+1||r.y+r.height>a.y+a.height+1)throw new Error('Crop is outside the shared source');c.rect=r;}
                 this._finishCrop(Boolean(r));
             } else if (data.operation === 'cancel') {
                 if (this._crop && data.id === this._crop.id) this._finishCrop(false, 'cancelled');
@@ -463,7 +472,10 @@ export default class KimochiOverlay extends Extension {
                 const tracked=data.sourceId.startsWith('portal:window:')?this._trackedStatus():null;
                 if(data.sourceId.startsWith('portal:window:')&&(!tracked||tracked.sourceId!==data.sourceId||!this._tracked.window.showing_on_its_workspace()||this._tracked.window.minimized||this._tracked.owner!==sender)) throw new Error('Link and bring the shared window to the front before desktop cropping');
                 const area=tracked?tracked.bounds:monitor;
-                if(area.x<monitor.x||area.y<monitor.y||area.x+area.width>monitor.x+monitor.width||area.y+area.height>monitor.y+monitor.height) throw new Error('Move the shared window fully onto this screen before cropping');
+                const visibleArea={x:Math.max(area.x,monitor.x),y:Math.max(area.y,monitor.y)};
+                visibleArea.width=Math.min(area.x+area.width,monitor.x+monitor.width)-visibleArea.x;
+                visibleArea.height=Math.min(area.y+area.height,monitor.y+monitor.height)-visibleArea.y;
+                if(visibleArea.width<2||visibleArea.height<2)throw new Error('Bring the shared window onto this screen before cropping');
                 if(tracked&&(Math.abs(data.width-area.width*tracked.scale)>2||Math.abs(data.height-area.height*tracked.scale)>2)) throw new Error('Shared frame and linked window dimensions disagree; link the correct window or retry after resizing');
                 let initial = null;
                 if (data.initial) {
@@ -474,11 +486,17 @@ export default class KimochiOverlay extends Extension {
                     initial = {x:area.x+c.x*area.width/c.reference_width,y:area.y+c.y*area.height/c.reference_height,
                         width:c.width*area.width/c.reference_width,height:c.height*area.height/c.reference_height};
                 }
+                if(initial){
+                    const x=Math.max(initial.x,visibleArea.x),y=Math.max(initial.y,visibleArea.y);
+                    const width=Math.min(initial.x+initial.width,visibleArea.x+visibleArea.width)-x;
+                    const height=Math.min(initial.y+initial.height,visibleArea.y+visibleArea.height)-y;
+                    initial=width>=2&&height>=2?{x,y,width,height}:null;
+                }
                 if(tracked)this._tracked.window.activate(global.get_current_time());
                 this._dismissPopup();
                 this._group.hide();
                 const pidReply=Gio.DBus.session.call_sync('org.freedesktop.DBus','/org/freedesktop/DBus','org.freedesktop.DBus','GetConnectionUnixProcessID',new GLib.Variant('(s)',[sender]),new GLib.VariantType('(u)'),Gio.DBusCallFlags.NONE,1000,null);
-                this._crop = {id:data.id, owner:sender, pid:pidReply.deep_unpack()[0], width:data.width, height:data.height, monitor, area, sourceId:data.sourceId, rect:initial,
+                this._crop = {id:data.id, owner:sender, pid:pidReply.deep_unpack()[0], width:data.width, height:data.height, monitor, area, visibleArea, sourceId:data.sourceId, rect:initial,
                     updated:GLib.get_monotonic_time(), previousFocus:global.display.focus_window, webview:data.ui==='shared',label:data.label,theme:data.theme==='light'?'light':'dark'};
                 this._cropWatch = Gio.bus_watch_name_on_connection(Gio.DBus.session, sender, Gio.BusNameWatcherFlags.NONE, null,
                     () => this._finishCrop(false, 'owner-vanished'));

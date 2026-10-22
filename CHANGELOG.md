@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- GNOME: restore annotations and desktop cropping for tiled window shares whose borders extend beyond the screen.
+
 - GNOME: avoid invalid native taskbar notifications during overlay cleanup, and prevent
   delayed extension imports from re-enabling an overlay after it has been disabled.
 

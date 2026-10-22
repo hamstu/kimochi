@@ -100,3 +100,27 @@ test('fullscreen transparency workaround touches only an active own shared crop 
  o._transparentCrop();assert.equal(background.opacity,0);assert.equal(surface.opacity,255);assert.equal(actor.opacity,254)
  actor.opacity=255;o._transparentCrop();assert.equal(actor.opacity,254);assert.equal(faded,1)
 })
+
+test('GNOME monitor-sized streams clip oversized shadow buffers without shifting their origin',()=>{
+ const actors=[],monitors=[{width:3440,height:1440}]
+ const Overlay=vm.runInNewContext(source,{Extension:class{},Main:{layoutManager:{monitors}},global:{get_window_actors:()=>actors}})
+ const o=new Overlay(),win={get_pid:()=>2,get_title:()=> 'Firefox',get_monitor:()=>0,
+  get_buffer_rect:()=>({x:1733,y:12,width:1727,height:1448}),get_compositor_private:()=>({get_resource_scale:()=>1})}
+ actors.push({meta_window:win})
+ assert.deepEqual(JSON.parse(JSON.stringify(o._captureBounds(win))),{x:1733,y:12,width:1727,height:1440})
+ assert.equal(o._matchWindow({width:1727,height:1440,name:'Firefox'},1),win)
+ assert.equal(o._matchWindow({width:1700,height:1440,name:'Firefox'},1),null)
+})
+
+test('partially offscreen crop limits the editor to visible pixels but preserves source-relative offsets',()=>{
+ const {o,signals}=fixture();o._crop.webview=true
+ o._crop.area={x:-20,y:-10,width:400,height:300};o._crop.visibleArea={x:0,y:0,width:380,height:290}
+ o._crop.width=400;o._crop.height=300
+ const inv={get_sender:()=>':1.2',return_dbus_error(_n,message){this.error=message},return_value(v){this.value=JSON.parse(v.args[0])}}
+ o.CropAsync([JSON.stringify({operation:'editor',id:'test'})],inv)
+ assert.deepEqual(inv.value.area,{x:0,y:0,width:380,height:290})
+ o.CropAsync([JSON.stringify({operation:'complete',id:'test',rect:{x:-10,y:0,width:100,height:100}})],inv)
+ assert.match(inv.error,/outside/)
+ o.CropAsync([JSON.stringify({operation:'complete',id:'test',rect:{x:0,y:0,width:100,height:100}})],inv)
+ assert.deepEqual(JSON.parse(JSON.stringify(signals[0].payload.crop)),{x:20,y:10,width:100,height:100,reference_width:400,reference_height:300})
+})
