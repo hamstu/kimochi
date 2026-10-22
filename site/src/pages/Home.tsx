@@ -1,4 +1,5 @@
 import { DownloadButton } from '../components/DownloadButton'
+import { DiscordButton } from '../components/DiscordButton'
 import { DemoShowcase } from '../components/home/DemoShowcase'
 import { Section } from '../components/Section'
 import { FeatureGrid } from '../components/home/FeatureGrid'
@@ -61,7 +62,10 @@ export function Home() {
         heading="I hope you'll give it a try."
         lede="Free, for macOS, Windows and Linux."
       >
-        <DownloadButton align="center" />
+        <div className="flex flex-wrap items-start justify-center gap-4">
+          <DownloadButton align="center" />
+          <DiscordButton size="lg" />
+        </div>
       </Section>
     </>
   )

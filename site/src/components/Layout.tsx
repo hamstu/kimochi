@@ -1,12 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { Menu, X } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { AccountNavLink } from './AccountNavLink'
+import { DiscordMark, GithubMark } from './PlatformMarks'
 import { LINUX_GUIDE_PATH } from '../lib/linux.js'
 import { DOCS_URL } from '../lib/docs.js'
 
 export const GITHUB_URL = 'https://github.com/hamstu/kimochi-tauri'
+/** Kimochi's Discord server (an invite that doesn't expire). */
+export const DISCORD_URL = 'https://discord.gg/vdMge6TBZQ'
 
 /**
  * The home page's sections, in the order they appear there (Home.tsx): the header nav and the
@@ -28,7 +31,9 @@ const MORE_LINKS: { label: string; to: string }[] = [
   { label: 'All questions', to: '/faq' },
   { label: 'Compare', to: '/compare' },
   { label: 'Linux install guide', to: LINUX_GUIDE_PATH },
-  { label: 'Your account', to: '/account' }
+  { label: 'Your account', to: '/account' },
+  { label: 'Discord', to: DISCORD_URL },
+  { label: 'Source on GitHub', to: GITHUB_URL }
 ]
 
 /** Scroll to the hash target after navigation, or to the top on a plain route change. */
@@ -54,10 +59,13 @@ function Wordmark() {
   )
 }
 
+const footerIconClass =
+  'grid size-8 place-items-center rounded-md text-ink-3 transition-colors duration-100 hover:bg-hover hover:text-ink'
+
 const footerLinkClass = 'text-ink-2 no-underline transition-colors duration-100 hover:text-ink'
 
 /** One titled list of footer links. */
-function FooterColumn({ title, links, extra }: { title: string; links: { label: string; to: string }[]; extra?: ReactNode }) {
+function FooterColumn({ title, links }: { title: string; links: { label: string; to: string }[] }) {
   return (
     <nav aria-label={title}>
       <p className="text-meta tracking-[0.08em] text-ink-3 uppercase">{title}</p>
@@ -75,7 +83,6 @@ function FooterColumn({ title, links, extra }: { title: string; links: { label: 
             )}
           </li>
         ))}
-        {extra && <li>{extra}</li>}
       </ul>
     </nav>
   )
@@ -155,9 +162,17 @@ export function Layout() {
           <div className="max-w-xs">
             <Wordmark />
             <p className="mt-3 text-ink-3">Read your games in Japanese. Free and open source, for macOS, Windows and Linux.</p>
+            <div className="mt-4 flex items-center gap-1">
+              <a href={DISCORD_URL} aria-label="Kimochi on Discord" title="Discord" className={footerIconClass}>
+                <DiscordMark className="size-[18px]" />
+              </a>
+              <a href={GITHUB_URL} aria-label="Kimochi on GitHub" title="GitHub" className={footerIconClass}>
+                <GithubMark className="size-[18px]" />
+              </a>
+            </div>
           </div>
           <FooterColumn title="Kimochi" links={NAV_LINKS} />
-          <FooterColumn title="More" links={MORE_LINKS} extra={<a href={GITHUB_URL} className={footerLinkClass}>Source on GitHub</a>} />
+          <FooterColumn title="More" links={MORE_LINKS} />
         </div>
         <div className="border-t border-hairline">
           <div className="container-page flex flex-col gap-3 py-5 text-ink-3 sm:flex-row sm:items-center sm:justify-between">

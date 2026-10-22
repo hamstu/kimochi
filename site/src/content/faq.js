@@ -137,10 +137,21 @@ export const FAQ = [
     ]
   },
   {
+    id: 'discord',
+    q: 'Is there a Kimochi community?',
+    a: [
+      'Yes, Kimochi has a Discord server. Come share what you’re reading, swap setups and dictionaries, ask for help, suggest features and hear about new releases first. Hamish is there too.'
+    ],
+    links: [{ href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' }]
+  },
+  {
     id: 'feedback',
     q: 'How do I report a bug or give feedback?',
-    a: ['Open an issue on Kimochi’s GitHub repository: bug reports, ideas and questions are all welcome there.'],
+    a: [
+      'Ask in Kimochi’s Discord, where Hamish and other readers can help, or open an issue on Kimochi’s GitHub repository. Bug reports, ideas and questions are all welcome in both.'
+    ],
     links: [
+      { href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' },
       { href: 'https://github.com/hamstu/kimochi-tauri/issues', label: 'Kimochi’s GitHub issues' },
       { href: docsUrl('/help/troubleshooting/'), label: 'Troubleshooting' }
     ]
