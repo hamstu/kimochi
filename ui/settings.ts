@@ -351,7 +351,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: 'Yomitan API',
     tagline: 'The Yomitan in your browser',
     description:
-      "A pop-up built into Kimochi that looks words up through the Yomitan you already use in your browser, over the Yomitan API. Your browser's dictionaries and settings are used as they are, with nothing to import again. Click words in the Log to look them up, and build Anki cards here.",
+      "A pop-up built into Kimochi that looks words up through the Yomitan you already use in your browser, over the Yomitan API. Your browser's dictionaries and settings are used as they are, with nothing to import again. Hold Shift and hover words in the Log to look them up, and build Anki cards here.",
     strengths: [
       'Uses the dictionaries already in your browser',
       'Click-to-define and furigana in the Log',
