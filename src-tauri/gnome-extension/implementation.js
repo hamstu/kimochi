@@ -240,8 +240,8 @@ export default class KimochiOverlay extends Extension {
                 if(current?.sourceId===data.sourceId){invocation.return_value(new GLib.Variant('(s)',[JSON.stringify(current)]));return;}
                 const response=Gio.DBus.session.call_sync('org.freedesktop.DBus','/org/freedesktop/DBus','org.freedesktop.DBus','GetConnectionUnixProcessID',
                     new GLib.Variant('(s)',[sender]),new GLib.VariantType('(u)'),Gio.DBusCallFlags.NONE,1000,null);
-                const win=this._matchWindow(data,response.deep_unpack()[0]);
-                if(win)this._bindTracked(win,sender,data.sourceId,false,'automatic');
+                const pid=response.deep_unpack()[0],win=this._matchWindow(data,pid);
+                if(win)this._bindTracked(win,sender,data.sourceId,false,'automatic',pid);
                 invocation.return_value(new GLib.Variant('(s)',[JSON.stringify(win?this._trackedStatus():null)]));return;
             }
             if (data.operation==='clear') {this._finishPick(null,'source-changed');this._finishCrop(false,'source-changed');this._forgetTracked();}
@@ -286,7 +286,7 @@ export default class KimochiOverlay extends Extension {
         this._pick=null;this._pickGroup?.destroy();this._pickGroup=null;
         if(this._pickWatch)Gio.bus_unwatch_name(this._pickWatch);this._pickWatch=null;
         if(win){
-            this._bindTracked(win,p.owner,p.sourceId,true,'manual');
+            this._bindTracked(win,p.owner,p.sourceId,true,'manual',p.pid);
         }
         this._hideButton.visible=this._words.length>0;
         this._bus?.emit_signal('TrackResult',new GLib.Variant('(s)',[JSON.stringify({sourceId:p.sourceId,linked:Boolean(win),reason,window:win?this._trackedStatus():null})]));
@@ -306,9 +306,9 @@ export default class KimochiOverlay extends Extension {
         return candidates.length===1?candidates[0]:null;
     }
 
-    _bindTracked(win,owner,sourceId,activate,method) {
+    _bindTracked(win,owner,sourceId,activate,method,pid) {
         this._forgetTracked();
-        this._tracked={owner,sourceId,window:win,sequence:win.get_stable_sequence(),method};
+        this._tracked={owner,pid,sourceId,window:win,sequence:win.get_stable_sequence(),method};
         this._trackWatch=Gio.bus_watch_name_on_connection(Gio.DBus.session,owner,Gio.BusNameWatcherFlags.NONE,null,()=>this._forgetTracked());
         if(activate)win.activate(global.get_current_time());
     }
@@ -391,9 +391,15 @@ export default class KimochiOverlay extends Extension {
         if(!w.get_compositor_private()||w.get_stable_sequence()!==t.sequence){this._forgetTracked();return null;}
         const r=w.get_buffer_rect(),focused=global.display.focus_window;
         const popup=focused===this._nativePopup||focused===this._controller?.window;
+        // Keep the source readable beside Kimochi, but never paint it through
+        // Kimochi's ordinary windows. Annotation and popup surfaces are separate.
+        const appRect=focused&&t.pid&&focused.get_pid()===t.pid&&focused!==this._surface?.window&&!popup
+            ? focused.get_frame_rect() : null;
+        const appBeside=appRect&&(appRect.x+appRect.width<=r.x||appRect.x>=r.x+r.width||
+            appRect.y+appRect.height<=r.y||appRect.y>=r.y+r.height);
         const app=Shell.WindowTracker.get_default().get_window_app(w),info=app?.get_app_info();
         return {appName:app?.get_name()??null,appId:info?.get_id()??w.get_gtk_application_id()??null,iconName:info?.get_icon()?.to_string()??'application-x-executable',sourceId:t.sourceId,sequence:t.sequence,method:t.method,windowId:String(w.get_id()),title:w.get_title(),bounds:{x:r.x,y:r.y,width:r.width,height:r.height},
-            visible:!w.minimized&&w.showing_on_its_workspace()&&w.get_compositor_private().get_paint_visibility()&&(focused===w||popup),
+            visible:!w.minimized&&w.showing_on_its_workspace()&&w.get_compositor_private().get_paint_visibility()&&Boolean(focused===w||popup||appBeside),
             scale:w.get_compositor_private().get_resource_scale()};
     }
 
@@ -638,7 +644,7 @@ export default class KimochiOverlay extends Extension {
             keyboardGrab: false, fullscreenInputSurface: Boolean(this._crop || this._pick), hideButton: this._hideButton?.visible ? (()=>{const b=this._fallbackHide?.get_paint_visibility()?this._fallbackHide:this._hideButton;return {position:b.get_transformed_position(),size:b.get_transformed_size(),floating:b===this._fallbackHide};})() : null, pointer: global.get_pointer(),
             sharedOverlay: true,
             surface: this._surface ? {rect:this._surface.rect,sourceId:this._surface.sourceId,
-                visible:Boolean(this._surface.visible),mapped:Boolean(this._surface.window)} : null,
+                origin:this._surfaceState().origin,visible:Boolean(this._surface.visible),mapped:Boolean(this._surface.window)} : null,
             painted: this._surface ? Boolean(this._surface.visible) : this._words.length > 0 && this._group.get_paint_visibility(),
             windowTracking: true, tracked: this._trackedStatus(), picking: Boolean(this._pick), pickWindows:this._pick ? global.get_window_actors().map(a=>a.meta_window).filter(w=>w.get_pid()!==this._pick.pid&&w.showing_on_its_workspace()&&!w.minimized).slice(-50).map(w=>{const r=w.get_frame_rect();return {title:w.get_title(),pid:w.get_pid(),bounds:{x:r.x,y:r.y,width:r.width,height:r.height}};}) : [], cropEditor: true, crop: this._crop ? this._crop.webview ? {id:this._crop.id,ui:'shared',backgroundSuppressed:Boolean(this._crop.backgroundSuppressed),opacity:this._crop.window?.get_compositor_private()?.opacity,monitor:this._crop.monitor,mapped:Boolean(this._crop.window),rect:this._crop.rect} : {id: this._crop.id, rect: this._crop.rect, dragging: Boolean(this._crop.drag), monitor: this._crop.monitor, save: {position:this._cropSave.get_transformed_position(),size:this._cropSave.get_transformed_size()}, cancel:{position:this._cropCancel.get_transformed_position(),size:this._cropCancel.get_transformed_size()}} : null,
             appearance: 'matched-word-highlight', matched: this._match ?? null, desktopPopup: true, revision: this.metadata.revision,
@@ -771,7 +777,7 @@ export default class KimochiOverlay extends Extension {
                 rect:{x:monitor.x,y:monitor.y,width:monitor.width,height:monitor.height},updated:GLib.get_monotonic_time()});
             if (this._controller?.mode !== 'words') this._group.hide();
             this._syncSurface();
-            invocation.return_value(new GLib.Variant('(s)', [JSON.stringify({rect:this._surface.rect})]));
+            invocation.return_value(new GLib.Variant('(s)', [JSON.stringify({rect:this._surfaceState().origin})]));
         } catch (e) { invocation.return_dbus_error(`${IFACE}.InvalidSurface`, e.message); }
     }
 
@@ -787,11 +793,16 @@ export default class KimochiOverlay extends Extension {
         if (!s) return null;
         const tracked = s.sourceKind === 'window' ? this._trackedStatus() : null;
         const bounds = tracked?.bounds ?? s.rect;
+        // Mutter may constrain a normal Wayland toplevel below the top panel.
+        // All DOM, pointer and native input-region coordinates must use where
+        // the surface actually mapped, rather than where we requested it.
+        const frame=s.window?.get_frame_rect();
+        const origin=frame?{x:frame.x,y:frame.y,width:frame.width,height:frame.height}:s.rect;
         const visible = !this._suspended && !this._crop && !this._pick &&
             !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter && !Main.overview.visible &&
             this._words.length > 0 && this._controlVisible() &&
             (s.sourceKind === 'screen' || tracked?.sourceId === s.sourceId && this._trackedVisible);
-        return {origin:s.rect,bounds,visible:Boolean(visible)};
+        return {origin,bounds,visible:Boolean(visible)};
     }
 
     _syncSurface() {
@@ -801,17 +812,24 @@ export default class KimochiOverlay extends Extension {
             w.get_pid() === s.pid && w.get_title() === 'Kimochi · overlay');
         if (win && win !== s.window) {
             s.window = win;
+            s.placementKey = null;
             const actor = win.get_compositor_private();
             Main.wm.skipNextEffect(actor);
             actor.remove_all_transitions();actor.set_scale(1,1);actor.set_translation(0,0,0);
         }
-        const state = this._surfaceState();
         const actor = s.window?.get_compositor_private();
+        if (actor) {
+            const r=s.rect,key=JSON.stringify(r);
+            if (s.placementKey!==key) {
+                s.placementKey=key;
+                const current=s.window.get_frame_rect();
+                if (['x','y','width','height'].some(k=>Math.abs(current[k]-r[k])>=1))
+                    s.window.move_resize_frame(false,r.x,r.y,r.width,r.height);
+            }
+        }
+        const state = this._surfaceState();
         s.visible = Boolean(state.visible && actor);
         if (actor) {
-            const current = s.window.get_frame_rect(), r = s.rect;
-            if (['x','y','width','height'].some(k => Math.abs(current[k]-r[k]) >= 1))
-                s.window.move_resize_frame(false,r.x,r.y,r.width,r.height);
             // 254 prevents Mutter's opaque-window culling from discarding the
             // game behind a full-monitor transparent surface (as in crop mode).
             actor.opacity = 254;
@@ -849,7 +867,7 @@ export default class KimochiOverlay extends Extension {
                 if (!this._surface || this._surface.owner !== invocation.get_sender())
                     throw new Error('Annotation surface requires an active owner lease');
                 if (!win) throw new Error('Annotation surface is not mapped yet');
-                const r = this._surface.rect;
+                const r = this._surfaceState().origin;
                 invocation.return_value(new GLib.Variant('(s)', [JSON.stringify(r)]));return;
             }
             if(data.label==='controller-host') {

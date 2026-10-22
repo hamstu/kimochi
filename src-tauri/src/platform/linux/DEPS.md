@@ -254,6 +254,10 @@ source visibility, stacking and pointer/modifier delivery. The GTK surface perma
 refuses keyboard focus and takes pointer input only over the renderer's actual hit
 rectangles. Estimated Shell character cells remain metadata for the legacy controller
 adapter; they no longer drive mouse lookup, typography or visual highlights.
+Mapped surface coordinates, rather than requested desktop coordinates, drive text,
+pointer conversion and input shapes, including GNOME panel/dock placement constraints.
+Linked-window annotations remain visible beside a focused Kimochi window; an overlapping
+ordinary Kimochi window or another focused application hides them.
 The dictionary uses the existing full Yomitan Popup/Display in a small native
 window, including dictionary images, audio controls and nested lookup. GNOME supplies
 geometry for Kimochi's own log/popup windows so log lookups can extend outside the

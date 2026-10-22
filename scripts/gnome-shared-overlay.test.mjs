@@ -53,6 +53,46 @@ test('surface synchronization only places the leased own window, preserves game 
   o._suspended=true;o._syncSurface();assert.equal(actor.visible,false);assert.equal(signals.at(-1).payload.over,false)
   let hidden=0;actor.hide=()=>hidden++;o._finishSurface();assert.equal(hidden,1);assert.equal(o._surface,null)
 })
+test('constrained GNOME surface origin agrees with pointer and native input geometry without a placement loop',()=>{
+  const {o,actors,signals,context}=shellFixture();let moves=0
+  const frame={x:0,y:32,width:1000,height:800}
+  const actor={remove_all_transitions(){},set_scale(){},set_translation(){}}
+  const win={get_pid:()=>8,get_title:()=> 'Kimochi · overlay',get_compositor_private:()=>actor,
+    get_frame_rect:()=>frame,is_above:()=>true,is_override_redirect:()=>false,
+    move_resize_frame(){moves++}}
+  actors.push({meta_window:win})
+  o._surface={owner:':1.2',pid:8,sourceKind:'screen',sourceId:'portal:display:1',rect:{x:0,y:0,width:1000,height:800},updated:100}
+  for(let i=0;i<100;i++)o._syncSurface()
+  assert.equal(moves,1,'Mutter constraints must not cause 50 placement requests per second')
+  assert.equal(signals[0].payload.origin.y,32)
+  assert.equal(signals[0].payload.bounds.y,0,'screen capture bounds do not move with the overlay')
+  const invocation={get_sender:()=>':1.2',return_value(v){this.rect=JSON.parse(v.value[0])},return_dbus_error(_n,error){assert.fail(error)}}
+  context.Gio={DBus:{session:{call_sync:()=>({deep_unpack:()=>[8]})}},DBusCallFlags:{NONE:0}}
+  context.GLib.VariantType=class{}
+  o.OwnWindowAsync([JSON.stringify({label:'overlay'})],invocation)
+  assert.equal(invocation.rect.y,32,'input shape origin agrees with DOM and pointer origin')
+  o._surface.rect={x:0,y:0,width:1200,height:800};o._syncSurface()
+  assert.equal(moves,2,'a changed monitor allocation is placed once again')
+})
+test('linked source stays visible beside Kimochi, but hides when covered, inactive or minimized',()=>{
+  const {o,context}=shellFixture()
+  const rect={x:500,y:100,width:400,height:300}
+  const source={get_compositor_private:()=>({get_paint_visibility:()=>true,get_resource_scale:()=>1}),
+    get_pid:()=>99,get_stable_sequence:()=>7,get_buffer_rect:()=>rect,showing_on_its_workspace:()=>true,
+    get_gtk_application_id:()=>null,get_id:()=>9,get_title:()=> 'Source',minimized:false}
+  context.Shell={WindowTracker:{get_default:()=>({get_window_app:()=>null})}}
+  context.global.display={focus_window:source}
+  o._tracked={window:source,sequence:7,sourceId:'portal:window:1',pid:8}
+  assert.equal(o._trackedStatus().visible,true)
+  const app={get_pid:()=>8,get_frame_rect:()=>({x:0,y:0,width:450,height:800})}
+  context.global.display.focus_window=app;assert.equal(o._trackedStatus().visible,true)
+  app.get_frame_rect=()=>({x:600,y:200,width:200,height:200})
+  assert.equal(o._trackedStatus().visible,false)
+  app.get_pid=()=>99;app.get_frame_rect=()=>({x:0,y:0,width:450,height:800})
+  assert.equal(o._trackedStatus().visible,false)
+  context.global.display.focus_window=source;source.minimized=true
+  assert.equal(o._trackedStatus().visible,false)
+})
 test('GNOME uses the shared renderer with intact OCR segments, grouping, opacity, and live desktop bounds',async()=>{
   const savedWindow=globalThis.window,savedInterval=globalThis.setInterval
   const calls=[],renders=[]

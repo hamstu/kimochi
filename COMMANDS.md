@@ -1255,7 +1255,11 @@ on one monitor; window streams are never placed at guessed desktop coordinates.
 
 When status advertises `sharedOverlay`, `surface` with `{operation:"open",sourceKind,sourceId}`
 leases the calling app's already-created annotation WebView after a validated `present`.
-It returns the monitor rectangle, which native uses for size/origin. Shell verifies the owner
+It returns the mapped surface rectangle (the requested monitor before first map), which native
+uses for size/origin. Pointer samples and native input shapes use that same actual origin,
+including compositor panel/dock constraints; source capture bounds remain independent.
+Placement is requested once per surface/monitor allocation, rather than repeatedly fighting
+Mutter's constraints. Shell verifies the owner
 and PID, controls stacking and visibility, and emits bounded `Pointer` samples to the shared
 DOM renderer/scanner. GTK refuses keyboard focus and applies only the renderer's word input
 regions. The original floating dictionary host owns its own popup input and focus.
