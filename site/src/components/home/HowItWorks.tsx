@@ -1,3 +1,6 @@
+import { ArrowRight } from 'lucide-react'
+import { docsUrl } from '../../lib/docs.js'
+
 const STEPS = [
   {
     n: '一',
@@ -23,19 +26,30 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <ol className="grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
-      {STEPS.map((s, i) => (
-        <li key={s.title} className="border-t border-hairline pt-5">
-          <p className="flex items-baseline gap-2">
-            <span lang="ja" className="text-[1.75rem] leading-none font-medium text-accent-ink">
-              {s.n}
-            </span>
-            <span className="sr-only">Step {i + 1}:</span>
-          </p>
-          <h3 className="mt-4 text-heading text-ink">{s.title}</h3>
-          <p className="mt-2 text-body text-ink-2">{s.body}</p>
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol className="grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+        {STEPS.map((s, i) => (
+          <li key={s.title} className="border-t border-hairline pt-5">
+            <p className="flex items-baseline gap-2">
+              <span lang="ja" className="text-[1.75rem] leading-none font-medium text-accent-ink">
+                {s.n}
+              </span>
+              <span className="sr-only">Step {i + 1}:</span>
+            </p>
+            <h3 className="mt-4 text-heading text-ink">{s.title}</h3>
+            <p className="mt-2 text-body text-ink-2">{s.body}</p>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-10">
+        <a
+          href={docsUrl('/quick-start/')}
+          className="inline-flex items-center gap-1 text-small font-medium text-accent-ink no-underline hover:underline"
+        >
+          The step-by-step quick start
+          <ArrowRight size={14} aria-hidden />
+        </a>
+      </p>
+    </>
   )
 }

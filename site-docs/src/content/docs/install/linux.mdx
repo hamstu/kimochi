@@ -1,0 +1,148 @@
+---
+title: Install on Linux
+description: Install Kimochi on Linux with the one-line installer, the AppImage or the .deb, and choose what it reads on Wayland and X11.
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components'
+import Screenshot from '../../../components/Screenshot.astro'
+
+Kimochi has Linux builds for **x64** and **ARM64**, as an **AppImage** (any distribution) and a
+**.deb** (Ubuntu, Debian, Mint, Pop!_OS). The marketing site's
+[Linux install guide](https://kimochiapp.com/download/linux) walks through the same steps.
+
+<Tabs syncKey="linux">
+  <TabItem label="One-line installer (recommended)">
+    Open a terminal, paste this line and press <kbd>Enter</kbd>:
+
+    ```sh
+    curl -fsSL https://kimochiapp.com/install.sh | sh
+    ```
+
+    It installs the newest Kimochi AppImage for your CPU in your home folder, adds Kimochi to your
+    app menu (under Education) and opens it. No administrator password is needed, and nothing outside
+    your home folder is touched. Run it again at any time to update in place; your settings,
+    dictionaries and history are kept.
+
+    Options, after `sh -s --`:
+
+    | Option | What it does |
+    | --- | --- |
+    | `--no-launch` | Install or update without opening Kimochi afterwards. |
+    | `--nightly` | Install the development build. |
+    | `--appimage <file>` | Install an AppImage you already downloaded. |
+    | `--uninstall` | Remove Kimochi and its menu entries (your data is kept). |
+    | `--help` | List the options. |
+
+    For example: `curl -fsSL https://kimochiapp.com/install.sh | sh -s -- --no-launch`.
+  </TabItem>
+  <TabItem label=".deb (Ubuntu, Debian)">
+    Download the `.deb` for your computer from [kimochiapp.com](https://kimochiapp.com/download/linux#debian),
+    then install it from the folder you saved it to:
+
+    ```sh
+    cd ~/Downloads && sudo apt install ./kimochi_*.deb
+    ```
+
+    The .deb gets updates inside Kimochi too; each one asks for your password before it installs.
+  </TabItem>
+  <TabItem label="AppImage by hand">
+    Download the `.AppImage` for your computer, make it executable and run it:
+
+    ```sh
+    cd ~/Downloads && chmod +x ./kimochi_*.AppImage && ./kimochi_*.AppImage
+    ```
+
+    Nothing happens? See [If Kimochi won't start](#if-kimochi-wont-start).
+  </TabItem>
+</Tabs>
+
+## Choosing what to read
+
+How Kimochi sees your screen depends on your desktop.
+
+- **Wayland** (most current desktops): your desktop shows its own dialog to choose the screen or
+  window Kimochi may capture. The welcome guide's **Choose what to read** step opens it, and later
+  **Change source → Choose New Source…** does. **Use Current Source** keeps the one you picked;
+  Kimochi remembers it across restarts.
+- **X11**: Kimochi lists your windows itself, as on macOS and Windows. Minimised windows and windows
+  on other workspaces aren't listed.
+
+<Screenshot id="linux-source-menu" alt="The source menu on Linux, where the first item opens the desktop's own picker." width={720} />
+
+<Screenshot id="welcome-picker" alt="The welcome guide's Choose what to read step on Linux, with the Choose New Source button." width={640} />
+
+### The overlay on Wayland
+
+Drawing over other apps on Wayland needs the desktop's layer-shell support. On desktops without it,
+**Show overlay** reads **Overlay unavailable**; scanning, the Log and lookups still work. On GNOME 46,
+**Settings → General → Desktop integration → GNOME overlay** sets up a small GNOME extension that
+enables screen annotations, dictionary pop-ups and desktop region selection (one monitor). Without
+either, **Crop area → Set crop area…** opens a crop editor inside Kimochi's window.
+
+The overlay is tested on **Hyprland** (on Omarchy) and on **GNOME 46** with the GNOME overlay
+extension. Other desktops with layer-shell support, such as KDE Plasma and Sway, should work but
+aren't tested yet.
+
+### Global shortcuts on Hyprland
+
+Hyprland lists Kimochi's shortcuts but doesn't assign their keys, so bind them in your own config.
+The first two lines bind **Scan** and the **Controller menu** (use any keys you like); the last two
+let the dictionary see <kbd>Shift</kbd> for lookups over other apps, without taking it from them.
+
+With Hyprland 0.56's Lua config (`~/.config/hypr/bindings.lua`, as on Omarchy):
+
+```lua
+hl.bind("CTRL + SHIFT + 8", hl.dsp.global("Kimochi:dev.kimochi.app.triggerScan"))
+hl.bind("CTRL + SHIFT + SPACE", hl.dsp.global("Kimochi:dev.kimochi.app.openControllerMenu"))
+hl.bind("Shift_L", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftLeft"), { non_consuming = true, transparent = true, ignore_mods = true })
+hl.bind("Shift_R", hl.dsp.global("Kimochi:dev.kimochi.app.dictionaryShiftRight"), { non_consuming = true, transparent = true, ignore_mods = true })
+```
+
+With the classic `hyprland.conf`:
+
+```ini
+bind = CTRL SHIFT, 8, global, Kimochi:dev.kimochi.app.triggerScan
+bind = CTRL SHIFT, SPACE, global, Kimochi:dev.kimochi.app.openControllerMenu
+bindnti = , Shift_L, global, Kimochi:dev.kimochi.app.dictionaryShiftLeft
+bindnti = , Shift_R, global, Kimochi:dev.kimochi.app.dictionaryShiftRight
+```
+
+Reload Hyprland (or log out and back in) after editing.
+
+## Updating
+
+Kimochi updates itself when a new version comes out. If you used the one-line installer, that
+happens quietly; running the installer again also brings you up to date. If you installed the .deb,
+Kimochi asks for your password before each update.
+
+## Uninstalling
+
+- **One-line installer** (including on a Steam Deck):
+
+  ```sh
+  curl -fsSL https://kimochiapp.com/install.sh | sh -s -- --uninstall
+  ```
+
+  Your settings and dictionaries are kept in case you come back. To delete them too:
+
+  ```sh
+  rm -rf ~/.local/share/dev.kimochi.app ~/.config/dev.kimochi.app ~/.cache/dev.kimochi.app
+  ```
+
+- **.deb**: `sudo apt remove kimochi`
+
+## If Kimochi won't start
+
+The AppImage needs **FUSE 3**, which desktop installs usually come with (the Steam Deck does). The
+one-line installer checks for it and, if it's missing, sets Kimochi up to run without it; it just
+starts a little slower. If you downloaded the AppImage yourself and it doesn't open, install FUSE 3
+and try again:
+
+| Distribution | Command |
+| --- | --- |
+| Ubuntu, Debian, Mint | `sudo apt install fuse3` |
+| Fedora | `sudo dnf install fuse3` |
+| Arch | `sudo pacman -S fuse3` |
+| openSUSE | `sudo zypper install fuse3` |
+
+More in [Troubleshooting](/help/troubleshooting/#linux).

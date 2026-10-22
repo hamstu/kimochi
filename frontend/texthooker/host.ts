@@ -121,7 +121,7 @@ async function selectSource(
     return;
   const match = matchedSession(source, sessions.listSessions(), bindings);
   if (match) await sessions.switchSession(match);
-  else await sessions.createSession(source.applicationContext?.name || source.name || source.appName);
+  else await sessions.createSession(source.name || source.appName);
   bindings[sourceKey(source)!] = sessions.getActiveSession().id;
   await setSetting("texthookerSourceSessions", bindings);
 }

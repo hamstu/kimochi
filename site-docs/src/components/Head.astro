@@ -1,0 +1,24 @@
+---
+/**
+ * Starlight's head plus the social card: every page shares one 1200×630 image (public/og.png,
+ * drawn by `npm run docs:screenshots`), unless its frontmatter `head` already sets one.
+ */
+import Default from '@astrojs/starlight/components/Head.astro'
+
+const { head } = Astro.locals.starlightRoute
+const hasImage = head.some(({ attrs }) => attrs?.property === 'og:image')
+const image = new URL('/og.png', Astro.site).href
+---
+
+<Default />
+{
+  !hasImage && (
+    <>
+      <meta property="og:image" content={image} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:image:alt" content="Kimochi Docs" />
+      <meta name="twitter:image" content={image} />
+    </>
+  )
+}

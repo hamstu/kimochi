@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { detectPlatformFromUA, platformFromClientHints } from './assets.js'
+import { useClientValue } from './client'
 import type { Platform, ReleaseAsset } from './assets.js'
 
 export type { Platform, ReleaseAsset }
@@ -150,4 +152,27 @@ export async function detectPlatform(): Promise<Platform> {
     const os = platformFromClientHints(uaData.platform, undefined).os
     return { os: os !== 'unknown' ? os : fallback.os, arch: fallback.arch }
   }
+}
+
+/** The user-agent guess as "os/arch", a primitive for useClientValue. */
+function readPlatformKey(): string {
+  const p = detectPlatformSync()
+  return `${p.os}/${p.arch}`
+}
+
+/**
+ * The visitor's platform: the user-agent guess at once (unknown in prerendered HTML), then the
+ * Client Hints answer when it arrives.
+ */
+export function useDetectedPlatform(): Platform {
+  const [os, arch] = useClientValue(readPlatformKey, 'unknown/unknown').split('/')
+  const [hinted, setHinted] = useState<Platform | null>(null)
+  useEffect(() => {
+    let alive = true
+    detectPlatform().then((p) => alive && setHinted(p))
+    return () => {
+      alive = false
+    }
+  }, [])
+  return hinted ?? ({ os, arch } as Platform)
 }

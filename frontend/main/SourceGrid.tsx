@@ -22,7 +22,7 @@ import {
   useSystemPick,
   type NativeError
 } from '../bridge/tauri'
-import { useCapabilities } from '../bridge/capabilities'
+import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 
 export interface CatalogSource {
   id: string
@@ -74,11 +74,14 @@ function Tile({
   source,
   current,
   root,
+  noPreview = false,
   onChoose
 }: {
   source: CatalogSource
   current: boolean
   root: HTMLElement | null
+  /** Shown without a thumbnail (Gaming Mode's screen, which is Kimochi itself right now). */
+  noPreview?: boolean
   onChoose: () => void
 }): ReactNode {
   const ref = useRef<HTMLDivElement>(null)
@@ -99,7 +102,7 @@ function Tile({
             () => {}
           )
         // On another Space or desktop: nothing is drawn there to preview from here.
-        if (source.space) return
+        if (source.space || noPreview) return
         void thumbnail(source.id, () => live).then(
           (result) => {
             if (live) setUrl(result.url || null)
@@ -117,9 +120,13 @@ function Tile({
       live = false
       observer.disconnect()
     }
-  }, [source.id, source.app, source.space, root])
+  }, [source.id, source.app, source.space, noPreview, root])
   const Icon = isDisplay(source) ? Monitor : AppWindow
-  const detail = source.app ? source.name || 'Untitled window' : null
+  const detail = noPreview
+    ? 'Whatever is in front'
+    : source.app && source.name !== source.app
+      ? source.name || 'Untitled window'
+      : null
   return (
     <MenuPrimitive.Item
       ref={ref}
@@ -144,6 +151,8 @@ function Tile({
             <Icon />
             {source.space ? (
               <span>Previews once it is showing</span>
+            ) : noPreview ? (
+              <span>The game or app in front</span>
             ) : (
               failed && <span>No preview</span>
             )}
@@ -256,7 +265,9 @@ function WindowGrid({
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const capabilities = useCapabilities()
   // Only a platform with a settings page to send the user to gets told to go there.
-  const emptyHint = !capabilities.capture.canOpenSettings
+  const emptyHint = isGamingMode(capabilities)
+    ? 'Nothing is running. Start a game from Steam, then choose it here.'
+    : !capabilities.capture.canOpenSettings
     ? 'No windows to read.'
     : capabilities.os === 'macos'
       ? 'No windows to read. Enable Screen Recording for Kimochi in System Settings.'
@@ -278,17 +289,27 @@ function WindowGrid({
     }
   }, [])
 
+  // Gaming Mode lists games first, and its screen has no thumbnail: only one app shows at a
+  // time, and while this menu is open that app is Kimochi.
+  const gaming = isGamingMode(capabilities)
   const tile = (source: CatalogSource): ReactNode => (
     <Tile
       key={source.id}
       source={source}
       current={source.id === currentId}
       root={root}
+      noPreview={gaming && isDisplay(source)}
       onChoose={() => onChoose(source)}
     />
   )
   const displays = sources?.filter(isDisplay) ?? []
   const windows = sources?.filter((source) => !isDisplay(source)) ?? []
+  const screens = root && displays.length > 0 && (
+    <section className="sg-section" aria-label="Screens">
+      <h3 className="sg-section-title">{gaming ? 'Screen' : 'Screens'}</h3>
+      <div className="sg-grid">{displays.map(tile)}</div>
+    </section>
+  )
 
   return (
     <div className="sg-scroll" ref={setRoot}>
@@ -307,20 +328,16 @@ function WindowGrid({
       {sources && sources.length === 0 && (
         <div className="sg-status">{emptyHint}</div>
       )}
-      {root && displays.length > 0 && (
-        <section className="sg-section" aria-label="Screens">
-          <h3 className="sg-section-title">Screens</h3>
-          <div className="sg-grid">{displays.map(tile)}</div>
-        </section>
-      )}
+      {!gaming && screens}
       {root && windows.length > 0 && (
-        <section className="sg-section" aria-label="App windows">
+        <section className="sg-section" aria-label={gaming ? 'Games and apps' : 'App windows'}>
           <h3 className="sg-section-title">
-            App windows <span className="k-num">{windows.length}</span>
+            {gaming ? 'Games and apps' : 'App windows'} <span className="k-num">{windows.length}</span>
           </h3>
           <div className="sg-grid">{windows.map(tile)}</div>
         </section>
       )}
+      {gaming && screens}
     </div>
   )
 }

@@ -602,9 +602,7 @@ fn crop_differs(a: Option<&Crop>, b: Option<&Crop>) -> bool {
 }
 
 fn selection_crop_key(service: &Service, kind: &str, name: &str, app: Option<&str>) -> String {
-    let context = if descriptor_type(kind) == "screen" { crate::application_context::current(service) } else { None };
-    let key = crate::application_context::crop_key(context.as_ref(), descriptor_key(kind, name, app));
-    crate::state::shaped_crop_key(key, kind, service.source_fullscreen.load(Ordering::Relaxed))
+    crate::state::shaped_crop_key(descriptor_key(kind, name, app), kind, service.source_fullscreen.load(Ordering::Relaxed))
 }
 
 fn saved_crop_for_key(service: &Service, key: &str) -> Option<Crop> {
@@ -668,13 +666,7 @@ pub fn resolve_saved_source(saved: &Value, live: &[Source]) -> Restored {
 
 /// The crop saved for a source descriptor, used when a scan starts.
 pub fn saved_crop(service: &Service, kind: &str, name: &str, app: Option<&str>) -> Option<Crop> {
-    saved_crop_with_context(service, kind, name, app, crate::application_context::current(service).as_ref())
-}
-
-pub fn saved_crop_with_context(service: &Service, kind: &str, name: &str, app: Option<&str>, context: Option<&crate::application_context::ApplicationContext>) -> Option<Crop> {
-    let context = if descriptor_type(kind) == "screen" { context } else { None };
-    let key = crate::application_context::crop_key(context, descriptor_key(kind, name, app));
-    let key = crate::state::shaped_crop_key(key, kind, service.source_fullscreen.load(Ordering::Relaxed));
+    let key = crate::state::shaped_crop_key(descriptor_key(kind, name, app), kind, service.source_fullscreen.load(Ordering::Relaxed));
     saved_crop_for_key(service, &key)
 }
 

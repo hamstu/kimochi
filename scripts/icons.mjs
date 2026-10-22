@@ -47,6 +47,25 @@ function write(path, data) {
   console.log(`  ${rel(path)}`);
 }
 
+/** An .ico holding PNG images (Vista+ format), one per size. */
+function ico(pngs) {
+  const header = Buffer.alloc(6 + 16 * pngs.length);
+  header.writeUInt16LE(1, 2); // type: icon
+  header.writeUInt16LE(pngs.length, 4);
+  let offset = header.length;
+  pngs.forEach(({ size, png }, i) => {
+    const e = 6 + 16 * i;
+    header.writeUInt8(size >= 256 ? 0 : size, e);
+    header.writeUInt8(size >= 256 ? 0 : size, e + 1);
+    header.writeUInt16LE(1, e + 4); // colour planes
+    header.writeUInt16LE(32, e + 6); // bits per pixel
+    header.writeUInt32LE(png.length, e + 8);
+    header.writeUInt32LE(offset, e + 12);
+    offset += png.length;
+  });
+  return Buffer.concat([header, ...pngs.map((p) => p.png)]);
+}
+
 function tauriIcon(sourcePng) {
   const out = mkdtempSync(join(tmpdir(), "kimochi-icons-"));
   try {
@@ -114,6 +133,8 @@ console.log(`  ${rel(join(sitePublic, "favicon.svg"))}`);
 // iOS rounds apple-touch-icon itself, so it gets the full square.
 write(join(sitePublic, "apple-touch-icon.png"), render(join(branding, "icon-square.svg"), 180));
 write(join(sitePublic, "og-icon.png"), render(join(branding, "icon.svg"), 512));
+write(join(sitePublic, "icon-192.png"), render(join(branding, "icon.svg"), 192));
+write(join(sitePublic, "favicon.ico"), ico([16, 32, 48].map((size) => ({ size, png: render(join(branding, "favicon.svg"), size) }))));
 
 console.log("Sketch previews");
 const previews = [];

@@ -1,0 +1,103 @@
+---
+/**
+ * One docs screenshot, in the reader's theme. Files come from `npm run docs:screenshots`
+ * (src/assets/screenshots/<id>-light.webp and -dark.webp, captured at 2×); Astro turns each into
+ * AVIF and WebP (the <img> fallback) at 1× and 2× of its display size. Both themes are in the page; CSS shows the one
+ * that matches the `data-theme` Starlight sets on <html>.
+ *
+ *   <Screenshot id="main-window" alt="…" caption="…" width={640} />
+ *
+ * `width` caps the display width in CSS pixels (default: the window's own size, up to the column).
+ * `src` takes another image folder's pair instead (e.g. the dictionary previews), as
+ * { light, dark } imports, with `scale` their device pixel ratio.
+ */
+import { Picture } from 'astro:assets'
+import type { ImageMetadata } from 'astro'
+
+interface Props {
+  id?: string
+  src?: { light: ImageMetadata; dark: ImageMetadata }
+  scale?: number
+  alt: string
+  caption?: string
+  width?: number
+  eager?: boolean
+}
+
+const shots = import.meta.glob<{ default: ImageMetadata }>('../assets/screenshots/*.webp', { eager: true })
+const { id, src, scale = src ? 1.5 : 2, alt, caption, width, eager = false } = Astro.props
+
+function load(theme: 'light' | 'dark'): ImageMetadata {
+  if (src) return src[theme]
+  const file = shots[`../assets/screenshots/${id}-${theme}.webp`]
+  if (!file) throw new Error(`No screenshot "${id}" (${theme}): run npm run docs:screenshots`)
+  return file.default
+}
+
+const images = { light: load('light'), dark: load('dark') }
+const natural = Math.round(images.light.width / scale)
+const display = Math.min(width ?? natural, natural)
+const loading = eager ? 'eager' : 'lazy'
+---
+
+<figure class:list={['k-shot', { 'k-shot-plain': Boolean(src) }]} style={`--k-shot-w: ${display}px`}>
+  {
+    (['light', 'dark'] as const).map((theme) => (
+      <span class:list={['k-shot-theme', `k-shot-${theme}`]}>
+      <Picture
+        src={images[theme]}
+        alt={alt}
+        width={display}
+        height={Math.round((images[theme].height / images[theme].width) * display)}
+        densities={[1, 2]}
+        formats={['avif', 'webp']}
+        fallbackFormat="webp"
+        quality={82}
+        loading={loading}
+        decoding="async"
+      />
+      </span>
+    ))
+  }
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .k-shot {
+    margin: 1.25rem auto 1.75rem;
+    max-width: min(100%, var(--k-shot-w));
+    text-align: center;
+  }
+  .k-shot :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-inline: auto;
+  }
+  /* The captures carry their own transparent margin for the shadow; tuck it in a little. */
+  .k-shot-theme {
+    display: block;
+    margin: -1rem -1rem -0.5rem;
+  }
+  :global([data-theme='dark']) .k-shot-light,
+  :global([data-theme='light']) .k-shot-dark {
+    display: none;
+  }
+  /* Pictures from elsewhere have no frame of their own: round and shadow them like the captures. */
+  .k-shot-plain .k-shot-theme {
+    margin: 0;
+  }
+  .k-shot-plain :global(img) {
+    border-radius: var(--k-radius-xl);
+    box-shadow: var(--k-shadow-frame);
+  }
+  .k-shot-plain figcaption {
+    margin-top: 0.85rem;
+  }
+  figcaption {
+    margin-top: 0.25rem;
+    font-size: var(--sl-text-sm);
+    color: var(--k-text-3);
+    text-wrap: balance;
+  }
+</style>

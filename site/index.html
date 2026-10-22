@@ -3,37 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Kimochi</title>
+    <!-- head:start · The dev server shows these; the build replaces them per route with the tags
+         from src/lib/seo.js (title, description, canonical, Open Graph, JSON-LD). -->
+    <title>Kimochi · Read Japanese games with an OCR overlay</title>
     <meta
       name="description"
-      content="Read your games in Japanese. Kimochi grabs the text off your screen, puts it back over the game, and lets you hover any word to look it up. Free for macOS, Windows and Linux."
+      content="Kimochi is a free, open-source desktop app for macOS, Windows and Linux that reads the Japanese text in your games, draws it over the game, and lets you hover any word to look it up and make Anki cards."
     />
+    <!-- head:end -->
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Kimochi" />
-    <meta property="og:title" content="Kimochi" />
-    <meta
-      property="og:description"
-      content="Read your games in Japanese. Hover any word on screen to look it up."
-    />
-    <!-- Crawlers want an absolute URL: prefix the production origin once the domain is settled. -->
-    <meta property="og:image" content="/og-icon.png" />
-    <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:width" content="512" />
-    <meta property="og:image:height" content="512" />
-    <meta property="og:image:alt" content="The Kimochi app icon" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:image" content="/og-icon.png" />
-    <meta name="twitter:title" content="Kimochi" />
-    <meta
-      name="twitter:description"
-      content="Read your games in Japanese."
-    />
+    <link rel="manifest" href="/site.webmanifest" />
 
     <!-- Apply the saved theme before first paint so the page never flashes. Keep the storage key
          in sync with src/lib/theme.ts. -->

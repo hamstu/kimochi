@@ -1,0 +1,278 @@
+/*
+ * Kimochi docs theme: Starlight dressed in the marketing site's tokens.
+ *
+ * The colour roles, fonts, weights, radii and shadows come from the site's own tokens.css (one
+ * source of truth for both builds; its light/dark switch keys off `data-theme`, which Starlight
+ * always sets on <html>). This file only maps Starlight's variables onto those roles, plus the
+ * slate ramp Starlight's components need for their grey steps (Radix slate, the same scale the
+ * roles are taken from).
+ */
+@import '../../../site/src/styles/tokens.css';
+
+:root {
+  --sl-font: var(--k-font-ui);
+  --sl-font-mono: var(--k-font-mono);
+  --sl-line-height: 1.7;
+  --sl-content-width: 46rem;
+  --sl-nav-height: var(--k-header-h);
+  --sl-text-h1: clamp(1.875rem, 1.5rem + 1.4vw, 2.375rem);
+  --sl-text-h2: 1.5rem;
+  --sl-text-h3: 1.1875rem;
+  --sl-text-h4: 1.0625rem;
+}
+
+/* Grey ramp. Starlight's dark scale runs light → dark (gray-1 is near-white text). */
+:root,
+::backdrop {
+  --sl-color-white: #edeef0;
+  --sl-color-gray-1: #edeef0;
+  --sl-color-gray-2: #b0b4ba;
+  --sl-color-gray-3: #80838d;
+  --sl-color-gray-4: #5a6169;
+  --sl-color-gray-5: #363a3f;
+  --sl-color-gray-6: #212225;
+  --sl-color-black: #111113;
+}
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+  --sl-color-white: #1c2024;
+  --sl-color-gray-1: #1c2024;
+  --sl-color-gray-2: #60646c;
+  --sl-color-gray-3: #60646c;
+  --sl-color-gray-4: #8b8d98;
+  --sl-color-gray-5: #d9d9e0;
+  --sl-color-gray-6: #f0f0f3;
+  --sl-color-gray-7: #f9f9fb;
+  --sl-color-black: #ffffff;
+}
+
+/* Roles (both themes: the --k-* values already switch). */
+:root,
+:root[data-theme='light'] {
+  --sl-color-bg: var(--k-bg);
+  --sl-color-bg-nav: var(--k-bg);
+  --sl-color-bg-sidebar: var(--k-bg);
+  --sl-color-bg-inline-code: var(--k-sunken);
+  --sl-color-text: var(--k-text-2);
+  --sl-color-text-accent: var(--k-accent-text);
+  --sl-color-text-invert: var(--k-accent-contrast);
+  --sl-color-accent: var(--k-accent);
+  --sl-color-accent-high: var(--k-accent-text);
+  --sl-color-accent-low: var(--k-accent-soft);
+  --sl-color-bg-accent: var(--k-accent);
+  --sl-color-hairline: var(--k-line);
+  --sl-color-hairline-light: var(--k-line);
+  --sl-color-hairline-shade: var(--k-line);
+  --sl-shadow-md: var(--k-shadow-pop);
+  --sl-shadow-lg: var(--k-shadow-frame);
+}
+
+body {
+  font-weight: var(--k-weight-regular);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:lang(ja),
+.jp {
+  font-family: var(--k-font-jp);
+}
+
+::selection {
+  background: var(--k-accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+}
+
+/* Header: the site's frosted bar with a hairline. */
+header.header {
+  background: color-mix(in srgb, var(--k-bg) 85%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--k-line);
+}
+
+/* Headings in the site's voice: semibold, tight, balanced. */
+.sl-markdown-content :is(h1, h2, h3, h4, h5),
+h1#_top {
+  color: var(--k-text);
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+h1#_top {
+  letter-spacing: -0.022em;
+}
+.sl-markdown-content p {
+  text-wrap: pretty;
+}
+.sl-markdown-content strong {
+  color: var(--k-text);
+  font-weight: var(--k-weight-semibold);
+}
+.sl-markdown-content a:not(.card a, .sl-link-button, .sl-link-card a, .k-platform) {
+  color: var(--k-accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--k-accent-text) 35%, transparent);
+  text-underline-offset: 0.2em;
+}
+.sl-markdown-content a:not(.card a, .sl-link-button, .k-platform):hover {
+  text-decoration-color: currentColor;
+}
+
+/* The install page's platform cards (PlatformCard.astro), two to a row on wider screens. */
+.k-platforms {
+  display: grid;
+  gap: 0.75rem;
+}
+@media (min-width: 40rem) {
+  .k-platforms {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.sl-markdown-content .k-platforms > * {
+  margin-top: 0;
+}
+
+/* Sidebar: quiet rows, indigo only for the current page (the app's One Voice rule). */
+.sidebar-content {
+  --sl-sidebar-item-padding-inline: 0.625rem;
+}
+.sidebar-content a {
+  border-radius: var(--k-radius-md);
+  color: var(--k-text-2);
+}
+.sidebar-content a:hover {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+  font-weight: var(--k-weight-medium);
+}
+.sidebar-content .group-label .large {
+  font-size: var(--sl-text-xs);
+  font-weight: var(--k-weight-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--k-text-3);
+}
+
+/* Tables: hairlines, a quiet header band, scroll on narrow screens. */
+.sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--sl-text-sm);
+}
+.sl-markdown-content :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid var(--k-line);
+  padding: 0.55rem 0.9rem 0.55rem 0;
+  vertical-align: baseline;
+}
+.sl-markdown-content th {
+  color: var(--k-text);
+  font-weight: var(--k-weight-semibold);
+  background: none;
+  border-bottom-color: var(--k-line-strong);
+}
+.sl-markdown-content tr:nth-child(2n) {
+  background: none;
+}
+
+kbd,
+.sl-markdown-content kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--k-line-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--k-radius-sm);
+  background: var(--k-field);
+  color: var(--k-text);
+  font-family: var(--k-font-ui);
+  font-size: 0.82em;
+  font-weight: var(--k-weight-medium);
+  line-height: 1.5;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Inline code: the site's sunken well. */
+.sl-markdown-content :not(pre) > code {
+  background: var(--k-sunken);
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-sm);
+  padding: 0.05em 0.35em;
+  color: var(--k-text);
+}
+
+/* Asides (tip/note/caution): soft tinted callouts like the site's Notice. */
+.starlight-aside {
+  border-radius: var(--k-radius-lg);
+  border-inline-start-width: 3px;
+}
+.starlight-aside--note {
+  --sl-color-asides-text-accent: var(--k-accent-text);
+  --sl-color-asides-border: var(--k-accent);
+  background: var(--k-accent-soft);
+}
+
+/* Cards and link cards: hairline frames that lift on hover. */
+.card,
+.sl-link-card {
+  border: 1px solid var(--k-line) !important;
+  border-radius: var(--k-radius-xl) !important;
+  background: var(--k-bar) !important;
+  box-shadow: none;
+}
+.sl-link-card:hover {
+  border-color: var(--k-line-strong) !important;
+  background: var(--k-raised) !important;
+  box-shadow: var(--k-shadow-pop);
+}
+.card .icon {
+  color: var(--k-accent-text) !important;
+  background: var(--k-accent-soft) !important;
+  border-radius: var(--k-radius-md);
+  padding: 0.3rem;
+}
+.card .title {
+  color: var(--k-text);
+  font-weight: var(--k-weight-semibold);
+}
+
+/* Buttons: the site's primary (indigo fill) and secondary (field + border). */
+.sl-link-button {
+  border-radius: var(--k-radius-lg) !important;
+  font-weight: var(--k-weight-medium) !important;
+}
+.sl-link-button.primary {
+  background: var(--k-accent) !important;
+  border-color: var(--k-accent) !important;
+  color: var(--k-accent-contrast) !important;
+}
+.sl-link-button.primary:hover {
+  background: var(--k-accent-hover) !important;
+}
+.sl-link-button.secondary {
+  background: var(--k-field) !important;
+  border: 1px solid var(--k-line-strong) !important;
+  color: var(--k-text) !important;
+}
+.sl-link-button.secondary:hover {
+  background: var(--k-hover) !important;
+}
+
+/* Search (Pagefind) button in the header: the site's field. */
+site-search button[data-open-modal] {
+  border-radius: var(--k-radius-lg);
+  border-color: var(--k-line-strong);
+  background: var(--k-field);
+}

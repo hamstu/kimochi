@@ -1,0 +1,14 @@
+# Cloudflare Workers Static Assets headers (the kimochi-server Worker serves site/dist).
+# Not served itself. Responses from the Worker's own routes (/api/*) are not affected.
+
+# Vite fingerprints everything under /assets/, so a file there never changes.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Account pages: not for search results.
+/account
+  X-Robots-Tag: noindex
+/account/*
+  X-Robots-Tag: noindex
+/link
+  X-Robots-Tag: noindex

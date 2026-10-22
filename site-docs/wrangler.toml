@@ -1,0 +1,22 @@
+# Kimochi docs: a static Cloudflare Worker (Workers Static Assets, no script) serving dist/.
+# Separate from kimochi-server (which serves the marketing site and /api on kimochiapp.com), so the
+# docs deploy on their own: `npm run docs:deploy` from the repository root builds, then deploys.
+#
+# Deploying needs `npx wrangler login` (or CLOUDFLARE_API_TOKEN) with access to the Cloudflare
+# account below, which holds the kimochiapp.com zone, as in kimochi-server. The custom domain below makes wrangler create
+# docs.kimochiapp.com and its DNS record in that zone on the first deploy (see README.md, "Deploying").
+name = "kimochi-docs"
+account_id = "89370b17100354f9a9d4dd0abb8c054a"
+compatibility_date = "2026-08-01"
+
+workers_dev = true
+preview_urls = false
+
+routes = [ { pattern = "docs.kimochiapp.com", custom_domain = true } ]
+
+[assets]
+directory = "./dist"
+# Every page is its own file (/install/macos/ → install/macos/index.html); unknown paths get
+# dist/404.html with status 404, as on kimochiapp.com.
+not_found_handling = "404-page"
+html_handling = "auto-trailing-slash"

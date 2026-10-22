@@ -67,6 +67,11 @@ function subscribe(notify: () => void): () => void {
   return () => subscribers.delete(notify)
 }
 
+/** Steam Deck Gaming Mode (Gamescope): one app on screen at a time, so a picture of the
+ * screen is a picture of Kimochi. */
+export const isGamingMode = (capabilities: PlatformCapabilities): boolean =>
+  capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope'
+
 /** The capabilities, re-rendering when native reports a change. Starts on the macOS default. */
 export function useCapabilities(): PlatformCapabilities {
   useEffect(() => {

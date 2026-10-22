@@ -1,0 +1,46 @@
+---
+title: Anki
+description: "Make Anki cards from the dictionary pop-up: your dictionary engine's own mining, or Kimochi's card builder with the Yomitan API engine."
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+Who makes the card depends on your [dictionary engine](/lookups/dictionaries/). With **Built-in
+Yomitan** and **Hachidori**, the dictionary does its own Anki mining: you set it up in that
+dictionary's settings, and its pop-up has the add buttons. Kimochi only builds Anki cards itself
+with the **Yomitan API** engine, whose pop-up is Kimochi's own.
+
+| Engine | Who makes the card | Where to set it up |
+| --- | --- | --- |
+| **Built-in Yomitan** | Yomitan | **Settings → Dictionary → Open Built-in Yomitan settings → Anki**. |
+| **Hachidori** | Hachidori | **Settings → Dictionary → Open Hachidori settings**. |
+| **10ten** | Nobody: 10ten doesn't make Anki cards. | |
+| **Yomitan API** | Kimochi | **Settings → Dictionary → Anki**, below. |
+
+Either way, cards reach [Anki](https://apps.ankiweb.net/) through the
+[AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, so Anki has to be running with
+AnkiConnect installed (it listens on `http://127.0.0.1:8765` by default).
+
+## Kimochi's card builder (Yomitan API)
+
+With the Yomitan API engine, Kimochi builds the cards itself. In **Settings → Dictionary → Anki**:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **Enable mining** | Off | Shows **Add to Anki** in the lookup pop-up. |
+| **AnkiConnect URL** | `http://127.0.0.1:8765` | **Test** checks that Anki answers. |
+| **Deck** / **Note type** | — | Where cards go, and which note type they use. |
+| **Tags** | `super-texthooker` | Comma-separated, added to every card. |
+| **Import from Yomitan** | — | Reads the deck, note type, tags and field mappings from a Yomitan settings export. |
+| **Field mapping** | — | For each field of the note type: a Yomitan marker, `(sentence)`, or literal text. |
+
+The markers are `expression`, `reading`, `glossary`, `dictionary`, `frequencies`, `pitch-accents`,
+`part-of-speech`, `tags`, `conjugation`, `audio`, `sentence` and `sentence-furigana`.
+
+<Screenshot id="settings-anki" alt="Settings, Dictionary, Anki section: Enable mining, AnkiConnect URL with Test, Deck, Note type, Tags and Import from Yomitan." width={760} />
+
+In the pop-up, **Add to Anki** turns into **Added** (click to open the card in Anki), or **In Anki**
+when the word is already in your deck. If Anki isn't running you'll see **Anki not running**.
+
+Settings → Log → **Reset Log settings** resets the Anki setup along with the other Log, Sources,
+Dictionary and AI options.

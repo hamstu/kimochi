@@ -1,0 +1,66 @@
+---
+title: Install on macOS
+description: Install Kimochi on a Mac and allow Screen Recording (and, optionally, Accessibility).
+---
+
+import { Steps } from '@astrojs/starlight/components'
+import Screenshot from '../../../components/Screenshot.astro'
+
+Kimochi needs **macOS 14 or later** on a Mac with **Apple silicon**. A build for Intel Macs is
+planned.
+
+<Steps>
+
+1. Download the macOS build (`Kimochi_<version>_aarch64.app.zip`) from
+   [kimochiapp.com](https://kimochiapp.com/#download).
+
+2. Open the zip and move **Kimochi** to your **Applications** folder, then open it.
+
+3. Follow the [welcome guide](/welcome-guide/). Its first step asks for Screen Recording.
+
+</Steps>
+
+## Screen Recording
+
+Kimochi reads Japanese by capturing the window you choose, so macOS has to allow it to record the
+screen. The welcome guide's **Allow screen recording** step shows whether it is allowed and opens the
+right page for you:
+
+**System Settings → Privacy & Security → Screen & System Audio Recording**, then turn on **Kimochi**.
+macOS may ask you to reopen Kimochi afterwards. The step updates on its own once it is allowed.
+
+<Screenshot id="welcome-permission" alt="The welcome guide's Allow screen recording step, with an illustration of the System Settings list and the status Not allowed yet." width={640} />
+
+If you skip it, the source menu shows **Allow Screen Recording…** in place of your windows until it
+is allowed.
+
+## Accessibility (optional)
+
+With Accessibility, clicking your source in Kimochi brings that exact window to the front, even a
+game in full screen on a Space of its own. Kimochi uses it only to find and bring forward the window
+you read from. Without it, Kimochi brings the application forward instead.
+
+Turn it on in **System Settings → Privacy & Security → Accessibility**, from the welcome guide's
+**Allow Accessibility** step or from **Settings → Sources → Windows**.
+
+<Screenshot id="welcome-accessibility" alt="The welcome guide's Allow Accessibility step, with Accessibility allowed." width={640} />
+
+## Game Mode
+
+When a full-screen game is in front, macOS Game Mode slows down every other app's drawing, which
+throttles Kimochi's overlay. Kimochi notices this and shows **Game Mode is on** under the overlay
+switch, with a link to [Apple's guide to turning it off](https://support.apple.com/en-us/105118).
+
+<Screenshot id="game-mode-notice" alt="The sidebar with the notice: Game Mode is on. The overlay will be throttled by macOS until you turn it off." width={240} />
+
+## Uninstalling
+
+Quit Kimochi and move it from Applications to the Bin. To remove your data as well, delete these
+folders (in Finder, **Go → Go to Folder…** and paste each path):
+
+| Folder | What's in it |
+| --- | --- |
+| `~/Library/Application Support/dev.kimochi.app/` | Settings, the Log, sessions, the Notebook, downloaded engines and models |
+| `~/Library/WebKit/dev.kimochi.app/` | The dictionaries you imported (the app's web storage) |
+| `~/Library/Caches/dev.kimochi.app/` | Caches |
+| `~/Library/HTTPStorages/dev.kimochi.app/` | Web cookies and storage for sign-in |

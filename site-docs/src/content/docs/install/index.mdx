@@ -1,0 +1,53 @@
+---
+title: Installation
+description: Download Kimochi for macOS, Windows, Linux or the Steam Deck, and keep it up to date.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+import PlatformCard from '../../../components/PlatformCard.astro'
+
+Download Kimochi from [kimochiapp.com](https://kimochiapp.com/#download). The download button picks
+the right file for your computer; **Other platforms** lists every build. Builds are also published on
+[GitHub Releases](https://github.com/hamstu/kimochi-tauri/releases).
+
+<div class="k-platforms">
+  <PlatformCard platform="macos" title="macOS" href="/install/macos/" description="macOS 14 or later, Apple silicon." />
+  <PlatformCard platform="windows" title="Windows" href="/install/windows/" description="Windows 10 22H2 or 11, x64 or ARM64." />
+  <PlatformCard platform="linux" title="Linux" href="/install/linux/" description="AppImage or .deb, x64 or ARM64." />
+  <PlatformCard platform="steam-deck" title="Steam Deck" href="/install/steam-deck/" description="Install in Desktop Mode, read in Gaming Mode." />
+</div>
+
+## Which file is which
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| macOS, Apple silicon | `Kimochi_<version>_aarch64.app.zip` | Signed and notarised. |
+| Windows x64 | `Kimochi_<version>_x64-setup.exe` | Installs for the current user. |
+| Windows ARM64 | `Kimochi_<version>_arm64-setup.exe` | |
+| Linux x64 | `kimochi_<version>_amd64.AppImage` or `.deb` | The one-line installer uses the AppImage. |
+| Linux ARM64 | `kimochi_<version>_aarch64.AppImage` or `kimochi_<version>_arm64.deb` | |
+
+Nightly builds drop the `_<version>` part of the name.
+
+## Updates
+
+Kimochi updates itself. In release builds it checks quietly shortly after launch and then every six
+hours, and shows a notice in the sidebar when a new version is out. You start the download and you
+choose when to restart; nothing is installed behind your back. You can also check from
+**Settings → General → Updates**.
+
+<Screenshot id="update-notice" alt="The sidebar's update notice: Kimochi 0.2.0 is available, with a Download button." width={240} />
+
+<Screenshot id="settings-updates" alt="Settings, General, Updates: the current version, What's new and a Download button for the new version." width={760} />
+
+After an update, **What's new** opens once on its own with the release notes. It is always in
+**Settings → General → Updates → What's new**.
+
+Every update is checked against Kimochi's signing key before it is installed. Development (nightly)
+builds are never offered as updates.
+
+## Building from source
+
+Kimochi is open source under the GPL-3.0. To build it yourself, see the
+[README](https://github.com/hamstu/kimochi-tauri#building-from-source).

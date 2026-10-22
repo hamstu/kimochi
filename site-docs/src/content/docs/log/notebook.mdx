@@ -1,0 +1,57 @@
+---
+title: Notebook
+description: Keep the characters, places and things of a story, recognise their names in the Log, and import a cast from VNDB.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+The **Notebook** keeps the cast, places and things of a session. Names you add are recognised in the
+Log as you read, so you can click one to remember who or what it was. Open it with the **Notebook**
+tab (<kbd>⌘2</kbd> / <kbd>Ctrl+2</kbd>).
+
+<Screenshot id="notebook" alt="The Notebook: Characters, Places and Things, each entry with its name, reading, aliases and description." width={900} />
+
+Entries come in three kinds: **Character** (人), **Place** (地) and **Thing** (物). Filter by kind,
+or search names, readings, aliases, descriptions and notes. Use <kbd>↑</kbd> <kbd>↓</kbd> to move,
+<kbd>Return</kbd> to edit and <kbd>/</kbd> to search.
+
+## Adding entries
+
+- **Add** (or **Add item** in an empty Notebook) and choose Character, Place or Thing.
+- In the Log, select a name, right-click it and choose **Add to notebook…**. Pick what it is, then
+  fill in the rest.
+- **Import from VNDB** brings in a visual novel's characters.
+
+<Screenshot id="notebook-empty" alt="An empty Notebook with Import from VNDB and Add item buttons." width={720} />
+
+<Screenshot id="add-to-notebook" alt="The Add to notebook dialog for the selected name ダル: What is it? Person, Place or Thing." width={720} />
+
+## Editing an entry
+
+Click an entry to open its editor beside the list:
+
+- **Family name** and **Given name** with their readings (characters), or **Name** and **Reading**.
+- **Description**, **Aliases** (press <kbd>Return</kbd> or a comma to add one), **Notes** and
+  **Images** (paste or drop them in).
+- **Match this entry** recognises its name and aliases in the Log; for characters, **Match given name
+  alone** also matches the given name by itself.
+
+<Screenshot id="notebook-editor" alt="The Notebook editor for 岡部 倫太郎: names and readings, aliases, matching switches and a description." width={900} />
+
+## In the Log
+
+Matched names show as chips in the Log. Click one for a card with its kind, nicknames and notes, and
+**Open in Notebook**.
+
+<Screenshot id="notebook-chips" alt="The Log, with names such as 助手 and オカリン shown as notebook chips." width={720} />
+
+## Import from VNDB
+
+**Import from VNDB** (in the Notebook's toolbar) searches [VNDB](https://vndb.org) for the visual
+novel you are reading, in English or Japanese. Pick it, review its characters, and import them as
+notebook entries. Re-importing is safe: existing characters are updated in place. Images VNDB marks
+as NSFW are hidden.
+
+<Screenshot id="vndb-import" alt="The Import characters from VNDB dialog with its search field." width={720} />
+
+The Notebook belongs to the session: each game keeps its own.

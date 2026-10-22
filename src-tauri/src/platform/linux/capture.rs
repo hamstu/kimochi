@@ -136,7 +136,7 @@ impl CaptureBackend for Protected {
     }
     fn enumerate(&mut self) -> Result<Vec<Source>> {
         let mut sources=self.inner.enumerate()?;
-        for source in &mut sources {super::gnome::decorate_source(source);}
+        for source in &mut sources {super::gnome::decorate_source(source); super::gaming_sources::decorate(source);}
         Ok(sources)
     }
     fn close(&mut self) {
@@ -146,7 +146,8 @@ impl CaptureBackend for Protected {
         // Gamescope's public portal stream contains the base scene, without its
         // external layer overlays (measured on SteamOS 3.8.16 / 3.16.23.4). This
         // does not exclude ordinary Kimochi windows, so keep the capability false.
-        if super::gamescope::scene_capture() && request.source_id.starts_with("portal:")
+        if super::gamescope::scene_capture()
+            && (request.source_id.starts_with("portal:") || request.source_id.starts_with("gamescope:"))
         {
             if super::region_editing() {
                 return Err(CaptureError::new("busy", "Finish crop editing before capturing"));

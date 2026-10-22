@@ -41,8 +41,9 @@ import {
   type ReactNode
 } from 'react'
 import { Maximize2, Minimize2, Play, RotateCcw } from 'lucide-react'
+import { useMediaQuery } from '../lib/client'
 import { GAME } from './content'
-import { guessPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
+import { useGuessedPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
 import { deckFrames, desktopFrames, usePlayer, type Frame } from './script'
 import { GameScreen } from './GameScreen'
 import { DeckBody, DeckHud } from './DeckStage'
@@ -105,15 +106,7 @@ function stillFrame(frames: Frame[]): Frame {
 
 /** `min-width: 1024px` (Tailwind's lg), live. */
 function useWide(): boolean {
-  const query = '(min-width: 1024px)'
-  const [wide, setWide] = useState(() => typeof matchMedia === 'function' && matchMedia(query).matches)
-  useEffect(() => {
-    const list = matchMedia(query)
-    const on = (): void => setWide(list.matches)
-    list.addEventListener('change', on)
-    return () => list.removeEventListener('change', on)
-  }, [])
-  return wide
+  return useMediaQuery('(min-width: 1024px)')
 }
 
 const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
@@ -137,7 +130,7 @@ interface Pointer {
 type Phase = 'idle' | 'intro' | 'running'
 
 export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
-  const [detected] = useState<Platform>(guessPlatform)
+  const detected = useGuessedPlatform()
   const platform = chosen ?? detected
   const theme = useResolvedTheme()
   const reduced = useReducedMotion()

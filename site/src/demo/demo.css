@@ -122,56 +122,52 @@
 }
 
 /* ---------------------------------------------------------------- overlay word boxes */
+/* Kimochi's overlay as the app draws it (proximityStyle and updateProximity in ui/render.js, the
+   ::selection rule in ui/overlay.html): every scanned word gets a blue underline that is stronger
+   the nearer the pointer is (--p, 0 to 1, set by GameScreen); the word under the pointer becomes a
+   near-black box with its text in white; and the text the dictionary matched is selected, in
+   light blue with dark text (.kd-selected). */
 .kd-word {
   position: relative;
+  isolation: isolate;
   white-space: nowrap;
-  border-radius: 0.5cqw;
-  transition: background-color 0.16s ease, color 0.16s ease;
 }
 .kd-word::after {
   content: '';
   position: absolute;
-  inset: -0.12em 0.02em;
-  border-radius: 0.55cqw;
-  border: 0.16cqw solid rgb(158 177 255 / 0.85);
-  background: rgb(158 177 255 / 0.1);
+  inset: -0.06em -0.04em;
+  z-index: -1;
+  border-radius: 0.5cqw 0.5cqw 0 0;
+  border-bottom: max(2px, 0.28cqw) solid hsl(210 100% calc(30% + var(--p, 0.4) * 50%) / var(--p, 0.4));
   opacity: 0;
-  transform: scale(1.35);
   pointer-events: none;
   transition:
     opacity 0.18s ease,
-    transform 0.32s cubic-bezier(0.2, 1.4, 0.4, 1),
-    border-color 0.16s ease,
-    background-color 0.16s ease,
-    box-shadow 0.16s ease;
+    background-color 0.1s ease-in-out,
+    border-color 0.1s ease-in-out;
   transition-delay: calc(var(--w) * 35ms);
 }
 .kd-boxes .kd-word::after {
   opacity: 1;
-  transform: scale(1);
-}
-.kd-boxes .kd-word.kd-plain::after {
-  opacity: 0.55;
-  border-color: rgb(255 255 255 / 0.4);
-  background: transparent;
 }
 .kd-word.kd-known {
   cursor: pointer;
 }
+.kd-word.kd-current {
+  color: #fff;
+  text-shadow: none;
+}
 .kd-word.kd-current::after {
   opacity: 1;
-  transform: scale(1);
   transition-delay: 0s;
-  border-color: rgb(158 177 255);
-  background: rgb(158 177 255 / 0.28);
-  box-shadow: 0 0 1.4cqw rgb(110 140 255 / 0.65);
+  border-radius: 0.5cqw;
+  border-bottom-color: transparent;
+  background: rgb(0 0 0 / 0.9);
 }
-.kd-deck .kd-word.kd-current::after {
-  border: 0.3cqw solid #7dd3fc;
-  background: rgb(125 211 252 / 0.12);
-  box-shadow:
-    0 0 0 0.5cqw rgb(125 211 252 / 0.16),
-    0 0 2cqw rgb(125 211 252 / 0.55);
+.kd-word.kd-selected .kd-char,
+.kd-word.kd-selected:not(:has(.kd-char)) {
+  background: #85b2ff99;
+  color: #132113;
 }
 
 /* ---------------------------------------------------------------- scan sweep */
@@ -561,17 +557,8 @@
   transform: scale(0.86);
 }
 
-/* The Easter egg's app: a warm card with one button. Its words take the overlay's boxes once
-   Kimochi has read it, in the accent colour on this light-or-dark card. */
-.kd-egg .kd-word::after {
-  border-color: color-mix(in oklab, var(--k-accent) 70%, transparent);
-  background: color-mix(in oklab, var(--k-accent) 8%, transparent);
-}
-.kd-egg .kd-word.kd-current::after {
-  border-color: var(--k-accent);
-  background: color-mix(in oklab, var(--k-accent) 22%, transparent);
-  box-shadow: 0 0 1.4cqw color-mix(in oklab, var(--k-accent) 55%, transparent);
-}
+/* The Easter egg's app: a warm card with one button. Its words take the overlay's underlines and
+   hover box (above) once Kimochi has read it. */
 .kd-egg {
   container-type: inline-size;
   background:

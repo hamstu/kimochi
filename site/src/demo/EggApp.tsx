@@ -97,7 +97,7 @@ export function EggApp({ boxes, onDownload }: { boxes: boolean; onDownload: () =
                   ref={(el) => {
                     words.current.set(key, el)
                   }}
-                  className={`kd-word kd-known ${shown === key ? 'kd-current' : ''}`}
+                  className={`kd-word kd-known ${shown === key ? 'kd-current kd-selected' : ''}`}
                   style={{ ['--w' as string]: n++ }}
                   onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(key)}
                   onPointerLeave={(e) => e.pointerType === 'mouse' && setHover((h) => (h === key ? null : h))}

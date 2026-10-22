@@ -11,7 +11,6 @@ mod sync_core;
 mod sync_log;
 mod actions;
 mod activity;
-mod application_context;
 mod capture_unavailable;
 mod chrome_storage;
 mod cloud;
@@ -317,8 +316,7 @@ fn save_preferences(app: tauri::AppHandle, state: State<Shared>, prefs: Prefs) -
     ])?;
     if let Some(crop) = prefs.crop {
         if let Some((kind, name, app_name)) = selected_descriptor(&state) {
-            let context = if kind == "screen" { application_context::current(&state) } else { None };
-            let key = application_context::crop_key(context.as_ref(), state::descriptor_key(&kind, &name, app_name.as_deref()));
+            let key = state::descriptor_key(&kind, &name, app_name.as_deref());
             let key = state::shaped_crop_key(key, &kind, state.source_fullscreen.load(Ordering::Relaxed));
             state
                 .settings
@@ -634,14 +632,12 @@ const OVERLAY: &str = "overlay";
 const POPUP_HOST: &str = "popup-host";
 
 fn snapshot_value(service: &Service) -> Value {
-    // Capture reading identity once so headers and crop cannot describe different games.
-    let context = application_context::current(service);
-    let crop = selected_descriptor(service).and_then(|(kind, name, app)| sources::saved_crop_with_context(service, &kind, &name, app.as_deref(), context.as_ref()));
+    let crop = selected_descriptor(service).and_then(|(kind, name, app)| sources::saved_crop(service, &kind, &name, app.as_deref()));
     // `lastSelectedSource` is a hint for the next launch; the UI shows a source only once it is
     // the live selection. Until `spawn_source_restore` finds the saved window again, or when it
     // is gone, the main window shows its empty "Choose a source" state instead of a stale card.
     let selected = service.selection.lock().unwrap().is_some();
-    let source = if selected { application_context::source_with_context(service, context.as_ref()) } else { None };
+    let source = if selected { saved_selection(service) } else { None };
     let v = service.view.lock().unwrap();
     json!({
         "revision": v.revision,
@@ -655,7 +651,6 @@ fn snapshot_value(service: &Service) -> Value {
         "dictionary": v.dictionary,
         "dismiss": v.dismiss,
         "source": source.map(with_source_kind),
-        "applicationContext": context,
         "crop": crop,
         "cropEnabled": crop.is_some(),
         "isScanning": v.scanning,
@@ -670,20 +665,9 @@ fn snapshot_value(service: &Service) -> Value {
     })
 }
 
-#[tauri::command]
-fn application_context_get(state: State<Shared>) -> Value {
-    json!({"available": application_context::available(), "context": application_context::current(&state)})
-}
-
-#[tauri::command]
-fn application_context_set(state: State<Shared>, context: Option<application_context::ApplicationContext>) -> Reply<Value> {
-    application_context::set_override(&state, context)?;
-    let mut view = state.view.lock().unwrap();
-    view.scan = None;
-    view.regions.clear();
-    view.revision += 1;
-    drop(view);
-    Ok(application_context_get(state))
+/// The saved descriptor of the chosen source (`{sourceId, type, name, appName}`).
+fn saved_selection(service: &Service) -> Option<Value> {
+    service.settings.get("lastSelectedSource").ok().flatten()
 }
 
 #[tauri::command]
@@ -1000,6 +984,10 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
     if platform::gamescope::active() && source_id.starts_with("portal:") {
         return_to_game(app);
         return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    if source_id.starts_with("gamescope:") {
+        return platform::gaming_sources::activate(&app, &source_id);
     }
     #[cfg(target_os = "linux")]
     if source_id.starts_with("portal:window:") && platform::gnome::eligible_popup_session() {
@@ -2231,7 +2219,7 @@ fn history_add(
     let source = if detached.unwrap_or(false) {
         Value::Null
     } else {
-        application_context::source(&state).unwrap_or(Value::Null)
+        saved_selection(&state).unwrap_or(Value::Null)
     };
     let now = now_millis();
     let mut entry = json!({ "id": history_id(), "text": text, "timestamp": now, "source": source, "groups": groups, "engine": engine });
@@ -2626,8 +2614,6 @@ fn main() {
             extension_store::extension_download_retry,
             extension_store::extension_download_cancel,
             extension_store::extension_delete,
-            application_context_get,
-            application_context_set,
             reader_settings_patch,
             reader_notebook_ack,
             reader::vndb::vndb_search_vns,
@@ -3288,13 +3274,29 @@ fn spawn_source_restore(service: Shared) {
             }
             return;
         }
-        let Some(saved) = service
+        let saved = service
             .settings
             .get("lastSelectedSource")
             .ok()
             .flatten()
-            .filter(|v| v.is_object())
-        else {
+            .filter(|v| v.is_object());
+        // Gaming Mode always starts reading something: the saved app if it is running,
+        // else the game being played, else the screen.
+        #[cfg(target_os = "linux")]
+        if platform::gaming_sources::active() {
+            let live = platform::gaming_sources::sources();
+            let restored = saved.as_ref().and_then(|saved| match sources::resolve_saved_source(saved, &live) {
+                sources::Restored::Exact(id) | sources::Restored::Matched(id) => live.iter().find(|s| s.id == id).cloned(),
+                _ => None,
+            });
+            if let Some(source) = restored.or_else(platform::gaming_sources::default_source) {
+                let _ = sources::select_keeping_crop(&service, &source.id);
+                service.set_status(format!("Reading · {}", source.name));
+                service.log(json!({"check":"gaming-mode-source-select","status":"selected","sourceId":source.id}));
+            }
+            return;
+        }
+        let Some(saved) = saved else {
             return;
         };
         #[cfg(target_os = "linux")]
@@ -3377,17 +3379,8 @@ fn make_panel(app: &tauri::AppHandle, service: &Shared, window: &tauri::WebviewW
 fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut previous = String::new();
-        let mut previous_context = application_context::current(&service).map(|c| c.id);
         loop {
             std::thread::sleep(Duration::from_millis(100));
-            let context = application_context::current(&service).map(|c| c.id);
-            if context != previous_context {
-                previous_context = context;
-                let mut view = service.view.lock().unwrap();
-                view.scan = None;
-                view.regions.clear();
-                view.revision += 1;
-            }
             let fingerprint = {
                 let v = service.view.lock().unwrap();
                 format!(

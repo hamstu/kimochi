@@ -1,0 +1,34 @@
+---
+/**
+ * The app's CHANGELOG.md (repository root), rendered at build time: the same notes the app shows in
+ * What's new and GitHub shows on each release. The file's own introduction (for contributors) is
+ * left out; everything from the first version heading down is shown.
+ */
+import source from '../../../CHANGELOG.md?raw'
+import { createMarkdownProcessor } from '@astrojs/markdown-remark'
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro'
+
+const body = source.slice(Math.max(0, source.search(/^## /m)))
+const processor = await createMarkdownProcessor()
+const { code } = await processor.render(body)
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'Changelog',
+    // CHANGELOG.md is written by the release flow (RELEASING.md), not edited from here.
+    editUrl: false,
+    description: 'What changed in each release of Kimochi, newest first. Unreleased changes are on the nightly build.'
+  }}
+  headings={[...body.matchAll(/^## (.+)$/gm)].map(([, text]) => ({
+    depth: 2,
+    text: text.replace(/[[\]]/g, ''),
+    slug: text.toLowerCase().replace(/[^\w]+/g, '-').replace(/^-|-$/g, '')
+  }))}
+>
+  <p>
+    What changed in each release, newest first. The app shows the same notes in <strong>What's new</strong>, and
+    each version's notes are on <a href="https://github.com/hamstu/kimochi-tauri/releases">GitHub Releases</a>.
+  </p>
+  <Fragment set:html={code} />
+</StarlightPage>

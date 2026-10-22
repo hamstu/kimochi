@@ -80,7 +80,6 @@ export class ControllerHistory {
       row.className = "cm-history-entry";
       const detail = document.createElement("small");
       const name =
-        entry.source?.applicationContext?.name ??
         entry.source?.appName ??
         entry.source?.name;
       const time = Number.isFinite(entry.timestamp)

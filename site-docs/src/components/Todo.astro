@@ -1,0 +1,30 @@
+---
+/**
+ * A question for Hamish, shown as a dashed box in the dev server only (never in the build), the
+ * same convention as the marketing site's FAQ `todo` fields. Every one is listed in DOCS_TODO.md;
+ * find them with `grep -rn "<Todo" site-docs/src`.
+ *
+ *   <Todo>TODO(hamish): is the minimum Windows version 10 22H2?</Todo>
+ */
+const show = import.meta.env.DEV
+---
+
+{
+  show && (
+    <aside class="k-todo not-content" aria-label="Open question (dev only)">
+      <slot />
+    </aside>
+  )
+}
+
+<style>
+  .k-todo {
+    margin: 1rem 0;
+    padding: 0.6rem 0.85rem;
+    border: 1.5px dashed var(--k-warn-text);
+    border-radius: var(--k-radius-lg);
+    color: var(--k-warn-text);
+    font-size: var(--sl-text-sm);
+    line-height: 1.5;
+  }
+</style>

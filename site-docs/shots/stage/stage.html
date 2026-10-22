@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Kimochi docs screenshot stage</title>
+    <!--
+      The docs screenshot stage (scripts/docs-screenshots.mjs). Served by the capture's own Vite
+      servers at /__shots/stage.html, so the harness page it frames is same-origin and the stage can
+      measure elements inside it. One shot per load: ?shot=<JSON> (see site-docs/shots/shots.config.mjs).
+    -->
+    <link rel="stylesheet" href="/__shots/stage.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <div id="window">
+        <div id="titlebar" hidden><span id="title"></span></div>
+        <div id="viewport"><iframe id="app" title="Kimochi"></iframe></div>
+        <div id="marks"></div>
+        <div id="badges"></div>
+      </div>
+      <div id="notes"></div>
+    </div>
+    <script type="module" src="/__shots/stage.js"></script>
+  </body>
+</html>

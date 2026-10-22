@@ -1,0 +1,71 @@
+---
+title: Controller
+description: "Use a gamepad with Kimochi: the controller menu over the game, word-by-word reading, and moving around Kimochi's windows."
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+Kimochi reads gamepads natively, so buttons work while the game has focus. Gamepad support is on by
+default (**Settings → Shortcuts & Controls → Gamepad → Enable gamepad support**).
+
+Kimochi has been tested with a PlayStation 4 controller on macOS, Windows and Linux, and any
+standard gamepad should work. Until a button press lights up in Settings, it notes that gamepad
+support hasn't been verified on your system yet. If your controller doesn't respond, let us know
+in [Kimochi's Discord](https://discord.gg/vdMge6TBZQ) or
+[open an issue](https://github.com/hamstu/kimochi-tauri/issues), with its make and model.
+
+## The controller menu
+
+Click both sticks (**LS + RS**) or press <kbd>⇧⌘Space</kbd> / <kbd>Ctrl+Shift+Space</kbd>
+to open Kimochi's radial menu over the game. Aim with the left stick or step with the D-pad, press
+**A** to choose and **B** to close. Every way out gives the game its focus back.
+
+| Item | What it does |
+| --- | --- |
+| **Scan** | Scans, then starts word-by-word reading at the first word. |
+| **Read along** | Word-by-word reading of the last scan (needs a scan first). |
+| **Auto OCR** | Turns [Auto OCR](/reading/auto-ocr/) on or off. |
+| **Recent text** | Your recent scans; pick one to read it again. |
+| **Kimochi** | Shows the main window. |
+| **OCR settings** | Opens Settings → OCR & Overlay. |
+
+Pick a menu chord your game doesn't use; you can change it in
+**Settings → Shortcuts & Controls → Shortcuts → Controller menu**.
+
+## Reading word by word
+
+After **Scan** or **Read along**, Kimochi steps through the text one word at a time in reading order,
+with the dictionary pop-up open on the current word. A small guide at the bottom shows the buttons.
+
+| Control | Action |
+| --- | --- |
+| D-pad / left stick ◀ ▶ | Previous / next word |
+| D-pad / left stick ▲ ▼ | Previous / next line (column, for vertical text) |
+| **A** | Look the word up again |
+| **LB** / **RB** | Previous / next definition |
+| Right stick | Scroll the pop-up |
+| **B** (or **Y**) | Back to the game (or back to Recent text) |
+
+## In Kimochi's windows
+
+When a Kimochi window is focused, the D-pad and left stick move between controls, **A** activates
+the focused one (a text field opens an on-screen controller keyboard), **B** goes back or closes a
+dialog, and the right stick scrolls.
+
+## Settings
+
+**Settings → Shortcuts & Controls** has the gamepad settings:
+
+- **Shortcuts**: a gamepad button or combination for **Scan** and **Controller menu**, beside the
+  keyboard shortcut.
+- **Controller menu**: the buttons for **Select** (A), **Back** (B), **Back (second button)** (Y),
+  **Previous definition** (LB) and **Next definition** (RB).
+- **Connected gamepads**: every pad Kimochi sees; **Set as primary** picks the one it listens to.
+- **Button test**: buttons light up as you press them.
+
+<Screenshot id="settings-controls" alt="Settings, Shortcuts & Controls: the Scan and Controller menu shortcuts, Enable gamepad support and the Controller menu buttons." width={760} />
+
+For a game where a button advances the text, **Settings → OCR & Overlay → Scan after a button press**
+scans a moment after you press it. See [Auto OCR](/reading/auto-ocr/#scan-after-a-button-press).
+
+All buttons are listed in [Controller buttons](/reference/controller-buttons/).

@@ -4,10 +4,11 @@
  * Every cell is `{ text, verified? }`. Leave `verified` out (or `true`) when the claim was checked
  * against the tool's own repo, site or docs (listed in `SOURCES`). Set `verified: false` for
  * anything inferred, reported by third parties, or simply not documented: the page shows a small
- * "unverified" tag next to it. Researched 2026-10-09.
+ * "unverified" tag next to it. Researched 2026-10-09; YomiNinja added 2026-10-21 from its README,
+ * releases and repository metadata only.
  */
 
-export type ToolId = "kimochi" | "kamui" | "gsm" | "owocr";
+export type ToolId = "kimochi" | "kamui" | "gsm" | "owocr" | "yomininja";
 
 export interface Cell {
   text: string;
@@ -55,6 +56,12 @@ export const TOOLS: Tool[] = [
     short: "owocr",
     url: "https://github.com/AuroraWright/owocr",
   },
+  {
+    id: "yomininja",
+    name: "YomiNinja",
+    short: "YomiNinja",
+    url: "https://github.com/matt-m-o/YomiNinja",
+  },
 ];
 
 export const ROWS: Row[] = [
@@ -72,6 +79,9 @@ export const ROWS: Row[] = [
       },
       owocr: {
         text: "Windows, macOS, Linux (Python 3.11 to 3.14). Linux works best on Wayland; X11 is partial.",
+      },
+      yomininja: {
+        text: "Windows 10/11, macOS (Intel and Apple silicon), Linux x64. Built for X11; Wayland support is initial.",
       },
     },
   },
@@ -91,13 +101,16 @@ export const ROWS: Row[] = [
       owocr: {
         text: "Screen area or window capture, OBS, or images from the clipboard, a folder or a socket.",
       },
+      yomininja: {
+        text: "The whole screen or one window, with OCR Templates for fixed text regions.",
+      },
     },
   },
   {
     label: "OCR engines",
     cells: {
       kimochi: {
-        text: "Google Lens (the default), Apple Live Text (macOS), MeikiOCR, Manga OCR, OneOCR (Windows), or a custom endpoint.",
+        text: "Google Lens (the default), Apple Live Text (macOS), MeikiOCR, Manga OCR, or OneOCR (Windows).",
       },
       kamui: { text: "Google Cloud Vision (cloud)." },
       gsm: {
@@ -106,13 +119,16 @@ export const ROWS: Row[] = [
       owocr: {
         text: "Local: Chrome Screen AI, OneOCR, Apple Live Text, Apple Vision, meikiocr, NDLOCR-Lite, Manga OCR, WinRT, EasyOCR, RapidOCR. Cloud: Google Lens, Bing, Google Vision, Azure, OCRSpace.",
       },
+      yomininja: {
+        text: "PaddleOCR, Manga OCR, Apple Vision (macOS), Google Lens, Google Cloud Vision.",
+      },
     },
   },
   {
     label: "Overlay on the game",
     cells: {
       kimochi: {
-        text: "Yes: recognised text drawn over the game, selectable for lookups (not with Manga OCR or owocr input, which return text only).",
+        text: "Yes: recognised text drawn over the game, selectable for lookups (not with owocr input, which returns text only).",
       },
       kamui: { text: "Yes, in the desktop app (experimental)." },
       gsm: {
@@ -121,6 +137,9 @@ export const ROWS: Row[] = [
       owocr: {
         text: "None documented; owocr outputs text for other tools.",
         verified: false,
+      },
+      yomininja: {
+        text: "Yes: extracted text over the screen for pop-up dictionary lookups; optional furigana filter; experimental browser overlay.",
       },
     },
   },
@@ -136,6 +155,9 @@ export const ROWS: Row[] = [
       },
       owocr: {
         text: "Takes images in (clipboard, WebSocket, folder); sends text out to the clipboard, a WebSocket or a file.",
+      },
+      yomininja: {
+        text: "WebSocket for texthooker pages (sends OCR text out). Clipboard and text input not documented.",
       },
     },
   },
@@ -154,6 +176,9 @@ export const ROWS: Row[] = [
       owocr: {
         text: "None built in; usually paired with a texthooker page and Yomitan.",
       },
+      yomininja: {
+        text: "Browser-extension dictionaries built in: Yomitan and 10ten pre-installed, other Chrome extensions partly supported.",
+      },
     },
   },
   {
@@ -167,6 +192,9 @@ export const ROWS: Row[] = [
         text: "Its focus: enriches cards with the voiced line (trimmed by voice detection), screenshots or GIFs, and optional AI translation.",
       },
       owocr: { text: "None built in." },
+      yomininja: {
+        text: "Not built in; listed as a planned feature.",
+      },
     },
   },
   {
@@ -182,6 +210,9 @@ export const ROWS: Row[] = [
       owocr: {
         text: "Yes: continuous scanning, repeated-text filtering, optional two-pass.",
       },
+      yomininja: {
+        text: "Yes: Auto OCR re-reads an OCR Template region when it changes (experimental, one region at a time).",
+      },
     },
   },
   {
@@ -195,6 +226,10 @@ export const ROWS: Row[] = [
         text: "Experimental gamepad navigation of the overlay; Deck in Desktop Mode.",
       },
       owocr: { text: "Not documented.", verified: false },
+      yomininja: {
+        text: "Not documented.",
+        verified: false,
+      },
     },
   },
   {
@@ -207,18 +242,24 @@ export const ROWS: Row[] = [
       },
       gsm: { text: "Free. GPL-3.0; accepts sponsorship." },
       owocr: { text: "Free. GPL-3.0." },
+      yomininja: {
+        text: "Free. GPL-3.0.",
+      },
     },
   },
   {
     label: "Project status",
     cells: {
-      kimochi: { text: "Early: nightly pre-release builds, one developer." },
+      kimochi: { text: "Young and actively developed, by one developer." },
       kamui: {
         text: "Commercial product from Kamui, LLC; desktop app labelled experimental.",
       },
       gsm: { text: "Active: release v2026.10.0 on 2026-10-04." },
       owocr: {
         text: "Active: release 1.26.8 on 2026-03-28, commits into June 2026.",
+      },
+      yomininja: {
+        text: "Latest release v0.9.3 on 2025-08-04; no commits since.",
       },
     },
   },
@@ -266,6 +307,14 @@ export const SOURCES: Source[] = [
   {
     label: "Kamui: Bunpro community thread (free allowance report)",
     url: "https://community.bunpro.jp/t/ocr-for-games-ai-for-speaking-practice/202891",
+  },
+  {
+    label: "YomiNinja: README (matt-m-o/YomiNinja)",
+    url: "https://github.com/matt-m-o/YomiNinja",
+  },
+  {
+    label: "YomiNinja: releases (v0.9.3, v0.9.1 Wayland, v0.8.3 overlay, v0.7.2 Auto OCR)",
+    url: "https://github.com/matt-m-o/YomiNinja/releases",
   },
   { label: "Kimochi: source", url: "https://github.com/hamstu/kimochi-tauri" },
 ];

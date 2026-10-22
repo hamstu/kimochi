@@ -26,10 +26,24 @@ const CLOUD = [
   'Sync of your logs and notebook across devices'
 ]
 
-/** Monthly / Yearly / Lifetime, as a small segmented control. */
+/**
+ * Monthly / Yearly / Lifetime as a segmented control: a well a shade off the card (dark in dark
+ * mode; .plan-toggle in index.css) with the chosen plan in an accent pill that slides between the
+ * three equal segments.
+ */
 export function PlanToggle({ value, onChange }: { value: Choice; onChange: (choice: Choice) => void }) {
+  const index = CHOICES.indexOf(value)
   return (
-    <div role="radiogroup" aria-label="Billing" className="inline-flex rounded-full bg-[color-mix(in_oklab,var(--k-ink)_6%,transparent)] p-0.5">
+    <div
+      role="radiogroup"
+      aria-label="Billing"
+      className="plan-toggle relative grid w-full grid-cols-3 rounded-xl p-1"
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-accent shadow-[0_4px_12px_-2px_color-mix(in_oklab,var(--k-accent)_70%,transparent),inset_0_1px_0_rgb(255_255_255/0.2)] transition-transform duration-200 ease-out motion-reduce:transition-none"
+        style={{ transform: `translateX(${index * 100}%)` }}
+      />
       {CHOICES.map((choice) => (
         <button
           key={choice}
@@ -37,8 +51,8 @@ export function PlanToggle({ value, onChange }: { value: Choice; onChange: (choi
           role="radio"
           aria-checked={value === choice}
           onClick={() => onChange(choice)}
-          className={`rounded-full px-2.5 py-1 text-meta transition-colors duration-100 ${
-            value === choice ? 'bg-raised text-ink shadow-[0_0_0_1px_var(--k-line)]' : 'text-ink-2 hover:text-ink'
+          className={`relative rounded-lg px-3 py-2 text-small font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+            value === choice ? 'text-white' : 'text-[var(--toggle-ink)] hover:text-[var(--toggle-ink-hover)]'
           }`}
         >
           {PRICES[choice].label}
@@ -139,11 +153,11 @@ export function OpenSource() {
       </div>
 
       <div className="relative flex flex-col overflow-hidden rounded-2xl border border-[color-mix(in_oklab,var(--k-accent)_40%,transparent)] bg-[color-mix(in_oklab,var(--k-accent)_7%,var(--k-raised))] p-6 md:p-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-meta tracking-[0.08em] text-accent-ink uppercase">Kimochi Cloud</p>
+        <p className="text-meta tracking-[0.08em] text-accent-ink uppercase">Kimochi Cloud</p>
+        <div className="mt-4">
           <PlanToggle value={choice} onChange={setChoice} />
         </div>
-        <p className="mt-3 flex items-baseline gap-1.5">
+        <p className="mt-5 flex items-baseline gap-1.5">
           <span className="text-[2.5rem] leading-none font-semibold tracking-[-0.02em] text-ink tnum">{price.amount}</span>
           <span className="text-small text-ink-3">{price.per}</span>
         </p>

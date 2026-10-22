@@ -6,7 +6,7 @@ export function Terms() {
     <Prose
       title="Terms of use"
       lede="Kimochi is free software made by one person. These terms are short and meant to be read."
-      updated="2026-10-09"
+      updated="2026-10-21"
     >
       <h2 id="agreement">1. These terms</h2>
       <p>
@@ -88,10 +88,12 @@ export function Terms() {
 
       <h2 id="law">8. Governing law</h2>
       <p>
-        {/* TODO(owner): choose the governing law, e.g. a Canadian province. */}
-        These terms are governed by the laws of <strong>[jurisdiction]</strong>,
-        without regard to conflict-of-law rules. Nothing here removes rights you
-        have under the consumer protection laws of the place where you live.
+        These terms are governed by the laws of the Province of British
+        Columbia and the federal laws of Canada applicable therein, without
+        regard to conflict-of-law rules. The courts of British Columbia have
+        jurisdiction over any dispute about these terms. Nothing here removes
+        rights you have under the consumer protection laws of the place where
+        you live, including any right to bring a claim there.
       </p>
 
       <h2 id="changes">9. Changes</h2>
@@ -104,7 +106,9 @@ export function Terms() {
 
       <h2 id="contact">10. Contact</h2>
       <p>
-        Questions about these terms: open an issue on{" "}
+        Questions about these terms: email{" "}
+        <a href="mailto:hamstu@gmail.com">hamstu@gmail.com</a>, or open an
+        issue on{" "}
         <a href="https://github.com/hamstu/kimochi-tauri/issues">GitHub</a>.
       </p>
     </Prose>

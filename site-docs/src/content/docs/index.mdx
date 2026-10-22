@@ -1,0 +1,57 @@
+---
+title: Introduction
+description: What Kimochi is, who it is for, and the words this guide uses for its parts.
+---
+
+import Screenshot from '../../components/Screenshot.astro'
+
+Kimochi is a free, open-source desktop app that helps you read any Japanese on your screen: games,
+visual novels, manga, YouTube videos, streams, screenshots, anything with Japanese text in it. It
+captures the text with OCR, can draw it back over what you're reading as an overlay, and lets you
+hover any word to look it up in your favourite dictionary and save it to Anki.
+
+It is built to stay beside whatever you're reading rather than be a study app: a few small windows
+that keep out of the way while you read.
+
+<Screenshot id="main-window-tour" alt="The main window with numbered parts: 1 the source card, 2 the Auto OCR and Show overlay switches, 3 the OCR model, 4 the dictionary, 5 the Log and Notebook tabs, 6 a line in the Log, 7 the reading stats." width={900} />
+
+1. **Source**: the window or screen Kimochi reads, with a live preview, **Crop area** and **Change source**.
+2. **Auto OCR** and **Show overlay**: scan whenever the text changes, and draw it over what you’re reading.
+3. **OCR model**: the engine that turns the capture into text.
+4. **Dictionary**: the pop-up dictionary engine used for lookups.
+5. **Log** and **Notebook**: the two views of the main window.
+6. **A line**: every scan adds its text to the Log, with the time it arrived.
+7. **Reading stats**: reading time, lines, characters and speed for this session.
+
+## Words used in this guide
+
+| Term | Meaning |
+| --- | --- |
+| Source | The window or screen Kimochi reads, or another input: Quick Shot, Clipboard or WebSocket. |
+| Crop area | Part of the source to read, such as a game’s dialogue box or a video’s subtitles. |
+| Scan | One OCR pass over the source (or the crop area). |
+| Auto OCR | Scanning on its own whenever the text on screen changes and settles. |
+| Overlay | The recognised text drawn over the source, so words can be looked up in place. |
+| Log | The running transcript of every line, per session. |
+| Session | A separate Log, Notebook and stats for one game, book, series or anything else you read. |
+| Notebook | Characters, places and things of a session, recognised in the Log. |
+| Controller menu | The radial menu over whatever you’re reading, opened with a shortcut or a gamepad chord. |
+| Mini mode | The main window shrunk to its controls. |
+
+## Platforms
+
+Kimochi runs on macOS (Apple silicon), Windows (x64 and ARM64) and Linux (x64 and ARM64), and has a
+Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in
+early testing. See [Installation](/install/).
+
+## Free, with an optional Kimochi Cloud
+
+The whole app works without an account: capture, the overlay, Auto OCR, every OCR engine except
+cloud OCR, the Log, Sessions, the Notebook, dictionaries, Anki and Gaming Mode. [**Kimochi Cloud**](/cloud/) is
+an optional paid plan that adds in-app translation, AI explanations, read aloud, cloud OCR and sync
+between computers.
+
+## Questions and community
+
+Stuck, curious or have an idea? Come say hi in [Kimochi's Discord](https://discord.gg/vdMge6TBZQ),
+where Hamish and other readers hang out.

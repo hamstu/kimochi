@@ -5,6 +5,7 @@ import { Home } from './pages/Home'
 import { Privacy } from './pages/Privacy'
 import { Terms } from './pages/Terms'
 import { Compare } from './pages/Compare'
+import { Faq } from './pages/Faq'
 import { DownloadLinux } from './pages/DownloadLinux'
 import { NotFound } from './pages/NotFound'
 import { Account } from './pages/Account'
@@ -16,33 +17,33 @@ import { AccountVerify } from './pages/AccountVerify'
 import { AccountAdmin } from './pages/AccountAdmin'
 import { LinkApp } from './pages/LinkApp'
 import { SessionProvider } from './lib/session'
+import { canonicalUrl, routeMeta } from './lib/seo.js'
 
-/** Per-route document titles. Add an entry when you add a route. */
-const TITLES: Record<string, string> = {
-  '/': 'Kimochi',
-  '/privacy': 'Privacy · Kimochi',
-  '/terms': 'Terms · Kimochi',
-  '/compare': 'Compare · Kimochi',
-  '/download/linux': 'Install on Linux · Kimochi',
-  '/account': 'Account · Kimochi',
-  '/account/sign-in': 'Sign in · Kimochi',
-  '/account/sign-up': 'Create an account · Kimochi',
-  '/account/forgot': 'Reset password · Kimochi',
-  '/account/reset': 'Choose a new password · Kimochi',
-  '/account/verify': 'Confirm email · Kimochi',
-  '/account/admin': 'Admin · Kimochi',
-  '/link': 'Sign in to Kimochi · Kimochi'
-}
-
-function useDocumentTitle() {
+/**
+ * Keep the head in step on client-side navigation. Prerendered pages already ship these tags
+ * (scripts/prerender.mjs); routes and their titles live in src/lib/seo.js.
+ */
+function useDocumentHead() {
   const { pathname } = useLocation()
   useEffect(() => {
-    document.title = TITLES[pathname.replace(/\/+$/, '') || '/'] ?? 'Not found · Kimochi'
+    const route = routeMeta(pathname)
+    document.title = route.title
+    setHeadTag('meta[name="description"]', 'meta', { name: 'description', content: route.description })
+    setHeadTag('meta[name="robots"]', 'meta', route.index ? null : { name: 'robots', content: 'noindex' })
+    setHeadTag('link[rel="canonical"]', 'link', route.index ? { rel: 'canonical', href: canonicalUrl(route.path) } : null)
   }, [pathname])
 }
 
+/** Create, update or (with null) remove one head element. */
+function setHeadTag(selector: string, tag: 'meta' | 'link', attrs: Record<string, string> | null) {
+  let el = document.head.querySelector(selector)
+  if (!attrs) return el?.remove()
+  if (!el) el = document.head.appendChild(document.createElement(tag))
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v)
+}
+
 export function App() {
-  useDocumentTitle()
+  useDocumentHead()
   return (
     <SessionProvider>
       <Routes>
@@ -50,6 +51,7 @@ export function App() {
           <Route index element={<Home />} />
           <Route path="privacy" element={<Privacy />} />
           <Route path="terms" element={<Terms />} />
+          <Route path="faq" element={<Faq />} />
           <Route path="compare" element={<Compare />} />
           <Route path="download/linux" element={<DownloadLinux />} />
           <Route path="account" element={<Account />} />

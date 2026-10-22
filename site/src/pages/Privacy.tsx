@@ -8,7 +8,7 @@ export function Privacy() {
     <Prose
       title="Privacy"
       lede="Kimochi is a desktop app with no analytics, and accounts are optional. Most of what it does happens on your computer. This page lists exactly what leaves it, and when."
-      updated="2026-10-16"
+      updated="2026-10-21"
     >
       <h2 id="summary">The short version</h2>
       <ul>
@@ -113,13 +113,6 @@ export function Privacy() {
         computer.
       </p>
 
-      <h3>Your own OCR server</h3>
-      <p>
-        If you point Kimochi at a custom OCR endpoint, captured images go to
-        that address, which you control or chose.
-        Its privacy depends on whoever runs it.
-      </p>
-
       <h3>Text to speech</h3>
       <p>
         Read aloud is likewise available when you are signed in. When you play
@@ -201,10 +194,11 @@ export function Privacy() {
 
       <h2 id="accounts">Accounts</h2>
       <p>
-        You can use Kimochi without an account. An account adds Kimochi&rsquo;s
-        hosted services (cloud OCR, read aloud, translation and explanations,
-        within free monthly allowances) and sync of your sessions, notebook,
-        presets and preferences between your computers. If you create one, we store:
+        You can use Kimochi without an account. With a Kimochi Cloud plan (or
+        its free trial), an account adds Kimochi&rsquo;s hosted services (cloud
+        OCR, read aloud, translation and explanations, each within a monthly
+        allowance) and sync of your sessions, notebook, presets and preferences
+        between your computers. If you create one, we store:
       </p>
       <ul>
         <li>
@@ -281,9 +275,9 @@ export function Privacy() {
 
       <h2 id="contact">Contact</h2>
       <p>
-        Questions or concerns: open an issue on <a href={ISSUES}>GitHub</a>, or
-        email {/* TODO(owner): replace with a real contact address. */}
-        <strong>[contact email]</strong>.
+        Questions or concerns: email{" "}
+        <a href="mailto:hamstu@gmail.com">hamstu@gmail.com</a>, or open an
+        issue on <a href={ISSUES}>GitHub</a>.
       </p>
     </Prose>
   );

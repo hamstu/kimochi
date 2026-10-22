@@ -6,15 +6,14 @@ import {
   RELEASES_URL,
   assetLabel,
   classifyAsset,
-  detectPlatform,
-  detectPlatformSync,
   fetchLatestRelease,
   formatBytes,
   osLabel,
   pickAsset,
   type Platform,
   versionLabel,
-  type Release
+  type Release,
+  useDetectedPlatform
 } from '../lib/releases'
 import { LINUX_GUIDE_PATH, primaryDownloadHref } from '../lib/linux.js'
 
@@ -50,14 +49,13 @@ const OTHER_OSES = ['macos', 'windows', 'linux'] as const
  * the menu still lists every file, plus a "Linux install guide" item.
  */
 export function DownloadButton({ align = 'start', className = '' }: DownloadButtonProps) {
-  const [platform, setPlatform] = useState<Platform>(detectPlatformSync)
+  const platform = useDetectedPlatform()
   const [release, setRelease] = useState<Release | null>(null)
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let alive = true
-    detectPlatform().then((p) => alive && setPlatform(p))
     const ctrl = new AbortController()
     fetchLatestRelease(ctrl.signal)
       .then((r) => alive && setRelease(r))

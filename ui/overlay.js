@@ -2702,7 +2702,6 @@ async function processView(view) {
     // picker reaches the hover markings without a scan in between.
     const selection = {
       sourceId: view.source?.sourceId ?? view.source?.id ?? null,
-      applicationContextId: view.source?.applicationContext?.id ?? null,
       crop: view.crop ?? null
     }
     if (generation.bumpIfChanged(lastSelection, selection)) {

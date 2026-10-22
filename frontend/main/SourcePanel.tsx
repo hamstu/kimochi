@@ -68,9 +68,8 @@ import {
 } from '../bridge/tauri'
 import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
-import { useCapabilities } from '../bridge/capabilities'
+import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 import { GnomeWindowLink } from './GnomeWindowLink'
-import { GamingApplicationProfile } from './GamingApplicationProfile'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
 import type { ControllerWiring } from '../panels/useController'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
@@ -617,7 +616,11 @@ export function SourcePanel({
         : source.name && source.name !== title
           ? source.name
           : 'Window'
-    const preview = (
+    // Gaming Mode shows one app at a time: while Kimochi is in front, its screen is Kimochi.
+    const screenOnly = isScreen && isGamingMode(capabilities)
+    const preview = screenOnly ? (
+      <CardHead icon={<Monitor />} title={title} detail="Reads whatever is in front" chevron={false} />
+    ) : (
       <>
         <LivePreview
           // A new source starts from a clean slate rather than fading from the old one.
@@ -631,7 +634,7 @@ export function SourcePanel({
             isScreen ? undefined : (
               <span className="src-front" aria-hidden>
                 <ArrowUpRight />
-                {fullScreen ? 'Go to full screen' : 'Bring to front'}
+                {isGamingMode(capabilities) ? 'Switch to it' : fullScreen ? 'Go to full screen' : 'Bring to front'}
               </span>
             )
           }
@@ -654,7 +657,7 @@ export function SourcePanel({
             <CardHead icon={isScreen ? <Monitor /> : <SourceIcon source={source} />}
               title={title} />
           </button>
-        ) : isScreen && !(capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope') ? (
+        ) : isScreen && !isGamingMode(capabilities) ? (
           <div className="src-card-body">{preview}</div>
         ) : (
           <button
@@ -663,9 +666,11 @@ export function SourcePanel({
             aria-label={
               isScreen
                 ? 'Return to game'
-                : fullScreen
-                  ? `Go to ${title} in full screen`
-                  : `Bring ${title} to the front`
+                : isGamingMode(capabilities)
+                  ? `Switch to ${title}`
+                  : fullScreen
+                    ? `Go to ${title} in full screen`
+                    : `Bring ${title} to the front`
             }
             onClick={() => controller.onActivateSource()}
             onMouseEnter={() => controller.onSourceHover(true)}
@@ -845,7 +850,6 @@ export function SourcePanel({
       )}
 
       {mode === 'ocr' && <GnomeWindowLink key={source?.sourceId} sourceId={source?.sourceId} />}
-      {mode === 'ocr' && <GamingApplicationProfile />}
       <LinuxSourceCrop enabled={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && !(capabilities.session as { nativeLayerShell?: boolean }).nativeLayerShell} />
       {mode === 'quickshot' && (
         <div className="src-controls">
