@@ -41,7 +41,6 @@ export const TOOLS: Tool[] = [
     id: "kimochi",
     name: "Kimochi",
     short: "Kimochi",
-    // TODO(hamish): private repo, 404 for visitors until it is public.
     url: "https://github.com/hamstu/kimochi-tauri",
   },
   { id: "kamui", name: "Kamui", short: "Kamui", url: "https://kamui.gg" },
@@ -111,7 +110,7 @@ export const ROWS: Row[] = [
     label: "OCR engines",
     cells: {
       kimochi: {
-        text: "Google Lens (the default), Apple Live Text (macOS), MeikiOCR, Manga OCR, OneOCR (Windows), or a custom endpoint.",
+        text: "Google Lens (the default), Apple Live Text (macOS), MeikiOCR, Manga OCR, or OneOCR (Windows).",
       },
       kamui: { text: "Google Cloud Vision (cloud)." },
       gsm: {
@@ -251,7 +250,7 @@ export const ROWS: Row[] = [
   {
     label: "Project status",
     cells: {
-      kimochi: { text: "Early: nightly pre-release builds, one developer." },
+      kimochi: { text: "Young and actively developed, by one developer." },
       kamui: {
         text: "Commercial product from Kamui, LLC; desktop app labelled experimental.",
       },
@@ -317,6 +316,5 @@ export const SOURCES: Source[] = [
     label: "YomiNinja: releases (v0.9.3, v0.9.1 Wayland, v0.8.3 overlay, v0.7.2 Auto OCR)",
     url: "https://github.com/matt-m-o/YomiNinja/releases",
   },
-  // TODO(hamish): this repo is private, so the link 404s for visitors. Make it public or change it.
   { label: "Kimochi: source", url: "https://github.com/hamstu/kimochi-tauri" },
 ];

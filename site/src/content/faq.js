@@ -5,7 +5,7 @@
  *
  * `a` is the answer's paragraphs (plain text: it also goes into JSON-LD). `links` are shown after
  * it. `todo` is what Hamish still has to supply or confirm: shown on the page in the dev server
- * only, marked TODO(hamish), and listed in site/SEO_TODO.md.
+ * only, marked TODO(hamish).
  *
  * @typedef {{ href: string, label: string }} FaqLink
  * @typedef {{ id: string, q: string, a: string[], links?: FaqLink[], todo?: string }} FaqItem
@@ -29,10 +29,8 @@ export const FAQ = [
     id: 'who-is-it-for',
     q: 'Who is Kimochi for?',
     a: [
-      'Kimochi is for people learning Japanese by reading the games, visual novels and manga they enjoy. It started as the tool its maker, Hamish Macpherson, wanted: something that reads the game for you, gets out of the way, and lets you look up the word you’re stuck on without breaking the flow.'
-    ],
-    // TODO(hamish): is it suitable for beginners who can't read kana yet, or aimed at intermediate learners?
-    todo: 'Is Kimochi suitable for beginners who can’t read kana yet, or aimed at intermediate learners?'
+      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy, from total beginners to advanced readers. Every word is a hover away from its reading and meaning, so you can start on real Japanese from day one. It started as the tool its maker, Hamish Macpherson, wanted: something that reads the game for you, gets out of the way, and lets you look up the word you’re stuck on without breaking the flow.'
+    ]
   },
   {
     id: 'how-does-it-work',
@@ -47,46 +45,29 @@ export const FAQ = [
     q: 'Is Kimochi free? What does Kimochi Cloud cost?',
     a: [
       'Yes, Kimochi is free forever, with no account and no limits on the core app: the overlay, Auto OCR, on-device and online OCR engines, the Log, Sessions, the Notebook, dictionaries, one-click Anki cards and Gaming Mode.',
-      'Kimochi Cloud is optional and costs $6 a month, $60 a year (two months free, so $5 a month), or $125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial.'
+      'Kimochi Cloud is optional and costs US$6 a month, US$60 a year (two months free, so $5 a month), or US$125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial. A free account on its own doesn’t include any of these.'
     ],
-    links: [{ href: '/#open-source', label: 'Plans on the home page' }],
-    // TODO(hamish): currency (USD?); do accounts get a free monthly allowance of Cloud features (the
-    // privacy page says "within free monthly allowances", the pricing shows a trial)?
-    todo:
-      'Confirm the currency (USD?). Is there a free monthly allowance of Cloud features? The privacy page says “within free monthly allowances”, the pricing shows only a trial.'
+    links: [{ href: '/#open-source', label: 'Plans on the home page' }]
   },
   {
     id: 'platforms',
     q: 'Which platforms does Kimochi run on?',
     a: [
-      'Kimochi runs on macOS, Windows (x64 and ARM64) and Linux, and has a Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in early testing.'
+      'Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in early testing. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
     ],
     links: [
       { href: '/download/linux', label: 'Installing on Linux and Steam Deck' },
       { href: docsUrl('/install/'), label: 'Installation guide' }
-    ],
-    // TODO(hamish): minimum macOS version and Intel Macs (home says "Apple silicon", compare says
-    // "macOS 14+"); which Linux distros; minimum Windows version (OneOCR needs Windows 11).
-    todo:
-      'Minimum macOS version, and do Intel Macs work? (The home page says “Apple silicon”, /compare says “macOS 14+”.) Which Linux distros are supported? Minimum Windows version (OneOCR needs Windows 11)?'
+    ]
   },
   {
     id: 'privacy',
     q: 'Does Kimochi send my screen to the cloud? Is it private?',
     a: [
-      'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads. Your captures, log, notebook, statistics and settings stay on your computer, unless you sign in to an account, which syncs them between your computers.',
+      'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads. Your captures, log, notebook, statistics and settings stay on your computer, unless you turn on Sync with Kimochi Cloud, which keeps them in step between your computers.',
       'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. If you’d rather nothing leave your machine, pick an on-device engine: Apple Live Text (macOS), MeikiOCR, Manga OCR or OneOCR (Windows). The privacy policy lists exactly what each feature sends and when.'
     ],
     links: [{ href: '/privacy', label: 'Privacy policy' }]
-  },
-  {
-    id: 'release',
-    q: 'Is Kimochi out yet?',
-    a: [
-      'Not as a proper release yet. Kimochi is early: it has nightly pre-release builds, made by one developer.'
-    ],
-    // TODO(hamish): release window (or "no date yet"), how to get notified, whether nightly builds are public.
-    todo: 'Add a target release window (or “no date yet”), how to get notified (email list, Discord), and whether the nightly builds are public.'
   },
   {
     id: 'account',
@@ -100,7 +81,7 @@ export const FAQ = [
     id: 'engines-and-dictionaries',
     q: 'Which OCR engines and dictionaries does Kimochi support?',
     a: [
-      'OCR engines: Google Lens (the default, online), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), OneOCR (Windows 11, built in), or your own custom OCR endpoint.',
+      'OCR engines: Google Lens (the default, online), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), or OneOCR (Windows 11, built in).',
       'Dictionaries: a built-in copy of Yomitan with your own dictionaries, Hachidori, 10ten, or the Yomitan in your browser through the Yomitan API.'
     ],
     links: [
@@ -112,14 +93,12 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Kimochi can also take owocr’s output over WebSocket.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
       { href: docsUrl('/reading/texthookers/'), label: 'Texthookers' }
-    ],
-    // TODO(hamish): list known-working texthookers (Textractor, LunaTranslator, Agent) only if tested.
-    todo: 'List the texthookers known to work (Textractor, LunaTranslator, Agent…), only the ones you have tested.'
+    ]
   },
   {
     id: 'obs-and-extensions',
@@ -148,25 +127,22 @@ export const FAQ = [
     id: 'open-source',
     q: 'Is Kimochi open source? Where is the code?',
     a: ['Yes. Kimochi is free and open source under the GPL-3.0 licence, and its source is on GitHub.'],
-    // TODO(hamish): github.com/hamstu/kimochi-tauri returns 404 to the public. Make it public or change the link.
-    todo: 'The repo (github.com/hamstu/kimochi-tauri) returns 404 to the public. Make it public or change the link before launch.'
+    links: [{ href: 'https://github.com/hamstu/kimochi-tauri', label: 'Kimochi on GitHub' }]
   },
   {
     id: 'mobile-and-languages',
     q: 'Does Kimochi work on phones or tablets, or for languages other than Japanese?',
-    a: ['Kimochi is a desktop app for macOS, Windows and Linux, plus Gaming Mode on the Steam Deck, and it is made for reading Japanese.'],
-    // TODO(hamish): say plainly whether mobile and other languages are planned or out of scope.
-    todo: 'Say plainly whether phones, tablets and other languages are planned or out of scope.'
+    a: [
+      'Not yet. Kimochi is a desktop app for macOS, Windows and Linux, plus Gaming Mode on the Steam Deck, and it is made for reading Japanese. Phones, tablets and other languages may come later.'
+    ]
   },
   {
     id: 'feedback',
     q: 'How do I report a bug or give feedback?',
-    a: ['Email Hamish at hamstu@gmail.com, or open an issue on Kimochi’s GitHub repository.'],
+    a: ['Open an issue on Kimochi’s GitHub repository: bug reports, ideas and questions are all welcome there.'],
     links: [
-      { href: 'mailto:hamstu@gmail.com', label: 'Email hamstu@gmail.com' },
+      { href: 'https://github.com/hamstu/kimochi-tauri/issues', label: 'Kimochi’s GitHub issues' },
       { href: docsUrl('/help/troubleshooting/'), label: 'Troubleshooting' }
-    ],
-    // TODO(hamish): the repo is private, so its issues 404; add GitHub discussions or Discord if you start them.
-    todo: 'The GitHub repo is private, so its issues link 404s until it is public. Add GitHub discussions or Discord here if you start them.'
+    ]
   }
 ]

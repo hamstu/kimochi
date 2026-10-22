@@ -40,7 +40,6 @@ export function Compare() {
         project&rsquo;s own docs (see <a href="#sources">Sources</a>), and
         anything we couldn&rsquo;t confirm is tagged <Unverified />. Spot
         something wrong?{" "}
-        {/* TODO(hamish): the issues link is in the private repo and 404s for visitors. */}
         <a href="https://github.com/hamstu/kimochi-tauri/issues">
           Open an issue
         </a>{" "}
@@ -137,7 +136,7 @@ export function Compare() {
         Capture, OCR, the overlay, a log, Yomitan, Anki and a notebook, in a few
         small windows. No OBS, no browser tabs. Local engines or Google Lens,
         and a controller works too. It&rsquo;s free and open source, but
-        it&rsquo;s young: no proper release yet, Steam Deck support is early,
+        it&rsquo;s young: Steam Deck support is early,
         and the Anki side is simpler than GSM&rsquo;s. More on the{" "}
         <Link to="/#features">home page</Link>, or see what leaves your machine
         in the <Link to="/privacy">privacy policy</Link>.

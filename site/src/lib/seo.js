@@ -3,8 +3,7 @@
  * on navigation), by the build's prerender step (scripts/prerender.mjs writes every route's HTML
  * with these tags) and by test/seo.test.mjs.
  *
- * Every fact here must already be on the site. Open questions are marked TODO(hamish) and listed
- * in site/SEO_TODO.md.
+ * Every fact here must already be on the site.
  */
 import { FAQ } from '../content/faq.js'
 
@@ -14,8 +13,13 @@ export const SITE_URL = 'https://kimochiapp.com'
 /** The name paired with the category, so Kimochi is not confused with other "Kimochi" apps. */
 export const ENTITY_NAME = 'Kimochi: Japanese OCR overlay for games'
 
-// TODO(hamish): a 1200×630 social card (screenshot + wordmark). Until then the 512×512 app icon.
-export const OG_IMAGE = { url: `${SITE_URL}/og-icon.png`, width: 512, height: 512, alt: 'The Kimochi app icon' }
+/** The social card (public/og.png, drawn by `npm run docs:screenshots -- --only og-site`). */
+export const OG_IMAGE = {
+  url: `${SITE_URL}/og.png`,
+  width: 1200,
+  height: 630,
+  alt: 'Kimochi: Read your games in Japanese. The main window beside the wordmark.'
+}
 
 /**
  * @typedef {object} RouteMeta
@@ -143,8 +147,8 @@ const PERSON = {
   '@id': PERSON_ID,
   name: 'Hamish Macpherson',
   description: 'An individual developer in Canada who makes Kimochi.',
-  address: { '@type': 'PostalAddress', addressCountry: 'CA' }
-  // TODO(hamish): sameAs links (public GitHub, Discord, YouTube, Bluesky/X) once they exist.
+  address: { '@type': 'PostalAddress', addressCountry: 'CA' },
+  sameAs: ['https://github.com/hamstu']
 }
 
 const WEBSITE = {
@@ -157,7 +161,7 @@ const WEBSITE = {
   publisher: { '@id': PERSON_ID }
 }
 
-// TODO(hamish): confirm the Cloud prices are in USD (the site shows "$").
+/** Kimochi Cloud is priced in US dollars (the Stripe prices). */
 const PRICE_CURRENCY = 'USD'
 
 const APP = {
@@ -181,9 +185,10 @@ const APP = {
     { '@type': 'Offer', name: 'Kimochi Cloud (monthly)', price: '6', priceCurrency: PRICE_CURRENCY, description: 'Billed monthly. 14-day free trial.' },
     { '@type': 'Offer', name: 'Kimochi Cloud (yearly)', price: '60', priceCurrency: PRICE_CURRENCY, description: 'Billed yearly ($5 a month, two months free). 14-day free trial.' },
     { '@type': 'Offer', name: 'Kimochi Cloud (lifetime)', price: '125', priceCurrency: PRICE_CURRENCY, description: 'One payment.' }
-  ]
+  ],
+  downloadUrl: 'https://github.com/hamstu/kimochi-tauri/releases/latest',
+  sameAs: ['https://github.com/hamstu/kimochi-tauri']
   // Leave out softwareVersion and datePublished until there is a tagged release.
-  // TODO(hamish): downloadUrl and sameAs (the GitHub repo) once the repo is public.
 }
 
 /**

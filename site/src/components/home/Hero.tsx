@@ -55,8 +55,6 @@ export function Hero() {
           favorite dictionary, understand the meaning, and make flash cards for Anki.
         </p>
         {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
-        {/* TODO(hamish): this Download CTA 404s while the repo is private; no email capture yet
-            (choose a service first). */}
         <div id="get-kimochi" className="mt-10 scroll-mt-24">
           <DownloadButton align="center" />
         </div>

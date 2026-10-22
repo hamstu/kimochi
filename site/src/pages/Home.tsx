@@ -61,8 +61,6 @@ export function Home() {
         heading="I hope you'll give it a try."
         lede="Free, for macOS, Windows and Linux."
       >
-        {/* TODO(hamish): the download (GitHub releases of the private repo) 404s for visitors. Make
-            the repo public, or replace this with launch sign-up once you pick an email service. */}
         <DownloadButton align="center" />
       </Section>
     </>

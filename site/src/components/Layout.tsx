@@ -6,7 +6,6 @@ import { AccountNavLink } from './AccountNavLink'
 import { LINUX_GUIDE_PATH } from '../lib/linux.js'
 import { DOCS_URL } from '../lib/docs.js'
 
-// TODO(hamish): private repo, so this and the Source on GitHub links 404 for visitors.
 export const GITHUB_URL = 'https://github.com/hamstu/kimochi-tauri'
 
 /**

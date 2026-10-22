@@ -1,7 +1,6 @@
 import { Link } from "react-router";
 import { Prose } from "../components/Prose";
 
-// TODO(hamish): this repo is private, so the GitHub links on this page 404 for visitors.
 const ISSUES = "https://github.com/hamstu/kimochi-tauri/issues";
 
 export function Privacy() {
@@ -114,13 +113,6 @@ export function Privacy() {
         computer.
       </p>
 
-      <h3>Your own OCR server</h3>
-      <p>
-        If you point Kimochi at a custom OCR endpoint, captured images go to
-        that address, which you control or chose.
-        Its privacy depends on whoever runs it.
-      </p>
-
       <h3>Text to speech</h3>
       <p>
         Read aloud is likewise available when you are signed in. When you play
@@ -202,10 +194,11 @@ export function Privacy() {
 
       <h2 id="accounts">Accounts</h2>
       <p>
-        You can use Kimochi without an account. An account adds Kimochi&rsquo;s
-        hosted services (cloud OCR, read aloud, translation and explanations,
-        within free monthly allowances) and sync of your sessions, notebook,
-        presets and preferences between your computers. If you create one, we store:
+        You can use Kimochi without an account. With a Kimochi Cloud plan (or
+        its free trial), an account adds Kimochi&rsquo;s hosted services (cloud
+        OCR, read aloud, translation and explanations, each within a monthly
+        allowance) and sync of your sessions, notebook, presets and preferences
+        between your computers. If you create one, we store:
       </p>
       <ul>
         <li>

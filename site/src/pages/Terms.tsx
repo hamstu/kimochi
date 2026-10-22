@@ -109,7 +109,6 @@ export function Terms() {
         Questions about these terms: email{" "}
         <a href="mailto:hamstu@gmail.com">hamstu@gmail.com</a>, or open an
         issue on{" "}
-        {/* TODO(hamish): the issues link is in the private repo and 404s until it is public. */}
         <a href="https://github.com/hamstu/kimochi-tauri/issues">GitHub</a>.
       </p>
     </Prose>
