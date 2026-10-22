@@ -247,7 +247,13 @@ if startup fails. Other enabled extension names are preserved. Unrecognized edit
 to Kimochi's loader/metadata are refused; the recognized legacy implementation is
 backed up before migration. No unsafe Shell evaluation or compositor restart.
 
-Shell actors provide one monitor's screen annotations and Shift-hover/click lookup.
+On GNOME46, the annotation surface uses the same `TextOverlayRenderer`, CSS,
+OCR line/segment layout, proximity indicators, hover text and DOM text scanning as
+X11, native layer-shell, macOS and Windows. Shell only supplies validated placement,
+source visibility, stacking and pointer/modifier delivery. The GTK surface permanently
+refuses keyboard focus and takes pointer input only over the renderer's actual hit
+rectangles. Estimated Shell character cells remain metadata for the legacy controller
+adapter; they no longer drive mouse lookup, typography or visual highlights.
 The dictionary uses the existing full Yomitan Popup/Display in a small native
 window, including dictionary images, audio controls and nested lookup. GNOME supplies
 geometry for Kimochi's own log/popup windows so log lookups can extend outside the
@@ -260,8 +266,11 @@ popup chain and the app's resolved theme, bundled fonts and smoothing; explicit 
 font/theme settings remain authoritative. Original resize gestures suppress accidental
 text selection. These have automated/virtual-input evidence; attended UX acceptance is
 still required after the reported failures (see Ubuntu ledger entries92 onward).
-The hidden OCR WebKit host never becomes a transparent ordinary desktop overlay.
-There is no modal or keyboard grab. GNOME 46 now supports native desktop crop and
+The WebView is mapped only under a PID/DBus-owner-validated Shell surface lease,
+with an empty native input shape before its first map. Owner loss, a missing heartbeat,
+source departure, crop, overview, lock and extension disable hide the surface. Screen
+capture suppression includes it; preview captures do not hide it. No detached-reader
+fallback, modal or keyboard grab is introduced. GNOME 46 now supports native desktop crop and
 Quick Shot on the single supported monitor. GNOME hosts the original shared
 `RegionSelect` editor in a transparent WebKit window only during explicit selection;
 Shell supplies validated fullscreen placement and lease cleanup. Explicit selection temporarily owns

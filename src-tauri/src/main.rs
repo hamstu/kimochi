@@ -720,12 +720,12 @@ fn regions(window: tauri::WebviewWindow, state: State<Shared>, rects: Vec<Region
         .take(2000)
         .collect();
     #[cfg(target_os = "linux")]
-    let usable = if window.label() == OVERLAY && platform::wayland_overlay_unavailable() {
+    let usable = if window.label() == OVERLAY && platform::wayland_overlay_unavailable() && !platform::gnome::shared_overlay() {
         let _ = window.hide();
         Vec::new()
     } else { usable };
     #[cfg(target_os = "linux")]
-    if window.label() == OVERLAY {
+    if window.label() == OVERLAY && !platform::gnome::shared_overlay() {
         // Linux overlays start hidden. Map X11 panels as well as native Wayland
         // layers when they publish words or editor regions, and hide empty surfaces.
         let visible = !usable.is_empty()
@@ -889,6 +889,23 @@ async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operati
     #[cfg(target_os = "linux")]
     { let service=state.inner().clone();
         tauri::async_runtime::spawn_blocking(move || {let result=platform::gnome::request(&operation,payload.clone())?;
+            if operation == "surface" {
+                let window = app.get_webview_window(OVERLAY).ok_or("native: overlay missing")?;
+                if payload["operation"] == "close" {
+                    platform::capture::mark_hidden();
+                    window.hide().map_err(|e| e.to_string())?;
+                } else {
+                    let rect: Rect = serde_json::from_value(result["rect"].clone()).map_err(|e|e.to_string())?;
+                    platform::desktop_place(&window, rect)?;
+                    service.view.lock().unwrap().origin = Some(rect);
+                    if !platform::capture::suppressed() && !window.is_visible().unwrap_or(false) {
+                        // The native empty region is committed before mapping.
+                        window.set_ignore_cursor_events(false).map_err(|e| e.to_string())?;
+                        platform::set_input_regions(&window, Some(&[]))?;
+                        window.show().map_err(|e| e.to_string())?;
+                    }
+                }
+            }
             if operation=="track"&&payload["operation"]=="match"&&!result.is_null(){if let Some(id)=payload["sourceId"].as_str(){platform::gnome::refresh_identity(&service,id);}}
             if matches!(operation.as_str(),"update"|"install")&&result["live"]==true {hotkeys::apply(&app,&service.settings);}
             Ok(result)
@@ -1053,8 +1070,11 @@ fn popup_window(app: tauri::AppHandle, rect: Option<Rect>, visible: bool) -> Rep
             platform::gnome::request("own-window", json!({"label":"popup-host","rect":rect}))?;
             window.set_size(tauri::LogicalSize::new(rect.width, rect.height)).map_err(|e| e.to_string())?;
         }
-        if visible { window.show().map_err(|e| e.to_string())?; }
-        else { window.hide().map_err(|e| e.to_string())?; }
+        // GTK show/present can request activation even for an already visible
+        // window. Gliding between words must only update content and geometry.
+        if !window.is_visible().map_err(|e| e.to_string())? {
+            window.show().map_err(|e| e.to_string())?;
+        }
         return Ok(());
     }
     if let Some(rect) = rect {

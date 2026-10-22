@@ -101,6 +101,7 @@ async function refreshDisplays() {
       const status = await invoke('gnome_overlay', { operation: 'status', payload: null })
       gnomeBridge = Boolean(status.available && status.desktopPopup)
       if (gnomeBridge) {
+        if (status.sharedOverlay) window.__kimochiFrameBands.overlay = 0
         displays = status.monitors.map((m, id) => ({ id, bounds: m, work_area: m.workArea, scale_factor: 1 }))
       }
     }
@@ -331,7 +332,7 @@ Popup.prototype.showContent = async function (details, displayDetails) {
     for (const [popup] of placed) if (!popup.parent && popup !== this) popup.hide(false)
   }
   markNewest(this)
-  if (gnomeBridge && sent.length) gnomeSources.set(this, this.parent ? gnomeSources.get(this.parent) : desktopLookup ? 'desktop' : 'reader')
+  if (gnomeBridge && sent.length) gnomeSources.set(this, this.parent ? gnomeSources.get(this.parent) : desktopLookup || displayDetails?.content?.contentOrigin?.tabId === 1 ? 'desktop' : 'reader')
   anchors = origin
     ? real.map((r) => ({
         left: r.left + origin.x,

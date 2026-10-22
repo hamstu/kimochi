@@ -1,24 +1,53 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Linux runtime bridge. */
-import { gnomeWordCells } from './gnome-word-cells.js'
+import { gnomeWordCells, packGnomeWords } from './gnome-word-cells.js'
 import { measureEms } from './render.js'
 
-/** GNOME Shell owns these actors; the hidden WebKit window only runs OCR/Yomitan. */
-export async function installGnomeOverlay(native, state, enabled, log) {
+/** GNOME places the original annotation WebView; the shared renderer owns its UI. */
+export async function installGnomeOverlay(native, state, enabled, log, { renderer, setting }) {
   if (window.__KIMOCHI_PLATFORM__?.os !== 'linux') return null
   const gnomeRequest = (operation, payload = null) => window.__TAURI__.core.invoke('gnome_overlay', { operation, payload })
   let busy = false
   let lastError = null
+  let shared = false
+  let placement = null
+  let placementSignature = null
+  const render = () => {
+    if (!shared || !placement?.visible || !enabled() || !state.geometry) { renderer.clear(); return }
+    state.origin = placement.origin
+    renderer.render({annotations:state.annotations,info:state.info,origin:placement.origin,bounds:placement.bounds,
+      grouping:setting('textOverlayGrouping'),opacity:setting('overlayOpacity'),scanning:state.scanning})
+  }
+  const closeSurface = async () => {
+    renderer.clear()
+    placement = null
+    placementSignature = null
+    if (shared) {
+      shared = false
+      await gnomeRequest('surface', {operation:'close'})
+    }
+  }
+  const pointer = payload => {
+    if (!shared || payload.sourceId !== state.info?.source_id || !payload.origin || !payload.bounds) return
+    const next = {origin:payload.origin,bounds:payload.bounds,visible:payload.visible}
+    const signature = JSON.stringify(next)
+    if (signature !== placementSignature) {
+      placement = next
+      placementSignature = signature
+      render()
+    }
+  }
   const update = async () => {
     if (busy) return
     busy = true
     try {
       const status = await gnomeRequest('status')
-      if (!status.available) return
+      if (!status.available) { renderer.clear(); shared = false; return }
       const info = state.info
       const screen = info?.source_id?.startsWith('portal:display:')
       const tracked = !screen && status.tracked?.sourceId === info?.source_id ? status.tracked : null
       const monitor = screen ? (status.monitors?.length === 1 ? status.monitors[0] : null) : tracked?.bounds
       if (!enabled() || !state.geometry || !monitor || (!screen && (!tracked?.visible || !info.source_bounds || Math.abs(info.source_bounds.width-monitor.width)>=2 || Math.abs(info.source_bounds.height-monitor.height)>=2))) {
+        await closeSurface()
         await gnomeRequest('clear')
         return
       }
@@ -34,9 +63,18 @@ export async function installGnomeOverlay(native, state, enabled, log) {
         const height = (Math.max(...ys) - Math.min(...ys)) * sy
         return width > 0 && height > 0 ? gnomeWordCells(a.description, { x, y, width, height }, a.orientation === 'vertical' || a.isVertical === true, measureEms) : []
       }).slice(0, 500)
-      await gnomeRequest('present', { sourceKind: screen ? 'screen' : 'window', sourceId:info.source_id, referenceBounds:screen ? undefined : monitor, frameId: state.appliedScanId, words })
+      await gnomeRequest('present', { sourceKind: screen ? 'screen' : 'window', sourceId:info.source_id, referenceBounds:screen ? undefined : monitor, frameId: state.appliedScanId, ...(status.sharedOverlay ? packGnomeWords(words) : {words}) })
+      if (status.sharedOverlay) {
+        const result = await gnomeRequest('surface', {operation:'open',sourceKind:screen?'screen':'window',sourceId:info.source_id})
+        shared = true
+        placement = {origin:result.rect,bounds:monitor,visible:true}
+        placementSignature = null
+        render()
+      }
       lastError = null
     } catch (error) {
+      renderer.clear()
+      await closeSurface().catch(() => {})
       const message = String(error)
       if (message !== lastError) log({ check: 'gnome-overlay-error', error: message })
       lastError = message
@@ -50,9 +88,10 @@ export async function installGnomeOverlay(native, state, enabled, log) {
     while (busy) await new Promise(resolve => setTimeout(resolve, 20))
     busy = true
     try {
+      await closeSurface()
       if ((await gnomeRequest('status')).available) await gnomeRequest('clear')
     } finally { busy = false }
   }
   const flush=async()=>{while(busy)await new Promise(resolve=>setTimeout(resolve,20));await update()}
-  return { update, pause, flush }
+  return { update, pause, flush, pointer, get shared() { return shared } }
 }

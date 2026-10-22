@@ -1247,14 +1247,25 @@ Real limitations, recorded rather than papered over.
 
 ## Optional GNOME Shell overlay (Linux only)
 
-`gnome_overlay({operation, payload}) -> Value`: status/install/present/clear/definition.
-Only the native Linux GNOME Wayland backend supports this bridge. The bundled extension
-creates compositor-owned annotation actors; ordinary Tauri annotation windows stay hidden.
-Screen annotations only, initially one monitor and GNOME46; portal window tracking stays deferred.
-Installation preserves differing existing extension files and tells the user to save work
-and log out/in when GNOME cannot discover the newly installed extension. No automatic logout.
-`gnome-overlay-lookup` forwards native word click or Shift hover to the existing Yomitan backend.
-The extension displays plain dictionary text; full Yomitan popup controls are not implemented.
+`gnome_overlay({operation, payload}) -> Value` supports status/install/update, annotation
+present/clear/highlight, own-window placement, crop, window tracking, controller and shortcuts.
+The optional GNOME46 Wayland extension provides the compositor geometry and non-activating
+placement unavailable through standard Wayland. It supports a screen or a linked portal window
+on one monitor; window streams are never placed at guessed desktop coordinates.
+
+When status advertises `sharedOverlay`, `surface` with `{operation:"open",sourceKind,sourceId}`
+leases the calling app's already-created annotation WebView after a validated `present`.
+It returns the monitor rectangle, which native uses for size/origin. Shell verifies the owner
+and PID, controls stacking and visibility, and emits bounded `Pointer` samples to the shared
+DOM renderer/scanner. GTK refuses keyboard focus and applies only the renderer's word input
+regions. The original floating dictionary host owns its own popup input and focus.
+`{operation:"close"}` releases the surface. Missing heartbeats, source changes/closure, owner
+loss, lock and extension disable hide it; capture suspension hides the WebView along with the
+other annotation surfaces. Native layer-shell and X11 retain the same existing renderer.
+
+Legacy `gnome-overlay-lookup` still serves controller navigation and older annotation adapters.
+The versioned extension loader reloads implementation updates without logout; initial discovery
+or a loader change may require login. Installation never logs out the user automatically.
 
 ## Gaming Mode reading identity
 

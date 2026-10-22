@@ -146,7 +146,11 @@ export function createChrome({
       sendMessage: api(tabsSendMessage),
       connect(id, { frameId, name }) {
         const target = select(id, frameId)[0]
-        if (!target) throw Error(`Unknown frame ${frameId}`)
+        if (!target) {
+          if (root.__KIMOCHI_PLATFORM__?.os === 'linux' && hub.connectRemote)
+            return hub.connectRemote({frameId, name, owner: ctx})
+          throw Error(`Unknown frame ${frameId}`)
+        }
         const channel = new MessageChannel()
         const sender = { frameId: ctx.id, tab: { id: tabId }, url: win.location.href }
         const local = channelPort(name, sender, channel.port1, ctx)

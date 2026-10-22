@@ -15,3 +15,21 @@ export function gnomeWordCells(text, rect, vertical = false, measure = text => [
     return width > 0 && height > 0 ? [{ text: text.slice(offset), sentence: text, offset, x, y, width, height }] : []
   })
 }
+
+/** Controller metadata must not limit the shared WebView's text. Intern the
+ * repeated sentences so long OCR lines cannot overflow the bounded Shell RPC. */
+export function packGnomeWords(words, limit = 220000) {
+  const sentences=[],indices=new Map(),packed=[]
+  let size=64
+  for(const word of words) {
+    let id=indices.get(word.sentence)
+    const fresh=id===undefined
+    if(fresh)id=sentences.length
+    const cell={sentenceId:id,offset:word.offset,x:word.x,y:word.y,width:word.width,height:word.height}
+    const added=JSON.stringify(cell).length+(fresh?JSON.stringify(word.sentence).length:0)+2
+    if(size+added>limit)break
+    if(fresh){indices.set(word.sentence,id);sentences.push(word.sentence)}
+    packed.push(cell);size+=added
+  }
+  return {words:packed,sentences}
+}

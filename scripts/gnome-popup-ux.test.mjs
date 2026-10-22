@@ -58,3 +58,29 @@ test('transparent popup shadow is outside the interactive dictionary', () => {
   f.overlay._outsidePress(105, 150)
   assert.deepEqual(f.signals, ['Dismiss'])
 })
+
+test('popup placement raises a mapped window once, without activating or repeatedly restacking it', () => {
+  const overlay = new Overlay()
+  let above = false, raised = 0, moved = 0, mapped = false
+  const win = {
+    get_compositor_private: () => ({get_paint_visibility: () => mapped}),
+    is_override_redirect: () => false,
+    is_above: () => above,
+    make_above: () => { raised++; above = true },
+    get_frame_rect: () => ({x:100, y:100}),
+    move_frame: () => { moved++ },
+    activate: () => assert.fail('hover must not activate the popup')
+  }
+  overlay._watchPopupButtons = () => {}
+  const rect = {x:100,y:100,width:400,height:250}
+  overlay._placePopup(win, rect)
+  assert.equal(raised, 0, 'unmapped windows are not in Mutter’s stack')
+  mapped = true
+  for (let i = 0; i < 100; i++) overlay._placePopup(win, rect)
+  assert.equal(raised, 1)
+  assert.equal(moved, 0)
+  win.is_override_redirect = () => true
+  above = false
+  overlay._placePopup(win, rect)
+  assert.equal(raised, 1, 'override-redirect surfaces are not stack-managed')
+})

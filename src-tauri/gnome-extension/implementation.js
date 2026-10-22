@@ -14,6 +14,8 @@ const XML = `<node><interface name="${IFACE}">
 <method name="Status"><arg type="s" direction="out"/></method>
 <method name="Present"><arg type="s" direction="in"/></method>
 <method name="Clear"/>
+<method name="Surface"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+<signal name="Pointer"><arg type="s"/></signal>
 <method name="OwnWindow"><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
 <signal name="Dismiss"/>
 <method name="Suspend"><arg type="b" direction="in"/><arg type="b" direction="out"/></method>
@@ -53,6 +55,7 @@ export default class KimochiOverlay extends Extension {
             if (this._pick && GLib.get_monotonic_time()-this._pick.started>30000000) this._finishPick(null,'timeout');
             if(this._controller&&GLib.get_monotonic_time()-this._controller.updated>5000000)this._finishController();
             this._followTracked();
+            this._syncSurface();
             this._transparentCrop();
             if (this._crop && GLib.get_monotonic_time() - this._crop.updated > 5000000) this._finishCrop(false, 'timeout');
             if (this._lastUpdate && GLib.get_monotonic_time() - this._lastUpdate > 5000000)
@@ -76,9 +79,9 @@ export default class KimochiOverlay extends Extension {
             if (!this._words.length) return GLib.SOURCE_CONTINUE;
             // Never publish input/text when the emergency panel control is hidden.
             const visible = !this._suspended && !this._pick && !this._crop && (this._sourceKind!=='window'||this._trackedVisible) && this._controlVisible();
-            this._group.visible = visible;
+            this._group.visible = visible && (!this._surface || this._controller?.mode === 'words');
             if (this._popup) this._popup.visible = visible;
-            if (!visible) return GLib.SOURCE_CONTINUE;
+            if (!visible || this._surface) return GLib.SOURCE_CONTINUE;
             const nativeRect = this._nativePopup?.get_compositor_private()?.get_paint_visibility() ? this._nativePopup.get_frame_rect() : null;
             if (nativeRect && x >= nativeRect.x && y >= nativeRect.y && x < nativeRect.x + nativeRect.width && y < nativeRect.y + nativeRect.height)
                 return GLib.SOURCE_CONTINUE;
@@ -136,6 +139,14 @@ export default class KimochiOverlay extends Extension {
         this._focusSignal = global.display.connect('notify::focus-window', () => {
             const win = global.display.focus_window;
             if (!win) return;
+            // The annotation WebView is permanently non-focusable. This also
+            // fences an unsolicited map activation by Mutter without a grab.
+            if (win === this._surface?.window) {
+                const previous = this._surface.previousFocus;
+                if (previous && previous !== win && previous.get_compositor_private())
+                    previous.activate(global.get_current_time());
+                return;
+            }
             if(this._controller&&win!==this._controller.previousFocus&&win!==this._controller.window&&win!==this._nativePopup&&!(win.get_pid()===this._controller.pid&&win.get_title()==='Kimochi · controller-host'))this._finishController();
             if(this._crop&&win!==this._crop.previousFocus&&win!==this._crop.window&&!(this._crop.webview&&win.get_pid()===this._crop.pid&&win.get_title()==='Kimochi · crop-host'))this._finishCrop(false,'focus-changed');
             if(this._pick&&win!==this._pick.previousFocus)this._finishPick(null,'focus-changed');
@@ -625,10 +636,13 @@ export default class KimochiOverlay extends Extension {
     Status() {
         return JSON.stringify({controller:this._controller?{mode:this._controller.mode,rect:this._controller.rect,mapped:Boolean(this._controller.window)}:null,nativeShortcuts:true,protocol: 1, shell: '46', words: this._words.length,
             keyboardGrab: false, fullscreenInputSurface: Boolean(this._crop || this._pick), hideButton: this._hideButton?.visible ? (()=>{const b=this._fallbackHide?.get_paint_visibility()?this._fallbackHide:this._hideButton;return {position:b.get_transformed_position(),size:b.get_transformed_size(),floating:b===this._fallbackHide};})() : null, pointer: global.get_pointer(),
-            painted: this._group.get_paint_visibility(),
+            sharedOverlay: true,
+            surface: this._surface ? {rect:this._surface.rect,sourceId:this._surface.sourceId,
+                visible:Boolean(this._surface.visible),mapped:Boolean(this._surface.window)} : null,
+            painted: this._surface ? Boolean(this._surface.visible) : this._words.length > 0 && this._group.get_paint_visibility(),
             windowTracking: true, tracked: this._trackedStatus(), picking: Boolean(this._pick), pickWindows:this._pick ? global.get_window_actors().map(a=>a.meta_window).filter(w=>w.get_pid()!==this._pick.pid&&w.showing_on_its_workspace()&&!w.minimized).slice(-50).map(w=>{const r=w.get_frame_rect();return {title:w.get_title(),pid:w.get_pid(),bounds:{x:r.x,y:r.y,width:r.width,height:r.height}};}) : [], cropEditor: true, crop: this._crop ? this._crop.webview ? {id:this._crop.id,ui:'shared',backgroundSuppressed:Boolean(this._crop.backgroundSuppressed),opacity:this._crop.window?.get_compositor_private()?.opacity,monitor:this._crop.monitor,mapped:Boolean(this._crop.window),rect:this._crop.rect} : {id: this._crop.id, rect: this._crop.rect, dragging: Boolean(this._crop.drag), monitor: this._crop.monitor, save: {position:this._cropSave.get_transformed_position(),size:this._cropSave.get_transformed_size()}, cancel:{position:this._cropCancel.get_transformed_position(),size:this._cropCancel.get_transformed_size()}} : null,
             appearance: 'matched-word-highlight', matched: this._match ?? null, desktopPopup: true, revision: this.metadata.revision,
-            ownPopup: this._nativePopup ? (() => { const r = this._nativePopup.get_frame_rect(); return {x: r.x, y: r.y, width: r.width, height: r.height}; })() : null,
+            ownPopup: this._nativePopup ? (() => { const r = this._nativePopup.get_frame_rect(); return {x: r.x, y: r.y, width: r.width, height: r.height, windowType: this._nativePopup.get_window_type(), overrideRedirect: this._nativePopup.is_override_redirect(), above: this._nativePopup.is_above(), visible: Boolean(this._nativePopup.get_compositor_private()?.get_paint_visibility())}; })() : null,
             focus: global.display.focus_window?.get_title() ?? null,
             actors: this._words.map((w, i) => ({...w, position: this._group.get_child_at_index(i)?.get_transformed_position(), size: this._group.get_child_at_index(i)?.get_transformed_size(), style: this._group.get_child_at_index(i)?.get_style()})),
             lastClear: this._lastClearReason ?? null, suspended: Boolean(this._suspended), serial: this._serial, popup: Boolean(this._popup),
@@ -650,7 +664,18 @@ export default class KimochiOverlay extends Extension {
                 !data.referenceBounds||!['x','y','width','height'].every(k=>Number.isFinite(data.referenceBounds[k])&&Math.abs(data.referenceBounds[k]-tracked.bounds[k])<2)))
                 throw new Error('Window annotations require the explicitly linked live source and current bounds');
             const monitors = Main.layoutManager.monitors;
-            const words = data.words.map(w => {
+            if (data.sentences !== undefined && (!Array.isArray(data.sentences) || data.sentences.length > 500 ||
+                !data.sentences.every(sentence => typeof sentence === 'string')))
+                throw new Error('Invalid annotation sentences');
+            const words = data.words.map(cell => {
+                let w = cell;
+                if (data.sentences !== undefined) {
+                    const sentence = data.sentences[cell.sentenceId];
+                    if (!Number.isInteger(cell.sentenceId) || typeof sentence !== 'string' ||
+                        !Number.isInteger(cell.offset) || cell.offset < 0 || cell.offset >= sentence.length)
+                        throw new Error('Invalid annotation text offset');
+                    w = {...cell,sentence,text:sentence.slice(cell.offset,cell.offset+512).replace(/[\uD800-\uDBFF]$/u,'')};
+                }
                 if (![w.x, w.y, w.width, w.height].every(Number.isFinite) || w.width <= 0 || w.height <= 0 || typeof w.text !== 'string' || w.text.length > 512)
                     throw new Error('Invalid annotation');
                 if (!monitors.some(m => w.x >= m.x && w.y >= m.y && w.x + w.width <= m.x + m.width && w.y + w.height <= m.y + m.height))
@@ -695,7 +720,7 @@ export default class KimochiOverlay extends Extension {
                 this._group.add_child(actor);
             }
             this._hideButton.visible = words.length > 0;
-            this._group.visible = !this._suspended && this._controlVisible();
+            this._group.visible = !this._suspended && !this._surface && this._controlVisible();
             invocation.return_value(null);
         } catch (e) {
             invocation.return_dbus_error(`${IFACE}.InvalidAnnotations`, e.message);
@@ -711,12 +736,108 @@ export default class KimochiOverlay extends Extension {
         invocation.return_value(null);
     }
 
+    // A lease only for Kimochi's existing, non-focusable annotation WebView.
+    // Shell owns desktop placement/visibility; the shared DOM renderer owns text,
+    // layout, hover indicators and dictionary hit testing. No guessed glyph cells.
+    SurfaceAsync([payload], invocation) {
+        try {
+            const sender = invocation.get_sender();
+            if (payload.length > 4096) throw new Error('Surface request exceeds limit');
+            const data = JSON.parse(payload);
+            if (this._surface && this._surface.owner !== sender)
+                throw new Error('Another client owns the annotation surface');
+            if (data.operation === 'close') {
+                this._finishSurface();
+                invocation.return_value(new GLib.Variant('(s)', [JSON.stringify({closed:true})]));return;
+            }
+            if (data.operation !== 'open' || this._owner !== sender ||
+                !['screen', 'window'].includes(data.sourceKind) || data.sourceId !== this._sourceId)
+                throw new Error('Publish current source annotations before opening its surface');
+            if (Main.layoutManager.monitors.length !== 1)
+                throw new Error('Shared GNOME annotation surfaces currently require one monitor');
+            const monitor = Main.layoutManager.monitors[0];
+            if (data.sourceKind === 'screen' && !/^portal:display:[0-9]+$/.test(data.sourceId))
+                throw new Error('Annotation surface requires a shared screen');
+            if (data.sourceKind === 'window' && (this._sourceKind !== 'window' ||
+                this._tracked?.owner !== sender || !this._trackedStatus()))
+                throw new Error('Annotation surface requires a linked window');
+            if (!this._surface) {
+                const response = Gio.DBus.session.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus',
+                    'org.freedesktop.DBus', 'GetConnectionUnixProcessID', new GLib.Variant('(s)', [sender]),
+                    new GLib.VariantType('(u)'), Gio.DBusCallFlags.NONE, 1000, null);
+                this._surface = {owner:sender,pid:response.deep_unpack()[0],previousFocus:global.display.focus_window};
+            }
+            Object.assign(this._surface, {sourceId:data.sourceId,sourceKind:data.sourceKind,
+                rect:{x:monitor.x,y:monitor.y,width:monitor.width,height:monitor.height},updated:GLib.get_monotonic_time()});
+            if (this._controller?.mode !== 'words') this._group.hide();
+            this._syncSurface();
+            invocation.return_value(new GLib.Variant('(s)', [JSON.stringify({rect:this._surface.rect})]));
+        } catch (e) { invocation.return_dbus_error(`${IFACE}.InvalidSurface`, e.message); }
+    }
+
+    _finishSurface() {
+        this._surface?.window?.get_compositor_private()?.hide();
+        this._surface = null;
+        this._surfacePointer = null;
+        this._surfacePointerTime = 0;
+    }
+
+    _surfaceState() {
+        const s = this._surface;
+        if (!s) return null;
+        const tracked = s.sourceKind === 'window' ? this._trackedStatus() : null;
+        const bounds = tracked?.bounds ?? s.rect;
+        const visible = !this._suspended && !this._crop && !this._pick &&
+            !Main.sessionMode.isLocked && !Main.sessionMode.isGreeter && !Main.overview.visible &&
+            this._words.length > 0 && this._controlVisible() &&
+            (s.sourceKind === 'screen' || tracked?.sourceId === s.sourceId && this._trackedVisible);
+        return {origin:s.rect,bounds,visible:Boolean(visible)};
+    }
+
+    _syncSurface() {
+        const s = this._surface;if (!s) return;
+        if (GLib.get_monotonic_time() - s.updated > 5000000) { this._clear('surface-timeout');return; }
+        const win = global.get_window_actors().map(a => a.meta_window).find(w =>
+            w.get_pid() === s.pid && w.get_title() === 'Kimochi · overlay');
+        if (win && win !== s.window) {
+            s.window = win;
+            const actor = win.get_compositor_private();
+            Main.wm.skipNextEffect(actor);
+            actor.remove_all_transitions();actor.set_scale(1,1);actor.set_translation(0,0,0);
+        }
+        const state = this._surfaceState();
+        const actor = s.window?.get_compositor_private();
+        s.visible = Boolean(state.visible && actor);
+        if (actor) {
+            const current = s.window.get_frame_rect(), r = s.rect;
+            if (['x','y','width','height'].some(k => Math.abs(current[k]-r[k]) >= 1))
+                s.window.move_resize_frame(false,r.x,r.y,r.width,r.height);
+            // 254 prevents Mutter's opaque-window culling from discarding the
+            // game behind a full-monitor transparent surface (as in crop mode).
+            actor.opacity = 254;
+            actor.visible = s.visible;
+            if (s.visible && !s.window.is_above() && !s.window.is_override_redirect()) s.window.make_above();
+        }
+        const [x,y,mods] = global.get_pointer();
+        const popup = this._nativePopup?.get_compositor_private()?.get_paint_visibility() ? this._nativePopup.get_frame_rect() : null;
+        const blocked = Boolean(popup && x >= popup.x && y >= popup.y && x < popup.x+popup.width && y < popup.y+popup.height || this._controller);
+        const pointer = {...state,sourceId:s.sourceId,x,y,over:s.visible,blocked,down:Boolean(mods&Clutter.ModifierType.BUTTON1_MASK),
+            shift:Boolean(mods&Clutter.ModifierType.SHIFT_MASK),ctrl:Boolean(mods&Clutter.ModifierType.CONTROL_MASK),
+            alt:Boolean(mods&Clutter.ModifierType.MOD1_MASK),meta:Boolean(mods&Clutter.ModifierType.SUPER_MASK)};
+        const signature = JSON.stringify(pointer);
+        if (signature !== this._surfacePointer || s.visible && GLib.get_monotonic_time() - (this._surfacePointerTime ?? 0) >= 100000) {
+            this._surfacePointerTime = GLib.get_monotonic_time();
+            this._surfacePointer = signature;
+            this._bus.emit_signal('Pointer',new GLib.Variant('(s)',[signature]));
+        }
+    }
+
     // Only Kimochi's own process windows; never a portal window or foreign client.
     OwnWindowAsync([payload], invocation) {
         try {
             if (payload.length > 4096) throw new Error('Window request exceeds limit');
             const data = JSON.parse(payload);
-            if (!['log', 'popup-host', 'crop-host','controller-host'].includes(data.label)) throw new Error('Unsupported own window');
+            if (!['log', 'popup-host', 'crop-host','controller-host', 'overlay'].includes(data.label)) throw new Error('Unsupported own window');
             const response = Gio.DBus.session.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus',
                 'org.freedesktop.DBus', 'GetConnectionUnixProcessID',
                 new GLib.Variant('(s)', [invocation.get_sender()]), new GLib.VariantType('(u)'),
@@ -724,6 +845,13 @@ export default class KimochiOverlay extends Extension {
             const [pid] = response.deep_unpack();
             const win = global.get_window_actors().map(a => a.meta_window)
                 .find(w => w.get_pid() === pid && w.get_title() === `Kimochi · ${data.label}`);
+            if (data.label === 'overlay') {
+                if (!this._surface || this._surface.owner !== invocation.get_sender())
+                    throw new Error('Annotation surface requires an active owner lease');
+                if (!win) throw new Error('Annotation surface is not mapped yet');
+                const r = this._surface.rect;
+                invocation.return_value(new GLib.Variant('(s)', [JSON.stringify(r)]));return;
+            }
             if(data.label==='controller-host') {
                 const c=this._controller;
                 if(!c||c.owner!==invocation.get_sender())throw new Error('Controller window requires an active owner lease');
@@ -783,7 +911,10 @@ export default class KimochiOverlay extends Extension {
 
     _placePopup(win, r) {
         this._nativePopup = win;
-        win.make_above();
+        // Placement is requested before GTK maps the surface. Mutter cannot
+        // raise an unstacked window, and repeated raises disturb game focus.
+        if (win.get_compositor_private()?.get_paint_visibility() &&
+            !win.is_override_redirect() && !win.is_above()) win.make_above();
         const current = win.get_frame_rect();
         if (current.x !== Math.round(r.x) || current.y !== Math.round(r.y))
             win.move_frame(false, Math.round(r.x), Math.round(r.y));
@@ -799,7 +930,8 @@ export default class KimochiOverlay extends Extension {
         }
         const hadAnnotations = this._words.length > 0 || Boolean(this._nativePopup?.get_compositor_private()?.visible);
         this._suspended = on;
-        this._group.visible = !on && this._controlVisible();
+        this._group.visible = !on && !this._surface && this._controlVisible();
+        this._syncSurface();
         if (this._popup) this._popup.visible = !on && this._controlVisible();
         const actor = this._nativePopup?.get_compositor_private();
         if (actor) {
@@ -811,6 +943,7 @@ export default class KimochiOverlay extends Extension {
 
     _clear(reason = 'replace-or-disable') {
         this._lastClearReason = reason;
+        this._finishSurface();
         if (this._ownerWatch) Gio.bus_unwatch_name(this._ownerWatch);
         this._ownerWatch = null;
         this._suspended = false;

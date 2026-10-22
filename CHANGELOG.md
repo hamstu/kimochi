@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Ubuntu/GNOME: OCR overlays now use the same hover text, fitted line layout, indicators and
+  floating dictionary UI as the other desktop versions. Hovering no longer repeatedly raises
+  the dictionary window above the game.
+
 - Manga OCR now reads each column of a speech bubble on its own, the way mokuro does, so every
   character stays in the column it was printed in instead of slipping to the end of the one
   before. Bubbles that touch are told apart more reliably, and long columns are no longer cut short.

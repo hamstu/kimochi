@@ -493,7 +493,7 @@ let gnomeControllerWords = false
 let lastVisibilityTrace = null
 function draw() {
   publishTextBoxes()
-  if (waylandDisabled) { renderer.clear(); void gnomeOverlay?.update(); return }
+  if (waylandDisabled) { if (!gnomeOverlay?.shared) renderer.clear(); void gnomeOverlay?.update(); return }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
   if (waylandLayer && state.info?.source_id?.startsWith('portal:window:')) {
@@ -2028,6 +2028,14 @@ async function playLatest() {
 // ---------------------------------------------------------------------------
 
 const relayTargets = new Set()
+let forwardingBackendBroadcasts = false
+function forwardBackendBroadcasts() {
+  if (forwardingBackendBroadcasts) return
+  forwardingBackendBroadcasts = true
+  chrome.runtime.onMessage.addListener((message) => {
+    for (const target of relayTargets) void native.relay(target, { kind: 'broadcast', message })
+  })
+}
 let extensionApi = null
 let dictionarySetup = null
 let openInIframe = null
@@ -2066,19 +2074,20 @@ function relayStorage({ area, action, keys, values }) {
  * backend is not ready" on launch.
  */
 let settleBackend
+let gnomeBackendReady = false
 const backendSettled = new Promise((resolve) => (settleBackend = resolve))
 /** Bounded like the startup itself: the backend signals readiness within 30s or fails. */
 const BACKEND_WAIT_MS = 35000
 
 async function whenBackendReady() {
-  if (state.yomitan.ready) return
+  if (state.yomitan.ready || gnomeBackendReady) return
   if (!state.yomitan.error) {
     await Promise.race([
       backendSettled,
       new Promise((resolve) => setTimeout(resolve, BACKEND_WAIT_MS))
     ])
   }
-  if (!state.yomitan.ready) throw Error(state.yomitan.error ?? 'Dictionary backend is not ready')
+  if (!state.yomitan.ready && !gnomeBackendReady) throw Error(state.yomitan.error ?? 'Dictionary backend is not ready')
 }
 
 async function handleRelay(from, payload) {
@@ -2205,9 +2214,7 @@ async function startYomitan() {
 
   // Backend broadcasts (readiness, database updates) must reach relayed windows
   // too, or their frontends never finish starting up.
-  chrome.runtime.onMessage.addListener((message) => {
-    for (const target of relayTargets) void native.relay(target, { kind: 'broadcast', message })
-  })
+  forwardBackendBroadcasts()
 
   // Extension storage changes are broadcast the same way. Relayed windows read
   // and write through this one store, so without this a profile or option
@@ -2358,7 +2365,19 @@ let livePopups = new Set()
 
 async function capturePopups() {
   const { observePopups } = await import('/spike/popup-bridge.js')
+  let remote = null
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+    const {installGnomePopupTransport} = await import('./gnome-popup-transport.js')
+    remote = await installGnomePopupTransport(window, hub, () => {
+      // The backend is already running. Let the native popup host complete its
+      // API handshake before this frontend asks for a remote PopupFactory.
+      gnomeBackendReady = true
+      forwardBackendBroadcasts()
+      settleBackend()
+    })
+  }
   ;({ popups: livePopups } = await observePopups({
+    remote,
     log,
     window: 'overlay',
     // A popup opens and closes between two ticks of the region loop; 100 ms of
@@ -2557,7 +2576,7 @@ const popupRects = () => popupHitRects(livePopups, state.origin)
  * — which a reader has deliberately opened and has to be able to type into.
  */
 function hitRects() {
-  if (waylandDisabled) return []
+  if (waylandDisabled && (!gnomeOverlay?.shared || state.regionSelecting)) return []
   if (!state.origin) return []
   // Selecting a region needs every event on the display, not just the parts of
   // it that happen to have text under them.
@@ -2834,10 +2853,12 @@ await native.watchCapabilities(async (caps) => {
     waylandDisabled = true
     if (!gnomeOverlay && caps.session.compositor === 'GNOME') {
       const { installGnomeOverlay } = await import('./gnome-overlay.js')
-      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && (gnomeControllerWords || isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible), log)
+      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && (gnomeControllerWords || isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible), log, {renderer,setting})
+      const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
+      await installLinuxScanInput(window, { passive: true })
     }
     renderer.clear()
-    log({ check: caps.session.nativeGnomeShell ? 'overlay-native-gnome' : 'overlay-disabled', reason: caps.session.nativeGnomeShell ? 'GNOME Shell owns screen annotations; the WebKit OCR host stays hidden.' : 'Native layer-shell overlay is unavailable on this desktop. GNOME can use the optional Shell integration.' })
+    log({ check: caps.session.nativeGnomeShell ? 'overlay-native-gnome' : 'overlay-disabled', reason: caps.session.nativeGnomeShell ? 'GNOME Shell places the shared annotation WebView without keyboard focus.' : 'Native layer-shell overlay is unavailable on this desktop. GNOME can use the optional Shell integration.' })
   }
 
   if (caps.os === 'windows')
@@ -3025,6 +3046,7 @@ function noteScanFeed(payload, dispatched) {
 // effect on scanned words, and the scan itself. See ui/scan-input.ts for why the
 // scan arrives this way rather than from an event addressed to this window.
 await native.listen('pointer', ({ payload }) => {
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') gnomeOverlay?.pointer(payload)
   if (!state.origin || typeof payload?.x !== 'number') return
   const local = toOverlayLocal(payload, state.origin)
   if (payload.over === false || !local) {
@@ -3057,6 +3079,12 @@ await native.listen('pointer', ({ payload }) => {
   noteScanFeed(payload, init !== null)
 })
 
+await native.listen('gnome-popup-dismiss', () => {
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeOverlay?.shared) {
+    dismissPopup()
+    window.getSelection()?.removeAllRanges()
+  }
+})
 await native.listen('state', ({ payload }) => void processView(payload))
 // The reader cleared its log. Both loops forget what they published, so a line read again
 // reaches the log again; native's history merge forgets it on the same signal.

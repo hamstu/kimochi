@@ -9,6 +9,7 @@ const PATH: &str = "/dev/kimochi/GnomeOverlay";
 static CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
 static AVAILABLE: AtomicBool = AtomicBool::new(false);
 static DESKTOP_POPUP: AtomicBool = AtomicBool::new(false);
+static SHARED_OVERLAY: AtomicBool = AtomicBool::new(false);
 
 fn eligible() -> bool {
     super::session().backend == super::Backend::Wayland
@@ -37,6 +38,7 @@ pub fn status() -> Value {
         value["available"] = json!(true);
         Ok(value)
     })();
+    SHARED_OVERLAY.store(result.as_ref().is_ok_and(|value| value["sharedOverlay"] == true), Ordering::SeqCst);
     DESKTOP_POPUP.store(result.as_ref().is_ok_and(|value| value["desktopPopup"] == true), Ordering::SeqCst);
     AVAILABLE.store(result.is_ok(), Ordering::SeqCst);
     result.unwrap_or_else(|error| json!({"available":false,"reason":error}))
@@ -48,10 +50,10 @@ pub fn request(operation: &str, payload: Value) -> Result<Value, String> {
     if operation == "status" { return Ok(status()); }
     if !eligible() { return Err("GNOME integration requires GNOME Wayland without native layer-shell".into()); }
     if operation == "install" || operation == "update" { return install(); }
-    if operation == "crop" || operation == "track" || operation == "shortcuts" || operation == "controller" {
+    if operation == "crop" || operation == "track" || operation == "shortcuts" || operation == "controller" || operation == "surface" {
         let conn = connection()?;
         let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
-        let reply: String = proxy.call(match operation { "crop" => "Crop", "track" => "Track", "controller" => "Controller", _ => "Shortcuts" }, &(payload.to_string(),)).map_err(|e| e.to_string())?;
+        let reply: String = proxy.call(match operation { "surface" => "Surface", "crop" => "Crop", "track" => "Track", "controller" => "Controller", _ => "Shortcuts" }, &(payload.to_string(),)).map_err(|e| e.to_string())?;
         return serde_json::from_str(&reply).map_err(|e| e.to_string());
     }
     if operation == "own-window" {
@@ -169,6 +171,23 @@ fn install() -> Result<Value, String> {
 
 pub fn start(app: tauri::AppHandle) {
     if !eligible() { return; }
+    let pointer_app = app.clone();
+    let _ = std::thread::Builder::new().name("gnome-shared-pointer".into()).spawn(move || loop {
+        let _ = (|| -> Result<(), String> {
+            let conn = connection()?;
+            let proxy = Proxy::new(&conn, NAME, PATH, NAME).map_err(|e| e.to_string())?;
+            for event in proxy.receive_signal("Pointer").map_err(|e| e.to_string())? {
+                let (text,): (String,) = event.body().deserialize().map_err(|e| e.to_string())?;
+                if text.len() <= 4096 {
+                    if let Ok(payload) = serde_json::from_str::<Value>(&text) {
+                        let _ = pointer_app.emit_to("overlay", "pointer", payload);
+                    }
+                }
+            }
+            Ok(())
+        })();
+        std::thread::sleep(Duration::from_secs(2));
+    });
     let action_app=app.clone();
     let _=std::thread::Builder::new().name("gnome-action-events".into()).spawn(move || loop {
         let _=(|| -> Result<(),String> {
@@ -286,6 +305,7 @@ pub fn own_bounds(w: &tauri::WebviewWindow) -> Result<kimochi_capture::Rect, Str
 }
 
 pub fn eligible_popup_session() -> bool { eligible() }
+pub fn shared_overlay() -> bool { eligible() && SHARED_OVERLAY.load(Ordering::SeqCst) }
 
 fn digest(contents: &str) -> Result<String, String> {
     let mut checksum = glib::Checksum::new(glib::ChecksumType::Sha256).ok_or("SHA256 unavailable")?;

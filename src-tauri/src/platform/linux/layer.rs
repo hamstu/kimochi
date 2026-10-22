@@ -167,7 +167,7 @@ pub fn input_regions(
     window: &tauri::WebviewWindow,
     regions: Option<&[Rect]>,
 ) -> Result<bool, String> {
-    if !(available() || window.label() == "popup-host" && super::gnome::eligible_popup_session()) {
+    if !(available() || matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session()) {
         return Ok(false);
     }
     let window = window.clone();
@@ -202,7 +202,7 @@ pub fn input_regions(
                     0,
                     0,
                 );
-                if window.label() == "popup-host" && super::gnome::eligible_popup_session() {
+                if matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session() {
                     // GNOME/GTK can defer the Wayland input-region commit until a
                     // paint. Without damage, a shadow click still reaches this
                     // window despite the new shape. Queue once per shape change.
