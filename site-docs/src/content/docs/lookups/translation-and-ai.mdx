@@ -1,0 +1,55 @@
+---
+title: Translation and AI
+description: Translate a line with DeepL or Kimochi Cloud, ask for a grammar explanation, and hear lines read aloud.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+For a line you can't read yet, the Log can translate it, explain it, or read it aloud. All three are
+in each line's menu (hover a line and press **⋯**, or right-click it).
+
+<Screenshot id="line-actions" alt="A line's menu in the Log: Copy text, Translate, Explain and Delete line." width={720} />
+
+## Translate
+
+**Translate** shows the line in English in place (**Show original** switches back); press
+<kbd>T</kbd> while hovering a line to toggle it. Choose where translations come from in
+**Settings → Translation & AI → Translate with**:
+
+| Option | What it uses |
+| --- | --- |
+| **Automatic** (default) | Kimochi Cloud if your account has it, otherwise your DeepL key. |
+| **Kimochi cloud** | Kimochi's server (DeepL behind it). Needs [Kimochi Cloud](/cloud/). |
+| **Your DeepL key** | Your own [DeepL API](https://www.deepl.com/pro-api) key, entered below it. |
+
+Your DeepL key is stored locally in `settings.json` and is never synced or backed up.
+
+<Screenshot id="settings-assist" alt="Settings, Translation & AI: Translate with, the DeepL API key and Explain." width={760} />
+
+<Screenshot id="line-translated" alt="The Log with one line translated into English, highlighted." width={720} />
+
+## Explain
+
+**Explain** (or <kbd>E</kbd> on a hovered line) opens a grammar-focused explanation of the line,
+starting with a one-line translation, using the lines before it as context. Answers are cached
+(**Cached**); **Regenerate** runs it again with the current settings. You can Shift-hover words
+inside the explanation too.
+
+**Settings → Translation & AI → Explain → Configure…** chooses who answers:
+
+| Provider | Notes |
+| --- | --- |
+| **Codex CLI** (default) | Runs the `codex` command-line tool on this computer. Model: the CLI's default, or one you name. |
+| **Claude CLI** | Runs the `claude` command-line tool on this computer. Model: Opus (default), Sonnet, Haiku or Fable. |
+| **Kimochi cloud** | Kimochi's server, with Kimochi Cloud. |
+
+The **Prompt** is yours to edit, with `{{context}}` (the previous lines) and `{{sentence}}`
+placeholders; **Reset to default** restores it.
+
+<Screenshot id="explain-settings" alt="The Explain settings dialog: Provider, model and the prompt." width={760} />
+
+## Read aloud
+
+With [Kimochi Cloud](/cloud/), each line's menu has **Read aloud**, which plays the line in an
+ElevenLabs voice. Choose the **Read-aloud voice** and **Voice model** (Eleven v3, v4 or v4 Turbo) in
+**Settings → Log → Reading**. Without Kimochi Cloud the item isn't shown.

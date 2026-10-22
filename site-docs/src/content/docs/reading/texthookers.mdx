@@ -1,0 +1,45 @@
+---
+title: Texthookers and clipboard
+description: Feed the Log from a texthooker over WebSocket or the clipboard, and send Kimochi's own scans to other tools.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+import Todo from '../../../components/Todo.astro'
+
+If you already hook text out of a visual novel, Kimochi can take those lines instead of reading the
+screen. They land in the same Log, with the same lookups, Notebook and stats.
+
+Choose the input in the sidebar's **Change source** menu or in **Settings → Sources → Input**.
+
+<Screenshot id="settings-sources" alt="Settings, Sources: the Input list (Screen, Quick Shot, Clipboard, WebSocket), Sessions, Windows and Output." width={760} />
+
+## Clipboard
+
+Picks up text copied to the clipboard, for example by a text hooker that copies each line. Kimochi
+checks the clipboard every 200 ms by default (**Poll interval**: 100 ms, 200 ms, 500 ms or 1 s) and
+ignores its own copies.
+
+<Screenshot id="clipboard-card" alt="The sidebar with the Clipboard source, Watching for copied text." width={240} />
+
+## WebSocket
+
+Receives plain-text messages from a text source on your network. Kimochi connects to the
+**WebSocket URL** you set (default `ws://localhost:6677`) and reconnects on its own if the
+connection drops. A status line at the top of the Log shows whether it is connecting, connected or
+retrying.
+
+Each message can be plain text, a JSON string, or a JSON object with a `text` or `sentence` field.
+Use a `ws://` or `wss://` address without credentials.
+
+<Screenshot id="websocket-card" alt="The sidebar with the WebSocket source and its URL." width={240} />
+
+<Todo>TODO(hamish): which texthookers are tested (Textractor with a WebSocket extension, LunaTranslator, Agent, owocr…)? The FAQ says owocr's output works over WebSocket. Add a short "with X, set Y" table once confirmed (SEO_TODO #8).</Todo>
+
+## Sending scans to other tools
+
+**Settings → Sources → Output** sends every OCR scan onwards, whatever the input is:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **Copy scans to clipboard** | Off | Copies each scan's text, for tools that watch the clipboard. |
+| **Send scans over WebSocket** | Off | Kimochi hosts a WebSocket server at the **WebSocket URL** (default `ws://localhost:6677`) that texthooker pages can connect to. |

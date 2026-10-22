@@ -1,0 +1,42 @@
+---
+title: Install on Windows
+description: Install Kimochi on Windows 10 or 11, x64 or ARM64.
+---
+
+import { Steps } from '@astrojs/starlight/components'
+import Todo from '../../../components/Todo.astro'
+
+Kimochi runs on **Windows 10 22H2 or Windows 11**, on **x64** or **ARM64**.
+
+<Steps>
+
+1. Download the installer for your PC from [kimochiapp.com](https://kimochiapp.com/#download):
+   `Kimochi_<version>_x64-setup.exe` for most PCs, `Kimochi_<version>_arm64-setup.exe` for ARM.
+
+2. Run it. It installs Kimochi for your user account (no administrator needed), in English or
+   Japanese, and fetches Microsoft's WebView2 runtime if your PC doesn't have it yet.
+
+3. Open Kimochi and follow the [welcome guide](/welcome-guide/).
+
+</Steps>
+
+Windows builds are signed. Updates install from inside the app and relaunch it.
+
+<Todo>TODO(hamish): does SmartScreen warn on first run with the Azure Artifact Signing certificate? If so, add "More info → Run anyway" here. Also confirm the minimum Windows version (the README's build prerequisites say 10 22H2).</Todo>
+
+## OneOCR, the Windows OCR engine
+
+Windows has an on-device OCR engine of its own, in the Snipping Tool, and Kimochi can use it:
+choose **OneOCR** in **Settings → OCR & Overlay**. See [OCR engines](/reading/ocr-engines/#oneocr).
+
+- **Windows 11:** install or update **Microsoft Snipping Tool** from the Microsoft Store. Nothing else is needed.
+- **Windows 10:** Snipping Tool doesn't include it, so OneOCR needs three files from a recent
+  Windows 11 Snipping Tool package: `oneocr.dll`, `oneocr.onemodel` and `onnxruntime.dll`. Put a
+  matching x64 or ARM64 set in your user folder under `.config\oneocr`. The
+  [OneOCR setup instructions](https://github.com/AuroraWright/oneocr#readme) explain where to find them.
+
+## Uninstalling
+
+Uninstall Kimochi from **Settings → Apps → Installed apps** like any other app.
+
+<Todo>TODO(hamish): where does Kimochi keep its data on Windows (presumably %APPDATA%\dev.kimochi.app and %LOCALAPPDATA%\dev.kimochi.app), and does the uninstaller remove it?</Todo>

@@ -1,0 +1,267 @@
+@import "/node_modules/@fontsource-variable/figtree/wght.css";
+/*
+ * The docs screenshot stage: one app window on a transparent ground, with a soft frame shadow,
+ * rounded corners and optional marks (glowing outlines, numbered badges, callout labels, a dimmed
+ * surround that leaves one element in focus). Colours follow the docs' theme tokens
+ * (site/src/styles/tokens.css): indigo accent, slate neutrals.
+ */
+:root {
+  color-scheme: light;
+  --accent: #3e63dd;
+  --accent-glow: rgb(62 99 221 / 0.45);
+  --accent-ring: rgb(62 99 221 / 0.18);
+  --note-bg: #ffffff;
+  --note-text: #1c2024;
+  --note-line: #00002d17;
+  --frame-line: rgb(15 17 26 / 0.12);
+  --frame-shadow: 0 1px 2px rgb(15 17 26 / 0.08), 0 18px 48px -12px rgb(15 17 26 / 0.28),
+    0 40px 80px -40px rgb(15 17 26 / 0.22);
+  --dim: rgb(15 17 26 / 0.42);
+  --title-bg: #f9f9fb;
+  --title-text: #60646c;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --accent: #5472e4;
+  --accent-glow: rgb(110 140 255 / 0.55);
+  --accent-ring: rgb(110 140 255 / 0.22);
+  --note-bg: #212225;
+  --note-text: #edeef0;
+  --note-line: #d3edf81d;
+  --frame-line: rgb(255 255 255 / 0.1);
+  --frame-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 48px -12px rgb(0 0 0 / 0.65),
+    0 40px 80px -40px rgb(0 0 0 / 0.5);
+  --dim: rgb(0 0 0 / 0.5);
+  --title-bg: #18191b;
+  --title-text: #b0b4ba;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  font-family: 'Figtree Variable', 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#stage {
+  position: relative;
+  display: inline-block;
+  padding: 48px;
+}
+
+#window {
+  position: relative;
+  border-radius: var(--radius, 12px);
+  box-shadow: var(--frame-shadow);
+  isolation: isolate;
+}
+/* The hairline sits above the content so light windows keep an edge on a light page. */
+#window::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--frame-line);
+  pointer-events: none;
+  z-index: 3;
+}
+#window.bare {
+  box-shadow: none;
+}
+#window.bare::after {
+  display: none;
+}
+
+#titlebar {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--title-bg);
+  border-bottom: 1px solid var(--frame-line);
+  border-radius: var(--radius, 12px) var(--radius, 12px) 0 0;
+  color: var(--title-text);
+  font-size: 12px;
+  font-weight: 520;
+}
+
+#viewport {
+  overflow: hidden;
+  border-radius: var(--radius, 12px);
+}
+#titlebar:not([hidden]) + #viewport {
+  border-radius: 0 0 var(--radius, 12px) var(--radius, 12px);
+}
+#app {
+  display: block;
+  border: 0;
+  background: transparent;
+}
+
+/* Marks are drawn in window coordinates and clipped to the window's rounded shape. */
+#marks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.glow {
+  position: absolute;
+  border-radius: var(--r, 8px);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-ring), 0 0 22px 4px var(--accent-glow);
+}
+.focus {
+  position: absolute;
+  border-radius: var(--r, 8px);
+  box-shadow: 0 0 0 200vmax var(--dim);
+}
+
+.badge {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px #fff, 0 4px 12px rgb(15 17 26 / 0.3);
+  z-index: 4;
+}
+:root[data-theme='dark'] .badge {
+  box-shadow: 0 0 0 2px #111113, 0 4px 12px rgb(0 0 0 / 0.5);
+}
+
+/* Callout labels live on the stage (outside the window clip), so they can sit in the margin. */
+#notes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.note {
+  position: absolute;
+  max-width: 220px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--note-bg);
+  color: var(--note-text);
+  border: 1px solid var(--note-line);
+  box-shadow: 0 1px 2px rgb(15 17 26 / 0.08), 0 10px 28px -8px rgb(15 17 26 / 0.3);
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.note .n {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 620;
+  vertical-align: 1px;
+}
+.leader {
+  position: absolute;
+  height: 0;
+  border-top: 1.5px dashed var(--accent);
+  transform-origin: 0 0;
+  opacity: 0.8;
+}
+.dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.cursor {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  z-index: 5;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* The social card (layout: 'og'): 1200×630. */
+body.og #stage {
+  display: block;
+  width: 1200px;
+  height: 630px;
+  padding: 0;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 100% 100%, #e6edfe 0%, #f9f9fb 55%, #ffffff 100%);
+}
+body.og .og-copy {
+  position: absolute;
+  left: 64px;
+  top: 70px;
+  width: 400px;
+  color: #1c2024;
+}
+body.og .og-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+}
+body.og .og-mark img {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+}
+body.og .og-mark b {
+  font-weight: 620;
+}
+body.og .og-mark span {
+  color: #80838d;
+  font-weight: 430;
+}
+body.og h1 {
+  margin: 56px 0 0;
+  font-size: 50px;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  font-weight: 620;
+}
+body.og p {
+  margin: 22px 0 0;
+  font-size: 21px;
+  line-height: 1.45;
+  color: #60646c;
+}
+body.og p.og-url {
+  position: absolute;
+  top: 430px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 520;
+  color: #3a5bc7;
+}
+body.og #window {
+  position: absolute;
+  left: 520px;
+  top: 92px;
+  transform: scale(0.82);
+  transform-origin: 0 0;
+}

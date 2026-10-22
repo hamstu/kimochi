@@ -1,0 +1,41 @@
+---
+title: Files and data
+description: Where Kimochi keeps its settings, Log, dictionaries and downloads, and what each holds.
+---
+
+import Todo from '../../../components/Todo.astro'
+
+Kimochi keeps everything on your computer, in its data folder, under the app id `dev.kimochi.app`:
+
+| System | Data folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/dev.kimochi.app/` |
+| Linux | `~/.local/share/dev.kimochi.app/`, plus `~/.config/dev.kimochi.app/` and `~/.cache/dev.kimochi.app/` |
+| Windows | See the note below |
+
+<Todo>TODO(hamish): confirm the Windows data folders (Tauri's defaults would be %APPDATA%\dev.kimochi.app and %LOCALAPPDATA%\dev.kimochi.app).</Todo>
+
+## What's in it
+
+| What | Where |
+| --- | --- |
+| Settings (including your DeepL key and window positions) | `settings.json` |
+| The Log, sessions, stats and Notebook (no account) | The data folder itself: `sessions.json`, `sessions/`, `stats.json` and friends |
+| The same, per signed-in account | `profiles/<server>-<account>/` |
+| Downloaded dictionary engines | `extensions/<engine>/<version>/` |
+| Downloaded OCR models | `models/<engine>/` |
+| The sync log | `sync-log.jsonl` |
+| Dictionaries you import | The app's web storage (IndexedDB), managed in the engine's settings |
+
+Captured images are held in memory while Kimochi reads them and aren't saved to disk (images you add
+to the Notebook are). Deleting the data folder removes all of it.
+
+<Todo>TODO(hamish): on macOS, where does the webview's IndexedDB (the dictionaries) live, so the docs can say how to back it up or remove it?</Todo>
+
+## Backing up
+
+- **With an account**, Sync keeps a copy on the server, and **Settings → Account → Export your data**
+  saves it as a ZIP. See [Sync and backup](/cloud/sync/).
+- **Without one**, copy the data folder while Kimochi is closed.
+- Yomitan dictionaries and settings can be exported from Yomitan's own settings (its **Backup**
+  section).

@@ -1,0 +1,80 @@
+---
+title: Kimochi Docs
+description: Install Kimochi and learn everything it does, from OCR and the overlay to pop-up dictionaries, the Log, the Notebook, Anki, controllers and Kimochi Cloud.
+template: splash
+hero:
+  title: Read your games in Japanese.
+  tagline: Kimochi reads the Japanese text on your screen, draws it over the game and puts every word a hover away from its meaning. This guide covers installing it, setting it up and everything it can do.
+  actions:
+    - text: Install Kimochi
+      link: /install/
+      icon: right-arrow
+      variant: primary
+    - text: Quick start
+      link: /quick-start/
+      variant: secondary
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components'
+import Screenshot from '../../components/Screenshot.astro'
+
+<Screenshot id="main-window" alt="Kimochi's main window: the chosen game in the sidebar with its live preview, Auto OCR and Show overlay switches, and the Log of Japanese lines on the right." width={900} eager />
+
+## What Kimochi does
+
+<CardGrid>
+  <Card title="Capture and OCR" icon="laptop">
+    Pick a game window or a whole screen, crop it to the dialogue, and press Scan or turn on
+    **Auto OCR**. Choose from online and on-device OCR engines. [Sources](/reading/sources/) ·
+    [OCR engines](/reading/ocr-engines/)
+  </Card>
+  <Card title="The overlay" icon="seti:image">
+    Kimochi can draw the recognised text back over the game, so you can hover any word right
+    where it is. [The overlay](/reading/overlay/)
+  </Card>
+  <Card title="Pop-up dictionaries" icon="open-book">
+    Built-in Yomitan, Hachidori or 10ten, downloaded from their official releases, or the Yomitan
+    in your browser. [Dictionaries](/lookups/dictionaries/)
+  </Card>
+  <Card title="The Log" icon="document">
+    Every line lands in a Log you can scroll back through, with a session and reading stats per
+    game, translation and explanations. [The Log](/log/the-log/)
+  </Card>
+  <Card title="Notebook" icon="pencil">
+    Keep the characters, places and things of a story. Names you add light up in the Log as you
+    read; import a cast from VNDB. [Notebook](/log/notebook/)
+  </Card>
+  <Card title="Anki" icon="add-document">
+    Make cards through AnkiConnect, from the dictionary pop-up. [Anki](/lookups/anki/)
+  </Card>
+  <Card title="Controller and Steam Deck" icon="star">
+    A radial menu and word-by-word reading on a gamepad, including Steam Deck Gaming Mode
+    (experimental). [Controller](/controller/)
+  </Card>
+  <Card title="Texthookers" icon="random">
+    Already hooking text out of a visual novel? Feed Kimochi over WebSocket or the clipboard.
+    [Texthookers and clipboard](/reading/texthookers/)
+  </Card>
+  <Card title="Kimochi Cloud" icon="rocket">
+    Optional: cloud OCR, read aloud, translation, AI explanations and sync between computers.
+    [Accounts and plans](/cloud/)
+  </Card>
+</CardGrid>
+
+## How it fits together
+
+1. **Pick the game.** Choose a window or screen in the sidebar, and add a crop area if you like.
+2. **Scan.** Press **Scan now** (<kbd>⇧⌘8</kbd> on a Mac, <kbd>Ctrl+Shift+8</kbd> elsewhere), or turn on Auto OCR.
+3. **Read.** The text shows up in the Log, and over the game when the overlay is on.
+4. **Look it up.** Hover a word to see its meaning, hear it, save it to Anki, and keep going.
+
+<Screenshot id="sidebar-callouts" alt="The sidebar with callouts: live preview, crop, scan, Auto OCR, the overlay, the OCR engine and the pop-up dictionary." width={558} />
+
+## Where to next
+
+<CardGrid>
+  <LinkCard title="Install" href="/install/" description="macOS, Windows, Linux and Steam Deck." />
+  <LinkCard title="Quick start" href="/quick-start/" description="From a fresh install to your first lookup in a few minutes." />
+  <LinkCard title="Keyboard shortcuts" href="/reference/shortcuts/" description="Every shortcut, in one table." />
+  <LinkCard title="Troubleshooting" href="/help/troubleshooting/" description="Capture permission, the overlay, dictionaries and more." />
+</CardGrid>

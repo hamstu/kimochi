@@ -1,0 +1,49 @@
+---
+title: Looking up words
+description: Look words up in the Log, over the game with the overlay, or word by word with a controller.
+---
+
+import Screenshot from '../../../components/Screenshot.astro'
+
+Wherever Japanese appears, Kimochi's dictionary pop-up is a hover away. The pop-up is the
+[dictionary engine](/lookups/dictionaries/) you chose, so its look, audio and Anki button are that
+engine's.
+
+## In the Log
+
+Hold <kbd>Shift</kbd> and hover a word in any line. The pop-up shows the entry for the longest word
+that starts there, with its reading, definitions and (for most engines) audio and an Anki button.
+
+<Screenshot id="reader-popup" alt="A dictionary pop-up for 世界線 (せかいせん): world line; timeline, alternate reality, from JMdict." width={480} />
+
+## Over the game
+
+With the [overlay](/reading/overlay/) on, hover a word right where it is on screen, with the same
+key held. The word you're on is highlighted and the pop-up opens beside it.
+
+## With a controller
+
+Open the [controller menu](/controller/#the-controller-menu) (click both sticks, or
+<kbd>⇧⌘Space</kbd> / <kbd>Ctrl+Shift+Space</kbd>) and choose **Scan** (scan, then start at
+the first word) or **Read along** (step through the last scan):
+
+| Control | Action |
+| --- | --- |
+| D-pad or left stick ◀ ▶ | Previous / next word |
+| D-pad or left stick ▲ ▼ | Previous / next line (column, for vertical text) |
+| **A** | Look the word up again |
+| **LB** / **RB** | Previous / next definition in the pop-up |
+| Right stick | Scroll the pop-up |
+| **B** | Back to the game |
+
+Words are split the way the dictionary sees them: with Built-in Yomitan, the longest dictionary match
+with deinflection, so 食べられなかった is one stop, not seven. The Yomitan API uses its own tokenizer,
+and Hachidori and 10ten a general word splitter. On the keyboard, the arrows,
+<kbd>Return</kbd> and <kbd>Esc</kbd> do the same while the menu is open.
+
+**Recent text** in the controller menu lists your recent scans; pick one to read its words again.
+
+## Notebook names
+
+Names you keep in the [Notebook](/log/notebook/) are recognised in the Log and shown as chips. Click
+one to see its card: what it is, its nicknames and notes, and **Open in Notebook**.

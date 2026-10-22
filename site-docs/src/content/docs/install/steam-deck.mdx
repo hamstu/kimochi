@@ -1,0 +1,57 @@
+---
+title: Steam Deck
+description: Install Kimochi on a Steam Deck in Desktop Mode, add it to your Steam library, and read alongside your game in Gaming Mode.
+---
+
+import { Steps } from '@astrojs/starlight/components'
+import Screenshot from '../../../components/Screenshot.astro'
+
+Install Kimochi once from Desktop Mode. After that it lives in your Steam library, and you can open
+it in Gaming Mode right alongside your game. Steam Deck support is early, and Gaming Mode is
+experimental.
+
+<Steps>
+
+1. **Switch to Desktop Mode.** Press the **Steam** button, choose **Power**, then **Switch to Desktop**.
+
+2. **Open Konsole.** Open the app launcher in the bottom-left corner, then go to **System** and
+   choose **Konsole**. It's the terminal, where you'll paste one line.
+
+3. **Paste the installer and press Enter.**
+
+   ```sh
+   curl -fsSL https://kimochiapp.com/install.sh | sh
+   ```
+
+   It's easiest if you open this page on the Deck itself. To paste in Konsole, press
+   <kbd>Ctrl+Shift+V</kbd>, or right-click (the left trigger) and choose
+   **Paste**. <kbd>Steam</kbd> + <kbd>X</kbd> brings up the on-screen keyboard. The installer never
+   touches SteamOS's read-only system partition.
+
+4. **Add Kimochi to your Steam library.** Kimochi opens when it's installed. Its welcome guide offers
+   to add it to your Steam library, so it shows up in Gaming Mode with its own artwork. Say yes.
+
+5. **Read in Desktop Mode or in Gaming Mode.** You can keep using Kimochi in Desktop Mode. Or
+   double-click **Return to Gaming Mode** on the desktop and launch Kimochi from your library. It runs
+   alongside your game: click both sticks to open its radial menu.
+
+</Steps>
+
+<Screenshot id="welcome-steam" alt="The welcome guide's Add Kimochi to your Steam library step, showing Kimochi's library artwork and the Add to Steam button." width={640} />
+
+## Adding to Steam later
+
+Kimochi adds itself as a non-Steam game, with its own library artwork. Nothing else in Steam changes,
+and you can remove it from Steam like any other game. If you skipped the step, use
+**Settings → General → Steam library → Add to Steam**. Its artwork appears once Steam restarts, as it
+does when you switch to Gaming Mode.
+
+<Screenshot id="settings-steam" alt="Settings, General page, with the Steam library section and its Add to Steam button." width={720} />
+
+If Steam isn't running, open Steam from the desktop and try again. Or add it yourself: in Steam,
+choose **Add a Game → Add a Non-Steam Game**, tick **Kimochi**, then **Add Selected Programs**.
+
+## Next
+
+- [Gaming Mode](/controller/gaming-mode/): reading with the controller while the game runs.
+- [Controller buttons](/reference/controller-buttons/): every button, in one table.

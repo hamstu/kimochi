@@ -1,0 +1,44 @@
+---
+title: Privacy
+description: What stays on your computer, what each online feature sends and where, and what an account stores.
+---
+
+This page summarises how Kimochi handles your data. The [privacy policy](https://kimochiapp.com/privacy)
+is the full, authoritative version.
+
+Kimochi has **no analytics, telemetry, crash reporting or advertising**, and accounts are optional.
+Most of what it does happens on your computer.
+
+## What stays on your computer
+
+- **Captures** are held in memory while Kimochi reads them, and are not saved to disk or uploaded,
+  except to an online OCR engine you chose.
+- **The Log, sessions, stats and Notebook** are in Kimochi's [data folder](/reference/data/).
+- **Dictionaries** are stored locally, and lookups run locally.
+- **Settings**, including API keys such as your DeepL key.
+
+## What each online feature sends
+
+| Feature | What is sent | Where |
+| --- | --- | --- |
+| **Google Lens** (the default OCR engine) | The captured region | Straight to Google's Lens service; not through Kimochi's servers. |
+| **Kimochi cloud OCR** (signed in) | The captured region | Kimochi's server, then Google Cloud Vision. Not stored; counted towards your month. |
+| **Read aloud** (Kimochi Cloud) | The line's text and voice | Kimochi's server, then ElevenLabs. The audio is cached by a fingerprint of voice and text, not by who asked. |
+| **Translation and explanations** (Kimochi Cloud) | The line, and the lines before it for explanations | Kimochi's server, then DeepL or an AI provider (Anthropic or OpenAI) through Cloudflare AI Gateway, which keeps request logs tagged with your account id. |
+| **Translation with your DeepL key** | The line | DeepL, with your key. |
+| **Explain with Codex CLI or Claude CLI** | The prompt | Whatever that tool on your computer sends. |
+| **Model downloads** (MeikiOCR, Manga OCR) | A download request | Hugging Face and GitHub, the first time you choose the engine. |
+| **Dictionary engine and dictionary downloads** | A download request | The publisher's host, such as GitHub or data.10ten.life. Importing a file uses no network. |
+| **VNDB import** | Your search | VNDB's API. |
+| **Anki** | Cards | AnkiConnect on this computer. |
+| **Clipboard and WebSocket** | — | Stay on your computer or network. |
+
+To keep everything on your computer, choose an on-device OCR engine (Apple Live Text, MeikiOCR, Manga
+OCR or OneOCR) and don't sign in.
+
+## With an account
+
+An account stores your email, display name and sign-in method, your linked apps, monthly usage
+counts, and, with Sync, your preferences (never your API keys or other secrets), presets, reading
+totals and your sessions with their lines, Notebook and captured images. You can download or delete
+your synced data, or delete the account, from [kimochiapp.com/account](https://kimochiapp.com/account).
