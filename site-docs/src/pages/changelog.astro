@@ -16,6 +16,8 @@ const { code } = await processor.render(body)
 <StarlightPage
   frontmatter={{
     title: 'Changelog',
+    // CHANGELOG.md is written by the release flow (RELEASING.md), not edited from here.
+    editUrl: false,
     description: 'What changed in each release of Kimochi, newest first. Unreleased changes are on the nightly build.'
   }}
   headings={[...body.matchAll(/^## (.+)$/gm)].map(([, text]) => ({

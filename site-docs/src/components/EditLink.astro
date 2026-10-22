@@ -1,0 +1,31 @@
+---
+/**
+ * Starlight's edit link, labelled for where it goes: GitHub's editor on the built site, Zed under
+ * `astro dev` (the URL itself comes from editLink.baseUrl in astro.config.mjs).
+ */
+import { Icon } from '@astrojs/starlight/components'
+
+const { editUrl } = Astro.locals.starlightRoute
+const label = import.meta.env.DEV ? 'Edit in Zed' : 'Edit this page on GitHub'
+---
+
+{
+  editUrl && (
+    <a href={editUrl.href} class="sl-flex print:hidden">
+      <Icon name="pencil" size="1.2em" />
+      {label}
+    </a>
+  )
+}
+
+<style>
+  a {
+    gap: 0.5rem;
+    align-items: center;
+    text-decoration: none;
+    color: var(--sl-color-gray-3);
+  }
+  a:hover {
+    color: var(--sl-color-white);
+  }
+</style>

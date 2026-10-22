@@ -8,6 +8,13 @@ const SITE = 'https://docs.kimochiapp.com'
 const MARKETING = 'https://kimochiapp.com'
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 
+// Every page's edit link (src/components/EditLink.astro). Built, it opens the page's source in
+// GitHub's editor, which forks the repository and offers a pull request for anyone who isn't a
+// collaborator. Under `astro dev` it opens the file in Zed (zed://file/<absolute path>), and the
+// dev server reloads the page on save.
+const DEV = process.argv.includes('dev')
+const EDIT_BASE = DEV ? `zed://file${here('.')}` : 'https://github.com/hamstu/kimochi-tauri/edit/main/site-docs/'
+
 export default defineConfig({
   site: SITE,
   trailingSlash: 'ignore',
@@ -32,6 +39,7 @@ export default defineConfig({
       logo: { src: './src/assets/kimochi-icon.svg', alt: 'Kimochi' },
       favicon: '/favicon.svg',
       lastUpdated: false,
+      editLink: { baseUrl: EDIT_BASE },
       pagination: true,
       social: [{ icon: 'github', label: 'Kimochi on GitHub', href: 'https://github.com/hamstu/kimochi-tauri' }],
       customCss: ['./src/styles/theme.css'],
@@ -39,7 +47,8 @@ export default defineConfig({
         SiteTitle: './src/components/SiteTitle.astro',
         Hero: './src/components/Hero.astro',
         Footer: './src/components/Footer.astro',
-        Head: './src/components/Head.astro'
+        Head: './src/components/Head.astro',
+        EditLink: './src/components/EditLink.astro'
       },
       head: [
         { tag: 'link', attrs: { rel: 'icon', href: '/favicon.ico', sizes: '32x32' } },

@@ -49,6 +49,10 @@ site-docs/
   when marked `lang="ja"`.
 - Starlight's components (`Steps`, `Tabs`, `Card`, `LinkCard`, asides `:::note`) are available.
 - Internal links are root-relative with a trailing slash: `[Auto OCR](/reading/auto-ocr/)`.
+- Every page ends with an edit link: **Edit in Zed** in the dev server (opens the `.mdx` in Zed;
+  save and the page reloads), **Edit this page on GitHub** on the built site (GitHub's editor, which
+  forks and opens a pull request for anyone else). The base URLs are `EDIT_BASE` in
+  `astro.config.mjs`; a page opts out with `editUrl: false` in its frontmatter.
 
 ## Screenshots
 
