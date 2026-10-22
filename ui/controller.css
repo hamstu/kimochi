@@ -414,6 +414,134 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+/* What the reader is doing: stepping by word or character, pointing, or in the pop-up. */
+.cm-hud-mode {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--cm-accent);
+  background: rgba(var(--cm-accent-rgb), 0.14);
+  box-shadow: inset 0 0 0 1px rgba(var(--cm-accent-rgb), 0.35);
+  white-space: nowrap;
+}
+.cm-hud-mode[data-mode="popup"] {
+  color: #0b1220;
+  background: var(--cm-accent);
+  box-shadow: none;
+}
+.cm-hud-message:empty {
+  display: none;
+}
+.cm-hud.cm-hud-bump {
+  animation: cm-hud-bump 0.26s ease;
+}
+
+/* The free cursor: a ring with a dot, the way a game draws its own. */
+.cm-free-cursor {
+  position: absolute;
+  pointer-events: none;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--cm-accent);
+  background: radial-gradient(circle, var(--cm-accent) 0 2.5px, rgba(14, 17, 28, 0.35) 3px);
+  box-shadow:
+    0 0 0 1px rgba(14, 17, 28, 0.6),
+    0 0 14px rgba(var(--cm-accent-rgb), 0.7);
+  will-change: transform;
+  animation: cm-fade 0.15s ease-out both;
+}
+.cm-free-cursor.cm-leaving {
+  animation: cm-fade 0.15s ease-in reverse both;
+}
+
+/* Every control, from View: the controller's dark glass, two columns of button and purpose. */
+.cm-sheet {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(720px, 92vw);
+  max-height: 86vh;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 18px 20px 16px;
+  border-radius: 18px;
+  background: rgba(14, 17, 28, 0.94);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: cm-sheet-in 0.24s cubic-bezier(0.16, 1.2, 0.3, 1) both;
+}
+.cm-sheet.cm-leaving {
+  animation: cm-sheet-out 0.18s ease-in both;
+}
+.cm-sheet header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.cm-sheet-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 6px 26px;
+}
+.cm-sheet h3 {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cm-dim);
+}
+.cm-sheet ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cm-sheet li {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.cm-sheet li:first-child {
+  border-top: none;
+}
+.cm-sheet li .cm-glyph {
+  justify-self: start;
+  min-width: 24px;
+  height: 22px;
+  border-radius: 11px;
+  font-size: 11px;
+}
+.cm-sheet li b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cm-sheet li small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--cm-dim);
+}
+.cm-sheet footer {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--cm-dim);
+}
 
 @keyframes cm-in {
   from {
@@ -491,6 +619,26 @@
   from {
     opacity: 0;
     transform: translateX(-50%) translateY(14px) scale(0.96);
+  }
+}
+@keyframes cm-hud-bump {
+  30% {
+    transform: translateX(calc(-50% - 5px));
+  }
+  70% {
+    transform: translateX(calc(-50% + 5px));
+  }
+}
+@keyframes cm-sheet-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+}
+@keyframes cm-sheet-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.98);
   }
 }
 @keyframes cm-hud-out {

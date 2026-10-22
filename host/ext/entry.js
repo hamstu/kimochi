@@ -61,7 +61,7 @@ function install(win) {
   const engineHere = resolveEngine(win)
   const appEngine = ENGINES[engineHere] ? engineHere : null
   // App documents: only the top document of a window, and only for the two extension engines
-  // ('yomitan', 'builtin' and 'custom-api' are the Yomitan shims' to serve).
+  // ('yomitan' and 'builtin' are the Yomitan shims' to serve; 'custom-api' and 'none' need nothing).
   if (!appEngine) return
   if (win !== win.top) return
   if (!['tauri:', 'http:', 'https:'].includes(win.location.protocol)) return

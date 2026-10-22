@@ -25,8 +25,10 @@ export const GAMEPAD_BUTTON_NAMES: string[] = [
   'RB',
   'LT',
   'RT',
-  'Back',
-  'Start',
+  // Delta: View and Menu, as the Steam Deck and Xbox pads print them (and as the overlay's hints
+  // name them, ui/controller-input.js BUTTON_NAMES), so "Back" only ever means the action.
+  'View',
+  'Menu',
   'LS',
   'RS',
   'Up',

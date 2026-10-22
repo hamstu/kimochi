@@ -1,6 +1,5 @@
 /**
- * Controller wiring shared by the main window's sidebar and the tray popover — the two places
- * `RemoteControl` is mounted (in Electron, `OverlayApp.tsx` and `TrayPopoverApp.tsx`).
+ * Controller wiring for the main window's sidebar (in Electron, `RemoteControl` in `OverlayApp.tsx`).
  *
  * In Electron the callbacks ran inside OverlayApp, which owned the session. Here each action is a
  * single `trigger_action` call so that the overlay (which owns capture and OCR orchestration) is
@@ -34,7 +33,7 @@ function normaliseType(type: string | undefined): 'screen' | 'window' {
 }
 
 export interface ControllerWiring {
-  /** Props for `RemoteControl`, exactly as the Electron mounts passed them. */
+  /** The sidebar's state and actions, as Electron's `RemoteControl` took them. */
   props: RemoteControlProps
   /** The backend's current status line. */
   status: string

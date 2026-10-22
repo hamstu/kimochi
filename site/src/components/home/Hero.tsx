@@ -49,7 +49,7 @@ export function Hero() {
           Kimochi
           <HeroVersion />
         </p>
-        <h1 className="mt-5 max-w-[18ch] text-display text-ink">Read your games in Japanese.</h1>
+        <h1 className="mt-5 max-w-[18ch] text-display text-ink">Read and play in Japanese.</h1>
         <p className="mt-6 max-w-[44rem] text-lede text-ink-2">
           Kimochi grabs the Japanese on your screen so it's easy to look up definitions in your
           favorite dictionary, understand the meaning, and make flash cards for Anki.

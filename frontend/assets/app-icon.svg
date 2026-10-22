@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="k-fill" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="1024">
+      <stop offset="0" stop-color="#5a7ce6"/>
+      <stop offset="0.45" stop-color="#3e63dd"/>
+      <stop offset="1" stop-color="#2c4cbf"/>
+    </linearGradient>
+    <linearGradient id="k-sheen" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="563.2">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="k-edge" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="307.2">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="k-glyph" gradientUnits="userSpaceOnUse" x1="0" y1="204.8" x2="0" y2="819.2">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e9edfc"/>
+    </linearGradient>
+    <clipPath id="k-clip"><path d="M352.2 0 L671.8 0 C773.21 0 823.92 0 869.65 15.09 L878.5 17.26 C938.1 38.95 985.05 85.9 1006.74 145.5 C1024 200.08 1024 250.79 1024 352.2 L1024 671.8 C1024 773.21 1024 823.92 1008.91 869.65 L1006.74 878.5 C985.05 938.1 938.1 985.05 878.5 1006.74 C823.92 1024 773.21 1024 671.8 1024 L352.2 1024 C250.79 1024 200.08 1024 154.35 1008.91 L145.5 1006.74 C85.9 985.05 38.95 938.1 17.26 878.5 C0 823.92 0 773.21 0 671.8 L0 352.2 C0 250.79 0 200.08 15.09 154.35 L17.26 145.5 C38.95 85.9 85.9 38.95 145.5 17.26 C200.08 0 250.79 0 352.2 0 Z"/></clipPath>
+    <filter id="k-lift" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8.19" stdDeviation="12.29" flood-color="#1a2c80" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <path d="M352.2 0 L671.8 0 C773.21 0 823.92 0 869.65 15.09 L878.5 17.26 C938.1 38.95 985.05 85.9 1006.74 145.5 C1024 200.08 1024 250.79 1024 352.2 L1024 671.8 C1024 773.21 1024 823.92 1008.91 869.65 L1006.74 878.5 C985.05 938.1 938.1 985.05 878.5 1006.74 C823.92 1024 773.21 1024 671.8 1024 L352.2 1024 C250.79 1024 200.08 1024 154.35 1008.91 L145.5 1006.74 C85.9 985.05 38.95 938.1 17.26 878.5 C0 823.92 0 773.21 0 671.8 L0 352.2 C0 250.79 0 200.08 15.09 154.35 L17.26 145.5 C38.95 85.9 85.9 38.95 145.5 17.26 C200.08 0 250.79 0 352.2 0 Z" fill="url(#k-fill)"/>
+  <g clip-path="url(#k-clip)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#k-sheen)"/>
+    <path d="M352.2 0 L671.8 0 C773.21 0 823.92 0 869.65 15.09 L878.5 17.26 C938.1 38.95 985.05 85.9 1006.74 145.5 C1024 200.08 1024 250.79 1024 352.2 L1024 671.8 C1024 773.21 1024 823.92 1008.91 869.65 L1006.74 878.5 C985.05 938.1 938.1 985.05 878.5 1006.74 C823.92 1024 773.21 1024 671.8 1024 L352.2 1024 C250.79 1024 200.08 1024 154.35 1008.91 L145.5 1006.74 C85.9 985.05 38.95 938.1 17.26 878.5 C0 823.92 0 773.21 0 671.8 L0 352.2 C0 250.79 0 200.08 15.09 154.35 L17.26 145.5 C38.95 85.9 85.9 38.95 145.5 17.26 C200.08 0 250.79 0 352.2 0 Z" fill="none" stroke="url(#k-edge)" stroke-width="6.14"/>
+  </g>
+  <path d="M168.96 286.72V168.96H286.72 M737.28 168.96H855.04V286.72 M855.04 737.28V855.04H737.28 M286.72 855.04H168.96V737.28" stroke-width="47.1" stroke-opacity="0.82" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="#fff" filter="url(#k-lift)"/>
+  <path transform="translate(266.7 705.55) scale(0.49134099999999997)" d="M358 -641L219 -620C149 -609 116 -605 72 -604L99 -433C140 -444 163 -448 248 -461L386 -483L409 -357L218 -327C158 -317 116 -313 75 -311L102 -141C165 -157 170 -158 239 -169L437 -200L463 -56C477 20 481 49 481 83L671 52C659 14 657 4 641 -82L613 -227L802 -256C886 -268 886 -268 943 -274L913 -443C871 -430 838 -423 769 -412L584 -384L560 -510L716 -534C824 -550 824 -550 858 -553L830 -721C786 -708 758 -703 687 -692L531 -668L520 -723C512 -769 507 -803 506 -834L322 -806C332 -777 337 -756 348 -693Z" fill="url(#k-glyph)" filter="url(#k-lift)"/>
+</svg>

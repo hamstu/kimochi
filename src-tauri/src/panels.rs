@@ -131,19 +131,6 @@ pub static PANELS: &[PanelSpec] = &[
         )
     },
     PanelSpec {
-        resizable: false,
-        // The width is also what `tray.rs` centres under the tray icon, so the minimum must
-        // not exceed it or the popover sits off-centre.
-        min_width: 280.,
-        ..panel(
-            "tray-popover",
-            "Kimochi",
-            "app/tray-popover.html",
-            280.,
-            460.,
-        )
-    },
-    PanelSpec {
         // The active dictionary engine's own distributed options page (Yomitan's
         // `/settings.html`, Hachidori's `settings.html`, 10ten's `options.html` on their
         // own origins), in its own native window like Electron's `createYomitanWindow`,
@@ -723,7 +710,10 @@ fn apply(
 ) -> Result<Value, String> {
     let native_err = |e: tauri::Error| format!("native: {e}");
     match action {
-        "mini" | "expand" if label == MAIN => crate::compact::set(window, action == "mini")?,
+        "mini" | "expand" if label == MAIN => {
+            crate::compact::set(window, action == "mini")?;
+            crate::tray::sync_mini(app);
+        }
         "pin" | "unpin" if label == MAIN && crate::compact::active() => {},
         #[cfg(target_os = "linux")]
         "hide" if platform::gamescope::handles(window) => platform::gamescope::hide(window)?,
@@ -871,7 +861,7 @@ fn centred(width: f64, height: f64, area: Rect) -> Rect {
     }
 }
 
-/// A fixed-size panel (the tray popover) grows to fit its rows.
+/// A fixed-size panel grows to fit its rows.
 fn set_content_height(
     turn: &MainTurn,
     app: &tauri::AppHandle,
@@ -997,7 +987,7 @@ mod tests {
         assert_eq!((welcome.width, welcome.height), (720., 620.));
         assert_eq!((welcome.min_width, welcome.min_height), (600., 520.));
         assert!(spec(DICTIONARY).unwrap().centred);
-        for label in ["log", "settings", "diagnostics", "tray-popover"] {
+        for label in ["log", "settings", "diagnostics"] {
             assert!(!spec(label).unwrap().centred, "{label} keeps its saved place");
         }
     }
@@ -1018,7 +1008,7 @@ mod tests {
 
     #[test]
     fn retired_windows_are_gone() {
-        for label in ["controller", "notebook", "capture", "debug", "stream"] {
+        for label in ["controller", "notebook", "capture", "debug", "stream", "tray-popover"] {
             assert!(
                 spec(label).is_none(),
                 "{label} should be part of another window"
@@ -1027,10 +1017,9 @@ mod tests {
     }
 
     #[test]
-    fn tray_and_linux_controller_hosts_are_fixed_size() {
+    fn only_the_linux_controller_host_is_fixed_size() {
         for spec in PANELS {
-            let expected = !matches!(spec.label, "tray-popover")
-                && !(cfg!(target_os = "linux") && spec.label == "controller-host");
+            let expected = !(cfg!(target_os = "linux") && spec.label == "controller-host");
             assert_eq!(spec.resizable, expected, "{} resizable", spec.label);
         }
     }

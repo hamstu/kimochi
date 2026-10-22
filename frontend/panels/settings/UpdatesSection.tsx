@@ -1,5 +1,5 @@
 /**
- * Settings → General → Updates: the running version, when it was last checked, and Check for
+ * Settings → About → Updates: the running version, when it was last checked, and Check for
  * updates. When one is offered the same row carries the download (the bar, the bytes, Cancel),
  * then "Restart to update"; it is the same status as the sidebar's notice, so a download started
  * there shows here and the other way round. "What's new" opens the release history in a dialog

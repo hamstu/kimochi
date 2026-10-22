@@ -4,6 +4,8 @@
  * scan scope, the popup's rectangle, and driving a lookup without a mouse.
  */
 
+import { createPopupFocus, HACHIDORI_FOCUS } from '../../ui/popup-focus.js'
+
 /** `contentCss` as links and `contentScripts` as classic scripts, in manifest order, one at a time. */
 export async function injectContentScripts(win, { origin, descriptor, report }) {
   const doc = win.document
@@ -216,6 +218,32 @@ function scroller(win, descriptor) {
   return best?.element ?? null
 }
 
+/** The deepest open popup level: the last visible part (`descriptor.popupParts`). */
+function popupLevel(win, descriptor) {
+  const host = win.document.querySelector(descriptor.popupSelector)
+  const root = host?.shadowRoot ?? host
+  if (!root) return null
+  const parts = [...root.querySelectorAll(descriptor.popupParts)]
+  return parts[parts.length - 1] ?? null
+}
+
+/**
+ * 10ten's dictionary tabs (popup/tabs.ts: `.tab-bar .tabs > li.tab`, the selected one
+ * `aria-selected`, each a button that switches to its dictionary): the one `step` tabs from the
+ * selected one, wrapping, clicked. Its `nextDictionary` keys only go forwards. False without tabs.
+ */
+function stepTenTenTab(win, descriptor, step) {
+  const host = win.document.querySelector(descriptor.popupSelector)
+  const tabs = [...(host?.shadowRoot?.querySelectorAll('.tab-bar .tabs > .tab') ?? [])].filter(
+    (tab) => !tab.classList.contains('disabled') && tab.querySelector('button, a')
+  )
+  if (tabs.length < 2) return false
+  const selected = tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true')
+  const next = tabs[(Math.max(0, selected) + step + tabs.length) % tabs.length]
+  next.querySelector('button, a').click()
+  return true
+}
+
 function keydown(win, key, code) {
   win.dispatchEvent(new win.KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true }))
   win.dispatchEvent(new win.KeyboardEvent('keyup', { key, code, bubbles: true, cancelable: true }))
@@ -237,6 +265,31 @@ export function dispatchPointer(win, descriptor, target, x, y, expando = {}) {
   }
 }
 
+/**
+ * Run `fn` with `element` and its ancestors that are at opacity 0 made all but invisible
+ * instead (0.001), then put them back. 10ten finds the text to look up as the pointer event
+ * arrives and drops it when `checkVisibility({checkOpacity: true})` says it is not shown
+ * (10ten-ja-content.js `isVisible`), and the overlay holds its text at opacity 0 while the
+ * controller reads, drawing its own outline instead. Only for the event: Yomitan's scanner
+ * relies on opacity 0 to end a lookup at a box's edge, so it is never left changed.
+ */
+export function withTextShown(win, element, fn) {
+  const changed = []
+  for (let at = element; at && at.nodeType === 1; at = at.parentElement) {
+    if (win.getComputedStyle(at).opacity !== '0') continue
+    changed.push([at, at.style.getPropertyValue('opacity'), at.style.getPropertyPriority('opacity')])
+    at.style.setProperty('opacity', '0.001', 'important')
+  }
+  try {
+    return fn()
+  } finally {
+    for (const [at, value, priority] of changed.reverse()) {
+      if (value) at.style.setProperty('opacity', value, priority)
+      else at.style.removeProperty('opacity')
+    }
+  }
+}
+
 /** A press and release away from the popup, which both extensions read as "dismiss". */
 function clickAway(win, descriptor) {
   const rect = popupRect(win, descriptor)
@@ -254,6 +307,15 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
   const engine = descriptor.id
   const command = (action) => context.deliverLocal(readerCommand(action), backgroundSender())
   const visible = () => popupRect(win, descriptor) !== null
+  // The controller's focus on the popup's buttons: Hachidori's; 10ten's popup has none to press.
+  const focus =
+    engine === 'hachidori'
+      ? createPopupFocus({
+          root: () => (visible() ? popupLevel(win, descriptor) : null),
+          spec: HACHIDORI_FOCUS,
+          scroller: () => scroller(win, descriptor)
+        })
+      : null
   // The selection a Hachidori lookup left behind (see `dismiss`).
   let ownSelection = null
   const sameRange = (a, b) =>
@@ -301,6 +363,8 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
 
   return {
     visible,
+    /** Whether the controller can focus the popup's buttons (Hachidori's; 10ten has none). */
+    focusable: Boolean(focus),
     /**
      * The text the open popup's lookup matched, as the engine marks it on the page
      * (`descriptor.matchHighlights`, else the selection when `matchSelection`): the start of its
@@ -360,10 +424,15 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
       }
       const start = range.startContainer
       const target = (start.nodeType === 1 ? start : start.parentElement) ?? win.document.body
-      dispatchPointer(win, descriptor, target, x, y, { fromPuck: true })
+      withTextShown(win, target, () => dispatchPointer(win, descriptor, target, x, y, { fromPuck: true }))
       return true
     },
-    popupControl({ scroll, step } = {}) {
+    /**
+     * The controller in the popup: `scroll` points, `step` entries (10ten: dictionary tabs), and
+     * `focus`, its buttons (see ui/popup-focus.js): 'enter', 'exit', 'refocus', a direction,
+     * 'press' or 'audio'. Returns whether a `focus` request did anything.
+     */
+    popupControl({ scroll, step, focus: request } = {}) {
       if (typeof scroll === 'number' && scroll !== 0) {
         const element = scroller(win, descriptor)
         if (element) element.scrollBy({ top: scroll, behavior: 'auto' })
@@ -371,10 +440,20 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
       }
       if (step === 1 || step === -1) {
         if (engine === 'hachidori') void command(step === 1 ? 'nextEntry' : 'previousEntry')
-        // 10ten has no entry cursor; its step is the next dictionary tab (words → kanji →
-        // names), the `nextDictionary` keys (default Shift / Enter; content.ts `handleKey`).
-        else keydown(win, 'Enter', 'Enter')
+        // 10ten has no entry cursor; its step is the next or previous dictionary tab (words →
+        // kanji → names). Without tabs, the `nextDictionary` keys (default Shift / Enter;
+        // content.ts `handleKey`), which only go forwards.
+        else if (!stepTenTenTab(win, descriptor, step)) keydown(win, 'Enter', 'Enter')
       }
+      if (!request) return false
+      if (!focus) return false
+      if (request === 'enter') return focus.enter()
+      if (request === 'exit') return (focus.exit(), true)
+      if (request === 'refocus') return focus.refocus()
+      if (request === 'press') return focus.press()
+      if (request === 'audio') return focus.playAudio()
+      if (request === 'available') return focus.available()
+      return focus.move(request)
     },
     async dismiss() {
       if (engine === 'hachidori') {

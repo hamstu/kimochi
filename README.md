@@ -4,7 +4,7 @@
 
 <h1 align="center">Kimochi</h1>
 
-<p align="center">Read your games in Japanese: on-screen OCR, pop-up dictionaries and a reading log, beside any game or visual novel.</p>
+<p align="center">Read and play in Japanese: on-screen OCR, pop-up dictionaries and a reading log, beside any game or visual novel.</p>
 
 <p align="center">
   <a href="https://github.com/hamstu/kimochi-tauri/releases/latest"><img src="https://img.shields.io/github/v/release/hamstu/kimochi-tauri?sort=semver&label=release" alt="Latest release"></a>

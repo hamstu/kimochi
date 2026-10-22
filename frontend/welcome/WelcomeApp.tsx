@@ -2,7 +2,7 @@
  * The onboarding window: Kimochi's own panel chrome (the same title bar as the main window), one
  * step at a time above a persistent action bar.
  *
- *   intro → capture (Screen Recording permission, or the system picker) → Accessibility (macOS)
+ *   intro → Screen Recording permission (macOS) → Accessibility (macOS)
  *   → OCR engine → dictionary engine (choose + download) → that engine's setup
  *   → Steam library (a Steam Deck / SteamOS in Desktop Mode) → done
  *
@@ -18,8 +18,7 @@ import {
   accessibilityStatus,
   onEvent,
   openScreenCapturePreferences,
-  requestAccessibility,
-  useSystemPick
+  requestAccessibility
 } from '../bridge/tauri'
 import type { PanelStateEvent } from '../bridge/types'
 import { useCapabilities } from '../bridge/capabilities'
@@ -28,11 +27,11 @@ import { useDictionaryEngine } from '../bridge/dictionaryEngine'
 import { offersSteamStep, useSteamLibrary } from '../bridge/steamLibrary'
 import DictionarySettingsPanel from '../panels/DictionarySettingsPanel'
 import { EngineChooser } from '../panels/settings/EngineChooser'
-import { SystemPickerButton } from '../main/SourceGrid'
 import macOSScreenPerms from './assets/howto-screen-macos.png'
 import DictionarySetup, { DictionaryPractice } from './DictionarySetup'
 import EngineSetup from './EngineSetup'
 import IntroStep from './IntroStep'
+import { AccessibilityWhy, ScreenRecordingWhy } from './PermissionWhy'
 import SteamLibraryStep from './SteamLibraryStep'
 import { STEAM_ROUTE } from './steamRoute'
 import KimochiLogo from '../components/KimochiLogo'
@@ -56,7 +55,6 @@ type StepId =
 const STEP_OF: Record<string, StepId> = {
   '/': 'intro',
   '/screen-recording-permission': 'capture',
-  '/system-picker': 'capture',
   '/accessibility': 'accessibility',
   '/ocr': 'ocr',
   '/engine': 'engine',
@@ -68,12 +66,13 @@ const STEP_OF: Record<string, StepId> = {
 }
 
 /**
- * Whether the dictionary the setting names can be used: its download (the Yomitan API needs
- * Built-in Yomitan's) is ready. Null until native answers (and on a backend without engine downloads).
+ * Whether the dictionary the setting names can be used: its download is ready (the Yomitan API
+ * has none). Null until native answers (and on a backend without engine downloads).
  */
 function useDictionaryReady(): boolean | null {
   const [engine] = useDictionaryEngine()
-  const status = useExtensionStatus(engine === 'custom-api' ? 'yomitan' : engine)
+  const status = useExtensionStatus(engine === 'custom-api' ? null : engine)
+  if (engine === 'custom-api') return true
   return status ? status.state === 'ready' : null
 }
 
@@ -113,13 +112,9 @@ function useFlow(pathname: string): {
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
   const dictionaryReady = useDictionaryReady()
   const steam = useSteamLibrary().offered
-  const captureRoute = gaming
-    ? null
-    : captureStep === 'permission'
-      ? '/screen-recording-permission'
-      : captureStep === 'picker'
-        ? '/system-picker'
-        : null
+  // Only a permission needs a step: where the system asks what to share (a portal picker), the
+  // source is chosen from the sidebar once the app is open.
+  const captureRoute = !gaming && captureStep === 'permission' ? '/screen-recording-permission' : null
   const current = STEP_OF[pathname]
   const accessibilityRoute = !gaming && accessibility === 'needed' ? '/accessibility' : null
   const steps: StepId[] = [
@@ -134,7 +129,6 @@ function useFlow(pathname: string): {
   ]
   const BACK: Record<string, string> = {
     '/screen-recording-permission': '/',
-    '/system-picker': '/',
     '/accessibility': captureRoute ?? '/',
     '/ocr': accessibilityRoute ?? captureRoute ?? '/',
     '/engine': '/ocr',
@@ -158,22 +152,22 @@ function ScreenPermissionScreen({ next }: { next: string }): JSX.Element {
       title="Allow screen recording"
       lede={
         <>
-          Kimochi reads Japanese by capturing the window you choose. Turn Kimochi on in System
-          Settings → Privacy &amp; Security → Screen &amp; System Audio Recording.
-          {restartAfterGrant && ' macOS may ask you to reopen Kimochi afterwards.'}
+          Kimochi reads the text in your game’s window. Turn Kimochi on in Screen &amp; System
+          Audio Recording.
+          <ScreenRecordingWhy restartAfterGrant={restartAfterGrant} />
         </>
       }
     >
       <img
         className={style.screenshot}
         src={macOSScreenPerms}
-        alt="System Settings, Screen & System Audio Recording, with the switch beside Kimochi"
+        alt="System Settings, with the switch beside Kimochi"
         width={828}
         height={582}
       />
       <p className={style.status} role="status">
         <StatusDot tone={hasPermission ? 'ok' : 'warn'} />
-        {hasPermission ? 'Screen recording is allowed.' : 'Not allowed yet. This updates on its own.'}
+        {hasPermission ? 'Screen recording is allowed.' : 'Not allowed yet.'}
       </p>
       <StepActions>
         {hasPermission ? (
@@ -208,16 +202,23 @@ function AccessibilityScreen(): JSX.Element {
       title="Allow Accessibility"
       lede={
         <>
-          With Accessibility, clicking your source in Kimochi brings that exact window to the
-          front, even a game in full screen on a Space of its own. Kimochi uses it only to find
-          and bring forward the window you read from. Turn Kimochi on in System Settings →
-          Privacy &amp; Security → Accessibility.
+          Lets Kimochi bring your game’s exact window to the front, even in full screen. Turn
+          Kimochi on in Accessibility.
+          <AccessibilityWhy />
         </>
       }
     >
+      {/* The same System Settings list as Screen Recording's, so the same picture. */}
+      <img
+        className={style.screenshot}
+        src={macOSScreenPerms}
+        alt="System Settings, with the switch beside Kimochi"
+        width={828}
+        height={582}
+      />
       <p className={style.status} role="status">
         <StatusDot tone={granted ? 'ok' : 'warn'} />
-        {granted ? 'Accessibility is allowed.' : 'Not allowed yet. This updates on its own.'}
+        {granted ? 'Accessibility is allowed.' : 'Not allowed yet.'}
       </p>
       <StepActions>
         {granted ? (
@@ -235,36 +236,6 @@ function AccessibilityScreen(): JSX.Element {
             </Button>
           </>
         )}
-      </StepActions>
-    </Step>
-  )
-}
-
-/**
- * Where the system asks what to share (a portal picker): nothing to grant up front, but the
- * screen or window can be chosen here already, through the same button the sidebar offers.
- */
-function SystemPickerScreen(): JSX.Element {
-  const { picked } = useSystemPick()
-  const pickedName = picked ? picked.app || picked.name || 'your screen' : null
-  return (
-    <Step
-      title="Choose what to read"
-      lede={
-        pickedName
-          ? `Kimochi will read ${pickedName}. You can choose again at any time from the sidebar's Change source menu.`
-          : 'Your desktop asks you to confirm the screen or window Kimochi may capture. Choose the game or app you want to read now, or later from the sidebar.'
-      }
-    >
-      {!picked && (
-        <div className={style.block}>
-          <SystemPickerButton />
-        </div>
-      )}
-      <StepActions>
-        <Button variant={picked ? 'primary' : 'secondary'} asChild>
-          <Link to="/ocr">{picked ? 'Continue' : 'Choose later'}</Link>
-        </Button>
       </StepActions>
     </Step>
   )
@@ -479,7 +450,8 @@ export default function WelcomeApp(): JSX.Element {
               <Route index element={<IntroStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />} />
               <Route path="/screen-recording-permission" element={<ScreenPermissionScreen next={afterCapture} />} />
               <Route path="/accessibility" element={<AccessibilityScreen />} />
-              <Route path="/system-picker" element={<SystemPickerScreen />} />
+              {/* The system picker step is gone: a reload there carries on to the OCR step. */}
+              <Route path="/system-picker" element={<Navigate to="/ocr" replace />} />
               <Route path="/ocr" element={<OcrScreen />} />
               <Route path="/engine" element={<EngineSetup />} />
               <Route path="/dictionaries" element={<DictionarySetup />} />

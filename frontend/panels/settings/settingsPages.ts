@@ -16,7 +16,8 @@ const LOADERS: Record<SettingsTabName, () => PageModule> = {
   dictionary: () => import('./DictionaryTab').then((m) => ({ default: m.DictionaryTab })),
   assist: () => import('./AssistTab').then((m) => ({ default: m.AssistTab })),
   controls: () => import('./ControlsTab').then((m) => ({ default: m.ControlsTab })),
-  account: () => import('./AccountTab').then((m) => ({ default: m.AccountTab }))
+  account: () => import('./AccountTab').then((m) => ({ default: m.AccountTab })),
+  about: () => import('./AboutTab').then((m) => ({ default: m.AboutTab }))
 }
 
 // One request per page, shared by `lazy` and the preloads; and the pages that have arrived.

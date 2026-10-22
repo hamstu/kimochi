@@ -5,13 +5,11 @@
  */
 import { type ReactNode } from 'react'
 import {
-  Badge,
   Select,
   SettingsPage,
   SettingsRow,
   SettingsSection,
   SettingsSubgroup,
-  Slider,
   Switch
 } from '@kit'
 import { DEFAULT_AUTO_OCR_SETTINGS } from '../../../ui/autoscan'
@@ -23,6 +21,7 @@ import type {
 import { useSetting } from '../../bridge/useSetting'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { EngineChooser } from './EngineChooser'
+import { SmallTextFilter } from './SmallTextFilter'
 
 const SCAN_DELAYS = [
   { value: '100', label: '100 ms' },
@@ -81,7 +80,6 @@ export function OcrTab(): ReactNode {
     DEFAULT_AUTO_OCR_SETTINGS
   )
   const filterSmallText = textOverlayGrouping.filterSmallText ?? true
-  const threshold = Math.round((textOverlayGrouping.filterSmallTextThreshold ?? 0.75) * 100)
 
   const updateAutoOCR = (patch: Partial<AutoOCRSettings>): void =>
     void setAutoOCRSettings({ ...autoOCRSettings, ...patch })
@@ -98,7 +96,6 @@ export function OcrTab(): ReactNode {
       <SettingsSection title="Overlay">
         <SettingsRow
           label="Overlay mode"
-          badge={<Badge tone="warn">Experimental</Badge>}
           controlId="ocr-live-overlay"
           description="Hover scanned text in your game to see its definition. Look for the faint blue underlines."
         >
@@ -111,7 +108,7 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Group text into regions"
           controlId="ocr-grouping"
-          description="Gives nearby text boxes a shared background. Useful for complex layouts."
+          description="Gives nearby text boxes a shared background."
         >
           <Switch
             id="ocr-grouping"
@@ -119,44 +116,16 @@ export function OcrTab(): ReactNode {
             onCheckedChange={(enabled) => void setTextOverlayGrouping({ ...textOverlayGrouping, enabled })}
           />
         </SettingsRow>
-        <SettingsRow
-          label="Filter out furigana and small text"
-          controlId="ocr-filter-small"
-          description="Removes text much smaller than the main text, such as reading aids above kanji."
-        >
-          <Switch
-            id="ocr-filter-small"
-            checked={filterSmallText}
-            onCheckedChange={(checked) =>
-              void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallText: checked })
-            }
-          />
-        </SettingsRow>
-        {filterSmallText && (
-          <SettingsSubgroup>
-            <SettingsRow
-              label="Size threshold"
-              description={`Text under ${threshold}% of the median height is removed. Lower values filter more aggressively.`}
-            >
-              <div className="settings-slider">
-                <Slider
-                  aria-label="Size threshold"
-                  value={[threshold]}
-                  onValueChange={(values) =>
-                    void setTextOverlayGrouping({
-                      ...textOverlayGrouping,
-                      filterSmallTextThreshold: values[0] / 100
-                    })
-                  }
-                  min={50}
-                  max={95}
-                  step={5}
-                />
-                <span className="settings-slider-value k-num">{threshold}%</span>
-              </div>
-            </SettingsRow>
-          </SettingsSubgroup>
-        )}
+        <SmallTextFilter
+          enabled={filterSmallText}
+          threshold={textOverlayGrouping.filterSmallTextThreshold ?? 0.75}
+          onEnabledChange={(checked) =>
+            void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallText: checked })
+          }
+          onThresholdChange={(value) =>
+            void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
+          }
+        />
       </SettingsSection>
 
       <SettingsSection title="Auto-scan">

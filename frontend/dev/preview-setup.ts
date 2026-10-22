@@ -25,6 +25,8 @@
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
  *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
  *                    linux the source menu offers "Choose in system picker" (`capture_pick_source`)
+ *   ?session=gamescope  Linux in the Steam Deck's Gaming Mode: the source grid lists Gamescope's
+ *                    apps with previews (implies ?platform=linux)
  *   ?account=<state> the Kimochi account (preview-account.ts): signedout (default), linking,
  *                    signedin, full, suspended, multi (two accounts), local (an account on this
  *                    computer, Local in use); Settings → Account (?tab=account). Signed in
@@ -39,7 +41,7 @@
  *                    paused, failed, verifying, ready
  *   ?model=<state>   OCR model downloads (preview-models.ts)
  *   ?update=<state>  self-updates (preview-updates.ts): none (default), idle, checking, available,
- *                    downloading, ready, failed; the sidebar notice and Settings → General → Updates
+ *                    downloading, ready, failed; the sidebar notice and Settings → About → Updates
  *   ?whatsnew=1      main window: What's new open on load (the sample changelog in preview-updates.ts;
  *                    add ?update=available for the offered release's notes on top)
  *   ?whatsnew=update main window: the first launch after an update (`lastSeenVersion` is an older
@@ -49,9 +51,9 @@
  *   ?popover=message  show what the parent frame posts instead of the sample (`listenForPopover`)
  *
  * Onboarding (welcome.html):
- *   ?step=intro|permission|accessibility|picker|ocr|engine|dictionaries|dictionary-settings|steam|done|error
+ *   ?step=intro|permission|accessibility|ocr|engine|dictionaries|dictionary-settings|steam|done|error
  *                    open that step (error: the last step's save failed). Every step stays
- *                    navigable from there; ?platform=linux makes the capture step the picker
+ *                    navigable from there
  *   ?permission=denied  macOS Screen Recording not granted yet (default: granted)
  *   ?accessibility=denied  macOS Accessibility not granted yet (default: granted; `none` for
  *                          a platform without it)
@@ -65,8 +67,11 @@
  *                    official, unknown, kimochi, broken, host, ready, fail; for the wizard in
  *                    onboarding and in Settings → Dictionary (?tab=dictionary&popup=custom-api)
  *   ?dict=fail|none|installed  Jitendex quick setup fails while importing, or Yomitan's backend is not
- *                    reachable, or dictionaries are set up already (default: Set up Jitendex
+ *                    reachable, or dictionaries are set up already (default: Install Jitendex
  *                    runs through every stage in about 6 s)
+ *   (In the UI studio, `npm run studio`, the JSON it edits also reaches the page: `settings` is
+ *   merged over the store above and `popover` replaces the reader pop-up's sample; see
+ *   frontend/dev/studio/bridge.ts.)
  *   ?embed=1         embedded in the marketing site's live demo (vite.demo.config.ts builds this page
  *                    into site/public/demo/): the lines the site's game plays are left out of the
  *                    seeded log, the page never moves focus until clicked and never scrolls its
@@ -95,15 +100,15 @@ import { UPDATE_HANDLERS } from './preview-updates'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
 import { STEAM_HANDLERS } from './preview-steam'
+import { studioJson } from './studio/bridge'
 
-export type PreviewPage = 'panel' | 'reader-popup' | 'welcome' | 'tray-popover'
+export type PreviewPage = 'panel' | 'reader-popup' | 'welcome'
 
 const params = new URLSearchParams(location.search)
 
 const PAGE_LABELS: Record<Exclude<PreviewPage, 'panel'>, string> = {
   'reader-popup': 'reader-popup',
-  welcome: 'welcome',
-  'tray-popover': 'tray-popover'
+  welcome: 'welcome'
 }
 
 const EMBED = params.get('embed') === '1'
@@ -176,7 +181,9 @@ const settings: Record<string, unknown> = {
   ...(params.get('scale') ? { interfaceScale: params.get('scale') } : {}),
   // The marketing demo reads as the app does on a desktop: MeikiOCR (what its Log lines say they
   // were read with) and the overlay on.
-  ...(params.get('embed') === '1' ? { ocrMode: 'meikiocr', liveOverlayEnabled: true } : {})
+  ...(params.get('embed') === '1' ? { ocrMode: 'meikiocr', liveOverlayEnabled: true } : {}),
+  // In the UI studio (frontend/dev/studio/): any stored setting, edited there as JSON.
+  ...studioJson<Record<string, unknown>>('settings')
 }
 ;(globalThis as Record<string, unknown>).__previewSettings = settings
 
@@ -199,7 +206,9 @@ function previewCapabilities(): PlatformCapabilities {
     },
     ownPids: [4242]
   }
-  const platform = params.get('platform')
+  // Gamescope is the Steam Deck's Gaming Mode, so a Linux session.
+  const gamescope = params.get('session') === 'gamescope'
+  const platform = gamescope ? 'linux' : params.get('platform')
   if (platform === 'windows') {
     return {
       ...mac,
@@ -245,6 +254,21 @@ function previewCapabilities(): PlatformCapabilities {
         excludesOwnWindows: false
       },
       sources: { catalog: false, thumbnails: false, icons: false, followWindowBounds: false, foregroundTracking: false },
+      // Gamescope lists its apps itself, with previews, and needs no portal picker.
+      ...(gamescope
+        ? {
+            session: { backend: 'x11', compositor: 'gamescope', layerShell: false },
+            capture: {
+              authorization: 'notRequired',
+              canOpenSettings: false,
+              restartAfterGrant: false,
+              pickerRequired: false,
+              windowCapture: true,
+              excludesOwnWindows: true
+            },
+            sources: { catalog: true, thumbnails: true, icons: true, followWindowBounds: false, foregroundTracking: true }
+          }
+        : {}),
       overlay: { passive: false, inputRegions: 'wholeWindowOnly', nonActivating: false, nativeHoverWorkaround: false },
       input: { globalShortcuts: false },
       ocrEngines: {
@@ -394,7 +418,7 @@ function panelInfo(label: string): Record<string, unknown> {
     scale: devicePixelRatio,
     pinned: label === 'log' || label === 'welcome',
     focused: true,
-    resizable: label !== 'tray-popover'
+    resizable: true
   }
 }
 
@@ -760,7 +784,7 @@ const HANDLERS: Record<string, Handler> = {
     setTimeout(() => {
       const dark = matchMedia('(prefers-color-scheme: dark)').matches
       void emit('popover:theme', dark ? 'dark' : 'light')
-      void emit('popover:show', POPOVER_SAMPLE)
+      void emit('popover:show', studioJson('popover') ?? POPOVER_SAMPLE)
     }, 0)
     return null
   },
@@ -1131,7 +1155,6 @@ const WELCOME_ROUTES: Record<string, string> = {
   intro: '/',
   permission: '/screen-recording-permission',
   accessibility: '/accessibility',
-  picker: '/system-picker',
   ocr: '/ocr',
   engine: '/engine',
   dictionaries: '/dictionaries',

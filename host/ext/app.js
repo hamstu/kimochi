@@ -15,7 +15,7 @@ import { Router, connectRelay, localUpstream, serveRelay } from './links.js'
 import { createNetworkServer, guardPageFetch } from './network.js'
 import { installGlobals } from './frame.js'
 import { describe, extensionOrigin, originOf, randomId, sleep, tabIdFor, within } from './util.js'
-import { watchReadiness } from './readiness.js'
+import { canLookUp, watchReadiness } from './readiness.js'
 
 const START_TIMEOUT_MS = 120000
 /** Windows whose own document runs content scripts and therefore gets `chrome` at document start. */
@@ -80,7 +80,7 @@ export function installApp(win, { engine, descriptor }) {
   let lookupReady = false
   const scopeState = { enabled: false, scope: null, lastTarget: null }
   const applyReadiness = (status) => {
-    lookupReady = status?.phase === 'ready'
+    lookupReady = canLookUp(status)
     scopeState.enabled = requestedEnabled && lookupReady
     if (!scopeState.enabled && driver?.visible()) void driver.dismiss()
   }
@@ -305,7 +305,8 @@ export function installApp(win, { engine, descriptor }) {
     }
   }
   api.matchedRange = () => driver?.matched() ?? null
-  api.popupControl = (control) => driver?.popupControl(control ?? {})
+  api.popupControl = (control) => driver?.popupControl(control ?? {}) ?? false
+  api.popupFocusable = () => Boolean(driver?.focusable)
   api.dismiss = () => void driver?.dismiss()
   api.openOptionsPage = () => {
     const url = `${origin}/${descriptor.optionsPage}`

@@ -11,6 +11,11 @@
  * The automatic loop can fail on every tick (an engine that is down stays down), so its errors
  * ring at most once per `AUTO_ERROR_INTERVAL_MS`, counted from the last error sound of either
  * kind. A scan the reader asked for always answers.
+ *
+ * Playback is Web Audio (`createBufferPlayer`): every sound is decoded once per window, ahead of
+ * its first use, and starts at its first audible sample, so it lands with the press rather than
+ * a beat after. An `<audio>` element goes through the media pipeline on every play, which is
+ * audibly late; it remains the fallback until the buffers are ready or where Web Audio is absent.
  */
 import type { ActivityPost } from './activity.js'
 
@@ -111,6 +116,8 @@ export function createSoundPlayer({
   now = Date.now
 }: SoundPlayerOptions): SoundPlayer {
   let lastErrorAt: number | null = null
+  // Decoded now, so the first sound already plays from a buffer.
+  if (play === playAudio) preloadSounds()
   return (name, { auto = false } = {}) => {
     // Anything but an explicit `false` is on: the default, and a store that predates the key.
     if (!name || enabled() === false) return false
@@ -257,21 +264,23 @@ function opensOnKey(facts: ControlFacts, key: string): boolean {
 }
 
 /**
- * The sound a press (pointer down, or a key) calls for, before any click. Only closed menu and
- * select triggers sound here: they open on the press, and the open menu then takes the pointer,
- * so their click never comes. Everything else waits for its click.
+ * The sound a press (pointer down, or a key) calls for, before any click. A pointer press sounds
+ * every control at once, as a physical button does, instead of a beat later when it is released.
+ * A key sounds only a closed menu or select trigger that opens on it (the open menu takes the
+ * keys, so no click comes); other keys wait for the click they make.
  */
 export function pressSound(facts: ControlFacts | null, key?: string): SoundName | null {
+  if (key === undefined) return controlSound(facts)
   if (!facts?.popup || facts.expanded) return null
-  if (key !== undefined && !opensOnKey(facts, key)) return null
+  if (!opensOnKey(facts, key)) return null
   return controlSound(facts)
 }
 
 /**
  * Click sounds for every control in a window, from capturing listeners on `root`, which run before
- * the control's own handlers so a switch and a menu trigger still show their old state. Menu and
- * select triggers sound on the press (`pressSound`); a click that follows such a press on the same
- * control stays quiet. `sound-on` is the one sound that plays with sound effects off: it belongs to
+ * the control's own handlers so a switch and a menu trigger still show their old state. A pointer
+ * press sounds its control (`pressSound`), and the click that follows on the same control stays
+ * quiet; a click with no press before it (Enter, Space, a script) sounds on the click. `sound-on` is the one sound that plays with sound effects off: it belongs to
  * the control that turns them back on, and only it carries it. Returns the uninstaller.
  */
 export function installInteractionSounds(
@@ -316,16 +325,138 @@ export function installInteractionSounds(
   }
 }
 
+/** Leading samples below this share of a sound's peak (-40 dB) are skipped: inaudible lead-in. */
+export const LEAD_THRESHOLD = 0.01
+
+/**
+ * Where a sound becomes audible, in samples: the first sample on any channel at or above
+ * `threshold` of the loudest. That skips the encoder's priming silence (an MP3 starts with about
+ * 25 ms of it, which not every decoder trims) and any quiet lead-in in the recording. A silent
+ * sound starts at 0.
+ */
+export function leadingSilence(channels: readonly Float32Array[], threshold = LEAD_THRESHOLD): number {
+  let peak = 0
+  for (const samples of channels) for (const sample of samples) peak = Math.max(peak, Math.abs(sample))
+  if (peak === 0) return 0
+  const floor = peak * threshold
+  let first = Infinity
+  for (const samples of channels) {
+    const limit = Math.min(first, samples.length)
+    for (let i = 0; i < limit; i++) {
+      if (Math.abs(samples[i]) >= floor) {
+        first = i
+        break
+      }
+    }
+  }
+  return Number.isFinite(first) ? first : 0
+}
+
+/** The part of the Web Audio API the buffer player uses. */
+export interface AudioContextLike {
+  readonly state: string
+  readonly destination: unknown
+  resume(): Promise<void>
+  decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike>
+  createGain(): { gain: { value: number }; connect(to: unknown): unknown }
+  createBufferSource(): {
+    buffer: AudioBufferLike | null
+    connect(to: unknown): unknown
+    start(when?: number, offset?: number): void
+  }
+}
+
+export interface AudioBufferLike {
+  readonly numberOfChannels: number
+  readonly sampleRate: number
+  getChannelData(channel: number): Float32Array
+}
+
+/**
+ * Plays decoded sounds through one context and gain. Each play is its own source node, so sounds
+ * mix and a quick repeat never cuts the last one off. `play` returns false while a sound is not
+ * decoded yet (or could not be), for the caller to fall back; `load` fetches and decodes every
+ * sound once.
+ */
+export function createBufferPlayer(
+  context: AudioContextLike,
+  fetchSound: (name: SoundName) => Promise<ArrayBuffer>
+): { load(): void; play(name: SoundName): boolean } {
+  const gain = context.createGain()
+  gain.gain.value = SOUND_VOLUME
+  gain.connect(context.destination)
+  const sounds = new Map<SoundName, { buffer: AudioBufferLike; offset: number }>()
+  let loading = false
+  return {
+    load() {
+      if (loading) return
+      loading = true
+      for (const name of SOUND_NAMES) {
+        fetchSound(name)
+          .then((data) => context.decodeAudioData(data))
+          .then((buffer) => {
+            const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) =>
+              buffer.getChannelData(i)
+            )
+            sounds.set(name, { buffer, offset: leadingSilence(channels) / buffer.sampleRate })
+          })
+          // Not decoded: that sound keeps the element fallback.
+          .catch(() => undefined)
+      }
+    },
+    play(name) {
+      const sound = sounds.get(name)
+      if (!sound) return false
+      // A context made before the window's first gesture can start suspended.
+      if (context.state === 'suspended') void context.resume().catch(() => undefined)
+      const source = context.createBufferSource()
+      source.buffer = sound.buffer
+      source.connect(gain)
+      source.start(0, sound.offset)
+      return true
+    }
+  }
+}
+
 let audioPlayer: ((name: SoundName) => AudioLike | null) | null = null
+let bufferPlayer: ReturnType<typeof createBufferPlayer> | null | undefined
+
+// Resolved from this module's own URL rather than the page's, so it finds dist/ui/sounds
+// whichever page imports it; and lazily, so loading the module never touches the URL.
+const soundUrl = (sound: SoundName): string => new URL(`./sounds/${sound}.mp3`, import.meta.url).href
+
+/** This window's buffer player, made on first use; null where there is no Web Audio. */
+function buffers(): ReturnType<typeof createBufferPlayer> | null {
+  if (bufferPlayer !== undefined) return bufferPlayer
+  bufferPlayer = null
+  try {
+    if (typeof AudioContext === 'undefined' || typeof fetch === 'undefined') return null
+    bufferPlayer = createBufferPlayer(new AudioContext() as unknown as AudioContextLike, (name) =>
+      fetch(soundUrl(name)).then((response) => {
+        if (!response.ok) throw new Error(`${name}: ${response.status}`)
+        return response.arrayBuffer()
+      })
+    )
+    bufferPlayer.load()
+  } catch {
+    bufferPlayer = null
+  }
+  return bufferPlayer
+}
+
+/** Fetch and decode every sound in this window now, so none waits on its first play. */
+export function preloadSounds(): void {
+  buffers()
+}
 
 /** Play one sound from `ui/sounds/` in this window. */
 export function playAudio(name: SoundName): void {
+  try {
+    if (buffers()?.play(name)) return
+  } catch {
+    // Fall through to the element: a sound effect is never worth an error.
+  }
   if (typeof Audio === 'undefined') return
-  // Resolved from this module's own URL rather than the page's, so it finds dist/ui/sounds
-  // whichever page imports it; and lazily, so loading the module never touches the URL.
-  audioPlayer ??= createAudioPlayer(
-    Audio,
-    (sound) => new URL(`./sounds/${sound}.mp3`, import.meta.url).href
-  )
+  audioPlayer ??= createAudioPlayer(Audio, soundUrl)
   audioPlayer(name)
 }

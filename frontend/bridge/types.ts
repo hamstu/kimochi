@@ -58,7 +58,6 @@ export type PanelLabel =
   | 'settings'
   | 'diagnostics'
   | 'dictionary'
-  | 'tray-popover'
   | 'welcome'
   | 'overlay'
   | 'fixture'
@@ -128,7 +127,7 @@ export interface ScanResult {
 }
 
 /**
- * `snapshot()`. The controller and tray read their whole enabled/disabled state from this, so the
+ * `snapshot()`. The controller reads its whole enabled/disabled state from this, so the
  * fields beyond the POC's original set were requested from kimochi-native (see FRONTEND_PLAN §7 H).
  * Every added field is optional here so the panels degrade to a usable state rather than crashing
  * if the backend has not shipped it yet.
@@ -187,17 +186,6 @@ export interface DisplayInfo {
   workArea?: Rect
   scaleFactor?: number
 }
-
-export type TrayAction =
-  | 'showControls'
-  | 'openSettings'
-  | 'toggleAutoOcr'
-  | 'selectAndScan'
-  | 'editCropArea'
-  | 'openLog'
-  | 'toggleTextOverlay'
-  | 'toggleDebugOverlay'
-  | 'quit'
 
 /** The bindable actions; `HOTKEY_ACTIONS` in `src-tauri/src/actions.rs`. */
 export type HotkeyName = 'triggerScan' | 'openControllerMenu'

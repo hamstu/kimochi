@@ -52,7 +52,7 @@ import {
 import { SourceGrid, SystemPickerButton } from './SourceGrid'
 import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
 import type { InputSource } from '@texthooker/input-source'
-import { SourceIcon } from '../components/RemoteControl'
+import { SourceIcon } from '../components/SourceIcon'
 import { isOverlayTextVisible } from '../../ui/settings'
 import { useSetting } from '../bridge/useSetting'
 import { useViewState } from '../bridge/state'

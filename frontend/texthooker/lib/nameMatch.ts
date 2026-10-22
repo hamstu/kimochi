@@ -109,6 +109,13 @@ export function buildMatcher(nb: NotebookFile): Matcher {
 
 /* ── Memoization ───────────────────────────────────────────────────────── */
 
+// Keyed by what decides a match, and nothing else. The matcher is the notebook's: `cacheVersion`
+// alone cannot tell two notebooks apart, since every session's notebook counts its own (switching
+// sessions can land on the same number). Each edit replaces the notebook object, so the object
+// together with its version identifies its entries. A line's matches are its text's: line ids
+// restart at 1 in each session and after a clear, and a merged reading changes a line's text but
+// keeps its id, so a line cache keyed by id hands one line another's offsets.
+let cachedNotebook: NotebookFile | null = null;
 let cachedNotebookVersion = -1;
 let cachedMatcher: Matcher = EMPTY_MATCHER;
 
@@ -116,22 +123,22 @@ const lineCache = new Map<string, Match[]>();
 const LINE_CACHE_MAX = 10_000;
 
 export function getMatcher(nb: NotebookFile): Matcher {
-  if (
-    cachedMatcher.version === nb.cacheVersion &&
-    cachedNotebookVersion === nb.cacheVersion
-  ) {
+  if (cachedNotebook === nb && cachedNotebookVersion === nb.cacheVersion) {
     return cachedMatcher;
   }
   cachedMatcher = buildMatcher(nb);
+  cachedNotebook = nb;
   cachedNotebookVersion = nb.cacheVersion;
-  // Invalidate per-line cache when matcher changes.
+  // Matches from another matcher are not this one's.
   lineCache.clear();
   return cachedMatcher;
 }
 
 export function matchLine(line: Line, matcher: Matcher): Match[] {
   if (matcher.patterns.length === 0) return [];
-  const key = `${matcher.version}:${line.id}`;
+  // Only the current matcher's results are kept; one passed in from elsewhere is not cached.
+  if (matcher !== cachedMatcher) return matcher.find(line.text);
+  const key = line.text;
   const cached = lineCache.get(key);
   if (cached) return cached;
   const result = matcher.find(line.text);

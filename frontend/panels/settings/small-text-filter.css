@@ -1,0 +1,69 @@
+/* The furigana filter's strength (SmallTextFilter.tsx). */
+
+.small-text-filter-disclosure svg {
+  transition: transform var(--k-fast) var(--k-ease-out);
+}
+.small-text-filter-disclosure-open svg {
+  transform: rotate(180deg);
+}
+
+.small-text-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1-5);
+  padding: var(--k-space-3) var(--k-space-3) var(--k-space-3) 0;
+}
+
+/*
+ * One label under each step. The slider keeps its thumb inside the track, so step i of n sits at
+ * i/n of the track less half a thumb at either end; the end columns are half as wide as the inner
+ * ones and the grid is inset by half a thumb, which puts every inner column's centre on its step.
+ */
+.small-text-filter-steps {
+  display: grid;
+  grid-template-columns: 1fr 2fr 2fr 2fr 1fr;
+  margin: 0 0.4375rem;
+}
+.small-text-filter-step {
+  padding: var(--k-space-0-5) 0;
+  border: 0;
+  background: none;
+  color: var(--k-text-3);
+  font: inherit;
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  white-space: nowrap;
+  cursor: default;
+  justify-self: center;
+  transition: color var(--k-fast);
+}
+.small-text-filter-step:first-child {
+  justify-self: start;
+  margin-left: -0.4375rem;
+}
+.small-text-filter-step:last-child {
+  justify-self: end;
+  margin-right: -0.4375rem;
+}
+.small-text-filter-step:hover {
+  color: var(--k-text-2);
+}
+.small-text-filter-step[data-active] {
+  color: var(--k-text);
+  font-weight: var(--k-weight-medium);
+}
+
+.small-text-filter-description {
+  min-height: calc(var(--k-leading-sm) * 2);
+  margin: var(--k-space-1) 0 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  text-wrap: pretty;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .small-text-filter-disclosure svg {
+    transition: none;
+  }
+}

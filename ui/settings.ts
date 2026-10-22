@@ -46,25 +46,59 @@ export const INTERFACE_SCALES: Record<InterfaceScale, { label: string; factor: n
 /**
  * The buttons of the overlay's controller menu and word mode, as standard (W3C) button indices;
  * `null` leaves an action unbound. The D-pad and sticks are fixed: they are how the menu and the
- * word cursor are steered, not commands.
+ * word cursor are steered, not commands. Mirrors `DEFAULT_BUTTONS` in controller-input.js.
  */
 export interface ControllerButtons {
-  /** Choose the menu item; in word mode, look the word up again. */
+  /** Choose the menu item; on a word, move into the dictionary pop-up; there, press its button. */
   confirm: number | null
-  /** Close the menu, or leave word mode and return to the game. */
+  /** Close the menu, leave the pop-up for the text, or leave word mode for the game. */
   back: number | null
-  backAlt: number | null
+  /** Step by word or by character. */
+  toggleUnit: number | null
+  /** Play the word's audio from the pop-up. */
+  playAudio: number | null
   /** Jump to the previous or next definition in the dictionary popup. */
   previousDefinition: number | null
   nextDefinition: number | null
+  /** Show every control while reading. */
+  showControls: number | null
 }
 
 export const DEFAULT_CONTROLLER_BUTTONS: ControllerButtons = {
   confirm: 0,
   back: 1,
-  backAlt: 3,
+  toggleUnit: 3,
+  playAudio: 2,
   previousDefinition: 4,
-  nextDefinition: 5
+  nextDefinition: 5,
+  showControls: 8
+}
+
+/**
+ * Stored controller buttons over the defaults: an action added since they were saved keeps its
+ * default, and a retired one (`backAlt`, the second Back that Y used to be) is dropped.
+ */
+export function effectiveControllerButtons(
+  stored: object | null | undefined
+): ControllerButtons {
+  const buttons = { ...DEFAULT_CONTROLLER_BUTTONS }
+  for (const key of Object.keys(DEFAULT_CONTROLLER_BUTTONS) as (keyof ControllerButtons)[]) {
+    const value = (stored as Record<string, unknown> | null | undefined)?.[key]
+    if (value === null || typeof value === 'number') buttons[key] = value
+  }
+  return buttons
+}
+
+/** The other actions bound to the same button as `key`: both would fire on one press. */
+export function sharedButtonActions(
+  buttons: ControllerButtons,
+  key: keyof ControllerButtons
+): (keyof ControllerButtons)[] {
+  const button = buttons[key]
+  if (button === null) return []
+  return (Object.keys(buttons) as (keyof ControllerButtons)[]).filter(
+    (other) => other !== key && buttons[other] === button
+  )
 }
 
 export interface ScanHistoryEntry {
@@ -287,8 +321,6 @@ export interface DictionaryEngineInfo {
   runs: 'local' | 'online'
   /** The engine's own options page, relative to its origin; null when it has none. */
   optionsPage: string | null
-  /** Shown as a badge beside the name. */
-  experimental?: boolean
 }
 
 export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> = {
@@ -296,14 +328,14 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: 'Built-in Yomitan',
     tagline: 'A copy of Yomitan inside Kimochi',
     description:
-      'An embedded copy of Yomitan that runs inside Kimochi, with its own dictionaries and settings. Set it up here: import dictionaries, or bring in the settings and dictionaries you exported from Yomitan in your browser. Audio, scanning options and Anki mining are all in its own settings.',
+      'Yomitan running inside Kimochi, with its own dictionaries and settings. Word audio and Anki mining are built in.',
     strengths: [
-      'Imports any Yomitan dictionary, and settings exported from your browser',
-      'Word audio and Anki mining built in',
-      'Works offline once dictionaries are imported'
+      'Imports any Yomitan dictionary or settings backup',
+      'Word audio and Anki mining',
+      'Works offline'
     ],
     requirements:
-      'Downloaded from its official release when you choose it (about 15 MB). Needs at least one dictionary: the setup offers Jitendex, or import your own in Yomitan settings.',
+      'Downloaded when you choose it (about 15 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/yomidevs/yomitan',
     version: '26.8.24.0',
@@ -314,15 +346,14 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: 'Hachidori',
     tagline: 'Fast, with native dictionary indexes',
     description:
-      'A fast lookup engine written in C++ and compiled to WebAssembly, which keeps dictionaries in native indexes rather than a browser database. It imports Yomitan dictionaries and MDict, and on first run offers a set of recommended dictionaries.',
+      'A fast engine that keeps dictionaries in native indexes. Imports Yomitan dictionaries and MDict.',
     strengths: [
-      'Quick lookups, even with many large dictionaries',
-      'Imports Yomitan dictionaries and MDict',
-      'Recommended dictionaries offered on first run',
+      'Quick, even with many large dictionaries',
+      'Recommended dictionaries on first run',
       'Anki mining through AnkiConnect'
     ],
     requirements:
-      'Downloaded from its official release when you choose it (about 5 MB). Needs dictionaries, from its first-run offer or your own. Kimochi runs its single-threaded engine, so imports take a few seconds longer than in Chrome.',
+      'Downloaded when you choose it (about 5 MB). Runs single-threaded here, so imports are a little slower.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/bee-san/hachidori',
     version: '0.3.0',
@@ -333,14 +364,14 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: '10ten',
     tagline: 'Lightweight, works straight away',
     description:
-      '10ten Japanese Reader is a lightweight reader with a word dictionary bundled in, so it looks words up the moment it is chosen. It then downloads the full JMdict, kanji and names dictionaries in the background.',
+      '10ten Japanese Reader: a lightweight reader that looks words up the moment it is chosen.',
     strengths: [
-      'Works immediately, with nothing to import',
-      'Kanji and proper-name lookups',
+      'Nothing to import',
+      'Kanji and name lookups',
       'Small and quick to start'
     ],
     requirements:
-      'Downloaded from its official release when you choose it (about 18 MB), then fetches its full dictionaries from data.10ten.life and keeps them up to date. No Anki mining.',
+      'Downloaded when you choose it (about 18 MB), then fetches its full dictionaries in the background. No Anki mining.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/birchill/10ten-ja-reader',
     version: '1.28.0',
@@ -351,22 +382,21 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: 'Yomitan API',
     tagline: 'The Yomitan in your browser',
     description:
-      "A pop-up built into Kimochi that looks words up through the Yomitan you already use in your browser, over the Yomitan API. Your browser's dictionaries and settings are used as they are, with nothing to import again. Hold Shift and hover words in the Log to look them up, and build Anki cards here.",
+      'Looks words up through the Yomitan in your browser, using its dictionaries and settings as they are.',
     strengths: [
-      'Uses the dictionaries already in your browser',
-      'Click-to-define and furigana in the Log',
+      'Nothing to import again',
+      'Shift-hover lookups in the Log and over your game',
       'Anki card builder in Kimochi'
     ],
     requirements:
-      "Needs Yomitan in your browser with its API turned on, and a small helper the browser starts (Kimochi installs it for you). Kimochi also downloads Yomitan for splitting text into words.",
+      'Needs Yomitan in your browser with its API on, and a small helper Kimochi installs for you.',
     licence: 'Part of Kimochi',
     upstream: 'https://github.com/yomidevs/yomitan-api',
     upstreamLabel: 'Yomitan API',
     version: null,
     // The browser's Yomitan on this computer (an address on another computer still works).
     runs: 'local',
-    optionsPage: null,
-    experimental: true
+    optionsPage: null
   }
 }
 
@@ -393,20 +423,20 @@ export function popupTypeOf(engine: DictionaryEngine): PopupType {
 
 /**
  * The engine whose host scripts a window needs. The Yomitan API engine (Kimochi's own pop-up over
- * the browser's Yomitan) runs over the Yomitan host: the overlay keeps Yomitan's backend for the
- * controller's word splitting (`parseText`) and installs the API lookup hook from it
- * (`ui/api-lookup.js`), exactly as before the other engines existed.
- * So switching between Built-in Yomitan and the Yomitan API changes no host and needs no reload.
+ * the browser's Yomitan) needs none: it splits words and looks them up through the browser's
+ * Yomitan over its API, and the overlay installs its lookup hook without any extension
+ * (`startApiEngine` in ui/overlay.js). So it downloads nothing, and switching to or from it
+ * reloads the reader windows as any other switch does.
  */
-export function hostEngineOf(engine: DictionaryEngine): 'yomitan' | 'hachidori' | 'tenten' {
-  return engine === 'custom-api' ? 'yomitan' : engine
+export function hostEngineOf(engine: DictionaryEngine): HostEngine {
+  return engine === 'custom-api' ? NO_ENGINE : engine
 }
 
 /**
  * The document-start mirror of the engine (`localStorage` on the app origin), which the injected
  * host scripts read synchronously before any extension script runs. See DICTIONARY_ENGINES.md §2.
- * It holds `hostEngineOf(engine)`, never `'custom-api'`, so the Yomitan shims keep installing for
- * the Yomitan API engine.
+ * It holds `hostEngineOf(engine)`, never `'custom-api'`: `'none'` for the Yomitan API engine, which
+ * installs no host.
  */
 export const DICTIONARY_ENGINE_KEY = 'kimochi.dictionaryEngine'
 

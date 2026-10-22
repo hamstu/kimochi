@@ -144,11 +144,15 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             }
             BUTTONS_HELD.store(buttons.contains(&true), Ordering::SeqCst);
             hand_back_when_released(&app);
+            // `overlayNavigation`: the overlay's controller menu or reading has the controller, so
+            // a focused panel must not act on the same presses (ui/panel-controller.js). Opening
+            // it brings Kimochi to the front, and the Log window can be the one with focus.
             let state = json!({
                 "gamepads": devices,
                 "activeGamepadIndex": active,
                 "buttonStates": buttons,
                 "axisStates": axes,
+                "overlayNavigation": navigating(),
             });
             #[cfg(target_os = "linux")]
             let state = {

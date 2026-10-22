@@ -1223,7 +1223,8 @@ pub fn install(
 /// the selected engine (after a pin bump, or an upgrade from a build that bundled it). Paused
 /// downloads resume; a failed one waits for Retry.
 pub fn ensure_selected(app: &tauri::AppHandle, id: &str) -> bool {
-    if is_ready(id) {
+    // `none` (the Yomitan API, which needs no engine) has nothing to download.
+    if !IDS.contains(&id) || is_ready(id) {
         return false;
     }
     let Some(store) = store(app) else { return false };

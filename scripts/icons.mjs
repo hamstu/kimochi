@@ -103,9 +103,11 @@ write(macPng, render(join(branding, "icon-macos.svg"), 1024));
 write(squarePng, render(join(branding, "icon-square.svg"), 1024));
 write(join(branding, "icon.png"), render(join(branding, "icon.svg"), 1024));
 
-console.log("Menu bar template (16pt)");
-write(join(branding, "tray-template.png"), render(join(branding, "tray-template.svg"), 16));
-write(join(branding, "tray-template@2x.png"), render(join(branding, "tray-template.svg"), 32));
+console.log("Menu bar template (18pt)");
+write(join(branding, "tray-template.png"), render(join(branding, "tray-template.svg"), 18));
+write(join(branding, "tray-template@2x.png"), render(join(branding, "tray-template.svg"), 36));
+// The copy the app embeds (src-tauri/src/tray.rs).
+write(join(root, "resources", "tray-template@2x.png"), render(join(branding, "tray-template.svg"), 36));
 
 console.log("Tauri bundle icons");
 const fromSquare = tauriIcon(squarePng);

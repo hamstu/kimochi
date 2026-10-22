@@ -18,9 +18,10 @@ export function resolveEngine(win) {
     // No storage (sandboxed frame, node:vm): fall back to the prelude.
   }
   const engine = stored ?? win.__kimochiDictionaryEngine ?? 'yomitan'
-  // 'builtin' is Yomitan's stored name, and the Yomitan API pop-up ('custom-api') runs on Yomitan's
-  // backend (installApiLookup, parseText), so both are Yomitan here.
-  return engine === 'builtin' || engine === 'custom-api' ? 'yomitan' : engine
+  // 'builtin' is Yomitan's stored name. The Yomitan API pop-up ('custom-api') needs no host: it
+  // talks to the browser's Yomitan (the mirror holds 'none' for it; a stored spelling here too).
+  if (engine === 'custom-api') return 'none'
+  return engine === 'builtin' ? 'yomitan' : engine
 }
 
 /**

@@ -24,7 +24,12 @@ await build({
   platform: 'neutral',
   target: 'es2022'
 })
-const { SETTINGS_DEFAULTS, DEFAULT_VOICE_ID } = await import(pathToFileURL(outfile).href)
+const {
+  SETTINGS_DEFAULTS,
+  DEFAULT_VOICE_ID,
+  effectiveControllerButtons,
+  sharedButtonActions
+} = await import(pathToFileURL(outfile).href)
 process.on('exit', () => {
   rm(outDir, { recursive: true, force: true }).catch(() => {})
 })
@@ -126,4 +131,17 @@ test('the Electron store defaults that carry over are unchanged', async (t) => {
   ]) {
     assert.ok(pattern.test(electron), `${label} no longer matches src/main/settings.ts`)
   }
+})
+
+test('controller buttons: new actions take their defaults, and the retired second Back is dropped', async () => {
+  const older = { confirm: 0, back: 1, backAlt: 3, previousDefinition: 4, nextDefinition: 5 }
+  const buttons = effectiveControllerButtons(older)
+  assert.deepEqual(buttons, SETTINGS_DEFAULTS.controllerButtons)
+  assert.equal('backAlt' in buttons, false)
+  assert.equal(effectiveControllerButtons({ playAudio: null }).playAudio, null, 'unbound stays unbound')
+  assert.deepEqual(sharedButtonActions({ ...buttons, playAudio: 0 }, 'confirm'), ['playAudio'])
+  assert.deepEqual(sharedButtonActions(buttons, 'confirm'), [])
+  // The overlay's own defaults are the same buttons.
+  const { DEFAULT_BUTTONS } = await import('../ui/controller-input.js')
+  assert.deepEqual(DEFAULT_BUTTONS, SETTINGS_DEFAULTS.controllerButtons)
 })

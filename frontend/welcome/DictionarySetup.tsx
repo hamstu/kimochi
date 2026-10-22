@@ -1,7 +1,7 @@
 import { useEffect, useState, type JSX } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Download, ExternalLink } from 'lucide-react'
-import { Button, Callout, StatusDot, type Tone } from '@kit'
+import { Check, Clock, Download, ExternalLink, Library } from 'lucide-react'
+import { Badge, Button, Callout, Spinner, StatusDot, type Tone } from '@kit'
 import { nativeError } from '../bridge/tauri'
 import {
   DICTIONARY_ENGINES,
@@ -75,7 +75,7 @@ function YomitanApiSetup(): JSX.Element {
   return (
     <Step
       title="Connect your browser's Yomitan"
-      lede="Kimochi's pop-up looks words up through the Yomitan you already use in your browser, with its dictionaries and settings. It needs a small helper and one setting in Yomitan."
+      lede="Look words up with the Yomitan in your browser, using its dictionaries and settings."
     >
       <YomitanApiWizard
         url={resolveYomitanApiUrl(settings.customApiUrl)}
@@ -193,17 +193,14 @@ function YomitanSetup(): JSX.Element {
   // Offered only once the check is back and found nothing to look words up with (or a setup
   // started here is under way or finished, to keep its progress in place).
   const offer = installed !== null && (ready.length === 0 || job !== null)
-  // One recommended dictionary (Jitendex): its setup is the step's main action, in the bar.
-  const only = offer && catalog.length === 1 ? catalog[0] : null
-  const offerInBar = only !== null && !busy && !done
   const line = job ? jobLine(job) : null
   const count = job?.progress?.count ?? 0
   return (
     <Step
-      title={offer || installed === null ? 'Add a dictionary' : 'Your dictionaries are ready'}
+      title={offer || installed === null ? 'Set up Yomitan' : 'Your dictionaries are ready'}
       lede={
         offer || installed === null
-          ? 'Built-in Yomitan is downloaded and runs inside Kimochi, so there is no browser extension to install. It needs at least one dictionary to look words up: set one up here, or import the dictionaries and settings you exported from Yomitan in your browser.'
+          ? 'Yomitan needs at least one dictionary before it can show you what words mean. Pick how you’d like to add one.'
           : 'Built-in Yomitan already has dictionaries to look words up with, so there is nothing to set up. You can add or change them any time in Settings → Dictionary.'
       }
     >
@@ -229,29 +226,59 @@ function YomitanSetup(): JSX.Element {
       {offer && ready.length === 0 && (installed?.length ?? 0) > 0 && (
         <Callout tone="warn">
           {installed?.length === 1 ? 'A dictionary is' : `${installed?.length} dictionaries are`}{' '}
-          installed, but none is enabled in your current profile. Enable one in dictionary settings,
-          or set one up here.
+          installed, but none is enabled in your current profile. Enable one in Yomitan’s settings,
+          or install one here.
         </Callout>
       )}
-      {(offer ? catalog : []).map((item) => (
-        <div key={item.id} className={style.block}>
-          <p className={style.text}>
-            <strong>{item.title}</strong> · {item.description}
-          </p>
-          <p className="k-description">
-            Quick setup downloads it and enables it in your current profile. Existing dictionaries
-            and preferences are kept.
-          </p>
-          {!only && (
-            <div>
-              <Button variant="primary" disabled={busy} onClick={() => void start(item.id)}>
-                <Download />
-                Set up {item.title}
-              </Button>
-            </div>
-          )}
+      {offer && (
+        <div className={style.options} role="group" aria-label="How to add a dictionary">
+          {catalog.map((item) => {
+            const thisJob = job && done ? 'done' : busy ? 'busy' : null
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`k-choice ${style.option}`}
+                data-recommended
+                data-state={thisJob === 'done' ? 'on' : undefined}
+                disabled={thisJob !== null}
+                onClick={() => void start(item.id)}
+              >
+                <span className={style.optionIcon}>
+                  {thisJob === 'busy' ? <Spinner /> : thisJob === 'done' ? <Check /> : <Download />}
+                </span>
+                <span className={style.optionTitle}>
+                  {thisJob === 'done'
+                    ? `${item.title} installed`
+                    : thisJob === 'busy'
+                      ? `Installing ${item.title}…`
+                      : `Install ${item.title}`}
+                </span>
+                <span className={style.optionDetail}>
+                  Japanese–English definitions, downloaded and set up for you.
+                </span>
+                {!thisJob && <Badge tone="accent">Recommended</Badge>}
+              </button>
+            )
+          })}
+          <Link to="/dictionary-settings" className={`k-choice ${style.option}`}>
+            <span className={style.optionIcon}>
+              <Library />
+            </span>
+            <span className={style.optionTitle}>Choose your own</span>
+            <span className={style.optionDetail}>
+              Import dictionaries or a Yomitan backup in Yomitan’s settings.
+            </span>
+          </Link>
+          <Link to={NEXT} className={`k-choice ${style.option}`}>
+            <span className={style.optionIcon}>
+              <Clock />
+            </span>
+            <span className={style.optionTitle}>Do it later</span>
+            <span className={style.optionDetail}>Add a dictionary any time in Settings → Dictionary.</span>
+          </Link>
         </div>
-      ))}
+      )}
       {line && (
         <div className={style.job}>
           <p className={style.status} role="status">
@@ -269,28 +296,18 @@ function YomitanSetup(): JSX.Element {
         </div>
       )}
       {(error || job?.error) && <Callout tone="danger">{error || job?.error}</Callout>}
-      <p className={style.aside}>
-        {offer ? 'Already have dictionaries or a Yomitan settings backup?' : 'Want more?'}{' '}
-        <Link to="/dictionary-settings" className={style.link}>
-          Import or manage dictionaries
-        </Link>
-      </p>
+      {!offer && installed !== null && (
+        <p className={style.aside}>
+          Want more?{' '}
+          <Link to="/dictionary-settings" className={style.link}>
+            Import or manage dictionaries
+          </Link>
+        </p>
+      )}
       <StepActions>
-        {offerInBar ? (
-          <>
-            <Button variant="ghost" asChild>
-              <Link to={NEXT}>Skip</Link>
-            </Button>
-            <Button variant="primary" onClick={() => void start(only.id)}>
-              <Download />
-              Set up {only.title}
-            </Button>
-          </>
-        ) : (
-          <Button variant="primary" onClick={() => void navigate(NEXT)}>
-            {busy ? 'Continue while importing' : 'Continue'}
-          </Button>
-        )}
+        <Button variant="primary" onClick={() => void navigate(NEXT)}>
+          {busy ? 'Continue while installing' : 'Continue'}
+        </Button>
       </StepActions>
     </Step>
   )

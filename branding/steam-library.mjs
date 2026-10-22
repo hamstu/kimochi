@@ -10,9 +10,9 @@
 // game page banner; no text, Steam lays the logo over its lower left) and a transparent logo
 // (`<appid>_logo.png`).
 //
-// The wordmark is Figtree (weight 700) and the Japanese 気持ち Noto Sans JP (weight 500), both
-// OFL-licensed (LICENSE-OFL.txt) and already bundled with the app. Their outlines were extracted
-// once from the @fontsource-variable packages with fontkit (woff2 decompressed with wawoff2,
+// The wordmark is Figtree (weight 700), OFL-licensed (LICENSE-OFL.txt) and already bundled with
+// the app; there is no Japanese name under it. Its outlines were extracted once from the
+// @fontsource-variable package with fontkit (woff2 decompressed with wawoff2,
 // `getVariation({wght})`, y flipped), so no SVG here depends on an installed font. Units are
 // font units: 1000 per em, baseline at y = 0.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -26,16 +26,11 @@ const WORDMARK = {
   bbox: [76, -733, 3703.4, 12],
 };
 
-const WORDMARK_JA = {
-  d: "M244 -742L928 -742L928 -663L244 -663ZM255 -597L835 -597L835 -520L255 -520ZM139 -453L730 -453L730 -372L139 -372ZM246 -847L346 -826Q309 -708 249.5 -607Q190 -506 118 -439Q109 -448 93 -459.5Q77 -471 60.5 -482Q44 -493 31 -500Q105 -559 160.5 -650.5Q216 -742 246 -847ZM506 -360L597 -330Q545 -236 472 -156Q399 -76 312 -13Q225 50 132 96Q124 86 112 72Q100 58 86 44.5Q72 31 61 22Q156 -17 240 -74Q324 -131 392.5 -203.5Q461 -276 506 -360ZM697 -453L794 -453Q794 -358 797 -277.5Q800 -197 809 -136.5Q818 -76 834 -42Q850 -8 876 -8Q889 -9 893.5 -47Q898 -85 899 -148Q913 -132 931 -116Q949 -100 963 -90Q960 -28 950.5 11Q941 50 922 67.5Q903 85 869 85Q812 85 778 44.5Q744 4 727 -68.5Q710 -141 704 -239Q698 -337 697 -453ZM153 -261L221 -323Q277 -293 338 -256Q399 -219 457 -178Q515 -137 565.5 -97Q616 -57 649 -21L574 50Q542 15 494 -26Q446 -67 389 -109Q332 -151 271 -190.5Q210 -230 153 -261ZM1409 -721L1918 -721L1918 -635L1409 -635ZM1372 -342L1958 -342L1958 -255L1372 -255ZM1361 -526L1965 -526L1965 -439L1361 -439ZM1619 -840L1709 -840L1709 -480L1619 -480ZM1749 -456L1840 -456L1840 -22Q1840 16 1830.5 36.5Q1821 57 1796 69Q1772 79 1733 81.5Q1694 84 1639 84Q1636 64 1628 38Q1620 12 1611 -7Q1649 -5 1684 -4.5Q1719 -4 1730 -5Q1741 -6 1745 -9.5Q1749 -13 1749 -23ZM1437 -196L1512 -238Q1533 -212 1555.5 -181Q1578 -150 1596.5 -120.5Q1615 -91 1625 -66L1545 -18Q1536 -43 1518.5 -73.5Q1501 -104 1480 -136.5Q1459 -169 1437 -196ZM1025 -323Q1084 -338 1168.5 -362Q1253 -386 1339 -412L1352 -326Q1273 -302 1193 -277Q1113 -252 1047 -232ZM1040 -648L1346 -648L1346 -560L1040 -560ZM1162 -843L1249 -843L1249 -25Q1249 11 1241 31Q1233 51 1212 62Q1193 73 1161 77Q1129 81 1081 80Q1079 62 1072 36.5Q1065 11 1056 -8Q1086 -7 1111 -7Q1136 -7 1145 -7Q1154 -7 1158 -11Q1162 -15 1162 -25ZM2436 -789Q2429 -767 2424.5 -743Q2420 -719 2415 -697Q2411 -673 2404 -639.5Q2397 -606 2388.5 -567.5Q2380 -529 2371 -490Q2362 -451 2352 -415.5Q2342 -380 2332 -352Q2396 -392 2461 -409.5Q2526 -427 2599 -427Q2680 -427 2737.5 -401.5Q2795 -376 2827 -330Q2859 -284 2859 -222Q2859 -142 2820.5 -86Q2782 -30 2712 1.5Q2642 33 2545.5 42Q2449 51 2331 39L2304 -62Q2389 -50 2469.5 -51Q2550 -52 2614 -69.5Q2678 -87 2716 -124Q2754 -161 2754 -220Q2754 -271 2711.5 -306.5Q2669 -342 2588 -342Q2500 -342 2424 -312Q2348 -282 2300 -223Q2292 -212 2285 -201.5Q2278 -191 2271 -178L2177 -211Q2206 -267 2230 -336Q2254 -405 2272.5 -475.5Q2291 -546 2303 -606Q2315 -666 2319 -704Q2323 -731 2324.5 -751.5Q2326 -772 2324 -794ZM2109 -666Q2152 -659 2206 -654Q2260 -649 2306 -649Q2354 -649 2412.5 -652Q2471 -655 2535 -661Q2599 -667 2663.5 -676.5Q2728 -686 2788 -699L2790 -603Q2739 -595 2677 -587Q2615 -579 2550 -572.5Q2485 -566 2422 -562.5Q2359 -559 2307 -559Q2253 -559 2203 -561.5Q2153 -564 2109 -568Z",
-  bbox: [31, -847, 2859, 96],
-};
 const C = {
   accent: "#3e63dd", // Radix indigo 9, the app accent
   deep: "#2c4cbf",
   night: "#17205a", // the ground's dark end: indigo 9 pulled most of the way to black
   ink: "#ffffff",
-  inkJa: "#c6d2ff", // indigo 4-ish on the dark ground, a step behind the wordmark
 };
 
 const r = (n) => Math.round(n * 100) / 100;
@@ -108,33 +103,25 @@ function brackets(x, y, w, h, arm, stroke, opacity) {
 function stacked(cx, top, iconSize, wordWidth, filter) {
   const wordTop = top + iconSize + iconSize * 0.3;
   const wordCap = capHeight(WORDMARK, wordWidth);
-  const jaWidth = wordWidth * 0.42;
-  const jaBase = wordTop + wordCap + jaWidth * 0.34 + capHeight(WORDMARK_JA, jaWidth) * 0.9;
   return [
     `  <g filter="${filter}">`,
     icon(cx - iconSize / 2, top, iconSize),
     run(WORDMARK, cx - wordWidth / 2, wordTop + wordCap, wordWidth, `fill="${C.ink}"`),
     `  </g>`,
-    run(WORDMARK_JA, cx - jaWidth / 2, jaBase, jaWidth, `fill="${C.inkJa}"`),
   ].join("\n");
 }
 
 /** Icon beside the wordmark, vertically centred on cy: the wide capsule and logo lockup. */
-function beside(x, cy, iconSize, wordWidth, { ja = true, filter = "" } = {}) {
+function beside(x, cy, iconSize, wordWidth, { filter = "" } = {}) {
   const wordX = x + iconSize * 1.22;
   const wordCap = capHeight(WORDMARK, wordWidth);
-  const jaWidth = wordWidth * 0.36;
-  const jaCap = capHeight(WORDMARK_JA, jaWidth);
-  const gap = wordCap * 0.42;
-  const block = ja ? wordCap + gap + jaCap : wordCap;
-  const top = cy - block / 2;
+  const top = cy - wordCap / 2;
   return [
     `  <g${filter ? ` filter="${filter}"` : ""}>`,
     icon(x, cy - iconSize / 2, iconSize),
     run(WORDMARK, wordX, top + wordCap, wordWidth, `fill="${C.ink}"`),
-    ja ? run(WORDMARK_JA, wordX + wordWidth * 0.012, top + wordCap + gap + jaCap, jaWidth, `fill="${C.inkJa}"`) : "",
     `  </g>`,
-  ].filter(Boolean).join("\n");
+  ].join("\n");
 }
 
 const files = {};
@@ -147,7 +134,7 @@ files["capsule.svg"] = svg(
     ground(600, 900, { glow: [300, 360, 420] }),
     ghost(520, 840, 560, 0.04),
     brackets(44, 44, 512, 812, 70, 7, 0.22),
-    stacked(300, 220, 236, 356, "url(#g-lift)"),
+    stacked(300, 250, 236, 356, "url(#g-lift)"),
   ].join("\n"),
 );
 

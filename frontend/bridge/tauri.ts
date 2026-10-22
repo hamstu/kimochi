@@ -157,7 +157,15 @@ export const panel = (
     : invoke<PanelInfo>('panel', { label, action, rect })
 /** Settings pages, in rail order. Older builds stored other names; see `settingsTabOf`. */
 export type SettingsTabName =
-  'general' | 'sources' | 'ocr' | 'log' | 'dictionary' | 'assist' | 'controls' | 'account'
+  | 'general'
+  | 'sources'
+  | 'ocr'
+  | 'log'
+  | 'dictionary'
+  | 'assist'
+  | 'controls'
+  | 'account'
+  | 'about'
 
 /** Shows Settings, on one page when given: a view of the main window. */
 export async function openSettings(tab?: SettingsTabName): Promise<void> {

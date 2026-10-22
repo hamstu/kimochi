@@ -10,7 +10,10 @@ const {
   SOUND_VOLUME,
   controlSound,
   createAudioPlayer,
+  createBufferPlayer,
   installInteractionSounds,
+  leadingSilence,
+  LEAD_THRESHOLD,
   pressSound,
   readControl,
   createSoundPlayer,
@@ -302,15 +305,20 @@ test('interaction sounds follow the setting, except the one that turns sound on'
   assert.equal(listeners.has('click'), false)
 })
 
-test('menus and selects sound on the press that opens them; other controls wait for the click', () => {
+test('a pointer press sounds every control; a key only a menu or select it opens', () => {
   const menu = { role: 'button', popup: 'menu' }
   const select = { role: 'combobox', popup: 'listbox' }
   assert.equal(pressSound(menu), 'menu-open')
   assert.equal(pressSound(select), 'menu-open')
-  assert.equal(pressSound({ ...menu, expanded: true }), null)
-  assert.equal(pressSound({ role: 'button' }), null)
-  assert.equal(pressSound({ role: 'switch', checked: 'false' }), null)
+  // The press sounds what the click would have, at once.
+  assert.equal(pressSound({ ...menu, expanded: true }), 'click')
+  assert.equal(pressSound({ role: 'button' }), 'click')
+  assert.equal(pressSound({ role: 'switch', checked: 'false' }), 'toggle-on')
   assert.equal(pressSound({ ...menu, disabled: true }), null)
+  assert.equal(pressSound(null), null)
+  // Other keys wait for the click they make.
+  assert.equal(pressSound({ role: 'button' }, 'Enter'), null)
+  assert.equal(pressSound({ ...menu, expanded: true }, 'Enter'), null)
   // The keys Radix opens each with.
   assert.equal(pressSound(menu, 'Enter'), 'menu-open')
   assert.equal(pressSound(menu, ' '), 'menu-open')
@@ -344,9 +352,54 @@ test('a trigger that sounded on its press does not sound again on its click', ()
   // Enter on a popover: keydown sounds, the click Enter makes does not.
   fire('keydown', popover, { key: 'Enter' })
   fire('click', popover)
-  // Ordinary buttons: nothing on the press, a click on the click; a right press is ignored.
+  // Ordinary buttons: the press sounds and its click does not; a right press is ignored.
   fire('pointerdown', plain)
   fire('pointerdown', user, { button: 2 })
   fire('click', plain)
-  assert.deepEqual(played, ['menu-open', 'menu-open', 'menu-open', 'click'])
+  // A click with no press (Enter or Space on a button) sounds on the click.
+  fire('keydown', plain, { key: 'Enter' })
+  fire('click', plain)
+  assert.deepEqual(played, ['menu-open', 'menu-open', 'menu-open', 'click', 'click'])
+})
+
+test('a sound starts at its first audible sample, on any channel', () => {
+  const quiet = LEAD_THRESHOLD / 2
+  const left = new Float32Array([0, quiet, -quiet, 0, 0.2, 1, 0.5])
+  const right = new Float32Array([0, 0, -0.3, 0.1, 0, 0, 0])
+  assert.equal(leadingSilence([left]), 4, 'below the floor is lead-in')
+  assert.equal(leadingSilence([left, right]), 2, 'the earliest channel decides')
+  assert.equal(leadingSilence([new Float32Array(8)]), 0, 'a silent sound starts at its start')
+  assert.equal(leadingSilence([]), 0)
+})
+
+test('buffered sounds play from their first audible sample, each on its own source', async () => {
+  const started = []
+  const context = {
+    state: 'suspended',
+    destination: 'out',
+    resumed: 0,
+    resume() {
+      this.resumed++
+      this.state = 'running'
+      return Promise.resolve()
+    },
+    decodeAudioData: async () => ({
+      numberOfChannels: 1,
+      sampleRate: 1000,
+      getChannelData: () => new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+    }),
+    createGain: () => ({ gain: { value: 1 }, connect() {} }),
+    createBufferSource: () => ({ buffer: null, connect() {}, start: (when, offset) => started.push(offset) })
+  }
+  const fetched = []
+  const sounds = createBufferPlayer(context, async (name) => (fetched.push(name), new ArrayBuffer(0)))
+  assert.equal(sounds.play('click'), false, 'nothing decoded yet: the caller falls back')
+  sounds.load()
+  sounds.load()
+  assert.deepEqual(fetched, SOUND_NAMES, 'every sound is fetched once')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(sounds.play('click'), true)
+  assert.equal(sounds.play('click'), true)
+  assert.deepEqual(started, [0.01, 0.01], 'ten silent samples at 1 kHz are skipped, on two sources')
+  assert.equal(context.resumed, 1, 'a suspended context is resumed once')
 })

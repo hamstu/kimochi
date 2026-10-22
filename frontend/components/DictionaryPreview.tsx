@@ -10,6 +10,7 @@
  * it without deleting anything.
  */
 import type { ReactNode } from "react";
+import { Maximize2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@kit";
 import {
   DICTIONARY_ENGINES,
@@ -99,6 +100,9 @@ export function DictionaryPreview({
             alt={alt}
             className="dictionary-preview-image"
           />
+          <span className="dictionary-preview-expand" aria-hidden>
+            <Maximize2 />
+          </span>
         </button>
       </DialogTrigger>
       <DialogContent

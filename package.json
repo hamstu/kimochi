@@ -6,6 +6,7 @@
     "prepare": "node scripts/prepare.mjs",
     "build:frontend": "vite build",
     "preview:ui": "vite --config vite.preview.config.ts",
+    "studio": "vite --config vite.preview.config.ts --open /dev/studio.html",
     "demo:build": "vite build --config vite.demo.config.ts",
     "capture:dictionary-previews": "node scripts/capture-dictionary-previews.mjs",
     "site:dev": "npm --prefix site run dev",

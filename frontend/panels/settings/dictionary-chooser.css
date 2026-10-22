@@ -85,3 +85,20 @@
   align-self: flex-start;
   margin-top: var(--k-space-1);
 }
+
+/* The description and strengths, with the pop-up's thumbnail beside them. */
+.dictionary-detail-intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8.5rem;
+  gap: var(--k-space-3);
+  align-items: start;
+}
+.dictionary-detail-words {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  min-width: 0;
+}
+.dictionary-detail-intro .dictionary-preview {
+  max-width: none;
+}

@@ -42,6 +42,10 @@ tccutil reset ScreenCapture dev.kimochi.app
 **UI work without the native app.** `npm run preview:ui` serves every window in Chrome against
 mocked native commands, so panels can be designed and checked in a browser. The mocks and the
 preview state live in [frontend/dev/preview-setup.ts](frontend/dev/preview-setup.ts).
+`npm run studio` opens the same pages in the UI studio: each window on a desktop where it can be
+moved and resized, the overlay and Gaming Mode on a screen of their own, a side panel that sets the
+state the page starts in (with JSON for anything bigger), and a copy-edit mode that collects text
+changes made in place. Its catalogue of states is in [frontend/dev/studio/](frontend/dev/studio/).
 
 **Design rules.** Components come from the kit, whose usage rules are in
 [frontend/kit/README.md](frontend/kit/README.md); colours, type and spacing are in

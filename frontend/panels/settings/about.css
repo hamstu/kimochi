@@ -1,0 +1,97 @@
+/* Settings → About (AboutTab.tsx). */
+
+/* The icon, name and version above the page's sections. */
+.about-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-4);
+  margin-bottom: var(--k-space-6);
+}
+.about-icon {
+  flex: none;
+  width: 4.5rem;
+  height: 4.5rem;
+  /* The squircle carries its own shape; the shadow sits it on the page like the Dock does. */
+  filter: drop-shadow(0 2px 6px rgb(26 44 128 / 0.25));
+  user-select: none;
+}
+.about-identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-0-5);
+  min-width: 0;
+}
+.about-name {
+  margin: 0;
+  font-size: var(--k-text-xl);
+  line-height: var(--k-leading-xl);
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: -0.01em;
+}
+.about-version {
+  margin: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  user-select: text;
+}
+.about-summary {
+  max-width: 36rem;
+  margin: var(--k-space-1) 0 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  text-wrap: pretty;
+}
+
+.about-link-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.about-link-label svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-text-2);
+}
+
+/* One block per group of credits, each a grouped list under a small heading. */
+.about-credits + .about-credits {
+  margin-top: var(--k-space-4);
+}
+.about-credits-title {
+  margin: 0 0 var(--k-space-1-5);
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+  font-weight: var(--k-weight-medium);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.about-license {
+  margin-left: var(--k-space-2);
+  font-weight: var(--k-weight-regular);
+}
+
+.about-inline-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--k-accent-text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.about-inline-link:focus-visible {
+  border-radius: var(--k-radius-sm);
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+}
+
+.about-copyright {
+  margin: var(--k-space-6) 0 0;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}

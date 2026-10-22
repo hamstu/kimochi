@@ -105,6 +105,53 @@ export function wordAnnotations(annotations: Annotation[]): Annotation[] {
 }
 
 /**
+ * The furigana filter's strengths, as Settings offers them: each is a `threshold` for
+ * `filterSmallTextAnnotations`, the share of the median text height below which text goes.
+ */
+export const FILTER_LEVELS = [
+  {
+    threshold: 0.5,
+    label: 'Gentle',
+    description:
+      'Removes only text half the size of the main text or smaller, such as clear furigana above kanji. Small captions and names stay.'
+  },
+  {
+    threshold: 0.6,
+    label: 'Light',
+    description:
+      'Removes furigana and other text well under the main size. Most small print stays.'
+  },
+  {
+    threshold: 0.75,
+    label: 'Balanced',
+    description:
+      'Removes furigana and small labels under three-quarters of the main text size. Right for most games.'
+  },
+  {
+    threshold: 0.85,
+    label: 'Strong',
+    description:
+      'Also removes text a little smaller than the main text, such as speaker names and small menu text.'
+  },
+  {
+    threshold: 0.95,
+    label: 'Strict',
+    description:
+      'Keeps only text close to the size of the main text. Smaller lines you want to read can go too.'
+  }
+] as const
+
+/** The step a stored threshold shows on: the nearest one. */
+export function filterLevelOf(threshold: number): number {
+  let best = 0
+  FILTER_LEVELS.forEach((level, index) => {
+    if (Math.abs(level.threshold - threshold) < Math.abs(FILTER_LEVELS[best].threshold - threshold))
+      best = index
+  })
+  return best
+}
+
+/**
  * Drop furigana and OCR noise, relative to the medians of this capture.
  *
  * The character-width medians are per *character*, not per word: OCR splits text

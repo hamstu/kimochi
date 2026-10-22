@@ -5,15 +5,19 @@
  * While the controller menu or word navigation is open, native stops dispatching gamepad
  * bindings and sends raw input instead: `controller-nav` events with the buttons pressed and
  * released since the last one, the buttons held, and both sticks (y positive is up), plus
- * `controller-key` events for the arrow keys, Return and Escape. This turns both into the few
+ * `controller-key` events for the arrow keys, Return, Escape and Space. This turns both into the few
  * things the overlay acts on, so the menu and the word cursor never look at buttons:
  *
- *   aim      the left stick's direction, for pointing at a radial menu item
+ *   aim      the left stick's position, for pointing at a radial menu item or moving the
+ *            reading cursor
  *   dir      one step up/down/left/right, from the D-pad, the left stick or the arrow keys;
  *            held D-pad and stick directions repeat, the way a game menu does
  *   step     previous/next definition, from the shoulder buttons
  *   confirm  A / Cross (south), or Return
- *   cancel   B / Circle (east) or Y / Triangle (north), or Escape
+ *   cancel   B / Circle (east), or Escape
+ *   unit     switch between stepping by word and by character: Y / Triangle (north), or Space
+ *   audio    play the word's audio: X / Square (west)
+ *   help     show every control: View / Select
  *   menu     the controller menu's own button combination, pressed again
  *   scroll   the right stick's vertical deflection, for scrolling a dictionary popup
  *
@@ -28,6 +32,12 @@ export const BUTTON = {
   north: 3,
   lb: 4,
   rb: 5,
+  lt: 6,
+  rt: 7,
+  view: 8,
+  start: 9,
+  ls: 10,
+  rs: 11,
   up: 12,
   down: 13,
   left: 14,
@@ -38,9 +48,24 @@ export const BUTTON = {
 export const DEFAULT_BUTTONS = {
   confirm: BUTTON.south,
   back: BUTTON.east,
-  backAlt: BUTTON.north,
+  toggleUnit: BUTTON.north,
+  playAudio: BUTTON.west,
   previousDefinition: BUTTON.lb,
-  nextDefinition: BUTTON.rb
+  nextDefinition: BUTTON.rb,
+  showControls: BUTTON.view
+}
+
+/**
+ * What each standard button is called on screen, with Xbox-style face letters (the Deck's); the
+ * same names as Settings (frontend/bridge/useGamepad.ts), with arrows for the D-pad.
+ */
+export const BUTTON_NAMES = [
+  'A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'View', 'Menu', 'LS', 'RS', '▲', '▼', '◀', '▶', 'Home'
+]
+
+/** A button's on-screen name, or null for none. */
+export function buttonName(button) {
+  return Number.isInteger(button) ? (BUTTON_NAMES[button] ?? `Button ${button}`) : null
 }
 
 const DPAD = {
@@ -93,18 +118,29 @@ export class ControllerInput {
     this.menuChord = Array.isArray(buttons) ? buttons.filter(Number.isInteger) : []
   }
 
-  /** The command buttons from settings; a missing entry keeps its default, `null` unbinds it. */
+  /**
+   * The command buttons from settings; a missing entry keeps its default, `null` unbinds it.
+   * Only the actions in DEFAULT_BUTTONS count: a retired one in older settings (`backAlt`, the
+   * second Back that Y used to be) is ignored.
+   */
   setButtons(buttons) {
-    this.buttons = { ...DEFAULT_BUTTONS, ...(buttons ?? {}) }
+    this.buttons = { ...DEFAULT_BUTTONS }
+    for (const action of Object.keys(DEFAULT_BUTTONS)) {
+      if (buttons && action in buttons) this.buttons[action] = buttons[action]
+    }
   }
 
   /** The command a button stands for, if any. */
   commandFor(button) {
-    const { confirm, back, backAlt, previousDefinition, nextDefinition } = this.buttons
+    const { confirm, back, toggleUnit, playAudio, previousDefinition, nextDefinition, showControls } =
+      this.buttons
     if (button === confirm) return { type: 'confirm' }
-    if (button === back || button === backAlt) return { type: 'cancel' }
+    if (button === back) return { type: 'cancel' }
+    if (button === toggleUnit) return { type: 'unit' }
+    if (button === playAudio) return { type: 'audio' }
     if (button === previousDefinition) return { type: 'step', delta: -1 }
     if (button === nextDefinition) return { type: 'step', delta: 1 }
+    if (button === showControls) return { type: 'help' }
     return null
   }
 
@@ -172,6 +208,8 @@ export class ControllerInput {
     if (KEYS[key]) this.emit({ type: 'dir', dir: KEYS[key], source: 'key', repeat: false })
     else if (key === 'Enter') this.emit({ type: 'confirm' })
     else if (key === 'Escape') this.emit({ type: 'cancel' })
+    // Native names it `Space` (macOS, Linux) or by its DOM key, ' ' (Windows).
+    else if (key === 'Space' || key === ' ') this.emit({ type: 'unit' })
   }
 
   press(dir, holder) {
@@ -196,4 +234,4 @@ export class ControllerInput {
   }
 }
 
-export default { ControllerInput, BUTTON, stickDirection }
+export default { ControllerInput, BUTTON, BUTTON_NAMES, buttonName, stickDirection }

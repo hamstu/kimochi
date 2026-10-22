@@ -1,6 +1,0 @@
-/* Tray popover: title strip aligned with the rows' icon column, like the panel title bar. */
-.tray-popover-bar {
-  padding: 0 var(--k-space-3);
-  -webkit-user-select: none;
-  user-select: none;
-}

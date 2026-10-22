@@ -29,8 +29,7 @@ export default defineConfig({
       input: {
         panel: here('frontend/panel.html'),
         'reader-popup': here('frontend/reader-popup.html'),
-        welcome: here('frontend/welcome.html'),
-        'tray-popover': here('frontend/tray-popover.html')
+        welcome: here('frontend/welcome.html')
       }
     }
   },

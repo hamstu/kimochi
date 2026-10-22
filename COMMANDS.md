@@ -160,10 +160,9 @@ where `native` reports `{level, opaque, ignores_mouse}`.
 | `sync-log` | `app/panel.html` | The sync log (see Sync); centred |
 | `source-picker` | `app/source-picker.html` | The only source UX |
 | `welcome` | `app/welcome.html` | Onboarding |
-| `tray-popover` | `app/tray-popover.html` | Fixed size, dismisses on blur |
 | `dictionary` | `app/panel.html` | The active engine's own options page in an iframe (Yomitan `/settings.html`, `hachidori://localhost/settings.html`, `tenten://localhost/options.html`); renamed from `yomitan`, so its saved bounds start fresh |
 | `fixture` | `ui/fixture.html` | Diagnostic Japanese test source |
-| `fixture-chunks` | `ui/fixture-chunks.html` | Split-word source for cloud OCR lookahead checks (macOS menu: Panels → Split-Word Fixture) |
+| `fixture-chunks` | `ui/fixture-chunks.html` | Split-word source for cloud OCR lookahead checks (macOS menu, debug builds: Panels → Split-Word Fixture) |
 | `overlay` | `ui/overlay.html` | Transparent, click-through, hosts the dictionary backend (Yomitan, or an extension engine's background and offscreen iframes) |
 
 There is deliberately **no** `sources` or `crop` panel. The POC's `ui/sources.html` is
@@ -191,7 +190,7 @@ proof that a background window's cursor visibly changed.
 
 **Events:** `state` (the full snapshot, emitted whenever anything a panel renders
 changes — panels should subscribe rather than poll); `panel:state` `{label, visible, pinned, bounds}` on every show/hide/place/
-pin path including the tray popover's blur dismissal; `panel:closed` `{label}`;
+pin path; `panel:closed` `{label}`;
 `source-picker-open` `{editCurrent}` on every picker open, so a mounted picker resets
 rather than showing the previous session's selection.
 
@@ -473,7 +472,6 @@ for the same action.
 | `hotkeys_save` | `({hotkeys}) -> {registered, failed}` |
 | `hotkeys_reapply` | `() -> {registered, failed}` |
 | `trigger_action` | `({name}) -> ()` |
-| `tray_action` | `({action}) -> ()` |
 
 All names live in one list, `actions::ACTIONS`, which the command-contract test reads
 and compares against the names the frontend actually calls, so a button cannot ship
@@ -664,10 +662,11 @@ engine, `none` included, whatever the setting says. Otherwise it reloads
 (`location.reload()`) every extension-hosting window that exists, in this order: `overlay`, `log`, `dictionary`, `popup-host`, `welcome`. Call
 it after saving `yomitanSettings.popupType` and writing the `localStorage` mirror
 `kimochi.dictionaryEngine`: the reload re-runs the document-start scripts, which read the
-new engine. The mirror and the prelude name the *host* engine: `'builtin'` and
-`'custom-api'` both resolve to `yomitan`, because the Yomitan API engine tokenises and looks
-words up through the Yomitan backend in the overlay, so switching between those two
-reloads nothing. A window not built yet needs nothing, because its prelude reads the store when
+new engine. The mirror and the prelude name the *host* engine: `'builtin'` resolves to
+`yomitan`, and `'custom-api'` to `none`, because the Yomitan API engine splits and looks words up
+through the browser's Yomitan and needs no host (the overlay installs its lookups itself), so
+switching to or from it reloads the windows like any other switch, and a switch to it is never
+refused for a missing download. A window not built yet needs nothing, because its prelude reads the store when
 it is built. Call it once per switch: Settings is the only caller on a switch (the overlay
 calls it only from its startup repair of a stale mirror). The Log comes back on Settings →
 Dictionary because Settings records its route in `sessionStorage` first
@@ -782,7 +781,7 @@ swapped on a switch (the profile not in use keeps it in its `profile-settings.js
 holds the Log so its pending writes reach the old profile, saves the current preferences to the
 old profile, prepares the new one, writes its preferences into the live settings (emitting
 `settings:changed` per key), sets `serverSettings.mode`, and reloads the windows that show
-profile data (`log`, `settings`, `diagnostics`, `tray-popover`, `sync-log`). An account's profile is
+profile data (`log`, `settings`, `diagnostics`, `sync-log`). An account's profile is
 made the first time it is used here: a **copy** of the Local profile when the account has nothing
 synced (`GET /api/v1/sync/status` `records: 0`), otherwise filled from the server before the
 windows reload (or empty when the server cannot be reached; it fills in once online). Each case
@@ -968,9 +967,11 @@ unfiltered on purpose.** Kimochi's own windows are not filtered out, because a c
 needs to distinguish "Kimochi is frontmost" (where the previous foreign app should stay
 the effective focus) from "no signal yet" (where text must be shown, never hidden).
 
-The tray uses the Electron build's macOS template icon, a left-click popover positioned
-under the icon, and a right-click menu of Show Controls / Settings / Quit. Emits
-`tray:action` `{action}`.
+The tray icon opens a native menu on either click: Open Kimochi, Mini Mode (checked while the
+main window is mini; `tray::sync_mini` keeps it current), Settings… and Quit Kimochi. macOS draws
+`resources/tray-template@2x.png` as a template (the icon's brackets and キ without the tile,
+from `branding/tray-template.svg`); Windows and Linux show the full-colour `icons/32x32.png`.
+There is no tray window and no tray command or event.
 
 ## Yomitan API setup
 
@@ -1206,7 +1207,7 @@ stopped exactly as `app_quit` does.
 parse it (`ui/changelog.ts`) and show the released versions newest first in a dialog over the
 main window (`frontend/main/WhatsNewDialog.tsx`), marking the running one. While the changelog
 has no released section yet, the Unreleased section is shown under the running version, so the
-dialog is never empty. Settings → General → Updates → What's new opens it; while an update is
+dialog is never empty. Settings → About → Updates → What's new opens it; while an update is
 offered (`version` set; `available`, `downloading`, `ready` or `failed`) the offered release's
 `notes` from the manifest come first, as "Coming in Kimochi x.y.z". The main window also opens it
 once on the first launch of a new version: the `lastSeenVersion` setting holds the version last

@@ -275,7 +275,7 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
             let Some(name) = key_name(key) else { continue };
             let payload = serde_json::json!({ "key": name, "type": if down { "keydown" } else { "keyup" } });
             if region && matches!(key, 13 | 27 | 32) { let _ = key_app.emit("region-key", &payload); }
-            if nav && key != 32 { let _ = key_app.emit("controller-key", &payload); }
+            if nav { let _ = key_app.emit("controller-key", &payload); }
         }
     }).map_err(|e| e.to_string())?;
     std::thread::Builder::new()

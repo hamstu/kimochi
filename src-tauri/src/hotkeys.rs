@@ -183,7 +183,7 @@ static KEYS_SYNC: Mutex<()> = Mutex::new(());
 #[cfg(not(target_os = "windows"))]
 const REGION_KEY_NAMES: [&str; 3] = ["Escape", "Enter", "Space"];
 #[cfg(not(target_os = "windows"))]
-const NAV_KEY_NAMES: [&str; 6] = ["Up", "Down", "Left", "Right", "Enter", "Escape"];
+const NAV_KEY_NAMES: [&str; 7] = ["Up", "Down", "Left", "Right", "Enter", "Escape", "Space"];
 
 /// Escape and Return for the region editor, as global shortcuts while it is open.
 ///
@@ -197,8 +197,8 @@ pub fn set_region_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {
     sync_keys(app)
 }
 
-/// The arrows, Return and Escape for the controller menu, as global shortcuts while it is
-/// open, delivered as `controller-key` events. The same bargain as `set_region_keys`, and
+/// The arrows, Return, Escape and Space for the controller menu, as global shortcuts while it
+/// is open, delivered as `controller-key` events (Space switches word and character steps). The same bargain as `set_region_keys`, and
 /// like those keys they are not action shortcuts, so `suspend` never touches them. The
 /// arrows report release as well, so the overlay can stop its key repeat.
 pub fn set_nav_keys(app: &tauri::AppHandle, on: bool) -> Result<(), String> {

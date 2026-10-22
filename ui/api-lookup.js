@@ -38,8 +38,15 @@ export function dismissApiLookup() {
 
 const WORD_BOX = '[data-ocr-word-box]'
 
-export async function installApiLookup() {
-  const { setEmbeddedEnabled } = await import('/spike/frontend-mode.js')
+/**
+ * `embedded`: Built-in Yomitan is loaded in this document (its own pop-up is switched off while
+ * the Yomitan API is the engine). The Yomitan API on its own (`startApiEngine` in overlay.js) loads
+ * none of Yomitan's files, so there is nothing to switch.
+ */
+export async function installApiLookup({ embedded = true } = {}) {
+  const { setEmbeddedEnabled } = embedded
+    ? await import('/spike/frontend-mode.js')
+    : { setEmbeddedEnabled: () => {} }
   const { invoke } = window.__TAURI__.core
   let settings = await invoke('settings_get', { key: 'yomitanSettings' })
   let reader = (await invoke('settings_get', { key: 'superTexthooker' })) || {}

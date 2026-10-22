@@ -219,6 +219,23 @@ export async function segmentAcross(units, split) {
 }
 
 /**
+ * The same units with one token per character, for stepping by character: every letter or digit
+ * is a stop, punctuation and spaces are not. A lookup from a character reads on from there, so
+ * this is how the reader starts a lookup where the word split went wrong.
+ */
+export function characterUnits(units) {
+  return units.map((unit) => {
+    const tokens = []
+    let at = 0
+    for (const character of unit.text) {
+      tokens.push({ start: at, end: at + character.length, text: character, word: isWordText(character) })
+      at += character.length
+    }
+    return { ...unit, tokens }
+  })
+}
+
+/**
  * A cursor over the words of several boxes.
  *
  * @param {{text: string, vertical: boolean, tokens: {start: number, end: number, text: string, word: boolean}[]}[]} units
@@ -267,6 +284,29 @@ export class WordCursor {
 
   get vertical() {
     return this.verticalText
+  }
+
+  /**
+   * Go to the stop at `offset` in unit `unit`: the one covering it, else the last one before it
+   * (in reading order), else the first after it. Returns whether there was one.
+   */
+  seek(unit, offset) {
+    let best = -1
+    for (let index = 0; index < this.words.length; index++) {
+      const word = this.words[index]
+      if (word.unit === unit && word.start <= offset && offset < word.end) {
+        best = index
+        break
+      }
+      if (word.unit < unit || (word.unit === unit && word.start <= offset)) best = index
+      else {
+        if (best < 0) best = index
+        break
+      }
+    }
+    if (best < 0) return false
+    this.index = best
+    return true
   }
 
   /** Move by `delta` words, stopping at either end. Returns whether the cursor moved. */
@@ -368,6 +408,7 @@ export class WordCursor {
 
 export default {
   WordCursor,
+  characterUnits,
   segmentText,
   tokensFromParse,
   tokensFromSegmenter,

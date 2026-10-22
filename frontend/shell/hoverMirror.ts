@@ -13,8 +13,8 @@
  * either way) and the mirror sheet comes last, so it wins.
  *
  * A rule is re-emitted from its `cssText`, not from `style.cssText`, because the app's own CSS
- * Modules put the declarations in nested at-rules — `RemoteControl.module.css` writes
- * `.button:hover { @media (prefers-color-scheme: dark) { … } }`, whose own `style.cssText` is
+ * Modules may put the declarations in nested at-rules —
+ * `.button:hover { @media (prefers-color-scheme: dark) { … } }` — whose own `style.cssText` is
  * empty. Nested rules are also traversed so `&:hover` inside a parent rule is mirrored too.
  */
 const MIRROR_ATTRIBUTE = 'data-native-hover'

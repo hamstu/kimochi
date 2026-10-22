@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hachidoriReadiness,
+  canLookUp,
   tentenReadiness,
   watchReadiness,
 } from "../host/ext/readiness.js";
@@ -120,6 +121,19 @@ test("10ten waits for every data series and the end of database writes", () => {
     tentenReadiness({ ...data(), updateState: { type: "idle" } }).phase,
     "ready",
   );
+});
+
+test("10ten looks words up in every phase, Hachidori only once ready", () => {
+  // 10ten's bundled words (data/words.ljson) answer while the full dictionary downloads or fails.
+  for (const state of [
+    { updateState: { type: "updating", series: "words", totalProgress: 0.1 } },
+    { updateError: { message: "Offline" } },
+    { updateState: { type: "idle" } },
+  ])
+    assert.equal(canLookUp(tentenReadiness(state)), true);
+  assert.equal(canLookUp({ phase: "downloading" }), false);
+  assert.equal(canLookUp({ phase: "ready" }), true);
+  assert.equal(canLookUp(hachidoriReadiness({ ok: true, ready: false })), false);
 });
 
 test("10ten observer follows its options port through progress, failure, recovery and shutdown", () => {

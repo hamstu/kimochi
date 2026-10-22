@@ -306,9 +306,6 @@ function LibraryTile() {
           className="relative size-20 drop-shadow-[0_10px_18px_rgb(0_0_0/0.25)]"
         />
         <span className="relative mt-4 text-[1.375rem] font-semibold tracking-[-0.015em] text-white">Kimochi</span>
-        <span lang="ja" className="relative mt-1 text-small text-white/75">
-          気持ち
-        </span>
       </div>
       <figcaption className="max-w-[12rem] text-center text-meta font-normal text-ink-3">
         Illustration: Kimochi in your Steam library, with its own artwork.

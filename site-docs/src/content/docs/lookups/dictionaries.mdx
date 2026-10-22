@@ -24,7 +24,7 @@ the first time.
 | **Built-in Yomitan** (recommended) | A copy of Yomitan inside Kimochi, with its own dictionaries and settings. | About 15 MB | Yomitan's own mining |
 | **Hachidori** | A fast engine written in C++ and compiled to WebAssembly, with native dictionary indexes. Imports Yomitan dictionaries and MDict. | About 5 MB | Through AnkiConnect |
 | **10ten** | Lightweight, works straight away with a bundled word dictionary, then downloads JMdict, kanji and names dictionaries in the background. | About 18 MB | None |
-| **Yomitan API** (experimental) | A pop-up built into Kimochi that looks words up through the Yomitan in your browser. | Small helper | Kimochi's card builder |
+| **Yomitan API** | A pop-up built into Kimochi that looks words up through the Yomitan in your browser. | Small helper | Kimochi's card builder |
 
 ## How engines are downloaded
 
@@ -40,7 +40,7 @@ windows: **Now using … The reader windows reloaded with it.**
 An embedded copy of [Yomitan](https://github.com/yomidevs/yomitan) that runs inside Kimochi, so
 there is no browser extension to install. It needs at least one dictionary:
 
-- **Set up Jitendex** (in the welcome guide) downloads the Jitendex Japanese–English dictionary and
+- **Install Jitendex** (in the welcome guide) downloads the Jitendex Japanese–English dictionary and
   enables it in your current profile.
 - **Open Built-in Yomitan settings** (in **Settings → Dictionary**) opens Yomitan's own settings
   page, where you import dictionaries, restore a settings backup exported from Yomitan in your
@@ -78,7 +78,8 @@ starts (Kimochi installs it for you) and one setting in Yomitan:
    **Enable Yomitan API**.
 3. Back in Kimochi, choose **Check again**.
 
-Kimochi also downloads Yomitan itself, to split text into words. The pop-up's options:
+There is nothing to download for it: words are split and looked up by the Yomitan in your
+browser. The pop-up's options:
 
 | Setting | Default |
 | --- | --- |

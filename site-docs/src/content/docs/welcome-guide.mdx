@@ -8,18 +8,17 @@ import Screenshot from '../../components/Screenshot.astro'
 The first time Kimochi opens, a short welcome guide sets up what it needs. Every step can be changed
 later in Settings, and you can open the guide again from **Settings → General → Help → Welcome guide**.
 
-<Screenshot id="welcome-intro" alt="The welcome guide's first page: the Kimochi icon, Read your games in Japanese, and a Get started button." width={640} />
+<Screenshot id="welcome-intro" alt="The welcome guide's first page: the Kimochi icon, Read and play in Japanese, and a Get started button." width={640} />
 
 ## The steps
 
 | Step | What it does | Shown on |
 | --- | --- | --- |
 | **Allow screen recording** | Lets Kimochi capture the window you read. | macOS |
-| **Choose what to read** | Opens your desktop's own dialog to pick a screen or window. | Linux (Wayland) |
 | **Allow Accessibility** | Optional: lets a click on your source bring that exact window forward. | macOS |
 | **How should Kimochi read text?** | Picks the [OCR engine](/reading/ocr-engines/). | All |
 | **Choose a pop-up dictionary** | Picks and downloads a [dictionary engine](/lookups/dictionaries/). | All |
-| **Add a dictionary** / **Set up …** | Sets up that engine (Jitendex for Yomitan). | All |
+| **Set up …** | Sets up that engine (Jitendex for Yomitan). | All |
 | **Add Kimochi to your Steam library** | Adds Kimochi to Steam for Gaming Mode. | Steam Deck, Desktop Mode |
 | **You're ready to read** | Recaps the loop and offers a test lookup. | All |
 
@@ -45,15 +44,18 @@ official release (Built-in Yomitan is recommended). You can switch at any time i
 If you skip it, nothing will look words up until you choose and download a dictionary in
 **Settings → Dictionary**. Scanning and the Log still work.
 
-### Add a dictionary (Built-in Yomitan)
+### Set up Yomitan (Built-in Yomitan)
 
-Built-in Yomitan needs at least one dictionary. **Set up Jitendex** downloads the Jitendex
-Japanese–English dictionary and enables it in your current Yomitan profile; existing dictionaries and
-preferences are kept. It carries on in the background if you press **Continue while importing**.
-Already have dictionaries or a Yomitan settings backup from your browser? Choose
-**Import or manage dictionaries**.
+Built-in Yomitan needs at least one dictionary, and the step offers three ways to get one:
 
-<Screenshot id="welcome-dictionaries" alt="The Add a dictionary step with Jitendex and a Set up Jitendex button." width={640} />
+- **Install Jitendex** downloads the Jitendex Japanese–English dictionary and enables it in your
+  current Yomitan profile; existing dictionaries and preferences are kept. It carries on in the
+  background if you press **Continue while installing**.
+- **Choose your own** opens Yomitan's settings, to import dictionaries or a settings backup from
+  Yomitan in your browser.
+- **Do it later** moves on; add a dictionary any time in **Settings → Dictionary**.
+
+<Screenshot id="welcome-dictionaries" alt="The Set up Yomitan step: Install Jitendex, Choose your own, and Do it later." width={640} />
 
 Hachidori offers a set of recommended dictionaries the first time its settings open. 10ten works
 straight away and downloads its full dictionaries in the background.

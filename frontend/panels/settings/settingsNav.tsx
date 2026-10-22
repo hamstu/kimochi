@@ -2,6 +2,7 @@
 import {
   BookOpen,
   Gamepad2,
+  Info,
   Languages,
   ScanText,
   ScrollText,
@@ -20,7 +21,8 @@ export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName 
   { value: 'dictionary', label: 'Dictionary', icon: <BookOpen /> },
   { value: 'assist', label: 'Translation & AI', icon: <Languages /> },
   { value: 'controls', label: 'Shortcuts & Controls', icon: <Gamepad2 /> },
-  { value: 'account', label: 'Account', icon: <UserRound /> }
+  { value: 'account', label: 'Account', icon: <UserRound /> },
+  { value: 'about', label: 'About', icon: <Info /> }
 ]
 
 /** Page names stored by earlier builds, mapped onto the pages that now hold their settings. */

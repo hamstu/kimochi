@@ -101,8 +101,7 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
       // The Yomitan API needs the browser side set up. If this window is reloaded by the switch,
       // the reloaded one opens the wizard again (`switchedTo`).
       if (engine === 'custom-api') setSetupOpen(true)
-      // Built-in Yomitan and the Yomitan API share a host, so moving between them reloads nothing:
-      // the overlay switches live, as it always has.
+      // The same host (only ever the same engine, saved again) needs no reload.
       if (hostEngineOf(engine) === hostEngineOf(saved)) return
       // Before native reloads this window, so the reload comes back to this page.
       setReloading(rememberEngineSwitch(engine, from) ? 'self' : 'others')
@@ -128,8 +127,10 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
       const mine = ++ticket.current
       setApplyError(null)
       let status: ExtensionStatus | null = null
+      const needs = downloadEngineFor(engine)
       try {
-        status = await extensionStatus(downloadEngineFor(engine))
+        // The Yomitan API downloads nothing: it is switched to at once.
+        if (needs) status = await extensionStatus(needs)
       } catch {
         // A backend without engine downloads: everything it has is bundled.
       }
@@ -168,6 +169,7 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   useEffect(() => {
     if (!pending) return
     const needs = downloadEngineFor(pending)
+    if (!needs) return
     let done = false
     const settle = (status: ExtensionStatus | null): void => {
       if (done || status?.engine !== needs) return

@@ -1,0 +1,39 @@
+/* The generic window glyph, when the app has no icon of its own. */
+.glyph {
+  flex-shrink: 0;
+  width: var(--k-icon);
+  height: var(--k-icon);
+  color: var(--k-text-2);
+}
+/* App icon slot: a soft placeholder until the icon has decoded, then a short fade. */
+.icon {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--k-icon);
+  height: var(--k-icon);
+  border-radius: var(--k-radius-sm);
+  background: var(--gray-a4);
+  animation: iconPulse 1.2s ease-in-out infinite;
+  transition: background-color var(--k-base) var(--k-ease-out);
+}
+.icon[data-loaded] {
+  background: transparent;
+  animation: none;
+}
+.icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity var(--k-base) var(--k-ease-out);
+}
+.icon[data-loaded] img {
+  opacity: 1;
+}
+@keyframes iconPulse {
+  50% {
+    opacity: 0.55;
+  }
+}

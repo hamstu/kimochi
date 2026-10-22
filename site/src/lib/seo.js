@@ -18,7 +18,7 @@ export const OG_IMAGE = {
   url: `${SITE_URL}/og.png`,
   width: 1200,
   height: 630,
-  alt: 'Kimochi: Read your games in Japanese. The main window beside the wordmark.'
+  alt: 'Kimochi: Read and play in Japanese. The main window beside the wordmark.'
 }
 
 /**

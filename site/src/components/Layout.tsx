@@ -161,7 +161,7 @@ export function Layout() {
         <div className="container-page grid gap-10 py-12 md:grid-cols-[1fr_auto_auto] md:gap-16">
           <div className="max-w-xs">
             <Wordmark />
-            <p className="mt-3 text-ink-3">Read your games in Japanese. Free and open source, for macOS, Windows and Linux.</p>
+            <p className="mt-3 text-ink-3">Read and play in Japanese. Free and open source, for macOS, Windows and Linux.</p>
             <div className="mt-4 flex items-center gap-1">
               <a href={DISCORD_URL} aria-label="Kimochi on Discord" title="Discord" className={footerIconClass}>
                 <DiscordMark className="size-[18px]" />

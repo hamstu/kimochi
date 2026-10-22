@@ -151,10 +151,13 @@ export function installPanelController(win, { onBack = () => false } = {}) {
     ].filter(visible);
     return modals.at(-1) ?? doc;
   };
+  // `data-controller-skip`: never a controller target (the Log's Quit button: one stray A
+  // would end the app).
   const candidates = (doc) =>
     [...scope(doc).querySelectorAll(TARGETS)].filter(
       (element) =>
         visible(element) &&
+        !element.closest("[data-controller-skip]") &&
         (element.getAttribute("tabindex") !== "-1" ||
           element.matches(
             '[role="option"], [role="menuitem"], [role="tab"], [role="radio"], [role="slider"]',
@@ -220,10 +223,14 @@ export function installPanelController(win, { onBack = () => false } = {}) {
       scroll = command.y;
       return;
     }
+    // Reading commands (word or character, audio, the list of controls) mean nothing in a panel.
     if (
       command.type === "aim" ||
       command.type === "menu" ||
-      command.type === "step"
+      command.type === "step" ||
+      command.type === "unit" ||
+      command.type === "audio" ||
+      command.type === "help"
     )
       return;
     if (command.type === "cancel") {
@@ -363,8 +370,13 @@ export function installPanelController(win, { onBack = () => false } = {}) {
     snapshot(payload) {
       const buttons = payload?.buttonStates ?? [];
       const pad = payload?.activeGamepadIndex ?? null;
+      // While the overlay's controller menu or reading has the controller, its presses are
+      // the overlay's: a panel that also acted on them would click whatever it had focused (the
+      // Log's Quit button, once). Kept in step meanwhile, so a button still held when the
+      // overlay lets go is not a fresh press here.
       if (
         !eligible() ||
+        payload?.overlayNavigation === true ||
         pad === null ||
         pad !== previousPad ||
         menuChord.some((button) => buttons[button])

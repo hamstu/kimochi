@@ -66,9 +66,10 @@ pub fn command_allowed(label: &str, command: &str) -> Result<(), String> {
 }
 
 /// The engine *host* `yomitanSettings.popupType` selects: `'builtin'` (and anything missing or
-/// malformed) is Yomitan, and so is `'custom-api'`: the Yomitan API pop-up still tokenises and
-/// looks words up through the Yomitan backend in the overlay (`installApiLookup` in
-/// ui/overlay.js), so that host must run for it. `hachidori` and `tenten` pass through.
+/// malformed) is Yomitan; `hachidori` and `tenten` pass through. `'custom-api'` needs no host
+/// ([`NONE`]): the Yomitan API pop-up splits words and looks them up through the browser's
+/// Yomitan over its API, and the overlay installs its lookup hook without any extension
+/// (`startApiEngine` in ui/overlay.js), so nothing has to be downloaded for it.
 pub fn selected_engine(settings: &Settings) -> String {
     engine_for(
         settings
@@ -99,7 +100,8 @@ pub fn effective(selected: &str, ready: impl Fn(&str) -> bool) -> String {
 
 fn engine_for(popup_type: Option<&Value>) -> String {
     match popup_type.and_then(Value::as_str) {
-        None | Some("") | Some("builtin") | Some("custom-api") => "yomitan".into(),
+        None | Some("") | Some("builtin") => "yomitan".into(),
+        Some("custom-api") => NONE.into(),
         // An unknown value (a future engine, a corrupt store) gets Yomitan, as the TypeScript
         // side's `dictionaryEngineOf` does; passing it through would leave the window with no
         // host at all while the overlay still started Yomitan's.
@@ -445,8 +447,8 @@ mod tests {
         assert_eq!(engine_for(Some(&json!("builtin"))), "yomitan");
         assert_eq!(engine_for(Some(&json!(""))), "yomitan");
         assert_eq!(engine_for(Some(&json!(3))), "yomitan");
-        // The Yomitan API pop-up runs over the Yomitan backend, so it needs the Yomitan host.
-        assert_eq!(engine_for(Some(&json!("custom-api"))), "yomitan");
+        // The Yomitan API pop-up talks to the browser's Yomitan: no host, nothing to download.
+        assert_eq!(engine_for(Some(&json!("custom-api"))), NONE);
         assert_eq!(engine_for(Some(&json!("hachidori"))), "hachidori");
         assert_eq!(engine_for(Some(&json!("tenten"))), "tenten");
         assert_eq!(engine_for(Some(&json!("rikaikun"))), "yomitan");

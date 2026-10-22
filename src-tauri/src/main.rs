@@ -436,7 +436,8 @@ const EXTENSION_HOST_WINDOWS: &[&str] = &[OVERLAY, panels::MAIN, "dictionary", P
 #[tauri::command]
 fn dictionary_engine_apply(app: tauri::AppHandle, state: State<Shared>, repair: Option<bool>) -> Reply<()> {
     let selected = extensions::selected_engine(&state.settings);
-    if !repair.unwrap_or(false) && !extension_store::is_ready(&selected) {
+    // `none` is the Yomitan API, which has no files to be missing.
+    if !repair.unwrap_or(false) && selected != extensions::NONE && !extension_store::is_ready(&selected) {
         return Err(format!("invalid: {selected} is not downloaded"));
     }
     reload_engine_windows(&app, &state, &extensions::dictionary_engine(&state.settings))
@@ -1103,8 +1104,37 @@ fn shutdown_platform() {
     platform::shortcuts::stop();
 }
 
+/// Append every panic to `evidence.jsonl` as well as stderr. A panic on the main thread ends the
+/// app without a crash report, and a release build has no terminal: this is the only trace left.
+fn record_panics(evidence: std::path::PathBuf) {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        use std::io::Write;
+        let message = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        let entry = json!({
+            "check": "panic",
+            "message": message,
+            "location": info.location().map(|l| format!("{}:{}", l.file(), l.line())),
+            "thread": std::thread::current().name().unwrap_or("unnamed"),
+            "at": now_ms(),
+        });
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&evidence) {
+            let _ = writeln!(file, "{entry}");
+        }
+        previous(info);
+    }));
+}
+
+/// Quit, from a window's Quit button. Recorded with the window that asked, so a quit is never
+/// mistaken for a crash afterwards (no crash report, nothing else in the log).
 #[tauri::command]
-fn app_quit(app: tauri::AppHandle) {
+fn app_quit(app: tauri::AppHandle, window: tauri::WebviewWindow, state: State<Shared>) {
+    record(&app, &state, json!({ "check": "app-quit", "window": window.label(), "at": now_ms() }));
     shutdown_platform();
     app.exit(0);
 }
@@ -1439,6 +1469,7 @@ async fn capture_frame(
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let frame = backend.capture(&request).map_err(|error| {
             let error = sources::err_for(&request.source_id, error);
+            sources::stop_auto_if_gone(&service, &request.source_id, &error);
             service.images.lock().unwrap().capture_error = Some(error.clone());
             error
         })?;
@@ -2142,11 +2173,6 @@ fn trigger_action(app: tauri::AppHandle, state: State<Shared>, name: String) -> 
     Ok(())
 }
 
-#[tauri::command]
-fn tray_action(app: tauri::AppHandle, state: State<Shared>, action: String) -> Reply<()> {
-    tray::dispatch(&app, state.inner(), &action)
-}
-
 const HISTORY_LIMIT: usize = 50;
 const HISTORY_KEY: [&str; 1] = ["scannedTextHistory"];
 
@@ -2706,7 +2732,6 @@ fn main() {
             hotkeys_reapply,
             hotkeys_suspend,
             trigger_action,
-            tray_action,
             texthooker_send,
             history_add,
             history_delete,
@@ -2787,6 +2812,9 @@ fn main() {
             #[cfg(target_os = "linux")]
             platform::gnome::start(handle.clone());
             steam_library::start();
+            if let Ok(evidence) = path(&handle, "evidence.jsonl") {
+                record_panics(evidence);
+            }
             let store = Arc::new(Settings::load(path(&handle, "settings.json")?));
             // Before any window is built, so none shows the system's appearance first.
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
@@ -3097,10 +3125,33 @@ fn main() {
             }
 
             // The app menu belongs in the macOS menu bar. Elsewhere a window menu would be
-            // attached to every window, including the transparent overlay.
+            // attached to every window, including the transparent overlay. A release build
+            // has the standard menus, with About Kimochi opening Settings → About in place of
+            // the system's about panel, and Settings… (⌘,); a debug build keeps the Panels
+            // menu, which reaches every window and the test fixtures.
             #[cfg(target_os = "macos")]
             {
                 let menu = tauri::menu::Menu::default(app.handle())?;
+                if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) = menu.items()?.first() {
+                    // The default menu's first item is the system about panel.
+                    app_menu.remove_at(0)?;
+                    let about = tauri::menu::MenuItemBuilder::with_id("app-about", "About Kimochi")
+                        .build(app)?;
+                    app_menu.insert(&about, 0)?;
+                    let settings = tauri::menu::MenuItemBuilder::with_id("app-settings", "Settings…")
+                        .accelerator("CmdOrCtrl+,")
+                        .build(app)?;
+                    // After About and its separator.
+                    app_menu.insert_items(
+                        &[&settings, &tauri::menu::PredefinedMenuItem::separator(app)?],
+                        2,
+                    )?;
+                }
+                app.set_menu(menu)?;
+            }
+            #[cfg(all(target_os = "macos", debug_assertions))]
+            {
+                let menu = app.menu().ok_or("the app menu is set above")?;
                 let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
                     .text("log", "Kimochi")
                     .text("choose-source", "Select Source")
@@ -3111,13 +3162,16 @@ fn main() {
                     .text("fixture-chunks", "Split-Word Fixture")
                     .build()?;
                 menu.append(&panel_menu)?;
-                app.set_menu(menu)?;
             }
             {
                 let store = store.clone();
                 app.on_menu_event(move |app, event| {
                     let label = event.id().as_ref();
-                    if label == "choose-source" {
+                    if label == "app-about" {
+                        let _ = tray::open_settings(app, Some("about"));
+                    } else if label == "app-settings" {
+                        let _ = tray::open_settings(app, None);
+                    } else if label == "choose-source" {
                         let _ = choose_source(app, &store);
                     } else if panels::spec(label).is_some() {
                         // A lazy panel is built in a later main-thread turn, never inside
@@ -3130,7 +3184,7 @@ fn main() {
                 });
             }
 
-            tray::setup(&handle, &store).map_err(std::io::Error::other)?;
+            tray::setup(&handle).map_err(std::io::Error::other)?;
             let shortcuts = hotkeys::apply(&handle, &store);
             record(
                 &handle,

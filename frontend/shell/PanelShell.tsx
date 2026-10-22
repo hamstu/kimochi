@@ -160,6 +160,8 @@ export default function PanelShell({
           <button
             aria-label={label === 'log' ? 'Quit Kimochi' : 'Close window'}
             title={label === 'log' ? 'Quit Kimochi' : 'Close'}
+            // Quitting is never one controller press away (ui/panel-controller.js).
+            data-controller-skip={label === 'log' ? '' : undefined}
             onClick={() =>
               label === 'log'
                 ? void quitApp().catch((caught) => setError(nativeError(caught).message))

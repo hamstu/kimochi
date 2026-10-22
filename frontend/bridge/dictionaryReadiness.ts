@@ -16,6 +16,8 @@ export interface DictionaryReadiness {
     | "failed";
   message: string;
   progress?: number | null;
+  /** Lookups work now, whatever the phase (10ten reads its bundled words while it downloads). */
+  lookups?: boolean;
 }
 
 /** The running engine's readiness, independent of its extension archive's download. */

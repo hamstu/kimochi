@@ -474,7 +474,6 @@ export const SHOTS = [
     size: WELCOME,
     settle: 900
   })),
-  { id: 'welcome-picker', page: 'welcome.html?step=picker&platform=linux', size: WELCOME, settle: 900 },
   { id: 'welcome-steam', page: 'welcome.html?step=steam&platform=linux&steam=deck', size: WELCOME, settle: 900 },
 
   // ------------------------------------------------------------------ platforms
@@ -538,7 +537,7 @@ export const OG = [
     out: 'site-docs/public/og.png',
     copy: {
       mark: 'Docs',
-      title: 'Read your games in Japanese.',
+      title: 'Read and play in Japanese.',
       lede: 'Install, set up OCR and dictionaries, and read with the overlay, the Log and the Notebook.',
       url: 'docs.kimochiapp.com'
     }
@@ -549,7 +548,7 @@ export const OG = [
     out: 'site/public/og.png',
     copy: {
       mark: '',
-      title: 'Read your games in Japanese.',
+      title: 'Read and play in Japanese.',
       lede: 'Free and open source for macOS, Windows and Linux. OCR, an overlay, pop-up dictionaries and Anki.',
       url: 'kimochiapp.com'
     }

@@ -10,10 +10,12 @@ import {
   BUTTON,
   REPEAT_DELAY_MS,
   REPEAT_RATE_MS,
+  buttonName,
   stickDirection
 } from '../ui/controller-input.js'
 import {
   WordCursor,
+  characterUnits,
   segmentText,
   tokensFromParse,
   tokensFromSegmenter,
@@ -22,7 +24,7 @@ import {
   segmentAcross
 } from '../ui/word-nav.js'
 import { itemAt, itemFor } from '../ui/radial-menu.js'
-import { scrollSpeed } from '../ui/controller.js'
+import { scrollSpeed, pointerSpeed, characterAt } from '../ui/controller.js'
 
 /** Timers that only fire when the test says so. */
 function manualTimers() {
@@ -67,20 +69,39 @@ const pad = (pressed = [], held = pressed, extra = {}) => ({
   ...extra
 })
 
-test('south confirms, east and north cancel, shoulders step', () => {
+test('A confirms, B cancels, Y switches word and character, X plays audio, View shows controls', () => {
   const { commands, controls } = input()
   controls.nav(pad([BUTTON.south]))
   controls.nav(pad([BUTTON.east]))
   controls.nav(pad([BUTTON.north]))
+  controls.nav(pad([BUTTON.west]))
   controls.nav(pad([BUTTON.lb]))
   controls.nav(pad([BUTTON.rb]))
+  controls.nav(pad([BUTTON.view]))
   assert.deepEqual(commands, [
     { type: 'confirm' },
     { type: 'cancel' },
-    { type: 'cancel' },
+    { type: 'unit' },
+    { type: 'audio' },
     { type: 'step', delta: -1 },
-    { type: 'step', delta: 1 }
+    { type: 'step', delta: 1 },
+    { type: 'help' }
   ])
+})
+
+test('the second Back older settings kept on Y is ignored, so Y still switches', () => {
+  const { commands, controls } = input()
+  controls.setButtons({ confirm: 0, back: 1, backAlt: 3, previousDefinition: 4, nextDefinition: 5 })
+  controls.nav(pad([BUTTON.north]))
+  assert.deepEqual(commands, [{ type: 'unit' }])
+  assert.equal('backAlt' in controls.buttons, false)
+})
+
+test('buttons are named the way the Deck and an Xbox pad print them', () => {
+  assert.equal(buttonName(BUTTON.south), 'A')
+  assert.equal(buttonName(BUTTON.west), 'X')
+  assert.equal(buttonName(BUTTON.view), 'View')
+  assert.equal(buttonName(null), null)
 })
 
 test('a held D-pad direction repeats after a pause, and stops when released', () => {
@@ -141,11 +162,15 @@ test('keys: arrows step once per press, Return confirms, Escape cancels', () => 
   controls.key({ key: 'ArrowLeft', type: 'keyup' })
   controls.key({ key: 'Enter', type: 'keydown' })
   controls.key({ key: 'Escape', type: 'keydown' })
+  controls.key({ key: 'Space', type: 'keydown' })
+  controls.key({ key: ' ', type: 'keydown' })
   timers.advance(2000)
   assert.deepEqual(commands, [
     { type: 'dir', dir: 'left', source: 'key', repeat: false },
     { type: 'confirm' },
-    { type: 'cancel' }
+    { type: 'cancel' },
+    { type: 'unit' },
+    { type: 'unit' }
   ])
 })
 
@@ -409,14 +434,94 @@ test('right-stick scrolling creeps with a light push and races at full tilt', ()
 
 test('command buttons follow the settings, and an unbound one does nothing', () => {
   const { commands, controls } = input()
-  controls.setButtons({ confirm: BUTTON.west, backAlt: null, nextDefinition: BUTTON.south })
+  controls.setButtons({ confirm: BUTTON.west, toggleUnit: null, playAudio: BUTTON.rt, nextDefinition: BUTTON.south })
   controls.nav(pad([BUTTON.west]))
   controls.nav(pad([BUTTON.north]))
   controls.nav(pad([BUTTON.south]))
   controls.nav(pad([BUTTON.east]))
+  controls.nav(pad([BUTTON.rt]))
   assert.deepEqual(commands, [
     { type: 'confirm' },
     { type: 'step', delta: 1 },
-    { type: 'cancel' }
+    { type: 'cancel' },
+    { type: 'audio' }
   ])
+})
+
+// --- by character, and the free cursor -------------------------------------------
+
+const box = (text, tokens, extra = {}) => ({ text, vertical: false, tokens, ...extra })
+
+test('by character, every letter is a stop and punctuation is not', () => {
+  const [unit] = characterUnits([box('猫、が。', [])])
+  assert.deepEqual(
+    unit.tokens.map((token) => [token.text, token.word]),
+    [['猫', true], ['、', false], ['が', true], ['。', false]]
+  )
+  const cursor = new WordCursor(characterUnits([box('食べた', []), box('猫', [])]))
+  assert.deepEqual(cursor.words.map((word) => word.text), ['食', 'べ', 'た', '猫'])
+})
+
+test('characters reach what the dictionary left as gaps between words', () => {
+  // 〇〇 matched nothing: no word stop there, but each character is one.
+  const tokens = [
+    { start: 0, end: 2, text: '〇〇', word: false },
+    { start: 2, end: 4, text: '食べ', word: true }
+  ]
+  const words = new WordCursor([box('〇〇食べ', tokens)])
+  const characters = new WordCursor(characterUnits([box('〇〇食べ', tokens)]))
+  assert.equal(words.words.length, 1)
+  assert.equal(characters.words.length, 4)
+})
+
+test('switching between word and character steps keeps the place', () => {
+  const tokens = [
+    { start: 0, end: 3, text: '食べた', word: true },
+    { start: 3, end: 4, text: 'の', word: true },
+    { start: 4, end: 5, text: '猫', word: true }
+  ]
+  const words = new WordCursor([box('食べたの猫', tokens)])
+  const characters = new WordCursor(characterUnits([box('食べたの猫', tokens)]))
+  // From a character inside a word, to that word.
+  characters.index = 2
+  assert.equal(words.seek(0, characters.current.start), true)
+  assert.equal(words.current.text, '食べた')
+  // From a word, to its first character.
+  words.index = 2
+  characters.seek(0, words.current.start)
+  assert.equal(characters.current.text, '猫')
+})
+
+test('seeking a place with no stop lands on the stop before it, else the first after', () => {
+  const units = [
+    box('「猫」', [{ start: 1, end: 2, text: '猫', word: true }]),
+    box('犬', [{ start: 0, end: 1, text: '犬', word: true }])
+  ]
+  const cursor = new WordCursor(units)
+  cursor.seek(0, 2) // 」
+  assert.equal(cursor.current.text, '猫')
+  cursor.index = 1
+  cursor.seek(0, 0) // 「, before any stop
+  assert.equal(cursor.current.text, '猫')
+  assert.equal(new WordCursor([]).seek(0, 0), false)
+})
+
+test('the free cursor creeps with a light push and crosses the screen at full tilt', () => {
+  assert.equal(pointerSpeed(0), 0)
+  assert.equal(pointerSpeed(0.2), 0)
+  const light = pointerSpeed(0.3)
+  const full = pointerSpeed(1)
+  assert.ok(light > 100 && light < 200, `light push ${light}`)
+  assert.ok(full >= 1400, `full push ${full}`)
+  assert.ok(pointerSpeed(0.6) < full / 2)
+})
+
+test('the free cursor is on the character under it, or one close by, and nothing far away', () => {
+  const rect = (left, top) => ({ left, top, width: 20, height: 20 })
+  const targets = [[rect(0, 0)], [rect(20, 0)], [rect(100, 0), rect(0, 40)]]
+  assert.equal(characterAt(targets, 25, 10, 14), 1)
+  assert.equal(characterAt(targets, 10, 55, 14), 2, 'a character drawn on two lines counts on both')
+  assert.equal(characterAt(targets, 52, 10, 14), 1, 'just past the last character')
+  assert.equal(characterAt(targets, 70, 10, 14), -1)
+  assert.equal(characterAt([], 0, 0, 14), -1)
 })

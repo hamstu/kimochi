@@ -64,7 +64,6 @@ test('every engine has the copy the chooser draws', () => {
   }
   assert.equal(DICTIONARY_ENGINES['custom-api'].runs, 'local')
   assert.equal(DICTIONARY_ENGINES['custom-api'].optionsPage, null)
-  assert.equal(DICTIONARY_ENGINES['custom-api'].experimental, true)
 })
 
 test('options pages are the ones the dictionary window loads (§3)', () => {
@@ -107,8 +106,8 @@ test('popupTypeOf is its inverse for every engine', () => {
   assert.equal(popupTypeOf('custom-api'), 'custom-api')
 })
 
-test('the Yomitan API engine runs over the Yomitan host', () => {
-  assert.equal(hostEngineOf('custom-api'), 'yomitan')
+test('the Yomitan API engine needs no host (it talks to the browser), the others their own', () => {
+  assert.equal(hostEngineOf('custom-api'), 'none')
   assert.equal(hostEngineOf('yomitan'), 'yomitan')
   assert.equal(hostEngineOf('hachidori'), 'hachidori')
   assert.equal(hostEngineOf('tenten'), 'tenten')
@@ -206,7 +205,7 @@ test("resolveHostEngine keeps 'none' (no engine downloaded) and otherwise resolv
   assert.equal(resolveHostEngine('none', 'yomitan'), 'none', 'the mirror wins')
   assert.equal(resolveHostEngine(null, 'none'), 'none', 'the prelude when there is no mirror')
   assert.equal(resolveHostEngine(undefined, undefined), 'yomitan')
-  assert.equal(resolveHostEngine('custom-api', null), 'yomitan')
+  assert.equal(resolveHostEngine('custom-api', null), 'none')
   assert.equal(resolveHostEngine('builtin', null), 'yomitan')
   assert.equal(resolveHostEngine('tenten', 'none'), 'tenten')
   assert.match(NO_ENGINE_MESSAGE, /Settings → Dictionary/)

@@ -460,6 +460,21 @@ export class TextOverlayRenderer {
     this.scheduleProximityUpdate()
   }
 
+  /**
+   * Light the box under the pointer now rather than on the next frame. 10ten looks up as the
+   * pointer event arrives and drops text it cannot see (`checkVisibility({checkOpacity: true})`
+   * in 10ten-ja-content.js `isVisible`), and an unlit box's text is at opacity 0, so the event
+   * that brings the pointer onto a box must find it lit. Yomitan waits before it scans, and
+   * Hachidori does not check.
+   */
+  flushPointer() {
+    if (this.frame !== null) {
+      cancelAnimationFrame(this.frame)
+      this.frame = null
+    }
+    if (this.mode === 'words' && this.words.length > 0) this.updateProximity()
+  }
+
   /** Hold every box unlit and unmarked (true), or let hovering and selection show again. */
   setQuiet(quiet) {
     if (this.quiet === quiet) return

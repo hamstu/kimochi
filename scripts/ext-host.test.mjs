@@ -569,7 +569,7 @@ test('the host stands down for Yomitan, builtin and custom-api, and installs for
   const mirrorWins = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'log', mirror: 'hachidori', prelude: 'tenten' }))
   assert.equal(result(mirrorWins, '__kimochiExtensionHost.engine'), 'hachidori')
   const prelude = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'log', prelude: 'custom-api' }))
-  assert.equal(result(prelude, 'typeof __kimochiExtensionHost'), 'undefined', 'custom-api from the prelude is Yomitan too')
+  assert.equal(result(prelude, 'typeof __kimochiExtensionHost'), 'undefined', 'custom-api from the prelude needs no host')
 })
 
 test('Hachidori and 10ten preserve the Windows WebView2 IPC bridge when installing chrome', () => {
@@ -607,9 +607,9 @@ test('an extension frame takes its engine from its own origin, which the prelude
   assert.equal(result(frame, '__kimochiExtensionHost.engine'), 'tenten')
 })
 
-test('the Yomitan shims install only for yomitan, builtin and custom-api', async () => {
+test('the Yomitan shims install only for yomitan and builtin', async () => {
   const panelShim = await yomitanShimSource('panel-shim.js', { network: 'Promise.resolve()' })
-  const cases = [['tenten', false], ['hachidori', false], ['custom-api', true], ['builtin', true], [undefined, true]]
+  const cases = [['tenten', false], ['hachidori', false], ['builtin', true], [undefined, true]]
   for (const [mirror, installs] of cases) {
     const world = new World()
     const win = world.window({ href: `${APP}/app/panel.html`, label: 'log', mirror })
@@ -622,10 +622,18 @@ test('the Yomitan shims install only for yomitan, builtin and custom-api', async
   }
 })
 
-test("no host installs for 'none', the engine when the selected one is not downloaded", async () => {
+test("no host installs for 'none' (nothing downloaded, or the Yomitan API, which needs none)", async () => {
   const panelShim = await yomitanShimSource('panel-shim.js', { network: 'Promise.resolve()' })
-  // From the mirror, and from native's prelude when there is no mirror yet.
-  for (const options of [{ mirror: 'none' }, { prelude: 'none' }, { mirror: 'none', prelude: 'yomitan' }]) {
+  // From the mirror, and from native's prelude when there is no mirror yet. The Yomitan API is
+  // mirrored as 'none'; its stored spelling, wherever it turns up, installs nothing either.
+  const cases = [
+    { mirror: 'none' },
+    { prelude: 'none' },
+    { mirror: 'none', prelude: 'yomitan' },
+    { mirror: 'custom-api' },
+    { prelude: 'custom-api' }
+  ]
+  for (const options of cases) {
     const world = new World()
     const win = world.window({ href: `${APP}/app/panel.html`, label: 'log', ...options })
     win.fetch = async () => ({ json: async () => ({}) })
@@ -1280,16 +1288,23 @@ test('the scan scope filters the extension\'s hit tests only, and setEnabled(fal
   result(background, `dataPort.postMessage({ type: 'dbstateupdated', state: {
     words: { state: 'empty' }, updateState: { type: 'updating', series: 'words', totalProgress: 0.4 }
   } })`)
-  await waitFor(() => asExtension('document.caretRangeFromPoint(10, 10)') === null, 'lookups disabled while data downloads')
+  await waitFor(
+    () => world.reports.filter((r) => r.check === 'dictionary-readiness').at(-1)?.phase === 'downloading',
+    'the download is reported'
+  )
   const downloading = world.reports.filter((r) => r.check === 'dictionary-readiness').at(-1)
-  assert.equal(downloading.phase, 'downloading')
   assert.equal(downloading.settingsReady, true, '10ten settings remain usable during data downloads')
+  assert.equal(downloading.lookups, true)
+  // 10ten reads its bundled words (data/words.ljson) while the full dictionary downloads.
+  assert.notEqual(asExtension('document.caretRangeFromPoint(10, 10)'), null, 'lookups go on while data downloads')
+  result(log, '__kimochiExtensionHost.setEnabled(false)')
+  assert.equal(asExtension('document.caretRangeFromPoint(10, 10)'), null, 'the switch still turns them off')
   result(log, '__kimochiExtensionHost.setEnabled(true)')
-  assert.equal(asExtension('document.caretRangeFromPoint(10, 10)'), null, 'enabling cannot bypass dictionary readiness')
   result(background, `dataPort.postMessage({ type: 'dbstateupdated', state: {
     words: { state: 'ok' }, kanji: { state: 'ok' }, radicals: { state: 'ok' }, names: { state: 'ok' }, updateState: { type: 'idle' }
   } })`)
-  await waitFor(() => asExtension('document.caretRangeFromPoint(10, 10)') !== null, 'lookups recover without a reload')
+  await waitFor(() => world.reports.filter((r) => r.check === 'dictionary-readiness').at(-1)?.phase === 'ready', 'ready')
+  assert.notEqual(asExtension('document.caretRangeFromPoint(10, 10)'), null)
 })
 
 test('Hachidori installer broadcasts gate lookup and report byte progress without changing the messages', async () => {

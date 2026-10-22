@@ -229,9 +229,27 @@ files["favicon.svg"] = svg(
   ` class="kimochi-ki"`,
 );
 
-// Menu bar template: pure black on transparent; macOS recolours it. 16pt canvas.
-const tray = placeGlyph({ cx: 8, cy: 8, height: 15 });
-files["tray-template.svg"] = svg(16, 16, glyphPath(tray, `fill="#000"`));
+// Menu bar template: the icon without its tile or colour, pure black on transparent so macOS
+// recolours it for the menu bar. An 18pt canvas drawn in 2x pixels (36 units): the brackets are
+// 2 units wide on even edges, so they land on whole pixels at 1x as well as 2x and stay sharp on
+// a non-Retina screen. The arms are longer than the tile's, which at this size would be dots.
+{
+  const [l, t, rr, b, arm] = [3, 3, 33, 33, 7];
+  const brackets = [
+    `M${l} ${t + arm}V${t}H${l + arm}`,
+    `M${rr - arm} ${t}H${rr}V${t + arm}`,
+    `M${rr} ${b - arm}V${b}H${rr - arm}`,
+    `M${l + arm} ${b}H${l}V${b - arm}`,
+  ].join(" ");
+  files["tray-template.svg"] = svg(
+    36,
+    36,
+    [
+      `  <path d="${brackets}" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
+      glyphPath(placeGlyph({ cx: 18, cy: 18, height: 20 }), `fill="#000"`),
+    ].join("\n"),
+  );
+}
 
 // ---- Sketches for comparison ---------------------------------------------------
 

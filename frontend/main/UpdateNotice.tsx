@@ -2,7 +2,7 @@
  * The sidebar's update notice, above Settings: "Kimochi 0.2.0 is available" with Download, the
  * bar while it downloads, "Restart to update" once it is in, and what went wrong if it did not.
  * Nothing shows until a check has found something; "Not now" puts an offer away for this run
- * (Settings → General → Updates still has it). The status is the same one that page shows: the
+ * (Settings → About → Updates still has it). The status is the same one that page shows: the
  * download runs in Rust (`updater.rs`) and both read `update-status`.
  */
 import type { JSX } from 'react'

@@ -13,7 +13,9 @@
 - **Contracts**: native commands and events are documented in [COMMANDS.md](COMMANDS.md); every
   `invoke('…')` literal must be a registered command (`scripts/command-contract.test.mjs`).
   UI uses the kit ([frontend/kit/README.md](frontend/kit/README.md)) and the tokens in
-  [DESIGN.md](DESIGN.md). Browser preview of every window: `npm run preview:ui`.
+  [DESIGN.md](DESIGN.md). Browser preview of every window: `npm run preview:ui`;
+  `npm run studio` puts them, the overlay and Gaming Mode in one movable, stateful frame (the
+  overlay pages, `/dev/stage.html?scene=…`, also open on their own for testing).
 - **Private notes stay local**: `docs/`, `evidence/` and every root `.md` not allowlisted in
   `.gitignore` exist only on the maintainer's machine and are never committed. Write plans,
   handoffs, bring-up reports and research there; anything the public needs goes in README.md or

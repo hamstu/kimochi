@@ -593,7 +593,7 @@ fn refresh_blocking() -> Result<Value, String> {
 // ---------------------------------------------------------------- switching profiles
 
 /// The windows that show a profile's data; they reload after a switch.
-const PROFILE_WINDOWS: &[&str] = &[panels::MAIN, "settings", "diagnostics", "tray-popover", "sync-log"];
+const PROFILE_WINDOWS: &[&str] = &[panels::MAIN, "settings", "diagnostics", "sync-log"];
 
 fn settings_store() -> Result<std::sync::Arc<settings::Settings>, String> {
     let account = account()?;

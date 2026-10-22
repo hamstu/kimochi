@@ -5,7 +5,7 @@
  * never empty. While an update is offered, its notes from the manifest come first, as "Coming in
  * Kimochi x.y.z".
  *
- * Opened from Settings → General → Updates, and once by the main window on the first launch of a
+ * Opened from Settings → About → Updates, and once by the main window on the first launch of a
  * new version (`useWhatsNewOnLaunch` in whatsNewOnLaunch.ts).
  */
 import { useEffect, useMemo, useState, type JSX, type MouseEvent } from 'react'

@@ -7,7 +7,9 @@ const {
   buildFilteredText,
   groupTextAnnotations,
   visibleAnnotations,
-  getBoundingBox
+  getBoundingBox,
+  FILTER_LEVELS,
+  filterLevelOf
 } = await load('annotations.ts')
 
 /** A box from its edges, in OCR pixel space, the way the endpoint reports it. */
@@ -128,4 +130,16 @@ test('visibleAnnotations drops the full-text block and honours the filter switch
     ),
     ['猫', '本', 'ほん']
   )
+})
+
+test('the filter strengths run from gentle to strict, and a stored threshold shows on its nearest', () => {
+  const thresholds = FILTER_LEVELS.map((level) => level.threshold)
+  assert.deepEqual([...thresholds].sort((a, b) => a - b), thresholds, 'stronger steps remove more')
+  assert.equal(FILTER_LEVELS[filterLevelOf(0.75)].label, 'Balanced', 'the default is Balanced')
+  // Values the old 50–95% slider could save land on a step.
+  assert.equal(filterLevelOf(0.5), 0)
+  assert.equal(filterLevelOf(0.7), 2)
+  assert.equal(filterLevelOf(0.87), 3)
+  assert.equal(filterLevelOf(0.95), 4)
+  assert.equal(filterLevelOf(2), 4)
 })

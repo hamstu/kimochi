@@ -1,7 +1,7 @@
 /**
  * Self-updates, as the UI sees them: the `update_status` reply and `update-status` event payload
  * (`UpdateStatus` in `src-tauri/src/updater.rs`), and the pure wording and decisions the
- * sidebar notice and Settings → General → Updates share.
+ * sidebar notice and Settings → About → Updates share.
  */
 import { formatBytes, percent, progressText } from './model-download.js'
 
@@ -164,7 +164,7 @@ export function downloadProgress(status: UpdateStatus): string {
 }
 
 /**
- * Settings → General → Updates: the row's description. The last check's outcome, or what is
+ * Settings → About → Updates: the row's description. The last check's outcome, or what is
  * happening now.
  */
 export function checkedLine(status: UpdateStatus, nowMs: number): string {

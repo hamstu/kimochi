@@ -39,7 +39,7 @@ const VOCAB: Record<string, DemoVocab> = {
   ありがとう: { reading: 'ありがとう', pos: 'Expression', meanings: ['thank you', 'thanks'] },
   本物: { reading: 'ほんもの', pos: 'Noun', meanings: ['the real thing', 'genuine article'] },
   の: { reading: 'の', pos: 'Particle', meanings: ['of; belonging to', 'links one noun to another'] },
-  Kimochi: { reading: 'きもち', pos: 'Name', meanings: ['this app (気持ち: feeling, mood)'] },
+  Kimochi: { reading: 'きもち', pos: 'Name', meanings: ['this app (kimochi: feeling, mood)'] },
   で: { reading: 'で', pos: 'Particle', meanings: ['with; by means of', 'in; at'] },
   好き: { reading: 'すき', pos: 'Adjective', meanings: ['liked; favourite', 'fond of'] },
   な: { reading: 'な', pos: 'Particle', meanings: ['links an adjective to a noun'] },

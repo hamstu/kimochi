@@ -418,13 +418,27 @@ fn commit_with_key(service: &Shared, source_id: &str, crop: Option<Crop>, saved_
 pub fn clear(service: &Shared) -> Result<Value, String> {
     service.settings.set_many(&[(&["lastSelectedSource"], Value::Null)])?;
     let previous = service.selection.lock().unwrap().take();
+    let mut view = service.view.lock().unwrap();
+    // With nothing to watch, automatic scanning could only fail until it gave up.
+    view.auto_ocr = false;
     if previous.is_some() {
-        let mut view = service.view.lock().unwrap();
         view.scan = None;
         view.regions.clear();
         view.revision += 1;
     }
     Ok(json!({ "sourceId": Value::Null, "previous": previous }))
+}
+
+/// Turn automatic scanning off when a capture of the chosen source finds it gone (`err`'s
+/// `gone:` prefix): the window closed, so every later round would fail the same way.
+pub fn stop_auto_if_gone(service: &Service, source_id: &str, error: &str) {
+    if !error.starts_with("gone:") {
+        return;
+    }
+    if service.selection.lock().unwrap().as_deref() != Some(source_id) {
+        return;
+    }
+    service.view.lock().unwrap().auto_ocr = false;
 }
 
 // ---------------------------------------------------------------- system picker

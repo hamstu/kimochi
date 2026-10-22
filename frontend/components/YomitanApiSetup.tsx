@@ -15,12 +15,11 @@
  */
 import { createContext, useContext, useEffect, useRef, useState, type JSX, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ExternalLink } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { Button, Callout, Dialog, DialogContent, SettingsRow, Spinner, StatusDot } from '@kit'
 import {
   CONNECTION_TONE,
-  KIMOCHI_HOST_URL,
   METHOD_LABEL,
   OFFICIAL_HOST_URL,
   SETUP_STEPS,
@@ -153,13 +152,8 @@ function HelperStep({
       {!host.installed ? (
         <>
           <p className="yomitan-setup-text">
-            Your browser&apos;s Yomitan talks to Kimochi through a small helper program, which the
-            browser starts for it. Kimochi can install its helper for every browser on this
-            computer: one download from{' '}
-            <button type="button" className="k-link" onClick={() => open(KIMOCHI_HOST_URL)}>
-              its GitHub release
-            </button>
-            , nothing to configure.
+            Press <strong>Install helper</strong> to add the small program your browser&apos;s
+            Yomitan uses to talk to Kimochi.
           </p>
           {broken.length > 0 && (
             <Callout tone="warn">
@@ -167,14 +161,6 @@ function HelperStep({
               start ({broken[0].problem ?? 'its program is missing'}). Installing replaces it.
             </Callout>
           )}
-          <p className="yomitan-setup-aside">
-            Prefer the official Python helper?{' '}
-            <button type="button" className="k-link" onClick={() => open(OFFICIAL_HOST_URL)}>
-              Follow its instructions
-              <ExternalLink aria-hidden className="yomitan-setup-link-icon" />
-            </button>{' '}
-            and Kimochi finds it here.
-          </p>
         </>
       ) : (
         <>

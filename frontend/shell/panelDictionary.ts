@@ -10,8 +10,8 @@
  *   at document start. Its `start({host: false, scope})` registers this window's content context
  *   with the overlay's hub and injects the extension's content scripts, confined to the
  *   transcript (`[data-yomitan-scan]`). Same `{ready, error}` contract.
- * - The Yomitan API engine runs over the Yomitan host, so it takes the Yomitan path; the Log turns it
- *   off (`usePanelDictionary(false)`) and looks words up through the API itself.
+ * - The Yomitan API engine installs no host (`'none'`); the Log turns this off
+ *   (`usePanelDictionary(false)`) and looks words up through the API itself.
  *
  * The Yomitan relay gives a panel window built-in Yomitan lookup against the single backend in the
  * overlay — what Electron got for free by loading the extension into every native panel window. It
@@ -198,7 +198,8 @@ export function usePanelDictionary(enabled = true): LookupState {
     }
   }, [enabled])
 
-  if (enabled && runtime.phase !== 'ready') return {
+  const usable = typeof runtime.lookups === 'boolean' ? runtime.lookups : runtime.phase === 'ready'
+  if (enabled && !usable) return {
     status: runtime.phase === 'failed' ? 'unavailable' : 'starting', message: runtime.message
   }
   return state

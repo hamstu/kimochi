@@ -1,0 +1,613 @@
+/* DEV-ONLY: the UI studio (Studio.tsx). Built from the kit's tokens, so it follows the theme. */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--k-bg);
+  color: var(--k-text);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-md);
+  overflow: hidden;
+}
+#root > .radix-themes,
+.studio {
+  height: 100%;
+}
+.studio {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* ---------------------------------------------------------------- top bar */
+
+.studio-top {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-4);
+  height: 2.75rem;
+  padding: 0 var(--k-space-3) 0 var(--k-space-4);
+  background: var(--k-bar);
+  border-bottom: 1px solid var(--k-line);
+  min-width: 0;
+}
+.studio-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  font-weight: var(--k-weight-semibold);
+  white-space: nowrap;
+}
+.studio-nav {
+  display: flex;
+  gap: var(--k-space-0-5);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.studio-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  height: var(--k-control-h);
+  padding: 0 var(--k-space-2-5);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-weight: var(--k-weight-medium);
+  white-space: nowrap;
+  cursor: default;
+}
+.studio-nav-item:hover {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.studio-nav-item[data-active] {
+  background: var(--k-selected);
+  color: var(--k-text);
+}
+.studio-nav-sub {
+  color: var(--k-text-3);
+  font-weight: var(--k-weight-regular);
+}
+.studio-nav-sub::before {
+  content: '· ';
+}
+.studio-globals {
+  display: flex;
+  gap: var(--k-space-1);
+}
+.studio-menu-gap {
+  display: inline-block;
+  width: var(--k-icon-sm);
+}
+.studio-menu-meta {
+  margin-left: auto;
+  padding-left: var(--k-space-4);
+  color: var(--k-text-3);
+}
+
+/* ---------------------------------------------------------------- body */
+
+.studio-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  min-height: 0;
+}
+.studio-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+.studio-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--k-space-3);
+  padding: var(--k-space-2) var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+  background: var(--k-bg);
+}
+.studio-contexts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+  min-width: 0;
+}
+.studio-axis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-0-5);
+}
+.studio-axis-label {
+  min-width: 5.5rem;
+  margin-right: var(--k-space-1);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  line-height: var(--k-control-h-sm);
+}
+.studio-axis-item {
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-size: var(--k-text-sm);
+  cursor: default;
+}
+.studio-axis-item:hover {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.studio-axis-item[aria-selected='true'] {
+  border-color: var(--k-accent-line);
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+  font-weight: var(--k-weight-medium);
+}
+.studio-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-0-5);
+  flex-shrink: 0;
+}
+.studio-size {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  height: var(--k-control-h-sm);
+  padding: 0 var(--k-space-2);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-size: var(--k-text-sm);
+  cursor: default;
+}
+.studio-size:hover {
+  background: var(--k-hover);
+}
+.studio-size svg,
+.studio-panel-tabs svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+
+/* ---------------------------------------------------------------- desk */
+
+.studio-desk {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  background:
+    radial-gradient(120% 80% at 12% 0%, var(--k-accent-soft), transparent 62%),
+    radial-gradient(90% 70% at 100% 100%, var(--k-hover), transparent 60%),
+    var(--k-bar);
+}
+.studio-desk::before {
+  /* A faint grid, so a window's position and size read against something. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--k-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--k-line) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+.studio-desk-plane {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+.studio-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+}
+.studio-window-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  align-self: flex-start;
+  height: 1.75rem;
+  padding: 0 var(--k-space-2-5) 0 var(--k-space-2);
+  border-radius: var(--k-radius-lg) var(--k-radius-lg) 0 0;
+  background: color-mix(in oklab, var(--k-raised) 80%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+  cursor: grab;
+  user-select: none;
+}
+.studio-window-tab svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-text-3);
+}
+.studio-window-size {
+  color: var(--k-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.studio-window-body {
+  position: relative;
+  border-radius: 0 var(--k-radius-xl) var(--k-radius-xl) var(--k-radius-xl);
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px var(--k-line-strong),
+    var(--k-shadow-dialog);
+  background: var(--k-bg);
+}
+.studio-window[data-copy-editing] .studio-window-body,
+.studio-screen[data-copy-editing] {
+  box-shadow:
+    0 0 0 2px var(--k-accent),
+    var(--k-shadow-dialog);
+}
+.studio-frame {
+  display: block;
+  border: 0;
+  background: transparent;
+}
+.studio-frame-shield,
+.studio-desk-shield {
+  position: absolute;
+  inset: 0;
+}
+.studio-desk-shield {
+  z-index: 10;
+}
+.studio-edge {
+  position: absolute;
+  z-index: 2;
+}
+.studio-edge-n,
+.studio-edge-s {
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.studio-edge-e,
+.studio-edge-w {
+  top: 36px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.studio-edge-n {
+  top: 24px;
+}
+.studio-edge-s {
+  bottom: -4px;
+}
+.studio-edge-e {
+  right: -4px;
+}
+.studio-edge-w {
+  left: -4px;
+}
+.studio-edge-ne,
+.studio-edge-nw,
+.studio-edge-se,
+.studio-edge-sw {
+  width: 14px;
+  height: 14px;
+}
+.studio-edge-ne {
+  top: 22px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+.studio-edge-nw {
+  top: 22px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+.studio-edge-se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}
+.studio-edge-sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+/* A screen of its own (the overlay, Gaming Mode): centred and scaled to fit. */
+.studio-desk-screen {
+  background: #0b0c10;
+}
+.studio-desk-screen::before {
+  display: none;
+}
+.studio-screen {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: 50% 50%;
+  border-radius: var(--k-radius-lg);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 30px 80px -20px rgb(0 0 0 / 0.8);
+}
+
+/* ---------------------------------------------------------------- side panel */
+
+.studio-panel {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  border-left: 1px solid var(--k-line);
+  background: var(--k-bg);
+}
+.studio-panel-tabs {
+  display: flex;
+  gap: var(--k-space-0-5);
+  padding: var(--k-space-2) var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+}
+.studio-panel-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  height: var(--k-control-h);
+  padding: 0 var(--k-space-2-5);
+  border: 0;
+  border-radius: var(--k-radius-md);
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-weight: var(--k-weight-medium);
+  cursor: default;
+}
+.studio-panel-tabs button:hover {
+  background: var(--k-hover);
+}
+.studio-panel-tabs button[aria-selected='true'] {
+  background: var(--k-selected);
+  color: var(--k-text);
+}
+.studio-count {
+  min-width: 1.125rem;
+  padding: 0 var(--k-space-1);
+  border-radius: 999px;
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+  font-size: var(--k-text-xs);
+  line-height: 1.125rem;
+  text-align: center;
+}
+.studio-panel-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: var(--k-space-8);
+}
+.studio-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--k-space-2);
+  padding: var(--k-space-4) var(--k-space-4) var(--k-space-2);
+}
+.studio-panel-head h2 {
+  margin: 0;
+  font-size: var(--k-text-lg);
+  line-height: var(--k-leading-lg);
+  font-weight: var(--k-weight-semibold);
+}
+.studio-panel-head p,
+.studio-help,
+.studio-empty {
+  margin: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+.studio-empty,
+.studio-pad {
+  padding: 0 var(--k-space-4);
+}
+.studio-group {
+  margin: var(--k-space-3) var(--k-space-4) 0;
+  padding-top: var(--k-space-3);
+  border-top: 1px solid var(--k-line);
+}
+.studio-group h3 {
+  margin: 0 0 var(--k-space-2);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.studio-control {
+  display: grid;
+  gap: var(--k-space-1);
+  padding: var(--k-space-1-5) 0;
+}
+.studio-control-inline {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.studio-control label {
+  display: grid;
+  gap: var(--k-space-0-5);
+}
+.studio-control label span {
+  font-weight: var(--k-weight-medium);
+}
+.studio-control label small {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.studio-control[data-changed] label span::after {
+  /* Changed from the page's default. */
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: var(--k-space-1-5);
+  border-radius: 50%;
+  background: var(--k-accent);
+  vertical-align: middle;
+}
+.studio-control .k-select-trigger,
+.studio-control button[role='combobox'] {
+  width: 100%;
+}
+
+/* JSON */
+.studio-json-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-2);
+  margin-bottom: var(--k-space-1);
+}
+.studio-json-head h3 {
+  margin: 0;
+}
+.studio-json-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-0-5);
+}
+.studio-json[data-changed] h3::after {
+  content: ' · changed';
+  color: var(--k-accent-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.studio-code {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  margin-top: var(--k-space-2);
+  border: 1px solid var(--k-line-strong);
+  border-radius: var(--k-radius-md);
+  background: var(--k-sunken);
+  overflow: hidden;
+}
+.studio-code:focus-within {
+  border-color: var(--k-focus);
+  box-shadow: 0 0 0 2px var(--k-accent-soft);
+}
+.studio-code-gutter,
+.studio-code textarea {
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-xs);
+  line-height: 1.125rem;
+  padding: var(--k-space-2) 0;
+}
+.studio-code-gutter {
+  display: flex;
+  flex-direction: column;
+  padding-inline: var(--k-space-2) var(--k-space-1-5);
+  color: var(--k-text-3);
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid var(--k-line);
+  max-height: calc(24 * 1.125rem + 1rem);
+  overflow: hidden;
+}
+.studio-code textarea {
+  min-width: 0;
+  padding-inline: var(--k-space-2);
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--k-text);
+  white-space: pre;
+  tab-size: 2;
+}
+.studio-json-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--k-space-2);
+  margin-top: var(--k-space-2);
+}
+.studio-json-status {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.studio-json-error {
+  color: var(--k-danger-text);
+}
+
+/* Copy edits */
+.studio-note {
+  display: flex;
+  gap: var(--k-space-1-5);
+  margin-top: var(--k-space-2);
+}
+.studio-note .k-field {
+  flex: 1;
+}
+.studio-changes {
+  display: grid;
+  gap: var(--k-space-2);
+  margin: var(--k-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.studio-changes li {
+  display: grid;
+  gap: var(--k-space-1);
+  padding: var(--k-space-2);
+  border: 1px solid var(--k-line);
+  border-radius: var(--k-radius-md);
+}
+.studio-change-where {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-1-5);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.studio-change-where span:first-child {
+  color: var(--k-text-2);
+  font-weight: var(--k-weight-medium);
+}
+.studio-change-where button {
+  margin-left: auto;
+}
+.studio-changes del,
+.studio-changes ins,
+.studio-change-note {
+  margin: 0;
+  padding: var(--k-space-1) var(--k-space-1-5);
+  border-radius: var(--k-radius-sm);
+  font-size: var(--k-text-sm);
+  text-decoration: none;
+  white-space: pre-wrap;
+}
+.studio-changes del {
+  background: var(--k-danger-soft);
+  color: var(--k-text-2);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--k-danger-text) 50%, transparent);
+}
+.studio-changes ins {
+  background: var(--k-ok-soft);
+  color: var(--k-text);
+}
+.studio-change-note {
+  background: var(--k-sunken);
+}

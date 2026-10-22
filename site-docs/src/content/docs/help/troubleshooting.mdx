@@ -58,8 +58,9 @@ Manual scans still work meanwhile.
 
 ### Furigana or small text gets in the way
 
-Keep **Filter out furigana and small text** on (**Settings → OCR & Overlay**) and lower or raise the
-**Size threshold**. A crop area around the dialogue also helps.
+Keep **Filter out furigana and small text** on (**Settings → OCR & Overlay**). To change how much
+it removes, open the arrow beside its switch and move **Filter strength** towards Strong (more
+removed) or Gentle (less). A crop area around the dialogue also helps.
 
 ### Google Lens stopped working
 
@@ -79,7 +80,7 @@ stop it at any time. Switch to another engine, such as MeikiOCR, in the meantime
 
 - **No definitions found**: Built-in Yomitan needs a dictionary that is installed *and* enabled in its
   current profile. Open **Settings → Dictionary → Open Built-in Yomitan settings** and enable one, or
-  run the welcome guide's **Set up Jitendex** again.
+  run the welcome guide's **Install Jitendex** again.
 - **"An incomplete Jitendex import already exists"**: remove the half-imported Jitendex in the
   dictionary settings, then retry.
 - **The engine won't download**: check your connection and press **Retry**, or choose another
@@ -121,5 +122,5 @@ URL matches (default `http://127.0.0.1:8765`).
 
 Ask in [Kimochi's Discord](https://discord.gg/vdMge6TBZQ), or open an issue on
 [GitHub](https://github.com/hamstu/kimochi-tauri/issues). Either way, include your OS, the Kimochi
-version (**Settings → General → Updates**), the OCR engine and dictionary engine you use, and what
+version (**Settings → About → Updates**), the OCR engine and dictionary engine you use, and what
 you expected to happen.

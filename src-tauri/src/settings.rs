@@ -21,13 +21,15 @@ pub fn defaults() -> Value {
         "autoScanSettings": { "enabled": false, "scanDelay": 500 },
         "gamepadSettings": { "enabled": true },
         // Standard button indices for the buttons of the overlay's controller menu and word
-        // mode: A, B, Y, LB, RB. `null` unbinds one.
+        // mode: A, B, Y, X, LB, RB, View. `null` unbinds one.
         "controllerButtons": {
             "confirm": 0,
             "back": 1,
-            "backAlt": 3,
+            "toggleUnit": 3,
+            "playAudio": 2,
             "previousDefinition": 4,
-            "nextDefinition": 5
+            "nextDefinition": 5,
+            "showControls": 8
         },
         "autoOCRSettings": {
             "pollInterval": 2000,

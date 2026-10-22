@@ -23,7 +23,8 @@ const PAGES: Record<SettingsTabName, ComponentType> = {
   dictionary: page('dictionary'),
   assist: page('assist'),
   controls: page('controls'),
-  account: page('account')
+  account: page('account'),
+  about: page('about')
 }
 
 /** Shown while a page's chunk loads, only once that takes long enough to notice. */

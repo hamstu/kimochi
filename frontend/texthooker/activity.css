@@ -20,7 +20,11 @@
 .activity {
   position: absolute;
   bottom: var(--k-space-3);
-  left: 50%;
+  /* Centred by auto margins, not `left: 50%` and a -50% translate: in a window an odd number of
+     pixels wide the translate lands the strip on a half pixel, and its text renders blurred on a
+     1x screen. Layout snaps the margins to whole pixels. */
+  right: 0;
+  left: 0;
   z-index: 5;
   display: flex;
   flex-direction: column-reverse;
@@ -31,7 +35,7 @@
   color: var(--k-text);
   font-size: var(--k-text-sm);
   line-height: var(--k-leading-sm);
-  transform: translateX(-50%);
+  margin-inline: auto;
 }
 .dark .activity {
   box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a6);

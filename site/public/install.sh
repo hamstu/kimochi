@@ -358,7 +358,7 @@ write_entries() {
 Type=Application
 Name=Kimochi
 GenericName=Japanese Reading Assistant
-Comment=Read your games in Japanese with on-screen OCR, pop-up dictionaries and a reading log
+Comment=Read and play in Japanese with on-screen OCR, pop-up dictionaries and a reading log
 Exec=$exec_line
 Icon=kimochi
 Terminal=false

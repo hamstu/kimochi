@@ -124,11 +124,12 @@ function harness() {
   doc.defaultView = win;
   element.ownerDocument = doc;
   const controller = installPanelController(win);
-  const snapshot = (buttons, activeGamepadIndex = 0) =>
+  const snapshot = (buttons, activeGamepadIndex = 0, extra = {}) =>
     controller.snapshot({
       buttonStates: buttons,
       activeGamepadIndex,
       axisStates: [0, 0, 0, 0],
+      ...extra,
     });
   return {
     controller,
@@ -188,6 +189,38 @@ test("overlay menu chord does not also activate focused controls", () => {
   buttons[11] = true;
   h.snapshot(buttons);
   assert.equal(h.clicks(), 0);
+  h.controller.destroy();
+});
+
+test("a focused panel ignores the pad while the overlay is reading, held buttons included", () => {
+  // Opening the controller menu brings Kimochi to the front, so the Log can be the focused
+  // window; its focused control (Quit, once) must not take the overlay's A.
+  const h = harness();
+  const reading = { overlayNavigation: true };
+  h.snapshot([], 0, reading);
+  h.snapshot([true], 0, reading);
+  h.snapshot([], 0, reading);
+  h.snapshot([true], 0, reading);
+  assert.equal(h.clicks(), 0);
+  // A still held as the overlay lets go is not a fresh press here.
+  h.snapshot([true]);
+  assert.equal(h.clicks(), 0);
+  h.snapshot([]);
+  h.snapshot([true]);
+  assert.equal(h.clicks(), 1, "once the overlay is done, the panel works again");
+  h.controller.destroy();
+});
+
+test("a control marked data-controller-skip is never focused or pressed", () => {
+  const h = harness();
+  h.element.closest = (selector) => (selector === "[data-controller-skip]" ? {} : null);
+  h.doc.activeElement = null;
+  h.snapshot([]);
+  h.snapshot([true]);
+  h.snapshot([]);
+  h.snapshot([true]);
+  assert.equal(h.clicks(), 0);
+  assert.equal(h.doc.activeElement, null);
   h.controller.destroy();
 });
 

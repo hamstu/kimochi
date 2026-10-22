@@ -25,7 +25,7 @@
  * panel, and the overflow menu removes a downloaded engine that is not in use.
  *
  * Each row leads with the engine's picture (`DictionaryEngineIcon`). Copy comes from
- * `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture under the description from
+ * `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture beside the description from
  * frontend/assets/dictionary-previews/ (`DictionaryPreview`). The decisions are
  * `ui/engine-chooser.ts`.
  */
@@ -62,10 +62,6 @@ import './dictionary-chooser.css'
 import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 
 const ENGINES = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
-
-function ExperimentalBadge({ engine }: { engine: DictionaryEngine }): ReactNode {
-  return DICTIONARY_ENGINES[engine].experimental ? <Badge tone="warn">Experimental</Badge> : null
-}
 
 function DictionaryItem({
   engine,
@@ -170,8 +166,8 @@ function DictionaryDetail({
   inUse: boolean
   /** A switch to this engine is waiting for its download. */
   pending: boolean
-  /** The download the saved engine needs: it cannot be removed from here. */
-  selectedDownload: ExtensionEngine
+  /** The download the saved engine needs (none for the Yomitan API): it cannot be removed from here. */
+  selectedDownload: ExtensionEngine | null
   onUse: () => void
   children: ReactNode
 }): ReactNode {
@@ -193,7 +189,6 @@ function DictionaryDetail({
         <h3 id={headingId} className="k-heading engine-detail-name">
           {info.name}
           <DictionaryRunsIcon engine={engine} />
-          <ExperimentalBadge engine={engine} />
         </h3>
         {action === 'active' ? (
           <Badge tone={runtime.phase === 'ready' ? 'accent' : 'warn'}>{runtime.phase === 'ready' ? 'Active' : 'Setting up'}</Badge>
@@ -233,16 +228,22 @@ function DictionaryDetail({
           </Menu>
         )}
       </header>
-      <p className="engine-detail-description">{info.description}</p>
-      <DictionaryPreview engine={engine} />
-      <ul className="engine-strengths">
-        {info.strengths.map((strength) => (
-          <li key={strength}>
-            <Check aria-hidden />
-            <span>{strength}</span>
-          </li>
-        ))}
-      </ul>
+      {/* The pop-up's picture is a thumbnail beside the words (it opens full size), so the
+          panel's download progress stays in view. */}
+      <div className="dictionary-detail-intro">
+        <div className="dictionary-detail-words">
+          <p className="engine-detail-description">{info.description}</p>
+          <ul className="engine-strengths">
+            {info.strengths.map((strength) => (
+              <li key={strength}>
+                <Check aria-hidden />
+                <span>{strength}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <DictionaryPreview engine={engine} />
+      </div>
       <p className="k-description">{info.requirements}</p>
       <p className="dictionary-detail-meta k-num">
         {info.version && <span>Version {info.version}</span>}
@@ -260,13 +261,6 @@ function DictionaryDetail({
           <ExternalLink aria-hidden />
         </button>
       </p>
-      {status && !ready && (
-        <p className="k-description">
-          {engine === 'custom-api'
-            ? `The Yomitan API splits text into words with Built-in Yomitan, which is not downloaded yet.`
-            : `${info.name} is not part of Kimochi's download: it is fetched from its official release when you choose it.`}
-        </p>
-      )}
       <div className="engine-detail-settings">
         {/* While it is not downloaded (or a download is under way), its progress and actions. */}
         {status && (!ready || pending) && (

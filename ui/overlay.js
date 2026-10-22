@@ -1,6 +1,7 @@
 import { createDictionarySetup } from './setup-dictionaries.js'
 import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm } from './api-lookup.js'
 import { createController } from './controller.js'
+import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -138,7 +139,7 @@ const setting = (key) => native.getSetting(key)
 /**
  * The dictionary engine whose host this document installed, as the injected scripts resolved it
  * at document start (DICTIONARY_ENGINES.md §2): the `localStorage` mirror, else native's prelude.
- * Read before this window rewrites the mirror. The Yomitan API engine runs over the Yomitan host.
+ * Read before this window rewrites the mirror. The Yomitan API engine installs no host ('none').
  */
 const readEngineMirror = () => {
   try {
@@ -334,6 +335,11 @@ controller = createController({
     return false
   },
   popupControl: (control) => controlPopup(control),
+  // Whose popup buttons the controller can focus and press: Yomitan's and Hachidori's.
+  popupFocusable: () =>
+    extensionHosted
+      ? Boolean(extensionHost()?.popupFocusable?.())
+      : (setting('yomitanSettings')?.popupType ?? 'builtin') !== 'custom-api',
   redraw: () => draw(),
   dictionary: () => extensionApi,
   popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
@@ -2277,7 +2283,9 @@ async function startExtensionEngine() {
   }
   const applyReadiness = (status) => {
     if (status.engine !== hostedEngine) return
-    state.yomitan.ready = status.phase === 'ready'
+    // 10ten looks words up while its full dictionary is still downloading (readiness.js
+    // `lookups`); the setup screens still wait for the phase.
+    state.yomitan.ready = typeof status.lookups === 'boolean' ? status.lookups : status.phase === 'ready'
     state.yomitan.error = status.phase === 'failed' ? status.message : null
     settleBackend()
   }
@@ -2394,18 +2402,22 @@ async function capturePopups() {
  * Yomitan's popup is a same-origin frame in this window, so it is scrolled directly: its
  * definitions are the per-dictionary `.definition-item`s, or whole `.entry`s when no entry
  * holds more than one. The Yomitan API pop-up is its own window and is asked by event.
+ *
+ * `control.focus` moves the controller's focus over the popup's buttons (ui/popup-focus.js), for
+ * Yomitan and Hachidori; the return value says whether it did anything. The Yomitan API pop-up
+ * and 10ten have no buttons it can reach.
  */
 function controlPopup(control) {
   if ((setting('yomitanSettings')?.popupType ?? 'builtin') === 'custom-api') {
     void globalThis.__TAURI__?.event?.emit('popover:control', control)
-    return
+    return false
   }
   if (extensionHosted) {
     // The extension's popup is in a closed-off shadow root; its host knows how to drive it.
-    extensionHost()?.popupControl(control)
-    return
+    return Boolean(extensionHost()?.popupControl(control))
   }
-  const popup = [...(livePopups ?? [])].find((candidate) => candidate.isVisibleSync?.())
+  if (control.focus) return yomitanFocus(control.focus)
+  const popup = visibleYomitanPopup()
   let doc = null
   try {
     doc = popup?._frame?.contentDocument ?? null
@@ -2440,6 +2452,36 @@ function controlPopup(control) {
     scroller.scrollTop += control.scroll
   }
   if (control.step) void stepEntry(popup._frame, scroller, control.step)
+  return false
+}
+
+/** The deepest visible Yomitan popup (a definition's own lookup opens a child popup). */
+function visibleYomitanPopup() {
+  return [...(livePopups ?? [])].filter((candidate) => candidate.isVisibleSync?.()).pop()
+}
+
+function yomitanDocument() {
+  try {
+    return visibleYomitanPopup()?._frame?.contentDocument ?? null
+  } catch {
+    return null
+  }
+}
+
+const yomitanButtons = createPopupFocus({
+  root: () => yomitanDocument()?.getElementById('content-body') ?? yomitanDocument(),
+  spec: YOMITAN_FOCUS,
+  scroller: () => yomitanDocument()?.getElementById('content-scroll') ?? null
+})
+
+function yomitanFocus(request) {
+  if (request === 'enter') return yomitanButtons.enter()
+  if (request === 'exit') return (yomitanButtons.exit(), true)
+  if (request === 'refocus') return yomitanButtons.refocus()
+  if (request === 'press') return yomitanButtons.press()
+  if (request === 'audio') return yomitanButtons.playAudio()
+  if (request === 'available') return yomitanButtons.available()
+  return yomitanButtons.move(request)
 }
 
 /**
@@ -3017,7 +3059,14 @@ let lastRealPointer = -Infinity
 window.addEventListener(
   'pointermove',
   (event) => {
-    if (event.isTrusted) lastRealPointer = performance.now()
+    if (!event.isTrusted) return
+    lastRealPointer = performance.now()
+    // The box under a real pointer is lit before the engine sees the event (`flushPointer`):
+    // this listener is the window's first, registered before any content script.
+    if (extensionHosted && !controller.drivesLookups) {
+      renderer.setPointer(event.clientX, event.clientY)
+      renderer.flushPointer()
+    }
   },
   true
 )
@@ -3061,6 +3110,7 @@ await native.listen('pointer', ({ payload }) => {
   if (init) {
     // Yomitan reads only the coordinates. The extension engines also look at the event's target,
     // so theirs is dispatched at the element under the point (it bubbles to window either way).
+    if (extensionHosted) renderer.flushPointer()
     const target = extensionHosted ? document.elementFromPoint(local.x, local.y) ?? window : window
     // Each engine listens for its own event: Yomitan and 10ten for `pointermove`, Hachidori for
     // `mousemove` on the document (extensions/hachidori/content.js). The descriptor says which.
@@ -3100,14 +3150,37 @@ void native.snapshot().then(processView)
 
 // Scanning and rendering are live from here. The dictionary comes up behind them:
 // if it fails, lookups are unavailable and say so, but OCR still works. Which engine is the one
-// this document's host scripts installed (`hostedEngine`); The Yomitan API engine runs over Yomitan's.
+// this document's host scripts installed (`hostedEngine`).
 // No engine downloaded (a first run that skipped the choice, a removed engine, a pin bump still
 // downloading): nothing to start, and lookups say how to get one.
 async function startNoEngine() {
   throw Error(NO_ENGINE_MESSAGE)
 }
 
-;(hostedEngine === NO_ENGINE ? startNoEngine() : extensionHosted ? startExtensionEngine() : startYomitan()).catch((error) => {
+/**
+ * The Yomitan API: no host and nothing downloaded. Words are split and looked up through the
+ * browser's Yomitan over its API, so the lookup hook (Shift-hover and click over the text) is all
+ * there is to install; the pointer replay and the controller see it as a ready dictionary.
+ */
+async function startApiEngine() {
+  await installApiLookup({ embedded: false })
+  state.yomitan.ready = true
+  settleBackend()
+  log({ check: 'dictionary-api-ready' })
+}
+
+/** The Yomitan API is the engine: it needs no host, so this document installed none. */
+const apiEngine =
+  hostedEngine === NO_ENGINE && dictionaryEngineOf(setting('yomitanSettings')?.popupType) === 'custom-api'
+
+;(apiEngine
+  ? startApiEngine()
+  : hostedEngine === NO_ENGINE
+    ? startNoEngine()
+    : extensionHosted
+      ? startExtensionEngine()
+      : startYomitan()
+).catch((error) => {
   state.yomitan.error = String(error?.message ?? error)
   if (hostedEngine === 'yomitan') void native.report({ check: 'dictionary-readiness', engine: 'yomitan',
     phase: 'failed', settingsReady: false, message: 'Yomitan could not start. Choose another dictionary engine and switch back to retry.' })

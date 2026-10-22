@@ -62,7 +62,22 @@ export function hachidoriReadiness(reply, installation = null) {
   return { phase: "ready", message: "Hachidori is ready." };
 }
 
+/** Whether a readiness status allows lookups: its `lookups` when it says, else only when ready. */
+export function canLookUp(status) {
+  return typeof status?.lookups === "boolean" ? status.lookups : status?.phase === "ready";
+}
+
+/**
+ * 10ten's setup, as a phase for the setup screens, and whether it can look words up now
+ * (`lookups`). It always can: 10ten ships a word dictionary in the extension (data/words.ljson,
+ * its "flat file") and reads that while the full one downloads, fails or updates, so only the
+ * setup screens wait for the download. Hachidori looks up only when ready.
+ */
 export function tentenReadiness(state) {
+  return { ...tentenPhase(state), lookups: true };
+}
+
+function tentenPhase(state) {
   const series = ["words", "kanji", "radicals", "names"];
   const complete = series.every((name) => state?.[name]?.state === "ok");
   if (complete && state?.updateState?.type === "idle")

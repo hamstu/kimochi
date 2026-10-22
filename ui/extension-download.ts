@@ -26,9 +26,12 @@ export const isExtensionEngine = (engine: unknown): engine is ExtensionEngine =>
 const count = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 
-/** The download an engine needs: its own, or Yomitan's for the Yomitan API (which runs over it). */
-export function downloadEngineFor(engine: DictionaryEngine): ExtensionEngine {
-  return engine === 'custom-api' ? 'yomitan' : engine
+/**
+ * The download an engine needs: its own, or none for the Yomitan API, which looks words up through
+ * the browser's Yomitan.
+ */
+export function downloadEngineFor(engine: DictionaryEngine): ExtensionEngine | null {
+  return engine === 'custom-api' ? null : engine
 }
 
 /** A native payload as an `ExtensionStatus`, or null when it is not one. */
