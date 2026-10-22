@@ -129,7 +129,7 @@ export const ROWS: Row[] = [
     label: "Overlay on the game",
     cells: {
       kimochi: {
-        text: "Yes: recognised text drawn over the game, selectable for lookups (not with Manga OCR or owocr input, which return text only).",
+        text: "Yes: recognised text drawn over the game, selectable for lookups (not with owocr input, which returns text only).",
       },
       kamui: { text: "Yes, in the desktop app (experimental)." },
       gsm: {

@@ -94,6 +94,30 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
     return () => observer.disconnect()
   }, [cursor, showPopup, frame.line])
 
+  // Each word's underline strength (--p), as the app's proximityStyle: 1 at the word under the
+  // pointer, fading to 0 a third of the screen's width away (the app's 300 px on a game window).
+  // With no pointer, every scanned word shows a faint underline.
+  useLayoutEffect(() => {
+    const screen = screenRef.current
+    if (!screen) return
+    const anchor = cursor !== null ? tokenRefs.current[cursor] : null
+    const centre = (el: HTMLElement) => {
+      const r = el.getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    }
+    const reach = screen.getBoundingClientRect().width / 3
+    const a = anchor ? centre(anchor) : null
+    for (const el of tokenRefs.current) {
+      if (!el) continue
+      let p = 0.35
+      if (a) {
+        const b = centre(el)
+        p = Math.max(0.12, 1 - Math.hypot(b.x - a.x, b.y - a.y) / reach)
+      }
+      el.style.setProperty('--p', p.toFixed(2))
+    }
+  }, [cursor, frame.line, boxes])
+
   let charIndex = 0
   let wordIndex = 0
   const style = {
@@ -138,7 +162,7 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
                   tokenRefs.current[i] = el
                 }}
                 data-token={i}
-                className={`kd-word ${known ? 'kd-known' : 'kd-plain'} ${cursor === i ? 'kd-current' : ''}`}
+                className={`kd-word ${known ? 'kd-known' : 'kd-plain'} ${cursor === i ? 'kd-current' : ''} ${showPopup && cursor === i ? 'kd-selected' : ''}`}
                 style={{ ['--w' as string]: w }}
                 onPointerEnter={known ? (e) => e.pointerType === 'mouse' && onUserCursor(i) : undefined}
                 onClick={known ? () => onUserCursor(userCursor === i ? null : i) : undefined}
