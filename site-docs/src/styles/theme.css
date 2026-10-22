@@ -113,14 +113,28 @@ h1#_top {
   color: var(--k-text);
   font-weight: var(--k-weight-semibold);
 }
-.sl-markdown-content a:not(.card a, .sl-link-button, .sl-link-card a) {
+.sl-markdown-content a:not(.card a, .sl-link-button, .sl-link-card a, .k-platform) {
   color: var(--k-accent-text);
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--k-accent-text) 35%, transparent);
   text-underline-offset: 0.2em;
 }
-.sl-markdown-content a:not(.card a, .sl-link-button):hover {
+.sl-markdown-content a:not(.card a, .sl-link-button, .k-platform):hover {
   text-decoration-color: currentColor;
+}
+
+/* The install page's platform cards (PlatformCard.astro), two to a row on wider screens. */
+.k-platforms {
+  display: grid;
+  gap: 0.75rem;
+}
+@media (min-width: 40rem) {
+  .k-platforms {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.sl-markdown-content .k-platforms > * {
+  margin-top: 0;
 }
 
 /* Sidebar: quiet rows, indigo only for the current page (the app's One Voice rule). */

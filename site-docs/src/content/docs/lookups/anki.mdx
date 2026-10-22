@@ -1,24 +1,27 @@
 ---
 title: Anki
-description: Make Anki cards from Kimochi's dictionary pop-up through the AnkiConnect add-on.
+description: "Make Anki cards from the dictionary pop-up: your dictionary engine's own mining, or Kimochi's card builder with the Yomitan API engine."
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
 
-Kimochi adds cards to [Anki](https://apps.ankiweb.net/) through the
-[AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on. Anki has to be running with
-AnkiConnect installed; Kimochi talks to it on this computer (`http://127.0.0.1:8765` by default).
+Who makes the card depends on your [dictionary engine](/lookups/dictionaries/). With **Built-in
+Yomitan** and **Hachidori**, the dictionary does its own Anki mining: you set it up in that
+dictionary's settings, and its pop-up has the add buttons. Kimochi only builds Anki cards itself
+with the **Yomitan API** engine, whose pop-up is Kimochi's own.
 
-How you set it up depends on your [dictionary engine](/lookups/dictionaries/):
+| Engine | Who makes the card | Where to set it up |
+| --- | --- | --- |
+| **Built-in Yomitan** | Yomitan | **Settings → Dictionary → Open Built-in Yomitan settings → Anki**. |
+| **Hachidori** | Hachidori | **Settings → Dictionary → Open Hachidori settings**. |
+| **10ten** | Nobody: 10ten doesn't make Anki cards. | |
+| **Yomitan API** | Kimochi | **Settings → Dictionary → Anki**, below. |
 
-| Engine | Where cards are set up |
-| --- | --- |
-| **Built-in Yomitan** | Yomitan's own Anki settings: **Settings → Dictionary → Open Built-in Yomitan settings → Anki**. Its pop-up has the add buttons. |
-| **Hachidori** | Hachidori's settings (through AnkiConnect). |
-| **10ten** | No Anki mining. |
-| **Yomitan API** | Kimochi's own card builder, below. |
+Either way, cards reach [Anki](https://apps.ankiweb.net/) through the
+[AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, so Anki has to be running with
+AnkiConnect installed (it listens on `http://127.0.0.1:8765` by default).
 
-## Yomitan API
+## Kimochi's card builder (Yomitan API)
 
 With the Yomitan API engine, Kimochi builds the cards itself. In **Settings → Dictionary → Anki**:
 

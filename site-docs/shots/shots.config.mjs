@@ -32,6 +32,42 @@
  * A target is a CSS selector inside the app, or { selector, text?, index?, pad? }.
  */
 
+/**
+ * Shows a lookup in the Log (a `run` action): the first line with `word` gets the word selected, in
+ * the Log's own selection colour, and the reader pop-up page floating above or below it, as a pop-up
+ * opens. Leaves #k-lookup-word over the word for a cursor mark.
+ */
+const SHOW_LOOKUP = (word) => `(() => {
+  const word = ${JSON.stringify(word)}
+  const line = [...document.querySelectorAll('.line')].find((l) => l.textContent.includes(word))
+  const walk = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+  let node
+  while ((node = walk.nextNode()) && !node.data.includes(word));
+  const range = document.createRange()
+  range.setStart(node, node.data.indexOf(word))
+  range.setEnd(node, node.data.indexOf(word) + word.length)
+  const r = range.getBoundingClientRect()
+  const mark = document.createElement('div')
+  mark.id = 'k-lookup-word'
+  const tint = getComputedStyle(line).getPropertyValue('--accent-a5') || 'rgb(62 99 221 / 0.25)'
+  Object.assign(mark.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', background: tint, borderRadius: '2px', pointerEvents: 'none', zIndex: 9998 })
+  document.body.append(mark)
+  // The reader page draws its card 13 px inside its window: show only the card, with a pop-up's shadow.
+  const inset = 13, w = 404, h = 346
+  const above = r.top > innerHeight / 2
+  const box = document.createElement('div')
+  const dark = document.documentElement.dataset.theme === 'dark' || /theme=dark/.test(location.search)
+  Object.assign(box.style, { position: 'fixed', left: Math.min(r.left - 12, innerWidth - w - 8) + 'px', top: (above ? r.top - h - 6 : r.bottom + 6) + 'px', width: w + 'px', height: h + 'px', overflow: 'hidden', borderRadius: '9px', boxShadow: dark ? '0 12px 32px rgb(0 0 0 / 0.55)' : '0 12px 32px rgb(15 17 26 / 0.22)', zIndex: 9999 })
+  const popup = document.createElement('iframe')
+  popup.src = location.pathname.replace(/[^/]*$/, 'reader-popup.html') + location.search
+  Object.assign(popup.style, { position: 'absolute', left: -inset + 'px', top: -inset + 'px', width: w + inset * 2 + 'px', height: h + inset * 2 + 'px', border: '0' })
+  box.append(popup)
+  document.body.append(box)
+})()`
+
+/** Hides the live demo's window resize grips (a `run` prefix for shots of the site's demo). */
+const HIDE_GRIPS = `document.head.insertAdjacentHTML('beforeend', '<style>.kd-resize{display:none!important}</style>');`
+
 const MAIN = [900, 560]
 const SETTINGS = [820, 700]
 const WELCOME = [720, 620]
@@ -84,7 +120,15 @@ export const SHOTS = [
     size: MAIN,
     crop: SIDEBAR,
     ready: '.src-card-live',
-    marks: [{ type: 'glow', target: { selector: '.src-rows', pad: 1 }, radius: 10 }]
+    marks: [{ type: 'glow', target: { selector: '.src-card', pad: 1 }, radius: 12 }]
+  },
+  {
+    id: 'overlay-switch',
+    page: 'panel.html?window=log',
+    size: MAIN,
+    crop: SIDEBAR,
+    ready: '.src-card-live',
+    marks: [{ type: 'glow', target: switchRow('Show overlay'), radius: 8 }]
   },
   {
     id: 'sidebar-callouts',
@@ -135,7 +179,14 @@ export const SHOTS = [
     crop: { x: 0, y: 0, width: 520, height: 560 },
     ready: '.src-card-live',
     actions: [{ click: sourceAction('Crop area'), after: 500 }],
-    marks: [{ type: 'glow', target: { selector: '.src-region', pad: 1 }, radius: 3 }]
+    // The three steps on the Sources page: the Crop area button, Change crop area… in its menu,
+    // and the crop it set, outlined on the preview.
+    marks: [
+      { type: 'glow', target: { selector: '.src-region', pad: 1 }, radius: 3 },
+      { type: 'badge', target: sourceAction('Crop area'), n: 1, nudge: [-6, -2] },
+      { type: 'badge', target: { selector: '[role="menuitem"]', text: 'Change crop area' }, n: 2, nudge: [-6, 0] },
+      { type: 'badge', target: { selector: '.src-region', pad: 1 }, n: 3, at: 'top-right' }
+    ]
   },
   {
     id: 'scan-button',
@@ -191,7 +242,8 @@ export const SHOTS = [
     page: 'panel.html?window=log',
     size: MAIN,
     ready: '.line',
-    actions: [{ rightClick: { selector: '.line', index: 1 }, after: 500 }],
+    // A line in the middle of the window, so the menu opens below it and stays inside.
+    actions: [{ rightClick: { selector: '.line', text: 'ダルはモニター' }, after: 500 }],
     marks: [{ type: 'glow', target: { selector: '[role="menu"]' }, radius: 10 }]
   },
   {
@@ -395,7 +447,17 @@ export const SHOTS = [
   // ------------------------------------------------------------------ other windows
   { id: 'diagnostics', page: 'panel.html?window=diagnostics&capture=window:101', size: [680, 720], ready: '[aria-label="Diagnostics view"]' },
   { id: 'sync-log', page: 'panel.html?window=sync-log&account=signedin', size: [760, 520], ready: '.sync-log-text, [class*="sync-log"]' },
-  { id: 'reader-popup', page: 'reader-popup.html', size: [480, 360], frame: 'titlebar', title: 'Dictionary' },
+  {
+    // A lookup as you see it in the Log: the word selected, the dictionary's pop-up beside it (the
+    // Yomitan API pop-up, standing in for any engine's) and the pointer.
+    id: 'word-lookup',
+    page: 'panel.html?window=log',
+    size: MAIN,
+    crop: { x: 240, y: 0, width: 660, height: 560 },
+    ready: '.line',
+    actions: [{ run: SHOW_LOOKUP('世界線'), after: 2500 }],
+    marks: [{ type: 'cursor', target: '#k-lookup-word', fx: 0.6, fy: 0.75 }]
+  },
 
   // ------------------------------------------------------------------ welcome guide
   ...[
@@ -441,7 +503,8 @@ export const SHOTS = [
     ready: '.kd-screen .kd-word',
     settle: 1500,
     actions: [
-      { run: `document.querySelector('#demo').scrollIntoView()`, after: 800 },
+      // The windows' resize grips are for visitors to the live demo, not for a picture of the overlay.
+      { run: HIDE_GRIPS + `document.querySelector('#demo').scrollIntoView()`, after: 800 },
       { doubleClick: { selector: '#demo button', text: 'STEINS' }, after: 2000 }
     ],
     clipTo: '.kd-screen',

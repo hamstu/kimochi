@@ -8,7 +8,7 @@ import Screenshot from '../../../components/Screenshot.astro'
 The **source** is where the Log's lines come from. It sits at the top of the main window's sidebar:
 a live preview of the window or screen, its name, and **Crop area** and **Change source**.
 
-<Screenshot id="source-card" alt="The sidebar's source card for a game window, with its live preview, Crop area and Change source buttons, and the Auto OCR and Show overlay switches highlighted." width={240} />
+<Screenshot id="source-card" alt="The sidebar's source card for a game window, with its live preview, Crop area and Change source buttons, highlighted." width={240} />
 
 Clicking the card brings the source forward (**Bring to front**, or **Go to full screen** for a
 full-screen game). Hover it and the ✕ in the corner clears the source.
@@ -50,18 +50,22 @@ With **Switch sessions by window name** on (the default), each window you read g
 
 ## Crop area
 
-A crop area limits scans to part of the source, such as the dialogue box, so menus, HUDs and other
-text stay out of the Log. **Crop area → Set crop area…** opens the region editor over the source:
+A crop area limits scans to part of the source, such as a game's dialogue box or a video's
+subtitles, so menus, HUDs and other text stay out of the Log.
 
-- Drag to draw the box. Hold <kbd>Space</kbd> while drawing to move it.
-- Drag inside the box to move it, or its edges and corners to resize it.
-- Arrow keys nudge it by one point (<kbd>Shift</kbd> + arrows by ten).
-- Press <kbd>Return</kbd>, double-click inside, or choose **Confirm** to keep it; <kbd>Esc</kbd> cancels.
+<Screenshot id="crop-menu" alt="The source card with three numbered marks: 1 the Crop area button, 2 Change crop area in its menu, 3 the crop outlined on the live preview." width={520} />
 
-The crop shows as a frame on the live preview. **Change crop area…** edits it and
-**Clear crop area** removes it.
+1. Click **Crop area** under the source's preview.
+2. Choose **Set crop area…** (**Change crop area…** once there is one). The region editor opens over
+   the source:
+   - Drag to draw the box. Hold <kbd>Space</kbd> while drawing to move it.
+   - Drag inside the box to move it, or its edges and corners to resize it.
+   - Arrow keys nudge it by one point (<kbd>Shift</kbd> + arrows by ten).
+   - Press <kbd>Return</kbd>, double-click inside, or choose **Confirm** to keep it; <kbd>Esc</kbd>
+     cancels.
+3. The crop shows as a frame on the live preview, and every scan reads only what's inside it.
 
-<Screenshot id="crop-menu" alt="The Crop area menu open under the source card, with Change crop area and Clear crop area, and the crop region outlined on the preview." width={520} />
+**Clear crop area**, in the same menu, removes it.
 
 ## Quick Shot
 

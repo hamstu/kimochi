@@ -41,13 +41,14 @@ export default defineConfig({
       lastUpdated: false,
       editLink: { baseUrl: EDIT_BASE },
       pagination: true,
-      social: [{ icon: 'github', label: 'Kimochi on GitHub', href: 'https://github.com/hamstu/kimochi-tauri' }],
       customCss: ['./src/styles/theme.css'],
       components: {
         SiteTitle: './src/components/SiteTitle.astro',
         Footer: './src/components/Footer.astro',
         Head: './src/components/Head.astro',
-        EditLink: './src/components/EditLink.astro'
+        EditLink: './src/components/EditLink.astro',
+        SocialIcons: './src/components/SocialIcons.astro',
+        ThemeSelect: './src/components/ThemeSelect.astro'
       },
       head: [
         { tag: 'link', attrs: { rel: 'icon', href: '/favicon.ico', sizes: '32x32' } },

@@ -19,12 +19,6 @@ page with `<Todo>TODO(hamish): …</Todo>`, which shows as a dashed box in the d
 5. **Overlay on Wayland** (install/linux): which desktops show it today (KDE Plasma, Hyprland, Sway…)?
    And which distributions should the docs call tested? (SEO_TODO #5.)
 6. **Hyprland shortcuts** (install/linux): the exact config lines for Scan and Controller menu.
-7. **Manga OCR and the overlay** (reading/ocr-engines): /compare says the overlay doesn't work with
-   Manga OCR ("text only"), but the engine reports positions in `ui/settings.ts`. Which is right? If
-   the overlay works, fix compare.ts too.
-8. **Hover modifier per engine** (reading/overlay): Kimochi forwards Shift/Ctrl/Alt/Meta and each
-   engine applies its own rule; the docs say Shift (as the welcome guide does). Do 10ten or Hachidori
-   differ by default?
 9. **Yomitan API lookups in the Log** (lookups/dictionaries): its description says "Click words in
    the Log to look them up". A click, or Shift-hover?
 10. **Tested texthookers** (reading/texthookers): Textractor (with a WebSocket plugin), LunaTranslator,
@@ -34,8 +28,6 @@ page with `<Todo>TODO(hamish): …</Todo>`, which shows as a dashed box in the d
 12. **Kimochi Cloud** (cloud): currency (USD?), free monthly allowances (privacy says yes, pricing
     shows only the trial), and whether Sync needs Kimochi Cloud (the app says so; the privacy page
     and FAQ say signing in syncs). (SEO_TODO #3, #4.)
-13. **Release status** (introduction): a target window, and whether the docs should point people at
-    the nightly builds. (SEO_TODO #6.)
 
 ## Things the docs left out on purpose
 

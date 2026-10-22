@@ -115,7 +115,10 @@ function clipTo(target) {
   const el = [...frame.contentDocument.querySelectorAll(spec.selector)].sort((a, b) => area(b) - area(a))[0]
   el.scrollIntoView({ block: 'center', inline: 'center' })
   const r = el.getBoundingClientRect()
-  crop = { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }
+  // Rounded inwards, so a fractional edge never shows a sliver of the page behind it.
+  const x = Math.ceil(r.left)
+  const y = Math.ceil(r.top)
+  crop = { x, y, width: Math.floor(r.right) - x, height: Math.floor(r.bottom) - y }
   viewport.style.width = `${crop.width}px`
   viewport.style.height = `${crop.height}px`
   frame.style.marginLeft = `${-crop.x}px`

@@ -4,7 +4,6 @@ description: Google Lens, Kimochi cloud OCR, MeikiOCR, Manga OCR, Apple Live Tex
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
-import Todo from '../../../components/Todo.astro'
 
 The OCR engine turns each capture into text. Choose it in the sidebar's **OCR model** menu, or in
 **Settings → OCR & Overlay**, where each engine has its description, strengths and requirements.
@@ -54,7 +53,7 @@ OCR, a model trained on manga. It reads each column of a bubble on its own, the 
 characters stay in the column they were printed in. It uses Metal on macOS and CUDA on NVIDIA cards
 where it can.
 
-<Todo>TODO(hamish): does the overlay work with Manga OCR now? The /compare page says it doesn't ("not with Manga OCR or owocr input, which return text only"), but the engine reports positions in ui/settings.ts.</Todo>
+The [overlay](/reading/overlay/) works with Manga OCR: each bubble's text is drawn back over the page where it was printed, ready to hover.
 
 ## Apple Live Text
 

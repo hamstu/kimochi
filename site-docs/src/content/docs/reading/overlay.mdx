@@ -4,7 +4,6 @@ description: Draw the recognised text over your game, manga or video and look wo
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
-import Todo from '../../../components/Todo.astro'
 
 The overlay draws each scan's text back over the source (a game, a manga page, a video), so you can hover a word where it appears on
 screen instead of in the Log. Look for the faint blue underlines on scanned text.
@@ -19,16 +18,14 @@ keeps working.
 
 The overlay is marked **Experimental** (**Settings → OCR & Overlay → Overlay mode**).
 
-<Screenshot id="source-card" alt="The sidebar's Auto OCR and Show overlay switches." width={240} />
+<Screenshot id="overlay-switch" alt="The sidebar with the Show overlay switch highlighted." width={240} />
 
 ## Looking up words
 
-Hover a word with the dictionary's scan key held (<kbd>Shift</kbd> for Yomitan by default) to open
-its pop-up. With a controller, open the [controller menu](/controller/#the-controller-menu) and
+Hover a word with <kbd>Shift</kbd> held to open its pop-up (with 10ten, just hover; see
+[Which key to hold](/lookups/looking-up/#which-key-to-hold)). With a controller, open the [controller menu](/controller/#the-controller-menu) and
 choose **Scan** or **Read along** to step through the words with the D-pad. See
 [Looking up words](/lookups/looking-up/).
-
-<Todo>TODO(hamish): confirm the hover modifier per engine. Kimochi forwards Shift/Ctrl/Alt/Meta and each engine applies its own rule; the welcome guide says "Hold Shift". Does 10ten or Hachidori differ?</Todo>
 
 ## Options
 
