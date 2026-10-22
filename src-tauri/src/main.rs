@@ -889,6 +889,9 @@ async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operati
     #[cfg(target_os = "linux")]
     { let service=state.inner().clone();
         tauri::async_runtime::spawn_blocking(move || {let result=platform::gnome::request(&operation,payload.clone())?;
+            if operation == "status" && result["windowPolicy"] == true {
+                if let Some(revision) = result["revision"].as_str() { platform::gnome::restore_pins(&app,&service.settings,revision)?; }
+            }
             if operation == "surface" {
                 let window = app.get_webview_window(OVERLAY).ok_or("native: overlay missing")?;
                 if payload["operation"] == "close" {
@@ -907,7 +910,7 @@ async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operati
                 }
             }
             if operation=="track"&&payload["operation"]=="match"&&!result.is_null(){if let Some(id)=payload["sourceId"].as_str(){platform::gnome::refresh_identity(&service,id);}}
-            if matches!(operation.as_str(),"update"|"install")&&result["live"]==true {hotkeys::apply(&app,&service.settings);}
+            if matches!(operation.as_str(),"update"|"install")&&result["live"]==true {platform::gnome::invalidate_pins();hotkeys::apply(&app,&service.settings);}
             Ok(result)
         }).await.map_err(|e|e.to_string())?
     }

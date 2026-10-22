@@ -11,6 +11,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- GNOME: avoid invalid native taskbar notifications during overlay cleanup, and prevent
+  delayed extension imports from re-enabling an overlay after it has been disabled.
+
+- Ubuntu/GNOME: hide the passive annotation surface from the dock and window switcher,
+  make window pinning work, and keep annotations visible in Kimochi until a window covers the text itself.
+
 - Ubuntu/GNOME: fix vertically displaced overlay text and flickering hover effects when
   the desktop constrains the overlay below its panel. Keep window annotations visible beside Kimochi.
 

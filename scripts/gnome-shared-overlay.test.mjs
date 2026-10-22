@@ -10,6 +10,7 @@ const source=(await readFile(new URL('../src-tauri/gnome-extension/implementatio
 function shellFixture() {
   const signals=[],actors=[]
   const context={Extension:class{},global:{get_window_actors:()=>actors,get_pointer:()=>[20,30,0]},
+    Shell:{WindowTracker:{get_default:()=>({get_window_app:()=>null})}},
     GLib:{get_monotonic_time:()=>100,Variant:class{constructor(_type,value){this.value=value}}},
     Clutter:{ModifierType:{BUTTON1_MASK:1,SHIFT_MASK:2,CONTROL_MASK:4,MOD1_MASK:8,SUPER_MASK:16}},
     Main:{overview:{visible:false},sessionMode:{isLocked:false,isGreeter:false},wm:{skipNextEffect(){}},
@@ -39,10 +40,20 @@ test('a shared surface rejects foreign ownership and has no fullscreen input or 
   o.SurfaceAsync([JSON.stringify({operation:'close'})],inv)
   assert.match(inv.error,/Another client/);assert.equal(o._surface.owner,':1.2')
 })
+test('GNOME46 Status needs no private AltTab helper and reports an idle extension safely',()=>{
+  const {o,context}=shellFixture()
+  context.global.display={focus_window:null}
+  context.Main.layoutManager.getWorkAreaForMonitor=()=>({x:0,y:0,width:1000,height:800})
+  o._words=[];o._group={get_paint_visibility:()=>false};o.metadata={revision:'test'}
+  const status=JSON.parse(o.Status())
+  assert.equal(status.protocol,1);assert.equal(status.words,0);assert.equal(status.painted,false)
+  assert.equal(status.windowPolicy,true)
+})
 test('surface synchronization only places the leased own window, preserves game focus, and stops repeating unchanged pointer samples',()=>{
   const {o,actors,signals}=shellFixture();let raised=0,moved=0,above=false
   const actor={remove_all_transitions(){},set_scale(){},set_translation(){}}
   const win={get_pid:()=>8,get_title:()=> 'Kimochi · overlay',get_compositor_private:()=>actor,
+    connect:()=>1,disconnect(){},notify(){},
     get_frame_rect:()=>({x:0,y:0,width:1000,height:800}),is_above:()=>above,is_override_redirect:()=>false,
     make_above(){above=true;raised++},move_resize_frame(){moved++},activate(){assert.fail('passive annotations must never activate')}}
   actors.push({meta_window:{get_pid:()=>99,get_title:()=> 'Kimochi · overlay'}},{meta_window:win})
@@ -58,6 +69,7 @@ test('constrained GNOME surface origin agrees with pointer and native input geom
   const frame={x:0,y:32,width:1000,height:800}
   const actor={remove_all_transitions(){},set_scale(){},set_translation(){}}
   const win={get_pid:()=>8,get_title:()=> 'Kimochi · overlay',get_compositor_private:()=>actor,
+    connect:()=>1,disconnect(){},notify(){},
     get_frame_rect:()=>frame,is_above:()=>true,is_override_redirect:()=>false,
     move_resize_frame(){moves++}}
   actors.push({meta_window:win})
@@ -75,7 +87,7 @@ test('constrained GNOME surface origin agrees with pointer and native input geom
   assert.equal(moves,2,'a changed monitor allocation is placed once again')
 })
 test('linked source stays visible beside Kimochi, but hides when covered, inactive or minimized',()=>{
-  const {o,context}=shellFixture()
+  const {o,context,actors}=shellFixture()
   const rect={x:500,y:100,width:400,height:300}
   const source={get_compositor_private:()=>({get_paint_visibility:()=>true,get_resource_scale:()=>1}),
     get_pid:()=>99,get_stable_sequence:()=>7,get_buffer_rect:()=>rect,showing_on_its_workspace:()=>true,
@@ -84,14 +96,77 @@ test('linked source stays visible beside Kimochi, but hides when covered, inacti
   context.global.display={focus_window:source}
   o._tracked={window:source,sequence:7,sourceId:'portal:window:1',pid:8}
   assert.equal(o._trackedStatus().visible,true)
-  const app={get_pid:()=>8,get_frame_rect:()=>({x:0,y:0,width:450,height:800})}
+  const app={get_pid:()=>8,get_title:()=> 'Kimochi · log',is_above:()=>false,minimized:false,
+    showing_on_its_workspace:()=>true,get_compositor_private:()=>({get_paint_visibility:()=>true}),
+    get_frame_rect:()=>({x:0,y:0,width:450,height:800})}
+  actors.push({meta_window:app})
+  o._coverage={sourceId:'portal:window:1',bounds:rect,rects:[{x:800,y:300,width:50,height:30}]}
   context.global.display.focus_window=app;assert.equal(o._trackedStatus().visible,true)
-  app.get_frame_rect=()=>({x:600,y:200,width:200,height:200})
+  app.get_frame_rect=()=>({x:600,y:200,width:100,height:50})
+  assert.equal(o._trackedStatus().visible,true,'overlapping the source away from its text stays visible')
+  app.get_frame_rect=()=>({x:800,y:300,width:100,height:50})
   assert.equal(o._trackedStatus().visible,false)
+  o._words=[];assert.equal(o._trackedStatus().visible,false,'hidden text retains coverage geometry')
   app.get_pid=()=>99;app.get_frame_rect=()=>({x:0,y:0,width:450,height:800})
   assert.equal(o._trackedStatus().visible,false)
   context.global.display.focus_window=source;source.minimized=true
   assert.equal(o._trackedStatus().visible,false)
+})
+test('GNOME panel pins apply once to the caller window, survive repeated requests and release cleanly',()=>{
+  const {o,context,actors}=shellFixture();let raised=0,lowered=0,above=false
+  const win={get_pid:()=>8,get_title:()=> 'Kimochi · log',is_above:()=>above,is_override_redirect:()=>false,
+    get_compositor_private:()=>({get_paint_visibility:()=>true}),
+    make_above(){above=true;raised++},unmake_above(){above=false;lowered++}}
+  actors.push({meta_window:win});o._pins=new Map()
+  context.Gio={DBus:{session:{call_sync:()=>({deep_unpack:()=>[8]})}},DBusCallFlags:{NONE:0},
+    BusNameWatcherFlags:{NONE:0},bus_watch_name_on_connection:()=>1,bus_unwatch_name(){}}
+  context.GLib.VariantType=class{}
+  const inv={get_sender:()=>':1.2',return_value(){},return_dbus_error(_n,error){this.error=error}}
+  for(let n=0;n<20;n++)o.OwnWindowAsync([JSON.stringify({label:'log',pinned:true})],inv)
+  assert.equal(inv.error,undefined);assert.equal(raised,1);assert.equal(lowered,0)
+  o.OwnWindowAsync([JSON.stringify({label:'overlay',pinned:true})],inv)
+  assert.match(inv.error,/ordinary own panels/)
+  o.OwnWindowAsync([JSON.stringify({label:'log',pinned:false})],inv)
+  assert.equal(lowered,1);assert.equal(o._pins.size,0)
+  context.Gio.DBus.session.call_sync=()=>({deep_unpack:()=>[99]})
+  o.OwnWindowAsync([JSON.stringify({label:'log',pinned:true})],inv)
+  assert.equal(raised,1,'another process cannot pin this window by copying its title')
+})
+test('passive window list filters exclude only the leased surface and restore on cleanup',()=>{
+  const {o,context}=shellFixture();let unmanaged,changes=0
+  const ordinary={title:'Reader'},win={skip_taskbar:false,skipTaskbar:false,
+    connect(_name,callback){unmanaged=callback;return 1},disconnect(){},notify(){}}
+  const app={get_windows:()=>[ordinary,win],emit(){changes++}}
+  const original=app.get_windows
+  context.Shell.WindowTracker.get_default=()=>({get_window_app:()=>app})
+  o._hideFromWindowLists(win)
+  assert.equal(win.skip_taskbar,true);assert.equal(win.skipTaskbar,true)
+  assert.deepEqual(app.get_windows(),[ordinary]);assert.equal(changes,0)
+  o._hideFromWindowLists(win);assert.equal(changes,0,'filtering never synthesizes native application signals')
+  unmanaged()
+  assert.equal(win.skip_taskbar,false);assert.equal(win.skipTaskbar,false)
+  assert.equal(app.get_windows,original);assert.equal(app.get_windows().length,2)
+  assert.equal(o._passiveWindows.size,0);assert.equal(o._passiveApps.size,0)
+})
+test('passive filtering never corrupts GNOME46 native interesting-window accounting',()=>{
+  const {o,context}=shellFixture();let unmanaged,nativeCount=2,nativeSignals=0
+  // GNOME46's C notify handler increments for FALSE, decrements for TRUE.
+  // A JS property shadow does not change meta_window_is_skip_taskbar().
+  const ordinary={},win={skip_taskbar:false,skipTaskbar:false,
+    connect(_name,callback){unmanaged=callback;return 1},disconnect(){},
+    notify(){nativeCount++}}
+  const app={get_windows:()=>[ordinary,win],emit(){nativeSignals++}}
+  context.Shell.WindowTracker.get_default=()=>({get_window_app:()=>app})
+  for(let n=0;n<3;n++){
+    o._hideFromWindowLists(win);unmanaged()
+    assert.equal(nativeCount,2,'fake property notifications inflate the C counter while native skip-taskbar stays FALSE')
+  }
+  nativeCount-- // Native removal of the annotation window.
+  nativeCount-- // Native removal of the final ordinary window.
+  const stillRunning=nativeCount!==0
+  const runningState=null // GNOME frees this when the native window list empties.
+  assert.equal(stillRunning,false,'RUNNING with freed state is unsafe in shell_app_compare')
+  assert.equal(runningState,null);assert.equal(nativeSignals,0)
 })
 test('GNOME uses the shared renderer with intact OCR segments, grouping, opacity, and live desktop bounds',async()=>{
   const savedWindow=globalThis.window,savedInterval=globalThis.setInterval
@@ -103,7 +178,7 @@ test('GNOME uses the shared renderer with intact OCR segments, grouping, opacity
     annotations:[annotation],appliedScanId:1,scanning:false}
   const status={available:true,sharedOverlay:true,monitors:[monitor],tracked:{sourceId:state.info.source_id,bounds,visible:true}}
   globalThis.window={__KIMOCHI_PLATFORM__:{os:'linux'},__TAURI__:{core:{invoke:async(_cmd,{operation,payload})=>{
-    calls.push({operation,payload});if(operation==='status')return status;if(operation==='surface')return {rect:monitor};return {}
+    calls.push({operation,payload});if(operation==='status')return status;if(operation==='surface')return {rect:monitor,visible:status.tracked.visible};return {}
   }}}}
   globalThis.setInterval=()=>0
   try {
@@ -120,6 +195,12 @@ test('GNOME uses the shared renderer with intact OCR segments, grouping, opacity
     bridge.pointer({sourceId:'portal:window:99',origin:monitor,bounds,visible:true});assert.equal(renders.length,count)
     await bridge.pause();assert.equal(bridge.shared,false)
     assert.ok(calls.some(c=>c.operation==='surface'&&c.payload.operation==='close'))
+    status.tracked.visible=false;status.tracked.covered=true
+    const rendered=renders.length
+    await bridge.update()
+    assert.equal(bridge.shared,true,'covered text keeps its lease and geometry without a hide/show loop')
+    assert.equal(renders.length,rendered,'covered text does not briefly paint on each heartbeat')
+    assert.deepEqual(calls.findLast(c=>c.operation==='present').payload.textRects,[{x:55,y:65,width:55,height:15}])
     status.tracked.bounds={...bounds,width:503};await bridge.update()
     assert.equal(bridge.shared,false,'a resized source cannot reuse stale capture geometry')
   } finally {globalThis.window=savedWindow;globalThis.setInterval=savedInterval}

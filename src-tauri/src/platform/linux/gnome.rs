@@ -1,4 +1,4 @@
-//! Optional GNOME Shell actors, never ordinary Wayland overlay windows.
+//! Optional GNOME Shell integration for validated Kimochi Wayland surfaces.
 use serde_json::{json, Value};
 use std::{sync::{atomic::{AtomicBool, Ordering}, Mutex}, time::Duration};
 use tauri::{Emitter, Manager};
@@ -10,6 +10,8 @@ static CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
 static AVAILABLE: AtomicBool = AtomicBool::new(false);
 static DESKTOP_POPUP: AtomicBool = AtomicBool::new(false);
 static SHARED_OVERLAY: AtomicBool = AtomicBool::new(false);
+static PANEL_PINS: AtomicBool = AtomicBool::new(false);
+static PIN_REVISION: Mutex<Option<String>> = Mutex::new(None);
 
 fn eligible() -> bool {
     super::session().backend == super::Backend::Wayland
@@ -39,8 +41,10 @@ pub fn status() -> Value {
         Ok(value)
     })();
     SHARED_OVERLAY.store(result.as_ref().is_ok_and(|value| value["sharedOverlay"] == true), Ordering::SeqCst);
+    PANEL_PINS.store(result.as_ref().is_ok_and(|value| value["windowPolicy"] == true), Ordering::SeqCst);
     DESKTOP_POPUP.store(result.as_ref().is_ok_and(|value| value["desktopPopup"] == true), Ordering::SeqCst);
     AVAILABLE.store(result.is_ok(), Ordering::SeqCst);
+    if result.is_err() { *PIN_REVISION.lock().unwrap() = None; }
     result.unwrap_or_else(|error| json!({"available":false,"reason":error}))
 }
 
@@ -101,11 +105,18 @@ fn install() -> Result<Value, String> {
         .or_else(|| std::fs::read_to_string(dir.join("revision")).ok());
     let bootstrapping = dir.exists() && std::fs::read_to_string(dir.join("extension.js")).map_err(|e| e.to_string())? != files[1].1;
     if bootstrapping {
-        // Accept only the exact previous Kimochi implementation, never arbitrary user edits.
-        if digest(&std::fs::read_to_string(dir.join("extension.js")).map_err(|e| e.to_string())?)? != "b9feb3db6467f2378e34287b70cee76b87117153eafdc9cf8941863fc8561941" {
+        // Accept only exact known Kimochi entry points, never arbitrary user edits.
+        let installed = std::fs::read_to_string(dir.join("extension.js")).map_err(|e| e.to_string())?;
+        let installed_hash = digest(&installed)?;
+        if !["b9feb3db6467f2378e34287b70cee76b87117153eafdc9cf8941863fc8561941",
+            "f5bd97906b2e33b5d684b5ddaab6c73dad6deba51cc49d9c0e80f084fd3268d5"].contains(&installed_hash.as_str()) {
             return Err("Existing Kimochi extension has unrecognized edits; it was not overwritten".into());
         }
-        std::fs::copy(dir.join("extension.js"), dir.join("extension.js.pre-loader" )).map_err(|e| e.to_string())?;
+        let backup = dir.join(format!("extension.js.before-{installed_hash}"));
+        if backup.exists() && std::fs::read_to_string(&backup).map_err(|e|e.to_string())? != installed {
+            return Err("Existing Kimochi loader backup differs; it was not overwritten".into());
+        }
+        if !backup.exists() { std::fs::copy(dir.join("extension.js"), backup).map_err(|e| e.to_string())?; }
     }
     std::fs::create_dir_all(dir.join("revisions")).map_err(|e| e.to_string())?;
     for (name, contents) in files {
@@ -165,8 +176,8 @@ fn install() -> Result<Value, String> {
             }
         }
     }
-    Ok(json!({"installed":true,"enabled":enabled.status.success(),"revision":revision,"live":live,"needsLogin":!live && !status()["desktopPopup"].as_bool().unwrap_or(false),
-        "message":if live { "GNOME extension updated in place; no logout required." } else if status()["desktopPopup"] == true { "Update could not be verified; the previous implementation was restored. See GNOME extension errors." } else { "The versioned loader is installed. GNOME has cached the old entry point; save your work and log out/in once. Future implementation updates reload in place." }}))
+    Ok(json!({"installed":true,"enabled":enabled.status.success(),"revision":revision,"live":live,"needsLogin":bootstrapping || !live && !status()["desktopPopup"].as_bool().unwrap_or(false),
+        "message":if bootstrapping { "The updated extension loader needs a new login. Save your work and log out/in once; implementation-only updates can still reload in place afterward." } else if live { "GNOME extension updated in place; no logout required." } else if status()["desktopPopup"] == true { "Update could not be verified; the previous implementation was restored. See GNOME extension errors." } else { "The versioned loader is installed. GNOME has cached the old entry point; save your work and log out/in once. Future implementation updates reload in place." }}))
 }
 
 pub fn start(app: tauri::AppHandle) {
@@ -306,6 +317,33 @@ pub fn own_bounds(w: &tauri::WebviewWindow) -> Result<kimochi_capture::Rect, Str
 
 pub fn eligible_popup_session() -> bool { eligible() }
 pub fn shared_overlay() -> bool { eligible() && SHARED_OVERLAY.load(Ordering::SeqCst) }
+pub fn pin_supported(label: &str) -> bool { matches!(label,"log"|"settings"|"diagnostics"|"dictionary"|"welcome"|"sync-log") }
+pub fn panel_pins() -> bool { eligible() && PANEL_PINS.load(Ordering::SeqCst) }
+
+pub fn pin(w: &tauri::WebviewWindow, pinned: bool) -> Result<(), String> {
+    if !panel_pins() { return Err("GNOME panel pinning requires the updated Kimochi extension".into()); }
+    w.set_title(&format!("Kimochi · {}", w.label())).map_err(|e|e.to_string())?;
+    request("own-window", json!({"label":w.label(),"pinned":pinned}))?;
+    Ok(())
+}
+
+pub fn pinned(w: &tauri::WebviewWindow) -> Option<bool> {
+    if !panel_pins() || !pin_supported(w.label()) { return None; }
+    request("own-window", json!({"label":w.label()})).ok()?.get("pinned")?.as_bool()
+}
+
+pub fn restore_pins(app: &tauri::AppHandle, settings: &crate::settings::Settings, revision: &str) -> Result<(), String> {
+    let mut previous = PIN_REVISION.lock().map_err(|e|e.to_string())?;
+    if previous.as_deref() == Some(revision) { return Ok(()); }
+    for window in app.webview_windows().values().filter(|w|pin_supported(w.label())) {
+        let pinned = settings.get_or(&format!("nativeWindowPinned.{}",window.label()), false);
+        pin(window, pinned || window.label() == "log" && crate::compact::active())?;
+    }
+    *previous = Some(revision.to_owned());
+    Ok(())
+}
+
+pub fn invalidate_pins() { *PIN_REVISION.lock().unwrap() = None; }
 
 fn digest(contents: &str) -> Result<String, String> {
     let mut checksum = glib::Checksum::new(glib::ChecksumType::Sha256).ok_or("SHA256 unavailable")?;

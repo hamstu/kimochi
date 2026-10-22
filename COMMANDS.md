@@ -1267,9 +1267,28 @@ regions. The original floating dictionary host owns its own popup input and focu
 loss, lock and extension disable hide it; capture suspension hides the WebView along with the
 other annotation surfaces. Native layer-shell and X11 retain the same existing renderer.
 
+With `windowPolicy`, the GNOME46 adapter removes only the validated passive annotation
+surface from Shell app/window lists and overview previews. Its per-window property and
+per-app list filters are restored on unmanagement or extension disable; the ordinary
+reader remains selectable. No Shell/dock files, modal state or global prototypes change.
+Filtering never synthesizes native `skip-taskbar` notifications or application
+`windows-changed` signals: GNOME46 counts native property transitions, and a notification
+without a real native transition corrupts its application window accounting.
+`own-window` also accepts `{label,pinned:boolean}` for ordinary Kimochi panels; native
+pin/unpin and inspection use Mutter's actual above state. Saved pins are restored after
+startup and extension updates, and owner loss releases the bridge's pin requests.
+`present.textRects` supplies up to 2000 mapped text rectangles, independently of the
+controller's bounded word metadata. The source remains visible with Kimochi focused
+unless one of its ordinary windows intersects a text rectangle (including its 8-point
+margin). Coverage geometry survives hiding so it cannot trigger a hide/show cycle.
+
 Legacy `gnome-overlay-lookup` still serves controller navigation and older annotation adapters.
 The versioned extension loader reloads implementation updates without logout; initial discovery
 or a loader change may require login. Installation never logs out the user automatically.
+Loader imports carry an enable-generation token, so disabling or superseding an update
+cancels stale imports before they can create another implementation. A recognized loader
+upgrade preserves a hash-named backup and reports `needsLogin:true` even if the old loader
+is still serving the previous implementation.
 
 ## Gaming Mode reading identity
 

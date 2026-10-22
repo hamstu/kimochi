@@ -256,8 +256,22 @@ rectangles. Estimated Shell character cells remain metadata for the legacy contr
 adapter; they no longer drive mouse lookup, typography or visual highlights.
 Mapped surface coordinates, rather than requested desktop coordinates, drive text,
 pointer conversion and input shapes, including GNOME panel/dock placement constraints.
-Linked-window annotations remain visible beside a focused Kimochi window; an overlapping
-ordinary Kimochi window or another focused application hides them.
+Linked-window annotations remain visible with Kimochi focused, even when its window
+overlaps a text-free part of the source. Ordinary Kimochi windows covering a text rectangle
+(with the shared 8-point margin), or another focused application, hide them. Text coverage
+geometry is retained while hidden so obscuring a word does not create a visibility loop.
+The GNOME46 Shell adapter excludes the passive annotation window from dock/app window
+lists, the window switcher and overview using reversible per-window/per-app filters.
+Ordinary panels keep their entries. Pin/unpin uses validated own-window Mutter requests
+and reports the actual above state; saved pins are restored on startup/extension update.
+The window-list filters operate in JavaScript only. Never emit a synthetic native
+`notify::skip-taskbar`: GNOME46 adjusts its native window count on every notification,
+even if the native flag did not change. No synthetic Shell.App lifecycle signals are used.
+The loader cancels imports from a disabled or superseded generation. Loader upgrades
+require a fresh login; implementation-only updates can still reload without logout.
+During crash investigation on Ubuntu, Dock's `isolate-locations=false` workaround was
+retained. Kimochi does not change this setting; system updates and the workaround alone
+are not proof that a reported native compositor crash has been fixed.
 The dictionary uses the existing full Yomitan Popup/Display in a small native
 window, including dictionary images, audio controls and nested lookup. GNOME supplies
 geometry for Kimochi's own log/popup windows so log lookups can extend outside the

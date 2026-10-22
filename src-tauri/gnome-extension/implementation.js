@@ -10,6 +10,8 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const IFACE = 'dev.kimochi.GnomeOverlay';
+const ORDINARY = ['log','settings','diagnostics','dictionary','welcome','sync-log'];
+const COVERING = ['log','settings','diagnostics','dictionary','welcome'];
 const XML = `<node><interface name="${IFACE}">
 <method name="Status"><arg type="s" direction="out"/></method>
 <method name="Present"><arg type="s" direction="in"/></method>
@@ -33,6 +35,8 @@ const XML = `<node><interface name="${IFACE}">
 
 export default class KimochiOverlay extends Extension {
     enable() {
+        this._pins=new Map();
+        this._passiveWindows=new Map();this._passiveApps=new Map();
         this._shortcuts=new Map();
         this._acceleratorSignal=global.display.connect('accelerator-activated',(_display,id)=>{
             const name=this._shortcuts.get(id);
@@ -55,6 +59,7 @@ export default class KimochiOverlay extends Extension {
             if (this._pick && GLib.get_monotonic_time()-this._pick.started>30000000) this._finishPick(null,'timeout');
             if(this._controller&&GLib.get_monotonic_time()-this._controller.updated>5000000)this._finishController();
             this._followTracked();
+            this._syncPins();
             this._syncSurface();
             this._transparentCrop();
             if (this._crop && GLib.get_monotonic_time() - this._crop.updated > 5000000) this._finishCrop(false, 'timeout');
@@ -316,6 +321,7 @@ export default class KimochiOverlay extends Extension {
     _forgetTracked() {
         if(this._trackWatch)Gio.bus_unwatch_name(this._trackWatch);this._trackWatch=null;
         this._tracked=null;
+        this._coverage=null;
         if(this._sourceKind==='window'){this._finishController();this._clear('tracked-window-unavailable');}
     }
 
@@ -391,15 +397,23 @@ export default class KimochiOverlay extends Extension {
         if(!w.get_compositor_private()||w.get_stable_sequence()!==t.sequence){this._forgetTracked();return null;}
         const r=w.get_buffer_rect(),focused=global.display.focus_window;
         const popup=focused===this._nativePopup||focused===this._controller?.window;
-        // Keep the source readable beside Kimochi, but never paint it through
-        // Kimochi's ordinary windows. Annotation and popup surfaces are separate.
-        const appRect=focused&&t.pid&&focused.get_pid()===t.pid&&focused!==this._surface?.window&&!popup
-            ? focused.get_frame_rect() : null;
-        const appBeside=appRect&&(appRect.x+appRect.width<=r.x||appRect.x>=r.x+r.width||
-            appRect.y+appRect.height<=r.y||appRect.y>=r.y+r.height);
+        const appActive=focused&&t.pid&&focused.get_pid()===t.pid&&focused!==this._surface?.window&&!popup;
+        // Match the shared cover rule: only TEXT overlap hides annotations.
+        // Keep these rectangles while hidden, or coverage would oscillate.
+        const coverage=this._coverage?.sourceId===t.sourceId?this._coverage:null;
+        const dx=r.x-(coverage?.bounds?.x??r.x),dy=r.y-(coverage?.bounds?.y??r.y);
+        const text=coverage?.rects??[];
+        const covered=Boolean(global.get_window_actors().some(({meta_window:own})=>{
+            if(own.get_pid()!==t.pid||!COVERING.some(label=>own.get_title()===`Kimochi · ${label}`)||
+                !(appActive||own.is_above())||
+                own.minimized||!own.showing_on_its_workspace()||!own.get_compositor_private()?.get_paint_visibility())return false;
+            const a=own.get_frame_rect();
+            return text.some(b=>a.x<b.x+dx+b.width+8&&b.x+dx-8<a.x+a.width&&
+                a.y<b.y+dy+b.height+8&&b.y+dy-8<a.y+a.height);
+        }));
         const app=Shell.WindowTracker.get_default().get_window_app(w),info=app?.get_app_info();
         return {appName:app?.get_name()??null,appId:info?.get_id()??w.get_gtk_application_id()??null,iconName:info?.get_icon()?.to_string()??'application-x-executable',sourceId:t.sourceId,sequence:t.sequence,method:t.method,windowId:String(w.get_id()),title:w.get_title(),bounds:{x:r.x,y:r.y,width:r.width,height:r.height},
-            visible:!w.minimized&&w.showing_on_its_workspace()&&w.get_compositor_private().get_paint_visibility()&&Boolean(focused===w||popup||appBeside),
+            covered,visible:!w.minimized&&w.showing_on_its_workspace()&&w.get_compositor_private().get_paint_visibility()&&Boolean((focused===w||popup||appActive)&&!covered),
             scale:w.get_compositor_private().get_resource_scale()};
     }
 
@@ -642,9 +656,10 @@ export default class KimochiOverlay extends Extension {
     Status() {
         return JSON.stringify({controller:this._controller?{mode:this._controller.mode,rect:this._controller.rect,mapped:Boolean(this._controller.window)}:null,nativeShortcuts:true,protocol: 1, shell: '46', words: this._words.length,
             keyboardGrab: false, fullscreenInputSurface: Boolean(this._crop || this._pick), hideButton: this._hideButton?.visible ? (()=>{const b=this._fallbackHide?.get_paint_visibility()?this._fallbackHide:this._hideButton;return {position:b.get_transformed_position(),size:b.get_transformed_size(),floating:b===this._fallbackHide};})() : null, pointer: global.get_pointer(),
-            sharedOverlay: true,
+            sharedOverlay: true, windowPolicy: true,
+            panels:[...(this._pins?.values()??[])].map(p=>({label:p.label,above:Boolean(p.window?.is_above()),mapped:Boolean(p.window)})),
             surface: this._surface ? {rect:this._surface.rect,sourceId:this._surface.sourceId,
-                origin:this._surfaceState().origin,visible:Boolean(this._surface.visible),mapped:Boolean(this._surface.window)} : null,
+                origin:this._surfaceState().origin,windowListHidden:this._passiveWindows?.has(this._surface.window)??false,visible:Boolean(this._surface.visible),mapped:Boolean(this._surface.window)} : null,
             painted: this._surface ? Boolean(this._surface.visible) : this._words.length > 0 && this._group.get_paint_visibility(),
             windowTracking: true, tracked: this._trackedStatus(), picking: Boolean(this._pick), pickWindows:this._pick ? global.get_window_actors().map(a=>a.meta_window).filter(w=>w.get_pid()!==this._pick.pid&&w.showing_on_its_workspace()&&!w.minimized).slice(-50).map(w=>{const r=w.get_frame_rect();return {title:w.get_title(),pid:w.get_pid(),bounds:{x:r.x,y:r.y,width:r.width,height:r.height}};}) : [], cropEditor: true, crop: this._crop ? this._crop.webview ? {id:this._crop.id,ui:'shared',backgroundSuppressed:Boolean(this._crop.backgroundSuppressed),opacity:this._crop.window?.get_compositor_private()?.opacity,monitor:this._crop.monitor,mapped:Boolean(this._crop.window),rect:this._crop.rect} : {id: this._crop.id, rect: this._crop.rect, dragging: Boolean(this._crop.drag), monitor: this._crop.monitor, save: {position:this._cropSave.get_transformed_position(),size:this._cropSave.get_transformed_size()}, cancel:{position:this._cropCancel.get_transformed_position(),size:this._cropCancel.get_transformed_size()}} : null,
             appearance: 'matched-word-highlight', matched: this._match ?? null, desktopPopup: true, revision: this.metadata.revision,
@@ -670,6 +685,9 @@ export default class KimochiOverlay extends Extension {
                 !data.referenceBounds||!['x','y','width','height'].every(k=>Number.isFinite(data.referenceBounds[k])&&Math.abs(data.referenceBounds[k]-tracked.bounds[k])<2)))
                 throw new Error('Window annotations require the explicitly linked live source and current bounds');
             const monitors = Main.layoutManager.monitors;
+            if(data.textRects!==undefined&&(!Array.isArray(data.textRects)||data.textRects.length>2000||
+                !data.textRects.every(r=>['x','y','width','height'].every(k=>Number.isFinite(r[k])&&Math.abs(r[k])<=1000000)&&r.width>0&&r.height>0)))
+                throw new Error('Invalid text coverage rectangles');
             if (data.sentences !== undefined && (!Array.isArray(data.sentences) || data.sentences.length > 500 ||
                 !data.sentences.every(sentence => typeof sentence === 'string')))
                 throw new Error('Invalid annotation sentences');
@@ -715,6 +733,8 @@ export default class KimochiOverlay extends Extension {
             this._sourceKind=data.sourceKind;this._sourceId=data.sourceId;
             this._referenceBounds=data.referenceBounds;this._trackedVisible=data.sourceKind!=='window'||tracked.visible;
             this._baseWords=words.map(w=>({...w}));
+            this._textRects=data.textRects??words;
+            this._coverage={sourceId:data.sourceId,bounds:data.referenceBounds,rects:this._textRects};
             this._words = words;
             for (const w of words) {
                 // Preserve the source's typography; only the hovered word is marked.
@@ -777,7 +797,7 @@ export default class KimochiOverlay extends Extension {
                 rect:{x:monitor.x,y:monitor.y,width:monitor.width,height:monitor.height},updated:GLib.get_monotonic_time()});
             if (this._controller?.mode !== 'words') this._group.hide();
             this._syncSurface();
-            invocation.return_value(new GLib.Variant('(s)', [JSON.stringify({rect:this._surfaceState().origin})]));
+            invocation.return_value(new GLib.Variant('(s)', [JSON.stringify({rect:this._surfaceState().origin,visible:this._surfaceState().visible})]));
         } catch (e) { invocation.return_dbus_error(`${IFACE}.InvalidSurface`, e.message); }
     }
 
@@ -812,6 +832,7 @@ export default class KimochiOverlay extends Extension {
             w.get_pid() === s.pid && w.get_title() === 'Kimochi · overlay');
         if (win && win !== s.window) {
             s.window = win;
+            this._hideFromWindowLists(win);
             s.placementKey = null;
             const actor = win.get_compositor_private();
             Main.wm.skipNextEffect(actor);
@@ -855,7 +876,7 @@ export default class KimochiOverlay extends Extension {
         try {
             if (payload.length > 4096) throw new Error('Window request exceeds limit');
             const data = JSON.parse(payload);
-            if (!['log', 'popup-host', 'crop-host','controller-host', 'overlay'].includes(data.label)) throw new Error('Unsupported own window');
+            if (![...ORDINARY, 'popup-host', 'crop-host','controller-host', 'overlay'].includes(data.label)) throw new Error('Unsupported own window');
             const response = Gio.DBus.session.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus',
                 'org.freedesktop.DBus', 'GetConnectionUnixProcessID',
                 new GLib.Variant('(s)', [invocation.get_sender()]), new GLib.VariantType('(u)'),
@@ -863,6 +884,20 @@ export default class KimochiOverlay extends Extension {
             const [pid] = response.deep_unpack();
             const win = global.get_window_actors().map(a => a.meta_window)
                 .find(w => w.get_pid() === pid && w.get_title() === `Kimochi · ${data.label}`);
+            if(data.pinned!==undefined){
+                if(!ORDINARY.includes(data.label)||typeof data.pinned!=='boolean')throw new Error('Only ordinary own panels may be pinned');
+                const owner=invocation.get_sender(),key=`${owner}:${data.label}`;
+                if(!data.pinned)this._dropPin(key);
+                if(data.pinned){
+                    if(!this._pins.has(key)){
+                        const pin={owner,pid,label:data.label,window:win,originalAbove:Boolean(win?.is_above())};
+                        pin.watch=Gio.bus_watch_name_on_connection(Gio.DBus.session,owner,Gio.BusNameWatcherFlags.NONE,null,()=>this._dropPin(key));
+                        this._pins.set(key,pin);
+                    }
+                    this._syncPins();
+                }else if(win?.is_above())win.unmake_above();
+                invocation.return_value(new GLib.Variant('(s)',[JSON.stringify({pinned:data.pinned,pending:!win})]));return;
+            }
             if (data.label === 'overlay') {
                 if (!this._surface || this._surface.owner !== invocation.get_sender())
                     throw new Error('Annotation surface requires an active owner lease');
@@ -923,8 +958,61 @@ export default class KimochiOverlay extends Extension {
             }
             if (!win && !data.rect && !data.sourceKind) throw new Error('Own window is not mapped');
             const r = win?.get_frame_rect();
-            invocation.return_value(new GLib.Variant('(s)', [JSON.stringify(r ? {x: r.x, y: r.y, width: r.width, height: r.height} : {pending: true})]));
+            invocation.return_value(new GLib.Variant('(s)', [JSON.stringify(r ? {x: r.x, y: r.y, width: r.width, height: r.height,pinned:win.is_above()} : {pending: true})]));
         } catch (e) { invocation.return_dbus_error(`${IFACE}.InvalidOwnWindow`, e.message); }
+    }
+
+    _syncPins() {
+        for(const p of this._pins?.values()??[]){
+            const win=global.get_window_actors().map(a=>a.meta_window).find(w=>w.get_pid()===p.pid&&w.get_title()===`Kimochi · ${p.label}`);
+            p.window=win;
+            if(win?.get_compositor_private()?.get_paint_visibility()&&!win.is_above()&&!win.is_override_redirect())win.make_above();
+        }
+    }
+
+    // GNOME46 has no public setter for a pre-existing Wayland client's native
+    // skip-taskbar flag. Filter only the validated passive MetaWindow at the
+    // Shell boundary; do not alter Mutter, the dock extension, or other apps.
+    // NEVER notify skip-taskbar here: GNOME46's native handler adjusts its
+    // interesting-window counter for every notification, even when the native
+    // flag did not change. False notifications can leave RUNNING with freed
+    // running_state and crash shell_app_compare after the last window closes.
+    _hideFromWindowLists(win) {
+        if(this._passiveWindows?.has(win))return;
+        this._passiveWindows??=new Map();this._passiveApps??=new Map();
+        const saved=new Map();
+        for(const key of ['skip_taskbar','skipTaskbar']){
+            saved.set(key,Object.getOwnPropertyDescriptor(win,key));
+            Object.defineProperty(win,key,{configurable:true,get:()=>true});
+        }
+        const app=Shell.WindowTracker.get_default().get_window_app(win);
+        if(app&&!this._passiveApps.has(app)){
+            const descriptor=Object.getOwnPropertyDescriptor(app,'get_windows'),original=app.get_windows;
+            const hidden=this._passiveWindows;
+            const replacement=function(...args){return original.apply(this,args).filter(w=>!hidden.has(w));};
+            Object.defineProperty(app,'get_windows',{configurable:true,writable:true,value:replacement});
+            this._passiveApps.set(app,{descriptor,original,replacement});
+        }
+        const signal=win.connect('unmanaged',()=>this._restoreWindowLists(win));
+        this._passiveWindows.set(win,{saved,app,signal});
+    }
+
+    _restoreWindowLists(win) {
+        const p=this._passiveWindows?.get(win);if(!p)return;
+        this._passiveWindows.delete(win);win.disconnect(p.signal);
+        for(const [key,descriptor]of p.saved){if(descriptor)Object.defineProperty(win,key,descriptor);else delete win[key];}
+        if(p.app&&![...this._passiveWindows.values()].some(w=>w.app===p.app)){
+            const a=this._passiveApps.get(p.app);
+            if(p.app.get_windows===a.replacement){if(a.descriptor)Object.defineProperty(p.app,'get_windows',a.descriptor);else delete p.app.get_windows;}
+            this._passiveApps.delete(p.app);
+        }
+    }
+
+    _dropPin(key) {
+        const p=this._pins?.get(key);if(!p)return;
+        if(p.watch)Gio.bus_unwatch_name(p.watch);
+        if(!p.originalAbove&&p.window?.get_compositor_private()&&p.window.is_above())p.window.unmake_above();
+        this._pins.delete(key);
     }
 
     _placePopup(win, r) {
@@ -977,7 +1065,7 @@ export default class KimochiOverlay extends Extension {
         this._payload = null;
         this._group?.destroy_all_children();
         this._words = [];
-        this._baseWords=[];this._sourceKind=null;this._referenceBounds=null;
+        this._baseWords=[];this._textRects=[];this._sourceKind=null;this._referenceBounds=null;
         if(!this._crop&&!this._pick){this._hideButton?.hide();this._fallbackHide?.hide();}
         this._owner = null;
         this._lastUpdate = 0;
@@ -987,6 +1075,8 @@ export default class KimochiOverlay extends Extension {
     }
 
     disable() {
+        for(const win of this._passiveWindows?.keys()??[])this._restoreWindowLists(win);
+        for(const key of this._pins?.keys()??[])this._dropPin(key);
         this._finishController();
         this._clearShortcuts();
         if(this._acceleratorSignal)global.display.disconnect(this._acceleratorSignal);this._acceleratorSignal=null;

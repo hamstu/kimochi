@@ -667,12 +667,15 @@ fn save_bounds(settings: &Arc<Settings>, window: &WebviewWindow, spec: &PanelSpe
 }
 
 pub fn info(window: &WebviewWindow) -> Result<Value, String> {
+    let pinned = window.is_always_on_top().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    let pinned = platform::gnome::pinned(window).unwrap_or(pinned);
     Ok(json!({
         "label": window.label(),
         "native": platform::inspect(window)?,
         "bounds": platform::desktop_bounds(window)?,
         "scale": window.scale_factor().map_err(|e| e.to_string())?,
-        "pinned": window.is_always_on_top().map_err(|e| e.to_string())?,
+        "pinned": pinned,
         "focused": window.is_focused().map_err(|e| e.to_string())?,
         "resizable": window.is_resizable().map_err(|e| e.to_string())?,
         "visible": window.is_visible().map_err(|e| e.to_string())?,
@@ -757,11 +760,22 @@ fn apply(
         }
         "pin" | "unpin" => {
             let pinned = action == "pin";
-            window.set_always_on_top(pinned).map_err(native_err)?;
+            #[cfg(target_os = "linux")]
+            let gnome = platform::gnome::desktop_popup() && platform::gnome::pin_supported(label);
+            #[cfg(not(target_os = "linux"))]
+            let gnome = false;
+            #[cfg(target_os = "linux")]
+            if gnome { platform::gnome::pin(window, pinned)?; }
+            if !gnome { window.set_always_on_top(pinned).map_err(native_err)?; }
             settings.set(&format!("nativeWindowPinned.{label}"), json!(pinned))?;
         }
         "inspect" => {}
         _ => return Err(format!("invalid: unknown window action {action:?}")),
+    }
+    #[cfg(target_os = "linux")]
+    if platform::gnome::panel_pins() && matches!(action, "show" | "show_inactive" | "restore")
+        && platform::gnome::pin_supported(label) {
+        platform::gnome::pin(window, label == MAIN && crate::compact::active() || pinned_default(settings, spec(label).unwrap()))?;
     }
     if matches!(action, "hide" | "minimize") {
         crate::gamepad::panel_focus(label, false);

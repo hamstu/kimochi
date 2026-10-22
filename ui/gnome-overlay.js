@@ -1,6 +1,8 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Linux runtime bridge. */
 import { gnomeWordCells, packGnomeWords } from './gnome-word-cells.js'
 import { measureEms } from './render.js'
+import { mapAnnotations } from './geometry.js'
+import { visibleAnnotations } from './annotations.js'
 
 /** GNOME places the original annotation WebView; the shared renderer owns its UI. */
 export async function installGnomeOverlay(native, state, enabled, log, { renderer, setting }) {
@@ -46,7 +48,7 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
       const screen = info?.source_id?.startsWith('portal:display:')
       const tracked = !screen && status.tracked?.sourceId === info?.source_id ? status.tracked : null
       const monitor = screen ? (status.monitors?.length === 1 ? status.monitors[0] : null) : tracked?.bounds
-      if (!enabled() || !state.geometry || !monitor || (!screen && (!tracked?.visible || !info.source_bounds || Math.abs(info.source_bounds.width-monitor.width)>=2 || Math.abs(info.source_bounds.height-monitor.height)>=2))) {
+      if (!enabled() || !state.geometry || !monitor || (!screen && (!tracked?.visible && !tracked?.covered || !info.source_bounds || Math.abs(info.source_bounds.width-monitor.width)>=2 || Math.abs(info.source_bounds.height-monitor.height)>=2))) {
         await closeSurface()
         await gnomeRequest('clear')
         return
@@ -63,11 +65,13 @@ export async function installGnomeOverlay(native, state, enabled, log, { rendere
         const height = (Math.max(...ys) - Math.min(...ys)) * sy
         return width > 0 && height > 0 ? gnomeWordCells(a.description, { x, y, width, height }, a.orientation === 'vertical' || a.isVertical === true, measureEms) : []
       }).slice(0, 500)
-      await gnomeRequest('present', { sourceKind: screen ? 'screen' : 'window', sourceId:info.source_id, referenceBounds:screen ? undefined : monitor, frameId: state.appliedScanId, ...(status.sharedOverlay ? packGnomeWords(words) : {words}) })
+      const textRects=mapAnnotations(info,visibleAnnotations(state.annotations,setting('textOverlayGrouping')),{x:0,y:0},monitor)
+        .slice(0,2000).map(({x,y,width,height})=>Object.fromEntries(Object.entries({x,y,width,height}).map(([k,v])=>[k,Math.round(v*1000)/1000])))
+      await gnomeRequest('present', { sourceKind: screen ? 'screen' : 'window', sourceId:info.source_id, referenceBounds:screen ? undefined : monitor, frameId: state.appliedScanId, textRects, ...(status.sharedOverlay ? packGnomeWords(words,Math.max(64,220000-JSON.stringify(textRects).length)) : {words}) })
       if (status.sharedOverlay) {
         const result = await gnomeRequest('surface', {operation:'open',sourceKind:screen?'screen':'window',sourceId:info.source_id})
         shared = true
-        placement = {origin:result.rect,bounds:monitor,visible:true}
+        placement = {origin:result.rect,bounds:monitor,visible:result.visible!==false}
         placementSignature = null
         render()
       }
