@@ -133,8 +133,7 @@ npx wrangler login       # once, with the account that holds the kimochiapp.com 
 npm run docs:deploy      # astro build, then wrangler deploy
 ```
 
-**Nothing has been deployed and no DNS or Cloudflare setting has changed.** As configured, the first
-deploy creates the `kimochi-docs` Worker on the account's workers.dev subdomain only (a preview URL).
-To put it on docs.kimochiapp.com, uncomment `routes` in `wrangler.toml` and deploy again: wrangler then
-adds the custom domain and creates its DNS record in the kimochiapp.com zone. After that you can set
-`workers_dev = false`, as kimochi-server does.
+The Worker serves **docs.kimochiapp.com** (a Workers custom domain, `routes` in `wrangler.toml`):
+the first deploy with that route creates the custom domain and its DNS record in the kimochiapp.com
+zone. `workers_dev = true` also keeps a workers.dev URL; set it to `false`, as kimochi-server does,
+once you no longer want it.

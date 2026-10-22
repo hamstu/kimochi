@@ -2,19 +2,16 @@
 # Separate from kimochi-server (which serves the marketing site and /api on kimochiapp.com), so the
 # docs deploy on their own: `npm run docs:deploy` from the repository root builds, then deploys.
 #
-# Not deployed yet. Before the first deploy (see README.md, "Deploying"):
-#   - `npx wrangler login` with the Cloudflare account that holds the kimochiapp.com zone, or set
-#     CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN.
-#   - The first deploy publishes to the account's workers.dev subdomain only, for a preview.
-#   - To serve docs.kimochiapp.com, uncomment `routes` below and deploy again: wrangler then creates
-#     the custom domain and its DNS record in the kimochiapp.com zone.
+# Deploying needs `npx wrangler login` with the Cloudflare account that holds the kimochiapp.com zone
+# (or CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN). The custom domain below makes wrangler create
+# docs.kimochiapp.com and its DNS record in that zone on the first deploy (see README.md, "Deploying").
 name = "kimochi-docs"
 compatibility_date = "2026-08-01"
 
 workers_dev = true
 preview_urls = false
 
-# routes = [ { pattern = "docs.kimochiapp.com", custom_domain = true } ]
+routes = [ { pattern = "docs.kimochiapp.com", custom_domain = true } ]
 
 [assets]
 directory = "./dist"
