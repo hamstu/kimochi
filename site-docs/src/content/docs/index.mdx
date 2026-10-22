@@ -1,80 +1,57 @@
 ---
-title: Kimochi Docs
-description: Install Kimochi and learn everything it does, from OCR and the overlay to pop-up dictionaries, the Log, the Notebook, Anki, controllers and Kimochi Cloud.
-template: splash
-hero:
-  title: Read your games in Japanese.
-  tagline: Kimochi reads the Japanese text on your screen, draws it over the game and puts every word a hover away from its meaning. This guide covers installing it, setting it up and everything it can do.
-  actions:
-    - text: Install Kimochi
-      link: /install/
-      icon: right-arrow
-      variant: primary
-    - text: Quick start
-      link: /quick-start/
-      variant: secondary
+title: Introduction
+description: What Kimochi is, who it is for, and the words this guide uses for its parts.
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components'
 import Screenshot from '../../components/Screenshot.astro'
+import Todo from '../../components/Todo.astro'
 
-<Screenshot id="main-window" alt="Kimochi's main window: the chosen game in the sidebar with its live preview, Auto OCR and Show overlay switches, and the Log of Japanese lines on the right." width={900} eager />
+Kimochi is a free, open-source desktop app that helps you read any Japanese on your screen: games,
+visual novels, manga, YouTube videos, streams, screenshots, anything with Japanese text in it. It
+captures the text with OCR, can draw it back over what you're reading as an overlay, and lets you
+hover any word to look it up in your favourite dictionary and save it to Anki.
 
-## What Kimochi does
+It is built to stay beside whatever you're reading rather than be a study app: a few small windows
+that keep out of the way while you read.
 
-<CardGrid>
-  <Card title="Capture and OCR" icon="laptop">
-    Pick a game window or a whole screen, crop it to the dialogue, and press Scan or turn on
-    **Auto OCR**. Choose from online and on-device OCR engines. [Sources](/reading/sources/) ·
-    [OCR engines](/reading/ocr-engines/)
-  </Card>
-  <Card title="The overlay" icon="seti:image">
-    Kimochi can draw the recognised text back over the game, so you can hover any word right
-    where it is. [The overlay](/reading/overlay/)
-  </Card>
-  <Card title="Pop-up dictionaries" icon="open-book">
-    Built-in Yomitan, Hachidori or 10ten, downloaded from their official releases, or the Yomitan
-    in your browser. [Dictionaries](/lookups/dictionaries/)
-  </Card>
-  <Card title="The Log" icon="document">
-    Every line lands in a Log you can scroll back through, with a session and reading stats per
-    game, translation and explanations. [The Log](/log/the-log/)
-  </Card>
-  <Card title="Notebook" icon="pencil">
-    Keep the characters, places and things of a story. Names you add light up in the Log as you
-    read; import a cast from VNDB. [Notebook](/log/notebook/)
-  </Card>
-  <Card title="Anki" icon="add-document">
-    Make cards through AnkiConnect, from the dictionary pop-up. [Anki](/lookups/anki/)
-  </Card>
-  <Card title="Controller and Steam Deck" icon="star">
-    A radial menu and word-by-word reading on a gamepad, including Steam Deck Gaming Mode
-    (experimental). [Controller](/controller/)
-  </Card>
-  <Card title="Texthookers" icon="random">
-    Already hooking text out of a visual novel? Feed Kimochi over WebSocket or the clipboard.
-    [Texthookers and clipboard](/reading/texthookers/)
-  </Card>
-  <Card title="Kimochi Cloud" icon="rocket">
-    Optional: cloud OCR, read aloud, translation, AI explanations and sync between computers.
-    [Accounts and plans](/cloud/)
-  </Card>
-</CardGrid>
+<Screenshot id="main-window-tour" alt="The main window with numbered parts: 1 the source card, 2 the Auto OCR and Show overlay switches, 3 the OCR model, 4 the dictionary, 5 the Log and Notebook tabs, 6 a line in the Log, 7 the reading stats." width={900} />
 
-## How it fits together
+1. **Source**: the window or screen Kimochi reads, with a live preview, **Crop area** and **Change source**.
+2. **Auto OCR** and **Show overlay**: scan whenever the text changes, and draw it over what you’re reading.
+3. **OCR model**: the engine that turns the capture into text.
+4. **Dictionary**: the pop-up dictionary engine used for lookups.
+5. **Log** and **Notebook**: the two views of the main window.
+6. **A line**: every scan adds its text to the Log, with the time it arrived.
+7. **Reading stats**: reading time, lines, characters and speed for this session.
 
-1. **Pick the game.** Choose a window or screen in the sidebar, and add a crop area if you like.
-2. **Scan.** Press **Scan now** (<kbd>⇧⌘8</kbd> on a Mac, <kbd>Ctrl+Shift+8</kbd> elsewhere), or turn on Auto OCR.
-3. **Read.** The text shows up in the Log, and over the game when the overlay is on.
-4. **Look it up.** Hover a word to see its meaning, hear it, save it to Anki, and keep going.
+## Words used in this guide
 
-<Screenshot id="sidebar-callouts" alt="The sidebar with callouts: live preview, crop, scan, Auto OCR, the overlay, the OCR engine and the pop-up dictionary." width={558} />
+| Term | Meaning |
+| --- | --- |
+| Source | The window or screen Kimochi reads, or another input: Quick Shot, Clipboard or WebSocket. |
+| Crop area | Part of the source to read, such as a game’s dialogue box or a video’s subtitles. |
+| Scan | One OCR pass over the source (or the crop area). |
+| Auto OCR | Scanning on its own whenever the text on screen changes and settles. |
+| Overlay | The recognised text drawn over the source, so words can be looked up in place. |
+| Log | The running transcript of every line, per session. |
+| Session | A separate Log, Notebook and stats for one game, book, series or anything else you read. |
+| Notebook | Characters, places and things of a session, recognised in the Log. |
+| Controller menu | The radial menu over whatever you’re reading, opened with a shortcut or a gamepad chord. |
+| Mini mode | The main window shrunk to its controls. |
 
-## Where to next
+## Platforms
 
-<CardGrid>
-  <LinkCard title="Install" href="/install/" description="macOS, Windows, Linux and Steam Deck." />
-  <LinkCard title="Quick start" href="/quick-start/" description="From a fresh install to your first lookup in a few minutes." />
-  <LinkCard title="Keyboard shortcuts" href="/reference/shortcuts/" description="Every shortcut, in one table." />
-  <LinkCard title="Troubleshooting" href="/help/troubleshooting/" description="Capture permission, the overlay, dictionaries and more." />
-</CardGrid>
+Kimochi runs on macOS (Apple silicon), Windows (x64 and ARM64) and Linux (x64 and ARM64), and has a
+Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in
+early testing. See [Installation](/install/).
+
+Kimochi is early: it has nightly pre-release builds, made by one developer.
+
+<Todo>TODO(hamish): release status. Is there a target release window, and should the docs say the nightly builds are public? (Same question as SEO_TODO #6.)</Todo>
+
+## Free, with an optional Kimochi Cloud
+
+The whole app works without an account: capture, the overlay, Auto OCR, every OCR engine except
+cloud OCR, the Log, Sessions, the Notebook, dictionaries, Anki and Gaming Mode. **Kimochi Cloud** is
+an optional paid plan that adds in-app translation, AI explanations, read aloud, cloud OCR and sync
+between computers. See [Accounts and plans](/cloud/).

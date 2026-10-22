@@ -35,7 +35,7 @@ export default defineConfig({
     starlight({
       title: 'Kimochi Docs',
       description:
-        'How to install and use Kimochi, the free desktop app that reads the Japanese in your games with OCR, an overlay, pop-up dictionaries and a reading log.',
+        'How to install and use Kimochi, the free desktop app that reads any Japanese on your screen (games, visual novels, manga, videos) with OCR, an overlay, pop-up dictionaries and a reading log.',
       logo: { src: './src/assets/kimochi-icon.svg', alt: 'Kimochi' },
       favicon: '/favicon.svg',
       lastUpdated: false,
@@ -45,7 +45,6 @@ export default defineConfig({
       customCss: ['./src/styles/theme.css'],
       components: {
         SiteTitle: './src/components/SiteTitle.astro',
-        Hero: './src/components/Hero.astro',
         Footer: './src/components/Footer.astro',
         Head: './src/components/Head.astro',
         EditLink: './src/components/EditLink.astro'
@@ -58,7 +57,7 @@ export default defineConfig({
         {
           label: 'Get started',
           items: [
-            { label: 'Introduction', slug: 'introduction' },
+            { label: 'Introduction', link: '/' },
             {
               label: 'Installation',
               items: [

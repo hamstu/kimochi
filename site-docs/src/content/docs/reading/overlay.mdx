@@ -1,12 +1,12 @@
 ---
 title: The overlay
-description: Draw the recognised text over your game and look words up right where they are.
+description: Draw the recognised text over your game, manga or video and look words up right where they are.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
 import Todo from '../../../components/Todo.astro'
 
-The overlay draws each scan's text back over the game, so you can hover a word where it appears on
+The overlay draws each scan's text back over the source (a game, a manga page, a video), so you can hover a word where it appears on
 screen instead of in the Log. Look for the faint blue underlines on scanned text.
 
 <Screenshot id="overlay-demo" alt="Kimochi's overlay over a visual novel: each word of the dialogue boxed, the hovered one highlighted, with its dictionary entry above." width={560} />
@@ -14,8 +14,8 @@ screen instead of in the Log. Look for the faint blue underlines on scanned text
 ## Turning it on
 
 Turn on **Show overlay** in the sidebar (under Auto OCR). The overlay follows the window you read
-and stays click-through everywhere except over the words themselves, so the game keeps working
-underneath.
+and stays click-through everywhere except over the words themselves, so whatever is underneath
+keeps working.
 
 The overlay is marked **Experimental** (**Settings → OCR & Overlay → Overlay mode**).
 
