@@ -861,6 +861,17 @@ pub const HOVER_PROMOTES_KEY: bool = cfg!(target_os = "macos");
 /// serve the custom scheme as is (`tauri-2.11.5/src/pattern.rs::format_real_schema`).
 const HTTP_SCHEME_BRIDGE: bool = cfg!(any(target_os = "windows", target_os = "android"));
 
+/// Whether a document served on a custom scheme can be cross-origin isolated by its own
+/// `Cross-Origin-Opener-Policy` / `-Embedder-Policy` headers, which is what gives it
+/// `SharedArrayBuffer` and lets WASM threads share memory. Only where the scheme reaches the
+/// webview as plain HTTP: WebView2's `http://<scheme>.localhost` bridge goes through Chromium's
+/// navigation, which honours them. WebKit keeps every load made by a URL scheme handler out of
+/// an isolated browsing context group on purpose (`WebPageProxy::browsingContextGroupForNavigation`:
+/// "These loads skip COOP enforcement, so they cannot stay cross-origin isolated") and then
+/// refuses to post shared memory to a worker (DataCloneError), so WKWebView and WebKitGTK would
+/// only get COEP's restrictions from the headers, never the threads.
+pub const CROSS_ORIGIN_ISOLATION: bool = HTTP_SCHEME_BRIDGE;
+
 /// The origin Kimochi's own pages are served from.
 pub fn app_origin() -> &'static str {
     if HTTP_SCHEME_BRIDGE {

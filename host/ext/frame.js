@@ -104,6 +104,7 @@ export function installFrame(win, { engine, descriptor }) {
   upstream.linked.catch((error) => console.warn('[ext-host]', describe(error)))
 
   if (kind === 'offscreen') {
+    if (descriptor.engineStorage === 'idbfs') keepEngineOnIdbfs(win)
     // Ready once its module scripts have run and registered their listeners (see hub `offscreen`).
     win.addEventListener('load', () => void upstream.call('ready').catch(() => {}))
   }
@@ -125,6 +126,25 @@ export function installFrame(win, { engine, descriptor }) {
 
   win.__kimochiExtensionHost = { engine, descriptor, kind, window: windowLabel, ready: upstream.linked, log: report }
   return context
+}
+
+/**
+ * Keep Hachidori's engine on IDBFS (engines.js `engineStorage`). offscreen.js `selectEngine` takes
+ * its threaded IDBFS runtime when `navigator.storage.getDirectory` is missing, so the offscreen
+ * document's own StorageManager stops offering it; that check is the only use of it there. The
+ * engine workers, the persistence probe and the settings pages keep theirs. Without cross-origin
+ * isolation (macOS, Linux) offscreen.js has already chosen its single-thread IDBFS engine before
+ * it looks, so this changes nothing there.
+ */
+export function keepEngineOnIdbfs(win) {
+  const storage = win.navigator?.storage
+  if (typeof storage?.getDirectory !== 'function') return false
+  try {
+    Object.defineProperty(storage, 'getDirectory', { value: undefined, configurable: true })
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**

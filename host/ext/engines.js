@@ -54,6 +54,12 @@ export const ENGINES = {
         (local?.dictionaryState?.dictionaries ?? []).map((d) => d?.path).filter((p) => typeof p === 'string' && p.startsWith('/dicts/')),
       probe: { kind: 'idbfs-paths', database: '/dicts', store: 'FILE_DATA', opfs: true }
     },
+    // Where its engine keeps dictionaries: always that IDBFS store (frame.js `keepEngineOnIdbfs`).
+    // In a cross-origin-isolated window (Windows: the scheme sends Hachidori's manifest COOP/COEP,
+    // extensions.rs `isolation_headers`) offscreen.js would otherwise move to its OPFS engine,
+    // which cannot see the dictionaries the single-thread engine imported into IDBFS. Its threaded
+    // IDBFS engine reads and writes the same store and still imports on several threads.
+    engineStorage: 'idbfs',
     deniedHosts: [],
     // Absent (§5.3): background.js `createTimerAlarms()` takes over when `chrome.alarms` is
     // missing, which is the path its overlay hosts (GSM) already run.

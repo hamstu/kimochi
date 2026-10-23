@@ -244,6 +244,34 @@ pub fn exact_asset(app: &tauri::AppHandle, key: &str) -> Option<Vec<u8>> {
     app.asset_resolver().get(key.into()).map(|a| a.bytes)
 }
 
+/// The cross-origin isolation an extension asks for in its manifest
+/// (`cross_origin_opener_policy` / `cross_origin_embedder_policy`), which Chrome applies to
+/// every page of the extension. Hachidori declares both so its engine can run the threaded
+/// Hoshidicts build (offscreen.js `supportsSharedWasmMemory`); without isolation it imports on
+/// one thread, about 2–3× slower. 10ten declares neither. A test holds this to the manifests.
+pub fn manifest_isolation(id: &str) -> Option<(&'static str, &'static str)> {
+    match id {
+        "hachidori" => Some(("same-origin", "require-corp")),
+        _ => None,
+    }
+}
+
+/// The isolation headers every response on extension `id`'s scheme carries: its manifest's
+/// policies where this webview can isolate a custom-scheme document
+/// (`platform::CROSS_ORIGIN_ISOLATION`, Windows), else none. `Cross-Origin-Resource-Policy`
+/// keeps its scripts, CSS and fonts loadable by the app origin's documents should one of
+/// them ever require it.
+pub fn isolation_headers(id: &str, supported: bool) -> Vec<(&'static str, &'static str)> {
+    match manifest_isolation(id) {
+        Some((opener, embedder)) if supported => vec![
+            ("Cross-Origin-Opener-Policy", opener),
+            ("Cross-Origin-Embedder-Policy", embedder),
+            ("Cross-Origin-Resource-Policy", "cross-origin"),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 /// Answers one request on an extension scheme. Runs off the main thread.
 pub fn respond(
     app: &tauri::AppHandle,
@@ -254,6 +282,9 @@ pub fn respond(
         // Fonts, CSS and module scripts are loaded from the app origin's documents.
         .header("Access-Control-Allow-Origin", "*")
         .header("Cache-Control", "no-store");
+    let response = isolation_headers(id, crate::platform::CROSS_ORIGIN_ISOLATION)
+        .into_iter()
+        .fold(response, |response, (name, value)| response.header(name, value));
     let found = match target(request.uri().path()) {
         Some(Target::Host(key)) => exact_asset(app, &key).map(|bytes| (mime_for(&key), bytes)),
         Some(Target::File(rel)) => {
@@ -534,5 +565,44 @@ mod tests {
         assert!(script.contains(&origins), "{script}");
         // An engine value is data, never code.
         assert!(engine_prelude("x\";alert(1);//").contains(r#"var e="x\";alert(1);//";"#));
+    }
+
+    #[test]
+    fn isolation_follows_each_manifest() {
+        // The committed copy of each release's manifest (host/ext/engines.js reads the same).
+        for id in IDS {
+            let path = format!("{}/../extensions/{id}.manifest.json", env!("CARGO_MANIFEST_DIR"));
+            let manifest: Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let policy = |key: &str| manifest[key]["value"].as_str().map(str::to_owned);
+            let declared = match (
+                policy("cross_origin_opener_policy"),
+                policy("cross_origin_embedder_policy"),
+            ) {
+                (Some(opener), Some(embedder)) => Some((opener, embedder)),
+                _ => None,
+            };
+            let ours = manifest_isolation(id).map(|(o, e)| (o.to_owned(), e.to_owned()));
+            assert_eq!(ours, declared, "{id}");
+        }
+    }
+
+    #[test]
+    fn isolation_headers_only_where_the_webview_can_isolate() {
+        assert_eq!(
+            isolation_headers("hachidori", true),
+            vec![
+                ("Cross-Origin-Opener-Policy", "same-origin"),
+                ("Cross-Origin-Embedder-Policy", "require-corp"),
+                ("Cross-Origin-Resource-Policy", "cross-origin"),
+            ]
+        );
+        assert!(isolation_headers("hachidori", false).is_empty());
+        assert!(isolation_headers("tenten", true).is_empty());
+        // WebKit (macOS, Linux) never isolates a scheme-handler document; WebView2 does.
+        assert_eq!(
+            crate::platform::CROSS_ORIGIN_ISOLATION,
+            cfg!(any(target_os = "windows", target_os = "android"))
+        );
     }
 }

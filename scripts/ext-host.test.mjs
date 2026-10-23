@@ -303,7 +303,9 @@ class World {
     vm.runInContext(PRELUDE, context)
     const origin = `${url.protocol}//${url.host}`
     context.location = { href: url.href, origin, protocol: url.protocol, host: url.host, hostname: url.hostname, pathname: url.pathname, search: url.search, hash: url.hash }
-    context.navigator = { language: 'en-US', languages: ['en-US'], platform: 'MacIntel' }
+    // A StorageManager whose getDirectory lives on its prototype, as in a browser.
+    const storage = Object.create({ getDirectory: async () => 'opfs-root' })
+    context.navigator = { language: 'en-US', languages: ['en-US'], platform: 'MacIntel', storage }
     context.frames = []
     context.top = parent ? parent.top : context
     context.parent = parent
@@ -460,6 +462,15 @@ async function hachidoriSession(options = {}) {
   const offscreen = world.contexts.find((c) => c.location.pathname === '/offscreen.html')
   return { world, overlay, started, background, offscreen, origin }
 }
+
+test('Hachidori offscreen document keeps its engine on IDBFS; no other document loses OPFS', async () => {
+  // offscreen.js selectEngine: no getDirectory means the threaded IDBFS engine where the window
+  // is cross-origin isolated (Windows), the store the single-thread engine already uses.
+  const { overlay, background, offscreen } = await hachidoriSession()
+  assert.equal(result(offscreen, 'typeof navigator.storage.getDirectory'), 'undefined')
+  assert.equal(result(background, 'typeof navigator.storage.getDirectory'), 'function')
+  assert.equal(result(overlay, 'typeof navigator.storage.getDirectory'), 'function')
+})
 
 test('Hachidori content coalesces obsolete interactive lookups before relaying to its worker', async () => {
   const { overlay, offscreen } = await hachidoriSession()
