@@ -13,10 +13,12 @@ import {
   Switch,
 } from "@kit";
 import {
+  findNotesByQuery,
   listDecks,
   listModelFields,
   listModels,
 } from "@texthooker/lib/ankiconnect";
+import { detectAnkiSetup } from "@texthooker/lib/ankiDetect";
 import { updateSettings } from "@texthooker/lib/settings";
 import type { AnkiFieldMapping, Settings } from "@texthooker/lib/types";
 import { YOMITAN_MARKERS } from "@texthooker/lib/types";
@@ -51,12 +53,48 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     null,
   );
   const [importError, setImportError] = useState<string | null>(null);
+  /** Set when the preview is Detect's rather than an import's: how many notes it found. */
+  const [detected, setDetected] = useState<{ modelNotes: number; deckNotes: number } | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  /** Detect found nothing to suggest: said plainly, not as an error. */
+  const [detectNote, setDetectNote] = useState<string | null>(null);
 
   const resetImport = () => {
     setImportOptions([]);
     setImportIndex(0);
     setImportPreview(null);
     setImportError(null);
+    setDetected(null);
+    setDetectNote(null);
+  };
+
+  const handleDetectClick = async () => {
+    resetImport();
+    setDetecting(true);
+    const url = settings.ankiConnectUrl;
+    try {
+      const found = await detectAnkiSetup({
+        models: () => listModels(url),
+        fields: (model) => listModelFields(url, model),
+        decks: () => listDecks(url),
+        findNotes: (query) => findNotesByQuery(url, query),
+      });
+      if (!found.ok) {
+        setDetectNote(found.reason);
+        return;
+      }
+      setDetected({ modelNotes: found.modelNotes, deckNotes: found.deckNotes });
+      setImportPreview({
+        deckName: found.deckName,
+        modelName: found.modelName,
+        fieldMappings: found.fieldMappings,
+        tags: [],
+      });
+    } catch (err) {
+      setImportError(`Couldn't read your Anki setup: ${err}`);
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const handleImportClick = async () => {
@@ -100,6 +138,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
   const handleImportConfirm = async () => {
     if (!importPreview) return;
     await updateSettings({
+      // Detect is for turning mining on; an import only brings settings over.
+      ...(detected ? { ankiEnabled: true } : {}),
       ankiDeckName: importPreview.deckName,
       ankiModelName: importPreview.modelName,
       ankiFieldMappings: importPreview.fieldMappings,
@@ -285,6 +325,14 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           />
         </SettingsRow>
         <SettingsRow
+          label="Detect from Anki"
+          description="Finds your Lapis, Kiku or Senren note type and the deck you add the most of its cards to, and fills in its fields."
+        >
+          <Button size="sm" onClick={() => void handleDetectClick()} disabled={detecting}>
+            {detecting ? "Detecting…" : "Detect"}
+          </Button>
+        </SettingsRow>
+        <SettingsRow
           label="Import from Yomitan"
           description="Deck, note type, tags and field mappings from a Yomitan settings export."
         >
@@ -292,6 +340,16 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
             Import…
           </Button>
         </SettingsRow>
+        {detectNote ? (
+          <div className="settings-note">
+            <Callout>
+              <span>{detectNote}</span>
+              <Button size="sm" onClick={() => setDetectNote(null)}>
+                Dismiss
+              </Button>
+            </Callout>
+          </div>
+        ) : null}
         {importError ? (
           <div className="settings-note">
             <Callout tone="danger">
@@ -303,7 +361,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           </div>
         ) : null}
         {importPreview ? (
-          <SettingsRow stacked label="Preview import">
+          <SettingsRow stacked label={detected ? "Found in Anki" : "Preview import"}>
             <div className="anki-preview">
               {importOptions.length > 1 ? (
                 <>
@@ -322,9 +380,23 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
               ) : null}
               <dl className="anki-preview-meta">
                 <dt>Deck</dt>
-                <dd>{importPreview.deckName}</dd>
+                <dd>
+                  {importPreview.deckName}
+                  {detected ? (
+                    <span className="k-description">
+                      {" "}(<span className="k-num">{detected.deckNotes.toLocaleString()}</span> notes)
+                    </span>
+                  ) : null}
+                </dd>
                 <dt>Note type</dt>
-                <dd>{importPreview.modelName}</dd>
+                <dd>
+                  {importPreview.modelName}
+                  {detected ? (
+                    <span className="k-description">
+                      {" "}(<span className="k-num">{detected.modelNotes.toLocaleString()}</span> notes)
+                    </span>
+                  ) : null}
+                </dd>
                 {importPreview.tags.length > 0 ? (
                   <>
                     <dt>Tags</dt>

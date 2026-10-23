@@ -14,6 +14,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Anki has its own page in Settings, whatever dictionary you use. It explains how your dictionary
   adds cards, with a button to its Anki settings. With the Yomitan API it also shows whether
   Kimochi can reach AnkiConnect (and why not: Anki not running, a wrong port, an API key needed).
+- With the Yomitan API, **Detect from Anki** in Settings → Anki finds your Lapis, Kiku or Senren
+  note type and the deck you mine into, and fills in the fields, so there's no need to export your Yomitan settings
+  first.
+
 - Built-in Yomitan and Hachidori can add Anki cards with AnkiConnect's default settings: there's
   no longer any need to edit its `webCorsOriginList`.
 

@@ -850,8 +850,16 @@ const HANDLERS: Record<string, Handler> = {
   anki_probe: () => 18,
   anki_deck_names: () => ['Default', 'Mining', 'Japanese::VN'],
   anki_model_names: () => ['Basic', 'Lapis', 'Kiku'],
-  anki_model_field_names: () => ['Expression', 'Reading', 'Glossary', 'Sentence', 'Audio'],
-  anki_find_notes: () => [],
+  anki_model_field_names: (a) =>
+    a?.modelName === 'Basic' ? ['Front', 'Back'] : ['Expression', 'ExpressionReading', 'MainDefinition', 'Sentence', 'ExpressionAudio', 'Picture'],
+  // Detect's searches: Lapis notes, most of them in Mining. Anything else (the pop-up's "In Anki"
+  // check) finds nothing.
+  anki_find_notes: (a) => {
+    const query = String(a?.query ?? '')
+    if (!query.startsWith('"note:Lapis"')) return query.startsWith('"note:Kiku"') ? [9] : []
+    const deck = /"deck:([^"]*)"/.exec(query)?.[1]
+    return deck === undefined ? [1, 2, 3, 4] : deck === 'Mining' ? [1, 2, 3] : deck === 'Japanese::VN' ? [4] : []
+  },
   anki_gui_browse: ok,
   anki_store_media_file: () => 'preview.mp3',
   anki_add_note: () => 1,
