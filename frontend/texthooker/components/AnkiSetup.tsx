@@ -1,5 +1,5 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import {
@@ -16,15 +16,9 @@ import {
   listDecks,
   listModelFields,
   listModels,
-  onAnkiStatus,
-  probeAnki,
 } from "@texthooker/lib/ankiconnect";
 import { updateSettings } from "@texthooker/lib/settings";
-import type {
-  AnkiFieldMapping,
-  AnkiStatus,
-  Settings,
-} from "@texthooker/lib/types";
+import type { AnkiFieldMapping, Settings } from "@texthooker/lib/types";
 import { YOMITAN_MARKERS } from "@texthooker/lib/types";
 import {
   extractConfigFromCardFormat,
@@ -35,17 +29,16 @@ import {
 
 interface Props {
   settings: Settings;
+  /** Changes when AnkiConnect (re)connects, so the deck and note type lists are fetched again.
+   *  The address, key and connection status are Settings → Anki's (AnkiTab). */
+  connection?: unknown;
+  title?: ReactNode;
+  description?: ReactNode;
 }
 
-export function AnkiSetup({ settings }: Props) {
-  const [urlDraft, setUrlDraft] = useState(settings.ankiConnectUrl);
+/** The Yomitan API pop-up's Add to Anki: on/off, deck, note type, tags and field mapping. */
+export function AnkiSetup({ settings, connection, title, description }: Props) {
   const [tagsDraft, setTagsDraft] = useState(settings.ankiTags.join(", "));
-  const [probeBusy, setProbeBusy] = useState(false);
-  const [probeMsg, setProbeMsg] = useState<{
-    ok: boolean;
-    text: string;
-  } | null>(null);
-  const [status, setStatus] = useState<AnkiStatus>("unknown");
   const [decks, setDecks] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [modelFields, setModelFields] = useState<string[]>([]);
@@ -121,17 +114,11 @@ export function AnkiSetup({ settings }: Props) {
     setRefreshTick((n) => n + 1);
   };
 
-  useEffect(() => onAnkiStatus(setStatus), []);
-
-  useEffect(() => {
-    setUrlDraft(settings.ankiConnectUrl);
-  }, [settings.ankiConnectUrl]);
-
   useEffect(() => {
     setTagsDraft(settings.ankiTags.join(", "));
   }, [settings.ankiTags]);
 
-  // Load decks + models whenever the URL changes (or we hit Retry).
+  // Load decks + models whenever the URL changes, AnkiConnect connects, or after an import.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -152,7 +139,7 @@ export function AnkiSetup({ settings }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [settings.ankiConnectUrl, refreshTick]);
+  }, [settings.ankiConnectUrl, connection, refreshTick]);
 
   // Load fields when the model changes; mirror into settings so the popover
   // can reach them without a round-trip to AnkiConnect on every send.
@@ -185,28 +172,7 @@ export function AnkiSetup({ settings }: Props) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.ankiConnectUrl, settings.ankiModelName, refreshTick]);
-
-  const handleTest = async () => {
-    setProbeBusy(true);
-    setProbeMsg(null);
-    const r = await probeAnki(urlDraft.trim());
-    setProbeBusy(false);
-    if (r.ok) {
-      setProbeMsg({ ok: true, text: `OK · ${r.latencyMs}ms` });
-      setRefreshTick((n) => n + 1);
-    } else {
-      setProbeMsg({ ok: false, text: `Failed: ${r.error}` });
-    }
-  };
-
-  const handleUrlBlur = async () => {
-    const next = urlDraft.trim();
-    if (next && next !== settings.ankiConnectUrl) {
-      await updateSettings({ ankiConnectUrl: next });
-      setProbeMsg(null);
-    }
-  };
+  }, [settings.ankiConnectUrl, settings.ankiModelName, connection, refreshTick]);
 
   const handleTagsBlur = async () => {
     const parsed = tagsDraft
@@ -264,11 +230,9 @@ export function AnkiSetup({ settings }: Props) {
     return { ankiField, mappingType: "literal", literal: value };
   };
 
-  const disconnected = status === "err";
-
   return (
     <>
-      <SettingsSection title="Anki">
+      <SettingsSection title={title ?? "Cards from Kimochi's pop-up"} description={description}>
         <SettingsRow
           label="Enable mining"
           controlId="anki-enabled"
@@ -280,47 +244,6 @@ export function AnkiSetup({ settings }: Props) {
             onCheckedChange={(v) => void updateSettings({ ankiEnabled: v })}
           />
         </SettingsRow>
-        <SettingsRow
-          label="AnkiConnect URL"
-          controlId="anki-url"
-          description={
-            probeMsg ? (
-              <span
-                className="anki-probe"
-                data-ok={probeMsg.ok ? "" : undefined}
-                data-failed={probeMsg.ok ? undefined : ""}
-              >
-                {probeMsg.text}
-              </span>
-            ) : undefined
-          }
-        >
-          <Input
-            id="anki-url"
-            mono
-            className="settings-field"
-            value={urlDraft}
-            onChange={(e) => setUrlDraft(e.target.value)}
-            onBlur={() => void handleUrlBlur()}
-            placeholder="http://127.0.0.1:8765"
-          />
-          <Button size="sm" onClick={() => void handleTest()} disabled={probeBusy}>
-            {probeBusy ? "Testing…" : "Test"}
-          </Button>
-        </SettingsRow>
-        {disconnected ? (
-          <div className="settings-note">
-            <Callout tone="warn">
-              <span>
-                Could not reach AnkiConnect. Make sure Anki is running with the AnkiConnect
-                add-on installed.
-              </span>
-              <Button size="sm" onClick={() => setRefreshTick((n) => n + 1)}>
-                Retry
-              </Button>
-            </Callout>
-          </div>
-        ) : null}
         <SettingsRow label="Deck">
           <Select
             aria-label="Deck"

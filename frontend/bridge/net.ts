@@ -7,7 +7,9 @@
  * A URL outside that scope is refused by the plugin with an opaque message, so `isWithinHttpScope`
  * lets a caller check first and explain. The user-configurable Yomitan API URL does NOT come
  * through here — it goes through the native `yomitan_request` command, which validates rather than
- * enumerating hosts. Kimochi's own server (cloud OCR, text to speech) is deliberately NOT in the
+ * enumerating hosts. Neither does AnkiConnect, at whatever address Settings → Anki names: Kimochi's
+ * own calls are `anki_*` commands, and the dictionary extensions' go through `anki_connect_relay`
+ * (host/anki-relay.js), because plugin-http would send an Origin AnkiConnect refuses. Kimochi's own server (cloud OCR, text to speech) is deliberately NOT in the
  * scope: it takes the signed-in account's token, so it is reached only from Rust (`post_ocr`,
  * `tts_speak`).
  */
@@ -20,7 +22,6 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 export const HTTP_SCOPE: string[] = [
   'http://localhost:19633/**',
   'http://127.0.0.1:19633/**',
-  'http://*:8765/**',
   'https://github.com/**',
   'https://*.githubusercontent.com/**',
   'https://api.jiten.moe/**',

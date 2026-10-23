@@ -40,6 +40,7 @@ const SETTINGS_TABS = opts(
   ['ocr', 'OCR & Overlay'],
   ['log', 'Log'],
   ['dictionary', 'Dictionary'],
+  ['anki', 'Anki'],
   ['assist', 'Translation & AI'],
   ['controls', 'Shortcuts & Controls'],
   ['account', 'Account'],
@@ -138,7 +139,9 @@ const DOWNLOADS: ControlGroup = {
         ['paused', 'Paused'],
         ['failed', 'Failed'],
         ['verifying', 'Verifying'],
-        ['ready', 'Ready']
+        ['ready', 'Ready'],
+        ['updating', 'Updating after an app update'],
+        ['update-failed', 'Update failed (retrying later)']
       )
     },
     {

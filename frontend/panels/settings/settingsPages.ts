@@ -14,6 +14,7 @@ const LOADERS: Record<SettingsTabName, () => PageModule> = {
   ocr: () => import('./OcrTab').then((m) => ({ default: m.OcrTab })),
   log: () => import('./LogTab').then((m) => ({ default: m.LogTab })),
   dictionary: () => import('./DictionaryTab').then((m) => ({ default: m.DictionaryTab })),
+  anki: () => import('./AnkiTab').then((m) => ({ default: m.AnkiTab })),
   assist: () => import('./AssistTab').then((m) => ({ default: m.AssistTab })),
   controls: () => import('./ControlsTab').then((m) => ({ default: m.ControlsTab })),
   account: () => import('./AccountTab').then((m) => ({ default: m.AccountTab })),

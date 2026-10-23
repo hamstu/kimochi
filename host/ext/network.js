@@ -18,6 +18,10 @@
  * a real `Response` whose `url` is the final URL after redirects (Hachidori checks it on GitHub
  * downloads, background-updates.js `recommendedIndexUrlMatches`).
  *
+ * AnkiConnect requests are the one kind plugin-http does not carry: it sends the page's Origin,
+ * which AnkiConnect's default `webCorsOriginList` refuses with HTTP 403, so they go through Rust's
+ * `anki_connect_relay` instead (../anki-relay.js), to the address in Settings → Anki.
+ *
  * The top document of an engine's extension window (`ext-<id>`, §5.4) is the exception: it has
  * Tauri IPC and its own plugin-http grant (capabilities/extension-windows.json), so it fetches
  * directly (`installDirectNetwork`), and serves its offscreen iframe's requests the same way.
@@ -30,10 +34,23 @@
  * answers with `Access-Control-Allow-Origin: *`.
  */
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
+import { ankiConnectBody, relayAnkiConnect } from '../anki-relay.js'
 import { describe } from './util.js'
 
 export { deniedHost, installFrameNetwork } from './frame-network.js'
 import { deniedHost, isNativeRequest } from './frame-network.js'
+
+/**
+ * A remote request from Rust: an AnkiConnect request through `anki_connect_relay` (without the
+ * page's Origin, which AnkiConnect refuses; see ../anki-relay.js), anything else through
+ * plugin-http. A Request object (`url` not a string or URL) carries its body in a stream and is
+ * never an extension's AnkiConnect call.
+ */
+function nativeFetch(win, url, init, report) {
+  const anki = typeof url === 'string' || url instanceof win.URL ? ankiConnectBody(init?.method, init?.body) : null
+  if (anki) return relayAnkiConnect(anki, { signal: init?.signal, realm: win, report })
+  return tauriFetch(url, init)
+}
 
 /**
  * The parent side: perform one request for a child frame and stream it back over its port.
@@ -42,7 +59,7 @@ import { deniedHost, isNativeRequest } from './frame-network.js'
 export function createNetworkServer(win, { denied, report, fetch = null }) {
   // `fetch` is given where the server stands in for a document that is itself relayed (the worker
   // shim, worker-network.js): its requests then take that document's own route to the network.
-  const doFetch = fetch ?? ((url, init) => (win.__TAURI_INTERNALS__ ? tauriFetch(url, init) : win.fetch(url, { ...init, credentials: 'omit' })))
+  const doFetch = fetch ?? ((url, init) => (win.__TAURI_INTERNALS__ ? nativeFetch(win, url, init, report) : win.fetch(url, { ...init, credentials: 'omit' })))
   return {
     async serve(request, port, signal, frame) {
       const { id, url, method, headers, body } = request
@@ -88,17 +105,17 @@ export function createNetworkServer(win, { denied, report, fetch = null }) {
  * Response keeps the final URL after redirects, which plugin-http sets.
  */
 export function installDirectNetwork(win, { denied, report }) {
-  const nativeFetch = win.fetch.bind(win)
-  const remote = (url, init) => (win.__TAURI_INTERNALS__ ? tauriFetch(url, init) : nativeFetch(url, { ...init, credentials: 'omit' }))
+  const pageFetch = win.fetch.bind(win)
+  const remote = (url, init) => (win.__TAURI_INTERNALS__ ? nativeFetch(win, url, init, report) : pageFetch(url, { ...init, credentials: 'omit' }))
   win.fetch = function fetch(input, init) {
     let url
     try {
       const raw = typeof input === 'string' || input instanceof win.URL ? String(input) : input?.url
       url = new win.URL(raw, win.document?.baseURI ?? win.location.href)
     } catch {
-      return nativeFetch(input, init)
+      return pageFetch(input, init)
     }
-    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return nativeFetch(input, init)
+    if (isNativeRequest(win, url) || !/^https?:$/.test(url.protocol) || url.origin === win.location.origin) return pageFetch(input, init)
     if (deniedHost(url.hostname, denied)) {
       report({ check: 'ext-host-host-refused', host: url.hostname })
       return Promise.reject(new TypeError('Failed to fetch'))

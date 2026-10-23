@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "extension-windows",
-  "description": "The hidden window each dictionary extension's background document runs in (ext-hachidori, ext-tenten; DICTIONARY_ENGINES.md §5.4). Extension code runs in its top document, so it gets only what the host there needs: listening for the ext-relay event, and plugin-http for the same hosts as kimochi-network (the background and its offscreen frame download dictionaries themselves). No emit, window, webview, shell, fs, dialog or clipboard access. App commands are limited separately by the invoke guard in main.rs (extensions::EXTENSION_WINDOW_COMMANDS: ext_relay, report). Keep the http allow-list identical to network.json (scripts/http-scope.test.mjs checks).",
+  "description": "The hidden window each dictionary extension's background document runs in (ext-hachidori, ext-tenten; DICTIONARY_ENGINES.md §5.4). Extension code runs in its top document, so it gets only what the host there needs: listening for the ext-relay event, and plugin-http for the same hosts as kimochi-network (the background and its offscreen frame download dictionaries themselves). No emit, window, webview, shell, fs, dialog or clipboard access. App commands are limited separately by the invoke guard in main.rs (extensions::EXTENSION_WINDOW_COMMANDS: ext_relay, report, anki_connect_relay). Keep the http allow-list identical to network.json (scripts/http-scope.test.mjs checks).",
   "windows": [
     "ext-hachidori",
     "ext-tenten"
@@ -16,9 +16,6 @@
         },
         {
           "url": "http://127.0.0.1:19633/**"
-        },
-        {
-          "url": "http://*:8765/**"
         },
         {
           "url": "https://github.com/**"

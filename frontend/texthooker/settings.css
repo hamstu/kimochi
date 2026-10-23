@@ -13,9 +13,6 @@
 
 /* Anki: field mapping rows and the Yomitan import preview. */
 .anki-mapping-field { width: 13rem; max-width: 100%; }
-.anki-probe { font-size: var(--k-text-sm); }
-.anki-probe[data-ok] { color: var(--k-ok-text); }
-.anki-probe[data-failed] { color: var(--k-danger-text); }
 .anki-preview { display: flex; flex-direction: column; gap: var(--k-space-2); width: 100%; }
 .anki-preview-meta { display: grid; grid-template-columns: auto 1fr; gap: var(--k-space-0-5) var(--k-space-3); margin: 0; font-size: var(--k-text-sm); }
 .anki-preview-meta dt { color: var(--k-text-2); }

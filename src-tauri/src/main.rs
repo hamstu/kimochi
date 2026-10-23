@@ -528,6 +528,20 @@ fn follow_effective_engine(app: &tauri::AppHandle) {
     let _ = reload_engine_windows(app, &state, &engine);
 }
 
+/// A background update finished and the engine now serves its new release: when the windows run
+/// that engine, they reload onto it, as on a switch (their dictionaries and settings are in the
+/// origin's storage, which the reload keeps). Until then they ran the earlier release throughout,
+/// so no window ever mixes the two.
+fn follow_engine_update(app: &tauri::AppHandle, id: &str) {
+    let Some(state) = app.try_state::<Shared>() else { return };
+    let engine = extensions::dictionary_engine(&state.settings);
+    let applied = APPLIED_ENGINE.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    record(app, &state, json!({ "check": "dictionary-engine-updated", "engine": id, "effective": engine, "applied": applied }));
+    if engine == id && applied.as_deref() == Some(id) {
+        let _ = reload_engine_windows(app, &state, &engine);
+    }
+}
+
 /// The dictionary engine as the windows should run it: `selected` (the setting's host engine),
 /// `effective` (it, when downloaded; else `none`) and which engines are ready. The overlay mirrors
 /// `effective`; Settings and onboarding draw the download states from it.
@@ -2666,6 +2680,8 @@ fn main() {
             reader::ankiconnect::anki_gui_browse,
             reader::ankiconnect::anki_store_media_file,
             reader::ankiconnect::anki_add_note,
+            reader::ankiconnect::anki_connect_relay,
+            reader::ankiconnect::anki_connect_status,
             #[cfg(target_os = "linux")]
             platform::dictionary_images::linux_dictionary_image,
             report,
@@ -2831,6 +2847,7 @@ fn main() {
                         }
                     },
                     |app, _, _| follow_effective_engine(app),
+                    follow_engine_update,
                 )
                 .map_err(std::io::Error::other)?
             };
@@ -2899,11 +2916,16 @@ fn main() {
                 // from bundled it). Their dictionaries are in the WebView's storage and were never
                 // touched; lookups come back when it is ready. A first run chooses in onboarding.
                 let started = onboarded && extension_store::ensure_selected(&handle, &selected);
+                // Engines the user downloaded that this build pins anew update in the background;
+                // the selected one keeps working on its earlier release until the new one is
+                // verified. Nothing is downloaded that was never downloaded.
+                let updating = extension_store::start_updates(&handle, &selected);
                 let value = json!({
                     "check": "dictionary-engine-startup",
                     "selected": selected,
                     "effective": effective,
                     "downloading": started,
+                    "updating": updating,
                     "store": engine_store.root().display().to_string(),
                 });
                 eprintln!("kimochi: {value}");

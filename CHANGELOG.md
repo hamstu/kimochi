@@ -11,6 +11,24 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Anki has its own page in Settings, whatever dictionary you use. It shows whether Kimochi can reach
+  AnkiConnect (and why not: Anki not running, a wrong port, an API key needed), and explains how
+  your dictionary adds cards, with a button to its Anki settings.
+
+- Built-in Yomitan and Hachidori can add Anki cards with AnkiConnect's default settings: there's
+  no longer any need to edit its `webCorsOriginList`.
+
+- AnkiConnect on another port works for every dictionary, and an AnkiConnect API key can be set.
+  Kimochi uses the address and key in Settings → Anki for all Anki requests, including Yomitan's
+  and Hachidori's.
+
+- Built-in Yomitan is updated to 26.10.22.0. With the new AnkiConnect (26.10), a word already in
+  Anki under another note type no longer hides the pop-up's Anki buttons.
+- When a Kimochi update brings a new version of a dictionary engine you've downloaded, it updates
+  in the background and your current version keeps working until the new one is ready and
+  checked. Progress shows in Settings → Dictionary. If you're offline, Kimochi tries again
+  later. Your dictionaries and settings are kept, and engines you never downloaded stay that way.
+
 - GNOME: restore annotations and desktop cropping for tiled window shares whose borders extend beyond the screen.
 
 - GNOME: avoid invalid native taskbar notifications during overlay cleanup, and prevent

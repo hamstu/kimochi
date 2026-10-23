@@ -4,7 +4,8 @@
  * 10ten keep their dictionaries and options in their own settings pages (the `dictionary`
  * panel); the Yomitan API (Kimochi's own pop-up over the Yomitan in the user's browser) is set up
  * here: its helper and connection (`YomitanApiStatusRows`, and the setup wizard in a dialog, which
- * opens on its own when the Yomitan API is chosen), its address and its Anki card builder.
+ * opens on its own when the Yomitan API is chosen), its address, pop-up size and audio. Anki is its
+ * own page (AnkiTab), for every engine; the engines' panels link to it.
  *
  * Choosing an engine saves `yomitanSettings.popupType`, writes the document-start mirror
  * (`localStorage['kimochi.dictionaryEngine']`) and asks native to reload the reader windows
@@ -45,7 +46,7 @@ import {
   type DictionaryEngine
 } from '../../bridge/dictionaryEngine'
 import { describeUrlRestriction } from '../../bridge/yomitan'
-import { AnkiSetup } from '@texthooker/components/AnkiSetup'
+import { setSetting } from '../../bridge/settings'
 import { clearAudioCache } from '@texthooker/lib/audio'
 import { updateSettings } from '@texthooker/lib/settings'
 import type { Settings } from '@texthooker/lib/types'
@@ -91,29 +92,32 @@ export function DictionaryTab(): ReactNode {
     if (engine !== 'custom-api') {
       const name = DICTIONARY_ENGINES[engine].name
       return (
-        <div className="dictionary-engine-action">
-          {inUse && <DictionaryReadiness engine={engine} />}
-          <div className="engine-setting-text">
-            <span className="engine-setting-label">{name} settings</span>
-            <span className="k-description">
-              {inUse
-                ? `Dictionaries, scanning and lookups are set up in ${name}'s own settings.`
-                : `${name}'s own settings open here once it is the active engine.`}
-            </span>
+        <>
+          <div className="dictionary-engine-action">
+            {inUse && <DictionaryReadiness engine={engine} />}
+            <div className="engine-setting-text">
+              <span className="engine-setting-label">{name} settings</span>
+              <span className="k-description">
+                {inUse
+                  ? `Dictionaries, scanning and lookups are set up in ${name}'s own settings.`
+                  : `${name}'s own settings open here once it is the active engine.`}
+              </span>
+            </div>
+            {inUse && runtime.settingsReady && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  openDictionarySettings().catch((error) =>
+                    console.error(`Open ${name} settings failed:`, nativeError(error).message)
+                  )
+                }}
+              >
+                Open {name} settings
+              </Button>
+            )}
           </div>
-          {inUse && runtime.settingsReady && (
-            <Button
-              size="sm"
-              onClick={() => {
-                openDictionarySettings().catch((error) =>
-                  console.error(`Open ${name} settings failed:`, nativeError(error).message)
-                )
-              }}
-            >
-              Open {name} settings
-            </Button>
-          )}
-        </div>
+          {inUse && <AnkiLink engine={engine} />}
+        </>
       )
     }
     return (
@@ -259,7 +263,44 @@ function KimochiPopupSections({ settings }: { settings: Settings }): ReactNode {
         ) : null}
       </SettingsSection>
 
-      <AnkiSetup settings={settings} />
+      <AnkiLink />
     </div>
+  )
+}
+
+/** The way to Settings → Anki, where AnkiConnect and each engine's way of adding cards are set. */
+function AnkiLink({ engine }: { engine?: DictionaryEngine }): ReactNode {
+  const description =
+    engine === 'tenten'
+      ? '10ten does not add Anki cards; Settings → Anki says which dictionaries do.'
+      : engine
+        ? `The AnkiConnect connection, and how ${DICTIONARY_ENGINES[engine].name} adds cards, are in Settings → Anki.`
+        : 'The AnkiConnect connection, and the deck, note type and fields of the cards this pop-up adds, are in Settings → Anki.'
+  const open = (): void => {
+    setSetting('settingsActiveTab', 'anki').catch((error) =>
+      console.error('Open Settings → Anki failed:', nativeError(error).message)
+    )
+  }
+  if (engine) {
+    return (
+      <div className="dictionary-engine-action">
+        <div className="engine-setting-text">
+          <span className="engine-setting-label">Anki cards</span>
+          <span className="k-description">{description}</span>
+        </div>
+        <Button size="sm" onClick={open}>
+          Open Anki settings
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <SettingsSection title="Anki">
+      <SettingsRow label="Anki cards" description={description}>
+        <Button size="sm" onClick={open}>
+          Open Anki settings
+        </Button>
+      </SettingsRow>
+    </SettingsSection>
   )
 }

@@ -2,6 +2,7 @@
    a sendCardForTerm orchestrator. Status pub/sub mirrors yomitan.ts. */
 
 import { invoke } from "@tauri-apps/api/core";
+import type { AnkiConnectStatus } from "@ui/anki-connect";
 import type {
   AnkiFieldMapping,
   AnkiMediaItem,
@@ -40,6 +41,20 @@ export function getAnkiStatus(): AnkiStatus {
 }
 
 /* ---------------- thin invoke wrappers ---------------- */
+
+/** The connection check behind Settings → Anki: the given address and key, or the saved ones.
+ *  Never rejects for a failed connection; the status says what happened. */
+export async function checkAnkiConnect(
+  url?: string,
+  key?: string,
+): Promise<AnkiConnectStatus> {
+  const status = await invoke<AnkiConnectStatus>("anki_connect_status", {
+    url: url ?? null,
+    key: key ?? null,
+  });
+  setStatus(status.state === "connected" ? "ok" : "err");
+  return status;
+}
 
 export async function probeAnki(
   url: string,

@@ -14,7 +14,10 @@
 // The pin lives in `extensions/<id>.source.json` (upstream URL, version, tag, commit, the release
 // asset's URL, sha256 and size). The unpacked file hashes are recorded in
 // `extensions/<id>.sha256.json`, which the app compiles in and checks every downloaded file
-// against. Beside them sit exact copies of the few files the build and the tests need without the
+// against. When the version moves, the outgoing release's hashes go to the front of
+// `extensions/<id>.previous.json` (the last few releases, newest first), which the app compiles in
+// too: after an app update it keeps serving a user's download of one of those, verified against
+// that map, until the new release has downloaded (src-tauri/src/extension_store.rs). Beside them sit exact copies of the few files the build and the tests need without the
 // tree (`<id>.manifest.json`, and any `fixtures` the pin names), each checked against the hash map.
 // Only those records are committed: `extensions/<id>/` itself is gitignored (upstream bytes that
 // would otherwise live in history for ever) and is refilled from the pinned release by
@@ -215,6 +218,28 @@ export async function checkRecordCopies(id, dir = extensionsDir) {
   return problems
 }
 
+/** How many earlier releases `<id>.previous.json` keeps: users more updates behind download anew. */
+export const PREVIOUS_KEPT = 3
+
+/**
+ * Moves the outgoing release (the version in the `<id>.manifest.json` copy, with the hashes in
+ * `<id>.sha256.json`) to the front of `<id>.previous.json` when `version` is a new one; always
+ * leaves a well-formed file without `version` in it. Run before the new records are written.
+ */
+export async function recordPrevious(id, version, dir = extensionsDir) {
+  const read = (name) => readFile(path.join(dir, name), 'utf8').then(JSON.parse, () => null)
+  let previous = (await read(`${id}.previous.json`)) ?? []
+  if (!Array.isArray(previous)) throw Error(`${id}.previous.json is not a list`)
+  const outgoing = (await read(`${id}.manifest.json`))?.version
+  const files = await read(`${id}.sha256.json`)
+  if (typeof outgoing === 'string' && outgoing !== version && files) {
+    previous = [{ version: outgoing, files }, ...previous.filter((release) => release.version !== outgoing)]
+  }
+  previous = previous.filter((release) => release.version !== version).slice(0, PREVIOUS_KEPT)
+  await writeFile(path.join(dir, `${id}.previous.json`), JSON.stringify(previous, null, 2) + '\n')
+  return previous.map((release) => release.version)
+}
+
 /** Every `extensions/*.source.json` id, sorted. */
 export async function extensionIds(dir = extensionsDir) {
   const names = await readdir(dir).catch(() => [])
@@ -260,6 +285,7 @@ export async function syncExtension(id, { replace = false, dir = extensionsDir, 
     const written = await hashTree(target)
     const problems = compareHashes(recorded, written)
     if (problems.length > 0) throw Error(`Unpacked tree differs from staging:\n  ${problems.join('\n  ')}`)
+    await recordPrevious(id, source.version, dir)
     await writeFile(path.join(dir, `${id}.sha256.json`), JSON.stringify(written, null, 2) + '\n')
     await writeRecordCopies(source, target, dir)
     log(`Vendored ${source.name} ${source.version}: ${Object.keys(written).length} files in extensions/${id}/`)

@@ -118,7 +118,7 @@ export function PopoverAddToAnki({
       );
     } catch (err) {
       const msg = String(err);
-      const friendly = /unreachable/i.test(msg) ? "Anki not running" : msg;
+      const friendly = /unreachable|not answering/i.test(msg) ? "Anki not running" : msg;
       setState({ kind: "error", message: friendly });
     }
   };

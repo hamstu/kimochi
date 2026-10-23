@@ -162,6 +162,7 @@ export type SettingsTabName =
   | 'ocr'
   | 'log'
   | 'dictionary'
+  | 'anki'
   | 'assist'
   | 'controls'
   | 'account'

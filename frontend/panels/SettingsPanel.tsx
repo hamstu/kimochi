@@ -3,7 +3,7 @@
  *
  * Originally a fork of the Electron app's `SettingsDialog.tsx`. The pages follow the path text
  * takes through Kimochi: where it comes from (Sources, OCR), how the Log shows and keeps it (Log),
- * looking it up (Dictionary, with the Anki setup of the Yomitan API pop-up), help with it (Translation &
+ * looking it up (Dictionary) and keeping it as cards (Anki), help with it (Translation &
  * AI), and how Kimochi is driven (Shortcuts & Controls). Deltas from Electron that still hold:
  *  1. There is no Source tab: choosing a window or screen and editing its crop are in the source
  *     picker, and the input kind is on the Sources page and in the sidebar's source menu.

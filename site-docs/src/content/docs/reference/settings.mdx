@@ -71,11 +71,10 @@ or from the tray icon. It has eight pages.
     | **Keep at most** | 5000 | Lines per session. |
     | **Text replacements** | None | Pattern rules applied to incoming lines. |
     | **Pause when idle for** | 60 s | The reading timer (10–600 s). |
-    | **Reset Log settings** | — | Returns every option on the Sources, Log, Dictionary and AI pages to its default, including the DeepL key and the Anki setup. Sessions, lines and text replacements are kept. |
+    | **Reset Log settings** | — | Returns every option on the Sources, Log, Dictionary, Anki and AI pages to its default, including the DeepL key and the Anki setup. Sessions, lines and text replacements are kept. |
   </TabItem>
   <TabItem label="Dictionary">
-    The pop-up that shows definitions. See [Dictionaries](/lookups/dictionaries/) and
-    [Anki](/lookups/anki/).
+    The pop-up that shows definitions. See [Dictionaries](/lookups/dictionaries/).
 
     | Setting | Default |
     | --- | --- |
@@ -84,7 +83,17 @@ or from the tray icon. It has eight pages.
     | **API address** (Yomitan API) | `http://127.0.0.1:19633` |
     | **Pop-up size** (Yomitan API) | 480 × 360 |
     | **Fetch word audio** / **Play on lookup** / **Volume** (Yomitan API) | On / On / 90% |
-    | **Anki** (Yomitan API) | Mining off; AnkiConnect at `http://127.0.0.1:8765` |
+    | **Anki cards** | A link to Settings → Anki. |
+  </TabItem>
+  <TabItem label="Anki">
+    Cards through AnkiConnect, whatever the dictionary engine. See [Anki](/lookups/anki/).
+
+    | Setting | Default |
+    | --- | --- |
+    | **Address** | `http://127.0.0.1:8765`, used by Kimochi, Built-in Yomitan and Hachidori |
+    | **API key** | Empty; stored locally, never synced |
+    | **Open … Anki settings** | The engine's own Anki settings (Built-in Yomitan, Hachidori) |
+    | **Enable mining** / **Deck** / **Note type** / **Tags** / **Field mapping** (Yomitan API) | Off / — / — / `super-texthooker` / — |
   </TabItem>
   <TabItem label="Translation & AI">
     Help with a line you can't read yet. See [Translation and AI](/lookups/translation-and-ai/).
