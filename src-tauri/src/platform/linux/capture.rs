@@ -155,15 +155,26 @@ impl CaptureBackend for Protected {
             return self.inner.capture(request);
         }
         let mut before = super::gnome::tracked_bounds(&request.source_id);
-        let _gnome = super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?;
-        let hidden = hide(&self.app)?;
+        // GNOME's linked WINDOW stream captures that window actor alone, not
+        // the desktop scene. Our separate annotation/popup windows cannot enter
+        // it. Hiding them each observation only creates a visible blink.
+        // Screen streams and unverified window shares retain full suppression.
+        let isolated_window = request.source_id.starts_with("portal:window:") && before.is_some();
+        if super::region_editing() {
+            return Err(CaptureError::new("busy", "Finish crop editing before capturing"));
+        }
+        let _gnome = if isolated_window { None } else {
+            Some(super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?)
+        };
+        let hidden = if isolated_window { None } else { Some(hide(&self.app)?) };
+        let after = hidden.as_ref().and_then(|hidden| hidden.after);
         // Allow compositor fade-out animations and queued PipeWire buffers to finish.
-        if let Some(after) = hidden.after {
+        if let Some(after) = after {
             if let Some(wait) = Duration::from_millis(350).checked_sub(after.elapsed()) {
                 std::thread::sleep(wait);
             }
         }
-        let mut result = match hidden.after {
+        let mut result = match after {
             Some(after) => self.inner.capture_after(request, after),
             None => self.inner.capture(request),
         };

@@ -38,7 +38,7 @@ export function dismissApiLookup() {
 
 const WORD_BOX = '[data-ocr-word-box]'
 
-export async function installApiLookup() {
+export async function installApiLookup({ onVisibilityChange = () => {} } = {}) {
   const { setEmbeddedEnabled } = await import('/spike/frontend-mode.js')
   const { invoke } = window.__TAURI__.core
   let settings = await invoke('settings_get', { key: 'yomitanSettings' })
@@ -49,6 +49,7 @@ export async function installApiLookup() {
 
   async function open({ term, cursorX, cursorY, anchor, sentence, focus }) {
     try {
+      onVisibilityChange(true)
       await invoke('show_popover', {
         term: term.trim(),
         cursorX,
@@ -74,6 +75,7 @@ export async function installApiLookup() {
           : null
       })
     } catch (error) {
+      onVisibilityChange(false)
       console.error('API dictionary popup:', error)
     }
   }
@@ -106,7 +108,10 @@ export async function installApiLookup() {
     }
     if (payload.key === 'superTexthooker') reader = payload.value || {}
   })
-  await window.__TAURI__.event.listen('popover:hide', () => scanner.clearSelection())
+  await window.__TAURI__.event.listen('popover:hide', () => {
+    onVisibilityChange(false)
+    scanner.clearSelection()
+  })
 
   const pointOf = (event) => ({
     x: event.clientX,
@@ -138,6 +143,7 @@ export async function installApiLookup() {
   hideTerm = () => {
     if (!apiMode()) return
     scanner.stop()
+    onVisibilityChange(false)
     void invoke('hide_popover')
   }
 }

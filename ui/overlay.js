@@ -1,6 +1,7 @@
 import { createDictionarySetup } from './setup-dictionaries.js'
 import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm } from './api-lookup.js'
 import { createController } from './controller.js'
+import { ReadingHold } from './reading-hold.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -435,11 +436,29 @@ setInterval(() => void checkThrottled(), 4000)
  * up, with a fresh look at the screen.
  */
 let controllerHold = false
+let readingHold = false
+let remoteReadingPopup = false
+let apiReadingPopup = false
+const reading = new ReadingHold()
+function syncScanHold() {
+  if (controllerHold || readingHold) scanner.pause()
+  else if (scanner.isPaused) scanner.resume()
+}
+function syncReadingHold() {
+  const popup = remoteReadingPopup || apiReadingPopup || Boolean(extensionPopupRect) ||
+    [...livePopups].some(popup => popup.isVisibleSync?.())
+  const enabled = isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && !state.regionSelecting
+  if (!enabled) reading.reset()
+  const next = enabled && reading.update(renderer.mouse, renderer.hitRects({x:0,y:0}), popup)
+  if (next === readingHold) return
+  readingHold = next
+  syncScanHold()
+  log({check:'auto-scan-reading-hold',hold:next})
+}
 function holdForController(hold) {
   if (hold === controllerHold) return
   controllerHold = hold
-  if (hold) scanner.pause()
-  else scanner.resume()
+  syncScanHold()
   log({ check: 'auto-scan-controller-hold', hold, running: scanner.isRunning })
 }
 
@@ -1266,7 +1285,7 @@ function syncAutoScanner() {
     if (scanner.isRunning) scanner.stop()
     scanner.resume()
     scanner = wantedScanner
-    if (controllerHold) scanner.pause()
+    if (controllerHold || readingHold) scanner.pause()
   }
   scanner.updateSettings(settings)
   // Quick Shot has no source to watch, so there is nothing for the loop to scan. Nor while a
@@ -2188,7 +2207,10 @@ async function startYomitan() {
   await capturePopups()
   // The overlay has no ground of its own: Yomitan's popups take Kimochi's appearance instead.
   await (await import('/spike/popup-bridge.js')).siteThemeFromAppearance()
-  await installApiLookup()
+  await installApiLookup({onVisibilityChange: visible => {
+    apiReadingPopup = visible
+    syncReadingHold()
+  }})
   await import('/js/app/content-script-wrapper.js')
 
   extensionApi = api
@@ -2611,6 +2633,11 @@ function hitRects() {
 
 /** Drops the text read from the selection, from the overlay and the scanner's memory. */
 function clearSelectionText() {
+  reading.reset()
+  readingHold = false
+  remoteReadingPopup = false
+  apiReadingPopup = false
+  syncScanHold()
   state.annotations = []
   state.info = null
   state.appliedScanId = null
@@ -2803,7 +2830,7 @@ async function publishRegions() {
 }
 
 function startRegionLoop() {
-  setInterval(() => void publishRegions(), 100)
+  setInterval(() => { syncReadingHold(); void publishRegions() }, 100)
 }
 
 // ---------------------------------------------------------------------------
@@ -3050,9 +3077,11 @@ await native.listen('pointer', ({ payload }) => {
   const local = toOverlayLocal(payload, state.origin)
   if (payload.over === false || !local) {
     renderer.clearPointer()
+    syncReadingHold()
     return
   }
   renderer.setPointer(local.x, local.y)
+  syncReadingHold()
   controller.pointer(local.x, local.y)
   // While the controller is reading, the pointer must not steer Yomitan: an idle mouse resting
   // somewhere else would otherwise close the controller's popup.
@@ -3077,6 +3106,12 @@ await native.listen('pointer', ({ payload }) => {
   // the answer. Names of keys only.
   noteScanFeed(payload, init !== null)
 })
+
+await native.listen('overlay-reading-popup', ({payload}) => {
+  remoteReadingPopup = payload?.visible === true
+  syncReadingHold()
+})
+window.addEventListener('mousemove', () => syncReadingHold())
 
 await native.listen('gnome-popup-dismiss', () => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeOverlay?.shared) {

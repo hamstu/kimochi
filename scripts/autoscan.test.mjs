@@ -1700,3 +1700,16 @@ test('a new menu item settles independently of continuously changing background 
   )
   h.scanner.stop()
 })
+
+test('a hover pause during capture prevents observation and visual invalidation until a fresh capture', async()=>{
+ let release
+ const {scanner,state}=harness({}, {captureFrame:()=>new Promise(resolve=>{release=()=>resolve({frame:1,generation:state.generation,observation:{text:'新しい文章',lines:[line('新しい文章')]}})})})
+ const pending=scanner.tick()
+ scanner.pause();release()
+ assert.equal(await pending,'paused')
+ assert.equal(scanner.stats().observations,0)
+ assert.equal(state.events.some(e=>e.type==='visual-invalidated'),false)
+ scanner.resume()
+ const fresh=scanner.tick();release();await fresh
+ assert.equal(scanner.stats().observations,1)
+})

@@ -47,6 +47,7 @@ function harness({ screen, recognise, settings = {} }) {
       generation: () => 1,
       captureFrame: async () => {
         const lines = screen(state)
+        if (state.captureGate) await state.captureGate
         const frame = { id: ++state.frames, lines }
         return {
           frame,
@@ -247,4 +248,23 @@ test('Scan with automatic OCR on: nothing new means straight in, new text is rea
   assert.equal(await scanner.refresh(), true)
   assert.equal(state.recognitions, 2, 'read at once, without waiting to settle')
   assert.equal(state.scenes.at(-1), '明日は雨だそうです')
+})
+
+
+test('entering an overlay lookup while a capture is out freezes visible text until a fresh observation',async()=>{
+ let lines=DIALOGUE
+ const {scanner,state,step}=harness({screen:()=>lines,recognise:frame=>reading(frame.lines)})
+ for(let n=0;n<4;n++)await step()
+ const scenes=state.scenes.length
+ lines=[]
+ let release
+ state.captureGate=new Promise(resolve=>{release=resolve})
+ const pending=scanner.tick()
+ scanner.pause();release()
+ assert.equal(await pending,'paused')
+ assert.equal(state.scenes.length,scenes,'late blank observation must not clear text under lookup')
+ state.captureGate=null
+ scanner.resume()
+ for(let n=0;n<5;n++)await step()
+ assert.equal(state.scenes.at(-1),'','real disappearance is still processed after leaving')
 })

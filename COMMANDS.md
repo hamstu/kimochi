@@ -1350,3 +1350,18 @@ not running, returns `steamNotRunning` (the launcher stays installed for the man
 Records `{"check":"steam-library-add", state, message, appId}` in the evidence log. At launch
 (`steam_library::start`, Linux) the same missing-art fill runs once for an existing entry.
 Steam shows new grid art after it restarts (switching to Gaming Mode).
+
+### Overlay reading hold
+
+Automatic OCR pauses both observations and recognition application while the pointer is on
+overlay text or a lookup from that overlay is visible. It resumes with a fresh observation
+after both have been left. Manual scans remain explicit, and source/crop changes reset the hold.
+Both text and image observer modes honor pauses that begin during a capture.
+`popup-host` sends `overlay-reading-popup` `{visible:boolean}` to `overlay` for the full
+visible desktop lookup chain; reader-only lookups do not hold the overlay. Embedded engine
+popups and the API lookup report their visibility locally. This is shared across platforms.
+
+On GNOME, a linked portal window stream contains the selected window actor alone. Those
+captures preserve annotation/popup visibility; screen streams and unlinked shares retain
+Linux hide-during-capture suppression and freshness fencing. General own-window exclusion
+capabilities remain false.
