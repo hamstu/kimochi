@@ -38,6 +38,7 @@ import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
 import { parseSourceId } from './source-id.js'
+import { portalWindowBounds, portalCropArea } from './portal-window-geometry.js'
 import {
   DICTIONARY_ENGINE_KEY,
   NO_ENGINE,
@@ -437,6 +438,9 @@ setInterval(() => void checkThrottled(), 4000)
  */
 let controllerHold = false
 let readingHold = false
+let layerPointerExit = null
+let hyprlandPointer = false
+let layerPointerPolling = false
 let remoteReadingPopup = false
 let apiReadingPopup = false
 const reading = new ReadingHold()
@@ -445,6 +449,10 @@ function syncScanHold() {
   else if (scanner.isPaused) scanner.resume()
 }
 function syncReadingHold() {
+  if (layerPointerExit) {
+    window.__linuxLayerPointerInside = !layerPointerExit.outside()
+    if (layerPointerExit.outside()) renderer.clearPointer()
+  }
   const popup = remoteReadingPopup || apiReadingPopup || Boolean(extensionPopupRect) ||
     [...livePopups].some(popup => popup.isVisibleSync?.())
   const enabled = isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && !state.regionSelecting
@@ -515,7 +523,9 @@ function draw() {
   if (waylandDisabled) { if (!gnomeOverlay?.shared) renderer.clear(); void gnomeOverlay?.update(); return }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
-  if (waylandLayer && state.info?.source_id?.startsWith('portal:window:')) {
+  const portalWindow = waylandLayer && state.info?.source_id?.startsWith('portal:window:')
+  const linkedBounds = portalWindow ? portalWindowBounds(state.info, state.sourceBounds) : null
+  if (portalWindow && (!linkedBounds || state.sourceWindow?.onScreen === false)) {
     renderer.clear()
     return
   }
@@ -561,7 +571,7 @@ function draw() {
       innerWidth / state.info.full_width,
       innerHeight / state.info.full_height
     )
-    readerBounds = {
+    readerBounds = linkedBounds ?? {
       x: (innerWidth - state.info.full_width * scale) / 2,
       y: (innerHeight - state.info.full_height * scale) / 2,
       width: state.info.full_width * scale,
@@ -1748,6 +1758,7 @@ async function editLinuxSourceImage(sourceId) {
 
 /** Portal captures have pixel dimensions, but no desktop display catalogue or window origin. */
 async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
+  let pictureUrl = null
   const frame = await native.sourceHoverPreview(sourceId)
   if (!frame?.width || !frame?.height) {
     throw new Error('No portal frame available. Choose a source in the system picker first.')
@@ -1765,24 +1776,43 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
     }
     const origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
     state.origin = origin
-    // Window streams are edited against their screenshot, never a fabricated screen position.
-    const fit = kind === 'window'
+    // A compositor-linked window can be edited over the game itself. Anonymous
+    // streams retain their screenshot editor rather than inventing an origin.
+    const linked = kind === 'window' && frame.desktopVisible ? frame.desktopBounds : null
+    const fit = kind === 'window' && !linked
       ? Math.min(origin.width / frame.width, origin.height / frame.height)
       : null
-    const bounds = fit === null ? origin : {
+    const bounds = linked ?? (fit === null ? origin : {
       x: (origin.width - frame.width * fit) / 2,
       y: (origin.height - frame.height * fit) / 2,
       width: frame.width * fit,
       height: frame.height * fit
+    })
+    const area = linked ? portalCropArea(bounds, origin) : bounds
+    if (!area) throw new Error('The shared window is outside this display. Bring it into view and try again.')
+    if (kind === 'window' && !linked) {
+      // WebKitGTK's image loader can reject capture:// from an HTTP dev page,
+      // while the native fetch bridge can read it. Decode the same PNG as a blob.
+      const response = await fetch(frame.url)
+      if (!response.ok) throw new Error('Could not load the shared window preview.')
+      pictureUrl = URL.createObjectURL(await response.blob())
     }
     const rect = await editRegion(quick ? 'Scan' : SAVE_AND_SCAN, {
       alternateLabel: quick ? undefined : 'Save',
-      area: bounds,
+      area,
       initial: !quick && state.crop ? cropToLocal(state.crop, origin, bounds) : null,
-      picture: kind === 'window' ? bounds : undefined,
-      onStart: kind === 'window' ? (selector) => void selector.setPicture(frame.url) : undefined
+      picture: kind === 'window' && !linked ? bounds : undefined,
+      onStart: pictureUrl ? (selector) => void selector.setPicture(pictureUrl) : undefined
     })
     if (!rect) return false
+    if (await native.selectedSource() !== sourceId) throw new Error('The shared source changed while editing. Open the editor again.')
+    if (linked) {
+      const current = await native.sourceHoverPreview(sourceId)
+      if (!current?.desktopVisible || !sameRect(current.desktopBounds, bounds)
+        || current.width !== frame.width || current.height !== frame.height) {
+        throw new Error('The shared window moved or resized while editing. Open the editor again.')
+      }
+    }
     const sx = frame.width / bounds.width
     const sy = frame.height / bounds.height
     const crop = {
@@ -1796,9 +1826,10 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
     if (crop.width <= 0 || crop.height <= 0) return false
     if (quick) return crop
     await native.commitSource(sourceId, crop)
-    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer', action: rect.action })
+    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer', placement: linked ? 'linked-window' : kind === 'window' ? 'source-image' : 'screen', action: rect.action })
     return savedAction(rect)
   } finally {
+    if (pictureUrl) URL.revokeObjectURL(pictureUrl)
     state.regionSelecting = false
     syncAutoScanner()
     await native.regionKeys(false)
@@ -2830,7 +2861,23 @@ async function publishRegions() {
 }
 
 function startRegionLoop() {
-  setInterval(() => { syncReadingHold(); void publishRegions() }, 100)
+  setInterval(() => { void refreshLayerPointer(); syncReadingHold(); void publishRegions() }, 100)
+}
+
+async function refreshLayerPointer() {
+  if (!hyprlandPointer || !layerPointerExit || layerPointerPolling || !state.origin) return
+  layerPointerPolling = true
+  try {
+    const point = await native.invoke('linux_window_geometry', {
+      operation: 'pointer', sourceId: watchedSourceId ?? '', windowAddress: null
+    })
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return
+    const inside = hitRects().some(r => point.x >= r.x && point.y >= r.y && point.x < r.x + r.width && point.y < r.y + r.height)
+    layerPointerExit.sample(inside)
+    if (inside) renderer.setPointer(point.x - state.origin.x, point.y - state.origin.y)
+    syncReadingHold()
+  } catch { /* Optional compositor IPC: GTK surface edges remain the fallback. */ }
+  finally { layerPointerPolling = false }
 }
 
 // ---------------------------------------------------------------------------
@@ -2868,6 +2915,21 @@ await native.watchCapabilities(async (caps) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true
+    if (caps.session.backend === 'wayland' && caps.session.nativeLayerShell) {
+      hyprlandPointer = caps.session.compositor === 'Hyprland'
+      const { installWaylandPointerExit } = await import('./wayland-pointer-exit.js')
+      const pointerExit = installWaylandPointerExit(window, {
+        leave: () => { renderer.clearPointer(); syncReadingHold() },
+        dismiss: () => {
+          if (!controllerHold && !controller.drivesLookups && !state.regionSelecting) dismissPopup()
+        }
+      })
+      layerPointerExit = pointerExit
+      await native.listen('wayland-layer-pointer', ({payload}) => {
+        if (payload === true) pointerExit.enter()
+        else if (payload === false) pointerExit.leave()
+      })
+    }
     const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
     await installLinuxScanInput(window, { passive: true })
     window.addEventListener('resize', () => {

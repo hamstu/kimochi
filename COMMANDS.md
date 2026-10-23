@@ -1245,6 +1245,21 @@ Real limitations, recorded rather than papered over.
 - **Transparent windows** use Tauri's macOS private API feature, which is unsuitable for
   a Mac App Store claim.
 
+## Optional Hyprland window geometry (Linux only)
+
+`linux_window_geometry({operation, sourceId, windowAddress?}) -> Value` operates on
+the current portal window share. `status` reports availability/link state;
+`candidates` lists native Wayland clients matching the real captured frame size;
+`link` explicitly associates the selected candidate for this app/share lifetime.
+`pointer` returns optional read-only compositor `{x,y}` coordinates without
+capturing a frame or claiming knowledge of buttons/modifiers. The Hyprland layer
+uses these to recover missed leave events and clear stale hover/reading holds.
+Unique matches are automatic; ambiguous matches use the source panel's
+**Relink window overlay…** dialog. Capture permission still comes from the portal.
+Only Hyprland with native layer-shell and one unrotated output at (0,0) is enabled.
+Missing/unsupported geometry retains the source-image crop fallback and does not
+place annotations at an invented origin. See `platform/linux/DEPS.md` for limits.
+
 ## Optional GNOME Shell overlay (Linux only)
 
 `gnome_overlay({operation, payload}) -> Value` supports status/install/update, annotation

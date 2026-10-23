@@ -907,6 +907,38 @@ fn desktop() -> Vec<Rect> {
     platform::desktop_displays()
 }
 
+/// Explicit pairing when a Wayland portal stream cannot uniquely identify its window.
+#[tauri::command]
+async fn linux_window_geometry(state: State<'_, Shared>, operation: String, source_id: String, window_address: Option<String>) -> Reply<Value> {
+    #[cfg(target_os = "linux")]
+    {
+        let service = state.inner().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            if operation == "pointer" { return Ok(platform::hyprland::pointer().unwrap_or(Value::Null)); }
+            if !source_id.starts_with("portal:window:") || service.selection.lock().unwrap().as_deref() != Some(source_id.as_str()) {
+                return Err("The shared window changed. Choose its source again.".into());
+            }
+            if operation == "status" { return Ok(platform::hyprland::status(&source_id)); }
+            let frame = sources::hover_preview(&service, &source_id)?;
+            let width = frame["width"].as_u64().ok_or("Missing shared frame width")? as u32;
+            let height = frame["height"].as_u64().ok_or("Missing shared frame height")? as u32;
+            match operation.as_str() {
+                "candidates" => platform::hyprland::candidates(width, height),
+                "link" => {
+                    if service.selection.lock().unwrap().as_deref() != Some(source_id.as_str()) {
+                        return Err("The shared window changed while linking. Try again.".into());
+                    }
+                    platform::hyprland::link(&source_id, window_address.as_deref().ok_or("Choose the shared window")?, width, height)?;
+                    Ok(platform::hyprland::status(&source_id))
+                }
+                _ => Err("Unknown window geometry operation".into()),
+            }
+        }).await.map_err(|e|e.to_string())?
+    }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = (state, operation, source_id, window_address); Err("Wayland window linking is Linux-only".into()) }
+}
+
 /// Route Escape and Return to the region editor while it is open; see `hotkeys::set_region_keys`.
 #[tauri::command]
 fn region_keys(app: tauri::AppHandle, on: bool) -> Reply<()> {
@@ -1244,7 +1276,21 @@ async fn source_thumbnail(state: State<'_, Shared>, source_id: String) -> Reply<
 #[tauri::command]
 async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Reply<Value> {
     let service = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || sources::hover_preview(&service, &source_id))
+    tauri::async_runtime::spawn_blocking(move || {
+        let value = sources::hover_preview(&service, &source_id)?;
+        #[cfg(target_os = "linux")]
+        let value = {
+            let mut value = value;
+            let bounds = value["width"].as_u64().zip(value["height"].as_u64())
+                .and_then(|(width, height)| platform::hyprland::frame_bounds(&source_id, width as u32, height as u32));
+            if let Some(bounds) = bounds {
+                value["desktopBounds"] = serde_json::to_value(bounds).map_err(|e| e.to_string())?;
+                value["desktopVisible"] = json!(platform::hyprland::tracked(&source_id).is_some_and(|(_, visible)| visible));
+            }
+            value
+        };
+        Ok(value)
+    })
         .await
         .map_err(|e| e.to_string())?
 }
@@ -2744,6 +2790,7 @@ fn main() {
             open_screen_capture_preferences,
             platform_capabilities,
             gnome_overlay,
+            linux_window_geometry,
             steam_library::steam_library_status,
             steam_library::steam_library_add,
             activity::activity_post,

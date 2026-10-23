@@ -376,3 +376,36 @@ from physical keyboard/gamepad acceptance. The available js0 is a Parallels virt
 mouse, not a controller. GNOME remains version-gated to 46 and screen mapping
 single-monitor. Other compositor window tracking is still deferred; X11 and native
 layer-shell paths are preserved.
+
+### Hyprland portal window placement (2026-10-22)
+
+Native layer-shell window shares can now acquire desktop geometry from the
+session's read-only Hyprland IPC socket. No `hyprctl` subprocess, configuration
+edit, additional capture permission or package is required by the app. This
+adapter is gated to Hyprland Wayland with an initialized native layer surface.
+The initial supported tier is native Wayland clients on one unrotated output
+at desktop origin (0,0). Other sessions retain their existing implementations.
+
+A unique full-buffer dimension match can associate the portal stream with a
+client. Equal-size candidates, including hidden/XWayland clients, prevent that
+automatic association. Ambiguous shares offer **Link the shared window**;
+**Relink window overlay…** in the source menu opens it again. The chosen window
+must still match the actual captured frame size. Associations live only for the
+current app/share, are checked against address/PID/app/stable ID, and never
+retarget a closed/replaced client automatically.
+
+The source watcher follows logical bounds. Captures include validated window
+bounds; resized/stale buffers cannot draw desktop annotations. Native crop uses
+the visible window rectangle directly, and rejects Save if the window moved,
+resized or the shared source changed while editing. Unknown geometry retains
+the source-image crop and suppresses desktop window annotations. Another active
+application hides the linked annotations; Kimochi controls can remain alongside
+the game. `KIMOCHI_HYPRLAND_WINDOW_TRACKING=0` disables this optional adapter for
+diagnostics. Multi-output/rotated layouts and XWayland targets remain outside
+this initial tier; this does not change GNOME, X11, Gamescope, macOS or Windows.
+
+In the Linux layer crop fallback, `capture://` PNGs are fetched through the
+native bridge and decoded as an object URL. This avoids WebKitGTK dev-mode
+`EncodingError: Loading error.` from direct `<img src="capture://…">` while
+preserving the exact captured PNG. The object URL is revoked on every editor
+exit. This change is confined to the Linux portal crop path.

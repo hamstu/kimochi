@@ -132,6 +132,7 @@ impl CaptureBackend for Protected {
         self.inner.permission()
     }
     fn request_permission(&self) -> bool {
+        super::hyprland::clear();
         self.inner.request_permission()
     }
     fn enumerate(&mut self) -> Result<Vec<Source>> {
@@ -140,6 +141,7 @@ impl CaptureBackend for Protected {
         Ok(sources)
     }
     fn close(&mut self) {
+        super::hyprland::clear();
         self.inner.close();
     }
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
@@ -194,13 +196,16 @@ impl CaptureBackend for Protected {
             }
         }
         if result.is_ok(){if let Some(service)=self.app.try_state::<crate::state::Shared>(){super::gnome::refresh_identity(&service,&request.source_id);}}
+        if let Ok(frame) = result.as_mut() { super::hyprland::enrich(frame); }
         drop(hidden);
         result
     }
     // Picker/sidebar images never enter OCR or the observer. They may include
     // annotations, but must not disturb what the user is reading.
     fn preview(&mut self, request: &CaptureRequest) -> Result<Frame> {
-        self.inner.capture(request)
+        let mut frame = self.inner.capture(request)?;
+        super::hyprland::enrich(&mut frame);
+        Ok(frame)
     }
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
         self.inner.thumbnail(source_id, edge)
