@@ -2,7 +2,11 @@
   "identifier": "reader-popup",
   "description": "API dictionary popup events and explicit external links; no filesystem access.",
   "windows": [
-    "reader-popup"
+    "reader-popup",
+    "reader-popup-2",
+    "reader-popup-3",
+    "reader-popup-4",
+    "reader-popup-5"
   ],
   "permissions": [
     "core:event:default",

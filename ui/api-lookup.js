@@ -113,7 +113,10 @@ export async function installApiLookup({ embedded = true } = {}) {
     }
     if (payload.key === 'superTexthooker') reader = payload.value || {}
   })
-  await window.__TAURI__.event.listen('popover:hide', () => scanner.clearSelection())
+  // Only the first pop-up is this word's; the ones nested on it close on their own.
+  await window.__TAURI__.event.listen('popover:hide', ({ payload }) => {
+    if (!payload?.level) scanner.clearSelection()
+  })
 
   const pointOf = (event) => ({
     x: event.clientX,

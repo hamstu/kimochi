@@ -366,3 +366,46 @@ export function prewarmPopups(Popup, note) {
     return result
   }
 }
+
+/**
+ * Hand a replayed pointer sample to the Yomitan popup under it, so a word inside a popup is
+ * Shift-scanned and opens Yomitan's own nested popup (up to `popupNestingMaxDepth`).
+ *
+ * Kimochi's windows that hold popups never have the keyboard (the game or the Log does), and
+ * macOS sends mouse moves only to the window that does: a popup's own scanner never sees the
+ * pointer move, nor Shift. Native reads both for every window and the page replays them; a
+ * sample dispatched at the page would only reach the page's scanner (which rightly ignores
+ * points over its popup), so one over a popup goes into that popup's frame instead, translated
+ * into the frame's own coordinates.
+ *
+ * `popups` are the factory's `Popup` instances; `x`, `y` are in this document's viewport. The
+ * deepest popup holding the point wins, as the topmost one on screen. Returns whether one did.
+ */
+export function replayIntoPopup(popups, x, y, init) {
+  let best = null
+  for (const popup of popups ?? []) {
+    if (!popup?.isVisibleSync?.()) continue
+    const frame = popup._frame
+    if (!(frame instanceof HTMLIFrameElement)) continue
+    const rect = frame.getBoundingClientRect()
+    if (x < rect.left || y < rect.top || x >= rect.right || y >= rect.bottom) continue
+    if (!best || (popup.depth ?? 0) > (best.popup.depth ?? 0)) best = { popup, frame, rect }
+  }
+  if (!best) return false
+  const { frame, rect } = best
+  let win = null
+  let doc = null
+  try {
+    win = frame.contentWindow
+    doc = frame.contentDocument
+  } catch {
+    return false
+  }
+  if (!win || !doc) return false
+  const style = getComputedStyle(frame)
+  const clientX = x - rect.left - (Number.parseFloat(style.borderLeftWidth) || 0)
+  const clientY = y - rect.top - (Number.parseFloat(style.borderTopWidth) || 0)
+  const target = doc.elementFromPoint(clientX, clientY) ?? win
+  target.dispatchEvent(new win.PointerEvent('pointermove', { ...init, clientX, clientY }))
+  return true
+}

@@ -21,7 +21,16 @@ pub fn mark_hidden() {
 pub fn suppressed() -> bool {
     SUPPRESSED.load(Ordering::SeqCst)
 }
-const LABELS: [&str; 3] = ["overlay", "popup-host", "reader-popup"];
+// The dictionary pop-up and the ones nested on it (`reader::popover::LEVELS`).
+const LABELS: [&str; 7] = [
+    "overlay",
+    "popup-host",
+    "reader-popup",
+    "reader-popup-2",
+    "reader-popup-3",
+    "reader-popup-4",
+    "reader-popup-5",
+];
 pub fn annotation_window(label: &str) -> bool {
     LABELS.contains(&label)
 }

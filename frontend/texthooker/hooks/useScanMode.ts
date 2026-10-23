@@ -59,13 +59,29 @@ export function useScanMode(enabled = true) {
     /** The pointer's last position, kept while Shift is up too, so pressing
         Shift over a word scans it without the mouse having to move. */
     let pointer: ScanPoint | null = null;
+    /** The visible pop-ups, in desktop points (`popover:cards`). This window keeps the
+        keyboard, so it keeps getting the pointer's moves while the pointer is over a pop-up:
+        those belong to the pop-up, not to the line it covers. */
+    let cards: { x: number; y: number; width: number; height: number }[] = [];
+    const overPopup = (p: ScanPoint) =>
+      cards.some(
+        (c) =>
+          p.screenX >= c.x &&
+          p.screenX < c.x + c.width &&
+          p.screenY >= c.y &&
+          p.screenY < c.y + c.height,
+      );
+    const scan = (p: ScanPoint) => {
+      if (overPopup(p)) scanner.stop();
+      else scanner.scan(p);
+    };
 
     const setShift = (down: boolean) => {
       if (down === shift) return;
       shift = down;
       document.body.classList.toggle("scan-mode", down);
       if (down) {
-        if (pointer) scanner.scan(pointer);
+        if (pointer) scan(pointer);
       } else scanner.stop();
     };
     const onKeyDown = (e: KeyboardEvent) => {
@@ -85,11 +101,16 @@ export function useScanMode(enabled = true) {
       // event.shiftKey is the source of truth: keydown can be missed when the
       // window doesn't have focus, but mousemove carries the modifier state.
       if (e.shiftKey !== shift) setShift(e.shiftKey);
-      else if (shift) scanner.scan(pointer);
+      else if (shift) scan(pointer);
     };
-    const stopClearing = listen("popover:hide", () =>
-      scanner.clearSelection(),
-    );
+    // Only the first pop-up is this word's; the ones nested on it close on their own.
+    const stopClearing = listen<{ level?: number } | null>("popover:hide", (e) => {
+      if (!e.payload?.level) scanner.clearSelection();
+    });
+
+    const stopCards = listen<typeof cards>("popover:cards", (e) => {
+      cards = Array.isArray(e.payload) ? e.payload : [];
+    });
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -97,6 +118,7 @@ export function useScanMode(enabled = true) {
     window.addEventListener("mousemove", onMouseMove);
     return () => {
       void stopClearing.then((stop) => stop());
+      void stopCards.then((stop) => stop());
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);

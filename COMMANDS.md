@@ -447,6 +447,30 @@ pointer. One last sample with `over: false` is sent on the way out so the effect
 instead of freezing lit. `blocked` marks a point another window claims: over the
 dictionary, the text under the pointer is the popup's own.
 
+Popups never have the keyboard either, so the same samples reach them. The Log's Yomitan
+popup window gets `popup-host:pointer` `{x, y, down, shift, ctrl, alt, meta}` while the
+pointer is over it, and the overlay's own samples over a Yomitan popup go into that popup:
+each hands the sample to the innermost popup under it (`replayIntoPopup` in
+host/popup-bridge.js), whose scanner opens Yomitan's nested popup.
+
+### The Yomitan API pop-up stack
+
+`show_popover({term, cursorX, cursorY, anchor?, width, height, baseUrl, …, level?})` opens
+the API pop-up; `level` (0–4, default 0) is its place in a stack of windows,
+`reader-popup`, then `reader-popup-2` … `reader-popup-5`, each built the first time the
+one below it shows. A word Shift-scanned inside the pop-up at one level opens the next;
+showing a level closes those above it. `hide_popover({level?})` closes a level and every
+one above it (default: all), and a click inside a pop-up closes only the ones on top of it.
+
+- `popover:show` is addressed to one level's window.
+- `popover:hide` `{level}` goes to every window: the lowest level that closed. The Log and
+  the overlay clear their scanned word only when level 0 closes.
+- `popover:pointer` `{x, y, screenX, screenY, shift}` goes to the pop-up under the pointer
+  (`x`, `y` in its own viewport), so Shift-scanning inside it needs no focus.
+- `popover:cards` `[{x, y, width, height}]` (desktop points) lists the visible pop-ups. The
+  Log has the keyboard and keeps getting the pointer's moves over a pop-up; it does not scan
+  the line under one.
+
 ### `snapshot()` and the `state` event
 
 Carries the POC fields (`revision`, `scan`, `status`, `logs`, `interactive`, `regions`,

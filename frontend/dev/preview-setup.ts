@@ -824,8 +824,18 @@ const HANDLERS: Record<string, Handler> = {
   // dictionary
   yomitan_probe: () => 12,
   yomitan_request: () => null,
-  yomitan_tokenize: () => [],
-  yomitan_ankifields: () => ({ fields: [], audioMedia: [], dictionaryMedia: [] }),
+  // A stand-in parser: any run of Japanese starts a two-character word, so Shift-scanning inside
+  // the reader pop-up opens nested cards in the preview.
+  yomitan_tokenize: (a) => {
+    const text = String((a?.body as { text?: string } | undefined)?.text ?? '')
+    const word = /^[\u3040-\u30ff\u4e00-\u9fff]{1,2}/.exec(text)?.[0]
+    return word ? [{ content: [[{ text: word, headwords: [] }]] }] : []
+  },
+  yomitan_ankifields: (a) => ({
+    fields: POPOVER_SAMPLE.entries.slice(1).map((entry) => ({ ...entry, expression: String(a?.text ?? ''), reading: '' })),
+    audioMedia: [],
+    dictionaryMedia: []
+  }),
   // Native reloads the reader windows; there are none to reload in the preview.
   dictionary_engine_apply: () => note('dictionary_engine_apply', null),
   // The preview's dictionary answers from these mocks, so whichever engine is asked about is up.

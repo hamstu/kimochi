@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 /* eslint react-hooks/preserve-manual-memoization: "off" -- The imported popup derives mutable display locals; this build does not enable React Compiler. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@kit";
 import { PopoverAudio } from "@texthooker/components/PopoverAudio";
@@ -11,6 +12,7 @@ import {
 } from "@texthooker/components/PopoverAddToAnki";
 import { TermDefinition } from "@texthooker/components/TermDefinition";
 import { NotebookEntryCard } from "@texthooker/components/NotebookEntryCard";
+import { usePopupScan, popupLevel } from "@texthooker/hooks/usePopupScan";
 import { audioItemForEntry, mediaForFields } from "@texthooker/lib/audio";
 import { termAllEntries } from "@texthooker/lib/yomitan";
 import type {
@@ -84,6 +86,9 @@ function jumpEntry(scroller: HTMLElement, step: number): void {
   scroller.scrollTo({ top: next === 0 ? 0 : offsets[next], behavior: "smooth" });
 }
 
+/** This window's place in the stack of pop-ups: 0 for the first. */
+const level = popupLevel();
+
 function PopoverApp() {
   const [payload, setPayload] = useState<ShowPayload | null>(null);
   const [visible, setVisible] = useState(false);
@@ -106,8 +111,12 @@ function PopoverApp() {
     const register = async <T,>(
       event: string,
       handler: (e: { payload: T }) => void,
+      /** Every pop-up's, rather than addressed to this window alone. */
+      shared = false,
     ) => {
-      const registration = listen<T>(event, handler);
+      const registration = shared
+        ? listen<T>(event, handler)
+        : getCurrentWebviewWindow().listen<T>(event, handler);
       registrations.push(registration);
       const u = await registration;
       if (cancelled) {
@@ -135,13 +144,19 @@ function PopoverApp() {
       setVisible(true);
     });
 
-    void register<unknown>("popover:hide", () => {
-      setVisible(false);
-    });
+    // Every pop-up hears every hide: this one closes when its level or one below it does.
+    void register<{ level?: number } | null>(
+      "popover:hide",
+      (e) => {
+        if ((e.payload?.level ?? 0) <= level) setVisible(false);
+      },
+      true,
+    );
 
     // The overlay's controller mode: the right stick scrolls, the shoulder buttons jump from
     // one definition to the next.
     void register<{ scroll?: number; step?: number }>("popover:control", (e) => {
+      if (level !== 0) return;
       const scroller = document.querySelector<HTMLElement>(".popover-scroll");
       if (!scroller) return;
       if (e.payload.scroll) scroller.scrollTop += e.payload.scroll;
@@ -149,9 +164,13 @@ function PopoverApp() {
     });
 
     // Mirror the main window's resolved theme onto our document root.
-    void register<ResolvedTheme>("popover:theme", (e) => {
-      document.documentElement.dataset.theme = e.payload;
-    });
+    void register<ResolvedTheme>(
+      "popover:theme",
+      (e) => {
+        document.documentElement.dataset.theme = e.payload;
+      },
+      true,
+    );
 
     void Promise.all(registrations).then(() => invoke("reader_popup_ready"));
 
@@ -168,7 +187,7 @@ function PopoverApp() {
         setVisible(false);
         // After the fade-out, hide the window in Rust by emitting on this side.
         // Rust listens to 'popover:dismiss' from the popover window itself.
-        void invoke("hide_popover");
+        void invoke("hide_popover", { level });
       } else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
         setAnkiTriggerNonce((n) => (n ?? 0) + 1);
@@ -311,12 +330,19 @@ function PopoverApp() {
 
   const isNotebook = notebookEntry !== null;
 
-  // Autoplay belongs to the first entry that actually has audio — the most
-  // exact match wins; shorter sub-term matches stay silent unless clicked.
-  const firstAudioIdx =
-    state === "loaded"
-      ? entries.findIndex((f) => audioItemForEntry(f, audioMedia) !== null)
-      : -1;
+  // Shift over a word in this pop-up opens the next one on top, with this lookup's settings.
+  usePopupScan(
+    level,
+    payload?.kind === "loaded"
+      ? {
+          baseUrl: payload.baseUrl,
+          includeMedia: baseWantsMedia,
+          audioAutoplay: payload.audioAutoplay,
+          audioVolume: payload.audioVolume,
+          ankiConfig: payload.ankiConfig,
+        }
+      : null,
+  );
 
   return (
     <div className={`popover-shell ${visible ? "visible" : ""}`}>
@@ -330,7 +356,7 @@ function PopoverApp() {
                 // the notebook drawer) and focuses itself; we just disappear.
                 void emit("notebook:edit-request", { entryId });
                 setVisible(false);
-                void invoke("hide_popover");
+                void invoke("hide_popover", { level });
               }}
             />
           ) : (
@@ -349,60 +375,97 @@ function PopoverApp() {
                   Back
                 </Button>
               ) : null}
-              {state === "loaded" ? (
-                entries.map((f, i) => (
-                  <div
-                    key={`${xrefStack.length}:${term}:${i}`}
-                    className="popover-entry"
-                  >
-                    <TermDefinition
-                      term={term}
-                      state="loaded"
-                      fields={f}
-                      onCrossRef={baseUrl ? followCrossRef : undefined}
-                      actions={
-                        <>
-                          <PopoverAudio
-                            item={audioItemForEntry(f, audioMedia)}
-                            autoplay={audioAutoplay && i === firstAudioIdx}
-                            volume={audioVolume}
-                          />
-                          {ankiConfig ? (
-                            <PopoverAddToAnki
-                              term={f.expression || term}
-                              fields={f}
-                              audioMedia={mediaForFields(f, audioMedia)}
-                              dictionaryMedia={mediaForFields(
-                                f,
-                                dictionaryMedia,
-                              )}
-                              sentence={sentence}
-                              config={ankiConfig}
-                              triggerNonce={
-                                i === 0 && !activeXref
-                                  ? ankiTriggerNonce
-                                  : undefined
-                              }
-                            />
-                          ) : null}
-                        </>
-                      }
-                    />
-                  </div>
-                ))
-              ) : (
-                <TermDefinition
-                  term={term}
-                  state={state}
-                  errorMessage={errorMessage}
-                />
-              )}
+              <EntryList
+                keyPrefix={`${xrefStack.length}`}
+                term={term}
+                state={state}
+                errorMessage={errorMessage}
+                entries={entries}
+                audioMedia={audioMedia}
+                dictionaryMedia={dictionaryMedia}
+                autoplay={audioAutoplay}
+                audioVolume={audioVolume}
+                ankiConfig={ankiConfig}
+                sentence={sentence}
+                ankiTriggerNonce={activeXref ? undefined : ankiTriggerNonce}
+                onCrossRef={baseUrl ? followCrossRef : undefined}
+              />
             </>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+/** One lookup's entries. */
+function EntryList({
+  keyPrefix,
+  term,
+  state,
+  errorMessage,
+  entries,
+  audioMedia,
+  dictionaryMedia,
+  autoplay,
+  audioVolume,
+  ankiConfig,
+  sentence,
+  ankiTriggerNonce,
+  onCrossRef,
+}: {
+  keyPrefix: string;
+  term: string;
+  state: "loading" | "loaded" | "error" | "empty";
+  errorMessage?: string;
+  entries: YomitanAnkiFields[];
+  audioMedia: AnkiMediaItem[];
+  dictionaryMedia: AnkiMediaItem[];
+  autoplay: boolean;
+  audioVolume: number;
+  ankiConfig: AnkiConfig | null;
+  sentence: string | null;
+  ankiTriggerNonce?: number;
+  onCrossRef?: (target: string) => void;
+}) {
+  if (state !== "loaded") {
+    return <TermDefinition term={term} state={state} errorMessage={errorMessage} />;
+  }
+  // Autoplay belongs to the first entry that actually has audio — the most
+  // exact match wins; shorter sub-term matches stay silent unless clicked.
+  const firstAudioIdx = entries.findIndex(
+    (f) => audioItemForEntry(f, audioMedia) !== null,
+  );
+  return entries.map((f, i) => (
+    <div key={`${keyPrefix}:${term}:${i}`} className="popover-entry">
+      <TermDefinition
+        term={term}
+        state="loaded"
+        fields={f}
+        onCrossRef={onCrossRef}
+        actions={
+          <>
+            <PopoverAudio
+              item={audioItemForEntry(f, audioMedia)}
+              autoplay={autoplay && i === firstAudioIdx}
+              volume={audioVolume}
+            />
+            {ankiConfig ? (
+              <PopoverAddToAnki
+                term={f.expression || term}
+                fields={f}
+                audioMedia={mediaForFields(f, audioMedia)}
+                dictionaryMedia={mediaForFields(f, dictionaryMedia)}
+                sentence={sentence}
+                config={ankiConfig}
+                triggerNonce={i === 0 ? ankiTriggerNonce : undefined}
+              />
+            ) : null}
+          </>
+        }
+      />
+    </div>
+  ));
 }
 
 export default PopoverApp;

@@ -2371,8 +2371,12 @@ function dismissPopup() {
  */
 let livePopups = new Set()
 
+/** `replayIntoPopup` from host/popup-bridge.js, once Yomitan's popups are being observed. */
+let replayPopupPointer = null
+
 async function capturePopups() {
-  const { observePopups } = await import('/spike/popup-bridge.js')
+  const { observePopups, replayIntoPopup } = await import('/spike/popup-bridge.js')
+  replayPopupPointer = replayIntoPopup
   let remote = null
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     const {installGnomePopupTransport} = await import('./gnome-popup-transport.js')
@@ -3107,6 +3111,12 @@ await native.listen('pointer', ({ payload }) => {
   // somewhere else would otherwise close the controller's popup.
   if (!state.yomitan.ready || controller.drivesLookups) return
   const init = scanPointerInit(payload, local, performance.now() - lastRealPointer)
+  // Over Yomitan's own popup the sample is the popup's: its scanner opens a nested popup for the
+  // word under it. The page's scanner would only ignore it.
+  if (init && !extensionHosted && replayPopupPointer?.(livePopups, local.x, local.y, init)) {
+    noteScanFeed(payload, true)
+    return
+  }
   if (init) {
     // Yomitan reads only the coordinates. The extension engines also look at the event's target,
     // so theirs is dispatched at the element under the point (it bubbles to window either way).

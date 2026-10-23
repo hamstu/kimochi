@@ -2945,25 +2945,7 @@ fn main() {
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
 
-            let reader_popup_builder = tauri::WebviewWindowBuilder::new(
-                app,
-                "reader-popup",
-                tauri::WebviewUrl::App("app/reader-popup.html".into()),
-            )
-            .title("Dictionary")
-            .decorations(false)
-            .transparent(true)
-            .always_on_top(true)
-            .visible(false)
-            .focused(false)
-            .accept_first_mouse(true)
-            .skip_taskbar(true)
-            .inner_size(500., 380.)
-            .content_protected(true)
-            .initialization_script_for_all_frames(platform::platform_prelude());
-            #[cfg(target_os = "linux")]
-            let reader_popup_builder = reader_popup_builder.focusable(platform::wayland_overlay_unavailable());
-            let reader_popup = reader_popup_builder.build()?;
+            let reader_popup = reader::popover::build_window(&handle, 0)?;
             make_panel(&handle, &service, &reader_popup);
             // Opt-in native regression: only the API popup, no source restore or OCR.
             #[cfg(debug_assertions)]
@@ -3620,6 +3602,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut noted_focus: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut last_modifiers = Modifiers::default();
         let mut last_buttons = false;
+        let mut last_popup_shift = false;
         let mut ticks: u64 = 0;
         let mut shapes: HashMap<&'static str, InputShape> = HashMap::new();
         loop {
@@ -3651,6 +3634,10 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     reader::popover::pointer_down(&handle, x, y);
                 }
                 let moved = last_point.is_none_or(|(px, py)| px != x || py != y);
+                if moved || modifiers.shift != last_popup_shift {
+                    reader::popover::pointer(&handle, x, y, modifiers.shift);
+                }
+                last_popup_shift = modifiers.shift;
                 last_point = Some((x, y));
                 let mut changed: Vec<(String, bool)> = Vec::new();
                 let mut focus: Vec<String> = Vec::new();
@@ -3663,7 +3650,11 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     } else {
                         vec![OVERLAY]
                     };
-                    if dismissed(&v.regions, &hidden, x, y, down, was_down) {
+                    // The Yomitan API pop-up is a window of its own that publishes no regions:
+                    // a press on its card is reading it, not a click away from the dictionary.
+                    if dismissed(&v.regions, &hidden, x, y, down, was_down)
+                        && !reader::popover::covers(x, y)
+                    {
                         v.dismiss += 1;
                     }
                     let mut interactive_anywhere = false;
@@ -3745,6 +3736,31 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                             }) || reader::popover::covers(x, y),
                         )
                     };
+                    // The Log's Yomitan popups live in a window of their own that never has
+                    // the keyboard, so it sees neither the pointer's moves nor Shift: they are
+                    // sent to it like the overlay's, and it hands them to the popup under them.
+                    let over_popup_host = service
+                        .view
+                        .lock()
+                        .unwrap()
+                        .regions
+                        .get(POPUP_HOST)
+                        .is_some_and(|rects| rects.iter().any(|r| r.contains(x, y)));
+                    if over_popup_host {
+                        let _ = handle.emit_to(
+                            POPUP_HOST,
+                            "popup-host:pointer",
+                            json!({
+                                "x": x,
+                                "y": y,
+                                "down": down,
+                                "shift": modifiers.shift,
+                                "ctrl": modifiers.ctrl,
+                                "alt": modifiers.alt,
+                                "meta": modifiers.meta,
+                            }),
+                        );
+                    }
                     if wanted && (over || was_over_overlay) {
                         let _ = handle.emit(
                             "pointer",

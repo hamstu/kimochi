@@ -405,7 +405,7 @@ export const POPOVER_SAMPLE = {
       expression: '世界線',
       reading: 'せかいせん',
       glossary:
-        '<div style="text-align: left;"><ol><li><i>(n)</i> world line (path of an object through spacetime)</li><li><i>(n, colloquial)</i> timeline; alternate reality</li></ol></div>',
+        '<div style="text-align: left;"><ol><li><i>(n)</i> world line (path of an object through spacetime)</li><li><i>(n, colloquial)</i> timeline; alternate reality<br>例：別の世界線では、彼女は科学者だった。</li></ol></div>',
       dictionary: 'JMdict (English)',
       frequencies: '<ul><li>JPDB: 14523</li><li>Novels: 21044</li></ul>',
       'pitch-accents': '<ol><li>せ<span style="text-decoration: overline;">かいせん</span></li></ol>',

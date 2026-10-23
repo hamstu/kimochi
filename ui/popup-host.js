@@ -291,29 +291,45 @@ function scheduleRelayout() {
   return pending
 }
 
+/** This window's top-left on the desktop: the chain's box, less the shadow margin. */
+function windowOrigin() {
+  return windowRect ? { x: windowRect.x - SHADOW_PAD, y: windowRect.y - SHADOW_PAD } : null
+}
+
 /**
  * The desktop point a nested lookup's rectangles are measured from.
  *
- * A lookup inside the popup runs in the popup's own frame, and Yomitan sends its
- * source rectangles in that frame's coordinates with no offset applied —
- * `PopupFactory` only attaches a `FrameOffsetForwarder` when there is no parent
- * popup. In a browser the parent frame and the popup it opens share one page, so the
- * result is merely a bit off; in a window of its own it is the difference between the
- * scanned word and the origin of the primary display.
- *
- * The parent's own rectangle is already known in desktop points, so the frame's
- * content box is where the child's coordinates start. The border is real: the popup
- * frame draws one, and `box-sizing: border-box` puts the content inside it.
+ * A lookup inside the popup runs in the popup's own frame. `PopupFactory` moves its source
+ * rectangles by the parent frame's place in this window (`_getPopupOffset`), so they arrive in
+ * this window's coordinates, short only of the parent frame's border, which Yomitan leaves out
+ * (`box-sizing: border-box` puts the content inside it). This window's own desktop origin is
+ * what turns them into desktop points. Adding the parent's desktop rectangle instead counted
+ * the parent's place twice and opened nested popups well off their word.
  */
 function nestedOrigin(popup) {
   const parent = popup.parent
-  const rect = parent ? placed.get(parent) : null
-  if (!rect) return null
+  const origin = parent ? windowOrigin() : null
+  if (!origin) return null
   const style = getComputedStyle(frameOf(parent))
   return {
-    x: rect.x + (Number.parseFloat(style.borderLeftWidth) || 0),
-    y: rect.y + (Number.parseFloat(style.borderTopWidth) || 0)
+    x: origin.x + (Number.parseFloat(style.borderLeftWidth) || 0),
+    y: origin.y + (Number.parseFloat(style.borderTopWidth) || 0)
   }
+}
+
+/**
+ * Whether the pointer is over the popup chain, asked by the scanning window's frontend before it
+ * scans (`Frontend._ignorePoint`): a point over the popup is the popup's, not the text it covers.
+ * That frontend is in another window and asks in desktop points (its `FrameOffsetForwarder` adds
+ * its window's origin, see host/popup-bridge.js), while the frames here are measured in this
+ * window. Unconverted, the answer was always no, and Shift over the popup looked up the line
+ * underneath it. Nested popups ask from inside this window, in its own coordinates.
+ */
+const containsPoint = Popup.prototype.containsPoint
+Popup.prototype.containsPoint = function (x, y) {
+  const origin = this.parent ? null : windowOrigin()
+  if (!this.parent && !origin) return Promise.resolve(false)
+  return origin ? containsPoint.call(this, x - origin.x, y - origin.y) : containsPoint.call(this, x, y)
 }
 
 const showContent = Popup.prototype.showContent
@@ -397,7 +413,7 @@ Popup.prototype.hide = function (changeFocus) {
 // The Display's own resize handle. Original code all the way down: the popup asks its
 // parent frame to resize it, which is this window.
 // Build the popup's frame ahead of the first lookup rather than during it.
-const { prewarmPopups, stylePopupFrames } = await import('/spike/popup-bridge.js')
+const { prewarmPopups, replayIntoPopup, stylePopupFrames } = await import('/spike/popup-bridge.js')
 // This page is transparent, which Yomitan would read as a light site: each frame takes its
 // content's theme instead (the scanned window's), else Kimochi's appearance.
 stylePopupFrames(Popup, { fallbackTheme: resolvedTheme })
@@ -413,6 +429,27 @@ Popup.prototype.setFrameSize = async function (width, height) {
   }
   return result
 }
+
+// The pointer and modifiers over this window, from native (`spawn_cursor_poll`): this window never
+// has the keyboard, so it sees neither for itself. Handed to the popup under the pointer, whose
+// own scanner then opens Yomitan's nested popup for a word Shift-scanned inside it.
+await window.__TAURI__?.event?.listen('popup-host:pointer', ({ payload }) => {
+  const origin = windowOrigin()
+  if (!origin || typeof payload?.x !== 'number') return
+  replayIntoPopup(placed.keys(), payload.x - origin.x, payload.y - origin.y, {
+    pointerType: 'mouse',
+    isPrimary: true,
+    bubbles: true,
+    cancelable: true,
+    screenX: payload.x,
+    screenY: payload.y,
+    buttons: payload.down ? 1 : 0,
+    shiftKey: !!payload.shift,
+    ctrlKey: !!payload.ctrl,
+    altKey: !!payload.alt,
+    metaKey: !!payload.meta
+  })
+})
 
 // A monitor added, removed or rearranged changes which work area a popup belongs in.
 await window.__TAURI__?.event?.listen('display-layout', () => void refreshDisplays())
