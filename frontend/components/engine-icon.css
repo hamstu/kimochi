@@ -1,6 +1,7 @@
 /*
  * An engine's picture (EngineIcon.tsx): a logo, or a neutral tile with a glyph or monogram for
- * the engines that have no logo. Every picture is the same 22 px square (`--engine-icon-size`).
+ * the engines that have no logo. Every picture is the same 22 px square (`--engine-icon-size`);
+ * a context can set a larger square through that variable and the glyph or monogram scales with it.
  */
 :root {
   --engine-icon-size: 1.375rem;
@@ -23,7 +24,8 @@
   box-shadow: inset 0 0 0 1px var(--k-line);
   color: var(--k-text-2);
   font-family: var(--k-font-ui);
-  font-size: var(--k-text-xs);
+  /* Scales with the square: 11 px in the default 22 px tile. */
+  font-size: calc(var(--engine-icon-size) / 2);
   font-weight: var(--k-weight-semibold);
   line-height: 1;
 }
@@ -32,8 +34,9 @@
 }
 .engine-icon-tile > svg,
 .engine-icon-tile > img {
-  width: var(--k-icon);
-  height: var(--k-icon);
+  /* 16 px in the default 22 px tile, and the same share of a larger one. */
+  width: calc(var(--engine-icon-size) * 8 / 11);
+  height: calc(var(--engine-icon-size) * 8 / 11);
   object-fit: contain;
 }
 

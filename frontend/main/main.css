@@ -285,6 +285,10 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   align-items: center;
   gap: var(--k-space-2);
   min-width: 0;
+  /* Not on the baseline: an inline-flex box's baseline is its first item's, and the pictures
+     differ (an image's is its bottom edge, a monogram's its text), which gave each menu row a
+     different gap above its description. */
+  vertical-align: top;
 }
 .sb-engine-option-name {
   min-width: 0;
@@ -309,8 +313,58 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
 .sb-note[data-tone="danger"] {
   color: var(--k-danger-text);
 }
+/* In the open list each engine is two tight lines, name (with where it runs) over tagline, beside
+   a picture as tall as both: its top is the name line's top, its bottom the tagline's. With
+   Figtree's metrics these line heights leave the same inset above the name's capitals as below
+   the tagline's baseline, so the text sits optically centred on the picture too. All in rem, so
+   it scales with the interface size. The ItemText span and the label's own flex row step aside
+   (display: contents) so picture, name, runs icon and tagline are all items of one grid. */
+.sb-engine-menu {
+  --sb-engine-name-leading: 1rem;
+  --sb-engine-tagline-leading: 0.875rem;
+  --engine-icon-size: calc(var(--sb-engine-name-leading) + var(--sb-engine-tagline-leading));
+}
+/* Two lines and a big picture need more room than the kit's one-line items. */
+.sb-engine-menu .k-menu-item-described {
+  padding: var(--k-space-2) var(--k-space-3) var(--k-space-2) var(--k-space-2-5);
+}
+.sb-engine-menu .k-menu-item-label {
+  display: grid;
+  grid-template-columns: var(--engine-icon-size) minmax(0, auto) 1fr;
+  grid-template-rows: var(--sb-engine-name-leading) var(--sb-engine-tagline-leading);
+  column-gap: var(--k-space-2-5);
+  align-items: center;
+}
+.sb-engine-menu .k-menu-item-label > span:not(.k-menu-item-description),
+.sb-engine-menu .sb-engine-option {
+  display: contents;
+}
+.sb-engine-menu .engine-icon {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+.sb-engine-menu .sb-engine-option-name {
+  grid-column: 2;
+  grid-row: 1;
+  line-height: var(--sb-engine-name-leading);
+}
+.sb-engine-menu .engine-runs {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: start;
+}
+.sb-engine-menu .engine-runs > svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
 .sb-engine-menu .k-menu-item-description {
-  padding-left: calc(var(--engine-icon-size) + var(--k-space-2));
+  grid-column: 2 / -1;
+  grid-row: 2;
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: var(--sb-engine-tagline-leading);
 }
 /* A label with a quiet "Manage" link at its right, both on the label's baseline. The link has the
    label's type metrics and no vertical padding, so the row is exactly as tall as a bare label. */
@@ -845,13 +899,19 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
 /* The Change source menu: one row per source type, with what it does. "Window or screen" opens
    the grid of windows and displays. */
 .src-menu {
-  width: 17.5rem;
+  /* Wide enough for every description on one line. */
+  width: max-content;
+  min-width: 17.5rem;
+  max-width: min(26rem, calc(100vw - 2 * var(--k-space-3)));
+  /* The same two-line rows as the OCR model and Dictionary menus (.sb-engine-menu). */
+  --src-type-label-leading: 1rem;
+  --src-type-detail-leading: 0.875rem;
 }
 .src-type {
   display: flex;
   align-items: center;
   gap: var(--k-space-2-5);
-  padding: var(--k-space-1-5) var(--k-space-2);
+  padding: var(--k-space-2) var(--k-space-3) var(--k-space-2) var(--k-space-2-5);
   border-radius: var(--k-radius-md);
   color: var(--k-text);
   outline: none;
@@ -862,12 +922,13 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
 .src-type[data-state="open"] {
   background: var(--k-hover);
 }
+/* As tall as the two lines beside it: its top on the name's, its bottom on the description's. */
 .src-type-icon {
   display: grid;
   flex: none;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: calc(var(--src-type-label-leading) + var(--src-type-detail-leading));
+  height: calc(var(--src-type-label-leading) + var(--src-type-detail-leading));
   border-radius: var(--k-radius-md);
   background: var(--k-sunken);
   box-shadow: inset 0 0 0 1px var(--k-line);
@@ -891,13 +952,15 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
 .src-type-label {
   font-size: var(--k-text-md);
   font-weight: var(--k-weight-medium);
-  line-height: var(--k-leading-md);
+  line-height: var(--src-type-label-leading);
 }
 .src-type-detail {
-  color: var(--k-text-3);
+  overflow: hidden;
+  color: var(--k-text-2);
   font-size: var(--k-text-xs);
-  line-height: var(--k-leading-xs);
-  text-wrap: pretty;
+  line-height: var(--src-type-detail-leading);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .src-type-check,
 .src-type-chevron {
