@@ -263,7 +263,9 @@ function PopoverApp() {
   // Follow a glossary cross-reference link: resolve the target term and push it
   // onto the stack, so the popover content becomes that word. Media is fetched
   // when the popover would normally include it (audio/Anki on) so audio and
-  // add-to-Anki keep working on the drilled-to entry.
+  // add-to-Anki keep working on the drilled-to entry, in the steps show_popover
+  // takes: the entries, the first entry's media (what autoplay plays, quick),
+  // then every entry's (seconds for a common word).
   const followCrossRef = useCallback(
     (target: string) => {
       if (!baseUrl) return;
@@ -278,21 +280,44 @@ function PopoverApp() {
           dictionaryMedia: [],
         },
       ]);
-      void termAllEntries(baseUrl, target, baseWantsMedia)
+      const setTop = (update: (top: XrefFrame) => XrefFrame | null) =>
+        setXrefStack((prev) => {
+          if (prev.length === 0) return prev;
+          const top = update(prev[prev.length - 1]);
+          if (!top) return prev;
+          const next = prev.slice();
+          next[next.length - 1] = top;
+          return next;
+        });
+      let allMedia = false;
+      const media = async () => {
+        if (!baseWantsMedia) return;
+        void termAllEntries(baseUrl, target, true, 1).then((first) => {
+          const entry = first.entries[0];
+          if (xrefGen.current !== gen || allMedia || !entry) return;
+          setTop((top) => {
+            const own = top.entries[0];
+            if (top.state !== "loaded" || !own || own.expression !== entry.expression || own.reading !== entry.reading)
+              return null;
+            return { ...top, entries: [entry, ...top.entries.slice(1)], audioMedia: first.audioMedia, dictionaryMedia: first.dictionaryMedia };
+          });
+        });
+        const all = await termAllEntries(baseUrl, target, true);
+        if (xrefGen.current !== gen || all.entries.length === 0) return;
+        allMedia = true;
+        setTop(() => ({ term: target, state: "loaded", ...all }));
+      };
+      void termAllEntries(baseUrl, target, false)
         .then((res) => {
           if (xrefGen.current !== gen) return; // superseded
-          setXrefStack((prev) => {
-            if (prev.length === 0) return prev;
-            const next = prev.slice();
-            next[next.length - 1] = {
-              term: target,
-              state: res.entries.length > 0 ? "loaded" : "empty",
-              entries: res.entries,
-              audioMedia: res.audioMedia,
-              dictionaryMedia: res.dictionaryMedia,
-            };
-            return next;
-          });
+          setTop(() => ({
+            term: target,
+            state: res.entries.length > 0 ? "loaded" : "empty",
+            entries: res.entries,
+            audioMedia: [],
+            dictionaryMedia: [],
+          }));
+          if (res.entries.length > 0) void media();
         })
         .catch(() => {
           if (xrefGen.current !== gen) return;

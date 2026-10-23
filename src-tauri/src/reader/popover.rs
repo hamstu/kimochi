@@ -372,6 +372,15 @@ pub async fn show_popover(
             crate::reader::yomitan::ankifields_value(&base_url, &term, false).await
         })
     });
+    // And the first entry's media alone, which is what autoplay plays: every entry's media takes
+    // Yomitan seconds for a common word (it tries each entry's audio sources in turn, online ones
+    // included), the first entry's alone tens of milliseconds with local audio.
+    let first_media = (!is_notebook && include_media.unwrap_or(false)).then(|| {
+        let (base_url, term) = (base_url.clone(), term.clone());
+        tokio::spawn(async move {
+            crate::reader::yomitan::ankifields_first(&base_url, &term, true, 1).await
+        })
+    });
 
     prepare_level(&app, level);
     for _ in 0..100 {
@@ -558,9 +567,11 @@ pub async fn show_popover(
         return Ok(());
     };
 
-    // Two phases:
+    // Three steps:
     //   1. fields only (fast, ~20ms), usually already shown above
-    //   2. fields + media (audio downloads can take seconds) → re-emit with
+    //   2. the first entry's media (started with 1), put on that entry as soon as it lands, so
+    //      its audio plays at once
+    //   3. every entry's fields + media (audio downloads can take seconds) → re-emit with
     //      audio/dictionary media attached; the frontend reconciles in place.
     let app2 = app.clone();
     let term2 = term.clone();
@@ -600,6 +611,29 @@ pub async fn show_popover(
         if !fetch_media || entries.is_empty() {
             return;
         }
+        // Step 3 has every entry's media, the first's included: once it is showing, step 2 has
+        // nothing to add.
+        let all_media = std::sync::Arc::new(AtomicBool::new(false));
+        if let Some(first_media) = first_media {
+            let (app, all_media, mut entries) = (app2.clone(), all_media.clone(), entries.clone());
+            let loaded = loaded.clone();
+            tauri::async_runtime::spawn(async move {
+                let Ok(Ok(v)) = first_media.await else { return };
+                if LOOKUP_GEN[level].load(Ordering::Relaxed) != gen || all_media.load(Ordering::SeqCst) {
+                    return;
+                }
+                let Some(first) = extract_entries(&v).into_iter().next() else { return };
+                if !same_entry(&first, &entries[0]) {
+                    return;
+                }
+                entries[0] = first;
+                let _ = app.emit_to(
+                    label(level),
+                    "popover:show",
+                    loaded(false, entries, extract_media(&v, "audioMedia"), extract_media(&v, "dictionaryMedia")),
+                );
+            });
+        }
         // Phase 2 is heavy. Wait for the cursor to settle on this term before
         // starting it, so scan-mode glides over many words don't start media
         // fetches the user already moved past.
@@ -613,6 +647,7 @@ pub async fn show_popover(
             if !is_current() {
                 return;
             }
+            all_media.store(true, Ordering::SeqCst);
             let _ = app2.emit_to(
                 label(level),
                 "popover:show",
@@ -627,6 +662,11 @@ pub async fn show_popover(
     });
 
     Ok(())
+}
+
+/// Whether two lookups' entries are the same word, so one's media can go on the other.
+fn same_entry(a: &Value, b: &Value) -> bool {
+    ["expression", "reading"].iter().all(|k| a.get(k) == b.get(k))
 }
 
 fn extract_entries(v: &Value) -> Vec<Value> {

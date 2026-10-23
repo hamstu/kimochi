@@ -1012,7 +1012,7 @@ normally means the browser is closed, the setting is off, or the browser suspend
 | `yomitan_api_check` | `({url}) -> ApiStatus` |
 | `install_yomitan_native_host` | `() -> string` (the installer's output) |
 | `yomitan_probe` | `({baseUrl}) -> latencyMs` (the Log's reader: a `/tokenize` round trip) |
-| `yomitan_tokenize`, `yomitan_ankifields` | the API pop-up's Shift-scan, in the Log and the overlay (`ui/scan-text.ts`), and its entries |
+| `yomitan_tokenize`, `yomitan_ankifields` | the API pop-up's Shift-scan, in the Log and the overlay (`ui/scan-text.ts`), and its entries. `yomitan_ankifields({baseUrl, text, includeMedia?, maxEntries?})`: `maxEntries` (1–32, default 32) returns only the first entries. With media, Yomitan fetches every returned entry's audio, trying its audio sources in turn (online ones too), which takes seconds for a common word; the pop-up asks for the first entry's media alone (`maxEntries: 1`, tens of milliseconds) so its audio plays at once, and every entry's in the background |
 
 `yomitan_host_status` only reads. It looks for `yomitan_api.json` in every browser's
 `NativeMessagingHosts` folder (macOS `~/Library/Application Support/<Google/Chrome, Chromium,

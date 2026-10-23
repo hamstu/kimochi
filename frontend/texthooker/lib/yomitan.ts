@@ -125,8 +125,10 @@ export async function termAllEntries(
   baseUrl: string,
   term: string,
   includeMedia = false,
+  /** Only the first entries: with media, Yomitan fetches each returned entry's audio in turn. */
+  maxEntries?: number,
 ): Promise<YomitanAllEntriesResult> {
-  const key = `${baseUrl}::${term}::${includeMedia ? "m" : "x"}`;
+  const key = `${baseUrl}::${term}::${includeMedia ? "m" : "x"}::${maxEntries ?? "all"}`;
   const cached = allEntriesCache.get(key);
   if (cached) return cached;
 
@@ -136,6 +138,7 @@ export async function termAllEntries(
       baseUrl,
       text: term,
       includeMedia,
+      maxEntries: maxEntries ?? null,
     });
   } catch (err) {
     console.warn("yomitan_ankifields failed", err);

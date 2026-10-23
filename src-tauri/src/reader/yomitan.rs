@@ -100,10 +100,22 @@ pub async fn ankifields_value(
     text: &str,
     include_media: bool,
 ) -> Result<Value, String> {
+    ankifields_first(base_url, text, include_media, MAX_ENTRIES).await
+}
+
+/// The first `max_entries` entries of a lookup. With media, Yomitan fetches the audio of every
+/// entry it returns, trying its audio sources in turn (online ones too) for each, so fewer
+/// entries come back much sooner.
+pub async fn ankifields_first(
+    base_url: &str,
+    text: &str,
+    include_media: bool,
+    max_entries: u32,
+) -> Result<Value, String> {
     let url = format!("{}/ankiFields", base_url.trim_end_matches('/'));
     let req = AnkiFieldsRequest {
         markers: ANKI_MARKERS,
-        max_entries: MAX_ENTRIES,
+        max_entries,
         field_type: "term",
         include_media,
         text,
@@ -125,8 +137,10 @@ pub async fn yomitan_ankifields(
     base_url: String,
     text: String,
     include_media: Option<bool>,
+    max_entries: Option<u32>,
 ) -> Result<Value, String> {
-    ankifields_value(&base_url, &text, include_media.unwrap_or(false)).await
+    let max_entries = max_entries.unwrap_or(MAX_ENTRIES).clamp(1, MAX_ENTRIES);
+    ankifields_first(&base_url, &text, include_media.unwrap_or(false), max_entries).await
 }
 
 #[tauri::command]
