@@ -20,7 +20,7 @@
  *
  * AnkiConnect requests are the one kind plugin-http does not carry: it sends the page's Origin,
  * which AnkiConnect's default `webCorsOriginList` refuses with HTTP 403, so they go through Rust's
- * `anki_connect_relay` instead (../anki-relay.js), to the address in Settings → Anki.
+ * `anki_connect_relay` instead (../anki-relay.js), to the address the extension asked for.
  *
  * The top document of an engine's extension window (`ext-<id>`, §5.4) is the exception: it has
  * Tauri IPC and its own plugin-http grant (capabilities/extension-windows.json), so it fetches
@@ -43,12 +43,12 @@ import { deniedHost, isNativeRequest } from './frame-network.js'
 /**
  * A remote request from Rust: an AnkiConnect request through `anki_connect_relay` (without the
  * page's Origin, which AnkiConnect refuses; see ../anki-relay.js), anything else through
- * plugin-http. A Request object (`url` not a string or URL) carries its body in a stream and is
+ * plugin-http, to the URL it asked for. A Request object (`url` not a string or URL) carries its body in a stream and is
  * never an extension's AnkiConnect call.
  */
 function nativeFetch(win, url, init, report) {
   const anki = typeof url === 'string' || url instanceof win.URL ? ankiConnectBody(init?.method, init?.body) : null
-  if (anki) return relayAnkiConnect(anki, { signal: init?.signal, realm: win, report })
+  if (anki) return relayAnkiConnect(url, anki, { signal: init?.signal, realm: win, report })
   return tauriFetch(url, init)
 }
 

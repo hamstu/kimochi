@@ -1047,9 +1047,11 @@ sets each browser's `HKCU` key above with `reg add`.
 
 ## AnkiConnect
 
-Every AnkiConnect request goes to ONE address, `superTexthooker.ankiConnectUrl` (default
-`http://127.0.0.1:8765`, set in Settings → Anki), with the optional `superTexthooker.ankiConnectKey`
-(AnkiConnect's `apiKey`; a private setting, never synced). All of them leave from Rust
+Kimochi's own AnkiConnect requests (the Yomitan API pop-up and its card builder) go to
+`superTexthooker.ankiConnectUrl` (default `http://127.0.0.1:8765`, set in Settings → Anki), with the
+optional `superTexthooker.ankiConnectKey` (AnkiConnect's `apiKey`; a private setting, never synced).
+The dictionary extensions' go where their own Anki settings say, with their own key. All of them
+leave from Rust
 (`src-tauri/src/reader/ankiconnect.rs`) on AnkiConnect's classic endpoint (`/`, API version 6), so
 they carry no Origin header and AnkiConnect's `webCorsOriginList` never applies.
 
@@ -1057,7 +1059,7 @@ they carry no Origin header and AnkiConnect's `webCorsOriginList` never applies.
 | --- | --- |
 | `anki_probe`, `anki_deck_names`, `anki_model_names`, `anki_model_field_names`, `anki_find_notes`, `anki_gui_browse`, `anki_store_media_file`, `anki_add_note` | `({url, …})`: Kimochi's own calls (the Yomitan API pop-up's Add to Anki and its card builder). `url` is validated; the configured key is added. |
 | `anki_connect_status` | `({url?, key?}) -> Status`: the connection check behind Settings → Anki; the configured address and key when omitted |
-| `anki_connect_relay` | `({body}) -> {status, body}`: a dictionary extension's AnkiConnect request |
+| `anki_connect_relay` | `({url, body}) -> {status, body}`: a dictionary extension's AnkiConnect request, to the `url` it asked for |
 
 `anki_connect_status` asks `requestPermission` (no key needed; it reports whether AnkiConnect
 wants one), then `version` with the key, and changes nothing. `Status` is tagged by `state`:
@@ -1073,9 +1075,9 @@ AnkiConnect's default `webCorsOriginList` (`["http://localhost"]`) refuses it wi
 `host/anki-relay.js` picks the extensions' AnkiConnect requests out of their remote `fetch` (Built-in
 Yomitan's `hub.fetchRemote` in `host/network-entry.js`, the extension host's in `host/ext/network.js`):
 a POST whose body is a JSON object with a string `action`, a numeric `version` and nothing but
-`params` and `key` besides. Rust refuses any other body, sends it to the configured address (not the
-URL in the extension's own settings) and puts the configured key in when there is one. The
-extension windows may invoke it (`extensions::EXTENSION_WINDOW_COMMANDS`).
+`params` and `key` besides. Rust refuses any other body, validates `url` as it does the address in
+Settings → Anki, and sends the body unchanged (the extension's API key in it), so the extension's
+own Anki settings stay in charge. The extension windows may invoke it (`extensions::EXTENSION_WINDOW_COMMANDS`).
 
 ## Dictionary engine downloads
 
@@ -1322,8 +1324,8 @@ allowing only the local Yomitan API (`19633`), plus the dictionary hosts the eng
 download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`). It is deliberately not a general internet grant.
 AnkiConnect is not in it: plugin-http sends the webview's Origin, which AnkiConnect's default
 `webCorsOriginList` refuses with HTTP 403, so every AnkiConnect request comes from Rust (the
-`anki_*` commands, and `anki_connect_relay` for the dictionary extensions), at any address and port
-the user sets in Settings → Anki. Kimochi's own server (cloud OCR,
+`anki_*` commands at the address in Settings → Anki, and `anki_connect_relay` for the dictionary
+extensions at the address in their own settings). Kimochi's own server (cloud OCR,
 text to speech, translation, explanations, accounts and backup) is deliberately absent: it takes
 an account token, so only Rust calls it. Google Lens
 (`ocrMode: 'googlelens'`) needs nothing here either: `ocr_frame` posts the frame to

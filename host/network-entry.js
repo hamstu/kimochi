@@ -8,7 +8,7 @@ hub.nativeFetch = window.__spikeNativeFetch ?? window.fetch.bind(window)
 hub.fetchRemote = (input, init) => {
   // A Request (which has `arrayBuffer`) carries its body in a stream: never Yomitan's AnkiConnect.
   const anki = typeof input?.arrayBuffer === 'function' ? null : ankiConnectBody(init?.method, init?.body)
-  if (anki) return relayAnkiConnect(anki, { signal: init?.signal, report: (value) => hub.log?.(value) })
+  if (anki) return relayAnkiConnect(input, anki, { signal: init?.signal, report: (value) => hub.log?.(value) })
   return rustFetch(input, init ? { ...init } : undefined)
 }
 // Installed in every extension frame before its original scripts execute.

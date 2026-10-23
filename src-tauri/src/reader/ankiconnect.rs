@@ -1,20 +1,21 @@
 // ankiconnect.rs — Kimochi's AnkiConnect client (https://git.foosoft.net/alex/anki-connect),
 // the relay the dictionary extensions' AnkiConnect requests take, and the connection check
-// behind Settings → Anki. Everything goes to ONE address, the user's
+// behind Settings → Anki. Kimochi's own calls (the Yomitan API pop-up) go to the user's
 // `superTexthooker.ankiConnectUrl` (default http://127.0.0.1:8765), with the optional
-// `superTexthooker.ankiConnectKey` (a private setting: never synced, profile::is_private).
+// `superTexthooker.ankiConnectKey` (a private setting: never synced, profile::is_private). The
+// extensions' requests go where the extension's own Anki settings say, with its own key.
 //
 // Why a relay: a request from a webview carries the page's Origin (tauri://localhost,
 // http://tauri.localhost on Windows, hachidori://localhost, …), and plugin-http forwards it.
 // AnkiConnect's default webCorsOriginList (["http://localhost"]) refuses those origins with
 // HTTP 403. A request from Rust has no Origin, which AnkiConnect always admits, so the
-// extensions' requests are re-sent from here (host/anki-relay.js routes them).
+// extensions' requests are re-sent from here (host/anki-relay.js routes them), unchanged.
 //
 // All calls use the classic endpoint (`/`, API version 6) that every AnkiConnect release
 // serves; 26.10's JSON-RPC endpoint (`/api/v1`) is not used.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -260,38 +261,19 @@ pub struct RelayReply {
     pub body: String,
 }
 
-/// The body of a classic AnkiConnect request, with the configured key put in: an object with a
-/// string `action`. Anything else is refused, so the relay cannot carry other traffic.
-fn relay_body(body: &str, key: Option<&str>) -> Result<Value, String> {
-    let mut value: Value = serde_json::from_str(body).map_err(|_| "not an AnkiConnect request".to_string())?;
-    let object: &mut Map<String, Value> = value
-        .as_object_mut()
-        .filter(|o| o.get("action").is_some_and(Value::is_string))
-        .ok_or_else(|| "not an AnkiConnect request".to_string())?;
-    // Kimochi's key wins over whatever the extension's own settings hold: one key for every route.
-    if let Some(key) = key {
-        put_key(object, key, 0);
+/// The body of a classic AnkiConnect request, as the extension wrote it (its API key included):
+/// an object with a string `action`. Anything else is refused, so the relay cannot carry other
+/// traffic.
+fn relay_body(body: &str) -> Result<Value, String> {
+    let value: Value = serde_json::from_str(body).map_err(|_| "not an AnkiConnect request".to_string())?;
+    if !value.get("action").is_some_and(Value::is_string) {
+        return Err("not an AnkiConnect request".into());
     }
     Ok(value)
 }
 
-/// AnkiConnect checks the key of every action inside a `multi` too (Yomitan's anki-connect.js
-/// puts its key on each), so it goes on those as well, down nested `multi`s.
-fn put_key(request: &mut Map<String, Value>, key: &str, depth: usize) {
-    request.insert("key".into(), json!(key));
-    if depth > 16 || request.get("action").and_then(Value::as_str) != Some("multi") {
-        return;
-    }
-    let actions = request.get_mut("params").and_then(|p| p.get_mut("actions")).and_then(Value::as_array_mut);
-    for action in actions.into_iter().flatten() {
-        if let Some(action) = action.as_object_mut() {
-            put_key(action, key, depth + 1);
-        }
-    }
-}
-
-async fn relay(url: &str, key: Option<&str>, body: &str) -> Result<RelayReply, String> {
-    let request = relay_body(body, key)?;
+async fn relay(url: &str, body: &str) -> Result<RelayReply, String> {
+    let request = relay_body(body)?;
     let url = parse_url(url)?;
     let res = client()
         .post(url.clone())
@@ -305,13 +287,12 @@ async fn relay(url: &str, key: Option<&str>, body: &str) -> Result<RelayReply, S
     Ok(RelayReply { status, body })
 }
 
-/// A dictionary extension's AnkiConnect request (host/anki-relay.js), sent to the configured
-/// address from here, without the webview's Origin. Whatever URL the extension's own settings
-/// name, the request goes to Kimochi's address.
+/// A dictionary extension's AnkiConnect request (host/anki-relay.js), sent from here without the
+/// webview's Origin to the address its own Anki settings name (`url`, validated like the one in
+/// Settings → Anki), and otherwise as it was: the extension's settings stay in charge.
 #[tauri::command]
-pub async fn anki_connect_relay(state: tauri::State<'_, Shared>, body: String) -> Result<RelayReply, String> {
-    let (url, key) = configured(&state.settings);
-    relay(&url, key.as_deref(), &body).await
+pub async fn anki_connect_relay(url: String, body: String) -> Result<RelayReply, String> {
+    relay(&url, &body).await
 }
 
 // ---------------------------------------------------------------- connection check
@@ -436,21 +417,12 @@ mod tests {
     }
 
     #[test]
-    fn the_relay_carries_only_ankiconnect_requests_and_puts_kimochis_key_in() {
-        let body = relay_body(r#"{"action":"deckNames","version":2,"params":{},"key":"theirs"}"#, Some("mine")).unwrap();
-        assert_eq!(body["key"], "mine");
-        assert_eq!(body["version"], 2, "the extension's API version is kept");
-        let body = relay_body(
-            r#"{"action":"multi","version":6,"params":{"actions":[{"action":"version","key":"theirs"},{"action":"multi","params":{"actions":[{"action":"deckNames"}]}}]}}"#,
-            Some("mine"),
-        )
-        .unwrap();
-        assert_eq!(body["params"]["actions"][0]["key"], "mine");
-        assert_eq!(body["params"]["actions"][1]["params"]["actions"][0]["key"], "mine", "nested multi");
-        let body = relay_body(r#"{"action":"deckNames","version":6,"key":"theirs"}"#, None).unwrap();
-        assert_eq!(body["key"], "theirs", "without a key of Kimochi's, the extension's own is sent");
+    fn the_relay_carries_only_ankiconnect_requests_as_the_extension_wrote_them() {
+        let sent = r#"{"action":"multi","version":6,"params":{"actions":[{"action":"version","key":"theirs"}]},"key":"theirs"}"#;
+        let body = relay_body(sent).unwrap();
+        assert_eq!(body, serde_json::from_str::<Value>(sent).unwrap(), "the extension's key and API version are kept");
         for refused in ["", "[]", "{}", r#"{"action":1}"#, "not json"] {
-            assert!(relay_body(refused, None).is_err(), "{refused}");
+            assert!(relay_body(refused).is_err(), "{refused}");
         }
     }
 
@@ -560,14 +532,15 @@ mod tests {
     #[tokio::test]
     async fn the_relay_sends_no_origin_and_returns_ankiconnects_answer() {
         let (anki, seen) = serve(fake_ankiconnect(Some("secret")));
-        let reply = relay(&anki, Some("secret"), r#"{"action":"version","version":2,"params":{}}"#).await.unwrap();
+        let reply = relay(&anki, r#"{"action":"version","version":2,"params":{},"key":"secret"}"#).await.unwrap();
         assert_eq!(reply.status, 200);
         assert_eq!(serde_json::from_str::<Value>(&reply.body).unwrap()["result"], 6);
         let request = seen.lock().unwrap().last().cloned().unwrap();
         assert!(!request.to_ascii_lowercase().contains("\r\norigin:"), "{request}");
         assert!(request.contains(r#""key":"secret""#), "{request}");
-        assert!(relay(&anki, None, "{}").await.is_err());
-        assert!(relay(&closed_port(), None, r#"{"action":"version"}"#).await.unwrap_err().contains("not answering"));
+        assert!(relay(&anki, "{}").await.is_err());
+        assert!(relay("localhost:8765", r#"{"action":"version"}"#).await.is_err(), "the extension's address is validated");
+        assert!(relay(&closed_port(), r#"{"action":"version"}"#).await.unwrap_err().contains("not answering"));
     }
 
     /// Against a real AnkiConnect, opt-in: `KIMOCHI_ANKI_E2E_URL=http://127.0.0.1:8771
@@ -595,11 +568,18 @@ mod tests {
         let refused = client().post(&url).header("Origin", "tauri://localhost").json(&direct).send().await.unwrap();
         assert_eq!(refused.status().as_u16(), 403, "a default webCorsOriginList refuses tauri://localhost");
 
-        // Yomitan's calls (anki-connect.js, API version 2), relayed; the extension's key is not needed.
-        let relayed = |body: Value| {
+        // Yomitan's calls (anki-connect.js, API version 2), relayed with the key the extension puts in.
+        let relayed = |mut body: Value| {
             let url = url.clone();
             async move {
-                let reply = relay(&url, key, &body.to_string()).await.unwrap();
+                // As the extensions do: AnkiConnect checks the key on each action of a `multi` too.
+                if let Some(key) = key {
+                    body["key"] = json!(key);
+                    for action in body["params"]["actions"].as_array_mut().into_iter().flatten() {
+                        action["key"] = json!(key);
+                    }
+                }
+                let reply = relay(&url, &body.to_string()).await.unwrap();
                 assert_eq!(reply.status, 200, "{}", reply.body);
                 let value: Value = serde_json::from_str(&reply.body).unwrap();
                 // Version 6 wraps the result in {result, error}; version 2 (Yomitan's) does not.

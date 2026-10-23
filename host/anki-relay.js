@@ -7,9 +7,9 @@
  * Windows, `hachidori://localhost`, …), and AnkiConnect's default `webCorsOriginList`
  * (`["http://localhost"]`) answers those with HTTP 403, so Yomitan and Hachidori could not add a
  * card until the user edited AnkiConnect's config. A request from Rust carries no Origin, which
- * AnkiConnect always admits. Rust also sends it to the address in Settings → Anki (whatever the
- * extension's own setting says) and puts in Kimochi's API key when one is set, so every route
- * agrees on one address and one key.
+ * AnkiConnect always admits. Nothing else changes: the request goes to the address the extension
+ * asked for, with the body (and the API key in it) the extension wrote, so its own Anki settings
+ * stay in charge.
  *
  * A request is AnkiConnect's when it is a POST whose body is AnkiConnect's classic envelope: a
  * JSON object with a string `action`, a numeric `version` and nothing but `params` and `key`
@@ -53,16 +53,16 @@ export function ankiConnectBody(method, body) {
 }
 
 /**
- * Send `body` (from `ankiConnectBody`) through Rust; resolves with AnkiConnect's answer as a
+ * Send `body` (from `ankiConnectBody`) to `url` through Rust; resolves with AnkiConnect's answer as a
  * `Response` of `realm`, and rejects like `fetch` (TypeError, or AbortError) when it cannot be
  * reached. The reason goes to `report`, since the extension only shows "connection failure".
  */
-export async function relayAnkiConnect(body, { signal = null, realm = globalThis, report = () => {} } = {}) {
+export async function relayAnkiConnect(url, body, { signal = null, realm = globalThis, report = () => {} } = {}) {
   const aborted = () => new realm.DOMException('The operation was aborted.', 'AbortError')
   if (signal?.aborted) throw aborted()
   let reply
   try {
-    const call = invoke('anki_connect_relay', { body })
+    const call = invoke('anki_connect_relay', { url: String(url), body })
     reply = signal
       ? await Promise.race([
           call,

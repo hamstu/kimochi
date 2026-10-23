@@ -52,7 +52,7 @@ pub fn background_url(id: &str) -> String {
 /// gets Tauri's IPC like any app page, so everything else is refused before it reaches a
 /// command: the host there only relays to the overlay's hub (`ext_relay`), reports
 /// diagnostics (`report`) and sends the extension's AnkiConnect requests on
-/// (`anki_connect_relay`, which only ever reaches the user's AnkiConnect address). Storage,
+/// (`anki_connect_relay`, which only carries AnkiConnect's request shape). Storage,
 /// capture and window commands are the hub's, in the overlay. Plugin commands are not app
 /// commands: `capabilities/extension-windows.json` grants these windows event listening and the
 /// scoped plugin-http and nothing more.

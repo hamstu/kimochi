@@ -33,7 +33,7 @@ test('Windows extension backgrounds keep native IPC outside the HTTP plugin, and
   assert.equal(pluginCalls.length, 1)
   assert.equal(pluginCalls[0][0], 'http://192.0.2.42:9000/upload')
   assert.equal(pluginCalls[0][1].method, 'POST')
-  assert.deepEqual(JSON.parse(JSON.stringify(relayCalls)), [['anki_connect_relay', { body: '{"action":"version","version":6,"key":"k"}' }]])
+  assert.deepEqual(JSON.parse(JSON.stringify(relayCalls)), [['anki_connect_relay', { url: 'http://127.0.0.1:8765/', body: '{"action":"version","version":6,"key":"k"}' }]])
   assert.equal(answer.result, 6)
 })
 

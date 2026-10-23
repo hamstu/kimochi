@@ -1,38 +1,17 @@
 ---
 title: Anki
-description: "Make Anki cards from the dictionary pop-up through AnkiConnect: the connection in Settings → Anki, and your dictionary engine's own mining or Kimochi's card builder."
+description: "Make Anki cards from the dictionary pop-up through AnkiConnect: your dictionary engine's own mining, or Kimochi's card builder with the Yomitan API."
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
 
 Cards reach [Anki](https://apps.ankiweb.net/) through the
 [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, so Anki has to be running with
-AnkiConnect installed. Everything about it is in **Settings → Anki**, whichever dictionary you use.
+AnkiConnect installed. **Settings → Anki** shows how cards are made with the dictionary you use.
 
-## The AnkiConnect connection
-
-The top of **Settings → Anki** shows whether Kimochi can reach AnkiConnect. It checks again every
-few seconds while the page is open; **Check** asks at once.
-
-| Setting | Default | What it does |
-| --- | --- | --- |
-| **Address** | `http://127.0.0.1:8765` | Where AnkiConnect listens. Change it if you changed AnkiConnect's `webBindPort`; a port number on its own (`8770`) is enough. |
-| **API key** | None | Only if AnkiConnect's config sets an `apiKey`. Kept on this computer and never synced. |
-
-Kimochi sends every AnkiConnect request to this address: its own, and those of Built-in Yomitan
-and Hachidori. The AnkiConnect address in those dictionaries' own settings is not used. Kimochi's
-API key, when you set one, is used for their requests too.
-
-| Status | What to do |
-| --- | --- |
-| **Connected** | Nothing. It shows the AnkiConnect API version. |
-| **Not running** | Open Anki, and check that AnkiConnect is installed. |
-| **Wrong port** | Nothing answers at the address, or something that isn't AnkiConnect does. If AnkiConnect answers at the default address instead, a button switches to it. |
-| **API key needed** / **Wrong API key** | AnkiConnect has an `apiKey`: enter the same key. |
-| **Not answering** | Anki is busy, for example with a dialog open. |
-
-You don't need to change AnkiConnect's `webCorsOriginList` for Kimochi. Its requests are sent
-from the app itself, not from a web page, and AnkiConnect accepts those with its default settings.
+You don't need to change AnkiConnect's `webCorsOriginList` for any of them. Kimochi sends every
+AnkiConnect request from the app itself, not from a web page, and AnkiConnect accepts those with
+its default settings.
 
 ## Who makes the card
 
@@ -45,6 +24,27 @@ for the engine you use, with a button to its Anki settings.
 | **Hachidori** | Hachidori | **Open Hachidori Anki settings**: its **Templates** set the deck, note type and fields. |
 | **10ten** | Nobody: 10ten doesn't make Anki cards. | |
 | **Yomitan API** | Kimochi | **Settings → Anki**, below. |
+
+Built-in Yomitan and Hachidori keep their own Anki settings, the AnkiConnect address and API key
+included: set those there, as you would in the browser.
+
+## The AnkiConnect connection (Yomitan API)
+
+With the Yomitan API, the top of **Settings → Anki** shows whether Kimochi can reach AnkiConnect.
+It checks again every few seconds while the page is open; **Check** asks at once.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **Address** | `http://127.0.0.1:8765` | Where AnkiConnect listens. Change it if you changed AnkiConnect's `webBindPort`; a port number on its own (`8770`) is enough. |
+| **API key** | None | Only if AnkiConnect's config sets an `apiKey`. Kept on this computer and never synced. |
+
+| Status | What to do |
+| --- | --- |
+| **Connected** | Nothing. It shows the AnkiConnect API version. |
+| **Not running** | Open Anki, and check that AnkiConnect is installed. |
+| **Wrong port** | Nothing answers at the address, or something that isn't AnkiConnect does. If AnkiConnect answers at the default address instead, a button switches to it. |
+| **API key needed** / **Wrong API key** | AnkiConnect has an `apiKey`: enter the same key. |
+| **Not answering** | Anki is busy, for example with a dialog open. |
 
 ## Kimochi's card builder (Yomitan API)
 

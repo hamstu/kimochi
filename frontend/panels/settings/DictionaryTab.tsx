@@ -268,13 +268,13 @@ function KimochiPopupSections({ settings }: { settings: Settings }): ReactNode {
   )
 }
 
-/** The way to Settings → Anki, where AnkiConnect and each engine's way of adding cards are set. */
+/** The way to Settings → Anki, where each engine's way of adding cards is (and the Yomitan API's AnkiConnect). */
 function AnkiLink({ engine }: { engine?: DictionaryEngine }): ReactNode {
   const description =
     engine === 'tenten'
       ? '10ten does not add Anki cards; Settings → Anki says which dictionaries do.'
       : engine
-        ? `The AnkiConnect connection, and how ${DICTIONARY_ENGINES[engine].name} adds cards, are in Settings → Anki.`
+        ? `How ${DICTIONARY_ENGINES[engine].name} adds Anki cards is in Settings → Anki.`
         : 'The AnkiConnect connection, and the deck, note type and fields of the cards this pop-up adds, are in Settings → Anki.'
   const open = (): void => {
     setSetting('settingsActiveTab', 'anki').catch((error) =>

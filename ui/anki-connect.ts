@@ -3,8 +3,8 @@
  * (`anki_connect_status`, src-tauri/src/reader/ankiconnect.rs), and how each dictionary engine adds
  * cards. No React and no Tauri, so scripts/anki-connect.test.mjs can pin it.
  *
- * Every AnkiConnect request Kimochi makes, its own and the dictionary extensions', leaves from Rust
- * to the one address set here, without an Origin header (host/anki-relay.js). AnkiConnect admits a
+ * Every AnkiConnect request leaves from Rust without an Origin header: Kimochi's own to the address
+ * set here, the dictionary extensions' to the one in their own settings (host/anki-relay.js). AnkiConnect admits a
  * request without an Origin whatever its `webCorsOriginList` says (26.10's web.py `allowOrigin`, and
  * every release before it), so no setup needs Kimochi's origins added there, and none is suggested:
  * a refusal (`blocked`) comes from something else at that address.

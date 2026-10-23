@@ -1,15 +1,14 @@
 /**
- * Settings → Anki: shown whatever the dictionary engine. Two parts:
+ * Settings → Anki: shown whatever the dictionary engine, for how cards are added with it
+ * (`ANKI_ROUTE`):
  *
- *  - AnkiConnect, for every route: the connection, checked live (`anki_connect_status`, every few
- *    seconds while this page is open, and on Check), the address and the optional API key. Every
- *    AnkiConnect request Kimochi makes, its own and the dictionary extension's, goes to this
- *    address from Rust (COMMANDS.md "AnkiConnect"); the address in an extension's own settings is
- *    not used.
- *  - How cards are added with the engine in use (`ANKI_ROUTE`): the Yomitan API pop-up is
- *    Kimochi's own, so its card builder (`AnkiSetup`) is here; Built-in Yomitan and Hachidori add
- *    cards from their pop-ups with their own Anki settings, which a button opens at `#anki`; 10ten
- *    adds none.
+ *  - The Yomitan API pop-up is Kimochi's own, so its AnkiConnect connection is here, checked live
+ *    (`anki_connect_status`, every few seconds while this page is open, and on Check), with the
+ *    address and the optional API key, and so is its card builder (`AnkiSetup`).
+ *  - Built-in Yomitan and Hachidori add cards from their pop-ups with their own Anki settings,
+ *    AnkiConnect address and key included, which a button opens at `#anki`. Kimochi only sends
+ *    their requests on from Rust, unchanged (COMMANDS.md "AnkiConnect").
+ *  - 10ten adds none.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
@@ -129,6 +128,20 @@ function AnkiSections({
   settings: Settings
   engine: DictionaryEngine
 }): ReactNode {
+  // Only Kimochi's own pop-up talks to AnkiConnect with Kimochi's settings.
+  if (ANKI_ROUTE[engine] !== 'kimochi') {
+    return <CardsSection settings={settings} engine={engine} connection={0} />
+  }
+  return <ConnectedSections settings={settings} engine={engine} />
+}
+
+function ConnectedSections({
+  settings,
+  engine
+}: {
+  settings: Settings
+  engine: DictionaryEngine
+}): ReactNode {
   const saved = settings.ankiConnectUrl || DEFAULT_ANKI_CONNECT_URL
   const { status, checking, check, epoch } = useAnkiConnection(saved, settings.ankiConnectKey)
   return (
@@ -195,17 +208,9 @@ function ConnectionSection({
       ? status.suggestion
       : null
   const name = DICTIONARY_ENGINES[engine].name
-  const route = ANKI_ROUTE[engine]
 
   return (
-    <SettingsSection
-      title="AnkiConnect"
-      description={
-        route === 'engine'
-          ? `Kimochi sends every AnkiConnect request here, its own and ${name}'s.`
-          : 'Kimochi sends every AnkiConnect request here.'
-      }
-    >
+    <SettingsSection title="AnkiConnect" description={`Where the ${name} pop-up sends its cards.`}>
       <SettingsRow
         label={
           <span className="anki-connection-label">
@@ -332,11 +337,12 @@ function CardsSection({
     engine === 'yomitan'
       ? `${name} adds the card from its pop-up once Enable Anki integration is on in its Anki settings, which also hold the deck, note type and fields.`
       : `${name} adds the card from its pop-up, using the Templates in its Anki settings for the deck, note type and fields.`
+  const where = `The AnkiConnect address and API key are set there too. You don't need to change AnkiConnect's webCorsOriginList.`
   return (
     <SettingsSection title={`Adding cards with ${name}`}>
       <SettingsRow
         label={`${name}'s Anki settings`}
-        description={`${how} The AnkiConnect address there is not used: Kimochi sends ${name}'s requests to the address above, with the API key above when one is set.`}
+        description={`${how} ${where}`}
       >
         <Button
           size="sm"

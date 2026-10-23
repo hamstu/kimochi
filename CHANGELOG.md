@@ -11,16 +11,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- Anki has its own page in Settings, whatever dictionary you use. It shows whether Kimochi can reach
-  AnkiConnect (and why not: Anki not running, a wrong port, an API key needed), and explains how
-  your dictionary adds cards, with a button to its Anki settings.
-
+- Anki has its own page in Settings, whatever dictionary you use. It explains how your dictionary
+  adds cards, with a button to its Anki settings. With the Yomitan API it also shows whether
+  Kimochi can reach AnkiConnect (and why not: Anki not running, a wrong port, an API key needed).
 - Built-in Yomitan and Hachidori can add Anki cards with AnkiConnect's default settings: there's
   no longer any need to edit its `webCorsOriginList`.
 
-- AnkiConnect on another port works for every dictionary, and an AnkiConnect API key can be set.
-  Kimochi uses the address and key in Settings → Anki for all Anki requests, including Yomitan's
-  and Hachidori's.
+- AnkiConnect on another port, or with an API key, works for every dictionary. Built-in Yomitan and
+  Hachidori use the address and key in their own Anki settings; the Yomitan API uses the ones in
+  Settings → Anki.
 
 - Built-in Yomitan is updated to 26.10.22.0. With the new AnkiConnect (26.10), a word already in
   Anki under another note type no longer hides the pop-up's Anki buttons.
