@@ -11,6 +11,7 @@
  *   when `dictionary_engine_apply` reloads the window.
  */
 import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
 import {
   DICTIONARY_ENGINE_KEY,
   DICTIONARY_ENGINES,
@@ -118,6 +119,41 @@ export function dictionaryPanelTitle(engine: DictionaryEngine): string {
 
 /** Shows the `dictionary` panel: the active engine's own settings. */
 export const openDictionarySettings = (): Promise<unknown> => panel('dictionary', 'show')
+
+const SECTION_KEY = 'kimochi.dictionarySettingsSection'
+/** How long a section request waits for a dictionary window that is still being built. */
+const SECTION_TTL_MS = 30000
+export const DICTIONARY_SECTION_EVENT = 'dictionary:show-section'
+
+/**
+ * Shows the `dictionary` panel at one section of the engine's settings page, by its fragment
+ * (`anki`: Yomitan's and Hachidori's pages both have `#anki`). The request is left in the shared
+ * `localStorage` for a window that is created by this show, and sent as an event to one that is
+ * already open; `takeDictionarySection` consumes it.
+ */
+export async function openDictionarySettingsSection(section: string): Promise<void> {
+  try {
+    localStorage.setItem(SECTION_KEY, JSON.stringify({ section, at: Date.now() }))
+  } catch {
+    // Without storage, an open window still gets the event; a new one opens at the top.
+  }
+  await openDictionarySettings()
+  await emit(DICTIONARY_SECTION_EVENT, { section })
+}
+
+/** The section asked for by `openDictionarySettingsSection`, once, if it is recent. */
+export function takeDictionarySection(): string | null {
+  try {
+    const raw = localStorage.getItem(SECTION_KEY)
+    if (!raw) return null
+    localStorage.removeItem(SECTION_KEY)
+    const { section, at } = JSON.parse(raw) as { section?: unknown; at?: unknown }
+    if (typeof section !== 'string' || !/^[\w-]+$/.test(section)) return null
+    return typeof at === 'number' && Date.now() - at < SECTION_TTL_MS ? section : null
+  } catch {
+    return null
+  }
+}
 
 /** The engine the setting names, live. */
 export function useDictionaryEngine(): [DictionaryEngine, YomitanSettings, (value: YomitanSettings) => Promise<void>] {

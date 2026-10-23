@@ -1,9 +1,16 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS host adapter. */
 import { observeFrame } from './observe.js'
 import { fetch as rustFetch } from '@tauri-apps/plugin-http'
+import { ankiConnectBody, relayAnkiConnect } from './anki-relay.js'
 const hub = window.__extensionHost
 hub.nativeFetch = window.__spikeNativeFetch ?? window.fetch.bind(window)
-hub.fetchRemote = (input, init) => rustFetch(input, init ? { ...init } : undefined)
+// Yomitan's AnkiConnect calls go through Rust without this page's Origin (anki-relay.js).
+hub.fetchRemote = (input, init) => {
+  // A Request (which has `arrayBuffer`) carries its body in a stream: never Yomitan's AnkiConnect.
+  const anki = typeof input?.arrayBuffer === 'function' ? null : ankiConnectBody(init?.method, init?.body)
+  if (anki) return relayAnkiConnect(anki, { signal: init?.signal, report: (value) => hub.log?.(value) })
+  return rustFetch(input, init ? { ...init } : undefined)
+}
 // Installed in every extension frame before its original scripts execute.
 hub.installNetwork = (win) => {
   if (win.__spikeNetworkInstalled) return

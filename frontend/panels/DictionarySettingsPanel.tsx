@@ -13,18 +13,22 @@
  * The title follows the SETTING; the page waits until this document's host is that engine's.
  * Navigation requests (an extension opening another of its pages) arrive as the window event
  * `kimochi-dictionary-navigate`, or wait in `__kimochiExtensionHost.pendingNavigate` when they
- * came before React mounted; only URLs on the engine's own origin are followed.
+ * came before React mounted; only URLs on the engine's own origin are followed. Settings → Anki
+ * opens the page at its `#anki` section (`openDictionarySettingsSection`).
  */
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
+import { listen } from '@tauri-apps/api/event'
 import { Button, Callout, Spinner } from '@kit'
 import { nativeError, openSettings } from '../bridge/tauri'
 import {
   DICTIONARY_ENGINES,
+  DICTIONARY_SECTION_EVENT,
   NO_ENGINE,
   documentEngine,
   extensionHost,
   extensionOrigin,
   isExtensionEngine,
+  takeDictionarySection,
   useDictionaryEngine,
   type DictionaryEngine
 } from '../bridge/dictionaryEngine'
@@ -87,10 +91,33 @@ export default function DictionarySettingsPanel(): JSX.Element {
 function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'> }): JSX.Element {
   const name = DICTIONARY_ENGINES[engine].name
   const [loaded, setLoaded] = useState(false)
+  const frame = useRef<HTMLIFrameElement>(null)
   const [src, setSrc] = useState<string | null>(() => {
     const pending = acceptNavigation(engine, extensionHost()?.pendingNavigate)
-    return pending ?? optionsUrl(engine)
+    const section = takeDictionarySection()
+    const options = optionsUrl(engine)
+    return section && options ? `${options}#${section}` : (pending ?? options)
   })
+
+  // A section asked for while this page is open: the options page, scrolled to it. Assigning the
+  // frame's location (allowed across origins) re-scrolls even when the fragment is already there.
+  useEffect(() => {
+    const options = optionsUrl(engine)
+    if (!options) return
+    const pending = listen<{ section?: unknown }>(DICTIONARY_SECTION_EVENT, (event) => {
+      // The event carries the section; the stored copy was for a window still being built.
+      takeDictionarySection()
+      const section = event.payload?.section
+      if (typeof section !== 'string' || !/^[\w-]+$/.test(section)) return
+      const target = new URL(`${options}#${section}`, window.location.href).href
+      const view = frame.current?.contentWindow
+      if (view && frame.current?.dataset.loaded) view.location.href = target
+      else setSrc(target)
+    })
+    return () => {
+      void pending.then((off) => off())
+    }
+  }, [engine])
 
   useEffect(() => {
     const onNavigate = (event: Event): void => {
@@ -133,6 +160,7 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
         </div>
       )}
       <iframe
+        ref={frame}
         title={`${name} settings`}
         src={src}
         className="dictionary-settings-frame"
@@ -172,7 +200,8 @@ function YomitanApiNote(): JSX.Element {
     <div className="dictionary-settings dictionary-settings-note">
       <p className="k-description">
         The Yomitan API uses the dictionaries in your browser&apos;s Yomitan, so there is nothing to
-        manage here. Its connection, pop-up size, audio and Anki cards are in Settings → Dictionary.
+        manage here. Its connection, pop-up size and audio are in Settings → Dictionary, and its Anki
+        cards in Settings → Anki.
       </p>
       <div>
         <Button

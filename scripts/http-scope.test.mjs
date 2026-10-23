@@ -40,7 +40,7 @@ test('the frontend HTTP scope matches the Rust capability', () => {
   )
 })
 
-test('AnkiConnect allows remote hosts on its port, with the same decision in panels and extension hosts', async () => {
+test('AnkiConnect is outside the plugin scope at every address: it is reached from Rust only', async () => {
   const { scopeFromCapability, scopeAllows } = await import('./ext-dev-server.mjs')
   const scope = scopeFromCapability(capability)
   const bundled = await build({
@@ -51,13 +51,15 @@ test('AnkiConnect allows remote hosts on its port, with the same decision in pan
     } }]
   })
   const { isWithinHttpScope } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`)
-  for (const url of ['http://192.0.2.42:8765/', 'http://anki.example:8765/', 'http://localhost:8765/', 'http://127.0.0.1:8765/']) {
-    assert.equal(scopeAllows(scope, url), true, url)
-    assert.equal(isWithinHttpScope(url), true, url)
-  }
-  for (const url of ['http://192.0.2.42:8766/', 'http://anki.example/', 'https://example.com/', 'file:///tmp/data']) {
+  // plugin-http would send the webview's Origin, which AnkiConnect's default config refuses
+  // (HTTP 403); the anki_* commands and anki_connect_relay (host/anki-relay.js) send none.
+  for (const url of ['http://127.0.0.1:8765/', 'http://localhost:8765/', 'http://192.0.2.42:8765/', 'http://127.0.0.1:8770/']) {
     assert.equal(scopeAllows(scope, url), false, url)
     assert.equal(isWithinHttpScope(url), false, url)
+  }
+  for (const url of ['http://127.0.0.1:19633/', 'https://github.com/x']) {
+    assert.equal(scopeAllows(scope, url), true, url)
+    assert.equal(isWithinHttpScope(url), true, url)
   }
 })
 

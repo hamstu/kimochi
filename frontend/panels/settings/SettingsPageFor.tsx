@@ -21,6 +21,7 @@ const PAGES: Record<SettingsTabName, ComponentType> = {
   ocr: page('ocr'),
   log: page('log'),
   dictionary: page('dictionary'),
+  anki: page('anki'),
   assist: page('assist'),
   controls: page('controls'),
   account: page('account'),

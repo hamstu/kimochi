@@ -6,7 +6,8 @@
  *
  * URL parameters:
  *   ?window=<label>  panel window label (log, settings, diagnostics, yomitan)
- *   ?tab=<id>        settings tab (general, sources, ocr, log, dictionary, assist, controls, account)
+ *   ?tab=<id>        settings tab (general, sources, ocr, log, dictionary, anki, assist, controls,
+ *                    account)
  *   ?view=notebook   main window: start on the Notebook view
  *   ?sidebar=0       main window: sidebar hidden
  *   ?theme=light|dark|system  seeds the `appearance` setting (default: system, i.e. the browser's
@@ -40,6 +41,8 @@
  *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
  *                    paused, failed, verifying, ready
  *   ?model=<state>   OCR model downloads (preview-models.ts)
+ *   ?anki=<state>    Settings → Anki's AnkiConnect check: connected (default), notrunning, wrongport,
+ *                    notanki, keyrequired, keyrejected, blocked, timeout
  *   ?update=<state>  self-updates (preview-updates.ts): none (default), idle, checking, available,
  *                    downloading, ready, failed; the sidebar notice and Settings → About → Updates
  *   ?whatsnew=1      main window: What's new open on load (the sample changelog in preview-updates.ts;
@@ -159,7 +162,9 @@ const settings: Record<string, unknown> = {
   superTexthooker: {
     inputSource: params.get('input') ?? 'ocr',
     deeplApiKey: 'preview-demo-key',
-    fontSizePx: 16
+    fontSizePx: 16,
+    // `?anki=wrongport`: an address AnkiConnect is not on (it is on the default one).
+    ...(params.get('anki') === 'wrongport' ? { ankiConnectUrl: 'http://127.0.0.1:8770' } : {})
   },
   nativeWindowPinned: { log: true },
   texthookerSourceSessions: { 'steins;gate': SESSION_IDS.steinsGate },
@@ -190,6 +195,31 @@ const settings: Record<string, unknown> = {
 function publish(key: string, value: unknown): void {
   settings[key] = value
   void emit('settings:changed', { key, value })
+}
+
+// ---------------------------------------------------------------- anki
+
+/** `?anki=`: what Settings → Anki's connection check finds (default: connected). */
+function previewAnkiStatus(url: string): Record<string, unknown> {
+  const suggestion = 'http://127.0.0.1:8765'
+  switch (params.get('anki')) {
+    case 'notrunning':
+      return { state: 'notRunning', url, suggestion: null }
+    case 'wrongport':
+      return { state: 'notRunning', url, suggestion }
+    case 'notanki':
+      return { state: 'notAnkiConnect', url, detail: 'HTTP 404', suggestion: null }
+    case 'keyrequired':
+      return { state: 'keyRequired', url }
+    case 'keyrejected':
+      return { state: 'keyRejected', url }
+    case 'blocked':
+      return { state: 'blocked', url, status: 403 }
+    case 'timeout':
+      return { state: 'timeout', url }
+    default:
+      return { state: 'connected', url, version: 6, latencyMs: 12, keyRequired: false }
+  }
 }
 
 // ---------------------------------------------------------------- platform
@@ -815,6 +845,8 @@ const HANDLERS: Record<string, Handler> = {
   anki_gui_browse: ok,
   anki_store_media_file: () => 'preview.mp3',
   anki_add_note: () => 1,
+  anki_connect_status: (a) => previewAnkiStatus((a?.url as string | null) ?? 'http://127.0.0.1:8765'),
+  anki_connect_relay: () => ({ status: 200, body: '{"result":6,"error":null}' }),
 
   // translate / explain / vndb
   deepl_translate: () => '(Preview) Machine translation would appear here.',

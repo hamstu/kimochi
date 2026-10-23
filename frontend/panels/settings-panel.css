@@ -52,6 +52,11 @@
 .settings-url { display: flex; align-items: center; gap: var(--k-space-2); width: 100%; }
 .settings-url > .k-field { flex: 1; min-width: 0; }
 
+/* Settings → Anki: the connection row's label with its dot; the Yomitan API's card builder keeps
+   the page's section spacing (its wrapper only scopes the Log's styles). */
+.anki-connection-label { display: inline-flex; align-items: center; gap: var(--k-space-2); }
+.anki-kimochi-sections { display: contents; }
+
 /* Page-level callout above the first section. */
 .settings-page-callout { margin-top: calc(var(--k-space-2) * -1); }
 

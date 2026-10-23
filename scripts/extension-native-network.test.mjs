@@ -13,23 +13,55 @@ const built = await build({
   } }]
 })
 
-test('Windows extension backgrounds keep native IPC outside the HTTP plugin, without losing remote Anki requests', async () => {
-  const nativeCalls = [], pluginCalls = []
-  const context = vm.createContext({ URL, nativeCalls, pluginCalls })
+test('Windows extension backgrounds keep native IPC outside the HTTP plugin, and send AnkiConnect requests through Rust', async () => {
+  const nativeCalls = [], pluginCalls = [], relayCalls = []
+  const context = vm.createContext({ URL, Response, TextDecoder, nativeCalls, pluginCalls, relayCalls })
   vm.runInContext(`window = globalThis; location = {href:'http://hachidori.localhost/__kimochi/ext-background.html',origin:'http://hachidori.localhost'};
-    document = {baseURI:location.href}; __TAURI_INTERNALS__ = {}; __KIMOCHI_PLATFORM__ = {os:'windows'};
+    document = {baseURI:location.href}; __KIMOCHI_PLATFORM__ = {os:'windows'};
+    __TAURI_INTERNALS__ = {invoke: (command, args) => { relayCalls.push([command, args]); return Promise.resolve({status: 200, body: '{"result":6,"error":null}'}) }};
     fetch = (...args) => { nativeCalls.push(args); return Promise.resolve({local:true}) };`, context)
   vm.runInContext(built.outputFiles[0].text, context)
-  await vm.runInContext(`(async () => {
+  const answer = await vm.runInContext(`(async () => {
     network.installDirectNetwork(window, {denied:[],report:()=>{}});
     await fetch('http://ipc.localhost/ext_relay', {method:'POST',body:'{}'});
     await fetch(new URL('http://capture.localhost/live/1'));
-    await fetch('http://192.0.2.42:8765/', {method:'POST',body:'{"action":"version","version":6}'});
+    await fetch('http://192.0.2.42:9000/upload', {method:'POST',body:'{"name":"x"}'});
+    const anki = await fetch('http://127.0.0.1:8765/', {method:'POST',body:'{"action":"version","version":6,"key":"k"}'});
+    return anki.json();
   })()`, context)
   assert.deepEqual(nativeCalls.map(([url]) => String(url)), ['http://ipc.localhost/ext_relay', 'http://capture.localhost/live/1'])
   assert.equal(pluginCalls.length, 1)
-  assert.equal(pluginCalls[0][0], 'http://192.0.2.42:8765/')
+  assert.equal(pluginCalls[0][0], 'http://192.0.2.42:9000/upload')
   assert.equal(pluginCalls[0][1].method, 'POST')
+  assert.deepEqual(JSON.parse(JSON.stringify(relayCalls)), [['anki_connect_relay', { body: '{"action":"version","version":6,"key":"k"}' }]])
+  assert.equal(answer.result, 6)
+})
+
+test('AnkiConnect requests are told apart by their envelope', async () => {
+  const relay = await build({
+    entryPoints: [fileURLToPath(new URL('../host/anki-relay.js', import.meta.url))],
+    bundle: true, write: false, format: 'iife', globalName: 'relay'
+  })
+  const context = vm.createContext({ URL, TextDecoder })
+  vm.runInContext('window = globalThis', context)
+  vm.runInContext(relay.outputFiles[0].text, context)
+  const relayed = (method, body) => vm.runInContext(`relay.ankiConnectBody(${JSON.stringify(method)}, ${JSON.stringify(body)})`, context)
+  // Yomitan (anki-connect.js `_invoke`) and Hachidori (anki.js) bodies.
+  assert.ok(relayed('POST', '{"action":"deckNames","params":{},"version":2}'))
+  assert.ok(relayed('post', '{"action":"multi","version":6,"params":{"actions":[]},"key":"k"}'))
+  for (const [method, body] of [
+    ['GET', '{"action":"version","version":6}'],
+    ['POST', '{"action":"version"}'],
+    ['POST', '{"action":"version","version":"6"}'],
+    ['POST', '{"action":"version","version":6,"other":1}'],
+    ['POST', '{"action":"version","version":6,"params":1}'],
+    ['POST', '[{"action":"version","version":6}]'],
+    ['POST', '{"jsonrpc":"2.0","method":"version","id":1}'],
+    ['POST', 'action=version'],
+    ['POST', null]
+  ]) {
+    assert.equal(relayed(method, body), null, `${method} ${body}`)
+  }
 })
 
 test('Windows extension frames also leave IPC and capture on native fetch', async () => {

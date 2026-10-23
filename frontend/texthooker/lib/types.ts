@@ -102,6 +102,8 @@ export interface Settings {
   // Anki mining (v3)
   ankiEnabled: boolean;
   ankiConnectUrl: string;
+  /** AnkiConnect's apiKey, when it has one. Private: never synced (profile.rs `is_private`). */
+  ankiConnectKey: string;
   ankiDeckName: string | null;
   ankiModelName: string | null;
   /** Cached field order from AnkiConnect for the chosen model; kept fresh by
@@ -189,6 +191,7 @@ export const SETTINGS_DEFAULTS: Settings = {
 
   ankiEnabled: false,
   ankiConnectUrl: "http://127.0.0.1:8765",
+  ankiConnectKey: "",
   ankiDeckName: null,
   ankiModelName: null,
   ankiModelFields: [],

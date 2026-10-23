@@ -1,6 +1,6 @@
 {
   "identifier": "kimochi-network",
-  "description": "Outbound HTTP for the local Yomitan API, and the dictionary hosts the dictionary engines download from (Yomitan, Hachidori, 10ten) \u2014 the last of which the dictionary settings window needs for imports. Deliberately not a general internet grant.",
+  "description": "Outbound HTTP for the local Yomitan API, and the dictionary hosts the dictionary engines download from (Yomitan, Hachidori, 10ten) \u2014 the last of which the dictionary settings window needs for imports. Deliberately not a general internet grant. AnkiConnect is not here: it is reached from Rust only (the anki_* commands and anki_connect_relay), at whatever address Settings \u2192 Anki names, because plugin-http would send the webview's Origin, which AnkiConnect refuses.",
   "windows": [
     "overlay",
     "log",
@@ -18,9 +18,6 @@
         },
         {
           "url": "http://127.0.0.1:19633/**"
-        },
-        {
-          "url": "http://*:8765/**"
         },
         {
           "url": "https://github.com/**"

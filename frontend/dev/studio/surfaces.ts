@@ -40,6 +40,7 @@ const SETTINGS_TABS = opts(
   ['ocr', 'OCR & Overlay'],
   ['log', 'Log'],
   ['dictionary', 'Dictionary'],
+  ['anki', 'Anki'],
   ['assist', 'Translation & AI'],
   ['controls', 'Shortcuts & Controls'],
   ['account', 'Account'],

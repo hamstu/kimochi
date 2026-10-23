@@ -50,11 +50,14 @@ pub fn background_url(id: &str) -> String {
 /// The app commands an extension window may invoke. Its top document runs the extension's
 /// own background script next to the host, and a top-level document on a registered scheme
 /// gets Tauri's IPC like any app page, so everything else is refused before it reaches a
-/// command: the host there only relays to the overlay's hub (`ext_relay`) and reports
-/// diagnostics (`report`). Storage, capture and window commands are the hub's, in the
-/// overlay. Plugin commands are not app commands: `capabilities/extension-windows.json`
-/// grants these windows event listening and the scoped plugin-http and nothing more.
-pub const EXTENSION_WINDOW_COMMANDS: &[&str] = &["ext_relay", "ext_relay_listen", "ext_relay_bytes", "report"];
+/// command: the host there only relays to the overlay's hub (`ext_relay`), reports
+/// diagnostics (`report`) and sends the extension's AnkiConnect requests on
+/// (`anki_connect_relay`, which only ever reaches the user's AnkiConnect address). Storage,
+/// capture and window commands are the hub's, in the overlay. Plugin commands are not app
+/// commands: `capabilities/extension-windows.json` grants these windows event listening and the
+/// scoped plugin-http and nothing more.
+pub const EXTENSION_WINDOW_COMMANDS: &[&str] =
+    &["ext_relay", "ext_relay_listen", "ext_relay_bytes", "report", "anki_connect_relay"];
 
 /// The invoke guard's decision for `command` from the webview `label`.
 pub fn command_allowed(label: &str, command: &str) -> Result<(), String> {
@@ -478,7 +481,7 @@ mod tests {
 
     #[test]
     fn extension_windows_may_only_relay_and_report() {
-        for command in ["ext_relay", "ext_relay_listen", "ext_relay_bytes", "report"] {
+        for command in ["ext_relay", "ext_relay_listen", "ext_relay_bytes", "report", "anki_connect_relay"] {
             assert!(command_allowed("ext-hachidori", command).is_ok(), "{command}");
             assert!(command_allowed("ext-tenten", command).is_ok(), "{command}");
         }
