@@ -15,7 +15,9 @@ import {
   extensionIds,
   hashTree,
   loadSource,
+  PREVIOUS_KEPT,
   readZip,
+  recordPrevious,
   safeEntryPath,
   sha256,
   syncExtension,
@@ -481,5 +483,47 @@ test('prepare.mjs refuses a dist/ that carries any dictionary engine', async () 
     }
   } finally {
     await rm(dist, { recursive: true, force: true })
+  }
+})
+
+test('a version bump moves the outgoing release to the front of <id>.previous.json, keeping a few', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'kimochi-previous-'))
+  try {
+    const records = async (version, files) => {
+      await writeFile(path.join(dir, 'demo.manifest.json'), JSON.stringify({ version }))
+      await writeFile(path.join(dir, 'demo.sha256.json'), JSON.stringify(files))
+    }
+    const previous = async () => JSON.parse(await readFile(path.join(dir, 'demo.previous.json'), 'utf8'))
+    // A first pin has no earlier release: an empty list, written so the app can compile it in.
+    assert.deepEqual(await recordPrevious('demo', '1.0', dir), [])
+    assert.deepEqual(await previous(), [])
+    await records('1.0', { 'manifest.json': 'a'.repeat(64) })
+    // Re-vendoring the same version changes nothing.
+    assert.deepEqual(await recordPrevious('demo', '1.0', dir), [])
+    assert.deepEqual(await recordPrevious('demo', '2.0', dir), ['1.0'])
+    assert.deepEqual(await previous(), [{ version: '1.0', files: { 'manifest.json': 'a'.repeat(64) } }])
+    for (const [from, to] of [['2.0', '3.0'], ['3.0', '4.0'], ['4.0', '5.0']]) {
+      await records(from, { 'manifest.json': from[0].repeat(64) })
+      await recordPrevious('demo', to, dir)
+    }
+    assert.equal(PREVIOUS_KEPT, 3)
+    assert.deepEqual((await previous()).map((r) => r.version), ['4.0', '3.0', '2.0'])
+    // Going back to an earlier pin drops it from the list (it is the pin again).
+    await records('5.0', { 'manifest.json': 'f'.repeat(64) })
+    assert.deepEqual(await recordPrevious('demo', '3.0', dir), ['5.0', '4.0', '2.0'])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('every pinned engine has a well-formed earlier-releases record the app compiles in', async () => {
+  for (const id of await extensionIds()) {
+    const previous = JSON.parse(await readFile(new URL(`../extensions/${id}.previous.json`, import.meta.url), 'utf8'))
+    const source = await loadSource(id)
+    assert.ok(Array.isArray(previous), id)
+    for (const release of previous) {
+      assert.notEqual(release.version, source.version, `${id}: the pin is not its own earlier release`)
+      assert.ok('manifest.json' in release.files, `${id} ${release.version}`)
+    }
   }
 })
