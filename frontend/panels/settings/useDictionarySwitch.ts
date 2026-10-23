@@ -7,7 +7,9 @@
  * so it first records where it is (`rememberEngineSwitch`, with `from` saying whether that is
  * Settings or the Log/Notebook the sidebar sits beside). An engine that is not downloaded is asked
  * about first and switched to once its download is ready (a PENDING switch). Choosing the Yomitan
- * API opens its setup wizard (`setupOpen`). See DictionaryTab.tsx for the whole story.
+ * API switches at once and checks that the API answers (`verifyingApi`), giving the browser's
+ * helper `API_GRACE_MS` to wake; only if it still does not answer does its setup wizard open
+ * (`setupOpen`). See DictionaryTab.tsx for the whole story.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YomitanSettings } from '../../vendor/shared-types'
@@ -28,11 +30,16 @@ import { extensionAction, extensionStatus, type ExtensionStatus } from '../../br
 import { downloadEngineFor, extensionDownloadPrompt, normalizeExtensionStatus } from '@ui/extension-download'
 import { engineSwitchRecord, forgetEngineSwitch, rememberEngineSwitch } from '../../main/engineSwitch'
 import { demoStops } from '../../bridge/demo'
+import { apiCheck } from '../../bridge/yomitanApi'
 
 /** How long "Reloading the reader windows…" stays up after native has answered. */
 export const RELOAD_NOTE_MS = 2500
 /** How long "Now using …" stays up after the reload a switch gave this window. */
 export const SWITCHED_NOTE_MS = 6000
+/** How long a switch to the Yomitan API waits for it to answer before opening its setup. */
+export const API_GRACE_MS = 2500
+/** How often it asks in that time. */
+const API_RETRY_MS = 500
 
 /**
  * The engine this window was just reloaded into by a switch made here, while that is news. The
@@ -52,9 +59,21 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
     customApiUrl: ''
   })
   const apiUrl = resolveYomitanApiUrl(yomitanSettings.customApiUrl)
-  // The Yomitan API's setup wizard: opened by choosing the Yomitan API (here, or on the reload a
-  // switch from Hachidori or 10ten gives this window), and from its Helper row.
-  const [setupOpen, setSetupOpen] = useState(switchedTo === 'custom-api')
+  // The address the Yomitan API check asks at each attempt (the setting may load mid-check).
+  const apiUrlRef = useRef(apiUrl)
+  useEffect(() => {
+    apiUrlRef.current = apiUrl
+  }, [apiUrl])
+  // The Yomitan API's setup wizard: opened from its Helper row, and by choosing the Yomitan API
+  // (here, or on the reload a switch from Hachidori or 10ten gives this window) when the API has
+  // not answered within API_GRACE_MS. `verifyingApi` counts the checks started (0: none running).
+  const [setupOpen, openSetup] = useState(false)
+  const [verifyingApi, setVerifyingApi] = useState(switchedTo === 'custom-api' ? 1 : 0)
+  // Opened or closed by hand: a check still running has nothing more to say.
+  const setSetupOpen = useCallback((open: boolean): void => {
+    setVerifyingApi(0)
+    openSetup(open)
+  }, [])
   const saved = dictionaryEngineOf(yomitanSettings.popupType)
   // The pick, shown as active from the click so the panel does not flash "Use <name>" while
   // the write goes out. Cleared once the setting agrees (or the write fails).
@@ -98,9 +117,9 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
         return
       }
       mirrorDictionaryEngine(engine)
-      // The Yomitan API needs the browser side set up. If this window is reloaded by the switch,
-      // the reloaded one opens the wizard again (`switchedTo`).
-      if (engine === 'custom-api') setSetupOpen(true)
+      // The Yomitan API needs the browser side set up: check it answers, and open the wizard if
+      // not. If this window is reloaded by the switch, the reloaded one checks again (`switchedTo`).
+      if (engine === 'custom-api') setVerifyingApi((n) => n + 1)
       // The same host (only ever the same engine, saved again) needs no reload.
       if (hostEngineOf(engine) === hostEngineOf(saved)) return
       // Before native reloads this window, so the reload comes back to this page.
@@ -126,6 +145,8 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
       if (engine !== saved && demoStops('Switching dictionaries')) return
       const mine = ++ticket.current
       setApplyError(null)
+      // Another engine: a Yomitan API check still running is moot.
+      if (engine !== 'custom-api') setVerifyingApi(0)
       let status: ExtensionStatus | null = null
       const needs = downloadEngineFor(engine)
       try {
@@ -197,6 +218,38 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   }, [pending, commit])
   const prompt = asking ? extensionDownloadPrompt(asking.status) : null
 
+  // The check after choosing the Yomitan API: asked every API_RETRY_MS until it answers (nothing
+  // more is shown) or API_GRACE_MS has passed (the setup wizard opens). Dropped when another
+  // engine is chosen, when the wizard is opened or closed by hand, and when the window goes.
+  const onApi = active === 'custom-api'
+  if (verifyingApi !== 0 && !onApi) setVerifyingApi(0)
+  useEffect(() => {
+    if (verifyingApi === 0 || !onApi) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = Date.now() + API_GRACE_MS
+    const attempt = async (): Promise<void> => {
+      const answered = await apiCheck(apiUrlRef.current).then(
+        (status) => status.yomitan,
+        () => false
+      )
+      if (cancelled) return
+      if (answered) {
+        setVerifyingApi(0)
+      } else if (Date.now() >= deadline) {
+        setVerifyingApi(0)
+        openSetup(true)
+      } else {
+        timer = setTimeout(() => void attempt(), API_RETRY_MS)
+      }
+    }
+    void attempt()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [verifyingApi, onApi])
+
   return {
     yomitanSettings,
     setYomitanSettings,
@@ -212,6 +265,8 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
     reloading,
     applyError,
     switchedTo,
+    /** True while a switch to the Yomitan API is checking that it answers. */
+    verifyingApi: verifyingApi > 0,
     setupOpen,
     setSetupOpen
   }

@@ -13,6 +13,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - The sidebar's OCR model, Dictionary and Change source menus are tidier: each icon now sits beside
   both its name and its description, at every interface size, and descriptions stay on one line.
+- Switching to the Yomitan API no longer opens its setup every time: Kimochi checks that it answers
+  and only walks you through the setup if it still doesn't after a few seconds.
 - Anki has its own page in Settings, whatever dictionary you use. It explains how your dictionary
   adds cards, with a button to its Anki settings. With the Yomitan API it also shows whether
   Kimochi can reach AnkiConnect (and why not: Anki not running, a wrong port, an API key needed).

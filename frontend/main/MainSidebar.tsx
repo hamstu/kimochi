@@ -131,7 +131,9 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
       ? `Switching to ${DICTIONARY_ENGINES[active].name}…`
       : pending
         ? `${DICTIONARY_ENGINES[pending].name} is used once it has downloaded.`
-        : null
+        : dictionary.verifyingApi
+          ? 'Checking the Yomitan API…'
+          : null
   return (
     <div className="sb-group">
       <div className="sb-label sb-label-row">

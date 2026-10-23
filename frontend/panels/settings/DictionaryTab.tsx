@@ -4,7 +4,8 @@
  * 10ten keep their dictionaries and options in their own settings pages (the `dictionary`
  * panel); the Yomitan API (Kimochi's own pop-up over the Yomitan in the user's browser) is set up
  * here: its helper and connection (`YomitanApiStatusRows`, and the setup wizard in a dialog, which
- * opens on its own when the Yomitan API is chosen), its address, pop-up size and audio. Anki is its
+ * opens on its own when the Yomitan API is chosen and does not answer within a couple of seconds),
+ * its address, pop-up size and audio. Anki is its
  * own page (AnkiTab), for every engine; the engines' panels link to it.
  *
  * Choosing an engine saves `yomitanSettings.popupType`, writes the document-start mirror
