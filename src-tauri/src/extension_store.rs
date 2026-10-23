@@ -1611,8 +1611,9 @@ fn report(value: Value) {
 /// The developer cache `<repo>/extensions/<id>/`, under `tauri dev` only: never in a bundle,
 /// debug or release (a bundle never serves code from a compiled-in path of the build machine, and
 /// a debug bundle is how the real download is tested), and not with
-/// `KIMOCHI_EXTENSIONS_NO_DEV_TREE` set. `tauri dev`'s dev server serves the same cache for
-/// Yomitan (scripts/ext-dev-server.mjs `engineTree`), so the two agree.
+/// `KIMOCHI_EXTENSIONS_NO_DEV_TREE` set. `tauri dev`'s dev server picks Yomitan's release in the
+/// same order as [`serving_files`] (scripts/ext-dev-server.mjs `engineServing`: the pinned
+/// download, the earlier release in use, then this cache), so the two agree.
 pub fn dev_tree(id: &str) -> Option<PathBuf> {
     if !cfg!(all(dev, debug_assertions)) || std::env::var_os(NO_DEV_TREE).is_some() {
         return None;
