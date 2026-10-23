@@ -37,6 +37,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   later. Your dictionaries and settings are kept, and engines you never downloaded stay that way.
 
 - With the Yomitan API, the pop-up's audio plays as soon as the word shows, instead of up to a few seconds later for common words with many entries.
+- With the Yomitan API, Add to Anki is a small + beside each entry's audio button. It turns into a green check once the card is in Anki (click it to open the card there), or a red alert if adding failed (hover for why, click to try again).
 - With the Yomitan API, clicking the pop-up over your game no longer closes it, so you can click into it and scroll.
 - Hold Shift over a word inside a dictionary pop-up to look it up in another pop-up on top, as in Yomitan, in the Log and over your game. It works with Built-in Yomitan (as deep as its "Maximum number of child popups" setting allows) and with the Yomitan API (up to five pop-ups). Click back in an earlier pop-up to close the ones above it.
 - Holding Shift over a dictionary pop-up no longer looks up the Log line underneath it, and Built-in Yomitan's nested pop-ups in the Log open beside their word.

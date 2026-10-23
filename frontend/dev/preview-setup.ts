@@ -52,6 +52,9 @@
  *
  * Reader pop-up (reader-popup.html):
  *   ?popover=message  show what the parent frame posts instead of the sample (`listenForPopover`)
+ *   ?ankicard=<state>  the sample with Add to Anki and audio on each entry: new (default), in (already
+ *                    in Anki), checking or adding (Anki never answers), notrunning, failed (Anki
+ *                    refuses the note). Click the + to add
  *
  * Onboarding (welcome.html):
  *   ?step=intro|permission|accessibility|ocr|engine|dictionaries|dictionary-settings|steam|done|error
@@ -219,6 +222,56 @@ function previewAnkiStatus(url: string): Record<string, unknown> {
       return { state: 'timeout', url }
     default:
       return { state: 'connected', url, version: 6, latencyMs: 12, keyRequired: false }
+  }
+}
+
+// ---------------------------------------------------------------- reader pop-up's Anki card
+
+/** `?ankicard=`: the reader pop-up's Add to Anki state (unset: the sample has no Anki). */
+const ANKI_CARD = params.get('ankicard')
+
+/** The sample pop-up, with an Anki deck and an audio clip per entry under `?ankicard=`. */
+function previewPopover(): typeof POPOVER_SAMPLE | Record<string, unknown> {
+  if (!ANKI_CARD) return POPOVER_SAMPLE
+  const audioMedia = POPOVER_SAMPLE.entries.map((_, i) => ({ ankiFilename: `preview_audio_${i}.mp3`, contentBase64: 'AAAA' }))
+  return {
+    ...POPOVER_SAMPLE,
+    entries: POPOVER_SAMPLE.entries.map((entry, i) => ({ ...entry, audio: `[sound:preview_audio_${i}.mp3]` })),
+    audioMedia,
+    ankiConfig: {
+      ankiConnectUrl: 'http://127.0.0.1:8765',
+      deck: 'Mining',
+      model: 'Lapis',
+      modelFields: ['Expression', 'ExpressionReading', 'MainDefinition', 'Sentence', 'ExpressionAudio'],
+      mappings: [
+        { ankiField: 'Expression', mappingType: 'marker', marker: 'expression' },
+        { ankiField: 'ExpressionReading', mappingType: 'marker', marker: 'reading' },
+        { ankiField: 'MainDefinition', mappingType: 'marker', marker: 'glossary' },
+        { ankiField: 'Sentence', mappingType: 'sentence' },
+        { ankiField: 'ExpressionAudio', mappingType: 'marker', marker: 'audio' }
+      ],
+      tags: ['kimochi']
+    }
+  }
+}
+
+/** What Anki answers the pop-up's check (`find`), add (`store`, `add`) and open (`browse`) with. */
+function popupAnki(step: 'find' | 'store' | 'add' | 'browse'): unknown {
+  const never = new Promise<never>(() => {})
+  switch (ANKI_CARD) {
+    case 'in':
+      return step === 'find' ? [7] : step === 'add' ? 7 : null
+    case 'checking':
+      return step === 'find' ? never : null
+    case 'adding':
+      return step === 'find' ? [] : step === 'add' ? never : null
+    case 'notrunning':
+      throw 'anki: AnkiConnect is not answering at http://127.0.0.1:8765/. Is Anki open?'
+    case 'failed':
+      if (step === 'add') throw 'anki: cannot create note because it is empty'
+      return step === 'find' ? [] : null
+    default:
+      return step === 'find' ? [] : step === 'add' ? 1 : null
   }
 }
 
@@ -814,7 +867,7 @@ const HANDLERS: Record<string, Handler> = {
     setTimeout(() => {
       const dark = matchMedia('(prefers-color-scheme: dark)').matches
       void emit('popover:theme', dark ? 'dark' : 'light')
-      void emit('popover:show', studioJson('popover') ?? POPOVER_SAMPLE)
+      void emit('popover:show', studioJson('popover') ?? previewPopover())
     }, 0)
     return null
   },
@@ -856,13 +909,14 @@ const HANDLERS: Record<string, Handler> = {
   // check) finds nothing.
   anki_find_notes: (a) => {
     const query = String(a?.query ?? '')
+    if (ANKI_CARD && query.startsWith('"deck:')) return popupAnki('find')
     if (!query.startsWith('"note:Lapis"')) return query.startsWith('"note:Kiku"') ? [9] : []
     const deck = /"deck:([^"]*)"/.exec(query)?.[1]
     return deck === undefined ? [1, 2, 3, 4] : deck === 'Mining' ? [1, 2, 3] : deck === 'Japanese::VN' ? [4] : []
   },
-  anki_gui_browse: ok,
-  anki_store_media_file: () => 'preview.mp3',
-  anki_add_note: () => 1,
+  anki_store_media_file: () => (ANKI_CARD ? popupAnki('store') : 'preview.mp3'),
+  anki_add_note: () => (ANKI_CARD ? popupAnki('add') : 1),
+  anki_gui_browse: (a) => (ANKI_CARD ? popupAnki('browse') : note('anki_gui_browse', a)),
   anki_connect_status: (a) => previewAnkiStatus((a?.url as string | null) ?? 'http://127.0.0.1:8765'),
   anki_connect_relay: () => ({ status: 200, body: '{"result":6,"error":null}' }),
 

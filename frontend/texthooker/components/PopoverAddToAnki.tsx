@@ -1,7 +1,7 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
 import { useEffect, useState } from "react";
-import { Check, Plus, X as XIcon } from "lucide-react";
-import { Button, Spinner, Tooltip } from "@kit";
+import { Check, CircleAlert, Plus } from "lucide-react";
+import { IconButton, Spinner } from "@kit";
 import {
   noteExistsForTerm,
   openInAnkiBrowser,
@@ -130,71 +130,60 @@ export function PopoverAddToAnki({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [triggerNonce]);
 
-  // Visuals. "Add to Anki" is the popup's one primary action; once it has run
-  // (added, already in Anki, failed) the button drops to secondary with a toned
-  // icon so the result reads without competing with the headword.
+  // Visuals: a small icon button beside the speaker, same variant and size.
+  // The tooltip (and aria-label) carries the words; the icon carries the state:
+  // + to add, a spinner while Anki works, a green check once the card is in
+  // Anki (click opens it there), a red alert when the last attempt failed
+  // (click tries again).
   let icon: React.ReactNode;
   let label: string;
-  let title: string;
   let tone = "";
   switch (state.kind) {
     case "checking":
       icon = <Spinner label="Checking Anki" />;
-      label = "Add to Anki";
-      title = "Checking Anki…";
+      label = "Checking Anki…";
       break;
     case "idle":
       icon = <Plus />;
       label = "Add to Anki";
-      title = "Add to Anki";
       break;
     case "sending":
       icon = <Spinner label="Adding to Anki" />;
-      label = "Adding…";
-      title = "Adding…";
+      label = "Adding to Anki…";
       break;
     case "sent":
       icon = <Check />;
-      label = "Added";
-      title = "Added — click to open in Anki";
+      label = "Added to Anki. Open in Anki";
       tone = "popover-action-ok";
       break;
     case "duplicate":
       icon = <Check />;
-      label = "In Anki";
-      title = "Already in Anki — click to open";
-      tone = "popover-action-warn";
+      label = "Already in Anki. Open in Anki";
+      tone = "popover-action-ok";
       break;
     case "error":
-      icon = <XIcon />;
-      label = "Retry";
-      title = state.message;
+      icon = <CircleAlert />;
+      label = /[.?!]$/.test(state.message.trim())
+        ? `${state.message.trim()} Click to try again.`
+        : `${state.message.trim()}. Click to try again.`;
       tone = "popover-action-danger";
       break;
   }
 
   const busy = state.kind === "sending" || state.kind === "checking";
-  const primary = state.kind === "idle" || busy;
   // A disabled button never receives pointer events, so the busy states keep
   // the button enabled (aria-disabled) and ignore clicks in send() instead;
   // that way the tooltip still explains what it is waiting for.
-  const button = (
-    <Button
+  return (
+    <IconButton
       size="sm"
-      variant={primary ? "primary" : "secondary"}
-      aria-label={title}
+      label={label}
+      tooltipSide="left"
       onClick={() => void send()}
       aria-disabled={busy || undefined}
       className={`popover-action popover-anki ${tone}`}
     >
       {icon}
-      {label}
-    </Button>
-  );
-  // The idle label already says what it does; other states explain themselves on hover.
-  return state.kind === "idle" ? button : (
-    <Tooltip content={title} side="left">
-      {button}
-    </Tooltip>
+    </IconButton>
   );
 }

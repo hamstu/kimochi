@@ -172,19 +172,13 @@ body,
   margin-top: 0.125rem;
 }
 .popover-action[aria-disabled="true"] { cursor: default; }
-.popover-action-ok { color: var(--k-ok-text); }
-.popover-action-warn { color: var(--k-warn-text); }
-.popover-action-danger { color: var(--k-danger-text); }
+/* Audio and Add to Anki share one size and variant; a finished or failed Anki
+   add tints only its icon (green check, red alert). */
+.popover-action.popover-action-ok,
+.popover-action.popover-action-ok:hover { color: var(--k-ok-text); }
+.popover-action.popover-action-danger,
+.popover-action.popover-action-danger:hover { color: var(--k-danger-text); }
 .popover-action .k-spinner { width: var(--k-icon-xs); height: var(--k-icon-xs); }
-/* Add to Anki: the popup's primary action. Toned states colour only the icon. */
-.popover-anki.popover-action-ok,
-.popover-anki.popover-action-warn,
-.popover-anki.popover-action-danger { color: var(--k-text); }
-.popover-anki.popover-action-ok > svg { color: var(--k-ok-text); }
-.popover-anki.popover-action-warn > svg { color: var(--k-warn-text); }
-.popover-anki.popover-action-danger > svg { color: var(--k-danger-text); }
-.popover-anki.k-button-primary .k-spinner { border-color: var(--white-a6); border-top-color: var(--k-accent-contrast); }
-.popover-anki.k-button-primary[aria-disabled="true"] { opacity: 0.85; }
 
 /* Inflection chain and tag rows */
 .popover-inflection,
