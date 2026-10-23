@@ -47,4 +47,3 @@ fn refresh_app_icon(data: &std::path::Path) -> Result<(), String> {
         .arg(theme).output();
     Ok(())
 }
-
