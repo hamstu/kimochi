@@ -1,34 +1,59 @@
 ---
 title: Anki
-description: "Make Anki cards from the dictionary pop-up: your dictionary engine's own mining, or Kimochi's card builder with the Yomitan API engine."
+description: "Make Anki cards from the dictionary pop-up through AnkiConnect: the connection in Settings → Anki, and your dictionary engine's own mining or Kimochi's card builder."
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
 
-Who makes the card depends on your [dictionary engine](/lookups/dictionaries/). With **Built-in
-Yomitan** and **Hachidori**, the dictionary does its own Anki mining: you set it up in that
-dictionary's settings, and its pop-up has the add buttons. Kimochi only builds Anki cards itself
-with the **Yomitan API** engine, whose pop-up is Kimochi's own.
+Cards reach [Anki](https://apps.ankiweb.net/) through the
+[AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, so Anki has to be running with
+AnkiConnect installed. Everything about it is in **Settings → Anki**, whichever dictionary you use.
+
+## The AnkiConnect connection
+
+The top of **Settings → Anki** shows whether Kimochi can reach AnkiConnect. It checks again every
+few seconds while the page is open; **Check** asks at once.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **Address** | `http://127.0.0.1:8765` | Where AnkiConnect listens. Change it if you changed AnkiConnect's `webBindPort`; a port number on its own (`8770`) is enough. |
+| **API key** | None | Only if AnkiConnect's config sets an `apiKey`. Kept on this computer and never synced. |
+
+Kimochi sends every AnkiConnect request to this address: its own, and those of Built-in Yomitan
+and Hachidori. The AnkiConnect address in those dictionaries' own settings is not used. Kimochi's
+API key, when you set one, is used for their requests too.
+
+| Status | What to do |
+| --- | --- |
+| **Connected** | Nothing. It shows the AnkiConnect API version. |
+| **Not running** | Open Anki, and check that AnkiConnect is installed. |
+| **Wrong port** | Nothing answers at the address, or something that isn't AnkiConnect does. If AnkiConnect answers at the default address instead, a button switches to it. |
+| **API key needed** / **Wrong API key** | AnkiConnect has an `apiKey`: enter the same key. |
+| **Not answering** | Anki is busy, for example with a dialog open. |
+
+You don't need to change AnkiConnect's `webCorsOriginList` for Kimochi. Its requests are sent
+from the app itself, not from a web page, and AnkiConnect accepts those with its default settings.
+
+## Who makes the card
+
+That depends on your [dictionary engine](/lookups/dictionaries/). **Settings → Anki** explains it
+for the engine you use, with a button to its Anki settings.
 
 | Engine | Who makes the card | Where to set it up |
 | --- | --- | --- |
-| **Built-in Yomitan** | Yomitan | **Settings → Dictionary → Open Built-in Yomitan settings → Anki**. |
-| **Hachidori** | Hachidori | **Settings → Dictionary → Open Hachidori settings**. |
+| **Built-in Yomitan** | Yomitan | **Open Built-in Yomitan Anki settings**: turn on **Enable Anki integration**, then choose the deck, note type and fields. |
+| **Hachidori** | Hachidori | **Open Hachidori Anki settings**: its **Templates** set the deck, note type and fields. |
 | **10ten** | Nobody: 10ten doesn't make Anki cards. | |
-| **Yomitan API** | Kimochi | **Settings → Dictionary → Anki**, below. |
-
-Either way, cards reach [Anki](https://apps.ankiweb.net/) through the
-[AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, so Anki has to be running with
-AnkiConnect installed (it listens on `http://127.0.0.1:8765` by default).
+| **Yomitan API** | Kimochi | **Settings → Anki**, below. |
 
 ## Kimochi's card builder (Yomitan API)
 
-With the Yomitan API engine, Kimochi builds the cards itself. In **Settings → Dictionary → Anki**:
+With the Yomitan API engine, Kimochi's own pop-up builds the cards. Below the connection in
+**Settings → Anki**:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | **Enable mining** | Off | Shows **Add to Anki** in the lookup pop-up. |
-| **AnkiConnect URL** | `http://127.0.0.1:8765` | **Test** checks that Anki answers. |
 | **Deck** / **Note type** | — | Where cards go, and which note type they use. |
 | **Tags** | `super-texthooker` | Comma-separated, added to every card. |
 | **Import from Yomitan** | — | Reads the deck, note type, tags and field mappings from a Yomitan settings export. |
@@ -37,10 +62,10 @@ With the Yomitan API engine, Kimochi builds the cards itself. In **Settings → 
 The markers are `expression`, `reading`, `glossary`, `dictionary`, `frequencies`, `pitch-accents`,
 `part-of-speech`, `tags`, `conjugation`, `audio`, `sentence` and `sentence-furigana`.
 
-<Screenshot id="settings-anki" alt="Settings, Dictionary, Anki section: Enable mining, AnkiConnect URL with Test, Deck, Note type, Tags and Import from Yomitan." width={760} />
+<Screenshot id="settings-anki" alt="Settings, Anki with the Yomitan API: the AnkiConnect connection, address and API key, then Enable mining, Deck, Note type, Tags and Import from Yomitan." width={760} />
 
 In the pop-up, **Add to Anki** turns into **Added** (click to open the card in Anki), or **In Anki**
 when the word is already in your deck. If Anki isn't running you'll see **Anki not running**.
 
-Settings → Log → **Reset Log settings** resets the Anki setup along with the other Log, Sources,
-Dictionary and AI options.
+Settings → Log → **Reset Log settings** resets the Anki setup, address and API key included, along
+with the other Log, Sources, Dictionary and AI options.

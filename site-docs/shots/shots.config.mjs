@@ -397,10 +397,9 @@ export const SHOTS = [
   },
   {
     id: 'settings-anki',
-    page: settingsTab('dictionary', '&popup=custom-api'),
+    page: settingsTab('anki', '&popup=custom-api'),
     size: SETTINGS,
-    ready: '#anki-enabled',
-    actions: [{ run: `document.querySelector('#anki-enabled').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -80)` }]
+    ready: '#anki-enabled'
   },
   {
     id: 'settings-account-signedin',

@@ -90,9 +90,20 @@ stop it at any time. Switch to another engine, such as MeikiOCR, in the meantime
 
 ## Anki
 
-**Could not reach AnkiConnect**: make sure Anki is running with the
-[AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on installed, and that the AnkiConnect
-URL matches (default `http://127.0.0.1:8765`).
+**Settings → Anki** shows what's wrong with the connection, and checks again every few seconds while
+it's open:
+
+- **Not running**: open Anki, and make sure the
+  [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on is installed.
+- **Wrong port**: the **Address** doesn't match AnkiConnect's `webBindPort` (default
+  `http://127.0.0.1:8765`). If AnkiConnect answers at the default address, a button switches to it.
+- **API key needed** or **Wrong API key**: AnkiConnect's config has an `apiKey`. Enter the same key
+  under **API key**.
+- **Yomitan or Hachidori can't reach Anki**: Kimochi sends their AnkiConnect requests to the address
+  in Settings → Anki, not the one in the dictionary's own Anki settings. Check that Settings → Anki
+  says **Connected**. You don't need to add anything to AnkiConnect's `webCorsOriginList`.
+
+See [Anki](/lookups/anki/#the-ankiconnect-connection).
 
 ## Linux
 
