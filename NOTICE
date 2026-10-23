@@ -199,12 +199,12 @@ from the releases named below and remain under GPL-3.0-or-later.
 
 Yomitan: https://github.com/yomidevs/yomitan (GPL-3.0-or-later)
 Not included in Kimochi. When you choose it, Kimochi downloads release
-26.8.24.0 (commit 77e200428902abf4fa48284df92da7af3dcb4162, asset
+26.10.22.0 (commit d3c54c10264673eca0d66b970ef74cd5c8b048e3, asset
 yomitan-chrome.zip, SHA-256
-99d3ac05e09b09d19b1ecd22da2ebca4fc8cfce1d95d029b5a18d87aff632147) from
+83bbb0761c3bb55a64f1ab12afbbd338a3741c59daaeda2b3d7e7024fc4f4c65) from
 https://github.com/yomidevs/yomitan/releases and runs it unmodified. Its
 legal notices (legal.html, legal-npm.html) are part of that download.
-Source: the upstream tag 26.8.24.0.
+Source: the upstream tag 26.10.22.0.
 
 Hachidori: https://github.com/bee-san/hachidori (GPL-3.0-or-later)
 Not included in Kimochi. When you choose it, Kimochi downloads release 0.3.0

@@ -22,7 +22,9 @@
  * of "Use <name>" ("Download · 15 MB", or "Use when downloaded" for one under way); the caller
  * asks first, downloads, and switches only once the download is ready (`pending` is the engine
  * waiting for its download, "Switching when ready"). The download's progress block sits in the
- * panel, and the overflow menu removes a downloaded engine that is not in use.
+ * panel, and the overflow menu removes a downloaded engine that is not in use. After an app update
+ * moved an engine's pin, its new release downloads in the background while the earlier one stays
+ * in use; that update has its own progress block ("Updating to …").
  *
  * Each row leads with the engine's picture (`DictionaryEngineIcon`). Copy comes from
  * `DICTIONARY_ENGINES` in `ui/settings.ts`; the pop-up picture beside the description from
@@ -50,6 +52,9 @@ import {
   downloadButtonLabel,
   downloadEngineFor,
   removePrompt,
+  updateActions,
+  updateDownload,
+  updateLine,
   type ExtensionEngine
 } from '@ui/extension-download'
 import { dictionaryUseAction, listKeyTarget, activateLabel } from '@ui/engine-chooser'
@@ -181,6 +186,8 @@ function DictionaryDetail({
   const ready = status === null || status.state === 'ready'
   const action = dictionaryUseAction({ inUse, pending, download: status?.state ?? null })
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const update = updateDownload(status)
+  const version = status?.update?.from || status?.version || info.version
   const removable = canRemoveExtension(status) && needs !== selectedDownload && download.pending === null
   const showMenu = engine !== 'custom-api' && status !== null && status.source !== 'development'
   return (
@@ -246,7 +253,8 @@ function DictionaryDetail({
       </div>
       <p className="k-description">{info.requirements}</p>
       <p className="dictionary-detail-meta k-num">
-        {info.version && <span>Version {info.version}</span>}
+        {/* The release in use: during an app update's background download, still the earlier one. */}
+        {version && <span>Version {version}</span>}
         <span>{info.licence}</span>
         <button
           type="button"
@@ -265,6 +273,17 @@ function DictionaryDetail({
         {/* While it is not downloaded (or a download is under way), its progress and actions. */}
         {status && (!ready || pending) && (
           <ModelDownload controls={download} emphasis={inUse || pending} label="Download" />
+        )}
+        {/* An app update's new release, downloading while the earlier one stays in use. */}
+        {status && update && (
+          <ModelDownload
+            controls={{ ...download, status: update }}
+            emphasis={false}
+            label="Update"
+            line={updateLine(status)}
+            actions={updateActions(status)}
+            labelFor={(action) => (action === 'download' ? 'Update' : null)}
+          />
         )}
         {children}
       </div>

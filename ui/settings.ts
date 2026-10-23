@@ -338,7 +338,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Downloaded when you choose it (about 15 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/yomidevs/yomitan',
-    version: '26.8.24.0',
+    version: '26.10.22.0',
     runs: 'local',
     optionsPage: 'settings.html'
   },

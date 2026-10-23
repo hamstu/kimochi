@@ -42,9 +42,9 @@ const BAR_EXIT_MS = 400
  * mounted for one exit transition, full and green, then collapses, rather than vanishing on the
  * same frame the last byte lands.
  */
-function ModelProgress({ status, noun }: { status: DownloadStatus; noun: string }): ReactNode {
+function ModelProgress({ status, noun, line: wording }: { status: DownloadStatus; noun: string; line?: string }): ReactNode {
   const value = barPercent(status)
-  const line = statusLine(status)
+  const line = wording ?? statusLine(status)
   const active = showsBar(status)
   // Lingering: the bar has just gone inactive and is playing its exit. Set during render when
   // `active` flips, which is React's way of deriving state from a prop change; the effect only
@@ -84,28 +84,38 @@ function ModelProgress({ status, noun }: { status: DownloadStatus; noun: string 
 /**
  * The bar, the line and the buttons. `emphasis` makes the next step (Download, Resume, Retry) the
  * primary button; off while the panel is showing an engine that is not in use, whose primary
- * action is "Use <name>".
+ * action is "Use <name>". `line`, `actions` and `labelFor` word a download that is not a plain
+ * first one (a dictionary engine's background update).
  */
 export function ModelDownload({
   controls,
   emphasis,
-  label = 'Model'
+  label = 'Model',
+  line,
+  actions: only,
+  labelFor
 }: {
   controls: DownloadControls
   emphasis: boolean
   /** The row's label: "Model" for OCR, "Download" for a dictionary engine. */
   label?: string
+  /** In place of the status line. */
+  line?: string
+  /** In place of the buttons for the state. */
+  actions?: ModelAction[]
+  /** A button's label, where it differs from the usual one. */
+  labelFor?: (action: ModelAction) => string | null
 }): ReactNode {
   const { status, pending, error, run } = controls
   // A backend without model downloads says nothing.
   if (!status) return null
-  const actions = primaryModelActions(status)
+  const actions = only ?? primaryModelActions(status)
   return (
     <div className="model-download">
       <div className="model-download-row">
         <div className="model-download-text">
           <span className="model-download-label">{label}</span>
-          <ModelProgress status={status} noun={label === 'Model' ? 'model' : 'download'} />
+          <ModelProgress status={status} noun={label === 'Model' ? 'model' : label.toLowerCase()} line={line} />
         </div>
         {actions.length > 0 && (
           <div className="model-actions">
@@ -119,7 +129,7 @@ export function ModelDownload({
                 disabled={pending !== null}
                 onClick={() => run(action)}
               >
-                {actionLabel(action, status)}
+                {labelFor?.(action) ?? actionLabel(action, status)}
               </Button>
             ))}
           </div>

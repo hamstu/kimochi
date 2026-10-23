@@ -39,7 +39,7 @@
  *   ?pick=cancel     the system picker shares nothing (default: a fake portal display after 1.5 s)
  *   ?activity=1      main window: play a scripted run of scans on the Log's activity ticker
  *   ?ext=<state>     dictionary-engine downloads (preview-extensions.ts): absent (default), downloading,
- *                    paused, failed, verifying, ready
+ *                    paused, failed, verifying, ready; updating, update-failed (after an app update)
  *   ?model=<state>   OCR model downloads (preview-models.ts)
  *   ?anki=<state>    Settings → Anki's AnkiConnect check: connected (default), notrunning, wrongport,
  *                    notanki, keyrequired, keyrejected, blocked, timeout

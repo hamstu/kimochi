@@ -1058,7 +1058,9 @@ extension windows may invoke it (`extensions::EXTENSION_WINDOW_COMMANDS`).
 Yomitan, Hachidori and 10ten are not bundled. Each is pinned to one upstream GitHub release by
 `extensions/<id>.source.json` (version, tag, commit, asset URL, SHA-256, size) and
 `extensions/<id>.sha256.json` (every file of the unpacked release and its SHA-256), both
-compiled in. Implementation: `src-tauri/src/extension_store.rs`.
+compiled in, beside `extensions/<id>.previous.json` (the last few pins' maps, newest first,
+written by `scripts/sync-extension.mjs` when the version moves; see "Updates" below).
+Implementation: `src-tauri/src/extension_store.rs`.
 
 `engine` is `"yomitan"`, `"hachidori"` or `"tenten"`. Every command answers with the engine's
 `ExtensionStatus` after acting:
@@ -1070,8 +1072,8 @@ compiled in. Implementation: `src-tauri/src/extension_store.rs`.
 | `extension_download_pause` | `({engine}) -> ExtensionStatus` — keeps the `.part` |
 | `extension_download_resume` | `({engine}) -> ExtensionStatus` — continues from the `.part` (HTTP Range) |
 | `extension_download_retry` | `({engine}) -> ExtensionStatus` — after `failed`; also resumes |
-| `extension_download_cancel` | `({engine}) -> ExtensionStatus` — stops and removes what was fetched; leaves a ready engine alone |
-| `extension_delete` | `({engine}) -> ExtensionStatus` — removes the downloaded engine; refused (`invalid:`) for the engine the setting names |
+| `extension_download_cancel` | `({engine}) -> ExtensionStatus` — stops and removes what was fetched; leaves a ready engine alone, and an update's earlier release |
+| `extension_delete` | `({engine}) -> ExtensionStatus` — removes the downloaded engine, an earlier release and its update; refused (`invalid:`) for the engine the setting names |
 
 ```ts
 ExtensionStatus = {
@@ -1080,13 +1082,26 @@ ExtensionStatus = {
   source: 'downloaded' | 'development' | null,  // where a ready engine is served from
   file,                              // "<version>.zip" while downloading or verifying it; "unpacking"
   receivedBytes, totalBytes, overallReceived, overallTotal,  // bytes of the zip
-  message                            // why it failed
+  message,                           // why it failed
+  update: ExtensionUpdate | null     // while an earlier release is in use (state is then 'ready')
+}
+ExtensionUpdate = {                  // the pinned release (`version`) downloading in the background
+  from,                              // the release in use until then, "26.8.24.0"
+  state: 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying',  // absent: not started
+  file, receivedBytes, totalBytes, overallReceived, overallTotal, message,
+  retryAt                            // Unix seconds of the next automatic try, after a failure
 }
 ```
 
+The download commands act on an update the same way (`start`/`resume`/`retry` run it, `pause`
+holds it); the UI offers no Cancel for one.
+
 Emits `extension-download` with an `ExtensionStatus` on every state change and about four
 times a second while bytes arrive, and posts to the activity feed ("Downloading Yomitan… 40%",
-"Yomitan ready", "Yomitan download failed: …", key `extension:<id>`).
+"Yomitan ready", "Yomitan download failed: …", key `extension:<id>`). An update posts only for
+the engine the setting names ("Updating Yomitan to 26.10.22.0… 40%", "Yomitan update failed: ….
+Still using 26.8.24.0; trying again later", "Yomitan updated to 26.10.22.0"); the others update
+quietly.
 
 **Store.** `<app local data>/extensions/<id>/`: the zip is downloaded as
 `<version>.zip.part` with the OCR models' transfer (resume by Range, restart on 416 or an
@@ -1097,7 +1112,9 @@ backslashes and `..` refused; size and CRC checked). Every file is hashed as it 
 the set must equal the pinned map exactly (nothing missing, changed or added); then the
 staging tree is renamed to `<version>/` (retried on Windows while an antivirus holds a file)
 and `installed.json` records it. The `<version>/` directory is the commit point. Other
-versions, stray parts and staging directories are removed after an install and at start-up.
+versions, stray parts and staging directories are removed after an install and at start-up,
+except an earlier release still in use (below), and the one a switch just left, which goes at the
+next start-up.
 Removing an engine removes its program files only: its dictionaries (the WebView's storage for
 its origin, and `chrome-local-<id>.json` or Yomitan's `chrome-local.json`) are kept.
 
@@ -1116,6 +1133,26 @@ usable, or the one in use went away) makes native write the mirror and reload th
 the selected engine is not usable (an app update moved its pin, or the build the user upgraded
 from bundled it), its download starts on its own (`dictionary-engine-startup`): the user
 already chose it, and their dictionaries are untouched. A first run chooses in onboarding.
+
+**Updates.** An app update that moves an engine's pin does not take the engine away. When the
+user's download is one of the releases in `<id>.previous.json`, its tree is kept and served,
+checked against that compiled-in map, while the new release downloads in the background; the
+status says `ready` with `update` set. Each session serves one release per engine: the new tree
+being renamed into place does not change what a window gets. When the new release is verified
+the session moves to it (`{check: 'extension-update-switched', engine, from, to}`), and the
+windows running that engine reload onto it (`{check: 'dictionary-engine-updated', engine,
+effective, applied}`); their dictionaries and settings are in the origin's storage and stay.
+
+Only engines the user downloaded and kept are updated (an earlier release's tree, or an
+`installed.json` naming another version: a release too old to be in `previous.json` is
+removed at start-up and downloaded anew). The engine the setting names goes first; the others
+follow one at a time, quietly. `<app local data>/extensions/updates.json` records
+`{<id>: {pin, failures}}`: an update fires once per app update, when the pin differs from the
+recorded one (`{check: 'extension-update-planned', engine, from, to, new}`); a later launch with
+the same pin carries an unfinished one on (from its `.part`, after a quit or while offline). A
+failure is tried again after 1, 5, 15, then 30 minutes; after 5 failures in all it waits for the
+user (Update or Retry in Settings → Dictionary). The earlier release stays in use throughout.
+Removing the engine drops its record.
 
 ## OCR model downloads
 
