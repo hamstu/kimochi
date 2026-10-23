@@ -12,7 +12,7 @@ import { emit } from '@tauri-apps/api/event'
 import type { ExtensionEngine, ExtensionStatus } from '@ui/extension-download'
 
 const ENGINES: Record<ExtensionEngine, { name: string; version: string; total: number; file: string }> = {
-  yomitan: { name: 'Yomitan', version: '26.8.24.0', total: 15_412_388, file: 'yomitan-chrome.zip' },
+  yomitan: { name: 'Yomitan', version: '26.10.22.0', total: 15_412_388, file: 'yomitan-chrome.zip' },
   hachidori: { name: 'Hachidori', version: '0.3.0', total: 5_238_012, file: 'hachidori-chrome.zip' },
   tenten: { name: '10ten Japanese Reader', version: '1.28.0', total: 18_022_441, file: '10ten-ja-reader-chrome.zip' }
 }

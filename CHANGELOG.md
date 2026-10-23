@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Built-in Yomitan is updated to 26.10.22.0. With the new AnkiConnect (26.10), a word already in
+  Anki under another note type no longer hides the pop-up's Anki buttons. Built-in Yomitan
+  downloads once more (about 15 MB) and keeps your dictionaries and settings.
+
 - GNOME: restore annotations and desktop cropping for tiled window shares whose borders extend beyond the screen.
 
 - GNOME: avoid invalid native taskbar notifications during overlay cleanup, and prevent
