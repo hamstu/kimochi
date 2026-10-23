@@ -31,18 +31,43 @@ export function appLocalDataDir(identifier = 'dev.kimochi.app', { platform = pro
 }
 
 /**
- * Where the dev server reads an engine from, in the app's own order (extension_store.rs): the
- * app's download of the pinned version when there is one, else the developer cache that
- * `scripts/sync-extension.mjs` fills (`extensions/<id>/`), unless `KIMOCHI_EXTENSIONS_NO_DEV_TREE`
- * is set, which is how the real download is tested in `npm run dev`. Null when neither is there.
+ * The release the dev server serves an engine from, in the app's own order (extension_store.rs
+ * `serving_files`): the app's download of the pinned version when its tree is there; else the
+ * newest earlier release (`extensions/<id>.previous.json`) whose tree is there, which is what an
+ * app update leaves in use while the new pin downloads in the background (`installed_previous`);
+ * else the developer cache that `scripts/sync-extension.mjs` fills (`extensions/<id>/`), unless
+ * `KIMOCHI_EXTENSIONS_NO_DEV_TREE` is set, which is how the real download is tested in
+ * `npm run dev`. Null when none is there.
+ *
+ * `{ dir, version, files, source }`: `files` is that release's own file map, so the paths the app
+ * origin answers are the served release's (an earlier Yomitan can have files the pin has not), and
+ * `version` is the one Settings → Dictionary names (`serving_previous`): the two cannot disagree.
+ * Rust's session stickiness (the windows keep their release until a switch reloads them) only
+ * differs from this for the moment between an update's install and its switch.
  */
-export async function engineTree(id, { env = process.env, store = path.join(appLocalDataDir(), 'extensions'), extensions = path.join(repo, 'extensions') } = {}) {
-  const source = JSON.parse(await readFile(path.join(extensions, `${id}.source.json`), 'utf8'))
-  const downloaded = path.join(store, id, source.version)
-  if ((await stat(downloaded).catch(() => null))?.isDirectory()) return downloaded
+export async function engineServing(id, { env = process.env, store = path.join(appLocalDataDir(), 'extensions'), extensions = path.join(repo, 'extensions') } = {}) {
+  const json = async (name) => JSON.parse(await readFile(path.join(extensions, `${id}.${name}.json`), 'utf8'))
+  const isDir = async (dir) => (await stat(dir).catch(() => null))?.isDirectory() ?? false
+  const source = await json('source')
+  const pinned = path.join(store, id, source.version)
+  if (await isDir(pinned)) return { dir: pinned, version: source.version, files: await json('sha256'), source: 'downloaded' }
+  const previous = await json('previous').catch((error) => {
+    if (error.code === 'ENOENT') return []
+    throw error
+  })
+  for (const release of previous) {
+    const dir = path.join(store, id, release.version)
+    if (await isDir(dir)) return { dir, version: release.version, files: release.files, source: 'downloaded' }
+  }
   if (env.KIMOCHI_EXTENSIONS_NO_DEV_TREE) return null
   const cache = path.join(extensions, id)
-  return (await stat(path.join(cache, 'manifest.json')).catch(() => null))?.isFile() ? cache : null
+  if (!(await stat(path.join(cache, 'manifest.json')).catch(() => null))?.isFile()) return null
+  return { dir: cache, version: source.version, files: await json('sha256'), source: 'development' }
+}
+
+/** The directory `engineServing` serves an engine from, or null. */
+export async function engineTree(id, options) {
+  return (await engineServing(id, options))?.dir ?? null
 }
 
 export const HOST_SCRIPT_TAG = '<script src="/__kimochi/ext-host.js"></script>'

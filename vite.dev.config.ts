@@ -3,9 +3,10 @@
  * src-tauri/tauri.conf.json). One origin, `http://127.0.0.1:1430`, serves the whole app:
  *
  * - `/app/*`: the React windows straight from `frontend/`, with Vite HMR.
- * - Yomitan's own paths (exactly the files in `extensions/yomitan.sha256.json`): the app's
- *   download of Yomitan, else the developer cache `extensions/yomitan/` (`engineTree`), as the
- *   app's asset layer serves them in a bundle.
+ * - Yomitan's own paths (exactly the files of the release being served): the app's download of
+ *   Yomitan, or the earlier release an app update left in use while the new one downloads, else
+ *   the developer cache `extensions/yomitan/` (`engineServing`), as the app's asset layer serves
+ *   them in a bundle.
  * - everything else: the prepared `dist/` tree (`dist/spike/` from `host/`, `dist/ui/` from
  *   `ui/`), byte for byte, as `tauri dev`'s own static server used to.
  * - a watcher on `ui/` and `host/` that redoes that directory's `scripts/prepare.mjs` step and
@@ -35,6 +36,7 @@ import {
   createExtensionServer,
   createProxyMiddleware,
   createRelayBus,
+  engineServing,
   engineTree,
   fileUnder,
   harnessInjectsYomitanShim,
@@ -92,12 +94,11 @@ const RELOAD_CLIENT = `if (window === window.top) {
 }
 `
 
-/** Yomitan's files, exactly: the app origin answers these paths from the engine, nothing else. */
-const YOMITAN_FILES = new Set(
-  Object.keys(JSON.parse(await readFile(here('extensions/yomitan.sha256.json'), 'utf8')) as Record<string, string>)
-)
-
-/** A Yomitan file for a request path, from the app's download or the cache; null otherwise. */
+/**
+ * A Yomitan file for a request path, from the release being served (`engineServing`: the app's
+ * download, the earlier release an app update left in use, or the cache); null otherwise. Only
+ * that release's own files are Yomitan's: the app origin answers nothing else from it.
+ */
 async function yomitanFile(urlPath: string): Promise<string | null> {
   let decoded: string
   try {
@@ -105,9 +106,9 @@ async function yomitanFile(urlPath: string): Promise<string | null> {
   } catch {
     return null
   }
-  if (!YOMITAN_FILES.has(decoded.replace(/^\//, ''))) return null
-  const tree = await engineTree('yomitan')
-  return tree ? fileUnder(tree, urlPath) : null
+  const serving = await engineServing('yomitan')
+  if (!serving || !Object.hasOwn(serving.files, decoded.replace(/^\//, ''))) return null
+  return fileUnder(serving.dir, urlPath)
 }
 
 /** A `dist/` file for a request path, or null when there is none (never a directory). */
