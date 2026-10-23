@@ -32,6 +32,7 @@ import {
   useDictionaryEngine,
   type DictionaryEngine
 } from '../bridge/dictionaryEngine'
+import { frameDocument, revealSectionWhenLoaded } from './dictionarySection'
 import './dictionary-settings.css'
 
 /** The engine's options page, or null when its origin is unknown here (outside Kimochi). */
@@ -92,12 +93,24 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
   const name = DICTIONARY_ENGINES[engine].name
   const [loaded, setLoaded] = useState(false)
   const frame = useRef<HTMLIFrameElement>(null)
-  const [src, setSrc] = useState<string | null>(() => {
+  const [first] = useState(() => {
     const pending = acceptNavigation(engine, extensionHost()?.pendingNavigate)
     const section = takeDictionarySection()
     const options = optionsUrl(engine)
-    return section && options ? `${options}#${section}` : (pending ?? options)
+    return section && options
+      ? { src: `${options}#${section}`, section }
+      : { src: pending ?? options, section: null }
   })
+  const [src, setSrc] = useState<string | null>(first.src)
+  // Yomitan's section to scroll to once its page has loaded and laid itself out (see
+  // dictionarySection.ts): its fragment alone is applied too early, and the page opens at the top.
+  const yomitanSection = useRef<string | null>(engine === 'yomitan' ? first.section : null)
+  const revealYomitanSection = (): void => {
+    const section = yomitanSection.current
+    if (!section) return
+    yomitanSection.current = null
+    void revealSectionWhenLoaded(() => frameDocument(frame.current), section)
+  }
 
   // A section asked for while this page is open: the options page, scrolled to it. Assigning the
   // frame's location (allowed across origins) re-scrolls even when the fragment is already there.
@@ -111,7 +124,22 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
       if (typeof section !== 'string' || !/^[\w-]+$/.test(section)) return
       const target = new URL(`${options}#${section}`, window.location.href).href
       const view = frame.current?.contentWindow
-      if (view && frame.current?.dataset.loaded) view.location.href = target
+      const ready = Boolean(view && frame.current?.dataset.loaded)
+      if (engine === 'yomitan') {
+        // On its page already: scroll once it is laid out (at once when it is). Elsewhere (another
+        // Yomitan page, or still loading): load the options page, and scroll when it has loaded.
+        yomitanSection.current = section
+        const doc = ready ? frameDocument(frame.current) : null
+        if (doc && new URL(doc.URL).pathname === new URL(target).pathname) {
+          doc.defaultView?.history.replaceState(null, '', target)
+          revealYomitanSection()
+          return
+        }
+        if (view && ready) view.location.href = target
+        else setSrc(target)
+        return
+      }
+      if (view && ready) view.location.href = target
       else setSrc(target)
     })
     return () => {
@@ -165,7 +193,10 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
         src={src}
         className="dictionary-settings-frame"
         data-loaded={loaded || undefined}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => {
+          setLoaded(true)
+          revealYomitanSection()
+        }}
       />
     </div>
   )
