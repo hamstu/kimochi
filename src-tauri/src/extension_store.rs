@@ -12,12 +12,14 @@
 //!
 //! ```text
 //! <app local data>/extensions/
+//!   updates.json           {<id>: {pin, failures}}: updates under way (see "Updates")
 //!   tenten/
 //!     1.28.0/              the verified tree, exactly the zip's files (its existence is the commit)
 //!     1.28.0.zip.part      while downloading (resumable)
 //!     1.28.0.zip           downloaded and verified, not yet unpacked
 //!     .staging-1.28.0-…    while unpacking; removed at start-up if found
-//!     installed.json       {version, assetSha256, verifiedAt}, for diagnostics only
+//!     1.27.0/              an earlier pin's tree, kept and served until 1.28.0 is installed
+//!     installed.json       {version, assetSha256, verifiedAt}: what was last installed
 //! ```
 //!
 //! # Serving
@@ -35,6 +37,18 @@
 //! The OCR models' (`model_store.rs`): absent → downloading → verifying (the zip, then
 //! "unpacking") → ready, with paused and failed, one worker per engine, pause and cancel checked
 //! between reads. Quitting pauses and keeps the `.part`.
+//!
+//! # Updates
+//!
+//! An app update that moves a pin must not take the user's engine away. Each build compiles in
+//! the maps of the last few pins (`extensions/<id>.previous.json`), so a download of one of those
+//! is still served, and still checked file by file, while the new release downloads in the
+//! background ([`ExtensionStore::start_updates`], at launch, once per app update per engine,
+//! [`plan_update`]). One release per engine is served per session ([`ExtensionStore::serving`]);
+//! the switch to a verified update moves it and reloads the engine's windows (`on_switch`), and
+//! the tree it left goes at the next start-up. Failures retry with a back-off and then wait for
+//! the user; the earlier release stays in use throughout. Nothing is ever downloaded for an
+//! engine the user never downloaded, or removed.
 use crate::model_store::{
     self, download_file, percent, remove_dir, sha256_file, Fetch, HttpFetch, ModelFile, Phase,
     Progress, Stop, CANCEL, PAUSE, PROGRESS_INTERVAL, RUN,
@@ -58,26 +72,32 @@ use std::{
 /// Every engine the store can download, in the order onboarding offers them.
 pub const IDS: &[&str] = &["yomitan", "hachidori", "tenten"];
 
-/// The compiled-in pins: `(id, source.json, sha256.json)`.
-const PINS: &[(&str, &str, &str)] = &[
+/// The compiled-in pins: `(id, source.json, sha256.json, previous.json)`.
+const PINS: &[(&str, &str, &str, &str)] = &[
     (
         "yomitan",
         include_str!("../../extensions/yomitan.source.json"),
         include_str!("../../extensions/yomitan.sha256.json"),
+        include_str!("../../extensions/yomitan.previous.json"),
     ),
     (
         "hachidori",
         include_str!("../../extensions/hachidori.source.json"),
         include_str!("../../extensions/hachidori.sha256.json"),
+        include_str!("../../extensions/hachidori.previous.json"),
     ),
     (
         "tenten",
         include_str!("../../extensions/tenten.source.json"),
         include_str!("../../extensions/tenten.sha256.json"),
+        include_str!("../../extensions/tenten.previous.json"),
     ),
 ];
 
 const INSTALLED: &str = "installed.json";
+/// `<root>/updates.json`: the pin each engine's update was last started for, and how often it
+/// failed (see [`plan_update`]).
+const UPDATES: &str = "updates.json";
 const STAGING: &str = ".staging-";
 /// Set to test the real download under `tauri dev`, which otherwise serves `extensions/<id>/`.
 pub const NO_DEV_TREE: &str = "KIMOCHI_EXTENSIONS_NO_DEV_TREE";
@@ -108,22 +128,60 @@ pub struct Pin {
     pub unpack: Unpack,
 }
 
-/// One engine: its pin and the hash of every file of its release.
+/// An earlier pin's release: `extensions/<id>.previous.json`, newest first, written by
+/// `scripts/sync-extension.mjs` when the pin moves. A download of one is still served, against
+/// this compiled-in map, while the current pin's download is under way (an app update), so the
+/// engine keeps working until the new release is verified.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct Release {
+    pub version: String,
+    pub files: BTreeMap<String, String>,
+}
+
+/// One engine: its pin, the hash of every file of its release, and the earlier releases it may
+/// still serve.
 #[derive(Debug, Clone)]
 pub struct Engine {
     pub pin: Pin,
     pub files: BTreeMap<String, String>,
+    pub previous: Vec<Release>,
 }
 
 fn is_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// A version is a plain directory name.
+fn plain(s: &str) -> bool {
+    !s.is_empty()
+        && s != "."
+        && s != ".."
+        && !s.starts_with('.')
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-+".contains(&b))
+}
+
+/// A file map lists a manifest, and only paths the unpacker would write, each with a SHA-256.
+fn check_files(what: &str, files: &BTreeMap<String, String>) -> Result<(), String> {
+    if files.is_empty() || !files.contains_key("manifest.json") {
+        return Err(format!("{what} lists no manifest.json"));
+    }
+    for (name, hash) in files {
+        if safe_entry_path(name).as_deref() != Ok(name.as_str()) || name == INSTALLED {
+            return Err(format!("{what}: {name:?} is not a safe relative path"));
+        }
+        if !is_sha256(hash) {
+            return Err(format!("{what}: {name} has no valid SHA-256"));
+        }
+    }
+    Ok(())
+}
+
 impl Engine {
-    /// Parse and check a pin and its file map, as `loadSource` does in Node: the id matches, the
-    /// URL is https, the hash is a SHA-256, the size is known, the version is a plain directory
-    /// name, and every file path is one the unpacker would accept.
-    pub fn parse(id: &str, source: &str, files: &str) -> Result<Self, String> {
+    /// Parse and check a pin, its file map and its earlier releases, as `loadSource` does in Node:
+    /// the id matches, the URL is https, the hash is a SHA-256, the size is known, every version
+    /// is a plain directory name (an earlier one never the pinned one), and every file path is one
+    /// the unpacker would accept.
+    pub fn parse(id: &str, source: &str, files: &str, previous: &str) -> Result<Self, String> {
         let pin: Pin = serde_json::from_str(source).map_err(|e| format!("{id}.source.json: {e}"))?;
         let files: BTreeMap<String, String> =
             serde_json::from_str(files).map_err(|e| format!("{id}.sha256.json: {e}"))?;
@@ -139,28 +197,23 @@ impl Engine {
         if pin.asset.size == 0 {
             return Err(format!("{id}.source.json: asset.size is missing"));
         }
-        let plain = |s: &str| {
-            !s.is_empty()
-                && s != "."
-                && s != ".."
-                && !s.starts_with('.')
-                && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-+".contains(&b))
-        };
         if !plain(&pin.version) {
             return Err(format!("{id}.source.json: version {:?} is not a plain name", pin.version));
         }
-        if files.is_empty() || !files.contains_key("manifest.json") {
-            return Err(format!("{id}.sha256.json lists no manifest.json"));
-        }
-        for (name, hash) in &files {
-            if safe_entry_path(name).as_deref() != Ok(name.as_str()) || name == INSTALLED {
-                return Err(format!("{id}.sha256.json: {name:?} is not a safe relative path"));
+        check_files(&format!("{id}.sha256.json"), &files)?;
+        let previous: Vec<Release> =
+            serde_json::from_str(previous).map_err(|e| format!("{id}.previous.json: {e}"))?;
+        for (i, release) in previous.iter().enumerate() {
+            let what = format!("{id}.previous.json {:?}", release.version);
+            if !plain(&release.version) || release.version == pin.version {
+                return Err(format!("{what}: not a plain name, or the pinned version"));
             }
-            if !is_sha256(hash) {
-                return Err(format!("{id}.sha256.json: {name} has no valid SHA-256"));
+            if previous[..i].iter().any(|r| r.version == release.version) {
+                return Err(format!("{what}: listed twice"));
             }
+            check_files(&what, &release.files)?;
         }
-        Ok(Engine { pin, files })
+        Ok(Engine { pin, files, previous })
     }
 
     fn zip_file(&self) -> ModelFile {
@@ -180,8 +233,8 @@ pub fn engines() -> &'static BTreeMap<String, Engine> {
     static ENGINES: OnceLock<BTreeMap<String, Engine>> = OnceLock::new();
     ENGINES.get_or_init(|| {
         PINS.iter()
-            .map(|(id, source, files)| {
-                let engine = Engine::parse(id, source, files)
+            .map(|(id, source, files, previous)| {
+                let engine = Engine::parse(id, source, files, previous)
                     .expect("the extensions/ pins are checked by the tests");
                 (id.to_string(), engine)
             })
@@ -477,6 +530,34 @@ fn version_dir(root: &Path, engine: &Engine) -> PathBuf {
     root.join(&engine.pin.id).join(&engine.pin.version)
 }
 
+/// The newest earlier release whose verified tree is on disk, while the pinned one's is not: what
+/// an app update left the user with. Its directory, like the pinned one's, only ever came from a
+/// rename after every file was verified (by the build that pinned it).
+pub fn installed_previous<'a>(root: &Path, engine: &'a Engine) -> Option<&'a Release> {
+    if version_dir(root, engine).is_dir() {
+        return None;
+    }
+    engine
+        .previous
+        .iter()
+        .find(|release| root.join(&engine.pin.id).join(&release.version).is_dir())
+}
+
+/// The version `installed.json` names: some release was downloaded once, even one too old to be
+/// in `previous` (whose tree [`clean`] removed).
+fn recorded_version(root: &Path, engine: &Engine) -> Option<String> {
+    let bytes = fs::read(root.join(&engine.pin.id).join(INSTALLED)).ok()?;
+    let record: Value = serde_json::from_slice(&bytes).ok()?;
+    record.get("version")?.as_str().map(str::to_string)
+}
+
+/// Whether the user downloaded this engine at some point and has not removed it: only such an
+/// engine is ever updated without being asked.
+pub fn previously_installed(root: &Path, engine: &Engine) -> bool {
+    installed_previous(root, engine).is_some()
+        || recorded_version(root, engine).is_some_and(|v| v != engine.pin.version)
+}
+
 /// The engine's phase as found on disk: ready when the pinned version's directory exists (it is
 /// only ever created by a rename after every file was verified), paused when part or all of the
 /// zip is there, absent otherwise.
@@ -500,16 +581,20 @@ pub fn scan_disk(root: &Path, engine: &Engine) -> Phase {
 
 /// Removes everything under `<root>/<id>/` that the pin does not need: other versions, their
 /// zips and parts, and leftover staging directories. Keeps the pinned version's tree, zip and
-/// part, and `installed.json`. Returns what was removed.
-pub fn clean(root: &Path, engine: &Engine) -> Vec<String> {
+/// part, `installed.json`, the earlier release still in use while the pinned one is not installed
+/// ([`installed_previous`]), and `also` (the tree the windows run until they reload onto a
+/// finished update). Returns what was removed.
+pub fn clean(root: &Path, engine: &Engine, also: Option<&str>) -> Vec<String> {
     let dir = root.join(&engine.pin.id);
     let version = &engine.pin.version;
-    let keep = [
+    let mut keep = vec![
         version.clone(),
         format!("{version}.zip"),
         format!("{version}.zip.part"),
         INSTALLED.to_string(),
     ];
+    keep.extend(installed_previous(root, engine).map(|release| release.version.clone()));
+    keep.extend(also.map(str::to_string));
     let mut removed = Vec::new();
     for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -530,34 +615,177 @@ pub fn clean(root: &Path, engine: &Engine) -> Vec<String> {
     removed
 }
 
+/// Removes the pinned version's download (its tree, zip, part and staging), and nothing else: a
+/// cancelled update leaves the earlier release in use.
+fn remove_pinned(root: &Path, engine: &Engine) -> io::Result<()> {
+    let dir = root.join(&engine.pin.id);
+    let version = &engine.pin.version;
+    let staging = format!("{STAGING}{version}-");
+    for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = entry.path();
+        if name == *version {
+            remove_dir(&path)?;
+        } else if name.starts_with(&staging) {
+            let _ = remove_dir(&path);
+        } else if name == format!("{version}.zip") || name == format!("{version}.zip.part") {
+            fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------- updates
+
+/// `updates.json`, one entry per engine with an update outstanding.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateRecord {
+    /// The pin the update was started for: a later launch with the same pin is the same update.
+    pub pin: String,
+    /// Failed attempts at it, over every launch.
+    pub failures: u32,
+}
+
+/// Attempts after which an update waits for the user (Settings → Dictionary → Update): a release
+/// that cannot be fetched or verified is not downloaded again on every launch.
+pub const MAX_UPDATE_FAILURES: u32 = 5;
+
+/// What launch does about one engine's update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdatePlan {
+    /// Nothing to update (current, never downloaded, or removed).
+    None,
+    /// Download the pinned release in the background. `new` is the first launch of this app
+    /// update; otherwise an unfinished one carries on (a quit mid-download, or offline).
+    Start { new: bool },
+    /// It failed too often; the user retries it.
+    Waiting,
+}
+
+/// The update decision for one engine, and its record afterwards. It fires once per app update,
+/// when the pin differs from the one last seen for this engine; until the release is installed,
+/// later launches carry it on rather than starting it again, and stop after
+/// [`MAX_UPDATE_FAILURES`].
+pub fn plan_update(
+    record: Option<&UpdateRecord>,
+    pin: &str,
+    previously_installed: bool,
+    pinned_ready: bool,
+) -> (UpdatePlan, Option<UpdateRecord>) {
+    if pinned_ready || !previously_installed {
+        return (UpdatePlan::None, None);
+    }
+    match record {
+        Some(record) if record.pin == pin => {
+            let plan = if record.failures < MAX_UPDATE_FAILURES {
+                UpdatePlan::Start { new: false }
+            } else {
+                UpdatePlan::Waiting
+            };
+            (plan, Some(record.clone()))
+        }
+        _ => (
+            UpdatePlan::Start { new: true },
+            Some(UpdateRecord {
+                pin: pin.to_string(),
+                failures: 0,
+            }),
+        ),
+    }
+}
+
+/// How long the store waits before trying a failed update again this session, by the number of
+/// failures so far.
+pub const RETRY_DELAYS: &[Duration] = &[
+    Duration::from_secs(60),
+    Duration::from_secs(5 * 60),
+    Duration::from_secs(15 * 60),
+    Duration::from_secs(30 * 60),
+];
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 // ---------------------------------------------------------------------------- store
 
 type Notify = Arc<dyn Fn(&str, bool) + Send + Sync>;
+type Switch = Arc<dyn Fn(&str) + Send + Sync>;
 
 struct Slot {
     phase: Phase,
     control: Option<Arc<AtomicU8>>,
+    /// The running worker was cancelled by a removal: everything goes, the earlier release too.
+    wipe: bool,
 }
 
-/// The per-engine download state machines over `<app local data>/extensions`.
+/// A tree the store serves: its directory, its version and the compiled-in map it is checked
+/// against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Serving<'a> {
+    pub dir: PathBuf,
+    pub version: &'a str,
+    pub files: &'a BTreeMap<String, String>,
+}
+
+/// The per-engine download state machines over `<app local data>/extensions`, and the background
+/// updates of engines an app update re-pinned.
 pub struct ExtensionStore {
     root: PathBuf,
     engines: BTreeMap<String, Engine>,
     fetch: Arc<dyn Fetch>,
     slots: Mutex<HashMap<String, Slot>>,
     notify: OnceLock<Notify>,
+    switch: OnceLock<Switch>,
     closing: AtomicBool,
+    /// The version each engine is served from this session. Chosen the first time it is asked
+    /// for, and changed only by a finished update ([`Self::activate`]), so a window that loaded
+    /// one release never fetches files of another.
+    active: Mutex<HashMap<String, String>>,
+    /// `updates.json`.
+    updates: Mutex<BTreeMap<String, UpdateRecord>>,
+    /// Updates waiting their turn: one runs at a time, the selected engine's first.
+    queue: Mutex<std::collections::VecDeque<String>>,
+    /// The update running from the queue.
+    updating: Mutex<Option<String>>,
+    /// When a failed update is tried again (Unix seconds), for the status.
+    retry_at: Mutex<HashMap<String, u64>>,
+    retry_delays: Vec<Duration>,
 }
 
 impl ExtensionStore {
     pub fn new(root: PathBuf, engines: BTreeMap<String, Engine>, fetch: Arc<dyn Fetch>) -> Arc<Self> {
+        Self::with_retry_delays(root, engines, fetch, RETRY_DELAYS.to_vec())
+    }
+
+    pub fn with_retry_delays(
+        root: PathBuf,
+        engines: BTreeMap<String, Engine>,
+        fetch: Arc<dyn Fetch>,
+        retry_delays: Vec<Duration>,
+    ) -> Arc<Self> {
+        // A missing or unreadable record is no outstanding update: launch plans afresh.
+        let updates = fs::read(root.join(UPDATES))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default();
         Arc::new(Self {
             root,
             engines,
             fetch,
             slots: Mutex::new(HashMap::new()),
             notify: OnceLock::new(),
+            switch: OnceLock::new(),
             closing: AtomicBool::new(false),
+            active: Mutex::new(HashMap::new()),
+            updates: Mutex::new(updates),
+            queue: Mutex::new(Default::default()),
+            updating: Mutex::new(None),
+            retry_at: Mutex::new(HashMap::new()),
+            retry_delays,
         })
     }
 
@@ -569,12 +797,19 @@ impl ExtensionStore {
         let _ = self.notify.set(Arc::new(notify));
     }
 
+    /// Called once a finished update moves an engine onto its new release: the windows running
+    /// that engine reload onto it.
+    pub fn on_switch(&self, switch: impl Fn(&str) + Send + Sync + 'static) {
+        let _ = self.switch.set(Arc::new(switch));
+    }
+
     fn with_slot<R>(&self, id: &str, f: impl FnOnce(&mut Slot) -> R) -> Option<R> {
         let engine = self.engines.get(id)?;
         let mut slots = self.slots.lock().unwrap_or_else(|p| p.into_inner());
         let slot = slots.entry(id.to_string()).or_insert_with(|| Slot {
             phase: scan_disk(&self.root, engine),
             control: None,
+            wipe: false,
         });
         Some(f(slot))
     }
@@ -585,6 +820,7 @@ impl ExtensionStore {
         }
     }
 
+    /// The pinned release's phase.
     pub fn phase(&self, id: &str) -> Phase {
         self.with_slot(id, |slot| {
             // A tree removed behind the store's back is not ready any more.
@@ -600,6 +836,58 @@ impl ExtensionStore {
         .unwrap_or(Phase::Absent)
     }
 
+    /// The tree an engine is served from: the session's active version while its tree is there,
+    /// else the pinned release when installed, else the earlier release an app update left.
+    pub fn serving(&self, id: &str) -> Option<Serving<'_>> {
+        let engine = self.engines.get(id)?;
+        let release = |version: &str| {
+            if version == engine.pin.version {
+                Some((engine.pin.version.as_str(), &engine.files))
+            } else {
+                engine
+                    .previous
+                    .iter()
+                    .find(|r| r.version == version)
+                    .map(|r| (r.version.as_str(), &r.files))
+            }
+        };
+        let mut active = self.active.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(current) = active.get(id).cloned() {
+            if let Some((version, files)) = release(&current) {
+                let dir = self.root.join(id).join(version);
+                if dir.is_dir() {
+                    return Some(Serving { dir, version, files });
+                }
+            }
+            active.remove(id);
+        }
+        let (version, files) = if version_dir(&self.root, engine).is_dir() {
+            (engine.pin.version.as_str(), &engine.files)
+        } else {
+            let release = installed_previous(&self.root, engine)?;
+            (release.version.as_str(), &release.files)
+        };
+        active.insert(id.to_string(), version.to_string());
+        Some(Serving {
+            dir: self.root.join(id).join(version),
+            version,
+            files,
+        })
+    }
+
+    /// The earlier release an engine is served from while its pinned one downloads, if it is.
+    pub fn serving_previous(&self, id: &str) -> Option<String> {
+        let engine = self.engines.get(id)?;
+        self.serving(id)
+            .map(|s| s.version.to_string())
+            .filter(|version| *version != engine.pin.version)
+    }
+
+    /// When a failed update is tried again, if it will be this session.
+    pub fn retry_at(&self, id: &str) -> Option<u64> {
+        self.retry_at.lock().unwrap_or_else(|p| p.into_inner()).get(id).copied()
+    }
+
     /// The pinned version's tree when it is installed.
     #[cfg(test)]
     pub fn ready_dir(&self, id: &str) -> Option<PathBuf> {
@@ -608,12 +896,13 @@ impl ExtensionStore {
         (self.phase(id) == Phase::Ready && dir.is_dir()).then_some(dir)
     }
 
-    /// Removes leftovers for every engine (other versions, staging, stray parts). Start-up only.
+    /// Removes leftovers for every engine (other versions, staging, stray parts), keeping an
+    /// earlier release still in use. Start-up only.
     pub fn clean_all(&self) -> Vec<String> {
         self.engines
             .values()
             .flat_map(|engine| {
-                clean(&self.root, engine)
+                clean(&self.root, engine, None)
                     .into_iter()
                     .map(move |name| format!("{}/{name}", engine.pin.id))
             })
@@ -626,6 +915,7 @@ impl ExtensionStore {
             return;
         }
         let Some(engine) = self.engines.get(id) else { return };
+        self.retry_at.lock().unwrap_or_else(|p| p.into_inner()).remove(id);
         let control = self.with_slot(id, |slot| {
             if let Some(control) = &slot.control {
                 control.store(RUN, Ordering::SeqCst);
@@ -636,6 +926,7 @@ impl ExtensionStore {
             }
             let control = Arc::new(AtomicU8::new(RUN));
             slot.control = Some(control.clone());
+            slot.wipe = false;
             slot.phase = Phase::Downloading {
                 file: engine.zip_file().name,
                 received: 0,
@@ -668,34 +959,46 @@ impl ExtensionStore {
         });
     }
 
-    /// Stops a download and removes what it fetched, unless the engine is ready.
+    /// Stops a download and removes what it fetched, unless the engine is ready. An update's
+    /// earlier release stays, and stays in use.
     pub fn cancel(&self, id: &str) -> Result<(), String> {
         if self.phase(id) == Phase::Ready {
             return Ok(());
         }
-        self.discard(id)
+        let keep = self
+            .engines
+            .get(id)
+            .is_some_and(|engine| installed_previous(&self.root, engine).is_some());
+        self.discard(id, !keep)
     }
 
-    /// Stops any download and removes the engine's files, ready or not. Never its dictionaries:
-    /// those are in the WebView's storage for its origin, and in `chrome-local-<id>.json`.
+    /// Stops any download and removes the engine's files, ready or not, and any earlier release.
+    /// Never its dictionaries: those are in the WebView's storage for its origin, and in
+    /// `chrome-local-<id>.json`.
     pub fn delete(&self, id: &str) -> Result<(), String> {
-        self.discard(id)
+        self.discard(id, true)
     }
 
-    fn discard(&self, id: &str) -> Result<(), String> {
+    fn discard(&self, id: &str, wipe: bool) -> Result<(), String> {
         let Some(engine) = self.engines.get(id) else {
             return Err(format!("unknown engine {id}"));
         };
         let dir = self.root.join(id);
         let result = self.with_slot(id, |slot| {
             if let Some(control) = &slot.control {
+                slot.wipe = wipe;
                 control.store(CANCEL, Ordering::SeqCst);
                 return Ok(());
             }
-            let removed = remove_dir(&dir);
+            let removed = if wipe { remove_dir(&dir) } else { remove_pinned(&self.root, engine) };
             slot.phase = scan_disk(&self.root, engine);
             removed.map_err(|e| format!("could not remove {}: {e}", dir.display()))
         });
+        if wipe {
+            // Removed: nothing is left to update, now or on a later launch.
+            self.forget_update(id);
+            self.active.lock().unwrap_or_else(|p| p.into_inner()).remove(id);
+        }
         forget_verified(id);
         self.emit(id, true);
         result.unwrap_or(Ok(()))
@@ -786,7 +1089,8 @@ impl ExtensionStore {
     }
 
     /// Unpack the verified zip into a staging directory, verify every file, then rename it into
-    /// place, record it, and remove the zip and anything else the pin does not need.
+    /// place, record it, and remove the zip. Leftovers are cleaned once the new tree is the one in
+    /// use ([`Self::activate`]): until then an earlier release may still be serving windows.
     fn install(&self, engine: &Engine, zip: &Path, control: &AtomicU8) -> Result<(), Stop> {
         let dir = self.root.join(&engine.pin.id);
         let version = &engine.pin.version;
@@ -825,34 +1129,67 @@ impl ExtensionStore {
         let record = json!({
             "version": version,
             "assetSha256": engine.pin.asset.sha256,
-            "verifiedAt": std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
+            "verifiedAt": unix_now(),
         });
         let _ = fs::write(dir.join(INSTALLED), serde_json::to_vec_pretty(&record).unwrap_or_default());
         let _ = fs::remove_file(zip);
         forget_verified(&engine.pin.id);
-        clean(&self.root, engine);
         Ok(())
+    }
+
+    /// The pinned release is installed: serve it from now on. When an earlier one was being
+    /// served, that one stays on disk until the next launch (a window mid-reload may still ask
+    /// for its files) and the switch hook reloads the engine's windows onto the new one.
+    fn activate(&self, engine: &Engine) {
+        let id = &engine.pin.id;
+        let was = self
+            .active
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id.clone(), engine.pin.version.clone());
+        let switched = was.as_deref().filter(|version| *version != engine.pin.version);
+        clean(&self.root, engine, switched);
+        self.forget_update(id);
+        if let Some(from) = switched {
+            report(json!({ "check": "extension-update-switched", "engine": id, "from": from, "to": engine.pin.version }));
+            if let Some(switch) = self.switch.get() {
+                switch(id);
+            }
+        }
     }
 
     fn finish(self: &Arc<Self>, id: &str, control: &AtomicU8, outcome: Result<(), Stop>) {
         let Some(engine) = self.engines.get(id) else { return };
         let dir = self.root.join(id);
+        // Before the slot goes idle, so whoever sees it finished sees the new release served (or
+        // the failure counted and its retry scheduled).
+        if outcome.is_ok() {
+            self.activate(engine);
+        }
+        if matches!(outcome, Err(Stop::Failed(_))) {
+            self.update_failed(id);
+        }
         let restart = self
             .with_slot(id, |slot| {
                 slot.control = None;
                 let stopped = matches!(outcome, Err(Stop::Paused | Stop::Cancelled));
+                let wipe = std::mem::take(&mut slot.wipe);
                 slot.phase = match outcome {
                     Ok(()) => Phase::Ready,
-                    Err(Stop::Cancelled) => match remove_dir(&dir) {
-                        Ok(()) => Phase::Absent,
-                        Err(e) => Phase::Failed {
-                            message: format!("could not remove {}: {e}", dir.display()),
-                            overall_received: 0,
-                        },
-                    },
+                    Err(Stop::Cancelled) => {
+                        let removed = if wipe || installed_previous(&self.root, engine).is_none() {
+                            remove_dir(&dir)
+                        } else {
+                            remove_pinned(&self.root, engine)
+                        };
+                        match removed {
+                            Ok(()) => Phase::Absent,
+                            Err(e) => Phase::Failed {
+                                message: format!("could not remove {}: {e}", dir.display()),
+                                overall_received: 0,
+                            },
+                        }
+                    }
                     Err(Stop::Paused) => match scan_disk(&self.root, engine) {
                         Phase::Paused { overall_received } => Phase::Paused { overall_received },
                         _ => Phase::Paused {
@@ -871,7 +1208,165 @@ impl ExtensionStore {
         self.emit(id, true);
         if restart {
             self.start(id);
+            return;
         }
+        let mut updating = self.updating.lock().unwrap_or_else(|p| p.into_inner());
+        if updating.as_deref() == Some(id) {
+            *updating = None;
+            drop(updating);
+            self.pump();
+        }
+    }
+
+    // ------------------------------------------------------------ updates
+
+    fn save_updates(&self, updates: &BTreeMap<String, UpdateRecord>) {
+        let path = self.root.join(UPDATES);
+        let temp = self.root.join(format!("{UPDATES}.tmp"));
+        let written = fs::create_dir_all(&self.root)
+            .and_then(|()| fs::write(&temp, serde_json::to_vec_pretty(updates).unwrap_or_default()))
+            .and_then(|()| rename_with_retry(&temp, &path));
+        if let Err(e) = written {
+            report(json!({ "check": "extension-update-record", "error": e.to_string() }));
+        }
+    }
+
+    fn forget_update(&self, id: &str) {
+        self.retry_at.lock().unwrap_or_else(|p| p.into_inner()).remove(id);
+        self.queue.lock().unwrap_or_else(|p| p.into_inner()).retain(|queued| queued != id);
+        let mut updates = self.updates.lock().unwrap_or_else(|p| p.into_inner());
+        if updates.remove(id).is_some() {
+            self.save_updates(&updates);
+        }
+    }
+
+    /// The update records.
+    #[cfg(test)]
+    pub fn update_records(&self) -> BTreeMap<String, UpdateRecord> {
+        self.updates.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    /// At launch: plan every engine's update ([`plan_update`]) and start the ones due, one at a
+    /// time and `selected`'s first. Only engines the user downloaded and kept are updated; the
+    /// windows keep running an engine's earlier release (when it is one the build still knows)
+    /// until the new one is verified. Returns the engines queued.
+    pub fn start_updates(self: &Arc<Self>, selected: &str) -> Vec<String> {
+        let mut queued = Vec::new();
+        {
+            let mut updates = self.updates.lock().unwrap_or_else(|p| p.into_inner());
+            let before = updates.clone();
+            for (id, engine) in &self.engines {
+                let (plan, record) = plan_update(
+                    updates.get(id),
+                    &engine.pin.version,
+                    previously_installed(&self.root, engine),
+                    version_dir(&self.root, engine).is_dir(),
+                );
+                match record {
+                    Some(record) => updates.insert(id.clone(), record),
+                    None => updates.remove(id),
+                };
+                if let UpdatePlan::Start { new } = plan {
+                    report(json!({
+                        "check": "extension-update-planned",
+                        "engine": id,
+                        "to": engine.pin.version,
+                        "from": installed_previous(&self.root, engine).map(|r| r.version.clone())
+                            .or_else(|| recorded_version(&self.root, engine)),
+                        "new": new,
+                    }));
+                    queued.push(id.clone());
+                }
+            }
+            if *updates != before {
+                self.save_updates(&updates);
+            }
+        }
+        queued.sort_by_key(|id| id != selected);
+        self.queue.lock().unwrap_or_else(|p| p.into_inner()).extend(queued.iter().cloned());
+        self.pump();
+        queued
+    }
+
+    /// Starts the next queued update, unless one is running. No lock is held across `start`,
+    /// whose worker may finish (and pump again) before it returns.
+    fn pump(self: &Arc<Self>) {
+        loop {
+            if self.closing.load(Ordering::SeqCst) {
+                return;
+            }
+            let id = {
+                let mut updating = self.updating.lock().unwrap_or_else(|p| p.into_inner());
+                if updating.is_some() {
+                    return;
+                }
+                let Some(id) = self.queue.lock().unwrap_or_else(|p| p.into_inner()).pop_front() else {
+                    return;
+                };
+                // Claimed before it starts, so a worker that finishes at once finds it.
+                *updating = Some(id.clone());
+                id
+            };
+            self.start(&id);
+            // Running now (or already, started by the user): its finish pumps the next one.
+            if self.with_slot(&id, |slot| slot.control.is_some()) == Some(true) {
+                return;
+            }
+            let mut updating = self.updating.lock().unwrap_or_else(|p| p.into_inner());
+            if updating.as_deref() != Some(id.as_str()) {
+                // It finished already, and its finish moved the queue on.
+                return;
+            }
+            // Ready already (the user downloaded it), or it could not start: the next one.
+            *updating = None;
+        }
+    }
+
+    /// A download with an update outstanding failed: count it, and try again later this session
+    /// while it has attempts left. The earlier release stays in use throughout.
+    fn update_failed(self: &Arc<Self>, id: &str) {
+        let failures = {
+            let mut updates = self.updates.lock().unwrap_or_else(|p| p.into_inner());
+            let Some(record) = updates.get_mut(id) else { return };
+            record.failures += 1;
+            let failures = record.failures;
+            self.save_updates(&updates);
+            failures
+        };
+        if failures >= MAX_UPDATE_FAILURES || self.closing.load(Ordering::SeqCst) {
+            return;
+        }
+        let delay = self
+            .retry_delays
+            .get(failures as usize - 1)
+            .or(self.retry_delays.last())
+            .copied()
+            .unwrap_or(Duration::from_secs(60));
+        self.retry_at
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id.to_string(), unix_now() + delay.as_secs());
+        let store = Arc::downgrade(self);
+        let owned = id.to_string();
+        let _ = std::thread::Builder::new()
+            .name(format!("kimochi-{id}-update-retry"))
+            .spawn(move || {
+                let due = Instant::now() + delay;
+                while Instant::now() < due {
+                    std::thread::sleep(Duration::from_millis(50).min(delay));
+                    match store.upgrade() {
+                        Some(store) if !store.closing.load(Ordering::SeqCst) => {}
+                        _ => return,
+                    }
+                }
+                let Some(store) = store.upgrade() else { return };
+                // Still failed and still wanted: not retried, removed or finished meanwhile.
+                let waiting = store.retry_at.lock().unwrap_or_else(|p| p.into_inner()).remove(&owned).is_some();
+                if waiting && matches!(store.phase(&owned), Phase::Failed { .. }) {
+                    store.queue.lock().unwrap_or_else(|p| p.into_inner()).push_front(owned);
+                    store.pump();
+                }
+            });
     }
 }
 
@@ -895,6 +1390,29 @@ pub struct ExtensionStatus {
     pub overall_received: u64,
     pub overall_total: u64,
     pub message: Option<String>,
+    /// While the engine runs an earlier release and the pinned one downloads in the background
+    /// (an app update moved the pin): that download. The status itself then says `ready`, since
+    /// the engine is usable throughout.
+    pub update: Option<ExtensionUpdate>,
+}
+
+/// An engine's background update: the pinned release's download, beside the earlier release in
+/// use. `version` on the status is the release it updates to.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionUpdate {
+    /// The release in use until the update is installed.
+    pub from: String,
+    /// absent (not started, or waiting for the user) | downloading | paused | failed | verifying
+    pub state: &'static str,
+    pub file: Option<String>,
+    pub received_bytes: Option<u64>,
+    pub total_bytes: Option<u64>,
+    pub overall_received: u64,
+    pub overall_total: u64,
+    pub message: Option<String>,
+    /// When a failed update is tried again this session (Unix seconds).
+    pub retry_at: Option<u64>,
 }
 
 impl ExtensionStatus {
@@ -917,6 +1435,7 @@ impl ExtensionStatus {
             overall_received: phase.overall_received(total),
             overall_total: total,
             message: None,
+            update: None,
         };
         match phase {
             Phase::Downloading {
@@ -932,13 +1451,44 @@ impl ExtensionStatus {
         }
         status
     }
+
+    /// The status of an engine served from the earlier release `from` while this one (the pinned
+    /// release's download) is not installed: ready, with the download as its `update`.
+    pub fn updating_from(self, from: &str, retry_at: Option<u64>) -> Self {
+        if self.state == "ready" {
+            return self;
+        }
+        let total = self.overall_total;
+        ExtensionStatus {
+            update: Some(ExtensionUpdate {
+                from: from.to_string(),
+                state: self.state,
+                file: self.file,
+                received_bytes: self.received_bytes,
+                total_bytes: self.total_bytes,
+                overall_received: self.overall_received,
+                overall_total: total,
+                message: self.message,
+                retry_at: if self.state == "failed" { retry_at } else { None },
+            }),
+            state: "ready",
+            source: Some("downloaded"),
+            file: None,
+            received_bytes: None,
+            total_bytes: None,
+            overall_received: total,
+            message: None,
+            ..self
+        }
+    }
 }
 
 /// What the activity feed hears about one engine's download: each state change once, progress at
 /// most once a second.
 #[derive(Default)]
 pub struct ExtensionTicker {
-    state: Option<&'static str>,
+    /// The last state seen, and whether it was an update's.
+    state: Option<(bool, &'static str)>,
     percent: u64,
     posted: Option<Instant>,
 }
@@ -948,11 +1498,55 @@ impl ExtensionTicker {
         format!("extension:{id}")
     }
 
+    /// Whether the last status seen was an update's (or this one is): the selected engine's are
+    /// posted, the others' kept quiet.
+    pub fn in_update(&self, status: &ExtensionStatus) -> bool {
+        status.update.is_some() || matches!(self.state, Some((true, _)))
+    }
+
     pub fn next(&mut self, status: &ExtensionStatus, now: Instant) -> Option<(String, crate::activity::Tone)> {
         use crate::activity::Tone;
         let name = &status.name;
+        if let Some(update) = &status.update {
+            let pct = percent(update.overall_received, update.overall_total);
+            let previous = self.state.replace((true, update.state));
+            let changed = previous != Some((true, update.state));
+            let version = &status.version;
+            let post = match update.state {
+                "downloading" => {
+                    let due = self
+                        .posted
+                        .is_none_or(|at| now.duration_since(at) >= Duration::from_secs(1));
+                    (changed || (due && pct != self.percent))
+                        .then(|| (format!("Updating {name} to {version}… {pct}%"), Tone::Busy))
+                }
+                _ if !changed => None,
+                "verifying" => Some((format!("Verifying {name} {version}…"), Tone::Busy)),
+                "paused" => Some((format!("{name} update paused at {pct}%"), Tone::Info)),
+                "failed" => Some((
+                    format!(
+                        "{name} update failed: {}. Still using {}{}",
+                        update.message.as_deref().unwrap_or("unknown error"),
+                        update.from,
+                        if update.retry_at.is_some() { "; trying again later" } else { "" }
+                    ),
+                    Tone::Error,
+                )),
+                _ => None,
+            };
+            if post.is_some() {
+                self.percent = pct;
+                self.posted = Some(now);
+            }
+            return post;
+        }
         let pct = percent(status.overall_received, status.overall_total);
-        let previous = self.state.replace(status.state);
+        let previous = self.state.replace((false, status.state));
+        if let (Some((true, _)), "ready") = (previous, status.state) {
+            self.posted = Some(now);
+            return Some((format!("{name} updated to {}", status.version), Tone::Ok));
+        }
+        let previous = previous.map(|(_, state)| state);
         let changed = previous != Some(status.state);
         let post = match status.state {
             "downloading" => {
@@ -989,9 +1583,8 @@ impl ExtensionTicker {
 
 // ---------------------------------------------------------------------------- serving
 
-/// The store root, set once at start-up, so serving needs no app handle (the asset provider has
-/// none).
-static ROOT: OnceLock<PathBuf> = OnceLock::new();
+/// The store, set once at start-up, so serving needs no app handle (the asset provider has none).
+static STORE: OnceLock<Arc<ExtensionStore>> = OnceLock::new();
 /// Files already hashed against the map this session: `(id, tree, path)`.
 static VERIFIED: OnceLock<Mutex<HashSet<(String, PathBuf, String)>>> = OnceLock::new();
 /// Where serving refusals are reported (`record` in main.rs).
@@ -1028,16 +1621,20 @@ pub fn dev_tree(id: &str) -> Option<PathBuf> {
     dir.join("manifest.json").is_file().then_some(dir)
 }
 
+/// The tree an engine is served from and the map its files are checked against: its download
+/// (the pinned release, or the earlier one in use while an update downloads), else the debug dev
+/// tree.
+fn serving_files(id: &str) -> Option<(PathBuf, &'static BTreeMap<String, String>, &'static str)> {
+    if let Some(serving) = STORE.get().and_then(|store| store.serving(id)) {
+        return Some((serving.dir, serving.files, "downloaded"));
+    }
+    let engine = engine(id)?;
+    dev_tree(id).map(|dir| (dir, &engine.files, "development"))
+}
+
 /// The tree an engine is served from: its installed download, else the debug dev tree.
 pub fn serving_tree(id: &str) -> Option<(PathBuf, &'static str)> {
-    let engine = engine(id)?;
-    if let Some(root) = ROOT.get() {
-        let dir = version_dir(root, engine);
-        if dir.is_dir() {
-            return Some((dir, "downloaded"));
-        }
-    }
-    dev_tree(id).map(|dir| (dir, "development"))
+    serving_files(id).map(|(dir, _, source)| (dir, source))
 }
 
 /// Whether an engine can be served now. `none` and unknown ids never are.
@@ -1068,12 +1665,12 @@ pub fn file_without_links(tree: &Path, rel: &str) -> Option<PathBuf> {
     Some(path)
 }
 
-/// One file of an engine's release, or `None` (a 404): only paths in the pinned map, from the
-/// serving tree, never through a link, and hashed against the map the first time it is served.
+/// One file of an engine's release, or `None` (a 404): only paths in the served release's
+/// compiled-in map, from its tree, never through a link, and hashed against the map the first
+/// time it is served.
 pub fn read(id: &str, rel: &str) -> Option<Vec<u8>> {
-    let engine = engine(id)?;
-    let expected = engine.files.get(rel)?;
-    let (tree, _) = serving_tree(id)?;
+    let (tree, files, _) = serving_files(id)?;
+    let expected = files.get(rel)?;
     read_verified(id, &tree, rel, expected)
 }
 
@@ -1129,13 +1726,15 @@ impl<R: tauri::Runtime> tauri::Assets<R> for NoAssets {
     }
 }
 
-/// The Yomitan file an asset key names, if it names one.
+/// The Yomitan file an asset key names, if it names one: a path of the release being served (the
+/// pinned one when none is).
 pub fn yomitan_path(key: &str) -> Option<&'static str> {
     let rel = key.strip_prefix('/').unwrap_or(key);
-    engine("yomitan")?
-        .files
-        .get_key_value(rel)
-        .map(|(k, _)| k.as_str())
+    let files = match STORE.get().and_then(|store| store.serving("yomitan")) {
+        Some(serving) => serving.files,
+        None => &engine("yomitan")?.files,
+    };
+    files.get_key_value(rel).map(|(k, _)| k.as_str())
 }
 
 impl<R: tauri::Runtime> tauri::Assets<R> for EngineAssets<R> {
@@ -1172,17 +1771,26 @@ fn store(app: &tauri::AppHandle) -> Option<Arc<ExtensionStore>> {
 /// The status the UI shows.
 pub fn status(app: &tauri::AppHandle, id: &str) -> Option<ExtensionStatus> {
     let engine = engine(id)?;
-    let phase = store(app).map_or(Phase::Absent, |s| s.phase(id));
-    Some(ExtensionStatus::new(engine, &phase, dev_tree(id).is_some()))
+    let Some(store) = store(app) else {
+        return Some(ExtensionStatus::new(engine, &Phase::Absent, dev_tree(id).is_some()));
+    };
+    let status = ExtensionStatus::new(engine, &store.phase(id), dev_tree(id).is_some());
+    Some(match store.serving_previous(id) {
+        Some(from) => status.updating_from(&from, store.retry_at(id)),
+        None => status,
+    })
 }
 
 /// Create the store under `<app local data>/extensions`, clean leftovers, and announce changes
 /// (the `extension-download` event, the activity feed, and `on_change`, which main.rs uses to
-/// move the windows to a newly usable engine).
+/// move the windows to a newly usable engine). An update's progress goes to the activity feed
+/// only for the engine the dictionary setting names; the others update quietly. `on_switch` is
+/// called when a finished update moves an engine onto its new release.
 pub fn install(
     app: &tauri::AppHandle,
     report_to: impl Fn(Value) + Send + Sync + 'static,
     on_change: impl Fn(&tauri::AppHandle, &str, bool) + Send + Sync + 'static,
+    on_switch: impl Fn(&tauri::AppHandle, &str) + Send + Sync + 'static,
 ) -> Result<Arc<ExtensionStore>, String> {
     use tauri::{Emitter, Manager};
     let root = app
@@ -1190,9 +1798,9 @@ pub fn install(
         .app_local_data_dir()
         .map_err(|e| e.to_string())?
         .join("extensions");
-    let _ = ROOT.set(root.clone());
     let _ = REPORT.set(Box::new(report_to));
     let store = ExtensionStore::new(root, engines().clone(), Arc::new(HttpFetch::default()));
+    let _ = STORE.set(store.clone());
     let removed = store.clean_all();
     if !removed.is_empty() {
         report(json!({ "check": "extension-store-cleaned", "removed": removed }));
@@ -1201,12 +1809,15 @@ pub fn install(
     let tickers: Mutex<HashMap<String, ExtensionTicker>> = Mutex::new(HashMap::new());
     store.on_change(move |id, transition| {
         let Some(current) = status(&handle, id) else { return };
-        let post = tickers
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .entry(id.to_string())
-            .or_default()
-            .next(&current, Instant::now());
+        let selected = handle
+            .try_state::<crate::state::Shared>()
+            .map(|state| crate::extensions::selected_engine(&state.settings));
+        let post = {
+            let mut tickers = tickers.lock().unwrap_or_else(|p| p.into_inner());
+            let ticker = tickers.entry(id.to_string()).or_default();
+            let quiet = ticker.in_update(&current) && selected.as_deref() != Some(id);
+            ticker.next(&current, Instant::now()).filter(|_| !quiet)
+        };
         if let Some((text, tone)) = post {
             crate::activity::post(&handle, &text, tone, Some(&ExtensionTicker::key(id)));
         }
@@ -1215,13 +1826,22 @@ pub fn install(
             on_change(&handle, id, transition);
         }
     });
+    let handle = app.clone();
+    store.on_switch(move |id| on_switch(&handle, id));
     app.manage(store.clone());
     Ok(store)
 }
 
+/// At launch: update in the background every engine an app update re-pinned that the user had
+/// downloaded (`ExtensionStore::start_updates`), `selected`'s first.
+pub fn start_updates(app: &tauri::AppHandle, selected: &str) -> Vec<String> {
+    store(app).map(|store| store.start_updates(selected)).unwrap_or_default()
+}
+
 /// Start the download of an engine the user already chose, when it is not usable: at launch for
-/// the selected engine (after a pin bump, or an upgrade from a build that bundled it). Paused
-/// downloads resume; a failed one waits for Retry.
+/// the selected engine (after a pin bump from a release too old to keep serving, or an upgrade
+/// from a build that bundled it; a recent release keeps serving and updates through
+/// [`start_updates`]). Paused downloads resume; a failed one waits for Retry.
 pub fn ensure_selected(app: &tauri::AppHandle, id: &str) -> bool {
     // `none` (the Yomitan API, which needs no engine) has nothing to download.
     if !IDS.contains(&id) || is_ready(id) {
@@ -1456,15 +2076,28 @@ mod tests {
             "a".repeat(64)
         );
         let files = |name: &str| format!(r#"{{"manifest.json":"{0}","{name}":"{0}"}}"#, "b".repeat(64));
-        assert!(Engine::parse("demo", &good, &files("js/a.js")).is_ok());
+        assert!(Engine::parse("demo", &good, &files("js/a.js"), "[]").is_ok());
         for bad in ["../x.js", "/abs.js", "a\\\\b.js", "a//b.js", "./a.js", "installed.json"] {
-            assert!(Engine::parse("demo", &good, &files(bad)).is_err(), "{bad}");
+            assert!(Engine::parse("demo", &good, &files(bad), "[]").is_err(), "{bad}");
         }
-        assert!(Engine::parse("other", &good, &files("a.js")).is_err());
-        assert!(Engine::parse("demo", &good.replace("https://", "http://"), &files("a.js")).is_err());
-        assert!(Engine::parse("demo", &good.replace("\"size\":5", "\"size\":0"), &files("a.js")).is_err());
-        assert!(Engine::parse("demo", &good.replace("1.0", "../1"), &files("a.js")).is_err());
-        assert!(Engine::parse("demo", &good, r#"{"a.js":"x"}"#).is_err());
+        assert!(Engine::parse("other", &good, &files("a.js"), "[]").is_err());
+        assert!(Engine::parse("demo", &good.replace("https://", "http://"), &files("a.js"), "[]").is_err());
+        assert!(Engine::parse("demo", &good.replace("\"size\":5", "\"size\":0"), &files("a.js"), "[]").is_err());
+        assert!(Engine::parse("demo", &good.replace("1.0", "../1"), &files("a.js"), "[]").is_err());
+        assert!(Engine::parse("demo", &good, r#"{"a.js":"x"}"#, "[]").is_err());
+        // Earlier releases: plain names, never the pinned one, each listed once, safe maps.
+        let release = |version: &str, name: &str| format!(r#"{{"version":"{version}","files":{}}}"#, files(name));
+        let parsed = Engine::parse("demo", &good, &files("a.js"), &format!("[{}]", release("0.9", "b.js"))).unwrap();
+        assert_eq!(parsed.previous[0].version, "0.9");
+        for bad in [
+            format!("[{}]", release("1.0", "b.js")),
+            format!("[{}]", release("../0", "b.js")),
+            format!("[{},{}]", release("0.9", "b.js"), release("0.9", "c.js")),
+            format!("[{}]", release("0.9", "../b.js")),
+            "{}".to_string(),
+        ] {
+            assert!(Engine::parse("demo", &good, &files("a.js"), &bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
@@ -1649,6 +2282,7 @@ mod tests {
                 unpack: Unpack::default(),
             },
             files: map(items),
+            previous: Vec::new(),
         };
         (engine, zip)
     }
@@ -1841,6 +2475,373 @@ mod tests {
             Some(("Demo ready".into(), Tone::Ok))
         );
         assert_eq!(ExtensionTicker::key("tenten"), "extension:tenten");
+    }
+
+    // ------------------------------------------------------------------ updates after an app update
+
+    fn wait_for(store: &ExtensionStore, id: &str, done: impl Fn(&Phase) -> bool) -> Phase {
+        let start = Instant::now();
+        loop {
+            let idle = store.with_slot(id, |s| s.control.is_none()).unwrap();
+            let phase = store.phase(id);
+            if idle && done(&phase) {
+                return phase;
+            }
+            assert!(start.elapsed() < Duration::from_secs(10), "{id} stuck in {phase:?}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// `id` at `version`, as `demo` builds it.
+    fn engine_at(id: &str, version: &str, items: &[(&'static str, &[u8])]) -> (Engine, Vec<u8>) {
+        let (mut engine, zip) = demo(version, items);
+        engine.pin.id = id.into();
+        engine.pin.name = format!("Engine {id}");
+        engine.pin.asset.url = format!("https://github.com/{id}/{version}.zip");
+        (engine, zip)
+    }
+
+    /// The next app version's pin of `old`: `version`, remembering `old`'s release.
+    fn repinned(old: &Engine, version: &str, items: &[(&'static str, &[u8])]) -> (Engine, Vec<u8>) {
+        let (mut engine, zip) = engine_at(&old.pin.id, version, items);
+        engine.previous = vec![Release {
+            version: old.pin.version.clone(),
+            files: old.files.clone(),
+        }];
+        (engine, zip)
+    }
+
+    /// Downloads `engine` the way a launch of the build that pinned it did.
+    fn download_once(root: &Path, engine: &Engine, zip: &[u8]) {
+        let id = engine.pin.id.clone();
+        let store = ExtensionStore::new(
+            root.to_path_buf(),
+            BTreeMap::from([(id.clone(), engine.clone())]),
+            server(engine, zip),
+        );
+        store.start(&id);
+        wait_for(&store, &id, |p| *p == Phase::Ready);
+    }
+
+    fn quick(root: &Path, engines: &[&Engine], fake: Arc<FakeServer>) -> Arc<ExtensionStore> {
+        ExtensionStore::with_retry_delays(
+            root.to_path_buf(),
+            engines.iter().map(|e| (e.pin.id.clone(), (*e).clone())).collect(),
+            fake,
+            vec![Duration::from_millis(10)],
+        )
+    }
+
+    #[test]
+    fn plan_update_fires_once_per_app_update_and_carries_an_unfinished_one_on() {
+        let none = |r: Option<&UpdateRecord>, installed, ready| plan_update(r, "2.0", installed, ready);
+        // Never downloaded (or removed), or already current: nothing, and no record kept.
+        assert_eq!(none(None, false, false), (UpdatePlan::None, None));
+        assert_eq!(none(None, true, true), (UpdatePlan::None, None));
+        let stale = UpdateRecord { pin: "1.5".into(), failures: 4 };
+        assert_eq!(none(Some(&stale), false, false), (UpdatePlan::None, None));
+        // The first launch of a build with a new pin: a new update, counted from zero.
+        let fresh = UpdateRecord { pin: "2.0".into(), failures: 0 };
+        assert_eq!(none(None, true, false), (UpdatePlan::Start { new: true }, Some(fresh.clone())));
+        assert_eq!(none(Some(&stale), true, false), (UpdatePlan::Start { new: true }, Some(fresh.clone())));
+        // A later launch of the same build: the same update carries on, until it failed too often.
+        let failing = UpdateRecord { pin: "2.0".into(), failures: MAX_UPDATE_FAILURES - 1 };
+        assert_eq!(none(Some(&failing), true, false), (UpdatePlan::Start { new: false }, Some(failing.clone())));
+        let given_up = UpdateRecord { pin: "2.0".into(), failures: MAX_UPDATE_FAILURES };
+        assert_eq!(none(Some(&given_up), true, false), (UpdatePlan::Waiting, Some(given_up.clone())));
+    }
+
+    #[test]
+    fn an_update_serves_the_earlier_release_until_the_new_one_is_verified_then_switches() {
+        let root = TempDir::new("update");
+        let (old, old_zip) = engine_at("demo", "1.0", &[("manifest.json", b"{\"v\":1}"), ("js/old.js", b"old")]);
+        download_once(&root.0, &old, &old_zip);
+        let (new, new_zip) = repinned(&old, "2.0", &[("manifest.json", b"{\"v\":2}"), ("js/new.js", b"new")]);
+        let fake = server(&new, &new_zip);
+        // The next launch: the earlier tree survives the clean-up and is served, with its own map.
+        let store = quick(&root.0, &[&new], fake.clone());
+        assert!(store.clean_all().is_empty());
+        let serving = store.serving("demo").unwrap();
+        assert_eq!((serving.version, serving.dir.clone()), ("1.0", root.0.join("demo/1.0")));
+        assert!(serving.files.contains_key("js/old.js") && !serving.files.contains_key("js/new.js"));
+        assert_eq!(store.serving_previous("demo").as_deref(), Some("1.0"));
+        // Its status is usable, with the update beside it.
+        let status = ExtensionStatus::new(&new, &store.phase("demo"), false).updating_from("1.0", None);
+        assert_eq!((status.state, status.source, status.version.as_str()), ("ready", Some("downloaded"), "2.0"));
+        let update = status.update.clone().unwrap();
+        assert_eq!((update.from.as_str(), update.state), ("1.0", "absent"));
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["update"]["from"], "1.0");
+        assert_eq!(json["update"]["overallTotal"], new.pin.asset.size);
+        // While the new tree is renamed into place, the session keeps serving the earlier one; the
+        // switch is the hook, called once.
+        let switched = Arc::new(Mutex::new(Vec::new()));
+        let log = switched.clone();
+        let watcher = Arc::downgrade(&store);
+        store.on_switch(move |id| {
+            let store = watcher.upgrade().unwrap();
+            log.lock().unwrap().push((id.to_string(), store.serving(id).unwrap().version.to_string()));
+        });
+        assert_eq!(store.start_updates("demo"), vec!["demo".to_string()]);
+        assert_eq!(store.update_records()["demo"], UpdateRecord { pin: "2.0".into(), failures: 0 });
+        assert_eq!(wait_for(&store, "demo", |p| *p == Phase::Ready), Phase::Ready);
+        assert_eq!(*switched.lock().unwrap(), vec![("demo".to_string(), "2.0".to_string())]);
+        assert_eq!(store.serving("demo").unwrap().version, "2.0");
+        assert_eq!(store.serving_previous("demo"), None);
+        assert!(store.update_records().is_empty(), "nothing outstanding");
+        // The earlier tree waits for the next launch (a window mid-reload may still ask for it).
+        assert!(root.0.join("demo/1.0").is_dir());
+        let next = quick(&root.0, &[&new], Arc::new(FakeServer::default()));
+        assert_eq!(next.clean_all(), vec!["demo/1.0"]);
+        assert!(next.start_updates("demo").is_empty());
+        let record: Value = serde_json::from_slice(&fs::read(root.0.join("demo/installed.json")).unwrap()).unwrap();
+        assert_eq!(record["version"], "2.0");
+    }
+
+    #[test]
+    fn a_failing_update_keeps_the_earlier_release_retries_later_and_then_waits_for_the_user() {
+        let root = TempDir::new("update-offline");
+        let (old, old_zip) = engine_at("demo", "1.0", &[("manifest.json", b"{\"v\":1}")]);
+        download_once(&root.0, &old, &old_zip);
+        let (new, new_zip) = repinned(&old, "2.0", &[("manifest.json", b"{\"v\":2}")]);
+        let fake = server(&new, &new_zip);
+        *fake.fail.lock().unwrap() = Some("network error: offline".into());
+        let store = quick(&root.0, &[&new], fake.clone());
+        store.start_updates("demo");
+        // Every failure is tried again a moment later (the test's delay), up to the limit.
+        let start = Instant::now();
+        while store.update_records()["demo"].failures < MAX_UPDATE_FAILURES {
+            assert!(start.elapsed() < Duration::from_secs(10), "{:?}", store.update_records());
+            assert_eq!(store.serving("demo").unwrap().version, "1.0", "the earlier release stays in use");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let Phase::Failed { message, .. } = wait_for(&store, "demo", |p| matches!(p, Phase::Failed { .. })) else {
+            unreachable!()
+        };
+        assert!(message.contains("offline"), "{message}");
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(fake.requests.lock().unwrap().len() as u32, MAX_UPDATE_FAILURES, "no more attempts");
+        assert_eq!(store.retry_at("demo"), None);
+        assert!(root.0.join("demo/1.0").is_dir());
+        // The next launch leaves it to the user; Retry (start) still works and switches over.
+        *fake.fail.lock().unwrap() = None;
+        let next = quick(&root.0, &[&new], fake.clone());
+        assert!(next.start_updates("demo").is_empty());
+        assert_eq!(next.serving("demo").unwrap().version, "1.0");
+        next.start("demo");
+        wait_for(&next, "demo", |p| *p == Phase::Ready);
+        assert_eq!(next.serving("demo").unwrap().version, "2.0");
+        assert!(next.update_records().is_empty());
+    }
+
+    #[test]
+    fn a_failed_update_reports_when_it_is_tried_again() {
+        let root = TempDir::new("update-retry-at");
+        let (old, old_zip) = engine_at("demo", "1.0", &[("manifest.json", b"{\"v\":1}")]);
+        download_once(&root.0, &old, &old_zip);
+        let (new, new_zip) = repinned(&old, "2.0", &[("manifest.json", b"{\"v\":2}")]);
+        let fake = server(&new, &new_zip);
+        *fake.fail.lock().unwrap() = Some("network error: offline".into());
+        let store = ExtensionStore::with_retry_delays(
+            root.0.clone(),
+            BTreeMap::from([("demo".to_string(), new.clone())]),
+            fake,
+            vec![Duration::from_secs(600)],
+        );
+        store.start_updates("demo");
+        wait_for(&store, "demo", |p| matches!(p, Phase::Failed { .. }));
+        let at = store.retry_at("demo").unwrap();
+        assert!(at >= unix_now() + 590, "{at}");
+        let status = ExtensionStatus::new(&new, &store.phase("demo"), false).updating_from("1.0", store.retry_at("demo"));
+        let update = status.update.unwrap();
+        assert_eq!((status.state, update.state, update.retry_at), ("ready", "failed", Some(at)));
+        assert!(update.message.unwrap().contains("offline"));
+        // Retrying by hand clears the scheduled time.
+        store.start("demo");
+        assert_eq!(store.retry_at("demo"), None);
+        store.shutdown(Duration::from_secs(1));
+    }
+
+    #[test]
+    fn an_update_interrupted_by_a_quit_resumes_from_its_part_on_the_next_launch() {
+        let root = TempDir::new("update-quit");
+        let (old, old_zip) = engine_at("demo", "1.0", &[("manifest.json", b"{\"v\":1}")]);
+        download_once(&root.0, &old, &old_zip);
+        let big = (0..200_000u32).map(|i| (i * 13) as u8).collect::<Vec<_>>();
+        let (new, new_zip) = repinned(&old, "2.0", &[("manifest.json", &big)]);
+        let fake = server(&new, &new_zip);
+        // The connection drops half way and the app quits: the part and the record stay.
+        *fake.drop_after.lock().unwrap() = Some(new_zip.len() / 2);
+        let store = ExtensionStore::with_retry_delays(
+            root.0.clone(),
+            BTreeMap::from([("demo".to_string(), new.clone())]),
+            fake.clone(),
+            vec![Duration::from_secs(600)],
+        );
+        store.start_updates("demo");
+        wait_for(&store, "demo", |p| matches!(p, Phase::Failed { .. }));
+        store.shutdown(Duration::from_secs(1));
+        assert!(root.0.join("demo/2.0.zip.part").is_file());
+        assert_eq!(store.update_records()["demo"], UpdateRecord { pin: "2.0".into(), failures: 1 });
+        // Next launch: the same update (not a new one: the count stands), from where it stopped,
+        // and the earlier release is served meanwhile.
+        *fake.drop_after.lock().unwrap() = None;
+        let next = quick(&root.0, &[&new], fake.clone());
+        assert!(next.clean_all().is_empty(), "the part and the earlier tree are kept");
+        assert_eq!(next.serving("demo").unwrap().version, "1.0");
+        assert_eq!(next.start_updates("demo"), vec!["demo".to_string()]);
+        wait_for(&next, "demo", |p| *p == Phase::Ready);
+        assert_eq!(fake.requests.lock().unwrap().last().unwrap().1, (new_zip.len() / 2) as u64);
+        assert_eq!(fs::read(root.0.join("demo/2.0/manifest.json")).unwrap(), big);
+    }
+
+    #[test]
+    fn cancelling_an_update_keeps_the_earlier_release_and_removing_the_engine_takes_both() {
+        let root = TempDir::new("update-cancel");
+        let (old, old_zip) = engine_at("demo", "1.0", &[("manifest.json", b"{\"v\":1}")]);
+        download_once(&root.0, &old, &old_zip);
+        let (new, new_zip) = repinned(&old, "2.0", &[("manifest.json", b"{\"v\":2}")]);
+        fs::write(root.0.join("demo/2.0.zip.part"), &new_zip[..10]).unwrap();
+        let store = quick(&root.0, &[&new], server(&new, &new_zip));
+        store.cancel("demo").unwrap();
+        assert!(!root.0.join("demo/2.0.zip.part").exists());
+        assert_eq!(store.serving("demo").unwrap().version, "1.0");
+        assert_eq!(store.phase("demo"), Phase::Absent);
+        // Removing it (another engine selected) takes the earlier release and the record too, so a
+        // later launch never downloads it again.
+        store.start_updates("other");
+        store.delete("demo").unwrap();
+        wait_for(&store, "demo", |p| *p == Phase::Absent);
+        assert!(!root.0.join("demo").exists());
+        assert_eq!(store.serving("demo"), None);
+        assert!(store.update_records().is_empty());
+        let next = quick(&root.0, &[&new], Arc::new(FakeServer::default()));
+        assert!(next.start_updates("demo").is_empty());
+    }
+
+    #[test]
+    fn engines_never_downloaded_are_never_updated() {
+        let root = TempDir::new("update-never");
+        let (old, _) = engine_at("demo", "1.0", &[("manifest.json", b"{\"v\":1}")]);
+        let (new, new_zip) = repinned(&old, "2.0", &[("manifest.json", b"{\"v\":2}")]);
+        let fake = server(&new, &new_zip);
+        let store = quick(&root.0, &[&new], fake.clone());
+        assert!(store.start_updates("demo").is_empty());
+        std::thread::sleep(Duration::from_millis(30));
+        assert!(fake.requests.lock().unwrap().is_empty());
+        assert_eq!(store.phase("demo"), Phase::Absent);
+        assert!(!root.0.join(UPDATES).exists(), "nothing recorded");
+    }
+
+    #[test]
+    fn a_release_too_old_to_serve_is_still_updated_once_it_was_downloaded() {
+        let root = TempDir::new("update-unknown");
+        // 0.5 is not among 2.0's earlier releases: its tree cannot be served, so it goes, but the
+        // engine was downloaded, so it is downloaded anew.
+        let (ancient, ancient_zip) = engine_at("demo", "0.5", &[("manifest.json", b"{\"v\":0}")]);
+        download_once(&root.0, &ancient, &ancient_zip);
+        let (old, _) = engine_at("demo", "1.0", &[("manifest.json", b"{\"v\":1}")]);
+        let (new, new_zip) = repinned(&old, "2.0", &[("manifest.json", b"{\"v\":2}")]);
+        let store = quick(&root.0, &[&new], server(&new, &new_zip));
+        assert_eq!(store.clean_all(), vec!["demo/0.5"]);
+        assert_eq!(store.serving("demo"), None);
+        assert_eq!(store.start_updates("demo"), vec!["demo".to_string()]);
+        wait_for(&store, "demo", |p| *p == Phase::Ready);
+        assert_eq!(store.serving("demo").unwrap().version, "2.0");
+    }
+
+    #[test]
+    fn updates_run_one_at_a_time_with_the_selected_engine_first() {
+        let root = TempDir::new("update-queue");
+        let (a1, a1_zip) = engine_at("alpha", "1.0", &[("manifest.json", b"{\"a\":1}")]);
+        let (b1, b1_zip) = engine_at("beta", "1.0", &[("manifest.json", b"{\"b\":1}")]);
+        download_once(&root.0, &a1, &a1_zip);
+        download_once(&root.0, &b1, &b1_zip);
+        let (a2, a2_zip) = repinned(&a1, "2.0", &[("manifest.json", b"{\"a\":2}")]);
+        let (b2, b2_zip) = repinned(&b1, "2.0", &[("manifest.json", b"{\"b\":2}")]);
+        let fake = Arc::new(FakeServer {
+            files: HashMap::from([(a2.pin.asset.url.clone(), a2_zip), (b2.pin.asset.url.clone(), b2_zip)]),
+            ..Default::default()
+        });
+        let store = quick(&root.0, &[&a2, &b2], fake.clone());
+        let running = Arc::new(Mutex::new((0usize, 0usize)));
+        let seen = running.clone();
+        let watcher = Arc::downgrade(&store);
+        store.on_change(move |_, _| {
+            let Some(store) = watcher.upgrade() else { return };
+            let now = ["alpha", "beta"]
+                .iter()
+                .filter(|id| store.slots.lock().unwrap().get(**id).is_some_and(|s| s.control.is_some()))
+                .count();
+            let mut seen = seen.lock().unwrap();
+            seen.0 = seen.0.max(now);
+            seen.1 += 1;
+        });
+        assert_eq!(store.start_updates("beta"), vec!["beta".to_string(), "alpha".to_string()]);
+        wait_for(&store, "beta", |p| *p == Phase::Ready);
+        wait_for(&store, "alpha", |p| *p == Phase::Ready);
+        let urls: Vec<String> = fake.requests.lock().unwrap().iter().map(|(u, _)| u.clone()).collect();
+        assert_eq!(urls, vec![b2.pin.asset.url.clone(), a2.pin.asset.url.clone()]);
+        assert_eq!(running.lock().unwrap().0, 1, "never two at once");
+        assert_eq!(store.serving("alpha").unwrap().version, "2.0");
+        assert_eq!(store.serving("beta").unwrap().version, "2.0");
+    }
+
+    #[test]
+    fn switching_engines_mid_update_carries_the_update_on_for_the_one_left() {
+        // An engine the user moves to while it updates is served its earlier release (it is
+        // usable), and moves to the new one when that is ready; the engine left keeps updating.
+        let root = TempDir::new("update-switch");
+        let (a1, a1_zip) = engine_at("alpha", "1.0", &[("manifest.json", b"{\"a\":1}")]);
+        let (b1, b1_zip) = engine_at("beta", "1.0", &[("manifest.json", b"{\"b\":1}")]);
+        download_once(&root.0, &a1, &a1_zip);
+        download_once(&root.0, &b1, &b1_zip);
+        let (a2, a2_zip) = repinned(&a1, "2.0", &[("manifest.json", b"{\"a\":2}")]);
+        let (b2, b2_zip) = repinned(&b1, "2.0", &[("manifest.json", b"{\"b\":2}")]);
+        let fake = Arc::new(FakeServer {
+            files: HashMap::from([(a2.pin.asset.url.clone(), a2_zip), (b2.pin.asset.url.clone(), b2_zip)]),
+            ..Default::default()
+        });
+        let store = quick(&root.0, &[&a2, &b2], fake);
+        // Both served from 1.0 before anything downloads.
+        assert_eq!(store.serving("alpha").unwrap().version, "1.0");
+        assert_eq!(store.serving("beta").unwrap().version, "1.0");
+        let switched = Arc::new(Mutex::new(Vec::new()));
+        let log = switched.clone();
+        store.on_switch(move |id| log.lock().unwrap().push(id.to_string()));
+        store.start_updates("alpha");
+        wait_for(&store, "alpha", |p| *p == Phase::Ready);
+        wait_for(&store, "beta", |p| *p == Phase::Ready);
+        let mut switched = switched.lock().unwrap().clone();
+        switched.sort();
+        assert_eq!(switched, vec!["alpha", "beta"], "each engine switches once, whichever is in use");
+    }
+
+    #[test]
+    fn update_statuses_and_the_activity_feed_name_both_releases() {
+        use crate::activity::Tone;
+        let (old, _) = engine_at("demo", "1.0", &[("manifest.json", b"{}")]);
+        let (new, _) = repinned(&old, "2.0", &[("manifest.json", b"{\"v\":2}")]);
+        let at = |phase: Phase| ExtensionStatus::new(&new, &phase, false).updating_from("1.0", Some(99));
+        let downloading = at(Phase::Downloading { file: "2.0.zip".into(), received: 0, total: 9, overall_received: 0 });
+        assert_eq!(downloading.update.as_ref().unwrap().retry_at, None, "only a failure has a retry time");
+        let mut ticker = ExtensionTicker::default();
+        let now = Instant::now();
+        assert!(ticker.in_update(&downloading));
+        assert_eq!(ticker.next(&downloading, now), Some(("Updating Engine demo to 2.0… 0%".into(), Tone::Busy)));
+        let failed = at(Phase::Failed { message: "network error".into(), overall_received: 3 });
+        assert_eq!(
+            ticker.next(&failed, now),
+            Some(("Engine demo update failed: network error. Still using 1.0; trying again later".into(), Tone::Error))
+        );
+        let ready = ExtensionStatus::new(&new, &Phase::Ready, false);
+        // The ready status right after an update still counts as the update's (kept quiet for an
+        // engine not in use), then the ticker is back to downloads.
+        assert!(ticker.in_update(&ready));
+        assert_eq!(ticker.next(&ready, now), Some(("Engine demo updated to 2.0".into(), Tone::Ok)));
+        assert!(!ticker.in_update(&ready));
+        // A ready status is never turned into an update.
+        assert_eq!(ready.clone().updating_from("1.0", None), ready);
     }
 
     /// The real releases through the Rust unpacker, against the compiled-in maps: run with

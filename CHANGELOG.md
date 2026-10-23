@@ -12,8 +12,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - Built-in Yomitan is updated to 26.10.22.0. With the new AnkiConnect (26.10), a word already in
-  Anki under another note type no longer hides the pop-up's Anki buttons. Built-in Yomitan
-  downloads once more (about 15 MB) and keeps your dictionaries and settings.
+  Anki under another note type no longer hides the pop-up's Anki buttons.
+- When a Kimochi update brings a new version of a dictionary engine you've downloaded, it updates
+  in the background and your current version keeps working until the new one is ready and
+  checked. Progress shows in Settings → Dictionary. If you're offline, Kimochi tries again
+  later. Your dictionaries and settings are kept, and engines you never downloaded stay that way.
 
 - GNOME: restore annotations and desktop cropping for tiled window shares whose borders extend beyond the screen.
 
