@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Linux uses the current Kimochi tray glyph with contrast on dark and light panels, and refreshes stale app icons after an update.
+
 - Auto OCR keeps overlay text steady while you hover it or read its dictionary popup, then checks the screen again when you leave both.
 - GNOME window shares no longer blink the overlay on every automatic observation; screen captures still hide it to keep annotations out of OCR.
 

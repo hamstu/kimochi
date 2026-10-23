@@ -46,6 +46,7 @@ pub mod deck_input;
 pub mod hyprland;
 mod layer;
 pub mod shortcuts;
+pub mod icons;
 mod rules;
 mod window;
 mod workspace;

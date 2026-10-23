@@ -208,19 +208,6 @@ fn desktop_identity() -> Result<(), String> {
         .replace('"', r#"\""#)
         .replace('%', "%%");
     std::fs::create_dir_all(&applications).map_err(|e| e.to_string())?;
-    let icon = data.join("icons/hicolor/256x256/apps/kimochi.png");
-    let source_icon = std::env::var_os("APPDIR")
-        .map(std::path::PathBuf::from)
-        .map(|d| d.join("kimochi.png"))
-        .filter(|p| p.exists())
-        .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("icons/icon.png"));
-    if source_icon.exists() {
-        std::fs::create_dir_all(icon.parent().ok_or("icon directory missing")?)
-            .map_err(|e| e.to_string())?;
-        if !icon.exists() {
-            std::fs::copy(source_icon, &icon).map_err(|e| e.to_string())?;
-        }
-    }
     std::fs::write(entry, format!("[Desktop Entry]\nType=Application\nName=Kimochi\nExec=\"{escaped}\"\nIcon=kimochi\nTerminal=false\nStartupWMClass=kimochi\nCategories=Education;\nX-Kimochi-Generated=true\n")).map_err(|e| e.to_string())
 }
 

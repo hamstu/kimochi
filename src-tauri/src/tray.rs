@@ -15,11 +15,20 @@ use tauri::{
 
 /// The Electron app's macOS template icon, reused byte-for-byte so the menu bar looks
 /// the same and follows light/dark mode automatically.
+#[cfg(not(target_os = "linux"))]
 const TEMPLATE_ICON: &[u8] = include_bytes!("../../resources/app-icon-Template@2x.png");
+
+// Linux tray hosts display the image as supplied, including on dark panels.
+#[cfg(target_os = "linux")]
+const TEMPLATE_ICON: &[u8] = include_bytes!("../../branding/tray-linux@2x.png");
 
 const POPOVER: &str = "tray-popover";
 
 pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if let Err(error) = platform::icons::refresh() {
+        eprintln!("Could not refresh the Linux app icon: {error}");
+    }
     let icon = tauri::image::Image::from_bytes(TEMPLATE_ICON).map_err(|e| e.to_string())?;
     let menu = MenuBuilder::new(app)
         .items(&[
@@ -41,7 +50,7 @@ pub fn setup(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), Str
     let store = settings.clone();
     let builder = TrayIconBuilder::with_id("kimochi").icon(icon);
     // Template rendering lets macOS invert it for the current menu bar appearance.
-    // Other trays draw the same PNG as is.
+    // Linux uses its own light glyph with a dark keyline for untinted hosts.
     #[cfg(target_os = "macos")]
     let builder = builder.icon_as_template(true);
     builder
