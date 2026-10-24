@@ -39,6 +39,7 @@ const MIN_WAIT_MS: f64 = 1_500.0;
 const QUIET_MS: f64 = 800.0;
 const DRAIN_EVERY: Duration = Duration::from_millis(50);
 const RESTART_AFTER: Duration = Duration::from_secs(5);
+const RETRY_UNAVAILABLE: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -89,10 +90,15 @@ impl Config {
 pub enum State {
     Off,
     Starting,
-    Recording,
+    /// `source`: what is recorded. `excludesOwnAudio`: Kimochi's own sounds are left out.
+    #[serde(rename_all = "camelCase")]
+    Recording { source: String, excludes_own_audio: bool },
     /// macOS: Screen Recording is not granted.
     NoPermission { message: String },
-    /// No backend for this OS yet.
+    /// This computer cannot record its audio now (no PipeWire, no output device); tried again
+    /// every `RETRY_UNAVAILABLE`.
+    Unavailable { message: String },
+    /// No backend for this OS.
     Unsupported { message: String },
     /// The stream failed or stopped; it is started again shortly.
     Error { message: String },
@@ -112,6 +118,8 @@ pub struct LastCard {
 pub struct Status {
     #[serde(flatten)]
     pub state: State,
+    /// `macos`, `windows` or `linux`: what the recording can do differs.
+    pub platform: &'static str,
     /// Seconds of audio held.
     pub held: f64,
     /// Loudness of the last half second, 0..1, for a level meter.
@@ -204,6 +212,7 @@ impl SentenceAudio {
             .unwrap_or(0.0);
         Status {
             state: lock(&self.state).clone(),
+            platform: std::env::consts::OS,
             held: ring.len() as f64 / ring.sample_rate() as f64,
             level: (level * 4.0).min(1.0),
             last: lock(&self.last).clone(),
@@ -211,7 +220,7 @@ impl SentenceAudio {
     }
 
     fn recording(&self) -> bool {
-        *lock(&self.state) == State::Recording
+        matches!(*lock(&self.state), State::Recording { .. })
     }
 
     pub fn record_line(&self, line: Line) {
@@ -391,7 +400,7 @@ fn record(generation: u64, current: Arc<AtomicU64>, ring: Arc<Mutex<AudioRing>>,
         set(State::Starting);
         match SystemAudio::start() {
             Ok(mut capture) => {
-                set(State::Recording);
+                set(State::Recording { source: capture.source(), excludes_own_audio: capture.excludes_own_audio() });
                 while live() {
                     std::thread::sleep(DRAIN_EVERY);
                     capture.drain_into(&mut lock(&ring));
@@ -406,9 +415,11 @@ fn record(generation: u64, current: Arc<AtomicU64>, ring: Arc<Mutex<AudioRing>>,
                 return;
             }
             Err(e) if e.code == "permission" => set(State::NoPermission { message: e.message }),
+            Err(e) if e.code == "unavailable" => set(State::Unavailable { message: e.message }),
             Err(e) => set(State::Error { message: e.message }),
         }
-        let until = std::time::Instant::now() + RESTART_AFTER;
+        let wait = if matches!(*lock(&state), State::Unavailable { .. }) { RETRY_UNAVAILABLE } else { RESTART_AFTER };
+        let until = std::time::Instant::now() + wait;
         while live() && std::time::Instant::now() < until {
             std::thread::sleep(Duration::from_millis(100));
         }

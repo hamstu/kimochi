@@ -12,11 +12,20 @@ import type { Line } from "./types";
 export type SentenceAudioStatus = (
   | { state: "off" }
   | { state: "starting" }
-  | { state: "recording" }
+  | {
+      state: "recording";
+      /** What is recorded ("Speakers (Realtek Audio)", "Everything this Mac plays"). */
+      source: string;
+      /** Kimochi's own sounds are left out of the recording. */
+      excludesOwnAudio: boolean;
+    }
   | { state: "noPermission"; message: string }
+  /** This computer cannot record its audio now (no PipeWire, no output); tried again later. */
+  | { state: "unavailable"; message: string }
   | { state: "unsupported"; message: string }
   | { state: "error"; message: string }
 ) & {
+  platform: "macos" | "windows" | "linux" | string;
   /** Seconds of audio held. */
   held: number;
   /** Loudness of the last half second, 0..1. */

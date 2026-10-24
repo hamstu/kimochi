@@ -5,7 +5,9 @@
  * through `sentence_audio_attach`. `sentenceAudio` is this computer's setting, never synced.
  *
  * While it is on, the recording state is read every second (`sentence_audio_status`), with a
- * level meter, so a user can see it hears the game before mining.
+ * level meter, so a user can see it hears the game before mining. What it can do differs by OS
+ * (the status's `platform`): macOS needs Screen Recording; Windows leaves Kimochi's sounds out
+ * from 10 2004 on; Linux needs PipeWire and records Kimochi's sounds too.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Callout, Input, SettingsRow, SettingsSection, StatusDot, Switch, type Tone } from '@kit'
@@ -44,7 +46,11 @@ function describe(status: SentenceAudioStatus | null): { tone: Tone; title: stri
       return {
         tone: 'ok',
         title: 'Recording',
-        detail: `Holding the last ${Math.round(status.held)} seconds, in memory only.`
+        detail: `${status.source}: the last ${Math.round(status.held)} seconds, in memory only. ${
+          status.excludesOwnAudio
+            ? "Kimochi's own sounds are left out."
+            : "Kimochi's own sounds are recorded too, so keep sound effects off while you mine."
+        }`
       }
     case 'starting':
       return { tone: 'neutral', title: 'Starting…', detail: '' }
@@ -55,12 +61,29 @@ function describe(status: SentenceAudioStatus | null): { tone: Tone; title: stri
         detail:
           'macOS records system audio under the Screen Recording permission. Allow Kimochi, then quit and reopen it.'
       }
+    case 'unavailable':
+      return { tone: 'warn', title: 'Not available', detail: `${status.message} Kimochi checks again every 30 seconds.` }
     case 'unsupported':
-      return { tone: 'neutral', title: 'Not available yet', detail: status.message }
+      return { tone: 'neutral', title: 'Not available', detail: status.message }
     case 'error':
       return { tone: 'danger', title: 'Not recording', detail: `${status.message} Trying again shortly.` }
     default:
       return { tone: 'neutral', title: 'Off', detail: 'Nothing is recorded.' }
+  }
+}
+
+/** What turning it on means on this computer. */
+function switchDescription(seconds: number, platform: string | undefined): string {
+  const kept = `Keeps the last ${seconds} seconds of what this computer plays, in memory only.`
+  switch (platform) {
+    case 'macos':
+      return `${kept} Kimochi's own sounds are left out. macOS shows its screen-recording indicator while this is on.`
+    case 'windows':
+      return `${kept} On Windows 10 (2004) and later, Kimochi's own sounds are left out.`
+    case 'linux':
+      return `${kept} Needs PipeWire, as SteamOS and most desktops have. Kimochi's own sounds are recorded too.`
+    default:
+      return kept
   }
 }
 
@@ -92,7 +115,7 @@ export function SentenceAudioSection({ popupMapping }: { popupMapping: boolean }
       <SettingsRow
         label="Record system audio"
         controlId="sentence-audio-enabled"
-        description={`Keeps the last ${config.seconds} seconds in memory. Kimochi's own sounds are left out. macOS shows its screen-recording indicator while this is on.`}
+        description={switchDescription(config.seconds, status?.platform)}
       >
         <Switch
           id="sentence-audio-enabled"
