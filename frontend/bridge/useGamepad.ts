@@ -9,7 +9,7 @@
  * the Web Gamepad API is unreliable in an unfocused WKWebView and the feature exists to fire while
  * a *game* holds focus. Browser polling remains as a fallback so the button test still works while
  * a Kimochi window is focused. Which source is live is reported through `source`, and the UI must
- * not claim gamepad support works until one of them is verified running (PARITY_GAPS #3).
+ * not claim gamepad support works until one of them is verified running.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GamepadDevice, GamepadSettings, GamepadState } from './types'

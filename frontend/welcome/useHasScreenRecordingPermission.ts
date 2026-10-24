@@ -4,7 +4,7 @@
  * poll, so the screen updates once the user grants access in System Settings.
  *
  * `permission_status` must be a *query*: the onboarding screen polls it, and a command that
- * re-prompts every two seconds would be unusable (PARITY_GAPS #8).
+ * re-prompts every two seconds would be unusable.
  */
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'

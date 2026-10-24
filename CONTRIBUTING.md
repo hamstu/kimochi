@@ -14,9 +14,7 @@ feature requests, so please don't be surprised if an idea is declined or a PR si
 
 ## Development workflow
 
-Set up as in the README's [Building from source](README.md#building-from-source). Two parity
-tests compare against the original Electron app at `../kimochi`, which is not public; without it
-they are reported as skipped.
+Set up as in the README's [Building from source](README.md#building-from-source).
 
 Branch from `main`, then before opening a PR run:
 

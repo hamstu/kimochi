@@ -34,7 +34,7 @@ process.on('exit', () => {
   rm(outDir, { recursive: true, force: true }).catch(() => {})
 })
 
-/** Agreed with kimochi-native (COMMANDS.md) and kimochi-overlay (PARITY_CONTRACT.md §4.3). */
+/** Agreed with kimochi-native (COMMANDS.md). */
 const AGREED = {
   overlayOpacity: 80,
   liveOverlayEnabled: false,
@@ -102,35 +102,6 @@ test('serverSettings is an object, never a flat scalar', () => {
   // AudioPlayer and the OCR layer both read `serverSettings.mode`; a scalar would break both.
   assert.equal(typeof SETTINGS_DEFAULTS.serverSettings, 'object')
   assert.equal(SETTINGS_DEFAULTS.serverSettings.mode, 'cloud')
-})
-
-test('the Electron store defaults that carry over are unchanged', async (t) => {
-  // The Electron app is a sibling checkout (`../kimochi`), absent on CI and fresh clones. Skip
-  // rather than pass silently, and only when the file is missing: any other failure still fails.
-  const electron = await readFile(
-    new URL('../../kimochi/src/main/settings.ts', import.meta.url),
-    'utf8'
-  ).catch((error) => {
-    if (error.code === 'ENOENT') return null
-    throw error
-  })
-  if (electron === null) {
-    t.skip('sibling ../kimochi checkout not found; Electron store parity not checked')
-    return
-  }
-  // Spot-check the values this experiment re-declares against their Electron source of truth.
-  for (const [pattern, label] of [
-    [/scannedTextFontSize:\s*14/, 'scannedTextFontSize'],
-    [/pollInterval:\s*2000/, 'autoOCRSettings.pollInterval'],
-    [/imageHashThreshold:\s*5/, 'autoOCRSettings.imageHashThreshold'],
-    [/localOCRSimilarityThreshold:\s*0\.85/, 'autoOCRSettings.localOCRSimilarityThreshold'],
-    [/adaptivePollMin:\s*500/, 'autoOCRSettings.adaptivePollMin'],
-    [/adaptivePollMax:\s*5000/, 'autoOCRSettings.adaptivePollMax'],
-    [/scanDelay:\s*500/, 'autoScanSettings.scanDelay'],
-    [/webSocketUrl:\s*'ws:\/\/localhost:6677'/, 'texthookerSettings.webSocketUrl']
-  ]) {
-    assert.ok(pattern.test(electron), `${label} no longer matches src/main/settings.ts`)
-  }
 })
 
 test('controller buttons: new actions take their defaults, and the retired second Back is dropped', async () => {

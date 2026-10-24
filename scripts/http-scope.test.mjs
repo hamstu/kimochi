@@ -74,31 +74,6 @@ test('the Yomitan API client goes through the native command, not the plugin sco
   assert.ok(!yomitan.includes('httpFetch'), 'the Yomitan client must not use the scoped plugin')
 })
 
-test('the Yomitan requests match the Electron handlers exactly', async (t) => {
-  // The Electron app is a sibling checkout (`../kimochi`), absent on CI and fresh clones. Skip
-  // rather than pass silently, and only when the file is missing: any other failure still fails.
-  const electron = await readFile(
-    new URL('../../kimochi/src/main/index.ts', import.meta.url),
-    'utf8'
-  ).catch((error) => {
-    if (error.code === 'ENOENT') return null
-    throw error
-  })
-  if (electron === null) {
-    t.skip('sibling ../kimochi checkout not found; Electron parity not checked')
-    return
-  }
-  const yomitan = await readFile(
-    fileURLToPath(new URL('../frontend/bridge/yomitan.ts', import.meta.url)),
-    'utf8'
-  )
-  // Paths and bodies are the parity surface: a guessed endpoint silently returns nothing useful.
-  for (const fragment of ['/tokenize', '/termEntries', 'scanLength: 32', "action: 'version'"]) {
-    assert.ok(electron.includes(fragment), `${fragment} missing from the Electron handlers`)
-    assert.ok(yomitan.includes(fragment), `${fragment} missing from the Tauri client`)
-  }
-})
-
 test('the extension windows get event listening and the same HTTP scope as network.json, nothing else', async () => {
   const dir = new URL('../src-tauri/capabilities/', import.meta.url)
   const read = async (name) => JSON.parse(await readFile(new URL(name, dir), 'utf8'))
