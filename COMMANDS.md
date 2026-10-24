@@ -1188,7 +1188,7 @@ and `last` (`{at, ok, message}`: what happened to the last card's audio, or null
 A card's audio: its line is the newest Log line whose text best matches the card's sentence (the
 pop-up's) or any of its fields (an extension's), else the newest line. Its window runs from just
 before the line arrived (300 ms; 1.5 s for an OCR'd line, never before the previous line arrived)
-to 300 ms after the next line arrived, or now; when there is no next line yet, the card waits (up
+to 100 ms after the next line arrived, or now; when there is no next line yet, the card waits (up
 to 15 s after the line arrived) until the last 0.8 s holds no speech. The window is trimmed to its
 speech (Silero VAD; leading speech that ends before the line arrived is the previous line's), padded
 150 ms before and 300 ms after, moved by the offsets, faded in and out over 50 ms and encoded as
