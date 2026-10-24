@@ -1163,6 +1163,49 @@ a POST whose body is a JSON object with a string `action`, a numeric `version` a
 `params` and `key` besides. Rust refuses any other body, validates `url` as it does the address in
 Settings → Anki, and sends the body unchanged (the extension's API key in it), so the extension's
 own Anki settings stay in charge. The extension windows may invoke it (`extensions::EXTENSION_WINDOW_COMMANDS`).
+A card the relay adds may afterwards be given its line's audio (see "Sentence audio" below).
+
+## Sentence audio
+
+While `sentenceAudio.enabled` is on, Kimochi keeps the last `sentenceAudio.seconds` (10–120,
+default 30) of what the computer plays in memory, and gives each new card the audio of the line it
+was mined from (`src-tauri/src/sentence_audio/`). `sentenceAudio` is a machine key: never synced,
+shared by every profile. Its other fields: `field` (the note field the audio goes in, default
+`SentenceAudio`), `startOffsetMs` and `endOffsetMs` (−5000–5000, moving the clip's ends), `trim`
+(cut the clip to its speech, default on).
+
+| Command | Signature |
+| --- | --- |
+| `sentence_audio_status` | `() -> Status`: the recording's state, for Settings → Anki |
+| `sentence_audio_line` | `({uid, text, ts, source})`: the Log added a line (or changed one's text, same `uid`); `ts` its arrival in Unix ms, `source` its `LineSource`. Ignored while recording is off. |
+| `sentence_audio_attach` | `({url, noteId, sentence, field})`: the Yomitan API pop-up added note `noteId` at `url` (with the configured key) from `sentence`; its audio follows in the background into `field`, or `sentenceAudio.field` when null |
+
+`Status` is tagged by `state`: `off`, `starting`, `recording {source, excludesOwnAudio}` (what is
+recorded, and whether Kimochi's own sounds are left out), `noPermission {message}` (macOS: Screen
+Recording not granted), `unavailable {message}` (this computer cannot record its audio now: no
+PipeWire, no output device; retried every 30 s), `unsupported {message}` (no backend on this OS) or
+`error {message}` (retried every 5 s), each with `platform` (`macos`, `windows`, `linux`), `held`
+(seconds of audio held), `level` (0–1, the last half second) and `last` (`{at, ok, message}`: what
+happened to the last card's audio, or null).
+
+Where the audio comes from (`capture-core/src/audio/`): macOS, a ScreenCaptureKit display stream with
+`capturesAudio` and `excludesCurrentProcessAudio`; Windows, WASAPI process loopback of everything
+but Kimochi's process tree (WebView2 included; Windows 10 2004+), else loopback of the default
+output (Kimochi's sounds included), restarted when the default output changes; Linux, a PipeWire
+capture stream on the default output's monitor (`stream.capture.sink`; Kimochi's sounds included).
+
+A card's audio: its line is the newest Log line whose text best matches the card's sentence (the
+pop-up's) or any of its fields (an extension's), else the newest line. Its window runs from just
+before the line arrived (300 ms; 1.5 s for an OCR'd line, never before the previous line arrived)
+to 100 ms after the next line arrived, or now; when there is no next line yet, the card waits (up
+to 15 s after the line arrived) until the last 0.8 s holds no speech. The window is trimmed to its
+speech (Silero VAD; leading speech that ends before the line arrived is the previous line's), padded
+150 ms before and 300 ms after, moved by the offsets, faded in and out over 50 ms and encoded as
+mono MP3 at 96 kbit/s. Then `notesInfo`, `storeMediaFile` (`kimochi_<ms>.mp3`) and
+`updateNoteFields` put `[sound:…]` in the field, but only when the note has the field and it is
+empty. An extension's card is noticed by `anki_connect_relay` (an `addNote` AnkiConnect accepted);
+its follow-up calls use the address and key of the extension's request. Neither the extension's
+request nor its reply changes.
 
 ## Dictionary engine downloads
 

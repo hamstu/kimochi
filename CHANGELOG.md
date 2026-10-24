@@ -20,6 +20,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   the top of a dimmed screen with one word lit and its dictionary entry below. Move word to word
   with the D-pad or arrow keys, through a word's entries with the shoulder buttons, and add the
   entry to Anki with A. The pop-up beside the word stays the default.
+- Sentence audio: turn on Record system audio in Settings → Anki and each card you add gets the
+  spoken audio of the line you mined it from, cut from what your computer was playing and trimmed
+  to the voice. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up, into a field
+  you choose (SentenceAudio by default), and never replaces a field that is already filled. Audio is
+  only kept in memory. On macOS it uses the Screen Recording permission; on Linux and the Steam
+  Deck it needs PipeWire.
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
   (and every other confirmation, alert or question an engine's settings page asks) now appears
   instead of being silently answered "Cancel".

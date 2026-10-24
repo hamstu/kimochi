@@ -249,7 +249,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
   };
 
   /** Convert a mapping object → a single string the autocomplete displays.
-      Sentinels: "" = unmapped, "(sentence)" = sentence-cloze-style. Plain
+      Sentinels: "" = unmapped, "(sentence)" = sentence-cloze-style,
+      "(sentence audio)" = the line's recorded audio. Plain
       strings that match a known marker are markers; anything else is literal. */
   const mappingToValue = (m: AnkiFieldMapping | null): string => {
     if (!m) return "";
@@ -258,6 +259,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         return "";
       case "sentence":
         return "(sentence)";
+      case "sentenceAudio":
+        return "(sentence audio)";
       case "marker":
         return m.marker ?? "";
       case "literal":
@@ -273,6 +276,9 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     if (trimmed === "") return null;
     if (trimmed === "(sentence)") {
       return { ankiField, mappingType: "sentence" };
+    }
+    if (trimmed === "(sentence audio)") {
+      return { ankiField, mappingType: "sentenceAudio" };
     }
     if ((YOMITAN_MARKERS as readonly string[]).includes(trimmed)) {
       return { ankiField, mappingType: "marker", marker: trimmed };
@@ -434,7 +440,9 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
                       <dd className="k-mono">
                         {m.mappingType === "sentence"
                           ? "(sentence)"
-                          : m.mappingType === "marker"
+                          : m.mappingType === "sentenceAudio"
+                            ? "(sentence audio)"
+                            : m.mappingType === "marker"
                             ? m.marker
                             : m.mappingType === "literal"
                               ? `"${m.literal ?? ""}"`
@@ -462,12 +470,15 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           title="Field mapping"
           description={
             <>
-              Type a Yomitan marker, <span className="k-mono">(sentence)</span>, or literal text.
+              Type a Yomitan marker, <span className="k-mono">(sentence)</span>,{" "}
+              <span className="k-mono">(sentence audio)</span> (with Sentence audio on, below), or
+              literal text.
             </>
           }
         >
           <datalist id="anki-mapping-options">
             <option value="(sentence)" />
+            <option value="(sentence audio)" />
             {YOMITAN_MARKERS.map((mk) => (
               <option key={mk} value={mk} />
             ))}

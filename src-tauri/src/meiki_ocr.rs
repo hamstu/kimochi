@@ -231,6 +231,12 @@ fn initialize_runtime(root: &Path) -> Result<(), String> {
         .clone()
 }
 
+/// The bundled ONNX Runtime, initialised for the whole process, for another model that runs on
+/// it (sentence audio's speech detection).
+pub(crate) fn onnx_runtime(app: &tauri::AppHandle) -> Result<(), String> {
+    initialize_runtime(&runtime_root(app)?)
+}
+
 /// The runtime and models, when both are present.
 /// For an engine owned elsewhere (the observer), which loads it with `load_engine`.
 #[cfg_attr(target_os = "macos", allow(dead_code))]

@@ -8,6 +8,7 @@ import {
 import { getSettings, onSettingsChange } from "../lib/settings";
 import { currentLinesPath, getManifest } from "./sessions";
 import { writesPaused } from "./profile";
+import { reportLine } from "../lib/sentenceAudio";
 import type { Line, LineSource } from "../lib/types";
 
 const DIR = BaseDirectory.AppLocalData;
@@ -248,6 +249,7 @@ export function appendLine(opts: {
     emit({ type: "trim", dropped });
   }
   emit({ type: "append", line });
+  reportLine(line);
   scheduleSave();
   return line;
 }
@@ -259,6 +261,7 @@ export function replaceLastLineText(text: string): Line | null {
   const updated: Line = { ...lines[idx], text };
   lines[idx] = updated;
   emit({ type: "update", line: updated });
+  reportLine(updated);
   scheduleSave();
   return updated;
 }

@@ -170,6 +170,13 @@ async fn call<R: for<'de> Deserialize<'de>>(
     serde_json::from_value(result).map_err(|e| format!("ankiconnect: unexpected result: {e}"))
 }
 
+/// One request to the AnkiConnect at `url` with `key`, for Kimochi's own follow-up calls to a
+/// card an extension or the pop-up added (sentence audio).
+pub(crate) async fn action(url: &str, key: Option<&str>, action: &str, params: Value) -> Result<Value, String> {
+    let url = parse_url(url)?;
+    post(&url, &request(action, params, key), RELAY_TIMEOUT).await.map_err(|failure| failure.message(&url))
+}
+
 #[tauri::command]
 pub async fn anki_probe(state: tauri::State<'_, Shared>, url: String) -> Result<u64, String> {
     let started = Instant::now();
@@ -272,13 +279,17 @@ fn relay_body(body: &str) -> Result<Value, String> {
     Ok(value)
 }
 
+#[cfg(test)]
 async fn relay(url: &str, body: &str) -> Result<RelayReply, String> {
-    let request = relay_body(body)?;
+    relay_request(url, &relay_body(body)?).await
+}
+
+async fn relay_request(url: &str, request: &Value) -> Result<RelayReply, String> {
     let url = parse_url(url)?;
     let res = client()
         .post(url.clone())
         .timeout(RELAY_TIMEOUT)
-        .json(&request)
+        .json(request)
         .send()
         .await
         .map_err(|e| transport(e).message(&url))?;
@@ -289,10 +300,14 @@ async fn relay(url: &str, body: &str) -> Result<RelayReply, String> {
 
 /// A dictionary extension's AnkiConnect request (host/anki-relay.js), sent from here without the
 /// webview's Origin to the address its own Anki settings name (`url`, validated like the one in
-/// Settings → Anki), and otherwise as it was: the extension's settings stay in charge.
+/// Settings → Anki), and otherwise as it was: the extension's settings stay in charge. A card it
+/// adds is given its line's audio afterwards when sentence audio is on (`sentence_audio`).
 #[tauri::command]
-pub async fn anki_connect_relay(url: String, body: String) -> Result<RelayReply, String> {
-    relay(&url, &body).await
+pub async fn anki_connect_relay(app: tauri::AppHandle, url: String, body: String) -> Result<RelayReply, String> {
+    let request = relay_body(&body)?;
+    let reply = relay_request(&url, &request).await?;
+    crate::sentence_audio::after_relay(&app, &url, &request, reply.status, &reply.body);
+    Ok(reply)
 }
 
 // ---------------------------------------------------------------- connection check
@@ -400,7 +415,7 @@ pub async fn anki_connect_status(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -440,7 +455,7 @@ mod tests {
 
     /// A one-request-at-a-time HTTP server answering every request with `reply(body)`, and
     /// recording each request's raw headers and body.
-    fn serve(reply: impl Fn(&str) -> (u16, String) + Send + 'static) -> (String, Arc<Mutex<Vec<String>>>) {
+    pub(crate) fn serve(reply: impl Fn(&str) -> (u16, String) + Send + 'static) -> (String, Arc<Mutex<Vec<String>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let seen = Arc::new(Mutex::new(Vec::new()));

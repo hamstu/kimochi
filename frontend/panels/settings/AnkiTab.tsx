@@ -9,6 +9,8 @@
  *    AnkiConnect address and key included, which a button opens at `#anki`. Kimochi only sends
  *    their requests on from Rust, unchanged (COMMANDS.md "AnkiConnect").
  *  - 10ten adds none.
+ *
+ * Sentence audio (`SentenceAudioSection`) follows the cards for every engine that adds them.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
@@ -45,6 +47,7 @@ import {
 } from '../../bridge/dictionaryEngine'
 import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 import { WithReaderSettings } from './ReaderSettingsProvider'
+import { SentenceAudioSection } from './SentenceAudioSection'
 
 export function AnkiTab(): ReactNode {
   const [engine] = useDictionaryEngine()
@@ -131,10 +134,22 @@ function AnkiSections({
   engine: DictionaryEngine
 }): ReactNode {
   // Only Kimochi's own pop-up talks to AnkiConnect with Kimochi's settings.
-  if (ANKI_ROUTE[engine] !== 'kimochi') {
-    return <CardsSection settings={settings} engine={engine} connection={0} />
+  const route = ANKI_ROUTE[engine]
+  if (route === 'none') return <CardsSection settings={settings} engine={engine} connection={0} />
+  if (route !== 'kimochi') {
+    return (
+      <>
+        <CardsSection settings={settings} engine={engine} connection={0} />
+        <SentenceAudioSection popupMapping={false} />
+      </>
+    )
   }
-  return <ConnectedSections settings={settings} engine={engine} />
+  return (
+    <>
+      <ConnectedSections settings={settings} engine={engine} />
+      <SentenceAudioSection popupMapping />
+    </>
+  )
 }
 
 function ConnectedSections({

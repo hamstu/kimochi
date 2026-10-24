@@ -3,6 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { AnkiConnectStatus } from "@ui/anki-connect";
+import { attachSentenceAudio } from "./sentenceAudio";
 import type {
   AnkiFieldMapping,
   AnkiMediaItem,
@@ -221,6 +222,9 @@ function resolveFieldValue(
     }
     case "sentence":
       return sentence ?? "";
+    case "sentenceAudio":
+      // Filled in after the card is added (attachSentenceAudio).
+      return "";
     case "literal":
       return mapping.literal ?? "";
     case "empty":
@@ -234,6 +238,7 @@ function resolveFieldValue(
  *  1. storeMedia for each audio + dictionary media item
  *  2. resolve field mappings → record
  *  3. addNote (with duplicate detection)
+ *  4. a new card gets its line's recorded audio afterwards, when sentence audio is on
  */
 export async function sendCardForTerm(
   opts: SendCardOpts,
@@ -282,5 +287,12 @@ export async function sendCardForTerm(
     expressionFieldName,
     expressionValue,
   );
+  // 4. In the background: the card is not held up while the voice finishes or is cut.
+  if (!duplicate) {
+    const audioField =
+      mappings.find((m) => m.mappingType === "sentenceAudio")?.ankiField ??
+      null;
+    attachSentenceAudio(ankiUrl, id, sentence, audioField);
+  }
   return { noteId: id, duplicate };
 }

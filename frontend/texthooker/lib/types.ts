@@ -148,7 +148,8 @@ TARGET SENTENCE:
 /** Each row maps one field of the chosen Anki note type to a source. */
 export interface AnkiFieldMapping {
   ankiField: string;
-  mappingType: "marker" | "sentence" | "literal" | "empty";
+  /** "sentenceAudio": the line's recorded audio, added once the card is (sentenceAudio.ts). */
+  mappingType: "marker" | "sentence" | "sentenceAudio" | "literal" | "empty";
   /** When mappingType="marker", a key into YomitanAnkiFields. */
   marker?: string;
   /** When mappingType="literal", verbatim text. */

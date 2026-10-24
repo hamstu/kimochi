@@ -33,6 +33,7 @@ pub mod linux_gamescope;
 #[cfg(target_os = "linux")]
 pub use linux_gamescope::GamescopeCapture;
 
+pub mod audio;
 pub mod hash;
 pub mod ids;
 pub mod pixels;
