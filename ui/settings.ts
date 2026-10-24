@@ -140,6 +140,24 @@ export interface Settings {
   interfaceScale: InterfaceScale
   /** Sounds when a scan starts, adds lines or fails; see sounds.ts. */
   soundEffects: boolean
+  /** Recording system audio for the cards' sentence audio (src-tauri/src/sentence_audio). This
+      computer's: never synced. */
+  sentenceAudio: SentenceAudioSettings
+}
+
+export interface SentenceAudioSettings {
+  /** Keep the last `seconds` of what the computer plays, and give new cards their line's audio. */
+  enabled: boolean
+  /** 10 to 120. */
+  seconds: number
+  /** The note field the audio goes in (a field mapped to (sentence audio) wins for the
+      Yomitan API pop-up). */
+  field: string
+  /** Move the clip's start and end, in milliseconds (negative: earlier). */
+  startOffsetMs: number
+  endOffsetMs: number
+  /** Cut the clip down to the voice in it. */
+  trim: boolean
 }
 
 export const DEFAULT_VOICE_ID = 'j210dv0vWm7fCknyQpbA'
@@ -170,7 +188,15 @@ export const SETTINGS_DEFAULTS: Settings = {
   scannedTextFontSize: 14,
   appearance: 'system',
   interfaceScale: 'medium',
-  soundEffects: true
+  soundEffects: true,
+  sentenceAudio: {
+    enabled: false,
+    seconds: 30,
+    field: 'SentenceAudio',
+    startOffsetMs: 0,
+    endOffsetMs: 0,
+    trim: true
+  }
 }
 
 /**

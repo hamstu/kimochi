@@ -11,6 +11,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Sentence audio: turn on Record system audio in Settings → Anki and each card you add gets the
+  spoken audio of the line you mined it from, cut from what your computer was playing and trimmed
+  to the voice. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up, into a field
+  you choose (SentenceAudio by default), and never replaces a field that is already filled. macOS
+  only for now; it uses the Screen Recording permission, and audio is only kept in memory.
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
   (and every other confirmation, alert or question an engine's settings page asks) now appears
   instead of being silently answered "Cancel".
