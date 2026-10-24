@@ -17,6 +17,7 @@ import vm from 'node:vm'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { resolveObjectURL } from 'node:buffer'
 import { yomitanShimSource } from './yomitan-shims.mjs'
 
 const root = new URL('../', import.meta.url)
@@ -151,7 +152,7 @@ class World {
 
   tauriFor(label) {
     return {
-      core: { invoke: async (command, args) => this.invoke(label, command, args) },
+      core: { invoke: async (command, args, options) => this.invoke(label, command, args, options) },
       event: {
         listen: async (name, callback) => {
           if (name === 'ext-relay' || name === `ext-relay:${label}`) this.listeners.push({ label, name, callback })
@@ -161,9 +162,13 @@ class World {
     }
   }
 
-  async invoke(label, command, args) {
-    this.invoked.push({ label, command, args: structuredClone(args) })
+  async invoke(label, command, args, options) {
+    this.invoked.push({ label, command, args: structuredClone(args), headers: structuredClone(options?.headers) })
     switch (command) {
+      case 'ext_save_file':
+        return { saved: true, path: `/Users/me/Downloads/${decodeURIComponent(options?.headers?.['x-kimochi-filename'] ?? '')}`, bytes: args.byteLength }
+      case 'plugin:shell|open':
+        return null
       case 'storage_load':
         // `loadFailures`: that many reads fail (an I/O error native could not answer) first.
         if (this.loadFailures > 0) {
@@ -344,6 +349,9 @@ class World {
       const target = new URL(String(input?.url ?? input), url.href).href
       if (this.remote && /^https?:/.test(target) && !target.startsWith(origin)) return this.remote(target)
       const file = files[target]
+      // A blob: URL made with URL.createObjectURL (node's, shared by every realm here).
+      const blob = file === undefined && target.startsWith('blob:') ? resolveObjectURL(target) : undefined
+      if (blob) return new Response(blob)
       return new Response(file ?? 'missing', { status: file === undefined ? 404 : 200 })
     }
     this.contexts.push(context)
@@ -1345,6 +1353,94 @@ test('openOptionsPage shows the dictionary panel and relays navigate; the panel 
   await sleep(20)
   assert.equal(result(dictionary, 'navigated.length'), 1)
   assert.ok(overlay)
+})
+
+test("a settings page's web links go to the system browser and its downloads to native's save dialog", async () => {
+  const { world } = await hachidoriSession()
+  const dictionary = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'dictionary', mirror: 'hachidori', tauri: true }))
+  const page = world.frame(dictionary, 'hachidori://localhost/settings.html')
+  await waitFor(() => world.reports.some((r) => r.check === 'ext-host-frame-linked' && r.window === 'dictionary'), 'dictionary page linked')
+  // A click on settings.html's "Privacy policy" link (target=_blank), as the window sees it.
+  const click = (attrs) => result(page, `(() => {
+    const attrs = ${JSON.stringify(attrs)}
+    const a = { localName: 'a', isConnected: true, getAttribute: (k) => attrs[k] ?? null, hasAttribute: (k) => k in attrs,
+      get href() { return new URL(attrs.href, location.href).href }, get target() { return attrs.target ?? '' } }
+    const event = new Event('click', { cancelable: true })
+    event.button = 0
+    event.composedPath = () => [a]
+    dispatchEvent(event)
+    return event.defaultPrevented
+  })()`)
+  assert.equal(click({ href: 'https://github.com/bee-san/hachidori/blob/main/docs/privacy.md', target: '_blank' }), true)
+  await waitFor(() => world.invoked.find((i) => i.command === 'plugin:shell|open'), 'shell open')
+  const shell = world.invoked.find((i) => i.command === 'plugin:shell|open')
+  assert.equal(shell.label, 'overlay')
+  assert.equal(shell.args.path, 'https://github.com/bee-san/hachidori/blob/main/docs/privacy.md')
+  // blob-download.js: the backup zip, saved by the window around the frame.
+  world.files['blob:hachidori://localhost/backup'] = 'PK backup'
+  assert.equal(click({ href: 'blob:hachidori://localhost/backup', download: 'hachidori-backup-2026-10-23.zip' }), true)
+  await waitFor(() => world.invoked.find((i) => i.command === 'ext_save_file'), 'save')
+  const save = world.invoked.find((i) => i.command === 'ext_save_file')
+  assert.equal(save.label, 'dictionary')
+  assert.equal(save.headers['x-kimochi-filename'], 'hachidori-backup-2026-10-23.zip')
+  assert.equal(new TextDecoder().decode(save.args), 'PK backup')
+  await waitFor(() => world.reports.some((r) => r.check === 'ext-host-download' && r.saved === true), 'download report')
+})
+
+test("Hachidori's restore, .mdx import and backup download carry their files across windows, not blob: URLs", async () => {
+  const { world, offscreen } = await hachidoriSession()
+  const dictionary = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'dictionary', mirror: 'hachidori', tauri: true }))
+  const page = world.frame(dictionary, 'hachidori://localhost/settings.html')
+  await waitFor(() => world.reports.some((r) => r.check === 'ext-host-frame-linked' && r.window === 'dictionary'), 'dictionary page linked')
+  // The engine's side (engine-service.js): it fetches what it is handed, and makes its own URLs.
+  result(offscreen, `
+    globalThis.engineSaw = []
+    chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
+      if (m?.target !== 'hoshidicts-offscreen') return false
+      engineSaw.push(m)
+      if (m.type === 'hd_backup_prepare' || m.type === 'hd_import') {
+        const urls = [m.blobUrl, ...(m.resources ?? []).map((r) => r.blobUrl)]
+        Promise.all(urls.map((u) => fetch(u).then((r) => r.text()))).then((texts) => sendResponse({ ok: true, texts }))
+        return true
+      }
+      if (m.type === 'hd_backup_export') {
+        globalThis.exportUrl = URL.createObjectURL(new Blob(['x'.repeat(1500000) + 'end']))
+        sendResponse({ ok: true, blobUrl: exportUrl, size: 1500003 })
+        return false
+      }
+      if (m.type === 'hd_backup_release') { sendResponse({ ok: true }); return false }
+      return false
+    })
+  `)
+  // Backup → Restore: the chosen file's URL is the page's own.
+  const restored = await result(page, `(() => {
+    const url = URL.createObjectURL(new Blob(['backup zip']))
+    return chrome.runtime.sendMessage({ target: 'hoshidicts-offscreen', type: 'hd_backup_prepare', token: 't1', blobUrl: url, pageUrl: url })
+  })()`)
+  assert.deepEqual(JSON.parse(JSON.stringify(restored)), { ok: true, texts: ['backup zip'] })
+  const prepare = result(offscreen, 'engineSaw.find((m) => m.type === "hd_backup_prepare")')
+  assert.notEqual(prepare.blobUrl, prepare.pageUrl, 'the engine gets a URL made on its side')
+  assert.equal(prepare.token, 't1')
+  // An .mdx with its .mdd.
+  const imported = await result(page, `chrome.runtime.sendMessage({ target: 'hoshidicts-offscreen', type: 'hd_import', fileName: 'dict.mdx',
+    blobUrl: URL.createObjectURL(new Blob(['mdx'])), resources: [{ fileName: 'dict.mdd', blobUrl: URL.createObjectURL(new Blob(['mdd'])) }] })`)
+  assert.deepEqual(JSON.parse(JSON.stringify(imported)), { ok: true, texts: ['mdx', 'mdd'] })
+  // Download backup: the page reads a URL of its own, and releasing it frees the engine's.
+  const exported = await result(page, `chrome.runtime.sendMessage({ target: 'hoshidicts-offscreen', type: 'hd_backup_export' })
+    .then(async (reply) => ({ reply, text: await (await fetch(reply.blobUrl)).text() }))`)
+  assert.notEqual(exported.reply.blobUrl, result(offscreen, 'exportUrl'))
+  assert.equal(exported.text.length, 1500003)
+  assert.ok(exported.text.endsWith('end'))
+  await result(page, `chrome.runtime.sendMessage({ target: 'hoshidicts-offscreen', type: 'hd_backup_release', blobUrl: ${JSON.stringify(exported.reply.blobUrl)} })`)
+  assert.equal(result(offscreen, 'engineSaw.find((m) => m.type === "hd_backup_release").blobUrl'), result(offscreen, 'exportUrl'))
+  assert.ok(world.reports.some((r) => r.check === 'ext-host-blob-bridge' && r.direction === 'export'))
+})
+
+test('the blob bridge answers extension pages only, never a content script', async () => {
+  const { world, overlay } = await hachidoriSession()
+  const reply = await result(overlay, `chrome.runtime.sendMessage({ target: 'kimochi-blob-bridge', type: 'commit', token: 'x' })`)
+  assert.equal(reply.ok, false)
+  assert.ok(world)
 })
 
 test('without native panels the page is offered to the hub document instead', async () => {

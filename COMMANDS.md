@@ -628,6 +628,15 @@ surface.
 | `dictionary_engine_effective` | `() -> {selected, effective, ready: {yomitan, hachidori, tenten}}` |
 | `dictionary_runtime_status` | `({engine}) -> {engine, phase, settingsReady, message, progress?}` |
 | `extension_window_ensure` | `({engine, reload?}) -> {label, action}` |
+| `ext_save_file` | raw bytes, header `x-kimochi-filename` (percent-encoded) `-> {saved, path?, bytes?}` |
+
+`ext_save_file` keeps a file an engine's settings page downloads (`<a download>` on a `blob:` or
+`data:` URL: Hachidori's backup, debug info and Anki add-on), which a webview frame has no download
+UI for. The page's host (`host/ext/page.js`) reads the bytes and hands them to its window's
+document, which sends them as the raw body; native shows a save dialog with the suggested name
+(directories and reserved characters stripped) and writes the file. `saved: false` when the
+dialog is cancelled. Only the `dictionary` and `welcome` windows may call it. Web links in those
+pages, and `window.open`, go to the system browser through the hub's `tabs.create` path.
 
 `dictionary_runtime_status` and the `dictionary-readiness` event describe **lookup** readiness,
 separately from extension-download readiness. `settingsReady` becomes true once the host's

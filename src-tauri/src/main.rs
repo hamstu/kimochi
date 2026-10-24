@@ -1177,6 +1177,8 @@ fn ext_ipc_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         loopback::ext_migration_failed,
     ]);
     tauri::plugin::Builder::new("kimochi-ext")
+        // Not about the extension windows: every webview gets confirm/alert/prompt here.
+        .on_webview_ready(|webview| extensions::enable_script_dialogs(&webview))
         .invoke_handler(move |invoke: tauri::ipc::Invoke| {
             let label = invoke.message.webview_ref().label().to_string();
             if let Err(message) = loopback::plugin_command_allowed(&label, invoke.message.command()) {
@@ -2795,6 +2797,7 @@ fn main() {
             ext_relay,
             ext_relay_listen,
             ext_relay_bytes,
+            extensions::ext_save_file,
             window_bounds,
             popup_window,
             yomitan_request,

@@ -367,9 +367,284 @@ window.__kimochiDictionaryEngine=e;\
     )
 }
 
+/// The windows whose extension pages may save a file through [`ext_save_file`]: the ones that
+/// show an engine's own settings page (DICTIONARY_ENGINES.md §3).
+pub const SAVE_WINDOWS: &[&str] = &["dictionary", "welcome"];
+
+/// A download's file name as the page suggested it, made safe to offer in a save dialog: no
+/// directories, no control characters, no leading dots, at most 200 characters.
+pub fn download_name(suggested: &str) -> String {
+    let base = suggested.rsplit(['/', '\\']).next().unwrap_or_default();
+    let cleaned: String = base
+        .chars()
+        .filter(|c| !c.is_control() && !matches!(c, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .collect();
+    let cleaned = cleaned.trim().trim_start_matches('.').trim();
+    if cleaned.is_empty() {
+        "download".into()
+    } else {
+        cleaned.chars().take(200).collect()
+    }
+}
+
+/// Saves a file an extension page downloads (`<a download>` on a `blob:` or `data:` URL:
+/// Hachidori's backup, debug info and Anki add-on). A webview inside Kimochi has no browser
+/// download UI: WKWebView cancels such a download, WebKitGTK drops it and WebView2 saves it
+/// somewhere the user is never told about. The page's host reads the bytes and its window
+/// (`dictionary`) sends them here as the raw body, with the suggested name percent-encoded in
+/// `x-kimochi-filename`; the user picks where it goes. Answers `{saved, path?, bytes?}`;
+/// `saved: false` when the dialog was cancelled.
+#[tauri::command]
+pub async fn ext_save_file(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    request: tauri::ipc::Request<'_>,
+) -> Result<Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+    if !SAVE_WINDOWS.contains(&window.label()) {
+        return Err(format!("invalid: {} cannot save extension downloads", window.label()));
+    }
+    let name = request
+        .headers()
+        .get("x-kimochi-filename")
+        .and_then(|value| value.to_str().ok())
+        .and_then(percent_decode)
+        .map(|name| download_name(&name))
+        .unwrap_or_else(|| "download".into());
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("invalid: a download needs a binary body".into());
+    };
+    let bytes = bytes.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Save download")
+        .set_file_name(&name)
+        .set_parent(&window)
+        .save_file(move |path| {
+            let _ = tx.send(path);
+        });
+    let Some(path) = rx.await.map_err(|e| format!("native: {e}"))? else {
+        return Ok(json!({ "saved": false }));
+    };
+    let path = path.into_path().map_err(|e| format!("native: {e}"))?;
+    std::fs::write(&path, &bytes).map_err(|e| format!("native: could not write {}: {e}", path.display()))?;
+    Ok(json!({ "saved": true, "path": path.to_string_lossy(), "bytes": bytes.len() }))
+}
+
+/// `window.confirm`, `alert` and `prompt` for every webview. WKWebView shows these only through
+/// its UI delegate, and wry's implements no panel: without one `confirm()` answers false at
+/// once, `alert()` shows nothing and `prompt()` answers null. Hachidori asks before it removes a
+/// dictionary or resets lookup counts, so on macOS those buttons silently did nothing. Here the
+/// delegate gains the three panels as sheets on the page's window. A window that is hidden or
+/// passes clicks through (the overlay, the engines' background windows) answers as WKWebView
+/// did, without showing anything. WebView2 and WebKitGTK show their own dialogs already.
+pub fn enable_script_dialogs<R: tauri::Runtime>(webview: &tauri::Webview<R>) {
+    #[cfg(target_os = "macos")]
+    {
+        let label = webview.label().to_string();
+        if let Err(error) = webview.with_webview(|platform| unsafe { script_dialogs::install(platform.inner()) }) {
+            eprintln!("[kimochi] script dialogs for {label}: {error}");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = webview;
+}
+
+#[cfg(target_os = "macos")]
+mod script_dialogs {
+    use block2::{Block, RcBlock};
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, Sel};
+    use objc2::{msg_send, sel};
+    use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+    use std::ffi::c_void;
+
+    const FIRST_BUTTON: isize = 1000;
+
+    type AlertPanel = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject, *mut AnyObject, *mut Block<dyn Fn()>);
+    type ConfirmPanel = unsafe extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject, *mut AnyObject, *mut AnyObject, *mut Block<dyn Fn(Bool)>);
+    type PromptPanel = unsafe extern "C-unwind" fn(
+        *mut AnyObject,
+        Sel,
+        *mut AnyObject,
+        *mut AnyObject,
+        *mut AnyObject,
+        *mut AnyObject,
+        *mut Block<dyn Fn(*mut AnyObject)>,
+    );
+
+    /// Adds the panels to the class of `webview`'s UI delegate (once; later calls find them) and
+    /// sets the delegate again, which is when WebKit reads which panels it implements.
+    pub unsafe fn install(webview: *mut c_void) {
+        let Some(webview) = (webview as *mut AnyObject).as_ref() else { return };
+        let delegate: *mut AnyObject = msg_send![webview, UIDelegate];
+        let Some(delegate) = delegate.as_ref() else { return };
+        let class = delegate.class() as *const AnyClass as *mut AnyClass;
+        let alert: AlertPanel = alert_panel;
+        let confirm: ConfirmPanel = confirm_panel;
+        let prompt: PromptPanel = prompt_panel;
+        let methods: [(Sel, Imp, &std::ffi::CStr); 3] = [
+            (
+                sel!(webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:),
+                std::mem::transmute::<AlertPanel, Imp>(alert),
+                c"v@:@@@@?",
+            ),
+            (
+                sel!(webView:runJavaScriptConfirmPanelWithMessage:initiatedByFrame:completionHandler:),
+                std::mem::transmute::<ConfirmPanel, Imp>(confirm),
+                c"v@:@@@@?",
+            ),
+            (
+                sel!(webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:),
+                std::mem::transmute::<PromptPanel, Imp>(prompt),
+                c"v@:@@@@@?",
+            ),
+        ];
+        for (selector, imp, types) in methods {
+            // NO when the class has it already: an earlier webview added it.
+            let _ = objc2::ffi::class_addMethod(class, selector, imp, types.as_ptr());
+        }
+        let _: () = msg_send![webview, setUIDelegate: delegate];
+    }
+
+    unsafe extern "C-unwind" fn alert_panel(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        webview: *mut AnyObject,
+        message: *mut AnyObject,
+        _frame: *mut AnyObject,
+        handler: *mut Block<dyn Fn()>,
+    ) {
+        let Some(handler) = RcBlock::copy(handler) else { return };
+        present(webview, message, false, None, Box::new(move |_, _| handler.call(())));
+    }
+
+    unsafe extern "C-unwind" fn confirm_panel(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        webview: *mut AnyObject,
+        message: *mut AnyObject,
+        _frame: *mut AnyObject,
+        handler: *mut Block<dyn Fn(Bool)>,
+    ) {
+        let Some(handler) = RcBlock::copy(handler) else { return };
+        present(webview, message, true, None, Box::new(move |ok, _| handler.call((Bool::new(ok),))));
+    }
+
+    unsafe extern "C-unwind" fn prompt_panel(
+        _this: *mut AnyObject,
+        _cmd: Sel,
+        webview: *mut AnyObject,
+        prompt: *mut AnyObject,
+        default_text: *mut AnyObject,
+        _frame: *mut AnyObject,
+        handler: *mut Block<dyn Fn(*mut AnyObject)>,
+    ) {
+        let Some(handler) = RcBlock::copy(handler) else { return };
+        let default_text = (default_text as *mut NSString).as_ref().map(|text| text.to_string()).unwrap_or_default();
+        present(
+            webview,
+            prompt,
+            true,
+            Some(default_text),
+            Box::new(move |ok, text: Option<String>| match text.filter(|_| ok) {
+                Some(text) => {
+                    let answer = NSString::from_str(&text);
+                    handler.call((Retained::as_ptr(&answer) as *mut AnyObject,));
+                }
+                None => handler.call((std::ptr::null_mut(),)),
+            }),
+        );
+    }
+
+    /// Shows one panel and calls `done(ok, text)` exactly once (WebKit raises if a completion
+    /// handler is released uncalled): as a sheet on the page's window, app-modal when that window
+    /// already has a sheet, and not at all (cancelled) when the window cannot take a click.
+    unsafe fn present(
+        webview: *mut AnyObject,
+        message: *mut AnyObject,
+        cancellable: bool,
+        default_text: Option<String>,
+        done: Box<dyn Fn(bool, Option<String>)>,
+    ) {
+        let window: *mut AnyObject = match webview.as_ref() {
+            Some(webview) => msg_send![webview, window],
+            None => std::ptr::null_mut(),
+        };
+        let usable = window.as_ref().is_some_and(|window| {
+            let visible: Bool = msg_send![window, isVisible];
+            let passes_clicks: Bool = msg_send![window, ignoresMouseEvents];
+            visible.as_bool() && !passes_clicks.as_bool()
+        });
+        let Some(alert_class) = AnyClass::get(c"NSAlert").filter(|_| usable) else {
+            done(false, None);
+            return;
+        };
+        let alert: Retained<AnyObject> = msg_send![alert_class, new];
+        let text = (message as *mut NSString).as_ref().map(|m| m.to_string()).unwrap_or_default();
+        let _: () = msg_send![&*alert, setMessageText: &*NSString::from_str(&text)];
+        let _: *mut AnyObject = msg_send![&*alert, addButtonWithTitle: &*NSString::from_str("OK")];
+        if cancellable {
+            let _: *mut AnyObject = msg_send![&*alert, addButtonWithTitle: &*NSString::from_str("Cancel")];
+        }
+        let field: Option<Retained<AnyObject>> = match (&default_text, AnyClass::get(c"NSTextField")) {
+            (Some(initial), Some(field_class)) => {
+                let frame = NSRect::new(NSPoint::new(0., 0.), NSSize::new(300., 24.));
+                let field: Retained<AnyObject> = msg_send![msg_send![field_class, alloc], initWithFrame: frame];
+                let _: () = msg_send![&*field, setStringValue: &*NSString::from_str(initial)];
+                let _: () = msg_send![&*alert, setAccessoryView: &*field];
+                let panel: *mut AnyObject = msg_send![&*alert, window];
+                if let Some(panel) = panel.as_ref() {
+                    let _: () = msg_send![panel, setInitialFirstResponder: &*field];
+                }
+                Some(field)
+            }
+            _ => None,
+        };
+        let read = move |response: isize| {
+            let ok = response == FIRST_BUTTON;
+            let text = field.as_ref().map(|field| {
+                let value: Retained<NSString> = msg_send![&**field, stringValue];
+                value.to_string()
+            });
+            (ok, text)
+        };
+        let window = &*window;
+        let sheet: *mut AnyObject = msg_send![window, attachedSheet];
+        if sheet.is_null() {
+            let keep = alert.clone();
+            let completion = RcBlock::new(move |response: isize| {
+                let _ = &keep;
+                let (ok, text) = read(response);
+                done(ok, text);
+            });
+            let _: () = msg_send![&*alert, beginSheetModalForWindow: window, completionHandler: &*completion];
+        } else {
+            let response: isize = msg_send![&*alert, runModal];
+            let (ok, text) = read(response);
+            done(ok, text);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_names_are_offered_without_directories_or_tricks() {
+        assert_eq!(download_name("hachidori-backup-2026-10-23.zip"), "hachidori-backup-2026-10-23.zip");
+        assert_eq!(download_name("../../.ssh/authorized_keys"), "authorized_keys");
+        assert_eq!(download_name("C:\\Windows\\evil.dll"), "evil.dll");
+        assert_eq!(download_name(".hidden"), "hidden");
+        assert_eq!(download_name("a\u{0}b<c>.txt"), "abc.txt");
+        assert_eq!(download_name(""), "download");
+        assert_eq!(download_name("..."), "download");
+        assert_eq!(download_name(&"x".repeat(500)).len(), 200);
+        assert!(SAVE_WINDOWS.contains(&"dictionary"));
+        assert!(!SAVE_WINDOWS.iter().any(|label| is_extension_window(label)));
+    }
 
     #[test]
     fn request_paths_map_to_the_extension_or_host_tree_only() {

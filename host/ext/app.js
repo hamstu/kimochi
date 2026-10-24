@@ -38,7 +38,7 @@ export function installApp(win, { engine, descriptor }) {
   }
 
   const network = createNetworkServer(win, { denied: descriptor.deniedHosts, report })
-  const router = new Router({ win, engine, descriptor, origin, label: label ?? 'overlay', report, network })
+  const router = new Router({ win, engine, descriptor, origin, label: label ?? 'overlay', report, network, save: (name, bytes) => saveDownload(win, name, bytes) })
   router.acceptChildren()
 
   const api = {
@@ -321,4 +321,23 @@ export function installApp(win, { engine, descriptor }) {
 
   win.__kimochiExtensionHost = api
   return api
+}
+
+/**
+ * Save a file an extension page in this window downloads (page.js): native's save dialog
+ * (`ext_save_file`) in Kimochi; outside it (the browser harness) an ordinary download from this
+ * document, which is not an extension frame and so still has the browser's.
+ */
+export async function saveDownload(win, name, bytes) {
+  const tauri = win.__TAURI__
+  if (tauri?.core?.invoke) {
+    return tauri.core.invoke('ext_save_file', new Uint8Array(bytes), { headers: { 'x-kimochi-filename': encodeURIComponent(name) } })
+  }
+  const url = win.URL.createObjectURL(new win.Blob([bytes]))
+  const anchor = win.document.createElement('a')
+  anchor.href = url
+  anchor.download = name
+  anchor.click()
+  win.setTimeout(() => win.URL.revokeObjectURL(url), 60000)
+  return { saved: true }
 }

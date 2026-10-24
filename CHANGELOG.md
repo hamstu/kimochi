@@ -11,6 +11,17 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
+  (and every other confirmation, alert or question an engine's settings page asks) now appears
+  instead of being silently answered "Cancel".
+- Links in Hachidori's and 10ten's settings (privacy policy, themes, AnkiConnect, dictionary
+  sources and credits) open in your web browser instead of doing nothing or opening inside the
+  settings window.
+- Hachidori's Download backup, Download debug info and Anki add-on buttons now ask where to save
+  the file, instead of doing nothing.
+- You can drop dictionary files onto Hachidori's import area and drag its dictionaries to reorder
+  them; the settings window used to swallow every drag.
+
 - Hachidori imports dictionaries on several threads on macOS, Windows and Linux, as it does in
   Chrome: up to twice as fast (Jitendex in about a second instead of nearly two on a Mac). Your
   dictionaries are copied to Hachidori's new home in the background once, and the faster imports

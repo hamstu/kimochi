@@ -18,6 +18,8 @@ import { installWorkerNetwork } from './worker-network.js'
 import { probeClaims, storeMarker } from './persistence.js'
 import { describe, randomId, within } from './util.js'
 import { extCommand } from './primitives.js'
+import { installPage } from './page.js'
+import { installBlobBridge } from './blob-bridge.js'
 
 export const BACKGROUND_PAGE = '/__kimochi/ext-background.html'
 
@@ -104,8 +106,21 @@ export function installFrame(win, { engine, descriptor }) {
   win.addEventListener('pagehide', () => context.disconnectAll())
   upstream.linked.catch((error) => console.warn('[ext-host]', describe(error)))
 
+  // An options or startup page in a Kimochi window: links out, `window.open` and downloads go
+  // where a browser tab would send them (page.js).
+  if (kind === 'page' && !windowLabel) {
+    installPage(win, {
+      origin,
+      open: (url) => upstream.call('open', { url }),
+      save: (name, bytes) => upstream.save(name, bytes),
+      report
+    })
+  }
+
   if (kind === 'offscreen') {
     if (descriptor.engineStorage === 'idbfs') keepEngineOnIdbfs(win)
+    // The settings page's files and backups reach the engine through here (blob-bridge.js).
+    if (engine === 'hachidori') installBlobBridge(win, context.events)
     // Ready once its module scripts have run and registered their listeners (see hub `offscreen`).
     win.addEventListener('load', () => void upstream.call('ready').catch(() => {}))
   }

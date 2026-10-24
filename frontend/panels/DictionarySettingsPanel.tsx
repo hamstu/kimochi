@@ -192,6 +192,9 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
         title={`${name} settings`}
         src={src}
         className="dictionary-settings-frame"
+        // An extension page is cross-origin here: without these, its copy buttons (Hachidori's
+        // sharing address) and audio previews are refused by WebView2's permissions policy.
+        allow="clipboard-read; clipboard-write; autoplay"
         data-loaded={loaded || undefined}
         onLoad={() => {
           setLoaded(true)

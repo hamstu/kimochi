@@ -156,17 +156,30 @@
           if (params.get('frame') === 'none') return null
           return { id: 1, matched: false, url: HARNESS_FRAME }
         },
-        retain_frame: () => true
+        retain_frame: () => true,
+        // extensions.rs `ext_save_file`: an extension page's download, recorded, then saved by the
+        // browser (its own download UI stands in for native's save dialog).
+        ext_save_file: (bytes, options) => {
+          const name = decodeURIComponent(options?.headers?.['x-kimochi-filename'] ?? 'download')
+          native.saved = [...(native.saved ?? []), { name, bytes: bytes?.byteLength ?? 0 }]
+          const url = URL.createObjectURL(new Blob([bytes]))
+          const anchor = document.createElement('a')
+          anchor.href = url
+          anchor.download = name
+          anchor.click()
+          setTimeout(() => URL.revokeObjectURL(url), 60000)
+          return { saved: true, path: name, bytes: bytes?.byteLength ?? 0 }
+        }
       }
 
   window.__TAURI__ = {
     core: {
-      invoke: async (command, args) => {
+      invoke: async (command, args, options) => {
         const handler = commands[command]
         if (!handler) {
           throw Error(extWindow ? `invalid: ${command} is not available to an extension window` : `The harness does not mock ${command}`)
         }
-        return handler(args)
+        return handler(args, options)
       }
     },
     event: {

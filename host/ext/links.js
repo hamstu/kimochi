@@ -61,8 +61,11 @@ const listenRelay = (tauri, label, onPayload, report) =>
 // ---------------------------------------------------------------- Router
 
 export class Router {
-  constructor({ win, engine, descriptor, origin, label, report, network }) {
+  constructor({ win, engine, descriptor, origin, label, report, network, save = null }) {
     this.win = win
+    // `save(name, bytes)`: keep a file an extension page downloads (page.js). Only a window that
+    // shows extension pages has one (app.js); elsewhere a download is refused.
+    this.save = save
     this.engine = engine
     this.descriptor = descriptor
     this.origin = origin
@@ -217,6 +220,17 @@ export class Router {
       }
       if (data.t === 'fetch-abort') {
         fetches.get(data.id)?.abort()
+        return
+      }
+      if (data.t === 'save') {
+        const answer = (ok, value) => port.postMessage(ok ? { t: 'reply', id: data.id, ok, value } : { t: 'reply', id: data.id, ok, error: value })
+        if (kind !== 'page' || typeof this.save !== 'function' || Object.prototype.toString.call(data.bytes) !== '[object ArrayBuffer]') {
+          answer(false, 'Saving files is not available here')
+          return
+        }
+        Promise.resolve()
+          .then(() => this.save(String(data.name ?? 'download'), data.bytes))
+          .then((value) => answer(true, json(value ?? null)), (error) => answer(false, describe(error)))
         return
       }
       if (data.t !== 'call') return
@@ -446,6 +460,15 @@ export function connectToParent(win, { engine, kind, documentId, onEvent, onFetc
     },
     post(message, transfer) {
       void linked.then(() => port.postMessage(message, transfer ?? []))
+    },
+    /** Hand a downloaded file's bytes (transferred) to the window to save (page.js). */
+    async save(name, bytes) {
+      await linked
+      const id = ++nextId
+      return new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject })
+        port.postMessage({ t: 'save', id, name: String(name), bytes }, [bytes])
+      })
     }
   }
 }

@@ -10,6 +10,7 @@
 import { getMessage } from './i18n.js'
 import { callbackApi } from './primitives.js'
 import { importLocalZip, isLocalZipImport } from './local-archive.js'
+import { createBlobBridgeClient, needsBlobBridge } from './blob-bridge.js'
 import { createLookupQueue } from './lookup-queue.js'
 import { ChromeEvent, NO_RECEIVER, describe, json, platformInfo, randomId } from './util.js'
 
@@ -85,6 +86,8 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
   // still executes every queued request. Keep only the newest waiting word.
   // Other requests (including parallel dictionary-tab reads) retain Chrome semantics.
   const lookups = createLookupQueue((request) => call('sendMessage', request))
+  /** Hachidori settings: files and backups whose blob: URLs must cross windows (blob-bridge.js). */
+  let blobBridge = null
 
   // ---------------------------------------------------------------- messages and ports
 
@@ -342,8 +345,15 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
           return lookups.submit({ message, capture: hint() })
         }
         const send = (value) => call('sendMessage', { message: value, capture: hint() })
-        return engine === 'hachidori' && kind === 'page' && isLocalZipImport(message)
-          ? importLocalZip(win, message, send, report) : send(message)
+        if (engine === 'hachidori' && kind === 'page') {
+          if (isLocalZipImport(message)) return importLocalZip(win, message, send, report)
+          // blob: URLs do not cross from this window to the offscreen document's (blob-bridge.js).
+          if (needsBlobBridge(message)) {
+            blobBridge ??= createBlobBridgeClient(win, { send, report })
+            return blobBridge(message)
+          }
+        }
+        return send(message)
       }),
       connect: (...args) => {
         const info = typeof args[0] === 'object' && args[0] !== null ? args[0] : args[1]

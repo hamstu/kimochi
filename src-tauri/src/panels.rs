@@ -575,6 +575,12 @@ fn ensure(
         }
         builder = builder.transparent(true).background_color(tauri::window::Color(0, 0, 0, 0)).skip_taskbar(true);
     }
+    if spec.label == "dictionary" {
+        // The engines' settings pages take dropped dictionary files and reorder their lists by
+        // dragging. Tauri's drag-and-drop handler swallows every drag in the webview (nothing
+        // here listens to its events), so the pages never saw one.
+        builder = builder.disable_drag_drop_handler();
+    }
     if !spec.init_assets.is_empty() {
         // Read now, not at app start: a panel built after an engine switch must say so.
         let engine = extensions::dictionary_engine(settings);
