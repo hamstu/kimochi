@@ -71,6 +71,25 @@ pub fn fade(samples: &mut [f32], sample_rate: u32) {
     }
 }
 
+/// The gain that brings `samples`' peak to `target`, at most `max_gain` and never below 1 (a loud
+/// clip is left as it is). Near-silence (peak under -100 dBFS) gets none.
+pub fn gain_to(samples: &[f32], target: f32, max_gain: f32) -> f32 {
+    let peak = samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+    if peak < 1e-5 {
+        return 1.0;
+    }
+    (target / peak).clamp(1.0, max_gain)
+}
+
+/// Bring a quiet clip up toward -1 dBFS (at most x8, +18 dB): a game played quietly, or a
+/// PipeWire monitor taken after the output's volume, still gives a clip worth hearing.
+pub fn level(samples: &mut [f32]) {
+    let gain = gain_to(samples, 0.9, 8.0);
+    if gain > 1.0 {
+        samples.iter_mut().for_each(|s| *s *= gain);
+    }
+}
+
 /// Speech spans from per-frame speech probabilities (Silero's hysteresis): speech starts at a
 /// frame at or above `on`, and ends after `min_silence_ms` below `off`.
 pub fn spans_from_probabilities(probabilities: &[f32], frame_ms: f64, on: f32, off: f32, min_silence_ms: f64) -> Vec<Span> {
@@ -158,6 +177,21 @@ mod tests {
         let mut tiny = vec![1.0; 3];
         fade(&mut tiny, 48_000);
         assert_eq!(tiny[1], 1.0);
+    }
+
+    #[test]
+    fn quiet_clips_are_brought_up_and_loud_ones_left_alone() {
+        let mut quiet = vec![0.0, 0.05, -0.1, 0.02];
+        level(&mut quiet);
+        assert!((quiet[2] + 0.8).abs() < 1e-6, "x8 at most: {quiet:?}");
+        let mut louder = vec![0.0, 0.3, -0.2];
+        level(&mut louder);
+        assert!((louder[1] - 0.9).abs() < 1e-6, "{louder:?}");
+        let mut loud = vec![0.95, -0.5];
+        level(&mut loud);
+        assert_eq!(loud, vec![0.95, -0.5]);
+        assert_eq!(gain_to(&[0.0, 1e-7], 0.5, 1_000.0), 1.0, "silence is not amplified");
+        assert!((gain_to(&[0.001], 0.5, 1_000.0) - 500.0).abs() < 0.01);
     }
 
     #[test]

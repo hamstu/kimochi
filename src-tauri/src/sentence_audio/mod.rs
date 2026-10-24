@@ -305,18 +305,27 @@ impl SentenceAudio {
             }
             ring.snapshot(window.from, window.to).ok_or("No audio was recorded for the line.")?
         };
-        let voice = if config.trim {
-            self.speech(&clip.samples, clip.sample_rate)
-                .and_then(|spans| trim::voice(&spans, window.anchor - clip.start_ms))
-        } else {
-            None
-        };
+        let spans = if config.trim { self.speech(&clip.samples, clip.sample_rate) } else { None };
+        let voice = spans.as_ref().and_then(|spans| trim::voice(spans, window.anchor - clip.start_ms));
         let cut = trim::cut(voice, clip.duration_ms(), config.start_offset_ms, config.end_offset_ms);
+        // KIMOCHI_SENTENCE_AUDIO_DEBUG=1: how the clip was cut, to tune the timing.
+        if std::env::var_os("KIMOCHI_SENTENCE_AUDIO_DEBUG").is_some() {
+            eprintln!(
+                "[sentence-audio] line {:?}: window {:.0}..{:.0} (anchor +{:.0}), clip {:.0}ms from +{:.0}, speech {spans:?}, voice {voice:?}, cut {cut:?}",
+                line.text,
+                window.from,
+                window.to,
+                window.anchor - window.from,
+                clip.duration_ms(),
+                clip.start_ms - window.from,
+            );
+        }
         let at = |ms: f64| ((ms * clip.sample_rate as f64 / 1000.0) as usize).min(clip.samples.len());
         let mut samples = clip.samples[at(cut.start)..at(cut.end)].to_vec();
         if samples.len() < clip.sample_rate as usize / 10 {
             return Err("The clip came out empty: check the offsets in Settings → Anki.".into());
         }
+        trim::level(&mut samples);
         trim::fade(&mut samples, clip.sample_rate);
         let mp3 = encode::mp3(&samples, clip.sample_rate)?;
         Ok(Made {
@@ -555,7 +564,8 @@ mod tests {
     /// lines' speech plays (out loud, at half volume), then attaches the first line's audio to a
     /// card. `KIMOCHI_ORT=…/libonnxruntime.dylib KIMOCHI_SPEECH_WAV=a.wav KIMOCHI_SPEECH_WAV2=b.wav
     /// [KIMOCHI_OUT=clip.mp3] cargo test --bin kimochi card_gets -- --ignored --nocapture`. Needs
-    /// Screen Recording for the terminal.
+    /// Screen Recording for the terminal on macOS, and on Windows `KIMOCHI_AUDIO_ENDPOINT_LOOPBACK=1`
+    /// (the test's own player is Kimochi's child there, which process loopback leaves out).
     #[tokio::test(flavor = "multi_thread")]
     #[ignore]
     async fn a_card_gets_its_lines_voice_from_system_audio() {
@@ -580,8 +590,15 @@ mod tests {
         std::thread::sleep(Duration::from_millis(500));
 
         let play = |path: &str| {
-            let status = std::process::Command::new("afplay").args(["-v", "0.5", path]).status().unwrap();
-            assert!(status.success());
+            let status = if cfg!(target_os = "macos") {
+                std::process::Command::new("afplay").args(["-v", "0.5", path]).status()
+            } else if cfg!(target_os = "windows") {
+                let script = format!("(New-Object Media.SoundPlayer '{path}').PlaySync()");
+                std::process::Command::new("powershell").args(["-NoProfile", "-Command", &script]).status()
+            } else {
+                std::process::Command::new("pw-play").args(["--volume", "0.5", path]).status()
+            };
+            assert!(status.unwrap().success());
         };
         let lines = ["今日はいい天気ですね。散歩に行きましょう。", "猫が好きです。"];
         let mut spoken_ms = Vec::new();

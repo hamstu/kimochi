@@ -34,7 +34,11 @@ impl Vad {
 
     /// Speech in `samples` (mono, any rate), in ms from their start.
     pub fn speech(&mut self, samples: &[f32], sample_rate: u32) -> Result<Vec<Span>, String> {
-        let audio = to_16k(samples, sample_rate);
+        let mut audio = to_16k(samples, sample_rate);
+        // Silero misses speech far below full scale (a quiet game, a monitor taken after the
+        // output's volume): it hears a copy brought up to half scale, up to +60 dB.
+        let gain = super::trim::gain_to(&audio, 0.5, 1_000.0);
+        audio.iter_mut().for_each(|s| *s *= gain);
         let mut state = vec![0f32; 2 * 128];
         let mut input = vec![0f32; CONTEXT + FRAME];
         let mut probabilities = Vec::with_capacity(audio.len() / FRAME + 1);
