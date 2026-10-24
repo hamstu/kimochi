@@ -83,8 +83,8 @@ test('versions and licences match the pinned releases', async () => {
   }
 })
 
-test("Hachidori's requirements say it runs single-threaded here", () => {
-  assert.match(DICTIONARY_ENGINES.hachidori.requirements, /single-threaded/)
+test("Hachidori's requirements no longer say it runs single-threaded (it imports on threads everywhere)", () => {
+  assert.doesNotMatch(DICTIONARY_ENGINES.hachidori.requirements, /single-threaded/)
 })
 
 test('dictionaryEngineOf maps the stored spelling, defaulting to Yomitan', () => {

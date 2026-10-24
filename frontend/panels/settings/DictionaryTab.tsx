@@ -14,9 +14,9 @@
  * window is one of those (it runs lookups over the transcript), and this page is a view inside
  * it, so the page records where it is first (`rememberEngineSwitch`); the reloaded window opens
  * straight back onto it and says "Now using …". The separate Settings window hosts no engine and
- * is not reloaded; it says "Reloading the reader windows…" instead. Built-in Yomitan and the
- * Yomitan API share the Yomitan host, so moving between those two reloads nothing. See DICTIONARY_ENGINES.md
- * §2 and §8.
+ * is not reloaded; it says "Reloading the reader windows…" instead. The Yomitan API installs no
+ * host (`hostEngineOf`), so moving to or from it reloads the reader windows like any other switch.
+ * See DICTIONARY_ENGINES.md §2 and §8.
  *
  * Engines are downloaded on demand (EXTENSION_DOWNLOADS.md §2, UI). Choosing one that is not
  * downloaded asks first ("Download 10ten?"), starts the download and records a PENDING switch;
@@ -25,12 +25,13 @@
  * pending, it is made exactly as above. If this page is closed meanwhile, the download finishes
  * in Rust and the engine simply offers "Use <name>" next time.
  */
-import { useCallback, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Button,
   Callout,
   ConfirmDialog,
   Input,
+  isComposing,
   SettingsPage,
   SettingsRow,
   SettingsSection,
@@ -78,33 +79,29 @@ export function DictionaryTab(): ReactNode {
   } = useDictionarySwitch('settings')
   const runtime = useDictionaryReadiness(active)
 
-  const handleApiUrlChange = useCallback(
-    (value: string): void => {
-      void setYomitanSettings({ ...yomitanSettings, customApiUrl: value })
-    },
-    [yomitanSettings, setYomitanSettings]
-  )
-
-  const restriction = yomitanSettings.customApiUrl
-    ? describeUrlRestriction(yomitanSettings.customApiUrl)
-    : null
-
   const renderSettings = (engine: DictionaryEngine, inUse: boolean): ReactNode => {
     if (engine !== 'custom-api') {
       const name = DICTIONARY_ENGINES[engine].name
       return (
         <>
           <div className="dictionary-engine-action">
-            {inUse && <DictionaryReadiness engine={engine} />}
+            {/* Not downloaded: the panel's download block above says so already. */}
+            {inUse && (runtime.download === null || runtime.download === 'ready') && (
+              <DictionaryReadiness engine={engine} />
+            )}
             <div className="engine-setting-text">
               <span className="engine-setting-label">{name} settings</span>
               <span className="k-description">
-                {inUse
-                  ? `Dictionaries, scanning and lookups are set up in ${name}'s own settings.`
-                  : `${name}'s own settings open here once it is the active engine.`}
+                {!inUse
+                  ? `${name}'s own settings open here once it is the active engine.`
+                  : runtime.view.settingsAvailable
+                    ? `Dictionaries, scanning and lookups are set up in ${name}'s own settings.`
+                    : runtime.download !== null && runtime.download !== 'ready'
+                      ? `${name}'s own settings open here once it is downloaded.`
+                      : `${name}'s own settings open here once it has started.`}
               </span>
             </div>
-            {inUse && runtime.settingsReady && (
+            {inUse && runtime.view.settingsAvailable && (
               <Button
                 size="sm"
                 onClick={() => {
@@ -125,27 +122,10 @@ export function DictionaryTab(): ReactNode {
       <>
         <SettingsSection title="Your browser's Yomitan" grouped>
           <YomitanApiStatusRows url={apiUrl} active={!setupOpen} onSetUp={() => setSetupOpen(true)} />
-          <SettingsRow
-            stacked
-            label="API address"
-            controlId="dictionary-api-url"
-            description={`Where the helper serves the Yomitan API. Leave it empty for the default, ${DEFAULT_YOMITAN_API_URL}.`}
-          >
-            <div className="settings-url">
-              <Input
-                id="dictionary-api-url"
-                mono
-                value={yomitanSettings.customApiUrl}
-                onChange={(e) => handleApiUrlChange(e.target.value)}
-                placeholder={DEFAULT_YOMITAN_API_URL}
-              />
-            </div>
-          </SettingsRow>
-          {restriction && (
-            <div className="settings-note">
-              <Callout tone="warn">{restriction}</Callout>
-            </div>
-          )}
+          <ApiAddressRow
+            value={yomitanSettings.customApiUrl}
+            onSave={(value) => void setYomitanSettings({ ...yomitanSettings, customApiUrl: value })}
+          />
         </SettingsSection>
         <WithReaderSettings>
           {(settings) => <KimochiPopupSections settings={settings} />}
@@ -190,6 +170,64 @@ export function DictionaryTab(): ReactNode {
         />
       </SettingsSection>
     </SettingsPage>
+  )
+}
+
+/**
+ * The Yomitan API's address, saved when the field is left or Enter is pressed (not on every
+ * keystroke, which would check every half-typed address and rewrite the setting each time). An
+ * address the API check would refuse stays in the field with the reason, unsaved.
+ */
+function ApiAddressRow({ value, onSave }: { value: string; onSave: (value: string) => void }): ReactNode {
+  const [draft, setDraft] = useState(value)
+  const [error, setError] = useState<string | null>(null)
+  // A change saved elsewhere (another window, Sync) replaces the field.
+  const [seen, setSeen] = useState(value)
+  if (seen !== value) {
+    setSeen(value)
+    setDraft(value)
+    setError(null)
+  }
+  const save = (raw: string): void => {
+    const next = raw.trim()
+    const problem = next ? describeUrlRestriction(next) : null
+    setError(problem)
+    if (problem) return
+    setDraft(next)
+    if (next !== value) onSave(next)
+  }
+  return (
+    <>
+      <SettingsRow
+        stacked
+        label="API address"
+        controlId="dictionary-api-url"
+        description={`Where the helper serves the Yomitan API. Leave it empty for the default, ${DEFAULT_YOMITAN_API_URL}.`}
+      >
+        <div className="settings-url">
+          <Input
+            id="dictionary-api-url"
+            mono
+            value={draft}
+            aria-invalid={error ? true : undefined}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              setError(null)
+            }}
+            onBlur={(e) => save(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isComposing(e)) save(e.currentTarget.value)
+            }}
+            placeholder={DEFAULT_YOMITAN_API_URL}
+          />
+        </div>
+      </SettingsRow>
+      {error && (
+        <div className="settings-note">
+          <Callout tone="warn">{error}</Callout>
+        </div>
+      )}
+    </>
   )
 }
 

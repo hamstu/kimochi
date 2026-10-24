@@ -198,7 +198,7 @@ function DictionaryDetail({
           <DictionaryRunsIcon engine={engine} />
         </h3>
         {action === 'active' ? (
-          <Badge tone={runtime.phase === 'ready' ? 'accent' : 'warn'}>{runtime.phase === 'ready' ? 'Active' : 'Setting up'}</Badge>
+          <Badge tone={runtime.view.badge.tone}>{runtime.view.badge.label}</Badge>
         ) : action === 'pending' ? (
           <Badge>Switching when ready</Badge>
         ) : action === 'use' ? (

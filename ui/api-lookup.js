@@ -38,6 +38,27 @@ export function dismissApiLookup() {
 
 const WORD_BOX = '[data-ocr-word-box]'
 
+/** AnkiConnect's address when the setting has none (ankiconnect.rs `DEFAULT_URL`). */
+const DEFAULT_ANKI_CONNECT_URL = 'http://127.0.0.1:8765'
+
+/**
+ * The pop-up's Add to Anki settings from the reader settings, or null (no Add to Anki button) until
+ * mining is on and a deck, a note type and its fields are set: the same rule as the Log's pop-up
+ * (`buildAnkiConfigForPopover`), so a half-set-up Settings → Anki never shows a button that fails.
+ */
+export function popupAnkiConfig(reader) {
+  if (!reader?.ankiEnabled || !reader.ankiDeckName || !reader.ankiModelName) return null
+  if (!Array.isArray(reader.ankiModelFields) || reader.ankiModelFields.length === 0) return null
+  return {
+    ankiConnectUrl: (typeof reader.ankiConnectUrl === 'string' && reader.ankiConnectUrl.trim()) || DEFAULT_ANKI_CONNECT_URL,
+    deck: reader.ankiDeckName,
+    model: reader.ankiModelName,
+    modelFields: reader.ankiModelFields,
+    mappings: Array.isArray(reader.ankiFieldMappings) ? reader.ankiFieldMappings : [],
+    tags: Array.isArray(reader.ankiTags) ? reader.ankiTags : []
+  }
+}
+
 /**
  * `embedded`: Built-in Yomitan is loaded in this document (its own pop-up is switched off while
  * the Yomitan API is the engine). The Yomitan API on its own (`startApiEngine` in overlay.js) loads
@@ -69,16 +90,7 @@ export async function installApiLookup({ embedded = true } = {}) {
         includeMedia: Boolean(reader.audioEnabled || reader.ankiEnabled),
         audioAutoplay: Boolean(reader.audioEnabled && reader.audioAutoplay),
         audioVolume: reader.audioVolume ?? 0.9,
-        ankiConfig: reader.ankiEnabled
-          ? {
-              ankiConnectUrl: reader.ankiConnectUrl,
-              deck: reader.ankiDeckName,
-              model: reader.ankiModelName,
-              modelFields: reader.ankiModelFields,
-              mappings: reader.ankiFieldMappings,
-              tags: reader.ankiTags
-            }
-          : null
+        ankiConfig: popupAnkiConfig(reader)
       })
     } catch (error) {
       console.error('API dictionary popup:', error)

@@ -3,29 +3,21 @@ import { Callout, Spinner } from "@kit";
 import { useDictionaryReadiness } from "../bridge/dictionaryReadiness";
 import type { DictionaryEngine } from "../bridge/dictionaryEngine";
 
+/** The engine in use while it is not ready: not downloaded, starting, fetching data, or failed. */
 export function DictionaryReadiness({
   engine,
 }: {
   engine: DictionaryEngine;
 }): ReactNode {
-  const status = useDictionaryReadiness(engine);
-  if (status.phase === "ready") return null;
+  const { view } = useDictionaryReadiness(engine);
+  if (!view.show) return null;
   return (
-    <Callout
-      tone={status.phase === "failed" ? "warn" : "neutral"}
-      icon={
-        ["starting", "downloading", "installing"].includes(status.phase) ? (
-          <Spinner />
-        ) : undefined
-      }
-    >
-      <span>
-        {status.message} Lookups will be available when setup is complete.
-      </span>
-      {typeof status.progress === "number" && (
+    <Callout tone={view.tone} icon={view.busy ? <Spinner /> : undefined}>
+      <span>{view.text}</span>
+      {view.progress !== null && (
         <progress
           max={100}
-          value={status.progress}
+          value={view.progress}
           aria-label="Dictionary data download"
         />
       )}

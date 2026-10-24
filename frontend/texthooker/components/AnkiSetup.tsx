@@ -19,6 +19,8 @@ import {
   listModels,
 } from "@texthooker/lib/ankiconnect";
 import { detectAnkiSetup } from "@texthooker/lib/ankiDetect";
+import { ankiMiningGap } from "@texthooker/lib/ankiConfig";
+import { DEFAULT_ANKI_CONNECT_URL } from "@ui/anki-connect";
 import { updateSettings } from "@texthooker/lib/settings";
 import type { AnkiFieldMapping, Settings } from "@texthooker/lib/types";
 import { YOMITAN_MARKERS } from "@texthooker/lib/types";
@@ -38,8 +40,16 @@ interface Props {
   description?: ReactNode;
 }
 
+/** `options` with the saved value added when it is missing (AnkiConnect not answering, or a deck
+    renamed in Anki), so the select shows what is saved instead of an empty placeholder. */
+function withSaved(options: string[], saved: string | null): string[] {
+  return saved && !options.includes(saved) ? [saved, ...options] : options;
+}
+
 /** The Yomitan API pop-up's Add to Anki: on/off, deck, note type, tags and field mapping. */
 export function AnkiSetup({ settings, connection, title, description }: Props) {
+  // Empty is AnkiConnect's default address, as Settings → Anki's Address field shows it.
+  const ankiUrl = settings.ankiConnectUrl.trim() || DEFAULT_ANKI_CONNECT_URL;
   const [tagsDraft, setTagsDraft] = useState(settings.ankiTags.join(", "));
   const [decks, setDecks] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
@@ -71,7 +81,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
   const handleDetectClick = async () => {
     resetImport();
     setDetecting(true);
-    const url = settings.ankiConnectUrl;
+    const url = ankiUrl;
     try {
       const found = await detectAnkiSetup({
         models: () => listModels(url),
@@ -164,8 +174,8 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     void (async () => {
       try {
         const [d, m] = await Promise.all([
-          listDecks(settings.ankiConnectUrl),
-          listModels(settings.ankiConnectUrl),
+          listDecks(ankiUrl),
+          listModels(ankiUrl),
         ]);
         if (cancelled) return;
         setDecks(d);
@@ -179,7 +189,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [settings.ankiConnectUrl, connection, refreshTick]);
+  }, [ankiUrl, connection, refreshTick]);
 
   // Load fields when the model changes; mirror into settings so the popover
   // can reach them without a round-trip to AnkiConnect on every send.
@@ -195,7 +205,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     void (async () => {
       try {
         const fs = await listModelFields(
-          settings.ankiConnectUrl,
+          ankiUrl,
           settings.ankiModelName!,
         );
         if (cancelled) return;
@@ -212,7 +222,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.ankiConnectUrl, settings.ankiModelName, connection, refreshTick]);
+  }, [ankiUrl, settings.ankiModelName, connection, refreshTick]);
 
   const handleTagsBlur = async () => {
     const parsed = tagsDraft
@@ -276,7 +286,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         <SettingsRow
           label="Enable mining"
           controlId="anki-enabled"
-          description="Shows Add to Anki in the lookup popover."
+          description="Shows Add to Anki in the lookup pop-up."
         >
           <Switch
             id="anki-enabled"
@@ -284,14 +294,19 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
             onCheckedChange={(v) => void updateSettings({ ankiEnabled: v })}
           />
         </SettingsRow>
+        {settings.ankiEnabled && ankiMiningGap(settings, modelFields.length > 0) ? (
+          <div className="settings-note">
+            <Callout tone="warn">{ankiMiningGap(settings, modelFields.length > 0)}</Callout>
+          </div>
+        ) : null}
         <SettingsRow label="Deck">
           <Select
             aria-label="Deck"
             value={settings.ankiDeckName ?? ""}
             onValueChange={(v) => void updateSettings({ ankiDeckName: v === "" ? null : v })}
-            disabled={decks.length === 0}
+            disabled={decks.length === 0 && !settings.ankiDeckName}
             placeholder="Select deck"
-            options={decks.map((d) => ({ value: d, label: d }))}
+            options={withSaved(decks, settings.ankiDeckName).map((d) => ({ value: d, label: d }))}
           />
         </SettingsRow>
         <SettingsRow label="Note type">
@@ -305,9 +320,9 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
                 ankiModelFields: [],
               })
             }
-            disabled={models.length === 0}
+            disabled={models.length === 0 && !settings.ankiModelName}
             placeholder="Select note type"
-            options={models.map((m) => ({ value: m, label: m }))}
+            options={withSaved(models, settings.ankiModelName).map((m) => ({ value: m, label: m }))}
           />
         </SettingsRow>
         <SettingsRow
@@ -463,6 +478,9 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
             return (
               <SettingsRow key={f} label={f} controlId={`anki-map-${f}`}>
                 <Input
+                  // Uncontrolled while typing; keyed by the saved mapping so one that Detect or
+                  // an import (or another window) changed replaces what the field shows.
+                  key={display}
                   id={`anki-map-${f}`}
                   size="sm"
                   mono

@@ -31,6 +31,37 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Opening one of Built-in Yomitan's pages from a pop-up or another window no longer replaces the
   Yomitan settings window with a bare page that couldn't be moved or closed.
 - Built-in Yomitan's recommended dictionaries for languages other than Japanese can be installed.
+- A dictionary that isn't downloaded yet now says so in the sidebar and in Settings, instead of
+  "Starting the dictionary…" forever, and its settings button waits until it's downloaded and
+  running (Settings → Anki's button too).
+- 10ten's setup note no longer says lookups wait for its download: it looks words up straight away.
+- With the Yomitan API, the pop-up over your game only shows Add to Anki once a deck and note type
+  are chosen, as the Log's pop-up does, and Settings → Anki says what's still missing.
+- Settings → Anki keeps showing your deck and note type while Anki is closed, and the field
+  mapping updates right away after Detect or an import.
+- The Yomitan API address in Settings → Dictionary is saved when you leave the field, and an
+  address that can't work is pointed out instead of saved.
+
+- Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
+  (and every other confirmation, alert or question an engine's settings page asks) now appears
+  instead of being silently answered "Cancel".
+- Links in Hachidori's and 10ten's settings (privacy policy, themes, AnkiConnect, dictionary
+  sources and credits) open in your web browser instead of doing nothing or opening inside the
+  settings window.
+- Hachidori's Download backup, Download debug info and Anki add-on buttons now ask where to save
+  the file, instead of doing nothing.
+- You can drop dictionary files onto Hachidori's import area and drag its dictionaries to reorder
+  them; the settings window used to swallow every drag.
+- Links in Built-in Yomitan's settings, info and support pages and in its pop-ups (the wiki,
+  AnkiConnect, dictionary homepages, links inside definitions) open in your web browser, instead
+  of doing nothing or loading the website inside the settings window. Its own pages, such as the
+  search page or "Anki settings" from a pop-up, open in the Yomitan settings window.
+- Built-in Yomitan's Export settings, Export dictionary collection and Anki deck export now ask
+  where to save the file, instead of doing nothing. Dropping dictionary files onto its import area
+  works too.
+- Opening one of Built-in Yomitan's pages from a pop-up or another window no longer replaces the
+  Yomitan settings window with a bare page that couldn't be moved or closed.
+- Built-in Yomitan's recommended dictionaries for languages other than Japanese can be installed.
 
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
   (and every other confirmation, alert or question an engine's settings page asks) now appears

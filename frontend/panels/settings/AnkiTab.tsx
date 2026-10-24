@@ -19,7 +19,8 @@ import {
   SettingsRow,
   SettingsSection,
   Spinner,
-  StatusDot
+  StatusDot,
+  Tooltip
 } from '@kit'
 import {
   ANKI_ROUTE,
@@ -42,6 +43,7 @@ import {
   useDictionaryEngine,
   type DictionaryEngine
 } from '../../bridge/dictionaryEngine'
+import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 
 export function AnkiTab(): ReactNode {
@@ -344,17 +346,53 @@ function CardsSection({
         label={`${name}'s Anki settings`}
         description={`${how} ${where}`}
       >
-        <Button
-          size="sm"
-          onClick={() => {
-            openDictionarySettingsSection('anki').catch((error) =>
-              console.error(`Open ${name} Anki settings failed:`, nativeError(error).message)
-            )
-          }}
-        >
-          Open {name} Anki settings
-        </Button>
+        <OpenEngineAnkiButton engine={engine} onChooseDictionary={showDictionary} />
       </SettingsRow>
     </SettingsSection>
+  )
+}
+
+/**
+ * "Open <engine> Anki settings", once the engine's settings page can open: not while the engine
+ * is not downloaded (its panel would only say so) or still starting, as Settings → Dictionary.
+ */
+function OpenEngineAnkiButton({
+  engine,
+  onChooseDictionary
+}: {
+  engine: DictionaryEngine
+  onChooseDictionary: () => void
+}): ReactNode {
+  const name = DICTIONARY_ENGINES[engine].name
+  const runtime = useDictionaryReadiness(engine)
+  if (runtime.download !== null && runtime.download !== 'ready') {
+    // Its settings page exists once it is downloaded, which Settings → Dictionary does.
+    return (
+      <Tooltip content={`${name} is not downloaded yet`}>
+        <Button size="sm" onClick={onChooseDictionary}>
+          Download in Dictionary settings
+        </Button>
+      </Tooltip>
+    )
+  }
+  if (!runtime.view.settingsAvailable) {
+    return (
+      <Button size="sm" disabled>
+        <Spinner label={`Starting ${name}`} />
+        Starting {name}…
+      </Button>
+    )
+  }
+  return (
+    <Button
+      size="sm"
+      onClick={() => {
+        openDictionarySettingsSection('anki').catch((error) =>
+          console.error(`Open ${name} Anki settings failed:`, nativeError(error).message)
+        )
+      }}
+    >
+      Open {name} Anki settings
+    </Button>
   )
 }

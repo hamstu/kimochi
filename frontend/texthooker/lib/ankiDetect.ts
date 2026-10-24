@@ -150,7 +150,14 @@ export async function detectAnkiSetup(anki: AnkiReader): Promise<DetectedSetup> 
     count: new Set(await anki.findNotes(`"note:${searchName(c.model)}"`)).size,
   }));
   const models = uniqueMost(counted);
-  if (!models.best) return { ok: false, reason: `Your ${candidates.map((c) => c.model).join(", ")} note type has no notes yet. ${CHOOSE}` };
+  if (!models.best) {
+    const names = candidates.map((c) => c.model);
+    const which =
+      names.length === 1
+        ? `Your ${names[0]} note type has`
+        : `Your ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} note types have`;
+    return { ok: false, reason: `${which} no notes yet. ${CHOOSE}` };
+  }
   if (models.tied) return { ok: false, reason: `Two note types have the most notes. ${CHOOSE}` };
   const model = models.best;
 

@@ -353,7 +353,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Anki mining through AnkiConnect'
     ],
     requirements:
-      'Downloaded when you choose it (about 5 MB). Runs single-threaded here, so imports are a little slower.',
+      'Downloaded when you choose it (about 5 MB). Needs at least one dictionary.',
     licence: 'GPL-3.0-or-later',
     upstream: 'https://github.com/bee-san/hachidori',
     version: '0.3.0',
