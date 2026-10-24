@@ -76,8 +76,10 @@ test('the overlay starts the Yomitan API on its own, as a ready dictionary', asy
   const installs = []
   const logged = []
   let settled = 0
+  const apiPopupVisible = () => {}
   const context = vm.createContext({
     installApiLookup: async (options) => installs.push(options),
+    apiPopupVisible,
     state: { yomitan: { ready: false } },
     settleBackend: () => settled++,
     log: (entry) => logged.push(entry.check)
@@ -85,6 +87,7 @@ test('the overlay starts the Yomitan API on its own, as a ready dictionary', asy
   vm.runInContext(`${start.getText(ast)}\nglobalThis.run = startApiEngine`, context)
   await context.run()
   assert.equal(JSON.stringify(installs), JSON.stringify([{ embedded: false }]), "no Yomitan frontend to switch")
+  assert.equal(installs[0].onVisibilityChange, apiPopupVisible, 'its pop-up holds automatic OCR still while read')
   assert.equal(context.state.yomitan.ready, true, 'the pointer replay and the controller see a dictionary')
   assert.equal(settled, 1)
   assert.equal(logged.join(), "dictionary-api-ready")
