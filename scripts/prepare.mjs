@@ -90,6 +90,7 @@ export async function prepareUi() {
     })
   }
   await prepareMangaFont()
+  await prepareUiFont()
   await checkUiSpecifiers()
 }
 
@@ -120,6 +121,24 @@ async function prepareMangaFont() {
   }
   await writeFile(path.join(out, 'manga.css'), rules.join('\n'))
   await cp(at(MANGA_FONT_PACKAGE, 'LICENSE'), path.join(out, 'zen-kaku-gothic-antique.LICENSE.txt'))
+}
+
+/** Kimochi's UI face (tokens.css `--k-font-ui`), for Gaming Mode's controller surfaces. */
+const UI_FONT_PACKAGE = 'node_modules/@fontsource-variable/figtree'
+
+/**
+ * `dist/ui/fonts/figtree.css` and its files, so the overlay's controller UI (controller-variants.css)
+ * is set in Figtree with no network: the variable upright face's `@font-face` rules, pointed at
+ * copies of their woff2 files beside it, with the font's licence.
+ */
+async function prepareUiFont() {
+  const out = at('dist/ui/fonts')
+  await mkdir(out, { recursive: true })
+  const css = await readFile(at(UI_FONT_PACKAGE, 'wght.css'), 'utf8')
+  for (const match of css.matchAll(/url\(\.\/files\/([^)]+\.woff2)\)/g))
+    await cp(at(UI_FONT_PACKAGE, 'files', match[1]), path.join(out, match[1]))
+  await writeFile(path.join(out, 'figtree.css'), css.replace(/url\(\.\/files\//g, 'url(./'))
+  await cp(at(UI_FONT_PACKAGE, 'LICENSE'), path.join(out, 'figtree.LICENSE.txt'))
 }
 
 /**
