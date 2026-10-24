@@ -57,6 +57,15 @@ pub fn defaults() -> Value {
         },
         "overlayOpacity": 80,
         "liveOverlayEnabled": false,
+        // Sentence audio (sentence_audio.rs): off until the user turns it on.
+        "sentenceAudio": {
+            "enabled": false,
+            "seconds": 30,
+            "field": "SentenceAudio",
+            "startOffsetMs": 0,
+            "endOffsetMs": 0,
+            "trim": true
+        },
         // New installs only: `load` keeps an existing settings file on the engine it had.
         "ocrMode": "googlelens"
         // `endpoint` is intentionally absent: an unset endpoint follows

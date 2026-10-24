@@ -29,7 +29,8 @@ pub const SETTINGS_FILE: &str = "profile-settings.json";
 
 /// Settings that belong to this computer: window places, the capture source and portal grant,
 /// the scan history, the server choice, the OCR engine and dictionary engine (they depend on
-/// what this computer has installed), and account bookkeeping.
+/// what this computer has installed), recording system audio (`sentenceAudio`: this computer's
+/// permission and choice), and account bookkeeping.
 pub const MACHINE_KEYS: &[&str] = &[
     "windowPositions",
     "nativeWindowBounds",
@@ -50,6 +51,7 @@ pub const MACHINE_KEYS: &[&str] = &[
     "accountLinkServer",
     "yomitanSettings",
     "accountBackup",
+    "sentenceAudio",
 ];
 
 /// Settings that follow the profile but never sync: they name this computer's sessions.

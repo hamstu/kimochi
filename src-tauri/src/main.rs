@@ -38,6 +38,7 @@ mod platform;
 mod ocr_result;
 mod panels;
 mod scan_trace;
+mod sentence_audio;
 mod settings;
 mod sources;
 mod state;
@@ -211,6 +212,11 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     if key.starts_with("texthookerSettings") {
         if let Some(texthooker) = app.try_state::<Arc<texthooker::Texthooker>>() {
             texthooker.settings_changed();
+        }
+    }
+    if key == "sentenceAudio" {
+        if let Some(service) = app.try_state::<Arc<sentence_audio::SentenceAudio>>() {
+            service.settings_changed();
         }
     }
     if key.starts_with("hotkeys") {
@@ -2723,6 +2729,9 @@ fn main() {
             reader::ankiconnect::anki_add_note,
             reader::ankiconnect::anki_connect_relay,
             reader::ankiconnect::anki_connect_status,
+            sentence_audio::sentence_audio_status,
+            sentence_audio::sentence_audio_line,
+            sentence_audio::sentence_audio_attach,
             #[cfg(target_os = "linux")]
             platform::dictionary_images::linux_dictionary_image,
             report,
@@ -3028,6 +3037,10 @@ fn main() {
             let hooker = Arc::new(texthooker::Texthooker::new(store.clone(), logger));
             hooker.start();
             app.manage(hooker);
+
+            let sentence_audio = sentence_audio::SentenceAudio::new(handle.clone(), store.clone());
+            sentence_audio.settings_changed();
+            app.manage(sentence_audio);
 
             spawn_source_restore(service.clone());
 

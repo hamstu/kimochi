@@ -71,6 +71,19 @@ installs the Microsoft Edge WebView2 Runtime under Microsoft's own terms if
 it is missing.
 
 
+Sentence audio (compiled into Kimochi)
+--------------------------------------
+
+Silero VAD, https://github.com/snakers4/silero-vad, MIT License, Copyright (c)
+2020-present Silero Team. The v5 model (release v5.1.2, silero_vad.onnx,
+SHA-256 2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f) is
+compiled in unmodified and runs on the ONNX Runtime above; its licence is
+bundled as silero-vad/LICENSE.
+
+LAME, https://lame.sourceforge.io, LGPL-2.0-or-later, built from source by the
+mp3lame-sys crate (mp3lame-encoder bindings, LGPL-3.0) to encode the audio as
+MP3. Its source is at https://crates.io/crates/mp3lame-sys.
+
 OCR models (downloaded on demand, not bundled)
 ----------------------------------------------
 
@@ -171,7 +184,7 @@ Kimochi is built with Tauri (MIT OR Apache-2.0), React (MIT), Radix UI (MIT)
 and other Rust crates and npm packages. src-tauri/Cargo.lock,
 capture-core/Cargo.lock, oneocr-worker/Cargo.lock and package-lock.json name
 each one and its exact version. Their licences are all compatible with
-GPL-3.0: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD,
+GPL-3.0: MIT, Apache-2.0, LGPL (LAME, above), BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD,
 Unicode-3.0, BSL-1.0, CC0-1.0, Unlicense, CDLA-Permissive-2.0 (the
 webpki-roots certificate data) and MPL-2.0 (cssparser, selectors, dtoa-short
 and option-ext, used unmodified; their source is at https://crates.io).

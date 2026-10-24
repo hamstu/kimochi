@@ -46,6 +46,7 @@
       "resources/mangaocr/LICENSE-APACHE": "mangaocr/LICENSE-APACHE",
       "resources/mangaocr/NOTICE": "mangaocr/NOTICE",
       "resources/mangaocr/model-manifest.json": "mangaocr/model-manifest.json",
+      "resources/silero-vad/LICENSE": "silero-vad/LICENSE",
       "../LICENSE": "licenses/LICENSE",
       "../LICENSE-APACHE": "licenses/LICENSE-APACHE",
       "../LICENSE-OFL.txt": "licenses/LICENSE-OFL.txt",
