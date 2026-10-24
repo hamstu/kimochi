@@ -1,15 +1,19 @@
-/* --- controller mode: design variants under review -------------------------
-       Four redesigns of every Gaming Mode surface (the radial menu, read-along's
-       outline and hint bar, the free cursor, the controls sheet and recent text),
-       chosen by `data-cm-variant` on the controller host and themed by
-       `data-cm-theme`. Only the dev stage sets them (`?variant=`); the app draws
-       controller.css alone until one is picked.
+/* --- controller mode: Gaming Mode's design -------------------------------
+       Every controller surface (the radial menu, read-along's outline and hint
+       bar, the free cursor, the controls sheet and recent text) in Kimochi's
+       roles (DESIGN.md: slate neutrals, one indigo accent, Figtree from
+       fonts/figtree.css) scaled up about 1.3× for TV and handheld distance: the
+       11 / 12 / 13 / 15 / 18 ramp becomes 14 / 16 / 17 / 20 / 24, rows grow from
+       32 to 44px. Layered over controller.css, which keeps layout and motion.
 
-       All four share Kimochi's roles (DESIGN.md: slate neutrals, one indigo
-       accent, Figtree) scaled up about 1.3× for TV and handheld distance: the
-       11 / 12 / 13 / 15 / 18 ramp becomes 14 / 16 / 17 / 20 / 24, rows grow
-       from 32 to 44px. The ring is a hub with spokes out to large icons, a halo
-       fading out past the hub, and the chosen action named in the hub. */
+       Turned on by `data-cm-variant="halo"` on the controller host (overlay.html,
+       gnome-controller-host.html) and themed by `data-cm-theme="light"|"dark"`,
+       which controller.js sets from the Appearance setting. The ring is a hub
+       naming the chosen action, spokes out to big icons on rounded tiles, and a
+       frosted halo fading out past the hub (geometry in radial-menu.js).
+
+       Other Gaming Mode surfaces can share the look: put `data-cm-variant="halo"`
+       and `data-cm-theme` on their root and build from the `--cm-*` tokens. */
 
 /* The tokens apply wherever `data-cm-variant` is set, so other Gaming Mode surfaces can take
    them on: `:is(#controller, …)` only lends the id's weight, over controller.css's own. */
@@ -83,7 +87,7 @@
   --cm-scrim: rgb(15 17 26 / 0.32);
 }
 
-/* --- shared: the ring ------------------------------------------------------- */
+/* --- the ring ------------------------------------------------------- */
 [data-cm-variant] .cm-vignette {
   background: radial-gradient(circle at 50% 50%, rgb(0 0 0 / 0.08), var(--cm-scrim));
 }
@@ -112,26 +116,12 @@
   stroke-width: 1;
   filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.28));
 }
-[data-cm-variant] .cm-orbit,
-[data-cm-variant] .cm-dial,
-[data-cm-variant] .cm-divider {
-  fill: none;
-  stroke: none;
-}
 [data-cm-variant] .cm-fade-from {
   stop-color: var(--cm-text-2);
   stop-opacity: 0.9;
 }
 [data-cm-variant] .cm-fade-to {
   stop-color: var(--cm-text-2);
-  stop-opacity: 0;
-}
-[data-cm-variant] .cm-glow-from {
-  stop-color: var(--cm-accent-9);
-  stop-opacity: 0.24;
-}
-[data-cm-variant] .cm-glow-to {
-  stop-color: var(--cm-accent-9);
   stop-opacity: 0;
 }
 [data-cm-variant] .cm-wedge,
@@ -265,7 +255,7 @@
   gap: 10px;
 }
 
-/* --- shared: hints and keys --------------------------------------------------- */
+/* --- hints and keys --------------------------------------------------- */
 [data-cm-variant] .cm-hint {
   gap: 6px;
   font-size: var(--cm-text-xs);
@@ -289,7 +279,7 @@
   box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 0.25);
 }
 
-/* --- shared: panels (controls sheet, recent text) ------------------------------ */
+/* --- panels (controls sheet, recent text) ------------------------------ */
 [data-cm-variant] .cm-sheet,
 [data-cm-variant] .cm-history {
   border: none;
@@ -405,7 +395,7 @@
   color: var(--cm-text-2);
 }
 
-/* --- shared: the hint bar, the word and the free cursor ------------------------ */
+/* --- the hint bar, the word and the free cursor ------------------------ */
 [data-cm-variant] .cm-hud {
   gap: 18px;
   padding: 8px 18px 8px 8px;
@@ -460,245 +450,10 @@
   box-shadow: 0 0 0 1.5px rgb(var(--cm-bg-rgb) / 0.7), var(--cm-shadow-pop);
 }
 
-/* === 1. Hairline ============================================================
-   The quiet one: 1.5px spokes, bare line icons, a solid hub. Panels are
-   Kimochi's raised plane; selection is the neutral press wash with a focus
-   ring. Everything above is this variant; it only adds the orbit. */
-[data-cm-variant="hairline"] .cm-spoke {
-  stroke-width: 1.25;
-}
-[data-cm-variant="hairline"] .cm-spoke.cm-selected {
-  stroke-width: 2;
-}
-[data-cm-variant="hairline"] .cm-item.cm-selected .cm-icon {
-  background: var(--cm-press);
-  transform: scale(1.06);
-}
-
-/* === 2. Beacon ==============================================================
-   The bold one: thick rounded spokes, round icon tiles, and the chosen
-   sector glowing indigo out past the hub. Panels mark the current row with
-   an indigo wash and edge bar; keys are round like a pad's face buttons. */
-[data-cm-variant="beacon"] .cm-glass {
-  background: radial-gradient(
-    circle closest-side,
-    transparent calc(var(--cm-hub) - 1px),
-    rgb(var(--cm-bg-rgb) / 0.94) var(--cm-hub),
-    rgb(var(--cm-bg-rgb) / 0.8) calc(var(--cm-orbit) + 10px),
-    rgb(var(--cm-bg-rgb) / 0) 100%
-  );
-}
-[data-cm-variant="beacon"] .cm-wedge.cm-selected {
-  fill: url(#cm-glow);
-  transition-duration: 0.04s;
-}
-[data-cm-variant="beacon"] .cm-wedge.cm-selected.cm-disabled {
-  fill: transparent;
-}
-[data-cm-variant="beacon"] .cm-spoke {
-  stroke: var(--cm-line-strong);
-  stroke-width: 6;
-}
-[data-cm-variant="beacon"] .cm-spoke.cm-selected {
-  stroke: var(--cm-accent-9);
-  stroke-width: 6;
-}
-[data-cm-variant="beacon"] .cm-disc {
-  stroke-width: 1.5;
-}
-[data-cm-variant="beacon"] .cm-icon {
-  width: 72px;
-  height: 72px;
-  background: var(--cm-raised);
-  box-shadow: var(--cm-shadow-pop), inset 0 0 0 1px var(--cm-line-strong);
-}
-[data-cm-variant="beacon"] .cm-icon svg {
-  width: 34px;
-  height: 34px;
-  stroke-width: 1.8;
-}
-[data-cm-variant="beacon"] .cm-item.cm-selected .cm-icon {
-  color: var(--cm-accent-contrast);
-  background: var(--cm-accent-9);
-  box-shadow: var(--cm-shadow-pop);
-}
-[data-cm-variant="beacon"] .cm-item[data-lit] .cm-icon::after {
-  bottom: 7px;
-}
-[data-cm-variant="beacon"] .cm-detail {
-  top: -6px;
-  left: calc(50% + 20px);
-}
-[data-cm-variant="beacon"] .cm-current {
-  font-size: var(--cm-text-xl);
-}
-[data-cm-variant="beacon"] .cm-glyph {
-  min-width: 26px;
-  height: 26px;
-  border-radius: 999px;
-}
-[data-cm-variant="beacon"] .cm-sheet,
-[data-cm-variant="beacon"] .cm-history {
-  border-radius: var(--cm-radius-lg);
-}
-[data-cm-variant="beacon"] .cm-history button:focus-visible,
-[data-cm-variant="beacon"] .cm-history-entry[aria-current="true"] {
-  outline: none;
-  background: var(--cm-accent-soft);
-  box-shadow: inset 4px 0 0 var(--cm-accent-9);
-}
-[data-cm-variant="beacon"] .cm-hud {
-  border-radius: 999px;
-}
-[data-cm-variant="beacon"] .cm-hud-mark {
-  border-radius: 50%;
-  color: var(--cm-accent-contrast);
-  background: var(--cm-accent-9);
-}
-[data-cm-variant="beacon"] .cm-hud-mode {
-  border-radius: 999px;
-}
-[data-cm-variant="beacon"] .cm-word {
-  border: none;
-  border-bottom: 4px solid var(--cm-accent-9);
-  border-radius: var(--cm-radius-sm) var(--cm-radius-sm) 2px 2px;
-  background: var(--cm-accent-soft);
-  box-shadow: 0 1.5px 0 rgb(var(--cm-bg-rgb) / 0.7);
-}
-[data-cm-variant="beacon"] .cm-free-cursor {
-  border-color: var(--cm-accent-9);
-  background: radial-gradient(circle, var(--cm-accent-9) 0 3.5px, rgb(var(--cm-bg-rgb) / 0.5) 4px);
-}
-
-/* === 3. Dial ================================================================
-   The instrument: a ring of fine ticks around the hub, dotted spokes, an
-   orbit line threading the icons, and a label under each icon. Panels are
-   the bar plane with full-bleed hairline rows (the remote's grammar); the
-   word gets corner brackets, like a camera's focus frame. */
-[data-cm-variant="dial"] .cm-glass {
-  background: radial-gradient(
-    circle closest-side,
-    transparent calc(var(--cm-hub) - 1px),
-    rgb(var(--cm-bg-rgb) / 0.9) var(--cm-hub),
-    rgb(var(--cm-bg-rgb) / 0.72) calc(var(--cm-orbit) + 30px),
-    rgb(var(--cm-bg-rgb) / 0) 100%
-  );
-}
-[data-cm-variant="dial"] .cm-dial {
-  stroke: var(--cm-line-strong);
-  stroke-width: 7;
-  stroke-dasharray: 0.6 4.4;
-}
-[data-cm-variant="dial"] .cm-orbit {
-  stroke: var(--cm-line);
-  stroke-width: 1;
-}
-[data-cm-variant="dial"] .cm-spoke {
-  stroke: var(--cm-text-3);
-  stroke-width: 3;
-  stroke-dasharray: 0 8;
-}
-[data-cm-variant="dial"] .cm-spoke.cm-selected {
-  stroke: var(--cm-accent-text);
-  stroke-width: 3.5;
-}
-[data-cm-variant="dial"] .cm-disc {
-  fill: var(--cm-bar);
-}
-[data-cm-variant="dial"] .cm-icon {
-  width: 62px;
-  height: 62px;
-  background: var(--cm-bar);
-  box-shadow: inset 0 0 0 1px var(--cm-line-strong);
-}
-[data-cm-variant="dial"] .cm-icon svg {
-  width: 32px;
-  height: 32px;
-}
-[data-cm-variant="dial"] .cm-label {
-  display: block;
-}
-[data-cm-variant="dial"] .cm-item.cm-selected .cm-icon {
-  transform: none;
-  box-shadow: inset 0 0 0 1px var(--cm-line-strong), 0 0 0 3px var(--cm-bar), 0 0 0 5px var(--cm-focus);
-}
-[data-cm-variant="dial"] .cm-item.cm-selected .cm-label {
-  color: var(--cm-text);
-}
-[data-cm-variant="dial"] .cm-item[data-lit] .cm-icon::after {
-  bottom: 6px;
-}
-[data-cm-variant="dial"] .cm-center .cm-title {
-  display: block;
-  font-size: 12px;
-  font-weight: 620;
-  letter-spacing: 0.08em;
-  color: var(--cm-text-3);
-}
-[data-cm-variant="dial"] .cm-sheet,
-[data-cm-variant="dial"] .cm-history {
-  border-radius: var(--cm-radius-md);
-  background: var(--cm-bar);
-}
-[data-cm-variant="dial"] .cm-history {
-  padding: 0;
-}
-[data-cm-variant="dial"] .cm-history header {
-  padding: 12px 14px 12px 20px;
-  border-bottom: 1px solid var(--cm-line);
-}
-[data-cm-variant="dial"] .cm-history-content {
-  margin: 0;
-  padding: 0;
-}
-[data-cm-variant="dial"] .cm-history .cm-history-entry {
-  margin: 0;
-  padding: 12px 20px;
-  border-radius: 0;
-  border-bottom: 1px solid var(--cm-line);
-}
-[data-cm-variant="dial"] .cm-history footer {
-  padding: 12px 20px;
-}
-[data-cm-variant="dial"] .cm-history-text {
-  padding: 0 20px;
-}
-[data-cm-variant="dial"] .cm-history-content > button:not(.cm-history-entry) {
-  margin: 14px 20px 0;
-}
-[data-cm-variant="dial"] .cm-history-entry[aria-current="true"] {
-  outline-width: 2px;
-  outline-offset: -3px;
-}
-[data-cm-variant="dial"] .cm-hud {
-  border-radius: var(--cm-radius-md);
-}
-[data-cm-variant="dial"] .cm-word {
-  --cm-c: var(--cm-accent-text);
-  border: none;
-  border-radius: 2px;
-  box-shadow: none;
-  background:
-    linear-gradient(var(--cm-c), var(--cm-c)) top left / 12px 3px,
-    linear-gradient(var(--cm-c), var(--cm-c)) top left / 3px 12px,
-    linear-gradient(var(--cm-c), var(--cm-c)) top right / 12px 3px,
-    linear-gradient(var(--cm-c), var(--cm-c)) top right / 3px 12px,
-    linear-gradient(var(--cm-c), var(--cm-c)) bottom left / 12px 3px,
-    linear-gradient(var(--cm-c), var(--cm-c)) bottom left / 3px 12px,
-    linear-gradient(var(--cm-c), var(--cm-c)) bottom right / 12px 3px,
-    linear-gradient(var(--cm-c), var(--cm-c)) bottom right / 3px 12px,
-    var(--cm-accent-soft);
-  background-repeat: no-repeat;
-  filter: drop-shadow(0 0 1px rgb(var(--cm-bg-rgb) / 0.8));
-}
-[data-cm-variant="dial"] .cm-free-cursor {
-  border-radius: 2px;
-}
-
-/* === 4. Halo ================================================================
-   The soft one: the game blurs behind a frosted halo that fades out past the
-   hub, spokes fade as they leave it, and icons sit on rounded-square tiles.
-   Panels are frosted too, with inset rounded rows. */
+/* === Halo ====================================================================
+   Over the base above: the game blurs behind a frosted halo that fades out
+   past the hub, spokes fade as they leave it, and icons sit on rounded-square
+   tiles. Panels and the hint bar are frosted too, with inset rounded rows. */
 [data-cm-variant="halo"] .cm-glass {
   background: radial-gradient(
     circle closest-side,

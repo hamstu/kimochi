@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Gaming Mode has a new look that matches the rest of Kimochi, in light or dark to follow your
+  Appearance setting. The controller menu is now a ring of large icons around a centre that names
+  the action you're pointing at. Read-along's hint bar, the controls sheet and Recent text use
+  bigger text and buttons, easier to read on a TV or handheld.
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
   (and every other confirmation, alert or question an engine's settings page asks) now appears
   instead of being silently answered "Cancel".

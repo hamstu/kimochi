@@ -18,9 +18,8 @@
  *   ?typeface=manga  set the text in Manga OCR's typeface
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open)
- *   ?theme=light|dark  the pop-up's and the region editor's appearance (default: the browser's)
- *   ?variant=hairline | beacon | dial | halo   controller scenes: a gaming-mode design variant under
- *                    review (ui/controller-variants.css), in the ?theme appearance; none: as shipped
+ *   ?theme=light|dark  the pop-up's, the region editor's and the controller's appearance (default:
+ *                    the browser's)
  *   ?popup=yomitan (default) | hachidori | tenten | custom-api   the dictionary in use: Yomitan and
  *                    Hachidori pop-ups have buttons the controller can move into, the others not
  *   ?input=pad (default) | keys   controller scenes: opened with a controller or the keyboard
@@ -50,6 +49,7 @@
 import overlayHtml from '@ui/overlay.html?raw'
 import '@ui/controller.css'
 import '@ui/controller-variants.css'
+// The app bundles Figtree for the overlay as fonts/figtree.css (prepare.mjs); here, from the package.
 import '@fontsource-variable/figtree/wght.css'
 import '@fontsource/zen-kaku-gothic-antique/500.css'
 import '@fontsource/zen-kaku-gothic-antique/700.css'
@@ -98,8 +98,6 @@ const gameHost = document.querySelector<HTMLElement>('#game')!
 const words = document.querySelector<HTMLElement>('#words')!
 const hoverHost = document.querySelector<HTMLElement>('#hover')!
 const controllerHost = document.querySelector<HTMLElement>('#controller')!
-const variant = params.get('variant')
-if (variant) Object.assign(controllerHost.dataset, { cmVariant: variant, cmTheme: theme })
 
 const log: unknown[] = []
 function toast(message: string): void {
@@ -274,6 +272,7 @@ let autoOcr = flag('auto')
 type ControllerContext = Parameters<typeof createController>[0]
 const controller = createController({
   host: controllerHost,
+  appearance: () => theme,
   words,
   native,
   status: () => {
