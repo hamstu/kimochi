@@ -1180,10 +1180,19 @@ shared by every profile. Its other fields: `field` (the note field the audio goe
 | `sentence_audio_line` | `({uid, text, ts, source})`: the Log added a line (or changed one's text, same `uid`); `ts` its arrival in Unix ms, `source` its `LineSource`. Ignored while recording is off. |
 | `sentence_audio_attach` | `({url, noteId, sentence, field})`: the Yomitan API pop-up added note `noteId` at `url` (with the configured key) from `sentence`; its audio follows in the background into `field`, or `sentenceAudio.field` when null |
 
-`Status` is tagged by `state`: `off`, `starting`, `recording`, `noPermission {message}` (macOS: Screen
-Recording not granted), `unsupported {message}` (no backend on this OS yet) or `error {message}`
-(retried every 5 s), each with `held` (seconds of audio held), `level` (0–1, the last half second)
-and `last` (`{at, ok, message}`: what happened to the last card's audio, or null).
+`Status` is tagged by `state`: `off`, `starting`, `recording {source, excludesOwnAudio}` (what is
+recorded, and whether Kimochi's own sounds are left out), `noPermission {message}` (macOS: Screen
+Recording not granted), `unavailable {message}` (this computer cannot record its audio now: no
+PipeWire, no output device; retried every 30 s), `unsupported {message}` (no backend on this OS) or
+`error {message}` (retried every 5 s), each with `platform` (`macos`, `windows`, `linux`), `held`
+(seconds of audio held), `level` (0–1, the last half second) and `last` (`{at, ok, message}`: what
+happened to the last card's audio, or null).
+
+Where the audio comes from (`capture-core/src/audio/`): macOS, a ScreenCaptureKit display stream with
+`capturesAudio` and `excludesCurrentProcessAudio`; Windows, WASAPI process loopback of everything
+but Kimochi's process tree (WebView2 included; Windows 10 2004+), else loopback of the default
+output (Kimochi's sounds included), restarted when the default output changes; Linux, a PipeWire
+capture stream on the default output's monitor (`stream.capture.sink`; Kimochi's sounds included).
 
 A card's audio: its line is the newest Log line whose text best matches the card's sentence (the
 pop-up's) or any of its fields (an extension's), else the newest line. Its window runs from just
