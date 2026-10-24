@@ -83,3 +83,12 @@ test('the dictionary window uses it for Built-in Yomitan on load, and leaves Hac
   assert.match(panel, /onLoad=\{\(\) => \{\s*setLoaded\(true\)\s*revealYomitanSection\(\)/)
   assert.match(panel, /revealSectionWhenLoaded\(\(\) => frameDocument\(frame\.current\), section\)/)
 })
+
+test('a navigation request to a page already shown navigates the frame, not its src', async () => {
+  // 10ten's pop-up cog asks for its options page while that page is open in the hidden-not-closed
+  // dictionary window: an unchanged `src` loads nothing, so "Loading…" must not be reset for it.
+  const panel = await readFile(new URL('../frontend/panels/DictionarySettingsPanel.tsx', import.meta.url), 'utf8')
+  const onNavigate = panel.slice(panel.indexOf('const onNavigate'), panel.indexOf("window.addEventListener('kimochi-dictionary-navigate'"))
+  assert.match(onNavigate, /if \(view && frame\.current\?\.dataset\.loaded\) \{\s*view\.location\.href = next\s*return/)
+  assert.doesNotMatch(onNavigate, /setLoaded\(false\)/)
+})

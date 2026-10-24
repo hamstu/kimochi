@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- 10ten's settings button in its pop-up opens its settings instead of leaving the window on
+  "Loading…" (which also stuck opening them from Settings afterwards).
 - Gaming Mode has a new look that matches the rest of Kimochi, in light or dark to follow your
   Appearance setting. The controller menu is now a ring of large icons around a centre that names
   the action you're pointing at. Read-along's hint bar, the controls sheet and Recent text use

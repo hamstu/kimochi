@@ -151,7 +151,15 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
     const onNavigate = (event: Event): void => {
       const next = acceptNavigation(engine, (event as CustomEvent<{ url?: string }>).detail?.url)
       if (!next) return
-      setLoaded(false)
+      // A page already shown is navigated in place (allowed across origins) and keeps its loaded
+      // state. Setting `src` to the URL it already has (10ten's pop-up cog asks for its options
+      // page while that page is open in this hidden-not-closed window) loads nothing, so the
+      // load that would clear "Loading…" never came and the window stayed stuck on it.
+      const view = frame.current?.contentWindow
+      if (view && frame.current?.dataset.loaded) {
+        view.location.href = next
+        return
+      }
       setSrc(next)
     }
     window.addEventListener('kimochi-dictionary-navigate', onNavigate)
