@@ -1,6 +1,9 @@
 //! System-audio probe: records what the computer plays for a few seconds and reports when the
 //! loud parts happened, in wall-clock time, so the ring's timestamps can be checked against a
-//! sound played at a known moment (`afplay` in another terminal, or `KIMOCHI_PLAY`).
+//! sound played at a known moment (in another terminal, or `KIMOCHI_PLAY`: a sound file played
+//! quietly with afplay, pw-play or PowerShell's SoundPlayer, by OS).
+//!
+//! Also prints what is recorded and whether Kimochi's own sounds would be left out.
 //!
 //! Reports levels and timings only. `KIMOCHI_WAV=path` also writes what was recorded, for
 //! listening to.
@@ -8,6 +11,10 @@
 //! Usage:
 //!   cargo run --manifest-path capture-core/Cargo.toml --example system_audio
 //!   KIMOCHI_SECONDS=8 KIMOCHI_PLAY=/System/Library/Sounds/Glass.aiff KIMOCHI_WAV=/tmp/a.wav ...
+//!
+//! On Windows the probe's own children (`KIMOCHI_PLAY`) are left out, as Kimochi's are: play the
+//! sound from another terminal. `KIMOCHI_AUDIO_ENDPOINT_LOOPBACK=1` tries the fallback that records
+//! the default output device instead.
 
 use kimochi_capture::audio::{now_ms, AudioRing, SystemAudio};
 use std::time::Duration;
@@ -21,7 +28,9 @@ fn main() {
             std::process::exit(1);
         }
     };
+    println!("recording: {} (own audio excluded: {})", capture.source(), capture.excludes_own_audio());
     let started = now_ms();
+    println!("capture began at Unix ms {started:.0}");
     let mut ring = AudioRing::new(48_000, seconds + 1.0);
     let mut played_at = None;
     while now_ms() - started < seconds * 1000.0 {
@@ -30,7 +39,7 @@ fn main() {
         if played_at.is_none() && now_ms() - started > 1000.0 {
             if let Ok(path) = std::env::var("KIMOCHI_PLAY") {
                 played_at = Some(now_ms());
-                let _ = std::process::Command::new("afplay").arg(path).spawn();
+                play(&path);
             }
         }
         if let Some(why) = capture.ended() {
@@ -51,6 +60,12 @@ fn main() {
         now_ms() - end,
         capture.dropped_chunks()
     );
+    // Equal when the stamps agree with the audio clock; a large difference is stamp jitter.
+    println!(
+        "samples held: {:.0}ms of audio for {:.0}ms of wall clock",
+        ring.len() as f64 * 1000.0 / ring.sample_rate() as f64,
+        end - start
+    );
     let clip = ring.snapshot(start, end).unwrap();
     let window = (clip.sample_rate / 10) as usize;
     let mut first_loud = None;
@@ -63,11 +78,31 @@ fn main() {
         println!("{at:>7.0}ms  rms {rms:.4} {}", "#".repeat((rms * 200.0).min(60.0) as usize));
     }
     if let (Some(played), Some(loud)) = (played_at, first_loud) {
-        println!("afplay started at {:.0}ms; first loud 100ms window at {:.0}ms (offset {:+.0}ms)", played - started, loud - started, loud - played);
+        println!("the sound started at {:.0}ms; first loud 100ms window at {:.0}ms (offset {:+.0}ms)", played - started, loud - started, loud - played);
     }
     if let Ok(path) = std::env::var("KIMOCHI_WAV") {
         write_wav(&path, clip.sample_rate, &clip.samples);
         println!("wrote {path}");
+    }
+}
+
+/// Play a sound file quietly, without waiting for it.
+fn play(path: &str) {
+    let mut command = if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("afplay");
+        c.args(["-v", "0.3", path]);
+        c
+    } else if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("powershell");
+        c.args(["-NoProfile", "-Command", &format!("(New-Object Media.SoundPlayer '{path}').PlaySync()")]);
+        c
+    } else {
+        let mut c = std::process::Command::new("pw-play");
+        c.args(["--volume", "0.3", path]);
+        c
+    };
+    if let Err(e) = command.spawn() {
+        eprintln!("could not play {path}: {e}");
     }
 }
 

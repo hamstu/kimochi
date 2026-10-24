@@ -7,7 +7,7 @@
 //! The stream's video is the smallest ScreenCaptureKit allows, at one frame a second, and
 //! is thrown away. Each audio buffer's presentation time is on the host clock; it is turned
 //! into wall-clock time against `mach_absolute_time` when the buffer arrives.
-use super::{Feed, Health};
+use super::{Backend, Feed, Health};
 use crate::{CaptureError, Result};
 use screencapturekit::{prelude::*, stream::ErrorHandler};
 use std::sync::atomic::Ordering;
@@ -48,6 +48,17 @@ const FLAG_NON_INTERLEAVED: u32 = 1 << 5;
 
 pub(super) struct Stream {
     stream: SCStream,
+}
+
+impl Backend for Stream {
+    fn source(&self) -> String {
+        "Everything this Mac plays".into()
+    }
+    // `excludesCurrentProcessAudio`. WebKit plays a page's audio from its own helper processes,
+    // which this may not cover: see docs/system-audio-capture.md.
+    fn excludes_own_audio(&self) -> bool {
+        true
+    }
 }
 
 impl Drop for Stream {

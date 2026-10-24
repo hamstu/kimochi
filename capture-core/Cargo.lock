@@ -643,6 +643,7 @@ dependencies = [
  "serde",
  "windows",
  "windows-capture",
+ "windows-core",
  "x11rb",
 ]
 

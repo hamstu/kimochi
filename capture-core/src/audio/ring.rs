@@ -179,7 +179,7 @@ impl AudioRing {
     /// The audio that played between `from_ms` and `to_ms`, cut to what the ring holds; `None`
     /// when none of it is held.
     pub fn snapshot(&self, from_ms: f64, to_ms: f64) -> Option<Clip> {
-        if self.samples.is_empty() || !(to_ms > from_ms) {
+        if self.samples.is_empty() || to_ms.partial_cmp(&from_ms) != Some(std::cmp::Ordering::Greater) {
             return None;
         }
         let from = self.index_at(from_ms)?.round().max(self.first as f64) as u64;
