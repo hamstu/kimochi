@@ -1,0 +1,469 @@
+/* --- the full-screen dictionary (ui/game-dictionary.js) ---------------------
+       Read along's other look, with the Yomitan API. Every colour, size and
+       font is a token on .gd-root, taken from the controller's own (--cm-*)
+       where one exists, so a restyle of the game-mode surfaces restyles this
+       too: override the tokens, not the rules. */
+.gd-root {
+  --gd-accent: var(--cm-accent, #7dd3fc);
+  --gd-accent-rgb: var(--cm-accent-rgb, 125, 211, 252);
+  --gd-accent-ink: var(--gd-accent);
+  --gd-ink: var(--cm-ink, rgba(255, 255, 255, 0.92));
+  --gd-dim: var(--cm-dim, rgba(255, 255, 255, 0.55));
+  --gd-faint: rgba(255, 255, 255, 0.32);
+  --gd-scrim: rgba(7, 9, 17, 0.8);
+  --gd-scrim-edge: rgba(7, 9, 17, 0.92);
+  --gd-blur: 16px;
+  --gd-line: rgba(255, 255, 255, 0.14);
+  --gd-chip: rgba(255, 255, 255, 0.07);
+  --gd-chip-line: rgba(255, 255, 255, 0.12);
+  --gd-lit-ink: #fff;
+  --gd-lit-bg: rgba(var(--gd-accent-rgb), 0.2);
+  --gd-ok: #86efac;
+  --gd-danger: #fca5a5;
+  --gd-font: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
+  --gd-font-ja: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans CJK JP",
+    "Noto Sans JP", var(--gd-font);
+  --gd-width: min(1040px, calc(100vw - 96px));
+  --gd-sentence-size: clamp(26px, 2.6vw + 8px, 46px);
+  --gd-expression-size: clamp(34px, 2.8vw + 12px, 56px);
+  --gd-text-size: clamp(16px, 0.6vw + 11px, 21px);
+  --gd-radius: 10px;
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  color: var(--gd-ink);
+  font-family: var(--gd-font);
+  font-size: var(--gd-text-size);
+  -webkit-font-smoothing: antialiased;
+  animation: gd-in 0.22s ease-out both;
+}
+#controller[data-cm-theme="light"] .gd-root {
+  --gd-ink: rgba(16, 20, 32, 0.92);
+  --gd-dim: rgba(16, 20, 32, 0.58);
+  --gd-faint: rgba(16, 20, 32, 0.34);
+  --gd-scrim: rgba(246, 247, 250, 0.84);
+  --gd-scrim-edge: rgba(246, 247, 250, 0.94);
+  --gd-line: rgba(16, 20, 32, 0.14);
+  --gd-chip: rgba(16, 20, 32, 0.05);
+  --gd-chip-line: rgba(16, 20, 32, 0.2);
+  --gd-lit-ink: rgba(8, 12, 24, 1);
+  --gd-lit-bg: rgba(var(--gd-accent-rgb), 0.28);
+  --gd-accent-ink: #0369a1;
+  --gd-ok: #15803d;
+  --gd-danger: #b91c1c;
+}
+.gd-root.gd-leaving {
+  animation: gd-out 0.18s ease-in both;
+}
+
+/* The game shows through, dimmed: a blur where the window can blur what is under it. */
+.gd-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, transparent 55%, var(--gd-scrim-edge)),
+    radial-gradient(ellipse at 50% 30%, var(--gd-scrim), var(--gd-scrim-edge));
+  backdrop-filter: blur(var(--gd-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--gd-blur)) saturate(1.2);
+}
+
+.gd-frame {
+  position: absolute;
+  inset: 0;
+  margin: 0 auto;
+  width: var(--gd-width);
+  display: flex;
+  flex-direction: column;
+  padding: clamp(28px, 7vh, 88px) 0 0;
+  box-sizing: border-box;
+}
+.gd-frame.gd-bump {
+  animation: gd-bump 0.22s ease-out;
+}
+
+.gd-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gd-dim);
+  margin-bottom: 14px;
+}
+.gd-count {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* The scanned text, every word a stop. */
+.gd-sentence {
+  margin: 0;
+  font-family: var(--gd-font-ja);
+  font-size: var(--gd-sentence-size);
+  font-weight: 500;
+  line-height: 1.75;
+  max-height: calc(var(--gd-sentence-size) * 1.75 * 3);
+  overflow-y: auto;
+  scrollbar-width: none;
+  overflow-wrap: anywhere;
+}
+.gd-gap {
+  color: var(--gd-dim);
+}
+/* Between two boxes of the scan: room, and a faint mark, so bubbles do not run together. */
+.gd-box-break {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  vertical-align: middle;
+  background: radial-gradient(circle, var(--gd-faint) 0 0.08em, transparent 0.09em);
+}
+/* Words touch, as Japanese is set; each has its own short underline so the stops show. */
+.gd-word {
+  white-space: nowrap;
+  color: var(--gd-ink);
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  background-image: linear-gradient(var(--gd-faint), var(--gd-faint));
+  background-size: calc(100% - 0.16em) 1px;
+  background-position: 50% 96%;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.gd-word.gd-lit {
+  color: var(--gd-lit-ink);
+  background-color: var(--gd-lit-bg);
+  background-image: linear-gradient(var(--gd-accent), var(--gd-accent));
+  background-size: calc(100% - 0.16em) 3px;
+  box-shadow:
+    0 0 0 0.12em var(--gd-lit-bg),
+    0 0 28px rgba(var(--gd-accent-rgb), 0.25);
+}
+
+/* The rule between the text and its dictionary. */
+.gd-rule {
+  position: relative;
+  height: 1px;
+  margin: clamp(16px, 3vh, 30px) 0 0;
+  background: linear-gradient(90deg, transparent, var(--gd-line) 6%, var(--gd-line) 94%, transparent);
+}
+.gd-rule-mark {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--gd-accent);
+  box-shadow: 0 0 12px rgba(var(--gd-accent-rgb), 0.7);
+}
+
+.gd-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: clamp(18px, 3.5vh, 36px) 0 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gd-line) transparent;
+  outline: none;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+.gd-entry {
+  animation: gd-entry 0.18s ease-out both;
+}
+
+.gd-entries {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-bottom: 18px;
+}
+.gd-entry-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font: inherit;
+  font-family: var(--gd-font-ja);
+  font-size: 0.85em;
+  color: var(--gd-dim);
+  background: var(--gd-chip);
+  border: 1px solid var(--gd-chip-line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.gd-entry-tab small {
+  font-size: 0.8em;
+  color: var(--gd-faint);
+}
+.gd-entry-tab.gd-entry-current {
+  color: var(--gd-ink);
+  border-color: rgba(var(--gd-accent-rgb), 0.6);
+  background: rgba(var(--gd-accent-rgb), 0.12);
+}
+
+.gd-headword {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-family: var(--gd-font-ja);
+}
+.gd-expression {
+  font-size: var(--gd-expression-size);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+}
+.gd-reading {
+  font-size: calc(var(--gd-expression-size) * 0.48);
+  color: var(--gd-dim);
+}
+
+.gd-inflection,
+.gd-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+.gd-label,
+.gd-sep {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gd-faint);
+  margin-right: 2px;
+}
+.gd-sep {
+  text-transform: none;
+}
+.gd-badge {
+  font-size: 13px;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 6px;
+  color: var(--gd-dim);
+  background: var(--gd-chip);
+  border: 1px solid var(--gd-chip-line);
+}
+.gd-badge-dict {
+  color: var(--gd-accent-ink);
+  border-color: rgba(var(--gd-accent-rgb), 0.4);
+  background: rgba(var(--gd-accent-rgb), 0.1);
+}
+
+/* Yomitan's glossary HTML: lists and structured content, tuned for reading at a distance. */
+.gd-glossary {
+  margin-top: 18px;
+  line-height: 1.6;
+}
+.gd-glossary ol,
+.gd-glossary ul {
+  margin: 0;
+  padding-left: 1.4em;
+}
+.gd-glossary li {
+  margin: 0.3em 0;
+}
+.gd-glossary li::marker {
+  color: var(--gd-faint);
+  font-variant-numeric: tabular-nums;
+}
+.gd-glossary i {
+  font-style: normal;
+  font-size: 0.8em;
+  color: var(--gd-dim);
+  margin-right: 0.3em;
+}
+.gd-glossary a[lang="ja"] {
+  color: var(--gd-accent-ink);
+  text-decoration: none;
+}
+.gd-glossary [data-sc-content="example-sentence-a"] {
+  font-family: var(--gd-font-ja);
+  border-left: 2px solid rgba(var(--gd-accent-rgb), 0.5);
+  padding-left: 0.6em;
+  margin: 0.4em 0;
+}
+.gd-glossary [data-sc-content="example-sentence-b"] {
+  font-size: 0.88em;
+  color: var(--gd-dim);
+  border-left: 2px solid var(--gd-line);
+  padding-left: 0.6em;
+  margin: 0.4em 0;
+}
+.gd-glossary [data-sc-content="example-keyword"] {
+  color: var(--gd-accent-ink);
+  font-weight: 700;
+}
+.gd-glossary table {
+  border-collapse: collapse;
+}
+.gd-glossary td,
+.gd-glossary th {
+  border: 1px solid var(--gd-line);
+  padding: 2px 8px;
+}
+.gd-frequencies {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--gd-dim);
+}
+.gd-frequencies ul,
+.gd-frequencies ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.gd-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--gd-dim);
+  margin: 8px 0;
+}
+.gd-status [lang="ja"] {
+  font-family: var(--gd-font-ja);
+  color: var(--gd-ink);
+}
+.gd-status-error b {
+  color: var(--gd-danger);
+  font-weight: 600;
+}
+.gd-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--gd-line);
+  border-top-color: var(--gd-accent);
+  animation: gd-spin 0.7s linear infinite;
+}
+
+/* The hints and actions, along the bottom; the glyphs are the controller's (.cm-glyph). */
+.gd-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  padding: 14px 0 clamp(18px, 4vh, 40px);
+  border-top: 1px solid var(--gd-line);
+  font-size: 14px;
+  color: var(--gd-dim);
+}
+.gd-bar-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+/* The controller's glyphs, sized and coloured for this screen's tokens. */
+.gd-bar .cm-glyph {
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--gd-ink);
+  border-color: var(--gd-chip-line);
+  background: var(--gd-chip);
+}
+.gd-bar .cm-glyph.cm-confirm {
+  color: #0b1220;
+  border-color: transparent;
+  background: var(--gd-accent);
+}
+.gd-bar .cm-hint {
+  font-size: inherit;
+  font-weight: 500;
+  color: var(--gd-dim);
+}
+.gd-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+button.gd-hint {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.gd-bar button.gd-hint:hover {
+  color: var(--gd-ink);
+  background: var(--gd-chip);
+}
+.gd-bar .gd-anki[data-state="idle"] .gd-hint,
+.gd-bar .gd-anki[data-state="error"] .gd-hint {
+  color: var(--gd-ink);
+}
+.gd-bar .gd-anki[data-tone="ok"] .gd-hint {
+  color: var(--gd-ok);
+}
+.gd-bar .gd-anki[data-tone="danger"] .gd-hint {
+  color: var(--gd-danger);
+}
+.gd-anki[data-state="checking"] .gd-hint,
+.gd-anki[data-state="sending"] .gd-hint {
+  opacity: 0.6;
+}
+.gd-note {
+  color: var(--gd-faint);
+}
+
+@keyframes gd-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes gd-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes gd-entry {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes gd-bump {
+  30% {
+    transform: translateX(-5px);
+  }
+  60% {
+    transform: translateX(4px);
+  }
+}
+@keyframes gd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gd-root,
+  .gd-entry,
+  .gd-frame.gd-bump {
+    animation: none;
+  }
+}

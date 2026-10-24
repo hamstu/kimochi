@@ -12,6 +12,10 @@
  *           ▲                       │                     │
  *           └──── B / Escape / an action / menu button ◀──┘
  *
+ * With the Yomitan API and Settings → Game mode's full-screen dictionary on, Read along opens
+ * `dictionary` instead of `words`: the scan across the top of a dimmed screen and the lit word's
+ * entry below it (ui/game-dictionary.js).
+ *
  * Reading (words) steps by word or, with Y, by character; the left stick moves a free cursor that
  * looks up whatever character it rests on, and the D-pad snaps back to stepping from there. A on
  * the word moves into the pop-up (`layer`): the D-pad then moves between its buttons, A presses
@@ -29,6 +33,7 @@ import {
   SCAN_LENGTH,
 } from "./word-nav.js";
 import { ControllerHistory } from "./controller-history.js";
+import { GameDictionary } from "./game-dictionary.js";
 
 /** Lets the menu's exit animation start before the chosen action changes the screen. */
 const ACTION_DELAY_MS = 120;
@@ -121,9 +126,12 @@ export function scrollSpeed(y) {
  * @param {(visible: boolean) => Promise<void>} context.setText the overlay's text switch, as the main window shows it
  * @param {(x: number, y: number) => boolean} context.nearText whether a point is on or close to scanned text
  * @param {(record: object) => void} context.log
- * @param {(mode: 'idle' | 'menu' | 'words' | 'history') => void} [context.modeChanged] the menu opened, word
+ * @param {(mode: 'idle' | 'menu' | 'words' | 'dictionary' | 'history') => void} [context.modeChanged] the menu opened, word
  *   mode started, or controller mode ended; automatic OCR stands still while it is anything but idle
  * @param {() => Promise<object[]>} context.history read durable recent text without publishing it
+ * @param {object} [context.fullDictionary] Read along as the full-screen dictionary instead of the
+ *   outline and pop-up, while `enabled()` (the Yomitan API, and Settings → Game mode says so):
+ *   `lookup`, `anki` and `play` for ui/game-dictionary.js
  */
 export function createController(context) {
   const { host, native } = context;
@@ -189,6 +197,19 @@ export function createController(context) {
   let scrollAt = 0;
   /** Bumped on every exit, so a segmentation that finishes late cannot reopen word mode. */
   let generation = 0;
+
+  /** Read along's full-screen look (mode `dictionary`), when the overlay offers it. */
+  const fullView = context.fullDictionary
+    ? new GameDictionary(host, {
+        lookup: (term, options) => context.fullDictionary.lookup(term, options),
+        anki: () => context.fullDictionary.anki(),
+        play: (item) => context.fullDictionary.play(item),
+        glyph: (action) => glyphOf(action),
+        input: () => input,
+        onClose: () => void (historical ? backToHistory() : close()),
+        log: (record) => context.log(record),
+      })
+    : null;
 
   const menu = new RadialMenu(host, {
     onChoose: (id) => void choose(id),
@@ -309,7 +330,8 @@ export function createController(context) {
     if (!historical) return;
     generation++;
     scroll(0);
-    leaveWords();
+    if (mode === "dictionary") fullView.remove();
+    else leaveWords();
     historical = false;
     setMode("history");
     controls.reset();
@@ -341,8 +363,9 @@ export function createController(context) {
   async function close() {
     if (mode === "idle") return;
     generation++;
-    const wasWords = mode === "words";
+    const wasWords = mode === "words" || mode === "dictionary";
     const wasHistory = historical;
+    fullView?.remove();
     setMode("idle");
     controls.reset();
     scroll(0);
@@ -417,6 +440,15 @@ export function createController(context) {
       if (command.type === "dir") history.move(command.dir);
       if (command.type === "scroll")
         history.content?.scrollBy(0, -command.y * 80);
+      return;
+    }
+    if (mode === "dictionary") {
+      if (command.type === "cancel") return historical ? backToHistory() : void close();
+      if (command.type === "dir" && command.source !== "stick") return void fullView.move(command.dir);
+      if (command.type === "step") return fullView.step(command.delta);
+      if (command.type === "scroll") return void scroll(command.y);
+      if (command.type === "confirm") return void fullView.confirm();
+      if (command.type === "audio") return void fullView.audio();
       return;
     }
     if (mode === "words") {
@@ -707,13 +739,14 @@ export function createController(context) {
     if (scrollLean === 0 || scrollFrame !== null) return;
     scrollAt = performance.now();
     const tick = (now) => {
-      if (scrollLean === 0 || mode !== "words") {
+      if (scrollLean === 0 || (mode !== "words" && mode !== "dictionary")) {
         scrollFrame = null;
         return;
       }
       const seconds = Math.min(0.05, (now - scrollAt) / 1000);
       scrollAt = now;
-      context.popupControl({ scroll: scrollLean * seconds });
+      if (mode === "dictionary") fullView.scroll(scrollLean * seconds);
+      else context.popupControl({ scroll: scrollLean * seconds });
       scrollFrame = requestAnimationFrame(tick);
     };
     scrollFrame = requestAnimationFrame(tick);
@@ -721,6 +754,7 @@ export function createController(context) {
 
   /** Start word mode, or with `rescan`, start over on new text keeping whoever is reading. */
   async function enterWords(rescan = false) {
+    if (fullView && context.fullDictionary.enabled()) return enterDictionary();
     setMode("words");
     if (!rescan) {
       driver = "controller";
@@ -773,6 +807,23 @@ export function createController(context) {
     }
     render();
     if (driver === "controller") void lookup();
+  }
+
+  /**
+   * Read along as the full-screen dictionary: the scan's words, split by the Yomitan API's
+   * `/tokenize`, across the top of the screen and the lit word's entry below.
+   */
+  async function enterDictionary() {
+    if (mode === "words") leaveWords();
+    setMode("dictionary");
+    const ticket = ++generation;
+    context.redraw();
+    const segmented = await segmentAcross(readUnits(), (text) =>
+      segmentText(text, context.apiParse),
+    );
+    if (ticket !== generation || mode !== "dictionary") return;
+    context.log({ check: "controller-dictionary", boxes: segmented.length });
+    fullView.show(segmented, { title: historical ? "Recent text" : "Read along" });
   }
 
   /**
@@ -1231,7 +1282,7 @@ export function createController(context) {
     hitRects() {
       const bounds = menu.bounds();
       const historyBounds = history.bounds();
-      return [bounds, historyBounds].filter(Boolean);
+      return [bounds, historyBounds, fullView?.bounds()].filter(Boolean);
     },
     /** A new scan was applied: in word mode, carry on over the new text from its first word. */
     scanChanged(hasText) {
@@ -1240,7 +1291,7 @@ export function createController(context) {
         hidText = false;
         void context.setText(true);
       }
-      if (mode === "words") void enterWords(true);
+      if (mode === "words" || mode === "dictionary") void enterWords(true);
     },
   };
 }

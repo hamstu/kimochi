@@ -1,5 +1,7 @@
 import { createDictionarySetup } from './setup-dictionaries.js'
-import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm } from './api-lookup.js'
+import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm, popupAnkiConfig } from './api-lookup.js'
+import { createAnki } from './game-dictionary-anki.js'
+import { audioUrl } from './game-dictionary.js'
 import { createController } from './controller.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
@@ -43,6 +45,7 @@ import {
   NO_ENGINE,
   NO_ENGINE_MESSAGE,
   dictionaryEngineOf,
+  fullscreenDictionary,
   hostEngineOf,
   isOverlayTextVisible,
   nextOverlayToggle,
@@ -376,7 +379,32 @@ controller = createController({
     void native.optional('hide_popover')
   },
   log: (record) => log(record),
-  modeChanged: (mode) => holdForController(mode !== 'idle')
+  modeChanged: (mode) => holdForController(mode !== 'idle'),
+  // Read along as the full-screen dictionary (Settings → Game mode), fed by the Yomitan API.
+  fullDictionary: {
+    enabled: () => fullscreenDictionary(setting('gameModeSettings'), setting('yomitanSettings')?.popupType),
+    lookup: (term, { media = false, maxEntries } = {}) =>
+      native.invoke('yomitan_ankifields', {
+        // Empty means the helper's default address, as for the API pop-up (api-lookup.js).
+        baseUrl: setting('yomitanSettings')?.customApiUrl?.trim() || 'http://127.0.0.1:19633',
+        text: term,
+        includeMedia: media,
+        maxEntries: maxEntries ?? null
+      }).then((answer) => ({
+        entries: Array.isArray(answer?.fields) ? answer.fields : [],
+        audioMedia: answer?.audioMedia ?? [],
+        dictionaryMedia: answer?.dictionaryMedia ?? []
+      })),
+    anki: () => {
+      const config = popupAnkiConfig(setting('superTexthooker'))
+      return config ? createAnki(native.invoke, config) : null
+    },
+    play: (item) => {
+      const audio = new Audio(audioUrl(item))
+      audio.volume = setting('superTexthooker')?.audioVolume ?? 0.9
+      void audio.play().catch((error) => log({ check: 'game-dictionary-audio-failed', error: String(error?.message ?? error) }))
+    }
+  }
 })
 /** The scan the controller last saw drawn, so it can follow a new one in word mode. */
 let controllerScanId = null
