@@ -2,6 +2,7 @@
 import {
   BookOpen,
   Gamepad2,
+  Joystick,
   Info,
   Layers,
   Languages,
@@ -23,6 +24,7 @@ export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName 
   { value: 'anki', label: 'Anki', icon: <Layers /> },
   { value: 'assist', label: 'Translation & AI', icon: <Languages /> },
   { value: 'controls', label: 'Shortcuts & Controls', icon: <Gamepad2 /> },
+  { value: 'gamemode', label: 'Game mode', icon: <Joystick /> },
   { value: 'account', label: 'Account', icon: <UserRound /> },
   { value: 'about', label: 'About', icon: <Info /> }
 ]

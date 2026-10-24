@@ -109,6 +109,25 @@ export interface ScanHistoryEntry {
   timestamp: number
 }
 
+/**
+ * How Read along shows the dictionary (Settings → Game mode): `popup`, an outline on the game's
+ * text and the dictionary's own pop-up beside it; `fullscreen`, the scan across the top of a
+ * dimmed screen and the lit word's entry below (ui/game-dictionary.js), which only the Yomitan
+ * API can feed. With any other engine Read along uses the pop-up whatever this says.
+ */
+export type GameDictionaryView = 'popup' | 'fullscreen'
+
+export interface GameModeSettings {
+  dictionaryView: GameDictionaryView
+}
+
+export const DEFAULT_GAME_MODE_SETTINGS: GameModeSettings = { dictionaryView: 'popup' }
+
+/** Whether Read along opens the full-screen dictionary: chosen, and the Yomitan API in use. */
+export function fullscreenDictionary(gameMode: unknown, popupType: unknown): boolean {
+  return popupType === 'custom-api' && (gameMode as Partial<GameModeSettings> | null)?.dictionaryView === 'fullscreen'
+}
+
 export interface Settings {
   overlayOpacity: number
   liveOverlayEnabled: boolean
@@ -128,6 +147,7 @@ export interface Settings {
   serverSettings: { mode: ServerMode }
   gamepadSettings: { enabled: boolean; preferredGamepadIndex?: number }
   controllerButtons: ControllerButtons
+  gameModeSettings: GameModeSettings
   yomitanSettings: {
     /** Which dictionary engine; see `DICTIONARY_ENGINES`. `'builtin'` is Yomitan. */
     popupType: PopupType
@@ -164,6 +184,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   serverSettings: { mode: 'cloud' },
   gamepadSettings: { enabled: true, preferredGamepadIndex: undefined },
   controllerButtons: DEFAULT_CONTROLLER_BUTTONS,
+  gameModeSettings: DEFAULT_GAME_MODE_SETTINGS,
   yomitanSettings: { popupType: 'builtin', customApiUrl: '' },
   ocrMode: 'googlelens',
   scannedTextHistory: [],

@@ -17,6 +17,7 @@ const LOADERS: Record<SettingsTabName, () => PageModule> = {
   anki: () => import('./AnkiTab').then((m) => ({ default: m.AnkiTab })),
   assist: () => import('./AssistTab').then((m) => ({ default: m.AssistTab })),
   controls: () => import('./ControlsTab').then((m) => ({ default: m.ControlsTab })),
+  gamemode: () => import('./GameModeTab').then((m) => ({ default: m.GameModeTab })),
   account: () => import('./AccountTab').then((m) => ({ default: m.AccountTab })),
   about: () => import('./AboutTab').then((m) => ({ default: m.AboutTab }))
 }

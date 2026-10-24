@@ -31,6 +31,11 @@
  *   ?layer=popup     controller-words: in the pop-up's buttons
  *   ?driver=mouse    controller-words: the mouse took over (outline and hints faded)
  *   ?step=<n>        controller-words: step on n words from the first
+ *   ?dictionary=full controller-words, controller-history: Read along as the full-screen dictionary
+ *                    (Settings → Game mode), with the stage's pretend Yomitan API (api-dictionary.ts)
+ *   ?entry=<n>       dictionary=full: step on n entries (RB) for the lit word
+ *   ?anki=idle (default) | duplicate | off   dictionary=full: Add to Anki ready, the card already
+ *                    in Anki, or Anki not set up
  *   ?read=1          controller-history: open the chosen entry's words
  *   ?crop=1          overlay-hover: the saved crop's outline too (default: the window outline only)
  *   ?initial=1       region-select: open with a box drawn, ready to adjust
@@ -63,13 +68,16 @@ import { SETTINGS_DEFAULTS } from '@ui/settings'
 import { studioJson } from '../studio/bridge'
 import { drawGame, gamePicture, type Game, type GameKind } from './game'
 import { DEFAULT_HISTORY, DEFAULT_SCRIPT, lookupWord, type StageScript } from './script'
+import '@ui/game-dictionary.css'
+import { apiEntries, apiTokenize } from './api-dictionary'
 
 const params = new URLSearchParams(location.search)
 const flag = (name: string): boolean => params.get(name) === '1'
 const scene = params.get('scene') ?? 'overlay-words'
 const script: StageScript = { ...DEFAULT_SCRIPT, ...(studioJson<Partial<StageScript>>('script') ?? {}) }
 const history = studioJson<unknown[]>('history') ?? DEFAULT_HISTORY
-const popupType = params.get('popup') ?? 'yomitan'
+const fullDictionary = params.get('dictionary') === 'full'
+const popupType = fullDictionary ? 'custom-api' : (params.get('popup') ?? 'yomitan')
 const input = params.get('input') === 'keys' ? 'keys' : 'pad'
 const theme =
   params.get('theme') === 'light' || params.get('theme') === 'dark'
@@ -98,6 +106,11 @@ const gameHost = document.querySelector<HTMLElement>('#game')!
 const words = document.querySelector<HTMLElement>('#words')!
 const hoverHost = document.querySelector<HTMLElement>('#hover')!
 const controllerHost = document.querySelector<HTMLElement>('#controller')!
+// The controller's Halo look (ui/controller-variants.css) and the full-screen dictionary's light
+// tokens (ui/game-dictionary.css) both follow the controller host's theme. The controller sets it
+// each time its mode opens (`appearance` below); set it up front too, so the full-screen
+// dictionary is themed from the first frame.
+controllerHost.dataset.cmTheme = theme
 
 const log: unknown[] = []
 function toast(message: string): void {
@@ -329,7 +342,27 @@ const controller = createController({
   lookupTerm: async (text: string, x: number, y: number) => {
     await showPopup(text, { left: x, right: x, top: y - 12, bottom: y + 12 })
   },
-  apiParse: async () => null,
+  apiParse: async (text: string) => (fullDictionary ? apiTokenize(script, text) : null),
+  fullDictionary: {
+    enabled: () => fullDictionary,
+    lookup: async (term: string) => {
+      await pause(120)
+      return apiEntries(script, term)
+    },
+    anki: () =>
+      params.get('anki') === 'off'
+        ? null
+        : {
+            exists: async () => (params.get('anki') === 'duplicate' ? 7 : null),
+            add: async () => {
+              await pause(400)
+              toast('Added to Anki (the stage’s pretend deck)')
+              return { noteId: 8, duplicate: false }
+            },
+            open: async () => toast('Opens the card in Anki')
+          },
+    play: () => toast('Plays the word’s audio')
+  },
   matchedRange: () => null,
   charRects: (element: HTMLElement) => (renderer.mode === 'words' ? renderer.charRects(element) : null),
   quietText: (quiet: boolean) => renderer.setQuiet(quiet),
@@ -478,7 +511,12 @@ async function play(): Promise<void> {
       const steps = Number(params.get('step') ?? 0)
       // Along the text: down a column of vertical text, right along a line.
       const along = params.get('game') === 'manga' ? 'down' : 'right'
-      for (let i = 0; i < steps; i++) await send(input === 'keys' ? `key:Arrow${along === 'down' ? 'Down' : 'Right'}` : along)
+      for (let i = 0; i < steps; i++)
+        await send(fullDictionary ? (input === 'keys' ? 'key:ArrowRight' : 'right') : input === 'keys' ? `key:Arrow${along === 'down' ? 'Down' : 'Right'}` : along)
+      if (fullDictionary) {
+        await pause(200)
+        for (let i = 0; i < Number(params.get('entry') ?? 0); i++) await send('rb')
+      }
       if (params.get('unit') === 'character') await send(input === 'keys' ? 'key:Space' : 'y')
       if (params.get('cursor') === 'free') {
         await send('stick:0.7,0.2')

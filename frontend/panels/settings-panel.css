@@ -99,3 +99,8 @@
 /* Pages that wrap Log settings in `.texthooker` (for its scoped resets) keep the page's section
    rhythm: the wrapper takes no part in layout. */
 .k-settings-page > .texthooker { display: contents; }
+
+/* Settings → Game mode: Read along's two looks, and the Yomitan API's state under them. */
+.game-mode-choice { padding: var(--k-space-3); }
+.game-mode-api { display: inline-flex; align-items: center; gap: var(--k-space-2); }
+.game-mode-choice .k-choice:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -15,6 +15,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   Appearance setting. The controller menu is now a ring of large icons around a centre that names
   the action you're pointing at. Read-along's hint bar, the controls sheet and Recent text use
   bigger text and buttons, easier to read on a TV or handheld.
+- New **Game mode** page in Settings, with the controller menu's and Read along's buttons, and a
+  new way to read along with the Yomitan API: **Full screen** shows the whole scanned text across
+  the top of a dimmed screen with one word lit and its dictionary entry below. Move word to word
+  with the D-pad or arrow keys, through a word's entries with the shoulder buttons, and add the
+  entry to Anki with A. The pop-up beside the word stays the default.
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
   (and every other confirmation, alert or question an engine's settings page asks) now appears
   instead of being silently answered "Cancel".

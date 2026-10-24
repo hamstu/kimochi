@@ -31,6 +31,9 @@ pub fn defaults() -> Value {
             "nextDefinition": 5,
             "showControls": 8
         },
+        // How Read along shows the dictionary: "popup" or "fullscreen" (the Yomitan API only;
+        // ui/game-dictionary.js).
+        "gameModeSettings": { "dictionaryView": "popup" },
         "autoOCRSettings": {
             "pollInterval": 2000,
             "imageHashThreshold": 5,
