@@ -21,6 +21,7 @@ import {
   installChrome,
   installLinuxDictionaryImages,
   installLinuxScanInput,
+  installPageActions,
   removeServiceWorker,
   RUNTIME_ID,
   stubSharedWorkerBridge,
@@ -131,6 +132,8 @@ function install(win) {
       )
       .catch((error) => hub.log({ check: 'audio-bridge-failed', error: String(error?.message ?? error) }))
   installAudioValidity(win, root, (value) => hub.log(value))
+  // Links and downloads in Yomitan's popups and pages shown here (/host/page-actions.js).
+  installPageActions(win, root, hub, (value) => hub.log(value))
 
   dropOnPagehide(win, hub, ctx)
   win.addEventListener('error', (e) =>

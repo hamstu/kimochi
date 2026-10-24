@@ -35,6 +35,9 @@
           "url": "https://jitendex.org/**"
         },
         {
+          "url": "https://huggingface.co/**"
+        },
+        {
           "url": "http://localhost:5050/**"
         },
         {

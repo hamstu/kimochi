@@ -1392,7 +1392,8 @@ fail silently at runtime.
 `dictionary` and `popup-host` — `dictionary` because dictionary downloads from the
 dictionary settings window go through the same plugin —
 allowing only the local Yomitan API (`19633`), plus the dictionary hosts the engines
-download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`). It is deliberately not a general internet grant.
+download from (GitHub for Yomitan and Hachidori, `api.jiten.moe`, `data.10ten.life`, `jitendex.org`, and
+`huggingface.co`, where Yomitan's recommended dictionaries for languages other than Japanese live). It is deliberately not a general internet grant.
 AnkiConnect is not in it: plugin-http sends the webview's Origin, which AnkiConnect's default
 `webCorsOriginList` refuses with HTTP 403, so every AnkiConnect request comes from Rust (the
 `anki_*` commands at the address in Settings → Anki, and `anki_connect_relay` for the dictionary

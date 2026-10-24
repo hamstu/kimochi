@@ -27,6 +27,7 @@ export const HTTP_SCOPE: string[] = [
   'https://api.jiten.moe/**',
   'https://data.10ten.life/**',
   'https://jitendex.org/**',
+  'https://huggingface.co/**',
   'http://localhost:5050/**',
   'http://127.0.0.1:5050/**'
 ]

@@ -2138,8 +2138,24 @@ async function handleRelay(from, payload) {
  * Prefer a real native settings window, as Electron has, and fall back to the
  * in-overlay iframe when that window does not exist. Either way the single
  * backend in this realm serves it.
+ *
+ * A web page (a link in Yomitan's settings, info page or popup; host/page-actions.js) opens in
+ * the system browser instead: the settings window is not a browser.
  */
 async function openDictionaryPage(url) {
+  let web = null
+  try {
+    const parsed = new URL(String(url), location.href)
+    if (/^https?:$/.test(parsed.protocol) && parsed.origin !== location.origin) web = parsed.href
+  } catch {
+    // Not a URL: handled as a page below, which refuses it.
+  }
+  if (web) {
+    await native.invoke('plugin:shell|open', { path: web }).catch((error) =>
+      native.report({ check: 'dictionary-link-failed', url: web.slice(0, 300), error: String(error?.message ?? error) })
+    )
+    return
+  }
   try {
     await native.panel('dictionary', 'show')
     await native.relay('dictionary', { kind: 'navigate', url })

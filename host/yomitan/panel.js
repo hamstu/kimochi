@@ -54,13 +54,16 @@ import {
   event,
   installAudioValidity,
   installChrome,
+  installFileDropGuard,
   installLinuxDictionaryImages,
+  installPageActions,
   installLinuxScanInput,
   removeServiceWorker,
   RUNTIME_ID,
   stubSharedWorkerBridge,
   yomitanRoot
 } from './common.js'
+import { isExtensionPage } from '../page-actions.js'
 
 install()
 
@@ -372,10 +375,39 @@ function install() {
           pending.delete(payload.id)
         } else if (payload.kind === 'navigate' && payload.url) {
           const next = new URL(payload.url, root.location.href)
-          if (next.origin === root.location.origin && next.href !== root.location.href) {
-            root.location.href = next.href
-          }
+          // Protocol and host, not `origin`: a custom scheme's URL origin is "null" in some engines.
+          if (next.protocol !== root.location.protocol || next.host !== root.location.host) return
+          if (hub.label === 'dictionary' && !isExtensionPage(root)) hub.showPage(next.href)
+          else if (next.href !== root.location.href) root.location.href = next.href
         }
+      },
+      /**
+       * Show an extension page (Yomitan's info, welcome or search page, or its settings at a
+       * section) in the dictionary window's settings frame. Replacing the window's own document,
+       * as this once did, left a window with no title bar to move or close it by: Kimochi's panel
+       * draws that, around the frame.
+       */
+      showPage(url) {
+        const frame = () => root.document.querySelector('iframe.dictionary-settings-frame')
+        const show = (element) => {
+          try {
+            element.contentWindow.location.assign(url)
+          } catch {
+            element.src = url
+          }
+          hub.log({ check: 'dictionary-page-shown', url: String(url).slice(0, 300) })
+        }
+        const now = frame()
+        if (now) return show(now)
+        // The panel is still being built (the window was just created): wait for its frame.
+        const deadline = Date.now() + 10000
+        const poll = () => {
+          const element = frame()
+          if (element) show(element)
+          else if (Date.now() < deadline) setTimeout(poll, 100)
+          else hub.log({ check: 'dictionary-page-dropped', url: String(url).slice(0, 300) })
+        }
+        setTimeout(poll, 100)
       }
     }
     root.__extensionHost = hub
@@ -607,6 +639,12 @@ function install() {
   // The popup plays its audio here; the "not available" clip check is WebKit's to fix
   // (see /spike/audio-bridge.js). Fetching is the backend's, in the overlay.
   installAudioValidity(window, root, (value) => hub.log(value))
+
+  // Links, downloads and file drops in Yomitan's own pages (/host/page-actions.js). The
+  // dictionary window lets file drops reach Yomitan's import zone, so its own document refuses
+  // the ones that land elsewhere instead of letting the web view open the file in its place.
+  installPageActions(window, root, hub, (value) => hub.log(value))
+  if (window === root && hub.label === 'dictionary') installFileDropGuard(window)
 
   dropOnPagehide(window, hub, ctx)
   installLinuxDictionaryImages(window, root, (value) => hub.log(value))

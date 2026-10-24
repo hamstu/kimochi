@@ -10,6 +10,7 @@
  * resolve against the document, see `assetUrl`).
  */
 import { ChromeEvent, callbackApi, clone, platformInfo, resolveEngine, rethrow } from '../ext/primitives.js'
+import { classifyLink, installDownloads, installFileDropGuard, installPageLinks, isExtensionPage } from '../page-actions.js'
 
 /** The extension id every Yomitan context reports. Yomitan only checks that it is truthy. */
 export const RUNTIME_ID = 'yomitan-spike'
@@ -118,6 +119,8 @@ export function createChrome({
 }) {
   const select = (id, frameId) => hub.select(id, frameId)
   const getURL = (p) => new URL(p.replace(/^\//, ''), new URL('/', root.location.href).href).href
+  // Relative URLs resolve against the extension's root, where every Yomitan page is.
+  const openTab = (url) => openExtensionUrl(hub, getURL(''), url)
   const info = () => platformInfo(win, root)
   return {
     // Tauri's Windows IPC uses WebView2's native chrome.webview bridge.
@@ -131,7 +134,7 @@ export function createChrome({
       getManifest: () => clone(hub.manifest),
       getPlatformInfo: api(() => info()),
       sendMessage: api(sendMessage),
-      openOptionsPage: api(() => hub.open('/settings.html')),
+      openOptionsPage: api(() => openTab(getURL('settings.html'))),
       connectNative: () => {
         throw Error('Native messaging is not implemented')
       }
@@ -158,8 +161,12 @@ export function createChrome({
         target.events.onConnect.emit(remote)
         return local
       },
-      create: api(({ url }) => hub.open(url)),
-      update: api((id, details) => (details?.url ? hub.open(details.url) : { id: tabId })),
+      create: api(({ url }) => openTab(url)),
+      // `tabs.update(details)` (the current tab) as well as `tabs.update(id, details)`.
+      update: api((id, details) => {
+        if (id !== null && typeof id === 'object') details = id
+        return details?.url ? openTab(details.url) : { id: tabId, windowId: 1, url: root.location.href }
+      }),
       remove: unsupported('tabs.remove'),
       captureVisibleTab: unsupported('tabs.captureVisibleTab')
     },
@@ -218,6 +225,45 @@ export function createChrome({
     }
   }
 }
+
+/**
+ * `tabs.create`, `tabs.update` and `openOptionsPage`: a web page goes to the system browser and a
+ * page of the extension to the dictionary window, both through `hub.open` (the overlay decides,
+ * see ui/overlay.js `openDictionaryPage`). Anything else (`chrome://extensions/shortcuts`, which
+ * Yomitan offers for its browser shortcuts) has nothing to open here and is dropped.
+ */
+export function openExtensionUrl(hub, base, url) {
+  const { kind, url: href } = classifyLink(String(url ?? ''), base)
+  if (kind === 'web' || kind === 'page') return hub.open(href)
+  hub.log?.({ check: 'page-link-ignored', how: 'tabs', url: String(url).slice(0, 300) })
+  return { id: -1, windowId: 1, url: String(url ?? '') }
+}
+
+/**
+ * Links, `window.open`, downloads and file drops in one of Yomitan's own pages (settings, info,
+ * search, popup…), see /host/page-actions.js. Kimochi's own documents (the overlay, the panels)
+ * keep their own handling.
+ */
+export function installPageActions(win, root, hub, log) {
+  if (!isExtensionPage(win)) return
+  installPageLinks(win, { open: (url) => hub.open(url), log })
+  installDownloads(win, { save: (file) => saveFile(root, file), log })
+  installFileDropGuard(win)
+}
+
+/**
+ * Hand a file a page is downloading to native (`ext_save_file`, the command Hachidori's and 10ten's
+ * downloads use too), which asks where to save it. Answers `{saved, path?, bytes?}`.
+ */
+export function saveFile(root, { name, bytes }) {
+  const invoke = root.__TAURI__?.core?.invoke
+  if (!invoke) return Promise.reject(Error('Saving a file needs the Kimochi app'))
+  return invoke('ext_save_file', new root.Uint8Array(bytes), {
+    headers: { 'x-kimochi-filename': encodeURIComponent(String(name)) }
+  })
+}
+
+export { installFileDropGuard }
 
 /**
  * Install `chrome` and `browser`. The bundles are strict-mode code (ES modules), where assigning

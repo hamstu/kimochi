@@ -21,6 +21,27 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   the file, instead of doing nothing.
 - You can drop dictionary files onto Hachidori's import area and drag its dictionaries to reorder
   them; the settings window used to swallow every drag.
+- Links in Built-in Yomitan's settings, info and support pages and in its pop-ups (the wiki,
+  AnkiConnect, dictionary homepages, links inside definitions) open in your web browser, instead
+  of doing nothing or loading the website inside the settings window. Its own pages, such as the
+  search page or "Anki settings" from a pop-up, open in the Yomitan settings window.
+- Built-in Yomitan's Export settings, Export dictionary collection and Anki deck export now ask
+  where to save the file, instead of doing nothing. Dropping dictionary files onto its import area
+  works too.
+- Opening one of Built-in Yomitan's pages from a pop-up or another window no longer replaces the
+  Yomitan settings window with a bare page that couldn't be moved or closed.
+- Built-in Yomitan's recommended dictionaries for languages other than Japanese can be installed.
+
+- Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
+  (and every other confirmation, alert or question an engine's settings page asks) now appears
+  instead of being silently answered "Cancel".
+- Links in Hachidori's and 10ten's settings (privacy policy, themes, AnkiConnect, dictionary
+  sources and credits) open in your web browser instead of doing nothing or opening inside the
+  settings window.
+- Hachidori's Download backup, Download debug info and Anki add-on buttons now ask where to save
+  the file, instead of doing nothing.
+- You can drop dictionary files onto Hachidori's import area and drag its dictionaries to reorder
+  them; the settings window used to swallow every drag.
 
 - Hachidori imports dictionaries on several threads on macOS, Windows and Linux, as it does in
   Chrome: up to twice as fast (Jitendex in about a second instead of nearly two on a Mac). Your
