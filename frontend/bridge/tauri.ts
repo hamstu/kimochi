@@ -165,6 +165,7 @@ export type SettingsTabName =
   | 'anki'
   | 'assist'
   | 'controls'
+  | 'gamemode'
   | 'account'
   | 'about'
 

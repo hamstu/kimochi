@@ -1,8 +1,13 @@
-/** Settings → Shortcuts & Controls, second half: enable gamepad input, pick the primary controller, test it. */
+/**
+ * Settings → Shortcuts & Controls, second half: enable gamepad input, pick the primary controller,
+ * test it. The buttons used in game mode (the controller menu and Read along) are on Settings →
+ * Game mode, as `ControllerButtonSections`.
+ */
 import type { ReactNode } from 'react'
 import { Badge, Button, Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
 import { useSetting } from '../../bridge/useSetting'
+import { showSettingsTab } from './showSettingsTab'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import {
   DEFAULT_CONTROLLER_BUTTONS,
@@ -26,7 +31,7 @@ const BUTTON_GROUPS: {
         key: 'confirm',
         label: 'Select',
         description:
-          'Choose a menu item. On a word, move into the dictionary pop-up to use its buttons; there, press the chosen button.'
+          'Choose a menu item. On a word, move into the dictionary pop-up to use its buttons; there, press the chosen button. In the full-screen dictionary, add the entry to Anki.'
       },
       {
         key: 'back',
@@ -53,12 +58,12 @@ const BUTTON_GROUPS: {
       {
         key: 'previousDefinition',
         label: 'Previous definition',
-        description: 'Jump up the dictionary pop-up to the definition before.'
+        description: 'Jump up the dictionary pop-up to the definition before, or to the entry before in the full-screen dictionary.'
       },
       {
         key: 'nextDefinition',
         label: 'Next definition',
-        description: 'Jump down the dictionary pop-up to the next definition.'
+        description: 'Jump down the dictionary pop-up to the next definition, or to the next entry in the full-screen dictionary.'
       },
       {
         key: 'showControls',
@@ -78,15 +83,9 @@ function sharedWith(buttons: ControllerButtons, key: keyof ControllerButtons): s
   return sharedButtonActions(buttons, key).map((other) => ROW_LABELS[other])
 }
 
-export function GamepadSections(): ReactNode {
-  const {
-    state: gamepadState,
-    settings: gamepadSettings,
-    setEnabled: setGamepadEnabled,
-    setPreferredGamepad,
-    source: gamepadSource
-  } = useGamepad()
-
+/** The game-mode buttons, by where they act (Settings → Game mode), while gamepad input is on. */
+export function ControllerButtonSections(): ReactNode {
+  const { settings: gamepadSettings } = useGamepad()
   const [storedButtons, setMenuButtons] = useSetting<ControllerButtons>(
     'controllerButtons',
     DEFAULT_CONTROLLER_BUTTONS
@@ -95,6 +94,68 @@ export function GamepadSections(): ReactNode {
   const customised = (Object.keys(DEFAULT_CONTROLLER_BUTTONS) as (keyof ControllerButtons)[]).some(
     (key) => menuButtons[key] !== DEFAULT_CONTROLLER_BUTTONS[key]
   )
+
+  if (!gamepadSettings.enabled) {
+    return (
+      <SettingsSection title="Controller buttons">
+        <SettingsRow
+          label="Gamepad support is off"
+          description="Turn it on in Shortcuts & Controls to choose the buttons game mode uses."
+        >
+          <Button size="sm" onClick={() => showSettingsTab('controls')}>
+            Shortcuts & Controls
+          </Button>
+        </SettingsRow>
+      </SettingsSection>
+    )
+  }
+
+  return (
+    <>
+      {BUTTON_GROUPS.map((group, index) => (
+        <SettingsSection
+          key={group.title}
+          title={group.title}
+          description={group.description}
+          actions={
+            index === 0 && customised ? (
+              <Button size="sm" onClick={() => void setMenuButtons({ ...DEFAULT_CONTROLLER_BUTTONS })}>
+                Restore defaults
+              </Button>
+            ) : undefined
+          }
+        >
+          {group.rows.map(({ key, label, description }) => {
+            const shared = sharedWith(menuButtons, key)
+            return (
+              <SettingsRow
+                key={key}
+                label={label}
+                description={description}
+                badge={shared.length > 0 ? <Badge tone="warn">Same as {shared.join(', ')}</Badge> : undefined}
+              >
+                <GamepadButtonCapture
+                  value={menuButtons[key] ?? undefined}
+                  onChange={(button) => void setMenuButtons({ ...menuButtons, [key]: button ?? null })}
+                  size="1"
+                />
+              </SettingsRow>
+            )
+          })}
+        </SettingsSection>
+      ))}
+    </>
+  )
+}
+
+export function GamepadSections(): ReactNode {
+  const {
+    state: gamepadState,
+    settings: gamepadSettings,
+    setEnabled: setGamepadEnabled,
+    setPreferredGamepad,
+    source: gamepadSource
+  } = useGamepad()
 
   const enabled = gamepadSettings.enabled
   const gamepads = gamepadState.gamepads
@@ -124,48 +185,18 @@ export function GamepadSections(): ReactNode {
         )}
       </SettingsSection>
 
-      {enabled &&
-        BUTTON_GROUPS.map((group, index) => (
-          <SettingsSection
-            key={group.title}
-            title={group.title}
-            description={group.description}
-            actions={
-              index === 0 && customised ? (
-                <Button
-                  size="sm"
-                  onClick={() => void setMenuButtons({ ...DEFAULT_CONTROLLER_BUTTONS })}
-                >
-                  Restore defaults
-                </Button>
-              ) : undefined
-            }
+      {enabled && (
+        <SettingsSection title="Game mode buttons">
+          <SettingsRow
+            label="Buttons for the controller menu and Read along"
+            description="Select, Back, audio, definitions and the rest are set in Game mode."
           >
-            {group.rows.map(({ key, label, description }) => {
-              const shared = sharedWith(menuButtons, key)
-              return (
-                <SettingsRow
-                  key={key}
-                  label={label}
-                  description={description}
-                  badge={
-                    shared.length > 0 ? (
-                      <Badge tone="warn">Same as {shared.join(', ')}</Badge>
-                    ) : undefined
-                  }
-                >
-                  <GamepadButtonCapture
-                    value={menuButtons[key] ?? undefined}
-                    onChange={(button) =>
-                      void setMenuButtons({ ...menuButtons, [key]: button ?? null })
-                    }
-                    size="1"
-                  />
-                </SettingsRow>
-              )
-            })}
-          </SettingsSection>
-        ))}
+            <Button size="sm" onClick={() => showSettingsTab('gamemode')}>
+              Game mode
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
+      )}
 
       {enabled && (
         <SettingsSection title="Connected gamepads">

@@ -67,6 +67,7 @@
  *   ?gamemode=1         macOS Game Mode is throttling the overlay (its notice under Show overlay)
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
+ *   ?readalong=fullscreen  Settings → Game mode: Read along as the full-screen dictionary
  *   ?steam=<state>   the Steam library (preview-steam.ts): deck, notrunning, fail, pending, added,
  *                    gaming; the welcome guide's Steam step (?step=steam) and Settings → General
  *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
@@ -183,6 +184,8 @@ const settings: Record<string, unknown> = {
   ...(params.get('whatsnew') === 'update' ? { lastSeenVersion: '0.0.2' } : {}),
   // `?popup=hachidori` stands in for a stored engine (the store is in memory, so a reload resets it).
   ...(params.get('popup') ? { yomitanSettings: { popupType: params.get('popup'), customApiUrl: '' } } : {}),
+  // `?readalong=fullscreen`: Settings → Game mode's full-screen dictionary chosen.
+  ...(params.get('readalong') === 'fullscreen' ? { gameModeSettings: { dictionaryView: 'fullscreen' } } : {}),
   mainSidebarOpen: params.get('sidebar') !== '0',
   quickShotEnabled: params.get('quickshot') === '1',
   ...(params.get('theme') ? { appearance: params.get('theme') } : {}),

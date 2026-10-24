@@ -43,6 +43,7 @@ const SETTINGS_TABS = opts(
   ['anki', 'Anki'],
   ['assist', 'Translation & AI'],
   ['controls', 'Shortcuts & Controls'],
+  ['gamemode', 'Game mode'],
   ['account', 'Account'],
   ['about', 'About']
 )

@@ -24,6 +24,7 @@ const PAGES: Record<SettingsTabName, ComponentType> = {
   anki: page('anki'),
   assist: page('assist'),
   controls: page('controls'),
+  gamemode: page('gamemode'),
   account: page('account'),
   about: page('about')
 }
