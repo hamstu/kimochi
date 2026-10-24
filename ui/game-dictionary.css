@@ -1,70 +1,89 @@
 /* --- the full-screen dictionary (ui/game-dictionary.js) ---------------------
-       Read along's other look, with the Yomitan API. Every colour, size and
-       font is a token on .gd-root, taken from the controller's own (--cm-*)
-       where one exists, so a restyle of the game-mode surfaces restyles this
-       too: override the tokens, not the rules. */
+       Read along's other look, with the Yomitan API, in Gaming Mode's Halo
+       language: the game blurred behind a soft scrim, the entry on a frosted
+       panel, rounded-square tiles with the indigo focus ring, a frosted pill of
+       hints. Every value comes from the controller's roles (--cm-*, set on the
+       controller host by the Gaming Mode design: ui/controller-variants.css on
+       the redesign), light and dark alike; the fallbacks only keep the view
+       readable where those roles are not set yet. Restyle through --cm-* (or
+       the --gd-* below), not the rules. */
 .gd-root {
-  --gd-accent: var(--cm-accent, #7dd3fc);
-  --gd-accent-rgb: var(--cm-accent-rgb, 125, 211, 252);
-  --gd-accent-ink: var(--gd-accent);
-  --gd-ink: var(--cm-ink, rgba(255, 255, 255, 0.92));
-  --gd-dim: var(--cm-dim, rgba(255, 255, 255, 0.55));
-  --gd-faint: rgba(255, 255, 255, 0.32);
-  --gd-scrim: rgba(7, 9, 17, 0.8);
-  --gd-scrim-edge: rgba(7, 9, 17, 0.92);
-  --gd-blur: 16px;
-  --gd-line: rgba(255, 255, 255, 0.14);
-  --gd-chip: rgba(255, 255, 255, 0.07);
-  --gd-chip-line: rgba(255, 255, 255, 0.12);
-  --gd-lit-ink: #fff;
-  --gd-lit-bg: rgba(var(--gd-accent-rgb), 0.2);
-  --gd-ok: #86efac;
-  --gd-danger: #fca5a5;
-  --gd-font: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
-  --gd-font-ja: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans CJK JP",
-    "Noto Sans JP", var(--gd-font);
-  --gd-width: min(1040px, calc(100vw - 96px));
-  --gd-sentence-size: clamp(26px, 2.6vw + 8px, 46px);
-  --gd-expression-size: clamp(34px, 2.8vw + 12px, 56px);
-  --gd-text-size: clamp(16px, 0.6vw + 11px, 21px);
-  --gd-radius: 10px;
+  /* Kimochi's roles, as the controller host carries them. */
+  --gd-bg-rgb: var(--cm-bg-rgb, 17 17 19);
+  --gd-raised-rgb: var(--cm-raised-rgb, 24 25 27);
+  --gd-raised: rgb(var(--gd-raised-rgb));
+  --gd-text: var(--cm-text, var(--cm-ink, #edeef0));
+  --gd-text-2: var(--cm-text-2, var(--cm-dim, #b0b4ba));
+  --gd-text-3: var(--cm-text-3, #777b84);
+  --gd-line: var(--cm-line, rgb(211 237 248 / 0.11));
+  --gd-line-strong: var(--cm-line-strong, rgb(221 234 248 / 0.2));
+  --gd-key: var(--cm-key, rgb(255 255 255 / 0.07));
+  --gd-hover: var(--cm-hover, rgb(221 234 248 / 0.07));
+  --gd-accent-9: var(--cm-accent-9, #3e63dd);
+  --gd-accent-contrast: var(--cm-accent-contrast, #fff);
+  --gd-accent-text: var(--cm-accent-text, #9eb1ff);
+  --gd-accent-soft: var(--cm-accent-soft, rgb(17 68 255 / 0.2));
+  --gd-accent-line: var(--cm-accent-line, rgb(84 114 228 / 0.7));
+  --gd-shadow: var(--cm-shadow, 0 2px 8px rgb(0 0 0 / 0.35), 0 28px 64px -12px rgb(0 0 0 / 0.7));
+  --gd-shadow-pop: var(--cm-shadow-pop, 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6));
+  --gd-font: var(--cm-font, system-ui, sans-serif);
+  --gd-font-jp: var(--cm-font-jp, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", sans-serif);
+  --gd-text-xs: var(--cm-text-xs, 14px);
+  --gd-text-sm: var(--cm-text-sm, 16px);
+  --gd-text-md: var(--cm-text-md, 17px);
+  --gd-text-lg: var(--cm-text-lg, 20px);
+  --gd-radius-sm: var(--cm-radius-sm, 5px);
+  --gd-radius-md: var(--cm-radius-md, 8px);
+  --gd-radius-lg: var(--cm-radius-lg, 10px);
+  /* Halo's own: the blur behind, its frosted panels and tiles (as its sheet, hint bar and icons). */
+  --gd-scrim: rgb(var(--gd-bg-rgb) / 0.6);
+  --gd-blur: blur(16px) saturate(1.3);
+  --gd-frost: rgb(var(--gd-raised-rgb) / 0.82);
+  --gd-frost-blur: blur(24px) saturate(1.4);
+  --gd-tile: rgb(var(--gd-raised-rgb) / 0.72);
+  --gd-radius-panel: 20px;
+  --gd-radius-tile: 12px;
+  /* Done and failed: Kimochi's green and red text roles. */
+  --gd-ok: #3dd68c;
+  --gd-danger: #ff9592;
+  /* This screen's scale. */
+  --gd-width: min(1080px, calc(100vw - 96px));
+  --gd-sentence-size: clamp(28px, 2.6vw + 8px, 46px);
+  --gd-expression-size: clamp(36px, 2.8vw + 12px, 56px);
   position: absolute;
   inset: 0;
   pointer-events: auto;
-  color: var(--gd-ink);
+  color: var(--gd-text);
   font-family: var(--gd-font);
-  font-size: var(--gd-text-size);
+  font-size: var(--gd-text-lg);
+  font-weight: 430;
   -webkit-font-smoothing: antialiased;
-  animation: gd-in 0.22s ease-out both;
 }
-#controller[data-cm-theme="light"] .gd-root {
-  --gd-ink: rgba(16, 20, 32, 0.92);
-  --gd-dim: rgba(16, 20, 32, 0.58);
-  --gd-faint: rgba(16, 20, 32, 0.34);
-  --gd-scrim: rgba(246, 247, 250, 0.84);
-  --gd-scrim-edge: rgba(246, 247, 250, 0.94);
-  --gd-line: rgba(16, 20, 32, 0.14);
-  --gd-chip: rgba(16, 20, 32, 0.05);
-  --gd-chip-line: rgba(16, 20, 32, 0.2);
-  --gd-lit-ink: rgba(8, 12, 24, 1);
-  --gd-lit-bg: rgba(var(--gd-accent-rgb), 0.28);
-  --gd-accent-ink: #0369a1;
-  --gd-ok: #15803d;
-  --gd-danger: #b91c1c;
+[data-cm-theme="light"] .gd-root {
+  --gd-ok: #218358;
+  --gd-danger: #ce2c31;
 }
-.gd-root.gd-leaving {
+/* Faded in and out by its parts, and only while fading: an ancestor's opacity cuts the blurs off
+   from the game behind (a backdrop-filter sees only up to its nearest such ancestor), so nothing
+   may hold one once the view is up (`backwards`, not `both`). */
+.gd-backdrop,
+.gd-frame {
+  animation: gd-in 0.22s ease-out backwards;
+}
+.gd-root.gd-leaving .gd-backdrop,
+.gd-root.gd-leaving .gd-frame {
   animation: gd-out 0.18s ease-in both;
 }
 
-/* The game shows through, dimmed: a blur where the window can blur what is under it. */
+/* The game shows through, blurred and dimmed, darker towards the hints. */
 .gd-backdrop {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(to bottom, transparent 55%, var(--gd-scrim-edge)),
-    radial-gradient(ellipse at 50% 30%, var(--gd-scrim), var(--gd-scrim-edge));
-  backdrop-filter: blur(var(--gd-blur)) saturate(1.2);
-  -webkit-backdrop-filter: blur(var(--gd-blur)) saturate(1.2);
+    linear-gradient(to bottom, transparent 50%, rgb(var(--gd-bg-rgb) / 0.4)),
+    var(--gd-scrim);
+  backdrop-filter: var(--gd-blur);
+  -webkit-backdrop-filter: var(--gd-blur);
 }
 
 .gd-frame {
@@ -74,7 +93,7 @@
   width: var(--gd-width);
   display: flex;
   flex-direction: column;
-  padding: clamp(28px, 7vh, 88px) 0 0;
+  padding: clamp(28px, 6vh, 80px) 0 0;
   box-sizing: border-box;
 }
 .gd-frame.gd-bump {
@@ -84,32 +103,36 @@
 .gd-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--gd-dim);
-  margin-bottom: 14px;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: var(--gd-text-xs);
+  font-weight: 620;
+  color: var(--gd-text-2);
+}
+.gd-eyebrow {
+  padding: 3px 10px;
+  border-radius: var(--gd-radius-sm);
+  color: var(--gd-accent-text);
+  background: var(--gd-accent-soft);
 }
 .gd-count {
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
 }
 
 /* The scanned text, every word a stop. */
 .gd-sentence {
   margin: 0;
-  font-family: var(--gd-font-ja);
+  font-family: var(--gd-font-jp);
   font-size: var(--gd-sentence-size);
   font-weight: 500;
-  line-height: 1.75;
-  max-height: calc(var(--gd-sentence-size) * 1.75 * 3);
+  line-height: 1.8;
+  max-height: calc(var(--gd-sentence-size) * 1.8 * 3);
   overflow-y: auto;
   scrollbar-width: none;
   overflow-wrap: anywhere;
 }
 .gd-gap {
-  color: var(--gd-dim);
+  color: var(--gd-text-2);
 }
 /* Between two boxes of the scan: room, and a faint mark, so bubbles do not run together. */
 .gd-box-break {
@@ -117,98 +140,106 @@
   width: 0.7em;
   height: 0.7em;
   vertical-align: middle;
-  background: radial-gradient(circle, var(--gd-faint) 0 0.08em, transparent 0.09em);
+  background: radial-gradient(circle, var(--gd-text-3) 0 0.08em, transparent 0.09em);
 }
 /* Words touch, as Japanese is set; each has its own short underline so the stops show. */
 .gd-word {
   white-space: nowrap;
-  color: var(--gd-ink);
-  border-radius: 4px;
+  color: var(--gd-text);
+  border-radius: var(--gd-radius-lg);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  background-image: linear-gradient(var(--gd-faint), var(--gd-faint));
-  background-size: calc(100% - 0.16em) 1px;
-  background-position: 50% 96%;
+  background-image: linear-gradient(var(--gd-line-strong), var(--gd-line-strong));
+  background-size: calc(100% - 0.2em) 1.5px;
+  background-position: 50% 94%;
   background-repeat: no-repeat;
   cursor: pointer;
   transition:
     background-color 0.14s ease,
-    color 0.14s ease,
     box-shadow 0.14s ease;
 }
+.gd-word:hover {
+  background-color: var(--gd-hover);
+}
+/* The lit word: Halo's outline (read-along's own, on the game's text). */
 .gd-word.gd-lit {
-  color: var(--gd-lit-ink);
-  background-color: var(--gd-lit-bg);
-  background-image: linear-gradient(var(--gd-accent), var(--gd-accent));
-  background-size: calc(100% - 0.16em) 3px;
+  background-color: var(--gd-accent-soft);
+  background-image: none;
   box-shadow:
-    0 0 0 0.12em var(--gd-lit-bg),
-    0 0 28px rgba(var(--gd-accent-rgb), 0.25);
+    inset 0 0 0 2px var(--gd-accent-line),
+    0 0 0 4px var(--gd-accent-soft);
 }
 
 /* The rule between the text and its dictionary. */
 .gd-rule {
   position: relative;
   height: 1px;
-  margin: clamp(16px, 3vh, 30px) 0 0;
-  background: linear-gradient(90deg, transparent, var(--gd-line) 6%, var(--gd-line) 94%, transparent);
+  margin: clamp(14px, 2.6vh, 26px) 0;
+  background: linear-gradient(90deg, transparent, var(--gd-line-strong) 8%, var(--gd-line-strong) 92%, transparent);
 }
 .gd-rule-mark {
   position: absolute;
   left: 50%;
-  top: -3px;
-  width: 7px;
-  height: 7px;
-  transform: translateX(-50%) rotate(45deg);
-  background: var(--gd-accent);
-  box-shadow: 0 0 12px rgba(var(--gd-accent-rgb), 0.7);
+  top: -1.5px;
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  background: var(--gd-accent-text);
 }
 
+/* The entry, on a frosted panel. */
 .gd-body {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: clamp(18px, 3.5vh, 36px) 0 24px;
+  padding: clamp(18px, 3vh, 30px) clamp(20px, 2.4vw, 34px);
+  border-radius: var(--gd-radius-panel);
+  background: var(--gd-frost);
+  backdrop-filter: var(--gd-frost-blur);
+  -webkit-backdrop-filter: var(--gd-frost-blur);
+  box-shadow: var(--gd-shadow), inset 0 0 0 1px var(--gd-line-strong);
   scrollbar-width: thin;
-  scrollbar-color: var(--gd-line) transparent;
+  scrollbar-color: var(--gd-line-strong) transparent;
   outline: none;
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 .gd-entry {
   animation: gd-entry 0.18s ease-out both;
 }
 
+/* The word's other entries: rounded-square tiles, the shown one ringed. */
 .gd-entries {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
   scrollbar-width: none;
-  margin-bottom: 18px;
+  padding: 4px;
+  margin: -4px -4px 16px;
 }
 .gd-entry-tab {
   flex: none;
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 8px;
   font: inherit;
-  font-family: var(--gd-font-ja);
-  font-size: 0.85em;
-  color: var(--gd-dim);
-  background: var(--gd-chip);
-  border: 1px solid var(--gd-chip-line);
-  border-radius: 999px;
-  padding: 4px 12px;
+  font-family: var(--gd-font-jp);
+  font-size: var(--gd-text-md);
+  color: var(--gd-text-2);
+  background: var(--gd-tile);
+  border: 0;
+  border-radius: var(--gd-radius-tile);
+  box-shadow: inset 0 0 0 1px var(--gd-line-strong);
+  padding: 8px 14px;
   cursor: pointer;
 }
 .gd-entry-tab small {
-  font-size: 0.8em;
-  color: var(--gd-faint);
+  font-size: var(--gd-text-xs);
+  color: var(--gd-text-3);
 }
 .gd-entry-tab.gd-entry-current {
-  color: var(--gd-ink);
-  border-color: rgba(var(--gd-accent-rgb), 0.6);
-  background: rgba(var(--gd-accent-rgb), 0.12);
+  color: var(--gd-text);
+  background: var(--gd-raised);
+  box-shadow: var(--gd-shadow-pop), inset 0 0 0 2px var(--gd-accent-line);
 }
 
 .gd-headword {
@@ -216,7 +247,7 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 4px 18px;
-  font-family: var(--gd-font-ja);
+  font-family: var(--gd-font-jp);
 }
 .gd-expression {
   font-size: var(--gd-expression-size);
@@ -226,7 +257,7 @@
 }
 .gd-reading {
   font-size: calc(var(--gd-expression-size) * 0.48);
-  color: var(--gd-dim);
+  color: var(--gd-text-2);
 }
 
 .gd-inflection,
@@ -239,28 +270,25 @@
 }
 .gd-label,
 .gd-sep {
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--gd-faint);
+  font-size: var(--gd-text-xs);
+  font-weight: 620;
+  color: var(--gd-text-3);
   margin-right: 2px;
 }
-.gd-sep {
-  text-transform: none;
-}
 .gd-badge {
-  font-size: 13px;
+  font-size: var(--gd-text-xs);
+  font-weight: 520;
   line-height: 1;
-  padding: 5px 9px;
-  border-radius: 6px;
-  color: var(--gd-dim);
-  background: var(--gd-chip);
-  border: 1px solid var(--gd-chip-line);
+  padding: 6px 10px;
+  border-radius: var(--gd-radius-md);
+  color: var(--gd-text-2);
+  background: var(--gd-key);
+  box-shadow: inset 0 0 0 1px var(--gd-line);
 }
 .gd-badge-dict {
-  color: var(--gd-accent-ink);
-  border-color: rgba(var(--gd-accent-rgb), 0.4);
-  background: rgba(var(--gd-accent-rgb), 0.1);
+  color: var(--gd-accent-text);
+  background: var(--gd-accent-soft);
+  box-shadow: none;
 }
 
 /* Yomitan's glossary HTML: lists and structured content, tuned for reading at a distance. */
@@ -277,34 +305,34 @@
   margin: 0.3em 0;
 }
 .gd-glossary li::marker {
-  color: var(--gd-faint);
+  color: var(--gd-text-3);
   font-variant-numeric: tabular-nums;
 }
 .gd-glossary i {
   font-style: normal;
   font-size: 0.8em;
-  color: var(--gd-dim);
+  color: var(--gd-text-2);
   margin-right: 0.3em;
 }
 .gd-glossary a[lang="ja"] {
-  color: var(--gd-accent-ink);
+  color: var(--gd-accent-text);
   text-decoration: none;
 }
 .gd-glossary [data-sc-content="example-sentence-a"] {
-  font-family: var(--gd-font-ja);
-  border-left: 2px solid rgba(var(--gd-accent-rgb), 0.5);
+  font-family: var(--gd-font-jp);
+  border-left: 2px solid var(--gd-accent-line);
   padding-left: 0.6em;
   margin: 0.4em 0;
 }
 .gd-glossary [data-sc-content="example-sentence-b"] {
   font-size: 0.88em;
-  color: var(--gd-dim);
-  border-left: 2px solid var(--gd-line);
+  color: var(--gd-text-2);
+  border-left: 2px solid var(--gd-line-strong);
   padding-left: 0.6em;
   margin: 0.4em 0;
 }
 .gd-glossary [data-sc-content="example-keyword"] {
-  color: var(--gd-accent-ink);
+  color: var(--gd-accent-text);
   font-weight: 700;
 }
 .gd-glossary table {
@@ -317,8 +345,8 @@
 }
 .gd-frequencies {
   margin-top: 16px;
-  font-size: 13px;
-  color: var(--gd-dim);
+  font-size: var(--gd-text-xs);
+  color: var(--gd-text-2);
 }
 .gd-frequencies ul,
 .gd-frequencies ol {
@@ -329,93 +357,109 @@
   padding: 0;
   margin: 0;
 }
+.gd-frequencies li {
+  padding: 4px 8px;
+  border-radius: var(--gd-radius-sm);
+  background: var(--gd-key);
+}
 
 .gd-status {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: var(--gd-dim);
+  color: var(--gd-text-2);
   margin: 8px 0;
 }
 .gd-status [lang="ja"] {
-  font-family: var(--gd-font-ja);
-  color: var(--gd-ink);
+  font-family: var(--gd-font-jp);
+  color: var(--gd-text);
 }
 .gd-status-error b {
   color: var(--gd-danger);
-  font-weight: 600;
+  font-weight: 620;
 }
 .gd-spinner {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid var(--gd-line);
-  border-top-color: var(--gd-accent);
+  border: 2px solid var(--gd-line-strong);
+  border-top-color: var(--gd-accent-text);
   animation: gd-spin 0.7s linear infinite;
 }
 
-/* The hints and actions, along the bottom; the glyphs are the controller's (.cm-glyph). */
+/* The hints and actions: a frosted pill along the bottom, as Halo's hint bar. The keys are the
+   controller's (.cm-glyph), drawn from the same roles. */
 .gd-bar {
+  align-self: center;
+  margin-top: auto;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px 24px;
+  gap: 10px 22px;
   flex-wrap: wrap;
-  padding: 14px 0 clamp(18px, 4vh, 40px);
-  border-top: 1px solid var(--gd-line);
-  font-size: 14px;
-  color: var(--gd-dim);
+  justify-content: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-bottom: clamp(18px, 3.5vh, 36px);
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: var(--gd-frost);
+  backdrop-filter: var(--gd-frost-blur);
+  -webkit-backdrop-filter: var(--gd-frost-blur);
+  box-shadow: var(--gd-shadow-pop), inset 0 0 0 1px var(--gd-line-strong);
 }
 .gd-bar-group {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  gap: 8px 20px;
 }
-/* The controller's glyphs, sized and coloured for this screen's tokens. */
-.gd-bar .cm-glyph {
-  min-width: 22px;
-  height: 22px;
-  border-radius: 11px;
-  padding: 0 6px;
-  font-size: 11px;
-  color: var(--gd-ink);
-  border-color: var(--gd-chip-line);
-  background: var(--gd-chip);
-}
-.gd-bar .cm-glyph.cm-confirm {
-  color: #0b1220;
-  border-color: transparent;
-  background: var(--gd-accent);
+.gd-bar-actions {
+  padding-left: 22px;
+  box-shadow: inset 1px 0 0 var(--gd-line-strong);
 }
 .gd-bar .cm-hint {
-  font-size: inherit;
-  font-weight: 500;
-  color: var(--gd-dim);
+  gap: 8px;
+  font-size: var(--gd-text-sm);
+  font-weight: 520;
+  color: var(--gd-text-2);
+}
+.gd-bar .cm-glyph {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  font: 620 13px/1 var(--gd-font);
+  color: var(--gd-text);
+  background: var(--gd-key);
+  box-shadow: inset 0 0 0 1px var(--gd-line-strong), inset 0 -1.5px 0 var(--gd-line-strong);
+}
+.gd-bar .cm-glyph.cm-confirm {
+  color: var(--gd-accent-contrast);
+  background: var(--gd-accent-9);
+  box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 0.25);
 }
 .gd-hint {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   white-space: nowrap;
 }
 button.gd-hint {
   font: inherit;
-  color: inherit;
   background: none;
   border: 0;
-  padding: 4px 6px;
-  margin: -4px -6px;
-  border-radius: 8px;
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: 999px;
   cursor: pointer;
 }
 .gd-bar button.gd-hint:hover {
-  color: var(--gd-ink);
-  background: var(--gd-chip);
+  color: var(--gd-text);
+  background: var(--gd-hover);
 }
 .gd-bar .gd-anki[data-state="idle"] .gd-hint,
 .gd-bar .gd-anki[data-state="error"] .gd-hint {
-  color: var(--gd-ink);
+  color: var(--gd-text);
 }
 .gd-bar .gd-anki[data-tone="ok"] .gd-hint {
   color: var(--gd-ok);
@@ -428,7 +472,8 @@ button.gd-hint {
   opacity: 0.6;
 }
 .gd-note {
-  color: var(--gd-faint);
+  font-size: var(--gd-text-sm);
+  color: var(--gd-text-3);
 }
 
 @keyframes gd-in {
@@ -461,7 +506,8 @@ button.gd-hint {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gd-root,
+  .gd-backdrop,
+  .gd-frame,
   .gd-entry,
   .gd-frame.gd-bump {
     animation: none;
