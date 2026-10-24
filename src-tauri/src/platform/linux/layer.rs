@@ -106,6 +106,7 @@ pub fn available() -> bool {
 
 unsafe extern "C" {
     fn gtk_widget_realize(widget: *mut c_void);
+    fn gtk_widget_add_events(widget: *mut c_void, events: c_int);
     fn gtk_widget_get_realized(widget: *mut c_void) -> c_int;
     fn gtk_widget_get_window(widget: *mut c_void) -> *mut c_void;
     fn gtk_widget_queue_draw(widget: *mut c_void);
@@ -132,6 +133,23 @@ pub fn make_panel(window: &tauri::WebviewWindow) -> Result<bool, String> {
         return Ok(false);
     };
     let gtk = window.gtk_window().map_err(|e| e.to_string())?;
+    if window.label() == "overlay" {
+        use glib::prelude::*;
+        use tauri::Emitter;
+        // WebKitGTK does not reliably forward wl_pointer.leave from a shaped
+        // layer surface to DOM mouseleave. Deliver the native surface edge too.
+        unsafe { gtk_widget_add_events(gtk.as_ptr().cast(), (1 << 13) | (1 << 12)) };
+        let leaving = window.clone();
+        gtk.connect_local("leave-notify-event", false, move |_| {
+            let _ = leaving.emit("wayland-layer-pointer", false);
+            Some(false.to_value())
+        });
+        let entering = window.clone();
+        gtk.connect_local("enter-notify-event", false, move |_| {
+            let _ = entering.emit("wayland-layer-pointer", true);
+            Some(false.to_value())
+        });
+    }
     let pointer = gtk.as_ptr().cast();
     // Hidden Tauri windows must remain unrealized until their surface role is set.
     unsafe {

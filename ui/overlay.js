@@ -2,6 +2,7 @@ import { createDictionarySetup } from './setup-dictionaries.js'
 import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm } from './api-lookup.js'
 import { createController } from './controller.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
+import { ReadingHold } from './reading-hold.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -38,6 +39,7 @@ import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
 import { parseSourceId } from './source-id.js'
+import { portalWindowBounds, portalCropArea } from './portal-window-geometry.js'
 import {
   DICTIONARY_ENGINE_KEY,
   NO_ENGINE,
@@ -441,11 +443,41 @@ setInterval(() => void checkThrottled(), 4000)
  * up, with a fresh look at the screen.
  */
 let controllerHold = false
+let readingHold = false
+let layerPointerExit = null
+let hyprlandPointer = false
+let layerPointerPolling = false
+let remoteReadingPopup = false
+let apiReadingPopup = false
+const reading = new ReadingHold()
+function syncScanHold() {
+  if (controllerHold || readingHold) scanner.pause()
+  else if (scanner.isPaused) scanner.resume()
+}
+function syncReadingHold() {
+  if (layerPointerExit) {
+    window.__linuxLayerPointerInside = !layerPointerExit.outside()
+    if (layerPointerExit.outside()) renderer.clearPointer()
+  }
+  const popup = remoteReadingPopup || apiReadingPopup || Boolean(extensionPopupRect) ||
+    [...livePopups].some(popup => popup.isVisibleSync?.())
+  const enabled = isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && !state.regionSelecting
+  if (!enabled) reading.reset()
+  const next = enabled && reading.update(renderer.mouse, renderer.hitRects({x:0,y:0}), popup)
+  if (next === readingHold) return
+  readingHold = next
+  syncScanHold()
+  log({check:'auto-scan-reading-hold',hold:next})
+}
+/** The Yomitan API's pop-up for a word opened or closed (`installApiLookup`). */
+function apiPopupVisible(visible) {
+  apiReadingPopup = visible
+  syncReadingHold()
+}
 function holdForController(hold) {
   if (hold === controllerHold) return
   controllerHold = hold
-  if (hold) scanner.pause()
-  else scanner.resume()
+  syncScanHold()
   log({ check: 'auto-scan-controller-hold', hold, running: scanner.isRunning })
 }
 
@@ -502,7 +534,9 @@ function draw() {
   if (waylandDisabled) { if (!gnomeOverlay?.shared) renderer.clear(); void gnomeOverlay?.update(); return }
   // Layer-shell provides an output-local surface, not another window's position.
   // Do not draw a portal window frame at a fabricated desktop location.
-  if (waylandLayer && state.info?.source_id?.startsWith('portal:window:')) {
+  const portalWindow = waylandLayer && state.info?.source_id?.startsWith('portal:window:')
+  const linkedBounds = portalWindow ? portalWindowBounds(state.info, state.sourceBounds) : null
+  if (portalWindow && (!linkedBounds || state.sourceWindow?.onScreen === false)) {
     renderer.clear()
     return
   }
@@ -548,7 +582,7 @@ function draw() {
       innerWidth / state.info.full_width,
       innerHeight / state.info.full_height
     )
-    readerBounds = {
+    readerBounds = linkedBounds ?? {
       x: (innerWidth - state.info.full_width * scale) / 2,
       y: (innerHeight - state.info.full_height * scale) / 2,
       width: state.info.full_width * scale,
@@ -1272,7 +1306,7 @@ function syncAutoScanner() {
     if (scanner.isRunning) scanner.stop()
     scanner.resume()
     scanner = wantedScanner
-    if (controllerHold) scanner.pause()
+    if (controllerHold || readingHold) scanner.pause()
   }
   scanner.updateSettings(settings)
   // Quick Shot has no source to watch, so there is nothing for the loop to scan. Nor while a
@@ -1735,6 +1769,7 @@ async function editLinuxSourceImage(sourceId) {
 
 /** Portal captures have pixel dimensions, but no desktop display catalogue or window origin. */
 async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
+  let pictureUrl = null
   const frame = await native.sourceHoverPreview(sourceId)
   if (!frame?.width || !frame?.height) {
     throw new Error('No portal frame available. Choose a source in the system picker first.')
@@ -1752,24 +1787,43 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
     }
     const origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
     state.origin = origin
-    // Window streams are edited against their screenshot, never a fabricated screen position.
-    const fit = kind === 'window'
+    // A compositor-linked window can be edited over the game itself. Anonymous
+    // streams retain their screenshot editor rather than inventing an origin.
+    const linked = kind === 'window' && frame.desktopVisible ? frame.desktopBounds : null
+    const fit = kind === 'window' && !linked
       ? Math.min(origin.width / frame.width, origin.height / frame.height)
       : null
-    const bounds = fit === null ? origin : {
+    const bounds = linked ?? (fit === null ? origin : {
       x: (origin.width - frame.width * fit) / 2,
       y: (origin.height - frame.height * fit) / 2,
       width: frame.width * fit,
       height: frame.height * fit
+    })
+    const area = linked ? portalCropArea(bounds, origin) : bounds
+    if (!area) throw new Error('The shared window is outside this display. Bring it into view and try again.')
+    if (kind === 'window' && !linked) {
+      // WebKitGTK's image loader can reject capture:// from an HTTP dev page,
+      // while the native fetch bridge can read it. Decode the same PNG as a blob.
+      const response = await fetch(frame.url)
+      if (!response.ok) throw new Error('Could not load the shared window preview.')
+      pictureUrl = URL.createObjectURL(await response.blob())
     }
     const rect = await editRegion(quick ? 'Scan' : SAVE_AND_SCAN, {
       alternateLabel: quick ? undefined : 'Save',
-      area: bounds,
+      area,
       initial: !quick && state.crop ? cropToLocal(state.crop, origin, bounds) : null,
-      picture: kind === 'window' ? bounds : undefined,
-      onStart: kind === 'window' ? (selector) => void selector.setPicture(frame.url) : undefined
+      picture: kind === 'window' && !linked ? bounds : undefined,
+      onStart: pictureUrl ? (selector) => void selector.setPicture(pictureUrl) : undefined
     })
     if (!rect) return false
+    if (await native.selectedSource() !== sourceId) throw new Error('The shared source changed while editing. Open the editor again.')
+    if (linked) {
+      const current = await native.sourceHoverPreview(sourceId)
+      if (!current?.desktopVisible || !sameRect(current.desktopBounds, bounds)
+        || current.width !== frame.width || current.height !== frame.height) {
+        throw new Error('The shared window moved or resized while editing. Open the editor again.')
+      }
+    }
     const sx = frame.width / bounds.width
     const sy = frame.height / bounds.height
     const crop = {
@@ -1783,9 +1837,10 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
     if (crop.width <= 0 || crop.height <= 0) return false
     if (quick) return crop
     await native.commitSource(sourceId, crop)
-    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer', action: rect.action })
+    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer', placement: linked ? 'linked-window' : kind === 'window' ? 'source-image' : 'screen', action: rect.action })
     return savedAction(rect)
   } finally {
+    if (pictureUrl) URL.revokeObjectURL(pictureUrl)
     state.regionSelecting = false
     syncAutoScanner()
     await native.regionKeys(false)
@@ -2210,7 +2265,7 @@ async function startYomitan() {
   await capturePopups()
   // The overlay has no ground of its own: Yomitan's popups take Kimochi's appearance instead.
   await (await import('/spike/popup-bridge.js')).siteThemeFromAppearance()
-  await installApiLookup()
+  await installApiLookup({ onVisibilityChange: apiPopupVisible })
   await import('/js/app/content-script-wrapper.js')
 
   extensionApi = api
@@ -2673,6 +2728,11 @@ function hitRects() {
 
 /** Drops the text read from the selection, from the overlay and the scanner's memory. */
 function clearSelectionText() {
+  reading.reset()
+  readingHold = false
+  remoteReadingPopup = false
+  apiReadingPopup = false
+  syncScanHold()
   state.annotations = []
   state.info = null
   state.appliedScanId = null
@@ -2865,7 +2925,23 @@ async function publishRegions() {
 }
 
 function startRegionLoop() {
-  setInterval(() => void publishRegions(), 100)
+  setInterval(() => { void refreshLayerPointer(); syncReadingHold(); void publishRegions() }, 100)
+}
+
+async function refreshLayerPointer() {
+  if (!hyprlandPointer || !layerPointerExit || layerPointerPolling || !state.origin) return
+  layerPointerPolling = true
+  try {
+    const point = await native.invoke('linux_window_geometry', {
+      operation: 'pointer', sourceId: watchedSourceId ?? '', windowAddress: null
+    })
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return
+    const inside = hitRects().some(r => point.x >= r.x && point.y >= r.y && point.x < r.x + r.width && point.y < r.y + r.height)
+    layerPointerExit.sample(inside)
+    if (inside) renderer.setPointer(point.x - state.origin.x, point.y - state.origin.y)
+    syncReadingHold()
+  } catch { /* Optional compositor IPC: GTK surface edges remain the fallback. */ }
+  finally { layerPointerPolling = false }
 }
 
 // ---------------------------------------------------------------------------
@@ -2903,6 +2979,21 @@ await native.watchCapabilities(async (caps) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true
+    if (caps.session.backend === 'wayland' && caps.session.nativeLayerShell) {
+      hyprlandPointer = caps.session.compositor === 'Hyprland'
+      const { installWaylandPointerExit } = await import('./wayland-pointer-exit.js')
+      const pointerExit = installWaylandPointerExit(window, {
+        leave: () => { renderer.clearPointer(); syncReadingHold() },
+        dismiss: () => {
+          if (!controllerHold && !controller.drivesLookups && !state.regionSelecting) dismissPopup()
+        }
+      })
+      layerPointerExit = pointerExit
+      await native.listen('wayland-layer-pointer', ({payload}) => {
+        if (payload === true) pointerExit.enter()
+        else if (payload === false) pointerExit.leave()
+      })
+    }
     const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
     await installLinuxScanInput(window, { passive: true })
     window.addEventListener('resize', () => {
@@ -3119,9 +3210,11 @@ await native.listen('pointer', ({ payload }) => {
   const local = toOverlayLocal(payload, state.origin)
   if (payload.over === false || !local) {
     renderer.clearPointer()
+    syncReadingHold()
     return
   }
   renderer.setPointer(local.x, local.y)
+  syncReadingHold()
   controller.pointer(local.x, local.y)
   // While the controller is reading, the pointer must not steer Yomitan: an idle mouse resting
   // somewhere else would otherwise close the controller's popup.
@@ -3153,6 +3246,12 @@ await native.listen('pointer', ({ payload }) => {
   // the answer. Names of keys only.
   noteScanFeed(payload, init !== null)
 })
+
+await native.listen('overlay-reading-popup', ({payload}) => {
+  remoteReadingPopup = payload?.visible === true
+  syncReadingHold()
+})
+window.addEventListener('mousemove', () => syncReadingHold())
 
 await native.listen('gnome-popup-dismiss', () => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && gnomeOverlay?.shared) {
@@ -3189,7 +3288,7 @@ async function startNoEngine() {
  * there is to install; the pointer replay and the controller see it as a ready dictionary.
  */
 async function startApiEngine() {
-  await installApiLookup({ embedded: false })
+  await installApiLookup({ embedded: false, onVisibilityChange: apiPopupVisible })
   state.yomitan.ready = true
   settleBackend()
   log({ check: 'dictionary-api-ready' })

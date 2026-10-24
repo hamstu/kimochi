@@ -5,13 +5,13 @@ import { installLinuxScanInput } from '../host/linux-scan-input.js'
 
 function fixture(os = 'linux') {
   const listeners = new Map(), received = []
-  let portal
+  const native = new Map()
   class PointerEvent { constructor(type, init) { this.type = type; Object.assign(this, init) } }
   const target = { dispatchEvent: e => received.push(e), closest: () => null }
   const win = { __KIMOCHI_PLATFORM__: { os }, PointerEvent,
     document: { activeElement: target, elementFromPoint: () => target, hasFocus: () => true },
     addEventListener: (type, fn) => listeners.set(type, fn),
-    __TAURI__: { event: { listen: async (_, fn) => { portal = fn } } } }
+    __TAURI__: { event: { listen: async (name, fn) => { native.set(name, fn) } } } }
   return { win, received, listeners, target,
     move: shiftKey => {
       let blocked=false
@@ -19,7 +19,8 @@ function fixture(os = 'linux') {
         clientX: 17, clientY: 23, shiftKey, stopImmediatePropagation() { blocked=true } })
       return blocked
     },
-    send: shift => portal({ payload: { shift } }) }
+    send: shift => native.get('linux-dictionary-modifier')({ payload: { shift } }),
+    surface: over => native.get('wayland-layer-pointer')?.({ payload: over }) }
 }
 test('portal Shift scans a stationary pointer on press, never on release', async () => {
   const f = fixture(); await installLinuxScanInput(f.win); f.move(false)
@@ -40,6 +41,26 @@ test('leaving the surface prevents stale-point lookups', async () => {
   const f = fixture(); await installLinuxScanInput(f.win); f.move(false)
   f.listeners.get('pointerout')({ relatedTarget: null }); f.send(true)
   assert.equal(f.received.length, 0)
+})
+test('native layer exit prevents a later Shift press reopening a stale lookup', async () => {
+  const f = fixture(); await installLinuxScanInput(f.win, { passive: true }); f.move(false)
+  f.surface(false); f.send(true)
+  assert.equal(f.received.length, 0)
+  f.surface(true); f.send(false); f.send(true)
+  assert.equal(f.received.length, 0, 'enter alone does not invent pointer coordinates')
+  f.move(false)
+  assert.equal(f.received.at(-1).shiftKey, true, 'fresh movement resumes glide scanning')
+})
+test('authoritative outside position rejects queued movement and Shift without a native leave', async () => {
+  const f = fixture(); await installLinuxScanInput(f.win, { passive: true }); f.move(false)
+  f.win.__linuxLayerPointerInside = false
+  f.move(false); f.send(true)
+  assert.equal(f.received.length, 0)
+  f.win.__linuxLayerPointerInside = true
+  f.send(false); f.send(true)
+  assert.equal(f.received.length, 0)
+  f.move(false)
+  assert.equal(f.received.at(-1).shiftKey, true)
 })
 test('Mac and Windows install no Linux listeners', async () => {
   for (const os of ['macos', 'windows']) {

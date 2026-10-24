@@ -16,6 +16,7 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
   let forwarding = false
   const editable = target => target?.closest?.('input,textarea,[contenteditable="true"]')
   const scan = () => {
+    if (passive && host.__linuxLayerPointerInside === false) return
     if (!passive && !host.document.hasFocus()) return
     if (!point || !held || editable(win.document.activeElement)) return
     const target = win.document.elementFromPoint(point.clientX, point.clientY)
@@ -37,6 +38,7 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
   const notify = () => { for (const listener of state.listeners) listener() }
   win.addEventListener('pointermove', e => {
     if (forwarding || e.pointerType !== 'mouse' || !e.isPrimary) return
+    if (passive && host.__linuxLayerPointerInside === false) { point = null; return }
     point = { clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY,
       buttons: e.buttons, ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey }
     // WebKit's pointer modifiers can lag its keyboard/portal modifier event.
@@ -77,5 +79,10 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
     state.portalHeld = !!payload.shift; host.__linuxDictionaryShiftHeld = state.portalHeld
     state.portalKnown = true; state.known = true; notify()
   })
-  win.addEventListener('pagehide', () => { stop?.(); state.listeners.delete(update) }, { once: true })
+  const stopPointer = passive ? await (win.__TAURI__ ?? host.__TAURI__).event.listen('wayland-layer-pointer', ({ payload }) => {
+    // WebKitGTK can omit DOM pointerout when leaving a shaped native layer.
+    // A later Shift press in the game must not scan the old overlay position.
+    if (payload === false) point = null
+  }) : null
+  win.addEventListener('pagehide', () => { stop?.(); stopPointer?.(); state.listeners.delete(update) }, { once: true })
 }

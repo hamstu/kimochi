@@ -2,6 +2,7 @@
 // Regenerates every app icon from the SVG masters in branding/.
 //
 //   npm run icons
+//   npm run icons -- --linux   (Linux tray and extra desktop sizes only)
 //
 // 1. Rasterises the masters to 1024px PNGs with resvg (system fonts off, so a stray
 //    <text> would render blank rather than silently depend on this machine's fonts).
@@ -91,6 +92,19 @@ function steamArtwork() {
   write(join(root, "frontend", "welcome", "assets", "steam-capsule.png"), render(join(masters, "capsule.svg"), 300));
 }
 
+// Linux StatusNotifier hosts draw supplied pixels directly rather than tinting a
+// macOS template. The current white glyph has a dark keyline for light panels.
+function linuxIcons() {
+  write(join(branding, "tray-linux@2x.png"), render(join(branding, "tray-linux.svg"), 32));
+  for (const size of [320, 512]) {
+    write(join(tauriIcons, `${size}x${size}.png`), render(join(branding, "icon-square.svg"), size));
+  }
+}
+if (process.argv.includes("--linux")) {
+  linuxIcons();
+  process.exit(0);
+}
+
 if (process.argv.includes("--steam")) {
   steamArtwork();
   process.exit(0);
@@ -102,6 +116,8 @@ const squarePng = join(branding, "icon-square.png");
 write(macPng, render(join(branding, "icon-macos.svg"), 1024));
 write(squarePng, render(join(branding, "icon-square.svg"), 1024));
 write(join(branding, "icon.png"), render(join(branding, "icon.svg"), 1024));
+
+linuxIcons();
 
 console.log("Menu bar template (18pt)");
 write(join(branding, "tray-template.png"), render(join(branding, "tray-template.svg"), 18));

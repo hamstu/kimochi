@@ -492,6 +492,10 @@ export class SceneScanner<Frame = unknown> {
       return 'error'
     }
 
+    // The reader may have entered text/a popup while this capture was out.
+    // Leave scene state untouched; resume takes a fresh look at the source.
+    if (this.paused) return 'paused'
+
     const generation = sample.generation ?? this.deps.generation?.() ?? 0
     if (this.generation !== generation) {
       const had = this.generation !== null

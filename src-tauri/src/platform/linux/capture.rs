@@ -141,6 +141,7 @@ impl CaptureBackend for Protected {
         self.inner.permission()
     }
     fn request_permission(&self) -> bool {
+        super::hyprland::clear();
         self.inner.request_permission()
     }
     fn enumerate(&mut self) -> Result<Vec<Source>> {
@@ -149,6 +150,7 @@ impl CaptureBackend for Protected {
         Ok(sources)
     }
     fn close(&mut self) {
+        super::hyprland::clear();
         self.inner.close();
     }
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
@@ -164,15 +166,26 @@ impl CaptureBackend for Protected {
             return self.inner.capture(request);
         }
         let mut before = super::gnome::tracked_bounds(&request.source_id);
-        let _gnome = super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?;
-        let hidden = hide(&self.app)?;
+        // GNOME's linked WINDOW stream captures that window actor alone, not
+        // the desktop scene. Our separate annotation/popup windows cannot enter
+        // it. Hiding them each observation only creates a visible blink.
+        // Screen streams and unverified window shares retain full suppression.
+        let isolated_window = request.source_id.starts_with("portal:window:") && before.is_some();
+        if super::region_editing() {
+            return Err(CaptureError::new("busy", "Finish crop editing before capturing"));
+        }
+        let _gnome = if isolated_window { None } else {
+            Some(super::gnome::suppress().map_err(|e| CaptureError::new("native", e))?)
+        };
+        let hidden = if isolated_window { None } else { Some(hide(&self.app)?) };
+        let after = hidden.as_ref().and_then(|hidden| hidden.after);
         // Allow compositor fade-out animations and queued PipeWire buffers to finish.
-        if let Some(after) = hidden.after {
+        if let Some(after) = after {
             if let Some(wait) = Duration::from_millis(350).checked_sub(after.elapsed()) {
                 std::thread::sleep(wait);
             }
         }
-        let mut result = match hidden.after {
+        let mut result = match after {
             Some(after) => self.inner.capture_after(request, after),
             None => self.inner.capture(request),
         };
@@ -192,13 +205,16 @@ impl CaptureBackend for Protected {
             }
         }
         if result.is_ok(){if let Some(service)=self.app.try_state::<crate::state::Shared>(){super::gnome::refresh_identity(&service,&request.source_id);}}
+        if let Ok(frame) = result.as_mut() { super::hyprland::enrich(frame); }
         drop(hidden);
         result
     }
     // Picker/sidebar images never enter OCR or the observer. They may include
     // annotations, but must not disturb what the user is reading.
     fn preview(&mut self, request: &CaptureRequest) -> Result<Frame> {
-        self.inner.capture(request)
+        let mut frame = self.inner.capture(request)?;
+        super::hyprland::enrich(&mut frame);
+        Ok(frame)
     }
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {
         self.inner.thumbnail(source_id, edge)

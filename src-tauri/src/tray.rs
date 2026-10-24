@@ -12,9 +12,13 @@ use tauri::{
 /// so macOS draws it as a template and recolours it for the menu bar.
 #[cfg(target_os = "macos")]
 const ICON: &[u8] = include_bytes!("../../resources/tray-template@2x.png");
-/// Windows and Linux trays show the icon as it is, on light and dark taskbars alike, so they
-/// get the full-colour app icon (`branding/icon-square.svg`).
-#[cfg(not(target_os = "macos"))]
+/// Linux tray hosts display the image as supplied, on dark and light panels alike, so they get
+/// the same glyph in white with a dark keyline (`branding/tray-linux.svg`).
+#[cfg(target_os = "linux")]
+const ICON: &[u8] = include_bytes!("../../branding/tray-linux@2x.png");
+/// Windows trays show the icon as it is, on light and dark taskbars alike, so they get the
+/// full-colour app icon (`branding/icon-square.svg`).
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 const ICON: &[u8] = include_bytes!("../icons/32x32.png");
 
 // Item ids are prefixed: the app's own menu handler (main.rs) sees these clicks too, and opens a
@@ -26,6 +30,10 @@ struct TrayMenu {
 }
 
 pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if let Err(error) = crate::platform::icons::refresh() {
+        eprintln!("Could not refresh the Linux app icon: {error}");
+    }
     let e = |e: tauri::Error| e.to_string();
     let icon = tauri::image::Image::from_bytes(ICON).map_err(e)?;
     let mini = CheckMenuItemBuilder::with_id("tray-mini", "Mini Mode")
@@ -44,6 +52,8 @@ pub fn setup(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(e)?;
     app.manage(TrayMenu { mini });
     let builder = TrayIconBuilder::with_id("kimochi").icon(icon);
+    // Template rendering lets macOS invert it for the current menu bar appearance.
+    // Linux uses its own light glyph with a dark keyline for untinted hosts.
     #[cfg(target_os = "macos")]
     let builder = builder.icon_as_template(true);
     builder

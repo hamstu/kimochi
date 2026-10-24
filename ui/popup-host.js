@@ -84,7 +84,7 @@ for (const seam of ['_getViewport', '_getPosition']) {
 
 /** Desktop rectangle each visible popup has been placed at. */
 const placed = new Map()
-const gnomeSources = new Map()
+const popupSources = new Map()
 let desktopLookup = false
 let gnomeBridge = false
 let appearance = 'system'
@@ -224,8 +224,14 @@ function scheduleHide() {
   }, HIDE_GRACE_MS)
 }
 
+let readingPopupVisible = false
 async function relayout() {
   const visible = [...placed].filter(([popup]) => popup.isVisibleSync())
+  const readingVisible = visible.some(([popup]) => popupSources.get(popup) === 'desktop')
+  if (readingVisible !== readingPopupVisible) {
+    readingPopupVisible = readingVisible
+    void window.__TAURI__.event.emitTo('overlay','overlay-reading-popup',{visible:readingVisible}).catch(() => {})
+  }
   if (visible.length === 0) {
     scheduleHide()
     return
@@ -260,7 +266,7 @@ async function relayout() {
   try {
     if (gnomeBridge) {
       await invoke('gnome_overlay', { operation: 'own-window', payload: {
-        label: LABEL, sourceKind: gnomeSources.get(newest) ?? 'reader',
+        label: LABEL, sourceKind: popupSources.get(newest) ?? 'reader',
         interactiveRects: visible.filter(([popup]) => container === whole || popup === newest).map(([, rect]) => rect)
       } })
     }
@@ -348,7 +354,7 @@ Popup.prototype.showContent = async function (details, displayDetails) {
     for (const [popup] of placed) if (!popup.parent && popup !== this) popup.hide(false)
   }
   markNewest(this)
-  if (gnomeBridge && sent.length) gnomeSources.set(this, this.parent ? gnomeSources.get(this.parent) : desktopLookup || displayDetails?.content?.contentOrigin?.tabId === 1 ? 'desktop' : 'reader')
+  if (sent.length) popupSources.set(this, this.parent ? popupSources.get(this.parent) : desktopLookup || displayDetails?.content?.contentOrigin?.tabId === 1 ? 'desktop' : 'reader')
   anchors = origin
     ? real.map((r) => ({
         left: r.left + origin.x,

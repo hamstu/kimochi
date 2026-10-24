@@ -62,9 +62,10 @@ export function popupAnkiConfig(reader) {
 /**
  * `embedded`: Built-in Yomitan is loaded in this document (its own pop-up is switched off while
  * the Yomitan API is the engine). The Yomitan API on its own (`startApiEngine` in overlay.js) loads
- * none of Yomitan's files, so there is nothing to switch.
+ * none of Yomitan's files, so there is nothing to switch. `onVisibilityChange(visible)`: told when
+ * this word's pop-up opens or closes, so automatic OCR can hold still while it's read.
  */
-export async function installApiLookup({ embedded = true } = {}) {
+export async function installApiLookup({ embedded = true, onVisibilityChange = () => {} } = {}) {
   const { setEmbeddedEnabled } = embedded
     ? await import('/spike/frontend-mode.js')
     : { setEmbeddedEnabled: () => {} }
@@ -77,6 +78,7 @@ export async function installApiLookup({ embedded = true } = {}) {
 
   async function open({ term, cursorX, cursorY, anchor, sentence, focus }) {
     try {
+      onVisibilityChange(true)
       await invoke('show_popover', {
         term: term.trim(),
         cursorX,
@@ -93,6 +95,7 @@ export async function installApiLookup({ embedded = true } = {}) {
         ankiConfig: popupAnkiConfig(reader)
       })
     } catch (error) {
+      onVisibilityChange(false)
       console.error('API dictionary popup:', error)
     }
   }
@@ -127,7 +130,9 @@ export async function installApiLookup({ embedded = true } = {}) {
   })
   // Only the first pop-up is this word's; the ones nested on it close on their own.
   await window.__TAURI__.event.listen('popover:hide', ({ payload }) => {
-    if (!payload?.level) scanner.clearSelection()
+    if (payload?.level) return
+    onVisibilityChange(false)
+    scanner.clearSelection()
   })
 
   const pointOf = (event) => ({
@@ -160,6 +165,7 @@ export async function installApiLookup({ embedded = true } = {}) {
   hideTerm = () => {
     if (!apiMode()) return
     scanner.stop()
+    onVisibilityChange(false)
     void invoke('hide_popover')
   }
 }

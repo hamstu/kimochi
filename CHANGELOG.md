@@ -78,6 +78,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - With the Yomitan API, clicking the pop-up over your game no longer closes it, so you can click into it and scroll.
 - Hold Shift over a word inside a dictionary pop-up to look it up in another pop-up on top, as in Yomitan, in the Log and over your game. It works with Built-in Yomitan (as deep as its "Maximum number of child popups" setting allows) and with the Yomitan API (up to five pop-ups). Click back in an earlier pop-up to close the ones above it.
 - Holding Shift over a dictionary pop-up no longer looks up the Log line underneath it, and Built-in Yomitan's nested pop-ups in the Log open beside their word.
+
+- Linux uses the current Kimochi tray glyph with contrast on dark and light panels, and refreshes stale app icons after an update.
+
+- Auto OCR keeps overlay text steady while you hover it or read its dictionary popup, then checks the screen again when you leave both.
+- GNOME window shares no longer blink the overlay on every automatic observation; screen captures still hide it to keep annotations out of OCR.
+
 - GNOME: restore annotations and desktop cropping for tiled window shares whose borders extend beyond the screen.
 
 - GNOME: avoid invalid native taskbar notifications during overlay cleanup, and prevent

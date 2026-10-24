@@ -43,8 +43,10 @@ mod gamescope_focus;
 mod gamescope_handoff;
 mod controller_neutral;
 pub mod deck_input;
+pub mod hyprland;
 mod layer;
 pub mod shortcuts;
+pub mod icons;
 mod rules;
 mod window;
 mod workspace;
@@ -178,6 +180,8 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
         let value = gnome::request("track", json!({"operation":"status","sourceId":id.to_string()})).ok()?;
         let rect = serde_json::from_value(value["bounds"].clone()).ok()?;
         Some((rect, value["visible"].as_bool().unwrap_or(false)))
+    } else if hyprland::available() {
+        hyprland::tracked(&id.to_string())
     } else {
         None
     }
@@ -311,7 +315,7 @@ pub fn capabilities() -> Value {
             "thumbnails": !portal,
             "icons": !portal || tracking,
             // A Gaming Mode app fills the output; nothing moves to follow.
-            "followWindowBounds": !gaming && (!portal || tracking),
+            "followWindowBounds": !gaming && (!portal || tracking || hyprland::available()),
             "foregroundTracking": !gaming && !portal,
         },
         "overlay": {
