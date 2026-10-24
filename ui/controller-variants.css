@@ -1,0 +1,527 @@
+/* --- controller mode: Gaming Mode's design -------------------------------
+       Every controller surface (the radial menu, read-along's outline and hint
+       bar, the free cursor, the controls sheet and recent text) in Kimochi's
+       roles (DESIGN.md: slate neutrals, one indigo accent, Figtree from
+       fonts/figtree.css) scaled up about 1.3× for TV and handheld distance: the
+       11 / 12 / 13 / 15 / 18 ramp becomes 14 / 16 / 17 / 20 / 24, rows grow from
+       32 to 44px. Layered over controller.css, which keeps layout and motion.
+
+       Turned on by `data-cm-variant="halo"` on the controller host (overlay.html,
+       gnome-controller-host.html) and themed by `data-cm-theme="light"|"dark"`,
+       which controller.js sets from the Appearance setting. The ring is a hub
+       naming the chosen action, spokes out to big icons on rounded tiles, and a
+       frosted halo fading out past the hub (geometry in radial-menu.js).
+
+       Other Gaming Mode surfaces can share the look: put `data-cm-variant="halo"`
+       and `data-cm-theme` on their root and build from the `--cm-*` tokens. */
+
+/* The tokens apply wherever `data-cm-variant` is set, so other Gaming Mode surfaces can take
+   them on: `:is(#controller, …)` only lends the id's weight, over controller.css's own. */
+:is(#controller, [data-cm-variant])[data-cm-variant] {
+  /* Kimochi's dark roles (tokens.css over Radix slate and indigo). */
+  --cm-bg-rgb: 17 17 19;
+  --cm-raised-rgb: 24 25 27;
+  --cm-bg: rgb(var(--cm-bg-rgb));
+  --cm-bar: #18191b;
+  --cm-raised: rgb(var(--cm-raised-rgb));
+  --cm-field: rgb(255 255 255 / 0.05);
+  --cm-key: rgb(255 255 255 / 0.07);
+  --cm-text: #edeef0;
+  --cm-text-2: #b0b4ba;
+  --cm-text-3: #777b84;
+  --cm-line: rgb(211 237 248 / 0.11);
+  --cm-line-strong: rgb(221 234 248 / 0.2);
+  --cm-hover: rgb(221 234 248 / 0.07);
+  --cm-press: rgb(221 234 248 / 0.1);
+  --cm-accent-9: #3e63dd;
+  --cm-accent-contrast: #fff;
+  --cm-accent-text: #9eb1ff;
+  --cm-accent-soft: rgb(17 68 255 / 0.2);
+  --cm-accent-line: rgb(84 114 228 / 0.7);
+  --cm-focus: #5472e4;
+  --cm-shadow: 0 2px 8px rgb(0 0 0 / 0.35), 0 28px 64px -12px rgb(0 0 0 / 0.7);
+  --cm-shadow-pop: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+  --cm-scrim: rgb(0 0 0 / 0.5);
+
+  /* Gaming Mode's scale: Kimochi's ramp and radii at about 1.3×. */
+  --cm-font: "Figtree Variable", "Figtree", system-ui, sans-serif;
+  --cm-font-jp: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP Variable",
+    "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+  --cm-text-xs: 14px;
+  --cm-text-sm: 16px;
+  --cm-text-md: 17px;
+  --cm-text-lg: 20px;
+  --cm-text-xl: 24px;
+  --cm-radius-sm: 5px;
+  --cm-radius-md: 8px;
+  --cm-radius-lg: 10px;
+  --cm-radius-xl: 16px;
+  --cm-row-h: 44px;
+
+  --cm-accent: var(--cm-accent-text);
+  --cm-ink: var(--cm-text);
+  --cm-dim: var(--cm-text-2);
+  font-family: var(--cm-font);
+  font-weight: 430;
+  color: var(--cm-text);
+}
+:is(#controller, [data-cm-variant])[data-cm-variant][data-cm-theme="light"] {
+  --cm-bg-rgb: 255 255 255;
+  --cm-raised-rgb: 255 255 255;
+  --cm-bar: #f9f9fb;
+  --cm-field: rgb(255 255 255 / 0.9);
+  --cm-key: rgb(0 0 85 / 0.04);
+  --cm-text: #1c2024;
+  --cm-text-2: #60646c;
+  --cm-text-3: #80838d;
+  --cm-line: rgb(0 0 45 / 0.09);
+  --cm-line-strong: rgb(0 0 47 / 0.17);
+  --cm-hover: rgb(0 0 51 / 0.06);
+  --cm-press: rgb(0 0 45 / 0.09);
+  --cm-accent-text: #3a5bc7;
+  --cm-accent-soft: rgb(0 71 241 / 0.08);
+  --cm-accent-line: rgb(0 51 220 / 0.36);
+  --cm-focus: #8da4ef;
+  --cm-shadow: 0 2px 6px rgb(15 17 26 / 0.12), 0 24px 56px -12px rgb(15 17 26 / 0.4);
+  --cm-shadow-pop: 0 1px 2px rgb(15 17 26 / 0.1), 0 10px 28px -8px rgb(15 17 26 / 0.3);
+  --cm-scrim: rgb(15 17 26 / 0.32);
+}
+
+/* --- the ring ------------------------------------------------------- */
+[data-cm-variant] .cm-vignette {
+  background: radial-gradient(circle at 50% 50%, rgb(0 0 0 / 0.08), var(--cm-scrim));
+}
+[data-cm-variant] .cm-glass {
+  inset: 0;
+  left: 0;
+  top: 0;
+  width: auto;
+  height: auto;
+  transform: none;
+  border-radius: 50%;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: radial-gradient(
+    circle closest-side,
+    transparent calc(var(--cm-hub) - 1px),
+    rgb(var(--cm-bg-rgb) / 0.72) var(--cm-hub),
+    rgb(var(--cm-bg-rgb) / 0.42) var(--cm-orbit),
+    rgb(var(--cm-bg-rgb) / 0) 100%
+  );
+}
+[data-cm-variant] .cm-disc {
+  fill: var(--cm-raised);
+  stroke: var(--cm-line-strong);
+  stroke-width: 1;
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.28));
+}
+[data-cm-variant] .cm-fade-from {
+  stop-color: var(--cm-text-2);
+  stop-opacity: 0.9;
+}
+[data-cm-variant] .cm-fade-to {
+  stop-color: var(--cm-text-2);
+  stop-opacity: 0;
+}
+[data-cm-variant] .cm-wedge,
+[data-cm-variant] .cm-wedge.cm-selected,
+[data-cm-variant] .cm-wedge.cm-selected.cm-disabled {
+  fill: transparent;
+  stroke: none;
+  filter: none;
+}
+[data-cm-variant] .cm-wedge.cm-chosen {
+  animation: none;
+}
+[data-cm-variant] .cm-spoke {
+  stroke: var(--cm-line-strong);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  transition: stroke 0.14s ease, stroke-width 0.14s ease;
+}
+[data-cm-variant] .cm-spoke.cm-selected {
+  stroke: var(--cm-accent-text);
+  stroke-width: 2.5;
+  transition-duration: 0.04s;
+}
+[data-cm-variant] .cm-spoke.cm-selected.cm-disabled {
+  stroke: var(--cm-text-3);
+}
+[data-cm-variant] .cm-pointer svg {
+  fill: var(--cm-accent-text);
+  filter: none;
+}
+[data-cm-variant] .cm-item {
+  width: 132px;
+  gap: 6px;
+  color: var(--cm-text-2);
+}
+[data-cm-variant] .cm-icon {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+}
+[data-cm-variant] .cm-icon svg {
+  width: 36px;
+  height: 36px;
+  stroke-width: 1.6;
+}
+[data-cm-variant] .cm-label {
+  display: none;
+  font-size: var(--cm-text-xs);
+  font-weight: 520;
+  letter-spacing: 0;
+  text-transform: none;
+}
+[data-cm-variant] .cm-detail {
+  position: absolute;
+  top: -4px;
+  left: calc(50% + 18px);
+  margin: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: 0;
+  color: var(--cm-text-2);
+  background: var(--cm-raised);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong);
+}
+[data-cm-variant] .cm-item.cm-selected {
+  color: var(--cm-text);
+}
+[data-cm-variant] .cm-item.cm-selected .cm-icon {
+  transform: scale(1.1);
+  color: var(--cm-accent-text);
+  filter: none;
+}
+[data-cm-variant] .cm-item.cm-selected .cm-label {
+  text-shadow: none;
+}
+[data-cm-variant] .cm-item[data-disabled] {
+  opacity: 0.4;
+}
+/* Lit: the likely choice (there is text to read along). A dot, not a pulse. */
+[data-cm-variant] .cm-item[data-lit] .cm-icon {
+  color: inherit;
+  animation: none;
+}
+[data-cm-variant] .cm-item[data-lit] .cm-icon::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--cm-accent-text);
+}
+[data-cm-variant] .cm-item.cm-selected[data-lit] .cm-icon::after {
+  display: none;
+}
+[data-cm-variant] .cm-center {
+  width: calc(var(--cm-hub) * 2 - 18px);
+  gap: 4px;
+}
+[data-cm-variant] .cm-center .cm-title {
+  display: none;
+}
+[data-cm-variant] .cm-current {
+  font-size: var(--cm-text-lg);
+  font-weight: 620;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  min-height: 24px;
+  text-wrap: balance;
+}
+[data-cm-variant] .cm-current.cm-muted {
+  font-size: var(--cm-text-sm);
+  font-weight: 520;
+  color: var(--cm-text-3);
+}
+[data-cm-variant] .cm-current-detail {
+  font-size: var(--cm-text-xs);
+  font-weight: 520;
+  color: var(--cm-text-2);
+}
+[data-cm-variant] .cm-current-detail:empty {
+  display: none;
+}
+[data-cm-variant] .cm-center .cm-hints {
+  margin-top: 6px;
+  gap: 10px;
+}
+
+/* --- hints and keys --------------------------------------------------- */
+[data-cm-variant] .cm-hint {
+  gap: 6px;
+  font-size: var(--cm-text-xs);
+  font-weight: 520;
+  color: var(--cm-text-2);
+}
+[data-cm-variant] .cm-glyph {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--cm-radius-sm);
+  font: 620 13px/1 var(--cm-font);
+  color: var(--cm-text);
+  background: var(--cm-key);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong), inset 0 -1.5px 0 var(--cm-line-strong);
+}
+[data-cm-variant] .cm-glyph.cm-confirm {
+  color: var(--cm-accent-contrast);
+  background: var(--cm-accent-9);
+  box-shadow: inset 0 -1.5px 0 rgb(0 0 0 / 0.25);
+}
+
+/* --- panels (controls sheet, recent text) ------------------------------ */
+[data-cm-variant] .cm-sheet,
+[data-cm-variant] .cm-history {
+  border: none;
+  border-radius: var(--cm-radius-xl);
+  background: var(--cm-raised);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--cm-text);
+  box-shadow: var(--cm-shadow), inset 0 0 0 1px var(--cm-line-strong);
+  font-size: var(--cm-text-md);
+}
+[data-cm-variant] .cm-history {
+  width: min(760px, 88vw);
+  padding: 20px 24px;
+}
+[data-cm-variant] .cm-history header strong,
+[data-cm-variant] .cm-sheet header .cm-title {
+  font-size: var(--cm-text-lg);
+  font-weight: 620;
+  letter-spacing: -0.005em;
+  text-transform: none;
+  color: var(--cm-text);
+}
+[data-cm-variant] .cm-history button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--cm-radius-md);
+  font: 520 var(--cm-text-sm) var(--cm-font);
+  color: var(--cm-text);
+  background: var(--cm-field);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong);
+}
+[data-cm-variant] .cm-history-content {
+  margin: 14px -8px;
+  padding: 0 8px;
+}
+[data-cm-variant] .cm-history .cm-history-entry {
+  gap: 4px;
+  margin: 0 0 4px;
+  padding: 12px 16px;
+  border-radius: var(--cm-radius-lg);
+  background: transparent;
+  box-shadow: none;
+}
+[data-cm-variant] .cm-history-entry small {
+  font-size: var(--cm-text-xs);
+  font-weight: 520;
+  font-variant-numeric: tabular-nums;
+  color: var(--cm-text-3);
+}
+[data-cm-variant] .cm-history-entry span {
+  font-family: var(--cm-font-jp);
+  font-size: 21px;
+  line-height: 1.5;
+}
+[data-cm-variant] .cm-history button:focus-visible,
+[data-cm-variant] .cm-history-entry[aria-current="true"] {
+  outline: 2px solid var(--cm-focus);
+  outline-offset: -2px;
+  background: var(--cm-press);
+}
+[data-cm-variant] .cm-history-text {
+  font-family: var(--cm-font-jp);
+  font-size: 30px;
+}
+[data-cm-variant] .cm-history footer,
+[data-cm-variant] .cm-sheet footer {
+  font-size: var(--cm-text-xs);
+  font-weight: 520;
+  color: var(--cm-text-3);
+}
+[data-cm-variant] .cm-sheet {
+  width: min(880px, 92vw);
+  padding: 22px 26px 18px;
+}
+[data-cm-variant] .cm-sheet header {
+  margin-bottom: 14px;
+}
+[data-cm-variant] .cm-sheet-columns {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 6px 32px;
+}
+[data-cm-variant] .cm-sheet h3 {
+  margin: 4px 0 6px;
+  font-size: var(--cm-text-xs);
+  font-weight: 620;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--cm-text-2);
+}
+[data-cm-variant] .cm-sheet li {
+  grid-template-columns: 76px 1fr;
+  gap: 12px;
+  min-height: var(--cm-row-h);
+  padding: 9px 0;
+  border-top: 1px solid var(--cm-line);
+}
+[data-cm-variant] .cm-sheet li .cm-glyph {
+  min-width: 30px;
+  height: 28px;
+  border-radius: var(--cm-radius-sm);
+  font-size: 13px;
+}
+[data-cm-variant] .cm-sheet li b {
+  font-size: var(--cm-text-md);
+  font-weight: 520;
+}
+[data-cm-variant] .cm-sheet li small {
+  margin-top: 2px;
+  font-size: var(--cm-text-xs);
+  line-height: 1.4;
+  color: var(--cm-text-2);
+}
+
+/* --- the hint bar, the word and the free cursor ------------------------ */
+[data-cm-variant] .cm-hud {
+  gap: 18px;
+  padding: 8px 18px 8px 8px;
+  border-radius: var(--cm-radius-lg);
+  background: var(--cm-bar);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: var(--cm-shadow-pop), inset 0 0 0 1px var(--cm-line-strong);
+}
+[data-cm-variant] .cm-hud-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--cm-radius-md);
+  color: var(--cm-accent-text);
+  background: var(--cm-accent-soft);
+}
+[data-cm-variant] .cm-hud-mark svg {
+  width: 19px;
+  height: 19px;
+}
+[data-cm-variant] .cm-hud-mode {
+  padding: 3px 10px;
+  border-radius: var(--cm-radius-sm);
+  font-size: var(--cm-text-xs);
+  font-weight: 620;
+  color: var(--cm-accent-text);
+  background: var(--cm-accent-soft);
+  box-shadow: none;
+}
+[data-cm-variant] .cm-hud-mode[data-mode="popup"] {
+  color: var(--cm-accent-contrast);
+  background: var(--cm-accent-9);
+}
+[data-cm-variant] .cm-hud-message {
+  font-size: var(--cm-text-sm);
+  font-weight: 620;
+  color: var(--cm-text);
+}
+[data-cm-variant] .cm-word {
+  border: 2.5px solid var(--cm-accent-text);
+  border-radius: var(--cm-radius-md);
+  background: var(--cm-accent-soft);
+  box-shadow: 0 0 0 1px rgb(var(--cm-bg-rgb) / 0.6);
+}
+[data-cm-variant] .cm-free-cursor {
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--cm-accent-text);
+  background: radial-gradient(circle, var(--cm-accent-text) 0 3px, rgb(var(--cm-bg-rgb) / 0.4) 3.5px);
+  box-shadow: 0 0 0 1.5px rgb(var(--cm-bg-rgb) / 0.7), var(--cm-shadow-pop);
+}
+
+/* === Halo ====================================================================
+   Over the base above: the game blurs behind a frosted halo that fades out
+   past the hub, spokes fade as they leave it, and icons sit on rounded-square
+   tiles. Panels and the hint bar are frosted too, with inset rounded rows. */
+[data-cm-variant="halo"] .cm-glass {
+  background: radial-gradient(
+    circle closest-side,
+    rgb(var(--cm-bg-rgb) / 0.7) var(--cm-hub),
+    rgb(var(--cm-bg-rgb) / 0.4) var(--cm-orbit),
+    rgb(var(--cm-bg-rgb) / 0) 100%
+  );
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  mask-image: radial-gradient(circle closest-side, #000 calc(var(--cm-orbit) - 10px), transparent 100%);
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 calc(var(--cm-orbit) - 10px), transparent 100%);
+}
+[data-cm-variant="halo"] .cm-spoke {
+  stroke: url(#cm-spoke-fade);
+  stroke-width: 2;
+}
+[data-cm-variant="halo"] .cm-spoke.cm-selected {
+  stroke: var(--cm-accent-text);
+  stroke-width: 2.5;
+}
+[data-cm-variant="halo"] .cm-disc {
+  fill: rgb(var(--cm-raised-rgb) / 0.92);
+}
+[data-cm-variant="halo"] .cm-icon {
+  width: 66px;
+  height: 66px;
+  border-radius: 20px;
+  background: rgb(var(--cm-raised-rgb) / 0.72);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong);
+}
+[data-cm-variant="halo"] .cm-item.cm-selected .cm-icon {
+  background: var(--cm-raised);
+  box-shadow: var(--cm-shadow-pop), inset 0 0 0 2px var(--cm-accent-line);
+}
+[data-cm-variant="halo"] .cm-item[data-lit] .cm-icon::after {
+  bottom: 6px;
+}
+[data-cm-variant="halo"] .cm-glyph {
+  border-radius: 999px;
+}
+[data-cm-variant="halo"] .cm-sheet,
+[data-cm-variant="halo"] .cm-history {
+  border-radius: 20px;
+  background: rgb(var(--cm-raised-rgb) / 0.82);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+}
+[data-cm-variant="halo"] .cm-history .cm-history-entry {
+  border-radius: 12px;
+}
+[data-cm-variant="halo"] .cm-history button:focus-visible,
+[data-cm-variant="halo"] .cm-history-entry[aria-current="true"] {
+  outline: none;
+  background: var(--cm-raised);
+  box-shadow: var(--cm-shadow-pop), inset 0 0 0 2px var(--cm-accent-line);
+}
+[data-cm-variant="halo"] .cm-hud {
+  border-radius: 999px;
+  background: rgb(var(--cm-raised-rgb) / 0.82);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+}
+[data-cm-variant="halo"] .cm-hud-mark,
+[data-cm-variant="halo"] .cm-hud-mode {
+  border-radius: 999px;
+}
+[data-cm-variant="halo"] .cm-word {
+  border: 2px solid var(--cm-accent-line);
+  border-radius: 10px;
+  box-shadow: 0 0 0 4px var(--cm-accent-soft);
+}

@@ -76,7 +76,7 @@ if(window.__KIMOCHI_PLATFORM__?.os==='linux') {
     popupControl:control=>void emit('gnome-controller-popup-control',control),
     redraw:()=>{},quietText:()=>{},charRects:()=>null,nearText:()=>false,
     dictionary:()=> (action,params)=>rpc('dictionary',{apiAction:action,params}),
-    popupType:()=> 'builtin',buttons:()=>settings.controllerButtons,
+    popupType:()=> 'builtin',buttons:()=>settings.controllerButtons,appearance:()=>settings.appearance,
     lookupRange:async range=>{
       const unit=range.startContainer.parentElement.parentElement
       const match=unit.indices.find(entry=>entry.offset>=range.startOffset)

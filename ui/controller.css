@@ -1,7 +1,8 @@
 /* --- controller mode ---------------------------------------------------
-       The radial menu and the word cursor. Drawn over a game, so they bring
-       their own dark glass rather than borrowing the source's colours, and
-       they animate in and out quickly: the reader is mid-game. */
+       The radial menu and the word cursor: their layout and motion. Drawn over
+       a game, so they animate in and out quickly: the reader is mid-game.
+       Their look (Kimochi's colours, type and the Halo ring, light or dark) is
+       controller-variants.css, layered over this. */
 #controller {
   position: absolute;
   inset: 0;
@@ -128,19 +129,6 @@
   position: absolute;
   inset: 0;
   overflow: visible;
-}
-.cm-track {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 1;
-}
-.cm-ticks {
-  fill: none;
-  stroke: var(--cm-accent);
-  stroke-width: 5;
-  stroke-dasharray: 1 11;
-  opacity: 0.45;
-  animation: cm-spin 60s linear infinite;
 }
 .cm-disc {
   fill: rgba(0, 0, 0, 0.35);
@@ -575,11 +563,6 @@
 @keyframes cm-fade {
   from {
     opacity: 0;
-  }
-}
-@keyframes cm-spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 @keyframes cm-lit {

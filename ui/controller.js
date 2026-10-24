@@ -130,10 +130,26 @@ export function createController(context) {
   let mode = "idle";
   function setMode(next) {
     if (next === mode) return;
+    if (next !== "idle") applyAppearance();
     mode = next;
     context.modeChanged?.(next);
   }
-  /** How the mode was opened, so the hints name the right buttons. */
+  /**
+   * Kimochi's appearance for the controller's surfaces (controller-variants.css): the app's
+   * Light or Dark, or the system's when it follows the system. Read each time controller mode
+   * opens, so a change in Settings shows the next time.
+   */
+  function applyAppearance() {
+    const appearance = context.appearance?.();
+    const theme =
+      appearance === "light" || appearance === "dark"
+        ? appearance
+        : globalThis.matchMedia?.("(prefers-color-scheme: light)").matches
+          ? "light"
+          : "dark";
+    if (host.dataset) host.dataset.cmTheme = theme;
+  }
+    /** How the mode was opened, so the hints name the right buttons. */
   let input = "pad";
   /** The cursor the outline shows: the word cursor, or the character one (by character, or the free cursor). */
   let cursor = null;
@@ -258,20 +274,20 @@ export function createController(context) {
       {
         id: "history",
         label: "Recent text",
-        icon: ICONS.text,
+        icon: ICONS.history,
         enabled: typeof context.history === "function",
         unavailable: "Open recent text in Kimochi",
       },
       {
         id: "controls",
         label: "Kimochi",
-        icon: ICONS.dictionary,
+        icon: ICONS.app,
         enabled: true,
       },
       {
         id: "ocr-settings",
         label: "OCR settings",
-        icon: ICONS.scan,
+        icon: ICONS.settings,
         enabled: true,
       },
     ]);
@@ -318,6 +334,7 @@ export function createController(context) {
 
   async function openMenu(how = "pad") {
     input = how;
+    applyAppearance();
     controls.setButtons(context.buttons());
     const status = context.status();
     const center = status.center ?? {

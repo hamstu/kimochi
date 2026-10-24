@@ -346,6 +346,7 @@ controller = createController({
   dictionary: () => extensionApi,
   popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
   buttons: () => setting('controllerButtons'),
+  appearance: () => setting('appearance'),
   // Yomitan's frontend module is only imported for Yomitan: it loads Yomitan's own frontend.
   lookupRange: async (range) =>
     extensionHosted
@@ -3343,7 +3344,7 @@ if(window.__KIMOCHI_PLATFORM__?.os==='linux') {
     let result,error
     try {
       switch(p.action) {
-        case 'snapshot':result={hasText:state.annotations.length>0,autoOcr:Boolean(state.flags.autoOcrEnabled),autoAvailable:!isQuickShot(),scanId:state.appliedScanId,settings:{controllerButtons:setting('controllerButtons')}};break
+        case 'snapshot':result={hasText:state.annotations.length>0,autoOcr:Boolean(state.flags.autoOcrEnabled),autoAvailable:!isQuickShot(),scanId:state.appliedScanId,settings:{controllerButtons:setting('controllerButtons'),appearance:setting('appearance')}};break
         case 'scan':await onAction('triggerScan');result=true;break
         case 'action':if(p.name!=='toggleAutoOcr')throw new Error('Invalid controller action');await onAction(p.name);break
         case 'dictionary':if(p.apiAction!=='parseText')throw new Error('Invalid dictionary action');if(!extensionApi)throw new Error('Word splitting needs Yomitan; using the segmenter');result=await extensionApi(p.apiAction,p.params);break

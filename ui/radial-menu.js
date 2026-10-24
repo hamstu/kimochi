@@ -4,14 +4,21 @@
  *
  * Pointed at with the left stick, stepped through with the D-pad or arrow keys, and clicked
  * with the mouse. Items sit at even angles clockwise from the top, so with four items each
- * D-pad direction names one item directly. The menu draws and reports; what an item does is
- * the caller's business.
+ * D-pad direction names one item directly. The chosen item is named in the hub. The menu draws
+ * and reports; what an item does is the caller's business.
  */
 
 const SVG = "http://www.w3.org/2000/svg";
-const RADIUS = 168;
-const INNER = 92;
-const GAP_DEGREES = 3;
+/**
+ * The ring's geometry (the Halo design, styled by controller-variants.css): the hub naming the
+ * chosen item, the orbit the icons sit on, the halo fading out past the hub, and how far the
+ * spokes stop short of the hub and of each icon.
+ */
+const HUB = 96;
+const ORBIT = 198;
+const HALO = 292;
+const SPOKE_IN = 6;
+const SPOKE_OUT = 44;
 /** How far the stick must lean before it points at an item. */
 export const AIM_THRESHOLD = 0.5;
 /** How far past an item's edge the stick may stray before the next item takes over. */
@@ -24,12 +31,17 @@ const POINTER_THRESHOLD = 0.3;
  */
 const POINTER_SMOOTHING_MS = 18;
 
+/** Lucide icons: one for each menu item, and the read-along mark. */
 export const ICONS = {
-  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8h8"/><path d="M7 12h10"/><path d="M7 16h6"/>',
   dictionary:
-    '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>',
+    '<path d="M12 7v14"/><path d="M16 12h2"/><path d="M16 8h2"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/><path d="M6 12h2"/><path d="M6 8h2"/>',
   auto: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
-  text: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
+  history:
+    '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  app: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>',
+  settings:
+    '<path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/>',
 };
 
 /** A stick's direction in degrees clockwise from the top, in [0, 360). */
@@ -149,58 +161,70 @@ export class RadialMenu {
     ring.className = "cm-ring";
     ring.style.left = `${center.x}px`;
     ring.style.top = `${center.y}px`;
-
-    const size = RADIUS * 2 + 48;
+    const size = HALO * 2;
     ring.style.setProperty("--cm-size", `${size}px`);
-    ring.style.setProperty("--cm-radius", `${RADIUS}px`);
+    ring.style.setProperty("--cm-hub", `${HUB}px`);
+    ring.style.setProperty("--cm-orbit", `${ORBIT}px`);
+    ring.style.setProperty("--cm-halo", `${HALO}px`);
+    // The halo: a fading wash (and blur) outside the hub, behind the spokes and icons.
     const glass = document.createElement("div");
     glass.className = "cm-glass";
     ring.append(glass);
+
     const svg = document.createElementNS(SVG, "svg");
     svg.setAttribute("class", "cm-wedges");
     svg.setAttribute("viewBox", `${-size / 2} ${-size / 2} ${size} ${size}`);
+    const span = 360 / items.length;
+    // Spokes fade from the hub out towards their icons.
     svg.innerHTML = `
       <defs>
-        <radialGradient id="cm-glow" cx="0" cy="0" r="${RADIUS}" gradientUnits="userSpaceOnUse">
-          <stop offset="0.5" stop-color="var(--cm-accent)" stop-opacity="0.05"/>
-          <stop offset="1" stop-color="var(--cm-accent)" stop-opacity="0.55"/>
+        <radialGradient id="cm-spoke-fade" cx="0" cy="0" r="${ORBIT}" gradientUnits="userSpaceOnUse">
+          <stop offset="${HUB / ORBIT}" class="cm-fade-from"/>
+          <stop offset="1" class="cm-fade-to"/>
         </radialGradient>
-      </defs>
-      <circle class="cm-track" r="${RADIUS + 14}"/>
-      <circle class="cm-ticks" r="${RADIUS + 14}"/>
-      <circle class="cm-disc" r="${INNER - 10}"/>`;
-    const span = 360 / items.length;
+      </defs>`;
+    // The wedges draw nothing: they are where the mouse points at an item.
     this.wedges = items.map((item, index) => {
       const middle = index * span;
       const path = document.createElementNS(SVG, "path");
       path.setAttribute(
         "d",
-        sectorPath(
-          middle - span / 2 + GAP_DEGREES,
-          middle + span / 2 - GAP_DEGREES,
-          RADIUS,
-          INNER,
-        ),
+        sectorPath(middle - span / 2, middle + span / 2, HALO - 8, HUB),
       );
       path.setAttribute("class", "cm-wedge");
       path.dataset.index = String(index);
       svg.append(path);
       return path;
     });
+    this.spokes = items.map((item, index) => {
+      const [x1, y1] = polar(index * span, HUB + SPOKE_IN);
+      const [x2, y2] = polar(index * span, ORBIT - SPOKE_OUT);
+      const spoke = document.createElementNS(SVG, "line");
+      Object.entries({ class: "cm-spoke", x1, y1, x2, y2 }).forEach(([name, value]) =>
+        spoke.setAttribute(name, String(value)),
+      );
+      svg.append(spoke);
+      return spoke;
+    });
+    const disc = document.createElementNS(SVG, "circle");
+    disc.setAttribute("class", "cm-disc");
+    disc.setAttribute("r", String(HUB));
+    svg.append(disc);
     ring.append(svg);
+
     // The pointer turns every frame the stick moves, so it is its own layer: rotating it
-    // repaints nothing else, the glowing wedges and the blurred glass behind them included.
+    // repaints nothing else, the blurred halo behind it included.
     const pointer = document.createElement("div");
     pointer.className = "cm-pointer";
-    pointer.style.setProperty("--cm-pointer-size", `${INNER * 2}px`);
-    pointer.innerHTML = `<svg viewBox="${-INNER} ${-INNER} ${INNER * 2} ${INNER * 2}" aria-hidden="true"><path d="M0 ${-INNER + 4}l-7 11h14z"/></svg>`;
+    pointer.style.setProperty("--cm-pointer-size", `${HUB * 2}px`);
+    pointer.innerHTML = `<svg viewBox="${-HUB} ${-HUB} ${HUB * 2} ${HUB * 2}" aria-hidden="true"><path d="M0 ${-HUB - 3}l-8 10h16z"/></svg>`;
     ring.append(pointer);
     this.pointer = pointer;
     this.aimTarget = null;
     this.aimDrawn = null;
 
     this.labels = items.map((item, index) => {
-      const [x, y] = polar(index * span, (RADIUS + INNER) / 2);
+      const [x, y] = polar(index * span, ORBIT);
       const label = document.createElement("div");
       label.className = "cm-item";
       label.style.setProperty("--x", `${x}px`);
@@ -225,11 +249,13 @@ export class RadialMenu {
     middle.innerHTML = `
       <div class="cm-title">Kimochi</div>
       <div class="cm-current"></div>
+      <div class="cm-current-detail"></div>
       <div class="cm-hints">
         <span class="cm-hint"><kbd class="cm-glyph cm-confirm">${input === "keys" ? "↵" : "A"}</kbd>Select</span>
         <span class="cm-hint"><kbd class="cm-glyph cm-cancel">${input === "keys" ? "esc" : "B"}</kbd>Close</span>
       </div>`;
     this.current = middle.querySelector(".cm-current");
+    this.currentDetail = middle.querySelector(".cm-current-detail");
     ring.append(middle);
 
     // The mouse works too: the overlay passes clicks through except over what it reports as
@@ -341,7 +367,12 @@ export class RadialMenu {
     this.labels.forEach((label, index) =>
       label.classList.toggle("cm-selected", index === this.selected),
     );
+    this.spokes.forEach((spoke, index) => {
+      spoke.classList.toggle("cm-selected", index === this.selected);
+      spoke.classList.toggle("cm-disabled", !this.items[index].enabled);
+    });
     const item = this.items[this.selected];
+    this.currentDetail.textContent = item?.enabled ? (item.detail ?? "") : "";
     this.current.textContent = item
       ? item.enabled
         ? item.label
