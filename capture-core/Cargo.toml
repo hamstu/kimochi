@@ -7,6 +7,7 @@ license = "GPL-3.0-only"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 png = "0.18"
+rtrb = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 screencapturekit = { version = "=10.0.3", features = ["macos_14_0"] }
