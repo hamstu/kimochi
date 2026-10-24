@@ -127,8 +127,11 @@ pub struct Made {
     pub trimmed: bool,
 }
 
+/// Initialises the ONNX Runtime speech detection runs on (`meiki_ocr::onnx_runtime` in the app).
+type Runtime = Box<dyn Fn() -> Result<(), String> + Send + Sync>;
+
 pub struct SentenceAudio {
-    app: tauri::AppHandle,
+    runtime: Runtime,
     settings: Arc<Settings>,
     ring: Arc<Mutex<AudioRing>>,
     timeline: Mutex<Timeline>,
@@ -146,9 +149,13 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 impl SentenceAudio {
     pub fn new(app: tauri::AppHandle, settings: Arc<Settings>) -> Arc<Self> {
+        Self::with_runtime(settings, Box::new(move || crate::meiki_ocr::onnx_runtime(&app)))
+    }
+
+    fn with_runtime(settings: Arc<Settings>, runtime: Runtime) -> Arc<Self> {
         let config = Config::load(&settings);
         Arc::new(Self {
-            app,
+            runtime,
             settings,
             ring: Arc::new(Mutex::new(AudioRing::new(48_000, config.seconds))),
             timeline: Mutex::new(Timeline::default()),
@@ -224,9 +231,7 @@ impl SentenceAudio {
     /// Speech in `samples`, or None when speech detection is off or cannot run.
     fn speech(&self, samples: &[f32], sample_rate: u32) -> Option<Vec<trim::Span>> {
         let mut vad = lock(&self.vad);
-        let vad = vad.get_or_insert_with(|| {
-            crate::meiki_ocr::onnx_runtime(&self.app).and_then(|()| vad::Vad::new())
-        });
+        let vad = vad.get_or_insert_with(|| (self.runtime)().and_then(|()| vad::Vad::new()));
         match vad {
             Ok(vad) => vad.speech(samples, sample_rate).map_err(|e| eprintln!("[sentence-audio] {e}")).ok(),
             Err(e) => {
@@ -413,14 +418,22 @@ fn record(generation: u64, current: Arc<AtomicU64>, ring: Arc<Mutex<AudioRing>>,
 /// After the relay carried a dictionary extension's request: when it was an `addNote` that
 /// AnkiConnect accepted, the card's audio follows.
 pub fn after_relay(app: &tauri::AppHandle, url: &str, request: &Value, reply_status: u16, reply_body: &str) {
-    if request.get("action").and_then(Value::as_str) != Some("addNote") || reply_status != 200 {
-        return;
-    }
     let Some(service) = app.try_state::<Arc<SentenceAudio>>() else { return };
     if !service.recording() {
         return;
     }
-    let Some(note_id) = added_note_id(reply_body) else { return };
+    let Some((anki, note_id, texts)) = added_card(url, request, reply_status, reply_body) else { return };
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn(service.attach(anki, note_id, texts, None));
+}
+
+/// The card a relayed request added: where its AnkiConnect is (the extension's address and key),
+/// its id, and its fields' text.
+fn added_card(url: &str, request: &Value, reply_status: u16, reply_body: &str) -> Option<(Anki, u64, Vec<String>)> {
+    if request.get("action").and_then(Value::as_str) != Some("addNote") || reply_status != 200 {
+        return None;
+    }
+    let note_id = added_note_id(reply_body)?;
     let texts = request
         .pointer("/params/note/fields")
         .and_then(Value::as_object)
@@ -430,8 +443,7 @@ pub fn after_relay(app: &tauri::AppHandle, url: &str, request: &Value, reply_sta
         url: url.to_string(),
         key: request.get("key").and_then(Value::as_str).map(str::to_string),
     };
-    let service = service.inner().clone();
-    tauri::async_runtime::spawn(service.attach(anki, note_id, texts, None));
+    Some((anki, note_id, texts))
 }
 
 /// The new note's id from `addNote`'s answer: `{"result": id, "error": null}` (API version 6),
@@ -498,6 +510,23 @@ mod tests {
     }
 
     #[test]
+    fn a_relayed_addnote_names_the_card_and_where_its_anki_is() {
+        let request = json!({
+            "action": "addNote", "version": 2, "key": "theirs",
+            "params": { "note": { "deckName": "D", "fields": { "Sentence": "猫が好き。", "Word": "猫", "Freq": 3 } } }
+        });
+        let (anki, id, mut texts) = added_card("http://127.0.0.1:8765", &request, 200, "1234").unwrap();
+        texts.sort();
+        assert_eq!((anki.url.as_str(), anki.key.as_deref(), id), ("http://127.0.0.1:8765", Some("theirs"), 1234));
+        assert_eq!(texts, vec!["猫", "猫が好き。"]);
+        assert!(added_card("u", &request, 403, "1234").is_none(), "refused");
+        assert!(added_card("u", &request, 200, r#"{"result":null,"error":"duplicate"}"#).is_none());
+        let mut other = request.clone();
+        other["action"] = json!("updateNoteFields");
+        assert!(added_card("u", &other, 200, "null").is_none(), "only new cards");
+    }
+
+    #[test]
     fn settings_are_read_with_defaults_and_limits() {
         let dir = std::env::temp_dir().join(format!("kimochi-sentence-audio-{}", std::process::id()));
         let settings = Settings::load(dir.join("settings.json"));
@@ -508,6 +537,87 @@ mod tests {
         let config = Config::load(&settings);
         assert!(config.enabled && config.trim);
         assert_eq!((config.seconds, config.field.as_str(), config.start_offset_ms), (120.0, "Audio", -200.0));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The whole path on this Mac, opt-in, with a fake AnkiConnect: records system audio while two
+    /// lines' speech plays (out loud, at half volume), then attaches the first line's audio to a
+    /// card. `KIMOCHI_ORT=…/libonnxruntime.dylib KIMOCHI_SPEECH_WAV=a.wav KIMOCHI_SPEECH_WAV2=b.wav
+    /// [KIMOCHI_OUT=clip.mp3] cargo test --bin kimochi card_gets -- --ignored --nocapture`. Needs
+    /// Screen Recording for the terminal.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn a_card_gets_its_lines_voice_from_system_audio() {
+        use crate::reader::ankiconnect::tests::serve;
+        let ort_path = std::env::var("KIMOCHI_ORT").expect("KIMOCHI_ORT");
+        let wavs = [std::env::var("KIMOCHI_SPEECH_WAV").unwrap(), std::env::var("KIMOCHI_SPEECH_WAV2").unwrap()];
+        let dir = std::env::temp_dir().join(format!("kimochi-sentence-audio-e2e-{}", std::process::id()));
+        let settings = Arc::new(Settings::load(dir.join("settings.json")));
+        settings.set("sentenceAudio", json!({ "enabled": true })).unwrap();
+        let service = SentenceAudio::with_runtime(
+            settings,
+            Box::new(move || ort::init_from(ort_path.clone()).commit().map(|_| ()).map_err(|e| e.to_string())),
+        );
+        service.settings_changed();
+        for _ in 0..50 {
+            if service.recording() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(service.recording(), "{:?}", service.status().state);
+        std::thread::sleep(Duration::from_millis(500));
+
+        let play = |path: &str| {
+            let status = std::process::Command::new("afplay").args(["-v", "0.5", path]).status().unwrap();
+            assert!(status.success());
+        };
+        let lines = ["今日はいい天気ですね。散歩に行きましょう。", "猫が好きです。"];
+        let mut spoken_ms = Vec::new();
+        for (i, (text, wav)) in lines.iter().zip(&wavs).enumerate() {
+            service.record_line(Line { uid: i.to_string(), text: text.to_string(), ts: now_ms(), ocr: false });
+            let started = now_ms();
+            play(wav);
+            spoken_ms.push(now_ms() - started);
+            std::thread::sleep(Duration::from_millis(400));
+        }
+
+        let (url, seen) = serve(|body| {
+            let request: Value = serde_json::from_str(body).unwrap();
+            let result = match request["action"].as_str().unwrap() {
+                "notesInfo" => json!([{ "noteId": 42, "fields": {
+                    "Word": { "value": "天気", "order": 0 },
+                    "SentenceAudio": { "value": "", "order": 1 }
+                } }]),
+                "storeMediaFile" => request["params"]["filename"].clone(),
+                _ => Value::Null,
+            };
+            (200, json!({ "result": result, "error": null }).to_string())
+        });
+        // The extension's card: its sentence field holds the first line, in markup.
+        let texts = vec!["天気".to_string(), "<b>今日</b>はいい天気ですね。".to_string()];
+        service.clone().attach(Anki { url, key: None }, 42, texts, None).await;
+
+        let last = service.status().last.unwrap();
+        eprintln!("{}", last.message);
+        assert!(last.ok, "{}", last.message);
+        let requests = seen.lock().unwrap().clone();
+        let body = |action: &str| -> Value {
+            let raw = requests.iter().find(|r| r.contains(&format!("\"action\":\"{action}\""))).unwrap();
+            serde_json::from_str(raw.split_once("\r\n\r\n").unwrap().1).unwrap()
+        };
+        let stored = body("storeMediaFile");
+        let mp3 = base64::engine::general_purpose::STANDARD.decode(stored["params"]["data"].as_str().unwrap()).unwrap();
+        if let Ok(out) = std::env::var("KIMOCHI_OUT") {
+            std::fs::write(out, &mp3).unwrap();
+        }
+        let seconds = mp3.len() as f64 * 8.0 / 96_000.0;
+        let first_line = spoken_ms[0] / 1000.0;
+        eprintln!("clip {seconds:.2}s; the first line played for {first_line:.2}s, the second for {:.2}s", spoken_ms[1] / 1000.0);
+        assert!((seconds - first_line).abs() < 0.8, "clip {seconds:.2}s vs line {first_line:.2}s");
+        let updated = body("updateNoteFields");
+        let sound = updated["params"]["note"]["fields"]["SentenceAudio"].as_str().unwrap();
+        assert_eq!(sound, format!("[sound:{}]", stored["params"]["filename"].as_str().unwrap()));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

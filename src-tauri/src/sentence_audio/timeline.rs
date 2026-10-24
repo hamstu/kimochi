@@ -13,8 +13,9 @@ const KEEP: usize = 300;
 /// How far before its arrival a line's voice may start.
 const LEAD_HOOKED_MS: f64 = 300.0;
 const LEAD_OCR_MS: f64 = 1_500.0;
-/// How long the voice may run on after the next line arrived.
-const TAIL_MS: f64 = 300.0;
+/// How long the voice may run on after the next line arrived. Little: advancing to the next line
+/// cuts a voiced line short, and the next line's voice starts right after it arrives.
+const TAIL_MS: f64 = 100.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Line {
@@ -168,7 +169,7 @@ mod tests {
     fn a_line_runs_from_its_arrival_to_the_next_line() {
         let t = timeline(&[("a", "一", 1_000.0), ("b", "二", 5_000.0), ("c", "三", 9_000.0)]);
         let b = t.mined(&["二"]).unwrap();
-        assert_eq!(t.window(b, 20_000.0, 30_000.0), Window { from: 4_700.0, to: 9_300.0, anchor: 5_000.0 });
+        assert_eq!(t.window(b, 20_000.0, 30_000.0), Window { from: 4_700.0, to: 9_100.0, anchor: 5_000.0 });
         // The newest line runs until now.
         let c = t.mined(&["三"]).unwrap();
         assert_eq!(t.window(c, 12_000.0, 30_000.0).to, 12_000.0);

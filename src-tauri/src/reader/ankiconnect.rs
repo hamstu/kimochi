@@ -415,7 +415,7 @@ pub async fn anki_connect_status(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -455,7 +455,7 @@ mod tests {
 
     /// A one-request-at-a-time HTTP server answering every request with `reply(body)`, and
     /// recording each request's raw headers and body.
-    fn serve(reply: impl Fn(&str) -> (u16, String) + Send + 'static) -> (String, Arc<Mutex<Vec<String>>>) {
+    pub(crate) fn serve(reply: impl Fn(&str) -> (u16, String) + Send + 'static) -> (String, Arc<Mutex<Vec<String>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let seen = Arc::new(Mutex::new(Vec::new()));
