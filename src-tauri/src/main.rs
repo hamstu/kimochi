@@ -20,6 +20,7 @@ mod dictionary_runtime;
 mod engine_probe;
 mod extension_store;
 mod extensions;
+mod loopback;
 mod gamepad;
 mod google_lens;
 mod history_merge;
@@ -1151,6 +1152,41 @@ fn app_quit(app: tauri::AppHandle, window: tauri::WebviewWindow, state: State<Sh
     record(&app, &state, json!({ "check": "app-quit", "window": window.label(), "at": now_ms() }));
     shutdown_platform();
     app.exit(0);
+}
+
+/// `kimochi-ext`: the extension windows' native commands, for a page Tauri sees as a remote
+/// origin (Hachidori's loopback origin, loopback.rs), which never reaches app commands. The
+/// same functions as the app commands of `extensions::EXTENSION_WINDOW_COMMANDS`, plus the
+/// storage copy's (`loopback::MIGRATION_COMMANDS`). Granted to `ext-hachidori` and the copy
+/// window for exactly the loopback origin at runtime (`loopback::add_capabilities`), and to the
+/// copy window's scheme page in capabilities/extension-migration.json; each window may call only
+/// its own commands (`loopback::plugin_command_allowed`).
+fn ext_ipc_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    let commands: Box<dyn Fn(tauri::ipc::Invoke) -> bool + Send + Sync> = Box::new(tauri::generate_handler![
+        ext_relay,
+        ext_relay_listen,
+        ext_relay_bytes,
+        report,
+        reader::ankiconnect::anki_connect_relay,
+        loopback::ext_migration_begin,
+        loopback::ext_migration_put,
+        loopback::ext_migration_exported,
+        loopback::ext_migration_manifest,
+        loopback::ext_migration_get,
+        loopback::ext_migration_done,
+        loopback::ext_migration_failed,
+    ]);
+    tauri::plugin::Builder::new("kimochi-ext")
+        .invoke_handler(move |invoke: tauri::ipc::Invoke| {
+            let label = invoke.message.webview_ref().label().to_string();
+            if let Err(message) = loopback::plugin_command_allowed(&label, invoke.message.command()) {
+                refuse_extension_command(invoke.message.webview_ref().app_handle(), &label, invoke.message.command());
+                invoke.resolver.reject(message);
+                return true;
+            }
+            commands(invoke)
+        })
+        .build()
 }
 
 /// Relays JSON between window labels. Deliberately generic: no Yomitan knowledge
@@ -2529,6 +2565,8 @@ fn main() {
     if platform::steam_input::run_watchdog() { return; }
     #[cfg(target_os = "linux")]
     if platform::dictionary_images::run_check() { return; }
+    // Before WebKitGTK starts a web process: Hachidori's threaded engine (loopback.rs).
+    loopback::prepare_environment();
     // Before anything claims a shortcut, the gamepad or a capture stream: any other copy
     // of Kimochi, of any build, is asked to quit first. See platform/macos/instance.rs.
     #[cfg(target_os = "macos")]
@@ -2554,6 +2592,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(ext_ipc_plugin())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Self-updates (updater.rs); the check, download and install are our own commands.
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -2888,6 +2927,26 @@ fn main() {
             });
             app.manage(service.clone());
             record(&handle, &service, website_data);
+            // Before any window is built: their preludes name Hachidori's origin, the loopback
+            // one on macOS and Linux once its storage lives there (loopback.rs).
+            let hachidori_origin = loopback::install(&handle);
+            eprintln!("kimochi: {hachidori_origin}");
+            record(&handle, &service, hachidori_origin);
+            {
+                // A pending copy of Hachidori's storage to its loopback origin runs once the
+                // session has settled, in a hidden window of its own.
+                let app = handle.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(15));
+                    panels::later(&app.clone(), move |app, turn| {
+                        if let Err(error) = loopback::start_migration(turn, app) {
+                            if let Some(service) = app.try_state::<Shared>() {
+                                record(app, &service, json!({ "check": "hachidori-migration", "phase": "failed-to-start", "error": error }));
+                            }
+                        }
+                    });
+                });
+            }
             // Before any window is built: the windows ask which profile's files to open.
             account::install(&handle).map_err(std::io::Error::other)?;
             {

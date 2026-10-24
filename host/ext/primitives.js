@@ -180,6 +180,23 @@ export async function listenRelay(tauri, label, onPayload, onDuplicate = () => {
 }
 
 /**
+ * The name of an app command the extension window's host invokes. On Hachidori's loopback origin
+ * (macOS, Linux; src-tauri/src/loopback.rs) Tauri treats the page as remote, and a remote page
+ * never reaches app commands, so native's prelude sets `__kimochiExtCommandPrefix` and the same
+ * commands go to the `kimochi-ext` plugin. Unchanged everywhere else.
+ */
+export function extCommand(win, command) {
+  const prefix = win?.__kimochiExtCommandPrefix
+  return typeof prefix === 'string' ? prefix + command : command
+}
+
+/** `win.__TAURI__` with `core.invoke` going through `extCommand` (same object when no prefix). */
+export function extTauri(win, tauri = win?.__TAURI__) {
+  if (typeof win?.__kimochiExtCommandPrefix !== 'string' || !tauri?.core?.invoke) return tauri
+  return { ...tauri, core: { ...tauri.core, invoke: (command, args, options) => tauri.core.invoke(extCommand(win, command), args, options) } }
+}
+
+/**
  * The tab id of a window, from its label: the overlay is tab 1, every other window a stable
  * non-zero id of its own (10ten drops `sender.tab.id === 0`; Yomitan's backend routes by tab id).
  */

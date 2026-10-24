@@ -55,10 +55,11 @@ export const ENGINES = {
       probe: { kind: 'idbfs-paths', database: '/dicts', store: 'FILE_DATA', opfs: true }
     },
     // Where its engine keeps dictionaries: always that IDBFS store (frame.js `keepEngineOnIdbfs`).
-    // In a cross-origin-isolated window (Windows: the scheme sends Hachidori's manifest COOP/COEP,
-    // extensions.rs `isolation_headers`) offscreen.js would otherwise move to its OPFS engine,
-    // which cannot see the dictionaries the single-thread engine imported into IDBFS. Its threaded
-    // IDBFS engine reads and writes the same store and still imports on several threads.
+    // On its cross-origin-isolated loopback origin (src-tauri/src/loopback.rs) offscreen.js would
+    // otherwise move to its OPFS engine where the webview offers it (WebView2), which cannot see
+    // the dictionaries the single-thread engine imported into IDBFS and that the one-time copy
+    // brought over. Its threaded IDBFS engine reads and writes the same store and still imports on
+    // several threads.
     engineStorage: 'idbfs',
     deniedHosts: [],
     // Absent (§5.3): background.js `createTimerAlarms()` takes over when `chrome.alarms` is

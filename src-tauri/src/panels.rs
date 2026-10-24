@@ -452,6 +452,11 @@ pub fn extension_window(
     if !extensions::IDS.contains(&engine) {
         return Err(format!("invalid: {engine:?} is not an extension engine"));
     }
+    // Hachidori's storage is on its loopback origin but that port is held by another program:
+    // no window at all, rather than an engine without its dictionaries (loopback.rs).
+    if let Some(reason) = crate::loopback::unavailable(engine) {
+        return Err(format!("unavailable: {reason}"));
+    }
     let spec = extension_window_spec(engine);
     if let Some(window) = app.get_webview_window(&spec.label) {
         if !reload {
@@ -467,7 +472,14 @@ pub fn extension_window(
         .parse()
         .map_err(|e| format!("native: {} is not a URL: {e}", spec.url))?;
     let allowed = engine.to_string();
-    let mut builder = tauri::WebviewWindowBuilder::new(app, &spec.label, tauri::WebviewUrl::CustomProtocol(url))
+    // On the loopback origin (Hachidori, macOS and Linux) the page is an ordinary HTTP page.
+    let loopback = crate::loopback::origin(engine).is_some();
+    let webview_url = if loopback {
+        tauri::WebviewUrl::External(url)
+    } else {
+        tauri::WebviewUrl::CustomProtocol(url)
+    };
+    let mut builder = tauri::WebviewWindowBuilder::new(app, &spec.label, webview_url)
         .title(format!("Kimochi {engine} background"))
         .visible(false)
         .focused(false)
@@ -482,6 +494,10 @@ pub fn extension_window(
         .initialization_script_for_all_frames(platform::platform_prelude())
         .initialization_script_for_all_frames(spec.prelude.clone())
         .on_navigation(move |u| u.as_str() == "about:blank" || platform::is_extension_url_of(u, &allowed));
+    if loopback {
+        // A remote origin to Tauri: its host's commands go through the `kimochi-ext` plugin.
+        builder = builder.initialization_script(crate::loopback::ipc_prelude());
+    }
     if let Some(script) = extensions::init_script(app, &spec.label, extensions::EXT_HOST)? {
         builder = builder.initialization_script_for_all_frames(script);
     }

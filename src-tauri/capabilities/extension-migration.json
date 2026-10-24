@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "extension-migration",
+  "description": "The hidden window that copies Hachidori's storage from its scheme origin to its loopback origin once (loopback.rs, docs/HACHIDORI_IMPORT_THREADS.md). On the scheme page it may call only the copy's kimochi-ext commands (main.rs ext_ipc_plugin, loopback.rs plugin_command_allowed); the loopback page gets the same at runtime for exactly that origin. No events, no http, no app commands beyond the invoke guard's.",
+  "windows": [
+    "ext-migrate-hachidori"
+  ],
+  "permissions": [
+    "kimochi-ext:default"
+  ]
+}

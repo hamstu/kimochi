@@ -1,5 +1,28 @@
 fn main() {
-    tauri_build::build();
+    // `kimochi-ext` (main.rs `ext_ipc_plugin`): the extension windows' commands as a plugin, so
+    // capabilities can grant them to Hachidori's loopback origin, which Tauri treats as remote and
+    // never lets reach app commands. Its default permission allows them all; which window may
+    // call which is checked in the plugin itself (loopback.rs `plugin_command_allowed`).
+    tauri_build::try_build(tauri_build::Attributes::new().plugin(
+        "kimochi-ext",
+        tauri_build::InlinedPlugin::new()
+            .commands(&[
+                "ext_relay",
+                "ext_relay_listen",
+                "ext_relay_bytes",
+                "report",
+                "anki_connect_relay",
+                "ext_migration_begin",
+                "ext_migration_put",
+                "ext_migration_exported",
+                "ext_migration_manifest",
+                "ext_migration_get",
+                "ext_migration_done",
+                "ext_migration_failed",
+            ])
+            .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands),
+    ))
+    .expect("tauri-build failed");
     // The upstream Swift bridge assumes XcodeDefault.xctoolchain. CLT puts
     // compatibility archives beside its own swiftc instead. Discover, don't
     // change xcode-select globally or depend on an unaccepted Xcode license.

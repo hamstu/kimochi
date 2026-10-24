@@ -113,8 +113,14 @@ test('the extension windows get event listening and the same HTTP scope as netwo
   assert.deepEqual(scope.slice().sort(), scopeFromCapability.slice().sort())
   // No other capability names an extension window (a broader grant would apply to it too).
   const { readdir } = await import('node:fs/promises')
+  // Except Hachidori's one-time storage copy window (src-tauri/src/loopback.rs): only the copy's
+  // own plugin commands, nothing else.
+  const migration = await read('extension-migration.json')
+  assert.deepEqual(migration.windows, ['ext-migrate-hachidori'])
+  assert.deepEqual(migration.permissions, ['kimochi-ext:default'])
+  assert.equal(migration.remote, undefined)
   for (const file of await readdir(dir)) {
-    if (!file.endsWith('.json') || file === 'extension-windows.json') continue
+    if (!file.endsWith('.json') || file === 'extension-windows.json' || file === 'extension-migration.json') continue
     const capability = await read(file)
     for (const window of capability.windows ?? []) {
       assert.ok(!/^ext-|\*/.test(window), `${file} lists ${window}, which would reach an extension window`)

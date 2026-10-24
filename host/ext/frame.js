@@ -17,6 +17,7 @@ import { createNetworkServer, installDirectNetwork, installFrameNetwork } from '
 import { installWorkerNetwork } from './worker-network.js'
 import { probeClaims, storeMarker } from './persistence.js'
 import { describe, randomId, within } from './util.js'
+import { extCommand } from './primitives.js'
 
 export const BACKGROUND_PAGE = '/__kimochi/ext-background.html'
 
@@ -42,7 +43,7 @@ export function installFrame(win, { engine, descriptor }) {
     report = (value) => {
       const record = { check: 'ext-host', engine, window: windowLabel, kind, ...value, at: Date.now() }
       console.log('[ext-host]', record)
-      void win.__TAURI__.core.invoke('report', { value: record }).catch(() => {})
+      void win.__TAURI__.core.invoke(extCommand(win, 'report'), { value: record }).catch(() => {})
     }
     upstream = connectViaRelay(win, {
       engine,
@@ -133,8 +134,8 @@ export function installFrame(win, { engine, descriptor }) {
  * its threaded IDBFS runtime when `navigator.storage.getDirectory` is missing, so the offscreen
  * document's own StorageManager stops offering it; that check is the only use of it there. The
  * engine workers, the persistence probe and the settings pages keep theirs. Without cross-origin
- * isolation (macOS, Linux) offscreen.js has already chosen its single-thread IDBFS engine before
- * it looks, so this changes nothing there.
+ * isolation (the custom scheme) offscreen.js has already chosen its single-thread IDBFS engine
+ * before it looks, so this changes nothing there.
  */
 export function keepEngineOnIdbfs(win) {
   const storage = win.navigator?.storage

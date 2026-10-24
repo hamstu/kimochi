@@ -59,7 +59,15 @@ export function hachidoriReadiness(reply, installation = null) {
       phase: "setup-needed",
       message: "Open Hachidori settings to install or import a dictionary.",
     };
-  return { phase: "ready", message: "Hachidori is ready." };
+  // How its engine runs, for the log: several threads only where its pages are cross-origin
+  // isolated (Windows; macOS and Linux on the loopback origin, src-tauri/src/loopback.rs).
+  return {
+    phase: "ready",
+    message: "Hachidori is ready.",
+    dictionaries: reply.dictionaryCount,
+    threaded: reply.threaded === true,
+    storage: reply.storageBackend ?? null,
+  };
 }
 
 /** Whether a readiness status allows lookups: its `lookups` when it says, else only when ready. */

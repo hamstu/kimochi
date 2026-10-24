@@ -256,9 +256,9 @@ pub fn manifest_isolation(id: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-/// The isolation headers every response on extension `id`'s scheme carries: its manifest's
-/// policies where this webview can isolate a custom-scheme document
-/// (`platform::CROSS_ORIGIN_ISOLATION`, Windows), else none. `Cross-Origin-Resource-Policy`
+/// The isolation headers a response for extension `id` carries: its manifest's policies when
+/// `supported` (Hachidori's loopback origin, `loopback.rs`; never the custom scheme, see
+/// `platform::CROSS_ORIGIN_ISOLATION`), else none. `Cross-Origin-Resource-Policy`
 /// keeps its scripts, CSS and fonts loadable by the app origin's documents should one of
 /// them ever require it.
 pub fn isolation_headers(id: &str, supported: bool) -> Vec<(&'static str, &'static str)> {
@@ -272,6 +272,19 @@ pub fn isolation_headers(id: &str, supported: bool) -> Vec<(&'static str, &'stat
     }
 }
 
+/// The `Content-Type` and bytes an extension origin answers for `uri_path`: the extension's own
+/// file or a host page (`/__kimochi/…`). Shared by the custom scheme and Hachidori's loopback
+/// origin (`loopback.rs`), so both serve exactly the same tree.
+pub fn lookup(app: &tauri::AppHandle, id: &str, uri_path: &str) -> Option<(&'static str, Vec<u8>)> {
+    match target(uri_path) {
+        Some(Target::Host(key)) => exact_asset(app, &key).map(|bytes| (mime_for(&key), bytes)),
+        Some(Target::File(rel)) => {
+            crate::extension_store::read(id, &rel).map(|bytes| (mime_for(&rel), bytes))
+        }
+        None => None,
+    }
+}
+
 /// Answers one request on an extension scheme. Runs off the main thread.
 pub fn respond(
     app: &tauri::AppHandle,
@@ -282,17 +295,11 @@ pub fn respond(
         // Fonts, CSS and module scripts are loaded from the app origin's documents.
         .header("Access-Control-Allow-Origin", "*")
         .header("Cache-Control", "no-store");
-    let response = isolation_headers(id, crate::platform::CROSS_ORIGIN_ISOLATION)
+    let isolate = crate::platform::CROSS_ORIGIN_ISOLATION && crate::platform::hachidori_threads_allowed();
+    let response = isolation_headers(id, isolate)
         .into_iter()
         .fold(response, |response, (name, value)| response.header(name, value));
-    let found = match target(request.uri().path()) {
-        Some(Target::Host(key)) => exact_asset(app, &key).map(|bytes| (mime_for(&key), bytes)),
-        Some(Target::File(rel)) => {
-            crate::extension_store::read(id, &rel).map(|bytes| (mime_for(&rel), bytes))
-        }
-        None => None,
-    };
-    match found {
+    match lookup(app, id, request.uri().path()) {
         Some((mime, bytes)) => response.header("Content-Type", mime).body(bytes),
         None => response.status(404).body(Vec::new()),
     }
@@ -599,10 +606,7 @@ mod tests {
         );
         assert!(isolation_headers("hachidori", false).is_empty());
         assert!(isolation_headers("tenten", true).is_empty());
-        // WebKit (macOS, Linux) never isolates a scheme-handler document; WebView2 does.
-        assert_eq!(
-            crate::platform::CROSS_ORIGIN_ISOLATION,
-            cfg!(any(target_os = "windows", target_os = "android"))
-        );
+        // No webview gives a scheme page what the threaded engine needs; the loopback origin does.
+        assert!(!crate::platform::CROSS_ORIGIN_ISOLATION);
     }
 }

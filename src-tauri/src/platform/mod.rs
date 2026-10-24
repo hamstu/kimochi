@@ -861,16 +861,27 @@ pub const HOVER_PROMOTES_KEY: bool = cfg!(target_os = "macos");
 /// serve the custom scheme as is (`tauri-2.11.5/src/pattern.rs::format_real_schema`).
 const HTTP_SCHEME_BRIDGE: bool = cfg!(any(target_os = "windows", target_os = "android"));
 
-/// Whether a document served on a custom scheme can be cross-origin isolated by its own
-/// `Cross-Origin-Opener-Policy` / `-Embedder-Policy` headers, which is what gives it
-/// `SharedArrayBuffer` and lets WASM threads share memory. Only where the scheme reaches the
-/// webview as plain HTTP: WebView2's `http://<scheme>.localhost` bridge goes through Chromium's
-/// navigation, which honours them. WebKit keeps every load made by a URL scheme handler out of
-/// an isolated browsing context group on purpose (`WebPageProxy::browsingContextGroupForNavigation`:
-/// "These loads skip COOP enforcement, so they cannot stay cross-origin isolated") and then
-/// refuses to post shared memory to a worker (DataCloneError), so WKWebView and WebKitGTK would
-/// only get COEP's restrictions from the headers, never the threads.
-pub const CROSS_ORIGIN_ISOLATION: bool = HTTP_SCHEME_BRIDGE;
+/// Whether a custom-scheme document may ask for cross-origin isolation (COOP/COEP), which
+/// Hachidori needs for its threaded engine. No webview gives a scheme page what that engine needs:
+///
+/// - WebKit (WKWebView, WebKitGTK) keeps every load made by a URL scheme handler out of an
+///   isolated browsing context group (`WebPageProxy::browsingContextGroupForNavigation`: "These
+///   loads skip COOP enforcement, so they cannot stay cross-origin isolated") and refuses to post
+///   shared memory to a worker (DataCloneError).
+/// - WebView2 does isolate `http://<scheme>.localhost`, but a worker started from a worker gets
+///   no response from it (`WebResourceRequested` never sees that request): Hachidori's pthreads
+///   are such workers, so its engine never finished starting (the Windows 11 VM, 2026-10-23).
+///
+/// So the scheme sends no isolation headers anywhere, and Hachidori is served from a loopback
+/// HTTP origin instead (`loopback.rs`), which every one of them isolates.
+pub const CROSS_ORIGIN_ISOLATION: bool = false;
+
+/// `KIMOCHI_HACHIDORI_THREADS=0`: Hachidori imports on one thread, as before: its storage is not
+/// moved to the loopback origin (`loopback.rs`; no effect once it has been).
+pub fn hachidori_threads_allowed() -> bool {
+    static ALLOWED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ALLOWED.get_or_init(|| std::env::var("KIMOCHI_HACHIDORI_THREADS").as_deref() != Ok("0"))
+}
 
 /// The origin Kimochi's own pages are served from.
 pub fn app_origin() -> &'static str {
@@ -886,10 +897,18 @@ pub fn is_app_url(url: &tauri::Url) -> bool {
     has_origin(url, app_origin())
 }
 
-/// The origin a dictionary extension (`hachidori`, `tenten`) is served from: its own
-/// custom scheme, registered in `main.rs` (DICTIONARY_ENGINES.md §4). Like the app
-/// origin, WebView2 reaches it through Tauri's HTTP bridge as `http://<id>.localhost`.
+/// The origin a dictionary extension (`hachidori`, `tenten`) is served from this session: its
+/// custom scheme ([`scheme_origin`]), except Hachidori on macOS and Linux once its storage lives
+/// on the loopback origin (`loopback.rs`, `http://127.0.0.1:<port>`), where WebKit can
+/// cross-origin isolate it.
 pub fn extension_origin(id: &str) -> String {
+    crate::loopback::origin(id).unwrap_or_else(|| scheme_origin(id))
+}
+
+/// The custom-scheme origin of a dictionary extension, registered in `main.rs`
+/// (DICTIONARY_ENGINES.md §4). Like the app origin, WebView2 reaches it through Tauri's HTTP
+/// bridge as `http://<id>.localhost`.
+pub fn scheme_origin(id: &str) -> String {
     if HTTP_SCHEME_BRIDGE {
         format!("http://{id}.localhost")
     } else {
@@ -907,7 +926,10 @@ pub fn is_extension_url(url: &tauri::Url) -> bool {
 /// Whether a navigation target is on the origin of the extension `id` exactly: the
 /// allowlist of that engine's hidden extension window (`ext-<id>`).
 pub fn is_extension_url_of(url: &tauri::Url, id: &str) -> bool {
-    has_origin(url, &extension_origin(id))
+    match crate::loopback::origin(id) {
+        Some(_) => crate::loopback::is_loopback_url(url),
+        None => has_origin(url, &scheme_origin(id)),
+    }
 }
 
 fn has_origin(url: &tauri::Url, origin: &str) -> bool {

@@ -11,9 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- On Windows, Hachidori imports dictionaries on several threads, as it does in Chrome: about twice
-  as fast (Jitendex in about half a second instead of over one). Dictionaries you already have stay
-  where they are.
+- Hachidori imports dictionaries on several threads on macOS, Windows and Linux, as it does in
+  Chrome: up to twice as fast (Jitendex in about a second instead of nearly two on a Mac). Your
+  dictionaries are copied to Hachidori's new home in the background once, and the faster imports
+  start from the next launch; nothing is removed from the old place.
 - The sidebar's OCR model, Dictionary and Change source menus are tidier: each icon now sits beside
   both its name and its description, at every interface size, and descriptions stay on one line.
 - Switching to the Yomitan API no longer opens its setup every time: Kimochi checks that it answers

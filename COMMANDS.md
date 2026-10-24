@@ -779,6 +779,68 @@ next to `__TAURI__` there. Two things contain it:
 `ext_relay` accepts any window label as sender and target, so the extension windows relay
 like the Log; nothing native checks a sender's origin.
 
+### Hachidori's loopback origin
+
+Hachidori imports on several threads only when its pages are cross-origin isolated. WebKit never
+isolates a page served by a URL scheme handler, and WebView2, which does, cannot load a worker's
+own workers from `http://hachidori.localhost` (Hachidori's pthreads), so its engine would never
+start (`platform::CROSS_ORIGIN_ISOLATION` is false: the scheme sends no COOP/COEP). So
+`loopback.rs` also serves Hachidori's tree (exactly what its scheme serves, `extensions::lookup`)
+over HTTP at **`http://127.0.0.1:<port>`**, with the manifest's COOP/COEP, and that becomes
+Hachidori's origin (`platform::extension_origin`) once its storage lives there, on macOS, Windows
+and Linux. 10ten keeps its scheme.
+
+- **Port.** Part of the origin, so chosen once and kept in `extension-origins.json` (app data
+  directory, per flavor: `release` prefers 27631, a dev build 27632, the next free one up to 24
+  above on a first run). Bound before any window is built. If the saved port is taken after the
+  switch, Hachidori does not start (`extension_window_ensure` fails with `unavailable: …`) rather
+  than show no dictionaries or load another program's pages; `{check: 'hachidori-origin'}` in the
+  log says which session it is (`scheme`, `loopback`, `unavailable`) and why.
+- **Who may load it.** `Host` must be `127.0.0.1:<port>`; a request carrying `Origin` or
+  `Referer` must come from the loopback origin, the app origin or (dev) the dev server, else 403
+  (`{check: 'hachidori-loopback-refused'}`). It serves only the public extension release and host
+  scripts, never user data; the dictionaries stay in WebKit's storage.
+- **IPC.** Tauri treats the page as remote, and remote pages never reach app commands, so the
+  extension window's commands are also the inline plugin **`kimochi-ext`** (`main.rs`
+  `ext_ipc_plugin`, permissions from `build.rs`): `plugin:kimochi-ext|ext_relay`,
+  `ext_relay_listen`, `ext_relay_bytes`, `report`, `anki_connect_relay`, same arguments and
+  replies as the app commands. Native's prelude sets `window.__kimochiExtCommandPrefix` there and
+  the host prefixes those names (`host/ext/primitives.js` `extCommand`). Granted at runtime to
+  `ext-hachidori` for exactly that origin, with `extension-windows.json`'s permissions
+  (`loopback::add_capabilities`); the plugin itself refuses any window/command pair not in
+  `loopback::plugin_command_allowed`.
+- **The one-time copy.** Until Hachidori's storage has been copied the session keeps its scheme
+  origin (`hachidori://localhost`, `http://hachidori.localhost` on Windows). A hidden window `ext-migrate-hachidori` (15 s after launch) loads
+  `/__kimochi/ext-migrate.html?step=export` on the old origin, then `?step=import` on the loopback
+  origin (`host/ext/migrate.js`), through these `kimochi-ext` commands, which only that window
+  may call (static capability `extension-migration.json` for the scheme page, the same at runtime
+  for the loopback page):
+
+| Command | Args → returns | Notes |
+| --- | --- | --- |
+| `ext_migration_begin` | `() -> {to, page}` | fresh staging directory (`<app local data>/extension-migration/hachidori-<flavor>/`) |
+| `ext_migration_put` | raw bytes → `index` | one part (localStorage, a database schema, a record) |
+| `ext_migration_exported` | `({records, bytes}) -> {parts}` | the totals the import must reproduce |
+| `ext_migration_manifest` | `() -> {parts, records, bytes}` | |
+| `ext_migration_get` | `({index}) -> ArrayBuffer` | |
+| `ext_migration_done` | `({records, bytes, isolated}) -> ()` | totals must match, and the storage file's `dictionaryState` must not have changed since `begin` |
+| `ext_migration_failed` | `({error}) -> ()` | |
+
+  Every record is read back and compared (shape and SHA-256 of each binary part) before
+  `done`. A verified copy of the `dictionaryState` the storage file still describes switches
+  the **next** launch; a changed one copies again; three failures stop retrying; a loopback page
+  that is not isolated records `unsupported` and never switches. The old origin's data is only
+  read, never removed. Progress is `{check: 'hachidori-migration', phase}` in the log
+  (`started`, `copied`, `stale`, `failed`, `unsupported`). Settings need no copy: `chrome.storage`
+  is `chrome-local-hachidori.json`, whatever the origin.
+- **Linux.** WebKitGTK also needs JavaScriptCore's `useSharedArrayBuffer` (`main` sets
+  `JSC_useSharedArrayBuffer=1` before any web process starts, `loopback::prepare_environment`),
+  or `SharedArrayBuffer` stays hidden even on the isolated page.
+- **Opting out.** `KIMOCHI_HACHIDORI_THREADS=0` keeps Hachidori on one thread on its scheme:
+  nothing is copied or moved. Once Hachidori has moved to the loopback origin it has no effect,
+  since going back would leave `chrome.storage` describing dictionaries the scheme origin does
+  not have.
+
 ## Kimochi account
 
 Optional accounts on the Kimochi server (`https://kimochiapp.com`), in

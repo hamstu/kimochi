@@ -33,7 +33,7 @@
  * exactly as the Yomitan panel host does (both use primitives.js `listenRelay`). Sends to one target are serialised, so a port's `connect`
  * can never overtake its first `postMessage`.
  */
-import { listenRelay as listenSharedRelay } from './primitives.js'
+import { extTauri, listenRelay as listenSharedRelay } from './primitives.js'
 import { describe, json, randomId, sleep, within } from './util.js'
 
 const CHILD_WELCOME_MS = 30000
@@ -475,7 +475,7 @@ export function extensionWindowLabel(win, engine) {
 export function connectViaRelay(win, { engine, descriptor, origin, label, kind, documentId, report, network, onEvent }) {
   const router = new Router({ win, engine, descriptor, origin, label, report, network })
   router.acceptChildren()
-  const relay = connectRelay(router, { tauri: win.__TAURI__, label, engine, report })
+  const relay = connectRelay(router, { tauri: extTauri(win), label, engine, report })
   const endpoint = router.attach({ kind, url: win.location.href, documentId, top: true }, onEvent)
   win.addEventListener('pagehide', () => endpoint.detach())
   const linked = endpoint.registered.then(() => undefined)

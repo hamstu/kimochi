@@ -195,3 +195,11 @@ test("10ten observer follows its options port through progress, failure, recover
   message({ type: "dbstateupdated", state: {} });
   assert.equal(statuses.length, 4);
 });
+
+test("Hachidori's ready status says how its engine runs", () => {
+  assert.deepEqual(
+    hachidoriReadiness({ ok: true, ready: true, dictionaryCount: 5, threaded: true, storageBackend: "idbfs" }),
+    { phase: "ready", message: "Hachidori is ready.", dictionaries: 5, threaded: true, storage: "idbfs" },
+  );
+  assert.equal(hachidoriReadiness({ ok: true, ready: true, dictionaryCount: 1 }).threaded, false);
+});
