@@ -13,6 +13,16 @@ import { installApp } from './app.js'
 import { ENGINES } from './engines.js'
 import { installFrame } from './frame.js'
 import { engineForExtensionOrigin, extensionOrigin, resolveEngine } from './util.js'
+import { installFrameCursorResponder } from '../../frontend/shell/nativeCursor.ts'
+
+// Any framed document of the windows that carry this host (an engine's settings page in the
+// Dictionary window): tell the parent panel which cursor belongs under the pointer, so an inactive
+// window can show it (frontend/shell/useNativeHover.ts). Independent of the engine install.
+try {
+  installFrameCursorResponder(window)
+} catch (error) {
+  console.error('[ext-host] cursor responder failed', error)
+}
 
 ;(() => {
   const win = window

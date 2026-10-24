@@ -291,6 +291,19 @@ pub fn set_input_regions(
 // ones, but they are still the ones a CSS `col-resize`/`row-resize` should look like.
 #[allow(deprecated)]
 pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> {
+    // Only one case is left to this bridge: Kimochi active, this window not key. In the key
+    // window WKWebView sets the cursor itself on every move, and a second writer flickers it.
+    // While Kimochi is inactive the window server ignores `NSCursor.set` (measured on macOS
+    // 26: the visible cursor never changes without the private `SetsCursorInBackground`
+    // connection property, which would leave hands and I-beams over the game), so the cursor
+    // there is the arrow.
+    let mtm = objc2::MainThreadMarker::new().ok_or("panel_cursor requires the main thread")?;
+    unsafe {
+        let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
+        if !NSApplication::sharedApplication(mtm).isActive() || (*p).isKeyWindow() {
+            return Ok(());
+        }
+    }
     // Recheck ownership after the DOM round trip. Never set another app's cursor.
     let Some((x, y)) = panel_pointer(w)? else {
         return Ok(());

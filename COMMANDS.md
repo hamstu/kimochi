@@ -188,6 +188,20 @@ hover are **user-confirmed**. `panel_cursor`'s cursor shapes and first-gesture c
 resizing are **physically unverified** — `NSCursor.set` returning successfully is not
 proof that a background window's cursor visibly changed.
 
+`panel_cursor` is only called while the webview itself receives no real mouse events
+(`CursorOwnership` in `frontend/shell/nativeCursor.ts`). Whenever it does (the key window,
+and Windows/Linux always) the webview sets the cursor on every move, and a second writer
+made it flicker between arrow, hand and I-beam. Never call it unconditionally on a timer.
+On macOS it also does nothing in the key window or while Kimochi is not the active app:
+the window server ignores a background app's `NSCursor.set` (measured: the visible cursor
+never changes), so an inactive Kimochi window shows the arrow. Making it work would need
+the private `SetsCursorInBackground` connection property, which would also leave hands and
+I-beams over the game; not used. What remains is a non-key window of the active app.
+Over an iframe the panel asks the framed page: it posts `kimochi:cursor-probe` `{id, x, y}`
+(frame-relative) to the frame's `src` origin, and the extension host injected into the frame
+(`installFrameCursorResponder`, from `host/ext/entry.js`) answers `kimochi:cursor`
+`{id, cursor}` to its parent only. No answer within 40 ms means the arrow.
+
 **Events:** `state` (the full snapshot, emitted whenever anything a panel renders
 changes — panels should subscribe rather than poll); `panel:state` `{label, visible, pinned, bounds}` on every show/hide/place/
 pin path; `panel:closed` `{label}`;
