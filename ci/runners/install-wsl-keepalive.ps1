@@ -10,8 +10,9 @@ It also registers "WSL watchdog (<Distro>)", run as SYSTEM at startup and every 
 the runner unit when it is inactive, resets WSL when the distro stops answering, and warns when C:
 or the distro's drive runs low on space (and, with -CompactBelowGB, compacts the distro's vhdx
 when that drive gets low and the runner is idle). Inside the distro it installs /usr/local/sbin/runner-health
-(the watchdog's probe) and a drop-in giving the runner unit Restart=always, and it turns off WSL's
-idle shutdown in the user's .wslconfig.
+(the watchdog's probe), a drop-in giving the runner unit Restart=always, and a weekly
+wsl-housekeeping timer (Docker build-cache and image prune, journal cap, apt clean, snap retain,
+fstrim), and it turns off WSL's idle shutdown in the user's .wslconfig.
 
   powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -Distro Ubuntu -User <user> -SshPort <port>
 
@@ -82,12 +83,31 @@ case "$s" in
 esac
 '@ -replace "`r", ''
 $dropin = "[Unit]`nStartLimitIntervalSec=0`n[Service]`nRestart=always`nRestartSec=15`n"
+# Weekly housekeeping (systemd timer) so caches do not refill the vhdx between compactions: Docker's
+# build cache is what grows fastest (tens of GB in weeks), then dangling images, the journal and
+# old snap revisions. Ends with a TRIM so the watchdog's next compaction can take the space back.
+$housekeeping = @'
+#!/bin/sh
+# Weekly housekeeping for the WSL runner distro (installed by install-wsl-keepalive.ps1).
+docker builder prune -af --filter until=168h >/dev/null 2>&1
+docker image prune -f >/dev/null 2>&1
+journalctl --vacuum-size=200M >/dev/null 2>&1
+apt-get clean
+snap set system refresh.retain=2 2>/dev/null
+fstrim /
+'@ -replace "`r", ''
+$hkService = "[Unit]`nDescription=WSL runner housekeeping`n[Service]`nType=oneshot`nExecStart=/usr/local/sbin/wsl-housekeeping`n"
+$hkTimer = "[Unit]`nDescription=Weekly WSL runner housekeeping`n[Timer]`nOnCalendar=Sun 03:00`nPersistent=true`n[Install]`nWantedBy=timers.target`n"
 $b64 = { param($t) [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t)) }
 $sh = "echo $(& $b64 $health) | base64 -d > /usr/local/sbin/runner-health && chmod 755 /usr/local/sbin/runner-health && " +
   "for u in `$(systemctl list-unit-files --plain --no-legend 'actions.runner.*' | awk '{print `$1}'); do " +
-  "mkdir -p /etc/systemd/system/`$u.d && echo $(& $b64 $dropin) | base64 -d > /etc/systemd/system/`$u.d/restart.conf; done && systemctl daemon-reload"
+  "mkdir -p /etc/systemd/system/`$u.d && echo $(& $b64 $dropin) | base64 -d > /etc/systemd/system/`$u.d/restart.conf; done && " +
+  "echo $(& $b64 $housekeeping) | base64 -d > /usr/local/sbin/wsl-housekeeping && chmod 755 /usr/local/sbin/wsl-housekeeping && " +
+  "echo $(& $b64 $hkService) | base64 -d > /etc/systemd/system/wsl-housekeeping.service && " +
+  "echo $(& $b64 $hkTimer) | base64 -d > /etc/systemd/system/wsl-housekeeping.timer && " +
+  "systemctl daemon-reload && systemctl enable --now wsl-housekeeping.timer"
 & wsl.exe -d $Distro -u root --exec sh -c $sh
-if ($LASTEXITCODE -ne 0) { Write-Warning "Could not install runner-health / the restart drop-in inside $Distro." }
+if ($LASTEXITCODE -ne 0) { Write-Warning "Could not install runner-health / the restart drop-in / the housekeeping timer inside $Distro." }
 
 # Watchdog: at startup and every 5 minutes.
 Copy-Item -Force "$PSScriptRoot\wsl-watchdog.ps1" "$dir\wsl-watchdog.ps1"

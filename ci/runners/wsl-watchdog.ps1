@@ -13,9 +13,12 @@ task that install-wsl-keepalive.ps1 registers. Each run:
      where the utility VM is up but every start fails with Wsl/Service/CreateInstance/E_FAIL;
   5. with -CompactBelowGB set, compacts the distro's vhdx when its drive has less free than that,
      the runner is idle and the last compaction was over a day ago: fstrim inside, stop WSL,
-     diskpart `compact vdisk`, start WSL again (a few minutes). The vhdx only ever grows (ext4
-     spreads writes over its whole virtual size and Windows never takes freed blocks back), so
-     without this it creeps up to fill the drive however small the build caches are kept.
+     wait until nothing holds the vhdx, diskpart `compact vdisk` on the detached file, start WSL
+     again (a few minutes). The vhdx only ever grows (ext4 spreads writes over its whole virtual
+     size and Windows never takes freed blocks back), so without this it creeps up to fill the
+     drive however small the build caches are kept. The file must be compacted detached: an
+     `attach vdisk readonly` first hangs or fails on this host, reclaims nothing, and leaves a
+     stale attachment that makes every later start fail with MountDisk/HCS sharing violations.
 
 Logs to C:\ProgramData\wsl-keepalive\watchdog.log.
 #>
@@ -69,6 +72,20 @@ function Describe($r) {
   "exit $($r.Code): $(($lines | ForEach-Object { $_.Trim() }) -join ' | ')"
 }
 
+# True once nothing holds the vhdx open. After WSLService stops, the utility VM can outlive it for
+# a minute or so with a kernel handle on the file; a VM worker still hosting a WSL partition
+# (the parent of a vmmemWSL process) is ended, which is what finally releases the handle.
+function Wait-VhdxFree([string]$path, [int]$timeoutSec) {
+  $deadline = (Get-Date).AddSeconds($timeoutSec)
+  do {
+    try { $fs = [IO.File]::Open($path, 'Open', 'ReadWrite', 'None'); $fs.Close(); return $true } catch {}
+    Get-CimInstance Win32_Process -Filter "Name='vmmemWSL'" -ErrorAction SilentlyContinue |
+      ForEach-Object { Stop-Process -Id $_.ParentProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 5
+  } while ((Get-Date) -lt $deadline)
+  return $false
+}
+
 function Compact-IfLow {
   $vhdx = Join-Path $basePath 'ext4.vhdx'
   $drive = $basePath.Substring(0, 1)
@@ -90,12 +107,21 @@ function Compact-IfLow {
     $null = AsUser 'wsl.exe --shutdown'
     Start-Sleep -Seconds 5
     Stop-Service WSLService -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 3
+    if (-not (Wait-VhdxFree $vhdx 120)) { Log 'vhdx still held open after 120 s; compaction skipped'; return }
     $script = "$dir\compact.txt"
-    "select vdisk file=`"$vhdx`"`r`nattach vdisk readonly`r`ncompact vdisk`r`ndetach vdisk`r`n" | Set-Content -Encoding ascii $script
+    # Detached compaction: no attach/detach (see the header).
+    "select vdisk file=`"$vhdx`"`r`ncompact vdisk`r`n" | Set-Content -Encoding ascii $script
     $out = & diskpart /s $script 2>&1 | Where-Object { $_ -match 'successfully|error|failed' }
     Log "diskpart: $($out -join ' | ')"
   } finally {
+    # Nothing may hold the file when WSL comes back or every start fails with a sharing violation.
+    # diskpart can outlive its script while it finishes with the file; it must be left to exit
+    # (killing it leaves a kernel handle behind for a minute or more), then any attachment it
+    # left is dismounted and the file is checked once more.
+    $deadline = (Get-Date).AddSeconds(120)
+    while ((Get-Process -Name diskpart -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 5 }
+    try { if ((Get-DiskImage -ImagePath $vhdx -ErrorAction Stop).Attached) { Dismount-DiskImage -ImagePath $vhdx | Out-Null; Log 'dismounted a leftover vhdx attachment' } } catch {}
+    if (-not (Wait-VhdxFree $vhdx 180)) { Log 'WARN vhdx still held open after compaction; WSL may not start until it is released' }
     Start-Service WSLService -ErrorAction SilentlyContinue
     Enable-ScheduledTask -TaskName $keepalive | Out-Null
     Start-ScheduledTask -TaskName $keepalive
