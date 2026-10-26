@@ -218,6 +218,7 @@ async function mirrorDictionaryEngine({ repair = false } = {}) {
 
 /** Scan sounds; the settings are read at each one, so turning them off in Settings is immediate. */
 const playSound = createSoundPlayer({
+  volume: () => setting('soundEffectsVolume'),
   enabled: (name) =>
     soundKindOn(
       {

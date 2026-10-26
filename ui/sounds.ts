@@ -61,8 +61,28 @@ export const SOUND_NAMES: readonly SoundName[] = [
   ...INTERFACE_SOUNDS
 ]
 
-/** Under the system's alert level: these accompany reading, they should not interrupt it. */
+/**
+ * The default volume (the `soundEffectsVolume` setting, 0–1): under the system's alert level, as
+ * these accompany reading and should not interrupt it.
+ */
 export const SOUND_VOLUME = 0.5
+
+/** This window's sound volume, 0–1: the setting, as the window last read it (`setSoundVolume`). */
+let soundVolume = SOUND_VOLUME
+
+/** The `soundEffectsVolume` setting as a volume: 0–1, the default for anything else. */
+export function volumeOf(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : SOUND_VOLUME
+}
+
+/** Sets the volume every later sound in this window plays at. */
+export function setSoundVolume(value: unknown): void {
+  soundVolume = volumeOf(value)
+}
+
+export function currentSoundVolume(): number {
+  return soundVolume
+}
 
 export const AUTO_ERROR_INTERVAL_MS = 10_000
 
@@ -109,6 +129,8 @@ export interface SoundPlayerOptions {
    * Settings applies at once. A boolean (or anything but `false`) answers for every sound.
    */
   enabled: (name: SoundName) => unknown
+  /** The `soundEffectsVolume` setting, read at each sound like `enabled`; omitted, the window's volume stays as it is. */
+  volume?: () => unknown
   play?: (name: SoundName) => void
   now?: () => number
 }
@@ -118,6 +140,7 @@ export type SoundPlayer = (name: SoundName | null, options?: { auto?: boolean })
 /** A player that honours the setting and the error throttle; returns whether it played. */
 export function createSoundPlayer({
   enabled,
+  volume,
   play = playAudio,
   now = Date.now
 }: SoundPlayerOptions): SoundPlayer {
@@ -132,6 +155,7 @@ export function createSoundPlayer({
       if (!errorMayRing(lastErrorAt, at, auto)) return false
       lastErrorAt = at
     }
+    if (volume) setSoundVolume(volume())
     play(name)
     return true
   }
@@ -158,7 +182,8 @@ export const POOL_SIZE = 3
  */
 export function createAudioPlayer(
   AudioCtor: AudioConstructor,
-  source: (name: SoundName) => string
+  source: (name: SoundName) => string,
+  volume: () => number = currentSoundVolume
 ): (name: SoundName) => AudioLike | null {
   const pools = new Map<SoundName, AudioLike[]>()
   return (name) => {
@@ -169,11 +194,11 @@ export function createAudioPlayer(
       let audio = pool.find((candidate) => candidate.ended) ?? null
       if (!audio) {
         audio = new AudioCtor(source(name))
-        // Modest, so two overlapping sounds (a start and a quick result) stay clear of clipping.
-        audio.volume = SOUND_VOLUME
         audio.preload = 'auto'
         if (pool.length < POOL_SIZE) pool.push(audio)
       }
+      // At each play, so a change of the volume setting applies to the next sound.
+      audio.volume = volume()
       void audio.play()?.catch(() => undefined)
       return audio
     } catch {
@@ -384,7 +409,8 @@ export interface AudioBufferLike {
  */
 export function createBufferPlayer(
   context: AudioContextLike,
-  fetchSound: (name: SoundName) => Promise<ArrayBuffer>
+  fetchSound: (name: SoundName) => Promise<ArrayBuffer>,
+  volume: () => number = currentSoundVolume
 ): { load(): void; play(name: SoundName): boolean } {
   const gain = context.createGain()
   gain.gain.value = SOUND_VOLUME
@@ -413,6 +439,7 @@ export function createBufferPlayer(
       if (!sound) return false
       // A context made before the window's first gesture can start suspended.
       if (context.state === 'suspended') void context.resume().catch(() => undefined)
+      gain.gain.value = volume()
       const source = context.createBufferSource()
       source.buffer = sound.buffer
       source.connect(gain)

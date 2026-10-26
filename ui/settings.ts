@@ -178,6 +178,8 @@ export interface Settings {
   soundEffectsScans: boolean
   /** Under `soundEffects`: the click of buttons, switches and menus, and the sidebar's whoosh. */
   soundEffectsClicks: boolean
+  /** Under `soundEffects`: the volume of every sound effect, 0–1. */
+  soundEffectsVolume: number
   /** Recording system audio for the cards' sentence audio (src-tauri/src/sentence_audio). This
       computer's: never synced. */
   sentenceAudio: SentenceAudioSettings
@@ -230,6 +232,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   soundEffects: true,
   soundEffectsScans: true,
   soundEffectsClicks: true,
+  soundEffectsVolume: 0.5,
   sentenceAudio: {
     enabled: false,
     seconds: 30,

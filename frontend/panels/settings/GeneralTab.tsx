@@ -3,12 +3,13 @@ import { GnomeOverlaySetup } from '../../main/GnomeOverlaySetup'
 import { SteamLibrarySection } from './SteamLibrarySection'
 import type { ReactNode } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
-import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, SettingsSubgroup, Switch } from '@kit'
+import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, SettingsSubgroup, Slider, Switch } from '@kit'
 import { useController } from '../useController'
 import { panel } from '../../bridge/tauri'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
 import { INTERFACE_SCALES, type Appearance, type InterfaceScale } from '@ui/settings'
+import { playAudio, setSoundVolume, volumeOf } from '@ui/sounds'
 
 const APPEARANCES = [
   { value: 'system', label: 'System', icon: <Monitor /> },
@@ -27,6 +28,8 @@ export function GeneralTab(): ReactNode {
   const [soundEffects, setSoundEffects] = useSetting<boolean>('soundEffects', true)
   const [scanSounds, setScanSounds] = useSetting<boolean>('soundEffectsScans', true)
   const [clickSounds, setClickSounds] = useSetting<boolean>('soundEffectsClicks', true)
+  const [soundVolume, saveSoundVolume] = useSetting<number>('soundEffectsVolume', 0.5)
+  const volume = Math.round(volumeOf(soundVolume) * 100)
   const { props: controller } = useController()
   const { capture } = useCapabilities()
   // Screen recording is a step only where it is granted in the system's settings.
@@ -97,6 +100,24 @@ export function GeneralTab(): ReactNode {
                 checked={clickSounds}
                 onCheckedChange={(checked) => void setClickSounds(checked)}
               />
+            </SettingsRow>
+            <SettingsRow label="Volume" description="For every sound effect.">
+              <div className="settings-slider">
+                <Slider
+                  aria-label="Sound effects volume"
+                  value={[volume]}
+                  min={0}
+                  max={100}
+                  step={5}
+                  onValueChange={(values) => void saveSoundVolume(values[0] / 100)}
+                  // Heard at the new level once it is let go (with click sounds on).
+                  onValueCommit={(values) => {
+                    setSoundVolume(values[0] / 100)
+                    if (clickSounds !== false) playAudio('click')
+                  }}
+                />
+                <span className="settings-slider-value k-num">{volume}%</span>
+              </div>
             </SettingsRow>
           </SettingsSubgroup>
         )}

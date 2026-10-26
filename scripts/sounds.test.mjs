@@ -21,7 +21,10 @@ const {
   outcomeSound,
   playAudio,
   soundKind,
-  soundKindOn
+  soundKindOn,
+  volumeOf,
+  setSoundVolume,
+  currentSoundVolume
 } = await load('sounds.ts')
 const scanActivity = await load('scan-activity.ts')
 const { SETTINGS_DEFAULTS } = await load('settings.ts')
@@ -432,4 +435,43 @@ test('buffered sounds play from their first audible sample, each on its own sour
   assert.equal(sounds.play('click'), true)
   assert.deepEqual(started, [0.01, 0.01], 'ten silent samples at 1 kHz are skipped, on two sources')
   assert.equal(context.resumed, 1, 'a suspended context is resumed once')
+})
+
+test('the volume setting is half by default, clamped, and read at each sound', () => {
+  assert.equal(SETTINGS_DEFAULTS.soundEffectsVolume, 0.5)
+  assert.equal(volumeOf(undefined), SOUND_VOLUME)
+  assert.equal(volumeOf('loud'), SOUND_VOLUME)
+  assert.equal(volumeOf(1.4), 1)
+  assert.equal(volumeOf(-1), 0)
+  assert.equal(volumeOf(0.25), 0.25)
+  let level = 0.2
+  const played = []
+  const play = createSoundPlayer({
+    enabled: () => true,
+    volume: () => level,
+    play: (name) => played.push([name, currentSoundVolume()])
+  })
+  play('click')
+  level = 0.8
+  play('scan-done')
+  assert.deepEqual(played, [['click', 0.2], ['scan-done', 0.8]])
+  setSoundVolume(undefined)
+  assert.equal(currentSoundVolume(), SOUND_VOLUME)
+})
+
+test('an element takes the volume at each play, so a change applies to the next sound', () => {
+  let level = 0.3
+  class FakeAudio {
+    volume = 1
+    preload = ''
+    ended = true
+    play() {
+      return Promise.resolve()
+    }
+  }
+  const audioPlay = createAudioPlayer(FakeAudio, (name) => name, () => level)
+  assert.equal(audioPlay('click').volume, 0.3)
+  level = 0.9
+  // The same (ended) element again, at the new level.
+  assert.equal(audioPlay('click').volume, 0.9)
 })

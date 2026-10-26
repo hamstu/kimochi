@@ -1018,7 +1018,10 @@ let embedScan = 0
  * (the app's overlay is not here to ring it), and `sound` from the parent for the demo's scripted
  * clicks on its own desktop. The sound settings apply, as in the app.
  */
-const embedSound = createSoundPlayer({ enabled: (name) => soundKindOn(settings, soundKind(name)) })
+const embedSound = createSoundPlayer({
+  enabled: (name) => soundKindOn(settings, soundKind(name)),
+  volume: () => settings.soundEffectsVolume
+})
 
 /**
  * Muted while the demo is out of sight (`muted` from the parent): every sound this page would play,
