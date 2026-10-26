@@ -71,8 +71,13 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
         },
         _ => None,
     };
-    let mut keep = |decided: &mut HashMap<String, (Decision, Option<Clipped>)>, decisions: Vec<Decision>, ring: &AudioRing| {
+    // When each line first got a clip: how long the Log waits for its voice.
+    let mut voiced_at: HashMap<String, f64> = HashMap::new();
+    let mut keep = |decided: &mut HashMap<String, (Decision, Option<Clipped>)>, decisions: Vec<Decision>, ring: &AudioRing, now: f64| {
         for d in decisions {
+            if matches!(d.outcome, Outcome::Voiced(_)) {
+                voiced_at.entry(d.uid.clone()).or_insert(now);
+            }
             if let Some((before, _)) = decided.get(&d.uid) {
                 let flipped = score(before).is_some_and(|b| score(&d).is_none_or(|n| n <= b)) && before.outcome != d.outcome;
                 if flipped && !changed_after_match.contains(&d.uid) {
@@ -113,18 +118,18 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
         if since_tick >= TICK_MS {
             since_tick = 0.0;
             let decisions = listener.tick(&ring, now);
-            keep(&mut decided, decisions, &ring);
+            keep(&mut decided, decisions, &ring, now);
         }
     }
     // The recording is over: whatever is left is decided with what was heard.
     let end = ring.end_ms().unwrap_or(start);
     let decisions = listener.tick(&ring, end);
-    keep(&mut decided, decisions, &ring);
+    keep(&mut decided, decisions, &ring, end);
     for row in &session.lines {
         let open = decided.get(&row.uid).is_none_or(|(d, _)| d.provisional);
         if open {
             if let Some(d) = listener.decide_now(&ring, end, &row.uid) {
-                keep(&mut decided, vec![d], &ring);
+                keep(&mut decided, vec![d], &ring, end);
             }
         }
     }
@@ -140,7 +145,7 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
             let (decision, clip) = decided.get(&line.uid).cloned().map_or((None, None), |(d, c)| (Some(d), c));
             let appeared = listener.get_line(&line.uid).and_then(|l| l.appeared);
             let note = listener.note(&line.uid).unwrap_or_default();
-            Row { line: line.clone(), decision, clip, appeared, note, flipped: changed_after_match.contains(&line.uid) }
+            Row { line: line.clone(), decision, clip, appeared, note, flipped: changed_after_match.contains(&line.uid), voiced_at: voiced_at.get(&line.uid).copied() }
         })
         .collect();
     let heard: Vec<_> = listener.transcripts().to_vec();

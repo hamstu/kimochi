@@ -18,6 +18,8 @@ pub struct Row {
     pub note: String,
     /// Its clip changed after it was matched by its words (other than for a better match).
     pub flipped: bool,
+    /// When it first got a clip (Unix ms, the replay's clock).
+    pub voiced_at: Option<f64>,
 }
 
 /// How a voiced line's clip compares with where its voice really was.
@@ -100,6 +102,47 @@ pub fn write(
              median start error {starts:.0} ms, end error {ends:.0} ms; {silent_right}/{truly_silent} unvoiced lines said no voice.",
             scores.len()
         );
+        // How long after a voiced line arrived (or its voice ended, if later) its clip came.
+        let waits: Vec<f64> = rows
+            .iter()
+            .filter_map(|r| {
+                let end = r.line.truth.as_ref().filter(|t| t.voiced)?.end_ms?;
+                Some(r.voiced_at? - r.line.ts.max(end))
+            })
+            .collect();
+        let p90 = |mut v: Vec<f64>| {
+            v.sort_by(f64::total_cmp);
+            v.get(v.len() * 9 / 10).copied().unwrap_or(f64::NAN)
+        };
+        let (wait_median, wait_p90) = (median(waits.clone()), p90(waits));
+        // Purity: a clip that takes in 300 ms or more of another line's voice, and how much
+        // longer than its own voice clips run (their padding aside).
+        let voices: Vec<(&str, f64, f64)> = rows
+            .iter()
+            .filter_map(|r| {
+                let t = r.line.truth.as_ref().filter(|t| t.voiced)?;
+                Some((r.line.uid.as_str(), t.start_ms?, t.end_ms?))
+            })
+            .collect();
+        let mut contaminated = 0;
+        let mut excess = Vec::new();
+        for r in rows {
+            let (Some(Outcome::Voiced(v)), Some(t)) = (outcome(r), r.line.truth.as_ref().filter(|t| t.voiced)) else { continue };
+            let others = voices.iter().filter(|(uid, ..)| *uid != r.line.uid);
+            if others.clone().any(|(_, a, b)| v.to_ms.min(*b) - v.from_ms.max(*a) >= 300.0) {
+                contaminated += 1;
+            }
+            if let (Some(a), Some(b)) = (t.start_ms, t.end_ms) {
+                excess.push((v.to_ms - v.from_ms - PAD_BEFORE_MS - PAD_AFTER_MS) - (b - a));
+            }
+        }
+        let excess_median = median(excess);
+        let _ = write!(
+            summary,
+            " {contaminated} clips take in another line's voice; clips run {:.2}s longer than the voice (median).",
+            excess_median / 1000.0
+        );
+        let _ = write!(summary, " Clips came {:.1}s (median), {:.1}s (90%) after the line and its voice.", wait_median / 1000.0, wait_p90 / 1000.0);
         if names > 0 {
             let _ = write!(summary, " {names_voiced}/{names} name boxes were given a voice.");
         }
@@ -108,7 +151,8 @@ pub fn write(
             "voicedLines": truly_voiced, "clipped": scores.len(), "covered": covered, "wrongAudio": wrong,
             "medianStartErrorMs": starts, "medianEndErrorMs": ends,
             "unvoicedLines": truly_silent, "unvoicedSaidSilent": silent_right,
-            "nameBoxes": names, "nameBoxesVoiced": names_voiced, "changedAfterMatch": flipped,
+            "nameBoxes": names, "nameBoxesVoiced": names_voiced, "changedAfterMatch": flipped, "waitMedianMs": wait_median, "waitP90Ms": wait_p90,
+            "otherVoiceClips": contaminated, "excessMedianMs": excess_median,
         });
     }
 
@@ -218,7 +262,7 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
             };
             json!({ "uid": r.line.uid, "text": r.line.text, "outcome": outcome, "how": how, "score": score_,
                     "fromMs": from, "toMs": to, "truth": r.line.truth, "ts": r.line.ts - t0, "scan": r.line.scan,
-                    "kind": r.line.kind, "note": r.note })
+                    "kind": r.line.kind, "note": r.note, "voicedAt": r.voiced_at.map(|v| v - t0) })
         })
         .collect();
     let report = json!({ "summary": summary, "metrics": metrics, "processingSeconds": elapsed, "audioSeconds": audio_seconds, "lines": json_rows });
