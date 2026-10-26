@@ -11,23 +11,35 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- macOS: Mini Mode now shows on top of a game in full screen.
+- Settings → Log is now Log & Sessions, with your sessions listed at the bottom: drag to reorder,
+  click a name to rename, switch, delete or add one. Reset Log settings is gone.
+- Settings → OCR & Overlay has an Auto OCR section with the same switch as the main window; its
+  tuning (adaptive polling and the rest) is under Advanced options.
+- Settings → Sources shows both macOS permissions, Screen Recording and Accessibility, with a
+  button to allow either one that isn't.
+- Settings → Translation & AI offers Kimochi cloud or your DeepL key; Automatic is gone.
+- Settings → Dictionary and Anki say less: the engine's settings button appears once it is
+  downloaded, and Anki asks you to download a dictionary until you have one.
 - 10ten's settings button in its pop-up opens its settings instead of leaving the window on
   "Loading…" (which also stuck opening them from Settings afterwards).
 - Gaming Mode has a new look that matches the rest of Kimochi, in light or dark to follow your
   Appearance setting. The controller menu is now a ring of large icons around a centre that names
   the action you're pointing at. Read-along's hint bar, the controls sheet and Recent text use
   bigger text and buttons, easier to read on a TV or handheld.
-- New **Game mode** page in Settings, with the controller menu's and Read along's buttons, and a
-  new way to read along with the Yomitan API: **Full screen** shows the whole scanned text across
-  the top of a dimmed screen with one word lit and its dictionary entry below. Move word to word
-  with the D-pad or arrow keys, through a word's entries with the shoulder buttons, and add the
-  entry to Anki with A. The pop-up beside the word stays the default.
-- Sentence audio: turn on Record system audio in Settings → Anki and each card you add gets the
-  spoken audio of the line you mined it from, cut from what your computer was playing and trimmed
-  to the voice. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up, into a field
-  you choose (SentenceAudio by default), and never replaces a field that is already filled. Audio is
-  only kept in memory. On macOS it uses the Screen Recording permission; on Linux and the Steam
-  Deck it needs PipeWire.
+- New **Game Mode** page in Settings to choose how Read along shows the dictionary: **Pop-up**
+  beside the word (the default) or **Full screen**, which shows the whole scanned text across the
+  top of a dimmed screen with one word lit and its dictionary entry below. Full screen works with
+  every dictionary: the Yomitan API shows its entries there, and Built-in Yomitan, Hachidori and
+  10ten show their own pop-up filling that space. Move word to word with the D-pad or arrow keys,
+  through a word's entries with the shoulder buttons, and add the entry to Anki with A. The
+  controller's buttons stay in Settings → Shortcuts & Controls.
+- Sentence audio: turn on Record and attach sentence audio in Settings → Anki and each card you
+  add gets the spoken audio of the line you mined it from, cut from what your computer was playing
+  and trimmed to the voice. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up,
+  into a field you choose (SentenceAudio by default), and never replaces a field that is already
+  filled. Audio is only kept in memory. On macOS it uses the Screen Recording permission; on Linux
+  and the Steam Deck it needs PipeWire.
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
   (and every other confirmation, alert or question an engine's settings page asks) now appears
   instead of being silently answered "Cancel".

@@ -18,7 +18,9 @@ import {
 import { updateSettings } from '@texthooker/lib/settings'
 import type { Settings } from '@texthooker/lib/types'
 import { useSetting } from '../../bridge/useSetting'
-import { accessibilityStatus, requestAccessibility } from '../../bridge/tauri'
+import { accessibilityStatus, openScreenCapturePreferences, requestAccessibility } from '../../bridge/tauri'
+import { useCapabilities } from '../../bridge/capabilities'
+import { useHasScreenRecordingPermission } from '../../welcome/useHasScreenRecordingPermission'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { OutputSections } from './OutputSections'
 
@@ -31,20 +33,19 @@ const INPUT_SOURCES = [
     value: 'ocr',
     label: 'Screen',
     icon: <Camera />,
-    detail: 'Reads the window or screen chosen in the source menu, with OCR.'
+    detail: 'Scan the window or screen chosen in the source menu with OCR.'
   },
   {
     value: 'quickshot',
     label: 'Quick Shot',
     icon: <Aperture />,
-    detail:
-      'No source to choose: the scan shortcut asks you to draw an area on the screen, then reads it.'
+    detail: 'No source, just hit the button or shortcut to grab and scan.'
   },
   {
     value: 'clipboard',
     label: 'Clipboard',
     icon: <Clipboard />,
-    detail: 'Picks up text copied to the clipboard, for example by a text hooker.'
+    detail: 'Picks up text copied to the clipboard. (E.g., from a text hooker.)'
   },
   {
     value: 'websocket',
@@ -66,17 +67,35 @@ const CLIPBOARD_POLL = [
   { value: '1000', label: '1 s' }
 ]
 
+/** A permission's state: Allowed, or a way to allow it. */
+function PermissionStatus({ granted, onAllow }: { granted: boolean; onAllow: () => void }): ReactNode {
+  return granted ? (
+    <span className="settings-status">
+      <StatusDot tone="ok" />
+      Allowed
+    </span>
+  ) : (
+    <Button size="sm" variant="secondary" onClick={onAllow}>
+      Allow
+      <ExternalLink />
+    </Button>
+  )
+}
+
 /**
- * Accessibility on macOS, where onboarding offers it once: what lets a click on the source
- * bring that exact window forward. Nothing on platforms without the permission.
+ * The macOS permissions onboarding asks for (Screen Recording, Accessibility), in case one was
+ * skipped or later turned off. Nothing on platforms without them: `accessibility_status` is null
+ * there.
  */
-function AccessibilitySection(): ReactNode {
-  const [granted, setGranted] = useState<boolean | null>(null)
+function MacPermissionsSection(): ReactNode {
+  const [accessibility, setAccessibility] = useState<boolean | null>(null)
+  const { authorization, restartAfterGrant } = useCapabilities().capture
+  const screenRecording = useHasScreenRecordingPermission(accessibility !== null)
   useEffect(() => {
     let alive = true
     const check = (): void => {
       void accessibilityStatus()
-        .then((next) => alive && setGranted(next))
+        .then((next) => alive && setAccessibility(next))
         .catch(() => undefined)
     }
     check()
@@ -87,24 +106,28 @@ function AccessibilitySection(): ReactNode {
       clearInterval(timer)
     }
   }, [])
-  if (granted === null) return null
+  if (accessibility === null) return null
+  const recordingGranted = screenRecording || authorization === 'granted'
   return (
-    <SettingsSection title="Windows">
+    <SettingsSection title="macOS permissions">
       <SettingsRow
-        label="Accessibility"
-        description="Lets a click on your source bring that exact window to the front, even a game in full screen on a Space of its own. Without it, Kimochi brings the application forward instead."
+        label="Screen Recording"
+        description={
+          !recordingGranted && restartAfterGrant
+            ? 'Lets Kimochi read your game window. Restart Kimochi after allowing.'
+            : 'Lets Kimochi read your game window.'
+        }
       >
-        {granted ? (
-          <span className="settings-status">
-            <StatusDot tone="ok" />
-            Allowed
-          </span>
-        ) : (
-          <Button size="sm" variant="secondary" onClick={() => void requestAccessibility().catch(() => undefined)}>
-            Open System Settings
-            <ExternalLink />
-          </Button>
-        )}
+        <PermissionStatus
+          granted={recordingGranted}
+          onAllow={() => void openScreenCapturePreferences().catch(() => undefined)}
+        />
+      </SettingsRow>
+      <SettingsRow label="Accessibility" description="Lets Kimochi bring your game window to front.">
+        <PermissionStatus
+          granted={accessibility}
+          onAllow={() => void requestAccessibility().catch(() => undefined)}
+        />
       </SettingsRow>
     </SettingsSection>
   )
@@ -119,7 +142,7 @@ export function SourcesTab(): ReactNode {
   return (
     <SettingsPage
       title="Sources"
-      description="Where the Log's lines come from. The source menu at the top of the main window switches between them too."
+      description="Choose where Kimochi gets its text."
     >
       <WithReaderSettings>
         {(settings) => {
@@ -190,9 +213,9 @@ export function SourcesTab(): ReactNode {
 
               <SettingsSection title="Sessions">
                 <SettingsRow
-                  label="Switch sessions by window name"
+                  label="Auto switch sessions by window name"
                   controlId="sources-auto-match"
-                  description="With screen input, each window you read gets its own session, created the first time. Also in the session menu."
+                  description="Kimochi will try to auto-load a session based on the source window name."
                 >
                   <Switch
                     id="sources-auto-match"
@@ -205,7 +228,7 @@ export function SourcesTab(): ReactNode {
           )
         }}
       </WithReaderSettings>
-      <AccessibilitySection />
+      <MacPermissionsSection />
       <OutputSections />
     </SettingsPage>
   )

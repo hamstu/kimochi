@@ -292,10 +292,12 @@ test('every engine has the copy the chooser shows', () => {
   // Google Lens leads the list: it is the default for new installs.
   assert.equal(modes[0], 'googlelens')
   for (const [mode, info] of Object.entries(OCR_MODES)) {
-    for (const field of ['label', 'name', 'tagline', 'description', 'requirements']) {
+    for (const field of ['label', 'name', 'tagline', 'description']) {
       assert.equal(typeof info[field], 'string', `${mode}.${field}`)
       assert.ok(info[field].trim().length > 0, `${mode}.${field} is empty`)
     }
+    // Requirements are left out when there is nothing to say; when present they say something.
+    if (info.requirements !== undefined) assert.ok(info.requirements.trim().length > 0, `${mode}.requirements is empty`)
     assert.equal(typeof info.geometry, 'boolean', `${mode}.geometry`)
     assert.ok(Array.isArray(info.strengths) && info.strengths.length >= 2, `${mode} needs strengths`)
     assert.ok(['local', 'online'].includes(info.runs), `${mode} must say where it runs`)

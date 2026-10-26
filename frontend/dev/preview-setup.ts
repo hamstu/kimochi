@@ -67,7 +67,7 @@
  *   ?gamemode=1         macOS Game Mode is throttling the overlay (its notice under Show overlay)
  *   ?popup=hachidori|tenten|custom-api  the dictionary engine already chosen (the setup step
  *                    follows it; custom-api is the Yomitan API wizard)
- *   ?readalong=fullscreen  Settings → Game mode: Read along as the full-screen dictionary
+ *   ?readalong=fullscreen  Settings → Game Mode: Read along as the full-screen dictionary
  *   ?steam=<state>   the Steam library (preview-steam.ts): deck, notrunning, fail, pending, added,
  *                    gaming; the welcome guide's Steam step (?step=steam) and Settings → General
  *   ?yapi=<state>    the Yomitan API setup (preview-yomitan-api.ts): flow (default), none,
@@ -87,7 +87,7 @@
  */
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit, listen } from '@tauri-apps/api/event'
-import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, nextOverlayToggle } from '@ui/settings'
+import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, dictionaryEngineOf, hostEngineOf, nextOverlayToggle } from '@ui/settings'
 import { SOUND_NAMES, createSoundPlayer, type SoundName } from '@ui/sounds'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
@@ -108,6 +108,7 @@ import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
 import { STEAM_HANDLERS } from './preview-steam'
 import { studioJson } from './studio/bridge'
+import type { ExtensionHost } from '../bridge/dictionaryEngine'
 
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome'
 
@@ -184,7 +185,7 @@ const settings: Record<string, unknown> = {
   ...(params.get('whatsnew') === 'update' ? { lastSeenVersion: '0.0.2' } : {}),
   // `?popup=hachidori` stands in for a stored engine (the store is in memory, so a reload resets it).
   ...(params.get('popup') ? { yomitanSettings: { popupType: params.get('popup'), customApiUrl: '' } } : {}),
-  // `?readalong=fullscreen`: Settings → Game mode's full-screen dictionary chosen.
+  // `?readalong=fullscreen`: Settings → Game Mode's full-screen dictionary chosen.
   ...(params.get('readalong') === 'fullscreen' ? { gameModeSettings: { dictionaryView: 'fullscreen' } } : {}),
   mainSidebarOpen: params.get('sidebar') !== '0',
   quickShotEnabled: params.get('quickshot') === '1',
@@ -605,13 +606,7 @@ function installDemoStops(): void {
     demoStop(feature)
     return true
   }
-  // A visitor's earlier switch is mirrored in this origin's storage, and the demo only has Yomitan:
-  // without this, every later visit would look for the Hachidori or 10ten host.
-  try {
-    localStorage.removeItem(DICTIONARY_ENGINE_KEY)
-  } catch {
-    // Storage blocked: nothing was mirrored either.
-  }
+  // A visitor's earlier engine switch is undone by `syncDictionaryEngine`, as on every load.
 }
 
 // ---------------------------------------------------------------- IPC
@@ -1253,8 +1248,45 @@ addEventListener('keydown', (event) => {
 
 // ---------------------------------------------------------------- dictionary relay stub
 
-// `preloadPanelDictionary` imports `/ui/panel-yomitan.js` (the engine resolves to Yomitan here: no
-// mirror, no prelude); vite.preview.config.ts serves a stub there.
+// `preloadPanelDictionary` imports `/ui/panel-yomitan.js` for Yomitan; vite.preview.config.ts
+// serves a stub there. The engine a window hosts comes from the mirror in this origin's storage,
+// which outlives the preview's settings (in memory, reset by every load): after trying Hachidori in
+// the preview's Settings, a reloaded Log looked for native's Hachidori host while the setting was
+// back to Built-in Yomitan, and said "The Hachidori host did not load in this window." So the mirror
+// follows this load's setting, and for Hachidori or 10ten a ready host that looks nothing up stands
+// in for native's, as the Yomitan stub does.
+function syncDictionaryEngine(): void {
+  const engine = hostEngineOf(dictionaryEngineOf((settings.yomitanSettings as { popupType?: unknown } | undefined)?.popupType))
+  try {
+    localStorage.setItem(DICTIONARY_ENGINE_KEY, engine)
+  } catch {
+    // Storage blocked: nothing is mirrored, so windows host Yomitan.
+    return
+  }
+  if (engine !== 'hachidori' && engine !== 'tenten') return
+  const target = window as unknown as {
+    __kimochiExtensionHost?: ExtensionHost
+    __kimochiExtensionOrigins?: Record<string, string>
+  }
+  if (target.__kimochiExtensionHost) return
+  // The Dictionary settings window frames `${origin}/settings.html`: vite.preview.config.ts serves
+  // a note there in place of the engine's own page.
+  target.__kimochiExtensionOrigins = { [engine]: `${location.origin}/dev/extension/${engine}` }
+  const ok = { ready: true }
+  target.__kimochiExtensionHost = {
+    engine,
+    start: async () => ok,
+    setEnabled: () => undefined,
+    observePopup: () => () => undefined,
+    lookupRange: async () => false,
+    popupControl: () => undefined,
+    dismiss: () => undefined,
+    isPopupVisible: () => false,
+    openOptionsPage: () => undefined,
+    ready: Promise.resolve(ok),
+    pendingNavigate: null
+  }
+}
 
 // ---------------------------------------------------------------- onboarding (welcome.html)
 
@@ -1354,6 +1386,7 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
     document.head.append(style)
     tellEmbedder({ type: 'state', sourceId: live.source?.id ?? null, autoOcr: live.autoOcr, overlay: live.textOverlayVisible })
   }
+  syncDictionaryEngine()
   if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed })
   if (params.get('activity') === '1') playActivity()
 

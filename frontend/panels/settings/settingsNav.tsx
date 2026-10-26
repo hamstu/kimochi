@@ -19,12 +19,12 @@ export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName 
   { value: 'general', label: 'General', icon: <SlidersHorizontal /> },
   { value: 'sources', label: 'Sources', icon: <Waypoints /> },
   { value: 'ocr', label: 'OCR & Overlay', icon: <ScanText /> },
-  { value: 'log', label: 'Log', icon: <ScrollText /> },
+  { value: 'log', label: 'Log & Sessions', icon: <ScrollText /> },
   { value: 'dictionary', label: 'Dictionary', icon: <BookOpen /> },
   { value: 'anki', label: 'Anki', icon: <Layers /> },
   { value: 'assist', label: 'Translation & AI', icon: <Languages /> },
   { value: 'controls', label: 'Shortcuts & Controls', icon: <Gamepad2 /> },
-  { value: 'gamemode', label: 'Game mode', icon: <Joystick /> },
+  { value: 'gamemode', label: 'Game Mode', icon: <Joystick /> },
   { value: 'account', label: 'Account', icon: <UserRound /> },
   { value: 'about', label: 'About', icon: <Info /> }
 ]

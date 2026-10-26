@@ -38,12 +38,12 @@ const SETTINGS_TABS = opts(
   ['general', 'General'],
   ['sources', 'Sources'],
   ['ocr', 'OCR & Overlay'],
-  ['log', 'Log'],
+  ['log', 'Log & Sessions'],
   ['dictionary', 'Dictionary'],
   ['anki', 'Anki'],
   ['assist', 'Translation & AI'],
   ['controls', 'Shortcuts & Controls'],
-  ['gamemode', 'Game mode'],
+  ['gamemode', 'Game Mode'],
   ['account', 'Account'],
   ['about', 'About']
 )

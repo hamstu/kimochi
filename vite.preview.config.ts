@@ -21,6 +21,23 @@ export async function isBackendReachable() { return ok }
 export default { setEmbeddedEnabled, start, isBackendReachable }
 `
 
+/**
+ * Where the preview says Hachidori and 10ten are served from (`__kimochiExtensionOrigins`, set by
+ * preview-setup.ts): their own settings pages ship with the downloaded engine, which a browser does
+ * not have, so the Dictionary settings window shows this note in their place.
+ */
+const EXTENSION_PAGE_PREFIX = '/dev/extension/'
+const extensionPageStub = (engine: string): string => `<!doctype html>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; font: 13px/1.5 system-ui, sans-serif; }
+  body { margin: 0; padding: 24px; color: CanvasText; background: Canvas; }
+  p { max-width: 46ch; margin: 0; opacity: .7; }
+</style>
+<p>${engine === 'tenten' ? '10ten' : 'Hachidori'}'s own settings page shows here in the app. The browser preview does
+not have the engine, so this stands in for it.</p>
+`
+
 function previewServer(): Plugin {
   return {
     name: 'kimochi-preview-server',
@@ -30,6 +47,11 @@ function previewServer(): Plugin {
         if (url === '/ui/panel-yomitan.js') {
           res.setHeader('Content-Type', 'text/javascript')
           res.end(PANEL_YOMITAN_STUB)
+          return
+        }
+        if (url?.startsWith(EXTENSION_PAGE_PREFIX)) {
+          res.setHeader('Content-Type', 'text/html')
+          res.end(extensionPageStub(url.slice(EXTENSION_PAGE_PREFIX.length).split('/')[0]))
           return
         }
         if (url === '/' || url === '/dev') {

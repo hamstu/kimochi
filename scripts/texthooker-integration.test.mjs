@@ -332,7 +332,6 @@ test("Dictionary is authoritative across reader updates and resets", async () =>
     "http://localhost:1234",
   );
   assert.equal(h.api.readerSettings.getSettings().fontSizePx, 20);
-  await h.api.readerSettings.resetSettings();
   assert.equal(h.api.readerSettings.getSettings().dictionaryMode, "custom-api");
   await h.setSetting("yomitanSettings", {
     popupType: "builtin",

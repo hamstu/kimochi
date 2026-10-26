@@ -20,28 +20,27 @@ export function AssistTab(): ReactNode {
   )
 }
 
-const PROVIDERS: { value: TranslationProvider; label: string }[] = [
-  { value: 'auto', label: 'Automatic' },
+/** The two choices. A stored `'auto'` (never chosen) shows as what it does now: `shownProvider`. */
+const PROVIDERS: { value: Exclude<TranslationProvider, 'auto'>; label: string }[] = [
   { value: 'kimochi', label: 'Kimochi cloud' },
   { value: 'deepl', label: 'Your DeepL key' }
 ]
 
+/** `'auto'` is Kimochi cloud with Kimochi Cloud and your DeepL key otherwise (`translationRoute`). */
+function shownProvider(provider: TranslationProvider | undefined, cloud: boolean): 'kimochi' | 'deepl' {
+  if (provider === 'kimochi' || provider === 'deepl') return provider
+  return cloud ? 'kimochi' : 'deepl'
+}
+
 function providerDescription(settings: Settings, cloud: boolean): string {
-  const route = translationRoute(settings.translationProvider, settings.deeplApiKey, cloud)
-  switch (settings.translationProvider) {
-    case 'kimochi':
-      return cloud
-        ? 'Uses your Kimochi Cloud monthly translations.'
-        : 'Needs Kimochi Cloud: see Settings → Account.'
-    case 'deepl':
-      return route ? 'Uses your own DeepL API key.' : 'Add your DeepL API key below.'
-    default:
-      return route === 'kimochi'
-        ? 'Kimochi cloud with Kimochi Cloud, otherwise your DeepL key. Now: Kimochi cloud.'
-        : route === 'deepl'
-          ? 'Your DeepL key.'
-          : 'Add your DeepL API key below.'
+  if (shownProvider(settings.translationProvider, cloud) === 'kimochi') {
+    return cloud
+      ? 'Uses your Kimochi Cloud monthly translations.'
+      : 'Needs Kimochi Cloud: see Settings → Account.'
   }
+  return translationRoute('deepl', settings.deeplApiKey, cloud)
+    ? 'Choose the translation provider'
+    : 'Add your DeepL API key below.'
 }
 
 function AssistSections({ settings }: { settings: Settings }): ReactNode {
@@ -50,7 +49,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
   const [explainOpen, setExplainOpen] = useState(false)
   // eslint-disable-next-line react-hooks/set-state-in-effect -- the draft follows outside changes
   useEffect(() => setDeeplDraft(settings.deeplApiKey), [settings.deeplApiKey])
-  const provider = settings.translationProvider ?? 'auto'
+  const provider = shownProvider(settings.translationProvider, cloud)
 
   const explainSummary =
     settings.explainProvider === 'kimochi'
@@ -86,7 +85,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
             controlId="assist-deepl"
             description={
               settings.deeplApiKey.trim()
-                ? 'Key set. Translate is in each line’s menu and on the T key.'
+                ? 'Enter your DeepL key'
                 : 'Stored locally in settings.json, never bundled or backed up.'
             }
           >
@@ -108,7 +107,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
         )}
       </SettingsSection>
 
-      <SettingsSection title="Explain">
+      <SettingsSection title="Explain with AI">
         <SettingsRow
           label="Provider, model and prompt"
           description={`${explainSummary}. Explain is in each line’s menu and on the E key.`}

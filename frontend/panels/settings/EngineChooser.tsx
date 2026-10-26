@@ -221,10 +221,11 @@ function EngineDetail({
           </li>
         ))}
       </ul>
-      <p className="k-description">
-        {info.requirements}
-        {runsOn && ` On this computer it runs on ${runsOn}.`}
-      </p>
+      {(info.requirements || runsOn) && (
+        <p className="k-description">
+          {[info.requirements, runsOn && `On this computer it runs on ${runsOn}.`].filter(Boolean).join(' ')}
+        </p>
+      )}
       {!selectable && (
         <Callout tone="warn" id={reasonId}>
           {capability?.reason || 'Not available on this computer.'}

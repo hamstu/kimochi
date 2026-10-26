@@ -84,8 +84,6 @@ export async function updateSettings(
   emit();
   return current;
 }
-export const resetSettings = (): Promise<Settings> =>
-  updateSettings({ ...SETTINGS_DEFAULTS });
 export function onSettingsChange(fn: (s: Settings) => void): () => void {
   subs.add(fn);
   return () => {

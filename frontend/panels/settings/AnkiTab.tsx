@@ -21,8 +21,7 @@ import {
   SettingsRow,
   SettingsSection,
   Spinner,
-  StatusDot,
-  Tooltip
+  StatusDot
 } from '@kit'
 import {
   ANKI_ROUTE,
@@ -135,7 +134,12 @@ function AnkiSections({
 }): ReactNode {
   // Only Kimochi's own pop-up talks to AnkiConnect with Kimochi's settings.
   const route = ANKI_ROUTE[engine]
-  if (route === 'none') return <CardsSection settings={settings} engine={engine} connection={0} />
+  const runtime = useDictionaryReadiness(engine)
+  const downloaded = runtime.download === null || runtime.download === 'ready'
+  // Not downloaded: no cards to add yet, so only the way to download it.
+  if (route === 'none' || !downloaded) {
+    return <CardsSection settings={settings} engine={engine} connection={0} />
+  }
   if (route !== 'kimochi') {
     return (
       <>
@@ -255,7 +259,7 @@ function ConnectionSection({
         controlId="anki-url"
         description={
           isLocalAddress(saved)
-            ? `Where AnkiConnect listens: ${DEFAULT_ANKI_CONNECT_URL} unless its webBindPort is changed. A port number on its own is enough.`
+            ? 'The AnkiConnect address.'
             : "Another computer's AnkiConnect must listen on your network: set its webBindAddress, and allow its port through that computer's firewall."
         }
       >
@@ -284,7 +288,7 @@ function ConnectionSection({
       <SettingsRow
         label="API key"
         controlId="anki-key"
-        description="Only if AnkiConnect's config sets an apiKey. Kept on this computer, never synced."
+        description="Optional AnkiConnect apiKey."
       >
         <Input
           id="anki-key"
@@ -337,11 +341,8 @@ function CardsSection({
 
   if (route === 'none') {
     return (
-      <SettingsSection title={`Adding cards with ${name}`}>
-        <SettingsRow
-          label={`${name} does not add Anki cards`}
-          description="To add cards, choose Built-in Yomitan, Hachidori or the Yomitan API as your dictionary."
-        >
+      <SettingsSection title="Cards">
+        <SettingsRow label={`${name} doesn't add Anki cards.`}>
           <Button size="sm" onClick={showDictionary}>
             Choose a dictionary
           </Button>
@@ -350,28 +351,16 @@ function CardsSection({
     )
   }
 
-  const how =
-    engine === 'yomitan'
-      ? `${name} adds the card from its pop-up once Enable Anki integration is on in its Anki settings, which also hold the deck, note type and fields.`
-      : `${name} adds the card from its pop-up, using the Templates in its Anki settings for the deck, note type and fields.`
-  const where = `The AnkiConnect address and API key are set there too. You don't need to change AnkiConnect's webCorsOriginList.`
-  return (
-    <SettingsSection title={`Adding cards with ${name}`}>
-      <SettingsRow
-        label={`${name}'s Anki settings`}
-        description={`${how} ${where}`}
-      >
-        <OpenEngineAnkiButton engine={engine} onChooseDictionary={showDictionary} />
-      </SettingsRow>
-    </SettingsSection>
-  )
+  return <EngineAnkiRow engine={engine} onChooseDictionary={showDictionary} />
 }
 
 /**
- * "Open <engine> Anki settings", once the engine's settings page can open: not while the engine
- * is not downloaded (its panel would only say so) or still starting, as Settings → Dictionary.
+ * Built-in Yomitan and Hachidori keep their own Anki settings (deck, note type, fields, the
+ * AnkiConnect address): a way to them once the engine's settings page can open. Before it is
+ * downloaded there is nothing to set up, so only the way to download it; while it starts, a
+ * disabled button says so.
  */
-function OpenEngineAnkiButton({
+function EngineAnkiRow({
   engine,
   onChooseDictionary
 }: {
@@ -381,33 +370,37 @@ function OpenEngineAnkiButton({
   const name = DICTIONARY_ENGINES[engine].name
   const runtime = useDictionaryReadiness(engine)
   if (runtime.download !== null && runtime.download !== 'ready') {
-    // Its settings page exists once it is downloaded, which Settings → Dictionary does.
     return (
-      <Tooltip content={`${name} is not downloaded yet`}>
-        <Button size="sm" onClick={onChooseDictionary}>
-          Download in Dictionary settings
-        </Button>
-      </Tooltip>
-    )
-  }
-  if (!runtime.view.settingsAvailable) {
-    return (
-      <Button size="sm" disabled>
-        <Spinner label={`Starting ${name}`} />
-        Starting {name}…
-      </Button>
+      <SettingsSection title="Cards">
+        <SettingsRow label="Download a dictionary to add Anki cards.">
+          <Button size="sm" onClick={onChooseDictionary}>
+            Go to Dictionary
+          </Button>
+        </SettingsRow>
+      </SettingsSection>
     )
   }
   return (
-    <Button
-      size="sm"
-      onClick={() => {
-        openDictionarySettingsSection('anki').catch((error) =>
-          console.error(`Open ${name} Anki settings failed:`, nativeError(error).message)
-        )
-      }}
-    >
-      Open {name} Anki settings
-    </Button>
+    <SettingsSection title="Cards">
+      <SettingsRow label={`${name} keeps its own Anki settings.`}>
+        {runtime.view.settingsAvailable ? (
+          <Button
+            size="sm"
+            onClick={() => {
+              openDictionarySettingsSection('anki').catch((error) =>
+                console.error(`Open ${name} Anki settings failed:`, nativeError(error).message)
+              )
+            }}
+          >
+            Open {name} Anki settings
+          </Button>
+        ) : (
+          <Button size="sm" disabled>
+            <Spinner label={`Starting ${name}`} />
+            Starting {name}…
+          </Button>
+        )}
+      </SettingsRow>
+    </SettingsSection>
   )
 }

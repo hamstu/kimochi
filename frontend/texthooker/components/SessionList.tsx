@@ -1,0 +1,380 @@
+/* eslint react-hooks/set-state-in-effect: "off" -- Name drafts synchronize to session changes. */
+/**
+ * The sessions, one editable row each: drag a handle to reorder, click a name to rename, the bin
+ * to delete (confirmed). Shared by the Log's "Manage sessions" dialog and Settings → Log & Sessions;
+ * every change goes through the Log (`@texthooker/lib/sessions`), which owns the session files.
+ */
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { GripVertical, Trash2 } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import {
+  restrictToVerticalAxis,
+  restrictToWindowEdges,
+} from "@dnd-kit/modifiers";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  Badge,
+  Button,
+  portalRoot,
+  Callout,
+  ConfirmDialog,
+  IconButton,
+  Input,
+  cn,
+  isComposing,
+} from "@kit";
+import {
+  deleteSession,
+  renameSession,
+  reorderSessions,
+  switchSession,
+} from "@texthooker/lib/sessions";
+import type { SessionMeta } from "@texthooker/lib/types";
+import "./session-list.css";
+
+interface Props {
+  activeId: string;
+  sessions: SessionMeta[];
+  /** Offer a "Switch" button on the rows that are not the active session. */
+  switchable?: boolean;
+  className?: string;
+}
+
+export function SessionList({
+  activeId,
+  sessions,
+  switchable = false,
+  className,
+}: Props): ReactNode {
+  const [ordered, setOrdered] = useState(sessions);
+  const [draftNames, setDraftNames] = useState<Record<string, string>>({});
+  // Pointer drags start after a few pixels, so a click on the handle stays a click. The keyboard
+  // lifts a row with Space or Enter, moves it with the arrows and drops it with Space or Enter.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  // The session being dragged: drawn in an overlay that follows the pointer, its row left behind
+  // as the gap the others slide around.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Read by the sync below without making the end of a drag a reason to sync.
+  const dragging = useRef(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // The reader sends a fresh copy of the sessions with every update (stats, new lines), so only
+  // a real change to them is taken up, and never mid-drag. A drop shows its new order at once;
+  // the saved order arrives a moment later and matches it.
+  const sessionsKey = sessions
+    .map((session) => `${session.id}\u0000${session.name}`)
+    .join("\u0001");
+  useEffect(() => {
+    if (dragging.current) return;
+    setOrdered(sessions);
+    setDraftNames((current) => {
+      const next: Record<string, string> = {};
+      for (const session of sessions) {
+        next[session.id] = current[session.id] ?? session.name;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `sessions` is followed through its key.
+  }, [sessionsKey]);
+
+  useEffect(() => {
+    if (deleteId && !sessions.some((session) => session.id === deleteId)) {
+      setDeleteId(null);
+    }
+  }, [deleteId, sessions]);
+
+  const endDrag = () => {
+    dragging.current = false;
+    setDraggingId(null);
+  };
+
+  const onDragEnd = async ({ active, over }: DragEndEvent) => {
+    endDrag();
+    if (!over || active.id === over.id) return;
+    const from = ordered.findIndex((session) => session.id === active.id);
+    const to = ordered.findIndex((session) => session.id === over.id);
+    if (from === -1 || to === -1) return;
+    const next = arrayMove(ordered, from, to);
+    setOrdered(next);
+    setError(null);
+    try {
+      await reorderSessions(next.map((session) => session.id));
+    } catch (err) {
+      setOrdered(sessions);
+      setError(errorMessage(err, "Couldn't reorder sessions."));
+    }
+  };
+
+  const commitName = async (session: SessionMeta, value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === session.name) {
+      setDraftNames((current) => ({ ...current, [session.id]: session.name }));
+      return;
+    }
+    setDraftNames((current) => ({ ...current, [session.id]: trimmed }));
+    setError(null);
+    try {
+      await renameSession(session.id, trimmed);
+    } catch (err) {
+      setDraftNames((current) => ({ ...current, [session.id]: session.name }));
+      setError(errorMessage(err, "Couldn't rename the session."));
+    }
+  };
+
+  const activate = async (id: string) => {
+    setError(null);
+    try {
+      await switchSession(id);
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't switch sessions."));
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteSession(deleteId);
+      setDeleteId(null);
+    } catch (err) {
+      // Close the confirmation so the error shows by the list.
+      setDeleteId(null);
+      setError(errorMessage(err, "Couldn't delete the session."));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const draggingSession = ordered.find((session) => session.id === draggingId);
+  const deletingSession = sessions.find((session) => session.id === deleteId);
+
+  return (
+    <>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={({ active }) => {
+          setDeleteId(null);
+          dragging.current = true;
+          setDraggingId(String(active.id));
+          // A text selection left on the page would otherwise go along as a native drag.
+          window.getSelection()?.removeAllRanges();
+        }}
+        onDragCancel={endDrag}
+        onDragEnd={(event) => void onDragEnd(event)}
+      >
+        <SortableContext
+          items={ordered.map((session) => session.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div
+            className={cn("log-sessions", className)}
+            role="list"
+            aria-label="Sessions"
+            data-sorting={draggingId ? "" : undefined}
+            // Only dnd-kit drags here; WebKit's own drag of text or elements never starts.
+            onDragStart={(event) => event.preventDefault()}
+          >
+            {ordered.map((session, index) => {
+              const isActive = session.id === activeId;
+              return (
+                <SortableSession
+                  key={session.id}
+                  id={session.id}
+                  label={`Move ${session.name}. Position ${index + 1} of ${ordered.length}.`}
+                >
+                  <Input
+                    size="sm"
+                    className="log-session-name"
+                    aria-label={`Session name${isActive ? " (active session)" : ""}`}
+                    value={draftNames[session.id] ?? session.name}
+                    onChange={(event) =>
+                      setDraftNames((current) => ({
+                        ...current,
+                        [session.id]: event.target.value,
+                      }))
+                    }
+                    onBlur={(event) =>
+                      void commitName(session, event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (isComposing(event)) return;
+                      if (event.key === "Enter") event.currentTarget.blur();
+                      if (event.key === "Escape") {
+                        // Revert the draft without closing a dialog around the list.
+                        event.stopPropagation();
+                        event.preventDefault();
+                        event.currentTarget.value = session.name;
+                        setDraftNames((current) => ({
+                          ...current,
+                          [session.id]: session.name,
+                        }));
+                        event.currentTarget.blur();
+                      }
+                    }}
+                  />
+
+                  {isActive ? (
+                    <Badge tone="accent">Active</Badge>
+                  ) : switchable ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="log-session-switch"
+                      aria-label={`Switch to ${session.name}`}
+                      onClick={() => void activate(session.id)}
+                    >
+                      Switch
+                    </Button>
+                  ) : null}
+                  <IconButton
+                    label={
+                      sessions.length === 1
+                        ? "Create another session before deleting this one"
+                        : `Delete ${session.name}`
+                    }
+                    size="sm"
+                    className="log-session-delete"
+                    onClick={() => {
+                      setDeleteId(session.id);
+                      setError(null);
+                    }}
+                    disabled={sessions.length === 1 || deleting}
+                  >
+                    <Trash2 />
+                  </IconButton>
+                </SortableSession>
+              );
+            })}
+          </div>
+        </SortableContext>
+        {createPortal(
+          <DragOverlay
+            modifiers={[restrictToVerticalAxis, restrictToWindowEdges]}
+            zIndex={70}
+          >
+            {draggingSession ? (
+              <SessionRowFace
+                name={draftNames[draggingSession.id] ?? draggingSession.name}
+                active={draggingSession.id === activeId}
+              />
+            ) : null}
+          </DragOverlay>,
+          portalRoot() ?? document.body,
+        )}
+      </DndContext>
+
+      {error ? (
+        <Callout tone="danger" className="log-dialog-error">
+          {error}
+        </Callout>
+      ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deletingSession)}
+        onOpenChange={(next) => {
+          if (!next && !deleting) setDeleteId(null);
+        }}
+        title={`Delete “${deletingSession?.name ?? ""}”?`}
+        description={`Its transcript, notebook and images will be permanently deleted.${
+          deletingSession?.id === activeId
+            ? " A nearby session will become active."
+            : ""
+        }`}
+        confirmLabel={deleting ? "Deleting…" : "Delete session"}
+        tone="danger"
+        busy={deleting}
+        onConfirm={() => void confirmDelete()}
+      />
+    </>
+  );
+}
+
+/** A session's row: dragged by its handle, the others sliding aside to make room. */
+function SortableSession({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      role="listitem"
+      className="log-session-row"
+      data-dragging={isDragging ? "" : undefined}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+    >
+      <Button
+        ref={setActivatorNodeRef}
+        variant="ghost"
+        size="sm"
+        icon
+        className="log-session-grip"
+        {...attributes}
+        {...listeners}
+        aria-label={label}
+      >
+        <GripVertical />
+      </Button>
+      {children}
+    </div>
+  );
+}
+
+/** The dragged row as it floats under the pointer: a picture of the row, not its controls. */
+function SessionRowFace({ name, active }: { name: string; active: boolean }) {
+  return (
+    <div className="log-session-row log-session-lifted" aria-hidden>
+      <span className="log-session-grip k-button k-button-ghost k-button-sm k-button-icon">
+        <GripVertical />
+      </span>
+      <span className="log-session-face-name">{name}</span>
+      {active ? <Badge tone="accent">Active</Badge> : null}
+      <span className="log-session-delete k-button k-button-ghost k-button-sm k-button-icon">
+        <Trash2 />
+      </span>
+    </div>
+  );
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}

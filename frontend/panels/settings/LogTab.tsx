@@ -1,12 +1,13 @@
 /**
- * Settings → Log: how the transcript reads, which incoming lines it keeps, the text replacements
- * applied on arrival, and the reading timer. Clearing a session's lines and resetting its stats
- * are in the session menu and the Log's ⋯ menu, next to the lines they act on.
+ * Settings → Log & Sessions: how the transcript reads, which incoming lines it keeps, the text
+ * replacements applied on arrival, the reading timer, and the sessions themselves (the same list
+ * as the Log's "Manage sessions" dialog). Clearing a session's lines and resetting its stats are in
+ * the session menu and the Log's ⋯ menu, next to the lines they act on.
  */
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Plus } from 'lucide-react'
 import {
   Button,
-  ConfirmDialog,
   Select,
   SettingsPage,
   SettingsRow,
@@ -15,7 +16,9 @@ import {
   Switch
 } from '@kit'
 import { ReplacementsEditor } from '@texthooker/components/ReplacementsEditor'
-import { resetSettings, updateSettings } from '@texthooker/lib/settings'
+import { SessionList } from '@texthooker/components/SessionList'
+import { createSession, getManifest, subscribeSessions } from '@texthooker/lib/sessions'
+import { updateSettings } from '@texthooker/lib/settings'
 import type { AudioSettings } from '../../vendor/shared-types'
 import { DEFAULT_VOICE_ID } from '../../vendor/shared-constants'
 import { AVAILABLE_VOICES } from '../../vendor/voices'
@@ -36,13 +39,15 @@ export function LogTab(): ReactNode {
   const [audioSettings, setAudioSettings] = useSetting<AudioSettings>('audioSettings', {
     voiceId: DEFAULT_VOICE_ID
   })
-  const [confirmReset, setConfirmReset] = useState(false)
   // Read aloud runs on Kimochi cloud, which needs a signed-in Kimochi account; without one its
   // voice is moot.
   const { cloudAccess } = useCapabilities()
 
   return (
-    <SettingsPage title="Log" description="How the transcript reads and which lines it keeps.">
+    <SettingsPage
+      title="Log & Sessions"
+      description="How the transcript reads, which lines it keeps, and your sessions."
+    >
       <WithReaderSettings>
         {(settings) => (
           <div className="texthooker">
@@ -184,31 +189,49 @@ export function LogTab(): ReactNode {
               </SettingsRow>
             </SettingsSection>
 
-            <SettingsSection title="Reset">
-              <SettingsRow
-                label="Reset Log settings"
-                description="Restores the defaults here and on the Sources, Dictionary and AI pages. Sessions, lines and text replacements are kept."
-              >
-                <Button variant="danger" size="sm" onClick={() => setConfirmReset(true)}>
-                  Reset…
-                </Button>
-              </SettingsRow>
-            </SettingsSection>
-            <ConfirmDialog
-              open={confirmReset}
-              onOpenChange={setConfirmReset}
-              tone="danger"
-              title="Reset Log settings?"
-              description="Every option on the Sources, Log, Dictionary and AI pages returns to its default, including the DeepL key and the Anki setup. Sessions, lines and text replacements are kept. This can’t be undone."
-              confirmLabel="Reset settings"
-              onConfirm={() => {
-                void resetSettings()
-                setConfirmReset(false)
-              }}
-            />
+            <SessionsSection />
           </div>
         )}
       </WithReaderSettings>
     </SettingsPage>
+  )
+}
+
+/** Every session, in the Log's order: reorder, rename, switch, delete, or start a new one. */
+function SessionsSection(): ReactNode {
+  // Rendered inside WithReaderSettings, so the Log's snapshot (and its sessions) is here.
+  const [manifest, setManifest] = useState(getManifest)
+  const [error, setError] = useState<string | null>(null)
+  // A copy each time: where the Log runs in the same page (the browser preview), the snapshot is
+  // its live manifest, changed in place.
+  useEffect(() => subscribeSessions((next) => setManifest({ ...next, sessions: [...next.sessions] })), [])
+
+  const create = async (): Promise<void> => {
+    setError(null)
+    try {
+      await createSession()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Couldn't create a session.")
+    }
+  }
+
+  return (
+    <SettingsSection
+      title="Sessions"
+      description="Drag to reorder. Click a name to rename it."
+      actions={
+        <Button variant="ghost" size="sm" onClick={() => void create()}>
+          <Plus /> New session
+        </Button>
+      }
+      footnote={error ?? undefined}
+    >
+      <SessionList
+        activeId={manifest.activeId}
+        sessions={manifest.sessions}
+        switchable
+        className="settings-sessions"
+      />
+    </SettingsSection>
   )
 }

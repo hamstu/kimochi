@@ -74,7 +74,7 @@ function describe(status: SentenceAudioStatus | null): { tone: Tone; title: stri
 
 /** What turning it on means on this computer. */
 function switchDescription(seconds: number, platform: string | undefined): string {
-  const kept = `Keeps the last ${seconds} seconds of what this computer plays, in memory only.`
+  const kept = `Kimochi keeps the last ${seconds} seconds of audio in memory, and tries to match the sentence.`
   switch (platform) {
     case 'macos':
       return `${kept} Kimochi's own sounds are left out. macOS shows its screen-recording indicator while this is on.`
@@ -109,11 +109,11 @@ export function SentenceAudioSection({ popupMapping }: { popupMapping: boolean }
 
   return (
     <SettingsSection
-      title="Sentence audio"
-      description="The line's voice, recorded from what this computer plays, added to each new card."
+      title="Sentence Audio"
+      description="Automatically enhance your Anki cards with real sentence audio from your system."
     >
       <SettingsRow
-        label="Record system audio"
+        label="Record and attach sentence audio"
         controlId="sentence-audio-enabled"
         description={switchDescription(config.seconds, status?.platform)}
       >

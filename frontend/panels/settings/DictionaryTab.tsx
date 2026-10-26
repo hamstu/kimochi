@@ -84,24 +84,16 @@ export function DictionaryTab(): ReactNode {
       const name = DICTIONARY_ENGINES[engine].name
       return (
         <>
-          <div className="dictionary-engine-action">
-            {/* Not downloaded: the panel's download block above says so already. */}
-            {inUse && (runtime.download === null || runtime.download === 'ready') && (
-              <DictionaryReadiness engine={engine} />
-            )}
-            <div className="engine-setting-text">
-              <span className="engine-setting-label">{name} settings</span>
-              <span className="k-description">
-                {!inUse
-                  ? `${name}'s own settings open here once it is the active engine.`
-                  : runtime.view.settingsAvailable
-                    ? `Dictionaries, scanning and lookups are set up in ${name}'s own settings.`
-                    : runtime.download !== null && runtime.download !== 'ready'
-                      ? `${name}'s own settings open here once it is downloaded.`
-                      : `${name}'s own settings open here once it has started.`}
-              </span>
-            </div>
-            {inUse && runtime.view.settingsAvailable && (
+          {/* Not downloaded: the panel's download block above says so already. */}
+          {inUse && (runtime.download === null || runtime.download === 'ready') && (
+            <DictionaryReadiness engine={engine} />
+          )}
+          {/* Its own settings, once there are some to open: nothing is said before then. */}
+          {inUse && runtime.view.settingsAvailable && (
+            <div className="dictionary-engine-action">
+              <div className="engine-setting-text">
+                <span className="engine-setting-label">{name} settings</span>
+              </div>
               <Button
                 size="sm"
                 onClick={() => {
@@ -112,9 +104,9 @@ export function DictionaryTab(): ReactNode {
               >
                 Open {name} settings
               </Button>
-            )}
-          </div>
-          {inUse && <AnkiLink engine={engine} />}
+            </div>
+          )}
+          {inUse && (runtime.download === null || runtime.download === 'ready') && <AnkiLink engine={engine} />}
         </>
       )
     }

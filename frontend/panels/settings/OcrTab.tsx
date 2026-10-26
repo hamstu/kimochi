@@ -1,16 +1,20 @@
 /**
  * Settings → OCR & Overlay: the engine chooser (`EngineChooser`: the engines, what each is good
- * for, its model or server), then overlay behaviour, auto-scan and change detection. The page
+ * for, its model or server), then overlay behaviour, auto-scan and Auto OCR (the main window's
+ * switch, with change detection's tuning behind an Advanced options disclosure). The page
  * keeps the `ocr` value, so deep links and `onSettingsTab('ocr')` still land here.
  */
-import { type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
+import { ChevronDown } from 'lucide-react'
 import {
+  IconButton,
   Select,
   SettingsPage,
   SettingsRow,
   SettingsSection,
   SettingsSubgroup,
-  Switch
+  Switch,
+  cn
 } from '@kit'
 import { DEFAULT_AUTO_OCR_SETTINGS } from '../../../ui/autoscan'
 import type {
@@ -19,9 +23,12 @@ import type {
   TextOverlayGroupingSettings
 } from '../../vendor/shared-types'
 import { useSetting } from '../../bridge/useSetting'
+import { useViewState } from '../../bridge/state'
+import { triggerAction } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { EngineChooser } from './EngineChooser'
 import { SmallTextFilter } from './SmallTextFilter'
+import './ocr-tab.css'
 
 const SCAN_DELAYS = [
   { value: '100', label: '100 ms' },
@@ -80,6 +87,10 @@ export function OcrTab(): ReactNode {
     DEFAULT_AUTO_OCR_SETTINGS
   )
   const filterSmallText = textOverlayGrouping.filterSmallText ?? true
+  // Auto OCR is the overlay's live flag, the same one the main window's Auto OCR row flips.
+  const autoOcrEnabled = Boolean(useViewState().state.autoOcrEnabled)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const advancedPanel = useId()
 
   const updateAutoOCR = (patch: Partial<AutoOCRSettings>): void =>
     void setAutoOCRSettings({ ...autoOCRSettings, ...patch })
@@ -163,65 +174,94 @@ export function OcrTab(): ReactNode {
         )}
       </SettingsSection>
 
-      <SettingsSection
-        title="Change detection"
-        description="Automatic scanning reads the screen locally several times a second and only sends it to the OCR engine once the text stops changing."
-      >
+      <SettingsSection title="Auto OCR">
         <SettingsRow
-          label="Adaptive polling"
-          controlId="ocr-adaptive"
-          description="Looks more often while text is moving and backs off once it settles."
+          label="Auto OCR"
+          controlId="ocr-auto"
+          description="Reads the screen again whenever its text changes."
         >
           <Switch
-            id="ocr-adaptive"
-            checked={autoOCRSettings.adaptivePollingEnabled}
-            onCheckedChange={(checked) => updateAutoOCR({ adaptivePollingEnabled: checked })}
+            id="ocr-auto"
+            checked={autoOcrEnabled}
+            onCheckedChange={(checked) => {
+              if (checked !== autoOcrEnabled) void triggerAction('toggleAutoOcr').catch(() => undefined)
+            }}
           />
         </SettingsRow>
-        <SettingsRow
-          label="Settle after"
-          description="Identical readings in a row before the text is recognised. More means fewer requests and a longer wait after a line finishes drawing."
-        >
-          <Select
-            aria-label="Settle after"
-            value={autoOCRSettings.stableObservations.toString()}
-            onValueChange={(value) => updateAutoOCR({ stableObservations: parseInt(value, 10) })}
-            options={SETTLE_OPTIONS}
-          />
+        <SettingsRow label="Advanced options" controlId="ocr-auto-advanced">
+          <IconButton
+            id="ocr-auto-advanced"
+            label={advancedOpen ? 'Hide advanced options' : 'Advanced options'}
+            size="sm"
+            className={cn('ocr-disclosure', advancedOpen && 'ocr-disclosure-open')}
+            aria-expanded={advancedOpen}
+            aria-controls={advancedPanel}
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+          >
+            <ChevronDown />
+          </IconButton>
         </SettingsRow>
-        <SettingsRow
-          label="Give up waiting after"
-          description="Text that never stops animating is recognised anyway after this long, so a restless screen cannot starve you of a line."
-        >
-          <Select
-            aria-label="Give up waiting after"
-            value={autoOCRSettings.maxCandidateAgeMs.toString()}
-            onValueChange={(value) => updateAutoOCR({ maxCandidateAgeMs: parseInt(value, 10) })}
-            options={MAX_WAIT_OPTIONS}
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Minimum time between requests"
-          description="A floor on how often the OCR engine is called, however fast dialogue moves. Lines that arrive during the wait are not queued; only the latest is kept."
-        >
-          <Select
-            aria-label="Minimum time between requests"
-            value={autoOCRSettings.minRequestSpacingMs.toString()}
-            onValueChange={(value) => updateAutoOCR({ minRequestSpacingMs: parseInt(value, 10) })}
-            options={MIN_SPACING_OPTIONS}
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Base poll interval"
-          description="How often to check for screen changes. With adaptive polling, the starting interval."
-        >
-          <Select
-            aria-label="Base poll interval"
-            value={autoOCRSettings.pollInterval.toString()}
-            onValueChange={(value) => updateAutoOCR({ pollInterval: parseInt(value, 10) })}
-            options={POLL_OPTIONS}
-          />
-        </SettingsRow>
+        {advancedOpen && (
+          <SettingsSubgroup>
+            <div id={advancedPanel}>
+              <SettingsRow
+                label="Adaptive polling"
+                controlId="ocr-adaptive"
+                description="Looks more often while text is moving and backs off once it settles."
+              >
+                <Switch
+                  id="ocr-adaptive"
+                  checked={autoOCRSettings.adaptivePollingEnabled}
+                  onCheckedChange={(checked) => updateAutoOCR({ adaptivePollingEnabled: checked })}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label="Settle after"
+                description="Identical readings in a row before the text is recognised."
+              >
+                <Select
+                  aria-label="Settle after"
+                  value={autoOCRSettings.stableObservations.toString()}
+                  onValueChange={(value) => updateAutoOCR({ stableObservations: parseInt(value, 10) })}
+                  options={SETTLE_OPTIONS}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label="Give up waiting after"
+                description="Text that never stops animating is recognised anyway after this long."
+              >
+                <Select
+                  aria-label="Give up waiting after"
+                  value={autoOCRSettings.maxCandidateAgeMs.toString()}
+                  onValueChange={(value) => updateAutoOCR({ maxCandidateAgeMs: parseInt(value, 10) })}
+                  options={MAX_WAIT_OPTIONS}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label="Minimum time between requests"
+                description="A floor on how often the OCR engine is called. Only the latest line is kept."
+              >
+                <Select
+                  aria-label="Minimum time between requests"
+                  value={autoOCRSettings.minRequestSpacingMs.toString()}
+                  onValueChange={(value) => updateAutoOCR({ minRequestSpacingMs: parseInt(value, 10) })}
+                  options={MIN_SPACING_OPTIONS}
+                />
+              </SettingsRow>
+              <SettingsRow
+                label="Base poll interval"
+                description="How often to check for screen changes. With adaptive polling, the starting interval."
+              >
+                <Select
+                  aria-label="Base poll interval"
+                  value={autoOCRSettings.pollInterval.toString()}
+                  onValueChange={(value) => updateAutoOCR({ pollInterval: parseInt(value, 10) })}
+                  options={POLL_OPTIONS}
+                />
+              </SettingsRow>
+            </div>
+          </SettingsSubgroup>
+        )}
       </SettingsSection>
 
     </SettingsPage>

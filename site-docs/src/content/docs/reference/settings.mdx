@@ -35,8 +35,8 @@ or from the tray icon. It has eight pages.
     | **Input** | Screen | Screen, Quick Shot, Clipboard or WebSocket. |
     | ↳ **Poll interval** (Clipboard) | 200 ms | 100 ms, 200 ms, 500 ms or 1 s. |
     | ↳ **WebSocket URL** | `ws://localhost:6677` | |
-    | **Switch sessions by window name** | On | Each window you read gets its own session. |
-    | **Accessibility** (macOS) | — | Lets a click on your source bring that exact window to the front. |
+    | **Auto switch sessions by window name** | On | Each window you read gets its own session. |
+    | **macOS permissions** | — | Screen Recording (reads your game window) and Accessibility (brings your game window to the front): Allowed, or a button to allow it. |
     | **Copy scans to clipboard** | Off | |
     | **Send scans over WebSocket** | Off | Hosts a WebSocket server at its URL (`ws://localhost:6677`). |
   </TabItem>
@@ -52,14 +52,16 @@ or from the tray icon. It has eight pages.
     | **Group text into regions** | Off |
     | **Filter out furigana and small text** | On, strength Balanced |
     | **Scan after a button press** | Off, delay 500 ms |
-    | **Adaptive polling** | On |
-    | **Settle after** | 2 readings |
-    | **Give up waiting after** | 4 seconds |
-    | **Minimum time between requests** | 1.2 seconds |
-    | **Base poll interval** | 500 ms |
+    | **Auto OCR** | Off; the same switch as the main window's |
+    | ↳ **Advanced options**: **Adaptive polling** | On |
+    | ↳ **Settle after** | 2 readings |
+    | ↳ **Give up waiting after** | 4 seconds |
+    | ↳ **Minimum time between requests** | 1.2 seconds |
+    | ↳ **Base poll interval** | 500 ms |
   </TabItem>
-  <TabItem label="Log">
-    How the transcript reads and which lines it keeps. See [The Log](/log/the-log/).
+  <TabItem label="Log & Sessions">
+    How the transcript reads, which lines it keeps, and your sessions. See [The Log](/log/the-log/)
+    and [Sessions](/log/sessions/).
 
     | Setting | Default | Notes |
     | --- | --- | --- |
@@ -71,7 +73,7 @@ or from the tray icon. It has eight pages.
     | **Keep at most** | 5000 | Lines per session. |
     | **Text replacements** | None | Pattern rules applied to incoming lines. |
     | **Pause when idle for** | 60 s | The reading timer (10–600 s). |
-    | **Reset Log settings** | — | Returns every option on the Sources, Log, Dictionary, Anki and AI pages to its default, including the DeepL key and the Anki setup. Sessions, lines and text replacements are kept. |
+    | **Sessions** | — | Every session: drag to reorder, click a name to rename, switch, delete, or add one. |
   </TabItem>
   <TabItem label="Dictionary">
     The pop-up that shows definitions. See [Dictionaries](/lookups/dictionaries/).
@@ -93,16 +95,16 @@ or from the tray icon. It has eight pages.
     | **Address** | `http://127.0.0.1:8765`, used by Kimochi, Built-in Yomitan and Hachidori |
     | **API key** | Empty; stored locally, never synced |
     | **Open … Anki settings** | The engine's own Anki settings (Built-in Yomitan, Hachidori) |
-    | **Enable mining** / **Deck** / **Note type** / **Tags** / **Field mapping** (Yomitan API) | Off / — / — / `super-texthooker` / — |
+    | **Enable Mining** / **Deck** / **Note type** / **Tags** / **Field mapping** (Yomitan API) | Off / — / — / `super-texthooker` / — |
   </TabItem>
   <TabItem label="Translation & AI">
     Help with a line you can't read yet. See [Translation and AI](/lookups/translation-and-ai/).
 
     | Setting | Default |
     | --- | --- |
-    | **Translate with** | Automatic (Kimochi cloud with Kimochi Cloud, else your DeepL key) |
+    | **Translate with** | Kimochi cloud with Kimochi Cloud, else your DeepL key |
     | **DeepL API key** | Empty; stored locally, never synced |
-    | **Explain → Configure…** | Codex CLI, its default model, the default prompt |
+    | **Explain with AI → Configure…** | Codex CLI, its default model, the default prompt |
   </TabItem>
   <TabItem label="Shortcuts & Controls">
     Keyboard shortcuts and a game controller. See [Keyboard shortcuts](/reference/shortcuts/) and
@@ -114,6 +116,13 @@ or from the tray icon. It has eight pages.
     | **Controller menu** | <kbd>⇧⌘Space</kbd> / <kbd>Ctrl+Shift+Space</kbd>, LS + RS |
     | **Enable gamepad support** | On |
     | **Select / Back / Back (second) / Previous / Next definition** | A / B / Y / LB / RB |
+  </TabItem>
+  <TabItem label="Game Mode">
+    How Read along shows the dictionary. See [Controller](/controller/).
+
+    | Setting | Default | Notes |
+    | --- | --- | --- |
+    | **Dictionary in Read along** | Pop-up | **Pop-up** beside the word, or **Full screen**: the scanned text across the top with the dictionary filling the space below, with any dictionary. |
   </TabItem>
   <TabItem label="Account">
     Optional. Everything else in Kimochi works without one. See [Accounts and plans](/cloud/) and

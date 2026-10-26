@@ -290,9 +290,9 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     <>
       <SettingsSection title={title ?? "Cards from Kimochi's pop-up"} description={description}>
         <SettingsRow
-          label="Enable mining"
+          label="Enable Mining"
           controlId="anki-enabled"
-          description="Shows Add to Anki in the lookup pop-up."
+          description='Shows the "+" button in the lookup pop-up.'
         >
           <Switch
             id="anki-enabled"
@@ -347,7 +347,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         </SettingsRow>
         <SettingsRow
           label="Detect from Anki"
-          description="Finds your Lapis, Kiku or Senren note type and the deck you add the most of its cards to, and fills in its fields."
+          description="Attempt to auto-detect your Anki mining setup and import it here."
         >
           <Button size="sm" onClick={() => void handleDetectClick()} disabled={detecting}>
             {detecting ? "Detecting…" : "Detect"}
@@ -471,7 +471,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           description={
             <>
               Type a Yomitan marker, <span className="k-mono">(sentence)</span>,{" "}
-              <span className="k-mono">(sentence audio)</span> (with Sentence audio on, below), or
+              <span className="k-mono">(sentence audio)</span> (with Sentence Audio on, below), or
               literal text.
             </>
           }
