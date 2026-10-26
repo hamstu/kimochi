@@ -6,10 +6,12 @@ interface WordPopupProps {
   entry: DemoVocab
   /** The inflected form seen in the line, when it differs from the dictionary form. */
   surface: string
+  /** Gaming Mode moved into the pop-up's buttons (A): the focus is on its first, Add to Anki. */
+  focused?: boolean
 }
 
 /** A Yomitan-style result card: term with its reading, part of speech, numbered glosses. */
-export const WordPopup = forwardRef<HTMLDivElement, WordPopupProps>(function WordPopup({ word, entry, surface }, ref) {
+export const WordPopup = forwardRef<HTMLDivElement, WordPopupProps>(function WordPopup({ word, entry, surface, focused = false }, ref) {
   return (
     <div
       ref={ref}
@@ -43,7 +45,9 @@ export const WordPopup = forwardRef<HTMLDivElement, WordPopupProps>(function Wor
       </div>
       <div className="flex items-center justify-between border-t border-hairline bg-bar px-[1.1em] py-[0.35em] text-[0.85em] text-ink-3">
         <span>Demo dictionary</span>
-        <span aria-hidden="true">+ Anki</span>
+        <span aria-hidden="true" className={`kd-popup-button ${focused ? 'kd-focused' : ''}`}>
+          + Anki
+        </span>
       </div>
     </div>
   )

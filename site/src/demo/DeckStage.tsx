@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { Button, Frame } from './script'
+import { useResolvedTheme } from './env'
 
 function down(frame: Frame, button: Button): string {
   return frame.pressed.includes(button) ? 'kd-down' : ''
@@ -54,25 +55,28 @@ function Controls({ side, frame }: { side: 'left' | 'right'; frame: Frame }) {
 const GLYPH: Record<Button, string> = { L3: 'L3', R3: 'R3', up: '▲', right: '▶', A: 'A', B: 'B' }
 
 const HINT_KEYS: Record<string, Button[]> = {
-  'Press both sticks for Kimochi': ['L3', 'R3'],
-  'Choose a word': ['right'],
-  Reading: ['A'],
-  'Back to the game': ['B']
+  Kimochi: ['L3', 'R3']
 }
 
-/** The hint strip at the top of the Deck screen: the buttons for this step, lit while held. */
+/**
+ * The demo's own note of the buttons held (the handheld's controls are hidden on phones), in Gaming
+ * Mode's glyphs; not something the app draws. Before the menu opens it names the shortcut.
+ */
 export function DeckHud({ frame }: { frame: Frame }) {
+  const theme = useResolvedTheme()
   const keys = frame.pressed.length ? frame.pressed : (HINT_KEYS[frame.hint] ?? [])
-  const visible = frame.hint !== '' || frame.pressed.length > 0
+  if (frame.hint === '' && frame.pressed.length === 0) return null
   return (
-    <div className="kd-hud" style={{ opacity: visible ? 1 : 0 }} aria-hidden="true">
-      {keys.map((b, i) => (
-        <span key={b} className="flex items-center gap-[0.5cqw]">
-          {i > 0 && <span className="opacity-60">+</span>}
-          <kbd className={`kd-glyph ${frame.pressed.includes(b) ? 'kd-down' : ''}`}>{GLYPH[b]}</kbd>
-        </span>
-      ))}
-      {frame.hint && <span>{frame.hint}</span>}
+    <div className="kd-gm kd-gm-layer kd-gm-top" data-cm-theme={theme} aria-hidden="true">
+      <div className="kd-echo">
+        {keys.map((b, i) => (
+          <span key={b} className="kd-echo-key">
+            {i > 0 && <span className="kd-echo-plus">+</span>}
+            <kbd className={`cm-glyph ${b === 'A' ? 'cm-confirm' : ''} ${frame.pressed.includes(b) ? 'kd-down' : ''}`}>{GLYPH[b]}</kbd>
+          </span>
+        ))}
+        {frame.hint && <span>{frame.hint}</span>}
+      </div>
     </div>
   )
 }

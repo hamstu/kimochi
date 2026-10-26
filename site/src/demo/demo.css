@@ -1,11 +1,12 @@
 /*
  * Live demo styles that Tailwind utilities would make unreadable: the synthetic game screen (sized
  * in container units so it scales as one picture), the overlay's word boxes, the scan sweep, the
- * Steam Deck radial menu and controller glyphs. Site chrome around the stage uses Tailwind + tokens.
+ * handheld's Gaming Mode (radial menu, hint bar, word outline). Site chrome around the stage uses
+ * Tailwind + tokens.
  *
  * The game screen is game art, not site UI, so its colours are its own (fed from the shared
- * content's `scene` palette through custom properties). The radial menu copies the app's
- * controller.css (steam-deck-bringup branch): cyan accent on dark glass.
+ * content's `scene` palette through custom properties). Gaming Mode is a port of the app's
+ * ui/controller.css + ui/controller-variants.css (the Halo design), light and dark.
  */
 
 .kd-screen {
@@ -233,217 +234,475 @@
   to { opacity: 1; transform: none; }
 }
 
-/* ---------------------------------------------------------------- Steam Deck radial menu */
-.kd-cm {
-  --cm-accent: #7dd3fc;
-  --cm-accent-rgb: 125 211 252;
+/* ---------------------------------------------------------------- Gaming Mode (handheld) */
+/* A port of the app's controller look: ui/controller.css (layout and motion) with the shipped
+   Halo design of ui/controller-variants.css over it, light and dark (`data-cm-theme`, from the
+   site's theme as the app's comes from its Appearance setting). Class names are the app's, so the
+   two can be compared rule by rule; every length is the app's points on the handheld's 1280 × 800
+   screen (`--u`), so the overlay scales with the game as one picture. */
+.kd-deck {
+  --u: calc(100cqw / 1280);
+}
+.kd-gm {
+  /* Kimochi's dark roles (tokens.css over Radix slate and indigo). */
+  --cm-bg-rgb: 17 17 19;
+  --cm-raised-rgb: 24 25 27;
+  --cm-bg: rgb(var(--cm-bg-rgb));
+  --cm-bar: #18191b;
+  --cm-raised: rgb(var(--cm-raised-rgb));
+  --cm-key: rgb(255 255 255 / 0.07);
+  --cm-text: #edeef0;
+  --cm-text-2: #b0b4ba;
+  --cm-text-3: #777b84;
+  --cm-line: rgb(211 237 248 / 0.11);
+  --cm-line-strong: rgb(221 234 248 / 0.2);
+  --cm-accent-9: #3e63dd;
+  --cm-accent-contrast: #fff;
+  --cm-accent-text: #9eb1ff;
+  --cm-accent-soft: rgb(17 68 255 / 0.2);
+  --cm-accent-line: rgb(84 114 228 / 0.7);
+  --cm-focus: #5472e4;
+  --cm-shadow-pop: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(0 0 0 / 0.3), 0 calc(12 * var(--u)) calc(32 * var(--u)) calc(-8 * var(--u)) rgb(0 0 0 / 0.6);
+  --cm-scrim: rgb(0 0 0 / 0.5);
   position: absolute;
   inset: 0;
-  z-index: 6;
-  display: grid;
-  place-items: center;
+  z-index: 7;
   pointer-events: none;
   font-family: var(--k-font-ui);
-  color: rgb(255 255 255 / 0.92);
+  font-weight: 430;
+  color: var(--cm-text);
+  -webkit-font-smoothing: antialiased;
 }
-.kd-cm-vignette {
+.kd-gm[data-cm-theme='light'] {
+  --cm-bg-rgb: 255 255 255;
+  --cm-raised-rgb: 255 255 255;
+  --cm-bar: #f9f9fb;
+  --cm-key: rgb(0 0 85 / 0.04);
+  --cm-text: #1c2024;
+  --cm-text-2: #60646c;
+  --cm-text-3: #80838d;
+  --cm-line: rgb(0 0 45 / 0.09);
+  --cm-line-strong: rgb(0 0 47 / 0.17);
+  --cm-accent-text: #3a5bc7;
+  --cm-accent-soft: rgb(0 71 241 / 0.08);
+  --cm-accent-line: rgb(0 51 220 / 0.36);
+  --cm-focus: #8da4ef;
+  --cm-shadow-pop: 0 calc(1 * var(--u)) calc(2 * var(--u)) rgb(15 17 26 / 0.1), 0 calc(10 * var(--u)) calc(28 * var(--u)) calc(-8 * var(--u)) rgb(15 17 26 / 0.3);
+  --cm-scrim: rgb(15 17 26 / 0.32);
+}
+/* Under the dictionary pop-up (the app's pop-up is its own window, over the overlay). */
+.kd-gm-under {
+  z-index: 4;
+}
+.kd-gm-layer {
+  z-index: 6;
+}
+.kd-gm-menu {
+  z-index: 8;
+}
+.kd-gm-top {
+  z-index: 9;
+}
+
+/* --- the ring (RadialMenu.tsx) --- */
+.kd-gm .cm-root {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, rgb(5 7 14 / 0.25), rgb(5 7 14 / 0.62));
-  animation: kd-fade 0.2s ease both;
 }
-.kd-cm-ring {
-  position: relative;
-  /* 384 of the Deck's 640 logical px (RADIUS 168 + 48). */
-  width: 60cqw;
-  aspect-ratio: 1;
-  animation: kd-cm-in 0.34s cubic-bezier(0.16, 1.2, 0.3, 1) both;
-}
-.kd-cm-leaving .kd-cm-ring {
-  animation: kd-cm-out 0.2s ease-in both;
-}
-.kd-cm-leaving .kd-cm-vignette {
-  animation: kd-fade 0.2s ease-in reverse both;
-}
-.kd-cm-glass {
-  position: absolute;
-  inset: 4%;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgb(14 17 28 / 0.86) 40%, rgb(14 17 28 / 0.7));
-  backdrop-filter: blur(14px) saturate(1.3);
-  box-shadow: 0 2cqw 5cqw rgb(0 0 0 / 0.45), inset 0 0 0 1px rgb(255 255 255 / 0.08);
-}
-.kd-cm svg {
+.kd-gm .cm-vignette {
   position: absolute;
   inset: 0;
-  overflow: visible;
+  background: radial-gradient(circle at 50% 50%, rgb(0 0 0 / 0.08), var(--cm-scrim));
+  animation: cm-fade 0.24s ease-out both;
 }
-.kd-cm-ticks {
-  fill: none;
-  stroke: var(--cm-accent);
-  stroke-width: 5;
-  stroke-dasharray: 1 11;
-  opacity: 0.45;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: kd-spin 60s linear infinite;
-}
-@keyframes kd-spin {
-  to { transform: rotate(360deg); }
-}
-.kd-cm-wedge {
-  fill: rgb(255 255 255 / 0.035);
-  stroke: rgb(255 255 255 / 0.07);
-  stroke-width: 1;
-  transition: fill 0.14s ease, stroke 0.14s ease, filter 0.14s ease;
-}
-.kd-cm-wedge.kd-sel {
-  fill: url(#kd-cm-glow);
-  stroke: rgb(var(--cm-accent-rgb) / 0.85);
-  filter: drop-shadow(0 0 14px rgb(var(--cm-accent-rgb) / 0.55));
-}
-.kd-cm-wedge.kd-chosen {
-  animation: kd-flash 0.22s ease-out;
-}
-@keyframes kd-flash {
-  50% { fill: rgb(var(--cm-accent-rgb) / 0.75); }
-}
-.kd-cm-item {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6cqw;
-  width: 15cqw;
-  color: rgb(255 255 255 / 0.55);
-  transform: translate(-50%, -50%);
-  font-size: max(6.5px, 1.65cqw);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  text-align: center;
-  line-height: 1.15;
-  animation: kd-item-in 0.36s cubic-bezier(0.16, 1.2, 0.3, 1) both;
-  animation-delay: calc(var(--i) * 40ms + 70ms);
-  transition: color 0.14s ease;
-}
-.kd-cm-item svg {
-  position: static;
-  width: 4.1cqw;
-  height: 4.1cqw;
-  transition: transform 0.18s cubic-bezier(0.2, 1.4, 0.4, 1);
-}
-.kd-cm-item.kd-sel {
-  color: #fff;
-}
-.kd-cm-item.kd-sel svg {
-  transform: scale(1.16);
-  color: var(--cm-accent);
-  filter: drop-shadow(0 0 10px rgb(var(--cm-accent-rgb) / 0.8));
-}
-.kd-cm-item.kd-sel .kd-cm-label {
-  text-shadow: 0 0 12px rgb(var(--cm-accent-rgb) / 0.7);
-}
-.kd-cm-item[data-disabled] {
-  opacity: 0.38;
-}
-.kd-cm-detail {
-  padding: 0.15cqw 1.1cqw;
-  border-radius: 999px;
-  font-size: 1.55cqw;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  background: rgb(255 255 255 / 0.08);
-}
-.kd-cm-center {
+.kd-gm .cm-ring {
   position: absolute;
   left: 50%;
   top: 50%;
+  width: var(--cm-size);
+  height: var(--cm-size);
+  transform: translate(-50%, -50%);
+  animation: cm-in 0.34s cubic-bezier(0.16, 1.3, 0.3, 1) both;
+}
+.kd-gm .cm-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    rgb(var(--cm-bg-rgb) / 0.7) var(--cm-hub),
+    rgb(var(--cm-bg-rgb) / 0.4) var(--cm-orbit),
+    rgb(var(--cm-bg-rgb) / 0) 100%
+  );
+  backdrop-filter: blur(calc(16 * var(--u))) saturate(1.3);
+  -webkit-backdrop-filter: blur(calc(16 * var(--u))) saturate(1.3);
+  mask-image: radial-gradient(circle closest-side, #000 calc(var(--cm-orbit) - 10 * var(--u)), transparent 100%);
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 calc(var(--cm-orbit) - 10 * var(--u)), transparent 100%);
+}
+.kd-gm .cm-wedges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.kd-gm .cm-disc {
+  fill: rgb(var(--cm-raised-rgb) / 0.92);
+  stroke: var(--cm-line-strong);
+  stroke-width: 1;
+  filter: drop-shadow(0 calc(10 * var(--u)) calc(24 * var(--u)) rgb(0 0 0 / 0.28));
+}
+.kd-gm .cm-fade-from {
+  stop-color: var(--cm-text-2);
+  stop-opacity: 0.9;
+}
+.kd-gm .cm-fade-to {
+  stop-color: var(--cm-text-2);
+  stop-opacity: 0;
+}
+.kd-gm .cm-spoke {
+  stroke: url(#kd-cm-spoke-fade);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: stroke 0.14s ease, stroke-width 0.14s ease;
+}
+.kd-gm .cm-spoke.cm-selected {
+  stroke: var(--cm-accent-text);
+  stroke-width: 2.5;
+  transition-duration: 0.04s;
+}
+.kd-gm .cm-spoke.cm-selected.cm-disabled {
+  stroke: var(--cm-text-3);
+}
+.kd-gm .cm-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6 * var(--u));
+  width: calc(132 * var(--u));
+  color: var(--cm-text-2);
+  transform: translate(-50%, -50%) translate(var(--x), var(--y));
+  animation: cm-item-in 0.36s cubic-bezier(0.16, 1.2, 0.3, 1) both;
+  animation-delay: calc(var(--i) * 40ms + 70ms);
+  transition: color 0.14s ease;
+}
+.kd-gm .cm-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(66 * var(--u));
+  height: calc(66 * var(--u));
+  border-radius: calc(20 * var(--u));
+  background: rgb(var(--cm-raised-rgb) / 0.72);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong);
+  transition: transform 0.18s cubic-bezier(0.2, 1.4, 0.4, 1), box-shadow 0.18s ease;
+}
+.kd-gm .cm-icon svg {
+  width: calc(36 * var(--u));
+  height: calc(36 * var(--u));
+  stroke-width: 1.6;
+}
+.kd-gm .cm-label {
+  display: none;
+}
+.kd-gm .cm-detail {
+  position: absolute;
+  top: calc(-4 * var(--u));
+  left: calc(50% + 18 * var(--u));
+  padding: calc(1 * var(--u)) calc(7 * var(--u));
+  border-radius: 999px;
+  font-size: calc(12 * var(--u));
+  font-weight: 620;
+  line-height: 1.25;
+  color: var(--cm-text-2);
+  background: var(--cm-raised);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong);
+}
+.kd-gm .cm-item.cm-selected {
+  color: var(--cm-text);
+  transition-duration: 0.04s;
+}
+.kd-gm .cm-item.cm-selected .cm-icon {
+  transition-duration: 0.12s;
+  transform: scale(1.1);
+  color: var(--cm-accent-text);
+  background: var(--cm-raised);
+  box-shadow: var(--cm-shadow-pop), inset 0 0 0 calc(2 * var(--u)) var(--cm-accent-line);
+}
+.kd-gm .cm-item.cm-chosen .cm-icon {
+  transform: scale(1.3);
+}
+.kd-gm .cm-item[data-disabled] {
+  opacity: 0.4;
+}
+/* Lit: the likely choice (there is text to read along). A dot, not a pulse. */
+.kd-gm .cm-item[data-lit] .cm-icon::after {
+  content: '';
+  position: absolute;
+  bottom: calc(6 * var(--u));
+  left: 50%;
+  width: calc(6 * var(--u));
+  height: calc(6 * var(--u));
+  margin-left: calc(-3 * var(--u));
+  border-radius: 50%;
+  background: var(--cm-accent-text);
+}
+.kd-gm .cm-item.cm-selected[data-lit] .cm-icon::after {
+  display: none;
+}
+.kd-gm .cm-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--cm-hub) * 2 - 18 * var(--u));
   transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.95cqw;
-  width: 24cqw;
+  gap: calc(4 * var(--u));
   text-align: center;
 }
-.kd-cm-title {
-  font-size: 1.4cqw;
-  font-weight: 700;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: rgb(var(--cm-accent-rgb) / 0.75);
+.kd-gm .cm-current {
+  min-height: calc(24 * var(--u));
+  font-size: calc(20 * var(--u));
+  font-weight: 620;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
 }
-.kd-cm-current {
-  font-size: 2.5cqw;
-  font-weight: 700;
-  min-height: 3.1cqw;
+.kd-gm .cm-current.cm-muted {
+  font-size: calc(16 * var(--u));
+  font-weight: 520;
+  color: var(--cm-text-3);
 }
-.kd-cm-hints {
+.kd-gm .cm-current-detail {
+  font-size: calc(14 * var(--u));
+  font-weight: 520;
+  color: var(--cm-text-2);
+}
+.kd-gm .cm-hints {
   display: flex;
-  gap: 1.6cqw;
-  font-size: 1.6cqw;
-  color: rgb(255 255 255 / 0.55);
+  gap: calc(10 * var(--u));
+  margin-top: calc(6 * var(--u));
 }
-@keyframes kd-cm-in {
-  from { opacity: 0; transform: scale(0.72) rotate(-14deg); filter: blur(10px); }
-  60% { opacity: 1; filter: blur(0); }
-  to { opacity: 1; transform: none; }
+.kd-gm .cm-root.cm-leaving .cm-ring {
+  animation: cm-out 0.2s ease-in both;
 }
-@keyframes kd-cm-out {
-  to { opacity: 0; transform: scale(1.1); filter: blur(8px); }
-}
-@keyframes kd-item-in {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
-  to { opacity: 1; transform: translate(-50%, -50%); }
-}
-@keyframes kd-fade {
-  from { opacity: 0; }
+.kd-gm .cm-root.cm-leaving .cm-vignette {
+  animation: cm-fade 0.2s ease-in reverse both;
 }
 
-/* Controller glyphs (the app's .cm-glyph) and the hint strip (.cm-hud). */
-.kd-glyph {
+/* --- hints and keys --- */
+.kd-gm .cm-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6 * var(--u));
+  font-size: calc(14 * var(--u));
+  font-weight: 520;
+  line-height: 1.2;
+  color: var(--cm-text-2);
+  white-space: nowrap;
+}
+.kd-gm .cm-glyph {
   display: inline-grid;
   place-items: center;
-  min-width: max(14px, 2.8cqw);
-  height: max(14px, 2.8cqw);
-  padding: 0 0.6cqw;
-  border-radius: 1.4cqw;
-  border: 1px solid rgb(255 255 255 / 0.35);
-  font: 700 max(8px, 1.55cqw)/1 var(--k-font-ui);
-  color: rgb(255 255 255 / 0.9);
   box-sizing: border-box;
-  transition: background-color 0.12s ease, color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+  min-width: calc(24 * var(--u));
+  height: calc(24 * var(--u));
+  padding: 0 calc(6 * var(--u));
+  border-radius: 999px;
+  font: 620 calc(13 * var(--u)) / 1 var(--k-font-ui);
+  color: var(--cm-text);
+  background: var(--cm-key);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong), inset 0 calc(-1.5 * var(--u)) 0 var(--cm-line-strong);
+  transition: transform 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
-.kd-glyph.kd-confirm {
-  color: #0b1220;
-  border-color: transparent;
-  background: #7dd3fc;
+.kd-gm .cm-glyph.cm-confirm {
+  color: var(--cm-accent-contrast);
+  background: var(--cm-accent-9);
+  box-shadow: inset 0 calc(-1.5 * var(--u)) 0 rgb(0 0 0 / 0.25);
 }
-.kd-glyph.kd-down {
-  transform: scale(0.9);
-  background: #7dd3fc;
-  color: #0b1220;
-  box-shadow: 0 0 1.4cqw rgb(125 211 252 / 0.8);
-}
-.kd-hud {
+
+/* --- the hint bar and the word (GamingMode.tsx) --- */
+/* Along the bottom of the source, as `showHud` places it: its top 64 points above the bottom. */
+.kd-gm .cm-hud {
   position: absolute;
-  z-index: 7;
-  left: 2.6cqw;
-  top: 2.6cqw;
+  left: 50%;
+  top: calc(100% - 64 * var(--u));
   display: flex;
   align-items: center;
-  gap: 1.6cqw;
-  padding: 1.1cqw 2.2cqw 1.1cqw 1.4cqw;
+  gap: calc(18 * var(--u));
+  padding: calc(8 * var(--u)) calc(18 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
   border-radius: 999px;
-  background: rgb(14 17 28 / 0.82);
-  backdrop-filter: blur(16px) saturate(1.4);
-  box-shadow: 0 1.2cqw 3cqw rgb(0 0 0 / 0.45), inset 0 0 0 1px rgb(255 255 255 / 0.08);
-  font: 700 max(9px, 1.9cqw)/1 var(--k-font-ui);
-  color: rgb(255 255 255 / 0.92);
+  background: rgb(var(--cm-raised-rgb) / 0.82);
+  backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
+  -webkit-backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
+  box-shadow: var(--cm-shadow-pop), inset 0 0 0 1px var(--cm-line-strong);
   white-space: nowrap;
-  transition: opacity 0.2s ease;
+  transform: translateX(-50%);
+  animation: cm-hud-in 0.28s cubic-bezier(0.16, 1.2, 0.3, 1) both;
+}
+.kd-gm .cm-hud.cm-leaving {
+  animation: cm-hud-out 0.2s ease-in both;
+}
+.kd-gm .cm-hud-mark {
+  display: grid;
+  place-items: center;
+  width: calc(34 * var(--u));
+  height: calc(34 * var(--u));
+  border-radius: 999px;
+  color: var(--cm-accent-text);
+  background: var(--cm-accent-soft);
+}
+.kd-gm .cm-hud-mark svg {
+  width: calc(19 * var(--u));
+  height: calc(19 * var(--u));
+}
+.kd-gm .cm-hud-mode {
+  padding: calc(3 * var(--u)) calc(10 * var(--u));
+  border-radius: 999px;
+  font-size: calc(14 * var(--u));
+  font-weight: 620;
+  line-height: 1.2;
+  color: var(--cm-accent-text);
+  background: var(--cm-accent-soft);
+}
+.kd-gm .cm-hud-mode[data-mode='popup'] {
+  color: var(--cm-accent-contrast);
+  background: var(--cm-accent-9);
+}
+.kd-gm .cm-hud-message {
+  min-width: calc(52 * var(--u));
+  font-size: calc(16 * var(--u));
+  font-weight: 620;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--cm-text);
+}
+.kd-gm .cm-hud-message:empty {
+  display: none;
+}
+.kd-gm .cm-word {
+  position: absolute;
+  box-sizing: border-box;
+  border: calc(2 * var(--u)) solid var(--cm-accent-line);
+  border-radius: calc(10 * var(--u));
+  background: var(--cm-accent-soft);
+  box-shadow: 0 0 0 calc(4 * var(--u)) var(--cm-accent-soft);
+  transition:
+    left 0.14s cubic-bezier(0.2, 0.9, 0.3, 1),
+    top 0.14s cubic-bezier(0.2, 0.9, 0.3, 1),
+    width 0.14s cubic-bezier(0.2, 0.9, 0.3, 1),
+    height 0.14s cubic-bezier(0.2, 0.9, 0.3, 1);
+  animation: cm-word-in 0.22s cubic-bezier(0.16, 1.3, 0.3, 1) both;
+}
+
+/* The demo's own note of the buttons held (DeckHud), in the hint bar's frosted look. */
+.kd-echo {
+  position: absolute;
+  left: calc(24 * var(--u));
+  top: calc(24 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(8 * var(--u)) calc(8 * var(--u));
+  border-radius: 999px;
+  background: rgb(var(--cm-raised-rgb) / 0.82);
+  backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
+  -webkit-backdrop-filter: blur(calc(20 * var(--u))) saturate(1.4);
+  box-shadow: var(--cm-shadow-pop), inset 0 0 0 1px var(--cm-line-strong);
+  font-size: calc(16 * var(--u));
+  font-weight: 620;
+  line-height: 1.2;
+  white-space: nowrap;
+  animation: cm-fade 0.15s ease-out both;
+}
+.kd-echo-key {
+  display: flex;
+  align-items: center;
+  gap: calc(6 * var(--u));
+}
+.kd-echo-plus {
+  color: var(--cm-text-3);
+}
+.kd-echo .cm-glyph {
+  min-width: calc(30 * var(--u));
+  height: calc(30 * var(--u));
+  font-size: calc(15 * var(--u));
+}
+.kd-echo .cm-glyph.kd-down {
+  transform: scale(0.9);
+  color: var(--cm-accent-contrast);
+  background: var(--cm-accent-9);
+  box-shadow: 0 0 0 calc(4 * var(--u)) var(--cm-accent-soft);
+}
+
+@keyframes cm-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72) rotate(-14deg);
+    filter: blur(calc(10 * var(--u)));
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0);
+  }
+}
+@keyframes cm-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.1);
+    filter: blur(calc(8 * var(--u)));
+  }
+}
+@keyframes cm-item-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(calc(var(--x) * 0.35), calc(var(--y) * 0.35)) scale(0.6);
+  }
+}
+@keyframes cm-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes cm-word-in {
+  from {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+@keyframes cm-hud-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(calc(14 * var(--u))) scale(0.96);
+  }
+}
+@keyframes cm-hud-out {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(calc(10 * var(--u)));
+  }
+}
+
+/* The pop-up's focused button, once A moved into it (WordPopup `focused`). */
+.kd-popup-button {
+  margin: -0.2em -0.45em;
+  padding: 0.2em 0.45em;
+  border-radius: 0.4em;
+}
+.kd-popup-button.kd-focused {
+  color: var(--k-text);
+  background: var(--k-press);
+  outline: 2px solid var(--k-focus);
+  outline-offset: -1px;
 }
 
 /* Deck body controls drawn beside the screen. */
@@ -451,8 +710,8 @@
   transition: fill 0.12s ease, filter 0.12s ease;
 }
 .kd-pad-part.kd-down {
-  fill: #7dd3fc;
-  filter: drop-shadow(0 0 6px rgb(125 211 252 / 0.9));
+  fill: #5472e4;
+  filter: drop-shadow(0 0 6px rgb(84 114 228 / 0.9));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -605,12 +864,6 @@
   --grip: color-mix(in oklab, var(--k-text) 35%, transparent);
   background: linear-gradient(135deg, transparent 55%, var(--grip) 55% 62%, transparent 62% 72%, var(--grip) 72% 79%, transparent 79%);
 }
-.kd-cm-hints span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6cqw;
-}
-
 /* Popup type scales with the screen so it fits a phone-sized game. */
 .kd-popup-term {
   font-size: clamp(15px, 3.4cqw, 22px);

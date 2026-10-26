@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { GAME, PLAY_LINES, lookup } from './content'
 import { SceneArt } from './SceneArt'
 import { WordPopup } from './WordPopup'
 import { RadialMenu } from './RadialMenu'
-import type { Frame } from './script'
+import { HintBar, WordOutline } from './GamingMode'
+import { wordStops, type Frame } from './script'
 
 interface GameScreenProps {
   frame: Frame
@@ -40,24 +41,41 @@ function useLeaving<T>(value: T | null, ms: number): [T | null, boolean] {
 
 /**
  * The synthetic visual novel with Kimochi's overlay on top: dialogue box, scan sweep, word boxes,
- * the dictionary popup, and (Steam Deck) the controller menu.
+ * the dictionary popup, and (handheld) Gaming Mode: the controller menu, and Read along's outline
+ * and hint bar.
  */
 export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, overlay = true, children }: GameScreenProps) {
   const line = PLAY_LINES[frame.line]
+  const deck = variant === 'deck'
   const user = userCursor !== null && overlay
   const text = user ? 'shown' : frame.text
-  const boxes = overlay && (user || frame.boxes)
   const cursor = user ? userCursor : overlay ? frame.cursor : null
   const popup = overlay && (user || frame.popup)
   const [menu, menuLeaving] = useLeaving(user ? null : frame.menu, 200)
+  // Handheld: a visitor's tap reads along from that word, as the controller would.
+  const reading = deck && overlay ? (user ? { layer: 'text' as const } : frame.reading) : null
+  // Read along quiets the overlay's word boxes (the app's `quietText`): the outline marks the word.
+  const boxes = overlay && !reading && (user || frame.boxes)
+  const outlined = reading !== null && !reading.loading && cursor !== null
+
+  const stops = useMemo(() => wordStops(frame.line), [frame.line])
+  const at = cursor !== null && stops.includes(cursor) ? stops.indexOf(cursor) : null
+  const layer = reading?.layer ?? null
+  const loading = reading?.loading ?? false
+  const hudNow = useMemo(
+    () => (layer ? { layer, loading, index: at, count: stops.length } : null),
+    [layer, loading, at, stops.length]
+  )
+  const [hud, hudLeaving] = useLeaving(hudNow, 200)
 
   const screenRef = useRef<HTMLDivElement>(null)
   const popupRef = useRef<HTMLDivElement>(null)
+  const outlineRef = useRef<HTMLDivElement>(null)
   const tokenRefs = useRef<(HTMLSpanElement | null)[]>([])
 
   const token = cursor !== null ? line.tokens[cursor] : null
   const entry = token ? lookup(token.word) : null
-  const showPopup = popup && token !== null && entry !== null
+  const showPopup = popup && token !== null && entry !== null && !reading?.loading
 
   // Place the popup above the word, inside the screen; re-place on resize.
   useLayoutEffect(() => {
@@ -93,6 +111,28 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
     observer.observe(screen)
     return () => observer.disconnect()
   }, [cursor, showPopup, frame.line])
+
+  // The outline round the lit word (the app's `render`): the word's box, padded 3 points.
+  useLayoutEffect(() => {
+    const screen = screenRef.current
+    const el = outlineRef.current
+    const anchor = cursor !== null ? tokenRefs.current[cursor] : null
+    if (!screen || !el || !anchor || !outlined) return
+    const place = (): void => {
+      const s = screen.getBoundingClientRect()
+      const a = anchor.getBoundingClientRect()
+      const scale = s.width / screen.offsetWidth || 1
+      const pad = (3 * screen.offsetWidth) / 1280
+      el.style.left = `${(a.left - s.left) / scale - pad}px`
+      el.style.top = `${(a.top - s.top) / scale - pad}px`
+      el.style.width = `${a.width / scale + pad * 2}px`
+      el.style.height = `${a.height / scale + pad * 2}px`
+    }
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(screen)
+    return () => observer.disconnect()
+  }, [cursor, outlined, frame.line])
 
   // Each word's underline strength (--p), as the app's proximityStyle: 1 at the word under the
   // pointer, fading to 0 a third of the screen's width away (the app's 300 px on a game window).
@@ -162,7 +202,7 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
                   tokenRefs.current[i] = el
                 }}
                 data-token={i}
-                className={`kd-word ${known ? 'kd-known' : 'kd-plain'} ${cursor === i ? 'kd-current' : ''} ${showPopup && cursor === i ? 'kd-selected' : ''}`}
+                className={`kd-word ${known ? 'kd-known' : 'kd-plain'} ${cursor === i && !reading ? 'kd-current' : ''} ${showPopup && cursor === i && !reading ? 'kd-selected' : ''}`}
                 style={{ ['--w' as string]: w }}
                 onPointerEnter={known ? (e) => e.pointerType === 'mouse' && onUserCursor(i) : undefined}
                 onClick={known ? () => onUserCursor(userCursor === i ? null : i) : undefined}
@@ -180,7 +220,7 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
 
       {overlay && frame.scan && !user && <div key={`scan-${frame.line}`} className="kd-sweep" />}
 
-      {menu && <RadialMenu selected={menu.sel} chosen={menu.chosen} leaving={menuLeaving} />}
+      {outlined && <WordOutline ref={outlineRef} />}
 
       {showPopup && token && entry && (
         <WordPopup
@@ -189,8 +229,15 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
           word={token.word!}
           entry={entry}
           surface={token.text}
+          focused={reading?.layer === 'popup'}
         />
       )}
+
+      {hud && (
+        <HintBar reading={{ layer: hud.layer, loading: hud.loading }} index={hud.index} count={hud.count} leaving={hudLeaving} />
+      )}
+
+      {menu && <RadialMenu selected={menu.sel} chosen={menu.chosen} leaving={menuLeaving} hasText={frame.line > 0} />}
       {children}
     </div>
   )

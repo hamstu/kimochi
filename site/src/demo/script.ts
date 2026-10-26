@@ -8,6 +8,14 @@ import { PLAY_LINES } from './content'
 
 export type Button = 'L3' | 'R3' | 'up' | 'right' | 'A' | 'B'
 
+/** Read along (the app's controller `words` mode): stepping the text, or in the pop-up's buttons. */
+export interface Reading {
+  /** `text`: the outline steps word to word; `popup`: A moved into the pop-up's buttons. */
+  layer: 'text' | 'popup'
+  /** Segmenting the scan: the hint bar says "Reading the text…" and nothing is lit yet. */
+  loading?: boolean
+}
+
 export interface Frame {
   ms: number
   line: number
@@ -20,11 +28,13 @@ export interface Frame {
   /** Highlighted token (overlay hover or controller cursor). */
   cursor: number | null
   popup: boolean
-  /** The controller radial menu: closed, or open with a selected wedge (-1 none). */
+  /** The controller's radial menu: closed, or open with a chosen item (-1 none). */
   menu: { sel: number; chosen: boolean } | null
-  /** Buttons held this frame (Steam Deck glyphs). */
+  /** Handheld: Read along is open (outline and hint bar), or null. */
+  reading: Reading | null
+  /** Buttons held this frame (lit on the handheld's controls). */
   pressed: Button[]
-  /** What the Deck's hint strip says. */
+  /** Handheld: the demo's own caption, beside the buttons held (not part of the app). */
   hint: string
   /** Sent to the embedded Log when the frame starts. */
   emit?: 'scan' | 'line'
@@ -33,7 +43,7 @@ export interface Frame {
 const TYPE_MS = 42
 
 function base(line: number): Omit<Frame, 'ms'> {
-  return { line, text: 'shown', scan: false, boxes: false, cursor: null, popup: false, menu: null, pressed: [], hint: '' }
+  return { line, text: 'shown', scan: false, boxes: false, cursor: null, popup: false, menu: null, reading: null, pressed: [], hint: '' }
 }
 
 function typing(line: number): number {
@@ -56,39 +66,54 @@ export function desktopFrames(): Frame[] {
   })
 }
 
-/** Index of the Scan wedge in the radial menu (see RadialMenu.tsx). */
-export const SCAN_WEDGE = 0
+/** Index of Scan in the radial menu (the app's `menuItems()`; see RadialMenu.tsx). */
+export const SCAN_ITEM = 0
 
 /**
- * Steam Deck: both sticks → radial menu → Scan → boxes → D-pad word to word → A opens the reading
- * → B back to the game.
+ * The words Read along steps through on a line. The app steps through every word its dictionary
+ * matches; the demo's dictionary is a few entries, so it steps through those (every other word
+ * would open an empty pop-up).
+ */
+export function wordStops(line: number): number[] {
+  return PLAY_LINES[line].tokens.flatMap((t, index) => (t.word !== null ? [index] : []))
+}
+
+/**
+ * Handheld (the app's Gaming Mode, ui/controller.js): both sticks open the menu → ▲ picks Scan →
+ * A → the scan runs and Read along starts on the first word, its pop-up open → ▶ steps word to
+ * word, the pop-up following → A moves into the pop-up → B back to the text → B back to the game.
  */
 export function deckFrames(): Frame[] {
   return PLAY_LINES.flatMap((line, i): Frame[] => {
     const b = base(i)
-    const words = line.tokens.flatMap((t, index) => (t.punct ? [] : [index]))
-    const target = Math.max(0, words.indexOf(line.focus))
-    // Walk from the first word to the focus word, at most four steps, so every line takes a beat.
-    const start = Math.max(0, target - 3)
-    const path = words.slice(start, target + 1)
+    const stops = wordStops(i)
+    const target = Math.max(0, stops.indexOf(line.focus))
+    const path = stops.slice(0, target + 1)
+    const text: Reading = { layer: 'text' }
+    const at = (cursor: number): Omit<Frame, 'ms'> => ({ ...b, reading: text, cursor, popup: true })
+    const menu = (sel: number, chosen = false) => ({ ...b, menu: { sel, chosen } })
     const frames: Frame[] = [
       { ...b, ms: typing(i), text: 'typing' },
-      { ...b, ms: 700, hint: 'Press both sticks for Kimochi' },
-      { ...b, ms: 380, pressed: ['L3', 'R3'], menu: { sel: -1, chosen: false }, hint: 'Press both sticks for Kimochi' },
-      { ...b, ms: 650, menu: { sel: -1, chosen: false } },
-      { ...b, ms: 650, menu: { sel: SCAN_WEDGE, chosen: false }, pressed: ['up'] },
-      { ...b, ms: 260, menu: { sel: SCAN_WEDGE, chosen: true }, pressed: ['A'] },
+      { ...b, ms: 700, hint: 'Kimochi' },
+      { ...menu(-1), ms: 380, pressed: ['L3', 'R3'], hint: 'Kimochi' },
+      { ...menu(-1), ms: 700 },
+      { ...menu(SCAN_ITEM), ms: 260, pressed: ['up'] },
+      { ...menu(SCAN_ITEM), ms: 520 },
+      { ...menu(SCAN_ITEM, true), ms: 240, pressed: ['A'] },
       { ...b, ms: 950, scan: true, emit: 'scan' },
-      { ...b, ms: 450, boxes: true, cursor: path[0], emit: 'line', hint: 'Choose a word' }
+      { ...b, ms: 420, reading: { layer: 'text', loading: true }, emit: 'line' },
+      { ...at(path[0]), ms: 1500 }
     ]
-    for (let k = 1; k < path.length; k++)
-      frames.push({ ...b, ms: 430, boxes: true, cursor: path[k], pressed: ['right'], hint: 'Choose a word' })
+    for (let k = 1; k < path.length; k++) frames.push({ ...at(path[k]), ms: 220, pressed: ['right'] }, { ...at(path[k]), ms: 380 })
+    const word = path[path.length - 1]
     frames.push(
-      { ...b, ms: 380, boxes: true, cursor: target >= 0 ? path[path.length - 1] : null, hint: 'Choose a word' },
-      { ...b, ms: 280, boxes: true, cursor: path[path.length - 1], popup: true, pressed: ['A'], hint: 'Reading' },
-      { ...b, ms: 2400, boxes: true, cursor: path[path.length - 1], popup: true, hint: 'Reading' },
-      { ...b, ms: 380, boxes: true, cursor: path[path.length - 1], pressed: ['B'], hint: 'Back to the game' },
-      { ...b, ms: 450 }
+      { ...at(word), ms: 900 },
+      { ...at(word), ms: 260, pressed: ['A'], reading: { layer: 'popup' } },
+      { ...at(word), ms: 1900, reading: { layer: 'popup' } },
+      { ...at(word), ms: 260, pressed: ['B'] },
+      { ...at(word), ms: 700 },
+      { ...b, ms: 260, pressed: ['B'] },
+      { ...b, ms: 500 }
     )
     return frames
   })

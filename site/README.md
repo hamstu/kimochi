@@ -177,8 +177,11 @@ this. After a change, `npm run build && npm run preview` and check the console f
 `<LiveDemo />` (`src/demo/`) plays a synthetic visual novel (`GameScreen`, `SceneArt`: original
 CSS/SVG art) with Kimochi's overlay over it: line → scan sweep → word boxes → dictionary popup →
 next. Visitors can hover or tap any boxed word. A platform switcher (macOS · Windows · Linux ·
-Steam Deck) restyles the stage; Steam Deck replays the controller flow (both sticks → radial menu
-→ Scan → D-pad word to word → A reads → B back), redrawn from the app's `ui/radial-menu.js`.
+Steam Deck) restyles the stage; Steam Deck replays Gaming Mode's controller flow (both sticks → the
+Halo menu → Scan → Read along word to word with the pop-up → A into the pop-up → B back to the
+text, B back to the game), ported from the app's `ui/radial-menu.js`, `ui/controller.css` and
+`ui/controller-variants.css` with the same class names (`GamingMode.tsx`, `RadialMenu.tsx`), so
+the two can be compared rule by rule when the app's design changes.
 
 Beside the game sits the **real Log window**: the app's React UI from the preview harness
 (`frontend/dev/`, Tauri runtime mocked), built by `npm run demo:build` (root
