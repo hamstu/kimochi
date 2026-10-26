@@ -195,7 +195,7 @@ jobs:
       # or when they outgrow the machine (ci/runners/prune-build-cache.sh).
       - name: Clean workspace
         run: |
-          git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
+          git clean -ffdx -e src-tauri/target -e capture-core/target -e speech-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
           bash ci/runners/prune-build-cache.sh
 
       - name: Install Linux dependencies
@@ -257,6 +257,10 @@ jobs:
         # Swift-backed crates link @rpath/libswift_*.dylib from the OS. The variable is set on the
         # command line because SIP strips DYLD_* from /bin/bash's own environment.
         run: ${{ runner.os == 'macOS' && 'DYLD_LIBRARY_PATH=/usr/lib/swift ' || '' }}cargo test --manifest-path capture-core/Cargo.toml
+      - name: Test speech-core
+        # Sentence audio's listener, matcher and clips (the tests that need the ONNX Runtime and a
+        # model are opt-in). Links capture-core, so the same Swift note applies.
+        run: ${{ runner.os == 'macOS' && 'DYLD_LIBRARY_PATH=/usr/lib/swift ' || '' }}cargo test --manifest-path speech-core/Cargo.toml
 
   bundle:
     name: Bundle (${{ matrix.name }})
@@ -289,7 +293,7 @@ jobs:
           clean: false
       - name: Clean workspace
         run: |
-          git clean -ffdx -e src-tauri/target -e capture-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
+          git clean -ffdx -e src-tauri/target -e capture-core/target -e speech-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
           # Only this run's bundles (and updater artifacts) may be uploaded.
           rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle ../updater
           bash ci/runners/prune-build-cache.sh
