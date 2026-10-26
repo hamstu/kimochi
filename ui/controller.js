@@ -130,7 +130,6 @@ export function scrollSpeed(y) {
  * @param {(element: HTMLElement) => ({x: number, y: number, width: number, height: number, line: number}|null)[]|null} context.charRects
  *   where each character of a word-mode box is on the source, by code unit; null in grouped mode
  * @param {(quiet: boolean) => void} context.quietText hold the text overlay's boxes unlit
- * @param {(visible: boolean) => Promise<void>} context.setText the overlay's text switch, as the main window shows it
  * @param {(x: number, y: number) => boolean} context.nearText whether a point is on or close to scanned text
  * @param {(record: object) => void} context.log
  * @param {(mode: 'idle' | 'menu' | 'words' | 'dictionary' | 'history') => void} [context.modeChanged] the menu opened, word
@@ -198,12 +197,6 @@ export function createController(context) {
   let sheet = null;
   let highlight = null;
   let hud = null;
-  /**
-   * Set when leaving word mode turned the overlay's text off. It is the overlay's real text
-   * switch, the one the main window shows, so the reader can turn it back on there; the next
-   * scan turns it back on by itself, but only if this is what turned it off.
-   */
-  let hidText = false;
   /**
    * Who is reading in word mode: the controller, with the outline and its popup, or the mouse,
    * hovering and clicking the text as usual. Either takes over from the other just by being
@@ -400,21 +393,15 @@ export function createController(context) {
     if (mode === "idle") return;
     generation++;
     const wasWords = mode === "words" || mode === "dictionary";
-    const wasHistory = historical;
     if (mode === "dictionary") leaveDictionary();
     else fullView?.remove();
     setMode("idle");
     controls.reset();
     scroll(0);
     menu.close();
-    // Finished reading: the text goes with the popup, until the next scan brings new text.
-    if (wasWords) {
-      leaveWords();
-      if (!wasHistory) {
-        hidText = true;
-        void context.setText(false);
-      }
-    }
+    // Finished reading. The overlay's own switch is left as the reader set it: with Show
+    // overlay off the text goes now that reading no longer holds it, and with it on it stays.
+    if (wasWords) leaveWords();
     historical = false;
     history.remove();
     await setNav(false);
@@ -1444,12 +1431,8 @@ export function createController(context) {
       return [bounds, historyBounds, fullView?.bounds()].filter(Boolean);
     },
     /** A new scan was applied: in word mode, carry on over the new text from its first word. */
-    scanChanged(hasText) {
+    scanChanged() {
       if (historical || mode === "history") return;
-      if (hidText && hasText && mode !== "words") {
-        hidText = false;
-        void context.setText(true);
-      }
       if (mode === "words" || mode === "dictionary") void enterWords(true);
     },
   };

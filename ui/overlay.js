@@ -375,7 +375,6 @@ controller = createController({
   matchedRange: () => (extensionHosted ? (extensionHost()?.matchedRange?.() ?? null) : null),
   charRects: (element) => (renderer.mode === 'words' ? renderer.charRects(element) : null),
   quietText: (quiet) => renderer.setQuiet(quiet),
-  setText: (visible) => setOverlayText(visible),
   nearText: (x, y) => {
     const reach = 32
     for (const element of wordsContainer.children) {
@@ -660,7 +659,7 @@ function draw() {
     trace('overlay-dom-change', renderChange)
   if (state.appliedScanId !== controllerScanId) {
     controllerScanId = state.appliedScanId
-    controller.scanChanged(state.annotations.length > 0)
+    controller.scanChanged()
   }
 }
 

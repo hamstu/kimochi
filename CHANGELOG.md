@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Gaming Mode: leaving the controller menu or the dictionary no longer turns Show overlay off. The
+  overlay is on afterwards if it was on before.
 - With Auto OCR on, the Scan button (and its shortcut) is now **Force rescan**: it clears what was
   read and scans again at once, starting Auto OCR over. A way out when Auto OCR seems stuck.
 - Sound effects are simpler: every button, switch and menu makes the same click (the sidebar keeps

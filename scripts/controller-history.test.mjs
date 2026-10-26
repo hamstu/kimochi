@@ -453,3 +453,16 @@ test("a menu scan that brings no text puts the text back to its ordinary look", 
   assert.deepEqual(events, ["quiet:true", "scan", "quiet:false"]);
   assert.equal(h.controller.mode, "idle");
 });
+
+test("leaving reading leaves Show overlay as it was", async (t) => {
+  const h = controllerHarness(t, async () => []);
+  await h.controller.toggle();
+  await h.press(12);
+  await h.press(0);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(h.controller.mode, "words");
+  // B: out of reading, back to the game.
+  await h.press(1);
+  assert.equal(h.controller.mode, "idle");
+  assert.deepEqual(h.textVisible, [], "the overlay's own switch is never turned off");
+});
