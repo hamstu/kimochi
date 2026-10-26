@@ -341,6 +341,28 @@ body.scan-mode .line-actions-trigger.k-button {
   pointer-events: none;
 }
 
+/* Sentence audio: the line's voice, inline after its text, quiet until hovered. */
+.line-voice.k-button {
+  display: inline-flex;
+  vertical-align: -0.2em;
+  margin-left: var(--k-space-1);
+  color: var(--k-text-3);
+  transition: color var(--k-fast), background-color var(--k-fast);
+}
+.line:hover .line-voice.k-button,
+.line-voice.k-button:focus-visible {
+  color: var(--k-text-2);
+}
+.line-voice.k-button[data-playing] {
+  color: var(--k-accent-text);
+}
+.line-voice-none {
+  font-style: normal;
+}
+body.scan-mode .line-voice.k-button {
+  pointer-events: none;
+}
+
 /* Transient per-line notes (translating, translation failed). */
 .line-pending {
   opacity: 0.5;

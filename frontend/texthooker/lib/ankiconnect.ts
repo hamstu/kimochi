@@ -223,6 +223,7 @@ function resolveFieldValue(
     case "sentence":
       return sentence ?? "";
     case "sentenceAudio":
+    case "wordAudio":
       // Filled in after the card is added (attachSentenceAudio).
       return "";
     case "literal":
@@ -289,10 +290,16 @@ export async function sendCardForTerm(
   );
   // 4. In the background: the card is not held up while the voice finishes or is cut.
   if (!duplicate) {
-    const audioField =
-      mappings.find((m) => m.mappingType === "sentenceAudio")?.ankiField ??
-      null;
-    attachSentenceAudio(ankiUrl, id, sentence, audioField);
+    const fieldFor = (type: AnkiFieldMapping["mappingType"]): string | null =>
+      mappings.find((m) => m.mappingType === type)?.ankiField ?? null;
+    attachSentenceAudio(
+      ankiUrl,
+      id,
+      sentence,
+      fieldFor("sentenceAudio"),
+      yomitan.fields.expression ?? null,
+      fieldFor("wordAudio"),
+    );
   }
   return { noteId: id, duplicate };
 }

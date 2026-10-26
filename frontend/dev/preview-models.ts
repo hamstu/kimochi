@@ -1,5 +1,5 @@
 /**
- * DEV-ONLY: the OCR model download commands for the browser preview (`preview-setup.ts`), with a
+ * DEV-ONLY: the model download commands (OCR engines, the speech model) for the browser preview (`preview-setup.ts`), with a
  * simulated download that emits `model-download` like `src-tauri/src/model_store.rs` does.
  *
  *   ?model=absent|downloading|paused|failed|ready  the starting state of both local engines
@@ -28,6 +28,13 @@ const FILES: Record<ModelEngine, { name: string; files: [string, number][] }> = 
       ['preprocessor_config.json', 228],
       ['comic-text-detector.onnx', 94669756],
       ['pytorch_model.bin', 444135475]
+    ]
+  },
+  sensevoice: {
+    name: 'SenseVoice speech',
+    files: [
+      ['model.int8.onnx', 239233841],
+      ['tokens.txt', 315894]
     ]
   }
 }
@@ -64,7 +71,7 @@ function at(engine: ModelEngine, received: number): { file: string; got: number;
 
 const seeded = new URLSearchParams(location.search).get('model')
 const states = new Map<ModelEngine, ModelStatus>(
-  (['meikiocr', 'mangaocr'] as ModelEngine[]).map((engine) => {
+  (['meikiocr', 'mangaocr', 'sensevoice'] as ModelEngine[]).map((engine) => {
     const half = Math.round(total(engine) * 0.32)
     const seed =
       seeded === 'downloading' || seeded === 'paused'
@@ -159,7 +166,7 @@ export function onModelSettingSet(key: string, value: unknown): void {
 }
 
 const engineOf = (args: Record<string, unknown> | undefined): ModelEngine =>
-  args?.engine === 'mangaocr' ? 'mangaocr' : 'meikiocr'
+  args?.engine === 'mangaocr' || args?.engine === 'sensevoice' ? args.engine : 'meikiocr'
 
 /** Merged into the preview's command table. */
 export const MODEL_HANDLERS: Record<

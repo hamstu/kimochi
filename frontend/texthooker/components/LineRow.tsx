@@ -1,5 +1,6 @@
 import { memo, useMemo, useSyncExternalStore } from "react";
-import { Tooltip } from "@kit";
+import { Square, Volume2 } from "lucide-react";
+import { IconButton, Tooltip } from "@kit";
 import { NotebookMatchChip } from "./NotebookMatchChip";
 import { LineActionsMenu } from "./LineActionsMenu";
 import { getMatcher, matchLine, type Match } from "@texthooker/lib/nameMatch";
@@ -11,6 +12,11 @@ import {
 } from "@texthooker/lib/translate";
 import type { Line } from "@texthooker/lib/types";
 import { lineDate, lineTime } from "@texthooker/lib/logDays";
+import {
+  toggleLineAudio,
+  useLineAudio,
+  useLinePlaying,
+} from "@texthooker/lib/sentenceAudio";
 
 interface Props {
   line: Line;
@@ -60,6 +66,42 @@ function LineGutter({ ts }: { ts: number }) {
         </Tooltip>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Sentence audio's word on the line (src-tauri/src/sentence_audio): a speaker that plays the clip
+ * of its voice, recorded from the game, or a quiet "no voice" when none was heard. Nothing while
+ * the line is still being listened to, or when sentence audio is off.
+ */
+function LineVoice({ uid }: { uid: string | undefined }) {
+  const audio = useLineAudio(uid);
+  const playing = useLinePlaying(uid);
+  if (!uid || !audio) return null;
+  if (audio.state === "silent") {
+    return (
+      <Tooltip content="No voice was detected for this line" delayDuration={300}>
+        <span className="line-note line-voice-none">no voice</span>
+      </Tooltip>
+    );
+  }
+  if (audio.state !== "voiced") return null;
+  const seconds = ((audio.durationMs ?? 0) / 1000).toFixed(1);
+  return (
+    <IconButton
+      label={playing ? "Stop" : `Play the line's voice (${seconds} s)`}
+      size="sm"
+      className="line-voice"
+      data-playing={playing || undefined}
+      // Keep the row's selection / scan handling out of the button.
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        void toggleLineAudio(uid);
+      }}
+    >
+      {playing ? <Square /> : <Volume2 />}
+    </IconButton>
   );
 }
 
@@ -131,6 +173,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
       >
         <LineGutter ts={line.ts} />
         <span>{line.translation}</span>
+        <LineVoice uid={line.uid} />
         <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
     );
@@ -147,6 +190,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
       >
         <LineGutter ts={line.ts} />
         <span>{line.text}</span>
+        <LineVoice uid={line.uid} />
         {translateNote}
         <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
@@ -178,6 +222,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
           <span key={`p-${i}`}>{line.text.slice(piece.start, piece.end)}</span>
         );
       })}
+      <LineVoice uid={line.uid} />
       {translateNote}
       <LineActionsMenu line={line} translateEnabled={translateEnabled} />
     </div>

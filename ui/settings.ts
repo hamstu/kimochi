@@ -186,17 +186,23 @@ export interface Settings {
 }
 
 export interface SentenceAudioSettings {
-  /** Keep the last `seconds` of what the computer plays, and give new cards their line's audio. */
+  /** Keep the last `seconds` of what the computer plays, give each Log line the clip of its
+      voice, and new cards their line's audio. */
   enabled: boolean
   /** 10 to 120. */
   seconds: number
   /** The note field the audio goes in (a field mapped to (sentence audio) wins for the
       Yomitan API pop-up). */
   field: string
+  /** The note field the mined word's own audio goes in; empty: none. (A field mapped to (word
+      audio) wins for the Yomitan API pop-up.) */
+  wordField: string
+  /** Line clips kept on disk, 5 to 100. */
+  clips: number
   /** Move the clip's start and end, in milliseconds (negative: earlier). */
   startOffsetMs: number
   endOffsetMs: number
-  /** Cut the clip down to the voice in it. */
+  /** Cut a clip placed by timing down to the voice in it. */
   trim: boolean
 }
 
@@ -237,6 +243,8 @@ export const SETTINGS_DEFAULTS: Settings = {
     enabled: false,
     seconds: 30,
     field: 'SentenceAudio',
+    wordField: '',
+    clips: 15,
     startOffsetMs: 0,
     endOffsetMs: 0,
     trim: true

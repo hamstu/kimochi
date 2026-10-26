@@ -74,6 +74,12 @@
 @media (prefers-reduced-motion: reduce) {
   .sentence-audio-meter > span { transition: none; }
 }
+.sentence-audio-disclosure svg {
+  transition: transform var(--k-fast) var(--k-ease-out);
+}
+.sentence-audio-disclosure-open svg {
+  transform: rotate(180deg);
+}
 
 /* Page-level callout above the first section. */
 .settings-page-callout { margin-top: calc(var(--k-space-2) * -1); }

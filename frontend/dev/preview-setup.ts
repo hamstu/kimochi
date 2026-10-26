@@ -107,6 +107,7 @@ import { UPDATE_HANDLERS } from './preview-updates'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
 import { STEAM_HANDLERS } from './preview-steam'
+import { SENTENCE_AUDIO_HANDLERS } from './preview-sentence-audio'
 import { studioJson } from './studio/bridge'
 import type { ExtensionHost } from '../bridge/dictionaryEngine'
 
@@ -652,6 +653,7 @@ const HANDLERS: Record<string, Handler> = {
   ...YOMITAN_API_HANDLERS,
   ...ACCOUNT_HANDLERS,
   ...STEAM_HANDLERS,
+  ...SENTENCE_AUDIO_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
   settings_set: (a) => {

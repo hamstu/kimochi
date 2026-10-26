@@ -1,10 +1,14 @@
 /**
- * On-demand OCR model downloads, as the UI sees them: the `model_status` reply and
+ * On-demand model downloads (the local OCR engines', and sentence audio's speech model), as the
+ * UI sees them: the `model_status` reply and
  * `model-download` event payload (`ModelStatus` in `src-tauri/src/model_store.rs`), and the
  * pure wording and decisions the settings card, the sidebar badge and the engine pickers share.
  */
 
-export type ModelEngine = 'meikiocr' | 'mangaocr'
+/** The local OCR engines: an `ocrMode` value whose models are downloaded. */
+export type OcrModelEngine = 'meikiocr' | 'mangaocr'
+/** Every downloadable model: the OCR engines', and sentence audio's speech recogniser. */
+export type ModelEngine = OcrModelEngine | 'sensevoice'
 export type ModelState = 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready'
 export type ModelSource = 'downloaded' | 'bundled' | 'development'
 export type ModelAction = 'download' | 'pause' | 'resume' | 'retry' | 'cancel' | 'delete'
@@ -52,8 +56,12 @@ const STATES: readonly ModelState[] = [
 ]
 const SOURCES: readonly ModelSource[] = ['downloaded', 'bundled', 'development']
 
-export const isModelEngine = (mode: unknown): mode is ModelEngine =>
+/** Whether an `ocrMode` value is a local OCR engine with downloaded models. */
+export const isModelEngine = (mode: unknown): mode is OcrModelEngine =>
   mode === 'meikiocr' || mode === 'mangaocr'
+
+const isDownloadable = (engine: unknown): engine is ModelEngine =>
+  isModelEngine(engine) || engine === 'sensevoice'
 
 const count = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
@@ -62,7 +70,7 @@ const count = (value: unknown): number | null =>
 export function normalizeModelStatus(raw: unknown): ModelStatus | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
-  if (!isModelEngine(r.engine) || !STATES.includes(r.state as ModelState)) return null
+  if (!isDownloadable(r.engine) || !STATES.includes(r.state as ModelState)) return null
   return {
     engine: r.engine,
     name: typeof r.name === 'string' ? r.name : r.engine,
