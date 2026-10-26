@@ -177,7 +177,7 @@ const SCREEN_KEEP: usize = 200;
 const SCREEN_LOOKBACK_MS: f64 = 30_000.0;
 /// Utterances and transcriptions kept: far more than any buffer holds.
 const UTTERANCES_KEEP: usize = 400;
-const TRANSCRIPTS_KEEP: usize = 60;
+const TRANSCRIPTS_KEEP: usize = 2_000;
 
 /// How a line's audio is cut, besides what the listener decides.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -901,8 +901,10 @@ impl Listener {
             self.heard_count += 1;
         }
         self.transcripts.push(Heard { start_ms: start, end_ms: end, chars });
-        let excess = self.transcripts.len().saturating_sub(TRANSCRIPTS_KEEP);
-        self.transcripts.drain(..excess);
+        // As far back as the recording reaches (chunks can be short: a count would not be).
+        let stale = self.transcripts.iter().take_while(|t| t.end_ms < held).count();
+        let excess = (self.transcripts.len() - stale).saturating_sub(TRANSCRIPTS_KEEP);
+        self.transcripts.drain(..stale + excess);
     }
 
     /// The characters heard between `start` and `end` (with a little audio before, for context).
