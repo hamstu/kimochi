@@ -176,6 +176,30 @@ impl AudioRing {
         self.wall_at(self.end())
     }
 
+    /// The absolute index of the oldest sample held. Indices count every sample the ring ever
+    /// held, so they only grow (a `clear` moves past what was dropped).
+    pub fn first_index(&self) -> u64 {
+        self.first
+    }
+
+    /// The absolute index the next sample will have.
+    pub fn end_index(&self) -> u64 {
+        self.end()
+    }
+
+    /// The samples from absolute `index` (or the oldest held, when that is later) to the newest,
+    /// and the index they start at: for a reader that follows the ring as it fills.
+    pub fn read_from(&self, index: u64) -> (u64, Vec<f32>) {
+        let start = index.clamp(self.first, self.end());
+        let samples = self.samples.range((start - self.first) as usize..).copied().collect();
+        (start, samples)
+    }
+
+    /// When the sample at absolute `index` played, in Unix ms.
+    pub fn wall_ms_at(&self, index: u64) -> Option<f64> {
+        self.wall_at(index)
+    }
+
     /// The audio that played between `from_ms` and `to_ms`, cut to what the ring holds; `None`
     /// when none of it is held.
     pub fn snapshot(&self, from_ms: f64, to_ms: f64) -> Option<Clip> {
@@ -219,6 +243,23 @@ mod tests {
         let clip = ring.snapshot(1_250.0, 1_260.0).unwrap();
         assert_eq!(clip.start_ms, 1_250.0);
         assert_eq!(clip.samples, ramp(1_250.0, 10));
+    }
+
+    #[test]
+    fn a_reader_follows_the_ring_by_absolute_index() {
+        let mut ring = AudioRing::new(RATE, 0.3);
+        ring.push(1_000.0, RATE, &ramp(1_000.0, 200));
+        let (start, first) = ring.read_from(0);
+        assert_eq!((start, first.len()), (0, 200));
+        ring.push(1_200.0, RATE, &ramp(1_200.0, 200));
+        // 100 samples fell out of the 300-sample ring before the reader came back.
+        assert_eq!((ring.first_index(), ring.end_index()), (100, 400));
+        let (start, next) = ring.read_from(200);
+        assert_eq!((start, next), (200, ramp(1_200.0, 200)));
+        assert_eq!(ring.read_from(50).0, 100, "what was dropped is skipped");
+        assert_eq!(ring.wall_ms_at(250), Some(1_250.0));
+        ring.clear();
+        assert_eq!(ring.read_from(400), (400, vec![]));
     }
 
     #[test]
