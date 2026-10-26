@@ -57,11 +57,14 @@ const SEED_OVER_BACKGROUND: f32 = 4.0;
 const MIN_SEED_RMS: f32 = 0.01;
 /// Speech goes on through frames this much louder than the background.
 const LOUD_OVER_BACKGROUND: f32 = 2.5;
+/// ... but for at most this long without Silero hearing speech.
+const LOUD_RUN_MS: f64 = 800.0;
 const MIN_LOUD_RMS: f32 = 0.004;
 /// How far back speech can be found to have risen: 20 frames, 640 ms.
 const ONSET_FRAMES: usize = 21;
-/// The background level is a low percentile of the last 10 s of frames.
-const BACKGROUND_FRAMES: usize = 312;
+/// The background level is a low percentile of the last 4 s of frames: quick to follow music
+/// coming in, while the pauses between words keep speech itself out of it.
+const BACKGROUND_FRAMES: usize = 125;
 const BACKGROUND_PERCENTILE: f64 = 0.2;
 /// Speech shorter than this is a click, a footstep or a breath.
 const MIN_SPEECH_MS: f64 = 200.0;
@@ -89,9 +92,14 @@ const WIDEN_END_MS: f64 = 1_500.0;
 /// A match takes in speech this close before or after it, from this long before the line's anchor.
 const EXTEND_GAP_MS: f64 = 1_500.0;
 const EXTEND_LEAD_MS: f64 = 400.0;
+/// After it, speech of at least this long, this close.
+const TRAILING_GAP_MS: f64 = 800.0;
+const MIN_TRAILING_MS: f64 = 250.0;
 /// An OCR'd line whose text was not seen appearing is looked for this far back.
 const OCR_LOOKBACK_MS: f64 = 20_000.0;
-/// Timing alone, for such a line, trusts only speech this close before its arrival.
+/// Timing alone, for such a line, trusts only speech still under way this close to its arrival,
+/// and from at most this long before it.
+const AT_SCAN_MS: f64 = 300.0;
 const OCR_TIMED_LEAD_MS: f64 = 1_500.0;
 /// The newest line is decided once this long has passed since its anchor...
 const SETTLE_AFTER_MS: f64 = 1_500.0;
@@ -273,9 +281,10 @@ pub struct Listener {
     asr: Option<SenseVoice>,
     /// The next ring sample to score, and the ring's sample rate when it was read.
     cursor: Option<(u64, u32)>,
-    /// Speech started at, and quiet since (hysteresis).
+    /// Speech started at, and quiet since (hysteresis); loud without Silero's word since.
     speaking: Option<f64>,
     quiet_since: Option<f64>,
+    loud_only_since: Option<f64>,
     /// The utterance being heard.
     open: Option<Span>,
     background: Background,
@@ -283,6 +292,13 @@ pub struct Listener {
     recent: VecDeque<(f64, bool)>,
     /// Utterances heard, oldest first.
     utterances: Vec<Span>,
+    /// The stretches of speech within them (split at every `MIN_SILENCE_MS`), oldest first: what
+    /// a line's clip is widened by, since an utterance can run from one line's voice into the
+    /// next's.
+    /// Each with the part Silero itself called speech (not only its loudness), if any.
+    spoken: Vec<(Span, Option<Span>)>,
+    /// That part of the stretch being heard.
+    voiced: Option<Span>,
     /// Short loud sounds that are not (Silero says) speech, oldest first: a gasp, a sob, a laugh
     /// (or a sound effect), which a line's clip takes in just before its words.
     bursts: Vec<Span>,
@@ -310,10 +326,13 @@ impl Listener {
             cursor: None,
             speaking: None,
             quiet_since: None,
+            loud_only_since: None,
             open: None,
             background: Background::default(),
             recent: VecDeque::new(),
             utterances: Vec::new(),
+            spoken: Vec::new(),
+            voiced: None,
             bursts: Vec::new(),
             burst: None,
             transcripts: Vec::new(),
@@ -354,6 +373,7 @@ impl Listener {
         self.background = Background::default();
         self.recent.clear();
         self.utterances.clear();
+        self.spoken.clear();
         self.bursts.clear();
         self.burst = None;
         self.transcripts.clear();
@@ -508,13 +528,21 @@ impl Listener {
             None if seed => {
                 let start = self.recent.iter().rev().skip(1).take_while(|(_, loud)| *loud).last().map_or(t, |(at, _)| *at);
                 self.speaking = Some(start);
+                self.voiced = (p >= vad::ON).then_some(Span { start: t, end });
                 self.quiet_since = None;
                 if self.open.is_some_and(|open| start - open.end > JOIN_MS) {
                     self.close();
                 }
                 self.open.get_or_insert(Span { start, end }).end = end;
             }
-            Some(_) if p >= vad::OFF || loud => {
+            // Loudness alone carries speech on only so long: music swells are loud too.
+            Some(_) if p >= vad::OFF || (loud && t - *self.loud_only_since.get_or_insert(t) < LOUD_RUN_MS) => {
+                if p >= vad::OFF {
+                    self.loud_only_since = None;
+                }
+                if p >= vad::ON || (p >= vad::OFF && self.voiced.is_some()) {
+                    self.voiced.get_or_insert(Span { start: t, end }).end = end;
+                }
                 self.quiet_since = None;
                 if let Some(open) = &mut self.open {
                     open.end = end;
@@ -527,6 +555,12 @@ impl Listener {
             Some(_) => {
                 let since = *self.quiet_since.get_or_insert(t);
                 if end - since >= MIN_SILENCE_MS {
+                    self.loud_only_since = None;
+                    if let Some(started) = self.speaking {
+                        self.spoken.push((Span { start: started, end: since.max(started) }, self.voiced));
+                        let excess = self.spoken.len().saturating_sub(UTTERANCES_KEEP * 4);
+                        self.spoken.drain(..excess);
+                    }
                     self.speaking = None;
                     self.quiet_since = None;
                     if let Some(open) = &mut self.open {
@@ -547,6 +581,19 @@ impl Listener {
                 self.utterances.drain(..excess);
             }
         }
+    }
+
+    /// Stretches of speech between `from` and `to`, including the one being heard.
+    /// `strong`: only the parts Silero itself called speech (not their loudness around them).
+    fn spoken(&self, from: f64, to: f64, strong: bool) -> Vec<Span> {
+        let current = self.speaking.map(|start| (Span { start, end: self.heard_until.max(start) }, self.voiced));
+        self.spoken
+            .iter()
+            .copied()
+            .chain(current)
+            .filter_map(|(s, voiced)| if strong { voiced } else { Some(s) })
+            .filter(|s| s.end > from && s.start < to)
+            .collect()
     }
 
     /// Utterances between `from` and `to`, including the one being heard.
@@ -618,19 +665,21 @@ impl Listener {
                 _ => stretches.push(Heard { start_ms: 0.0, end_ms: 0.0, chars: vec![*c] }),
             }
         }
-        let utterances = self.speech(from, to);
+        // A stretch starts where its speech rose (any), and ends where speech Silero heard ends:
+        // music after it is loud too.
+        let (any, by_silero) = (self.spoken(from, to, false), self.spoken(from, to, true));
         for s in &mut stretches {
             let (first, last) = (s.chars[0].ms, s.chars[s.chars.len() - 1].ms);
             s.start_ms = (first - CHAR_LEAD_MS).max(from);
             s.end_ms = (last + CHAR_TAIL_MS).min(to);
-            for u in &utterances {
-                if u.start >= s.end_ms || u.end <= s.start_ms {
-                    continue;
-                }
-                if u.start < s.start_ms && u.start >= s.start_ms - WIDEN_START_MS {
+            let (start, end) = (s.start_ms, s.end_ms);
+            for u in any.iter().filter(|u| u.start < end && u.end > start) {
+                if u.start < s.start_ms && u.start >= start - WIDEN_START_MS {
                     s.start_ms = u.start.max(from);
                 }
-                if u.end > s.end_ms && u.end <= s.end_ms + WIDEN_END_MS {
+            }
+            for u in by_silero.iter().filter(|u| u.start < end && u.end > start) {
+                if u.end > s.end_ms && u.end <= end + WIDEN_END_MS {
                     s.end_ms = u.end.min(to);
                 }
             }
@@ -731,13 +780,18 @@ impl Listener {
         }
         let floor = from.max(line.anchor() - EXTEND_LEAD_MS);
         let ceiling = (to - TAIL_MS).max(end);
-        let mut spans = self.speech(floor, ceiling);
-        spans.extend(stretches.iter().map(|s| Span { start: s.start_ms, end: s.end_ms }));
-        // Bursts only lead into the words: after them, they are as likely the next line's.
-        let bursts: Vec<Span> = self.bursts.iter().copied().filter(|b| b.start >= floor && b.end <= start).collect();
-        spans.extend(bursts);
+        let words = stretches.iter().map(|s| Span { start: s.start_ms, end: s.end_ms });
+        // Before the words: any speech, and loud bursts (a gasp, a sob).
+        let mut before = self.spoken(floor, start, false);
+        before.extend(words.clone());
+        before.extend(self.bursts.iter().copied().filter(|b| b.start >= floor && b.end <= start));
+        before.sort_by(|a, b| a.start.total_cmp(&b.start));
+        // After them, only speech Silero heard, or words: music swells are loud too, and bursts
+        // are as likely the next line's.
+        let mut spans = self.spoken(end - CHAR_TAIL_MS, ceiling, true);
+        spans.extend(words);
         spans.sort_by(|a, b| a.start.total_cmp(&b.start));
-        for span in spans.iter().rev() {
+        for span in before.iter().rev() {
             if span.end >= start - EXTEND_GAP_MS && span.start < start && span.start >= floor {
                 start = span.start;
             }
@@ -745,7 +799,10 @@ impl Listener {
         // After it, only speech of its own (a trailing laugh, a last word the recogniser missed):
         // an utterance running on from the match may be the next line said without a pause.
         for span in &spans {
-            if span.start >= end - CHAR_TAIL_MS && span.start <= end + EXTEND_GAP_MS && span.end > end && span.start < ceiling {
+            // Speech that runs on past the next line's anchor is the next line's.
+            let own = span.end <= ceiling + TAIL_MS;
+            let speech = span.end - span.start >= MIN_TRAILING_MS;
+            if own && speech && span.start >= end - CHAR_TAIL_MS && span.start <= end + TRAILING_GAP_MS && span.end > end {
                 end = span.end.min(ceiling);
             }
         }
@@ -785,6 +842,20 @@ impl Listener {
             let opening = m.from_line_start && matched >= MIN_OPENING;
             if m.score >= MIN_SCORE || (m.score >= MIN_SCORE_LOOSE && matched >= MIN_MATCHED_LOOSE) || opening {
                 let (start, end) = self.around_match(line, &m, &stretches, from, to);
+                if std::env::var_os("KIMOCHI_SENTENCE_AUDIO_DEBUG").is_some() {
+                    let spans = |strong| -> Vec<String> {
+                        self.spoken(from, to, strong).iter().map(|s| format!("{:.2}-{:.2}", s.start / 1000.0, s.end / 1000.0)).collect()
+                    };
+                    let spoken = (spans(false), spans(true));
+                    eprintln!(
+                        "[sentence-audio] {}: matched {:.2}-{:.2}, widened to {:.2}-{:.2}; speech {spoken:?}",
+                        line.uid,
+                        m.start_ms / 1000.0,
+                        m.end_ms / 1000.0,
+                        start / 1000.0,
+                        end / 1000.0
+                    );
+                }
                 return cut(start, end, How::Matched(m));
             }
         }
@@ -796,13 +867,29 @@ impl Listener {
             return Outcome::Silent;
         }
         let (from, to) = if unanchored {
-            let from = from.max(line.ts - OCR_TIMED_LEAD_MS).max(previous.map_or(f64::NEG_INFINITY, |p| p.ts));
-            let under_way = self.speech(from, line.ts).into_iter().map(|s| s.end).reduce(f64::max);
-            (from, under_way.unwrap_or(line.ts).max(from))
+            // Only a voice still playing as the line was scanned.
+            let at_scan = self.speech(line.ts - AT_SCAN_MS, line.ts);
+            let (Some(start), Some(end)) = (
+                at_scan.iter().map(|s| s.start).reduce(f64::min),
+                at_scan.iter().map(|s| s.end).reduce(f64::max),
+            ) else {
+                return Outcome::Silent;
+            };
+            let floor = from.max(line.ts - OCR_TIMED_LEAD_MS).max(previous.map_or(f64::NEG_INFINITY, |p| p.ts));
+            (start.max(floor), end.max(floor))
         } else {
             (from, to.max(from))
         };
-        let mut speech = self.speech(from, to);
+        // Stretches of speech, each ending where Silero last heard speech in it (the loudness after
+        // is as likely music).
+        let mut speech: Vec<Span> = self
+            .spoken
+            .iter()
+            .copied()
+            .chain(self.speaking.map(|start| (Span { start, end: self.heard_until.max(start) }, self.voiced)))
+            .map(|(s, voiced)| voiced.map_or(s, |v| Span { start: s.start, end: v.end.min(s.end).max(s.start) }))
+            .filter(|s| s.end > from && s.start < to)
+            .collect();
         speech.extend(stretches.iter().filter(|s| s.end_ms > from && s.start_ms < to).map(|s| Span { start: s.start_ms, end: s.end_ms }));
         // A line without words ("……", "…！") is often voiced with a gasp or a sigh, which Silero
         // does not call speech: a loud burst right after a reliable anchor counts.
