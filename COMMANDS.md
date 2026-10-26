@@ -1168,25 +1168,39 @@ A card the relay adds may afterwards be given its line's audio (see "Sentence au
 ## Sentence audio
 
 While `sentenceAudio.enabled` is on, Kimochi keeps the last `sentenceAudio.seconds` (10–120,
-default 30) of what the computer plays in memory, and gives each new card the audio of the line it
-was mined from (`src-tauri/src/sentence_audio/`). `sentenceAudio` is a machine key: never synced,
-shared by every profile. Its other fields: `field` (the note field the audio goes in, default
-`SentenceAudio`), `startOffsetMs` and `endOffsetMs` (−5000–5000, moving the clip's ends), `trim`
-(cut the clip to its speech, default on).
+default 30) of what the computer plays in memory, gives each Log line the clip of its voice, and
+gives each new card the audio of the line it was mined from (`src-tauri/src/sentence_audio/`, with
+the listener in `speech-core/`). `sentenceAudio` is a machine key: never synced, shared by every
+profile. Its other fields: `field` (the note field the line's audio goes in, default
+`SentenceAudio`), `wordField` (the note field the mined word's audio goes in; empty, the default,
+for none), `clips` (line clips kept on disk, 5–100, default 15), `startOffsetMs` and `endOffsetMs`
+(−5000–5000, moving every clip's ends), `trim` (cut a clip placed by timing to its speech, default
+on).
 
 | Command | Signature |
 | --- | --- |
 | `sentence_audio_status` | `() -> Status`: the recording's state, for Settings → Anki |
 | `sentence_audio_line` | `({uid, text, ts, source})`: the Log added a line (or changed one's text, same `uid`); `ts` its arrival in Unix ms, `source` its `LineSource`. Ignored while recording is off. |
-| `sentence_audio_attach` | `({url, noteId, sentence, field})`: the Yomitan API pop-up added note `noteId` at `url` (with the configured key) from `sentence`; its audio follows in the background into `field`, or `sentenceAudio.field` when null |
+| `sentence_audio_lines` | `() -> LineAudio[]`: what is known about recent lines' audio (the decided ones, and every kept clip), for the Log |
+| `sentence_audio_clip` | `({uid}) -> string \| null`: line `uid`'s clip as base64 MP3, or null when none is kept |
+| `sentence_audio_attach` | `({url, noteId, sentence, field, word, wordField})`: the Yomitan API pop-up added note `noteId` at `url` (with the configured key) from `sentence` for `word`; its audio follows in the background into `field` (or `sentenceAudio.field` when null), and the word's into `wordField` (or `sentenceAudio.wordField`) |
+
+| Event | Payload |
+| --- | --- |
+| `sentence-audio-line` | `LineAudio`: the listener decided (or decided again) a line's audio |
+
+`LineAudio` is `{uid, state, durationMs?, how?, message?}`: `state` `voiced` (a clip, `durationMs`
+long, found by its words, `how: "matched"`, or by timing, `"timed"`), `silent` (no voice was
+detected near the line) or `missed` (its audio was no longer held; `message` says why).
 
 `Status` is tagged by `state`: `off`, `starting`, `recording {source, excludesOwnAudio}` (what is
 recorded, and whether Kimochi's own sounds are left out), `noPermission {message}` (macOS: Screen
 Recording not granted), `unavailable {message}` (this computer cannot record its audio now: no
 PipeWire, no output device; retried every 30 s), `unsupported {message}` (no backend on this OS) or
 `error {message}` (retried every 5 s), each with `platform` (`macos`, `windows`, `linux`), `held`
-(seconds of audio held), `level` (0–1, the last half second) and `last` (`{at, ok, message}`: what
-happened to the last card's audio, or null).
+(seconds of audio held), `level` (0–1, the last half second), `recogniser` (the speech model in the
+listener, tagged by `state`: `absent`, `loading`, `ready` or `failed {message}`) and `last`
+(`{at, ok, message}`: what happened to the last card's audio, or null).
 
 Where the audio comes from (`capture-core/src/audio/`): macOS, a ScreenCaptureKit display stream with
 `capturesAudio` and `excludesCurrentProcessAudio`; Windows, WASAPI process loopback of everything
@@ -1194,17 +1208,39 @@ but Kimochi's process tree (WebView2 included; Windows 10 2004+), else loopback 
 output (Kimochi's sounds included), restarted when the default output changes; Linux, a PipeWire
 capture stream on the default output's monitor (`stream.capture.sink`; Kimochi's sounds included).
 
+The listener (`speech-core/src/listener.rs`) follows its own copy of the recording, ten times a
+second. Speech is Silero VAD's, helped by loudness against the background (Silero misses
+drawn-out exclamations and gasps under music). With the speech model downloaded (the model store's
+`sensevoice` engine, below), the recording is transcribed in chunks that end in pauses, each once.
+A line is decided once its voice must be over (the next line has arrived and the speech before it
+has been heard, or a quiet spell for the newest line, which is decided again when the next arrives):
+
+- its window runs from 1 s before its anchor (never before the previous line's) to 300 ms after the
+  next line's anchor. The anchor is when the line arrived, or for an OCR'd line when automatic
+  OCR's quick readings (`capture_frame` with `observe`) first showed its text drawing in. An OCR'd
+  line not seen drawing in is looked for up to 20 s back.
+- matched: its text, folded (katakana as hiragana; punctuation, long-vowel marks, small vowels and
+  small tsu dropped), is found in what was heard by local alignment, at half its characters (or a
+  third and five characters, or its first three in a row). The clip is that speech, widened to the
+  speech and loud bursts around it that are the line's own; every character gets a time, which is
+  how a word's audio is cut out of it.
+- otherwise timed: the speech near the anchor (leading speech that ends before the line arrived is
+  the previous line's). An OCR'd line not seen drawing in is only timed without the model.
+- no speech at all: `silent`.
+
+A voiced line's clip is padded 150 ms before and 300 ms after, moved by the offsets, levelled
+toward −1 dBFS (×8 at most), faded over 50 ms and encoded as mono MP3 at 96 kbit/s into
+`<app local data>/sentence-audio/` (the newest `clips` kept, with `clips.json`).
+
 A card's audio: its line is the newest Log line whose text best matches the card's sentence (the
-pop-up's) or any of its fields (an extension's), else the newest line. Its window runs from just
-before the line arrived (300 ms; 1.5 s for an OCR'd line, never before the previous line arrived)
-to 100 ms after the next line arrived, or now; when there is no next line yet, the card waits (up
-to 15 s after the line arrived) until the last 0.8 s holds no speech. The window is trimmed to its
-speech (Silero VAD; leading speech that ends before the line arrived is the previous line's), padded
-150 ms before and 300 ms after, moved by the offsets, faded in and out over 50 ms and encoded as
-mono MP3 at 96 kbit/s. Then `notesInfo`, `storeMediaFile` (`kimochi_<ms>.mp3`) and
-`updateNoteFields` put `[sound:…]` in the field, but only when the note has the field and it is
-empty. An extension's card is noticed by `anki_connect_relay` (an `addNote` AnkiConnect accepted);
-its follow-up calls use the address and key of the extension's request. Neither the extension's
+pop-up's) or any of its fields (an extension's), else the newest line. The card waits (up to 15 s
+after the line arrived) for the line to be decided, then takes its clip. A word-audio field gets
+the mined word (the pop-up's term; for an extension's card, a field named Expression, Word, Term,
+… or its shortest field found in the line) cut from a matched clip, 80 ms before and 150 ms after.
+Then `notesInfo`, `storeMediaFile` (`kimochi_<ms>.mp3`, `kimochi_<ms>_word.mp3`) and
+`updateNoteFields` put `[sound:…]` in the fields, but only those the note has and that are empty.
+An extension's card is noticed by `anki_connect_relay` (an `addNote` AnkiConnect accepted); its
+follow-up calls use the address and key of the extension's request. Neither the extension's
 request nor its reply changes.
 
 ## Dictionary engine downloads
@@ -1310,13 +1346,15 @@ Removing the engine drops its record.
 
 ## OCR model downloads
 
-The local engines' models are not bundled; only the ONNX Runtime libraries are. They are
+The local engines' models (and sentence audio's speech model) are not bundled; only the ONNX
+Runtime libraries are. They are
 downloaded on demand into `<app local data>/models/<engine>/` (`app_local_data_dir`: the app
 data directory on macOS and Linux, `%LOCALAPPDATA%` rather than the roaming profile on
 Windows) from the pinned list in `src-tauri/ocr-models.json` (repository, revision, URL,
 SHA-256 and size per file). Implementation: `src-tauri/src/model_store.rs`.
 
-`engine` is `"meikiocr"` or `"mangaocr"`. Every command answers with the engine's
+`engine` is `"meikiocr"`, `"mangaocr"` or `"sensevoice"` (SenseVoice-Small, sentence audio's
+speech recogniser; never an `ocrMode`). Every command answers with the engine's
 `ModelStatus` after acting:
 
 | Command | Signature |

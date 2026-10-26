@@ -88,7 +88,8 @@ OCR models (downloaded on demand, not bundled)
 ----------------------------------------------
 
 Kimochi does not include any OCR model. When you choose MeikiOCR or Manga OCR,
-the app downloads that engine's model files from their upstream location.
+the app downloads that engine's model files from their upstream location; the
+same goes for sentence audio's speech model, below.
 Every file is pinned by revision, SHA-256 and size in src-tauri/ocr-models.json.
 
 MeikiOCR models, LGPL-3.0, by rtr46 on Hugging Face:
@@ -104,6 +105,17 @@ Comic Text Detector ONNX weights, GPL-3.0, from dmMaze/comic-text-detector,
 as distributed by zyddnys/manga-image-translator (GPL-3.0), release
 beta-0.2.1:
 https://github.com/zyddnys/manga-image-translator/releases/tag/beta-0.2.1
+
+SenseVoice-Small (sentence audio's speech recogniser, downloaded only when you
+choose to in Settings → Anki), by Alibaba's FunASR team
+(https://github.com/modelscope/FunASR, https://huggingface.co/FunAudioLLM/SenseVoiceSmall),
+under the FunASR Model Open Source License Agreement v1.1
+(https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE), as converted to
+ONNX with int8 weights by the k2-fsa sherpa-onnx project:
+https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17
+(revision 2365baeacb507f821a0c8120fcee3d484dba7a07). Kimochi computes the
+model's features and decodes its output itself (speech-core/src/fbank.rs,
+sense_voice.rs), following sherpa-onnx (Apache-2.0).
 
 
 OneOCR (Windows, optional)

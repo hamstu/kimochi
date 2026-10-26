@@ -42,11 +42,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   10ten show their own pop-up filling that space. Move word to word with the D-pad or arrow keys,
   through a word's entries with the shoulder buttons, and add the entry to Anki with A. The
   controller's buttons stay in Settings → Shortcuts & Controls.
-- Sentence audio: turn on Record and attach sentence audio in Settings → Anki and each card you
-  add gets the spoken audio of the line you mined it from, cut from what your computer was playing
-  and trimmed to the voice. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up,
-  into a field you choose (SentenceAudio by default), and never replaces a field that is already
-  filled. Audio is only kept in memory. On macOS it uses the Screen Recording permission; on Linux
+- Sentence audio: turn on Record and attach sentence audio in Settings → Anki and Kimochi listens
+  to your game. Each line in the Log gets the clip of its voice, with a speaker to play it (or "no
+  voice" when it wasn't voiced), and each card you add gets the spoken audio of the line you mined
+  it from. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up, into a field you
+  choose (SentenceAudio by default), and never replaces a field that is already filled. Download
+  the speech model (240 MB) in the same place and Kimochi hears what is said, so each line gets
+  exactly its own voice, even lines read by OCR and lines spoken back to back, and you can have the
+  mined word's own audio put in a second field. The last 15 clips are kept (you can keep more);
+  the recording itself stays in memory. On macOS it uses the Screen Recording permission; on Linux
   and the Steam Deck it needs PipeWire.
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question
   (and every other confirmation, alert or question an engine's settings page asks) now appears

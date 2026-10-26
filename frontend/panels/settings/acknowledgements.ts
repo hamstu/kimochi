@@ -89,11 +89,40 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
     ]
   },
   {
+    title: 'Sentence audio',
+    items: [
+      {
+        name: 'SenseVoice',
+        role: 'Hears what a game says, to match each line to its voice (FunASR, Alibaba)',
+        license: 'FunASR Model License',
+        url: 'https://github.com/FunAudioLLM/SenseVoice'
+      },
+      {
+        name: 'sherpa-onnx',
+        role: 'SenseVoice in ONNX, and how to run it',
+        license: 'Apache-2.0',
+        url: 'https://github.com/k2-fsa/sherpa-onnx'
+      },
+      {
+        name: 'Silero VAD',
+        role: 'Hears where speech is',
+        license: 'MIT',
+        url: 'https://github.com/snakers4/silero-vad'
+      },
+      {
+        name: 'LAME',
+        role: 'Encodes the clips as MP3',
+        license: 'LGPL-2.0',
+        url: 'https://lame.sourceforge.io'
+      }
+    ]
+  },
+  {
     title: 'Ideas',
     items: [
       {
         name: 'GameSentenceMiner',
-        role: 'Automatic OCR and reading games with a controller',
+        role: 'Automatic OCR, reading games with a controller, and sentence audio',
         license: 'GPL-3.0',
         url: 'https://github.com/bpwhelan/GameSentenceMiner'
       },
