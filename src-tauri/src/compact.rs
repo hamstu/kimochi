@@ -11,7 +11,7 @@ struct Saved {
     pinned: bool,
     maximized: bool,
     #[cfg(target_os = "macos")]
-    spaces: usize,
+    mac: MacFrame,
 }
 static SAVED: Mutex<Option<Saved>> = Mutex::new(None);
 #[cfg(target_os = "windows")]
@@ -125,7 +125,7 @@ pub fn set(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
             pinned: window.is_always_on_top().map_err(|e| e.to_string())?,
             maximized: window.is_maximized().map_err(|e| e.to_string())?,
             #[cfg(target_os = "macos")]
-            spaces: mac_spaces(window, None)?,
+            mac: mac_mini(window, None)?,
         });
         ACTIVE.store(true, Ordering::Relaxed);
         window.unmaximize().map_err(|e| e.to_string())?;
@@ -157,7 +157,7 @@ pub fn set(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
             window.maximize().map_err(|e| e.to_string())?;
         }
         #[cfg(target_os = "macos")]
-        mac_spaces(window, Some(previous.spaces))?;
+        mac_mini(window, Some(&previous.mac))?;
         saved.take();
         ACTIVE.store(false, Ordering::Relaxed);
     }
@@ -184,22 +184,60 @@ pub fn crop(app: &tauri::AppHandle, editing: bool) -> Result<(), String> {
     Ok(())
 }
 
-// Mini mode must join the source's full-screen Space. Restore the main window's
-// exact behavior on expand; the platform's reference overlay implementation stays unchanged.
+/// What mini mode changes on the main window's `NSWindow`, kept to undo on expand.
 #[cfg(target_os = "macos")]
-fn mac_spaces(window: &tauri::WebviewWindow, restore: Option<usize>) -> Result<usize, String> {
-    use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior as Behavior};
+struct MacFrame {
+    behavior: usize,
+    class: &'static objc2::runtime::AnyClass,
+    style: usize,
+}
+
+/// `NSWindowStyleMaskNonactivatingPanel`, as in `platform::make_panel`.
+#[cfg(target_os = "macos")]
+const NONACTIVATING_PANEL: usize = 1 << 7;
+
+// Mini mode must show over the source's full-screen Space. Only a non-activating `NSPanel`
+// of a background app is drawn over another app's full-screen window, so mini mode re-classes
+// the main window into one (the same in-place technique as `platform::make_panel`, with the
+// same size guard) and joins every Space. Expand restores the exact class, style and behavior.
+#[cfg(target_os = "macos")]
+fn mac_mini(window: &tauri::WebviewWindow, restore: Option<&MacFrame>) -> Result<MacFrame, String> {
+    use objc2::runtime::AnyObject;
+    use objc2::ClassType;
+    use objc2_app_kit::{NSPanel, NSWindow, NSWindowCollectionBehavior as Behavior, NSWindowStyleMask};
     objc2::MainThreadMarker::new().ok_or("Mini mode requires the main thread")?;
     unsafe {
         let native = window.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
-        let original = (*native).collectionBehavior();
-        let next = restore.map(Behavior).unwrap_or(
+        let current = MacFrame {
+            behavior: (*native).collectionBehavior().0,
+            class: (*(native as *mut AnyObject)).class(),
+            style: (*native).styleMask().0,
+        };
+        if let Some(previous) = restore {
+            if current.class != previous.class {
+                objc2::ffi::object_setClass(native as *mut AnyObject, previous.class);
+            }
+            (*native).setStyleMask(NSWindowStyleMask(previous.style));
+            (*native).setCollectionBehavior(Behavior(previous.behavior));
+            return Ok(current);
+        }
+        let original = Behavior(current.behavior);
+        (*native).setCollectionBehavior(
             (original - Behavior::MoveToActiveSpace - Behavior::FullScreenPrimary)
                 | Behavior::CanJoinAllSpaces
                 | Behavior::FullScreenAuxiliary,
         );
-        (*native).setCollectionBehavior(next);
-        Ok(original.0)
+        let panel = NSPanel::class();
+        if std::env::var_os("KIMOCHI_NO_PANEL").is_none()
+            && current.class != panel
+            && panel.instance_size() <= current.class.instance_size()
+        {
+            objc2::ffi::object_setClass(native as *mut AnyObject, panel);
+            (*native).setStyleMask(NSWindowStyleMask(current.style | NONACTIVATING_PANEL));
+            // On by default for panels: it would hide mini mode as the reader clicks into the game.
+            (*native).setHidesOnDeactivate(false);
+        }
+        Ok(current)
     }
 }
 
