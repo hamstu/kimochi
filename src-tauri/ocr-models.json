@@ -1,5 +1,5 @@
 {
-  "$comment": "Source of truth for the local OCR model files: compiled into the app (src/model_store.rs), which downloads them on demand into <app local data>/models/<engine>/, and read by scripts/prepare-meikiocr.mjs and scripts/prepare-mangaocr.mjs when staging models for development (--with-models). Every file is pinned by revision, SHA-256 and size.",
+  "$comment": "Source of truth for the local OCR model files (and sentence audio's speech model, sensevoice): compiled into the app (src/model_store.rs), which downloads them on demand into <app local data>/models/<engine>/, and read by scripts/prepare-meikiocr.mjs and scripts/prepare-mangaocr.mjs when staging models for development (--with-models). Every file is pinned by revision, SHA-256 and size.",
   "schemaVersion": 1,
   "engines": {
     "meikiocr": {
@@ -73,6 +73,27 @@
           "url": "https://huggingface.co/kha-white/manga-ocr-base/resolve/aa6573bd10b0d446cbf622e29c3e084914df9741/pytorch_model.bin",
           "sha256": "c63e0bb5b3ff798c5991de18a8e0956c7ee6d1563aca6729029815eda6f5c2eb",
           "size": 444135475
+        }
+      ]
+    },
+    "sensevoice": {
+      "name": "SenseVoice speech",
+      "files": [
+        {
+          "name": "model.int8.onnx",
+          "repository": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+          "revision": "2365baeacb507f821a0c8120fcee3d484dba7a07",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/model.int8.onnx",
+          "sha256": "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51",
+          "size": 239233841
+        },
+        {
+          "name": "tokens.txt",
+          "repository": "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
+          "revision": "2365baeacb507f821a0c8120fcee3d484dba7a07",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/2365baeacb507f821a0c8120fcee3d484dba7a07/tokens.txt",
+          "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
+          "size": 315894
         }
       ]
     }

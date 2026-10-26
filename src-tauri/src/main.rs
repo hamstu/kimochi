@@ -1571,6 +1571,8 @@ async fn capture_frame(
             .backend
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        // When the frame was taken: sentence audio dates a line's first appearance by it.
+        let captured_at = kimochi_capture::audio::now_ms();
         let frame = backend.capture(&request).map_err(|error| {
             let error = sources::err_for(&request.source_id, error);
             sources::stop_auto_if_gone(&service, &request.source_id, &error);
@@ -1599,6 +1601,7 @@ async fn capture_frame(
                     .map_err(|_| "busy: the local observer is poisoned".to_string())?;
                 match observer.observe(&frame, OBSERVE_TIMEOUT) {
                     Ok(read) => {
+                        sentence_audio::screen_text(&app, &read.text, captured_at);
                         observation = serde_json::to_value(&read).map_err(|e| e.to_string())?;
                         // Per line, how strongly its text stands out: what tells text that is
                         // still fading or drawing in from text that has settled.
@@ -2109,7 +2112,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         payload["ocrEngines"]["cloud"] = json!({ "available": false, "reason": reason });
     }
     // An engine held back only by its models stays selectable: choosing it asks to download them.
-    for engine in model_store::Engine::ALL {
+    for engine in model_store::Engine::OCR {
         if let Some(state) = model_store::gate(app, engine) {
             payload["ocrEngines"][engine.key()]["model"] = json!(state);
         }
@@ -2777,6 +2780,8 @@ fn main() {
             reader::ankiconnect::anki_connect_status,
             sentence_audio::sentence_audio_status,
             sentence_audio::sentence_audio_line,
+            sentence_audio::sentence_audio_lines,
+            sentence_audio::sentence_audio_clip,
             sentence_audio::sentence_audio_attach,
             #[cfg(target_os = "linux")]
             platform::dictionary_images::linux_dictionary_image,

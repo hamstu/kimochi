@@ -1,4 +1,5 @@
-//! Local OCR models, downloaded on demand instead of bundled.
+//! Local models, downloaded on demand instead of bundled: the OCR engines' and sentence audio's
+//! speech recogniser (SenseVoice, `sentence_audio`).
 //!
 //! The ONNX Runtime libraries stay in the app bundle (they are native code that has to
 //! be signed with it); the model files do not. They are listed, pinned by revision,
@@ -11,6 +12,7 @@
 //! <app local data>/models/
 //!   meikiocr/  meiki.text.detect.v0.1.960x544.onnx ... verified.json
 //!   mangaocr/  pytorch_model.bin ... pytorch_model.bin.part  verified.json
+//!   sensevoice/  model.int8.onnx  tokens.txt  verified.json
 //! ```
 //!
 //! A file is only ever written as `<name>.part`; it reaches its final name by an atomic
@@ -150,26 +152,37 @@ pub fn manifest() -> &'static Manifest {
 pub enum Engine {
     Meiki,
     Manga,
+    /// Sentence audio's speech recogniser: not an OCR engine, never an `ocrMode`.
+    SenseVoice,
 }
 
 impl Engine {
-    pub const ALL: [Engine; 2] = [Engine::Meiki, Engine::Manga];
+    pub const ALL: [Engine; 3] = [Engine::Meiki, Engine::Manga, Engine::SenseVoice];
+    /// The OCR engines among them.
+    pub const OCR: [Engine; 2] = [Engine::Meiki, Engine::Manga];
 
-    /// The `ocrMode` setting value, the directory name and the manifest key.
+    /// The `ocrMode` setting value (OCR engines), the directory name and the manifest key.
     pub fn key(self) -> &'static str {
         match self {
             Engine::Meiki => "meikiocr",
             Engine::Manga => "mangaocr",
+            Engine::SenseVoice => "sensevoice",
         }
     }
 
-    /// An `ocrMode` value; `local` is the retired name for MeikiOCR.
+    /// An engine by its key; `local` is the retired name for MeikiOCR.
     pub fn from_key(key: &str) -> Option<Self> {
         match key {
             "meikiocr" | "local" => Some(Engine::Meiki),
             "mangaocr" => Some(Engine::Manga),
+            "sensevoice" => Some(Engine::SenseVoice),
             _ => None,
         }
+    }
+
+    /// An `ocrMode` value naming an OCR engine.
+    pub fn from_ocr_mode(mode: &str) -> Option<Self> {
+        Self::from_key(mode).filter(|e| Self::OCR.contains(e))
     }
 }
 
@@ -1130,7 +1143,7 @@ pub fn status(app: &tauri::AppHandle, engine: Engine) -> ModelStatus {
 /// was paused or failed (the UI offers Resume or Retry instead). Called from `settings_set`
 /// only, which the pickers reach after the user confirms the download; never at launch.
 pub fn on_engine_selected(app: &tauri::AppHandle, mode: &str) {
-    let Some(engine) = Engine::from_key(mode) else {
+    let Some(engine) = Engine::from_ocr_mode(mode) else {
         return;
     };
     if models_dir(app, engine).is_ok() {
@@ -1165,7 +1178,7 @@ pub fn shutdown(app: &tauri::AppHandle) {
 }
 
 fn engine_arg(engine: &str) -> Result<Engine, String> {
-    Engine::from_key(engine).ok_or_else(|| format!("invalid: unknown OCR model {engine}"))
+    Engine::from_key(engine).ok_or_else(|| format!("invalid: unknown model {engine}"))
 }
 
 /// Run one store operation off the async runtime (it may delete files, and it announces the
@@ -1259,6 +1272,7 @@ pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<Model
                 }
             }
             Engine::Manga => crate::manga_ocr::unload(app),
+            Engine::SenseVoice => crate::sentence_audio::unload_model(app),
         }
         store.delete(engine)
     })
@@ -1422,6 +1436,9 @@ mod tests {
         }
         assert!(names(Engine::Manga).contains(&"comic-text-detector.onnx".to_string()));
         assert!(manifest.engine(Engine::Manga).total_size() > 500_000_000);
+        for file in [kimochi_speech::sense_voice::MODEL_FILE, kimochi_speech::sense_voice::TOKENS_FILE] {
+            assert!(names(Engine::SenseVoice).contains(&file.to_string()));
+        }
     }
 
     #[test]
@@ -1431,7 +1448,7 @@ mod tests {
                 r#"{{"name":"{name}","repository":"r","revision":"v","url":"https://x/y","sha256":"{sha}","size":1}}"#
             );
             format!(
-                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}}}}}}"#
+                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}}}}}}"#
             )
         };
         let good = "a".repeat(64);

@@ -3143,10 +3143,10 @@ dependencies = [
  "glib",
  "image",
  "kimochi-capture",
+ "kimochi-speech",
  "libc",
  "mangaocr",
  "meikiocr",
- "mp3lame-encoder",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",
@@ -3198,6 +3198,19 @@ dependencies = [
  "windows-capture",
  "windows-core 0.62.2",
  "x11rb",
+]
+
+[[package]]
+name = "kimochi-speech"
+version = "0.1.0"
+dependencies = [
+ "kimochi-capture",
+ "mp3lame-encoder",
+ "objc2",
+ "objc2-app-kit",
+ "ort",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

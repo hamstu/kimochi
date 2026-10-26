@@ -60,11 +60,13 @@ pub fn defaults() -> Value {
         },
         "overlayOpacity": 80,
         "liveOverlayEnabled": false,
-        // Sentence audio (sentence_audio.rs): off until the user turns it on.
+        // Sentence audio (sentence_audio/): off until the user turns it on.
         "sentenceAudio": {
             "enabled": false,
             "seconds": 30,
             "field": "SentenceAudio",
+            "wordField": "",
+            "clips": 15,
             "startOffsetMs": 0,
             "endOffsetMs": 0,
             "trim": true

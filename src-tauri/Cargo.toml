@@ -56,9 +56,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-deep-link = "2"
 # Formats the offered release's date for the panels. Already in the lock file via the updater.
 time = { version = "0.3", features = ["formatting"] }
-# Sentence audio (sentence_audio/encode.rs): MP3 for Anki through LAME, built from source (LGPL;
-# NOTICE). No ffmpeg.
-mp3lame-encoder = "0.2.5"
+# Sentence audio's listener, recogniser and clips (speech-core: Silero, SenseVoice, LAME).
+kimochi-speech = { path = "../speech-core" }
 [target.'cfg(target_os = "macos")'.dependencies]
 mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "ab871d47efba3db9edaa55649a03fb9f95e1538f", features = ["metal"] }
 objc2 = "0.6"
