@@ -356,9 +356,6 @@ body.scan-mode .line-actions-trigger.k-button {
 .line-voice.k-button[data-playing] {
   color: var(--k-accent-text);
 }
-.line-voice-none {
-  font-style: normal;
-}
 body.scan-mode .line-voice.k-button {
   pointer-events: none;
 }

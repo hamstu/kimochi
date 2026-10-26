@@ -71,21 +71,14 @@ function LineGutter({ ts }: { ts: number }) {
 
 /**
  * Sentence audio's word on the line (src-tauri/src/sentence_audio): a speaker that plays the clip
- * of its voice, recorded from the game, or a quiet "no voice" when none was heard. Nothing while
- * the line is still being listened to, or when sentence audio is off.
+ * of its voice, recorded from the game. Nothing otherwise: while the line is still being listened
+ * to, when no voice was found (Diagnostics → Sentence audio says why), or when sentence audio is
+ * off.
  */
 function LineVoice({ uid }: { uid: string | undefined }) {
   const audio = useLineAudio(uid);
   const playing = useLinePlaying(uid);
-  if (!uid || !audio) return null;
-  if (audio.state === "silent") {
-    return (
-      <Tooltip content="No voice was detected for this line" delayDuration={300}>
-        <span className="line-note line-voice-none">no voice</span>
-      </Tooltip>
-    );
-  }
-  if (audio.state !== "voiced") return null;
+  if (!uid || audio?.state !== "voiced") return null;
   const seconds = ((audio.durationMs ?? 0) / 1000).toFixed(1);
   return (
     <IconButton

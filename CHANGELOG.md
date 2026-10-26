@@ -43,13 +43,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   through a word's entries with the shoulder buttons, and add the entry to Anki with A. The
   controller's buttons stay in Settings → Shortcuts & Controls.
 - Sentence audio: turn on Record and attach sentence audio in Settings → Anki and Kimochi listens
-  to your game. Each line in the Log gets the clip of its voice, with a speaker to play it (or "no
-  voice" when it wasn't voiced), and each card you add gets the spoken audio of the line you mined
-  it from. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up, into a field you
+  to your game. Each line in the Log gets the clip of its voice, with a speaker to play it, and
+  each card you add gets the spoken audio of the line you mined it from. It works with Built-in Yomitan, Hachidori and the Yomitan API pop-up, into a field you
   choose (SentenceAudio by default), and never replaces a field that is already filled. Download
   the speech model (240 MB) in the same place and Kimochi hears what is said, so each line gets
-  exactly its own voice, even lines read by OCR and lines spoken back to back, and you can have the
-  mined word's own audio put in a second field. The last 15 clips are kept (you can keep more);
+  exactly its own voice, even lines read by OCR and lines spoken back to back, whether you scan
+  while the line is still being spoken or long after; a speaker's name read beside the dialogue
+  never takes its voice, and a line that has found its voice keeps it. You can also have the mined
+  word's own audio put in a second field. Diagnostics → Sentence audio shows what was heard and
+  why each line got its voice or didn't. The last 15 clips are kept (you can keep more);
   the recording itself stays in memory. On macOS it uses the Screen Recording permission; on Linux
   and the Steam Deck it needs PipeWire.
 - Removing a dictionary in Hachidori's settings now works on macOS: the "Remove …?" question

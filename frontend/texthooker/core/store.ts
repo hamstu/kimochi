@@ -8,7 +8,7 @@ import {
 import { getSettings, onSettingsChange } from "../lib/settings";
 import { currentLinesPath, getManifest } from "./sessions";
 import { writesPaused } from "./profile";
-import { reportLine } from "../lib/sentenceAudio";
+import { forgetLines, reportLine } from "../lib/sentenceAudio";
 import type { Line, LineSource } from "../lib/types";
 
 const DIR = BaseDirectory.AppLocalData;
@@ -302,13 +302,16 @@ export function setLineTranslationVisible(id: number, visible: boolean) {
 export function deleteLine(id: number) {
   const idx = lines.findIndex((l) => l.id === id);
   if (idx === -1) return;
-  rememberDeleted(lines.splice(idx, 1));
+  const removed = lines.splice(idx, 1);
+  rememberDeleted(removed);
+  forgetLines(removed);
   emit({ type: "remove", id });
   scheduleSave();
 }
 
 export function clearLines() {
   rememberDeleted(lines);
+  forgetLines(lines);
   lines = [];
   nextId = 1;
   dirty = true;

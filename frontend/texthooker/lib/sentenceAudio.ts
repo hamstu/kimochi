@@ -1,7 +1,9 @@
 /* sentenceAudio.ts — the Log's side of sentence audio (src-tauri/src/sentence_audio): each line
-   it adds is reported with its arrival time; the listener decides what each line's voice was and
-   says so (`sentence-audio-line`), which the Log shows as a play button or "No voice"; and the
-   pop-up's cards ask for their audio once added. Nothing is sent while the setting is off. */
+   it adds is reported with its arrival time (and its OCR scan: a scan's lines, a name box and the
+   dialogue, are decided together), and each it deletes is forgotten; the listener decides what
+   each line's voice was and says so (`sentence-audio-line`), which the Log shows as a play
+   button; and the pop-up's cards ask for their audio once added. Nothing is sent while the
+   setting is off. */
 
 import { useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -76,7 +78,16 @@ export function reportLine(line: Line): void {
     text: line.text,
     ts: line.ts,
     source: line.source,
+    scan: line.ocr?.scanId ?? null,
   }).catch(() => {});
+}
+
+/** The Log deleted these lines (or a fuller reading of the same text replaced them). */
+export function forgetLines(removed: readonly Line[]): void {
+  watch();
+  const uids = removed.flatMap((line) => (line.uid ? [line.uid] : []));
+  if (!enabled || uids.length === 0) return;
+  invoke("sentence_audio_forget", { uids }).catch(() => {});
 }
 
 /** The pop-up added note `noteId` from `sentence` for `word`: its audio follows in the
