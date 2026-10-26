@@ -15,6 +15,7 @@ pub mod encode;
 pub mod fbank;
 pub mod listener;
 pub mod matching;
+pub mod readings;
 pub mod sense_voice;
 pub mod timeline;
 pub mod trim;

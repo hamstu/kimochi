@@ -2,6 +2,9 @@
 //! heard (`sense_voice`), as a local alignment (Smith-Waterman), so a wrong guess here and there,
 //! an OCR slip, or kana where the line has kanji costs a few characters rather than the match.
 //!
+//! A kanji on either side may stand for its reading in kana on the other (`readings`): the
+//! recogniser writes わかった where the script has 分かった, and 為 where it has ため.
+//!
 //! The text on both sides is folded first: full-width letters to ASCII, katakana to hiragana,
 //! and punctuation, spaces, long-vowel marks, small vowels and small tsu dropped (the recogniser
 //! rarely writes them the way a script does).
@@ -12,6 +15,20 @@
 use crate::sense_voice::HeardChar;
 
 const MATCH: i32 = 2;
+/// A kanji stands for at most this many kana of its reading (after folding).
+const MAX_RUN: usize = 4;
+
+#[derive(Clone, Copy, PartialEq)]
+enum Step {
+    Stop,
+    Diagonal,
+    Up,
+    Left,
+    /// The line's kanji, said as this many heard kana.
+    LineKanji(u8),
+    /// A heard kanji, written as this many of the line's kana.
+    HeardKanji(u8),
+}
 const MISMATCH: i32 = -1;
 const GAP: i32 = -1;
 /// The voice is taken to start this long before the first character's frame.
@@ -140,43 +157,100 @@ pub fn find_near(
     if got.is_empty() {
         return None;
     }
-    // Smith-Waterman: score[i][j] for want[..i] against got[..j].
+    // Smith-Waterman: score[i][j] for want[..i] against got[..j], and the step that got there.
+    // Besides the usual steps, a kanji on either side may stand for a run of kana on the other
+    // that is one of its readings (`readings`): a line's 分かった and a heard わかった.
     let (n, m) = (want.len(), got.len());
     let width = m + 1;
     let mut score = vec![0i32; (n + 1) * width];
+    let mut step = vec![Step::Stop; (n + 1) * width];
+    let kanji_at = |chars: &dyn Fn(usize) -> char, k: usize| -> Option<&'static [Vec<char>]> {
+        // 々 repeats the kanji before it.
+        let c = chars(k);
+        if c == '々' && k > 0 { crate::readings::of(chars(k - 1)) } else { crate::readings::of(c) }
+    };
+    let line_char = |k: usize| want[k];
+    let heard_char = |k: usize| got[k].ch;
+    // Kana a reading can stand for: hiragana as written. Katakana is how a script and the
+    // recogniser write names and loanwords (フリッツ), which no kanji's reading stands for.
+    let original: Vec<char> = line.chars().collect();
+    let line_hiragana: Vec<bool> = want_from.iter().map(|&k| crate::readings::is_kana(original[k])).collect();
+    let heard_hiragana: Vec<bool> = got.iter().map(|g| crate::readings::is_kana(heard[g.segment].chars[g.index].ch)).collect();
     for i in 1..=n {
+        let line_kanji = kanji_at(&line_char, i - 1);
         for j in 1..=m {
-            let diagonal = score[(i - 1) * width + j - 1]
-                + if want[i - 1] == got[j - 1].ch {
-                    MATCH
-                } else {
-                    MISMATCH
-                };
-            let up = score[(i - 1) * width + j] + GAP;
-            let left = score[i * width + j - 1] + GAP;
-            score[i * width + j] = diagonal.max(up).max(left).max(0);
+            let same = want[i - 1] == got[j - 1].ch;
+            let mut best = (0, Step::Stop);
+            let mut consider = |value: i32, s: Step| {
+                if value > best.0 {
+                    best = (value, s);
+                }
+            };
+            consider(score[(i - 1) * width + j - 1] + if same { MATCH } else { MISMATCH }, Step::Diagonal);
+            consider(score[(i - 1) * width + j] + GAP, Step::Up);
+            consider(score[i * width + j - 1] + GAP, Step::Left);
+            if !same {
+                // A kanji of the line said as the kana heard.
+                if let Some(readings) = line_kanji {
+                    for k in 1..=MAX_RUN.min(j) {
+                        let run: Vec<char> = got[j - k..j].iter().map(|g| g.ch).collect();
+                        if !heard_hiragana[j - k..j].iter().all(|&h| h) {
+                            break;
+                        }
+                        if crate::readings::reads(readings, &run) {
+                            consider(score[(i - 1) * width + j - k] + MATCH, Step::LineKanji(k as u8));
+                        }
+                    }
+                }
+                // A kanji heard, written in kana in the line.
+                if let Some(readings) = kanji_at(&heard_char, j - 1) {
+                    for k in 1..=MAX_RUN.min(i) {
+                        let run = &want[i - k..i];
+                        if !line_hiragana[i - k..i].iter().all(|&h| h) {
+                            break;
+                        }
+                        if crate::readings::reads(readings, run) {
+                            consider(score[(i - k) * width + j - 1] + MATCH * k as i32, Step::HeardKanji(k as u8));
+                        }
+                    }
+                }
+            }
+            score[i * width + j] = best.0;
+            step[i * width + j] = best.1;
         }
     }
     let best = *score.iter().max()?;
     if best < MATCH {
         return None;
     }
-    // Trace each cell holding the best score back to its pairs; keep the one nearest `prefer_ms`.
+    // Trace each cell holding the best score back to its pairs (line character, heard character
+    // it was said in); keep the one nearest `prefer_ms`.
     let trace = |mut i: usize, mut j: usize| {
         let mut pairs = Vec::new();
         while i > 0 && j > 0 && score[i * width + j] > 0 {
-            let here = score[i * width + j];
-            let same = want[i - 1] == got[j - 1].ch;
-            if here == score[(i - 1) * width + j - 1] + if same { MATCH } else { MISMATCH } {
-                if same {
-                    pairs.push((i - 1, j - 1));
+            match step[i * width + j] {
+                Step::Diagonal => {
+                    if want[i - 1] == got[j - 1].ch {
+                        pairs.push((i - 1, j - 1));
+                    }
+                    i -= 1;
+                    j -= 1;
                 }
-                i -= 1;
-                j -= 1;
-            } else if here == score[(i - 1) * width + j] + GAP {
-                i -= 1;
-            } else {
-                j -= 1;
+                Step::Up => i -= 1,
+                Step::Left => j -= 1,
+                Step::LineKanji(k) => {
+                    pairs.push((i - 1, j - k as usize));
+                    i -= 1;
+                    j -= k as usize;
+                }
+                Step::HeardKanji(k) => {
+                    for q in (i - k as usize..i).rev() {
+                        pairs.push((q, j - 1));
+                    }
+                    i -= k as usize;
+                    j -= 1;
+                }
+                Step::Stop => break,
             }
         }
         pairs.reverse();
@@ -271,7 +345,9 @@ pub fn find_near(
         char_ms[i] = char_ms[i].max(char_ms[i - 1]);
     }
 
-    let from_line_start = pairs.len() >= 3 && pairs[..3].iter().enumerate().all(|(k, &(i, j))| i == k && j == pairs[0].1 + k);
+    // Its first three characters heard in a row (a kanji said as several kana counts as one).
+    let from_line_start = pairs.len() >= 3
+        && pairs[..3].iter().enumerate().all(|(k, &(i, j))| i == k && j >= pairs[0].1 && j <= pairs[0].1 + k * MAX_RUN);
     Some(Match {
         from_line_start,
         score: pairs.len() as f64 / n as f64,
@@ -425,6 +501,23 @@ mod tests {
             find("！", &segments, 0.0, 20_000.0).is_none(),
             "nothing to match by"
         );
+    }
+
+    #[test]
+    fn kanji_and_kana_line_up_by_their_readings() {
+        // The script's kanji, heard in kana.
+        let m = find("分かった。伝えておくよ", &[heard(0.0, "わかったつたえておくよ")], 0.0, 1e4).unwrap();
+        assert!(m.score > 0.9, "{m:?}");
+        assert_eq!(m.char_ms.len(), "分かった。伝えておくよ".chars().count() + 1);
+        // The script's kana, heard as kanji.
+        let m = find("そのためなら", &[heard(0.0, "その為なら")], 0.0, 1e4).unwrap();
+        assert_eq!(m.score, 1.0, "{m:?}");
+        // Words that only share a kana are not lined up by it.
+        let other = find("分かった", &[heard(0.0, "ためいき")], 0.0, 1e4);
+        assert!(other.as_ref().is_none_or(|m| m.score < 0.5), "{other:?}");
+        // A name in katakana is not a kanji's reading: フリッツ is not 不立.
+        let name = find("フリッツ", &[heard(0.0, "不立")], 0.0, 1e4);
+        assert!(name.is_none(), "{name:?}");
     }
 
     #[test]

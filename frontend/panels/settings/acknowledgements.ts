@@ -104,6 +104,12 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
         url: 'https://github.com/k2-fsa/sherpa-onnx'
       },
       {
+        name: 'Unihan',
+        role: 'Kanji readings, so a line’s kanji line up with the kana heard (Unicode)',
+        license: 'Unicode-3.0',
+        url: 'https://www.unicode.org/charts/unihan.html'
+      },
+      {
         name: 'Silero VAD',
         role: 'Hears where speech is',
         license: 'MIT',

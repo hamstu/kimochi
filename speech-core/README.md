@@ -12,7 +12,9 @@ listener outside the app.
   transcribed.
 - `sense_voice.rs`, `fbank.rs`: SenseVoice-Small on the app's ONNX Runtime (features and
   decoding as sherpa-onnx does them).
-- `matching.rs`: a line's text lined up with what was heard, to the character.
+- `matching.rs`: a line's text lined up with what was heard, to the character, a kanji on either
+  side standing for its reading in kana on the other (`readings.rs`, from Unicode's Unihan:
+  `data/kanji-readings.txt`, built by `tools/kanji_readings.py`).
 - `clips.rs`: clips cut, levelled, encoded and kept; word clips cut out of them.
 - `vad.rs`, `trim.rs`, `encode.rs`, `timeline.rs`, `wav.rs`: the parts.
 

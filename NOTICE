@@ -80,6 +80,13 @@ SHA-256 2623a2953f6ff3d2c1e61740c6cdb7168133479b267dfef114a4a3cc5bdd788f) is
 compiled in unmodified and runs on the ONNX Runtime above; its licence is
 bundled as silero-vad/LICENSE.
 
+Unihan, the Unicode Character Database's CJK data, https://www.unicode.org/charts/unihan.html,
+Unicode License v3, Copyright © 1991-2025 Unicode, Inc. The Japanese readings
+of the kanji in its Japanese sources (kJapanese, kIRG_JSource) are compiled in
+as speech-core/data/kanji-readings.txt (built by speech-core/tools/kanji_readings.py),
+so sentence audio lines up a script's kanji with the kana it hears. Terms:
+https://www.unicode.org/license.txt
+
 LAME, https://lame.sourceforge.io, LGPL-2.0-or-later, built from source by the
 mp3lame-sys crate (mp3lame-encoder bindings, LGPL-3.0) to encode the audio as
 MP3. Its source is at https://crates.io/crates/mp3lame-sys.
