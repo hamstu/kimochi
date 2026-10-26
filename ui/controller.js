@@ -12,9 +12,11 @@
  *           ▲                       │                     │
  *           └──── B / Escape / an action / menu button ◀──┘
  *
- * With the Yomitan API and Settings → Game mode's full-screen dictionary on, Read along opens
- * `dictionary` instead of `words`: the scan across the top of a dimmed screen and the lit word's
- * entry below it (ui/game-dictionary.js).
+ * With Settings → Game Mode's full-screen dictionary on, Read along opens `dictionary` instead of
+ * `words`: the scan across the top of a dimmed screen and the lit word's dictionary below it
+ * (ui/game-dictionary.js). With the Yomitan API that is Kimochi's own drawing of its entries; with
+ * any other engine it is the engine's own pop-up, looked up on the lit word and placed over the
+ * space below the text (`placePopup`), and driven as in `words` (step, scroll, its buttons).
  *
  * Reading (words) steps by word or, with Y, by character; the left stick moves a free cursor that
  * looks up whatever character it rests on, and the D-pad snaps back to stepping from there. A on
@@ -34,7 +36,12 @@ import {
 } from "./word-nav.js";
 import { ControllerHistory } from "./controller-history.js";
 import { GameDictionary } from "./game-dictionary.js";
+import { sectionText } from "./log-sections.js";
 
+/** How long the full-screen dictionary waits for an engine's pop-up before saying there is no entry. */
+const POPUP_WAIT_MS = 1500;
+/** How far up or down scrolls the engine's pop-up in the full-screen dictionary, in points. */
+const POPUP_SCROLL_STEP = 120;
 /** Lets the menu's exit animation start before the chosen action changes the screen. */
 const ACTION_DELAY_MS = 120;
 /**
@@ -130,8 +137,15 @@ export function scrollSpeed(y) {
  *   mode started, or controller mode ended; automatic OCR stands still while it is anything but idle
  * @param {() => Promise<object[]>} context.history read durable recent text without publishing it
  * @param {object} [context.fullDictionary] Read along as the full-screen dictionary instead of the
- *   outline and pop-up, while `enabled()` (the Yomitan API, and Settings → Game mode says so):
- *   `lookup`, `anki` and `play` for ui/game-dictionary.js
+ *   outline and pop-up, while `enabled()` (Settings → Game Mode says so); `source()` says what
+ *   fills it (`entries` or `popup`, ui/settings.ts `fullscreenDictionarySource`); `lookup`, `anki`
+ *   and `play` serve ui/game-dictionary.js's Yomitan API entries
+ * @param {(rect: {x: number, y: number, width: number, height: number}|null) => void} [context.placePopup]
+ *   where the engine's pop-up must go (overlay points) instead of beside the word it looks up, for
+ *   the full-screen dictionary with an engine pop-up; null puts it back to the engine's own placing
+ * @param {() => boolean} [context.popupShowing] whether the engine's pop-up is showing now
+ * @param {() => (string[]|null)} [context.sections] the drawn scan's sections as the Log shows them
+ *   (ui/log-sections.js `logSections`), for the full-screen dictionary; null when there are none
  */
 export function createController(context) {
   const { host, native } = context;
@@ -224,8 +238,13 @@ export function createController(context) {
         input: () => input,
         onClose: () => void (historical ? backToHistory() : close()),
         log: (record) => context.log(record),
+        lookupInPopup: (range, rect) => popupLookup(range, rect),
+        popupFocusable: () => Boolean(context.popupFocusable?.()),
       })
     : null;
+
+  /** The full-screen dictionary is showing the engine's own pop-up, not the Yomitan API's entries. */
+  const enginePopup = () => mode === "dictionary" && fullView?.source === "popup";
 
   const menu = new RadialMenu(host, {
     onChoose: (id) => void choose(id),
@@ -346,7 +365,7 @@ export function createController(context) {
     if (!historical) return;
     generation++;
     scroll(0);
-    if (mode === "dictionary") fullView.remove();
+    if (mode === "dictionary") leaveDictionary();
     else leaveWords();
     historical = false;
     setMode("history");
@@ -382,7 +401,8 @@ export function createController(context) {
     generation++;
     const wasWords = mode === "words" || mode === "dictionary";
     const wasHistory = historical;
-    fullView?.remove();
+    if (mode === "dictionary") leaveDictionary();
+    else fullView?.remove();
     setMode("idle");
     controls.reset();
     scroll(0);
@@ -459,6 +479,7 @@ export function createController(context) {
         history.content?.scrollBy(0, -command.y * 80);
       return;
     }
+    if (enginePopup()) return void dictionaryPopupCommand(command);
     if (mode === "dictionary") {
       if (command.type === "cancel") return historical ? backToHistory() : void close();
       if (command.type === "dir" && command.source !== "stick") return void fullView.move(command.dir);
@@ -762,7 +783,7 @@ export function createController(context) {
       }
       const seconds = Math.min(0.05, (now - scrollAt) / 1000);
       scrollAt = now;
-      if (mode === "dictionary") fullView.scroll(scrollLean * seconds);
+      if (mode === "dictionary" && !enginePopup()) fullView.scroll(scrollLean * seconds);
       else context.popupControl({ scroll: scrollLean * seconds });
       scrollFrame = requestAnimationFrame(tick);
     };
@@ -781,23 +802,7 @@ export function createController(context) {
     const ticket = ++generation;
     context.redraw();
     showHud("Reading the text…");
-    // Words split the way the dictionary in use would match them: the Yomitan API's own
-    // `/tokenize` with its dictionaries; else the built-in Yomitan's parser; else (Hachidori,
-    // 10ten) the platform's segmenter, kanji kept with their kana (`tokensFromSegmenter`).
-    const api = context.dictionary();
-    const parse =
-      context.popupType() === "custom-api"
-        ? context.apiParse
-        : api
-          ? (text) =>
-              api("parseText", {
-                text,
-                optionsContext: { current: true },
-                scanLength: SCAN_LENGTH,
-                useInternalParser: true,
-                useMecabParser: false,
-              })
-          : null;
+    const parse = parser();
     const units = readUnits();
     const segmented = await segmentAcross(units, (text) =>
       segmentText(text, parse),
@@ -827,20 +832,139 @@ export function createController(context) {
   }
 
   /**
-   * Read along as the full-screen dictionary: the scan's words, split by the Yomitan API's
-   * `/tokenize`, across the top of the screen and the lit word's entry below.
+   * Words split the way the dictionary in use would match them: the Yomitan API's own
+   * `/tokenize` with its dictionaries; else the built-in Yomitan's parser; else (Hachidori,
+   * 10ten) the platform's segmenter, kanji kept with their kana (`tokensFromSegmenter`).
+   */
+  function parser() {
+    if (context.popupType() === "custom-api") return context.apiParse;
+    const api = context.dictionary();
+    return api
+      ? (text) =>
+          api("parseText", {
+            text,
+            optionsContext: { current: true },
+            scanLength: SCAN_LENGTH,
+            useInternalParser: true,
+            useMecabParser: false,
+          })
+      : null;
+  }
+
+  /**
+   * Read along as the full-screen dictionary: the scan's words across the top of the screen and
+   * the lit word's dictionary below, the Yomitan API's entries or the engine's own pop-up.
    */
   async function enterDictionary() {
     if (mode === "words") leaveWords();
+    if (mode === "dictionary" && fullView.source === "popup") context.dismiss();
     setMode("dictionary");
     const ticket = ++generation;
     context.redraw();
-    const segmented = await segmentAcross(readUnits(), (text) =>
-      segmentText(text, context.apiParse),
-    );
+    const source =
+      context.fullDictionary.source?.() ??
+      (context.popupType() === "custom-api" ? "entries" : "popup");
+    const parse = parser();
+    // The text as the Log shows it: a section per detected group, each one run of text however
+    // finely the engine boxed it. Without sections (no grouped scan), the drawn boxes as they are.
+    const sections = (historical ? history.sections() : (context.sections?.() ?? []))
+      .map(sectionText)
+      .filter(Boolean);
+    const segmented = sections.length
+      ? await Promise.all(
+          sections.map(async (text) => ({ text, tokens: await segmentText(text, parse) })),
+        )
+      : await segmentAcross(readUnits(), (text) => segmentText(text, parse));
     if (ticket !== generation || mode !== "dictionary") return;
-    context.log({ check: "controller-dictionary", boxes: segmented.length });
-    fullView.show(segmented, { title: historical ? "Recent text" : "Read along" });
+    context.log({
+      check: "controller-dictionary",
+      boxes: segmented.length,
+      sections: sections.length,
+      source,
+    });
+    fullView.show(segmented, {
+      title: historical ? "Recent text" : "Read along",
+      source,
+      sections: sections.length > 0,
+    });
+  }
+
+  /** Close the full-screen dictionary, and the engine pop-up it placed, which goes back to its own placing. */
+  function leaveDictionary() {
+    const engine = fullView?.source === "popup" && fullView.open;
+    fullView?.remove();
+    if (!engine) return;
+    context.popupControl({ focus: "exit" });
+    context.dismiss();
+    context.placePopup?.(null);
+  }
+
+  /**
+   * The full-screen dictionary's engine pop-up: look the lit word up (`range`, in the view's own
+   * text) with the pop-up placed over `rect`, and resolve whether it shows.
+   */
+  async function popupLookup(range, rect) {
+    const ticket = generation;
+    // A new lookup replaces the pop-up's entries, and the focus on its buttons with them.
+    context.popupControl({ focus: "exit" });
+    context.placePopup?.(rect);
+    try {
+      await context.lookupRange(range);
+    } catch (error) {
+      context.log({ check: "controller-lookup-failed", error: String(error?.message ?? error) });
+      return false;
+    }
+    if (!context.popupShowing) return true;
+    for (let waited = 0; waited < POPUP_WAIT_MS; waited += 50) {
+      if (ticket !== generation || !enginePopup()) return false;
+      if (context.popupShowing()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return context.popupShowing();
+  }
+
+  /** A command in the full-screen dictionary with the engine's pop-up: as in `words`, on its words. */
+  function dictionaryPopupCommand(command) {
+    const inPopup = fullView.layer === "popup";
+    if (command.type === "cancel") {
+      if (inPopup) {
+        context.popupControl({ focus: "exit" });
+        return fullView.setLayer("text");
+      }
+      return historical ? backToHistory() : void close();
+    }
+    if (command.type === "dir" && command.source !== "stick") {
+      if (inPopup) {
+        if (!context.popupControl({ focus: command.dir })) fullView.bump();
+        return;
+      }
+      if (command.dir === "up" || command.dir === "down")
+        return void context.popupControl({ scroll: command.dir === "up" ? -POPUP_SCROLL_STEP : POPUP_SCROLL_STEP });
+      return void fullView.move(command.dir);
+    }
+    if (command.type === "step") {
+      context.popupControl({ step: command.delta });
+      // The focus follows to the entry the jump lands on, once it has scrolled there.
+      if (inPopup)
+        setTimeout(() => {
+          if (enginePopup() && fullView.layer === "popup") context.popupControl({ focus: "refocus" });
+        }, 180);
+      return;
+    }
+    if (command.type === "scroll") return void scroll(command.y);
+    if (command.type === "confirm") {
+      if (inPopup) {
+        if (!context.popupControl({ focus: "press" })) fullView.bump();
+        return;
+      }
+      if (context.popupFocusable?.() && context.popupControl({ focus: "enter" })) {
+        context.log({ check: "controller-popup-focus", entered: true, view: "dictionary" });
+        return fullView.setLayer("popup");
+      }
+      // No buttons to move into (10ten): look the word up again.
+      return fullView.select(fullView.index);
+    }
+    if (command.type === "audio" && !context.popupControl({ focus: "audio" })) fullView.bump();
   }
 
   /**
@@ -1235,13 +1359,17 @@ export function createController(context) {
     get mode() {
       return mode;
     },
-    /** True while the scan's text must stay drawn, whatever its usual visibility rules say. */
+    /**
+     * True while the scan's text must stay drawn, whatever its usual visibility rules say: word
+     * mode steps through it, and the full-screen dictionary reads its words from it (cleared
+     * first, it found none: "No words to look up in this text").
+     */
     get holdsText() {
-      return mode === "words" && !historical;
+      return (mode === "words" || mode === "dictionary") && !historical;
     },
     /** True while the controller, not the mouse, is reading: the pointer must not drive lookups. */
     get drivesLookups() {
-      return mode === "words" && driver === "controller";
+      return (mode === "words" && driver === "controller") || mode === "dictionary";
     },
     /**
      * The pointer moved, in overlay coordinates. Moving it well clear of where it was, near the

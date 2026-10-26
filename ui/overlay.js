@@ -36,7 +36,8 @@ import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
 import { HoverOverlay, HoverPreview } from './hover.js'
 import { recognize } from './ocr.js'
-import { normalizeOcrResult } from './ocr-result.js'
+import { normalizeOcrResult, scanGroups } from './ocr-result.js'
+import { logSections } from './log-sections.js'
 import { publishOcrResult, listHistory } from './output.js'
 import { speak } from './tts.js'
 import { ForegroundTracker, shouldShowScannedText } from './foreground.js'
@@ -48,6 +49,7 @@ import {
   NO_ENGINE_MESSAGE,
   dictionaryEngineOf,
   fullscreenDictionary,
+  fullscreenDictionarySource,
   hostEngineOf,
   isOverlayTextVisible,
   nextOverlayToggle,
@@ -381,11 +383,23 @@ controller = createController({
     dismissPopup()
     void native.optional('hide_popover')
   },
+  // Read along's full-screen dictionary with an engine's own pop-up: placed over the space under
+  // its text instead of beside the word.
+  placePopup: (rect) => placeEnginePopup(rect),
+  popupShowing: () => enginePopupShowing(),
+  // The drawn scan as the Log has it, a section per group (`publishOcrResult` logs these same
+  // groups), for the full-screen dictionary; null without boxes to group.
+  sections: () =>
+    state.geometry && state.annotations.length
+      ? logSections(scanGroups(state.annotations, setting('textOverlayGrouping') ?? {}))
+      : null,
   log: (record) => log(record),
   modeChanged: (mode) => holdForController(mode !== 'idle'),
-  // Read along as the full-screen dictionary (Settings → Game mode), fed by the Yomitan API.
+  // Read along as the full-screen dictionary (Settings → Game Mode): with the Yomitan API, its
+  // entries are drawn from `lookup`; with any other engine, its pop-up fills the view's lower half.
   fullDictionary: {
-    enabled: () => fullscreenDictionary(setting('gameModeSettings'), setting('yomitanSettings')?.popupType),
+    enabled: () => fullscreenDictionary(setting('gameModeSettings')),
+    source: () => fullscreenDictionarySource(setting('yomitanSettings')?.popupType ?? 'builtin'),
     lookup: (term, { media = false, maxEntries } = {}) =>
       native.invoke('yomitan_ankifields', {
         // Empty means the helper's default address, as for the API pop-up (api-lookup.js).
@@ -2473,10 +2487,31 @@ let livePopups = new Set()
 
 /** `replayIntoPopup` from host/popup-bridge.js, once Yomitan's popups are being observed. */
 let replayPopupPointer = null
+/** `setPopupTarget` from host/popup-bridge.js: where Yomitan's top-level popup opens, or null. */
+let setYomitanPopupTarget = null
+
+/**
+ * Open the engine's top-level pop-up over `rect` (overlay points) instead of beside the word, for
+ * Read along's full-screen dictionary; null gives the engine its own placing back. Yomitan's
+ * popup is a frame in this window placed at its next show; an extension engine's is a shadow host
+ * in this window, restyled by its host (host/ext/content.js `place`). Both stay in this window,
+ * so they are excluded from capture and published as regions as any pop-up is.
+ */
+function placeEnginePopup(rect) {
+  if (extensionHosted) return void extensionHost()?.placePopup?.(rect)
+  setYomitanPopupTarget?.(rect)
+}
+
+/** Whether the engine's pop-up is showing in this window now. */
+function enginePopupShowing() {
+  if (extensionHosted) return Boolean(extensionPopupRect || extensionHost()?.isPopupVisible?.())
+  return Boolean(visibleYomitanPopup())
+}
 
 async function capturePopups() {
-  const { observePopups, replayIntoPopup } = await import('/spike/popup-bridge.js')
+  const { observePopups, replayIntoPopup, setPopupTarget } = await import('/spike/popup-bridge.js')
   replayPopupPointer = replayIntoPopup
+  setYomitanPopupTarget = setPopupTarget
   let remote = null
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
     const {installGnomePopupTransport} = await import('./gnome-popup-transport.js')

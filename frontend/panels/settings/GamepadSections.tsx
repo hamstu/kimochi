@@ -1,13 +1,11 @@
 /**
- * Settings → Shortcuts & Controls, second half: enable gamepad input, pick the primary controller,
- * test it. The buttons used in game mode (the controller menu and Read along) are on Settings →
- * Game mode, as `ControllerButtonSections`.
+ * Settings → Shortcuts & Controls, second half: enable gamepad input, the buttons Game Mode uses
+ * (the controller menu and Read along), pick the primary controller, test it.
  */
 import type { ReactNode } from 'react'
 import { Badge, Button, Callout, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useGamepad, getButtonName } from '../../bridge/useGamepad'
 import { useSetting } from '../../bridge/useSetting'
-import { showSettingsTab } from './showSettingsTab'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import {
   DEFAULT_CONTROLLER_BUTTONS,
@@ -83,9 +81,8 @@ function sharedWith(buttons: ControllerButtons, key: keyof ControllerButtons): s
   return sharedButtonActions(buttons, key).map((other) => ROW_LABELS[other])
 }
 
-/** The game-mode buttons, by where they act (Settings → Game mode), while gamepad input is on. */
-export function ControllerButtonSections(): ReactNode {
-  const { settings: gamepadSettings } = useGamepad()
+/** The buttons Game Mode uses, by where they act; shown while gamepad input is on. */
+function ControllerButtonSections(): ReactNode {
   const [storedButtons, setMenuButtons] = useSetting<ControllerButtons>(
     'controllerButtons',
     DEFAULT_CONTROLLER_BUTTONS
@@ -94,21 +91,6 @@ export function ControllerButtonSections(): ReactNode {
   const customised = (Object.keys(DEFAULT_CONTROLLER_BUTTONS) as (keyof ControllerButtons)[]).some(
     (key) => menuButtons[key] !== DEFAULT_CONTROLLER_BUTTONS[key]
   )
-
-  if (!gamepadSettings.enabled) {
-    return (
-      <SettingsSection title="Controller buttons">
-        <SettingsRow
-          label="Gamepad support is off"
-          description="Turn it on in Shortcuts & Controls to choose the buttons game mode uses."
-        >
-          <Button size="sm" onClick={() => showSettingsTab('controls')}>
-            Shortcuts & Controls
-          </Button>
-        </SettingsRow>
-      </SettingsSection>
-    )
-  }
 
   return (
     <>
@@ -176,27 +158,12 @@ export function GamepadSections(): ReactNode {
         </SettingsRow>
         {enabled && gamepadSource === 'none' && (
           <div className="settings-note">
-            <Callout tone="warn">
-              No gamepad input has been received yet in this build. Gamepad support has not been
-              verified on this platform, so treat these controls as unconfirmed until a button
-              lights up in the test below.
-            </Callout>
+            <Callout tone="warn">No gamepad has been detected.</Callout>
           </div>
         )}
       </SettingsSection>
 
-      {enabled && (
-        <SettingsSection title="Game mode buttons">
-          <SettingsRow
-            label="Buttons for the controller menu and Read along"
-            description="Select, Back, audio, definitions and the rest are set in Game mode."
-          >
-            <Button size="sm" onClick={() => showSettingsTab('gamemode')}>
-              Game mode
-            </Button>
-          </SettingsRow>
-        </SettingsSection>
-      )}
+      {enabled && <ControllerButtonSections />}
 
       {enabled && (
         <SettingsSection title="Connected gamepads">

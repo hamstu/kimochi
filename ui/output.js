@@ -10,8 +10,8 @@
  * overlay actually shows after furigana filtering.
  */
 
-import { buildFilteredText, visibleAnnotations } from './annotations.js'
-import { logicalGroups } from './ocr-result.js'
+import { buildFilteredText } from './annotations.js'
+import { logGroups } from './ocr-result.js'
 import { pushHistory, MAX_HISTORY_ENTRIES } from './settings.js'
 import { optional, getSetting, setSetting, publishText } from './native.js'
 
@@ -96,13 +96,11 @@ export { MAX_HISTORY_ENTRIES }
  */
 export async function publishOcrResult(result, options = {}) {
   const report = (lines, duplicate = false) => options.onPublication?.({ lines, duplicate })
-  let groups = result.groups ?? []
-  if (result.geometry && !result.textAnnotations.some(a => a.granularity === 'block')) {
-    groups = logicalGroups(visibleAnnotations(result.textAnnotations, options.grouping ?? {})).groups
-    if (!groups.length) {
-      report(0)
-      return ''
-    }
+  // The groups the Log will show, one line each (shared with Read along's full screen).
+  const groups = logGroups(result, options.grouping ?? {})
+  if (result.geometry && !result.textAnnotations.some(a => a.granularity === 'block') && !groups.length) {
+    report(0)
+    return ''
   }
   const text = groups.map(group => group.text).join('\n') || result.fullText || ''
   if (!text.trim()) {

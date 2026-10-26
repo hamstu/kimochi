@@ -75,7 +75,8 @@
   animation: gd-out 0.18s ease-in both;
 }
 
-/* The game shows through, blurred and dimmed, darker towards the hints. */
+/* The game shows through, blurred and dimmed, darker towards the hints. Where the webview cannot
+   blur what is behind its window it is only dimmed. */
 .gd-backdrop {
   position: absolute;
   inset: 0;
@@ -85,6 +86,22 @@
   backdrop-filter: var(--gd-blur);
   -webkit-backdrop-filter: var(--gd-blur);
 }
+/* macOS: WebKit blurs the game behind the overlay's transparent window (backdrop-filter, sampled
+   through the window) only while the overlay's layers are being redrawn: as each selection's
+   animations and spinner ran the blur was there, and once they settled the frozen frame dropped
+   back to the dim alone. An imperceptible, endless fade on the backdrop itself keeps it redrawn,
+   so the blur stays for as long as the view is open. Not reduced by reduced-motion: nothing
+   visible moves. Elsewhere the dim alone is all there is, so nothing is kept redrawing. */
+.gd-root[data-os="macos"]:not(.gd-leaving) .gd-backdrop {
+  animation:
+    gd-in 0.22s ease-out backwards,
+    gd-hold-blur 2s linear 0.22s infinite alternate;
+}
+@keyframes gd-hold-blur {
+  to {
+    opacity: 0.995;
+  }
+}
 
 .gd-frame {
   position: absolute;
@@ -93,8 +110,12 @@
   width: var(--gd-width);
   display: flex;
   flex-direction: column;
-  padding: clamp(28px, 6vh, 80px) 0 0;
+  padding: clamp(24px, 5vh, 56px) 0 0;
   box-sizing: border-box;
+}
+.gd-head,
+.gd-rule {
+  flex: 0 0 auto;
 }
 .gd-frame.gd-bump {
   animation: gd-bump 0.22s ease-out;
@@ -119,40 +140,81 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The scanned text, every word a stop. */
+/* The scanned text, as the Log shows it: a line per scanned line, stacked, the words only spans
+   inside it. It keeps its own share of the screen whatever the dictionary below holds (it never
+   shrinks), steps its type down as the scan gets longer (`--gd-sentence-scale`, set from
+   `sentenceScale`, above a floor), and scrolls itself to keep the lit word in view, its edges
+   fading while there is more that way. */
 .gd-sentence {
-  margin: 0;
+  --gd-fade: 1.1em;
+  flex: 0 0 auto;
+  margin: 0 -10px;
+  padding: 6px 10px;
   font-family: var(--gd-font-jp);
-  font-size: var(--gd-sentence-size);
+  font-size: max(18px, calc(var(--gd-sentence-size) * var(--gd-sentence-scale, 1)));
   font-weight: 500;
-  line-height: 1.8;
-  max-height: calc(var(--gd-sentence-size) * 1.8 * 3);
+  line-height: 1.7;
+  max-height: min(32vh, calc(1em * 1.7 * 4 + 12px));
+  min-height: calc(1em * 1.7 + 12px);
   overflow-y: auto;
   scrollbar-width: none;
   overflow-wrap: anywhere;
 }
-.gd-gap {
-  color: var(--gd-text-2);
+.gd-sentence::-webkit-scrollbar {
+  display: none;
 }
-/* Between two boxes of the scan: room, and a faint mark, so bubbles do not run together. */
-.gd-box-break {
-  display: inline-block;
-  width: 0.7em;
-  height: 0.7em;
-  vertical-align: middle;
-  background: radial-gradient(circle, var(--gd-text-3) 0 0.08em, transparent 0.09em);
+.gd-sentence[data-more-below] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--gd-fade)), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--gd-fade)), transparent);
 }
-/* Words touch, as Japanese is set; each has its own short underline so the stops show. */
-.gd-word {
-  white-space: nowrap;
+.gd-sentence[data-more-above] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--gd-fade));
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--gd-fade));
+}
+.gd-sentence[data-more-above][data-more-below] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 var(--gd-fade), #000 calc(100% - var(--gd-fade)), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--gd-fade), #000 calc(100% - var(--gd-fade)), transparent);
+}
+.gd-line {
   color: var(--gd-text);
-  border-radius: var(--gd-radius-lg);
+}
+/* Separately detected sections (the Log's "1 / 2", "2 / 2"), two or more: each its own block,
+   numbered by a small disc that is only a mark. The text hangs clear of it, so a section that
+   wraps lines up under its own first character, not under the disc. */
+.gd-numbered .gd-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.4em;
+  align-items: start;
+}
+.gd-numbered .gd-line + .gd-line {
+  margin-top: 0.3em;
+}
+/* As tall as one line of the text, so the disc sits centred on the section's first line. */
+.gd-section-mark {
+  display: flex;
+  align-items: center;
+  height: 1.7em;
+  pointer-events: none;
+  user-select: none;
+}
+.gd-section-mark > span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font: 650 12px/1 var(--gd-font);
+  font-variant-numeric: tabular-nums;
+  color: var(--gd-text-2);
+  background: var(--gd-key);
+  box-shadow: inset 0 0 0 1px var(--gd-line-strong);
+}
+/* No gaps, marks or underlines: the text reads as scanned; the stops show only as you move. */
+.gd-word {
+  border-radius: var(--gd-radius-sm);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-  background-image: linear-gradient(var(--gd-line-strong), var(--gd-line-strong));
-  background-size: calc(100% - 0.2em) 1.5px;
-  background-position: 50% 94%;
-  background-repeat: no-repeat;
   cursor: pointer;
   transition:
     background-color 0.14s ease,
@@ -161,13 +223,13 @@
 .gd-word:hover {
   background-color: var(--gd-hover);
 }
-/* The lit word: Halo's outline (read-along's own, on the game's text). */
+/* The lit word: Halo's outline (read-along's own, on the game's text), drawn without moving a
+   character. */
 .gd-word.gd-lit {
   background-color: var(--gd-accent-soft);
-  background-image: none;
   box-shadow:
     inset 0 0 0 2px var(--gd-accent-line),
-    0 0 0 4px var(--gd-accent-soft);
+    0 0 0 3px var(--gd-accent-soft);
 }
 
 /* The rule between the text and its dictionary. */
@@ -188,10 +250,12 @@
   background: var(--gd-accent-text);
 }
 
-/* The entry, on a frosted panel. */
+/* The dictionary, on a frosted panel: every space left between the text and the hints, at least
+   a comfortable minimum; a long entry scrolls inside it, and an engine's pop-up is placed over it
+   (GameDictionary#slotRect), so it is the same box whatever is in it. */
 .gd-body {
-  flex: 0 1 auto;
-  min-height: 0;
+  flex: 1 1 0;
+  min-height: min(220px, 30vh);
   overflow-y: auto;
   padding: clamp(18px, 3vh, 30px) clamp(20px, 2.4vw, 34px);
   border-radius: var(--gd-radius-panel);
@@ -205,6 +269,12 @@
 }
 .gd-entry {
   animation: gd-entry 0.18s ease-out both;
+}
+/* With an engine's own pop-up (built-in Yomitan, Hachidori, 10ten) the panel only says what is
+   happening while no pop-up covers it. */
+.gd-root[data-source="popup"] .gd-body {
+  display: grid;
+  place-items: center;
 }
 
 /* The word's other entries: rounded-square tiles, the shown one ringed. */
@@ -390,8 +460,9 @@
 /* The hints and actions: a frosted pill along the bottom, as Halo's hint bar. The keys are the
    controller's (.cm-glyph), drawn from the same roles. */
 .gd-bar {
+  flex: 0 0 auto;
   align-self: center;
-  margin-top: auto;
+  margin-top: clamp(14px, 2.6vh, 26px);
   display: flex;
   align-items: center;
   gap: 10px 22px;
@@ -506,10 +577,13 @@ button.gd-hint {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gd-backdrop,
+  .gd-root:not([data-os="macos"]) .gd-backdrop,
   .gd-frame,
   .gd-entry,
   .gd-frame.gd-bump {
     animation: none;
+  }
+  .gd-root[data-os="macos"]:not(.gd-leaving) .gd-backdrop {
+    animation: gd-hold-blur 2s linear infinite alternate;
   }
 }

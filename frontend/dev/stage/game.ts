@@ -33,6 +33,11 @@ export interface GameOptions {
   furigana: boolean
   /** A window on a desktop rather than the whole screen (a Mac game, not the Deck). */
   windowed: boolean
+  /**
+   * Report each word as its own box, as some engines do (a particle a box), instead of each
+   * line: the case Read along's full screen has to put back together as the Log does.
+   */
+  fragments?: boolean
 }
 
 export interface Game {
@@ -94,7 +99,7 @@ function annotation(text: string, rect: Rect, area: Rect, vertical: boolean): St
 }
 
 /** Read a drawn line back the way OCR would: its base text and box, and each reading's. */
-function scanLine(node: HTMLElement, area: Rect, vertical: boolean): StageAnnotation[] {
+function scanLine(node: HTMLElement, area: Rect, vertical: boolean, fragments = false): StageAnnotation[] {
   const base: Text[] = []
   const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
   for (let text = walker.nextNode(); text; text = walker.nextNode()) {
@@ -107,7 +112,19 @@ function scanLine(node: HTMLElement, area: Rect, vertical: boolean): StageAnnota
   })
   const box = union(rects)
   const found: StageAnnotation[] = []
-  if (box) found.push(annotation(base.map((t) => t.data).join(''), box, area, vertical))
+  if (fragments) {
+    // A box per word, as an engine that boxes words (or particles) on their own reports them.
+    const words = new Intl.Segmenter('ja', { granularity: 'word' })
+    for (const text of base) {
+      for (const { segment, index } of words.segment(text.data)) {
+        const range = document.createRange()
+        range.setStart(text, index)
+        range.setEnd(text, index + segment.length)
+        const rect = union([...range.getClientRects()])
+        if (rect && segment.trim()) found.push(annotation(segment, rect, area, vertical))
+      }
+    }
+  } else if (box) found.push(annotation(base.map((t) => t.data).join(''), box, area, vertical))
   // A line's readings are one more line of small text to OCR, as engines report them.
   const readings = [...node.querySelectorAll('rt')]
   const rubyBox = union(
@@ -164,7 +181,7 @@ export function drawGame(host: HTMLElement, options: GameOptions): Game {
 
   const r = screen.getBoundingClientRect()
   const area = { x: r.left, y: r.top, width: r.width, height: r.height }
-  const scanned = lines.flatMap(({ node, vertical }) => scanLine(node, area, vertical))
+  const scanned = lines.flatMap(({ node, vertical }) => scanLine(node, area, vertical, options.fragments))
   // The first annotation is the whole text, as Google Vision-style results lead with
   // (`wordAnnotations` drops it).
   const whole = annotation(scanned.map((a) => a.description).join('\n'), area, area, false)

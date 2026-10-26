@@ -1,5 +1,6 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /** A read-only view of durable scan history. Opening old text never republishes OCR. */
+import { logSections } from "./log-sections.js";
 export function historyEntries(value) {
   const seen = new Set();
   return (Array.isArray(value) ? value : [])
@@ -129,6 +130,12 @@ export class ControllerHistory {
     this.hints.textContent =
       "D-pad / stick: word · LB / RB: definition · RS: scroll · B: recent text";
     return true;
+  }
+
+  /** The open entry's sections, as the Log shows them: its groups, or its whole text. */
+  sections() {
+    const entry = this.node ? this.entries[this.index] : null;
+    return entry ? logSections(entry.groups, entry.text) : [];
   }
 
   units() {

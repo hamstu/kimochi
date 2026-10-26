@@ -176,6 +176,47 @@ export function observePopup(win, descriptor, callback) {
   }
 }
 
+/**
+ * The stylesheet that puts an engine's top-level pop-up exactly over `rect` (CSS pixels of this
+ * document), for Read along's full-screen dictionary: it goes in the pop-up host's open shadow
+ * root, and its `!important` rules outrank the inline position and size the engine writes on
+ * every show. '' for no rect or an engine without one.
+ *
+ *  - Hachidori: its root level, `.gsm-hoshidicts-popup[data-hoshidicts-depth="0"]`, positioned
+ *    from its zero-sized fixed host with inline `left`/`top`/`width`/`height` (content.js
+ *    `placePopup`). Its nested levels keep their own placing, beside the word they look up.
+ *  - 10ten: `.container` at `--tenten-left`/`--tenten-top`, its `.window` sized by content up to
+ *    `--tenten-max-width` (600px) and `--tenten-max-height` (popup/show-popup.ts). The window is
+ *    held at the box's width, and between its height as a minimum and a maximum, so a short entry
+ *    still fills the box and a long one scrolls inside it; the arrow at the word is hidden.
+ */
+export function fillCss(engine, rect) {
+  if (!rect || !(rect.width > 0) || !(rect.height > 0)) return ''
+  const px = (value) => `${Math.round(value * 100) / 100}px`
+  const [x, y, width, height] = [px(rect.x), px(rect.y), px(rect.width), px(rect.height)]
+  if (engine === 'hachidori') {
+    return `.gsm-hoshidicts-popup[data-hoshidicts-depth="0"] {
+  left: ${x} !important; top: ${y} !important;
+  width: ${width} !important; height: ${height} !important;
+  min-width: 0 !important; min-height: 0 !important; max-width: none !important; max-height: none !important;
+}`
+  }
+  if (engine === 'tenten') {
+    return `.container {
+  left: ${x} !important; top: ${y} !important;
+  padding: 0 !important; max-height: none !important;
+  -webkit-mask-image: none !important; mask-image: none !important;
+}
+.container .window {
+  box-sizing: border-box !important;
+  width: ${width} !important; max-width: ${width} !important;
+  min-height: ${height} !important; max-height: ${height} !important;
+}
+.container .arrow { display: none !important; }`
+  }
+  return ''
+}
+
 /** Hachidori's in-page command channel (content.js `onReaderCommand`). */
 const readerCommand = (action) => ({ target: 'hachidori-reader', type: 'hd_reader_command', action })
 
@@ -321,6 +362,40 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
   const sameRange = (a, b) =>
     a.startContainer === b.startContainer && a.startOffset === b.startOffset && a.endContainer === b.endContainer && a.endOffset === b.endOffset
 
+  /**
+   * Where the top-level pop-up must go (`place`), as {@link fillCss} in the host's shadow root.
+   * The host is made on the first lookup and 10ten may make it again, so while a rectangle is set
+   * a MutationObserver puts the stylesheet back the moment a host appears: the observer runs
+   * before the next paint, so the pop-up is never drawn in its own place first.
+   */
+  let fill = null
+  let fillWatch = null
+  let fillClear = 0
+  const FILL_ATTRIBUTE = 'data-kimochi-fill'
+  function applyFill() {
+    const host = win.document.querySelector(descriptor.popupSelector)
+    const root = host?.shadowRoot
+    if (!root) return
+    let style = root.querySelector(`style[${FILL_ATTRIBUTE}]`)
+    const css = fillCss(engine, fill)
+    if (!css) return void style?.remove()
+    if (!style) {
+      style = win.document.createElement('style')
+      style.setAttribute(FILL_ATTRIBUTE, '')
+      root.append(style)
+    }
+    if (style.textContent !== css) style.textContent = css
+  }
+  function watchFill(on) {
+    if (on && !fillWatch && typeof win.MutationObserver === 'function') {
+      fillWatch = new win.MutationObserver(() => applyFill())
+      fillWatch.observe(win.document.documentElement, { childList: true, subtree: true })
+    } else if (!on && fillWatch) {
+      fillWatch.disconnect()
+      fillWatch = null
+    }
+  }
+
   const waitForPopup = (ms) =>
     new Promise((resolve) => {
       const started = Date.now()
@@ -363,6 +438,30 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
 
   return {
     visible,
+    /**
+     * Put the top-level pop-up over `rect` (this document's CSS pixels) from now on, or with null
+     * give it back to the engine's own placing. That waits until the pop-up it filled has closed
+     * (up to a second), so a dismissal does not jump it to the word on its way out.
+     */
+    place(rect) {
+      const clear = ++fillClear
+      if (rect) {
+        fill = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        watchFill(true)
+        applyFill()
+        return
+      }
+      if (!fill) return
+      const started = Date.now()
+      const release = () => {
+        if (clear !== fillClear) return
+        if (visible() && Date.now() - started < 1000) return void setTimeout(release, 50)
+        fill = null
+        watchFill(false)
+        applyFill()
+      }
+      release()
+    },
     /** Whether the controller can focus the popup's buttons (Hachidori's; 10ten has none). */
     focusable: Boolean(focus),
     /**

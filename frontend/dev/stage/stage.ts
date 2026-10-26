@@ -12,6 +12,7 @@
  *   ?game=dialogue (default) | manga     a visual novel's dialogue box, or vertical speech bubbles
  *   ?windowed=1      the game is a window on a desktop (a Mac game), not the whole screen
  *   ?furigana=0      no readings over the kanji (default: drawn, and reported as OCR reports them)
+ *   ?fragments=1     OCR reports a box per word (a particle a box), not a box per line
  *   ?filter=0        keep furigana and small text (the overlay's small-text filter off)
  *   ?grouping=1      Group text into regions (the grouped overlay)
  *   ?opacity=<0-100> the grouped overlay's background opacity (default 80)
@@ -32,7 +33,9 @@
  *   ?driver=mouse    controller-words: the mouse took over (outline and hints faded)
  *   ?step=<n>        controller-words: step on n words from the first
  *   ?dictionary=full controller-words, controller-history: Read along as the full-screen dictionary
- *                    (Settings → Game mode), with the stage's pretend Yomitan API (api-dictionary.ts)
+ *                    (Settings → Game Mode), with the stage's pretend Yomitan API (api-dictionary.ts);
+ *                    with ?popup=yomitan|hachidori|tenten, the stand-in pop-up placed over the space
+ *                    under the text instead, as the app places that engine's own pop-up
  *   ?entry=<n>       dictionary=full: step on n entries (RB) for the lit word
  *   ?anki=idle (default) | duplicate | off   dictionary=full: Add to Anki ready, the card already
  *                    in Anki, or Anki not set up
@@ -65,6 +68,9 @@ import { BUTTON } from '@ui/controller-input.js'
 import { HoverOverlay } from '@ui/hover.js'
 import { RegionSelect } from '@ui/region-select.js'
 import { SETTINGS_DEFAULTS } from '@ui/settings'
+import { scanGroups } from '@ui/ocr-result'
+import type { Annotation } from '@ui/annotations'
+import { logSections } from '@ui/log-sections.js'
 import { studioJson } from '../studio/bridge'
 import { drawGame, gamePicture, type Game, type GameKind } from './game'
 import { DEFAULT_HISTORY, DEFAULT_SCRIPT, lookupWord, type StageScript } from './script'
@@ -77,7 +83,7 @@ const scene = params.get('scene') ?? 'overlay-words'
 const script: StageScript = { ...DEFAULT_SCRIPT, ...(studioJson<Partial<StageScript>>('script') ?? {}) }
 const history = studioJson<unknown[]>('history') ?? DEFAULT_HISTORY
 const fullDictionary = params.get('dictionary') === 'full'
-const popupType = fullDictionary ? 'custom-api' : (params.get('popup') ?? 'yomitan')
+const popupType = params.get('popup') ?? (fullDictionary ? 'custom-api' : 'yomitan')
 const input = params.get('input') === 'keys' ? 'keys' : 'pad'
 const theme =
   params.get('theme') === 'light' || params.get('theme') === 'dark'
@@ -166,7 +172,8 @@ async function layOut(): Promise<void> {
     kind: (params.get('game') === 'manga' ? 'manga' : 'dialogue') as GameKind,
     script,
     furigana: params.get('furigana') !== '0',
-    windowed: flag('windowed')
+    windowed: flag('windowed'),
+    fragments: flag('fragments')
   })
   draw()
 }
@@ -179,6 +186,8 @@ popup.title = 'Dictionary pop-up'
 popup.hidden = true
 let popupReady: Promise<void> | null = null
 let shown: string | null = null
+/** Where the full-screen dictionary has the pop-up go (the controller's `placePopup`), or null. */
+let popupTarget: { x: number; y: number; width: number; height: number } | null = null
 
 function popupFrame(): Promise<void> {
   popupReady ??= new Promise((resolve) => {
@@ -212,7 +221,12 @@ async function showPopup(text: string, rect: { left: number; top: number; right:
     left = Math.max(8, Math.min(innerWidth - width - 8, rect.left))
     top = below ? rect.bottom + 8 : Math.max(8, rect.top - height - 8)
   }
-  Object.assign(popup.style, { left: `${left}px`, top: `${top}px` })
+  Object.assign(
+    popup.style,
+    popupTarget
+      ? { left: `${popupTarget.x}px`, top: `${popupTarget.y}px`, width: `${popupTarget.width}px`, height: `${popupTarget.height}px` }
+      : { left: `${left}px`, top: `${top}px`, width: '', height: '' }
+  )
   await popupFrame()
   popup.hidden = false
   if (shown === term) return
@@ -376,6 +390,14 @@ const controller = createController({
       return x >= r.left - 32 && x <= r.right + 32 && y >= r.top - 32 && y <= r.bottom + 32
     }),
   dismiss: () => hidePopup(),
+  placePopup: (rect: typeof popupTarget) => {
+    popupTarget = rect
+    log.push({ check: 'stage-place-popup', rect })
+  },
+  popupShowing: () => !popup.hidden,
+  // As the overlay: the drawn scan's sections as the Log shows them.
+  sections: () =>
+    logSections(scanGroups(game.annotations as unknown as Annotation[], SETTINGS_DEFAULTS.textOverlayGrouping)),
   log: (record: unknown) => void log.push(record),
   modeChanged: () => undefined
 } as unknown as ControllerContext)

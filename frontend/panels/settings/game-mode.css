@@ -1,0 +1,112 @@
+/* Settings → Game Mode (GameModeTab.tsx): Read along's two looks as picture cards. */
+
+.read-along-views {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
+  gap: var(--k-space-3);
+}
+
+.read-along-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-field);
+  color: var(--k-text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.dark .read-along-view { background: var(--gray-a2); }
+/* The ring over the picture's well (an inset shadow on the card would sit under it). */
+.read-along-view::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+  pointer-events: none;
+  transition: box-shadow var(--k-fast);
+}
+.dark .read-along-view::after { box-shadow: inset 0 0 0 1px var(--gray-a5); }
+.read-along-view[data-state="on"]::after { box-shadow: inset 0 0 0 1px var(--k-accent); }
+.read-along-view:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 2px; }
+
+.read-along-view-art {
+  display: flex;
+  justify-content: center;
+  padding: var(--k-space-4);
+  border-bottom: 1px solid var(--k-line);
+  background: var(--k-sunken);
+  transition: background-color var(--k-fast);
+}
+.read-along-view:hover .read-along-view-art,
+.read-along-view[data-native-hover] .read-along-view-art { background: var(--k-hover); }
+.read-along-view[data-state="on"] .read-along-view-art { background: var(--accent-a2); }
+
+.read-along-view-text {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: var(--k-space-2);
+  padding: var(--k-space-2-5) var(--k-space-3);
+}
+.read-along-view-radio {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 999px;
+  background: var(--k-field);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+  transition: box-shadow var(--k-fast), background-color var(--k-fast);
+}
+.read-along-view[data-state="on"] .read-along-view-radio {
+  background: var(--k-accent-contrast);
+  box-shadow: inset 0 0 0 0.25rem var(--k-accent);
+}
+.read-along-view-label { font-size: var(--k-text-md); line-height: var(--k-leading-md); font-weight: var(--k-weight-medium); }
+.read-along-view-detail { grid-column: 2; font-size: var(--k-text-sm); line-height: var(--k-leading-sm); color: var(--k-text-2); }
+
+/* The drawings (ReadAlongArt.tsx): 1px lines in quiet greys, the looked-up word in the accent
+   once its card is chosen. */
+.read-along-art {
+  --ra-frame: var(--gray-a8);
+  --ra-line: var(--gray-a8);
+  --ra-strong: var(--gray-a10);
+  --ra-faint: var(--gray-a6);
+  --ra-scenery: var(--gray-a5);
+  --ra-accent: var(--gray-a10);
+  --ra-mark: var(--gray-a3);
+  --ra-screen: var(--k-bg);
+  --ra-panel: var(--k-bg);
+  --ra-dim: var(--gray-a3);
+  display: block;
+  flex: none;
+  max-width: 100%;
+  height: auto;
+}
+/* Dark: the dictionary's panels sit a step above the game, and the dim darkens it. */
+.dark .read-along-art { --ra-panel: var(--gray-2); --ra-dim: rgb(0 0 0 / 0.35); }
+.read-along-view[data-state="on"] .read-along-art {
+  --ra-frame: var(--gray-a10);
+  --ra-line: var(--gray-a10);
+  --ra-strong: var(--gray-12);
+  --ra-faint: var(--gray-a7);
+  --ra-accent: var(--k-accent);
+  --ra-mark: var(--k-accent-soft);
+}
+.read-along-art * { transition: fill var(--k-base), stroke var(--k-base); }
+.read-along-art .ra-screen { fill: var(--ra-screen); stroke: var(--ra-frame); }
+.read-along-art .ra-scenery { stroke: var(--ra-scenery); }
+.read-along-art .ra-dim { fill: var(--ra-dim); }
+.read-along-art .ra-panel { fill: var(--ra-panel); stroke: var(--ra-line); }
+.read-along-art .ra-line { stroke: var(--ra-line); }
+.read-along-art .ra-strong { stroke: var(--ra-strong); }
+.read-along-art .ra-faint { stroke: var(--ra-faint); }
+.read-along-art .ra-dot { fill: var(--ra-faint); }
+.read-along-art .ra-accent { stroke: var(--ra-accent); }
+.read-along-art .ra-accent-dot { fill: var(--ra-accent); }
+.read-along-art .ra-mark { fill: var(--ra-mark); stroke: var(--ra-accent); }

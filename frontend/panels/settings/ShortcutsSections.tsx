@@ -12,11 +12,6 @@ import { ShortcutRecorder } from './ShortcutRecorder'
 /** Display order. The native side returns the bindings keyed alphabetically. */
 const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu']
 
-/** Extra guidance under a row, where a binding is easy to get wrong. */
-const HINTS: Partial<Record<HotkeyName, string>> = {
-  openControllerMenu: "Pick a button combination your game doesn't use."
-}
-
 export function ShortcutsSections(): ReactNode {
   const [hotkeys, setHotkeys, hotkeyFailures] = useHotkeys()
   const capabilities = useCapabilities()
@@ -68,16 +63,7 @@ export function ShortcutsSections(): ReactNode {
             key={name}
             className="shortcut-row"
             label={def.name}
-            description={
-              HINTS[name] ? (
-                <>
-                  {def.description}
-                  <span className="shortcut-hint">{HINTS[name]}</span>
-                </>
-              ) : (
-                def.description
-              )
-            }
+            description={def.description}
             controlId={`hotkey-${name}`}
           >
             <ShortcutRecorder

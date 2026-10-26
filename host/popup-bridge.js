@@ -29,6 +29,60 @@ const OBSERVED = Symbol.for('kimochi.popupBridge.observed')
 const PREWARMED = Symbol.for('kimochi.popupBridge.prewarmed')
 const STYLED = Symbol.for('kimochi.popupBridge.styled')
 const APPEARANCE = Symbol.for('kimochi.popupBridge.appearance')
+const TARGETED = Symbol.for('kimochi.popupBridge.targeted')
+
+/**
+ * Where this realm's top-level popup must open instead of beside the scanned word: a rectangle
+ * in this document's CSS pixels, or null for Yomitan's own placing. Set by Read along's
+ * full-screen dictionary (ui/controller.js `placePopup`), which fills the space under its text
+ * with the engine's pop-up.
+ */
+let popupTarget = null
+
+/** Open this realm's top-level popup over `rect` from now on; null gives Yomitan its placing back. */
+export function setPopupTarget(rect) {
+  popupTarget = rect && rect.width > 0 && rect.height > 0 ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+}
+
+/**
+ * The `SizeRect` `Popup._getPosition` answers for a target rectangle: the rectangle itself, as
+ * though Yomitan had chosen it below and after the word.
+ */
+export function targetPosition(rect) {
+  return { left: rect.x, top: rect.y, width: rect.width, height: rect.height, after: true, below: true }
+}
+
+/**
+ * Let {@link setPopupTarget} place the top-level popup (`depth` 0; a nested lookup inside it keeps
+ * Yomitan's placing beside its word). `_getPosition` answers the target, so the frame is sized
+ * and shown there in one step; `_show` puts it back afterwards for the full-width display mode,
+ * which overrides the position it was given. Both are `Popup` internals, checked here so a Yomitan
+ * that renames them leaves the popup in its own place rather than failing a lookup.
+ */
+export function targetPopups(Popup) {
+  if (Popup.prototype[TARGETED]) return
+  const getPosition = Popup.prototype._getPosition
+  const showFrame = Popup.prototype._show
+  if (typeof getPosition !== 'function' || typeof showFrame !== 'function') return
+  Popup.prototype[TARGETED] = true
+  const target = (popup) => ((popup.depth ?? 0) === 0 ? popupTarget : null)
+  Popup.prototype._getPosition = function (...args) {
+    const rect = target(this)
+    return rect ? targetPosition(rect) : getPosition.apply(this, args)
+  }
+  Popup.prototype._show = async function (...args) {
+    const result = await showFrame.apply(this, args)
+    const rect = target(this)
+    const style = this._frame?.style
+    if (rect && style) {
+      style.left = `${rect.x}px`
+      style.top = `${rect.y}px`
+      style.width = `${rect.width}px`
+      style.height = `${rect.height}px`
+    }
+    return result
+  }
+}
 
 /**
  * Give a page with no ground of its own Kimochi's appearance as its Yomitan "site" theme.
@@ -189,6 +243,7 @@ export async function observePopups({ log, onChange, window: label, remote } = {
   const popups = new Set()
   const note = (value) => log?.({ window: label, ...value })
   stylePopupFrames(Popup)
+  targetPopups(Popup)
 
   // One realm, one set of wrappers, however many callers ask.
   if (PopupFactory.prototype[OBSERVED]) {

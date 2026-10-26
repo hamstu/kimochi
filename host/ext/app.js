@@ -308,6 +308,8 @@ export function installApp(win, { engine, descriptor }) {
   api.popupControl = (control) => driver?.popupControl(control ?? {}) ?? false
   api.popupFocusable = () => Boolean(driver?.focusable)
   api.dismiss = () => void driver?.dismiss()
+  // Read along's full-screen dictionary: the pop-up over a rectangle, or (null) back beside the word.
+  api.placePopup = (rect) => void driver?.place(rect ?? null)
   api.openOptionsPage = () => {
     const url = `${origin}/${descriptor.optionsPage}`
     // Same as `chrome.runtime.openOptionsPage`; from a window without a context of its own the

@@ -110,10 +110,11 @@ export interface ScanHistoryEntry {
 }
 
 /**
- * How Read along shows the dictionary (Settings → Game mode): `popup`, an outline on the game's
+ * How Read along shows the dictionary (Settings → Game Mode): `popup`, an outline on the game's
  * text and the dictionary's own pop-up beside it; `fullscreen`, the scan across the top of a
- * dimmed screen and the lit word's entry below (ui/game-dictionary.js), which only the Yomitan
- * API can feed. With any other engine Read along uses the pop-up whatever this says.
+ * dimmed screen and the lit word's dictionary below it (ui/game-dictionary.js). Every engine can
+ * be full screen: the Yomitan API's entries are drawn by Kimochi, and every other engine's own
+ * pop-up (built-in Yomitan, Hachidori, 10ten) is placed to fill the space below the text.
  */
 export type GameDictionaryView = 'popup' | 'fullscreen'
 
@@ -123,9 +124,22 @@ export interface GameModeSettings {
 
 export const DEFAULT_GAME_MODE_SETTINGS: GameModeSettings = { dictionaryView: 'popup' }
 
-/** Whether Read along opens the full-screen dictionary: chosen, and the Yomitan API in use. */
-export function fullscreenDictionary(gameMode: unknown, popupType: unknown): boolean {
-  return popupType === 'custom-api' && (gameMode as Partial<GameModeSettings> | null)?.dictionaryView === 'fullscreen'
+/**
+ * Whether Read along opens the full-screen dictionary: Settings → Game Mode says so, whichever
+ * engine is in use (it once also needed the Yomitan API; a caller still passing the engine as a
+ * second argument from plain JS is unaffected).
+ */
+export function fullscreenDictionary(gameMode: unknown): boolean {
+  return (gameMode as Partial<GameModeSettings> | null)?.dictionaryView === 'fullscreen'
+}
+
+/**
+ * What fills the full-screen dictionary's lower half: `entries`, Kimochi's own drawing of the
+ * Yomitan API's entries; `popup`, the engine's own pop-up (built-in Yomitan, Hachidori, 10ten),
+ * placed over that space.
+ */
+export function fullscreenDictionarySource(popupType: unknown): 'entries' | 'popup' {
+  return popupType === 'custom-api' ? 'entries' : 'popup'
 }
 
 export interface Settings {
@@ -240,8 +254,8 @@ export interface OcrModeInfo {
   description: string
   /** Two to four short reasons to pick it. */
   strengths: string[]
-  /** What it needs to run: a connection, a download, a server of your own. */
-  requirements: string
+  /** What it needs to run, when there is something to say: an OS version, a server of your own. */
+  requirements?: string
 }
 
 /** Capabilities and descriptions shared by Settings and the overlay. */
@@ -253,14 +267,12 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'online',
     description:
-      'Sends each capture to Google Lens, the image recognition behind Lens in Chrome, and returns the text with the position of every line. Very accurate on Japanese, horizontal or vertical, with nothing to set up.',
+      'Send each capture to Google Lens. Great accuracy for Japanese. Supports horizontal or vertical text.',
     strengths: [
       'Accurate on game text, manga and busy backgrounds',
       'Reads vertical and horizontal text, with line positions for the overlay',
       'Nothing to download, and the same on every computer'
-    ],
-    requirements:
-      "Needs an internet connection. Each capture is sent to Google and handled under Google's terms and privacy policy. Kimochi uses the service Chrome's Lens uses, which is not a published API, so Google could change or stop it at any time."
+    ]
   },
   cloud: {
     label: 'Cloud OCR',
@@ -285,14 +297,11 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'local',
     description:
-      'A small, fast recogniser that runs entirely on this computer. It is tuned for Japanese video game text: dialogue boxes, menus and subtitles, horizontal or vertical, with a box for every line.',
+      "A small, fast OCR model that runs local on your machine. It's tuned for Japanese video game text: dialogue boxes, menus and subtitles. Supports horizontal or vertical text.",
     strengths: [
       'Fast: a scan takes a fraction of a second',
-      'Works offline; captures never leave this computer',
-      'Line positions, so the overlay can draw over your game'
-    ],
-    requirements:
-      'A one-time model download. Uses the GPU where it can (Core ML on macOS, DirectML on Windows) and the CPU otherwise.'
+      'Works offline; captures never leave this computer'
+    ]
   },
   mangaocr: {
     label: 'Local (Manga OCR)',
@@ -301,14 +310,14 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'local',
     description:
-      'Finds speech bubbles and text blocks with the comic text detector, then reads each one with Manga OCR, a model trained on manga. The best choice for comics, stylised lettering and vertical text.',
+      'Manga OCR is a model trained specifically on manga. The best choice for manga and printed vertical text.',
     strengths: [
       'Excellent on vertical text and hand-lettered dialogue',
       'Reads text set over busy artwork',
       'Works offline; captures never leave this computer'
     ],
     requirements:
-      'A larger one-time model download, and each scan takes longer than with MeikiOCR. Uses the GPU where it can (Metal on macOS, CUDA on NVIDIA cards) and the CPU otherwise.'
+      'This model uses the GPU where it can (Metal on macOS, CUDA on NVIDIA cards) and the CPU otherwise.'
   },
   livetext: {
     label: 'Local (Apple Live Text)',
@@ -317,7 +326,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'local',
     description:
-      'Reads text locally with the engine behind Live Text, the same recognition macOS uses when you select text in a screenshot. Returns line positions for dictionary lookups directly over the captured text.',
+      "Uses macOS's Live Text, the same recognition macOS uses when you select text in a screenshot.",
     strengths: [
       'Nothing to download: part of macOS',
       'Fast, with no model to load',
@@ -325,7 +334,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
       'Handles vertical and horizontal text'
     ],
     requirements:
-      'macOS 13 or later. Uses the system Live Text engine through an unpublished interface, so a future macOS release could need an update.'
+      'Requires macOS 13 or later.'
   },
   oneocr: {
     label: 'Local (OneOCR)',

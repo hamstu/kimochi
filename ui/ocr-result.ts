@@ -4,8 +4,10 @@
  */
 import {
   getBoundingBox,
+  visibleAnnotations,
   wordAnnotations,
   type Annotation,
+  type GroupingSettings,
 } from "./annotations.js";
 export type Orientation = "horizontal" | "vertical";
 /** A piece of a line (a word, or a character) with its own box, in capture pixels. */
@@ -327,6 +329,47 @@ export function logicalGroups(input: Annotation[]): {
   });
   return { groups, annotations };
 }
+/**
+ * The groups a scan is published and logged as: the engine's own blocks, or, for an engine that
+ * reads words or lines (a geometry result with no `block` annotations), the visible ones (the
+ * small-text filter applied, as `grouping` says) grouped here by `logicalGroups`. This is what
+ * `publishOcrResult` (output.js) writes to the history, and so what the Log shows, one line per
+ * group ("1 / 2", "2 / 2"); Read along's full-screen dictionary shows the same.
+ */
+export function logGroups(
+  result: Pick<OcrResult, "groups" | "geometry" | "textAnnotations">,
+  grouping: Partial<GroupingSettings> = {},
+): OcrGroup[] {
+  if (result.geometry && !(result.textAnnotations ?? []).some((a) => a.granularity === "block"))
+    return logicalGroups(visibleAnnotations(result.textAnnotations ?? [], grouping as GroupingSettings)).groups;
+  return result.groups ?? [];
+}
+
+/**
+ * The groups the Log has for the scan drawn now (the overlay's annotations, as `normalizeOcrResult`
+ * left them): an engine's blocks as they are, or the words and lines grouped as `logGroups` groups
+ * them for the Log. Read along's full-screen dictionary reads its sections from these.
+ */
+export function scanGroups(
+  annotations: Annotation[],
+  grouping: Partial<GroupingSettings> = {},
+): OcrGroup[] {
+  const blocks = annotations.filter((a) => a.granularity === "block");
+  return logGroups(
+    {
+      geometry: true,
+      textAnnotations: annotations,
+      groups: blocks.map((a, index) => ({
+        id: a.groupId ?? `group-${index}`,
+        text: a.description,
+        bbox: null,
+        orientation: a.orientation === "vertical" ? "vertical" : "horizontal",
+      })),
+    },
+    grouping,
+  );
+}
+
 export function normalizeOcrResult(
   raw: Partial<OcrResult>,
   engine: string,

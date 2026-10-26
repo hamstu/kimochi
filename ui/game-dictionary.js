@@ -1,16 +1,21 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
- * The full-screen dictionary: Read along's other look, for the Yomitan API only.
+ * The full-screen dictionary: Read along's other look.
  *
  * Instead of an outline on the game's text and the dictionary's pop-up beside it, the whole scan
- * is set out across the top of a dimmed screen, one word lit, and that word's dictionary entry
- * fills the space below a rule. The D-pad (or the arrow keys) moves the lit word along and the
- * entry follows; the shoulder buttons step between the entries a word has; A adds the entry to
- * Anki through Kimochi's own Add to Anki settings; the right stick scrolls a long entry.
+ * is set out across the top of a dimmed screen, one word lit, and that word's dictionary fills
+ * the space below a rule. The D-pad (or the arrow keys) moves the lit word along and the
+ * dictionary follows.
  *
- * It needs the dictionary's raw entries, and only the Yomitan API gives Kimochi those (`/tokenize`
- * for the words, `/ankiFields` for the entries). Yomitan inside Kimochi, Hachidori and 10ten draw
- * their own pop-ups, so with them Read along keeps its outline and pop-up.
+ * What fills that space depends on the engine. With the Yomitan API (the `entries` source) it is
+ * Kimochi's own drawing of the raw entries (`/tokenize` for the words, `/ankiFields` for the
+ * entries): the shoulder buttons step between the entries a word has, A adds the entry to Anki
+ * through Kimochi's own Add to Anki settings, the right stick scrolls a long entry. Every other
+ * engine (built-in Yomitan, Hachidori, 10ten) draws its own pop-up (the `popup` source): the view
+ * looks the lit word up in the engine through `context.lookupInPopup`, handing it the lit word's
+ * range in this view and the rectangle of the space below the rule (`slotRect`), and the overlay
+ * places the engine's pop-up over that rectangle. The controller drives the pop-up as in popup
+ * mode (ui/controller.js).
  *
  * The view owns nothing native: the controller (ui/controller.js) feeds it its commands, and the
  * overlay (ui/overlay.js) the lookups, Anki and audio through `context`. Its colours, type and
@@ -20,6 +25,8 @@
 
 /** How far one press of up or down scrolls the entry, in points. */
 const SCROLL_STEP = 120;
+/** How much text a pop-up lookup starts from the lit word: as word-nav.js's `SCAN_LENGTH`. */
+const POPUP_SCAN_LENGTH = 16;
 
 // --- the text and its words (pure, tested in scripts/game-dictionary.test.mjs) ------------------
 
@@ -32,8 +39,8 @@ const SCROLL_STEP = 120;
  * sentence. Text no token covers (punctuation, a gap the dictionary matched nothing in) is kept as
  * a filler token that is not a stop, so the whole scan is drawn. Each token keeps the unit it
  * starts in (`unit`) and that unit's box (`box`: the first unit drawn by the same overlay
- * `element`, since a block's lines or a bubble's columns are units of one box), so the view can
- * set separate boxes (a manga page's bubbles) apart.
+ * `element`, since a block's lines or a bubble's columns are units of one box). The view draws
+ * each unit as its own line (`sentenceLines`).
  *
  * @param {{text: string, element?: object, tokens: {start: number, end: number, text: string, word: boolean}[]}[]} units
  * @returns {{text: string, tokens: {start: number, end: number, text: string, word: boolean, unit: number, box: number}[]}}
@@ -97,6 +104,69 @@ export function nextWord(tokens, index, delta) {
 /** The first stop in the text, or -1 when it has none. */
 export function firstWord(tokens) {
   return tokens.findIndex((token) => token.word);
+}
+
+/**
+ * The scan as the Log shows it: each unit (a scanned line, or a box's own line) one line of plain
+ * text, stacked, with the tokens' boundaries kept only as spans inside it. A token that runs on
+ * from one unit into the next is split at the break, each piece carrying the token's `index`, so
+ * lighting the word lights both. Units with no text leave no line.
+ *
+ * @returns {{text: string, tokens: object[], lines: {text: string, index: number, word: boolean}[][]}}
+ */
+export function sentenceLines(units) {
+  const { text, tokens } = sentenceTokens(units);
+  const offsets = [];
+  let at = 0;
+  for (const unit of units) {
+    offsets.push(at);
+    at += unit.text.length;
+  }
+  const lines = units.map(() => []);
+  tokens.forEach((token, index) => {
+    for (let unit = token.unit; unit < units.length; unit++) {
+      const end = offsets[unit] + units[unit].text.length;
+      const from = Math.max(token.start, offsets[unit]);
+      const to = Math.min(token.end, end);
+      if (to > from) lines[unit].push({ text: text.slice(from, to), index, word: token.word });
+      if (end >= token.end) break;
+    }
+  });
+  return { text, tokens, lines: lines.filter((line) => line.length > 0) };
+}
+
+/**
+ * How much smaller than its full size the scanned text is set, for `chars` characters on `lines`
+ * lines: a line or two stays large, a long scan steps down so more of it shows at once. The CSS
+ * keeps a floor under it (`.gd-sentence`), so it never gets too small to read.
+ */
+export function sentenceScale(chars, lines = 1) {
+  let scale = chars <= 30 ? 1 : chars <= 60 ? 0.85 : chars <= 110 ? 0.72 : chars <= 180 ? 0.62 : 0.54;
+  if (lines >= 3) scale = Math.min(scale, 0.85);
+  if (lines >= 5) scale = Math.min(scale, 0.72);
+  if (lines >= 8) scale = Math.min(scale, 0.62);
+  return scale;
+}
+
+/** Whether a scroller has more above and below what shows, for its edge fades. */
+export function edgeFades(scrollTop, clientHeight, scrollHeight) {
+  return { above: scrollTop > 1, below: scrollTop + clientHeight < scrollHeight - 1 };
+}
+
+/**
+ * Where a scroller showing `view` ({scrollTop, clientHeight}) must scroll so the span from `top`
+ * to `bottom` (content coordinates) shows clear of `margin` at each edge (where the fades are);
+ * null when it already does. A span taller than the room left is shown from its top.
+ */
+export function scrollToShow(top, bottom, view, margin = 0) {
+  const { scrollTop, clientHeight } = view;
+  const room = clientHeight - margin * 2;
+  if (bottom - top > room || top - margin < scrollTop) {
+    const next = Math.max(0, top - margin);
+    return next === scrollTop ? null : next;
+  }
+  if (bottom + margin > scrollTop + clientHeight) return bottom + margin - clientHeight;
+  return null;
 }
 
 /** The file names an entry's `audio` field plays (`[sound:a.mp3]`), so its media can be found. */
@@ -231,7 +301,36 @@ const ANKI_LABELS = {
  * @property {() => 'pad'|'keys'} input how the mode was opened, so the hints name the right keys
  * @property {() => void} onClose the view's own Back (a click on it)
  * @property {(record: object) => void} [log]
+ * @property {(range: Range, rect: {x: number, y: number, width: number, height: number}) => Promise<boolean>} [lookupInPopup]
+ *   the `popup` source: look `range` up in the engine and place its pop-up over `rect` (overlay
+ *   points); resolves whether a pop-up is showing for it
+ * @property {() => boolean} [popupFocusable] the `popup` source: whether A can move into the
+ *   engine pop-up's buttons
  */
+
+/**
+ * The text a pop-up lookup reads from word `index` on: its own span and the spans after it, up to
+ * `length` characters, as the {node, offset} ends of a Range. A dictionary finds the longest match
+ * from there itself (作った, not 作), as it does on the game's text. Null for a word with no text.
+ *
+ * @param {{firstChild: {nodeType: number, length: number}|null}[]} spans the sentence's spans in order
+ * @param {number} from the lit word's span
+ */
+export function lookupSpan(spans, from, length = POPUP_SCAN_LENGTH) {
+  const text = (span) => (span?.firstChild?.nodeType === 3 ? span.firstChild : null);
+  const first = text(spans[from]);
+  if (!first) return null;
+  let end = { node: first, offset: Math.min(first.length, length) };
+  let remaining = length - end.offset;
+  for (let at = from + 1; at < spans.length && remaining > 0; at++) {
+    const node = text(spans[at]);
+    if (!node) continue;
+    const take = Math.min(node.length, remaining);
+    end = { node, offset: take };
+    remaining -= take;
+  }
+  return { start: { node: first, offset: 0 }, end };
+}
 
 export class GameDictionary {
   /** @param {HTMLElement} host @param {GameDictionaryContext} context */
@@ -250,21 +349,39 @@ export class GameDictionary {
     /** Bumped on every move, so a lookup that answers late cannot replace a newer word's entry. */
     this.ticket = 0;
     this.cache = new Map();
+    /** What fills the space below the text (see `show`), and where the controller is in it. */
+    this.source = "entries";
+    this.layer = "text";
+    this.sectioned = false;
   }
 
   get open() {
     return Boolean(this.root);
   }
 
-  /** Lay out `units` (the controller's segmented boxes) and look up their first word. */
-  show(units, { title = "" } = {}) {
+  /**
+   * Lay out `units` (the controller's segmented boxes) and look up their first word. `source` is
+   * what fills the space below the text: `entries` (the Yomitan API's, drawn here) or `popup` (the
+   * engine's own pop-up, placed there by the overlay). With `sections`, each unit is a separately
+   * detected section of the scan (the Log's "1 / 2", "2 / 2"): two or more are numbered, and a
+   * lookup reads on only to the end of its own section.
+   */
+  show(units, { title = "", source = "entries", sections = false } = {}) {
     this.remove();
-    const { text, tokens } = sentenceTokens(units);
+    this.sectioned = Boolean(sections);
+    this.source = source === "popup" ? "popup" : "entries";
+    this.layer = "text";
+    const { text, tokens, lines } = sentenceLines(units);
     this.text = text;
     this.tokens = tokens;
     this.index = firstWord(tokens);
     const root = document.createElement("section");
     root.className = "gd-root";
+    root.dataset.source = this.source;
+    // macOS keeps its blur of the game behind only while the overlay's layers are being redrawn;
+    // the backdrop holds a redraw going there (see `.gd-root[data-os="macos"] .gd-backdrop`).
+    root.dataset.os = globalThis.__KIMOCHI_PLATFORM__?.os ?? "";
+    root.style.setProperty("--gd-sentence-scale", String(sentenceScale(text.length, lines.length)));
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-label", "Dictionary");
     root.innerHTML = `
@@ -274,29 +391,44 @@ export class GameDictionary {
           <span class="gd-eyebrow">${escapeHtml(title || "Read along")}</span>
           <span class="gd-count" aria-live="polite"></span>
         </header>
-        <p class="gd-sentence" lang="ja"></p>
+        <div class="gd-sentence" lang="ja"></div>
         <div class="gd-rule" aria-hidden="true"><span class="gd-rule-mark"></span></div>
         <div class="gd-body" tabindex="-1"><article class="gd-entry"></article></div>
         <footer class="gd-bar"></footer>
       </div>`;
     const sentence = root.querySelector(".gd-sentence");
-    tokens.forEach((token, index) => {
-      // The next box (a bubble, a line set apart): a little space, never a character of the text.
-      if (index > 0 && token.box !== tokens[index - 1].box) {
-        const gap = document.createElement("span");
-        gap.className = "gd-box-break";
-        gap.setAttribute("aria-hidden", "true");
-        sentence.append(gap);
+    // The text exactly as the Log has it, a line per section (or per scanned line); words are only
+    // spans inside it. Two or more sections are numbered: a mark, not a control.
+    const numbered = this.sectioned && lines.length > 1;
+    sentence.classList.toggle("gd-numbered", numbered);
+    lines.forEach((pieces, number) => {
+      const line = document.createElement("div");
+      line.className = "gd-line";
+      let holder = line;
+      if (numbered) {
+        const mark = document.createElement("span");
+        mark.className = "gd-section-mark";
+        mark.setAttribute("aria-hidden", "true");
+        const disc = document.createElement("span");
+        disc.textContent = String(number + 1);
+        mark.append(disc);
+        holder = document.createElement("span");
+        holder.className = "gd-line-text";
+        line.append(mark, holder);
       }
-      const span = document.createElement("span");
-      span.textContent = token.text;
-      span.className = token.word ? "gd-word" : "gd-gap";
-      if (token.word) {
-        span.dataset.index = String(index);
-        span.addEventListener("click", () => this.select(index));
+      for (const piece of pieces) {
+        const span = document.createElement("span");
+        span.textContent = piece.text;
+        span.className = piece.word ? "gd-word" : "gd-gap";
+        if (piece.word) {
+          span.dataset.index = String(piece.index);
+          span.addEventListener("click", () => this.select(piece.index));
+        }
+        holder.append(span);
       }
-      sentence.append(span);
+      sentence.append(line);
     });
+    sentence.addEventListener("scroll", () => this.updateFades(), { passive: true });
     root.addEventListener("click", (event) => {
       const action = event.target?.closest?.("[data-action]")?.dataset.action;
       if (action === "close") this.context.onClose();
@@ -306,6 +438,7 @@ export class GameDictionary {
     });
     this.root = root;
     this.host.append(root);
+    this.updateFades();
     if (this.index < 0) {
       this.renderEntry({ kind: "empty", message: "No words to look up in this text." });
       this.renderBar();
@@ -324,11 +457,85 @@ export class GameDictionary {
       if (lit) span.setAttribute("aria-current", "true");
       else span.removeAttribute("aria-current");
     }
-    this.root.querySelector(".gd-lit")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    this.showLit();
     const position = this.tokens.slice(0, index + 1).filter((token) => token.word).length;
     const total = this.tokens.filter((token) => token.word).length;
     this.root.querySelector(".gd-count").textContent = `${position} / ${total}`;
-    void this.lookUp(this.tokens[index].text);
+    if (this.source === "popup") void this.lookUpInPopup(index);
+    else void this.lookUp(this.tokens[index].text);
+  }
+
+  /** Scroll the text, inside its own area, so the lit word shows clear of the edge fades. */
+  showLit() {
+    const sentence = this.root?.querySelector(".gd-sentence");
+    const pieces = [...(this.root?.querySelectorAll(".gd-lit") ?? [])];
+    if (!sentence || !pieces.length) return;
+    const box = sentence.getBoundingClientRect();
+    const rects = pieces.map((piece) => piece.getBoundingClientRect());
+    const top = Math.min(...rects.map((rect) => rect.top)) - box.top + sentence.scrollTop;
+    const bottom = Math.max(...rects.map((rect) => rect.bottom)) - box.top + sentence.scrollTop;
+    const margin = Number.parseFloat(getComputedStyle(sentence).fontSize) * 0.9 || 0;
+    const next = scrollToShow(top, bottom, sentence, margin);
+    if (next !== null) sentence.scrollTo({ top: next, behavior: "smooth" });
+    this.updateFades();
+  }
+
+  /** Fade the text's top or bottom edge while there is more of it that way. */
+  updateFades() {
+    const sentence = this.root?.querySelector(".gd-sentence");
+    if (!sentence) return;
+    const { above, below } = edgeFades(sentence.scrollTop, sentence.clientHeight, sentence.scrollHeight);
+    sentence.toggleAttribute("data-more-above", above);
+    sentence.toggleAttribute("data-more-below", below);
+  }
+
+  /** The `popup` source: the space below the rule, in overlay points, for the engine's pop-up. */
+  slotRect() {
+    const rect = this.root?.querySelector(".gd-body")?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+  }
+
+  /** The `popup` source: the Range a lookup of word `index` reads, from it on. */
+  wordRange(index) {
+    const lit = this.root?.querySelector(`.gd-sentence .gd-word[data-index="${index}"]`);
+    // A section is read on its own: a lookup does not run on into the next detected section.
+    const scope = this.sectioned ? lit?.closest(".gd-line") : this.root?.querySelector(".gd-sentence");
+    const spans = [...(scope?.querySelectorAll(".gd-word, .gd-gap") ?? [])];
+    const from = spans.findIndex((span) => span.dataset.index === String(index));
+    const ends = lookupSpan(spans, from);
+    if (!ends) return null;
+    const range = document.createRange();
+    range.setStart(ends.start.node, ends.start.offset);
+    range.setEnd(ends.end.node, ends.end.offset);
+    return range;
+  }
+
+  /** The `popup` source: look word `index` up in the engine, its pop-up over the space below. */
+  async lookUpInPopup(index) {
+    const ticket = ++this.ticket;
+    const term = this.tokens[index].text;
+    this.layer = "text";
+    this.result = null;
+    this.renderEntry({ kind: "popup", term });
+    this.renderBar();
+    const range = this.wordRange(index);
+    const rect = this.slotRect();
+    let shown = false;
+    try {
+      shown = Boolean(range && rect && (await this.context.lookupInPopup?.(range, rect)));
+    } catch (error) {
+      this.context.log?.({ check: "game-dictionary-popup-lookup-failed", error: String(error?.message ?? error) });
+    }
+    if (ticket !== this.ticket || !this.root) return;
+    // Under the pop-up while it shows; in view when no dictionary had anything for the word.
+    if (!shown) this.renderEntry({ kind: "empty", term });
+  }
+
+  /** The `popup` source: whether A, the D-pad and B are in the engine pop-up's buttons. */
+  setLayer(layer) {
+    this.layer = layer === "popup" ? "popup" : "text";
+    this.renderBar();
   }
 
   async lookUp(term) {
@@ -508,6 +715,10 @@ export class GameDictionary {
     const body = this.root.querySelector(".gd-body");
     body.scrollTop = 0;
     article.dataset.state = state.kind;
+    if (state.kind === "popup") {
+      article.innerHTML = `<p class="gd-status"><span class="gd-spinner" aria-hidden="true"></span>Looking up <span lang="ja">${escapeHtml(state.term)}</span>…</p>`;
+      return;
+    }
     if (state.kind === "loading") {
       article.innerHTML = `<p class="gd-status"><span class="gd-spinner" aria-hidden="true"></span>Looking up <span lang="ja">${escapeHtml(state.term)}</span>…</p>`;
       return;
@@ -557,9 +768,40 @@ export class GameDictionary {
     article.querySelector(".gd-entry-current")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
 
+  /** The `popup` source's hints: the engine's pop-up does the rest, as in popup mode. */
+  popupHints() {
+    const keys = this.context.input() === "keys";
+    const glyph = this.context.glyph;
+    const pair = [glyph("previousDefinition"), glyph("nextDefinition")].filter(Boolean).join(" ");
+    if (this.layer === "popup") {
+      return `
+      <span class="gd-bar-group">
+        ${hint(keys ? "← ↑ ↓ →" : "D-pad", "Choose")}
+        ${hint(keys ? "return" : glyph("confirm"), "Press", { tone: "confirm" })}
+        ${keys ? "" : hint(pair, "Entry")}
+      </span>
+      <span class="gd-bar-group gd-bar-actions">
+        ${hint(keys ? "esc" : glyph("back"), "Back to text", { tone: "cancel" })}
+      </span>`;
+    }
+    const focusable = Boolean(this.context.popupFocusable?.());
+    return `
+      <span class="gd-bar-group">
+        ${hint(keys ? "← →" : "◀ ▶", "Word")}
+        ${keys ? "" : hint(pair, "Entry")}
+        ${hint(keys ? "↑ ↓" : "RS", "Scroll")}
+      </span>
+      <span class="gd-bar-group gd-bar-actions">
+        ${focusable ? hint(keys ? "return" : glyph("confirm"), "Pop-up", { tone: "confirm" }) : ""}
+        ${keys ? "" : hint(glyph("playAudio"), "Audio")}
+        ${hint(keys ? "esc" : glyph("back"), "Back to game", { tone: "cancel", action: "close" })}
+      </span>`;
+  }
+
   renderBar() {
     const bar = this.root?.querySelector(".gd-bar");
     if (!bar) return;
+    if (this.source === "popup") return void (bar.innerHTML = this.popupHints());
     const keys = this.context.input() === "keys";
     const glyph = this.context.glyph;
     const entries = this.result?.entries.length ?? 0;
@@ -581,4 +823,16 @@ export class GameDictionary {
   }
 }
 
-export default { GameDictionary, sentenceTokens, nextWord, firstWord, sanitizeGlossary, entryAudio };
+export default {
+  GameDictionary,
+  sentenceTokens,
+  sentenceLines,
+  sentenceScale,
+  edgeFades,
+  scrollToShow,
+  nextWord,
+  firstWord,
+  sanitizeGlossary,
+  entryAudio,
+  lookupSpan,
+};

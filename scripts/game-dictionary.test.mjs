@@ -1,8 +1,9 @@
 /**
  * The full-screen dictionary's pure parts (ui/game-dictionary.js, ui/game-dictionary-anki.js) and
- * when Read along opens it (`fullscreenDictionary` in ui/settings.ts). The view itself is checked
+ * when Read along opens it (`fullscreenDictionary`, `fullscreenDictionarySource` in ui/settings.ts). The view itself is checked
  * on the overlay stage (`/dev/stage.html?scene=controller-words&dictionary=full`).
  */
+import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -11,10 +12,15 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { build } from 'esbuild'
 import {
+  edgeFades,
   entryAudio,
   firstWord,
   inflectionChains,
+  lookupSpan,
   nextWord,
+  scrollToShow,
+  sentenceLines,
+  sentenceScale,
   sentenceTokens,
   soundFiles,
   splitTags
@@ -31,7 +37,7 @@ await build({
   platform: 'node',
   logLevel: 'silent'
 })
-const { fullscreenDictionary, SETTINGS_DEFAULTS } = await import(pathToFileURL(outfile).href)
+const { fullscreenDictionary, fullscreenDictionarySource, SETTINGS_DEFAULTS } = await import(pathToFileURL(outfile).href)
 await rm(outDir, { recursive: true, force: true })
 
 const word = (start, end, text) => ({ start, end, text, word: true })
@@ -167,11 +173,102 @@ test('Add to Anki stores media, adds the note, and recovers a duplicate', async 
   assert.deepEqual(calls[0][1].query, '"deck:Mining \\"VN\\"" "Expression:天気"')
 })
 
-test('Read along opens the full-screen dictionary only when chosen and with the Yomitan API', () => {
+test('Read along opens the full-screen dictionary whenever it is chosen, with every engine', () => {
   assert.deepEqual(SETTINGS_DEFAULTS.gameModeSettings, { dictionaryView: 'popup' })
-  assert.equal(fullscreenDictionary({ dictionaryView: 'fullscreen' }, 'custom-api'), true)
-  assert.equal(fullscreenDictionary({ dictionaryView: 'fullscreen' }, 'builtin'), false)
-  assert.equal(fullscreenDictionary({ dictionaryView: 'fullscreen' }, 'hachidori'), false)
-  assert.equal(fullscreenDictionary({ dictionaryView: 'popup' }, 'custom-api'), false)
+  for (const engine of ['custom-api', 'builtin', 'hachidori', 'tenten', undefined]) {
+    assert.equal(fullscreenDictionary({ dictionaryView: 'fullscreen' }, engine), true, engine)
+    assert.equal(fullscreenDictionary({ dictionaryView: 'popup' }, engine), false, engine)
+  }
   assert.equal(fullscreenDictionary(undefined, 'custom-api'), false)
+  assert.equal(fullscreenDictionary(null), false)
+  // The Yomitan API's entries are drawn by Kimochi; every other engine fills the space with its pop-up.
+  assert.equal(fullscreenDictionarySource('custom-api'), 'entries')
+  assert.equal(fullscreenDictionarySource('builtin'), 'popup')
+  assert.equal(fullscreenDictionarySource('hachidori'), 'popup')
+  assert.equal(fullscreenDictionarySource('tenten'), 'popup')
+  assert.equal(fullscreenDictionarySource(undefined), 'popup')
+})
+
+test("a pop-up lookup reads from the lit word on, through the spans after it, up to the scan length", () => {
+  const span = (text) => ({ firstChild: text === null ? null : { nodeType: 3, length: text.length, text } })
+  const spans = [span('今日'), span('は'), span('いい'), span('天気'), span(null), span('ですね。')]
+  const ends = lookupSpan(spans, 1, 5)
+  assert.equal(ends.start.node.text, 'は')
+  assert.equal(ends.start.offset, 0)
+  // は + いい + 天気 = 5 characters: it ends at the end of 天気, skipping nothing it could read.
+  assert.equal(ends.end.node.text, '天気')
+  assert.equal(ends.end.offset, 2)
+  // The default reaches on past the empty span, to the end of the text.
+  const all = lookupSpan(spans, 0)
+  assert.equal(all.end.node.text, 'ですね。')
+  assert.equal(all.end.offset, 4)
+  // Ends inside a span when the length runs out there.
+  assert.equal(lookupSpan(spans, 0, 3).end.node.text, 'は')
+  // 天気, past the span with no text, then one character of ですね。
+  assert.deepEqual([lookupSpan(spans, 3, 3).end.node.text, lookupSpan(spans, 3, 3).end.offset], ['ですね。', 1])
+  assert.equal(lookupSpan(spans, 4), null)
+  assert.equal(lookupSpan(spans, -1), null)
+})
+
+test('the full-screen dictionary keeps the scan drawn, so it has words to read', async () => {
+  // It reads its words from the drawn text (`readUnits`) after switching mode and redrawing. When
+  // only word mode held the text, the overlay cleared it whenever it would not otherwise show
+  // (the game not in front), and full screen said "No words to look up in this text".
+  const source = await readFile(new URL('../ui/controller.js', import.meta.url), 'utf8')
+  const getter = source.match(/get holdsText\(\) \{\s*return ([^;]+);/)
+  assert.ok(getter, 'holdsText is not where it was')
+  assert.match(getter[1], /mode === "words"/)
+  assert.match(getter[1], /mode === "dictionary"/)
+  assert.match(getter[1], /!historical/)
+})
+
+test('the scan is drawn as the Log shows it: a line per scanned line, the words only spans in it', () => {
+  const box = {}
+  const { text, lines } = sentenceLines([
+    { text: '今日はいい天', element: box, tokens: [word(0, 2, '今日'), word(2, 3, 'は'), word(3, 5, 'いい'), word(5, 7, '天気')] },
+    { text: '気ですね。', element: box, tokens: [] },
+    { text: '', tokens: [] },
+    { text: '海まで', tokens: [word(0, 1, '海'), word(1, 3, 'まで')] }
+  ])
+  // The text of each line is exactly the scanned line's: nothing added between words or boxes.
+  assert.deepEqual(lines.map((line) => line.map((piece) => piece.text).join('')), ['今日はいい天', '気ですね。', '海まで'])
+  assert.equal(lines.flat().map((piece) => piece.text).join(''), text)
+  // 天気 runs on from the first line into the second: both pieces are the same word.
+  const tenki = lines.flat().filter((piece) => piece.text === '天' || piece.text === '気')
+  assert.equal(tenki.length, 2)
+  assert.equal(tenki[0].index, tenki[1].index)
+  assert.ok(tenki.every((piece) => piece.word))
+  assert.deepEqual(lines[1].map((piece) => [piece.text, piece.word]), [['気', true], ['ですね。', false]])
+})
+
+test('long scans are set smaller, in steps, and many lines step down too', () => {
+  assert.equal(sentenceScale(12, 1), 1)
+  assert.equal(sentenceScale(30, 2), 1)
+  assert.ok(sentenceScale(50, 1) < 1)
+  assert.ok(sentenceScale(100, 2) < sentenceScale(50, 2))
+  assert.ok(sentenceScale(400, 12) >= 0.5, 'never below the smallest step')
+  assert.equal(sentenceScale(20, 3), 0.85)
+  assert.equal(sentenceScale(20, 6), 0.72)
+  // More text never sets it larger.
+  let last = 1
+  for (let chars = 1; chars < 500; chars += 7) {
+    const scale = sentenceScale(chars, 1)
+    assert.ok(scale <= last)
+    last = scale
+  }
+})
+
+test('the text fades at an edge only while there is more that way, and scrolls the lit word clear of the fades', () => {
+  assert.deepEqual(edgeFades(0, 100, 100), { above: false, below: false })
+  assert.deepEqual(edgeFades(0, 100, 300), { above: false, below: true })
+  assert.deepEqual(edgeFades(100, 100, 300), { above: true, below: true })
+  assert.deepEqual(edgeFades(200, 100, 300), { above: true, below: false })
+  assert.deepEqual(edgeFades(199.5, 100, 300), { above: true, below: false }, 'sub-pixel rounding is the end')
+
+  const view = { scrollTop: 0, clientHeight: 100 }
+  assert.equal(scrollToShow(20, 40, view, 10), null, 'already clear')
+  assert.equal(scrollToShow(80, 110, view, 10), 20, 'below: just enough to clear the bottom fade')
+  assert.equal(scrollToShow(30, 50, { scrollTop: 40, clientHeight: 100 }, 10), 20, 'above: clear of the top fade')
+  assert.equal(scrollToShow(0, 20, { scrollTop: 30, clientHeight: 100 }, 10), 0, 'never past the top')
+  assert.equal(scrollToShow(200, 400, view, 10), 190, 'taller than the room: from its top')
 })
