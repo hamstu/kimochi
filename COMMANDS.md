@@ -1180,8 +1180,8 @@ on).
 | Command | Signature |
 | --- | --- |
 | `sentence_audio_status` | `() -> Status`: the recording's state, for Settings → Anki |
-| `sentence_audio_line` | `({uid, text, ts, source, scan})`: the Log added a line (or changed one's text, same `uid`); `ts` its arrival in Unix ms, `source` its `LineSource`, `scan` the OCR scan it was read in or null (a scan's lines, a name box and the dialogue, are decided together: one voice, never the name box's). Ignored while recording is off. |
-| `sentence_audio_forget` | `({uids})`: the Log deleted these lines, or a fuller reading of the same text replaced them; their voice is free for other lines again |
+| `sentence_audio_line` | `({uid, text, ts, source, scan})`: the Log added a line (or changed one's text, same `uid`); `ts` its arrival in Unix ms, `source` its `LineSource`, `scan` the OCR scan it was read in or null (a scan's lines are decided together: blocks said apart each get their own voice, parts of one box share it, and a block that looks like a name box needs a strong match of its own). Ignored while recording is off. |
+| `sentence_audio_forget` | `({uids})`: the Log deleted these lines, or a fuller reading of the same text replaced them; their kept clips are removed and their voice is free for other lines again |
 | `sentence_audio_debug` | `() -> {status: Status, clips, listener}`: for Diagnostics → Sentence audio. `listener` (null until recording starts) is `{heardUntil, transcribedUntil, speaking, speechDetection, recogniser, lines, heard}`: the newest 40 lines, newest first, each `{uid, text, ts, appeared, scan, outcome (waiting, voiced, silent, missed), how, score, heard, clip: [from, to], provisional, window: [from, to], decidedAt, changes, note}` (`note`: why it was decided as it was), and what the recogniser heard in the last minute, `{startMs, endMs, text}` |
 | `sentence_audio_lines` | `() -> LineAudio[]`: what is known about recent lines' audio (the decided ones, and every kept clip), for the Log |
 | `sentence_audio_clip` | `({uid}) -> string \| null`: line `uid`'s clip as base64 MP3, or null when none is kept |

@@ -28,16 +28,28 @@
 //!
 //! # Scans, claims and second tries
 //!
-//! - The lines of one OCR scan (a name box and the dialogue, read as separate blocks) arrive
-//!   together and are decided together (`units`): one voice, which goes to the line that matches
-//!   it best, never to a name box (`speaking_lines`); without a match, timing gives it to the
-//!   dialogue (`main_line`).
+//! - The lines of one OCR scan (the dialogue, a name box, another speaker's box, noise the OCR
+//!   picked up) arrive together and are decided together (`units`). Every block is looked for in
+//!   what was heard; blocks said apart each get their own voice, and the parts of one box read as
+//!   two blocks share theirs. A block that looks like a name box (short, no punctuation:
+//!   `speaking_lines`) needs strong evidence of its own (`said_aside`), and a name said inside
+//!   the dialogue is the dialogue's. Without a match, timing gives the voice to the line most
+//!   like dialogue (`main_line`).
 //! - A match holds the words it heard: other lines are matched to what is left (`claimed`). A
 //!   line scanned again gets the voice its earlier reading had (`same_text`).
 //! - A match is never given up, only bettered while it is partial (`replaces`); once most of the
 //!   line is heard (`FINAL_SCORE`) it is not decided again. A line without one is tried again
 //!   each time more speech is transcribed, for `RETRY_MS` (a scan made while the voice played).
+//!   One letter heard is never a match.
 //! - Lines the Log deletes, or a fuller reading replaces, are forgotten (`forget`).
+//!
+//! # Speed
+//!
+//! A line is decided as soon as its voice is over and transcribed: while a line waits, the
+//! speech so far is transcribed at its first pause, and a line scanned with no sign of when it
+//! appeared does not wait for its voice to start (it was already on screen). Pauses are judged
+//! against the background as it is now (music comes and goes); how far speech reaches, against
+//! the quietest of the last 30 s, so a soft start still counts.
 //!
 //! # Where a line's voice is looked for
 //!
@@ -73,12 +85,22 @@ const LOUD_OVER_BACKGROUND: f32 = 2.5;
 /// ... but for at most this long without Silero hearing speech.
 const LOUD_RUN_MS: f64 = 800.0;
 const MIN_LOUD_RMS: f32 = 0.004;
+/// Sound this much above the floor, for at least this long, just before a line's words (at most
+/// `LEAD_IN_GAP_MS` before them) is its lead-in: a stammer, a soft "へえ……".
+const LEAD_IN_OVER_BACKGROUND: f32 = 1.7;
+const MIN_LOUD_MS: f64 = 100.0;
+const LEAD_IN_GAP_MS: f64 = 800.0;
 /// How far back speech can be found to have risen: 20 frames, 640 ms.
 const ONSET_FRAMES: usize = 21;
 /// The background level is a low percentile of the last 4 s of frames: quick to follow music
 /// coming in, while the pauses between words keep speech itself out of it.
 const BACKGROUND_FRAMES: usize = 125;
 const BACKGROUND_PERCENTILE: f64 = 0.2;
+/// How far speech reaches is judged against a slower floor too, the quietest of the last 30 s:
+/// a voice's soft start ("へえ……", "そ、") rises above the room even while music plays. The
+/// quick level alone says when the sound pauses (a voice is over, a chunk can be transcribed).
+const FLOOR_FRAMES: usize = 940;
+const FLOOR_PERCENTILE: f64 = 0.1;
 /// Speech shorter than this is a click, a footstep or a breath.
 const MIN_SPEECH_MS: f64 = 200.0;
 /// A line's voice may start this long before its anchor (voices that lead their text).
@@ -91,6 +113,8 @@ const CHUNK_PAUSE_MS: f64 = 400.0;
 const CHUNK_MIN_MS: f64 = 3_000.0;
 const CHUNK_LONG_PAUSE_MS: f64 = 1_500.0;
 const CHUNK_MAX_MS: f64 = 20_000.0;
+/// A chunk the recogniser fails on is tried again this many times before it is skipped.
+const MAX_FAILURES: u32 = 3;
 /// ... and each is heard with this much of the audio before it, so its first word is whole.
 const CHUNK_CONTEXT_MS: f64 = 300.0;
 /// Heard characters further apart than this are separate stretches of speech.
@@ -332,6 +356,11 @@ fn common(a: &[char], b: &[char]) -> usize {
 struct Background {
     frames: VecDeque<f32>,
     level: f32,
+    /// The slower floor (`FLOOR_FRAMES`), and its frames.
+    long: VecDeque<f32>,
+    floor: f32,
+    /// Frames pushed, to re-rank every few.
+    pushed: u64,
 }
 
 impl Background {
@@ -340,12 +369,28 @@ impl Background {
         if self.frames.len() > BACKGROUND_FRAMES {
             self.frames.pop_front();
         }
-        // Every quarter second is plenty.
-        if self.frames.len().is_multiple_of(8) || self.frames.len() < 16 {
-            let mut sorted: Vec<f32> = self.frames.iter().copied().collect();
-            sorted.sort_by(f32::total_cmp);
-            self.level = sorted[((sorted.len() - 1) as f64 * BACKGROUND_PERCENTILE) as usize];
+        self.long.push_back(rms);
+        if self.long.len() > FLOOR_FRAMES {
+            self.long.pop_front();
         }
+        self.pushed += 1;
+        let rank = |frames: &VecDeque<f32>, percentile: f64| {
+            let mut sorted: Vec<f32> = frames.iter().copied().collect();
+            sorted.sort_by(f32::total_cmp);
+            sorted[((sorted.len() - 1) as f64 * percentile) as usize]
+        };
+        // Every quarter second is plenty (every two for the floor).
+        if self.pushed.is_multiple_of(8) || self.frames.len() < 16 {
+            self.level = rank(&self.frames, BACKGROUND_PERCENTILE);
+        }
+        if self.pushed.is_multiple_of(64) || self.long.len() < 16 {
+            self.floor = rank(&self.long, FLOOR_PERCENTILE);
+        }
+    }
+
+    /// The level speech is judged against: the quick level, or the floor below it.
+    fn speech_level(&self) -> f32 {
+        self.level.min(self.floor)
     }
 }
 
@@ -390,11 +435,17 @@ pub struct Listener {
     /// (or a sound effect), which a line's clip takes in just before its words.
     bursts: Vec<Span>,
     burst: Option<Span>,
+    /// Stretches of sound above the floor (`LEAD_IN_OVER_BACKGROUND`), oldest first: a stammer
+    /// or a soft "へえ……" before a line's words, which Silero does not call speech.
+    louds: Vec<Span>,
+    loud_run: Option<Span>,
     /// What the recogniser heard, chunk by chunk, oldest first, and where the next chunk starts.
     transcripts: Vec<Heard>,
     transcribed_until: f64,
     /// Transcribed chunks with words in them so far: lines are tried again when it grows.
     heard_count: usize,
+    /// The recogniser failed on the chunk this many times in a row.
+    failures: u32,
     /// Tests give the transcripts themselves, standing in for the recogniser.
     given_transcripts: bool,
     /// The end of the last frame that was speech or loud.
@@ -426,9 +477,12 @@ impl Listener {
             voiced: None,
             bursts: Vec::new(),
             burst: None,
+            louds: Vec::new(),
+            loud_run: None,
             transcripts: Vec::new(),
             transcribed_until: f64::NEG_INFINITY,
             heard_count: 0,
+            failures: 0,
             given_transcripts: false,
             last_sound: f64::NEG_INFINITY,
             heard_until: f64::NEG_INFINITY,
@@ -475,6 +529,8 @@ impl Listener {
         self.spoken.clear();
         self.bursts.clear();
         self.burst = None;
+        self.louds.clear();
+        self.loud_run = None;
         self.transcripts.clear();
         self.transcribed_until = f64::NEG_INFINITY;
         self.last_sound = f64::NEG_INFINITY;
@@ -491,6 +547,9 @@ impl Listener {
         let uid = line.uid.clone();
         if self.lines.record(line) {
             self.states.insert(uid, LineState::default());
+            // Lines the timeline let go of (it keeps the newest few hundred).
+            let lines = &self.lines;
+            self.states.retain(|uid, _| lines.get(uid).is_some());
         }
     }
 
@@ -684,19 +743,26 @@ impl Listener {
     /// out from the background; speech runs on (and back, to where the sound rose) while it
     /// stays loud.
     fn hear(&mut self, p: f32, rms: f32, t: f64) {
-        let level = self.background.level;
+        let (level, floor) = (self.background.level, self.background.speech_level());
         self.background.push(rms);
-        let loud = rms >= (LOUD_OVER_BACKGROUND * level).max(MIN_LOUD_RMS);
-        let seed = p >= vad::ON || (p >= WEAK_SPEECH && rms >= (SEED_OVER_BACKGROUND * level).max(MIN_SEED_RMS));
+        let loud = rms >= (LOUD_OVER_BACKGROUND * floor).max(MIN_LOUD_RMS);
+        let seed = p >= vad::ON || (p >= WEAK_SPEECH && rms >= (SEED_OVER_BACKGROUND * floor).max(MIN_SEED_RMS));
         self.recent.push_back((t, loud));
         while self.recent.len() > ONSET_FRAMES {
             self.recent.pop_front();
         }
         let end = t + vad::FRAME_MS;
-        if loud || p >= vad::OFF {
+        if p >= vad::OFF || rms >= (LOUD_OVER_BACKGROUND * level).max(MIN_LOUD_RMS) {
             self.last_sound = end;
         }
-        if rms >= (SEED_OVER_BACKGROUND * level).max(MIN_SEED_RMS) {
+        if rms >= (LEAD_IN_OVER_BACKGROUND * floor).max(MIN_LOUD_RMS) {
+            self.loud_run.get_or_insert(Span { start: t, end }).end = end;
+        } else if let Some(run) = self.loud_run.take().filter(|r| r.end - r.start >= MIN_LOUD_MS) {
+            self.louds.push(run);
+            let excess = self.louds.len().saturating_sub(UTTERANCES_KEEP);
+            self.louds.drain(..excess);
+        }
+        if rms >= (SEED_OVER_BACKGROUND * floor).max(MIN_SEED_RMS) {
             self.burst.get_or_insert(Span { start: t, end }).end = end;
         } else if let Some(burst) = self.burst.take() {
             self.bursts.push(burst);
@@ -794,12 +860,16 @@ impl Listener {
         }
         let pause = self.heard_until - self.last_sound.max(start);
         let length = self.heard_until - start;
+        // A line waiting for its voice to be heard: the speech so far, at its first pause.
+        let waiting = self.states.values().any(|s| s.decision.is_none());
+        // Never longer than half the recording kept, so a chunk's start is still held.
+        let longest = CHUNK_MAX_MS.min(ring.seconds() * 500.0);
         let end = if now {
             self.heard_until
-        } else if pause >= CHUNK_PAUSE_MS && (length >= CHUNK_MIN_MS || pause >= CHUNK_LONG_PAUSE_MS) {
+        } else if pause >= CHUNK_PAUSE_MS && (length >= CHUNK_MIN_MS || pause >= CHUNK_LONG_PAUSE_MS || waiting) {
             // In the middle of the pause, so neither chunk clips a sound.
             (self.heard_until - pause / 2.0).max(start)
-        } else if length >= CHUNK_MAX_MS {
+        } else if length >= longest {
             self.heard_until
         } else {
             return;
@@ -807,9 +877,26 @@ impl Listener {
         if end <= start {
             return;
         }
-        self.transcribed_until = end;
         let sound = self.last_sound > start || self.speech(start, end).iter().any(|_| true);
-        let chars = if sound { self.recognise(ring, start, end) } else { Vec::new() };
+        let chars = if sound {
+            match self.recognise(ring, start, end) {
+                Ok(chars) => chars,
+                // Tried again next time, a few times, while the audio is held.
+                Err(e) if self.failures < MAX_FAILURES => {
+                    self.failures += 1;
+                    eprintln!("[sentence-audio] {e}");
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("[sentence-audio] {e}; skipping {:.1}s of audio", (end - start) / 1000.0);
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        };
+        self.failures = 0;
+        self.transcribed_until = end;
         if !chars.is_empty() {
             self.heard_count += 1;
         }
@@ -819,21 +906,16 @@ impl Listener {
     }
 
     /// The characters heard between `start` and `end` (with a little audio before, for context).
-    fn recognise(&mut self, ring: &AudioRing, start: f64, end: f64) -> Vec<crate::sense_voice::HeardChar> {
-        let Some(asr) = &mut self.asr else { return Vec::new() };
-        let Some(clip) = ring.snapshot(start - CHUNK_CONTEXT_MS, end) else { return Vec::new() };
+    fn recognise(&mut self, ring: &AudioRing, start: f64, end: f64) -> Result<Vec<crate::sense_voice::HeardChar>, String> {
+        let Some(asr) = &mut self.asr else { return Ok(Vec::new()) };
+        let Some(clip) = ring.snapshot(start - CHUNK_CONTEXT_MS, end) else { return Ok(Vec::new()) };
         let audio = vad::to_16k(&clip.samples, clip.sample_rate);
-        match asr.transcribe(&audio) {
-            Ok(chars) => chars
-                .into_iter()
-                .map(|c| crate::sense_voice::HeardChar { ch: c.ch, ms: clip.start_ms + c.ms })
-                .filter(|c| c.ms >= start - CHUNK_CONTEXT_MS / 2.0)
-                .collect(),
-            Err(e) => {
-                eprintln!("[sentence-audio] {e}");
-                Vec::new()
-            }
-        }
+        Ok(asr
+            .transcribe(&audio)?
+            .into_iter()
+            .map(|c| crate::sense_voice::HeardChar { ch: c.ch, ms: clip.start_ms + c.ms })
+            .filter(|c| c.ms >= start - CHUNK_CONTEXT_MS / 2.0)
+            .collect())
     }
 
     /// What the recogniser heard between `from` and `to`, as stretches of speech: the characters,
@@ -929,14 +1011,17 @@ impl Listener {
         out
     }
 
-    /// Whether a scan already decided without a final match is worth trying again: the
-    /// recogniser has heard more since, and the scan is recent enough for that to be its voice.
+    /// Whether a scan already decided is worth trying again: one of its lines has no final match,
+    /// the recogniser has heard more since, and the scan is recent enough for that to be its
+    /// voice. (Lines already final keep their decision: `replaces`.)
     fn retry_due(&self, unit: &[Line], now: f64) -> bool {
         let Some(newest) = unit.iter().map(|l| l.ts).reduce(f64::max) else { return false };
         self.recognising()
             && now - newest < RETRY_MS
-            && unit.iter().all(|l| !self.decision(&l.uid).is_some_and(|d| is_final(&d.outcome)))
-            && unit.iter().any(|l| self.states.get(&l.uid).is_some_and(|s| s.tried < self.heard_count))
+            && unit.iter().any(|l| {
+                let state = self.states.get(&l.uid);
+                state.is_some_and(|s| s.tried < self.heard_count && !s.decision.as_ref().is_some_and(|d| is_final(&d.outcome)))
+            })
     }
 
     /// Where `line`'s voice is looked for, in Unix ms (`to` is open-ended for the newest line).
@@ -965,7 +1050,10 @@ impl Listener {
         if next.is_some() {
             return heard_until >= to && !self.unfinished(to);
         }
-        if heard_until - anchor < SETTLE_AFTER_MS || self.unfinished(to) || self.speaking.is_some() {
+        // A line scanned with no sign of when it appeared was already on screen: its voice has
+        // begun (or is over), and only has to end. Others wait for theirs to start.
+        let settled = (line.ocr && line.appeared.is_none()) || heard_until - anchor >= SETTLE_AFTER_MS;
+        if !settled || self.unfinished(to) || self.speaking.is_some() {
             return false;
         }
         match self.speech(from, heard_until).iter().map(|s| s.end).reduce(f64::max) {
@@ -1007,11 +1095,18 @@ impl Listener {
                 start = span.start;
             }
         }
+        // A softer lead-in right before that.
+        for span in self.louds.iter().rev() {
+            if span.start >= floor && span.start < start && span.end >= start - LEAD_IN_GAP_MS {
+                start = span.start;
+            }
+        }
         // After it, only speech of its own (a trailing laugh, a last word the recogniser missed):
         // an utterance running on from the match may be the next line said without a pause.
         for span in &spans {
-            // Speech that runs on past the next line's anchor is the next line's.
-            let own = span.end <= ceiling + TAIL_MS;
+            // Speech that runs on past the next line's anchor is the next line's (what reaches the
+            // window's end was cut there: it ran on).
+            let own = span.end < ceiling + TAIL_MS - 1.0;
             let speech = span.end - span.start >= MIN_TRAILING_MS;
             if own && speech && span.start >= end - CHAR_TAIL_MS && span.start <= end + TRAILING_GAP_MS && span.end > end {
                 end = span.end.min(ceiling);
@@ -1033,10 +1128,18 @@ impl Listener {
         }
         let claimed = self.claimed(unit);
         let stretches = if to > from { self.heard(from, to, &claimed) } else { Vec::new() };
+        // Every block of the scan is looked for. One that looks like a name box (short, no
+        // punctuation: `speaking_lines`) may still be what is said, or a name inside the words,
+        // or noise the OCR picked up: it needs strong evidence of its own (`said_aside`).
         let speaks = speaking_lines(unit);
-        let mut candidates: Vec<(usize, Match)> =
-            (0..unit.len()).filter(|&i| speaks[i]).filter_map(|i| self.matched(&unit[i], &stretches, from, to).map(|m| (i, m))).collect();
-        candidates.sort_by(|(a, x), (b, y)| matched_letters(&unit[*b], y).total_cmp(&matched_letters(&unit[*a], x)));
+        let mut candidates: Vec<(usize, Match)> = (0..unit.len())
+            .filter_map(|i| self.matched(&unit[i], &stretches, from, to).map(|m| (i, m)))
+            .filter(|(i, m)| speaks[*i] || said_aside(&unit[*i], m))
+            .collect();
+        // Most letters heard first; of equals, the one that reads like dialogue.
+        candidates.sort_by(|(a, x), (b, y)| {
+            matched_letters(&unit[*b], y).total_cmp(&matched_letters(&unit[*a], x)).then(speaks[*b].cmp(&speaks[*a]))
+        });
         let debug = std::env::var_os("KIMOCHI_SENTENCE_AUDIO_DEBUG").is_some();
         if debug {
             let heard: Vec<String> = stretches.iter().map(|s| format!("{:.2}-{:.2} {}", s.start_ms / 1000.0, s.end_ms / 1000.0, s.text())).collect();
@@ -1049,42 +1152,70 @@ impl Listener {
                 unit[main].anchor() / 1000.0,
             );
         }
-        let elsewhere = |text: &str| format!("another line of the scan has the voice ({})", short(text));
+        // The voices heard in the scan: each the speech of one or more of its blocks (a box read
+        // as two blocks shares one voice; boxes said apart each have their own).
+        struct Voiced {
+            start: f64,
+            end: f64,
+            lines: Vec<(usize, Match)>,
+        }
+        let mut voices: Vec<Voiced> = Vec::new();
+        for (i, m) in candidates {
+            // The same words as a block that matched better.
+            if voices.iter().flat_map(|v| &v.lines).any(|(_, o)| overlap(o, &m) > SAME_VOICE) {
+                continue;
+            }
+            // Words of its own, not a syllable that happens to be in the speech.
+            let letters = matched_letters(&unit[i], &m);
+            let substantial = letters >= MIN_MATCHED_LOOSE || (m.score >= FINAL_SCORE && letters >= MIN_OPENING);
+            let (s, e) = self.around_match(&unit[i], &m, &stretches, from, to);
+            let first = voices.is_empty();
+            // Next to a voice: the rest of the same box, unless the part said first ends its
+            // sentence (two boxes said one after the other).
+            let continues = |v: &Voiced| {
+                let said_first = if m.start_ms < v.start {
+                    &unit[i].text
+                } else {
+                    let (k, _) = v.lines.iter().max_by(|a, b| a.1.end_ms.total_cmp(&b.1.end_ms)).unwrap();
+                    &unit[*k].text
+                };
+                !ends_sentence(said_first)
+            };
+            match voices.iter_mut().find(|v| m.start_ms <= v.end + EXTEND_GAP_MS && m.end_ms >= v.start - EXTEND_GAP_MS && continues(v)) {
+                Some(voice) if substantial => {
+                    (voice.start, voice.end) = (voice.start.min(s), voice.end.max(e));
+                    voice.lines.push((i, m));
+                }
+                Some(_) => {}
+                None if first || substantial => voices.push(Voiced { start: s, end: e, lines: vec![(i, m)] }),
+                None => {}
+            }
+        }
         let mut outcomes = vec![(Outcome::Silent, String::new()); unit.len()];
-        if let Some((best, m)) = candidates.first() {
-            let (mut start, mut end) = self.around_match(&unit[*best], m, &stretches, from, to);
-            let mut voiced = vec![(*best, m.clone())];
-            for (i, m) in &candidates[1..] {
-                let apart = voiced.iter().all(|(_, v)| overlap(v, m) <= SAME_VOICE);
-                let near = m.start_ms <= end + EXTEND_GAP_MS && m.end_ms >= start - EXTEND_GAP_MS;
-                // Words of its own, not a syllable that happens to be in the voice.
-                let substantial = matched_letters(&unit[*i], m) >= MIN_MATCHED_LOOSE;
-                if apart && near && substantial {
-                    let (s, e) = self.around_match(&unit[*i], m, &stretches, from, to);
-                    (start, end) = (start.min(s), end.max(e));
-                    voiced.push((*i, m.clone()));
+        if let Some(first) = voices.first() {
+            let best = first.lines[0].0;
+            for voice in &voices {
+                if debug {
+                    eprintln!("[sentence-audio] {}: matched, cut {:.2}-{:.2}", unit[voice.lines[0].0].uid, voice.start / 1000.0, voice.end / 1000.0);
+                }
+                for (i, m) in &voice.lines {
+                    let note = format!("matched {:.0}% by its words: heard “{}”", m.score * 100.0, m.heard);
+                    outcomes[*i] = (self.cut(voice.start, voice.end, How::Matched(m.clone())), note);
                 }
             }
-            if debug {
-                eprintln!("[sentence-audio] {}: matched, cut {:.2}-{:.2}", unit[*best].uid, start / 1000.0, end / 1000.0);
-            }
             for (i, outcome) in outcomes.iter_mut().enumerate() {
-                *outcome = match voiced.iter().find(|(v, _)| *v == i) {
-                    Some((_, m)) => {
-                        let note = format!("matched {:.0}% by its words: heard “{}”", m.score * 100.0, m.heard);
-                        (self.cut(start, end, How::Matched(m.clone())), note)
-                    }
-                    None => (Outcome::Silent, elsewhere(&unit[*best].text)),
-                };
+                if outcome.1.is_empty() {
+                    outcome.1 = elsewhere(&unit[best].text, speaks[i]);
+                }
             }
             return outcomes;
         }
         // The same text as a line already matched (scanned again): its voice.
         for (i, line) in unit.iter().enumerate().filter(|(i, _)| speaks[*i]) {
             if let Some(voice) = self.same_text(line, unit, held_from) {
-                outcomes[i] = (Outcome::Voiced(voice), "the same text as an earlier line: its voice".into());
-                for (_, other) in outcomes.iter_mut().enumerate().filter(|(k, _)| *k != i) {
-                    other.1 = elsewhere(&unit[i].text);
+                outcomes[i] = (Outcome::Voiced(voice), "the same text as the scan just before: its voice".into());
+                for (k, other) in outcomes.iter_mut().enumerate().filter(|(k, _)| *k != i) {
+                    other.1 = elsewhere(&unit[i].text, speaks[k]);
                 }
                 return outcomes;
             }
@@ -1093,7 +1224,7 @@ impl Listener {
         outcomes[main] = self.timed(&unit[main], previous, from, to, &stretches, &heard_text);
         for (i, outcome) in outcomes.iter_mut().enumerate() {
             if i != main {
-                outcome.1 = if speaks[i] { elsewhere(&unit[main].text) } else { "a name box: never voiced".into() };
+                outcome.1 = elsewhere(&unit[main].text, speaks[i]);
             }
         }
         outcomes
@@ -1105,6 +1236,7 @@ impl Listener {
     /// the speech that started by then and what runs on from it.
     fn matched(&self, line: &Line, stretches: &[Heard], from: f64, to: f64) -> Option<Match> {
         let latest = line.ts + LEAD_MS;
+        let letters = matching::fold(&line.text).0.len() as f64;
         let m = if line.ocr {
             let mut usable: Vec<Heard> = Vec::new();
             for s in stretches {
@@ -1125,8 +1257,11 @@ impl Listener {
         } else {
             matching::find_near(&line.text, stretches, from, to, line.anchor())?
         };
-        let letters = matching::fold(&line.text).0.len() as f64;
         let matched = m.score * letters;
+        // One letter heard is chance, not the line (unless the line is one letter).
+        if matched < letters.min(2.0) {
+            return None;
+        }
         // A voice cut short (the player clicked on) matches only the line's opening words.
         let opening = m.from_line_start && matched >= MIN_OPENING;
         (m.score >= MIN_SCORE || (m.score >= MIN_SCORE_LOOSE && matched >= MIN_MATCHED_LOOSE) || opening).then_some(m)
@@ -1161,14 +1296,18 @@ impl Listener {
             .collect()
     }
 
-    /// The voice of an earlier line with the same text that was matched by its words, while its
-    /// audio is still held.
+    /// The voice of a line of the scan just before with the same text, matched by its words,
+    /// while its audio is still held: a line scanned twice is one presentation.
     fn same_text(&self, line: &Line, unit: &[Line], held_from: f64) -> Option<Voice> {
         let text = matching::fold(&line.text).0;
         if text.len() < 2 {
             return None;
         }
-        self.lines.iter().rev().filter(|l| l.ts <= line.ts && !unit.iter().any(|u| u.uid == l.uid)).find_map(|l| {
+        // Only the scan just before: the same text scanned again. Further back, the same words
+        // ("はい") may be said again by someone else.
+        let before = self.lines.iter().rev().find(|l| l.ts <= line.ts && !unit.iter().any(|u| u.uid == l.uid))?;
+        let previous = |l: &Line| l.uid == before.uid || (before.scan.is_some() && l.scan == before.scan);
+        self.lines.iter().rev().filter(|l| previous(l)).find_map(|l| {
             match self.decision(&l.uid).map(|d| &d.outcome) {
                 Some(Outcome::Voiced(v)) if matches!(v.how, How::Matched(_)) && v.from_ms >= held_from && matching::fold(&l.text).0 == text => {
                     Some(v.clone())
@@ -1286,8 +1425,9 @@ fn units(lines: &[Line]) -> Vec<std::ops::Range<usize>> {
     out
 }
 
-/// Which lines of a scan can be voiced: all of them, unless some look like dialogue and the
-/// others like a name box beside it (short, with no punctuation), which is never voiced.
+/// Which lines of a scan read like what is said: all of them, unless some look like dialogue and
+/// the others like a name box beside it (short, with no punctuation). A lean, not a rule: a
+/// name-like block that was clearly said gets its voice too (`said_aside`).
 fn speaking_lines(unit: &[Line]) -> Vec<bool> {
     let name_like = |l: &Line| {
         unit.len() > 1
@@ -1311,6 +1451,26 @@ fn main_line(unit: &[Line]) -> usize {
         return unit.len() - 1;
     }
     (0..unit.len()).max_by_key(|&i| (speaks[i], matching::fold(&unit[i].text).0.len())).unwrap_or(0)
+}
+
+/// Whether text ends a sentence (。！？…, or a closing quote after one).
+fn ends_sentence(text: &str) -> bool {
+    text.trim_end().trim_end_matches(['」', '』', '）', ')', '"']).ends_with(['。', '！', '？', '!', '?', '…', '‥', '.'])
+}
+
+/// Why a line of a scan has no voice of its own.
+fn elsewhere(text: &str, speaks: bool) -> String {
+    if speaks {
+        format!("another line of the scan has the voice ({})", short(text))
+    } else {
+        format!("looks like a name box, and its words were not heard on their own (the voice went to {})", short(text))
+    }
+}
+
+/// Whether a block that looks like a name box was said itself: nearly all of it heard, as it
+/// appeared or was scanned (not in some earlier voice that happens to say the name).
+fn said_aside(line: &Line, m: &Match) -> bool {
+    m.score >= FINAL_SCORE && matched_letters(line, m) >= 2.0 && m.end_ms >= line.anchor() - MISHEARD_RECENT_MS
 }
 
 /// How many of the line's letters a match heard.
@@ -1455,7 +1615,54 @@ mod tests {
         let voice = matched(listener.decision("said")).expect("the dialogue matched by its words");
         assert!(voice.0 < 10_000.0 && voice.1 > 11_000.0, "{voice:?}");
         assert_eq!(listener.decision("name").unwrap().outcome, Outcome::Silent);
-        assert!(listener.note("name").unwrap().contains("another line"), "{:?}", listener.note("name"));
+        assert!(listener.note("name").unwrap().contains("name box"), "{:?}", listener.note("name"));
+    }
+
+    #[test]
+    fn every_box_of_a_scan_that_was_said_gets_its_own_voice() {
+        let (mut listener, ring) = listening();
+        // Two speakers' boxes on screen at once (or a short subtitle beside another): said apart.
+        say(&mut listener, 10_000.0, "今日はいい天気ですね");
+        say(&mut listener, 12_600.0, "ありがとう");
+        listener.line(scanned("long", "今日はいい天気ですね。", 14_000.0, "s1"));
+        listener.line(scanned("short", "ありがとう", 14_000.0, "s1"));
+        listener.line(scanned("noise", "MENU", 14_000.0, "s1"));
+        listener.tick(&ring, 20_000.0);
+        let (long, short) = (matched(listener.decision("long")).unwrap(), matched(listener.decision("short")).unwrap());
+        assert!(long.1 < 12_600.0 && short.0 > 11_500.0, "each its own voice: {long:?} {short:?}");
+        assert_eq!(listener.decision("noise").unwrap().outcome, Outcome::Silent);
+    }
+
+    #[test]
+    fn a_name_box_is_not_voiced_by_the_name_said_in_the_dialogue_or_long_before() {
+        let (mut listener, ring) = listening();
+        say(&mut listener, 2_000.0, "フリッツ先生このお店ですか");
+        say(&mut listener, 10_000.0, "シーアおはよう");
+        listener.line(scanned("name", "シーア", 12_000.0, "s1"));
+        listener.line(scanned("said", "シーア、おはよう！", 12_000.0, "s1"));
+        listener.tick(&ring, 18_000.0);
+        assert!(matched(listener.decision("said")).is_some());
+        assert_eq!(listener.decision("name").unwrap().outcome, Outcome::Silent, "the name is the dialogue's");
+        // A name box whose dialogue was not heard: the name was said, but 18 s before.
+        listener.line(scanned("name2", "フリッツ", 20_000.0, "s2"));
+        listener.line(scanned("said2", "……", 20_000.0, "s2"));
+        listener.tick(&ring, 30_000.0);
+        assert!(matched(listener.decision("name2")).is_none(), "{:?}", listener.decision("name2"));
+    }
+
+    #[test]
+    fn the_same_words_said_again_are_not_the_earlier_lines_voice() {
+        let (mut listener, ring) = listening();
+        say(&mut listener, 10_000.0, "はい");
+        listener.line(scanned("first", "はい", 11_000.0, "s1"));
+        listener.tick(&ring, 16_000.0);
+        assert!(matched(listener.decision("first")).is_some());
+        listener.line(scanned("between", "行きましょう。", 18_000.0, "s2"));
+        // Someone says "はい" again later, and the recogniser mishears it.
+        say(&mut listener, 24_000.0, "ない");
+        listener.line(scanned("again", "はい", 25_000.0, "s3"));
+        listener.tick(&ring, 32_000.0);
+        assert!(!matches!(listener.decision("again").unwrap().outcome, Outcome::Voiced(_)), "{:?}", listener.decision("again"));
     }
 
     #[test]

@@ -49,7 +49,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   the speech model (240 MB) in the same place and Kimochi hears what is said, so each line gets
   exactly its own voice, even lines read by OCR and lines spoken back to back, whether you scan
   while the line is still being spoken or long after; a speaker's name read beside the dialogue
-  never takes its voice, and a line that has found its voice keeps it. You can also have the mined
+  doesn't take its voice, other boxes said aloud get their own, and a line that has found its
+  voice keeps it. The clip is usually there a second or two after the voice ends. You can also have the mined
   word's own audio put in a second field. Diagnostics → Sentence audio shows what was heard and
   why each line got its voice or didn't. The last 15 clips are kept (you can keep more);
   the recording itself stays in memory. On macOS it uses the Screen Recording permission; on Linux

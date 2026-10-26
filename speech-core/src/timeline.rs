@@ -81,7 +81,8 @@ impl Timeline {
     }
 
     /// The line a card was made from: the newest whose text best matches one of `texts` (the
-    /// card's sentence, or every field of an extension's card), else the newest line.
+    /// card's sentence, or every field of an extension's card). None when none matches: a card
+    /// is better without audio than with another line's. With no text to go by, the newest line.
     pub fn mined(&self, texts: &[&str]) -> Option<&Line> {
         let wanted: Vec<String> = texts
             .iter()
@@ -103,7 +104,10 @@ impl Timeline {
                 best = Some((score, line));
             }
         }
-        best.map(|(_, line)| line).or_else(|| self.lines.back())
+        if wanted.is_empty() {
+            return self.lines.back();
+        }
+        best.map(|(_, line)| line)
     }
 }
 
@@ -191,10 +195,9 @@ mod tests {
             "a",
             "one of the card's fields"
         );
-        assert_eq!(
-            t.mined(&["猫"]).unwrap().uid,
-            "c",
-            "a lone word matches no line: the newest"
+        assert!(
+            t.mined(&["猫"]).is_none(),
+            "a lone word matches no line: no audio rather than another line's"
         );
         assert_eq!(t.mined(&[]).unwrap().uid, "c");
         assert!(Timeline::default().mined(&["x"]).is_none());

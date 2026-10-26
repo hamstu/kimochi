@@ -192,12 +192,15 @@ pub struct Debug {
 }
 
 /// A clip ready for Anki.
+/// Taken from the clip store in one go, so a line decided again while the card is being sent
+/// cannot mix one clip's audio with another's word.
 pub struct Made {
-    pub uid: String,
     pub filename: String,
     pub mp3: Vec<u8>,
     pub duration_ms: f64,
     pub matched: bool,
+    /// The mined word and its audio, when asked for and found in the line.
+    pub word: Option<(String, Vec<u8>)>,
 }
 
 /// What the service needs from the app: kept apart so the tests run it without one.
@@ -424,6 +427,10 @@ impl SentenceAudio {
                     Input::Forget(uids) => {
                         ears.listener.forget(&uids);
                         lock(&self.lines).retain(|l| !uids.contains(&l.uid));
+                        let mut store = lock(&self.store);
+                        for uid in &uids {
+                            store.remove(uid);
+                        }
                     }
                     Input::Screen(text, at) => ears.listener.screen.observed(&text, at),
                 }
@@ -539,16 +546,19 @@ impl SentenceAudio {
         (self.host.emit)(&line);
     }
 
-    /// The line a card was made from (`texts`: the card's sentence, or all its fields), and its
-    /// audio. Waits (up to `MAX_WAIT_MS`) while the line's voice may still be playing.
-    pub fn make(&self, texts: &[&str]) -> Result<Made, String> {
+    /// The line a card was made from (found by its fields' text: its sentence, or all of them),
+    /// and its audio. Waits (up to `MAX_WAIT_MS`) while the line's voice may still be playing.
+    /// `fields`: the card's fields (name, text); `word`: the mined word, when known, else found
+    /// among the fields; `want_word`: cut the word's audio too.
+    pub fn make(&self, fields: &[(String, String)], word: Option<String>, want_word: bool) -> Result<Made, String> {
         if !self.recording() {
             return Err("System audio is not being recorded.".into());
         }
+        let texts: Vec<&str> = fields.iter().map(|(_, v)| v.as_str()).collect();
         let (uid, ts) = {
             let ears = lock(&self.ears);
-            let line = ears.as_ref().and_then(|e| e.listener.mined(texts));
-            let line = line.ok_or("No line has arrived in the Log since recording started.")?;
+            let ears = ears.as_ref().ok_or("No line has arrived in the Log since recording started.")?;
+            let line = ears.listener.mined(&texts).ok_or("The card's sentence is not a line in the Log, so no audio was added.")?;
             (line.uid.clone(), line.ts)
         };
         while self.line_state(&uid).is_none() && now_ms() - ts < MAX_WAIT_MS && self.recording() {
@@ -566,13 +576,21 @@ impl SentenceAudio {
         let state = self.line_state(&uid).ok_or("The line's audio could not be found.")?;
         match state.state {
             "voiced" => {
-                let mp3 = self.clip(&uid).ok_or("The line's clip is no longer kept.")?;
+                let store = lock(&self.store);
+                let info = store.get(&uid).ok_or("The line's clip is no longer kept.")?;
+                let mp3 = store.read(&uid).ok_or("The line's clip is no longer kept.")?;
+                let word = if want_word {
+                    let word = word.or_else(|| card_word(fields, &info.text));
+                    word.and_then(|w| store.word(&uid, &w).map(|mp3| (w, mp3)))
+                } else {
+                    None
+                };
                 Ok(Made {
                     filename: format!("kimochi_{}.mp3", now_ms() as u64),
                     mp3,
-                    duration_ms: state.duration_ms.unwrap_or(0.0),
-                    matched: state.how.as_deref() == Some("matched"),
-                    uid: uid.to_string(),
+                    duration_ms: info.duration_ms,
+                    matched: info.how == "matched",
+                    word,
                 })
             }
             "silent" => Err(SILENT.into()),
@@ -619,13 +637,9 @@ impl SentenceAudio {
             return Ok(());
         }
         let service = self.clone();
-        let texts: Vec<String> = fields.iter().map(|(_, v)| v.clone()).collect();
-        let made = tauri::async_runtime::spawn_blocking(move || {
-            let texts: Vec<&str> = texts.iter().map(String::as_str).collect();
-            service.make(&texts)
-        })
-        .await
-        .map_err(|e| e.to_string())??;
+        let made = tauri::async_runtime::spawn_blocking(move || service.make(&fields, word, word_empty))
+            .await
+            .map_err(|e| e.to_string())??;
         let mut update = serde_json::Map::new();
         let mut done = Vec::new();
         if sentence_empty {
@@ -635,9 +649,7 @@ impl SentenceAudio {
             done.push(format!("{:.1} seconds of audio to “{field}”", made.duration_ms / 1000.0));
         }
         if word_empty {
-            let line_text = lock(&self.store).get(&made.uid).map(|c| c.text.clone()).unwrap_or_default();
-            let word = word.or_else(|| card_word(&fields, &line_text));
-            match word.and_then(|w| lock(&self.store).word(&made.uid, &w).map(|mp3| (w, mp3))) {
+            match made.word {
                 Some((w, mp3)) => {
                     let filename = format!("kimochi_{}_word.mp3", now_ms() as u64);
                     let data = base64::engine::general_purpose::STANDARD.encode(&mp3);
@@ -648,6 +660,11 @@ impl SentenceAudio {
                 None if made.matched => done.push("no word audio (the word was not found in the line)".into()),
                 None => done.push("no word audio (needs the speech model)".into()),
             }
+        }
+        // Filled meanwhile (by hand, or another card's audio): left as it is.
+        let info = anki.call("notesInfo", json!({ "notes": [note_id] })).await?;
+        if let Some(now) = info.get(0).and_then(|n| n.get("fields")) {
+            update.retain(|name, _| now.get(name).and_then(|f| f.get("value")).and_then(Value::as_str).is_none_or(|v| v.trim().is_empty()));
         }
         if !update.is_empty() {
             anki.call("updateNoteFields", json!({ "note": { "id": note_id, "fields": update } })).await?;
