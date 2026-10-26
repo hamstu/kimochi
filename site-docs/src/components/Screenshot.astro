@@ -1,9 +1,12 @@
 ---
 /**
  * One docs screenshot, in the reader's theme. Files come from `npm run docs:screenshots`
- * (src/assets/screenshots/<id>-light.webp and -dark.webp, captured at 2×); Astro turns each into
- * AVIF and WebP (the <img> fallback) at 1× and 2× of its display size. Both themes are in the page; CSS shows the one
- * that matches the `data-theme` Starlight sets on <html>.
+ * (src/assets/screenshots/<id>-light.webp and -dark.webp, captured at 2×, plus each one rendered at
+ * the width it is shown, at 1× and 2×: <id>-<theme>.w<width>x<density>.webp). Those rendered files
+ * are used as they are, so a 1× screen gets text drawn for its own pixels rather than a resampled
+ * picture; without them Astro resizes the 2× capture. Each becomes AVIF and WebP (the <img>
+ * fallback). Both themes are in the page; CSS shows the one that matches the `data-theme`
+ * Starlight sets on <html>.
  *
  *   <Screenshot id="main-window" alt="…" caption="…" width={640} />
  *
@@ -11,7 +14,7 @@
  * `src` takes another image folder's pair instead (e.g. the dictionary previews), as
  * { light, dark } imports, with `scale` their device pixel ratio.
  */
-import { Picture } from 'astro:assets'
+import { Picture, getImage } from 'astro:assets'
 import type { ImageMetadata } from 'astro'
 
 interface Props {
@@ -34,16 +37,48 @@ function load(theme: 'light' | 'dark'): ImageMetadata {
   return file.default
 }
 
+/** The docs column (46rem) plus the capture's 1rem tuck each side: the widest a capture is shown. */
+const COLUMN = 736 + 32
+/** Captures carry a transparent margin that the CSS below tucks in by 1rem each side. */
+const FRAME = src ? 0 : 32
+
 const images = { light: load('light'), dark: load('dark') }
 const natural = Math.round(images.light.width / scale)
 const display = Math.min(width ?? natural, natural)
 const loading = eager ? 'eager' : 'lazy'
+
+/** The capture rendered at exactly the width it is shown, for 1× and 2× screens, as AVIF and WebP. */
+const shown = Math.min(display, COLUMN)
+async function rendered(theme: 'light' | 'dark') {
+  if (src) return null
+  const one = shots[`../assets/screenshots/${id}-${theme}.w${shown}x1.webp`]?.default
+  const two = shown === natural ? images[theme] : shots[`../assets/screenshots/${id}-${theme}.w${shown}x2.webp`]?.default
+  if (!one || !two) return null
+  const encode = (file: ImageMetadata, format: 'avif' | 'webp') =>
+    getImage({ src: file, width: file.width, height: file.height, format, quality: 82 })
+  const srcset = async (format: 'avif' | 'webp') => {
+    const [a, b] = await Promise.all([encode(one, format), encode(two, format)])
+    return { one: a.src, set: `${a.src} 1x, ${b.src} 2x` }
+  }
+  return { width: one.width, height: one.height, avif: await srcset('avif'), webp: await srcset('webp') }
+}
+const native = { light: await rendered('light'), dark: await rendered('dark') }
+const shownWidth = native.light?.width ?? display
 ---
 
-<figure class:list={['k-shot', { 'k-shot-plain': Boolean(src) }]} style={`--k-shot-w: ${display}px`}>
+<figure class:list={['k-shot', { 'k-shot-plain': Boolean(src) }]} style={`--k-shot-w: ${shownWidth - FRAME}px`}>
   {
-    (['light', 'dark'] as const).map((theme) => (
+    (['light', 'dark'] as const).map((theme) => {
+      const n = native[theme]
+      return (
       <span class:list={['k-shot-theme', `k-shot-${theme}`]}>
+      {n ? (
+        <picture>
+          <source type="image/avif" srcset={n.avif.set} />
+          <source type="image/webp" srcset={n.webp.set} />
+          <img src={n.webp.one} srcset={n.webp.set} alt={alt} width={n.width} height={n.height} loading={loading} decoding="async" />
+        </picture>
+      ) : (
       <Picture
         src={images[theme]}
         alt={alt}
@@ -56,13 +91,17 @@ const loading = eager ? 'eager' : 'lazy'
         loading={loading}
         decoding="async"
       />
+      )}
       </span>
-    ))
+      )
+    })
   }
   {caption && <figcaption>{caption}</figcaption>}
 </figure>
 
 <style>
+  /* --k-shot-w is the visible window: the image is that plus the tucked-in margin, so it is drawn
+     at exactly its own pixel width wherever the column has room, never stretched. */
   .k-shot {
     margin: 1.25rem auto 1.75rem;
     max-width: min(100%, var(--k-shot-w));

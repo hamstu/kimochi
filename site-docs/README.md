@@ -34,7 +34,8 @@ site-docs/
     pages/changelog.astro the repository's CHANGELOG.md, rendered
     components/           Screenshot, Todo, and the Starlight overrides (SiteTitle, Footer, Head)
     styles/theme.css      Starlight mapped onto the marketing site's tokens
-    assets/screenshots/   <id>-light.webp / <id>-dark.webp, written by docs:screenshots
+    assets/screenshots/   <id>-light.webp / <id>-dark.webp (2×), and <id>-<theme>.w<width>x<1|2>.webp
+                          (rendered at the width a page shows it), written by docs:screenshots
 ```
 
 ## Writing pages
@@ -83,8 +84,14 @@ How it works (`scripts/docs-screenshots.mjs`):
 4. The stage's box is captured as PNG and written as lossless WebP. Every page runs on a fixed clock
    (2026-10-21 19:45 UTC, time zone UTC, locale en-US), so the harness's seeded timestamps don't
    drift: re-running on an unchanged window writes a byte-identical file, and `git status` shows
-   only the shots whose window really changed. At build time Astro's image
-   pipeline turns each into AVIF and WebP at 1× and 2× of its display width.
+   only the shots whose window really changed.
+5. For every width the pages show a shot at (each `<Screenshot id width>` in `src/content/docs`,
+   capped at the column, 46rem plus the 1rem tuck each side), the same staged page is captured again
+   with Chrome drawing at that size, at 1× and 2× (`<id>-<theme>.w<width>x<density>.webp`). The
+   component serves those files as they are, so the image is never resized by Astro or the browser:
+   on a 1× screen the text is rasterized for its own pixels instead of a soft, resampled 2× picture.
+   A shot used at a new width falls back to Astro's resizing until the next run, so re-run the
+   shot after changing a `width`.
 
 A shot is one entry in `shots/shots.config.mjs`:
 

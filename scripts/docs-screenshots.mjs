@@ -15,14 +15,18 @@
  *   transparent ground, plays the shot's actions with real CDP mouse and key input, then draws its
  *   marks: glowing outlines, a dimmed surround (focus), numbered badges, callout notes, a cursor.
  * - Shots are declared in site-docs/shots/shots.config.mjs. Each is written as lossless WebP
- *   (`<id>-light.webp`, `<id>-dark.webp`); Astro's image pipeline turns them into AVIF/WebP at 1×
- *   and 2× when the docs build. The social cards (site-docs/public/og.png, `og`;
+ *   (`<id>-light.webp`, `<id>-dark.webp`) at 2×. The social cards (site-docs/public/og.png, `og`;
  *   site/public/og.png, `og-site`) are drawn the same way.
+ * - Each screenshot is also rendered at the size the docs show it, at 1× and (when smaller than its
+ *   own size) 2× (`<id>-<theme>.w<width>x<density>.webp`): Chrome draws the page again at that
+ *   scale, so a 1× screen gets text rasterized for its pixels instead of a resampled 2× picture,
+ *   which reads soft. The sizes come from the `<Screenshot id width>` uses in the docs' pages and
+ *   the column width below; Screenshot.astro picks the files up by name.
  *
  * Needs `npm ci` (root), `npm ci --prefix site` (for site shots) and `npm ci --prefix site-docs`
  * (sharp). Chrome is found as in scripts/cdp.mjs (`$CHROME` overrides).
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -33,6 +37,9 @@ const docs = path.join(root, 'site-docs')
 const STAGE = path.join(docs, 'shots/stage')
 const OUT = path.join(docs, 'src/assets/screenshots')
 const SCALE = 2
+/** The widest a screenshot is shown: the docs column (46rem) plus the frame's 1rem tuck each side. */
+const COLUMN = 736 + 32
+const CONTENT = path.join(docs, 'src/content/docs')
 
 const requireDocs = createRequire(path.join(docs, 'package.json'))
 const sharp = (await import(pathToFileURL(requireDocs.resolve('sharp')).href)).default
@@ -124,6 +131,9 @@ function pageUrl(shot, theme) {
   const [file, query = ''] = shot.page.split('?')
   const params = new URLSearchParams(query)
   if (shot.server !== 'site' && !params.has('theme')) params.set('theme', theme)
+  // The harness starts on a first run, with no dictionary engine downloaded; the docs show the app
+  // in use. The welcome guide's shots keep the first run unless they say otherwise.
+  if (shot.server !== 'site' && !params.has('ext') && !file.startsWith('welcome')) params.set('ext', 'ready')
   const base = shot.server === 'site' ? '/' : '/dev/'
   return `${base}${file}${params.size ? `?${params}` : ''}`
 }
@@ -206,6 +216,37 @@ async function shoot(page, servers, shot, theme) {
   return capture(page, clip)
 }
 
+/** Every `<Screenshot id="…" width={…}>` in the docs, as id → the widths it is asked for. */
+async function usages() {
+  const found = new Map()
+  for (const entry of await readdir(CONTENT, { recursive: true })) {
+    if (!/\.mdx?$/.test(entry)) continue
+    const text = await readFile(path.join(CONTENT, entry), 'utf8')
+    for (const [tag] of text.matchAll(/<Screenshot\b[^>]*?\/>/gs)) {
+      const id = tag.match(/\bid="([^"]+)"/)?.[1]
+      if (!id) continue
+      const width = Number(tag.match(/\bwidth=\{(\d+)\}/)?.[1]) || undefined
+      found.set(id, [...(found.get(id) ?? []), width])
+    }
+  }
+  return found
+}
+
+/**
+ * The widths (in CSS pixels, frame included) a shot of `natural` width is drawn at in the docs:
+ * Screenshot.astro shows it at min(width, natural), and never wider than the column.
+ */
+function shownWidths(asked = [], natural) {
+  return [...new Set(asked.map((w) => Math.min(w ?? natural, natural, COLUMN)))]
+}
+
+/** The shot again at `scale` device pixels per CSS pixel, the page left as it is. */
+async function rescale(page, scale) {
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: scale, mobile: false })
+  await sleep(300)
+  return capture(page, await evaluate(page, '__stage.clip()'))
+}
+
 async function write(file, png) {
   const webp = await sharp(png).webp({ lossless: true, effort: 5 }).toBuffer()
   await writeFile(file, webp)
@@ -237,6 +278,7 @@ async function main() {
     await page.send('Emulation.setLocaleOverride', { locale: 'en-US' })
     await page.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK, runImmediately: true })
     await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
+    const used = await usages()
     for (const shot of shots) {
       for (const theme of shot.themes ?? themes) {
         if (!themes.includes(theme)) continue
@@ -245,6 +287,20 @@ async function main() {
           const png = await shoot(page, servers, shot, theme)
           const { width, height, bytes } = await write(file, png)
           console.log(`✓ ${path.relative(root, file)}  ${width}×${height}  ${Math.round(bytes / 1024)} KB`)
+          const natural = width / SCALE
+          // Sizes a page no longer asks for go with the old capture.
+          const sizedName = /^(.+)\.w\d+x\d\.webp$/
+          for (const old of (await readdir(OUT)).filter((f) => f.match(sizedName)?.[1] === `${shot.id}-${theme}`))
+            await rm(path.join(OUT, old))
+          for (const shown of shownWidths(used.get(shot.id), natural)) {
+            // At its own width, the 2× file already is the 2× picture.
+            for (const density of shown === natural ? [1] : [1, 2]) {
+              const sized = path.join(OUT, `${shot.id}-${theme}.w${shown}x${density}.webp`)
+              const out = await write(sized, await rescale(page, (density * shown) / natural))
+              console.log(`  ↳ ${path.basename(sized)}  ${out.width}×${out.height}`)
+            }
+          }
+          await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
         } catch (error) {
           failed++
           console.error(`✗ ${shot.id} (${theme}): ${error.message}`)
