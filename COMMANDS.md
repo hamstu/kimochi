@@ -1230,8 +1230,8 @@ has been heard, or a quiet spell for the newest line, which is decided again whe
   the previous line's). An OCR'd line not seen drawing in is only timed without the model.
 - no speech at all: `silent`.
 
-A voiced line's clip is padded 150 ms before and 300 ms after, moved by the offsets, levelled
-toward −1 dBFS (×8 at most), faded over 50 ms and encoded as mono MP3 at 96 kbit/s into
+A voiced line's clip is padded 150 ms before and 300 ms after, moved by the offsets, kept at
+the loudness it was recorded at (as the game played it), faded over 50 ms and encoded as mono MP3 at 96 kbit/s into
 `<app local data>/sentence-audio/` (the newest `clips` kept, with `clips.json`).
 
 A card's audio: its line is the newest Log line whose text best matches the card's sentence (the

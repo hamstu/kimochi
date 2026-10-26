@@ -1,4 +1,4 @@
-//! Clips: a decided line's voice cut out of the recording, levelled, faded and encoded, and the
+//! Clips: a decided line's voice cut out of the recording, faded and encoded, and the
 //! last few kept on disk (`ClipStore`) so the Log can play them and a card made later still gets
 //! its audio, without the recording having to reach that far back.
 use crate::listener::{How, Voice};
@@ -25,14 +25,15 @@ pub struct Rendered {
     pub duration_ms: f64,
 }
 
-/// Cut `voice` out of `ring`, level it, fade its ends and encode it.
+/// Cut `voice` out of `ring`, fade its ends and encode it. Its loudness is left as recorded:
+/// the recording is taken before the system's volume (ScreenCaptureKit, WASAPI loopback, a
+/// PipeWire monitor), so a clip played on the same computer sounds as the game did.
 pub fn render(ring: &AudioRing, voice: &Voice) -> Result<Rendered, String> {
     let clip = ring.snapshot(voice.from_ms, voice.to_ms).ok_or("The line's audio is no longer held.")?;
     if clip.samples.len() < clip.sample_rate as usize / 10 {
         return Err("The clip came out empty: check the offsets in Settings → Anki.".into());
     }
     let mut samples = clip.samples;
-    trim::level(&mut samples);
     trim::fade(&mut samples, clip.sample_rate);
     let mp3 = encode::mp3(&samples, clip.sample_rate)?;
     Ok(Rendered {
