@@ -59,7 +59,7 @@ import {
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
-import { createSoundPlayer, outcomeSound } from './sounds.js'
+import { createSoundPlayer, outcomeSound, soundKind, soundKindOn } from './sounds.js'
 import * as native from './native.js'
 
 let waylandDisabled = false
@@ -216,8 +216,18 @@ async function mirrorDictionaryEngine({ repair = false } = {}) {
   }
 }
 
-/** Scan sounds; the setting is read at each one, so turning them off in Settings is immediate. */
-const playSound = createSoundPlayer({ enabled: () => setting('soundEffects') })
+/** Scan sounds; the settings are read at each one, so turning them off in Settings is immediate. */
+const playSound = createSoundPlayer({
+  enabled: (name) =>
+    soundKindOn(
+      {
+        soundEffects: setting('soundEffects'),
+        soundEffectsScans: setting('soundEffectsScans'),
+        soundEffectsClicks: setting('soundEffectsClicks')
+      },
+      soundKind(name)
+    )
+})
 
 /**
  * Post how a scan ended, with the sound it calls for (see sounds.ts). Progress posts go through

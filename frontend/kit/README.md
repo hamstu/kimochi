@@ -27,9 +27,9 @@ The shared design system for every Kimochi window. Import components from `@kit`
 - **Theme:** light and dark both have to work. Use roles, never `prefers-color-scheme` media
   queries; the appearance controller puts `.light` / `.dark` on `<html>`.
 - **Sound:** every button, link, switch, checkbox, tab and menu item clicks on its own (one listener per
-  window, `ui/sounds.ts`): switches play on/off, closed menu triggers play an open sound. Give a
-  control `data-sound="<name>"` when its job has its own sound, or `data-sound="none"` when it
-  already makes one (Scan).
+  window, `ui/sounds.ts`), all with the same click. Give a control `data-sound="<name>"` when its
+  job has its own sound (only the sidebar's whoosh does), or `data-sound="none"` when it already
+  makes one (Scan).
 - **Inactive windows:** `:hover` rules are mirrored to `[data-native-hover]` automatically; keep
   hover styles in plain `:hover` rules in stylesheets (not only in inline JS state).
 

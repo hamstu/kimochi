@@ -197,7 +197,6 @@ export default function MainPanel(): JSX.Element {
           </Tooltip>}
           {<IconButton
             label={mini ? 'Expand Kimochi' : 'Mini mode'} size="sm"
-            data-sound={mini ? 'mini-exit' : 'mini-enter'}
             onClick={() => void changeMini(!mini)}>
             {mini ? <Maximize2 /> : <Minimize2 />}
           </IconButton>}

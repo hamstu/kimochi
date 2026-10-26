@@ -35,7 +35,7 @@ import {
   type HostStatus,
   type SetupStep
 } from '@ui/yomitan-api-setup'
-import { playAudio } from '@ui/sounds'
+import { playAudio, soundKindOn } from '@ui/sounds'
 import { getSetting } from '../bridge/settings'
 import { nativeError } from '../bridge/tauri'
 import { installHost, useYomitanApiSetup } from '../bridge/yomitanApi'
@@ -47,13 +47,13 @@ const open = (url: string): void => {
   openUrl(url).catch((error: unknown) => console.error('Open link failed:', nativeError(error).message))
 }
 
-/** The success chime (Kenney's CC0 "bong", the scan-done sound), unless sound effects are off. */
+/** The interface's click, unless sound effects (or their clicks) are off. */
 function playSuccess(): void {
-  getSetting<boolean>('soundEffects', true)
-    .then((enabled) => {
-      if (enabled !== false) playAudio('scan-done')
+  Promise.all([getSetting<boolean>('soundEffects', true), getSetting<boolean>('soundEffectsClicks', true)])
+    .then(([soundEffects, soundEffectsClicks]) => {
+      if (soundKindOn({ soundEffects, soundEffectsClicks }, 'clicks')) playAudio('click')
     })
-    .catch(() => playAudio('scan-done'))
+    .catch(() => playAudio('click'))
 }
 
 type Install = { state: 'idle' | 'installing' | 'done' | 'error'; message: string | null }

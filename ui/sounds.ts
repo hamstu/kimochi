@@ -1,8 +1,10 @@
 /**
  * Sound effects for scanning: a pluck when the reader asks for a scan, a chime when lines reach
- * the Log, a buzz when a scan fails. And for the interface: a soft click for buttons, a pair for
- * switches, and their own sounds for the sidebar, mini mode, pinning and turning sound back on
- * (see `soundForClick`).
+ * the Log, a buzz when a scan fails. And for the interface: one soft click for every control, and
+ * a whoosh for showing and hiding the sidebar (see `controlSound`).
+ *
+ * Settings → General has a switch for all of them (`soundEffects`) and, under it, one for each
+ * kind (`soundEffectsScans`, `soundEffectsClicks`; see `soundKindOn`).
  *
  * The overlay decides when; this module decides whether, and plays. Which outcome earns which
  * sound is read off the activity post the overlay already makes for it (scan-activity.ts), so the
@@ -22,34 +24,35 @@ import type { ActivityPost } from './activity.js'
 export type ScanSound = 'scan-start' | 'scan-done' | 'scan-error'
 
 /** Interface sounds, synthesized with Earshot (see ui/sounds/LICENSE.txt). */
-export type InterfaceSound =
-  | 'click'
-  | 'toggle-on'
-  | 'toggle-off'
-  | 'menu-open'
-  | 'sidebar-show'
-  | 'sidebar-hide'
-  | 'mini-enter'
-  | 'mini-exit'
-  | 'pin-on'
-  | 'pin-off'
-  | 'sound-on'
+export type InterfaceSound = 'click' | 'sidebar-show' | 'sidebar-hide'
 
 export type SoundName = ScanSound | InterfaceSound
 
-export const INTERFACE_SOUNDS: readonly InterfaceSound[] = [
-  'click',
-  'toggle-on',
-  'toggle-off',
-  'menu-open',
-  'sidebar-show',
-  'sidebar-hide',
-  'mini-enter',
-  'mini-exit',
-  'pin-on',
-  'pin-off',
-  'sound-on'
-]
+export const INTERFACE_SOUNDS: readonly InterfaceSound[] = ['click', 'sidebar-show', 'sidebar-hide']
+
+/**
+ * `data-sound="sound-on"` marks the control that turns sound effects back on: it clicks although
+ * sound effects are off, so turning them on is heard.
+ */
+export const SOUND_ON = 'sound-on'
+
+/** Which setting under `soundEffects` a sound belongs to. */
+export function soundKind(name: SoundName): 'scans' | 'clicks' {
+  return name === 'scan-start' || name === 'scan-done' || name === 'scan-error' ? 'scans' : 'clicks'
+}
+
+/** The sound settings, as stored; anything but an explicit `false` is on (the defaults, and a store that predates a key). */
+export interface SoundSettings {
+  soundEffects?: unknown
+  soundEffectsScans?: unknown
+  soundEffectsClicks?: unknown
+}
+
+/** Whether a kind of sound plays: sound effects on, and that kind on under them. */
+export function soundKindOn(settings: SoundSettings, kind: 'scans' | 'clicks'): boolean {
+  if (settings.soundEffects === false) return false
+  return (kind === 'scans' ? settings.soundEffectsScans : settings.soundEffectsClicks) !== false
+}
 
 export const SOUND_NAMES: readonly SoundName[] = [
   'scan-start',
@@ -101,8 +104,11 @@ export function errorMayRing(
 }
 
 export interface SoundPlayerOptions {
-  /** The `soundEffects` setting, read at each sound so a change in Settings applies at once. */
-  enabled: () => unknown
+  /**
+   * Whether this sound may play now: the sound settings, read at each sound so a change in
+   * Settings applies at once. A boolean (or anything but `false`) answers for every sound.
+   */
+  enabled: (name: SoundName) => unknown
   play?: (name: SoundName) => void
   now?: () => number
 }
@@ -120,7 +126,7 @@ export function createSoundPlayer({
   if (play === playAudio) preloadSounds()
   return (name, { auto = false } = {}) => {
     // Anything but an explicit `false` is on: the default, and a store that predates the key.
-    if (!name || enabled() === false) return false
+    if (!name || enabled(name) === false) return false
     if (name === 'scan-error') {
       const at = now()
       if (!errorMayRing(lastErrorAt, at, auto)) return false
@@ -179,7 +185,7 @@ export function createAudioPlayer(
 
 /** What a clicked control is, as far as its sound goes; read before the click changes it. */
 export interface ControlFacts {
-  /** `data-sound` on the control or around it: a sound name, or `none` for silence. */
+  /** `data-sound` on the control or around it: a sound name, `sound-on`, or `none` for silence. */
   explicit?: string | null
   /** Its ARIA role, or `button` / `link` for the plain elements. */
   role: string | null
@@ -193,23 +199,21 @@ export interface ControlFacts {
   disabled?: boolean
 }
 
-const CHECKABLE = new Set(['switch', 'checkbox', 'menuitemcheckbox'])
+/** A control's sound: a sound name, or `sound-on` (a click that plays with sound effects off). */
+export type ControlSound = SoundName | typeof SOUND_ON
 
 /**
- * The sound a click on a control calls for. A switch sounds the state it is going to, which is
- * the opposite of the one it shows before the click; a closed menu trigger opens with its own
- * sound; anything else clicks. `data-sound` overrides all of it, for controls whose job has a
- * sound of its own (sidebar, mini mode, pin) or that already make one (Scan).
+ * The sound a click on a control calls for: a click, whatever the control. `data-sound` overrides
+ * it, for the sidebar's whoosh, the control that turns sound back on, and controls that already
+ * make a sound of their own (Scan: `none`).
  */
-export function controlSound(facts: ControlFacts | null): SoundName | null {
+export function controlSound(facts: ControlFacts | null): ControlSound | null {
   if (!facts?.role || facts.disabled) return null
   if (facts.explicit) {
-    return (SOUND_NAMES as readonly string[]).includes(facts.explicit)
-      ? (facts.explicit as SoundName)
+    return facts.explicit === SOUND_ON || (SOUND_NAMES as readonly string[]).includes(facts.explicit)
+      ? (facts.explicit as ControlSound)
       : null
   }
-  if (CHECKABLE.has(facts.role)) return facts.checked === 'true' ? 'toggle-off' : 'toggle-on'
-  if (facts.popup && !facts.expanded) return 'menu-open'
   return 'click'
 }
 
@@ -269,7 +273,7 @@ function opensOnKey(facts: ControlFacts, key: string): boolean {
  * A key sounds only a closed menu or select trigger that opens on it (the open menu takes the
  * keys, so no click comes); other keys wait for the click they make.
  */
-export function pressSound(facts: ControlFacts | null, key?: string): SoundName | null {
+export function pressSound(facts: ControlFacts | null, key?: string): ControlSound | null {
   if (key === undefined) return controlSound(facts)
   if (!facts?.popup || facts.expanded) return null
   if (!opensOnKey(facts, key)) return null
@@ -280,7 +284,7 @@ export function pressSound(facts: ControlFacts | null, key?: string): SoundName 
  * Click sounds for every control in a window, from capturing listeners on `root`, which run before
  * the control's own handlers so a switch and a menu trigger still show their old state. A pointer
  * press sounds its control (`pressSound`), and the click that follows on the same control stays
- * quiet; a click with no press before it (Enter, Space, a script) sounds on the click. `sound-on` is the one sound that plays with sound effects off: it belongs to
+ * quiet; a click with no press before it (Enter, Space, a script) sounds on the click. `sound-on` is the one click that plays with sound effects off: it belongs to
  * the control that turns them back on, and only it carries it. Returns the uninstaller.
  */
 export function installInteractionSounds(
@@ -288,8 +292,8 @@ export function installInteractionSounds(
   { enabled, play = playAudio }: Pick<SoundPlayerOptions, 'enabled' | 'play'>
 ): () => void {
   const player = createSoundPlayer({ enabled, play })
-  const sound = (name: SoundName | null): void => {
-    if (name === 'sound-on') play(name)
+  const sound = (name: ControlSound | null): void => {
+    if (name === SOUND_ON) play('click')
     else player(name)
   }
   // The trigger whose press already sounded, so its own click (a popover's, or Enter's) does not.

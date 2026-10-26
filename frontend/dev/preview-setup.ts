@@ -88,7 +88,7 @@
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit, listen } from '@tauri-apps/api/event'
 import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, dictionaryEngineOf, hostEngineOf, nextOverlayToggle } from '@ui/settings'
-import { SOUND_NAMES, createSoundPlayer, type SoundName } from '@ui/sounds'
+import { SOUND_NAMES, createSoundPlayer, soundKind, soundKindOn, type SoundName } from '@ui/sounds'
 import { DEFAULT_CAPABILITIES_MACOS, type PlatformCapabilities } from '@ui/capabilities'
 import { mergeHotkeysWithOverrides } from '../vendor/shared-defaults'
 import {
@@ -1016,9 +1016,9 @@ let embedScan = 0
 /**
  * The app's sounds, played in this page: the overlay's chime when a scan's lines reach the Log
  * (the app's overlay is not here to ring it), and `sound` from the parent for the demo's scripted
- * clicks on its own desktop. The `soundEffects` setting applies, as in the app.
+ * clicks on its own desktop. The sound settings apply, as in the app.
  */
-const embedSound = createSoundPlayer({ enabled: () => settings.soundEffects })
+const embedSound = createSoundPlayer({ enabled: (name) => soundKindOn(settings, soundKind(name)) })
 
 /**
  * Muted while the demo is out of sight (`muted` from the parent): every sound this page would play,

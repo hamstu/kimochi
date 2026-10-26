@@ -19,7 +19,9 @@ const {
   createSoundPlayer,
   errorMayRing,
   outcomeSound,
-  playAudio
+  playAudio,
+  soundKind,
+  soundKindOn
 } = await load('sounds.ts')
 const scanActivity = await load('scan-activity.ts')
 const { SETTINGS_DEFAULTS } = await load('settings.ts')
@@ -32,8 +34,34 @@ function player({ enabled = () => true } = {}) {
   return { play, played, clock }
 }
 
-test('sound effects are on by default', () => {
+test('sound effects are on by default, scans and clicks both', () => {
   assert.equal(SETTINGS_DEFAULTS.soundEffects, true)
+  assert.equal(SETTINGS_DEFAULTS.soundEffectsScans, true)
+  assert.equal(SETTINGS_DEFAULTS.soundEffectsClicks, true)
+})
+
+test('scan sounds and click sounds each have their own switch, under the one for all', () => {
+  assert.equal(soundKind('scan-start'), 'scans')
+  assert.equal(soundKind('scan-done'), 'scans')
+  assert.equal(soundKind('scan-error'), 'scans')
+  assert.equal(soundKind('click'), 'clicks')
+  assert.equal(soundKind('sidebar-show'), 'clicks')
+  // A store from before the keys existed: every sound on.
+  assert.equal(soundKindOn({}, 'scans'), true)
+  assert.equal(soundKindOn({ soundEffectsClicks: false }, 'scans'), true)
+  assert.equal(soundKindOn({ soundEffectsClicks: false }, 'clicks'), false)
+  assert.equal(soundKindOn({ soundEffectsScans: false }, 'scans'), false)
+  assert.equal(soundKindOn({ soundEffectsScans: false }, 'clicks'), true)
+  // Off for all wins over either kind.
+  assert.equal(soundKindOn({ soundEffects: false, soundEffectsScans: true }, 'scans'), false)
+  assert.equal(soundKindOn({ soundEffects: false, soundEffectsClicks: true }, 'clicks'), false)
+})
+
+test('the interface has one click, and the sidebar its whoosh', () => {
+  assert.deepEqual(
+    SOUND_NAMES.filter((name) => soundKind(name) === 'clicks'),
+    ['click', 'sidebar-show', 'sidebar-hide']
+  )
 })
 
 test('every sound has its file beside the overlay modules', async () => {
@@ -219,16 +247,14 @@ test('a refused or throwing play is swallowed', async () => {
   await new Promise((resolve) => setTimeout(resolve, 0))
 })
 
-test('buttons click, switches sound where they are going, closed menus open', () => {
+test('every control clicks: buttons, links, switches, menus', () => {
   assert.equal(controlSound({ role: 'button' }), 'click')
   assert.equal(controlSound({ role: 'link' }), 'click')
   assert.equal(controlSound({ role: 'menuitem' }), 'click')
-  // Read before the click lands: an unchecked switch is being turned on.
-  assert.equal(controlSound({ role: 'switch', checked: 'false' }), 'toggle-on')
-  assert.equal(controlSound({ role: 'switch', checked: 'true' }), 'toggle-off')
-  assert.equal(controlSound({ role: 'checkbox', checked: 'indeterminate' }), 'toggle-on')
-  assert.equal(controlSound({ role: 'menuitemcheckbox', checked: 'true' }), 'toggle-off')
-  assert.equal(controlSound({ role: 'button', popup: 'menu' }), 'menu-open')
+  assert.equal(controlSound({ role: 'switch', checked: 'false' }), 'click')
+  assert.equal(controlSound({ role: 'switch', checked: 'true' }), 'click')
+  assert.equal(controlSound({ role: 'menuitemcheckbox', checked: 'true' }), 'click')
+  assert.equal(controlSound({ role: 'button', popup: 'menu' }), 'click')
   assert.equal(controlSound({ role: 'button', popup: 'menu', expanded: true }), 'click')
   assert.equal(controlSound({ role: 'button', disabled: true }), null)
   assert.equal(controlSound(null), null)
@@ -236,7 +262,9 @@ test('buttons click, switches sound where they are going, closed menus open', ()
 
 test('data-sound overrides the control, and none or an unknown name is silent', () => {
   assert.equal(controlSound({ role: 'button', explicit: 'sidebar-hide' }), 'sidebar-hide')
-  assert.equal(controlSound({ role: 'switch', checked: 'true', explicit: 'pin-on' }), 'pin-on')
+  assert.equal(controlSound({ role: 'button', explicit: 'sound-on' }), 'sound-on')
+  // Sounds that are gone (pin, mini mode) are silent rather than a missing file.
+  assert.equal(controlSound({ role: 'switch', checked: 'true', explicit: 'pin-on' }), null)
   assert.equal(controlSound({ role: 'button', explicit: 'none' }), null)
   assert.equal(controlSound({ role: 'button', explicit: 'kaboom' }), null)
 })
@@ -277,7 +305,7 @@ test('a click inside a control reads the control and the nearest data-sound', ()
   const muted = element('button', {}, region)
   assert.equal(controlSound(readControl(muted)), null)
   const toggle = element('button', { role: 'switch', 'aria-checked': 'true' })
-  assert.equal(controlSound(readControl(element('span', {}, toggle))), 'toggle-off')
+  assert.equal(controlSound(readControl(element('span', {}, toggle))), 'click')
   // Text, a field, the window ground: not controls, no sound.
   assert.equal(readControl(element('p')), null)
   assert.equal(readControl(null), null)
@@ -300,7 +328,8 @@ test('interaction sounds follow the setting, except the one that turns sound on'
   on = false
   click(element('button'))
   click(element('button', { 'data-sound': 'sound-on' }))
-  assert.deepEqual(played, ['click', 'sound-on'])
+  // Turning sound back on is heard: the same click, with sound effects still off.
+  assert.deepEqual(played, ['click', 'click'])
   uninstall()
   assert.equal(listeners.has('click'), false)
 })
@@ -308,23 +337,23 @@ test('interaction sounds follow the setting, except the one that turns sound on'
 test('a pointer press sounds every control; a key only a menu or select it opens', () => {
   const menu = { role: 'button', popup: 'menu' }
   const select = { role: 'combobox', popup: 'listbox' }
-  assert.equal(pressSound(menu), 'menu-open')
-  assert.equal(pressSound(select), 'menu-open')
+  assert.equal(pressSound(menu), 'click')
+  assert.equal(pressSound(select), 'click')
   // The press sounds what the click would have, at once.
   assert.equal(pressSound({ ...menu, expanded: true }), 'click')
   assert.equal(pressSound({ role: 'button' }), 'click')
-  assert.equal(pressSound({ role: 'switch', checked: 'false' }), 'toggle-on')
+  assert.equal(pressSound({ role: 'switch', checked: 'false' }), 'click')
   assert.equal(pressSound({ ...menu, disabled: true }), null)
   assert.equal(pressSound(null), null)
   // Other keys wait for the click they make.
   assert.equal(pressSound({ role: 'button' }, 'Enter'), null)
   assert.equal(pressSound({ ...menu, expanded: true }, 'Enter'), null)
   // The keys Radix opens each with.
-  assert.equal(pressSound(menu, 'Enter'), 'menu-open')
-  assert.equal(pressSound(menu, ' '), 'menu-open')
-  assert.equal(pressSound(menu, 'ArrowDown'), 'menu-open')
+  assert.equal(pressSound(menu, 'Enter'), 'click')
+  assert.equal(pressSound(menu, ' '), 'click')
+  assert.equal(pressSound(menu, 'ArrowDown'), 'click')
   assert.equal(pressSound(menu, 'ArrowUp'), null)
-  assert.equal(pressSound(select, 'ArrowUp'), 'menu-open')
+  assert.equal(pressSound(select, 'ArrowUp'), 'click')
   assert.equal(pressSound(select, 'a'), null)
   assert.equal(pressSound({ role: 'button', popup: 'dialog' }, 'ArrowDown'), null)
 })
@@ -359,7 +388,8 @@ test('a trigger that sounded on its press does not sound again on its click', ()
   // A click with no press (Enter or Space on a button) sounds on the click.
   fire('keydown', plain, { key: 'Enter' })
   fire('click', plain)
-  assert.deepEqual(played, ['menu-open', 'menu-open', 'menu-open', 'click', 'click'])
+  // Three menu opens and two plain clicks, each heard once.
+  assert.deepEqual(played, ['click', 'click', 'click', 'click', 'click'])
 })
 
 test('a sound starts at its first audible sample, on any channel', () => {

@@ -172,8 +172,12 @@ export interface Settings {
   scannedTextFontSize: number
   appearance: Appearance
   interfaceScale: InterfaceScale
-  /** Sounds when a scan starts, adds lines or fails; see sounds.ts. */
+  /** Every sound effect; see sounds.ts. */
   soundEffects: boolean
+  /** Under `soundEffects`: sounds when a scan starts, adds lines or fails. */
+  soundEffectsScans: boolean
+  /** Under `soundEffects`: the click of buttons, switches and menus, and the sidebar's whoosh. */
+  soundEffectsClicks: boolean
   /** Recording system audio for the cards' sentence audio (src-tauri/src/sentence_audio). This
       computer's: never synced. */
   sentenceAudio: SentenceAudioSettings
@@ -224,6 +228,8 @@ export const SETTINGS_DEFAULTS: Settings = {
   appearance: 'system',
   interfaceScale: 'medium',
   soundEffects: true,
+  soundEffectsScans: true,
+  soundEffectsClicks: true,
   sentenceAudio: {
     enabled: false,
     seconds: 30,

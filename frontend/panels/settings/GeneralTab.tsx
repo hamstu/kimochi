@@ -3,7 +3,7 @@ import { GnomeOverlaySetup } from '../../main/GnomeOverlaySetup'
 import { SteamLibrarySection } from './SteamLibrarySection'
 import type { ReactNode } from 'react'
 import { Monitor, Moon, Sun } from 'lucide-react'
-import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, Switch } from '@kit'
+import { Button, Segmented, SettingsPage, SettingsRow, SettingsSection, SettingsSubgroup, Switch } from '@kit'
 import { useController } from '../useController'
 import { panel } from '../../bridge/tauri'
 import { useSetting } from '../../bridge/useSetting'
@@ -25,6 +25,8 @@ export function GeneralTab(): ReactNode {
   const [appearance, setAppearance] = useSetting<Appearance>('appearance', 'system')
   const [scale, setScale] = useSetting<InterfaceScale>('interfaceScale', 'medium')
   const [soundEffects, setSoundEffects] = useSetting<boolean>('soundEffects', true)
+  const [scanSounds, setScanSounds] = useSetting<boolean>('soundEffectsScans', true)
+  const [clickSounds, setClickSounds] = useSetting<boolean>('soundEffectsClicks', true)
   const { props: controller } = useController()
   const { capture } = useCapabilities()
   // Screen recording is a step only where it is granted in the system's settings.
@@ -64,7 +66,7 @@ export function GeneralTab(): ReactNode {
         <SettingsRow
           label="Sound effects"
           controlId="general-sound-effects"
-          description="Play sounds for scans, buttons, switches and window changes. The speaker in each title bar turns them on and off too."
+          description="Turns every sound on or off. The speaker in each title bar does the same."
         >
           <Switch
             id="general-sound-effects"
@@ -72,6 +74,32 @@ export function GeneralTab(): ReactNode {
             onCheckedChange={(checked) => void setSoundEffects(checked)}
           />
         </SettingsRow>
+        {soundEffects && (
+          <SettingsSubgroup>
+            <SettingsRow
+              label="Scan sounds"
+              controlId="general-sound-scans"
+              description="When a scan starts, adds lines to the Log or fails."
+            >
+              <Switch
+                id="general-sound-scans"
+                checked={scanSounds}
+                onCheckedChange={(checked) => void setScanSounds(checked)}
+              />
+            </SettingsRow>
+            <SettingsRow
+              label="Click sounds"
+              controlId="general-sound-clicks"
+              description="When you click buttons, switches and menus."
+            >
+              <Switch
+                id="general-sound-clicks"
+                checked={clickSounds}
+                onCheckedChange={(checked) => void setClickSounds(checked)}
+              />
+            </SettingsRow>
+          </SettingsSubgroup>
+        )}
       </SettingsSection>
       <SettingsSection title="Diagnostics">
         <SettingsRow
