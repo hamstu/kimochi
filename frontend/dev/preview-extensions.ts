@@ -4,7 +4,8 @@
  * `src-tauri/src/extension_store.rs` does. The twin of `preview-models.ts`.
  *
  *   ?ext=absent|downloading|paused|failed|verifying|ready  the starting state of every engine
- *                                                          (default: all absent, a first run)
+ *                                                          (default: all absent, a first run;
+ *                                                          ready when embedded in the site's demo)
  *   ?ext=updating|update-failed                            after an app update: every engine
  *        ready on an earlier release, its new one downloading in the background (or failed, with
  *        a retry scheduled), as `ExtensionStatus.update`
@@ -65,7 +66,9 @@ function updating(engine: ExtensionEngine, patch: Partial<ExtensionUpdate>): Ext
   })
 }
 
-const seeded = new URLSearchParams(location.search).get('ext')
+const search = new URLSearchParams(location.search)
+// The marketing site's demo (?embed=1) shows the app in use, every engine already downloaded.
+const seeded = search.get('ext') ?? (search.get('embed') === '1' ? 'ready' : null)
 const states = new Map<ExtensionEngine, ExtensionStatus>(
   (Object.keys(ENGINES) as ExtensionEngine[]).map((engine) => {
     const { total, file } = ENGINES[engine]
