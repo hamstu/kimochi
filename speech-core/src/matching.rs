@@ -67,6 +67,10 @@ pub struct Match {
     pub end_ms: f64,
     /// What was heard over the match.
     pub heard: String,
+    /// When the first and last characters the match heard were spoken: what it holds of the
+    /// speech, which no other line can then be matched to.
+    pub heard_from_ms: f64,
+    pub heard_to_ms: f64,
     /// The match begins at the line's first characters (its first three, heard in a row).
     pub from_line_start: bool,
     /// Character boundaries: line character `i` (by `char`) was spoken from `char_ms[i]` to
@@ -274,6 +278,8 @@ pub fn find_near(
         start_ms,
         end_ms,
         heard: heard_text,
+        heard_from_ms: first_ms,
+        heard_to_ms: time(last),
         char_ms,
     })
 }

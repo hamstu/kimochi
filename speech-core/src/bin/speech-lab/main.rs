@@ -7,7 +7,9 @@
 //! session.json   { "audio": "audio.wav", "audioStartMs": <Unix ms of the first sample> }
 //! audio.wav      what the computer played (mono)
 //! lines.jsonl    one line a row, as the Log got it: {"uid","text","ts","source":"hook"|"ocr",
-//!                "appeared"?: ms, "truth"?: {"voiced": bool, "startMs": ms, "endMs": ms}}
+//!                "appeared"?: ms, "scan"?: id (a scan's lines share it: name box, dialogue),
+//!                "replaces"?: [uid…] (a fuller reading that took those lines' place),
+//!                "kind"?: "name", "truth"?: {"voiced": bool, "startMs": ms, "endMs": ms}}
 //! screen.jsonl   optional: the quick screen readings automatic OCR made, {"at": ms, "text"}
 //! ```
 //!
@@ -29,7 +31,8 @@
 //! ```text
 //! speech-lab record <session> [--seconds N]
 //! speech-lab video <file> <session> [--fps 5] [--crop x,y,w,h]
-//! speech-lab synth <dataset.json> <session> [--bgm music.mp3] [--mode hook|typewriter|manual] [--seed N]
+//! speech-lab synth <dataset.json> <session> [--bgm music.mp3] [--mode hook|typewriter|manual]
+//!                  [--names] [--rereads] [--seed N] [--lines N]
 //! speech-lab replay <session> [--model DIR | --no-model] [--out DIR]
 //! ```
 //!
@@ -63,7 +66,8 @@ fn main() {
 const USAGE: &str = "usage:
   speech-lab record <session> [--seconds N]
   speech-lab video <file> <session> [--fps 5] [--crop x,y,w,h]
-  speech-lab synth <dataset.json> <session> [--bgm music.mp3] [--mode hook|typewriter|manual] [--seed N]
+  speech-lab synth <dataset.json> <session> [--bgm music.mp3] [--mode hook|typewriter|manual]
+                   [--names] [--rereads] [--seed N] [--lines N]
   speech-lab replay <session> [--model DIR | --no-model] [--out DIR]";
 
 /// `--name value` from `args`.

@@ -11,9 +11,15 @@
 //!
 //! `--mode` is how the lines reach Kimochi: `hook` (as they appear, like a texthooker),
 //! `typewriter` (drawn in at 35 ms a character and read by automatic OCR: screen readings every
-//! 200 ms, the line logged once the text has settled), or `manual` (a manual OCR scan some
-//! seconds after the voice, with no screen readings). `--bgm` mixes music under it all (looped, at
-//! -18 dB).
+//! 200 ms, the line logged once the text has settled), or `manual` (a manual OCR scan, with no
+//! screen readings: one in three while the voice is still playing, the others up to a few
+//! seconds after it). `--bgm` mixes music under it all (looped, at -18 dB).
+//!
+//! For the OCR modes, `--names` puts the speaker's name box (the dataset's `speaker`) in each
+//! scan beside the dialogue, as its own line, the way OCR reads a game's name plate; and
+//! `--rereads` has one line in four read first in part (automatic OCR settling early, a manual
+//! scan that missed half the box) and then in full, the fuller reading replacing the first in
+//! the Log as the app's history merge does.
 use crate::session::{self, LineRow, Meta, ScreenRow, Truth};
 use serde::Deserialize;
 use std::path::Path;
@@ -32,6 +38,8 @@ struct Entry {
     text: String,
     #[serde(default)]
     voice: Option<String>,
+    #[serde(default)]
+    speaker: Option<String>,
 }
 
 /// A small, seeded random source, so a dataset always lays out the same way.
@@ -62,6 +70,8 @@ pub fn main(args: &[String]) -> Result<(), String> {
     }
     let seed: u64 = crate::flag(args, "--seed").and_then(|s| s.parse().ok()).unwrap_or(7);
     let limit: usize = crate::flag(args, "--lines").and_then(|s| s.parse().ok()).unwrap_or(usize::MAX);
+    let names = crate::has(args, "--names") && mode != "hook";
+    let rereads = crate::has(args, "--rereads") && mode != "hook";
     let entries: Vec<Entry> = serde_json::from_str(&std::fs::read_to_string(dataset).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     let base = dataset.parent().unwrap_or(Path::new("."));
     let mut random = Random(seed.max(1) * 0x9E37_79B9_7F4A_7C15);
@@ -77,6 +87,7 @@ pub fn main(args: &[String]) -> Result<(), String> {
         let mut truth = Truth { voiced: false, start_ms: None, end_ms: None };
         let mut next = shown + 1_200.0 + chars as f64 * 60.0;
         let mut scan_at = drawn + random.between(1_000.0, 3_000.0);
+        let mid_voice = random.next() < 1.0 / 3.0;
         if let Some(voice) = &entry.voice {
             let samples = crate::decode_audio(&base.join(voice), RATE)?;
             let (speech_from, speech_to) = speech_extent(&samples);
@@ -101,7 +112,12 @@ pub fn main(args: &[String]) -> Result<(), String> {
                 audio[at + k] += s;
             }
             truth = Truth { voiced: true, start_ms: Some(T0 + start + speech_from), end_ms: Some(T0 + end) };
-            scan_at = end + random.between(300.0, 3_000.0);
+            scan_at = if mid_voice {
+                // Scanned while the voice is still playing, once the text is there.
+                (start + speech_from + (end - start - speech_from) * random.between(0.2, 0.8)).max(drawn + 200.0)
+            } else {
+                end + random.between(300.0, 3_000.0)
+            };
         }
         let (ts, appeared_screen) = match mode {
             "hook" => (shown + random.between(5.0, 40.0), false),
@@ -111,24 +127,67 @@ pub fn main(args: &[String]) -> Result<(), String> {
         if mode == "manual" {
             next = next.max(scan_at + 500.0);
         }
+        let name = entry.speaker.as_deref().filter(|_| names);
         if appeared_screen {
             let mut at = (shown / READING_MS).ceil() * READING_MS;
             while at < next.min(drawn + 3.0 * READING_MS) {
                 let visible = (((at - shown) / CHAR_MS).floor() as usize).min(chars);
                 if visible > 0 {
-                    screen.push(ScreenRow { at: T0 + at, text: entry.text.chars().take(visible).collect() });
+                    let text: String = entry.text.chars().take(visible).collect();
+                    screen.push(ScreenRow { at: T0 + at, text: name.map_or(text.clone(), |n| format!("{n} {text}")) });
                 }
                 at += READING_MS;
             }
         }
-        lines.push(LineRow {
-            uid: format!("l{:03}", i + 1),
-            text: entry.text.clone(),
-            ts: T0 + ts,
-            source: if mode == "hook" { "hook".into() } else { "ocr".into() },
-            appeared: None,
-            truth: Some(truth),
-        });
+        let uid = format!("l{:03}", i + 1);
+        // A scan: the name box (when there is one) and the dialogue, arriving together.
+        let scan = |uid: &str, text: String, ts: f64, replaces: Vec<String>, truth: Truth| {
+            let mut rows = Vec::new();
+            let ocr = mode != "hook";
+            if let Some(name) = name {
+                rows.push(LineRow {
+                    uid: format!("{uid}n"),
+                    text: name.to_string(),
+                    ts: T0 + ts,
+                    source: "ocr".into(),
+                    scan: Some(format!("s{uid}")),
+                    kind: Some("name".into()),
+                    truth: Some(Truth { voiced: false, start_ms: None, end_ms: None }),
+                    ..LineRow::default()
+                });
+            }
+            rows.push(LineRow {
+                uid: uid.to_string(),
+                text,
+                ts: T0 + ts,
+                source: if ocr { "ocr".into() } else { "hook".into() },
+                scan: ocr.then(|| format!("s{uid}")),
+                replaces,
+                truth: Some(truth),
+                ..LineRow::default()
+            });
+            rows
+        };
+        let mut replaces = Vec::new();
+        let ts = if rereads && chars >= 8 && random.next() < 0.25 {
+            // Read in part first; the full reading follows and takes its place.
+            let partial = format!("{uid}p");
+            let half: String = entry.text.chars().take(chars / 2).collect();
+            let (first, full) = match mode {
+                "typewriter" => (shown + (chars / 2) as f64 * CHAR_MS + SETTLE_TO_LINE_MS, ts),
+                _ => (ts, ts + random.between(800.0, 2_000.0)),
+            };
+            let rows = scan(&partial, half, first, Vec::new(), truth.clone());
+            replaces = rows.iter().map(|r| r.uid.clone()).collect();
+            lines.extend(rows);
+            if mode == "manual" {
+                next = next.max(full + 500.0);
+            }
+            full
+        } else {
+            ts
+        };
+        lines.extend(scan(&uid, entry.text.clone(), ts, replaces, truth));
         t = next.max(ts + 50.0);
     }
     audio.resize(ms_to_index(t + 3_000.0), 0.0);

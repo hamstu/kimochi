@@ -2781,6 +2781,8 @@ fn main() {
             sentence_audio::sentence_audio_status,
             sentence_audio::sentence_audio_line,
             sentence_audio::sentence_audio_lines,
+            sentence_audio::sentence_audio_forget,
+            sentence_audio::sentence_audio_debug,
             sentence_audio::sentence_audio_clip,
             sentence_audio::sentence_audio_attach,
             #[cfg(target_os = "linux")]

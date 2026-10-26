@@ -61,8 +61,24 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
     let (mut next_line, mut next_screen) = (0, 0);
     let mut since_tick = 0.0;
     let mut decided: HashMap<String, (Decision, Option<Clipped>)> = HashMap::new();
-    let keep = |decided: &mut HashMap<String, (Decision, Option<Clipped>)>, decisions: Vec<Decision>, ring: &AudioRing| {
+    // Lines whose clip changed after they were matched by their words, other than for a better
+    // match (more of the line heard): what the Log would show flipping.
+    let mut changed_after_match: Vec<String> = Vec::new();
+    let score = |d: &Decision| match &d.outcome {
+        Outcome::Voiced(v) => match &v.how {
+            How::Matched(m) => Some(m.score),
+            How::Timed => None,
+        },
+        _ => None,
+    };
+    let mut keep = |decided: &mut HashMap<String, (Decision, Option<Clipped>)>, decisions: Vec<Decision>, ring: &AudioRing| {
         for d in decisions {
+            if let Some((before, _)) = decided.get(&d.uid) {
+                let flipped = score(before).is_some_and(|b| score(&d).is_none_or(|n| n <= b)) && before.outcome != d.outcome;
+                if flipped && !changed_after_match.contains(&d.uid) {
+                    changed_after_match.push(d.uid.clone());
+                }
+            }
             let clip = match &d.outcome {
                 Outcome::Voiced(voice) => Some(clip(ring, &d, voice, &clips_dir)),
                 _ => None,
@@ -80,12 +96,16 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
             next_screen += 1;
         }
         while let Some(row) = session.lines.get(next_line).filter(|r| r.ts <= now) {
+            if !row.replaces.is_empty() {
+                listener.forget(&row.replaces);
+            }
             listener.line(Line {
                 uid: row.uid.clone(),
                 text: row.text.clone(),
                 ts: row.ts,
                 ocr: row.source == "ocr",
                 appeared: row.appeared,
+                scan: row.scan.clone(),
             });
             next_line += 1;
         }
@@ -109,13 +129,18 @@ pub fn run(session: &Session, model: Option<&Path>, out: &Path) -> Result<Replay
         }
     }
     let elapsed = started.elapsed().as_secs_f64();
+    drop(keep);
+    // Lines a fuller reading replaced are gone from the Log: not reported.
+    let replaced: Vec<&String> = session.lines.iter().flat_map(|l| &l.replaces).collect();
     let rows: Vec<Row> = session
         .lines
         .iter()
+        .filter(|line| !replaced.contains(&&line.uid))
         .map(|line| {
             let (decision, clip) = decided.get(&line.uid).cloned().map_or((None, None), |(d, c)| (Some(d), c));
             let appeared = listener.get_line(&line.uid).and_then(|l| l.appeared);
-            Row { line: line.clone(), decision, clip, appeared }
+            let note = listener.note(&line.uid).unwrap_or_default();
+            Row { line: line.clone(), decision, clip, appeared, note, flipped: changed_after_match.contains(&line.uid) }
         })
         .collect();
     let heard: Vec<_> = listener.transcripts().to_vec();

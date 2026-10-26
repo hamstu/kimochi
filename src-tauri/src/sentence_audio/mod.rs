@@ -50,6 +50,9 @@ const RESTART_AFTER: Duration = Duration::from_secs(5);
 const RETRY_UNAVAILABLE: Duration = Duration::from_secs(30);
 /// Line states kept for the Log: far more than the clips kept.
 const LINES_KEEP: usize = 500;
+/// The Diagnostics window shows this many of the newest lines, and what was heard this far back.
+const DEBUG_LINES: usize = 40;
+const DEBUG_HEARD_MS: f64 = 60_000.0;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -177,6 +180,17 @@ pub struct LineAudio {
     pub message: Option<String>,
 }
 
+/// What the Diagnostics window shows (`sentence_audio_debug`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Debug {
+    pub status: Status,
+    /// Clips kept on disk.
+    pub clips: usize,
+    /// None until recording starts.
+    pub listener: Option<kimochi_speech::listener::Report>,
+}
+
 /// A clip ready for Anki.
 pub struct Made {
     pub uid: String,
@@ -197,6 +211,7 @@ pub struct Host {
 
 enum Input {
     Line(Line),
+    Forget(Vec<String>),
     Screen(String, f64),
 }
 
@@ -336,6 +351,19 @@ impl SentenceAudio {
         }
     }
 
+    /// The Log deleted lines (or a fuller reading replaced them).
+    pub fn forget_lines(&self, uids: Vec<String>) {
+        if *lock(&self.running) && !uids.is_empty() {
+            lock(&self.inbox).push(Input::Forget(uids));
+        }
+    }
+
+    /// What the listener knows, for the Diagnostics window.
+    pub fn debug(&self) -> Debug {
+        let report = lock(&self.ears).as_ref().map(|ears| ears.listener.report(DEBUG_LINES, DEBUG_HEARD_MS));
+        Debug { status: self.status(), clips: lock(&self.store).all().count(), listener: report }
+    }
+
     /// The automatic-scan observer read `text` from the screen at `at_ms`.
     pub fn screen_text(&self, text: &str, at_ms: f64) {
         if *lock(&self.running) {
@@ -393,6 +421,10 @@ impl SentenceAudio {
             for input in lock(&self.inbox).drain(..) {
                 match input {
                     Input::Line(line) => ears.listener.line(line),
+                    Input::Forget(uids) => {
+                        ears.listener.forget(&uids);
+                        lock(&self.lines).retain(|l| !uids.contains(&l.uid));
+                    }
                     Input::Screen(text, at) => ears.listener.screen.observed(&text, at),
                 }
             }
@@ -522,7 +554,8 @@ impl SentenceAudio {
         while self.line_state(&uid).is_none() && now_ms() - ts < MAX_WAIT_MS && self.recording() {
             std::thread::sleep(Duration::from_millis(200));
         }
-        if self.line_state(&uid).is_none() {
+        // Undecided, or decided without a match by its words: try it with everything heard by now.
+        if self.line_state(&uid).is_none_or(|l| l.how.as_deref() != Some("matched")) {
             let mut guard = lock(&self.ears);
             if let Some(ears) = guard.as_mut() {
                 if let Some(decision) = ears.listener.decide_now(&ears.ring, now_ms(), &uid) {
@@ -778,9 +811,30 @@ pub fn sentence_audio_status(service: tauri::State<'_, Arc<SentenceAudio>>) -> S
 
 /// The Log added a line (or changed one: a start-merge keeps its `uid`). `ts`: its arrival, in
 /// Unix ms. `source`: the Log's line source (`ocr`, `websocket`, `clipboard`, `webhook`).
+/// `scan`: the OCR scan it was read in (a scan's lines, a name box and the dialogue, share it).
 #[tauri::command]
-pub fn sentence_audio_line(service: tauri::State<'_, Arc<SentenceAudio>>, uid: String, text: String, ts: f64, source: String) {
-    service.record_line(Line { uid, text, ts, ocr: source == "ocr", appeared: None });
+pub fn sentence_audio_line(
+    service: tauri::State<'_, Arc<SentenceAudio>>,
+    uid: String,
+    text: String,
+    ts: f64,
+    source: String,
+    scan: Option<String>,
+) {
+    service.record_line(Line { uid, text, ts, ocr: source == "ocr", appeared: None, scan });
+}
+
+/// The Log deleted lines, or a fuller reading of the same text replaced them.
+#[tauri::command]
+pub fn sentence_audio_forget(service: tauri::State<'_, Arc<SentenceAudio>>, uids: Vec<String>) {
+    service.forget_lines(uids);
+}
+
+/// The recording, the speech model and the listener's view of the recent lines, for the
+/// Diagnostics window.
+#[tauri::command]
+pub fn sentence_audio_debug(service: tauri::State<'_, Arc<SentenceAudio>>) -> Debug {
+    service.debug()
 }
 
 /// What is known about each recent line's audio, for the Log.
@@ -938,7 +992,7 @@ mod tests {
         let lines = ["今日はいい天気ですね。散歩に行きましょう。", "猫が好きです。"];
         let mut spoken_ms = Vec::new();
         for (i, (text, wav)) in lines.iter().zip(&wavs).enumerate() {
-            service.record_line(Line { uid: i.to_string(), text: text.to_string(), ts: now_ms(), ocr: false, appeared: None });
+            service.record_line(Line { uid: i.to_string(), text: text.to_string(), ts: now_ms(), ocr: false, appeared: None, scan: None });
             let started = now_ms();
             play(wav);
             spoken_ms.push(now_ms() - started);

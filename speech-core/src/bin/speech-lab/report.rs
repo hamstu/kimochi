@@ -14,6 +14,10 @@ pub struct Row {
     pub decision: Option<Decision>,
     pub clip: Option<Clipped>,
     pub appeared: Option<f64>,
+    /// Why the listener decided as it did.
+    pub note: String,
+    /// Its clip changed after it was matched by its words (other than for a better match).
+    pub flipped: bool,
 }
 
 /// How a voiced line's clip compares with where its voice really was.
@@ -87,16 +91,24 @@ pub fn write(
         let wrong = scores.iter().filter(|s| !s.overlaps).count();
         let starts = median(scores.iter().map(|s| s.start_error.abs()).collect());
         let ends = median(scores.iter().map(|s| s.end_error.abs()).collect());
+        let flipped: Vec<&str> = rows.iter().filter(|r| r.flipped).map(|r| r.line.uid.as_str()).collect();
+        let names = count(&|r| r.line.kind.as_deref() == Some("name"));
+        let names_voiced = count(&|r| r.line.kind.as_deref() == Some("name") && matches!(outcome(r), Some(Outcome::Voiced(_))));
         let _ = write!(
             summary,
             "\nAgainst the truth: {}/{truly_voiced} voiced lines got a clip, {covered} holding the whole voice, {wrong} the wrong audio; \
              median start error {starts:.0} ms, end error {ends:.0} ms; {silent_right}/{truly_silent} unvoiced lines said no voice.",
             scores.len()
         );
+        if names > 0 {
+            let _ = write!(summary, " {names_voiced}/{names} name boxes were given a voice.");
+        }
+        let _ = write!(summary, " {} lines changed their clip after being matched.", flipped.len());
         metrics = json!({
             "voicedLines": truly_voiced, "clipped": scores.len(), "covered": covered, "wrongAudio": wrong,
             "medianStartErrorMs": starts, "medianEndErrorMs": ends,
             "unvoicedLines": truly_silent, "unvoicedSaidSilent": silent_right,
+            "nameBoxes": names, "nameBoxesVoiced": names_voiced, "changedAfterMatch": flipped,
         });
     }
 
@@ -118,9 +130,10 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
     for (i, row) in rows.iter().enumerate() {
         let line = &row.line;
         let arrived = format!(
-            "{:.2}s {}{}",
+            "{:.2}s {}{}{}",
             rel(line.ts),
             line.source,
+            line.scan.as_ref().map_or(String::new(), |s| format!(" <span class=muted>scan {}</span>", escape(s))),
             row.appeared.map_or(String::new(), |a| format!("<br><span class=muted>appeared {:.2}s</span>", rel(a)))
         );
         let (decided, clip) = match (&row.decision, &row.clip) {
@@ -150,6 +163,11 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
             },
             (None, _) => ("<span class=bad>undecided</span>".into(), String::new()),
         };
+        let decided = format!("{decided}<br><span class=muted>{}</span>", escape(&row.note));
+        let text = match line.kind.as_deref() {
+            Some(kind) => format!("{} <span class=muted>({kind})</span>", escape(&line.text)),
+            None => escape(&line.text),
+        };
         let truth = match &line.truth {
             None => String::new(),
             Some(t) if !t.voiced => {
@@ -172,9 +190,8 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
         };
         let _ = write!(
             html,
-            "<tr><td>{}</td><td class=text>{}</td><td>{arrived}</td><td>{decided}</td><td>{clip}</td><td>{truth}</td></tr>",
+            "<tr><td>{}</td><td class=text>{text}</td><td>{arrived}</td><td>{decided}</td><td>{clip}</td><td>{truth}</td></tr>",
             i + 1,
-            escape(&line.text)
         );
     }
     html.push_str("</table><h2>Speech heard</h2><table><tr><th>From</th><th>To</th><th>Heard</th></tr>");
@@ -200,7 +217,8 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
                 None => ("undecided", None, None, None, None),
             };
             json!({ "uid": r.line.uid, "text": r.line.text, "outcome": outcome, "how": how, "score": score_,
-                    "fromMs": from, "toMs": to, "truth": r.line.truth })
+                    "fromMs": from, "toMs": to, "truth": r.line.truth, "ts": r.line.ts - t0, "scan": r.line.scan,
+                    "kind": r.line.kind, "note": r.note })
         })
         .collect();
     let report = json!({ "summary": summary, "metrics": metrics, "processingSeconds": elapsed, "audioSeconds": audio_seconds, "lines": json_rows });

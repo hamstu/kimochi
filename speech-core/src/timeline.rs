@@ -18,6 +18,9 @@ pub struct Line {
     pub ocr: bool,
     /// When the line's text began to appear on screen, if that was seen (OCR'd lines only).
     pub appeared: Option<f64>,
+    /// The OCR scan the line was read in: one scan can give several lines (a name box, the
+    /// dialogue, a choice), all arriving together.
+    pub scan: Option<String>,
 }
 
 impl Line {
@@ -64,7 +67,12 @@ impl Timeline {
         )
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Line> {
+    /// Forget lines (the Log deleted them, or a fuller reading replaced them).
+    pub fn remove(&mut self, uids: &[String]) {
+        self.lines.retain(|l| !uids.contains(&l.uid));
+    }
+
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &Line> {
         self.lines.iter()
     }
 
@@ -147,6 +155,7 @@ mod tests {
             ts,
             ocr: false,
             appeared: None,
+            scan: None,
         }
     }
 
@@ -219,7 +228,8 @@ mod tests {
             text: "四".into(),
             ts: 12_000.0,
             ocr: true,
-            appeared: Some(10_500.0)
+            appeared: Some(10_500.0),
+            scan: None,
         }));
         assert_eq!(t.get("d").unwrap().anchor(), 10_500.0);
         assert_eq!(t.get("a").unwrap().anchor(), 1_000.0);

@@ -23,7 +23,7 @@ pub struct Truth {
     pub end_ms: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LineRow {
     pub uid: String,
@@ -33,6 +33,16 @@ pub struct LineRow {
     pub source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appeared: Option<f64>,
+    /// The OCR scan it was read in: a scan's lines (a name box and the dialogue) share it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scan: Option<String>,
+    /// Lines this fuller reading replaced in the Log (the app's history merge): they are
+    /// forgotten as it arrives, and not scored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub replaces: Vec<String>,
+    /// `name`: a name box, never voiced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub truth: Option<Truth>,
 }

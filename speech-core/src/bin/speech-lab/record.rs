@@ -70,13 +70,20 @@ fn row(at: f64, text: &str, index: usize) -> Option<LineRow> {
     if text.starts_with('{') {
         let value: serde_json::Value = serde_json::from_str(text).ok()?;
         return Some(LineRow {
-            uid,
+            uid: field(&value, "uid").unwrap_or(uid),
             text: value.get("text")?.as_str()?.to_string(),
             ts: value.get("ts").and_then(|v| v.as_f64()).unwrap_or(at),
             source: value.get("source").and_then(|v| v.as_str()).unwrap_or("hook").to_string(),
-            appeared: value.get("appeared").and_then(|v| v.as_f64()),
-            truth: value.get("truth").and_then(|v| serde_json::from_value(v.clone()).ok()),
+            appeared: field(&value, "appeared"),
+            scan: field(&value, "scan"),
+            replaces: field(&value, "replaces").unwrap_or_default(),
+            kind: field(&value, "kind"),
+            truth: field(&value, "truth"),
         });
     }
-    Some(LineRow { uid, text: text.to_string(), ts: at, source: "hook".into(), appeared: None, truth: None })
+    Some(LineRow { uid, text: text.to_string(), ts: at, source: "hook".into(), ..LineRow::default() })
+}
+
+fn field<T: serde::de::DeserializeOwned>(value: &serde_json::Value, name: &str) -> Option<T> {
+    value.get(name).and_then(|v| serde_json::from_value(v.clone()).ok())
 }

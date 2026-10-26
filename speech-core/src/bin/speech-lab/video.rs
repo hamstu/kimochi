@@ -110,8 +110,7 @@ fn read(video: &Path, dir: &Path, fps: f64, crop: Option<&str>) -> Result<(), St
                 text: text.clone(),
                 ts: at + SCAN_MS,
                 source: "ocr".into(),
-                appeared: None,
-                truth: None,
+                ..LineRow::default()
             });
             eprintln!("{:>7.2}s  {}", (at - T0) / 1000.0, text.replace('\n', " / "));
             logged = text.clone();
