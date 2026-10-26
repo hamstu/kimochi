@@ -1,6 +1,6 @@
 ---
 title: Anki
-description: "Make Anki cards from the dictionary pop-up through AnkiConnect: your dictionary engine's own mining, or Kimochi's card builder with the Yomitan API."
+description: "Make Anki cards from the dictionary pop-up through AnkiConnect: your dictionary engine's own mining or Kimochi's card builder, with sentence audio from your game."
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -66,6 +66,30 @@ The markers are `expression`, `reading`, `glossary`, `dictionary`, `frequencies`
 <Screenshot id="settings-anki" alt="Settings, Anki with the Yomitan API: the AnkiConnect connection, address and API key, then Enable mining, Deck, Note type, Tags, Detect from Anki and Import from Yomitan." width={760} />
 
 In the pop-up, each entry has a small **+** (Add to Anki) beside its audio button, in the entry's
-top corner. Once the card is in Anki, or when the word is already in your deck, the **+** becomes a
+top corner. It shows only once a deck and note type are chosen; until then **Settings → Anki** says
+what's missing. Once the card is in Anki, or when the word is already in your deck, the **+** becomes a
 green check: click it to open the card in Anki. If adding fails, it shows a red alert; hover it for
 the reason (for example **Anki not running**) and click it to try again.
+
+## Sentence audio
+
+Turn on **Record and attach sentence audio** in **Settings → Anki → Sentence Audio** and each card
+you add gets the spoken audio of the line you mined it from, cut from what your computer was
+playing and trimmed to the voice. It works with Built-in Yomitan, Hachidori and the Yomitan API
+pop-up.
+
+While it is on, the section shows **Recording**, with a level meter, so you can check it hears your
+game before you mine. Audio is only kept in memory: nothing is saved but the clip in your card.
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **Audio field** | `SentenceAudio` | The note field the audio goes into. A field that is already filled is never replaced. |
+| **Seconds kept** | 30 | A card gets audio only for a line that arrived within this time (10–120). |
+| **Trim to the voice** | On | Cuts the clip down to the speech in it. Off keeps everything from the line's arrival to the next line's. |
+| **Start offset** / **End offset** | 0 ms | Milliseconds added to the clip's start or end; negative moves it earlier. |
+
+- **macOS** records system audio under the **Screen Recording** permission, and leaves Kimochi's
+  own sounds out. macOS shows its screen-recording indicator while it is on.
+- **Windows** leaves Kimochi's own sounds out on Windows 10 (2004) and later.
+- **Linux** and the **Steam Deck** need PipeWire, as SteamOS and most desktops have. Kimochi's own
+  sounds are recorded too, so keep sound effects off while you mine.

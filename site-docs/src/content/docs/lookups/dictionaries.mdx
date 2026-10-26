@@ -33,7 +33,13 @@ Kimochi downloads it when you choose it, checks the download and every file in i
 SHA-256 hashes, and runs it unmodified. Downloads resume if interrupted; quitting pauses one.
 
 Switching engines asks to download the new one if needed (**Download …?**), then reloads the reader
-windows: **Now using … The reader windows reloaded with it.**
+windows: **Now using … The reader windows reloaded with it.** Until an engine is downloaded, the
+sidebar and Settings say so, and its settings button appears once it is downloaded and running.
+
+When a Kimochi update brings a new version of an engine you've downloaded, it updates in the
+background and the current version keeps working until the new one is ready and checked. Progress
+shows in **Settings → Dictionary**. Your dictionaries and settings are kept, and engines you never
+downloaded stay that way.
 
 ## Built-in Yomitan
 
@@ -53,8 +59,9 @@ Dictionaries are stored on this computer and lookups run locally.
 <Screenshot src={{ light: hachidoriLight, dark: hachidoriDark }} alt="Hachidori's pop-up over a line of game dialogue." width={560} />
 
 Hachidori offers a set of recommended dictionaries the first time its settings open, and imports
-Yomitan dictionaries and MDict files you already have. Kimochi runs its single-threaded engine, so
-imports take a few seconds longer than in Chrome. Open its settings with **Open Hachidori settings**.
+Yomitan dictionaries and MDict files you already have, on several threads, as fast as in Chrome.
+Open its settings with **Open Hachidori settings**; you can drop dictionary files onto its import
+area and drag its dictionaries to reorder them.
 
 ## 10ten
 

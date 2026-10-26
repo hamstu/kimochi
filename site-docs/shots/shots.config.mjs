@@ -80,9 +80,10 @@ const SETTINGS_READY = {
   sources: '.input-source-list',
   ocr: '.engine-chooser',
   log: '#log-font-size',
-  dictionary: '.engine-setting-label, .dictionary-engine-action',
+  dictionary: '.engine-chooser',
   assist: '#assist-deepl',
   controls: '#gamepad-enabled',
+  gamemode: '.read-along-views',
   account: '.settings-page-scroll h2, .settings-page-scroll h3'
 }
 /** Settings → Account shows a Server section in development builds only (the harness is one). */
@@ -355,10 +356,11 @@ export const SHOTS = [
     ['general', 'General'],
     ['sources', 'Sources'],
     ['ocr', 'OCR & Overlay'],
-    ['log', 'Log'],
+    ['log', 'Log & Sessions'],
     ['dictionary', 'Dictionary'],
     ['assist', 'Translation & AI'],
     ['controls', 'Shortcuts & Controls'],
+    ['gamemode', 'Game Mode'],
     ['account', 'Account']
   ].map(([tab]) => ({
     id: `settings-${tab}`,
@@ -386,8 +388,14 @@ export const SHOTS = [
     id: 'settings-auto-ocr',
     page: settingsTab('ocr'),
     size: SETTINGS,
-    ready: '#ocr-adaptive',
-    actions: [{ run: `document.querySelector('#ocr-autoscan').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -60)` }]
+    ready: '#ocr-auto',
+    // Auto OCR's tuning is behind its Advanced options disclosure, closed by default.
+    actions: [
+      // Clicked in the page: below the fold, the button is out of the stage's reach.
+      { run: `document.querySelector('#ocr-auto-advanced').click()`, after: 300 },
+      { waitFor: '#ocr-adaptive' },
+      { run: `document.querySelector('#ocr-auto').scrollIntoView({ block: 'start' }); document.querySelector('.settings-page-scroll').scrollBy(0, -60)` }
+    ]
   },
   {
     id: 'settings-dictionary-api',
@@ -425,7 +433,7 @@ export const SHOTS = [
   },
   {
     id: 'settings-updates',
-    page: settingsTab('general', '&update=available'),
+    page: settingsTab('about', '&update=available'),
     size: SETTINGS,
     ready: '.settings-page-scroll'
   },

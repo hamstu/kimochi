@@ -7,7 +7,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
 
 Open Settings from the sidebar's **Settings** row, with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd>,
-or from the tray icon. It has eight pages.
+or from the tray icon's menu (**Settings…**). On a Mac it is also in the Kimochi menu. It has
+eleven pages.
 
 <Tabs>
   <TabItem label="General">
@@ -21,7 +22,6 @@ or from the tray icon. It has eight pages.
     | **Debug overlay** | Off | Marks the scanned text boxes over the source and opens the Diagnostics window. |
     | **GNOME overlay** | — | Linux, GNOME only. See [Install on Linux](/install/linux/#the-overlay-on-wayland). |
     | **Kimochi in Steam** | — | Linux with Steam only. See [Steam Deck](/install/steam-deck/#adding-to-steam-later). |
-    | **Updates** | — | Your version, **What's new** and **Check for updates**. |
     | **Welcome guide** | — | **Open** runs the [welcome guide](/welcome-guide/) again. |
 
     <Screenshot id="settings-general" alt="Settings, General page." width={760} />
@@ -38,7 +38,7 @@ or from the tray icon. It has eight pages.
     | **Auto switch sessions by window name** | On | Each window you read gets its own session. |
     | **macOS permissions** | — | Screen Recording (reads your game window) and Accessibility (brings your game window to the front): Allowed, or a button to allow it. |
     | **Copy scans to clipboard** | Off | |
-    | **Send scans over WebSocket** | Off | Hosts a WebSocket server at its URL (`ws://localhost:6677`). |
+    | **Send scans over WebSocket** | Off | Hosts a WebSocket server at its **WebSocket URL** (`ws://localhost:6677`). |
   </TabItem>
   <TabItem label="OCR & Overlay">
     Which engine reads the screen, and what is drawn over your game. See
@@ -51,7 +51,7 @@ or from the tray icon. It has eight pages.
     | **Overlay mode** | Off |
     | **Group text into regions** | Off |
     | **Filter out furigana and small text** | On, strength Balanced |
-    | **Scan after a button press** | Off, delay 500 ms |
+    | **Scan after a button press** | Off; **Scan delay** 500 ms, **Gamepad trigger** none |
     | **Auto OCR** | Off; the same switch as the main window's |
     | ↳ **Advanced options**: **Adaptive polling** | On |
     | ↳ **Settle after** | 2 readings |
@@ -92,18 +92,24 @@ or from the tray icon. It has eight pages.
 
     | Setting | Default |
     | --- | --- |
-    | **Address** | `http://127.0.0.1:8765`, used by Kimochi, Built-in Yomitan and Hachidori |
-    | **API key** | Empty; stored locally, never synced |
-    | **Open … Anki settings** | The engine's own Anki settings (Built-in Yomitan, Hachidori) |
-    | **Enable Mining** / **Deck** / **Note type** / **Tags** / **Field mapping** (Yomitan API) | Off / — / — / `super-texthooker` / — |
+    | **Open … Anki settings** (Built-in Yomitan, Hachidori) | The engine's own Anki settings, AnkiConnect address and key included |
+    | **AnkiConnect** status, **Address** (Yomitan API) | `http://127.0.0.1:8765` |
+    | **API key** (Yomitan API) | Empty; stored locally, never synced |
+    | **Enable Mining** / **Deck** / **Note type** / **Tags** (Yomitan API) | Off / — / — / `super-texthooker` |
+    | **Detect from Anki** / **Import from Yomitan** / **Field mapping** (Yomitan API) | — |
+    | **Record and attach sentence audio** | Off |
+    | ↳ **Audio field** / **Seconds kept** / **Trim to the voice** | `SentenceAudio` / 30 / On |
+    | ↳ **Start offset** / **End offset** | 0 ms / 0 ms |
+
+    10ten adds no cards, and an engine that isn't downloaded yet only offers **Go to Dictionary**.
   </TabItem>
   <TabItem label="Translation & AI">
     Help with a line you can't read yet. See [Translation and AI](/lookups/translation-and-ai/).
 
     | Setting | Default |
     | --- | --- |
-    | **Translate with** | Kimochi cloud with Kimochi Cloud, else your DeepL key |
-    | **DeepL API key** | Empty; stored locally, never synced |
+    | **Translate with** | **Kimochi cloud** (with Kimochi Cloud) or **Your DeepL key**; Kimochi cloud if you have Kimochi Cloud, otherwise your DeepL key |
+    | **DeepL API key** (Your DeepL key) | Empty; stored locally, never synced |
     | **Explain with AI → Configure…** | Codex CLI, its default model, the default prompt |
   </TabItem>
   <TabItem label="Shortcuts & Controls">
@@ -115,7 +121,11 @@ or from the tray icon. It has eight pages.
     | **Scan** | <kbd>⇧⌘8</kbd> / <kbd>Ctrl+Shift+8</kbd>, no gamepad button |
     | **Controller menu** | <kbd>⇧⌘Space</kbd> / <kbd>Ctrl+Shift+Space</kbd>, LS + RS |
     | **Enable gamepad support** | On |
-    | **Select / Back / Back (second) / Previous / Next definition** | A / B / Y / LB / RB |
+    | **Controller menu**: **Select** / **Back** | A / B |
+    | **Reading**: **Word or character** / **Play audio** / **Previous definition** / **Next definition** / **Show all controls** | Y / X / LB / RB / View |
+    | **Connected gamepads** / **Button test** | — |
+
+    Two actions on the same button are pointed out.
   </TabItem>
   <TabItem label="Game Mode">
     How Read along shows the dictionary. See [Controller](/controller/).
@@ -123,9 +133,21 @@ or from the tray icon. It has eight pages.
     | Setting | Default | Notes |
     | --- | --- | --- |
     | **Dictionary in Read along** | Pop-up | **Pop-up** beside the word, or **Full screen**: the scanned text across the top with the dictionary filling the space below, with any dictionary. |
+
+    The buttons Read along uses are in **Shortcuts & Controls**.
   </TabItem>
   <TabItem label="Account">
     Optional. Everything else in Kimochi works without one. See [Accounts and plans](/cloud/) and
     [Sync and backup](/cloud/sync/).
+  </TabItem>
+  <TabItem label="About">
+    Your version and its updates, links and credits. **About Kimochi** in the macOS menu and in the
+    tray menu opens it.
+
+    | Section | What it has |
+    | --- | --- |
+    | **Updates** | Your version, when it last checked, **What's new** and **Check for updates** (or the update's download and **Restart to update**). See [Updates](/install/#updates). |
+    | **Links** | Website, Documentation, Discord and Source code. |
+    | **Acknowledgements** | The open-source projects Kimochi is built on, with their licences. |
   </TabItem>
 </Tabs>

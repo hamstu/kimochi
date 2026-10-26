@@ -7,7 +7,8 @@ import Screenshot from '../../../components/Screenshot.astro'
 
 With **Auto OCR** on, Kimochi watches the source and scans it each time the text on screen changes
 and then settles, so new dialogue lands in the Log without pressing anything. Turn it on with the
-**Auto OCR** switch in the sidebar or from the [controller menu](/controller/#the-controller-menu).
+**Auto OCR** switch in the sidebar, in **Settings → OCR & Overlay → Auto OCR** (the same switch),
+or from the [controller menu](/controller/#the-controller-menu).
 
 While it is on, the preview shows an **Auto** badge with a green dot and the Scan button reads
 **Auto OCR is on**. Auto OCR works with a window or screen source; Quick Shot has no Auto OCR.
@@ -29,7 +30,7 @@ in a row**); manual scans still work.
 
 ## Settings
 
-**Settings → OCR & Overlay → Auto OCR → Advanced options**:
+Open **Advanced options** (the arrow beside it) under **Settings → OCR & Overlay → Auto OCR**:
 
 | Setting | Options | Default | What it does |
 | --- | --- | --- | --- |
@@ -39,7 +40,7 @@ in a row**); manual scans still work.
 | **Minimum time between requests** | No limit, 0.8, 1.2 or 3 seconds | 1.2 seconds | A floor on how often the OCR engine is called. Lines that arrive during the wait are not queued; only the latest is kept. |
 | **Base poll interval** | 250 ms – 5 s | 500 ms | How often to check for screen changes (the starting interval with adaptive polling). |
 
-<Screenshot id="settings-auto-ocr" alt="Settings, OCR & Overlay, scrolled to Auto-scan and Auto OCR." width={760} />
+<Screenshot id="settings-auto-ocr" alt="Settings, OCR & Overlay, scrolled to Auto OCR with its Advanced options open." width={760} />
 
 ## Scan after a button press
 

@@ -35,16 +35,39 @@ Pick a menu chord your game doesn't use; you can change it in
 ## Reading word by word
 
 After **Scan** or **Read along**, Kimochi steps through the text one word at a time in reading order,
-with the dictionary pop-up open on the current word. A small guide at the bottom shows the buttons.
+with the dictionary pop-up open on the current word. A bar at the bottom shows the buttons, and
+**View** opens a sheet with every control.
 
 | Control | Action |
 | --- | --- |
-| D-pad / left stick ◀ ▶ | Previous / next word |
-| D-pad / left stick ▲ ▼ | Previous / next line (column, for vertical text) |
-| **A** | Look the word up again |
+| D-pad ◀ ▶ | Previous / next word |
+| D-pad ▲ ▼ | Previous / next line (column, for vertical text) |
+| **Y** | Step by word or by character. By character, a lookup starts at that character: for a word split in the wrong place. |
+| Left stick | A free cursor that looks up whatever character it rests on; the D-pad steps on from there |
+| **A** | Into the pop-up, to use its buttons (or look the word up again, when the pop-up has none) |
+| **X** | Play the word's audio |
 | **LB** / **RB** | Previous / next definition |
 | Right stick | Scroll the pop-up |
-| **B** (or **Y**) | Back to the game (or back to Recent text) |
+| **View** | Show all controls |
+| **B** | Back to the game (or back to Recent text) |
+
+In the pop-up, the D-pad chooses a button (such as Add to Anki or Play audio) and **A** presses it.
+Add to Anki is chosen first, so **A**, **A** adds the word. **B** goes back to the text.
+
+## Pop-up or full screen
+
+**Settings → Game Mode → Dictionary in Read along** chooses how Read along shows the dictionary:
+
+- **Pop-up** (the default): the dictionary's pop-up beside the word.
+- **Full screen**: the scanned text across the top of a dimmed screen with one word lit, and its
+  dictionary entry below. ◀ ▶ move word to word, the right stick scrolls, and **B** goes back to
+  the game. With the Yomitan API, **LB** / **RB** step through the word's entries and **A** adds the
+  entry to Anki; Built-in Yomitan, Hachidori and 10ten show their own pop-up filling that space,
+  and **A** moves into it.
+
+It works with every dictionary.
+
+<Screenshot id="settings-gamemode" alt="Settings, Game Mode: Dictionary in Read along, with Pop-up and Full screen pictures to choose from." width={760} />
 
 ## In Kimochi's windows
 
@@ -58,12 +81,14 @@ dialog, and the right stick scrolls.
 
 - **Shortcuts**: a gamepad button or combination for **Scan** and **Controller menu**, beside the
   keyboard shortcut.
-- **Controller menu**: the buttons for **Select** (A), **Back** (B), **Back (second button)** (Y),
-  **Previous definition** (LB) and **Next definition** (RB).
+- **Controller menu**: the buttons for **Select** (A) and **Back** (B).
+- **Reading**: the buttons for **Word or character** (Y), **Play audio** (X), **Previous definition**
+  (LB), **Next definition** (RB) and **Show all controls** (View). Two actions on the same button
+  are pointed out.
 - **Connected gamepads**: every pad Kimochi sees; **Set as primary** picks the one it listens to.
 - **Button test**: buttons light up as you press them.
 
-<Screenshot id="settings-controls" alt="Settings, Shortcuts & Controls: the Scan and Controller menu shortcuts, Enable gamepad support and the Controller menu buttons." width={760} />
+<Screenshot id="settings-controls" alt="Settings, Shortcuts & Controls: the Scan and Controller menu shortcuts, Enable gamepad support and the Controller menu and Reading buttons." width={760} />
 
 For a game where a button advances the text, **Settings → OCR & Overlay → Scan after a button press**
 scans a moment after you press it. See [Auto OCR](/reading/auto-ocr/#scan-after-a-button-press).

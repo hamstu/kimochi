@@ -93,7 +93,7 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
@@ -111,7 +111,7 @@ export const FAQ = [
     id: 'alternatives',
     q: 'How is Kimochi different from Game Sentence Miner, Kamui, owocr or YomiNinja?',
     a: [
-      'Kimochi puts capture, OCR, the overlay, a log, Yomitan, Anki and a notebook in one app, with no OBS and no browser tabs, and a controller works too. Game Sentence Miner is better if you want rich Anki sentence cards with audio and screenshots (it needs OBS). owocr is great if you like building your own setup. Kamui is a paid, closed-source web and Windows app if you want everything handled for you in the cloud. YomiNinja is a free, open-source overlay with Yomitan and 10ten built in; Anki integration is on its planned list.'
+      'Kimochi puts capture, OCR, the overlay, a log, Yomitan, Anki and a notebook in one app, with no OBS and no browser tabs, and a controller works too. Game Sentence Miner is better if you want rich Anki sentence cards with screenshots or GIFs and AI translation (it needs OBS). owocr is great if you like building your own setup. Kamui is a paid, closed-source web and Windows app if you want everything handled for you in the cloud. YomiNinja is a free, open-source overlay with Yomitan and 10ten built in; Anki integration is on its planned list.'
     ],
     links: [{ href: '/compare', label: 'The full, sourced comparison' }]
   },
@@ -119,7 +119,7 @@ export const FAQ = [
     id: 'controller',
     q: 'Can I use Kimochi with a controller or on the Steam Deck?',
     a: [
-      'Yes, though Steam Deck support is early. In Gaming Mode, click both sticks (L3 + R3) to scan, pick a word with the D-pad, press A for the reading, and press B to go back to the game.'
+      'Yes, though Steam Deck support is early. In Gaming Mode, click both sticks (L3 + R3) to scan, step to a word with the D-pad to see its dictionary entry, and press B to go back to the game. The dictionary can also fill the screen, which is easier to read on a TV or handheld.'
     ],
     links: [{ href: docsUrl('/controller/'), label: 'Controller and Gaming Mode' }]
   },

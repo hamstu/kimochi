@@ -165,7 +165,7 @@ export const ROWS: Row[] = [
     label: "Dictionary lookup",
     cells: {
       kimochi: {
-        text: "Built-in Yomitan with dictionaries you import or download.",
+        text: "Built-in Yomitan, Hachidori or 10ten, with dictionaries you import or download, or the Yomitan in your browser through the Yomitan API.",
       },
       kamui: {
         text: "Built-in dictionary sidebar with context-aware lookups; AI translation.",
@@ -184,7 +184,9 @@ export const ROWS: Row[] = [
   {
     label: "Anki integration",
     cells: {
-      kimochi: { text: "Yes, through AnkiConnect." },
+      kimochi: {
+        text: "Yes, through AnkiConnect, with the mined line's voice cut from system audio and trimmed to the speech.",
+      },
       kamui: {
         text: "Yes: one-click add from a dictionary entry, to your deck or a Kamui deck.",
       },
@@ -201,7 +203,7 @@ export const ROWS: Row[] = [
     label: "Automatic / continuous OCR",
     cells: {
       kimochi: {
-        text: "Yes: Auto OCR with change detection, optional local gating and adaptive polling.",
+        text: "Yes: Auto OCR with change detection and adaptive polling.",
       },
       kamui: { text: "Yes, in the desktop app (experimental)." },
       gsm: {
