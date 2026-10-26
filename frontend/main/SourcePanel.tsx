@@ -748,14 +748,13 @@ export function SourcePanel({
   }
 
   const scanDisabled =
-    mode === 'quickshot'
-      ? controller.isScanning
-      : !controller.hasSource || controller.isAutoOCREnabled || controller.isScanning
+    mode === 'quickshot' ? controller.isScanning : !controller.hasSource || controller.isScanning
 
   const scanButton = (
     <Button
-      // While Auto OCR reads on its own the button steps back; it is not the thing to press.
-      variant={mode === 'ocr' && controller.isAutoOCREnabled ? 'secondary' : 'primary'}
+      // While Auto OCR reads on its own, this (and the shortcut) is Force rescan: it clears what
+      // was read and starts the loop over, a way out when it is stuck (ui/overlay.js).
+      variant="primary"
       className="src-scan"
       // The scan has its own start sound (ui/sounds.ts), so no click on top of it.
       data-sound="none"
@@ -769,7 +768,7 @@ export function SourcePanel({
           : mode === 'quickshot'
             ? 'Draw and scan'
             : controller.isAutoOCREnabled
-              ? 'Auto OCR is on'
+              ? 'Force rescan'
               : 'Scan now'}
       </span>
       {scanKey && !controller.isScanning && <kbd className="src-scan-key">{scanKey}</kbd>}

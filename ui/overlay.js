@@ -1417,7 +1417,10 @@ async function onAction(name) {
         for(let attempt=0;attempt<20&&controllerHold;attempt++)await new Promise(resolve=>setTimeout(resolve,25))
         if(controllerHold)throw new Error('Close controller navigation before scanning')
       }
-      return isQuickShot() ? quickShot() : performScan()
+      if (isQuickShot()) return quickShot()
+      // With Auto OCR on, the button and the shortcut are Force rescan: start over from nothing.
+      if (scanner.isRunning) forceRescan()
+      return performScan()
     case 'openControllerMenu':
       if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && controller.mode === 'idle') {
         // A never-mapped Gamescope overlay has a zero-sized WebKit viewport.
@@ -2814,6 +2817,18 @@ function clearSelectionText() {
   state.detached = false
   renderer.clear()
   scanner.reset()
+}
+
+/**
+ * Force rescan (Scan while Auto OCR is on): drop what is drawn and everything the automatic loop
+ * remembers — the scene, what it held back, its backoff after errors, an engine it gave up on —
+ * so the scan that follows starts from the screen as it is. A way out when the loop is stuck.
+ */
+function forceRescan() {
+  log({ check: 'overlay-force-rescan', scanner: scanner === sceneScanner ? 'scene' : 'image' })
+  clearSelectionText()
+  scanner.resume()
+  draw()
 }
 
 let handling = false

@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- With Auto OCR on, the Scan button (and its shortcut) is now **Force rescan**: it clears what was
+  read and scans again at once, starting Auto OCR over. A way out when Auto OCR seems stuck.
 - Sound effects are simpler: every button, switch and menu makes the same click (the sidebar keeps
   its whoosh). Settings → General has separate switches for scan sounds and click sounds under
   Sound effects, and a Volume slider for all of them (50% by default).
