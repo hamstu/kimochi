@@ -49,9 +49,13 @@ const open = (url: string): void => {
 
 /** The interface's click, unless sound effects (or their clicks) are off. */
 function playSuccess(): void {
-  Promise.all([getSetting<boolean>('soundEffects', true), getSetting<boolean>('soundEffectsClicks', true)])
-    .then(([soundEffects, soundEffectsClicks]) => {
-      if (soundKindOn({ soundEffects, soundEffectsClicks }, 'clicks')) playAudio('click')
+  Promise.all([
+    getSetting<boolean>('soundEffects', true),
+    getSetting<boolean>('soundEffectsClicks', true),
+    getSetting<unknown>('sentenceAudio', null)
+  ])
+    .then(([soundEffects, soundEffectsClicks, sentenceAudio]) => {
+      if (soundKindOn({ soundEffects, soundEffectsClicks, sentenceAudio }, 'clicks')) playAudio('click')
     })
     .catch(() => playAudio('click'))
 }

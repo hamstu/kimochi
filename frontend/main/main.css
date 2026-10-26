@@ -895,6 +895,74 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
 .src-switch {
   pointer-events: none;
 }
+/* A row with a second control in it (Sentence audio's experimental flask): the switch is a
+   transparent button under the whole row, everything drawn on it lets clicks through to it, and
+   the flask is a button of its own above. */
+.src-row-layered {
+  position: relative;
+}
+.src-row-hit {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: default;
+}
+.src-row-hit:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
+.src-row-layered > :not(.src-row-hit) {
+  position: relative;
+  pointer-events: none;
+}
+.src-row-label-fit {
+  flex: none;
+}
+.src-row-fill {
+  flex: 1;
+}
+.src-row-layered > .src-experimental {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--k-icon-sm) + var(--k-space-1-5));
+  height: calc(var(--k-icon-sm) + var(--k-space-1-5));
+  margin-left: calc(var(--k-space-1) * -1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-sm);
+  background: transparent;
+  color: var(--amber-9);
+  pointer-events: auto;
+}
+.src-row-layered > .src-experimental:hover,
+.src-row-layered > .src-experimental[data-state="open"] {
+  background: var(--k-warn-soft);
+}
+.src-row-layered > .src-experimental:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 0;
+}
+.src-experimental > svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.src-experimental-pop {
+  display: grid;
+  gap: var(--k-space-2);
+  max-width: min(18rem, calc(100vw - 1rem));
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+.src-experimental-pop p {
+  margin: 0;
+}
+.src-experimental-more {
+  color: var(--k-text-2);
+}
 
 /* The Change source menu: one row per source type, with what it does. "Window or screen" opens
    the grid of windows and displays. */

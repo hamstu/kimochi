@@ -4,7 +4,9 @@
  * a whoosh for showing and hiding the sidebar (see `controlSound`).
  *
  * Settings → General has a switch for all of them (`soundEffects`) and, under it, one for each
- * kind (`soundEffectsScans`, `soundEffectsClicks`; see `soundKindOn`).
+ * kind (`soundEffectsScans`, `soundEffectsClicks`; see `soundKindOn`). While sentence audio
+ * records what the computer plays (`sentenceAudio.enabled`), none of them plays at all: they
+ * would end up in the lines' clips.
  *
  * The overlay decides when; this module decides whether, and plays. Which outcome earns which
  * sound is read off the activity post the overlay already makes for it (scan-activity.ts), so the
@@ -46,10 +48,18 @@ export interface SoundSettings {
   soundEffects?: unknown
   soundEffectsScans?: unknown
   soundEffectsClicks?: unknown
+  /** The `sentenceAudio` setting: while it records, no sound effect plays (`recordingAudio`). */
+  sentenceAudio?: unknown
 }
 
-/** Whether a kind of sound plays: sound effects on, and that kind on under them. */
+/** Whether sentence audio is recording what the computer plays (its setting is on). */
+export function recordingAudio(sentenceAudio: unknown): boolean {
+  return (sentenceAudio as { enabled?: unknown } | null | undefined)?.enabled === true
+}
+
+/** Whether a kind of sound plays: sound effects on, and that kind on under them, and sentence audio not recording. */
 export function soundKindOn(settings: SoundSettings, kind: 'scans' | 'clicks'): boolean {
+  if (recordingAudio(settings.sentenceAudio)) return false
   if (settings.soundEffects === false) return false
   return (kind === 'scans' ? settings.soundEffectsScans : settings.soundEffectsClicks) !== false
 }
@@ -310,16 +320,22 @@ export function pressSound(facts: ControlFacts | null, key?: string): ControlSou
  * the control's own handlers so a switch and a menu trigger still show their old state. A pointer
  * press sounds its control (`pressSound`), and the click that follows on the same control stays
  * quiet; a click with no press before it (Enter, Space, a script) sounds on the click. `sound-on` is the one click that plays with sound effects off: it belongs to
- * the control that turns them back on, and only it carries it. Returns the uninstaller.
+ * the control that turns them back on, and only it carries it (unless `silenced`: sentence audio
+ * is recording). Returns the uninstaller.
  */
 export function installInteractionSounds(
   root: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>,
-  { enabled, play = playAudio }: Pick<SoundPlayerOptions, 'enabled' | 'play'>
+  {
+    enabled,
+    play = playAudio,
+    silenced = () => false
+  }: Pick<SoundPlayerOptions, 'enabled' | 'play'> & { silenced?: () => boolean }
 ): () => void {
   const player = createSoundPlayer({ enabled, play })
   const sound = (name: ControlSound | null): void => {
-    if (name === SOUND_ON) play('click')
-    else player(name)
+    if (name === SOUND_ON) {
+      if (!silenced()) play('click')
+    } else player(name)
   }
   // The trigger whose press already sounded, so its own click (a popover's, or Enter's) does not.
   let pressed: Element | null = null

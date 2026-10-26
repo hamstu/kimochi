@@ -17,6 +17,8 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import {
   Aperture,
   AppWindow,
+  AudioLines,
+  FlaskConical,
   ArrowLeftRight,
   ArrowUpRight,
   Check,
@@ -47,13 +49,16 @@ import {
   MenuSub,
   MenuSubContent,
   MenuTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Spinner
 } from '@kit'
 import { SourceGrid, SystemPickerButton } from './SourceGrid'
 import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
 import type { InputSource } from '@texthooker/input-source'
 import { SourceIcon } from '../components/SourceIcon'
-import { isOverlayTextVisible } from '../../ui/settings'
+import { isOverlayTextVisible, SETTINGS_DEFAULTS, type SentenceAudioSettings } from '../../ui/settings'
 import { useSetting } from '../bridge/useSetting'
 import { useViewState } from '../bridge/state'
 import { useHotkeys } from '../bridge/useHotkeys'
@@ -137,6 +142,49 @@ function SwitchMark({ on }: { on: boolean }): ReactNode {
     <span className="k-switch k-switch-sm src-switch" data-state={state} aria-hidden>
       <span className="k-switch-thumb" data-state={state} />
     </span>
+  )
+}
+
+/**
+ * Sentence audio's switch, under Auto OCR: the same setting as Settings → Anki → Sentence Audio.
+ * Its yellow flask says the feature is experimental and opens what it does. The row holds two
+ * controls, so it is not a button: the switch is a transparent button under the whole row
+ * (`src-row-hit`), and the flask a button above it.
+ */
+function SentenceAudioRow(): ReactNode {
+  const [stored, save] = useSetting<SentenceAudioSettings>('sentenceAudio', SETTINGS_DEFAULTS.sentenceAudio)
+  const config = { ...SETTINGS_DEFAULTS.sentenceAudio, ...stored }
+  return (
+    <div className="k-row src-row src-row-layered">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={config.enabled}
+        aria-label="Sentence audio"
+        className="src-row-hit"
+        onClick={() => void save({ ...config, enabled: !config.enabled })}
+      />
+      <AudioLines aria-hidden />
+      <span className="k-row-label src-row-label-fit">Sentence audio</span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button type="button" className="src-experimental" aria-label="Experimental: what Sentence audio does" title="Experimental">
+            <FlaskConical aria-hidden />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent side="bottom" align="start" className="src-experimental-pop">
+          <p>
+            <strong>Experimental.</strong> Sentence audio records what this computer plays and matches it to the
+            lines you scan, so each line in the Log gets its own spoken audio, to replay and to add to your
+            Anki cards.
+          </p>
+          <p>While it’s on, all of Kimochi’s sound effects are turned off, so they stay out of the recordings.</p>
+          <p className="src-experimental-more">Settings → Anki → Sentence Audio has the rest, and the speech model.</p>
+        </PopoverContent>
+      </Popover>
+      <span className="src-row-fill" />
+      <SwitchMark on={config.enabled} />
+    </div>
   )
 }
 
@@ -843,6 +891,7 @@ export function SourcePanel({
               <span className="k-row-label">Auto OCR</span>
               <SwitchMark on={controller.isAutoOCREnabled} />
             </button>
+            <SentenceAudioRow />
             {overlayRow}
           </div>
           {gameModeNotice}

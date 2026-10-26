@@ -19,6 +19,7 @@ import { usePanelController } from './usePanelController'
 import { useNativeHover } from './useNativeHover'
 import { TitleBarSlotContext } from './titleBarSlot'
 import { useSetting } from '../bridge/useSetting'
+import { recordingAudio } from '@ui/sounds'
 
 interface PanelShellProps {
   label: string
@@ -43,6 +44,9 @@ export default function PanelShell({
   const [error, setError] = useState<string | null>(null)
   const [soundEffects, setSoundEffects] = useSetting<boolean>('soundEffects', true)
   const soundOn = soundEffects !== false
+  // While sentence audio records, sound effects are off whatever this says: no speaker to press.
+  const [sentenceAudio] = useSetting<unknown>('sentenceAudio', null)
+  const recording = recordingAudio(sentenceAudio)
 
   useNativeHover()
   usePanelController(label)
@@ -135,15 +139,18 @@ export default function PanelShell({
         <div ref={setSlot} className="native-titlebar-slot" />
         <div className="native-window-actions">
           {/* The same setting as Settings → General → Sound effects. Muting is silent; turning
-              sound back on plays its own sound, the one that plays while the setting is off. */}
-          <button
-            title={soundOn ? 'Mute sound effects' : 'Turn on sound effects'}
-            aria-label={soundOn ? 'Mute sound effects' : 'Turn on sound effects'}
-            data-sound={soundOn ? 'none' : 'sound-on'}
-            onClick={() => void setSoundEffects(!soundOn)}
-          >
-            {soundOn ? <Volume2 /> : <VolumeX />}
-          </button>
+              sound back on plays its own sound, the one that plays while the setting is off.
+              Hidden while sentence audio records (no sound effect plays then). */}
+          {!recording && (
+            <button
+              title={soundOn ? 'Mute sound effects' : 'Turn on sound effects'}
+              aria-label={soundOn ? 'Mute sound effects' : 'Turn on sound effects'}
+              data-sound={soundOn ? 'none' : 'sound-on'}
+              onClick={() => void setSoundEffects(!soundOn)}
+            >
+              {soundOn ? <Volume2 /> : <VolumeX />}
+            </button>
+          )}
           <button
             title={pinned ? 'Unpin window' : 'Keep on top'}
             aria-label={pinned ? 'Unpin window' : 'Keep on top'}

@@ -224,7 +224,8 @@ const playSound = createSoundPlayer({
       {
         soundEffects: setting('soundEffects'),
         soundEffectsScans: setting('soundEffectsScans'),
-        soundEffectsClicks: setting('soundEffectsClicks')
+        soundEffectsClicks: setting('soundEffectsClicks'),
+        sentenceAudio: setting('sentenceAudio')
       },
       soundKind(name)
     )

@@ -22,6 +22,7 @@ const {
   playAudio,
   soundKind,
   soundKindOn,
+  recordingAudio,
   volumeOf,
   setSoundVolume,
   currentSoundVolume
@@ -58,6 +59,15 @@ test('scan sounds and click sounds each have their own switch, under the one for
   // Off for all wins over either kind.
   assert.equal(soundKindOn({ soundEffects: false, soundEffectsScans: true }, 'scans'), false)
   assert.equal(soundKindOn({ soundEffects: false, soundEffectsClicks: true }, 'clicks'), false)
+})
+
+test('no sound effect plays while sentence audio records what the computer plays', () => {
+  const recording = { sentenceAudio: { ...SETTINGS_DEFAULTS.sentenceAudio, enabled: true } }
+  assert.equal(soundKindOn(recording, 'scans'), false)
+  assert.equal(soundKindOn({ ...recording, soundEffects: true, soundEffectsClicks: true }, 'clicks'), false)
+  assert.equal(soundKindOn({ sentenceAudio: SETTINGS_DEFAULTS.sentenceAudio }, 'clicks'), true, 'off by default')
+  assert.equal(recordingAudio(null), false)
+  assert.equal(recordingAudio({ enabled: 'yes' }), false, 'only a real on')
 })
 
 test('the interface has one click, and the sidebar its whoosh', () => {
@@ -335,6 +345,18 @@ test('interaction sounds follow the setting, except the one that turns sound on'
   assert.deepEqual(played, ['click', 'click'])
   uninstall()
   assert.equal(listeners.has('click'), false)
+})
+
+test('while sentence audio records, even turning sound back on is silent', () => {
+  const listeners = new Map()
+  const root = {
+    addEventListener: (type, fn) => listeners.set(type, fn),
+    removeEventListener: (type) => listeners.delete(type)
+  }
+  const played = []
+  installInteractionSounds(root, { enabled: () => false, silenced: () => true, play: (name) => played.push(name) })
+  listeners.get('click')({ target: element('button', { 'data-sound': 'sound-on' }) })
+  assert.deepEqual(played, [])
 })
 
 test('a pointer press sounds every control; a key only a menu or select it opens', () => {

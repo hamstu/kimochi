@@ -9,7 +9,7 @@ import { panel } from '../../bridge/tauri'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
 import { INTERFACE_SCALES, type Appearance, type InterfaceScale } from '@ui/settings'
-import { playAudio, setSoundVolume, volumeOf } from '@ui/sounds'
+import { playAudio, recordingAudio, setSoundVolume, volumeOf } from '@ui/sounds'
 
 const APPEARANCES = [
   { value: 'system', label: 'System', icon: <Monitor /> },
@@ -29,6 +29,9 @@ export function GeneralTab(): ReactNode {
   const [scanSounds, setScanSounds] = useSetting<boolean>('soundEffectsScans', true)
   const [clickSounds, setClickSounds] = useSetting<boolean>('soundEffectsClicks', true)
   const [soundVolume, saveSoundVolume] = useSetting<number>('soundEffectsVolume', 0.5)
+  // Sentence audio records what the computer plays: no sound effect plays meanwhile.
+  const [sentenceAudio] = useSetting<unknown>('sentenceAudio', null)
+  const recording = recordingAudio(sentenceAudio)
   const volume = Math.round(volumeOf(soundVolume) * 100)
   const { props: controller } = useController()
   const { capture } = useCapabilities()
@@ -69,15 +72,20 @@ export function GeneralTab(): ReactNode {
         <SettingsRow
           label="Sound effects"
           controlId="general-sound-effects"
-          description="Turns every sound on or off. The speaker in each title bar does the same."
+          description={
+            recording
+              ? 'Off while Sentence Audio records (Settings → Anki), so they stay out of its clips.'
+              : 'Turns every sound on or off. The speaker in each title bar does the same.'
+          }
         >
           <Switch
             id="general-sound-effects"
-            checked={soundEffects}
+            checked={soundEffects && !recording}
+            disabled={recording}
             onCheckedChange={(checked) => void setSoundEffects(checked)}
           />
         </SettingsRow>
-        {soundEffects && (
+        {soundEffects && !recording && (
           <SettingsSubgroup>
             <SettingsRow
               label="Scan sounds"
