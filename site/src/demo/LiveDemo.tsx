@@ -40,7 +40,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react'
-import { Maximize2, Minimize2, Play, RotateCcw } from 'lucide-react'
+import { Maximize2, Play, RotateCcw, X } from 'lucide-react'
 import { useMediaQuery } from '../lib/client'
 import { GAME } from './content'
 import { useGuessedPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
@@ -617,21 +617,42 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
             : 'kd-stage relative flex w-full [overflow-anchor:none] flex-col overflow-hidden rounded-xl border border-hairline lg:aspect-[16/10]'
         }
       >
-        <div className="absolute top-0 right-0 z-[80] hidden items-center gap-1 p-0.5 md:flex">
+        <div
+          className={`absolute right-0 z-[80] flex items-center gap-1 ${max ? 'top-[env(safe-area-inset-top)] p-2' : 'top-0 p-0.5'}`}
+        >
           {flow && phase === 'running' && (
-            <button type="button" onClick={play} aria-label="Play the demo again" title="Play again" className="kd-max grid size-5 place-items-center rounded-md">
-              <RotateCcw size={12} aria-hidden />
+            <button
+              type="button"
+              onClick={play}
+              aria-label="Play the demo again"
+              title="Play again"
+              className={`kd-max grid place-items-center ${max ? 'size-11 rounded-full md:size-9' : 'size-5 rounded-md'}`}
+            >
+              <RotateCcw size={max ? 16 : 12} aria-hidden />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setMax((m) => !m)}
-            aria-label={max ? 'Restore the demo' : 'Maximise the demo'}
-            title={max ? 'Restore (Esc)' : 'Maximise'}
-            className={`kd-max grid place-items-center rounded-md ${deck ? 'm-1.5 size-7' : 'mr-1 size-5'}`}
-          >
-            {max ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
-          </button>
+          {max ? (
+            // Out of the maximised demo: big enough to hit with a thumb.
+            <button
+              type="button"
+              onClick={() => setMax(false)}
+              aria-label="Close the maximised demo"
+              title="Close (Esc)"
+              className="kd-max kd-max-close grid size-11 place-items-center rounded-full md:size-9"
+            >
+              <X size={20} aria-hidden />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMax(true)}
+              aria-label="Maximise the demo"
+              title="Maximise"
+              className={`kd-max grid place-items-center rounded-md ${deck ? 'm-1.5 size-7' : 'mr-1 size-5'}`}
+            >
+              <Maximize2 size={14} aria-hidden />
+            </button>
+          )}
         </div>
         {deck ? (
           <div className="grid flex-1 place-items-center px-3 py-8 sm:px-8 lg:px-14">
@@ -725,9 +746,10 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
               {showPlay && (
                 <button
                   type="button"
-                  // Playing fills the screen, for the full effect; Esc or the corner button restores it.
+                  // On a large screen, playing fills it for the full effect (Esc or the corner X
+                  // restores it); a phone plays in place.
                   onClick={() => {
-                    setMax(true)
+                    if (wide) setMax(true)
                     play()
                   }}
                   disabled={flow && loadLog && !logReady}

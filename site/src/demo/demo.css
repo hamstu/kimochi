@@ -760,6 +760,24 @@
   color: var(--k-text);
   background: var(--k-hover);
 }
+/* A small corner button still takes a finger-sized tap. */
+.kd-max {
+  position: relative;
+}
+.kd-max::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.kd-max-close {
+  color: var(--k-text);
+  background: color-mix(in oklab, var(--k-raised) 88%, transparent);
+  box-shadow: 0 0 0 1px var(--k-line), 0 4px 14px rgb(0 0 0 / 0.25);
+  backdrop-filter: blur(8px);
+}
+.kd-max-close::after {
+  inset: -4px;
+}
 .kd-max:focus-visible {
   outline: 2px solid var(--k-accent);
   outline-offset: 1px;
