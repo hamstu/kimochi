@@ -416,3 +416,40 @@ test("Gaming Mode opens controls before releasing radial ownership", async (t) =
   assert.deepEqual(h.nav, [true, false]);
   assert.equal(h.controller.mode, 'idle');
 });
+
+test("Scan from the menu lands quiet, so the text is not lit and put out again as reading starts", async (t) => {
+  const events = [];
+  const h = controllerHarness(t, async () => [], {
+    quietText: (quiet) => events.push(`quiet:${quiet}`),
+    scan: async () => {
+      events.push("scan");
+      return true;
+    },
+  });
+  await h.controller.toggle();
+  await h.press(12);
+  await h.press(0);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(events[0], "quiet:true");
+  assert.equal(events[1], "scan");
+  assert.ok(!events.slice(2).includes("quiet:false"), `held quiet into reading: ${events}`);
+  assert.equal(h.controller.mode, "words");
+});
+
+test("a menu scan that brings no text puts the text back to its ordinary look", async (t) => {
+  const events = [];
+  const h = controllerHarness(t, async () => [], {
+    quietText: (quiet) => events.push(`quiet:${quiet}`),
+    scan: async () => {
+      events.push("scan");
+      return false;
+    },
+    status: () => ({ hasText: false, autoOcr: false, autoAvailable: true, center: { x: 640, y: 400 } }),
+  });
+  await h.controller.toggle();
+  await h.press(12);
+  await h.press(0);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(events, ["quiet:true", "scan", "quiet:false"]);
+  assert.equal(h.controller.mode, "idle");
+});

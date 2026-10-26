@@ -439,20 +439,34 @@ export function createController(context) {
     // focus while the scan runs, so it is captured as it looks when it is in front. With
     // automatic OCR on, the scan catches the loop up instead, and when the text drawn is
     // already current (`fresh`) there is nothing new to wait for: straight into reading.
+    // The text is going straight into reading, so it lands quiet, as reading draws it: lit by the
+    // pointer for a moment and then put out by `enterWords` read as the overlay flickering.
+    context.quietText(true);
     const before = context.status().scanId;
-    const fresh = await context.scan();
+    let fresh;
+    try {
+      fresh = await context.scan();
+    } catch (error) {
+      unquiet();
+      throw error;
+    }
     const after = context.status();
     if (
       mode !== "idle" ||
       !after.hasText ||
       (after.scanId === before && !fresh)
     )
-      return;
+      return void unquiet();
     await setNav(true);
-    if (mode !== "idle") return;
+    if (mode !== "idle") return void unquiet();
     input = "pad";
     controls.reset();
     await enterWords();
+  }
+
+  /** The text back to its ordinary look, unless reading (which holds it quiet) took over meanwhile. */
+  function unquiet() {
+    if (mode === "idle") context.quietText(false);
   }
 
   function handle(command) {

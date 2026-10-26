@@ -13,7 +13,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - Sound effects are simpler: every button, switch and menu makes the same click (the sidebar keeps
   its whoosh). Settings → General has separate switches for scan sounds and click sounds under
-  Sound effects.
+  Sound effects, and a Volume slider for all of them (50% by default).
+- Gaming Mode: choosing Scan from the menu no longer makes the text flicker as reading starts.
 - macOS: Mini Mode now shows on top of a game in full screen.
 - Settings → Log is now Log & Sessions, with your sessions listed at the bottom: drag to reorder,
   click a name to rename, switch, delete or add one. Reset Log settings is gone.
