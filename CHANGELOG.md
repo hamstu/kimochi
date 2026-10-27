@@ -10,3 +10,5 @@ the new version with the date. Format: [Keep a Changelog](https://keepachangelog
 Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`, `### Removed`.
 
 ## [Unreleased]
+
+- First alpha release of Kimochi.
