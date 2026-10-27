@@ -1,6 +1,7 @@
 // Reproducible Linux AppImage repairs; no changes to application/library versions.
 import { readFile, writeFile, copyFile, readdir, access, mkdir, rename, rm, cp } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -107,6 +108,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`AVIF dictionary images: libavif ${linuxAvifSource().version}`)
 }
 
+/** The SPA plugin directories the AppImage carries (see repairLinuxAppImages). */
+export const spaPlugins = ['support', 'audioconvert', 'videoconvert']
+
 export async function repairLinuxAppImages({ target, release, env }) {
   const directory = path.resolve(process.env.CARGO_TARGET_DIR ?? 'src-tauri/target', target ?? '', release ? 'release' : 'debug', 'bundle/appimage')
   const entries = await readdir(directory)
@@ -116,13 +120,24 @@ export async function repairLinuxAppImages({ target, release, env }) {
   const appdir = path.join(directory, appdirs[0])
   await bundleLinuxAudio(appdir, env)
   linuxAvifSource()
-  // PipeWire loads its support.system implementation dynamically. The compiled-in
-  // Ubuntu multiarch path is absent on SteamOS/Arch, even when PipeWire is installed.
+  // PipeWire loads its SPA plugins dynamically. The compiled-in Ubuntu multiarch path is
+  // absent on SteamOS/Arch, even when PipeWire is installed, and SPA_PLUGIN_DIR points at the
+  // bundle alone: `support` for every client, `audioconvert` for an audio stream's adapter
+  // (sentence audio; without it the stream cannot be made) and `videoconvert` for video.
   const spaDirectory = spawnSync('pkg-config', ['--variable=plugindir', 'libspa-0.2'], { encoding: 'utf8' })
   const spaSource = spaDirectory.stdout.trim()
   if (spaDirectory.status !== 0 || !spaSource) throw new Error('PipeWire SPA plugin directory unavailable')
-  const spaDestination = path.join(appdir, 'usr/lib/spa-0.2/support')
-  await cp(path.join(spaSource, 'support'), spaDestination, { recursive: true })
+  const spaDestinations = []
+  for (const plugin of spaPlugins) {
+    const source = path.join(spaSource, plugin)
+    if (!existsSync(source)) {
+      if (plugin === 'videoconvert') continue
+      throw new Error(`PipeWire SPA plugin ${plugin} missing from ${spaSource} (install libspa-0.2-modules)`)
+    }
+    const destination = path.join(appdir, 'usr/lib/spa-0.2', plugin)
+    await cp(source, destination, { recursive: true })
+    spaDestinations.push(destination)
+  }
   const moduleDirectory = spawnSync('pkg-config', ['--variable=moduledir', 'libpipewire-0.3'], { encoding: 'utf8' }).stdout.trim()
   const pipewirePrefix = spawnSync('pkg-config', ['--variable=prefix', 'libpipewire-0.3'], { encoding: 'utf8' }).stdout.trim()
   if (!moduleDirectory || !pipewirePrefix) throw new Error('PipeWire runtime paths unavailable')
@@ -139,7 +154,7 @@ export async function repairLinuxAppImages({ target, release, env }) {
   await mkdir(configDestination, { recursive: true })
   await copyFile(clientConfig, path.join(configDestination, 'client.conf'))
   const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
-  const spaDeployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, `--deploy-deps-only=${spaDestination}`, `--deploy-deps-only=${moduleDestination}`], { stdio: 'inherit', env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1' } })
+  const spaDeployed = spawnSync(path.join(cache, `linuxdeploy-${arch}.AppImage`), ['--appimage-extract-and-run', `--appdir=${appdir}`, ...spaDestinations.map((directory) => `--deploy-deps-only=${directory}`), `--deploy-deps-only=${moduleDestination}`], { stdio: 'inherit', env: { ...env, APPIMAGE_EXTRACT_AND_RUN: '1' } })
   if (spaDeployed.error || spaDeployed.status !== 0) throw spaDeployed.error ?? new Error(`PipeWire SPA deployment failed (${spaDeployed.status})`)
   const libraries = path.join(appdir, 'usr/lib')
   // EGL/Mesa stays on the host. Its Wayland ABI must come from the host too:

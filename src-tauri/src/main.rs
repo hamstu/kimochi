@@ -2675,6 +2675,7 @@ fn main() {
     if platform::steam_input::run_watchdog() { return; }
     #[cfg(target_os = "linux")]
     if platform::dictionary_images::run_check() { return; }
+    if sentence_audio::run_check() { return; }
     // Before WebKitGTK starts a web process: Hachidori's threaded engine (loopback.rs).
     loopback::prepare_environment();
     // Before anything claims a shortcut, the gamepad or a capture stream: any other copy

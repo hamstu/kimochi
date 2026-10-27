@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { hashOverlapsHeaders, verifyDictionaryImages } from './linux-appimage.mjs'
+import { hashOverlapsHeaders, spaPlugins, verifyDictionaryImages } from './linux-appimage.mjs'
 
 // Minimal ELF64 section metadata, using the real failed library's header/hash offsets.
 function elf(programHeaders, hashOffset = 0x1f0) {
@@ -56,4 +56,10 @@ test('an AppDir without libavif, a decode, or an AV1 decoder fails the build', a
   await assert.rejects(verifyDictionaryImages(await appdir(t, { libavif: false }), answers(0, decoded)), /carries no libavif/)
   await assert.rejects(verifyDictionaryImages(await appdir(t), answers(1, 'AVIF check failed: AVIF decode failed: No codec available')), /cannot decode AVIF: .*No codec/)
   await assert.rejects(verifyDictionaryImages(await appdir(t), answers(0, 'AVIF ok: sample.avif with libavif 1.0.4 (rav1e [enc]:0.7.1)')), /no AV1 decoder/)
+})
+
+test('the AppImage carries the PipeWire plugins an audio stream needs', () => {
+  // Sentence audio's capture stream cannot be made without audioconvert (SPA_PLUGIN_DIR is the bundle's).
+  assert.ok(spaPlugins.includes('support'))
+  assert.ok(spaPlugins.includes('audioconvert'))
 })

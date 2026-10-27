@@ -810,6 +810,45 @@ impl Anki {
     }
 }
 
+/// `kimochi --check-audio [seconds]`: records what this computer plays for a few seconds (3 by
+/// default) with the capture this binary carries (in an AppImage, the bundled PipeWire), says how
+/// it went and exits, for support and for checking a build over SSH.
+pub fn run_check() -> bool {
+    let mut args = std::env::args().skip(1);
+    if args.next().as_deref() != Some("--check-audio") {
+        return false;
+    }
+    let seconds = args.next().and_then(|s| s.parse::<f64>().ok()).unwrap_or(3.0).clamp(0.5, 30.0);
+    let mut capture = match SystemAudio::start() {
+        Ok(capture) => capture,
+        Err(e) => {
+            eprintln!("Audio check failed ({}): {}", e.code, e.message);
+            std::process::exit(1);
+        }
+    };
+    let mut ring = AudioRing::new(48_000, seconds + 1.0);
+    let until = Instant::now() + Duration::from_secs_f64(seconds);
+    while Instant::now() < until {
+        std::thread::sleep(DRAIN_EVERY);
+        capture.drain_into(&mut ring);
+        if let Some(why) = capture.ended() {
+            eprintln!("Audio check failed: recording stopped: {why}");
+            std::process::exit(1);
+        }
+    }
+    capture.drain_into(&mut ring);
+    let (_, samples) = ring.read_from(ring.first_index());
+    let peak = samples.iter().fold(0f32, |peak, s| peak.max(s.abs()));
+    println!(
+        "Audio ok: {}: {:.1} s at {} Hz, peak {peak:.3}{}",
+        capture.source(),
+        samples.len() as f64 / ring.sample_rate() as f64,
+        ring.sample_rate(),
+        if peak == 0.0 { " (silence: is anything playing?)" } else { "" }
+    );
+    true
+}
+
 /// The capture thread: start, drain into the ring, and start again after a failure, until the
 /// generation moves on.
 fn record(generation: u64, current: Arc<AtomicU64>, ring: Arc<Mutex<AudioRing>>, state: Arc<Mutex<State>>) {
