@@ -58,4 +58,16 @@ given the truth, how many clips held the whole voice and how far their ends were
 `clips/`; every line says why it was decided as it was (as Diagnostics → Sentence audio does in
 the app). `KIMOCHI_SENTENCE_AUDIO_DEBUG=1` prints what each line was decided from.
 
+A recording of a voiced game becomes sessions with the truth known through
+`tools/game_video.py` (Python, with meikiocr, numpy, opencv-python-headless and mlx-whisper or
+openai-whisper). It reads the frames with MeikiOCR, groups each scan into the Log's blocks as the
+app does, and takes each dialogue's voice from Whisper transcribing its time on screen. It writes
+an automatic-OCR session and a manual-scan session side by side, sharing one `audio.wav`, plus a
+`truth.txt` to check by eye. Corrections go in `truth.json`, keyed by a line's text.
+
+```sh
+python3 -I speech-core/tools/game_video.py game.mp4 sessions/game --crop 0,560,1700,500
+$LAB replay sessions/game/auto && $LAB replay sessions/game/manual
+```
+
 `vad_probe` (an example) prints Silero's probability and the loudness of every 32 ms of a WAV.
