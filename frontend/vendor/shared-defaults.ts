@@ -19,7 +19,8 @@ export const DEFAULT_HOTKEYS: HotkeysSettings = {
     accelerator: 'CommandOrControl+Shift+Space',
     description: 'Open the radial menu over the game',
     enabled: true,
-    // LS + RS: both stick clicks, which few games use together.
+    // LS + RS: both stick clicks, which few games use together. A placeholder until the native
+    // hotkeys load: on a Steam Deck the native default is the R4 back grip (settings.rs).
     gamepadButtons: [10, 11]
   }
 }

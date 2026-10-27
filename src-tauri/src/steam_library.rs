@@ -444,6 +444,21 @@ pub fn detect(os_release: &str, board_vendor: &str, product_name: &str) -> Devic
 }
 
 /// Python's `urllib.parse.quote(s, safe='')`, which `steamos-add-to-steam` uses for the URL.
+/// Whether this computer is a Steam Deck (LCD or OLED), whatever OS it runs. Read once. Tests
+/// never see one, so the defaults they check do not depend on the machine running them.
+pub fn is_steam_deck() -> bool {
+    #[cfg(all(target_os = "linux", not(test)))]
+    {
+        static DECK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *DECK.get_or_init(|| {
+            let read = |path: &str| std::fs::read_to_string(path).unwrap_or_default();
+            detect("", &read("/sys/class/dmi/id/board_vendor"), &read("/sys/class/dmi/id/product_name")).steam_deck
+        })
+    }
+    #[cfg(any(not(target_os = "linux"), test))]
+    false
+}
+
 pub fn percent_encode(text: &str) -> String {
     let mut out = String::with_capacity(text.len() * 3);
     for byte in text.bytes() {

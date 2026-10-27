@@ -5,7 +5,10 @@ use std::io::{ErrorKind, Read};
 use std::os::unix::fs::OpenOptionsExt;
 use std::time::{Duration, Instant};
 
-const BUTTONS: [(usize, u8); 17] = [
+/// (byte, bit) of each button, per Linux hid-steam.c's Deck report: the 17 W3C standard
+/// buttons in their order, then what only the Deck has, as 17–22: the back grips L4, R4, L5, R5
+/// and the left and right trackpad clicks (named in frontend/bridge/useGamepad.ts).
+const BUTTONS: [(usize, u8); 23] = [
     (8, 7),
     (8, 5),
     (8, 6),
@@ -23,6 +26,12 @@ const BUTTONS: [(usize, u8); 17] = [
     (9, 2),
     (9, 1),
     (9, 5),
+    (13, 1),
+    (13, 2),
+    (9, 7),
+    (10, 0),
+    (10, 1),
+    (10, 2),
 ];
 
 #[derive(Clone, Debug)]

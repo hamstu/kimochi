@@ -125,8 +125,9 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 let mut devices = devices;
                 if let Some(sample) = sample {
                     let index = devices.len();
+                    // The standard 17, then the back grips and trackpad clicks (deck_input.rs).
                     devices.push(json!({"index": index, "id": "Steam Deck physical controller",
-                        "connected": true, "mapping": "standard", "buttons": STANDARD.len(),
+                        "connected": true, "mapping": "standard", "buttons": sample.buttons.len(),
                         "axes": 4, "timestamp": 0, "source": "steam-deck-hidraw"}));
                     if preferred.is_none() || preferred == Some(index) {
                         (devices, Some(index), sample.buttons, sample.axes)

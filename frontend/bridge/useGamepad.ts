@@ -35,7 +35,15 @@ export const GAMEPAD_BUTTON_NAMES: string[] = [
   'Down',
   'Left',
   'Right',
-  'Home'
+  'Home',
+  // Delta: what only the Steam Deck has, read from its own controller (deck_input.rs): the back
+  // grips (upper L4 and R4, lower L5 and R5) and the trackpad clicks.
+  'L4',
+  'R4',
+  'L5',
+  'R5',
+  'Left pad',
+  'Right pad'
 ]
 
 export function getButtonName(index: number): string {

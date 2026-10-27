@@ -424,8 +424,18 @@ fn merge(target: &mut Value, source: Value) {
 /// `frontend/vendor/shared-defaults.ts`.
 ///
 /// `gamepadButtons` is a chord of W3C standard button indices that must all be held; the
-/// controller menu defaults to both stick clicks (LS + RS), which few games use together.
+/// controller menu defaults to both stick clicks (LS + RS), which few games use together, and on
+/// a Steam Deck to the upper right back grip (R4), which games never see unless a Steam layout
+/// binds it, so both sticks stay the game's.
 pub fn default_hotkeys() -> Map<String, Value> {
+    default_hotkeys_for(crate::steam_library::is_steam_deck())
+}
+
+/// R4: the Deck's buttons after the 17 standard ones (platform/linux/deck_input.rs).
+pub const DECK_MENU_BUTTON: usize = 18;
+
+fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
+    let menu_chord = if steam_deck { json!([DECK_MENU_BUTTON]) } else { json!([10, 11]) };
     let mut hotkeys = Map::new();
     hotkeys.insert(
         "triggerScan".into(),
@@ -444,7 +454,7 @@ pub fn default_hotkeys() -> Map<String, Value> {
             "accelerator": "CommandOrControl+Shift+Space",
             "description": "Open the radial menu over your source",
             "enabled": true,
-            "gamepadButtons": [10, 11]
+            "gamepadButtons": menu_chord
         }),
     );
     hotkeys
@@ -691,6 +701,13 @@ mod tests {
         assert_eq!(doc["autoOCRSettings"]["pollInterval"], 9);
         // Untouched sibling default must still be present after a partial merge.
         assert_eq!(doc["autoOCRSettings"]["adaptivePollMax"], 5000);
+    }
+
+    #[test]
+    fn a_steam_deck_opens_the_controller_menu_with_a_back_grip() {
+        assert_eq!(default_hotkeys_for(false)["openControllerMenu"]["gamepadButtons"], json!([10, 11]));
+        assert_eq!(default_hotkeys_for(true)["openControllerMenu"]["gamepadButtons"], json!([DECK_MENU_BUTTON]));
+        assert_eq!(default_hotkeys_for(true)["triggerScan"]["gamepadButtons"], json!([]));
     }
 
     #[test]
