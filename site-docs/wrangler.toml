@@ -9,7 +9,8 @@ name = "kimochi-docs"
 account_id = "89370b17100354f9a9d4dd0abb8c054a"
 compatibility_date = "2026-08-01"
 
-workers_dev = true
+# Served only on docs.kimochiapp.com, no workers.dev copy (as kimochi-server).
+workers_dev = false
 preview_urls = false
 
 routes = [ { pattern = "docs.kimochiapp.com", custom_domain = true } ]

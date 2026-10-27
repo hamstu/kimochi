@@ -5,6 +5,10 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+# The demo's own build (the app's real windows): fingerprinted the same way.
+/demo/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # Account pages: not for search results.
 /account
   X-Robots-Tag: noindex
