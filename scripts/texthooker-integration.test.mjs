@@ -360,6 +360,35 @@ test('semantic OCR groups remain separate with independent durable replay IDs', 
   assert.equal(replay.snapshot().lines.length,3)
 })
 
+test('a fuller reading that only says the last line again is not logged twice while Skip repeats is on', async () => {
+  // Recorded: a screen left alone, its blinking "next" mark misread as one more character now and
+  // then. Native logs that reading (the line itself is over a minute old), then the clean reading
+  // replaces it: the same line as the one above.
+  const line = 'その看護師さんに、お礼を伝えてほしいです。とっても助かりました、ってく';
+  const at = 1_000_000;
+  const read = (id, text, ms, replaces) => ({
+    ...entry(id, 'Game', text),
+    timestamp: at + ms,
+    engine: 'meikiocr',
+    groups: [{ id: 'group-0', text, bbox: [0, 0, 400, 40], orientation: 'horizontal' }],
+    ...(replaces ? { replaces } : {}),
+  });
+  const run = async (dedupeDepth, cleanAfterMs) => {
+    const h = await harness({ superTexthooker: { inputSource: 'ocr', dedupeDepth } });
+    await h.setSetting('scannedTextHistory', [read('1', line, 0)]);
+    await h.drain();
+    await h.setSetting('scannedTextHistory', [read('2', `${line}V`, cleanAfterMs - 1000), read('1', line, 0)]);
+    await h.drain();
+    assert.deepEqual(h.snapshot().lines.map((l) => l.text), [line, `${line}V`]);
+    await h.setSetting('scannedTextHistory', [read('3', line, cleanAfterMs, ['2']), read('1', line, 0)]);
+    await h.drain();
+    return h.snapshot().lines.map((l) => l.text);
+  };
+  assert.deepEqual(await run(1, 90_000), [line], 'the misread line goes and its clean reading is not shown again');
+  assert.deepEqual(await run(0, 90_000), [line, line], 'with Skip repeats off, every reading is logged');
+  assert.deepEqual(await run(1, 10 * 60_000), [line], 'however long the screen was left alone');
+});
+
 const resets = (h) => h.invoked.filter((c) => c === 'history_merge_reset').length;
 
 test('clearing the log tells native to forget the scans it held, so the same text logs again', async () => {

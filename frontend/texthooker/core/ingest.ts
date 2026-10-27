@@ -12,6 +12,13 @@ import { hasCJK } from "@texthooker/lib/utils";
 import { acceptsInput } from "../input-source";
 import type { Line, LineSource } from "@texthooker/lib/types";
 
+/** Steps 1–4 below: the text a line would be stored with, or null when nothing is left. */
+export function preparedText(text: string): string | null {
+  const value = text.replace(/\r\n?/g, "\n").trim();
+  if (!value) return null;
+  return applyReplacements(value).text.trim() || null;
+}
+
 /**
  * Returns a stable ingest function that runs incoming text through the
  * processing pipeline and (optionally) triggers a background tokenize.
@@ -43,13 +50,8 @@ export const ingestText = async (
   )
     return;
 
-  // 1+2
-  let value = text.replace(/\r\n?/g, "\n").trim();
-  if (!value) return;
-
-  // 3 — regex replacements
-  const replaced = applyReplacements(value);
-  value = replaced.text.trim();
+  // 1–5
+  const value = preparedText(text);
   if (!value) return;
 
   // 6 — CJK-only filter

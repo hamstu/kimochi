@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Automatic OCR no longer logs the same line again and again while you stay on one screen, when
+  a blinking "next" mark is now and then read as one more character (with Skip repeats on).
 - Windows: quitting Kimochi no longer sometimes ends in a crash when another window comes to the
   front as it closes.
 - Windows: on a graphics adapter that cannot run MeikiOCR on DirectML, Kimochi now goes straight

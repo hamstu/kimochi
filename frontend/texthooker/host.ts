@@ -9,7 +9,7 @@ import * as notebook from "./core/notebook";
 import * as stats from "./core/stats";
 import * as presets from "./core/presets";
 import * as replacements from "./core/replacements";
-import { ingestText } from "./core/ingest";
+import { ingestText, preparedText } from "./core/ingest";
 import { loadSettings, getSettings } from "./lib/settings";
 import { acceptSnapshot, type ReaderSnapshot } from "./bridge";
 import { matchedSession, sourceKey, type SourceName } from "./source-sessions";
@@ -135,20 +135,44 @@ interface ScanEntry {
   /** Earlier entries this fuller reading replaced in the history; see history_merge.rs. */
   replaces?: string[];
 }
+/**
+ * Does `texts` (one reading's lines) say again exactly what the Log's last reading says? The last
+ * reading is the newest line and the lines of its scan before it. There is no time limit: a
+ * screen can be left alone for many minutes before its mark is misread.
+ */
+function repeatsLastReading(texts: string[]): boolean {
+  const lines = store.snapshotLines();
+  const last = lines.at(-1);
+  if (!last || !texts.length) return false;
+  const scan = last.ocr?.scanId;
+  let first = lines.length - 1;
+  while (scan && first > 0 && lines[first - 1].ocr?.scanId === scan) first--;
+  const previous = lines.slice(first).map((line) => line.text);
+  return previous.length === texts.length && previous.every((text, i) => text === texts[i]);
+}
 async function ingestHistory(entries: ScanEntry[]): Promise<void> {
   for (const entry of [...entries].reverse()) {
     if (seen.includes(entry.id)) continue;
+    const groups = entry.groups?.filter(group => group.text?.trim());
     // A fuller reading of text already logged: its fragments' lines give way to it.
+    let repeat = false;
     if (entry.replaces?.length) {
       for (const line of store.snapshotLines()) {
         const from = line.ingestIds ?? [];
         if (from.some((key) => entry.replaces!.some((id) => key === id || key.startsWith(`${id}:group:`))))
           store.deleteLine(line.id);
       }
+      // A screen left alone for a while is read again whenever a blinking "next" mark is misread
+      // as one more character: that reading is a new line, and the clean reading after it
+      // replaces it with the line already above it. With Skip repeats on, it is not shown again.
+      const texts = (groups?.length ? groups.map((group) => group.text) : [entry.text])
+        .map(preparedText)
+        .filter((text): text is string => text !== null);
+      repeat = getSettings().dedupeDepth > 0 && repeatsLastReading(texts);
     }
-    if (getSettings().inputSource === "ocr") {
+    if (repeat) await flush();
+    else if (getSettings().inputSource === "ocr") {
       if (entry.source) await selectSource(entry.source);
-      const groups = entry.groups?.filter(group => group.text?.trim());
       if (groups?.length) {
         for (const [index, group] of groups.entries()) {
           await ingestText(group.text, "ocr", entry.timestamp, `${entry.id}:group:${group.id}`, {
