@@ -23,8 +23,10 @@ thread_local! {
     };
 }
 
+/// `None` while the thread's locals are being destroyed: dropping `MANAGER` makes a COM call
+/// that pumps messages, and a foreground event delivered then comes back here.
 fn with_manager<R>(f: impl FnOnce(&IVirtualDesktopManager) -> Option<R>) -> Option<R> {
-    MANAGER.with(|manager| manager.as_ref().and_then(f))
+    MANAGER.try_with(|manager| manager.as_ref().and_then(f)).ok().flatten()
 }
 
 /// The desktop a window is on; `None` for one on every desktop, or none (the shell).

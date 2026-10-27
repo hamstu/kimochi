@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: quitting Kimochi no longer sometimes ends in a crash when another window comes to the
+  front as it closes.
+- Windows: on a graphics adapter that cannot run MeikiOCR on DirectML, Kimochi now goes straight
+  to the CPU after the first try instead of retrying DirectML each time OCR starts.
 - Right-clicking a Log line keeps the text you selected (and offers Copy selection and Add to
   notebook for it); with nothing selected, it no longer selects the clicked word or offers them.
 - Import from VNDB looks tidier: the results sit in their own inset box, the window is only as tall

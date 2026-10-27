@@ -126,7 +126,7 @@ unsafe extern "system" fn power_proc(
             _ => None,
         };
         if let Some(event) = event {
-            HANDLERS.with(|h| {
+            let _ = HANDLERS.try_with(|h| {
                 if let Some(h) = h.borrow().as_ref() {
                     let (report, suspended) = rules::power_transition(h.suspended.get(), event);
                     h.suspended.set(suspended);
@@ -161,7 +161,9 @@ unsafe extern "system" fn activate_proc(
     if pid == 0 {
         return;
     }
-    HANDLERS.with(|h| {
+    // `try_with` here and in `power_proc`: these callbacks can still arrive while the UI
+    // thread's locals are being destroyed at exit, and a panic cannot unwind into Windows.
+    let _ = HANDLERS.try_with(|h| {
         if let Some(h) = h.borrow().as_ref() {
             if h.last_pid.replace(pid) == pid {
                 return;

@@ -7,11 +7,14 @@
 //! otherwise its temporary engine is dropped. The observer has its own sessions.
 use crate::engine_probe::{self, Loaded, Probe, Verified};
 use crate::model_store;
-use meikiocr::{Backend, MeikiOcr, ModelPaths, OcrOptions, TextLine};
+use meikiocr::{Backend, BackendInfo, Config, MeikiOcr, ModelPaths, OcrOptions, TextLine};
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, LazyLock, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, LazyLock, Mutex, OnceLock,
+    },
 };
 use tauri::Manager;
 
@@ -251,7 +254,26 @@ pub(crate) fn engine_root(app: &tauri::AppHandle) -> Result<Assets, String> {
 pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
     initialize_runtime(&assets.runtime)?;
     let models = ModelPaths::from_dir(&assets.models);
-    engine_probe::guarded(|| MeikiOcr::new(models).map_err(|e| format!("MeikiOCR models: {e}")))
+    let config = Config {
+        backend: if DIRECTML_REFUSED.load(Ordering::Relaxed) { Backend::Cpu } else { Backend::Auto },
+        ..Config::default()
+    };
+    let engine = engine_probe::guarded(|| {
+        MeikiOcr::with_config(models, config).map_err(|e| format!("MeikiOCR models: {e}"))
+    })?;
+    if refused_directml(engine.backend_info()) {
+        DIRECTML_REFUSED.store(true, Ordering::Relaxed);
+    }
+    Ok(engine)
+}
+
+/// Set once an adapter accepts DirectML sessions but fails the crate's first-inference probe
+/// (seen on Windows on ARM under virtualisation). Every engine after that asks for CPU
+/// directly, instead of repeating the failed run and its ONNX Runtime error on stderr.
+static DIRECTML_REFUSED: AtomicBool = AtomicBool::new(false);
+
+fn refused_directml(info: &BackendInfo) -> bool {
+    info.selected == Backend::Cpu && info.fallback_reasons.iter().any(|r| r.starts_with("DirectMl"))
 }
 
 /// One DirectML inference at a time across every engine in the process.
@@ -442,6 +464,19 @@ fn annotations(lines: &[TextLine]) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_a_failed_directml_probe_pins_later_engines_to_cpu() {
+        let info = |selected, reasons: &[&str]| BackendInfo {
+            requested: Backend::Auto,
+            selected,
+            fallback_reasons: reasons.iter().map(|r| r.to_string()).collect(),
+        };
+        let probe = "DirectMl: model contract: DirectML detection inference probe failed";
+        assert!(refused_directml(&info(Backend::Cpu, &[probe])));
+        assert!(!refused_directml(&info(Backend::Cpu, &[])));
+        assert!(!refused_directml(&info(Backend::DirectMl, &[])));
+        assert!(!refused_directml(&info(Backend::Cpu, &["Cuda: provider unavailable"])));
+    }
     #[test]
     #[ignore = "requires prepared assets and MEIKIOCR_TEST_IMAGE"]
     fn bundled_runtime_recognizes_example() {
