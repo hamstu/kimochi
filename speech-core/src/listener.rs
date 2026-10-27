@@ -35,8 +35,9 @@
 //!   `speaking_lines`) needs strong evidence of its own (`said_aside`), and a name said inside
 //!   the dialogue is the dialogue's. Without a match, timing gives the voice to the line most
 //!   like dialogue (`main_line`).
-//! - A match holds the words it heard: other lines are matched to what is left (`claimed`). A
-//!   line scanned again gets the voice its earlier reading had (`same_text`).
+//! - A match holds the words it heard: other lines are matched to what is left (`claimed`), but
+//!   for readings of the same words, which share it. A line scanned again gets the voice its
+//!   earlier reading had (`same_text`).
 //! - A match is never given up, only bettered while it is partial (`replaces`); once most of the
 //!   line is heard (`FINAL_SCORE`) it is not decided again. A line without one is tried again
 //!   each time more speech is transcribed, for `RETRY_MS` (a scan made while the voice played).
@@ -170,11 +171,17 @@ const FINAL_SCORE: f64 = 0.8;
 const RETRY_MS: f64 = 40_000.0;
 /// Two lines of one scan whose matches share more than this (of the shorter) heard the same words.
 const SAME_VOICE: f64 = 0.3;
+/// Readings of one box (`same_words`): at least this many letters, this much in common.
+const SAME_WORDS_LETTERS: usize = 4;
+const SAME_WORDS_SHARE: f64 = 0.8;
 /// A line of a multi-line scan this short (in letters) with no punctuation is a name box.
 const NAME_LETTERS: usize = 6;
 /// Screen-text changes kept (`Screen`).
 const SCREEN_KEEP: usize = 200;
 const SCREEN_LOOKBACK_MS: f64 = 30_000.0;
+/// A line this long seen whole in an earlier reading was already up (a shorter one, "……", may
+/// be anywhere).
+const WHOLE_LINE_SHOWN: usize = 8;
 /// Utterances and transcriptions kept: far more than any buffer holds.
 const UTTERANCES_KEEP: usize = 400;
 const TRANSCRIPTS_KEEP: usize = 2_000;
@@ -306,7 +313,8 @@ impl Screen {
     /// When the text of a line that arrived at `ts` began to appear. While a line draws in,
     /// the screen's text only grows: each reading is held in the next. So, from the last reading
     /// before the line arrived (which must show the line's start), go back while each earlier
-    /// reading is held in the one after it (give or take an OCR slip); the run ends at the reading
+    /// reading is held in the one after it (give or take an OCR slip) or shows the whole line
+    /// word for word (another box beside it changed); the run ends at the reading
     /// where the previous line's text was replaced, or the box was empty.
     pub fn appeared(&self, text: &str, ts: f64) -> Option<f64> {
         let line = screen_fold(text);
@@ -320,7 +328,11 @@ impl Screen {
             _ => return None,
         };
         for (at, seen) in readings {
-            if seen.is_empty() || common(seen, later) * 5 < seen.len() * 4 {
+            // Held in the reading after it, or already showing the whole line, word for word
+            // (another box beside it changed: a name plate, noise the OCR picked up).
+            let held = common(seen, later) * 5 >= seen.len() * 4;
+            let shown = line.len() >= WHOLE_LINE_SHOWN && seen.windows(line.len()).any(|w| w == line.as_slice());
+            if seen.is_empty() || !(held || shown) {
                 break;
             }
             first = *at;
@@ -335,6 +347,24 @@ impl Screen {
 /// seen appearing too, beside a name box or not.
 fn screen_fold(text: &str) -> Vec<char> {
     text.chars().filter(|c| !c.is_whitespace()).map(|c| matching::fold(&c.to_string()).0.first().copied().unwrap_or(c)).collect()
+}
+
+/// Whether two readings are of the same words: long enough not to be said twice by chance
+/// (`SAME_WORDS_LETTERS`), and alike but for a misread letter or two (`SAME_WORDS_SHARE`).
+fn same_words(a: &[char], b: &[char]) -> bool {
+    let longer = a.len().max(b.len());
+    a.len().min(b.len()) >= SAME_WORDS_LETTERS && common(a, b) as f64 >= longer as f64 * SAME_WORDS_SHARE
+}
+
+/// Whether two scans read the same box: a block of each, dialogue rather than a name, with the
+/// same words.
+fn rereads(a: &[Line], b: &[Line]) -> bool {
+    let words = |unit: &[Line]| -> Vec<Vec<char>> {
+        let speaks = speaking_lines(unit);
+        unit.iter().zip(speaks).filter(|(_, s)| *s).map(|(l, _)| matching::fold(&l.text).0).collect()
+    };
+    let theirs = words(b);
+    words(a).iter().any(|x| theirs.iter().any(|y| same_words(x, y)))
 }
 
 /// The length of the longest common subsequence of `a` and `b`.
@@ -971,8 +1001,11 @@ impl Listener {
                 continue;
             }
             let main = main_line(unit);
-            let previous = u.checked_sub(1).map(main_of);
-            let next = units.get(u + 1).map(|_| main_of(u + 1));
+            // The lines said before and after: a scan reading a box of this one again (when a
+            // block beside it changed) is still its time.
+            let other = |k: &usize| !rereads(unit, &lines[units[*k].clone()]);
+            let previous = (0..u).rev().find(other).map(main_of);
+            let next = (u + 1..units.len()).find(other).map(main_of);
             let decided: Vec<Option<&Decision>> = unit.iter().map(|l| self.decision(&l.uid)).collect();
             let undecided = decided.iter().any(|d| d.is_none_or(|d| d.provisional && next.is_some()));
             let retry = !undecided && self.retry_due(unit, now);
@@ -1287,10 +1320,19 @@ impl Listener {
     }
 
     /// The speech other lines' matches hold: what they were heard saying is not this line's.
+    /// Except a recent reading of the same words: a box scanned again (when a name plate or
+    /// another box beside it changed) is one presentation, and both readings have its voice.
     fn claimed(&self, unit: &[Line]) -> Vec<Span> {
+        let texts: Vec<Vec<char>> = unit.iter().map(|l| matching::fold(&l.text).0).collect();
+        let newest = unit.iter().map(|l| l.ts).fold(f64::NEG_INFINITY, f64::max);
+        let rescanned = |line: &Line| {
+            let text = matching::fold(&line.text).0;
+            newest - line.ts <= OCR_LOOKBACK_MS && texts.iter().any(|t| same_words(t, &text))
+        };
         self.states
             .iter()
             .filter(|(uid, _)| !unit.iter().any(|l| &l.uid == *uid))
+            .filter(|(uid, _)| !self.lines.iter().any(|l| &l.uid == *uid && rescanned(l)))
             .filter_map(|(_, s)| match s.decision.as_ref().map(|d| &d.outcome) {
                 Some(Outcome::Voiced(Voice { how: How::Matched(m), .. })) => Some(Span { start: m.heard_from_ms, end: m.heard_to_ms + 1.0 }),
                 _ => None,
@@ -1550,6 +1592,14 @@ mod tests {
         game.observed("フリッツ 今日 オート スキップ", 2_200.0);
         game.observed("フリッツ 今日はいい天気ですね。 オート スキップ", 2_600.0);
         assert_eq!(game.appeared("今日はいい天気ですね。", 3_400.0), Some(2_200.0));
+        // A slanted name plate the OCR reads differently each time, and a reply bubble coming up
+        // beside the box: the line was up, whole, since the first of these.
+        let mut noisy = Screen::default();
+        noisy.observed("シーア 前の台詞です。", 1_000.0);
+        noisy.observed("物治郎人宮惣ため 今日はいい天気ですね。", 2_000.0);
+        noisy.observed("数治母人石魁なじ 今日はいい天気ですね。", 2_600.0);
+        noisy.observed("観察？ 四治郎屋惣花め 今日はいい天気ですね。", 3_400.0);
+        assert_eq!(noisy.appeared("今日はいい天気ですね。", 3_800.0), Some(2_000.0));
     }
 
     #[test]
@@ -1744,6 +1794,27 @@ mod tests {
         match &listener.decision("again").unwrap().outcome {
             Outcome::Voiced(v) => assert_eq!((v.from_ms, v.to_ms), first),
             other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_box_read_again_as_a_block_beside_it_changes_keeps_its_whole_voice() {
+        let (mut listener, ring) = listening();
+        // The text is up as the voice starts, and read twice while it plays: a name plate the
+        // OCR reads differently each time is the only change. The first words are transcribed
+        // on their own, the rest after.
+        say(&mut listener, 10_000.0, "でもルーブ");
+        say(&mut listener, 10_600.0, "ランは裏路地だし他の配送が先かな");
+        listener.line(scanned("first", "でも、ルブランは裏路地だし他の配送が先かな…", 10_600.0, "s1"));
+        listener.line(scanned("plate", "お紀業を", 10_600.0, "s1"));
+        listener.line(scanned("again", "でも、ルブランは裏路地だし他の配送が先かな…", 11_200.0, "s2"));
+        listener.line(scanned("plate2", "文紀業た", 11_200.0, "s2"));
+        listener.tick(&ring, 20_000.0);
+        // One presentation: both readings have the whole voice (to 12.6 s), not the first only
+        // what was said before the second reading came.
+        for uid in ["first", "again"] {
+            let voice = matched(listener.decision(uid)).unwrap_or_else(|| panic!("{uid}: {:?}", listener.decision(uid)));
+            assert!(voice.0 < 10_100.0 && voice.1 > 12_500.0, "{uid}: {voice:?}");
         }
     }
 
