@@ -407,7 +407,12 @@ export const SHOTS = [
     id: 'settings-anki',
     page: settingsTab('anki', '&popup=custom-api'),
     size: SETTINGS,
-    ready: '#anki-enabled'
+    // The page opens on AnkiConnect; the shot is the Yomitan API's Mining tab.
+    ready: '.k-settings-tabs',
+    actions: [
+      { run: `[...document.querySelectorAll('.k-settings-tab')].find((tab) => tab.textContent.includes('Mining')).click()` },
+      { waitFor: '#anki-enabled' }
+    ]
   },
   {
     id: 'settings-account-signedin',

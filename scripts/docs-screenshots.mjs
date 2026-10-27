@@ -3,7 +3,11 @@
  * Renders every screenshot in the docs (site-docs/src/assets/screenshots/) from the browser
  * preview harness, never the real app, in headless Chrome at 2× (retina), light and dark.
  *
- *   npm run docs:screenshots -- [--only id,id] [--theme light|dark] [--port <n>] [--list]
+ *   npm run docs:screenshots -- [--only id,id] [--theme light|dark] [--jobs <n>] [--port <n>] [--list]
+ *
+ * Shots render in parallel: `--jobs` tabs (default: the cores less two, at most 12) in one headless
+ * Chrome, each with its own viewport, theme and input, focus emulated so each acts as the window in
+ * front. Encoding the WebPs runs alongside.
  *
  * What runs (nothing touches the desktop or an installed app):
  *
@@ -28,6 +32,7 @@
  */
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { evaluate, launchChrome } from './cdp.mjs'
@@ -54,6 +59,7 @@ function options(argv) {
     only: value('--only')?.split(',').filter(Boolean),
     theme: value('--theme'),
     port: Number(value('--port') ?? 1474),
+    jobs: Number(value('--jobs') ?? Math.min(12, Math.max(2, os.availableParallelism() - 2))),
     list: argv.includes('--list')
   }
 }
@@ -254,7 +260,52 @@ async function write(file, png) {
   return { width, height, bytes: webp.length }
 }
 
+/** A tab set up as every shot expects: transparent ground, UTC, en-US, the fixed clock, and focus
+    kept as if it were the window in front (several tabs render at once). */
+async function setupPage(browser) {
+  const page = await browser.newPage()
+  await page.send('Page.enable')
+  await page.send('Runtime.enable')
+  await page.send('Emulation.setFocusEmulationEnabled', { enabled: true })
+  await page.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } })
+  await page.send('Emulation.setTimezoneOverride', { timezoneId: 'UTC' })
+  await page.send('Emulation.setLocaleOverride', { locale: 'en-US' })
+  await page.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK, runImmediately: true })
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
+  return page
+}
+
+/** One shot in one theme, then its sizes for the docs; the encodes run while the tab moves on. */
+async function render(page, servers, shot, theme, used) {
+  const file = path.join(OUT, `${shot.id}-${theme}.webp`)
+  const png = await shoot(page, servers, shot, theme)
+  const natural = (await sharp(png).metadata()).width / SCALE
+  const sized = []
+  for (const shown of shownWidths(used.get(shot.id), natural)) {
+    // At its own width, the 2× file already is the 2× picture.
+    for (const density of shown === natural ? [1] : [1, 2]) {
+      const name = path.join(OUT, `${shot.id}-${theme}.w${shown}x${density}.webp`)
+      sized.push([name, await rescale(page, (density * shown) / natural)])
+    }
+  }
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
+  // In an object: an async function's returned promise would be waited for.
+  const done = (async () => {
+    // Sizes a page no longer asks for go with the old capture.
+    const sizedName = /^(.+)\.w\d+x\d\.webp$/
+    const keep = new Set(sized.map(([name]) => path.basename(name)))
+    for (const old of (await readdir(OUT)).filter((f) => f.match(sizedName)?.[1] === `${shot.id}-${theme}` && !keep.has(f)))
+      await rm(path.join(OUT, old))
+    const [main, ...outs] = await Promise.all([write(file, png), ...sized.map(([name, shotPng]) => write(name, shotPng))])
+    const lines = [`✓ ${path.relative(root, file)}  ${main.width}×${main.height}  ${Math.round(main.bytes / 1024)} KB`]
+    sized.forEach(([name], i) => lines.push(`  ↳ ${path.basename(name)}  ${outs[i].width}×${outs[i].height}`))
+    console.log(lines.join('\n'))
+  })()
+  return { done }
+}
+
 async function main() {
+  const started = Date.now()
   const opts = options(process.argv.slice(2))
   if (opts.list) {
     for (const s of SHOTS) console.log(`${s.id.padEnd(28)} ${s.page}`)
@@ -266,61 +317,55 @@ async function main() {
   const themes = opts.theme ? [opts.theme] : ['light', 'dark']
   await mkdir(OUT, { recursive: true })
 
-  const servers = await startServers(opts.port, shots.some((s) => s.server === 'site'))
+  // Every (shot, theme), then the social cards: 1200×630 at 1×, light, the main window beside the
+  // wordmark. A pool of tabs takes them in turn.
+  const jobs = []
+  for (const shot of shots)
+    for (const theme of shot.themes ?? themes) if (themes.includes(theme)) jobs.push({ shot, theme })
+  for (const card of OG) if (!opts.only || opts.only.includes(card.id)) jobs.push({ shot: card, theme: 'light', og: true })
+
+  const servers = await startServers(opts.port, jobs.some((j) => j.shot.server === 'site'))
   const browser = await launchChrome({ args: ['--force-color-profile=srgb', '--font-render-hinting=none'] })
+  const used = await usages()
+  const writes = []
   let failed = 0
+  let next = 0
   try {
-    const page = await browser.newPage()
-    await page.send('Page.enable')
-    await page.send('Runtime.enable')
-    await page.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } })
-    await page.send('Emulation.setTimezoneOverride', { timezoneId: 'UTC' })
-    await page.send('Emulation.setLocaleOverride', { locale: 'en-US' })
-    await page.send('Page.addScriptToEvaluateOnNewDocument', { source: FIXED_CLOCK, runImmediately: true })
-    await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
-    const used = await usages()
-    for (const shot of shots) {
-      for (const theme of shot.themes ?? themes) {
-        if (!themes.includes(theme)) continue
-        const file = path.join(OUT, `${shot.id}-${theme}.webp`)
+    const worker = async () => {
+      const page = await setupPage(browser)
+      while (next < jobs.length) {
+        const { shot, theme, og } = jobs[next++]
         try {
-          const png = await shoot(page, servers, shot, theme)
-          const { width, height, bytes } = await write(file, png)
-          console.log(`✓ ${path.relative(root, file)}  ${width}×${height}  ${Math.round(bytes / 1024)} KB`)
-          const natural = width / SCALE
-          // Sizes a page no longer asks for go with the old capture.
-          const sizedName = /^(.+)\.w\d+x\d\.webp$/
-          for (const old of (await readdir(OUT)).filter((f) => f.match(sizedName)?.[1] === `${shot.id}-${theme}`))
-            await rm(path.join(OUT, old))
-          for (const shown of shownWidths(used.get(shot.id), natural)) {
-            // At its own width, the 2× file already is the 2× picture.
-            for (const density of shown === natural ? [1] : [1, 2]) {
-              const sized = path.join(OUT, `${shot.id}-${theme}.w${shown}x${density}.webp`)
-              const out = await write(sized, await rescale(page, (density * shown) / natural))
-              console.log(`  ↳ ${path.basename(sized)}  ${out.width}×${out.height}`)
-            }
+          if (og) {
+            await page.send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 630, deviceScaleFactor: 1, mobile: false })
+            const png = await shoot(page, servers, shot, 'light')
+            await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
+            const out = path.join(root, shot.out)
+            await writeFile(out, await sharp(png).resize(1200, 630).flatten({ background: '#ffffff' }).png({ compressionLevel: 9 }).toBuffer())
+            console.log(`✓ ${path.relative(root, out)}  1200×630`)
+          } else {
+            const { done } = await render(page, servers, shot, theme, used)
+            writes.push(
+              done.catch((error) => {
+                failed++
+                console.error(`✗ ${shot.id} (${theme}): ${error.message}`)
+              })
+            )
           }
-          await page.send('Emulation.setDeviceMetricsOverride', { width: 2400, height: 1600, deviceScaleFactor: SCALE, mobile: false })
         } catch (error) {
           failed++
           console.error(`✗ ${shot.id} (${theme}): ${error.message}`)
         }
       }
     }
-    // The social cards: 1200×630 at 1×, light, the main window beside the wordmark.
-    for (const card of OG) {
-      if (opts.only && !opts.only.includes(card.id)) continue
-      await page.send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 630, deviceScaleFactor: 1, mobile: false })
-      const png = await shoot(page, servers, card, 'light')
-      const out = path.join(root, card.out)
-      await writeFile(out, await sharp(png).resize(1200, 630).flatten({ background: '#ffffff' }).png({ compressionLevel: 9 }).toBuffer())
-      console.log(`✓ ${path.relative(root, out)}  1200×630`)
-    }
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(opts.jobs, jobs.length)) }, worker))
+    await Promise.all(writes)
   } finally {
     await browser.close()
     await servers.preview.close()
     await servers.site?.close()
   }
+  console.log(`${jobs.length} capture(s) in ${((Date.now() - started) / 1000).toFixed(1)} s with ${opts.jobs} tabs`)
   if (failed) {
     console.error(`${failed} screenshot(s) failed`)
     process.exitCode = 1
