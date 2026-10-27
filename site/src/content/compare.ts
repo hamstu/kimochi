@@ -41,7 +41,7 @@ export const TOOLS: Tool[] = [
     id: "kimochi",
     name: "Kimochi",
     short: "Kimochi",
-    url: "https://github.com/hamstu/kimochi-tauri",
+    url: "https://github.com/hamstu/kimochi",
   },
   { id: "kamui", name: "Kamui", short: "Kamui", url: "https://kamui.gg" },
   {
@@ -318,5 +318,5 @@ export const SOURCES: Source[] = [
     label: "YomiNinja: releases (v0.9.3, v0.9.1 Wayland, v0.8.3 overlay, v0.7.2 Auto OCR)",
     url: "https://github.com/matt-m-o/YomiNinja/releases",
   },
-  { label: "Kimochi: source", url: "https://github.com/hamstu/kimochi-tauri" },
+  { label: "Kimochi: source", url: "https://github.com/hamstu/kimochi" },
 ];

@@ -186,8 +186,8 @@ const APP = {
     { '@type': 'Offer', name: 'Kimochi Cloud (yearly)', price: '60', priceCurrency: PRICE_CURRENCY, description: 'Billed yearly ($5 a month, two months free). 14-day free trial.' },
     { '@type': 'Offer', name: 'Kimochi Cloud (lifetime)', price: '125', priceCurrency: PRICE_CURRENCY, description: 'One payment.' }
   ],
-  downloadUrl: 'https://github.com/hamstu/kimochi-tauri/releases/latest',
-  sameAs: ['https://github.com/hamstu/kimochi-tauri']
+  downloadUrl: 'https://github.com/hamstu/kimochi/releases/latest',
+  sameAs: ['https://github.com/hamstu/kimochi']
   // Leave out softwareVersion and datePublished until there is a tagged release.
 }
 

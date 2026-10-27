@@ -7,7 +7,7 @@ import { DiscordMark, GithubMark } from './PlatformMarks'
 import { LINUX_GUIDE_PATH } from '../lib/linux.js'
 import { DOCS_URL } from '../lib/docs.js'
 
-export const GITHUB_URL = 'https://github.com/hamstu/kimochi-tauri'
+export const GITHUB_URL = 'https://github.com/hamstu/kimochi'
 /** Kimochi's Discord server (an invite that doesn't expire). */
 export const DISCORD_URL = 'https://discord.gg/vdMge6TBZQ'
 

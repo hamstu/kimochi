@@ -19,7 +19,7 @@ import { UpdateBar } from '../../components/UpdateBar'
 import { WhatsNewDialog } from '../../main/WhatsNewDialog'
 
 /** GitHub repository the releases live in; the updater's endpoint in tauri.conf.json names it. */
-const REPOSITORY = 'hamstu/kimochi-tauri'
+const REPOSITORY = 'hamstu/kimochi'
 
 /** "checked 4 minutes ago" moves on its own: the clock, once a minute. */
 function useNow(): number {

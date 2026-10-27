@@ -68,7 +68,7 @@ test('latest.json carries a URL, a signature and the size per platform', () => {
   const document = manifest({
     version: '0.2.0',
     tag: 'v0.2.0',
-    repo: 'hamstu/kimochi-tauri',
+    repo: 'hamstu/kimochi',
     notes: 'Self-updates.',
     date: '2026-10-13T09:00:00Z',
     sidecars
@@ -79,17 +79,17 @@ test('latest.json carries a URL, a signature and the size per platform', () => {
     notes: 'Self-updates.',
     platforms: {
       'darwin-aarch64': {
-        url: 'https://github.com/hamstu/kimochi-tauri/releases/download/v0.2.0/Kimochi_0.2.0_aarch64.app.tar.gz',
+        url: 'https://github.com/hamstu/kimochi/releases/download/v0.2.0/Kimochi_0.2.0_aarch64.app.tar.gz',
         signature: 'sig-mac',
         size: 90_000_000
       },
       'windows-x86_64': {
-        url: 'https://github.com/hamstu/kimochi-tauri/releases/download/v0.2.0/Kimochi_0.2.0_x64-setup.exe',
+        url: 'https://github.com/hamstu/kimochi/releases/download/v0.2.0/Kimochi_0.2.0_x64-setup.exe',
         signature: 'sig-win',
         size: 74_000_000
       },
       'linux-x86_64-deb': {
-        url: 'https://github.com/hamstu/kimochi-tauri/releases/download/v0.2.0/Kimochi_0.2.0_amd64.deb',
+        url: 'https://github.com/hamstu/kimochi/releases/download/v0.2.0/Kimochi_0.2.0_amd64.deb',
         signature: 'sig-deb'
       }
     }
@@ -100,7 +100,7 @@ test('latest.json carries a URL, a signature and the size per platform', () => {
 })
 
 test('a manifest refuses a release that would never be offered or could not be verified', () => {
-  const ok = { version: '0.2.0', tag: 'v0.2.0', repo: 'hamstu/kimochi-tauri', sidecars }
+  const ok = { version: '0.2.0', tag: 'v0.2.0', repo: 'hamstu/kimochi', sidecars }
   assert.throws(() => manifest({ ...ok, tag: 'v0.2.1' }), /tag v0.2.1 does not match version 0.2.0/)
   assert.throws(() => manifest({ ...ok, tag: '0.2.0' }), /does not match/)
   assert.throws(() => manifest({ ...ok, version: 'nightly', tag: 'nightly' }), /not a version/)

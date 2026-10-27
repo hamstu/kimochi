@@ -127,7 +127,7 @@ export const FAQ = [
     id: 'open-source',
     q: 'Is Kimochi open source? Where is the code?',
     a: ['Yes. Kimochi is free and open source under the GPL-3.0 licence, and its source is on GitHub.'],
-    links: [{ href: 'https://github.com/hamstu/kimochi-tauri', label: 'Kimochi on GitHub' }]
+    links: [{ href: 'https://github.com/hamstu/kimochi', label: 'Kimochi on GitHub' }]
   },
   {
     id: 'mobile-and-languages',
@@ -152,7 +152,7 @@ export const FAQ = [
     ],
     links: [
       { href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' },
-      { href: 'https://github.com/hamstu/kimochi-tauri/issues', label: 'Kimochi’s GitHub issues' },
+      { href: 'https://github.com/hamstu/kimochi/issues', label: 'Kimochi’s GitHub issues' },
       { href: docsUrl('/help/troubleshooting/'), label: 'Troubleshooting' }
     ]
   }

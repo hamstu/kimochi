@@ -35,12 +35,12 @@ const LINKS = [
   {
     label: 'Source code',
     description: 'Free software under the GNU GPL, version 3.',
-    url: 'https://github.com/hamstu/kimochi-tauri',
+    url: 'https://github.com/hamstu/kimochi',
     icon: <CodeXml />
   }
 ] as const
 
-const NOTICE_URL = 'https://github.com/hamstu/kimochi-tauri/blob/main/NOTICE'
+const NOTICE_URL = 'https://github.com/hamstu/kimochi/blob/main/NOTICE'
 
 const visit = (url: string): void => void openUrl(url).catch(() => undefined)
 

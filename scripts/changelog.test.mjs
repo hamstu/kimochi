@@ -109,8 +109,8 @@ const linked = `# Changelog
 
 - First release.
 
-[Unreleased]: https://github.com/hamstu/kimochi-tauri/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/hamstu/kimochi-tauri/releases/tag/v0.2.0
+[Unreleased]: https://github.com/hamstu/kimochi/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hamstu/kimochi/releases/tag/v0.2.0
 `
 
 test('link definitions at the end are not part of the last section, and promotion extends them', () => {
@@ -120,7 +120,7 @@ test('link definitions at the end are not part of the last section, and promotio
   const next = promoteUnreleased(linked, '0.3.0', '2026-11-01')
   assert.match(
     next,
-    /\n\[Unreleased\]: https:\/\/github\.com\/hamstu\/kimochi-tauri\/compare\/v0\.3\.0\.\.\.HEAD\n\[0\.3\.0\]: https:\/\/github\.com\/hamstu\/kimochi-tauri\/releases\/tag\/v0\.3\.0\n\[0\.2\.0\]: /
+    /\n\[Unreleased\]: https:\/\/github\.com\/hamstu\/kimochi\/compare\/v0\.3\.0\.\.\.HEAD\n\[0\.3\.0\]: https:\/\/github\.com\/hamstu\/kimochi\/releases\/tag\/v0\.3\.0\n\[0\.2\.0\]: /
   )
   assert.equal(sectionFor(next, '0.3.0'), '- Something on main.')
   assert.equal(parseChangelog(next).links.split('\n').length, 3)

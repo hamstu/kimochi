@@ -7,8 +7,8 @@
 <p align="center">Read and play in Japanese: on-screen OCR, pop-up dictionaries and a reading log, beside any game or visual novel.</p>
 
 <p align="center">
-  <a href="https://github.com/hamstu/kimochi-tauri/releases/latest"><img src="https://img.shields.io/github/v/release/hamstu/kimochi-tauri?sort=semver&label=release" alt="Latest release"></a>
-  <a href="https://github.com/hamstu/kimochi-tauri/actions/workflows/ci.yml"><img src="https://github.com/hamstu/kimochi-tauri/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/hamstu/kimochi/releases/latest"><img src="https://img.shields.io/github/v/release/hamstu/kimochi?sort=semver&label=release" alt="Latest release"></a>
+  <a href="https://github.com/hamstu/kimochi/actions/workflows/ci.yml"><img src="https://github.com/hamstu/kimochi/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-3e63dd" alt="Platforms: macOS, Windows, Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-3e63dd" alt="License: GPL-3.0"></a>
 </p>
@@ -40,7 +40,7 @@ Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux buil
 ## Install
 
 Download the app from [kimochiapp.com](https://kimochiapp.com). Builds are published on
-[GitHub Releases](https://github.com/hamstu/kimochi-tauri/releases), and the app updates itself.
+[GitHub Releases](https://github.com/hamstu/kimochi/releases), and the app updates itself.
 
 ## Building from source
 
@@ -63,8 +63,8 @@ The OCR engines are separate crates ([kimochi-meikiocr](https://github.com/hamst
 revisions pinned in `src-tauri/Cargo.toml`, so there is nothing else to clone:
 
 ```sh
-git clone https://github.com/hamstu/kimochi-tauri
-cd kimochi-tauri
+git clone https://github.com/hamstu/kimochi
+cd kimochi
 npm ci
 npm run dev      # the app with live reload
 npm run bundle   # a debug bundle for this OS, under src-tauri/target/debug/bundle/

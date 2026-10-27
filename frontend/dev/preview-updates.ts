@@ -48,7 +48,7 @@ What changed in each release of Kimochi, newest first.
 - Quick Shot: a single scan of the chosen region from anywhere, with \`⌘⇧J\`.
 - Sessions can be renamed and given a description from the session menu.
 - Hachidori and 10ten as dictionary engines, beside Yomitan. See the
-  [dictionary guide](https://github.com/hamstu/kimochi-tauri#dictionaries).
+  [dictionary guide](https://github.com/hamstu/kimochi#dictionaries).
 
 ### Changed
 
@@ -72,8 +72,8 @@ What changed in each release of Kimochi, newest first.
 - First release: OCR of a game window, a transcript of what was read, and dictionary lookups on
   hover.
 
-[Unreleased]: https://github.com/hamstu/kimochi-tauri/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/hamstu/kimochi-tauri/releases/tag/v0.1.0
+[Unreleased]: https://github.com/hamstu/kimochi/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hamstu/kimochi/releases/tag/v0.1.0
 `
 
 function status(patch: Partial<UpdateStatus>): UpdateStatus {

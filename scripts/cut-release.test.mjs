@@ -166,9 +166,9 @@ test('each check refuses with what to do', () => {
 })
 
 test('the GitHub repository is read from https and ssh remotes', () => {
-  assert.equal(githubRepo('https://github.com/hamstu/kimochi-tauri.git\n'), 'hamstu/kimochi-tauri')
-  assert.equal(githubRepo('git@github.com:hamstu/kimochi-tauri.git'), 'hamstu/kimochi-tauri')
-  assert.equal(githubRepo('https://github.com/hamstu/kimochi-tauri'), 'hamstu/kimochi-tauri')
+  assert.equal(githubRepo('https://github.com/hamstu/kimochi.git\n'), 'hamstu/kimochi')
+  assert.equal(githubRepo('git@github.com:hamstu/kimochi.git'), 'hamstu/kimochi')
+  assert.equal(githubRepo('https://github.com/hamstu/kimochi'), 'hamstu/kimochi')
   assert.equal(githubRepo('https://example.com/x.git'), null)
 })
 

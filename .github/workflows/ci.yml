@@ -62,7 +62,7 @@ jobs:
   # job is skipped, and with it every job that needs it, instead of waiting a day for a runner.
   plan:
     name: Plan
-    if: github.repository == 'hamstu/kimochi-tauri'
+    if: github.repository == 'hamstu/kimochi'
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write

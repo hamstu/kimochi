@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { Prose } from "../components/Prose";
 
-const ISSUES = "https://github.com/hamstu/kimochi-tauri/issues";
+const ISSUES = "https://github.com/hamstu/kimochi/issues";
 
 export function Privacy() {
   return (
@@ -37,7 +37,7 @@ export function Privacy() {
         Kimochi is made by Hamish Macpherson, an individual developer in Canada.
         &ldquo;We&rdquo; on this page means him. The app&rsquo;s source code is
         published on{" "}
-        <a href="https://github.com/hamstu/kimochi-tauri">GitHub</a> under the
+        <a href="https://github.com/hamstu/kimochi">GitHub</a> under the
         GPL-3.0 licence, so you can check everything described here.
       </p>
 

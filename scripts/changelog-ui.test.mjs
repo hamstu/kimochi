@@ -40,8 +40,8 @@ What changed in each release, newest first.
 
 - First release.
 
-[Unreleased]: https://github.com/hamstu/kimochi-tauri/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/hamstu/kimochi-tauri/releases/tag/v0.2.0
+[Unreleased]: https://github.com/hamstu/kimochi/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hamstu/kimochi/releases/tag/v0.2.0
 `
 
 const ONLY_UNRELEASED = `# Changelog

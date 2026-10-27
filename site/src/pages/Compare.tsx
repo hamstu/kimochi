@@ -40,7 +40,7 @@ export function Compare() {
         project&rsquo;s own docs (see <a href="#sources">Sources</a>), and
         anything we couldn&rsquo;t confirm is tagged <Unverified />. Spot
         something wrong?{" "}
-        <a href="https://github.com/hamstu/kimochi-tauri/issues">
+        <a href="https://github.com/hamstu/kimochi/issues">
           Open an issue
         </a>{" "}
         and we&rsquo;ll fix it.

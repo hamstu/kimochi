@@ -17,4 +17,4 @@ Kimochi is not the "Kimochi" emotions journal, the "Kimochi" AI companion app or
 ## Community
 
 - [Discord](https://discord.gg/vdMge6TBZQ): help, feedback, feature ideas and release news, with the developer
-- [GitHub](https://github.com/hamstu/kimochi-tauri): source code (GPL-3.0), releases and issues
+- [GitHub](https://github.com/hamstu/kimochi): source code (GPL-3.0), releases and issues

@@ -167,8 +167,8 @@ test('the bar only speaks while something happens', () => {
 })
 
 test('What\'s new points at the tagged release', () => {
-  assert.equal(releaseUrl('hamstu/kimochi-tauri', offered({ state: 'available' })), 'https://github.com/hamstu/kimochi-tauri/releases/tag/v0.2.0')
-  assert.equal(releaseUrl('hamstu/kimochi-tauri', base), null)
+  assert.equal(releaseUrl('hamstu/kimochi', offered({ state: 'available' })), 'https://github.com/hamstu/kimochi/releases/tag/v0.2.0')
+  assert.equal(releaseUrl('hamstu/kimochi', base), null)
 })
 
 test('the configured endpoint, the settings link and the release script agree on the repository', async () => {

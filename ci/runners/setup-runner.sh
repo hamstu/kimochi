@@ -12,7 +12,7 @@
 #   --name NAME       Runner name as GitHub shows it (default: this host's name)
 #   --labels a,b      Extra labels. `self-hosted`, the OS and the architecture are automatic.
 #   --url URL         Repository or organisation to register with
-#                     (default: https://github.com/hamstu/kimochi-tauri)
+#                     (default: https://github.com/hamstu/kimochi)
 #   --dir DIR         Where the runner lives (default: ~/actions-runner)
 #   --deps            Also install the build prerequisites this app needs (Rust, system libs)
 #   --no-service      Configure only; do not install the service
@@ -20,7 +20,7 @@ set -euo pipefail
 
 NAME="$(uname -n | cut -d. -f1)"
 LABELS=""
-URL="https://github.com/hamstu/kimochi-tauri"
+URL="https://github.com/hamstu/kimochi"
 DIR="$HOME/actions-runner"
 DEPS=0
 SERVICE=1

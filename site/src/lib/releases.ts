@@ -6,7 +6,7 @@ import type { Platform, ReleaseAsset } from './assets.js'
 export type { Platform, ReleaseAsset }
 export { pickAsset, assetLabel, formatBytes, osLabel, classifyAsset } from './assets.js'
 
-export const REPO = 'hamstu/kimochi-tauri'
+export const REPO = 'hamstu/kimochi'
 export const RELEASES_URL = `https://github.com/${REPO}/releases`
 const API = `https://api.github.com/repos/${REPO}/releases`
 const LATEST_API = `${API}/latest`

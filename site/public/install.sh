@@ -30,7 +30,7 @@
 kimochi_install() {
   set -eu
 
-  repo=${KIMOCHI_INSTALL_REPO:-hamstu/kimochi-tauri}
+  repo=${KIMOCHI_INSTALL_REPO:-hamstu/kimochi}
   api=${KIMOCHI_INSTALL_API:-https://api.github.com/repos/$repo/releases}
   raw=${KIMOCHI_INSTALL_RAW:-https://raw.githubusercontent.com/$repo}
   releases_page="https://github.com/$repo/releases"

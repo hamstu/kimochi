@@ -13,7 +13,7 @@ const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 // collaborator. Under `astro dev` it opens the file in Zed (zed://file/<absolute path>), and the
 // dev server reloads the page on save.
 const DEV = process.argv.includes('dev')
-const EDIT_BASE = DEV ? `zed://file${here('.')}` : 'https://github.com/hamstu/kimochi-tauri/edit/main/site-docs/'
+const EDIT_BASE = DEV ? `zed://file${here('.')}` : 'https://github.com/hamstu/kimochi/edit/main/site-docs/'
 
 export default defineConfig({
   site: SITE,

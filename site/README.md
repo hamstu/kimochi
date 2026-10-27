@@ -122,7 +122,7 @@ fixed URL (favicon, robots.txt, a future `og.png`) go in `public/`. Give images 
 / `height`, `alt`, and `loading="lazy"` below the fold.
 
 **Downloads.** `<DownloadButton align?="start|center" showAll?={true} className? />` fetches
-`https://api.github.com/repos/hamstu/kimochi-tauri/releases/latest` (unauthenticated, cached in
+`https://api.github.com/repos/hamstu/kimochi/releases/latest` (unauthenticated, cached in
 sessionStorage for 10 minutes); when that 404s (no tagged release published yet) it falls back to
 `releases/tags/nightly`, the rolling pre-release CI refreshes on every push to main, and labels it
 "Development build" with its date. It detects the OS and CPU (User-Agent Client Hints
@@ -135,7 +135,7 @@ Preference: macOS `.dmg` then `.app.zip`; Windows `-setup.exe` then `.msi`; Linu
 then `.deb` then `.rpm`, with every generic build before the `-arch` one. It shows the version
 (or "Development build"), platform and size, plus an "Other platforms" disclosure. On a rate
 limit, network error, no published build, a phone, or no build for the platform, it links to
-https://github.com/hamstu/kimochi-tauri/releases instead. The API only answers for a public
+https://github.com/hamstu/kimochi/releases instead. The API only answers for a public
 repository; drafts are invisible to it.
 
 **Linux install guide.** On Linux the button goes to `/download/linux` (`pages/DownloadLinux.tsx`)

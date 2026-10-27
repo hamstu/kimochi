@@ -15,7 +15,7 @@ const posix = { skip: process.platform === "win32" && "installer targets Linux s
 
 const APPIMAGE = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0, 0x41, 0x49, 2, 0, 0, 0]);
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
-const REPO = "hamstu/kimochi-tauri";
+const REPO = "hamstu/kimochi";
 
 // A curl that maps https://<host>/<path> to $FAKE_WEB/<host>/<path>, honours -o and -w, and
 // answers 404 (or $FAKE_STATUS_<n> for the n-th request) like the real one.

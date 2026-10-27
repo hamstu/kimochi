@@ -16,7 +16,7 @@ prepends that cargo bin, Git and Node to the job PATH (.path file).
 param(
   [string]$Name = $env:COMPUTERNAME,
   [string]$Labels = '',
-  [string]$Url = 'https://github.com/hamstu/kimochi-tauri',
+  [string]$Url = 'https://github.com/hamstu/kimochi',
   [string]$Dir = 'C:\actions-runner',
   # Where jobs check out and build: relative to $Dir, or an absolute path on another drive.
   [string]$Work = '_work',

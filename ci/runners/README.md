@@ -6,8 +6,8 @@ minutes quota; GitHub only provides the queue, the logs and the artifact storage
 up to 24 hours for a matching runner, so a machine that is off just picks the job up when it
 is back.
 
-Runs and artifacts: https://github.com/hamstu/kimochi-tauri/actions
-Runner fleet: https://github.com/hamstu/kimochi-tauri/settings/actions/runners
+Runs and artifacts: https://github.com/hamstu/kimochi/actions
+Runner fleet: https://github.com/hamstu/kimochi/settings/actions/runners
 
 ## The fleet
 
@@ -126,7 +126,7 @@ To share the fleet across repositories, register the runners against an organisa
 
 Runners are persistent, so the workflow checks out with `clean: false` and keeps
 `src-tauri/target`, `capture-core/target`, `node_modules` and the staged OCR runtimes between
-runs. Everything else is `git clean`ed. Delete `_work/kimochi-tauri` beside a runner for a
+runs. Everything else is `git clean`ed. Delete `_work/kimochi` beside a runner for a
 cold build. Expect 10–20 GB per machine for the work directory.
 
 Cargo never deletes stale artifacts, so a kept target directory only grows (25 GB on the Ubuntu
