@@ -11,4 +11,6 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-27
+
 - First alpha release of Kimochi.
