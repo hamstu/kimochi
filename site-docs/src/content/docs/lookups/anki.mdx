@@ -79,23 +79,30 @@ The main window's **Anki** tab (beside **Log** and **Notebook**, or <kbd>⌘3</k
 lists the cards you made in this session, newest first, whichever made them: Kimochi's pop-up,
 Built-in Yomitan or Hachidori. They stay with the session, so switching sessions shows that
 session's cards, and with an account they sync with it. Click a card to open it in Anki's browser.
-A green audio mark means Kimochi added its sentence audio (and word audio) after it was made; hover
-it to see which. Search finds a card by its word, reading or deck, and the footer counts the
-session's cards, today's and those with audio.
+A green mark means Kimochi added its sentence audio (and word audio) or its screenshot after it
+was made; hover it to see which. Search finds a card by its word, reading or deck, and the footer counts the
+session's cards, today's, and those with audio or a screenshot.
 
 Each card's **⋯** menu (or a right-click on the card) has **Open in Anki**, **Add sentence audio** (for a card made without it:
-Kimochi puts its line's kept clip in the card's empty audio field) and **Delete…**, which removes it
+Kimochi puts its line's kept clip in the card's empty audio field), **Add screenshot** (the same,
+with its scan's screenshot) and **Delete…**, which removes it
 from the tab and, if you tick **Also delete the card in Anki**, from Anki too. Edit a card in Anki.
 The tab needs Anki running: when AnkiConnect doesn't answer, the tab says why, with a button to
 **Settings → Anki → AnkiConnect**.
 
+## Enhance Anki cards
+
+The sidebar's **Enhance Anki cards** switch turns every card enhancement on or off at once: sentence
+audio, the screenshot and tags. Each has its own switch in **Settings → Anki → Card enhancement**
+(the cog beside the sidebar switch opens it). The sidebar switch is on while any of them is; when
+only some are, an amber dot on its info mark says which are off.
+
 ## Sentence audio
 
-Turn on **Enhance Anki cards** in the sidebar (or **Enhance with sentence audio** in **Settings →
-Anki → Card enhancement**) and Kimochi records what your computer plays, finds the audio of each
+Turn on **Enhance with sentence audio** in **Settings → Anki → Card enhancement** (or the sidebar's
+**Enhance Anki cards**) and Kimochi records what your computer plays, finds the audio of each
 line you read, and adds it to the new cards you make in Anki automatically. It works with Built-in
-Yomitan, Hachidori and the Yomitan API pop-up. The cog beside the sidebar switch opens Card
-enhancement, and the faint info mark says what it does. It is experimental: a clip may not always
+Yomitan, Hachidori and the Yomitan API pop-up. It is experimental: a clip may not always
 be the right line, and the [Anki tab](#the-anki-tab) shows which cards got audio.
 
 The switch is there whatever your [source](/reading/sources/): a window or screen, Quick Shot, the
@@ -122,11 +129,37 @@ changes: Lapis and Kiku call it `SentenceAudio`, Senren `sentenceAudio`. You can
 | **Seconds kept** | 30 | A card gets audio only for a line whose audio is still held (10–120). |
 | **Clips kept** | 15 | The newest lines' clips kept on your computer, to play from the Log and add to later cards. |
 
+In the Log, a line with audio has a chip with its length (**4.2s**) at the end of the row: click it
+to play the clip, which fills the chip as it plays, and again to stop.
+
 - **macOS** records system audio under the **Screen Recording** permission, and leaves Kimochi's
   own sounds out. macOS shows its screen-recording indicator while it is on.
 - **Windows** leaves Kimochi's own sounds out on Windows 10 (2004) and later.
 - **Linux** and the **Steam Deck** need PipeWire, as SteamOS and most desktops have. Kimochi's own
   sounds are recorded too, so keep sound effects off while you mine.
+
+## Screenshot
+
+Every scan keeps a screenshot of your whole source, taken as its text was read: a window, a screen,
+or for a Quick Shot the display it was taken on. Each Log line shows its scan's screenshot as a
+small chip at the end of the row, beside the chip of its audio; every line of one scan shows the
+same one. Click it to see it full size: **◀ ▶** (or the arrow keys) step through your scans, oldest to
+newest, and the boxes show where OCR read text, with what it read when you point at one. The crop
+area is drawn with the rest of the source faded. The eye at the top hides or shows all of that, and
+stays as you leave it. Lines from the clipboard or a WebSocket have no screenshot.
+
+With **Enhance with screenshot** on (the default), every new card you make gets the screenshot of
+the scan its sentence was read in, whichever dictionary made it, in its **Picture field**
+(`Picture` in Lapis and Kiku; Kimochi finds it in Anki when you turn it on). A field that is
+already filled is left as it is, so Hachidori's own picture stays; Hachidori's screenshot is the
+same whole source now, not the scanned area.
+
+Cards get the whole source. To send only part of it (the scene without the dialogue box, say), set
+the source's [Anki crop area](/reading/sources/#anki-crop-area), the green box: **Crop area → Set
+Anki crop area…** in the main window.
+
+**Screenshots kept** (50) is how many of the newest scans keep theirs on your computer, for the Log
+and for cards you make later; older ones are deleted.
 
 ## Tags
 

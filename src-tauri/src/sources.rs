@@ -96,6 +96,12 @@ fn capture_isolated(service: &Service, source_id: &str) -> Result<kimochi_captur
     frame.map_err(|e| err_for(source_id, e))
 }
 
+/// The whole of one source now, without touching any view state: a scan's screenshot
+/// (screenshots.rs), which its OCR-cropped frame cannot be.
+pub fn capture_whole(service: &Service, source_id: &str) -> Result<kimochi_capture::Frame, String> {
+    capture_isolated(service, source_id)
+}
+
 /// Box-average downscale of tightly packed RGBA. Averaging rather than dropping
 /// pixels keeps small text legible in a thumbnail instead of aliasing it away.
 fn downscale(pixels: &[u8], width: u32, height: u32, edge: u32) -> (Vec<u8>, u32, u32) {
@@ -412,6 +418,63 @@ fn commit_with_key(service: &Shared, source_id: &str, crop: Option<Crop>, saved_
     Ok(json!({ "sourceId": source.id, "crop": crop, "key": key }))
 }
 
+/// Save (or, with `None`, clear) the Anki crop of a source: the part of it that goes on Anki
+/// cards as the screenshot. Kept per source under the same key as its OCR crop, in
+/// `ankiCropRegions`. Unlike `commit`, nothing else moves: the selection, the OCR crop and the
+/// scan on screen all stay as they are.
+pub fn commit_anki(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<Value, String> {
+    let source = {
+        let mut backend = service
+            .backend
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        backend
+            .enumerate()
+            .map_err(err)?
+            .into_iter()
+            .find(|s| s.id == source_id)
+            .ok_or_else(|| closed(source_id))?
+    };
+    if let Some(crop) = crop {
+        crop_rect(Some(crop), crop.reference_width, crop.reference_height)
+            .map_err(|e| format!("invalid: {}", e.message))?;
+    }
+    let key = selection_crop_key(service, source.kind, &source.name, source.app.as_deref());
+    let value = match crop {
+        Some(crop) => serde_json::to_value(crop).unwrap(),
+        None => Value::Null,
+    };
+    // Literal segments: an application name may contain a dot.
+    service.settings.set_many(&[(&["ankiCropRegions", key.as_str()], value)])?;
+    Ok(json!({ "sourceId": source.id, "crop": crop, "key": key }))
+}
+
+/// The crop key of the selected source: the key `commit` saves its crops under. None when
+/// nothing is selected.
+pub fn current_crop_key(service: &Service) -> Option<String> {
+    service.selection.lock().unwrap().as_ref()?;
+    let record = service.settings.get("lastSelectedSource").ok().flatten()?;
+    record_crop_key(&record, service.source_fullscreen.load(Ordering::Relaxed))
+}
+
+/// The crop key for a persisted source record (`{type, name, appName}`).
+fn record_crop_key(record: &Value, fullscreen: bool) -> Option<String> {
+    let kind = descriptor_type(record.get("type")?.as_str()?);
+    let name = record.get("name").and_then(Value::as_str).unwrap_or_default();
+    let app = record.get("appName").and_then(Value::as_str);
+    Some(crate::state::shaped_crop_key(descriptor_key(kind, name, app), kind, fullscreen))
+}
+
+/// The Anki crop saved under a crop key, if any. None means the whole source.
+pub fn anki_crop_for_key(service: &Service, key: &str) -> Option<Crop> {
+    service
+        .settings
+        .get_path(&["ankiCropRegions", key])
+        .ok()
+        .flatten()
+        .and_then(|v| serde_json::from_value(v).ok())
+}
+
 /// Reads nothing: no source is selected, now or at the next launch. Each source's saved crop is
 /// kept, so choosing it again brings its region back. The scan on screen belonged to the source,
 /// so it goes too.
@@ -687,6 +750,16 @@ pub fn saved_crop(service: &Service, kind: &str, name: &str, app: Option<&str>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn record_crop_key_matches_the_commit_key() {
+        let record = json!({"sourceId": "w:1", "type": "window", "name": "Game", "appName": "Steam"});
+        assert_eq!(record_crop_key(&record, false).as_deref(), Some("Steam"));
+        assert_eq!(record_crop_key(&record, true).as_deref(), Some("Steam (full screen)"));
+        let screen = json!({"type": "screen", "name": "Built-in Display", "appName": null});
+        assert_eq!(record_crop_key(&screen, true).as_deref(), Some("Built-in Display"));
+        assert_eq!(record_crop_key(&json!({"name": "x"}), false), None);
+    }
 
     fn solid(width: u32, height: u32, value: u8) -> Vec<u8> {
         vec![value; width as usize * height as usize * 4]

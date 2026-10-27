@@ -40,6 +40,7 @@ mod platform;
 mod ocr_result;
 mod panels;
 mod scan_trace;
+mod screenshots;
 mod sentence_audio;
 mod settings;
 mod sources;
@@ -218,6 +219,11 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     }
     if key == "sentenceAudio" {
         if let Some(service) = app.try_state::<Arc<sentence_audio::SentenceAudio>>() {
+            service.settings_changed();
+        }
+    }
+    if key == screenshots::KEY {
+        if let Some(service) = app.try_state::<Arc<screenshots::Screenshots>>() {
             service.settings_changed();
         }
     }
@@ -657,6 +663,7 @@ const POPUP_HOST: &str = "popup-host";
 
 fn snapshot_value(service: &Service) -> Value {
     let crop = selected_descriptor(service).and_then(|(kind, name, app)| sources::saved_crop(service, &kind, &name, app.as_deref()));
+    let anki_crop = sources::current_crop_key(service).and_then(|key| sources::anki_crop_for_key(service, &key));
     // `lastSelectedSource` is a hint for the next launch; the UI shows a source only once it is
     // the live selection. Until `spawn_source_restore` finds the saved window again, or when it
     // is gone, the main window shows its empty "Choose a source" state instead of a stale card.
@@ -677,6 +684,8 @@ fn snapshot_value(service: &Service) -> Value {
         "source": source.map(with_source_kind),
         "crop": crop,
         "cropEnabled": crop.is_some(),
+        // The part of the source that goes on Anki cards; null means the whole source.
+        "ankiCrop": anki_crop,
         "isScanning": v.scanning,
         "autoOcrEnabled": v.auto_ocr,
         "overlayVisible": v.overlay_visible,
@@ -1420,6 +1429,16 @@ async fn commit_source(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Save or clear a source's Anki crop (`ankiCropRegions`); the selection, the OCR crop and
+/// the scan stay as they are (see `sources::commit_anki`).
+#[tauri::command]
+async fn commit_anki_crop(state: State<'_, Shared>, source_id: String, crop: Option<Crop>) -> Reply<Value> {
+    let service = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || sources::commit_anki(&service, &source_id, crop))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Deselect the source: nothing is read until one is chosen again (see `sources::clear`).
@@ -2357,6 +2376,7 @@ fn history_add(
         saved_selection(&state).unwrap_or(Value::Null)
     };
     let now = now_millis();
+    let shot_groups = groups.clone().unwrap_or_default();
     let mut entry = json!({ "id": history_id(), "text": text, "timestamp": now, "source": source, "groups": groups, "engine": engine });
     // The capture frame this reading came from, so a mining screenshot taken from the Log's
     // line can show that frame while the image store still holds it (`capture_frame_source`).
@@ -2390,6 +2410,22 @@ fn history_add(
     })?;
     if skipped {
         entry["skipped"] = json!(true);
+    } else {
+        // The scan's frame is cropped to the OCR crop area: its screenshot is the source, whole.
+        let info = {
+            let images = state.images.lock().map_err(|e| e.to_string())?;
+            images.mining_frame(frame).and_then(|(id, _)| images.frame(id)).map(|image| image.info.clone())
+        };
+        screenshots::taken(
+            &app,
+            screenshots::Scan {
+                id: entry["id"].as_str().unwrap_or_default().to_string(),
+                text: text.clone(),
+                groups: shot_groups,
+                info,
+                detached: detached.unwrap_or(false),
+            },
+        );
     }
     Ok(entry)
 }
@@ -2412,7 +2448,22 @@ fn history_frame(history: Option<&Value>, id: &str) -> Option<u64> {
 /// Only the frame's id and `capture:` URL cross the bridge: the pixels are fetched over
 /// the protocol like every other frame, and never logged.
 #[tauri::command]
-fn capture_frame_source(state: State<'_, Shared>, scan: Option<String>) -> Reply<Value> {
+fn capture_frame_source(app: tauri::AppHandle, state: State<'_, Shared>, scan: Option<String>) -> Reply<Value> {
+    // The scan's kept screenshot: the whole source (or its Anki crop area), not the OCR crop.
+    if let Some(shots) = app.try_state::<Arc<screenshots::Screenshots>>() {
+        let shot = match scan.as_deref() {
+            Some(id) => shots.get(id),
+            None => shots.newest(),
+        };
+        if let Some(shot) = shot {
+            return Ok(json!({
+                "id": 0,
+                "url": platform::capture_url(&format!("shot/{}/card", shot.scan)),
+                "info": Value::Null,
+                "matched": scan.as_deref() == Some(shot.scan.as_str()),
+            }));
+        }
+    }
     let wanted = match scan.as_deref() {
         Some(id) => history_frame(state.settings.get_path(&HISTORY_KEY)?.as_ref(), id),
         None => None,
@@ -2700,6 +2751,20 @@ fn main() {
                     return;
                 };
                 let path = request.uri().path().trim_start_matches('/').to_string();
+                // A kept screenshot (screenshots.rs): JPEG from disk.
+                if let Some(shot) = path.strip_prefix("shot/") {
+                    responder.respond(match screenshots::serve(&app, shot) {
+                        Some(jpeg) => tauri::http::Response::builder()
+                            .header("Content-Type", "image/jpeg")
+                            // A card's picture follows the Anki crop area, which can change.
+                            .header("Cache-Control", if shot.ends_with("/card") { "no-store" } else { "max-age=31536000, immutable" })
+                            .header("Access-Control-Allow-Origin", "*")
+                            .body(jpeg)
+                            .unwrap(),
+                        None => not_found(),
+                    });
+                    return;
+                }
                 let found = {
                     let images = service.images.lock().unwrap();
                     match path.strip_prefix("preview/") {
@@ -2790,6 +2855,10 @@ fn main() {
             sentence_audio::sentence_audio_debug,
             sentence_audio::sentence_audio_clip,
             sentence_audio::sentence_audio_attach,
+            screenshots::screenshots_list,
+            screenshots::screenshot_status,
+            screenshots::screenshot_attach,
+            screenshots::screenshot_add_to_note,
             #[cfg(target_os = "linux")]
             platform::dictionary_images::linux_dictionary_image,
             report,
@@ -2841,6 +2910,7 @@ fn main() {
             accessibility_status,
             request_accessibility,
             commit_source,
+            commit_anki_crop,
             clear_source,
             open_source_picker,
             pointer_display,
@@ -3101,6 +3171,7 @@ fn main() {
             let sentence_audio = sentence_audio::SentenceAudio::new(handle.clone(), store.clone());
             sentence_audio.settings_changed();
             app.manage(sentence_audio);
+            app.manage(screenshots::install(&handle, store.clone()));
 
             spawn_source_restore(service.clone());
 
@@ -3574,10 +3645,12 @@ fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
         let mut previous = String::new();
         loop {
             std::thread::sleep(Duration::from_millis(100));
+            // Saving an Anki crop changes nothing in the view, only this settings entry.
+            let anki_crop = sources::current_crop_key(&service).and_then(|key| sources::anki_crop_for_key(&service, &key));
             let fingerprint = {
                 let v = service.view.lock().unwrap();
                 format!(
-                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}|{}",
+                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{:?}|{}|{:?}",
                     v.revision,
                     v.action_seq,
                     v.scanning,
@@ -3591,6 +3664,7 @@ fn spawn_state_broadcast(handle: tauri::AppHandle, service: Shared) {
                     (&v.status, &v.frontmost_app),
                     v.source_focus,
                     v.overlay_throttled,
+                    anki_crop,
                 )
             };
             if fingerprint == previous {

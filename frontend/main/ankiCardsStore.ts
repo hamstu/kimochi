@@ -87,6 +87,11 @@ export function addSentenceAudio(card: AnkiCardRecord): Promise<void> {
   return invoke('sentence_audio_add_to_note', { noteId: card.noteId })
 }
 
+/** Put the screenshot of the card's scan in its empty picture field (`screenshot_add_to_note`). */
+export function addScreenshot(card: AnkiCardRecord): Promise<void> {
+  return invoke('screenshot_add_to_note', { noteId: card.noteId })
+}
+
 /** Load the open session's cards again (after AnkiConnect comes back, say). */
 export function reloadAnkiCards(): void {
   if (state.sessionId) void load(state.sessionId)

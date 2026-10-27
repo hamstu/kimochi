@@ -398,9 +398,13 @@ pub fn refresh_identity(service: &crate::state::Shared, source_id: &str) {
     let new_key=crate::state::descriptor_key("window",title,descriptor["appName"].as_str());
     let crops=service.settings.get("cropRegions").ok().flatten().unwrap_or(Value::Null);
     let active=service.settings.get("cropScanEnabled").ok().flatten().unwrap_or(Value::Null);
+    let anki=service.settings.get("ankiCropRegions").ok().flatten().unwrap_or(Value::Null);
     let mut changes=vec![(vec!["lastSelectedSource"],descriptor)];
     if new_key!=old_key && crops.get(&new_key).is_none() {
         if let Some(crop)=crops.get(&old_key){changes.push((vec!["cropRegions",&new_key],crop.clone()));changes.push((vec!["cropScanEnabled",&new_key],active[&old_key].clone()));}
+    }
+    if new_key!=old_key && anki.get(&new_key).is_none() {
+        if let Some(crop)=anki.get(&old_key).filter(|v|!v.is_null()){changes.push((vec!["ankiCropRegions",&new_key],crop.clone()));}
     }
     let borrowed:Vec<(&[&str],Value)>=changes.iter().map(|(path,v)|(path.as_slice(),v.clone())).collect();
     if service.settings.set_many(&borrowed).is_ok(){service.view.lock().unwrap().revision+=1;}

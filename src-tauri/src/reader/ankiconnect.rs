@@ -334,6 +334,7 @@ pub async fn anki_connect_relay(app: tauri::AppHandle, url: String, body: String
     crate::anki_cards::after_relay(&app, &url, &request, reply.status, &reply.body);
     crate::sentence_audio::after_relay(&app, &url, &request, reply.status, &reply.body);
     crate::card_tags::after_relay(&app, &url, &request, reply.status, &reply.body);
+    crate::screenshots::after_relay(&app, &url, &request, reply.status, &reply.body);
     Ok(reply)
 }
 

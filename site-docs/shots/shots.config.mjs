@@ -180,12 +180,12 @@ export const SHOTS = [
     crop: { x: 0, y: 0, width: 520, height: 560 },
     ready: '.src-card-live',
     actions: [{ click: sourceAction('Crop area'), after: 500 }],
-    // The three steps on the Sources page: the Crop area button, Change crop area… in its menu,
+    // The three steps on the Sources page: the Crop area button, Change OCR crop area… in its menu,
     // and the crop it set, outlined on the preview.
     marks: [
       { type: 'glow', target: { selector: '.src-region', pad: 1 }, radius: 3 },
       { type: 'badge', target: sourceAction('Crop area'), n: 1, nudge: [-6, -2] },
-      { type: 'badge', target: { selector: '[role="menuitem"]', text: 'Change crop area' }, n: 2, nudge: [-6, 0] },
+      { type: 'badge', target: { selector: '[role="menuitem"]', text: 'Change OCR crop area' }, n: 2, nudge: [-6, 0] },
       { type: 'badge', target: { selector: '.src-region', pad: 1 }, n: 3, at: 'top-right' }
     ]
   },

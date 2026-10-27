@@ -346,23 +346,260 @@ body.scan-mode .line-actions-trigger.k-button {
   pointer-events: none;
 }
 
-/* Sentence audio: the line's voice, inline after its text, quiet until hovered. */
-.line-voice.k-button {
+/* The line's media: its voice and its screenshot as chips, between the text and the actions
+   slot, the height of the first text line. The row makes room for the chips it has and no more.
+   Sized in em: the chips follow the text size. */
+.log-lines {
+  --line-chip-voice: 3.3em;
+  --line-chip-shot: 2.7em;
+  --line-chip-gap: 0.3em;
+}
+.log-lines .line {
+  padding-right: calc(
+    var(--k-control-h-sm) + var(--k-space-5) + var(--line-has-voice, 0px) + var(--line-has-shot, 0px)
+  );
+}
+.log-lines .line:has(.line-chip-voice) {
+  --line-has-voice: calc(var(--line-chip-voice) + var(--line-chip-gap));
+}
+.log-lines .line:has(.line-chip-shot) {
+  --line-has-shot: calc(var(--line-chip-shot) + var(--line-chip-gap));
+}
+.line-media {
+  position: absolute;
+  top: 0.3em;
+  right: calc(var(--k-control-h-sm) + var(--k-space-3));
+  display: flex;
+  align-items: center;
+  gap: var(--line-chip-gap);
+  height: 1.85em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.line-media:empty {
+  display: none;
+}
+/* An English line's text is 0.75em (App.css): its chips stay at the Japanese lines' size. */
+.log-lines .line-translated {
+  padding-right: calc(
+    var(--k-control-h-sm) + var(--k-space-5) + (var(--line-has-voice, 0px) + var(--line-has-shot, 0px)) / 0.75
+  );
+}
+.line-translated .line-media {
+  font-size: calc(1em / 0.75);
+  height: calc(1.7em * 0.75);
+}
+
+.line-chip {
+  position: relative;
   display: inline-flex;
-  vertical-align: -0.2em;
-  margin-left: var(--k-space-1);
+  align-items: center;
+  gap: 0.25em;
+  height: 1.3em;
+  padding: 0 0.3em;
+  border: 0;
+  border-radius: 0.3em;
+  overflow: hidden;
+  background: var(--gray-a3);
+  box-shadow: inset 0 0 0 1px var(--gray-a4);
   color: var(--k-text-3);
-  transition: color var(--k-fast), background-color var(--k-fast);
+  font: inherit;
+  cursor: pointer;
+  transition: color var(--k-fast), background-color var(--k-fast), box-shadow var(--k-fast);
 }
-.line:hover .line-voice.k-button,
-.line-voice.k-button:focus-visible {
+.line-chip > svg {
+  flex: none;
+  width: 0.72em;
+  height: 0.72em;
+}
+.line:hover .line-chip,
+.line-chip:focus-visible {
   color: var(--k-text-2);
+  box-shadow: inset 0 0 0 1px var(--gray-a6);
 }
-.line-voice.k-button[data-playing] {
-  color: var(--k-accent-text);
+.line-chip:hover {
+  background: var(--gray-a4);
 }
-body.scan-mode .line-voice.k-button {
+.line-chip:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 1px;
+}
+body.scan-mode .line-chip {
   pointer-events: none;
+}
+
+/* The voice: its length, and while it plays the chip fills from left to right. */
+.line-chip-text {
+  position: relative;
+  font-family: var(--k-font-ui);
+  font-size: 0.62em;
+  font-weight: var(--k-weight-medium);
+  font-feature-settings: "tnum";
+  line-height: 1;
+  white-space: nowrap;
+}
+.line-chip-voice {
+  width: var(--line-chip-voice);
+}
+.line-chip-voice > svg {
+  position: relative;
+}
+.line-chip-voice::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent-a5);
+  transform: scaleX(var(--played, 0));
+  transform-origin: left;
+  opacity: 0;
+}
+.line-chip-voice[data-playing] {
+  color: var(--k-accent-text);
+  box-shadow: inset 0 0 0 1px var(--accent-a7);
+}
+.line-chip-voice[data-playing]::before {
+  opacity: 1;
+}
+
+/* The screenshot: an image mark, then the picture filling the rest, a + over it on hover. */
+/* Two equal halves: the mark, centred in its own, and the picture. */
+.line-chip-shot {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  place-items: center;
+  gap: 0;
+  width: var(--line-chip-shot);
+  padding: 0;
+  cursor: zoom-in;
+}
+/* The edge, drawn over the picture. */
+.line-chip-shot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inherit;
+  pointer-events: none;
+}
+.line-chip-picture {
+  position: relative;
+  align-self: stretch;
+  justify-self: stretch;
+  display: grid;
+  place-items: center;
+}
+.line-chip-picture img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.85;
+  transition: opacity var(--k-fast);
+}
+.line-chip-zoom {
+  position: relative;
+  width: 0.8em;
+  height: 0.8em;
+  padding: 0.1em;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  opacity: 0;
+  transition: opacity var(--k-fast);
+}
+.line:hover .line-chip-picture img {
+  opacity: 1;
+}
+.line-chip-shot:hover .line-chip-zoom,
+.line-chip-shot:focus-visible .line-chip-zoom {
+  opacity: 1;
+}
+
+/* The screenshot viewer: the picture as large as the window allows, ◀ ▶ beside it. */
+.k-dialog.shot-viewer {
+  max-width: none;
+  width: calc(100vw - 2rem);
+  height: calc(100vh - 2rem);
+}
+.shot-viewer .k-dialog-body {
+  flex: 1 1 auto;
+  display: flex;
+  overflow: hidden;
+  padding-inline: var(--k-space-2);
+}
+.shot-viewer-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.shot-viewer-step.k-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: var(--gray-a3);
+}
+.shot-viewer-step.k-button:hover:not(:disabled) {
+  background: var(--gray-a5);
+}
+.shot-viewer-step.k-button svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+/* The space between the arrows, measured so the picture can fill it at its own ratio. */
+.shot-viewer-frame {
+  align-self: stretch;
+  justify-self: stretch;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+.shot-viewer-picture {
+  position: relative;
+  width: min(100cqw, 100cqh * var(--shot-ratio));
+  aspect-ratio: var(--shot-ratio);
+  border-radius: var(--k-radius-md);
+  overflow: hidden;
+  background: var(--gray-a3);
+  box-shadow: 0 0 0 1px var(--gray-a5);
+}
+.shot-viewer-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* The OCR crop area: the rest of the source faded, as the source preview draws it. */
+.shot-viewer-crop {
+  position: absolute;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1.5px var(--k-accent), 0 0 0 9999px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+.shot-viewer-mark {
+  position: absolute;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1.5px var(--k-accent);
+  background: color-mix(in srgb, var(--k-accent) 10%, transparent);
+  transition: background-color var(--k-fast);
+}
+.shot-viewer-mark:hover {
+  background: color-mix(in srgb, var(--k-accent) 28%, transparent);
+}
+.shot-viewer-gone {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
 }
 
 /* Transient per-line notes (translating, translation failed). */
@@ -604,15 +841,4 @@ body.scan-mode .line-voice.k-button {
 
 /* Each OCR capture is a section; its semantic units retain their own actions. */
 .line[data-ocr-index="0"]:not([data-ocr-count="1"]) { margin-top: 1.25rem; }
-.log-lines .line[data-group-label] { padding-right: calc(var(--k-control-h-sm) + var(--k-space-5) + 3rem); }
-.line[data-group-label]::after {
-  content: attr(data-group-label);
-  position: absolute;
-  top: 0.75rem;
-  right: calc(var(--k-control-h-sm) + var(--k-space-4));
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--k-text-3);
-  opacity: 0.6;
-  pointer-events: none;
-}
+

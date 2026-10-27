@@ -55,6 +55,7 @@ import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { SentenceAudioSection } from './SentenceAudioSection'
 import { CardTagsSection } from './CardTagsSection'
+import { ScreenshotSection } from './ScreenshotSection'
 import { useAnkiTab, type AnkiTabName } from './ankiPageTab'
 
 const TABS = [
@@ -100,6 +101,7 @@ function AnkiPage({ settings }: { settings: Settings }): ReactNode {
           {tab === 'enhance' && (
             <>
               <SentenceAudioSection />
+              <ScreenshotSection />
               <CardTagsSection />
             </>
           )}

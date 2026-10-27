@@ -65,6 +65,7 @@ Keys and defaults mirror `src/main/settings.ts`:
 
 `hasCompletedOnboarding`, `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
+`ankiCropRegions.<appName>`,
 `hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `scannedTextFontSize` (14),
 `scannedTextHistory[]`, `audioSettings.voiceId`,
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
@@ -109,7 +110,7 @@ because `electron-store` is permissive and they are written only through `useSet
 their defaults come from the call sites (`OverlayApp.tsx:46-51`), the only authority
 for them.
 
-**Map keys are literal.** `cropRegions` and `cropScanEnabled` are keyed by application
+**Map keys are literal.** `cropRegions`, `cropScanEnabled` and `ankiCropRegions` are keyed by application
 name, and an application name may contain a dot (`Node.js`). Those writes go through a
 path-segment API rather than a dotted string, so a dotted name stays one map entry
 instead of silently nesting a new object and diverging from Electron's shape.
@@ -217,6 +218,7 @@ rather than showing the previous session's selection.
 | `source_thumbnail` | `({sourceId}) -> {url}` |
 | `source_preview` | `({sourceId}) -> {url, width, height}` |
 | `commit_source` | `({sourceId, crop}) -> {sourceId, crop, key}` |
+| `commit_anki_crop` | `({sourceId, crop: Crop\|null}) -> {sourceId, crop, key}` |
 | `clear_source` | `() -> {sourceId: null, previous}` |
 | `open_source_picker` | `({editCurrent}) -> PanelInfo` |
 | `source_picker_state` | `() -> {sourceId, crop, editCurrent}` |
@@ -269,6 +271,12 @@ It persists `cropRegions`, `cropScanEnabled` and `lastSelectedSource` in **one s
 transaction**, keyed per source descriptor — application name, then window title, then
 normalised kind. It invalidates the previous scan when the source changes **or when the
 crop changes on the same source**, since the old text no longer matches the new region.
+
+`commit_anki_crop` saves (or, with `null`, clears) a source's **Anki crop**: the part of it
+that goes on Anki cards as the screenshot, the whole source when there is none. It is
+validated like a commit's crop and stored in `ankiCropRegions` under the same key as the
+source's `cropRegions` entry. It changes nothing else: not the selection, not the OCR crop,
+not the scan on screen. The snapshot carries the selected source's as `ankiCrop`.
 
 `clear_source` deselects the source: `lastSelectedSource` becomes null, so nothing is restored at
 the next launch either, and the scan on screen is dropped (a new revision). Saved crops stay, so
@@ -489,7 +497,8 @@ one above it (default: all), and a click inside a pop-up closes only the ones on
 
 Carries the POC fields (`revision`, `scan`, `status`, `logs`, `interactive`, `regions`,
 `origin`, `dictionary`, `dismiss`) plus, so panels can stop polling expensive sources:
-`source` (the frontend-shaped descriptor), `crop`, `cropEnabled`, `isScanning`,
+`source` (the frontend-shaped descriptor), `crop`, `cropEnabled`, `ankiCrop` (the selected
+source's Anki crop, or null), `isScanning`,
 `autoOcrEnabled`, `overlayVisible`, `textOverlayVisible`, `debugOverlayVisible`,
 `frontmostApp`, `sourceFocus`, and `action` `{name, seq}`.
 
@@ -515,10 +524,10 @@ All names live in one list, `actions::ACTIONS`, which the command-contract test 
 and compares against the names the frontend actually calls, so a button cannot ship
 against an action that does not exist.
 
-**Commands** — `triggerScan`, `toggleOverlay`, `setCropArea`, `playAudio`,
+**Commands** — `triggerScan`, `toggleOverlay`, `setCropArea`, `setAnkiCropArea`, `playAudio`,
 `selectAndScan`. Bindable to a shortcut or a gamepad button. Rust performs the native
 part Electron performed: restoring the overlay for `triggerScan`, `setCropArea`,
-`playAudio` and `selectAndScan`, toggling it for `toggleOverlay`, and focusing it for
+`setAnkiCropArea`, `playAudio` and `selectAndScan`, toggling it for `toggleOverlay`, and focusing it for
 `selectAndScan`.
 
 **View toggles** — `toggleAutoOcr`, `toggleTextOverlay`, `toggleDebugOverlay`. Pure
@@ -1275,6 +1284,38 @@ Then `notesInfo`, `storeMediaFile` (`kimochi_<ms>.mp3`, `kimochi_<ms>_word.mp3`)
 An extension's card is noticed by `anki_connect_relay` (an `addNote` AnkiConnect accepted); its
 follow-up calls use the address and key of the extension's request. Neither the extension's
 request nor its reply changes.
+
+## Screenshots
+
+Each new OCR scan (`history_add`, not skipped) captures its source again, whole (its own frame is
+cut to the OCR crop area), and keeps it as JPEG (longest edge 1920) in
+`<app local data>/screenshots/`, indexed by `shots.json`, the newest `cardScreenshot.kept` (10–500,
+default 50) (`src-tauri/src/screenshots.rs`). A Quick Shot's source is its display. Each Log line
+finds its scan's screenshot by `ocr.scanId` (or, for a scan read as one text, its ingest id).
+Setting `cardScreenshot`: `{enabled (default on), field (default Picture), kept}`;
+`screenshotAnnotations` (default on) is the viewer's eye.
+
+The `capture:` protocol serves `shot/<scan>` (the kept JPEG) and `shot/<scan>/card` (a card's
+picture: the source's Anki crop area, from `ankiCropRegions`, when it has one; longest edge 1280).
+`capture_frame_source` (Hachidori's `tabs.captureVisibleTab`) answers with `shot/<scan>/card` while
+the scan's screenshot is kept (the newest one without a scan), `id` 0, before falling back to the
+image store's frames.
+
+A card gets the screenshot of the kept scan whose text matches its fields best (newest on a tie),
+in its empty picture field (`storeMediaFile`, then `updateNoteFields` with `<img>`), marked
+`screenshot` in the Anki tab: after a relayed `addNote` while `cardScreenshot.enabled` is on, and
+through the commands below.
+
+| Command | Signature |
+| --- | --- |
+| `screenshots_list` | `() -> Shot[]`: every kept screenshot, oldest first: `{scan, url, at, width, height, text, crop: [x, y, w, h] \| null, marks: [{text, bbox: [x0, y0, x1, y1], vertical}], key}`, in the picture's pixels; `crop` is the OCR crop area, `key` the source's crop key (null for a Quick Shot) |
+| `screenshot_status` | `() -> {kept, last: {at, ok, message} \| null}`: how the last card's screenshot went, for Settings |
+| `screenshot_attach` | `({url, noteId, sentence, scan, field})`: the Yomitan API pop-up added note `noteId` at `url`; the screenshot of `scan` (or the scan matching `sentence`) follows into `field` (or `cardScreenshot.field`). Ignored while off |
+| `screenshot_add_to_note` | `({noteId}) -> ()`: the Anki tab's Add screenshot: reads the note back through Kimochi's AnkiConnect and puts its scan's screenshot in its empty picture field; errors say why not |
+
+| Event | Payload |
+| --- | --- |
+| `screenshot-added` | `Shot`: a scan's screenshot was kept |
 
 ## Dictionary engine downloads
 

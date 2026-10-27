@@ -158,6 +158,8 @@ export interface ViewState {
   } | null
   crop?: NativeCrop | null
   cropEnabled?: boolean
+  /** The selected source's Anki crop (what goes on cards as the screenshot); null for all of it. */
+  ankiCrop?: NativeCrop | null
   isScanning?: boolean
   autoOcrEnabled?: boolean
   overlayVisible?: boolean

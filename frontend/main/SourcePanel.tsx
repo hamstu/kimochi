@@ -25,6 +25,7 @@ import {
   Clipboard,
   Crop,
   Eye,
+  ImageIcon,
   Info,
   Monitor,
   Plus,
@@ -56,7 +57,13 @@ import { SourceGrid, SystemPickerButton } from './SourceGrid'
 import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
 import type { InputSource } from '@texthooker/input-source'
 import { SourceIcon } from '../components/SourceIcon'
-import { isOverlayTextVisible, SETTINGS_DEFAULTS, type SentenceAudioSettings } from '../../ui/settings'
+import {
+  isOverlayTextVisible,
+  SETTINGS_DEFAULTS,
+  type CardScreenshotSettings,
+  type CardTagsSettings,
+  type SentenceAudioSettings
+} from '../../ui/settings'
 import { useSetting } from '../bridge/useSetting'
 import { useViewState } from '../bridge/state'
 import { useHotkeys } from '../bridge/useHotkeys'
@@ -75,7 +82,7 @@ import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
 import { showAnkiTab } from '../panels/settings/ankiPageTab'
 import { showSettingsTab } from '../panels/settings/showSettingsTab'
-import { detectAudioField } from '../panels/settings/sentenceAudioField'
+import { detectAudioField, detectPictureField } from '../panels/settings/sentenceAudioField'
 import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 import { GnomeWindowLink } from './GnomeWindowLink'
 import { HyprlandWindowLink } from './HyprlandWindowLink'
@@ -236,28 +243,49 @@ function openSettingsTab(tab: SettingsTabName): void {
 }
 
 /**
- * Enhance Anki cards, under Auto OCR (and in Quick Shot, Clipboard and WebSocket, whose lines get
- * audio the same way): Sentence audio's switch, the same setting as Settings → Anki → Card
- * enhancement, where its cog leads. A Quick Shot comes after the line was said, often long after,
- * so there it warns that only the newest seconds of audio are held.
+ * Enhance Anki cards, under Auto OCR (and in Quick Shot, Clipboard and WebSocket): one switch for
+ * every card enhancement in Settings → Anki → Card enhancement, where its cog leads. On while any
+ * of them is; turning it off turns them all off, and on turns them all on. When only some are on,
+ * the info mark says which are off. A Quick Shot comes after the line was said, often long after,
+ * so there it also warns that only the newest seconds of audio are held.
  */
 function EnhanceCardsRow({ quickShot }: { quickShot?: boolean }): ReactNode {
-  const [stored, save] = useSetting<SentenceAudioSettings>('sentenceAudio', SETTINGS_DEFAULTS.sentenceAudio)
-  const config = { ...SETTINGS_DEFAULTS.sentenceAudio, ...stored }
+  const [storedAudio, saveAudio] = useSetting<SentenceAudioSettings>('sentenceAudio', SETTINGS_DEFAULTS.sentenceAudio)
+  const [storedShot, saveShot] = useSetting<CardScreenshotSettings>('cardScreenshot', SETTINGS_DEFAULTS.cardScreenshot)
+  const [storedTags, saveTags] = useSetting<CardTagsSettings>('cardTags', SETTINGS_DEFAULTS.cardTags)
+  const audio = { ...SETTINGS_DEFAULTS.sentenceAudio, ...storedAudio }
+  const shot = { ...SETTINGS_DEFAULTS.cardScreenshot, ...storedShot }
+  const tags = { ...SETTINGS_DEFAULTS.cardTags, ...storedTags }
+  const parts = [
+    { name: 'Sentence audio', on: audio.enabled },
+    { name: 'Screenshot', on: shot.enabled },
+    { name: 'Tags', on: tags.enabled }
+  ]
+  const anyOn = parts.some((p) => p.on)
+  const off = parts.filter((p) => !p.on).map((p) => p.name)
+  const cautions = [
+    anyOn && off.length > 0 ? `Off in Card enhancement: ${off.join(', ')}.` : null,
+    quickShot && audio.enabled
+      ? `Only the last ${audio.seconds} seconds of audio are kept, so a line may get no audio if you take its Quick Shot too late.`
+      : null
+  ].filter(Boolean)
   return (
     <SourceRow
       icon={<Sparkles aria-hidden />}
       label="Enhance Anki cards"
-      checked={config.enabled}
-      info="Records what your computer plays, finds the audio of each line you read, and adds it to the new cards you make in Anki. While it's on, Kimochi's sound effects are off so they stay out of the recordings."
-      caution={
-        quickShot &&
-        `Only the last ${config.seconds} seconds of audio are kept, so a line may get no audio if you take its Quick Shot too late.`
-      }
+      checked={anyOn}
+      info="Adds to the new cards you make in Anki: the audio of the line, recorded from what your computer plays; a screenshot of your source; and tags. While sentence audio is on, Kimochi's sound effects are off so they stay out of the recordings."
+      caution={cautions.length > 0 ? cautions.join(' ') : undefined}
       settingsLabel="Card enhancement settings"
       onToggle={() => {
-        void save({ ...config, enabled: !config.enabled })
-        if (!config.enabled) void detectAudioField()
+        const on = !anyOn
+        void saveAudio({ ...audio, enabled: on })
+        void saveShot({ ...shot, enabled: on })
+        void saveTags({ ...tags, enabled: on })
+        if (on) {
+          void detectAudioField()
+          void detectPictureField()
+        }
       }}
       onSettings={() => {
         showAnkiTab('enhance')
@@ -407,9 +435,22 @@ function useFullScreen(sourceId: string): boolean {
   return Boolean(state && state.sourceId === sourceId && state.fullscreen)
 }
 
+/** A crop as percentages of its reference frame, for positioning over the preview. */
+function cropBox(crop: NativeCrop | null): CSSProperties | null {
+  return crop && crop.reference_width > 0 && crop.reference_height > 0
+    ? {
+        left: `${(crop.x / crop.reference_width) * 100}%`,
+        top: `${(crop.y / crop.reference_height) * 100}%`,
+        width: `${(crop.width / crop.reference_width) * 100}%`,
+        height: `${(crop.height / crop.reference_height) * 100}%`
+      }
+    : null
+}
+
 function LivePreview({
   sourceId,
   crop,
+  ankiCrop = null,
   live,
   placeholder,
   hint,
@@ -417,6 +458,8 @@ function LivePreview({
 }: {
   sourceId: string
   crop: NativeCrop | null
+  /** The part that goes on Anki cards: a green outline, nothing dimmed. */
+  ankiCrop?: NativeCrop | null
   live: boolean
   placeholder: ReactNode
   /** Shown over the picture while the card is hovered. */
@@ -429,15 +472,8 @@ function LivePreview({
   // The well follows the frame's shape within limits; the frame sits inside it, fitted, with
   // room around it — a tall window stands in the middle of a wide well.
   const boxRatio = Math.min(Math.max(ratio, 1.3), 2.4)
-  const region =
-    crop && crop.reference_width > 0 && crop.reference_height > 0
-      ? {
-          left: `${(crop.x / crop.reference_width) * 100}%`,
-          top: `${(crop.y / crop.reference_height) * 100}%`,
-          width: `${(crop.width / crop.reference_width) * 100}%`,
-          height: `${(crop.height / crop.reference_height) * 100}%`
-        }
-      : null
+  const region = cropBox(crop)
+  const ankiRegion = cropBox(ankiCrop)
 
   return (
     <span className="src-shot" style={{ aspectRatio: boxRatio }}>
@@ -454,6 +490,7 @@ function LivePreview({
           />
         ))}
         {region && <span className="src-region" style={region} />}
+        {ankiRegion && <span className="src-region src-region-anki" style={ankiRegion} />}
       </span>
       {frames.length === 0 && <span className="src-shot-wait">{placeholder}</span>}
       {hint}
@@ -676,6 +713,7 @@ export function SourcePanel({
     controller.isTextOverlayVisible
   )
   const crop = state.crop ?? null
+  const ankiCrop = state.ankiCrop ?? null
 
   const closeMenu = (): void => {
     setOpen(false)
@@ -755,6 +793,7 @@ export function SourcePanel({
           key={source.sourceId}
           sourceId={source.sourceId}
           crop={crop}
+          ankiCrop={ankiCrop}
           live={controller.isAutoOCREnabled}
           placeholder={isScreen ? <Monitor /> : <SourceIcon source={source} />}
           onStale={pickerRequired ? onStale : undefined}
@@ -823,7 +862,7 @@ export function SourcePanel({
         <div className="src-actions">
           <Menu>
             <MenuTrigger asChild>
-              <button type="button" className="src-action" aria-label="Crop area" data-on={crop ? '' : undefined}>
+              <button type="button" className="src-action" aria-label="Crop area" data-on={crop || ankiCrop ? '' : undefined}>
                 <Crop />
                 <span className="src-action-label src-action-long">Crop area</span>
                 <span className="src-action-label src-action-short">Crop</span>
@@ -835,11 +874,26 @@ export function SourcePanel({
                 disabled={!controller.hasSource}
                 onSelect={() => controller.onEditCropArea()}
               >
-                {crop ? 'Change crop area…' : 'Set crop area…'}
+                {crop ? 'Change OCR crop area…' : 'Set OCR crop area…'}
               </MenuItem>
-              <MenuItem icon={<X />} disabled={!crop} onSelect={() => controller.onClearCrop()}>
-                Clear crop area
+              <MenuItem
+                icon={<ImageIcon />}
+                disabled={!controller.hasSource}
+                onSelect={() => controller.onEditAnkiCropArea()}
+              >
+                {ankiCrop ? 'Change Anki crop area…' : 'Set Anki crop area…'}
               </MenuItem>
+              {(crop || ankiCrop) && <MenuSeparator />}
+              {crop && (
+                <MenuItem icon={<X />} onSelect={() => controller.onClearCrop()}>
+                  Clear OCR crop area
+                </MenuItem>
+              )}
+              {ankiCrop && (
+                <MenuItem icon={<X />} onSelect={() => controller.onClearAnkiCrop()}>
+                  Clear Anki crop area
+                </MenuItem>
+              )}
             </MenuContent>
           </Menu>
           <Menu open={open} onOpenChange={onMenuOpen}>

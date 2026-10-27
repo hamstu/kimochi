@@ -9,7 +9,7 @@
  * `sentence_audio_add_to_note`); and Delete…, which asks whether to delete the note from Anki too.
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react'
-import { AudioLines, ExternalLink, Layers, MoreHorizontal, Search, SearchX, Settings2, Trash2, Unplug, X } from 'lucide-react'
+import { AudioLines, ExternalLink, Image as ImageIcon, Layers, MoreHorizontal, Search, SearchX, Settings2, Trash2, Unplug, X } from 'lucide-react'
 import {
   Bar,
   BarSpacer,
@@ -42,13 +42,14 @@ import {
   cardMatches,
   cardStats,
   enhancementLabel,
+  hasAudio,
   type AnkiCardRecord
 } from '@texthooker/lib/ankiCards'
 import { openSettings } from '../bridge/tauri'
 import { showSettingsTab } from '../panels/settings/showSettingsTab'
 import { showAnkiTab } from '../panels/settings/ankiPageTab'
 import { SessionMenu } from './SessionMenu'
-import { addSentenceAudio, deleteAnkiCard, reloadAnkiCards, useAnkiCards } from './ankiCardsStore'
+import { addScreenshot, addSentenceAudio, deleteAnkiCard, reloadAnkiCards, useAnkiCards } from './ankiCardsStore'
 import '@texthooker/notebook.css'
 import './anki-panel.css'
 
@@ -172,6 +173,15 @@ export function AnkiPanel(): JSX.Element {
     addSentenceAudio(card).then(
       () => setNotice(`Added sentence audio to “${card.term || card.noteId}”, if its field was empty.`),
       (err: unknown) => setOpenError(`No audio for “${card.term || card.noteId}”: ${String(err)}`)
+    )
+  }
+
+  const addPicture = (card: AnkiCardRecord): void => {
+    setOpenError(null)
+    setNotice(null)
+    addScreenshot(card).then(
+      () => setNotice(`Added the screenshot to “${card.term || card.noteId}”.`),
+      (err: unknown) => setOpenError(`No screenshot for “${card.term || card.noteId}”: ${String(err)}`)
     )
   }
 
@@ -319,6 +329,7 @@ export function AnkiPanel(): JSX.Element {
                 card={card}
                 onOpen={() => open(card)}
                 onAddAudio={() => addAudio(card)}
+                onAddScreenshot={() => addPicture(card)}
                 onDelete={() => askDelete(card)}
               />
             ))}
@@ -371,6 +382,13 @@ export function AnkiPanel(): JSX.Element {
                 <span>with audio</span>
               </span>
             ) : null}
+            {stats.screenshots > 0 ? (
+              <span className="log-stat anki-stat-audio">
+                <ImageIcon aria-hidden />
+                <span className="log-stat-value">{stats.screenshots.toLocaleString()}</span>
+                <span>with screenshots</span>
+              </span>
+            ) : null}
           </span>
         ) : null}
         <BarSpacer />
@@ -384,11 +402,13 @@ function CardRow({
   card,
   onOpen,
   onAddAudio,
+  onAddScreenshot,
   onDelete
 }: {
   card: AnkiCardRecord
   onOpen: () => void
   onAddAudio: () => void
+  onAddScreenshot: () => void
   onDelete: () => void
 }): JSX.Element {
   const enhanced = enhancementLabel(card.enhanced)
@@ -404,6 +424,11 @@ function CardRow({
       {!card.enhanced.includes('sentenceAudio') ? (
         <MenuItem icon={<AudioLines />} onSelect={onAddAudio}>
           Add sentence audio
+        </MenuItem>
+      ) : null}
+      {!card.enhanced.includes('screenshot') ? (
+        <MenuItem icon={<ImageIcon />} onSelect={onAddScreenshot}>
+          Add screenshot
         </MenuItem>
       ) : null}
       <MenuSeparator />
@@ -430,7 +455,8 @@ function CardRow({
                 <span className="nb-trail">
                   <Tooltip content={enhanced}>
                     <span className="anki-enhanced" data-testid="anki-enhanced">
-                      <AudioLines aria-hidden />
+                      {hasAudio(card) ? <AudioLines aria-hidden /> : null}
+                      {card.enhanced.includes('screenshot') ? <ImageIcon aria-hidden /> : null}
                     </span>
                   </Tooltip>
                 </span>

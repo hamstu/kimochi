@@ -683,6 +683,10 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
     width var(--k-base) var(--k-ease-out),
     height var(--k-base) var(--k-ease-out);
 }
+/* The Anki crop (what goes on cards): outlined in green, nothing dimmed. */
+.src-region-anki {
+  box-shadow: 0 0 0 1.5px var(--k-ok);
+}
 .src-shot-wait {
   position: absolute;
   inset: 0;

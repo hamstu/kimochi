@@ -16,7 +16,7 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
       const c=await request({operation:'editor',id:payload.id})
       const local=r=>r&&({...r,x:r.x-c.monitor.x,y:r.y-c.monitor.y})
       selector=new RegionSelect({container:document.body,confirmLabel:c.label,theme:c.theme,
-        area:local(c.area),initial:local(c.initial)})
+        area:local(c.area),initial:local(c.initial),accent:payload.accent,title:payload.title})
       active={id:c.id,selector}
       const running=selector.start({bounds:c.monitor})
       for(let attempt=0;;attempt++) {

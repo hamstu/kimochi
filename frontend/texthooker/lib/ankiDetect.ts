@@ -189,27 +189,48 @@ export type DetectedAudioField =
   | { ok: true; field: string; modelName: string }
   | { ok: false; reason: string };
 
+/** A screenshot's field: Lapis's and Kiku's Picture, and the other names note types give it. */
+const PICTURE = /^(picture|image|screenshot|photo)$/i;
+
 /** Sentence audio's field, found when it is turned on and when the Anki settings change, for
     every engine: the sentence audio field of the note type someone mines with. `prefer` (the
     Yomitan API's chosen note type) wins when it has one; otherwise, of the note types that have
     one, the one with the most notes wins, and a tie between different field names is left to the
     person. Only reads. */
-export async function detectSentenceAudioField(
+export function detectSentenceAudioField(
   anki: Pick<AnkiReader, "models" | "fields" | "findNotes">,
   prefer?: string | null,
 ): Promise<DetectedAudioField> {
+  return detectField(anki, SENTENCE_AUDIO, prefer, "a sentence audio field", "Audio field");
+}
+
+/** The screenshot's Picture field, found the same way. */
+export function detectPictureField(
+  anki: Pick<AnkiReader, "models" | "fields" | "findNotes">,
+  prefer?: string | null,
+): Promise<DetectedAudioField> {
+  return detectField(anki, PICTURE, prefer, "a picture field", "Picture field");
+}
+
+async function detectField(
+  anki: Pick<AnkiReader, "models" | "fields" | "findNotes">,
+  pattern: RegExp,
+  prefer: string | null | undefined,
+  what: string,
+  setting: string,
+): Promise<DetectedAudioField> {
   if (prefer) {
-    const field = (await anki.fields(prefer).catch(() => [] as string[])).find((f) => SENTENCE_AUDIO.test(f.trim()));
+    const field = (await anki.fields(prefer).catch(() => [] as string[])).find((f) => pattern.test(f.trim()));
     if (field) return { ok: true, field, modelName: prefer };
   }
   const withField = (
     await each(await anki.models(), PARALLEL, async (model) => ({
       model,
-      field: (await anki.fields(model)).find((f) => SENTENCE_AUDIO.test(f.trim())) ?? null,
+      field: (await anki.fields(model)).find((f) => pattern.test(f.trim())) ?? null,
     }))
   ).filter((c): c is { model: string; field: string } => c.field !== null);
   if (withField.length === 0) {
-    return { ok: false, reason: "None of your note types has a sentence audio field. Type the field's name in Audio field." };
+    return { ok: false, reason: `None of your note types has ${what}. Type the field's name in ${setting}.` };
   }
   const counted = await each(withField, PARALLEL, async (c) => ({
     ...c,

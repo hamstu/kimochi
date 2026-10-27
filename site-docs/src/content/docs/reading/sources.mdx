@@ -53,11 +53,11 @@ With **Auto switch sessions by window name** on (the default), each window you r
 A crop area limits scans to part of the source, such as a game's dialogue box or a video's
 subtitles, so menus, HUDs and other text stay out of the Log.
 
-<Screenshot id="crop-menu" alt="The source card with three numbered marks: 1 the Crop area button, 2 Change crop area in its menu, 3 the crop outlined on the live preview." width={520} />
+<Screenshot id="crop-menu" alt="The source card with three numbered marks: 1 the Crop area button, 2 Change OCR crop area in its menu, 3 the crop outlined on the live preview." width={520} />
 
 1. Click **Crop area** under the source's preview.
-2. Choose **Set crop area…** (**Change crop area…** once there is one). The region editor opens over
-   the source:
+2. Choose **Set OCR crop area…** (**Change OCR crop area…** once there is one). The region editor
+   opens over the source, as a blue box:
    - Drag to draw the box. Hold <kbd>Space</kbd> while drawing to move it.
    - Drag inside the box to move it, or its edges and corners to resize it.
    - Arrow keys nudge it by one point (<kbd>Shift</kbd> + arrows by ten).
@@ -65,7 +65,16 @@ subtitles, so menus, HUDs and other text stay out of the Log.
      cancels.
 3. The crop shows as a frame on the live preview, and every scan reads only what's inside it.
 
-**Clear crop area**, in the same menu, removes it.
+**Clear OCR crop area**, in the same menu, removes it.
+
+### Anki crop area
+
+The Anki crop area is the part of the source that goes on your Anki cards as the [screenshot](/lookups/anki/#screenshot), such
+as the game's scene without its dialogue box. Without one, cards get the whole source.
+
+Choose **Crop area → Set Anki crop area…** (**Change Anki crop area…** once there is one). The same
+editor opens, as a green box; **Save** keeps it. It doesn't change what's read, and nothing is
+scanned. It shows as a green frame on the live preview. **Clear Anki crop area** removes it.
 
 ## Quick Shot
 

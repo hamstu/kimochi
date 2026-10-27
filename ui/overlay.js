@@ -126,6 +126,8 @@ const state = {
    */
   sourceFocus: null,
   crop: null,
+  /** The chosen source's Anki crop (what goes on cards as the screenshot), or null for all of it. */
+  ankiCrop: null,
   hover: { selectRegion: false, source: false, isWindow: false },
   /** While true the overlay claims the whole display so a drag can be seen. */
   regionSelecting: false,
@@ -1451,6 +1453,9 @@ async function onAction(name) {
     case 'selectAndScan':
     case 'setCropArea':
       return editSourceRegion()
+    // The second region: what goes on Anki cards. Same editors, green, and saving it scans nothing.
+    case 'setAnkiCropArea':
+      return editSourceRegion('anki')
     case 'toggleAutoOcr':
       return native.setViewFlags({ autoOcrEnabled: !state.flags.autoOcrEnabled })
     case 'toggleTextOverlay':
@@ -1559,7 +1564,7 @@ async function followPointer(selector, onDisplay) {
  *   picture?: object, alternateLabel?: string, onStart?: (selector: object) => void}} [options]
  * @returns {Promise<{x:number,y:number,width:number,height:number,action:string}|null>}
  */
-async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alternateLabel, onStart } = {}) {
+async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alternateLabel, onStart, accent, title } = {}) {
   let RegionSelect
   try {
     ;({ RegionSelect } = await import('./region-select.js'))
@@ -1600,7 +1605,9 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alt
       theme,
       area,
       initial,
-      picture
+      picture,
+      accent,
+      title
     })
     const running = selector.start()
     onStart?.(selector)
@@ -1683,37 +1690,46 @@ async function placeOverlayOn(bounds) {
  * Quick Shot — then save it. Save and Scan (the default) also scans it, unless Auto OCR is already
  * reading; Save only clears the old text.
  *
+ * `target` picks which of the source's two regions: `ocr`, the area read (blue), or `anki`, the
+ * area that goes on Anki cards as the screenshot (green). Both use the same editor for the
+ * platform; saving the Anki one changes nothing else — not the selection, not the OCR crop, not
+ * the text on screen — and scans nothing.
+ *
  * A screen is edited in place and is not a fixed choice: the editor follows the cursor to any
  * display, and the display the region is drawn on becomes the source. A window is shown as its
  * latest screenshot, kept fresh, over a dimmed screen — the real window may be covered — and the
  * region is limited to it.
  */
-async function editSourceRegion() {
+async function editSourceRegion(target = 'ocr') {
   if (state.regionSelecting) return
+  const region = REGIONS[target] ?? REGIONS.ocr
   const sourceId = await native.selectedSource()
   if (!sourceId) {
-    log({ check: 'region-edit-skipped', reason: 'no source selected' })
+    log({ check: 'region-edit-skipped', reason: 'no source selected', region: region.name })
     return
   }
-  state.regionCommitting = true
+  // Only the OCR crop changes what is read: the Anki one has nothing to hold back.
+  if (region === REGIONS.ocr) state.regionCommitting = true
   try {
     // The view's own description of the selection says what it is; the id is read
     // (never pattern-matched on a platform name) only when the view has not caught up.
     const described = state.viewSource?.sourceId === sourceId ? state.viewSource : null
     const kind = described?.kind ?? described?.type ?? parseSourceId(sourceId)?.kind
     const desktopCrop = window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled && await gnomeCropAvailable(sourceId)
-    const saved = desktopCrop ? await editGnomeRegion(sourceId)
+    const saved = desktopCrop ? await editGnomeRegion(sourceId, { region })
       : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandDisabled
-      ? await editLinuxSourceImage(sourceId)
+      ? await editLinuxSourceImage(sourceId, region)
       : window.__KIMOCHI_PLATFORM__?.os === 'linux' && waylandLayer
-      ? await editPortalRegion(sourceId, kind)
+      ? await editPortalRegion(sourceId, kind, { region })
       : kind === 'window'
-        ? await editWindowRegion(sourceId)
-        : await editScreenRegion(sourceId)
+        ? await editWindowRegion(sourceId, region)
+        : await editScreenRegion(sourceId, region)
     if (!saved) {
-      log({ check: 'region-edit-cancelled' })
+      log({ check: 'region-edit-cancelled', region: region.name })
       return
     }
+    // Saved, and nothing read changed: the shared view brings `ankiCrop` back to every window.
+    if (region !== REGIONS.ocr) return
     // Committing changes the selection, so anything in flight belongs to the old one.
     generation.bump()
     // Consume the committed crop before anything scans. The native state event otherwise
@@ -1756,7 +1772,7 @@ async function gnomeCropAvailable(sourceId = null) {
     (!sourceId?.startsWith('portal:window:') || status.tracked?.sourceId === sourceId)
 }
 
-async function editGnomeRegion(sourceId, {quick = false} = {}) {
+async function editGnomeRegion(sourceId, {quick = false, region = REGIONS.ocr} = {}) {
   if (!/^portal:(display|window):[0-9]+$/.test(sourceId)) throw new Error('Desktop crop requires a shared screen or linked window.')
   state.regionSelecting = true
   syncAutoScanner()
@@ -1771,12 +1787,13 @@ async function editGnomeRegion(sourceId, {quick = false} = {}) {
     const frame = await native.sourceHoverPreview(sourceId)
     if (!frame?.width || !frame?.height) throw new Error('No shared screen frame available. Choose a screen first.')
     const {selectGnomeCrop} = await import('./gnome-crop.js')
-    const crop = await selectGnomeCrop(native, {sourceId, frame, initial:state.crop, quick, theme:setting('appearance') === 'light' ? 'light' : setting('appearance') === 'dark' ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'})
+    const crop = await selectGnomeCrop(native, {sourceId, frame, initial:regionInitialCrop(region, frame), quick, theme:setting('appearance') === 'light' ? 'light' : setting('appearance') === 'dark' ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
+      ...(quick ? {} : {accent:region.accent, title:region.title})})
     if (!crop) return false
     if (await native.selectedSource() !== sourceId) throw new Error('The shared screen changed while editing. Open the editor again.')
     if (quick) { selected = true; return crop }
-    await native.commitSource(sourceId, crop)
-    log({check:'region-saved', sourceId, crop, editor:'gnome-shell'})
+    await region.commit(sourceId, crop)
+    log({check:'region-saved', region:region.name, sourceId, crop, editor:'gnome-shell'})
     return true
   } finally {
     state.regionSelecting = false
@@ -1787,7 +1804,7 @@ async function editGnomeRegion(sourceId, {quick = false} = {}) {
 }
 
 /** A source-image editor in the main window when a native desktop layer is unavailable. */
-async function editLinuxSourceImage(sourceId) {
+async function editLinuxSourceImage(sourceId, region = REGIONS.ocr) {
   state.regionSelecting = true
   syncAutoScanner()
   const requestId = crypto.randomUUID()
@@ -1807,9 +1824,10 @@ async function editLinuxSourceImage(sourceId) {
     })
     // Register the reply listener before the main window can submit the editor.
     await native.panel('log', 'show')
-    await window.__TAURI__.event.emit('linux:edit-source-crop', { requestId, sourceId, frame, crop: state.crop })
+    // `kind` says which region: the dialog saves an `anki` one with commit_anki_crop.
+    await window.__TAURI__.event.emit('linux:edit-source-crop', { requestId, sourceId, frame, crop: regionInitialCrop(region, frame), kind: region.name })
     const saved = await result
-    if (saved) log({ check: 'region-saved', sourceId, editor: 'linux-source-image' })
+    if (saved) log({ check: 'region-saved', region: region.name, sourceId, editor: 'linux-source-image' })
     return saved
   } finally {
     clearTimeout(timer)
@@ -1825,7 +1843,7 @@ async function editLinuxSourceImage(sourceId) {
 }
 
 /** Portal captures have pixel dimensions, but no desktop display catalogue or window origin. */
-async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
+async function editPortalRegion(sourceId, kind, { quick = false, region = REGIONS.ocr } = {}) {
   let pictureUrl = null
   const frame = await native.sourceHoverPreview(sourceId)
   if (!frame?.width || !frame?.height) {
@@ -1865,10 +1883,13 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
       if (!response.ok) throw new Error('Could not load the shared window preview.')
       pictureUrl = URL.createObjectURL(await response.blob())
     }
-    const rect = await editRegion(quick ? 'Scan' : SAVE_AND_SCAN, {
-      alternateLabel: quick ? undefined : 'Save',
+    const saved = quick ? null : region.saved()
+    const rect = await editRegion(quick ? 'Scan' : region.confirmLabel, {
+      alternateLabel: quick ? undefined : region.alternateLabel,
+      accent: quick ? undefined : region.accent,
+      title: quick ? undefined : region.title,
       area,
-      initial: !quick && state.crop ? cropToLocal(state.crop, origin, bounds) : null,
+      initial: saved ? cropToLocal(saved, origin, bounds) : !quick && region.whole ? area : null,
       picture: kind === 'window' && !linked ? bounds : undefined,
       onStart: pictureUrl ? (selector) => void selector.setPicture(pictureUrl) : undefined
     })
@@ -1893,8 +1914,8 @@ async function editPortalRegion(sourceId, kind, { quick = false } = {}) {
     }
     if (crop.width <= 0 || crop.height <= 0) return false
     if (quick) return crop
-    await native.commitSource(sourceId, crop)
-    log({ check: 'region-saved', kind, sourceId, crop, editor: 'wayland-layer', placement: linked ? 'linked-window' : kind === 'window' ? 'source-image' : 'screen', action: rect.action })
+    await region.commit(sourceId, crop)
+    log({ check: 'region-saved', region: region.name, kind, sourceId, crop, editor: 'wayland-layer', placement: linked ? 'linked-window' : kind === 'window' ? 'source-image' : 'screen', action: rect.action })
     return savedAction(rect)
   } finally {
     if (pictureUrl) URL.revokeObjectURL(pictureUrl)
@@ -1910,37 +1931,82 @@ const SAVE_AND_SCAN = 'Save and Scan'
 /** `scan` for Save and Scan (Return), `save` for Save. */
 const savedAction = (rect) => (rect.action === 'alternate' ? 'save' : 'scan')
 
-async function editScreenRegion(sourceId) {
+/**
+ * A source's two regions and how an editor shows and saves each. The OCR crop is the area read
+ * (blue; Save and Scan, or Save). The Anki crop is the area that goes on Anki cards as the
+ * screenshot (green; Save only). With no Anki crop saved the cards get the whole source, so its
+ * editor opens on the whole source (`whole`) rather than on an empty screen.
+ */
+const REGIONS = {
+  ocr: {
+    name: 'ocr',
+    title: 'OCR crop area',
+    accent: 'blue',
+    confirmLabel: SAVE_AND_SCAN,
+    alternateLabel: 'Save',
+    whole: false,
+    saved: () => state.crop,
+    commit: (sourceId, crop) => native.commitSource(sourceId, crop)
+  },
+  anki: {
+    name: 'anki',
+    title: 'Anki crop area',
+    accent: 'green',
+    confirmLabel: 'Save',
+    alternateLabel: undefined,
+    whole: true,
+    saved: () => state.ankiCrop,
+    commit: (sourceId, crop) => native.commitAnkiCrop(sourceId, crop)
+  }
+}
+
+/** A region's saved crop for an editor that takes source pixels, or the whole `frame` (`whole`). */
+function regionInitialCrop(region, frame) {
+  const saved = region.saved()
+  if (saved) return saved
+  if (!region.whole || !frame?.width || !frame?.height) return null
+  return { x: 0, y: 0, width: frame.width, height: frame.height, reference_width: frame.width, reference_height: frame.height }
+}
+
+async function editScreenRegion(sourceId, region = REGIONS.ocr) {
   const displays = await native.displays()
   const current = displays.find((d) => displaySourceId(d) === sourceId) ?? null
-  const start = (await native.pointerDisplay()) ?? current ?? displays[0]
+  // Only the OCR crop may move the source to another display; the Anki crop stays on the chosen one.
+  const follows = region === REGIONS.ocr
+  const start = follows ? (await native.pointerDisplay()) ?? current ?? displays[0] : current
   if (!start?.bounds) return false
   await placeOverlayOn(start.bounds)
 
   // The saved region shows on its own display only.
-  const initialFor = (display) =>
-    display && displaySourceId(display) === sourceId && state.crop
-      ? cropToLocal(state.crop, display.bounds, display.bounds)
-      : null
+  const initialFor = (display) => {
+    if (!display || displaySourceId(display) !== sourceId) return null
+    const saved = region.saved()
+    if (saved) return cropToLocal(saved, display.bounds, display.bounds)
+    return region.whole ? { x: 0, y: 0, width: display.bounds.width, height: display.bounds.height } : null
+  }
   let target = start
-  const rect = await editRegion(SAVE_AND_SCAN, {
-    alternateLabel: 'Save',
+  const rect = await editRegion(region.confirmLabel, {
+    alternateLabel: region.alternateLabel,
+    accent: region.accent,
+    title: region.title,
     initial: initialFor(start),
-    onDisplay: (next) => {
-      target = next
-      return initialFor(next)
-    }
+    onDisplay: follows
+      ? (next) => {
+          target = next
+          return initialFor(next)
+        }
+      : undefined
   })
   if (!rect) return false
   const crop = cropFor(rect, target.bounds, target.bounds, scaleOf(target))
   if (crop.width <= 0 || crop.height <= 0) return false
   const chosen = displaySourceId(target)
-  await native.commitSource(chosen, crop)
-  log({ check: 'region-saved', kind: 'display', sourceId: chosen, switched: chosen !== sourceId, crop, action: rect.action })
+  await region.commit(chosen, crop)
+  log({ check: 'region-saved', region: region.name, kind: 'display', sourceId: chosen, switched: chosen !== sourceId, crop, action: rect.action })
   return savedAction(rect)
 }
 
-async function editWindowRegion(sourceId) {
+async function editWindowRegion(sourceId, region = REGIONS.ocr) {
   const bounds = state.sourceBounds ?? state.info?.source_bounds ?? null
   if (!bounds) {
     log({ check: 'region-edit-skipped', reason: 'window bounds unknown' })
@@ -1992,11 +2058,14 @@ async function editWindowRegion(sourceId) {
     }
   }
 
-  const rect = await editRegion(SAVE_AND_SCAN, {
-    alternateLabel: 'Save',
+  const saved = region.saved()
+  const rect = await editRegion(region.confirmLabel, {
+    alternateLabel: region.alternateLabel,
+    accent: region.accent,
+    title: region.title,
     area,
     picture,
-    initial: state.crop ? cropToLocal(state.crop, origin, bounds) : null,
+    initial: saved ? cropToLocal(saved, origin, bounds) : region.whole ? area : null,
     onStart: (selector) => void refresh(selector)
   })
   if (!rect) return false
@@ -2007,8 +2076,8 @@ async function editWindowRegion(sourceId) {
     crop.reference_height = frame.height
   }
   if (crop.width <= 0 || crop.height <= 0) return false
-  await native.commitSource(sourceId, crop)
-  log({ check: 'region-saved', kind: 'window', sourceId, crop, action: rect.action })
+  await region.commit(sourceId, crop)
+  log({ check: 'region-saved', region: region.name, kind: 'window', sourceId, crop, action: rect.action })
   return savedAction(rect)
 }
 
@@ -2923,6 +2992,7 @@ async function processView(view) {
       lastSelection = selection
     }
     state.crop = view.crop ?? null
+    state.ankiCrop = view.ankiCrop ?? null
     state.viewSource = view.source ?? null
     const kind = view.source?.kind ?? view.source?.type
     state.hover.isWindow = kind === 'window'

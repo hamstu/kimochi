@@ -1,6 +1,10 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Linux GNOME runtime. */
-/** Shell owns transient selection actors. The hidden OCR WebKit host stays hidden. */
-export async function selectGnomeCrop(native, {sourceId, frame, initial = null, quick = false, theme = 'dark'}) {
+/**
+ * Shell owns transient selection actors. The hidden OCR WebKit host stays hidden. `accent` and
+ * `title` style the editor box (see RegionSelect); they ride on the open notification to the
+ * crop host, so the Shell extension does not need to know them.
+ */
+export async function selectGnomeCrop(native, {sourceId, frame, initial = null, quick = false, theme = 'dark', accent = 'blue', title = null}) {
   const request = (payload) => native.invoke('gnome_overlay', {operation:'crop', payload})
   const id = crypto.randomUUID()
   let finish, fail, keep, pending = false
@@ -19,9 +23,9 @@ export async function selectGnomeCrop(native, {sourceId, frame, initial = null, 
     await native.panel('crop-host','show_inactive')
     // A new WebKit panel loads asynchronously. Repeat only the idempotent open
     // notification during this selection; the host ignores a duplicate id.
-    const open=setInterval(()=>void window.__TAURI__.event.emit('gnome-crop-open',{id}),150)
+    const open=setInterval(()=>void window.__TAURI__.event.emit('gnome-crop-open',{id,accent,title}),150)
     try {
-      await window.__TAURI__.event.emit('gnome-crop-open',{id})
+      await window.__TAURI__.event.emit('gnome-crop-open',{id,accent,title})
       return await result
     } finally { clearInterval(open) }
   } finally {

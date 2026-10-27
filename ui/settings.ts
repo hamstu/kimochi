@@ -186,6 +186,20 @@ export interface Settings {
   /** Card enhancement's tags, on every new card whichever dictionary made it
       (src-tauri/src/card_tags.rs). */
   cardTags: CardTagsSettings
+  /** Card enhancement's screenshot: each scan's source, kept for the Log and new cards
+      (src-tauri/src/screenshots.rs). */
+  cardScreenshot: CardScreenshotSettings
+  /** The screenshot viewer draws what OCR read (the boxes, and the crop area faded around). */
+  screenshotAnnotations: boolean
+}
+
+export interface CardScreenshotSettings {
+  /** Give new cards the screenshot of the scan their sentence was read in. */
+  enabled: boolean
+  /** The note field the picture goes in. */
+  field: string
+  /** Screenshots kept on disk, 10 to 500. */
+  kept: number
 }
 
 export interface CardTagsSettings {
@@ -258,7 +272,9 @@ export const SETTINGS_DEFAULTS: Settings = {
     endOffsetMs: 0,
     trim: true
   },
-  cardTags: { enabled: true, tags: 'kimochi, {{session-name}}' }
+  cardTags: { enabled: true, tags: 'kimochi, {{session-name}}' },
+  cardScreenshot: { enabled: true, field: 'Picture', kept: 50 },
+  screenshotAnnotations: true
 }
 
 /**

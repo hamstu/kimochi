@@ -13,7 +13,7 @@
  * does the Yomitan API's (word audio) mapping). What recording can do differs by OS (the status's
  * `platform`): macOS needs Screen Recording; Linux needs PipeWire.
  */
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { ChevronDown, FlaskConical } from 'lucide-react'
 import {
   Button,
@@ -30,13 +30,12 @@ import {
 } from '@kit'
 import { SETTINGS_DEFAULTS, type SentenceAudioSettings } from '@ui/settings'
 import { sentenceAudioStatus, type SentenceAudioStatus } from '@texthooker/lib/sentenceAudio'
-import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { useSetting } from '../../bridge/useSetting'
 import { requestPermission } from '../../bridge/tauri'
 import { useModelControls } from '../../bridge/models'
 import { NumberField } from './fields'
 import { ModelDownload } from './ModelDownload'
-import { detectAudioField } from './sentenceAudioField'
+import { useFieldDetection } from './fieldDetection'
 
 const DEFAULTS = SETTINGS_DEFAULTS.sentenceAudio
 
@@ -319,30 +318,4 @@ export function SentenceAudioSection(): ReactNode {
       )}
     </SettingsSection>
   )
-}
-
-/**
- * The Audio field, found in Anki (`detectAudioField`): `run` when the switch turns it on, and on
- * its own while it is on, whenever the AnkiConnect address or the Yomitan API's note type changes.
- * `note` says why nothing was found, when Anki answered.
- */
-function useFieldDetection(enabled: boolean): { run: () => void; note: string | null } {
-  const [note, setNote] = useState<string | null>(null)
-  const run = useCallback((): void => {
-    void detectAudioField().then((found) => setNote(found && !found.ok ? found.reason : null))
-  }, [])
-  const [anki, setAnki] = useState(() => ankiKey(getSettings()))
-  useEffect(() => onSettingsChange((next) => setAnki(ankiKey(next))), [])
-  const seen = useRef(anki)
-  useEffect(() => {
-    if (seen.current === anki) return
-    seen.current = anki
-    if (enabled) run()
-  }, [anki, enabled, run])
-  return { run, note }
-}
-
-/** What the Audio field depends on in the Anki settings. */
-function ankiKey(settings: { ankiConnectUrl: string; ankiModelName: string | null }): string {
-  return `${settings.ankiConnectUrl}\n${settings.ankiModelName ?? ''}`
 }

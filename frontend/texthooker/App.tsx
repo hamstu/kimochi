@@ -30,6 +30,7 @@ import "./log.css";
 import { LineRow } from "./components/LineRow";
 import { dayLabel, dayStarts } from "./lib/logDays";
 import { ExplainModal } from "./components/ExplainModal";
+import { ScreenshotViewer } from "./components/ScreenshotViewer";
 import { AddToNotebookModal } from "./components/AddToNotebookModal";
 import { StatsFooter } from "./components/StatsFooter";
 import { LogMoreMenu } from "./components/LogMoreMenu";
@@ -300,6 +301,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
       </Bar>
       <AddToNotebookModal text={addText} onClose={() => setAddText(null)} />
       <ExplainModal />
+      <ScreenshotViewer />
     </div>
   );
 }

@@ -4,6 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AnkiConnectStatus } from "@ui/anki-connect";
 import { attachSentenceAudio } from "./sentenceAudio";
+import { attachScreenshot } from "./screenshots";
 import type {
   AnkiFieldMapping,
   AnkiMediaItem,
@@ -177,6 +178,8 @@ export interface SendCardOpts {
     dictionaryMedia: AnkiMediaItem[];
   };
   sentence: string | null;
+  /** The OCR scan the sentence was read in, when known: its screenshot goes on the card. */
+  scan?: string | null;
 }
 
 export interface SendCardResult {
@@ -247,7 +250,7 @@ function resolveFieldValue(
  *  1. storeMedia for each audio + dictionary media item
  *  2. resolve field mappings → record
  *  3. addNote (with duplicate detection)
- *  4. a new card gets its line's recorded audio afterwards, when sentence audio is on
+ *  4. a new card gets its line's recorded audio and its scan's screenshot afterwards, when on
  */
 export async function sendCardForTerm(
   opts: SendCardOpts,
@@ -310,6 +313,7 @@ export async function sendCardForTerm(
       fieldFor("wordAudio"),
       yomitan.fields.reading ?? null,
     );
+    attachScreenshot(ankiUrl, id, sentence, opts.scan ?? null);
   }
   return { noteId: id, duplicate };
 }

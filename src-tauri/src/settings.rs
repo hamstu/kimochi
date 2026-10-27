@@ -14,6 +14,9 @@ pub fn defaults() -> Value {
         "nativeWindowPinned": {},
         "cropRegions": {},
         "cropScanEnabled": {},
+        // The part of each source that goes on Anki cards as the screenshot, keyed like
+        // `cropRegions`; none means the whole source.
+        "ankiCropRegions": {},
         "hotkeys": {},
         "scannedTextFontSize": 14,
         "scannedTextHistory": [],
@@ -73,6 +76,9 @@ pub fn defaults() -> Value {
         },
         // Card enhancement's tags, on every new card (card_tags.rs).
         "cardTags": { "enabled": true, "tags": crate::card_tags::DEFAULT_TAGS },
+        // Card enhancement's screenshot (screenshots.rs).
+        "cardScreenshot": { "enabled": true, "field": "Picture", "kept": 50 },
+        "screenshotAnnotations": true,
         // New installs only: `load` keeps an existing settings file on the engine it had.
         "ocrMode": "googlelens"
         // `endpoint` is intentionally absent: an unset endpoint follows

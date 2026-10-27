@@ -210,6 +210,8 @@ export const desktop = () => invoke('desktop')
 export const displays = () => invoke('displays')
 /** Atomic selection + crop, keyed per source descriptor by native. */
 export const commitSource = (sourceId, crop) => invoke('commit_source', { sourceId, crop, keepCrop: false })
+/** Save (or, with null, clear) the source's Anki crop; the selection, OCR crop and scan stay. */
+export const commitAnkiCrop = (sourceId, crop) => invoke('commit_anki_crop', { sourceId, crop })
 /** The main window, with its source menu open on the grid of windows and displays. */
 export const openSourcePicker = () => invoke('open_source_picker')
 export const preferences = () => invoke('preferences')

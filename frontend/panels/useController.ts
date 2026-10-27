@@ -11,6 +11,7 @@ import { useViewState } from '../bridge/state'
 import { useSetting } from '../bridge/useSetting'
 import {
   activateSource,
+  clearAnkiCrop,
   clearSource,
   clearSourceCrop,
   selectSource,
@@ -56,6 +57,8 @@ interface RemoteControlProps {
   onTriggerScan: () => void
   onSelectAndScan: () => void
   onEditCropArea: () => void
+  /** Draw the part of the source that goes on Anki cards (the green box). */
+  onEditAnkiCropArea: () => void
   onOpenLog: () => void
   onToggleTextOverlayVisibility: () => void
   onToggleDebugOverlay: () => void
@@ -70,6 +73,8 @@ interface RemoteControlProps {
   onSelectSource: (sourceId: string) => void
   /** Forget the current source's region. */
   onClearCrop: () => void
+  /** Forget the current source's Anki crop: cards get the whole source. */
+  onClearAnkiCrop: () => void
   /** Deselect the source: nothing is read until one is chosen again. */
   onClearSource: () => void
 }
@@ -138,6 +143,8 @@ export function useController(): ControllerWiring {
     onSelectAndScan: () => attempt('Select and scan', () => triggerAction('selectAndScan')),
     // Drawn over the source itself by the overlay, window or screen alike.
     onEditCropArea: () => attempt('Edit region', () => triggerAction('setCropArea')),
+    onEditAnkiCropArea: () =>
+      attempt('Edit Anki crop area', () => triggerAction('setAnkiCropArea')),
     onOpenLog: () => attempt('Show Kimochi', () => panel('log', 'show')),
     onToggleTextOverlayVisibility: () =>
       attempt('Toggle overlay text', () => triggerAction('toggleTextOverlay')),
@@ -161,6 +168,10 @@ export function useController(): ControllerWiring {
     onClearCrop: () => {
       const sourceId = state.source?.sourceId
       if (sourceId) attempt('Clear crop area', () => clearSourceCrop(sourceId))
+    },
+    onClearAnkiCrop: () => {
+      const sourceId = state.source?.sourceId
+      if (sourceId) attempt('Clear Anki crop area', () => clearAnkiCrop(sourceId))
     },
     onClearSource: () => {
       // The source's outline would otherwise stay up over a window that is no longer the source.

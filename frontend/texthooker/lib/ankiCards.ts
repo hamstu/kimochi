@@ -3,7 +3,9 @@
    Tauri, so scripts/anki-cards.test.mjs can pin it. */
 
 /** What Kimochi added to a card after it was made. */
-export type AnkiEnhancement = "sentenceAudio" | "wordAudio";
+export type AnkiEnhancement = "sentenceAudio" | "wordAudio" | "screenshot";
+
+const ENHANCEMENTS: readonly AnkiEnhancement[] = ["sentenceAudio", "wordAudio", "screenshot"];
 
 /** One card made in a session: a reference to the Anki note, and what the tab shows of it. */
 export interface AnkiCardRecord {
@@ -32,18 +34,22 @@ export interface AnkiCardsChanged {
 const ENHANCEMENT_LABELS: Record<AnkiEnhancement, string> = {
   sentenceAudio: "Sentence audio",
   wordAudio: "word audio",
+  screenshot: "screenshot",
 };
 
-/** "Sentence audio added by Kimochi", "Sentence audio and word audio added by Kimochi". */
+/** "Sentence audio added by Kimochi", "Sentence audio, word audio and screenshot added by Kimochi". */
 export function enhancementLabel(enhanced: readonly string[]): string | null {
-  const known = (["sentenceAudio", "wordAudio"] as const).filter((kind) =>
-    enhanced.includes(kind),
-  );
+  const known = ENHANCEMENTS.filter((kind) => enhanced.includes(kind));
   if (known.length === 0) return null;
   const words = known.map((kind) => ENHANCEMENT_LABELS[kind]);
   words[0] = words[0][0].toUpperCase() + words[0].slice(1);
-  return `${words.join(" and ")} added by Kimochi`;
+  const last = words.pop()!;
+  return `${words.length ? `${words.join(", ")} and ${last}` : last} added by Kimochi`;
 }
+
+/** Whether Kimochi added audio (the line's or the word's) to the card. */
+export const hasAudio = (card: Pick<AnkiCardRecord, "enhanced">): boolean =>
+  card.enhanced.includes("sentenceAudio") || card.enhanced.includes("wordAudio");
 
 /** Newest first; a card already there (by note id) is replaced, and a deleted one removed. */
 export function upsertCard(
@@ -75,6 +81,8 @@ export interface AnkiCardStats {
   today: number;
   /** Given audio by Kimochi. */
   enhanced: number;
+  /** Given a screenshot by Kimochi. */
+  screenshots: number;
 }
 
 export function cardStats(
@@ -87,7 +95,8 @@ export function cardStats(
   return {
     total: cards.length,
     today: cards.filter((c) => c.addedAt >= start && c.addedAt <= now).length,
-    enhanced: cards.filter((c) => c.enhanced.length > 0).length,
+    enhanced: cards.filter(hasAudio).length,
+    screenshots: cards.filter((c) => c.enhanced.includes("screenshot")).length,
   };
 }
 
@@ -102,7 +111,7 @@ export function normalizeCard(raw: unknown): AnkiCardRecord | null {
   if (typeof r.noteId !== "number") return null;
   const enhanced = Array.isArray(r.enhanced)
     ? r.enhanced.filter(
-        (k): k is AnkiEnhancement => k === "sentenceAudio" || k === "wordAudio",
+        (k): k is AnkiEnhancement => ENHANCEMENTS.includes(k as AnkiEnhancement),
       )
     : [];
   return {

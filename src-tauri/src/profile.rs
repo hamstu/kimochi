@@ -46,6 +46,7 @@ pub const MACHINE_KEYS: &[&str] = &[
     "ocrMode",
     "cropRegions",
     "cropScanEnabled",
+    "ankiCropRegions",
     "settingsActiveTab",
     "texthookerIngestedHistory",
     "accountLinkServer",

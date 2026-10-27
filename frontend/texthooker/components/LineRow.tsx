@@ -1,6 +1,5 @@
 import { memo, useMemo, useSyncExternalStore } from "react";
-import { Square, Volume2 } from "lucide-react";
-import { IconButton, Tooltip } from "@kit";
+import { Tooltip } from "@kit";
 import { NotebookMatchChip } from "./NotebookMatchChip";
 import { LineActionsMenu } from "./LineActionsMenu";
 import { getMatcher, matchLine, type Match } from "@texthooker/lib/nameMatch";
@@ -12,11 +11,7 @@ import {
 } from "@texthooker/lib/translate";
 import type { Line } from "@texthooker/lib/types";
 import { lineDate, lineTime } from "@texthooker/lib/logDays";
-import {
-  toggleLineAudio,
-  useLineAudio,
-  useLinePlaying,
-} from "@texthooker/lib/sentenceAudio";
+import { LineMedia } from "./LineMedia";
 
 interface Props {
   line: Line;
@@ -69,35 +64,6 @@ function LineGutter({ ts }: { ts: number }) {
   );
 }
 
-/**
- * Sentence audio's word on the line (src-tauri/src/sentence_audio): a speaker that plays the clip
- * of its voice, recorded from the game. Nothing otherwise: while the line is still being listened
- * to, when no voice was found (Diagnostics → Sentence audio says why), or when sentence audio is
- * off.
- */
-function LineVoice({ uid }: { uid: string | undefined }) {
-  const audio = useLineAudio(uid);
-  const playing = useLinePlaying(uid);
-  if (!uid || audio?.state !== "voiced") return null;
-  const seconds = ((audio.durationMs ?? 0) / 1000).toFixed(1);
-  return (
-    <IconButton
-      label={playing ? "Stop" : `Play the line's voice (${seconds} s)`}
-      size="sm"
-      className="line-voice"
-      data-playing={playing || undefined}
-      // Keep the row's selection / scan handling out of the button.
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        e.stopPropagation();
-        void toggleLineAudio(uid);
-      }}
-    >
-      {playing ? <Square /> : <Volume2 />}
-    </IconButton>
-  );
-}
-
 function LineRowInner({ line, translateEnabled }: Props) {
   // Subscribe so this row re-renders when notebook content changes.
   const cacheVersion = useNotebookCacheVersion();
@@ -121,8 +87,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
     ...(line.ocr ? {
       'data-ocr-scan': line.ocr.scanId,
       'data-ocr-index': line.ocr.groupIndex,
-      'data-ocr-count': line.ocr.groupCount,
-      'data-group-label': line.ocr.groupCount > 1 ? `${line.ocr.groupIndex + 1} / ${line.ocr.groupCount}` : undefined
+      'data-ocr-count': line.ocr.groupCount
     } : {})
   };
 
@@ -141,6 +106,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
         <span className="line-note line-pending" role="status">
           translating…
         </span>
+        <LineMedia line={line} />
       </div>
     );
   }
@@ -166,7 +132,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
       >
         <LineGutter ts={line.ts} />
         <span>{line.translation}</span>
-        <LineVoice uid={line.uid} />
+        <LineMedia line={line} />
         <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
     );
@@ -183,7 +149,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
       >
         <LineGutter ts={line.ts} />
         <span>{line.text}</span>
-        <LineVoice uid={line.uid} />
+        <LineMedia line={line} />
         {translateNote}
         <LineActionsMenu line={line} translateEnabled={translateEnabled} />
       </div>
@@ -215,7 +181,7 @@ function LineRowInner({ line, translateEnabled }: Props) {
           <span key={`p-${i}`}>{line.text.slice(piece.start, piece.end)}</span>
         );
       })}
-      <LineVoice uid={line.uid} />
+      <LineMedia line={line} />
       {translateNote}
       <LineActionsMenu line={line} translateEnabled={translateEnabled} />
     </div>

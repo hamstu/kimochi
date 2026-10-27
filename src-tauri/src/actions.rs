@@ -17,6 +17,7 @@ pub const ACTIONS: &[&str] = &[
     "openControllerMenu",
     "toggleOverlay",
     "setCropArea",
+    "setAnkiCropArea",
     "playAudio",
     "selectAndScan",
     // View toggles. Rust does NOT flip these flags — the overlay owns the state and
@@ -45,6 +46,7 @@ const RESTORES_OVERLAY: &[&str] = &[
     "triggerScan",
     "openControllerMenu",
     "setCropArea",
+    "setAnkiCropArea",
     "playAudio",
     "selectAndScan",
 ];

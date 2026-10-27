@@ -194,6 +194,13 @@ export async function toggleLineAudio(uid: string): Promise<void> {
   await audio.play().catch(done);
 }
 
+/** How far line `uid`'s clip has played, 0..1, while it is the one playing; null otherwise. */
+export function lineProgress(uid: string): number | null {
+  if (playing?.uid !== uid) return null;
+  const { currentTime, duration } = playing.audio;
+  return duration > 0 && Number.isFinite(duration) ? Math.min(1, currentTime / duration) : 0;
+}
+
 /** Whether line `uid`'s clip is playing. */
 export function useLinePlaying(uid: string | undefined): boolean {
   return useSyncExternalStore(

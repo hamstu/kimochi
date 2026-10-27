@@ -103,6 +103,22 @@ const THEMES = {
   }
 }
 
+/**
+ * The box's colour per `accent`: blue (the theme's own, the OCR crop) or green (the Anki crop;
+ * Radix green 9 on dark, green 10 on light, the app's `--k-ok` family). Overrides the theme's
+ * `accent` and `tint`.
+ */
+const ACCENTS = {
+  blue: { dark: null, light: null },
+  green: {
+    dark: { accent: '#30a46c', tint: 'rgba(48, 164, 108, 0.12)' },
+    light: { accent: '#2b9a66', tint: 'rgba(43, 154, 102, 0.10)' }
+  }
+}
+
+/** Space between the foot's title and its readout. */
+const TITLE_GAP = 10
+
 const MONO = 'ui-monospace, "SF Mono", Menlo, monospace'
 const UI = 'system-ui, -apple-system, sans-serif'
 
@@ -175,10 +191,12 @@ export class RegionSelect {
   /**
    * @param {{onHitRects?: Function, container?: HTMLElement, cancelOnMisclick?: boolean,
    *   confirmLabel?: string, alternateLabel?: string, theme?: 'light' | 'dark', area?: object,
-   *   initial?: object, picture?: object}} options `area`, `initial` and `picture` are
-   *   rectangles in surface points; see above. `alternateLabel` adds a second, outlined confirm
-   *   button left of the primary one; the result's `action` says which committed it (`primary`
-   *   for Return and a double-click too).
+   *   initial?: object, picture?: object, accent?: 'blue' | 'green', title?: string}} options
+   *   `area`, `initial` and `picture` are rectangles in surface points; see above.
+   *   `alternateLabel` adds a second, outlined confirm button left of the primary one; the
+   *   result's `action` says which committed it (`primary` for Return and a double-click too).
+   *   `accent` colours the box (blue by default; green for the Anki crop area), and `title` names
+   *   it at the start of the foot, shown only while the foot has room for it.
    */
   constructor({
     onHitRects,
@@ -189,8 +207,12 @@ export class RegionSelect {
     theme,
     area = null,
     initial = null,
-    picture = null
+    picture = null,
+    accent = 'blue',
+    title = null
   } = {}) {
+    this._accent = ACCENTS[accent] ? accent : 'blue'
+    this._title = typeof title === 'string' && title.trim() ? title.trim() : null
     this._area = isRect(area) ? { ...area } : null
     this._initial = isRect(initial) ? { ...initial } : null
     this._picture = isRect(picture) ? { ...picture } : null
@@ -657,6 +679,7 @@ export class RegionSelect {
     const corner = this._area ?? { x: 0, y: 0 }
     els.origin.textContent = `${rect.x - corner.x}, ${rect.y - corner.y}`
     els.actions.style.display = this._editing ? 'flex' : 'none'
+    this._fitTitle(rect.width + RING * 2)
     assign(els.grips, {
       display: editing ? 'block' : 'none',
       left: `${rect.x}px`,
@@ -682,6 +705,23 @@ export class RegionSelect {
         ? Math.max(0, frameLeft + frameWidth - footWidth)
         : Math.max(0, frameLeft)
     els.foot.style.left = `${left}px`
+  }
+
+  /**
+   * Show the title only when it fits in the foot without widening it past the frame: measure the
+   * foot's own content without it, and add the title's width.
+   */
+  _fitTitle(frameWidth) {
+    const els = this._els
+    if (!els?.title) return
+    els.title.style.display = 'none'
+    els.foot.style.minWidth = '0px'
+    els.foot.style.display = 'flex'
+    const without = els.foot.offsetWidth || 0
+    els.title.style.display = ''
+    const titleWidth = els.title.offsetWidth || 0
+    const fits = without > 0 && titleWidth > 0 && without + titleWidth + TITLE_GAP <= frameWidth
+    els.title.style.display = fits ? '' : 'none'
   }
 
   /**
@@ -730,7 +770,8 @@ export class RegionSelect {
   }
 
   _render() {
-    const theme = THEMES[this._theme ?? systemTheme()] ?? THEMES.dark
+    const themeName = THEMES[this._theme] ? this._theme : systemTheme()
+    const theme = { ...THEMES[themeName], ...(ACCENTS[this._accent][themeName] ?? {}) }
     const container = assign(document.createElement('div'), {
       position: 'fixed',
       inset: '0',
@@ -854,6 +895,15 @@ export class RegionSelect {
       whiteSpace: 'nowrap',
       cursor: 'move'
     })
+    // What the box is ("Anki crop area"), when the caller names it; `_fitTitle` hides it when the
+    // foot is too narrow.
+    const title = this._title
+      ? assign(document.createElement('span'), { font: `600 11px/1 ${UI}`, opacity: '0.92' })
+      : null
+    if (title) {
+      title.textContent = this._title
+      title.dataset.regionTitle = 'true'
+    }
     const size = assign(document.createElement('span'), { fontWeight: '600' })
     const origin = assign(document.createElement('span'), { opacity: '0.7' })
     const spacer = assign(document.createElement('span'), { flex: '1' })
@@ -897,7 +947,7 @@ export class RegionSelect {
       ...(this._alternateLabel ? [button(this._alternateLabel, 'outline', () => this.confirm('alternate'))] : []),
       button(`${this._confirmLabel} ⏎`, 'primary', () => this.confirm())
     )
-    foot.append(size, origin, spacer, actions)
+    foot.append(...(title ? [title] : []), size, origin, spacer, actions)
     foot.addEventListener('pointerdown', (event) => this._beginMove(event))
 
     // The cursor bubble. Positioned by transform from the top-left; fades and scales in place.
@@ -951,7 +1001,7 @@ export class RegionSelect {
     container.append(frame, foot, grips, hint)
     ;(this._mount ?? document.body).append(container)
     this._container = container
-    this._els = { frame, bevel, foot, size, origin, actions, grips, hint, message, stage }
+    this._els = { frame, bevel, foot, title, size, origin, actions, grips, hint, message, stage }
     this._drawBubble()
   }
 
