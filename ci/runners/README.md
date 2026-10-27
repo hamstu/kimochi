@@ -63,6 +63,10 @@ powershell -ExecutionPolicy Bypass -File ci\runners\install-wsl-keepalive.ps1 -D
   five minutes. Log: `C:\ProgramData\wsl-keepalive\watchdog.log`.
 - `vmIdleTimeout=-1` and `instanceIdleTimeout=-1` in the user's `.wslconfig`, and the
   `Restart=always` drop-in for the runner unit inside the distro.
+- `wsl-housekeeping.timer` inside the distro (Sundays 03:00): prunes Docker's build cache older
+  than a week and dangling images, caps the journal at 200 MB, `apt-get clean`, keeps two snap
+  revisions and runs `fstrim /`, so the vhdx has something to give back when it is compacted.
+  Docker's build cache was the biggest filler on the Ubuntu VM (26 GB in a week).
 
 Failure seen on the x64 Windows runner (October 2026): the distro's `ext4.vhdx` had grown until C: was
 full; the distro died and every start then failed with `Wsl/Service/CreateInstance/E_FAIL`
@@ -75,9 +79,17 @@ size, so the file creeps towards used space plus everything ever written, whatev
 caches are capped at. To reclaim space by hand: inside the distro delete
 regenerable data (`_work/*/src-tauri/target`, `~/.npm/_cacache`, `apt-get clean`) and run
 `sudo fstrim -v /`; then on Windows (elevated) disable both keepalive tasks and the watchdog,
-`wsl --shutdown`, `Stop-Service WSLService`, and in `diskpart`: `select vdisk file=<ext4.vhdx>`,
-`attach vdisk readonly`, `compact vdisk`, `detach vdisk`; re-enable and start the tasks. Sparse
-vhdx mode (`wsl --manage --set-sparse`) needs `--allow-unsafe` and is left off.
+`wsl --shutdown`, `Stop-Service WSLService`, wait until the vhdx opens exclusively (the utility
+VM can hold a kernel handle on it for a minute after the service stops; a `vmwp.exe` that still
+parents a `vmmemWSL` process has to be ended), and in `diskpart`: `select vdisk
+file=<ext4.vhdx>`, `compact vdisk`, nothing else. Then re-enable and start the tasks. Compact the
+detached file: `attach vdisk readonly` first hangs or fails with "Incorrect function", reclaims
+nothing (101 GB stayed 101 GB) and leaves an attachment behind, after which every start fails
+with `MountDisk/HCS/ERROR_SHARING_VIOLATION` or `E_ACCESSDENIED` until it is dismounted. Do not
+kill `diskpart` either; let it exit. Sparse vhdx mode (`wsl --manage --set-sparse`) needs
+`--allow-unsafe` and is left off. Second occurrence (24 October 2026): G: was down to 7 MB free
+with the vhdx at 108 GB; freeing caches inside the distro took it from 95 GB to 39 GB used and
+the detached compaction took the file from 103 GB to 49 GB.
 
 ## Adding or re-registering a machine
 
