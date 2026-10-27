@@ -4,8 +4,8 @@ import { docsUrl } from '../../lib/docs.js'
 const STEPS = [
   {
     n: '一',
-    title: 'Pick the game',
-    body: 'Choose a window or screen source. Add a crop area if you want.'
+    title: 'Pick what to read',
+    body: 'A game, a manga, a video, any window or screen. Add a crop area if you want.'
   },
   {
     n: '二',
@@ -15,7 +15,7 @@ const STEPS = [
   {
     n: '三',
     title: 'Read',
-    body: 'The text shows up on the game (when the overlay is enabled), and in the Log.'
+    body: 'The text shows up right over your game, manga or video (when the overlay is enabled), and in the Log.'
   },
   {
     n: '四',

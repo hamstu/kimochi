@@ -22,21 +22,21 @@ export const FAQ = [
     id: 'what-is-kimochi',
     q: 'What is Kimochi?',
     a: [
-      'Kimochi is a free, open-source desktop app that helps you read Japanese in games. It captures the Japanese text on your screen with OCR, can draw that text back over the game as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki. It works on games, visual novels, manga, YouTube videos and anything else on your screen.'
+      'Kimochi is a free, open-source desktop app that helps you read Japanese in games, visual novels, manga and more. It captures the Japanese text on your screen with OCR, can draw that text back over whatever you’re reading as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki. It works on games, visual novels, manga, YouTube videos and anything else on your screen.'
     ]
   },
   {
     id: 'who-is-it-for',
     q: 'Who is Kimochi for?',
     a: [
-      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy, from total beginners to advanced readers. Every word is a hover away from its reading and meaning, so you can start on real Japanese from day one. It started as the tool its maker, Hamish Macpherson, wanted: something that reads the game for you, gets out of the way, and lets you look up the word you’re stuck on without breaking the flow.'
+      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy, from total beginners to advanced readers. Every word is a hover away from its reading and meaning, so you can start on real Japanese from day one. It started as the tool its maker, Hamish Macpherson, wanted: something that reads the screen for you, gets out of the way, and lets you look up the word you’re stuck on without breaking the flow.'
     ]
   },
   {
     id: 'how-does-it-work',
     q: 'How does Kimochi work?',
     a: [
-      'There are four steps. Pick the game window or screen, and crop it if you like. Press Scan, or turn on Auto OCR. The text shows up in Kimochi’s Log, and over the game if the overlay is on. Then hover a word to look it up, hear it, or save it. Every line is kept in a Log you can scroll back through, with a separate session for each game.'
+      'There are four steps. Pick a window or screen (a game, a manga reader, a video player), and crop it if you like. Press Scan, or turn on Auto OCR. The text shows up in Kimochi’s Log, and right over the window if the overlay is on. Then hover a word to look it up, hear it, or save it. Every line is kept in a Log you can scroll back through, with a separate session for each game, book or series.'
     ],
     links: [{ href: docsUrl('/quick-start/'), label: 'Quick start in the docs' }]
   },

@@ -38,7 +38,7 @@ export const ROUTES = [
     path: '/',
     title: 'Kimochi · Read Japanese games with an OCR overlay',
     description:
-      'Kimochi is a free, open-source desktop app for macOS, Windows and Linux that reads the Japanese text in your games, draws it over the game, and lets you hover any word to look it up and make Anki cards.',
+      'Kimochi is a free, open-source desktop app for macOS, Windows and Linux that reads the Japanese text in your games, manga, videos and apps, draws it right over them, and lets you hover any word to look it up and make Anki cards.',
     index: true,
     render: 'full'
   },
@@ -171,7 +171,7 @@ const APP = {
   alternateName: ENTITY_NAME,
   url: `${SITE_URL}/`,
   description:
-    'A desktop app that reads the Japanese text on your screen with OCR, draws it over the game, and lets you hover any word to look it up in Yomitan, Hachidori or 10ten and make Anki cards.',
+    'A desktop app that reads the Japanese text on your screen with OCR, draws it over your game, manga or video, and lets you hover any word to look it up in Yomitan, Hachidori or 10ten and make Anki cards.',
   applicationCategory: 'EducationalApplication',
   operatingSystem: 'macOS, Windows, Linux',
   inLanguage: 'en',

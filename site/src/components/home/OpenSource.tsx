@@ -135,7 +135,7 @@ export function OpenSource() {
           <span className="text-[2.5rem] leading-none font-semibold tracking-[-0.02em] text-ink">Free</span>
           <span className="text-small text-ink-3">forever</span>
         </p>
-        <p className="mt-3 text-body text-ink-2">Everything you need to read your games. No account, no limits.</p>
+        <p className="mt-3 text-body text-ink-2">Everything you need to read your games, manga and more. No account, no limits.</p>
         <ul className="mt-6 flex flex-col gap-2.5">
           {FREE.map((item) => (
             <li key={item} className="flex gap-2.5 text-body text-ink">

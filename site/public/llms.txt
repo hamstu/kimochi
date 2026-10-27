@@ -1,6 +1,6 @@
 # Kimochi
 
-> Kimochi is a free, open-source (GPL-3.0) desktop app for macOS, Windows and Linux that reads the Japanese text on your screen with OCR, draws it back over your game, and lets you hover any word to look it up (Yomitan, Hachidori or 10ten) and make Anki cards. It also has a Gaming Mode for the Steam Deck. Made by Hamish Macpherson, an independent developer in Canada. Status: early, nightly pre-release builds; no proper release yet.
+> Kimochi is a free, open-source (GPL-3.0) desktop app for macOS, Windows and Linux that reads the Japanese text on your screen with OCR (games, visual novels, manga, videos, any app), draws it back over whatever you're reading, and lets you hover any word to look it up (Yomitan, Hachidori or 10ten) and make Anki cards. It also has a Gaming Mode for the Steam Deck. Made by Hamish Macpherson, an independent developer in Canada. Status: early, nightly pre-release builds; no proper release yet.
 
 Kimochi is not the "Kimochi" emotions journal, the "Kimochi" AI companion app or the Kimochis toys. Kimochi itself is free with no account. Kimochi Cloud is optional and paid: $6 a month, $60 a year (two months free, so $5 a month) or $125 once for lifetime, with a 14-day free trial. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync. The app has no analytics, telemetry, crash reporting or ads.
 

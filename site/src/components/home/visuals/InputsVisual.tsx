@@ -2,7 +2,7 @@ import { Clipboard, ScanText, Webhook } from 'lucide-react'
 import { MiniWindow, VisualFrame } from './parts'
 
 const INPUTS = [
-  { name: 'Screen (OCR)', detail: 'Read the game window', icon: ScanText },
+  { name: 'Screen (OCR)', detail: 'Read any window or screen', icon: ScanText },
   { name: 'Clipboard', detail: 'Lines you copy', icon: Clipboard },
   { name: 'WebSocket', detail: 'ws://localhost:6677', icon: Webhook, on: true }
 ]

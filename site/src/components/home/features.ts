@@ -38,7 +38,7 @@ export const features: Feature[] = [
   {
     id: 'mini-mode',
     title: 'Mini mode',
-    body: 'Shrink Kimochi down to just its controls: your source, Auto OCR, the overlay, your OCR model and dictionary, in a slim window that sits beside your game. Expand it again whenever you want the Log.',
+    body: 'Shrink Kimochi down to just its controls: your source, Auto OCR, the overlay, your OCR model and dictionary, in a slim window that sits beside your game, video or manga. Expand it again whenever you want the Log.',
     Visual: MiniModeVisual,
     docs: '/reading/mini-mode/'
   },
