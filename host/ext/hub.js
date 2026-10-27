@@ -591,7 +591,7 @@ export class Hub {
       } catch (error) {
         throw fail(describe(error))
       }
-      if (!source?.url) throw fail('Kimochi has not captured the game yet. Scan once, then add the card again.')
+      if (!source?.url) throw fail('Kimochi has not captured your source yet. Scan once, then add the card again.')
       // Held for the fetch, so a newer probe cannot evict it in between (best effort: a full
       // retention table answers false, and the retry below covers the gap).
       const held = await this.invoke('retain_frame', { id: source.id, retain: true }).catch(() => false)

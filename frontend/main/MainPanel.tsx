@@ -1,6 +1,7 @@
 /**
  * The main window: a resizable sidebar (source and session pickers, Settings at its foot) and the
- * current view: the Log or the Notebook, switched by tabs across the top, or Settings. The title
+ * current view: the Log, the Notebook or the session's Anki cards, switched by tabs across the
+ * top, or Settings. The title
  * bar carries the sidebar toggle and the app's name.
  *
  * The Log stays mounted under the other views: it owns line intake (clipboard, WebSocket, OCR),
@@ -36,10 +37,11 @@ import './main.css'
 const Notebook = lazy(() =>
   import('@texthooker/components/NotebookPanel').then((m) => ({ default: m.NotebookPanel }))
 )
+const AnkiCards = lazy(() => import('./AnkiPanel').then((m) => ({ default: m.AnkiPanel })))
 
 function initialView(): MainView {
   const view = new URLSearchParams(location.search).get('view')
-  if (view === 'notebook' || view === 'settings') return view
+  if (view === 'notebook' || view === 'anki' || view === 'settings') return view
   // Reloaded by a dictionary-engine switch made in Settings: open on that page, not the Log.
   return engineSwitchRecord()?.view ?? 'log'
 }
@@ -165,12 +167,13 @@ export default function MainPanel(): JSX.Element {
     return () => void pending.then((stop) => stop())
   }, [setSidebar, changeMini])
 
-  // ⌘1, ⌘2 and ⌘, switch views (Ctrl+1, Ctrl+2 and Ctrl+, off macOS).
+  // ⌘1, ⌘2, ⌘3 and ⌘, switch views (Ctrl+1, Ctrl+2, Ctrl+3 and Ctrl+, off macOS).
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (!isPrimaryModifier(event, capabilities)) return
       if (event.key === '1') setView('log')
       else if (event.key === '2') setView('notebook')
+      else if (event.key === '3') setView('anki')
       else if (event.key === ',') setView('settings')
       else return
       event.preventDefault()
@@ -250,6 +253,11 @@ export default function MainPanel(): JSX.Element {
                     onEdit={setEditing}
                     onCloseEditor={() => setEditing(null)}
                   />
+                </Suspense>
+              )}
+              {view === 'anki' && (
+                <Suspense fallback={<div role="status">Loading Anki cards…</div>}>
+                  <AnkiCards />
                 </Suspense>
               )}
               {view === 'settings' && (

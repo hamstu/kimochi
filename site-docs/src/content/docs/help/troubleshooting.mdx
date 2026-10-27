@@ -103,9 +103,10 @@ every few seconds while it's open:
   one in AnkiConnect) in the dictionary's own Anki settings: **Settings → Anki** has a button to
   them. You don't need to add anything to AnkiConnect's `webCorsOriginList`.
 
-- **Cards have no sentence audio**: check that **Settings → Anki → Sentence Audio** shows
-  **Recording** and its meter moves while your game plays. On macOS it needs Screen Recording; on
-  Linux it needs PipeWire. A card only gets audio for a line that arrived within **Seconds kept**,
+- **Cards have no sentence audio**: check that **Enhance Anki cards** is on and that **Settings →
+  Anki → Card enhancement** shows no problem. On macOS it needs Screen Recording; on Linux it needs
+  PipeWire. Recording starts only once the speech model is downloaded. Check the **Audio field**
+  matches your note type. A card only gets audio for a line that arrived within **Seconds kept**,
   and never into a field that is already filled.
 
 See [Anki](/lookups/anki/#the-ankiconnect-connection-yomitan-api).

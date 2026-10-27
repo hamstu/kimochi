@@ -794,7 +794,7 @@ export class GameDictionary {
       <span class="gd-bar-group gd-bar-actions">
         ${focusable ? hint(keys ? "return" : glyph("confirm"), "Pop-up", { tone: "confirm" }) : ""}
         ${keys ? "" : hint(glyph("playAudio"), "Audio")}
-        ${hint(keys ? "esc" : glyph("back"), "Back to game", { tone: "cancel", action: "close" })}
+        ${hint(keys ? "esc" : glyph("back"), "Back", { tone: "cancel", action: "close" })}
       </span>`;
   }
 
@@ -818,7 +818,7 @@ export class GameDictionary {
       <span class="gd-bar-group gd-bar-actions">
         ${this.context.anki() ? `<span class="gd-anki" data-state="${anki}" data-tone="${ankiTone}">${hint(keys ? "return" : glyph("confirm"), ankiLabel, { tone: "confirm", action: "anki" })}</span>` : `<span class="gd-anki" data-state="off">${hint("", "")}<span class="gd-note">Add to Anki: set up in Settings → Anki</span></span>`}
         ${keys ? "" : hint(glyph("playAudio"), "Audio", { action: "audio" })}
-        ${hint(keys ? "esc" : glyph("back"), "Back to game", { tone: "cancel", action: "close" })}
+        ${hint(keys ? "esc" : glyph("back"), "Back", { tone: "cancel", action: "close" })}
       </span>`;
   }
 }

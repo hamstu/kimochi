@@ -383,6 +383,8 @@
 .k-menu-item-description { display: block; margin-top: 1px; font-size: var(--k-text-xs); line-height: var(--k-leading-xs); color: var(--k-text-2); }
 .k-menu-item-described[data-disabled] .k-menu-item-description { color: var(--k-text-3); }
 .k-menu-item-shortcut { margin-left: auto; padding-left: var(--k-space-4); color: var(--k-text-3); font-size: var(--k-text-sm); font-variant-numeric: tabular-nums; }
+.k-menu-item-key { flex: none; margin-left: auto; color: var(--k-text-3); font-size: var(--k-text-xs); }
+.k-menu-item-label + .k-menu-item-key { margin-left: var(--k-space-4); }
 .k-menu-item-check { flex: none; display: grid; place-items: center; width: var(--k-icon-sm); height: var(--k-icon-sm); margin-left: auto; color: var(--k-accent-text); }
 .k-menu-item-check svg { width: var(--k-icon-sm); height: var(--k-icon-sm); }
 .k-menu-item[data-state="checked"],
@@ -458,10 +460,20 @@
   overflow: hidden;
   border-radius: var(--k-radius-xl);
   background: var(--k-raised);
-  box-shadow: var(--k-shadow-dialog), inset 0 0 0 1px var(--gray-a5);
+  box-shadow: var(--k-shadow-dialog);
   color: var(--k-text);
   outline: none;
   animation: k-dialog-in 200ms var(--k-ease-out);
+}
+/* The edge, drawn over the content: as an inset shadow on the dialog itself, the footer's ground
+   (and anything else with a background) covered it. */
+.k-dialog::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--gray-a5);
+  pointer-events: none;
 }
 .k-dialog-lg { max-width: 52rem; }
 .k-dialog-header {
@@ -653,6 +665,87 @@
   padding: var(--k-space-5) var(--k-space-6) var(--k-space-8);
 }
 .k-settings-page-header { display: flex; flex-direction: column; gap: var(--k-space-1); }
+/* A tabbed page fills the settings scroller and scrolls below its tabs, so the tab bar spans the
+   whole width with no scrollbar gutter beside it. */
+.k-settings-tabbed {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.k-settings-tabbed-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.k-settings-tabs {
+  display: flex;
+  flex: none;
+  height: var(--k-bar-h);
+  border-bottom: 1px solid var(--k-line);
+  background: var(--k-bar);
+}
+.k-settings-tab {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--k-space-1-5);
+  min-width: 0;
+  /* As the main window's tabs: one pixel taller than the strip, over its bottom line, so the
+     chosen tab's ground joins the page below. */
+  margin-bottom: -1px;
+  padding: 0 var(--k-space-3);
+  border: 0;
+  background: transparent;
+  color: var(--k-text-2);
+  font: inherit;
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color var(--k-fast), color var(--k-fast);
+}
+.k-settings-tab + .k-settings-tab {
+  border-left: 1px solid var(--k-line);
+}
+.k-settings-tab > svg {
+  flex: none;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.k-settings-tab > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-settings-tab:hover,
+.k-settings-tab[data-native-hover] {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.k-settings-tab[aria-selected="true"] {
+  background: var(--k-bg);
+  color: var(--k-text);
+}
+.k-settings-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--k-accent);
+}
+.k-settings-tab[aria-selected="true"] > svg {
+  color: var(--k-accent-text);
+}
+.k-settings-tab:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -2px;
+}
 .k-settings-section { display: flex; flex-direction: column; gap: var(--k-space-2); }
 .k-settings-section-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--k-space-3); }
 .k-settings-section-header > div { display: flex; flex-direction: column; gap: var(--k-space-0-5); }

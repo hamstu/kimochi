@@ -152,7 +152,7 @@ function Tile({
             {source.space ? (
               <span>Previews once it is showing</span>
             ) : noPreview ? (
-              <span>The game or app in front</span>
+              <span>The app in front</span>
             ) : (
               failed && <span>No preview</span>
             )}

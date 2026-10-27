@@ -1,0 +1,64 @@
+/*
+ * The Anki tab: the Notebook's search strip, row grammar and footer (notebook.css), with the Log's
+ * footer stats (log.css). Only what differs lives here. Every value comes from the kit tokens.
+ */
+.anki-filter {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--k-space-2);
+  padding: var(--k-space-1-5) var(--k-space-3);
+  border-bottom: 1px solid var(--k-line);
+}
+
+/* Anki settings: an icon in a narrow strip, written out once there's room for it. */
+.anki-settings-wide.k-button { display: none; }
+@container (min-width: 36rem) {
+  .anki-settings-icon.k-button { display: none; }
+  .anki-settings-wide.k-button { display: inline-flex; }
+}
+@container (max-width: 30rem) {
+  .anki .nb-search-end .k-kbd { display: none; }
+}
+
+.anki-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--k-space-1) 0 var(--k-space-2);
+}
+.anki-row.k-row { width: 100%; text-align: left; }
+
+/* Given audio by Kimochi: a small ok-toned mark (like the pop-up's added check) beside the row's end. */
+.anki-enhanced {
+  display: inline-grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 999px;
+  background: var(--k-ok-soft);
+  color: var(--k-ok-text);
+}
+.anki-enhanced svg { width: var(--k-icon-xs); height: var(--k-icon-xs); }
+
+.anki-empty { flex: 1; }
+.anki-checking {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  color: var(--k-text-3);
+}
+
+.anki-stat-audio > svg { color: var(--k-ok-text); }
+@container (max-width: 26rem) {
+  .anki-stat-audio { display: none; }
+}
+
+/* The delete dialog's choice: also delete the note in Anki. */
+.anki-delete-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  margin-top: var(--k-space-3);
+  color: var(--k-text);
+}

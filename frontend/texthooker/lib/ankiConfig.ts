@@ -18,7 +18,8 @@ export function buildAnkiConfigForPopover(s: Settings): AnkiConfig | null {
     model: s.ankiModelName,
     modelFields: s.ankiModelFields,
     mappings: s.ankiFieldMappings,
-    tags: s.ankiTags,
+    // Card enhancement's tags are added in Rust (anki_add_note), for every dictionary.
+    tags: [],
   };
 }
 

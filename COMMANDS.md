@@ -980,8 +980,8 @@ notes what changed (with the time) and logs going offline once, and `Back online
 **Records** (`collection`, `id` → JSON): `prefs` (one per settings leaf of the profile's synced
 keys, path segments joined by `/`, JSON Pointer escaping), `sessions` (`<sid>`), `lines`
 (`<sid>/<uid>`), `notebook` (`<sid>/<entryId>`, each image as `sha256` of a blob), `presets`
-(name, secrets stripped), `stats` (`<deviceId>`: this computer's totals, pushed, never merged) and
-`conflicts`. A line's `uid` is random for new lines; lines written before uids get one derived
+(name, secrets stripped), `anki` (`<sid>/<noteId>`: `{sid, card}`, the session's Anki card records, see "AnkiConnect"),
+`stats` (`<deviceId>`: this computer's totals, pushed, never merged) and `conflicts`. A line's `uid` is random for new lines; lines written before uids get one derived
 from session id, numeric id, time and text (FNV-1a 64, `l` + 16 hex digits, the same in Rust
 and `store.ts`), written to the file the next time it is saved. A line deleted on purpose
 (Delete, Clear, a fuller OCR reading replacing fragments) is remembered in `lines.json`'s
@@ -995,7 +995,9 @@ folders deleted by another computer for 30 days. The device id is `<AppData>/dev
 **Merging.** Only one side changed → that side. Both changed → the newer hybrid-logical-clock
 stamp wins (ties by device id) and the other version is kept as a `conflicts` record, synced to
 every computer, restorable or dismissible (`sync_conflict_resolve`). Lines merge field by field
-(only a different `text` is a conflict). An edit beats a concurrent delete. The first sync of a
+(only a different `text` is a conflict). Anki card records merge without a conflict: the newer
+record's fields, every enhancement either side noted and the earlier `addedAt`; a card missing from
+`anki.json` is never a delete (only deleting its session is). An edit beats a concurrent delete. The first sync of a
 record (no shadow): preferences and presets take the account's version; sessions and notebook
 entries the one with the later `updatedAt`. Deleted sessions' lines and entries are deleted too.
 Settings that are machine keys or secrets are never sent and are ignored if received.
@@ -1004,7 +1006,7 @@ Settings that are machine keys or secrets are never sent and are ignored if rece
 Sync emits `sync:hold` `{id}` to it; the Log (`host.ts`) finishes its queued work, writes what is
 pending, pauses its writes and answers `sync_hold_ready({id})` (20 s timeout: the cycle is
 retried later). Sync writes the files (each atomically), then emits `sync:release` `{id, changed:
-{sessions, lines: [sid], notebook: [sid], presets}}`, and the Log reloads what changed (the open
+{sessions, lines: [sid], notebook: [sid], anki: [sid], presets}}`, and the Log reloads what changed (the open
 Log updates in place) and resumes. Preferences are applied to the live settings directly
 (`settings:changed` per top-level key, with the same side effects as `settings_set`).
 
@@ -1165,6 +1167,33 @@ Settings → Anki, and sends the body unchanged (the extension's API key in it),
 own Anki settings stay in charge. The extension windows may invoke it (`extensions::EXTENSION_WINDOW_COMMANDS`).
 A card the relay adds may afterwards be given its line's audio (see "Sentence audio" below).
 
+### The session's cards (the Anki tab)
+
+Every card Kimochi sees added is recorded with the Log's open session (`sessions.json`'s
+`activeId`), in `<profile>/sessions/<sid>/anki.json` (`{version: 1, cards: [AnkiCard]}`,
+`src-tauri/src/anki_cards.rs`): Kimochi's own pop-up's through `anki_add_note` (which takes the
+pop-up's `term` and `reading`), and a dictionary extension's through `anki_connect_relay` (an
+`addNote` AnkiConnect accepted, whether or not sentence audio is on; its word is the field named
+Expression, Word, Term, … or the note's shortest field, its reading a field named Reading or Kana).
+When sentence audio fills a card's fields, its record notes which (`enhanced`). The record is only
+a reference: nothing is read back from Anki, and Kimochi never edits or deletes the card. The
+records sync with the session (the `anki` collection, see "Sync").
+
+`AnkiCard` is `{noteId, term, reading?, deck?, addedAt, via: 'kimochi' | 'extension', engine,
+enhanced: ('sentenceAudio' | 'wordAudio')[], deleted?, updatedAt}` (`deleted`: removed from the tab, kept so Sync
+carries it; `merge` keeps it whichever side wins); `engine` is `yomitan-api` for the pop-up's
+cards, else the selected engine (`yomitan`, `hachidori`, …). Times are Unix ms.
+
+| Command | Signature |
+| --- | --- |
+| `anki_add_note` | also takes `term?` and `reading?`: the card's word, for its record (else read from the fields) |
+| `anki_cards_list` | `({sessionId}) -> AnkiCard[]`: the cards recorded in that session of the profile in use, oldest first (deleted ones left out) |
+| `anki_cards_delete` | `({sessionId, noteId, fromAnki})`: marks the card `deleted` in that session (kept so Sync carries it, never listed again) and announces it; with `fromAnki`, first deletes the note from Anki (`deleteNotes` through Kimochi's AnkiConnect), and if Anki refuses, nothing changes |
+
+| Event | Payload |
+| --- | --- |
+| `anki-cards:changed` | `{sessionId, card: AnkiCard}`: a card was recorded, given audio, or deleted (`deleted: true`) |
+
 ## Sentence audio
 
 While `sentenceAudio.enabled` is on, Kimochi keeps the last `sentenceAudio.seconds` (10–120,
@@ -1185,7 +1214,8 @@ on).
 | `sentence_audio_debug` | `() -> {status: Status, clips, listener}`: for Diagnostics → Sentence audio. `listener` (null until recording starts) is `{heardUntil, transcribedUntil, speaking, speechDetection, recogniser, lines, heard}`: the newest 40 lines, newest first, each `{uid, text, ts, appeared, scan, outcome (waiting, voiced, silent, missed), how, score, heard, clip: [from, to], provisional, window: [from, to], decidedAt, changes, note}` (`note`: why it was decided as it was), and what the recogniser heard in the last minute, `{startMs, endMs, text}` |
 | `sentence_audio_lines` | `() -> LineAudio[]`: what is known about recent lines' audio (the decided ones, and every kept clip), for the Log |
 | `sentence_audio_clip` | `({uid}) -> string \| null`: line `uid`'s clip as base64 MP3, or null when none is kept |
-| `sentence_audio_attach` | `({url, noteId, sentence, field, word, wordField})`: the Yomitan API pop-up added note `noteId` at `url` (with the configured key) from `sentence` for `word`; its audio follows in the background into `field` (or `sentenceAudio.field` when null), and the word's into `wordField` (or `sentenceAudio.wordField`) |
+| `sentence_audio_attach` | `({url, noteId, sentence, field, word, wordField, reading})`: the Yomitan API pop-up added note `noteId` at `url` (with the configured key) from `sentence` for `word`; its audio follows in the background into `field` (or `sentenceAudio.field` when null), and the word's into `wordField` (or `sentenceAudio.wordField`), looked for by `word`, then `reading`. Runs whenever sentence audio is on, recording or not: the line is the best match among the lines heard and the clips kept |
+| `sentence_audio_add_to_note` | `({noteId}) -> ()`: the Anki tab's Add sentence audio: reads the note back through Kimochi's AnkiConnect and puts its line's kept clip in its empty sentence-audio field (and the word's in the word-audio field); errors say why not |
 
 | Event | Payload |
 | --- | --- |
@@ -1195,7 +1225,8 @@ on).
 long, found by its words, `how: "matched"`, or by timing, `"timed"`), `silent` (no voice was
 detected near the line) or `missed` (its audio was no longer held; `message` says why).
 
-`Status` is tagged by `state`: `off`, `starting`, `recording {source, excludesOwnAudio}` (what is
+`Status` is tagged by `state`: `off`, `needsModel` (on, waiting for the speech model, whose
+download turning it on starts: nothing is recorded without it), `starting`, `recording {source, excludesOwnAudio}` (what is
 recorded, and whether Kimochi's own sounds are left out), `noPermission {message}` (macOS: Screen
 Recording not granted), `unavailable {message}` (this computer cannot record its audio now: no
 PipeWire, no output device; retried every 30 s), `unsupported {message}` (no backend on this OS) or

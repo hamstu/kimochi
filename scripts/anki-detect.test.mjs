@@ -124,3 +124,60 @@ test('nothing to suggest, or a tie, says why', async () => {
   const tied = await detectAnkiSetup(anki({ Lapis: LAPIS }, [...notes('Lapis', 'A', 3, 1), ...notes('Lapis', 'B', 3, 10)], ['A', 'B']))
   assert.match(tied.reason, /Two decks have the most Lapis notes/)
 })
+
+const { detectSentenceAudioField } = await import(pathToFileURL(outfile).href)
+
+/** A stand-in Anki: note types with their fields and note counts. */
+const audioAnki = (types) => ({
+  models: async () => Object.keys(types),
+  fields: async (model) => types[model].fields,
+  findNotes: async (query) => {
+    const model = Object.keys(types).find((m) => query === `"note:${searchName(m)}"`)
+    return Array.from({ length: model ? types[model].notes : 0 }, (_, i) => i + 1)
+  }
+})
+
+test('the sentence audio field comes from the note type with the most notes', async () => {
+  const found = await detectSentenceAudioField(audioAnki({
+    Lapis: { fields: LAPIS, notes: 40 },
+    'Senren 5': { fields: SENREN, notes: 900 },
+    Tango: { fields: TANGO, notes: 6000 }
+  }))
+  assert.deepEqual(found, { ok: true, field: 'sentenceAudio', modelName: 'Senren 5' })
+})
+
+test('any note type with a sentence audio field counts, spelled with a space or underscore', async () => {
+  const found = await detectSentenceAudioField(audioAnki({
+    Mine: { fields: ['Front', 'Sentence_Audio'], notes: 3 },
+    Lapis: { fields: LAPIS, notes: 0 }
+  }))
+  assert.deepEqual(found, { ok: true, field: 'Sentence_Audio', modelName: 'Mine' })
+})
+
+test('no sentence audio field, or a tie between different names, is left to the person', async () => {
+  assert.equal((await detectSentenceAudioField(audioAnki({ Tango: { fields: TANGO, notes: 10 } }))).ok, false)
+  const tied = await detectSentenceAudioField(audioAnki({
+    Lapis: { fields: LAPIS, notes: 5 },
+    Senren: { fields: SENREN, notes: 5 }
+  }))
+  assert.equal(tied.ok, false)
+  // The same name on both is no question.
+  const same = await detectSentenceAudioField(audioAnki({
+    Lapis: { fields: LAPIS, notes: 5 },
+    'Kiku v2': { fields: LAPIS, notes: 5 }
+  }))
+  assert.equal(same.ok && same.field, 'SentenceAudio')
+})
+
+test('the note type the Yomitan API mines with wins when it has the field', async () => {
+  const found = await detectSentenceAudioField(audioAnki({
+    Lapis: { fields: LAPIS, notes: 900 },
+    'Senren 5': { fields: SENREN, notes: 3 }
+  }), 'Senren 5')
+  assert.deepEqual(found, { ok: true, field: 'sentenceAudio', modelName: 'Senren 5' })
+  const fallback = await detectSentenceAudioField(audioAnki({
+    Lapis: { fields: LAPIS, notes: 900 },
+    Tango: { fields: TANGO, notes: 3 }
+  }), 'Tango')
+  assert.equal(fallback.ok && fallback.field, 'SentenceAudio')
+})

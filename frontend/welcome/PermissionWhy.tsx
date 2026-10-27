@@ -54,13 +54,13 @@ export function AccessibilityWhy(): JSX.Element {
   return (
     <PermissionWhy title="Why Kimochi asks for Accessibility">
       <p>
-        When you click your source in Kimochi, it brings that exact window to the front, even a
-        game in full screen on a Space of its own. macOS only lets an app do that with
+        When you click your source in Kimochi, it brings that exact window to the front, even one
+        in full screen on a Space of its own. macOS only lets an app do that with
         Accessibility.
       </p>
       <p>
         Kimochi uses it only to find and bring forward the window you read from. It is optional:
-        without it, Kimochi brings the game’s app forward instead, which may not be the window you
+        without it, Kimochi brings your source’s app forward instead, which may not be the window you
         were reading.
       </p>
       <p>To allow it, open System Settings → Privacy &amp; Security → Accessibility and turn on Kimochi.</p>

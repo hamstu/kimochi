@@ -42,4 +42,5 @@ export { Dialog, DialogTrigger, DialogClose, DialogContent, ConfirmDialog } from
 export { Segmented, ChoiceGroup, type SegmentOption, type ChoiceOption } from './Segmented'
 export { Slider } from './Slider'
 export { Badge, StatusDot, Callout, EmptyState, Spinner, Kbd, type Tone } from './Feedback'
-export { SettingsPage, SettingsSection, SettingsRow, SettingsSubgroup } from './Settings'
+export { SettingsPage, SettingsSection, SettingsRow, SettingsSubgroup, SettingsTabs } from './Settings'
+export type { SettingsTabOption } from './Settings'

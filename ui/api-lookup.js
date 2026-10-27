@@ -55,7 +55,8 @@ export function popupAnkiConfig(reader) {
     model: reader.ankiModelName,
     modelFields: reader.ankiModelFields,
     mappings: Array.isArray(reader.ankiFieldMappings) ? reader.ankiFieldMappings : [],
-    tags: Array.isArray(reader.ankiTags) ? reader.ankiTags : []
+    // Card enhancement's tags are added in Rust (anki_add_note), for every dictionary.
+    tags: []
   }
 }
 

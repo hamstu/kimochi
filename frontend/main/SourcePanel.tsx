@@ -17,8 +17,6 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import {
   Aperture,
   AppWindow,
-  AudioLines,
-  FlaskConical,
   ArrowLeftRight,
   ArrowUpRight,
   Check,
@@ -27,6 +25,7 @@ import {
   Clipboard,
   Crop,
   Eye,
+  Info,
   Monitor,
   Plus,
   Radio,
@@ -34,6 +33,7 @@ import {
   ScreenShare,
   ScanText,
   Settings,
+  Sparkles,
   SquareDashed,
   X
 } from 'lucide-react'
@@ -49,10 +49,8 @@ import {
   MenuSub,
   MenuSubContent,
   MenuTrigger,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Spinner
+  Spinner,
+  Tooltip
 } from '@kit'
 import { SourceGrid, SystemPickerButton } from './SourceGrid'
 import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
@@ -65,14 +63,19 @@ import { useHotkeys } from '../bridge/useHotkeys'
 import {
   nativeError,
   onEvent,
+  openSettings,
   sourceLiveThumbnail,
   sourceWindowState,
   startSystemPick,
   useSystemPick,
+  type SettingsTabName,
   type SourceWindowState
 } from '../bridge/tauri'
 import type { NativeCrop } from '../bridge/types'
 import { formatAccelerator, keyPlatformOf } from '../panels/settings/accelerator'
+import { showAnkiTab } from '../panels/settings/ankiPageTab'
+import { showSettingsTab } from '../panels/settings/showSettingsTab'
+import { detectAudioField } from '../panels/settings/sentenceAudioField'
 import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 import { GnomeWindowLink } from './GnomeWindowLink'
 import { HyprlandWindowLink } from './HyprlandWindowLink'
@@ -99,7 +102,7 @@ const TYPES = [
     mode: 'ocr',
     label: 'Window or screen',
     icon: <AppWindow />,
-    detail: 'Read a game window or a whole display with OCR.'
+    detail: 'Read an app window or a whole display with OCR.'
   },
   {
     mode: 'quickshot',
@@ -146,45 +149,121 @@ function SwitchMark({ on }: { on: boolean }): ReactNode {
 }
 
 /**
- * Sentence audio's switch, under Auto OCR: the same setting as Settings → Anki → Sentence Audio.
- * Its yellow flask says the feature is experimental and opens what it does. The row holds two
+ * One switch row under the scan button: its icon, its name, a faint info mark whose tooltip says
+ * what it does, the switch, and a cog that opens its page in Settings. The row holds three
  * controls, so it is not a button: the switch is a transparent button under the whole row
- * (`src-row-hit`), and the flask a button above it.
+ * (`src-row-hit`), and the info mark and the cog are buttons above it.
  */
-function SentenceAudioRow(): ReactNode {
-  const [stored, save] = useSetting<SentenceAudioSettings>('sentenceAudio', SETTINGS_DEFAULTS.sentenceAudio)
-  const config = { ...SETTINGS_DEFAULTS.sentenceAudio, ...stored }
+function SourceRow({
+  icon,
+  label,
+  checked,
+  disabled,
+  title,
+  info,
+  caution,
+  settingsLabel,
+  onToggle,
+  onSettings
+}: {
+  icon: ReactNode
+  label: string
+  checked: boolean
+  disabled?: boolean
+  title?: string
+  info: ReactNode
+  /** A catch in this mode: an amber pip on the info mark, and this line in its tooltip. */
+  caution?: ReactNode
+  settingsLabel: string
+  onToggle: () => void
+  onSettings: () => void
+}): ReactNode {
   return (
-    <div className="k-row src-row src-row-layered">
+    <div className="k-row src-row src-row-layered" data-disabled={disabled ? '' : undefined} title={title}>
       <button
         type="button"
         role="switch"
-        aria-checked={config.enabled}
-        aria-label="Sentence audio"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
         className="src-row-hit"
-        onClick={() => void save({ ...config, enabled: !config.enabled })}
+        onClick={onToggle}
       />
-      <AudioLines aria-hidden />
-      <span className="k-row-label src-row-label-fit">Sentence audio</span>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button type="button" className="src-experimental" aria-label="Experimental: what Sentence audio does" title="Experimental">
-            <FlaskConical aria-hidden />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="bottom" align="start" className="src-experimental-pop">
-          <p>
-            <strong>Experimental.</strong> Sentence audio records what this computer plays and matches it to the
-            lines you scan, so each line in the Log gets its own spoken audio, to replay and to add to your
-            Anki cards.
-          </p>
-          <p>While it’s on, all of Kimochi’s sound effects are turned off, so they stay out of the recordings.</p>
-          <p className="src-experimental-more">Settings → Anki → Sentence Audio has the rest, and the speech model.</p>
-        </PopoverContent>
-      </Popover>
+      {icon}
+      <span className="k-row-label src-row-label-fit">{label}</span>
+      <Tooltip
+        className="src-info-tip"
+        side="bottom"
+        delayDuration={150}
+        content={
+          <>
+            <p>{info}</p>
+            {caution && <p className="src-info-caution">{caution}</p>}
+            <p className="src-info-more">
+              Click <Settings aria-label="the cog" /> to change its settings.
+            </p>
+          </>
+        }
+      >
+        <button
+          type="button"
+          className="src-info"
+          data-caution={caution ? '' : undefined}
+          aria-label={`What ${label} does`}
+        >
+          <Info aria-hidden />
+        </button>
+      </Tooltip>
       <span className="src-row-fill" />
-      <SwitchMark on={config.enabled} />
+      <SwitchMark on={checked} />
+      <button
+        type="button"
+        className="src-row-cog"
+        aria-label={settingsLabel}
+        title={settingsLabel}
+        onClick={onSettings}
+      >
+        <Settings aria-hidden />
+      </button>
     </div>
+  )
+}
+
+/** Shows Settings on `tab`, through the shared setting so this window's Settings follows at once. */
+function openSettingsTab(tab: SettingsTabName): void {
+  showSettingsTab(tab)
+  void openSettings()
+}
+
+/**
+ * Enhance Anki cards, under Auto OCR (and in Quick Shot, Clipboard and WebSocket, whose lines get
+ * audio the same way): Sentence audio's switch, the same setting as Settings → Anki → Card
+ * enhancement, where its cog leads. A Quick Shot comes after the line was said, often long after,
+ * so there it warns that only the newest seconds of audio are held.
+ */
+function EnhanceCardsRow({ quickShot }: { quickShot?: boolean }): ReactNode {
+  const [stored, save] = useSetting<SentenceAudioSettings>('sentenceAudio', SETTINGS_DEFAULTS.sentenceAudio)
+  const config = { ...SETTINGS_DEFAULTS.sentenceAudio, ...stored }
+  return (
+    <SourceRow
+      icon={<Sparkles aria-hidden />}
+      label="Enhance Anki cards"
+      checked={config.enabled}
+      info="Records what your computer plays, finds the audio of each line you read, and adds it to the new cards you make in Anki. While it's on, Kimochi's sound effects are off so they stay out of the recordings."
+      caution={
+        quickShot &&
+        `Only the last ${config.seconds} seconds of audio are kept, so a line may get no audio if you take its Quick Shot too late.`
+      }
+      settingsLabel="Card enhancement settings"
+      onToggle={() => {
+        void save({ ...config, enabled: !config.enabled })
+        if (!config.enabled) void detectAudioField()
+      }}
+      onSettings={() => {
+        showAnkiTab('enhance')
+        openSettingsTab('anki')
+      }}
+    />
   )
 }
 
@@ -714,7 +793,7 @@ export function SourcePanel({
             className="src-card-body"
             aria-label={
               isScreen
-                ? 'Return to game'
+                ? 'Return to your source'
                 : isGamingMode(capabilities)
                   ? `Switch to ${title}`
                   : fullScreen
@@ -744,9 +823,10 @@ export function SourcePanel({
         <div className="src-actions">
           <Menu>
             <MenuTrigger asChild>
-              <button type="button" className="src-action" data-on={crop ? '' : undefined}>
+              <button type="button" className="src-action" aria-label="Crop area" data-on={crop ? '' : undefined}>
                 <Crop />
-                <span className="src-action-label">Crop area</span>
+                <span className="src-action-label src-action-long">Crop area</span>
+                <span className="src-action-label src-action-short">Crop</span>
               </button>
             </MenuTrigger>
             <MenuContent align="start" className="src-crop-menu">
@@ -764,9 +844,10 @@ export function SourcePanel({
           </Menu>
           <Menu open={open} onOpenChange={onMenuOpen}>
             <MenuTrigger asChild>
-              <button type="button" className="src-action">
+              <button type="button" className="src-action" aria-label="Change source">
                 <ArrowLeftRight />
-                <span className="src-action-label">Change source</span>
+                <span className="src-action-label src-action-long">Change source</span>
+                <span className="src-action-label src-action-short">Source</span>
               </button>
             </MenuTrigger>
             {menu}
@@ -844,19 +925,17 @@ export function SourcePanel({
 
   const overlayUnavailable = capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
   const overlayRow = (
-    <button
-      type="button"
-      role="switch"
+    <SourceRow
+      icon={<Eye aria-hidden />}
+      label={overlayUnavailable ? 'Overlay unavailable' : 'Show overlay'}
+      checked={!overlayUnavailable && overlayOn}
       disabled={overlayUnavailable}
       title={overlayUnavailable ? 'Native overlay is unavailable on this desktop.' : undefined}
-      aria-checked={!overlayUnavailable && overlayOn}
-      className="k-row src-row"
-      onClick={() => controller.onToggleTextOverlayVisibility()}
-    >
-      <Eye />
-      <span className="k-row-label">{overlayUnavailable ? 'Overlay unavailable' : 'Show overlay'}</span>
-      <SwitchMark on={!overlayUnavailable && overlayOn} />
-    </button>
+      info="Draws the scanned text over your source, so you can point at a word to look it up."
+      settingsLabel="Overlay settings"
+      onToggle={() => controller.onToggleTextOverlayVisibility()}
+      onSettings={() => openSettingsTab('ocr')}
+    />
   )
 
   return (
@@ -880,18 +959,16 @@ export function SourcePanel({
         <div className="src-controls">
           {scanButton}
           <div className="src-rows">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={controller.isAutoOCREnabled}
-              className="k-row src-row"
-              onClick={() => controller.onToggleAutoOCR()}
-            >
-              <ScanSearch />
-              <span className="k-row-label">Auto OCR</span>
-              <SwitchMark on={controller.isAutoOCREnabled} />
-            </button>
-            <SentenceAudioRow />
+            <SourceRow
+              icon={<ScanSearch aria-hidden />}
+              label="Auto OCR"
+              checked={controller.isAutoOCREnabled}
+              info="Scans on its own whenever the text on your source changes, so new lines reach the Log without pressing Scan."
+              settingsLabel="Auto OCR settings"
+              onToggle={() => controller.onToggleAutoOCR()}
+              onSettings={() => openSettingsTab('ocr')}
+            />
+            <EnhanceCardsRow />
             {overlayRow}
           </div>
           {gameModeNotice}
@@ -904,8 +981,18 @@ export function SourcePanel({
       {mode === 'quickshot' && (
         <div className="src-controls">
           {scanButton}
-          <div className="src-rows">{overlayRow}</div>
+          <div className="src-rows">
+            <EnhanceCardsRow quickShot />
+            {overlayRow}
+          </div>
           {gameModeNotice}
+        </div>
+      )}
+      {(mode === 'clipboard' || mode === 'websocket') && (
+        <div className="src-controls">
+          <div className="src-rows">
+            <EnhanceCardsRow />
+          </div>
         </div>
       )}
     </div>

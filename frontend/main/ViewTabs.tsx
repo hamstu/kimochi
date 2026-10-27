@@ -1,12 +1,13 @@
 /**
- * The Log and Notebook as tabs across the top of the content, each as wide as it can be. The
+ * The Log, Notebook and Anki views as tabs across the top of the content, each as wide as it can be. The
  * active one takes the content's ground and an accent underline, so it reads as the page below it.
  */
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
-import { BookOpen, ScrollText } from 'lucide-react'
+import { BookOpen, Layers, ScrollText } from 'lucide-react'
 import { getSnapshot, subscribe } from '@texthooker/bridge'
+import { useAnkiCards } from './ankiCardsStore'
 
-export type TabView = 'log' | 'notebook'
+export type TabView = 'log' | 'notebook' | 'anki'
 
 function useCounts(): { lines: number; entries: number } {
   const count = (): { lines: number; entries: number } => {
@@ -26,6 +27,7 @@ export function ViewTabs({
   onView: (view: TabView) => void
 }): JSX.Element {
   const counts = useCounts()
+  const anki = useAnkiCards()
   const tab = (value: TabView, icon: ReactNode, label: string, count: number): JSX.Element => (
     <button
       type="button"
@@ -43,6 +45,7 @@ export function ViewTabs({
     <div className="main-tabs" role="tablist" aria-label="Views">
       {tab('log', <ScrollText />, 'Log', counts.lines)}
       {tab('notebook', <BookOpen />, 'Notebook', counts.entries)}
+      {tab('anki', <Layers />, 'Anki', anki.cards.length)}
     </div>
   )
 }

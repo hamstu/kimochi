@@ -34,12 +34,12 @@ import { activeAccount } from '@ui/account'
 import { useAccount } from '../bridge/account'
 import { AccountBar } from './AccountBar'
 
-export type MainView = 'log' | 'notebook' | 'settings'
+export type MainView = 'log' | 'notebook' | 'anki' | 'settings'
 
 /** Narrowest and widest the sidebar can be dragged, in CSS pixels. */
-const MIN_WIDTH = 160
+const MIN_WIDTH = 200
 const MAX_WIDTH = 360
-export const DEFAULT_WIDTH = 240
+export const DEFAULT_WIDTH = 272
 
 /** The quiet "Manage" link at the right of a group's label, on the label's baseline. */
 function ManageLink({ label, onClick }: { label: string; onClick: () => void }): JSX.Element {

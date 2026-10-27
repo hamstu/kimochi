@@ -4,7 +4,8 @@
 //! **Records.** A profile's data is cut into records `(collection, id) → JSON`:
 //! `prefs` (one per settings leaf, `profile::flatten`), `sessions` (one per session),
 //! `lines` (`<sid>/<uid>`, one per line, keyed by a uid that is unique across computers),
-//! `notebook` (`<sid>/<entryId>`, images as content-addressed blobs), `presets` (by name),
+//! `notebook` (`<sid>/<entryId>`, images as content-addressed blobs), `anki` (`<sid>/<noteId>`,
+//! the cards made in the session, `anki_cards`), `presets` (by name),
 //! `stats` (one per computer, never merged), `conflicts` (the losing side of a concurrent edit).
 //!
 //! **State** (`<profile>/sync/state.json`): the server cursor, and for every record the server
@@ -20,7 +21,7 @@
 //! - both changed → the newer clock wins (ties: device id), and the loser is kept as a
 //!   `conflicts` record the person can restore — never silently dropped. Lines merge field by
 //!   field (a translation added on one computer and an explanation on another both stay); only a
-//!   different text is a conflict;
+//!   different text is a conflict; Anki card records merge too (every enhancement kept);
 //! - an edit and a delete → the edit wins;
 //! - the first sync of a record (no shadow): preferences and presets take the account's version;
 //!   sessions and notebook entries the one changed last.
@@ -41,7 +42,7 @@ pub const TOMB: &str = "-";
 pub const PUSH_BATCH: usize = 200;
 pub const PULL_PAGE: u32 = 500;
 /// Host-owned collections: changing their files needs the Log window to hold its writes.
-const HOST_COLLECTIONS: &[&str] = &["sessions", "lines", "notebook", "presets"];
+const HOST_COLLECTIONS: &[&str] = &["sessions", "lines", "notebook", "anki", "presets"];
 const TRASH_DAYS: u64 = 30;
 
 pub fn key(collection: &str, id: &str) -> String {
@@ -316,6 +317,7 @@ pub struct Changed {
     pub sessions: bool,
     pub lines: BTreeSet<String>,
     pub notebook: BTreeSet<String>,
+    pub anki: BTreeSet<String>,
     pub presets: bool,
 }
 
@@ -422,6 +424,7 @@ pub struct Local {
     pub sids: HashSet<String>,
     pub lines_ok: HashSet<String>,
     pub notebook_ok: HashSet<String>,
+    pub anki_ok: HashSet<String>,
     pub presets_ok: bool,
     pub conflicts_ok: bool,
     /// Image blobs by SHA-256: the file holding each.
@@ -523,6 +526,15 @@ pub fn scan(dir: &Path, prefs: &Value, device_id: &str, device_name: &str, cache
                 local.records.insert(key("notebook", &format!("{sid}/{id}")), json!({ "sid": sid, "entry": entry }));
             }
         }
+        let anki_file = session_dir.join(crate::anki_cards::FILE);
+        let anki = if anki_file.exists() { cache.json(&anki_file) } else { Some(json!({ "cards": [] })) };
+        if let Some(anki) = anki.filter(|a| a.get("cards").is_some_and(Value::is_array)) {
+            local.anki_ok.insert(sid.clone());
+            for card in anki["cards"].as_array().into_iter().flatten() {
+                let Some(id) = card.get("noteId").and_then(Value::as_u64) else { continue };
+                local.records.insert(key("anki", &format!("{sid}/{id}")), json!({ "sid": sid, "card": card }));
+            }
+        }
     }
     if let Some(presets) = cache.json(&dir.join("presets.json")) {
         if let Some(map) = presets.get("presets").and_then(Value::as_object) {
@@ -575,6 +587,9 @@ pub fn side(local: &Local, k: &str) -> Side {
         "sessions" => local.manifest_ok,
         "lines" => local.line_tombstones.contains(k) || session_gone(line_sid(id)),
         "notebook" => local.notebook_ok.contains(line_sid(id)) || session_gone(line_sid(id)),
+        // Cards are never deleted here, only with their session: one missing from the file is not
+        // a delete.
+        "anki" => session_gone(line_sid(id)),
         "presets" => local.presets_ok,
         "conflicts" => local.conflicts_ok,
         _ => false,
@@ -595,6 +610,7 @@ pub struct Writes {
     pub sessions: BTreeMap<String, Option<Value>>,
     pub lines: BTreeMap<String, BTreeMap<String, Option<Value>>>,
     pub notebook: BTreeMap<String, BTreeMap<String, Option<Value>>>,
+    pub anki: BTreeMap<String, BTreeMap<String, Option<Value>>>,
     pub presets: BTreeMap<String, Option<Value>>,
     pub conflicts: BTreeMap<String, Option<Value>>,
 }
@@ -605,12 +621,17 @@ impl Writes {
             && self.sessions.is_empty()
             && self.lines.is_empty()
             && self.notebook.is_empty()
+            && self.anki.is_empty()
             && self.presets.is_empty()
             && self.conflicts.is_empty()
     }
 
     fn needs_host(&self) -> bool {
-        !(self.sessions.is_empty() && self.lines.is_empty() && self.notebook.is_empty() && self.presets.is_empty())
+        !(self.sessions.is_empty()
+            && self.lines.is_empty()
+            && self.notebook.is_empty()
+            && self.anki.is_empty()
+            && self.presets.is_empty())
     }
 
     /// Record `data` (None: delete) for `k`, and reflect it in `local`.
@@ -635,12 +656,16 @@ impl Writes {
                 }
                 self.sessions.insert(id, data);
             }
-            "lines" | "notebook" => {
+            "lines" | "notebook" | "anki" => {
                 let Some((sid, item)) = id.split_once('/') else { return };
                 if data.is_some() && !local.sids.contains(sid) {
                     local.sids.insert(sid.to_string());
                 }
-                let target = if collection == "lines" { &mut self.lines } else { &mut self.notebook };
+                let target = match collection.as_str() {
+                    "lines" => &mut self.lines,
+                    "notebook" => &mut self.notebook,
+                    _ => &mut self.anki,
+                };
                 target.entry(sid.to_string()).or_default().insert(item.to_string(), data);
             }
             "presets" => {
@@ -733,7 +758,8 @@ pub fn apply_writes(
 
     // Sessions: the manifest, with placeholders for sessions known only through their lines.
     let manifest_path = dir.join("sessions.json");
-    let touches_sessions = !writes.sessions.is_empty() || !writes.lines.is_empty() || !writes.notebook.is_empty();
+    let touches_sessions =
+        !writes.sessions.is_empty() || !writes.lines.is_empty() || !writes.notebook.is_empty() || !writes.anki.is_empty();
     let mut manifest = read_or(&manifest_path, json!({ "version": 1, "activeId": "", "sessions": [] }));
     if touches_sessions {
         if !manifest.get("sessions").is_some_and(Value::is_array) {
@@ -746,12 +772,13 @@ pub fn apply_writes(
             .filter(|(sid, _)| safe_segment(sid))
             .map(|(sid, data)| (sid.clone(), data.clone()))
             .collect();
-        for sid in writes.lines.keys().chain(writes.notebook.keys()) {
+        for sid in writes.lines.keys().chain(writes.notebook.keys()).chain(writes.anki.keys()) {
             let live = writes
                 .lines
                 .get(sid)
                 .into_iter()
                 .chain(writes.notebook.get(sid))
+                .chain(writes.anki.get(sid))
                 .any(|items| items.values().any(Option::is_some));
             if live && !writes.sessions.contains_key(sid) && safe_segment(sid) {
                 let present = manifest["sessions"].as_array().is_some_and(|s| s.iter().any(|x| x["id"] == json!(sid)));
@@ -928,6 +955,14 @@ pub fn apply_writes(
         changed.notebook.insert(sid.clone());
     }
 
+    for (sid, items) in &writes.anki {
+        if !live_sids.contains(sid) {
+            continue;
+        }
+        crate::anki_cards::apply(dir, sid, items)?;
+        changed.anki.insert(sid.clone());
+    }
+
     if !writes.presets.is_empty() {
         let path = dir.join("presets.json");
         let mut file = read_or(&path, json!({ "version": 1, "active": "", "presets": {} }));
@@ -1017,6 +1052,7 @@ fn describe(k: &str) -> String {
         "sessions" => format!("session {id}"),
         "lines" => format!("line {id}"),
         "notebook" => format!("notebook entry {id}"),
+        "anki" => format!("Anki card {id}"),
         "presets" => format!("preset \"{id}\""),
         "stats" => format!("reading stats of {id}"),
         "conflicts" => format!("conflict copy {id}"),
@@ -1195,6 +1231,19 @@ fn merge_remote(ctx: &mut Ctx, local: &mut Local, remote: &[RemoteRecord], repor
                     );
                     writes.put(local, k, Some(r.data.clone()));
                     ctx.state.pending.remove(k);
+                } else if collection == "anki" {
+                    // The same card on two computers: nothing to lose, so no conflict copy.
+                    let remote_wins = first || r.hlc.as_str() > my_stamp.as_str();
+                    let (winner, loser) = if remote_wins { (&r.data, &mine) } else { (&mine, &r.data) };
+                    let mut merged = winner.clone();
+                    if let (Some(card), Some(other)) = (winner.get("card"), loser.get("card")) {
+                        merged["card"] = crate::anki_cards::merge(card, other);
+                    }
+                    (ctx.log)("merge", format!("Merged {}", describe(k)));
+                    if merged != mine {
+                        writes.put(local, k, Some(merged));
+                        report.applied += 1;
+                    }
                 } else if collection == "lines" {
                     let remote_wins = first || r.hlc.as_str() > my_stamp.as_str();
                     let (winner, loser) = if remote_wins { (&r.data, &mine) } else { (&mine, &r.data) };
@@ -1820,6 +1869,45 @@ pub mod tests {
         // Nothing differs afterwards: a second sync pushes nothing.
         b.touch();
         assert_eq!(b.sync(&server).pushed, 0);
+    }
+
+    #[test]
+    fn anki_cards_follow_their_session_and_keep_every_enhancement() {
+        use crate::anki_cards::{self, NewCard, SENTENCE_AUDIO, WORD_AUDIO};
+        let server = MemServer::default();
+        let mut a = Device::new("A", "anki");
+        let mut b = Device::new("B", "anki");
+        a.session("s1", "Novel", json!([]));
+        let card = NewCard { note_id: 42, term: "猫".into(), reading: Some("ねこ".into()), deck: None, via: "extension", engine: "yomitan".into() };
+        anki_cards::add(&a.dir, "s1", &card, 10).unwrap();
+        a.sync(&server);
+        b.sync(&server);
+        let cards = anki_cards::list(&b.dir, "s1").unwrap();
+        assert_eq!(cards.len(), 1, "the card arrives with its session");
+        assert_eq!((cards[0]["noteId"].as_u64(), cards[0]["term"].as_str()), (Some(42), Some("猫")));
+
+        // Each computer notes a different enhancement while apart: both are kept, no conflict.
+        anki_cards::enhance(&a.dir, 42, &[SENTENCE_AUDIO], 20).unwrap();
+        anki_cards::enhance(&b.dir, 42, &[WORD_AUDIO], 30).unwrap();
+        a.touch();
+        a.sync(&server);
+        b.touch();
+        b.sync(&server);
+        a.touch();
+        a.sync(&server);
+        for device in [&a, &b] {
+            let cards = anki_cards::list(&device.dir, "s1").unwrap();
+            assert_eq!(cards[0]["enhanced"], json!(["sentenceAudio", "wordAudio"]), "{}", device.id);
+            assert!(device.conflicts().is_empty());
+        }
+
+        // A card missing from the file is not a delete; deleting the session is.
+        a.write("sessions/s1/anki.json", json!({ "version": 1, "cards": [] }));
+        a.touch();
+        a.sync(&server);
+        b.touch();
+        b.sync(&server);
+        assert_eq!(anki_cards::list(&b.dir, "s1").unwrap().len(), 1);
     }
 
     #[test]

@@ -15,6 +15,7 @@ import type { Line } from "./types";
 /** What Settings → Anki shows about the recording (`sentence_audio_status`). */
 export type SentenceAudioStatus = (
   | { state: "off" }
+  | { state: "needsModel" }
   | { state: "starting" }
   | {
       state: "recording";
@@ -92,7 +93,8 @@ export function forgetLines(removed: readonly Line[]): void {
 
 /** The pop-up added note `noteId` from `sentence` for `word`: its audio follows in the
     background, into `field` (the field mapped to (sentence audio)) or the one in Settings → Anki,
-    and the word's into `wordField` (mapped to (word audio)) or the one in Settings. */
+    and the word's into `wordField` (mapped to (word audio)) or the one in Settings; `reading`
+    finds the word when the line spells it in kana (今日は said as こんにちは). */
 export function attachSentenceAudio(
   url: string,
   noteId: number,
@@ -100,6 +102,7 @@ export function attachSentenceAudio(
   field: string | null,
   word: string | null = null,
   wordField: string | null = null,
+  reading: string | null = null,
 ): void {
   invoke("sentence_audio_attach", {
     url,
@@ -108,6 +111,7 @@ export function attachSentenceAudio(
     field,
     word,
     wordField,
+    reading,
   }).catch(() => {});
 }
 

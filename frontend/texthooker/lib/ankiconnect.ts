@@ -115,7 +115,9 @@ export async function storeMedia(
 }
 
 /** Add a note. Returns { id, duplicate }. Catches the "duplicate" error and
- *  recovers the existing note id via findNotes when possible. */
+ *  recovers the existing note id via findNotes when possible. `card` names the
+ *  word for the Anki tab's record of the session's cards (native reads it from
+ *  the fields otherwise). */
 export async function addNote(
   url: string,
   deck: string,
@@ -124,6 +126,10 @@ export async function addNote(
   tags: string[],
   expressionFieldName: string,
   expressionValue: string,
+  card: { term: string | null; reading: string | null } = {
+    term: null,
+    reading: null,
+  },
 ): Promise<{ id: number; duplicate: boolean }> {
   try {
     const id = await invoke<number>("anki_add_note", {
@@ -133,6 +139,8 @@ export async function addNote(
       fields,
       tags,
       allowDuplicate: false,
+      term: card.term,
+      reading: card.reading,
     });
     return { id, duplicate: false };
   } catch (err) {
@@ -287,6 +295,7 @@ export async function sendCardForTerm(
     tags,
     expressionFieldName,
     expressionValue,
+    { term: yomitan.fields.expression ?? null, reading: yomitan.fields.reading ?? null },
   );
   // 4. In the background: the card is not held up while the voice finishes or is cut.
   if (!duplicate) {
@@ -299,6 +308,7 @@ export async function sendCardForTerm(
       fieldFor("sentenceAudio"),
       yomitan.fields.expression ?? null,
       fieldFor("wordAudio"),
+      yomitan.fields.reading ?? null,
     );
   }
   return { noteId: id, duplicate };

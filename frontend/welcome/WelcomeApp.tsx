@@ -152,7 +152,7 @@ function ScreenPermissionScreen({ next }: { next: string }): JSX.Element {
       title="Allow screen recording"
       lede={
         <>
-          Kimochi reads the text in your game’s window. Turn Kimochi on in Screen &amp; System
+          Kimochi reads the text in the window you choose. Turn Kimochi on in Screen &amp; System
           Audio Recording.
           <ScreenRecordingWhy restartAfterGrant={restartAfterGrant} />
         </>
@@ -202,7 +202,7 @@ function AccessibilityScreen(): JSX.Element {
       title="Allow Accessibility"
       lede={
         <>
-          Lets Kimochi bring your game’s exact window to the front, even in full screen. Turn
+          Lets Kimochi bring your source’s exact window to the front, even in full screen. Turn
           Kimochi on in Accessibility.
           <AccessibilityWhy />
         </>
@@ -332,14 +332,14 @@ function DoneScreen(): JSX.Element {
           <strong>Choose and crop.</strong>{' '}
           {gaming
             ? 'Gaming Mode shares the game screen on its own. Set a crop around the dialogue to skip menus and other text.'
-            : 'Pick the game or window in the sidebar, then crop the area with the dialogue.'}
+            : 'Pick a window or screen in the sidebar, then crop the area with the text.'}
         </li>
         <li>
           <strong>Scan.</strong> Kimochi recognises the Japanese and adds each line to the Log.
         </li>
         <li>
           <strong>Look up.</strong> Hold Shift and hover a word, or use controller reading
-          navigation, to see its meaning. Press B to go back to your game.
+          navigation, to see its meaning. Press B to go back.
         </li>
       </ol>
       <DeckNextSteps />

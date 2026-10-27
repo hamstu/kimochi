@@ -38,6 +38,8 @@ import {
 } from "@kit";
 import { SessionMenu } from "../../main/SessionMenu";
 import { useSetting } from "../../bridge/useSetting";
+import { useRowHotkeys } from "../hooks/useRowHotkeys";
+import { writeTextSelf } from "@texthooker/lib/clipboardWrite";
 import {
   DeleteEntryDialog,
   EntryActionsMenu,
@@ -124,6 +126,26 @@ export function NotebookPanel({
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => subscribeNotebook((next) => setNb(next)), []);
+
+  // The ⋯ menu's letters, for the entry under the pointer (EntryActionsMenu).
+  const pointed = (row: HTMLElement) =>
+    nb.entries.find((e) => e.id === row.dataset.entryMenu);
+  useRowHotkeys(".nb-row-wrap[data-entry-menu]", {
+    e: (row) => {
+      const entry = pointed(row);
+      if (!entry) return;
+      setActiveId(entry.id);
+      onEdit(entry.id);
+    },
+    c: (row) => {
+      const name = pointed(row) && entryName(pointed(row)!);
+      if (name) void writeTextSelf(name).catch(() => {});
+    },
+    d: (row) => {
+      const entry = pointed(row);
+      if (entry) setDeleting(entry);
+    },
+  });
 
   const counts = useMemo(() => {
     const c: Record<NotebookKind, number> = { person: 0, place: 0, thing: 0 };

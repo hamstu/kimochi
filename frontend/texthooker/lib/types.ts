@@ -110,6 +110,8 @@ export interface Settings {
       the AnkiSetup UI. Send path uses this to know which fields to populate. */
   ankiModelFields: string[];
   ankiFieldMappings: AnkiFieldMapping[];
+  /** No longer used: card enhancement's tags (`cardTags`) tag every card, and a settings file
+      from before them moves these there (src-tauri/src/settings.rs). */
   ankiTags: string[];
 
   // Translation (DeepL with the user's key, or Kimochi cloud with an account)
@@ -198,7 +200,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   ankiModelName: null,
   ankiModelFields: [],
   ankiFieldMappings: [],
-  ankiTags: ["super-texthooker"],
+  ankiTags: [],
 
   translationProvider: "auto",
   deeplApiKey: "",

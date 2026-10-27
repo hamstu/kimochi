@@ -180,3 +180,45 @@ export async function detectAnkiSetup(anki: AnkiReader): Promise<DetectedSetup> 
     fieldMappings: model.fieldMappings,
   };
 }
+
+/** A sentence audio field's name: Lapis's and Kiku's SentenceAudio, Senren's sentenceAudio, and
+    the same words spelled with a space, dash or underscore. */
+const SENTENCE_AUDIO = /^sentence[\s_-]?audio$/i;
+
+export type DetectedAudioField =
+  | { ok: true; field: string; modelName: string }
+  | { ok: false; reason: string };
+
+/** Sentence audio's field, found when it is turned on and when the Anki settings change, for
+    every engine: the sentence audio field of the note type someone mines with. `prefer` (the
+    Yomitan API's chosen note type) wins when it has one; otherwise, of the note types that have
+    one, the one with the most notes wins, and a tie between different field names is left to the
+    person. Only reads. */
+export async function detectSentenceAudioField(
+  anki: Pick<AnkiReader, "models" | "fields" | "findNotes">,
+  prefer?: string | null,
+): Promise<DetectedAudioField> {
+  if (prefer) {
+    const field = (await anki.fields(prefer).catch(() => [] as string[])).find((f) => SENTENCE_AUDIO.test(f.trim()));
+    if (field) return { ok: true, field, modelName: prefer };
+  }
+  const withField = (
+    await each(await anki.models(), PARALLEL, async (model) => ({
+      model,
+      field: (await anki.fields(model)).find((f) => SENTENCE_AUDIO.test(f.trim())) ?? null,
+    }))
+  ).filter((c): c is { model: string; field: string } => c.field !== null);
+  if (withField.length === 0) {
+    return { ok: false, reason: "None of your note types has a sentence audio field. Type the field's name in Audio field." };
+  }
+  const counted = await each(withField, PARALLEL, async (c) => ({
+    ...c,
+    count: new Set(await anki.findNotes(`"note:${searchName(c.model)}"`)).size,
+  }));
+  const most = Math.max(...counted.map((c) => c.count));
+  const best = most > 0 ? counted.filter((c) => c.count === most) : counted;
+  if (new Set(best.map((c) => c.field)).size > 1) {
+    return { ok: false, reason: `${best.map((c) => c.model).join(" and ")} name the field differently. Type the one you mine with.` };
+  }
+  return { ok: true, field: best[0].field, modelName: best[0].model };
+}

@@ -1,6 +1,6 @@
 ---
 title: Anki
-description: "Make Anki cards from the dictionary pop-up through AnkiConnect: your dictionary engine's own mining or Kimochi's card builder, with sentence audio from your game."
+description: "Make Anki cards from the dictionary pop-up through AnkiConnect: your dictionary engine's own mining or Kimochi's card builder, with sentence audio from your source."
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -23,15 +23,18 @@ for the engine you use, with a button to its Anki settings.
 | **Built-in Yomitan** | Yomitan | **Open Built-in Yomitan Anki settings**: turn on **Enable Anki integration**, then choose the deck, note type and fields. |
 | **Hachidori** | Hachidori | **Open Hachidori Anki settings**: its **Templates** set the deck, note type and fields. |
 | **10ten** | Nobody: 10ten doesn't make Anki cards. | |
-| **Yomitan API** | Kimochi | **Settings → Anki**, below. |
+| **Yomitan API** | Kimochi | **Settings → Anki → Mining**, below. |
 
 Built-in Yomitan and Hachidori keep their own Anki settings, the AnkiConnect address and API key
 included: set those there, as you would in the browser.
 
-## The AnkiConnect connection (Yomitan API)
+## The AnkiConnect connection
 
-With the Yomitan API, the top of **Settings → Anki** shows whether Kimochi can reach AnkiConnect.
-It checks again every few seconds while the page is open; **Check** asks at once.
+**Settings → Anki → AnkiConnect** shows whether Kimochi can reach AnkiConnect, whatever dictionary
+you use: the Anki tab, sentence audio and the Yomitan API pop-up all use this connection. The
+defaults are AnkiConnect's own, so it usually works untouched. It checks again every few seconds
+while the tab is open; **Check** asks at once. (Built-in Yomitan and Hachidori add their cards
+with their own AnkiConnect address, set in their Anki settings under **Mining**.)
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -49,15 +52,14 @@ It checks again every few seconds while the page is open; **Check** asks at once
 ## Kimochi's card builder (Yomitan API)
 
 With the Yomitan API engine, Kimochi's own pop-up builds the cards. Below the connection in
-**Settings → Anki**:
+**Settings → Anki → Mining**:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | **Enable Mining** | Off | Shows the **+** (Add to Anki) button in the lookup pop-up. |
 | **Deck** / **Note type** | — | Where cards go, and which note type they use. |
-| **Tags** | `super-texthooker` | Comma-separated, added to every card. |
 | **Detect from Anki** | — | Finds your Lapis, Kiku or Senren note type and the deck holding most of its notes, as Hachidori's setup does, and fills in its fields. You see what it found before anything changes; **Apply** also turns on mining. |
-| **Import from Yomitan** | — | Reads the deck, note type, tags and field mappings from a Yomitan settings export. |
+| **Import from Yomitan** | — | Reads the deck, note type and field mappings from a Yomitan settings export. Its tags join [card enhancement's](#tags). |
 | **Field mapping** | — | For each field of the note type: a Yomitan marker, `(sentence)`, or literal text. |
 
 The markers are `expression`, `reading`, `glossary`, `dictionary`, `frequencies`, `pitch-accents`,
@@ -71,25 +73,69 @@ what's missing. Once the card is in Anki, or when the word is already in your de
 green check: click it to open the card in Anki. If adding fails, it shows a red alert; hover it for
 the reason (for example **Anki not running**) and click it to try again.
 
+## The Anki tab
+
+The main window's **Anki** tab (beside **Log** and **Notebook**, or <kbd>⌘3</kbd> / <kbd>Ctrl+3</kbd>)
+lists the cards you made in this session, newest first, whichever made them: Kimochi's pop-up,
+Built-in Yomitan or Hachidori. They stay with the session, so switching sessions shows that
+session's cards, and with an account they sync with it. Click a card to open it in Anki's browser.
+A green audio mark means Kimochi added its sentence audio (and word audio) after it was made; hover
+it to see which. Search finds a card by its word, reading or deck, and the footer counts the
+session's cards, today's and those with audio.
+
+Each card's **⋯** menu (or a right-click on the card) has **Open in Anki**, **Add sentence audio** (for a card made without it:
+Kimochi puts its line's kept clip in the card's empty audio field) and **Delete…**, which removes it
+from the tab and, if you tick **Also delete the card in Anki**, from Anki too. Edit a card in Anki.
+The tab needs Anki running: when AnkiConnect doesn't answer, the tab says why, with a button to
+**Settings → Anki → AnkiConnect**.
+
 ## Sentence audio
 
-Turn on **Record and attach sentence audio** in **Settings → Anki → Sentence Audio** and each card
-you add gets the spoken audio of the line you mined it from, cut from what your computer was
-playing and trimmed to the voice. It works with Built-in Yomitan, Hachidori and the Yomitan API
-pop-up.
+Turn on **Enhance Anki cards** in the sidebar (or **Enhance with sentence audio** in **Settings →
+Anki → Card enhancement**) and Kimochi records what your computer plays, finds the audio of each
+line you read, and adds it to the new cards you make in Anki automatically. It works with Built-in
+Yomitan, Hachidori and the Yomitan API pop-up. The cog beside the sidebar switch opens Card
+enhancement, and the faint info mark says what it does. It is experimental: a clip may not always
+be the right line, and the [Anki tab](#the-anki-tab) shows which cards got audio.
 
-While it is on, the section shows **Recording**, with a level meter, so you can check it hears your
-game before you mine. Audio is only kept in memory: nothing is saved but the clip in your card.
+The switch is there whatever your [source](/reading/sources/): a window or screen, Quick Shot, the
+clipboard or a WebSocket. With Quick Shot, take the shot soon after the line is said: only the
+last **Seconds kept** of audio are held (30 by default), so a later shot finds no audio for its
+line. An amber dot on the info mark says so; raise **Seconds kept** under **Advanced** if you need
+longer.
+
+Turning it on downloads the speech model (240 MB, run on your computer), which listens for each
+line's words to find where it was said. Recording starts once the model is downloaded; the section
+shows the download's progress until then. After that it stays quiet unless something is wrong (no
+permission, no audio device), and says so. Audio is only kept in memory: nothing is saved but the
+clips of the newest lines and the clip in your card.
+
+**Audio field** is the field in your note that gets the line's audio. Kimochi finds it in Anki
+when you turn the feature on, and again when the AnkiConnect address or the Yomitan API's note type
+changes: Lapis and Kiku call it `SentenceAudio`, Senren `sentenceAudio`. You can type another.
+
+### Advanced
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| **Audio field** | `SentenceAudio` | The note field the audio goes into. A field that is already filled is never replaced. |
-| **Seconds kept** | 30 | A card gets audio only for a line that arrived within this time (10–120). |
-| **Trim to the voice** | On | Cuts the clip down to the speech in it. Off keeps everything from the line's arrival to the next line's. |
 | **Start offset** / **End offset** | 0 ms | Milliseconds added to the clip's start or end; negative moves it earlier. |
+| **Seconds kept** | 30 | A card gets audio only for a line whose audio is still held (10–120). |
+| **Clips kept** | 15 | The newest lines' clips kept on your computer, to play from the Log and add to later cards. |
 
 - **macOS** records system audio under the **Screen Recording** permission, and leaves Kimochi's
   own sounds out. macOS shows its screen-recording indicator while it is on.
 - **Windows** leaves Kimochi's own sounds out on Windows 10 (2004) and later.
 - **Linux** and the **Steam Deck** need PipeWire, as SteamOS and most desktops have. Kimochi's own
   sounds are recorded too, so keep sound effects off while you mine.
+
+## Tags
+
+Under sentence audio in **Settings → Anki → Card enhancement**, **Add tags** (on by default) tags
+every new card you make, whichever dictionary made it: Kimochi's pop-up adds them with the card,
+and Built-in Yomitan's and Hachidori's cards get them as soon as they're added (on top of any tags
+of their own).
+
+**Tags** is a comma-separated list, `kimochi, {{session-name}}` by default.
+`{{session-name}}` becomes the name of the session you're reading, with `_` for its spaces (Anki
+tags can't hold spaces), so a card mined in **Chrono Trigger** is tagged `kimochi` and
+`Chrono_Trigger`. Below the field, Kimochi shows the tags a card made now would get.

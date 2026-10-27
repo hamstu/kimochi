@@ -114,8 +114,8 @@ function MacPermissionsSection(): ReactNode {
         label="Screen Recording"
         description={
           !recordingGranted && restartAfterGrant
-            ? 'Lets Kimochi read your game window. Restart Kimochi after allowing.'
-            : 'Lets Kimochi read your game window.'
+            ? 'Lets Kimochi read the window or screen you choose. Restart Kimochi after allowing.'
+            : 'Lets Kimochi read the window or screen you choose.'
         }
       >
         <PermissionStatus
@@ -123,7 +123,7 @@ function MacPermissionsSection(): ReactNode {
           onAllow={() => void openScreenCapturePreferences().catch(() => undefined)}
         />
       </SettingsRow>
-      <SettingsRow label="Accessibility" description="Lets Kimochi bring your game window to front.">
+      <SettingsRow label="Accessibility" description="Lets Kimochi bring your source's window to the front.">
         <PermissionStatus
           granted={accessibility}
           onAllow={() => void requestAccessibility().catch(() => undefined)}

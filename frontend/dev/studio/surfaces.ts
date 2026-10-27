@@ -215,13 +215,14 @@ const SETTINGS_JSON = {
 
 // ---------------------------------------------------------------- where the reader is
 
-/** The main window: Log, Notebook or Settings, and the Settings page, read from its document. */
+/** The main window: Log, Notebook, Anki or Settings, and the Settings page, read from its document. */
 function locateMain(frame: Window): StudioContext {
   const doc = frame.document
   const settings = (frame as unknown as { __previewSettings?: Record<string, unknown> }).__previewSettings
   if (doc.querySelector('.main-settings')) return { view: 'settings', tab: String(settings?.settingsActiveTab ?? 'general') }
   const selected = doc.querySelector('[role="tab"][aria-selected="true"], [role="tab"][data-state="active"]')
   if (selected?.textContent?.trim().toLowerCase().startsWith('notebook')) return { view: 'notebook' }
+  if (selected?.textContent?.trim().toLowerCase().startsWith('anki')) return { view: 'anki' }
   return { view: 'log' }
 }
 
@@ -269,7 +270,7 @@ const MAIN: Surface = {
   params: { window: 'log' },
   size: { width: 900, height: 560, minWidth: 520, minHeight: 360 },
   contexts: [
-    { param: 'view', label: 'View', options: opts(['log', 'Log'], ['notebook', 'Notebook'], ['settings', 'Settings']) },
+    { param: 'view', label: 'View', options: opts(['log', 'Log'], ['notebook', 'Notebook'], ['anki', 'Anki'], ['settings', 'Settings']) },
     { param: 'tab', label: 'Settings page', options: SETTINGS_TABS, when: in_('view', 'settings') }
   ],
   locate: locateMain,
@@ -319,6 +320,26 @@ const MAIN: Surface = {
           label: "What's new",
           default: 'none',
           options: opts(['none', 'Closed'], ['1', 'Open'], ['update', 'After an update'])
+        }
+      ]
+    },
+    {
+      title: 'Anki tab',
+      when: in_('view', 'anki'),
+      controls: [
+        {
+          kind: 'select',
+          param: 'ankicards',
+          label: 'Cards this session',
+          default: 'demo',
+          options: opts(['demo', 'Some, a few with audio'], ['none', 'None yet'])
+        },
+        {
+          kind: 'select',
+          param: 'anki',
+          label: 'AnkiConnect',
+          default: 'connected',
+          options: opts(['connected', 'Connected'], ['notrunning', 'Not running'], ['keyrequired', 'API key needed'])
         }
       ]
     },

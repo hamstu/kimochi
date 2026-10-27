@@ -93,7 +93,7 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
     items: [
       {
         name: 'SenseVoice',
-        role: 'Hears what a game says, to match each line to its voice (FunASR, Alibaba)',
+        role: 'Hears what is said, to match each line to its voice (FunASR, Alibaba)',
         license: 'FunASR Model License',
         url: 'https://github.com/FunAudioLLM/SenseVoice'
       },

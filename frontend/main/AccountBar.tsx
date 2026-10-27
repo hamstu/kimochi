@@ -2,14 +2,15 @@
  * The sidebar's account switcher, in the foot of the sidebar in place of the Settings row while an
  * account is in use: one row, the account's avatar (or initial) and name (or the email before
  * "@"). Clicking opens a menu of the accounts signed in to on this computer, the active one
- * checked, with Add account…, Settings, Account settings and Sign out. Each account has its own
+ * checked, and Settings (adding an account and signing out are in Settings → Account, which a
+ * failed switch opens). Each account has its own
  * Log, notebook and preferences, so choosing one switches everything (native reloads the windows
  * once it is in place). Without an account in use the sidebar shows the plain Settings row instead
  * (MainSidebar). It follows `account-changed`, and shows a dot when Sync needs attention
  * (offline, an error, conflicts).
  */
 import { useState, type JSX } from 'react'
-import { ChevronsUpDown, LogOut, Settings, UserCog, UserPlus } from 'lucide-react'
+import { ChevronsUpDown, Settings } from 'lucide-react'
 import {
   Menu,
   MenuContent,
@@ -23,7 +24,7 @@ import {
   StatusDot
 } from '@kit'
 import { accountBarName, accountLines, activeAccount, type AccountSummary } from '@ui/account'
-import { accountLinkStart, accountSignOut, accountSwitch, useAccount } from '../bridge/account'
+import { accountSwitch, useAccount } from '../bridge/account'
 import { useSync } from '../bridge/sync'
 import { AccountAvatar } from '../components/AccountAvatar'
 
@@ -111,26 +112,9 @@ export function AccountBar({
           </MenuRadioItem>
         </MenuRadioGroup>
         <MenuSeparator />
-        <MenuItem
-          icon={<UserPlus />}
-          onSelect={() => {
-            onOpen()
-            run(() => accountLinkStart())
-          }}
-        >
-          Add account…
-        </MenuItem>
         <MenuItem icon={<Settings />} onSelect={onSettings}>
           Settings
         </MenuItem>
-        <MenuItem icon={<UserCog />} onSelect={onOpen}>
-          Account settings
-        </MenuItem>
-        {active.signedIn && (
-          <MenuItem icon={<LogOut />} onSelect={() => run(() => accountSignOut(active.key))}>
-            Sign out
-          </MenuItem>
-        )}
       </MenuContent>
     </Menu>
   )

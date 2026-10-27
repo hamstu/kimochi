@@ -11,6 +11,30 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Right-clicking a Log line keeps the text you selected (and offers Copy selection and Add to
+  notebook for it); with nothing selected, it no longer selects the clicked word or offers them.
+- Import from VNDB looks tidier: the results sit in their own inset box, the window is only as tall
+  as it needs to be until results come in, and Cancel stays at the bottom. Dialogs keep their
+  border all the way round, beside the buttons too.
+- Row menus show their keyboard shortcuts, and the keys work on the row under the pointer: in the
+  Log R reads aloud, C copies, T translates, E explains and D deletes; in the Notebook E edits, C
+  copies the name and D deletes; in the Anki tab O opens the card and D deletes it.
+- Right-click a card in the Anki tab for the same menu as its ⋯ button.
+- The ⋯ button on Notebook and Anki tab rows no longer jumps when clicked, and the row stays
+  highlighted while you point at it.
+- The sidebar's account menu is simpler: switch accounts or open Settings. Add account and Sign out
+  are in Settings → Account.
+- Every new Anki card is tagged, whichever dictionary made it: `kimochi` and the name of the session
+  you're reading, by default. Change the tags (or turn them off) in Settings → Anki → Card
+  enhancement → Tags; the Yomitan API's Tags setting moved there.
+- The main window has a third tab, Anki: every card you made this session, from Kimochi's pop-up, Built-in Yomitan or Hachidori, kept with the session (and synced with it). Search them, click one to open it in Anki, and see which ones Kimochi gave sentence audio. ⌘3 / Ctrl+3 opens it.
+- In the Anki tab, each card's ⋯ menu can open it in Anki, add its sentence audio afterwards, or delete it from the tab (and from Anki too, if you choose).
+- Sentence audio finds a card's line more reliably: a line from before Kimochi was restarted still gives its kept clip, cards made while recording is starting get their audio, and a word written differently in the line (今日は said as こんにちは) is found by its reading for word audio.
+- On first launch, the main window opens centred on your screen and larger, with a wider sidebar.
+- The sidebar's Crop and Source buttons keep their icons when the sidebar is narrow; their labels shorten instead.
+- Sidebar switches each have a faint info mark that explains them and a cog that opens their settings.
+- Settings → Anki has three tabs across the top: AnkiConnect (always there, whatever your dictionary), Mining and Card enhancement. Card enhancement holds sentence audio, said plainly, with the rarer settings under Advanced.
+- Sentence audio now always uses the speech model: turning it on downloads it, and recording starts once it's there. Its Audio field is found in Anki on its own when you turn it on and when your Anki settings change.
 - Gaming Mode: leaving the controller menu or the dictionary no longer turns Show overlay off. The
   overlay is on afterwards if it was on before.
 - With Auto OCR on, the Scan button (and its shortcut) is now **Force rescan**: it clears what was
@@ -42,8 +66,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
   10ten show their own pop-up filling that space. Move word to word with the D-pad or arrow keys,
   through a word's entries with the shoulder buttons, and add the entry to Anki with A. The
   controller's buttons stay in Settings → Shortcuts & Controls.
-- Sentence audio (experimental): turn it on under Auto OCR in the main window, or in Settings →
-  Anki, and Kimochi listens to your game. Its own sound effects stay off while it does, so they
+- Sentence audio: turn on Enhance Anki cards in the main window's sidebar (with any source: a
+  window, Quick Shot, the clipboard or a WebSocket), or Settings → Anki → Card enhancement, and
+  Kimochi listens to your game. Its own sound effects stay off while it does, so they
   never end up in a clip. Each line in the Log gets the clip of its voice, with a speaker to play
   it, and each card you add gets the spoken audio of the line you mined it from. It works with
   Built-in Yomitan, Hachidori and the Yomitan API pop-up, into a field you choose (SentenceAudio

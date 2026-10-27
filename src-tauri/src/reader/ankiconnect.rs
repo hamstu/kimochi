@@ -230,6 +230,7 @@ pub async fn anki_store_media_file(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // a command's arguments are its parameters, by name
 pub async fn anki_add_note(
     state: tauri::State<'_, Shared>,
     url: String,
@@ -238,8 +239,19 @@ pub async fn anki_add_note(
     fields: HashMap<String, String>,
     tags: Vec<String>,
     allow_duplicate: Option<bool>,
+    term: Option<String>,
+    reading: Option<String>,
 ) -> Result<u64, String> {
     let allow = allow_duplicate.unwrap_or(false);
+    let deck_name = deck.clone();
+    let named: Vec<(String, String)> = fields.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    // Card enhancement's tags, with any the pop-up sent.
+    let mut tags = tags;
+    for tag in crate::card_tags::current(&state.settings) {
+        if !tags.iter().any(|t| t.eq_ignore_ascii_case(&tag)) {
+            tags.push(tag);
+        }
+    }
     let params = json!({
         "note": {
             "deckName": deck,
@@ -253,9 +265,21 @@ pub async fn anki_add_note(
         }
     });
     let result: Value = call(&state.settings, &url, "addNote", params).await?;
-    result
+    let note_id = result
         .as_u64()
-        .ok_or_else(|| "addNote returned non-numeric id".to_string())
+        .ok_or_else(|| "addNote returned non-numeric id".to_string())?;
+    // The Anki tab's record of the session's cards: the pop-up names its term.
+    let (found, found_reading) = crate::anki_cards::card_term(&named);
+    let term = term.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).unwrap_or(found);
+    crate::anki_cards::record(crate::anki_cards::NewCard {
+        note_id,
+        term,
+        reading: reading.or(found_reading),
+        deck: Some(deck_name),
+        via: "kimochi",
+        engine: crate::anki_cards::KIMOCHI_ENGINE.into(),
+    });
+    Ok(note_id)
 }
 
 // ---------------------------------------------------------------- relay
@@ -301,12 +325,15 @@ async fn relay_request(url: &str, request: &Value) -> Result<RelayReply, String>
 /// A dictionary extension's AnkiConnect request (host/anki-relay.js), sent from here without the
 /// webview's Origin to the address its own Anki settings name (`url`, validated like the one in
 /// Settings → Anki), and otherwise as it was: the extension's settings stay in charge. A card it
-/// adds is given its line's audio afterwards when sentence audio is on (`sentence_audio`).
+/// adds is recorded in the open session (`anki_cards`), given its line's audio afterwards when
+/// sentence audio is on (`sentence_audio`), and card enhancement's tags (`card_tags`).
 #[tauri::command]
 pub async fn anki_connect_relay(app: tauri::AppHandle, url: String, body: String) -> Result<RelayReply, String> {
     let request = relay_body(&body)?;
     let reply = relay_request(&url, &request).await?;
+    crate::anki_cards::after_relay(&app, &url, &request, reply.status, &reply.body);
     crate::sentence_audio::after_relay(&app, &url, &request, reply.status, &reply.body);
+    crate::card_tags::after_relay(&app, &url, &request, reply.status, &reply.body);
     Ok(reply)
 }
 

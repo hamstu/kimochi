@@ -22,6 +22,8 @@ import { detectAnkiSetup } from "@texthooker/lib/ankiDetect";
 import { ankiMiningGap } from "@texthooker/lib/ankiConfig";
 import { DEFAULT_ANKI_CONNECT_URL } from "@ui/anki-connect";
 import { updateSettings } from "@texthooker/lib/settings";
+import { SETTINGS_DEFAULTS, type CardTagsSettings } from "@ui/settings";
+import { getSetting, setSetting } from "../../bridge/settings";
 import type { AnkiFieldMapping, Settings } from "@texthooker/lib/types";
 import { YOMITAN_MARKERS } from "@texthooker/lib/types";
 import {
@@ -46,11 +48,22 @@ function withSaved(options: string[], saved: string | null): string[] {
   return saved && !options.includes(saved) ? [saved, ...options] : options;
 }
 
-/** The Yomitan API pop-up's Add to Anki: on/off, deck, note type, tags and field mapping. */
+/** Adds `tags` to card enhancement's (an import from Yomitan), leaving out ones already there. */
+async function addCardTags(tags: string[]): Promise<void> {
+  const stored = await getSetting<CardTagsSettings>("cardTags").catch(() => null);
+  const current = { ...SETTINGS_DEFAULTS.cardTags, ...stored };
+  const have = current.tags.split(",").map((t) => t.trim().toLowerCase());
+  const added = tags.filter((t) => t.trim() && !have.includes(t.trim().toLowerCase()));
+  if (added.length === 0) return;
+  const tagsText = [current.tags.trim(), ...added].filter(Boolean).join(", ");
+  await setSetting("cardTags", { ...current, tags: tagsText });
+}
+
+/** The Yomitan API pop-up's Add to Anki: on/off, deck, note type and field mapping. (Its tags are
+    card enhancement's, for every dictionary: Settings → Anki → Card enhancement.) */
 export function AnkiSetup({ settings, connection, title, description }: Props) {
   // Empty is AnkiConnect's default address, as Settings → Anki's Address field shows it.
   const ankiUrl = settings.ankiConnectUrl.trim() || DEFAULT_ANKI_CONNECT_URL;
-  const [tagsDraft, setTagsDraft] = useState(settings.ankiTags.join(", "));
   const [decks, setDecks] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [modelFields, setModelFields] = useState<string[]>([]);
@@ -153,20 +166,14 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
       ankiDeckName: importPreview.deckName,
       ankiModelName: importPreview.modelName,
       ankiFieldMappings: importPreview.fieldMappings,
-      // Keep "super-texthooker" tag + merge in Yomitan's profile tags.
-      ankiTags: Array.from(
-        new Set(["super-texthooker", ...importPreview.tags]),
-      ),
       // Clear cached model fields so we refetch for the new model.
       ankiModelFields: [],
     });
+    // Yomitan's tags join card enhancement's, which tag every new card.
+    if (importPreview.tags.length > 0) await addCardTags(importPreview.tags);
     resetImport();
     setRefreshTick((n) => n + 1);
   };
-
-  useEffect(() => {
-    setTagsDraft(settings.ankiTags.join(", "));
-  }, [settings.ankiTags]);
 
   // Load decks + models whenever the URL changes, AnkiConnect connects, or after an import.
   useEffect(() => {
@@ -223,16 +230,6 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ankiUrl, settings.ankiModelName, connection, refreshTick]);
-
-  const handleTagsBlur = async () => {
-    const parsed = tagsDraft
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (parsed.join("|") !== settings.ankiTags.join("|")) {
-      await updateSettings({ ankiTags: parsed });
-    }
-  };
 
   const setMapping = (ankiField: string, mapping: AnkiFieldMapping | null) => {
     const rest = settings.ankiFieldMappings.filter(
@@ -338,20 +335,6 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
           />
         </SettingsRow>
         <SettingsRow
-          label="Tags"
-          controlId="anki-tags"
-          description="Comma-separated, added to every card."
-        >
-          <Input
-            id="anki-tags"
-            className="settings-field"
-            value={tagsDraft}
-            onChange={(e) => setTagsDraft(e.target.value)}
-            onBlur={() => void handleTagsBlur()}
-            placeholder="super-texthooker"
-          />
-        </SettingsRow>
-        <SettingsRow
           label="Detect from Anki"
           description="Attempt to auto-detect your Anki mining setup and import it here."
         >
@@ -361,7 +344,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         </SettingsRow>
         <SettingsRow
           label="Import from Yomitan"
-          description="Deck, note type, tags and field mappings from a Yomitan settings export."
+          description="Deck, note type and field mappings from a Yomitan settings export. Its tags join Card enhancement's."
         >
           <Button size="sm" onClick={() => void handleImportClick()}>
             Import…

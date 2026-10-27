@@ -61,12 +61,13 @@ function EntryMenuItems({
   const name = entryName(entry);
   return (
     <>
-      <MenuItem icon={<Pencil />} onSelect={() => onEdit(entry)}>
+      <MenuItem icon={<Pencil />} shortcut="e" onSelect={() => onEdit(entry)}>
         Edit
       </MenuItem>
       {name ? (
         <MenuItem
           icon={<Copy />}
+          shortcut="c"
           onSelect={() => void writeTextSelf(name).catch(() => {})}
         >
           Copy name
@@ -85,6 +86,7 @@ function EntryMenuItems({
       <MenuItem
         icon={<Trash2 />}
         tone="danger"
+        shortcut="d"
         onSelect={() => onDelete(entry)}
       >
         Delete…

@@ -125,7 +125,7 @@ export const FILTER_LEVELS = [
     threshold: 0.75,
     label: 'Balanced',
     description:
-      'Removes furigana and small labels under three-quarters of the main text size. Right for most games.'
+      'Removes furigana and small labels under three-quarters of the main text size. Right for most text.'
   },
   {
     threshold: 0.85,

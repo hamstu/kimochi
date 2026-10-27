@@ -67,7 +67,7 @@ export function HintBar({ reading, index, count, leaving }: HintBarProps) {
             <Hint glyph="Y">By character</Hint>
             <Hint glyph="View">Controls</Hint>
             <Hint glyph="B" tone="cancel">
-              Back to game
+              Back
             </Hint>
           </>
         )}

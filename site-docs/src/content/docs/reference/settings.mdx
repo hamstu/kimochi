@@ -39,12 +39,12 @@ eleven pages.
     | ↳ **Poll interval** (Clipboard) | 200 ms | 100 ms, 200 ms, 500 ms or 1 s. |
     | ↳ **WebSocket URL** | `ws://localhost:6677` | |
     | **Auto switch sessions by window name** | On | Each window you read gets its own session. |
-    | **macOS permissions** | — | Screen Recording (reads your game window) and Accessibility (brings your game window to the front): Allowed, or a button to allow it. |
+    | **macOS permissions** | — | Screen Recording (reads the window or screen you choose) and Accessibility (brings your source's window to the front): Allowed, or a button to allow it. |
     | **Copy scans to clipboard** | Off | |
     | **Send scans over WebSocket** | Off | Hosts a WebSocket server at its **WebSocket URL** (`ws://localhost:6677`). |
   </TabItem>
   <TabItem label="OCR & Overlay">
-    Which engine reads the screen, and what is drawn over your game. See
+    Which engine reads the screen, and what is drawn over your source. See
     [OCR engines](/reading/ocr-engines/), [The overlay](/reading/overlay/) and
     [Auto OCR](/reading/auto-ocr/).
 
@@ -95,14 +95,15 @@ eleven pages.
 
     | Setting | Default |
     | --- | --- |
-    | **Open … Anki settings** (Built-in Yomitan, Hachidori) | The engine's own Anki settings, AnkiConnect address and key included |
-    | **AnkiConnect** status, **Address** (Yomitan API) | `http://127.0.0.1:8765` |
-    | **API key** (Yomitan API) | Empty; stored locally, never synced |
-    | **Enable Mining** / **Deck** / **Note type** / **Tags** (Yomitan API) | Off / — / — / `super-texthooker` |
-    | **Detect from Anki** / **Import from Yomitan** / **Field mapping** (Yomitan API) | — |
-    | **Record and attach sentence audio** | Off |
-    | ↳ **Audio field** / **Seconds kept** / **Trim to the voice** | `SentenceAudio` / 30 / On |
-    | ↳ **Start offset** / **End offset** | 0 ms / 0 ms |
+    | **AnkiConnect** tab: status, **Address** | `http://127.0.0.1:8765` |
+    | ↳ **API key** | Empty; stored locally, never synced |
+    | **Mining** tab: **Open … Anki settings** (Built-in Yomitan, Hachidori) | The engine's own Anki settings, AnkiConnect address and key included |
+    | ↳ **Enable Mining** / **Deck** / **Note type** (Yomitan API) | Off / — / — |
+    | ↳ **Detect from Anki** / **Import from Yomitan** / **Field mapping** (Yomitan API) | — |
+    | **Card enhancement** tab: **Enhance with sentence audio** | Off (turning it on downloads the speech model) |
+    | ↳ **Audio field** | `SentenceAudio`, found in Anki when turned on |
+    | ↳ **Advanced**: **Start offset** / **End offset** / **Seconds kept** / **Clips kept** | 0 ms / 0 ms / 30 / 15 |
+    | **Card enhancement** tab: **Add tags** / **Tags** | On / `kimochi, {{session-name}}` |
 
     10ten adds no cards, and an engine that isn't downloaded yet only offers **Go to Dictionary**.
   </TabItem>

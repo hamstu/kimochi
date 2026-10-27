@@ -30,13 +30,19 @@
   outline: none;
   scrollbar-gutter: stable;
 }
+/* A tabbed page (Anki) scrolls inside, below its tabs. */
+.settings-page-scroll:has(> .k-settings-tabbed) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
 .settings-page-scroll[hidden] {
   display: none;
 }
 
 /* A page fades in as it mounts: on first load and on every switch. Only opacity and a short rise,
    so the scroller's height and the nav never move. */
-.settings-page-scroll > .k-settings-page {
+.settings-page-scroll > .k-settings-page,
+.settings-page-scroll > .k-settings-tabbed {
   animation: settings-page-in var(--k-base) var(--k-ease-out) both;
 }
 @keyframes settings-page-in {

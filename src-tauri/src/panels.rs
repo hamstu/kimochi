@@ -94,7 +94,7 @@ pub static PANELS: &[PanelSpec] = &[
         // completes, and lookup fails silently while the window still reports the
         // backend as reachable.
         init_assets: EXTENSION_HOST_ASSETS,
-        ..panel("log", "Kimochi", PANEL_PAGE, 900., 560.)
+        ..panel("log", "Kimochi", PANEL_PAGE, 1040., 680.)
     },
     PanelSpec {
         min_width: 820.,
@@ -186,17 +186,22 @@ fn saved_bounds(settings: &Settings, spec: &PanelSpec) -> Rect {
     let mut rect = match saved {
         Some(rect) => rect,
         None => {
-            let area = platform::desktop_display_infos()
-                .first()
-                .map(|d| d.work_area)
+            let displays = platform::desktop_display_infos();
+            let area = platform::desktop_cursor()
+                .and_then(|p| work_area_at(&displays, p.x, p.y))
+                .or_else(|| displays.first().map(|d| d.work_area))
                 .unwrap_or(Rect {
                     x: 0.,
                     y: 0.,
                     width: spec.width,
                     height: spec.height,
                 });
+            // The main window's first frame, shown as the welcome guide ends: centred.
+            if spec.label == MAIN {
+                return platform::clamp_to_visible(centred(spec.width, spec.height, area));
+            }
             Rect {
-                x: area.x + if spec.label == MAIN { 40. } else { 260. },
+                x: area.x + 260.,
                 y: area.y + 40.,
                 width: spec.width,
                 height: spec.height,

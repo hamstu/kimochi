@@ -895,9 +895,9 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
 .src-switch {
   pointer-events: none;
 }
-/* A row with a second control in it (Sentence audio's experimental flask): the switch is a
-   transparent button under the whole row, everything drawn on it lets clicks through to it, and
-   the flask is a button of its own above. */
+/* A row with more controls in it (an info mark and a settings cog): the switch is a transparent
+   button under the whole row, everything drawn on it lets clicks through to it, and the info mark
+   and the cog are buttons of their own above. */
 .src-row-layered {
   position: relative;
 }
@@ -918,50 +918,110 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   position: relative;
   pointer-events: none;
 }
+.src-row-layered[data-disabled] > :not(.src-row-hit, .src-row-cog) {
+  opacity: 0.5;
+}
 .src-row-label-fit {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .src-row-fill {
   flex: 1;
 }
-.src-row-layered > .src-experimental {
+.src-row-layered > .src-info,
+.src-row-layered > .src-row-cog {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: calc(var(--k-icon-sm) + var(--k-space-1-5));
   height: calc(var(--k-icon-sm) + var(--k-space-1-5));
-  margin-left: calc(var(--k-space-1) * -1);
   padding: 0;
   border: 0;
   border-radius: var(--k-radius-sm);
   background: transparent;
-  color: var(--amber-9);
+  color: var(--k-text-3);
+  cursor: default;
   pointer-events: auto;
 }
-.src-row-layered > .src-experimental:hover,
-.src-row-layered > .src-experimental[data-state="open"] {
-  background: var(--k-warn-soft);
+/* Faint until asked about. */
+.src-row-layered > .src-info {
+  margin-left: calc(var(--k-space-1) * -1);
+  opacity: 0.6;
 }
-.src-row-layered > .src-experimental:focus-visible {
+.src-row-layered > .src-info:hover,
+.src-row-layered > .src-info[data-state="delayed-open"],
+.src-row-layered > .src-info[data-state="instant-open"] {
+  opacity: 1;
+  color: var(--k-text-2);
+}
+/* The cog: its own column after the switch. */
+.src-row-layered > .src-row-cog {
+  margin-right: calc(var(--k-space-1) * -1);
+}
+.src-row-layered > .src-row-cog:hover {
+  background: var(--k-press);
+  color: var(--k-text);
+}
+.src-row-layered > .src-info:focus-visible,
+.src-row-layered > .src-row-cog:focus-visible {
   outline: 2px solid var(--k-focus);
   outline-offset: 0;
 }
-.src-experimental > svg {
+/* A catch in this mode (Enhance Anki cards in Quick Shot): an amber pip on the mark's corner. */
+.src-row-layered > .src-info[data-caution] {
+  position: relative;
+  opacity: 1;
+}
+.src-row-layered > .src-info[data-caution]:not(:hover, [data-state$="-open"]) > svg {
+  opacity: 0.6;
+}
+.src-info[data-caution]::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--amber-9);
+}
+.src-info > svg,
+.src-row-cog > svg {
   width: var(--k-icon-sm);
   height: var(--k-icon-sm);
 }
-.src-experimental-pop {
+/* The info mark's tooltip: a small card, like a popover. */
+.k-tooltip.src-info-tip {
   display: grid;
-  gap: var(--k-space-2);
-  max-width: min(18rem, calc(100vw - 1rem));
-  font-size: var(--k-text-sm);
-  line-height: var(--k-leading-sm);
+  gap: var(--k-space-1-5);
+  max-width: min(17rem, calc(100vw - 1rem));
+  padding: var(--k-space-2) var(--k-space-2-5);
+  border-radius: var(--k-radius-lg);
+  background: var(--k-raised);
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+  color: var(--k-text);
 }
-.src-experimental-pop p {
+.dark .k-tooltip.src-info-tip {
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a6);
+}
+.src-info-tip p {
   margin: 0;
 }
-.src-experimental-more {
-  color: var(--k-text-2);
+.src-info-caution {
+  color: var(--k-warn-text);
+}
+.src-info-more {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.src-info-more > svg {
+  width: 0.95em;
+  height: 0.95em;
+  vertical-align: -0.12em;
 }
 
 /* The Change source menu: one row per source type, with what it does. "Window or screen" opens
@@ -1277,9 +1337,15 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   .src-scan-key,
   .src-row-meta { display: none; }
 }
-/* Too narrow for both labels with their icons: the labels win. */
-@container (max-width: 16rem) {
-  .src-action > svg { display: none; }
+/* Too narrow for the switches' names with their info marks: the names win; the cog stays. */
+@container (max-width: 14rem) {
+  .src-row-layered > .src-info { display: none; }
+}
+/* Too narrow for both full labels with their icons: the icons stay, the labels shorten. */
+.src-action-short { display: none; }
+@container (max-width: 15rem) {
+  .src-action-long { display: none; }
+  .src-action-short { display: inline; }
 }
 
 /*

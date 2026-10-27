@@ -111,6 +111,15 @@ impl Timeline {
     }
 }
 
+/// How well a line's text matches the best of a card's field texts (`similarity`, 0–3).
+pub fn card_score(line: &str, texts: &[&str]) -> u8 {
+    let line = normalize(line);
+    if line.is_empty() {
+        return 0;
+    }
+    texts.iter().map(|t| normalize(t)).filter(|t| !t.is_empty()).map(|t| similarity(&line, &t)).max().unwrap_or(0)
+}
+
 /// Text as compared: no markup, no furigana brackets' readings, no spaces.
 pub fn normalize(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -134,7 +143,7 @@ pub fn normalize(text: &str) -> String {
 /// (the line in a sentence field with more around it), 1 the line holds the card's text and that
 /// is sentence-sized (Yomitan cuts the sentence around the word out of a longer line), 0 no match.
 /// A single looked-up word inside a line is not a match: it would pick any line using the word.
-fn similarity(line: &str, card: &str) -> u8 {
+pub fn similarity(line: &str, card: &str) -> u8 {
     let sentence_sized =
         card.chars().count() >= 6 || card.chars().count() * 2 >= line.chars().count();
     if line == card {

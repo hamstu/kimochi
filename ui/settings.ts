@@ -183,6 +183,15 @@ export interface Settings {
   /** Recording system audio for the cards' sentence audio (src-tauri/src/sentence_audio). This
       computer's: never synced. */
   sentenceAudio: SentenceAudioSettings
+  /** Card enhancement's tags, on every new card whichever dictionary made it
+      (src-tauri/src/card_tags.rs). */
+  cardTags: CardTagsSettings
+}
+
+export interface CardTagsSettings {
+  enabled: boolean
+  /** Comma-separated; `{{session-name}}` is the open session's name. */
+  tags: string
 }
 
 export interface SentenceAudioSettings {
@@ -248,7 +257,8 @@ export const SETTINGS_DEFAULTS: Settings = {
     startOffsetMs: 0,
     endOffsetMs: 0,
     trim: true
-  }
+  },
+  cardTags: { enabled: true, tags: 'kimochi, {{session-name}}' }
 }
 
 /**
@@ -458,7 +468,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       'Looks words up through the Yomitan in your browser, using its dictionaries and settings as they are.',
     strengths: [
       'Nothing to import again',
-      'Shift-hover lookups in the Log and over your game',
+      'Shift-hover lookups in the Log and over your source',
       'Anki card builder in Kimochi'
     ],
     requirements:
@@ -561,13 +571,13 @@ export const ENGINE_SWITCH_TTL_MS = 30_000
 export interface EngineSwitchRecord {
   /** The engine just chosen, for "Now using …". */
   engine: DictionaryEngine
-  /** The main window's view to reopen: Settings for a switch made there, else the Log or Notebook
-   * the sidebar's dictionary picker was used from. */
-  view: 'settings' | 'log' | 'notebook'
+  /** The main window's view to reopen: Settings for a switch made there, else the Log, Notebook or
+   * Anki tab the sidebar's dictionary picker was used from. */
+  view: 'settings' | 'log' | 'notebook' | 'anki'
   /** The Settings page (`settingsActiveTab`), so the first frame is that page, not the default. */
   tab: string
   /** Where Back from Settings returns to. */
-  back: 'log' | 'notebook'
+  back: 'log' | 'notebook' | 'anki'
   /** The Settings page's scroll offset, in CSS pixels. */
   scrollTop: number
   /** `Date.now()` when the switch was made. */
@@ -591,7 +601,7 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
   const record = value as Record<string, unknown>
   const { engine, view, tab, back, scrollTop, at } = record
   if (typeof engine !== 'string' || !Object.hasOwn(DICTIONARY_ENGINES, engine)) return null
-  if (view !== 'settings' && view !== 'log' && view !== 'notebook') return null
+  if (view !== 'settings' && view !== 'log' && view !== 'notebook' && view !== 'anki') return null
   if (typeof tab !== 'string' || !tab) return null
   if (typeof at !== 'number' || !Number.isFinite(at)) return null
   // A clock that stepped back a little still counts; a record from the future does not.
@@ -600,7 +610,7 @@ export function decodeEngineSwitch(raw: string | null | undefined, now: number):
     engine: engine as DictionaryEngine,
     view,
     tab,
-    back: back === 'notebook' ? 'notebook' : 'log',
+    back: back === 'notebook' || back === 'anki' ? back : 'log',
     scrollTop: typeof scrollTop === 'number' && Number.isFinite(scrollTop) && scrollTop > 0 ? scrollTop : 0,
     at
   }

@@ -172,6 +172,11 @@
 .log-lines ::selection {
   background: var(--accent-a5);
 }
+/* The selection a line's right-click menu acts on, drawn while the menu has focus
+   (LineActionsMenu's showKept). */
+::highlight(kimochi-menu-selection) {
+  background-color: var(--accent-a5);
+}
 
 /* A transcript line is a full-bleed row (the remote's grammar): hover lifts the whole row,
    hairlines are inset to the time column, and the actions trigger sits at the row's end. The

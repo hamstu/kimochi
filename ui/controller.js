@@ -1214,7 +1214,7 @@ export function createController(context) {
     const count = cursor?.current
       ? `${cursor.index + 1} / ${cursor.words.length}`
       : "";
-    const back = historical ? "Recent text" : "Back to game";
+    const back = historical ? "Recent text" : "Back";
     let hints;
     if (layer === "popup") {
       hints = keys
@@ -1271,7 +1271,7 @@ export function createController(context) {
       row(glyphOf("playAudio"), "Play audio", ""),
       row(pair("previousDefinition", "nextDefinition"), "Previous or next definition", ""),
       row("RS", "Scroll the pop-up", "Push further to scroll faster"),
-      row(glyphOf("back"), historical ? "Back to recent text" : "Back to the game", ""),
+      row(glyphOf("back"), historical ? "Back to recent text" : "Back", ""),
     ].join("");
     const inPopup = popupButtons
       ? [

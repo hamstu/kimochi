@@ -4,6 +4,7 @@ import {
   useContext,
   type ComponentPropsWithoutRef,
   type ElementRef,
+  type KeyboardEvent,
   type ReactNode
 } from 'react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
@@ -58,10 +59,21 @@ export const MenuContent = forwardRef<
   ElementRef<typeof MenuPrimitive.Content>,
   ComponentPropsWithoutRef<typeof MenuPrimitive.Content>
 >(function MenuContent(
-  { className, sideOffset = 4, collisionPadding = 8, onCloseAutoFocus, ...props },
+  { className, sideOffset = 4, collisionPadding = 8, onCloseAutoFocus, onKeyDown, ...props },
   ref
 ) {
   const P = usePrimitive()
+  // A letter that is an item's `shortcut` chooses that item (before Radix's type-to-find).
+  const chooseByShortcut = (event: KeyboardEvent<HTMLDivElement>): void => {
+    onKeyDown?.(event)
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.key.length !== 1) return
+    const item = event.currentTarget.querySelector<HTMLElement>(
+      `[data-shortcut="${CSS.escape(event.key.toLowerCase())}"]:not([data-disabled])`
+    )
+    if (!item) return
+    event.preventDefault()
+    item.click()
+  }
   return (
     <P.Portal container={portalRoot()}>
       <P.Content
@@ -70,6 +82,7 @@ export const MenuContent = forwardRef<
         collisionPadding={collisionPadding}
         onCloseAutoFocus={onCloseAutoFocus ?? closeAutoFocusFromKeyboardOnly}
         className={cn('k-menu', className)}
+        onKeyDown={chooseByShortcut}
         {...props}
       />
     </P.Portal>
@@ -80,7 +93,9 @@ export const MenuItem = forwardRef<
   ElementRef<typeof MenuPrimitive.Item>,
   ComponentPropsWithoutRef<typeof MenuPrimitive.Item> & {
     icon?: ReactNode
-    shortcut?: ReactNode
+    /** A letter key, shown as a key cap: pressing it while the menu is open chooses the item. (The
+        row the menu is for usually takes the same key while pointed at.) */
+    shortcut?: string
     tone?: 'default' | 'danger'
   }
 >(function MenuItem({ className, icon, shortcut, tone = 'default', children, ...props }, ref) {
@@ -89,11 +104,16 @@ export const MenuItem = forwardRef<
     <P.Item
       ref={ref}
       className={cn('k-menu-item', tone === 'danger' && 'k-menu-item-danger', className)}
+      data-shortcut={shortcut?.toLowerCase()}
       {...props}
     >
       {icon}
       <span className="k-menu-item-label">{children}</span>
-      {shortcut && <span className="k-menu-item-shortcut">{shortcut}</span>}
+      {shortcut && (
+        <kbd className="k-kbd k-menu-item-key" aria-hidden>
+          {shortcut.toUpperCase()}
+        </kbd>
+      )}
     </P.Item>
   )
 })

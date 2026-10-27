@@ -71,6 +71,8 @@ pub fn defaults() -> Value {
             "endOffsetMs": 0,
             "trim": true
         },
+        // Card enhancement's tags, on every new card (card_tags.rs).
+        "cardTags": { "enabled": true, "tags": crate::card_tags::DEFAULT_TAGS },
         // New installs only: `load` keeps an existing settings file on the engine it had.
         "ocrMode": "googlelens"
         // `endpoint` is intentionally absent: an unset endpoint follows
@@ -103,7 +105,15 @@ impl Settings {
             match serde_json::from_slice::<Value>(&bytes) {
                 Ok(stored) => {
                     let engine_recorded = stored.get("ocrMode").is_some();
+                    // The Yomitan API's tags became card enhancement's, for every dictionary.
+                    let card_tags = match stored.get(crate::card_tags::KEY) {
+                        Some(_) => None,
+                        None => stored.get("superTexthooker").and_then(crate::card_tags::migrated),
+                    };
                     merge(&mut doc, stored);
+                    if let Some(card_tags) = card_tags {
+                        doc[crate::card_tags::KEY] = card_tags;
+                    }
                     // Google Lens is the default for new installs. A file from before then
                     // that never recorded an engine was using Cloud OCR, and keeps it.
                     if !engine_recorded {
@@ -426,7 +436,7 @@ pub fn default_hotkeys() -> Map<String, Value> {
         json!({
             "name": "Controller menu",
             "accelerator": "CommandOrControl+Shift+Space",
-            "description": "Open the radial menu over the game",
+            "description": "Open the radial menu over your source",
             "enabled": true,
             "gamepadButtons": [10, 11]
         }),

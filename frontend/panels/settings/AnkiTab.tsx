@@ -1,18 +1,24 @@
 /**
- * Settings → Anki: shown whatever the dictionary engine, for how cards are added with it
- * (`ANKI_ROUTE`):
+ * Settings → Anki, in three tabs across the top (no title: the tabs name the page):
  *
- *  - The Yomitan API pop-up is Kimochi's own, so its AnkiConnect connection is here, checked live
- *    (`anki_connect_status`, every few seconds while this page is open, and on Check), with the
- *    address and the optional API key, and so is its card builder (`AnkiSetup`).
- *  - Built-in Yomitan and Hachidori add cards from their pop-ups with their own Anki settings,
- *    AnkiConnect address and key included, which a button opens at `#anki`. Kimochi only sends
- *    their requests on from Rust, unchanged (COMMANDS.md "AnkiConnect").
- *  - 10ten adds none.
+ *  - **AnkiConnect**: Kimochi's own connection, checked live (`anki_connect_status`, every few
+ *    seconds while it shows, and on Check), with the address and the optional API key. Shown
+ *    whatever the dictionary engine: the Yomitan API pop-up, the main window's Anki tab and
+ *    sentence audio's field detection all use it. Its defaults are AnkiConnect's, so it usually
+ *    works untouched.
+ *  - **Mining**: how cards are added with the engine (`ANKI_ROUTE`). The Yomitan API pop-up is
+ *    Kimochi's own, so its card builder (`AnkiSetup`) is here. Built-in Yomitan and Hachidori add
+ *    cards from their pop-ups with their own Anki settings, AnkiConnect address and key included,
+ *    which a button opens at `#anki`; Kimochi only sends their requests on from Rust, unchanged
+ *    (COMMANDS.md "AnkiConnect"). 10ten adds none.
+ *  - **Card enhancement**: sentence audio (`SentenceAudioSection`) and tags (`CardTagsSection`),
+ *    for every engine.
  *
- * Sentence audio (`SentenceAudioSection`) follows the cards for every engine that adds them.
+ * The tab is `ankiPageTab`'s, so links elsewhere in the main window can choose it (the sidebar's
+ * Enhance Anki cards cog, the Anki tab's empty state).
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Pickaxe, Plug, Sparkles } from 'lucide-react'
 import {
   Button,
   Callout,
@@ -20,6 +26,7 @@ import {
   SettingsPage,
   SettingsRow,
   SettingsSection,
+  SettingsTabs,
   Spinner,
   StatusDot
 } from '@kit'
@@ -47,18 +54,58 @@ import {
 import { useDictionaryReadiness } from '../../bridge/dictionaryReadiness'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { SentenceAudioSection } from './SentenceAudioSection'
+import { CardTagsSection } from './CardTagsSection'
+import { useAnkiTab, type AnkiTabName } from './ankiPageTab'
+
+const TABS = [
+  { value: 'connect', label: 'AnkiConnect', icon: <Plug aria-hidden /> },
+  { value: 'mining', label: 'Mining', icon: <Pickaxe aria-hidden /> },
+  {
+    value: 'enhance',
+    label: 'Card enhancement',
+    icon: <Sparkles aria-hidden />
+  }
+] as const satisfies readonly {
+  value: AnkiTabName
+  label: string
+  icon: ReactNode
+}[]
 
 export function AnkiTab(): ReactNode {
+  return <WithReaderSettings>{(settings) => <AnkiPage settings={settings} />}</WithReaderSettings>
+}
+
+function AnkiPage({ settings }: { settings: Settings }): ReactNode {
   const [engine] = useDictionaryEngine()
+  const [tab, setTab] = useAnkiTab()
+  const saved = settings.ankiConnectUrl || DEFAULT_ANKI_CONNECT_URL
+  const connection = useAnkiConnection(saved, settings.ankiConnectKey)
   return (
-    <SettingsPage
-      title="Anki"
-      description="Words you look up, added to Anki as cards through the AnkiConnect add-on."
-    >
-      <WithReaderSettings>
-        {(settings) => <AnkiSections settings={settings} engine={engine} />}
-      </WithReaderSettings>
-    </SettingsPage>
+    <div className="k-settings-tabbed">
+      <SettingsTabs aria-label="Anki" value={tab} onValueChange={setTab} options={TABS} />
+      <div className="k-settings-tabbed-scroll">
+        <SettingsPage>
+          {tab === 'connect' && (
+            <ConnectionSection
+              settings={settings}
+              engine={engine}
+              status={connection.status}
+              checking={connection.checking}
+              onCheck={connection.check}
+            />
+          )}
+          {tab === 'mining' && (
+            <AnkiSections settings={settings} engine={engine} connection={connection.epoch} />
+          )}
+          {tab === 'enhance' && (
+            <>
+              <SentenceAudioSection />
+              <CardTagsSection />
+            </>
+          )}
+        </SettingsPage>
+      </div>
+    </div>
   )
 }
 
@@ -127,55 +174,24 @@ function useAnkiConnection(
 
 function AnkiSections({
   settings,
-  engine
+  engine,
+  connection
 }: {
   settings: Settings
   engine: DictionaryEngine
+  connection: number
 }): ReactNode {
-  // Only Kimochi's own pop-up talks to AnkiConnect with Kimochi's settings.
   const route = ANKI_ROUTE[engine]
   const runtime = useDictionaryReadiness(engine)
   const downloaded = runtime.download === null || runtime.download === 'ready'
-  // Not downloaded: no cards to add yet, so only the way to download it.
-  if (route === 'none' || !downloaded) {
-    return <CardsSection settings={settings} engine={engine} connection={0} />
-  }
-  if (route !== 'kimochi') {
-    return (
-      <>
-        <CardsSection settings={settings} engine={engine} connection={0} />
-        <SentenceAudioSection popupMapping={false} />
-      </>
-    )
-  }
+  // Only Kimochi's own pop-up adds cards with Kimochi's connection; before an engine is
+  // downloaded there are no cards to add yet, so only the way to download it.
   return (
-    <>
-      <ConnectedSections settings={settings} engine={engine} />
-      <SentenceAudioSection popupMapping />
-    </>
-  )
-}
-
-function ConnectedSections({
-  settings,
-  engine
-}: {
-  settings: Settings
-  engine: DictionaryEngine
-}): ReactNode {
-  const saved = settings.ankiConnectUrl || DEFAULT_ANKI_CONNECT_URL
-  const { status, checking, check, epoch } = useAnkiConnection(saved, settings.ankiConnectKey)
-  return (
-    <>
-      <ConnectionSection
-        settings={settings}
-        engine={engine}
-        status={status}
-        checking={checking}
-        onCheck={check}
-      />
-      <CardsSection settings={settings} engine={engine} connection={epoch} />
-    </>
+    <CardsSection
+      settings={settings}
+      engine={engine}
+      connection={route === 'kimochi' && downloaded ? connection : 0}
+    />
   )
 }
 
@@ -231,7 +247,14 @@ function ConnectionSection({
   const name = DICTIONARY_ENGINES[engine].name
 
   return (
-    <SettingsSection title="AnkiConnect" description={`Where the ${name} pop-up sends its cards.`}>
+    <SettingsSection
+      description="Kimochi's connection to Anki, through the AnkiConnect add-on. The Anki tab in the main window, sentence audio and the Yomitan API pop-up use it. The usual address works unless you changed AnkiConnect's."
+      footnote={
+        ANKI_ROUTE[engine] === 'engine'
+          ? `${name} adds its cards with its own AnkiConnect address, set in its Anki settings under Mining.`
+          : undefined
+      }
+    >
       <SettingsRow
         label={
           <span className="anki-connection-label">
@@ -285,11 +308,7 @@ function ConnectionSection({
           <Callout tone="danger">{urlError}</Callout>
         </div>
       )}
-      <SettingsRow
-        label="API key"
-        controlId="anki-key"
-        description="Optional AnkiConnect apiKey."
-      >
+      <SettingsRow label="API key" controlId="anki-key" description="Optional AnkiConnect apiKey.">
         <Input
           id="anki-key"
           type="password"

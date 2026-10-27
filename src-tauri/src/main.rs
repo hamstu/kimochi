@@ -5,6 +5,8 @@ use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
 mod account;
+mod anki_cards;
+mod card_tags;
 mod profile;
 mod sync;
 mod sync_core;
@@ -2778,6 +2780,9 @@ fn main() {
             reader::ankiconnect::anki_add_note,
             reader::ankiconnect::anki_connect_relay,
             reader::ankiconnect::anki_connect_status,
+            anki_cards::anki_cards_list,
+            anki_cards::anki_cards_delete,
+            sentence_audio::sentence_audio_add_to_note,
             sentence_audio::sentence_audio_status,
             sentence_audio::sentence_audio_line,
             sentence_audio::sentence_audio_lines,
@@ -3092,6 +3097,7 @@ fn main() {
             hooker.start();
             app.manage(hooker);
 
+            anki_cards::install(&handle);
             let sentence_audio = sentence_audio::SentenceAudio::new(handle.clone(), store.clone());
             sentence_audio.settings_changed();
             app.manage(sentence_audio);

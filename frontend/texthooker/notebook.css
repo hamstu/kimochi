@@ -120,19 +120,27 @@
 /* The ⋯ menu sits over the row's right end, in room the row keeps free for it. */
 .nb-row-wrap { position: relative; }
 .nb-row-wrap > .nb-row.k-row { padding-right: calc(var(--k-space-3) + var(--k-control-h-sm)); }
+/* Centred by its margins, not a transform: the button's press (`scale`) replaces any transform,
+   which made it drop and spring back on every click. */
 .nb-row-actions.k-button {
   position: absolute;
-  top: 50%;
+  top: 0;
+  bottom: 0;
   right: var(--k-space-1-5);
+  margin-block: auto;
   opacity: 0;
-  transform: translateY(-50%);
   transition: opacity var(--k-fast), background-color var(--k-fast), color var(--k-fast);
 }
 .nb-row-wrap:hover .nb-row-actions.k-button,
+.nb-row-wrap:has([data-native-hover]) .nb-row-actions.k-button,
 .nb-row-wrap:focus-within .nb-row-actions.k-button,
 .nb-row-actions.k-button[data-state="open"] { opacity: 1; }
+/* The row stays lit while the pointer is on its ⋯ (which sits over it, so the row itself loses
+   :hover) and while its menu is open. */
+.nb-row-wrap:hover > .nb-row:not([data-editing]),
+.nb-row-wrap:has([data-native-hover]) > .nb-row:not([data-editing]),
 .nb-row-wrap[data-menu-open] > .nb-row:not([data-editing]),
-.nb-row-wrap:has(.nb-row-actions[data-state="open"]) > .nb-row:not([data-editing]) { background: var(--k-hover); }
+.nb-row-wrap:has(.nb-row-actions[data-state="open"]) > .nb-row:not([data-editing]) { background: var(--k-press); }
 .nb-row .k-row-label { display: flex; flex-direction: column; gap: 0; }
 .nb-row-title { display: flex; align-items: baseline; gap: var(--k-space-2); min-width: 0; white-space: nowrap; }
 .nb-name {
@@ -401,8 +409,10 @@
 .nb-dialog-title { display: flex; align-items: center; gap: var(--k-space-2); }
 
 /* ------------------------------------------------------------------ VNDB import */
-.nb-vndb.k-dialog { height: min(32rem, calc(100vh - 2rem)); }
-.nb-vndb .k-dialog-body { display: flex; flex-direction: column; gap: var(--k-space-2); padding-bottom: 0; }
+/* As tall as what it shows until there are rows (results, their skeletons while searching, or the
+   characters), then a steady height with the list scrolling; the footer stays at the bottom. */
+.nb-vndb.k-dialog:has(.nb-vndb-row, .nb-skel) { height: min(32rem, calc(100vh - 2rem)); }
+.nb-vndb .k-dialog-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--k-space-2); }
 .nb-vndb .nb-search { flex: none; }
 .nb-vndb .nb-search .k-field { padding-right: var(--k-space-8); }
 .nb-vndb-status {
@@ -415,13 +425,14 @@
   line-height: var(--k-leading-xs);
 }
 .nb-vndb-status .k-badge { font-variant-numeric: tabular-nums; }
+/* Inset like the search field above it, in its own box. */
 .nb-vndb-list {
   flex: 1;
   min-height: 0;
-  margin: 0 calc(var(--k-space-4) * -1);
-  padding: 0 0 var(--k-space-2);
   overflow-y: auto;
-  border-top: 1px solid var(--k-line);
+  border-radius: var(--k-radius-lg);
+  border: 1px solid var(--k-line);
+  background: var(--k-sunken);
 }
 .nb-vndb-row.k-row { align-items: center; gap: var(--k-space-3); padding: var(--k-space-1-5) var(--k-space-4); white-space: normal; }
 .nb-vndb-row .k-row-label { display: flex; flex-direction: column; }
@@ -467,7 +478,7 @@
 .nb-vndb-head > div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .nb-vndb-empty { flex: 1; padding: var(--k-space-6) var(--k-space-4); }
 .nb-vndb-foot-note { margin-right: auto; color: var(--k-text-2); font-size: var(--k-text-xs); line-height: var(--k-leading-xs); font-variant-numeric: tabular-nums; }
-.nb-vndb-summary { display: flex; flex-direction: column; margin: 0 calc(var(--k-space-4) * -1); border-top: 1px solid var(--k-line); }
+.nb-vndb-summary { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--k-line); border-radius: var(--k-radius-lg); }
 .nb-vndb-summary .k-row .k-row-meta { color: var(--k-text); font-size: var(--k-text-md); font-weight: var(--k-weight-medium); }
 
 /* Skeleton rows while results load. */

@@ -55,25 +55,6 @@
    the page's section spacing (its wrapper only scopes the Log's styles). */
 .anki-connection-label { display: inline-flex; align-items: center; gap: var(--k-space-2); }
 .anki-kimochi-sections { display: contents; }
-/* Settings → Anki → Sentence audio: the recording's level, a thin bar that follows the sound. */
-.sentence-audio-meter {
-  display: block;
-  width: 6rem;
-  height: 0.375rem;
-  overflow: hidden;
-  border-radius: var(--k-radius-sm);
-  background: var(--gray-a3);
-}
-.sentence-audio-meter > span {
-  display: block;
-  height: 100%;
-  background: var(--k-ok);
-  transform-origin: left;
-  transition: transform 0.2s ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  .sentence-audio-meter > span { transition: none; }
-}
 .sentence-audio-disclosure svg {
   transition: transform var(--k-fast) var(--k-ease-out);
 }
@@ -123,3 +104,25 @@
 /* Pages that wrap Log settings in `.texthooker` (for its scoped resets) keep the page's section
    rhythm: the wrapper takes no part in layout. */
 .k-settings-page > .texthooker { display: contents; }
+
+/* Card enhancement → Tags: the field across the row, and under it the tags a card made now gets. */
+.card-tags-control {
+  display: grid;
+  width: 100%;
+}
+.card-tags-control .settings-field {
+  width: 100%;
+  max-width: none;
+}
+.card-tags-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-1);
+  margin: var(--k-space-1-5) 0 0;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.card-tags-preview > span:first-child {
+  margin-right: var(--k-space-0-5);
+}
