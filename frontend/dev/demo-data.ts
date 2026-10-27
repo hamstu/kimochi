@@ -88,6 +88,9 @@ function sgLines(omitPlayed = false): Line[] {
     tokens: null,
     source: 'ocr' as const,
     ts: start + index * 160_000,
+    // Two lines to a scan (a name box and its dialogue, say): the preview's screenshots
+    // (?screenshots=1) find their lines by it.
+    ingestIds: [`demo-scan-${Math.floor(index / 2)}`],
     ...(translation !== undefined ? { translation } : {}),
     ...(showTranslation !== undefined ? { showTranslation } : {}),
     ...(explanation !== undefined ? { explanation } : {})

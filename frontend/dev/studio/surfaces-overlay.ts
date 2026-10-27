@@ -145,6 +145,17 @@ export const OVERLAY_SURFACES: Surface[] = [
           { kind: 'toggle', param: 'picture', label: 'Dim, with the window’s picture', on: '1' },
           { kind: 'text', param: 'label', label: 'Confirm button', placeholder: 'Save' },
           { kind: 'text', param: 'alternate', label: 'Second button', placeholder: 'Save region' },
+          {
+            kind: 'select',
+            param: 'accent',
+            label: 'Colour',
+            options: [
+              { value: 'blue', label: 'Blue (OCR crop area)' },
+              { value: 'green', label: 'Green (Anki crop area)' }
+            ],
+            default: 'blue'
+          },
+          { kind: 'text', param: 'title', label: 'Title in the foot', placeholder: 'Anki crop area', help: 'Hidden when the foot has no room for it.' },
           THEME
         ]
       }

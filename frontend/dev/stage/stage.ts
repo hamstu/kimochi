@@ -45,6 +45,8 @@
  *   ?picture=1       region-select: dim the screen and show the window's picture
  *   ?label=<text>    region-select: the confirm button's label (default Save); ?alternate=<text> adds
  *                    the outlined second button
+ *   ?accent=blue (default) | green   region-select: the box's colour (green is the Anki crop area)
+ *   ?title=<text>    region-select: the box's name in its foot (e.g. OCR crop area), shown when it fits
  *
  * Studio JSON (`studioJson`): `script` (StageScript: the game's lines, bubbles and dictionary) and
  * `history` (the recent-text entries).
@@ -513,7 +515,9 @@ async function play(): Promise<void> {
           theme,
           area: flag('windowed') ? area : null,
           initial,
-          picture
+          picture,
+          accent: params.get('accent') === 'green' ? 'green' : 'blue',
+          title: params.get('title')
         } as unknown as ConstructorParameters<typeof RegionSelect>[0])
         const running = selector.start()
         if (picture) void selector.setPicture(gamePicture(params.get('game') === 'manga' ? 'manga' : 'dialogue'))

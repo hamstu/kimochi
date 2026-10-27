@@ -20,6 +20,7 @@
  *                    Auto OCR and Show overlay switches)
  *   ?auto=0          Auto OCR starts off (default: on)
  *   ?crop=1          main window: the chosen source has a crop region
+ *   ?ankiCrop=1      main window: the chosen source has an Anki crop (the green outline)
  *   ?source=<id>     main window: the chosen demo source (e.g. window:106, a tall one)
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
@@ -107,7 +108,8 @@ import { UPDATE_HANDLERS } from './preview-updates'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
 import { STEAM_HANDLERS } from './preview-steam'
-import { SENTENCE_AUDIO_HANDLERS } from './preview-sentence-audio'
+import { SENTENCE_AUDIO_HANDLERS, demoLineAdded } from './preview-sentence-audio'
+import { SCREENSHOT_HANDLERS, SCREENSHOTS_ON, shotOf } from './preview-screenshots'
 import { ANKI_CARDS_HANDLERS } from './preview-anki-cards'
 import { studioJson } from './studio/bridge'
 import type { ExtensionHost } from '../bridge/dictionaryEngine'
@@ -468,6 +470,17 @@ function viewState(label: string): Record<string, unknown> {
           }
         : null,
     cropEnabled: params.get('crop') === '1',
+    ankiCrop:
+      params.get('ankiCrop') === '1'
+        ? {
+            x: Math.round(CURRENT_SOURCE.bounds.width * 0.1),
+            y: Math.round(CURRENT_SOURCE.bounds.height * 0.08),
+            width: Math.round(CURRENT_SOURCE.bounds.width * 0.8),
+            height: Math.round(CURRENT_SOURCE.bounds.height * 0.6),
+            reference_width: CURRENT_SOURCE.bounds.width,
+            reference_height: CURRENT_SOURCE.bounds.height
+          }
+        : null,
     isScanning: false,
     autoOcrEnabled: live.autoOcr,
     overlayVisible: true,
@@ -549,6 +562,7 @@ const DEMO_STOPPED_COMMANDS: Record<string, string> = {
 /** `trigger_action` names that need a real screen: the region editor, scans on demand. */
 const DEMO_STOPPED_ACTIONS: Record<string, string> = {
   setCropArea: 'Choosing a scan area',
+  setAnkiCropArea: 'Choosing the Anki crop area',
   selectAndScan: 'Scanning a selected area',
   triggerScan: 'Scanning on demand',
   toggleDebugOverlay: 'Diagnostics'
@@ -590,6 +604,7 @@ function stoppedFeature(cmd: string, args: Args, mocked: boolean): string | null
   if (cmd === 'trigger_action') return DEMO_STOPPED_ACTIONS[String(args?.name)] ?? null
   // Clearing a crop area: the demo's sources have none.
   if (cmd === 'commit_source' && args?.keepCrop === false) return 'Choosing a scan area'
+  if (cmd === 'commit_anki_crop') return 'Choosing the Anki crop area'
   if (cmd === 'panel' && args?.action === 'show' && args?.label !== 'log') return 'That window'
   if (cmd === 'settings_set' && !DEMO_SETTINGS.has(String(args?.key)))
     return DEMO_SETTING_LABELS[String(args?.key)] ?? 'Changing that setting'
@@ -655,6 +670,7 @@ const HANDLERS: Record<string, Handler> = {
   ...ACCOUNT_HANDLERS,
   ...STEAM_HANDLERS,
   ...SENTENCE_AUDIO_HANDLERS,
+  ...SCREENSHOT_HANDLERS,
   ...ANKI_CARDS_HANDLERS,
   // settings
   settings_get: (a) => settings[String(a?.key)] ?? null,
@@ -750,6 +766,7 @@ const HANDLERS: Record<string, Handler> = {
     }
     return { sourceId: a?.sourceId ?? null, crop: null, key: '' }
   },
+  commit_anki_crop: (a) => ({ sourceId: a?.sourceId ?? null, crop: a?.crop ?? null, key: '' }),
   clear_source: () => {
     live.source = null
     closedSource = null
@@ -1129,6 +1146,7 @@ function listenToEmbedder(): void {
         method: 'ingest',
         args: [message.text, 'ocr', Date.now(), scanId, ocr]
       })
+      demoLineAdded(message.text, scanId, emit, SCREENSHOTS_ON ? (scan, at, texts) => shotOf(scan, at, texts, embedScan) : null)
       void emit('activity', { text: 'Added 1 line', tone: 'ok', key: 'scan', at: Date.now() })
       // An automatic scan's lines: the chime the overlay plays for them (`outcomeSound`).
       embedSound('scan-done', { auto: true })

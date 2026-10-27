@@ -1,16 +1,39 @@
 /**
  * DEV-ONLY: sentence audio's commands for the browser preview (`preview-setup.ts`).
  *
- *   ?sentenceAudio=1   the Log's newest lines have voices (one has none), Settings → Anki shows
- *                      the recording with the speech model loaded, and Diagnostics → Sentence
- *                      audio the listener's view of them. Otherwise no line has audio, so the
- *                      site's demo and screenshots are unchanged.
+ * The demo's spoken lines always have their voices (demo-voices.ts: real speech, to play in the
+ * studio and the site's demo); `?sentenceAudio=0` leaves every line without.
  *
- * Clips are a short tone, so the play button can be tried.
+ *   ?sentenceAudio=1   also the Log's other newest lines have voices (one has none, as a short
+ *                      tone), Settings → Anki shows the recording with the speech model loaded,
+ *                      and Diagnostics → Sentence audio the listener's view of them.
  */
 import { snapshotLines } from '@texthooker/core/store'
+import { demoVoice } from './demo-voices'
 
-const ON = new URLSearchParams(location.search).get('sentenceAudio') === '1'
+const FLAG = new URLSearchParams(location.search).get('sentenceAudio')
+const ON = FLAG === '1'
+const VOICES = FLAG !== '0'
+
+/** Bytes of a 64 kbps MP3 per millisecond. */
+const MP3_BYTES_PER_MS = 8
+const durations = new Map<string, number>()
+
+/** A demo voice's length, from its size (fetched once). */
+async function voiceMs(url: string): Promise<number> {
+  if (!durations.has(url)) {
+    const bytes = await fetch(url).then((r) => r.arrayBuffer(), () => null)
+    durations.set(url, bytes ? bytes.byteLength / MP3_BYTES_PER_MS : 2000)
+  }
+  return durations.get(url)!
+}
+
+async function base64Of(url: string): Promise<string> {
+  const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer())
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(binary)
+}
 
 /** A quarter second of a quiet 440 Hz tone, as a base64 WAV. */
 function tone(): string {
@@ -102,18 +125,57 @@ export const SENTENCE_AUDIO_HANDLERS: Record<string, (args: Record<string, unkno
   sentence_audio_debug: debug,
   sentence_audio_forget: () => null,
   sentence_audio_line: () => null,
-  sentence_audio_lines: () =>
-    ON
-      ? snapshotLines()
+  sentence_audio_lines: async () => {
+    const lines = snapshotLines().filter((line) => line.uid)
+    const voiced = VOICES
+      ? await Promise.all(
+          lines.flatMap((line) => {
+            const url = demoVoice(line.text)
+            return url
+              ? [voiceMs(url).then((durationMs) => ({ uid: line.uid, state: 'voiced', durationMs, how: 'matched' }))]
+              : []
+          })
+        )
+      : []
+    const toned = ON
+      ? lines
           .slice(-6)
-          .filter((line) => line.uid)
+          .filter((line) => !demoVoice(line.text))
           .map((line, i) => ({
             uid: line.uid,
             state: i === 3 ? 'silent' : 'voiced',
             durationMs: 1800 + line.text.length * 110,
             how: 'matched'
           }))
-      : [],
-  sentence_audio_clip: () => (ON ? tone() : null),
+      : []
+    return [...voiced, ...toned]
+  },
+  sentence_audio_clip: async (args) => {
+    const line = snapshotLines().find((l) => l.uid === args?.uid)
+    const url = VOICES && line ? demoVoice(line.text) : undefined
+    if (url) return base64Of(url)
+    return ON ? tone() : null
+  },
   sentence_audio_attach: () => null
+}
+
+/** The site's demo added `text` (scan `scan`) to the Log: once it is there, its voice (when it is
+    a spoken line) and its screenshot are announced, as native would. */
+export function demoLineAdded(
+  text: string,
+  scan: string,
+  emit: (event: string, payload: unknown) => unknown,
+  shot: ((scan: string, at: number, texts: string[]) => unknown) | null
+): void {
+  const announce = async (tries: number): Promise<void> => {
+    const line = snapshotLines().find((l) => l.text === text && l.ocr?.scanId === scan)
+    if (!line?.uid) {
+      if (tries > 0) setTimeout(() => void announce(tries - 1), 150)
+      return
+    }
+    if (shot) void emit('screenshot-added', shot(scan, line.ts, [text]))
+    const url = VOICES ? demoVoice(text) : undefined
+    if (url) void emit('sentence-audio-line', { uid: line.uid, state: 'voiced', durationMs: await voiceMs(url), how: 'matched' })
+  }
+  setTimeout(() => void announce(20), 150)
 }
