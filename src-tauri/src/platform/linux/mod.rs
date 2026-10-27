@@ -349,7 +349,7 @@ pub fn capabilities() -> Value {
 
 pub fn region_editing() -> bool { gamescope::editing() || layer::region_editing() }
 pub fn region_keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
-    if gamescope::active() { gamescope::keyboard(window, on) } else { layer::region_keyboard(window, on) }
+    if gamescope::active() { gamescope::region_keyboard(window, on) } else { layer::region_keyboard(window, on) }
 }
 
 pub mod capture;

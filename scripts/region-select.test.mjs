@@ -408,3 +408,98 @@ test('an initial box opens ready to confirm, pristine until touched, and reset r
   doc.dispatch('keydown', { key: 'Enter' })
   assert.deepEqual((await pending).local, { x: 51, y: 60, width: 200, height: 100 })
 })
+
+/** Animation frames run by hand, at chosen times, while `body` runs. */
+async function withFrames(body) {
+  const queue = []
+  globalThis.requestAnimationFrame = (callback) => queue.push(callback)
+  globalThis.cancelAnimationFrame = (id) => {
+    queue[id - 1] = null
+  }
+  const run = (time) => {
+    const pending = queue.splice(0)
+    for (const callback of pending) callback?.(time)
+  }
+  try {
+    await body(run)
+  } finally {
+    delete globalThis.requestAnimationFrame
+    delete globalThis.cancelAnimationFrame
+  }
+}
+
+test('a stick push opens stick mode: the left stick moves the top-left corner, the right the bottom-right', async () => {
+  await withFrames(async (frame) => {
+    const area = { x: 0, y: 0, width: 1000, height: 800 }
+    const selector = new RegionSelect({ area, pad: { confirm: 'A', cancel: 'B' } })
+    const pending = selector.start({ bounds: BOUNDS })
+    assert.equal(selector.stickMode, false)
+    // Full left and up on the left stick (y is positive up).
+    selector.sticks({ x: -1, y: 1 }, { x: 0, y: 0 })
+    assert.equal(selector.stickMode, true)
+    assert.deepEqual(selector.rect, { x: 250, y: 200, width: 500, height: 400 }, 'the middle half of the area')
+    frame(1000)
+    frame(1050)
+    const moved = selector.rect
+    assert.ok(moved.x < 250 && moved.y < 200, 'top-left went up and left')
+    assert.equal(moved.x + moved.width, 750, 'bottom-right stayed')
+    // The right stick pushes the bottom-right corner down and right.
+    selector.sticks({ x: 0, y: 0 }, { x: 1, y: -1 })
+    frame(2000)
+    frame(2050)
+    assert.ok(selector.rect.x + selector.rect.width > 750)
+    assert.ok(selector.rect.y + selector.rect.height > 600)
+    selector.confirm()
+    const { local } = await pending
+    assert.ok(Number.isInteger(local.x) && Number.isInteger(local.width), 'whole points come back')
+  })
+})
+
+test('in stick mode the corners stop at the area and never cross', async () => {
+  await withFrames(async (frame) => {
+    const area = { x: 100, y: 100, width: 400, height: 300 }
+    const selector = new RegionSelect({ area, pad: {} })
+    const pending = selector.start({ bounds: BOUNDS })
+    selector.sticks({ x: 1, y: -1 }, { x: -1, y: 1 })
+    for (let time = 0; time < 3000; time += 50) frame(time)
+    const rect = selector.rect
+    assert.ok(rect.width >= 16 && rect.height >= 16, 'the corners keep apart')
+    selector.sticks({ x: -1, y: 1 }, { x: 1, y: -1 })
+    for (let time = 3000; time < 6000; time += 50) frame(time)
+    assert.deepEqual(selector.rect, area, 'out to the area and no further')
+    selector.cancel()
+    assert.equal(await pending, null)
+  })
+})
+
+test('a stick at rest starts nothing, and touching the box leaves stick mode', async () => {
+  await withFrames(async (frame) => {
+    const selector = new RegionSelect({ area: { x: 0, y: 0, width: 1000, height: 800 }, pad: {} })
+    const pending = selector.start({ bounds: BOUNDS })
+    selector.sticks({ x: 0.1, y: 0.1 }, { x: 0, y: 0 })
+    assert.equal(selector.rect, null, 'inside the deadzone')
+    selector.sticks({ x: 0, y: 0 }, { x: 1, y: 0 })
+    frame(0)
+    frame(50)
+    // A finger moves the box: stick mode ends, and a resting stick does not bring it back.
+    drag(surface(), { x: 500, y: 400 }, { x: 520, y: 400 }, 7)
+    assert.equal(selector.stickMode, false)
+    selector.sticks({ x: 0, y: 0 }, { x: 0, y: 0 })
+    assert.equal(selector.stickMode, false)
+    selector.cancel()
+    await pending
+  })
+})
+
+test('a touch press grabs an edge from further away than a mouse press', async () => {
+  const selector = new RegionSelect({ initial: { x: 100, y: 100, width: 200, height: 200 } })
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  // 15 points outside the right edge: a mouse there starts a new box, a finger resizes.
+  element.dispatch('pointerdown', { button: 0, pointerId: 1, pointerType: 'touch', clientX: 315, clientY: 200 })
+  element.dispatch('pointermove', { pointerId: 1, clientX: 400, clientY: 200 })
+  element.dispatch('pointerup', { pointerId: 1, clientX: 400, clientY: 200 })
+  assert.deepEqual(selector.rect, { x: 100, y: 100, width: 300, height: 200 })
+  selector.cancel()
+  await pending
+})

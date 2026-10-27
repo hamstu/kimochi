@@ -28,6 +28,16 @@
  * Any size of box is kept — it can be adjusted afterwards — except a plain click, which draws
  * nothing.
  *
+ * ## Touch and controller
+ *
+ * Touch draws, moves and resizes like a mouse; `touch` makes the handles, grab zones and buttons
+ * big enough for a finger (a touch press always grabs generously). With `pad` (the confirm and
+ * cancel buttons' names), a controller can do it all: the caller passes the sticks to `sticks()`,
+ * and the first push switches to stick mode — the left stick moves the box's top-left corner and
+ * the right stick its bottom-right, each marked with crosshairs — and a bar along the bottom says
+ * which button saves and which cancels (and can be tapped). A box drawn by touch or mouse leaves
+ * stick mode until a stick moves again.
+ *
  * Until a box exists, a small bubble rides just above the cursor saying what to do. It follows the
  * container's own pointer events, and `pointerAt` for callers that track the pointer themselves (a
  * non-key panel sees no hover events). Drawing hides it.
@@ -75,6 +85,16 @@ const RING = 4
 const FOOT = 28
 /** How far from an edge a press still grabs it. */
 const GRAB = 8
+/** The same for a finger, and the foot's height when the editor is touch-sized. */
+const TOUCH_GRAB = 22
+const TOUCH_FOOT = 40
+/** A stick moves a corner at this many points per second, from a light push to a full one. */
+const STICK_MIN = 50
+const STICK_MAX = 800
+/** In stick mode the corners stay at least this far apart, so the box never flips. */
+const STICK_GAP = 16
+/** Below this a stick is at rest. */
+const STICK_DEADZONE = 0.2
 
 const THEMES = {
   dark: {
@@ -149,6 +169,18 @@ function rectangleFrom(start, end) {
   }
 }
 
+function roundRect(rect) {
+  const x = Math.round(rect.x)
+  const y = Math.round(rect.y)
+  return {
+    ...rect,
+    x,
+    y,
+    width: Math.round(rect.x + rect.width) - x,
+    height: Math.round(rect.y + rect.height) - y
+  }
+}
+
 function isRect(value) {
   return (
     value &&
@@ -173,14 +205,22 @@ function systemTheme() {
  * Which part of `rect` a point is on: an edge or corner (`l`, `tr`, ...), `move` inside, or
  * `outside`.
  */
-function zoneOf(point, rect) {
-  const within = (value, low, high) => value >= low - GRAB && value <= high + GRAB
+function zoneOf(point, rect, grab = GRAB) {
+  const within = (value, low, high) => value >= low - grab && value <= high + grab
   if (!within(point.x, rect.x, rect.x + rect.width)) return 'outside'
   if (!within(point.y, rect.y, rect.y + rect.height)) return 'outside'
-  const near = (value, edge) => Math.abs(value - edge) <= GRAB
+  const near = (value, edge) => Math.abs(value - edge) <= grab
   const vertical = near(point.y, rect.y) ? 't' : near(point.y, rect.y + rect.height) ? 'b' : ''
   const horizontal = near(point.x, rect.x) ? 'l' : near(point.x, rect.x + rect.width) ? 'r' : ''
   return vertical + horizontal || 'move'
+}
+
+/** How far a stick at `value` (-1..1) moves a corner in `seconds`. */
+export function stickTravel(value, seconds) {
+  const magnitude = Math.abs(value)
+  if (magnitude < STICK_DEADZONE) return 0
+  const t = Math.min(1, (magnitude - STICK_DEADZONE) / (1 - STICK_DEADZONE))
+  return Math.sign(value) * (STICK_MIN + (STICK_MAX - STICK_MIN) * t * t) * seconds
 }
 
 /**
@@ -196,7 +236,9 @@ export class RegionSelect {
    *   `alternateLabel` adds a second, outlined confirm button left of the primary one; the
    *   result's `action` says which committed it (`primary` for Return and a double-click too).
    *   `accent` colours the box (blue by default; green for the Anki crop area), and `title` names
-   *   it at the start of the foot, shown only while the foot has room for it.
+   *   it at the start of the foot, shown only while the foot has room for it. `touch` sizes it
+   *   for a finger; `pad` ({confirm, cancel} button names) turns on the controller bar and
+   *   `sticks()` (see the top of this file).
    */
   constructor({
     onHitRects,
@@ -209,8 +251,17 @@ export class RegionSelect {
     initial = null,
     picture = null,
     accent = 'blue',
-    title = null
+    title = null,
+    touch = false,
+    pad = null
   } = {}) {
+    this._touch = Boolean(touch)
+    this._pad = pad && typeof pad === 'object' ? { confirm: pad.confirm ?? 'A', cancel: pad.cancel ?? 'B' } : null
+    this._foot = this._touch ? TOUCH_FOOT : FOOT
+    this._sticks = { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } }
+    this._stickMode = false
+    this._stickFrame = 0
+    this._stickAt = 0
     this._accent = ACCENTS[accent] ? accent : 'blue'
     this._title = typeof title === 'string' && title.trim() ? title.trim() : null
     this._area = isRect(area) ? { ...area } : null
@@ -322,9 +373,78 @@ export class RegionSelect {
     this._drawBubble()
   }
 
+  /**
+   * The controller's sticks, each `{x, y}` from -1 to 1 with y positive up, sent whenever they
+   * change (a stick held still need not be resent). The first push away from rest starts stick
+   * mode, with the box opened at `initial`, or the middle half of the surface.
+   */
+  sticks(left, right) {
+    if (!this._els) return
+    const read = (stick) => ({
+      x: Number.isFinite(stick?.x) ? stick.x : 0,
+      y: Number.isFinite(stick?.y) ? stick.y : 0
+    })
+    this._sticks = { left: read(left), right: read(right) }
+    const moving = [this._sticks.left, this._sticks.right].some(
+      (stick) => Math.hypot(stick.x, stick.y) >= STICK_DEADZONE
+    )
+    if (!moving || this._gesture) return
+    if (!this._stickMode) {
+      if (!this._rect) {
+        const limits = this._limits()
+        this._rect = this._clampMove(
+          this._initial ?? {
+            x: limits.x + Math.round(limits.width / 4),
+            y: limits.y + Math.round(limits.height / 4),
+            width: Math.round(limits.width / 2),
+            height: Math.round(limits.height / 2)
+          }
+        )
+      }
+      this._stickMode = true
+      this._editing = true
+      this._pristine = false
+      this._draw()
+    }
+    if (!this._stickFrame) {
+      this._stickAt = 0
+      this._stickFrame = nextFrame((time) => this._stepSticks(time))
+    }
+  }
+
+  /** True while the sticks are moving the box's corners. */
+  get stickMode() {
+    return this.active && this._stickMode
+  }
+
+  _stepSticks(time) {
+    this._stickFrame = 0
+    if (!this._els || !this._stickMode || this._gesture || !this._rect) return
+    const now = Number.isFinite(time) ? time : performance.now()
+    // The first frame only starts the clock; a long gap (a stalled frame) moves no further than
+    // a tenth of a second would.
+    const seconds = this._stickAt ? Math.min(0.1, (now - this._stickAt) / 1000) : 0
+    this._stickAt = now
+    const { left, right } = this._sticks
+    const limits = this._limits()
+    const clamp = (value, low, high) => Math.min(Math.max(value, low), high)
+    const { x, y, width, height } = this._rect
+    // The top-left corner stops short of where the bottom-right was, and the bottom-right short
+    // of where the top-left now is: pushed together, they meet and stay on the surface.
+    const x0 = clamp(x + stickTravel(left.x, seconds), limits.x, x + width - STICK_GAP)
+    const y0 = clamp(y - stickTravel(left.y, seconds), limits.y, y + height - STICK_GAP)
+    const x1 = clamp(x + width + stickTravel(right.x, seconds), x0 + STICK_GAP, limits.x + limits.width)
+    const y1 = clamp(y + height - stickTravel(right.y, seconds), y0 + STICK_GAP, limits.y + limits.height)
+    // Whole points on screen, with the fraction kept so a light push still creeps.
+    this._rect = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }
+    this._draw()
+    const moving = [left, right].some((stick) => Math.hypot(stick.x, stick.y) >= STICK_DEADZONE)
+    if (moving) this._stickFrame = nextFrame((t) => this._stepSticks(t))
+  }
+
   /** The current box in overlay-local points, or null. */
   get rect() {
-    return this._rect ? { ...this._rect } : null
+    return this._rect ? roundRect(this._rect) : null
   }
 
   /**
@@ -392,7 +512,7 @@ export class RegionSelect {
    */
   confirm(action = 'primary') {
     if (!this._settle || !this._editing || !bigEnough(this._rect)) return
-    const local = { ...this._rect }
+    const local = roundRect(this._rect)
     this._settle(
       this._bounds
         ? {
@@ -432,6 +552,19 @@ export class RegionSelect {
     // The surface covers the window exactly, so client coordinates are overlay-local points.
     const rect = this._container.getBoundingClientRect()
     return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+  }
+
+  /** How near an edge a press grabs it: generous for a finger, or everywhere when touch-sized. */
+  _grab(event) {
+    return this._touch || event?.pointerType === 'touch' ? TOUCH_GRAB : GRAB
+  }
+
+  _leaveStickMode() {
+    if (!this._stickMode) return
+    this._stickMode = false
+    cancelFrame(this._stickFrame)
+    this._stickFrame = 0
+    if (this._rect) this._rect = roundRect(this._rect)
   }
 
   _viewport() {
@@ -477,10 +610,11 @@ export class RegionSelect {
     if (event.button !== 0 || this._gesture) return
     event.preventDefault()
     const point = this._point(event)
-    const zone = this._editing ? zoneOf(point, this._rect) : 'outside'
+    const zone = this._editing ? zoneOf(point, this._rect, this._grab(event)) : 'outside'
     // Outside the area there is nothing to select.
     if (zone === 'outside' && !this._inArea(point)) return
     this._pristine = false
+    this._leaveStickMode()
     this._container.setPointerCapture(event.pointerId)
     if (zone === 'outside') {
       this._editing = false
@@ -502,8 +636,9 @@ export class RegionSelect {
   _beginMove(event) {
     if (event.button !== 0 || this._gesture || !this._editing) return
     // Over the box's edge (the handles draw above the foot), let the surface start a resize.
-    if (zoneOf(this._point(event), this._rect) !== 'outside') return
+    if (zoneOf(this._point(event), this._rect, this._grab(event)) !== 'outside') return
     this._pristine = false
+    this._leaveStickMode()
     event.preventDefault()
     event.stopPropagation()
     this._container.setPointerCapture(event.pointerId)
@@ -520,7 +655,7 @@ export class RegionSelect {
     if (!gesture) this.pointerAt(this._point(event))
     if (!gesture) {
       const point = this._point(event)
-      const zone = this._editing ? zoneOf(point, this._rect) : 'outside'
+      const zone = this._editing ? zoneOf(point, this._rect, this._grab(event)) : 'outside'
       this._container.style.cursor =
         zone === 'outside' && !this._inArea(point) ? 'default' : CURSORS[zone]
       return
@@ -644,6 +779,7 @@ export class RegionSelect {
     if (!els) return
     const rect = this._rect
     this._drawBubble()
+    this._drawPad()
     if (!isRect(rect)) {
       els.frame.style.display = 'none'
       els.foot.style.display = 'none'
@@ -654,31 +790,33 @@ export class RegionSelect {
     const viewport = this._viewport()
     // The foot goes under the box, above it when there is no room below, and inside the box's
     // bottom edge when the box fills the display's height.
-    const below = rect.y + rect.height + FOOT <= viewport.height
-    const above = !below && rect.y - FOOT >= 0
+    const below = rect.y + rect.height + this._foot <= viewport.height
+    const above = !below && rect.y - this._foot >= 0
     const place = below ? 'below' : above ? 'above' : 'inside'
 
     assign(els.frame, {
       display: 'block',
       left: `${rect.x - RING}px`,
-      top: `${rect.y - (place === 'above' ? FOOT : RING)}px`,
+      top: `${rect.y - (place === 'above' ? this._foot : RING)}px`,
       width: `${rect.width + RING * 2}px`,
-      height: `${rect.height + RING + (place === 'inside' ? RING : FOOT)}px`,
-      borderTopWidth: `${place === 'above' ? FOOT : RING}px`,
-      borderBottomWidth: `${place === 'below' ? FOOT : RING}px`
+      height: `${rect.height + RING + (place === 'inside' ? RING : this._foot)}px`,
+      borderTopWidth: `${place === 'above' ? this._foot : RING}px`,
+      borderBottomWidth: `${place === 'below' ? this._foot : RING}px`
     })
     // The bevel spans the whole frame, thick edge included.
     assign(els.bevel, {
-      top: `-${place === 'above' ? FOOT : RING}px`,
-      bottom: `-${place === 'below' ? FOOT : RING}px`
+      top: `-${place === 'above' ? this._foot : RING}px`,
+      bottom: `-${place === 'below' ? this._foot : RING}px`
     })
 
     const editing = this._editing && !this._gesture
-    els.size.textContent = `${rect.width} × ${rect.height}`
+    const shown = roundRect(rect)
+    els.size.textContent = `${shown.width} × ${shown.height}`
     // Within an area (a window), the position counts from its corner.
     const corner = this._area ?? { x: 0, y: 0 }
-    els.origin.textContent = `${rect.x - corner.x}, ${rect.y - corner.y}`
-    els.actions.style.display = this._editing ? 'flex' : 'none'
+    els.origin.textContent = `${shown.x - corner.x}, ${shown.y - corner.y}`
+    // The controller bar has its own Cancel and Save.
+    els.actions.style.display = this._editing && !this._pad ? 'flex' : 'none'
     this._fitTitle(rect.width + RING * 2)
     assign(els.grips, {
       display: editing ? 'block' : 'none',
@@ -693,7 +831,7 @@ export class RegionSelect {
     assign(els.foot, {
       display: 'flex',
       minWidth: `${frameWidth}px`,
-      top: `${place === 'below' ? rect.y + rect.height : place === 'above' ? rect.y - FOOT : rect.y + rect.height - FOOT}px`,
+      top: `${place === 'below' ? rect.y + rect.height : place === 'above' ? rect.y - this._foot : rect.y + rect.height - this._foot}px`,
       borderRadius:
         place === 'below' ? '0 0 6px 6px' : place === 'above' ? '6px 6px 0 0' : '6px'
     })
@@ -705,6 +843,31 @@ export class RegionSelect {
         ? Math.max(0, frameLeft + frameWidth - footWidth)
         : Math.max(0, frameLeft)
     els.foot.style.left = `${left}px`
+  }
+
+  /**
+   * Controller mode's parts: crosshairs through the two corners the sticks move (stick mode only),
+   * and the bar saying what each button does, at the bottom unless the box is down there.
+   */
+  _drawPad() {
+    const els = this._els
+    if (!els?.bar) return
+    const rect = this._rect
+    const crosshairs = this._stickMode && isRect(rect)
+    for (const [cross, x, y] of [
+      [els.crossTopLeft, rect?.x, rect?.y],
+      [els.crossBottomRight, rect ? rect.x + rect.width : 0, rect ? rect.y + rect.height : 0]
+    ]) {
+      cross.style.display = crosshairs ? 'block' : 'none'
+      if (crosshairs) cross.style.transform = `translate3d(${x}px, ${y}px, 0)`
+    }
+    const boxed = isRect(rect) && this._editing
+    els.barStart.style.display = boxed ? 'none' : ''
+    els.barSticks.style.display = boxed ? '' : 'none'
+    els.barSave.style.display = boxed ? '' : 'none'
+    const viewport = this._viewport()
+    const low = isRect(rect) && rect.y + rect.height + this._foot + 72 > viewport.height
+    assign(els.bar, low ? { top: '16px', bottom: 'auto' } : { top: 'auto', bottom: '16px' })
   }
 
   /**
@@ -735,7 +898,7 @@ export class RegionSelect {
     const showing = this.idle && this._pointer !== null
     els.hint.style.opacity = showing ? '1' : '0'
     els.hint.style.scale = showing ? '1' : '0.92'
-    els.message.textContent = 'Drag to select an area'
+    els.message.textContent = this._pad ? 'Drag on the screen to select an area' : 'Drag to select an area'
     if (!showing) return
     if (!this._frame) this._frame = nextFrame(() => this._stepBubble())
   }
@@ -862,12 +1025,13 @@ export class RegionSelect {
       [50, 100],
       [100, 100]
     ]) {
+      const half = this._touch ? 9 : 5
       const handle = assign(document.createElement('div'), {
         position: 'absolute',
-        left: `calc(${x}% - 5px)`,
-        top: `calc(${y}% - 5px)`,
-        width: '10px',
-        height: '10px',
+        left: `calc(${x}% - ${half}px)`,
+        top: `calc(${y}% - ${half}px)`,
+        width: `${half * 2}px`,
+        height: `${half * 2}px`,
         boxSizing: 'border-box',
         borderRadius: '3px',
         backgroundColor: '#fff',
@@ -886,7 +1050,7 @@ export class RegionSelect {
       alignItems: 'center',
       gap: '10px',
       boxSizing: 'border-box',
-      height: `${FOOT}px`,
+      height: `${this._foot}px`,
       padding: `0 ${RING + 4}px`,
       backgroundColor: theme.accent,
       boxShadow: `inset 0 -1px 0 ${theme.shade}, ${theme.lift}`,
@@ -916,11 +1080,11 @@ export class RegionSelect {
     // `style`: primary (filled white), outline (the alternate confirm) or quiet (Esc).
     const button = (label, style, onPress) => {
       const element = assign(document.createElement('button'), {
-        height: '20px',
-        padding: '0 8px',
+        height: this._touch ? '30px' : '20px',
+        padding: this._touch ? '0 12px' : '0 8px',
         border: '0',
         borderRadius: '4px',
-        font: `600 11px/1 ${UI}`,
+        font: `600 ${this._touch ? 13 : 11}px/1 ${UI}`,
         color: style === 'primary' ? theme.accent : '#fff',
         backgroundColor:
           style === 'primary' ? '#fff' : style === 'outline' ? 'transparent' : 'rgba(255, 255, 255, 0.16)',
@@ -943,9 +1107,9 @@ export class RegionSelect {
       return element
     }
     actions.append(
-      button('Esc', 'quiet', () => this.cancel()),
+      button(this._touch ? 'Cancel' : 'Esc', 'quiet', () => this.cancel()),
       ...(this._alternateLabel ? [button(this._alternateLabel, 'outline', () => this.confirm('alternate'))] : []),
-      button(`${this._confirmLabel} ⏎`, 'primary', () => this.confirm())
+      button(this._touch ? this._confirmLabel : `${this._confirmLabel} ⏎`, 'primary', () => this.confirm())
     )
     foot.append(...(title ? [title] : []), size, origin, spacer, actions)
     foot.addEventListener('pointerdown', (event) => this._beginMove(event))
@@ -997,12 +1161,150 @@ export class RegionSelect {
     cancel.textContent = 'to cancel'
     hint.append(message, divider, key, cancel)
 
+    const pad = this._pad ? this._renderPad(theme) : {}
+
     if (shade) container.append(shade, stage)
-    container.append(frame, foot, grips, hint)
+    // The crosshairs go under the box, so they never cross its handles.
+    container.append(...(pad.under ?? []), frame, foot, grips, hint, ...(pad.parts ?? []))
     ;(this._mount ?? document.body).append(container)
     this._container = container
-    this._els = { frame, bevel, foot, title, size, origin, actions, grips, hint, message, stage }
+    this._els = { frame, bevel, foot, title, size, origin, actions, grips, hint, message, stage, ...pad.els }
+    this._drawPad()
     this._drawBubble()
+  }
+
+  /** Controller mode's crosshairs and button bar (see `_drawPad`). */
+  _renderPad(theme) {
+    const line = (styles) =>
+      assign(document.createElement('div'), {
+        position: 'absolute',
+        backgroundColor: theme.accent,
+        opacity: '0.55',
+        pointerEvents: 'none',
+        ...styles
+      })
+    // A crosshair: lines across the whole surface through its corner, and a ring on the corner
+    // naming the stick that moves it.
+    const crosshair = (stick, labelAt) => {
+      const cross = assign(document.createElement('div'), {
+        position: 'absolute',
+        left: '0',
+        top: '0',
+        width: '0',
+        height: '0',
+        display: 'none',
+        pointerEvents: 'none',
+        willChange: 'transform'
+      })
+      const ring = assign(document.createElement('div'), {
+        position: 'absolute',
+        left: '-11px',
+        top: '-11px',
+        width: '22px',
+        height: '22px',
+        boxSizing: 'border-box',
+        borderRadius: '50%',
+        border: `2px solid ${theme.accent}`,
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        boxShadow: `0 1px 3px ${theme.shade}`
+      })
+      const label = assign(document.createElement('div'), {
+        position: 'absolute',
+        ...labelAt,
+        padding: '3px 6px',
+        borderRadius: '5px',
+        backgroundColor: theme.accent,
+        color: '#fff',
+        font: `600 12px/1 ${UI}`,
+        whiteSpace: 'nowrap'
+      })
+      label.textContent = stick
+      cross.append(
+        line({ left: '-100vw', top: '-0.5px', width: '200vw', height: '1px' }),
+        line({ top: '-100vh', left: '-0.5px', height: '200vh', width: '1px' }),
+        ring,
+        label
+      )
+      return cross
+    }
+    // Labels inside the box, so they stay on screen whatever the corner's place.
+    const crossTopLeft = crosshair('Left stick', { left: '16px', top: '16px' })
+    const crossBottomRight = crosshair('Right stick', { right: '16px', bottom: '16px' })
+
+    // The bar: what to do, and the two buttons, which a finger can tap too.
+    const bar = assign(document.createElement('div'), {
+      position: 'fixed',
+      left: '50%',
+      bottom: '16px',
+      transform: 'translateX(-50%)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '14px',
+      padding: '8px 8px 8px 16px',
+      borderRadius: '12px',
+      backgroundColor: theme.hint,
+      color: theme.hintText,
+      boxShadow: `0 0 0 1px ${theme.hintEdge}, ${theme.lift}`,
+      font: `500 14px/20px ${UI}`,
+      whiteSpace: 'nowrap'
+    })
+    // A controller button drawn as a round cap.
+    const cap = (name) => {
+      const element = assign(document.createElement('span'), {
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: '24px',
+        height: '24px',
+        padding: '0 6px',
+        boxSizing: 'border-box',
+        borderRadius: '12px',
+        backgroundColor: theme.keyBg,
+        boxShadow: `inset 0 0 0 1px ${theme.keyEdge}, inset 0 -1.5px 0 ${theme.keyEdge}`,
+        font: `700 12px/1 ${UI}`
+      })
+      element.textContent = name
+      return element
+    }
+    const barStart = document.createElement('span')
+    barStart.textContent = 'Drag on the screen, or move a stick to start'
+    const barSticks = assign(document.createElement('span'), { opacity: '0.8' })
+    barSticks.textContent = 'Sticks move the corners'
+    const barButton = (name, label, onPress, primary) => {
+      const element = assign(document.createElement('button'), {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        height: '40px',
+        padding: '0 14px 0 8px',
+        border: '0',
+        borderRadius: '8px',
+        font: `600 14px/1 ${UI}`,
+        color: primary ? '#fff' : theme.hintText,
+        backgroundColor: primary ? theme.accent : 'transparent',
+        boxShadow: primary ? 'none' : `inset 0 0 0 1px ${theme.hintEdge}`,
+        cursor: 'pointer'
+      })
+      element.type = 'button'
+      const text = document.createElement('span')
+      text.textContent = label
+      element.append(cap(name), text)
+      element.addEventListener('pointerdown', (event) => event.stopPropagation())
+      element.addEventListener('click', (event) => {
+        event.stopPropagation()
+        onPress()
+      })
+      return element
+    }
+    const barCancel = barButton(this._pad.cancel, 'Cancel', () => this.cancel(), false)
+    const barSave = barButton(this._pad.confirm, this._confirmLabel, () => this.confirm(), true)
+    bar.append(barStart, barSticks, barCancel, barSave)
+    bar.dataset.regionPadBar = 'true'
+    return {
+      under: [crossTopLeft, crossBottomRight],
+      parts: [bar],
+      els: { crossTopLeft, crossBottomRight, bar, barStart, barSticks, barSave }
+    }
   }
 
   _publishHitRects() {
@@ -1016,6 +1318,9 @@ export class RegionSelect {
     this._rect = null
     cancelFrame(this._frame)
     this._frame = 0
+    cancelFrame(this._stickFrame)
+    this._stickFrame = 0
+    this._stickMode = false
     this._pointer = null
     this._bubble = null
     this._pictureUrl = null
@@ -1064,4 +1369,4 @@ export async function selectRegion(target = {}, options = {}) {
   }
 }
 
-export default { RegionSelect, selectRegion, MINIMUM_DRAG }
+export default { RegionSelect, selectRegion, stickTravel, MINIMUM_DRAG }

@@ -1,5 +1,6 @@
 //! A game's global disabled-touch mode also affects overlay controls. Temporarily
-//! select native touch passthrough while our controls have focus, with crash recovery.
+//! select native touch passthrough while our controls have focus, or while the crop
+//! editor is open over the game, with crash recovery.
 use super::steam_input::{spawn_lease, Lease};
 use std::io::Write;
 use std::sync::{
@@ -76,7 +77,7 @@ pub fn show(app: &tauri::AppHandle) {
         let active = !EXITING.load(Ordering::Relaxed)
             && owns_input()
             && app.webview_windows().values().any(|window| {
-                window.label() != "overlay"
+                (window.label() != "overlay" || super::gamescope::region_editing())
                     && super::gamescope::handles(window)
                     && window.is_visible().unwrap_or(false)
             });

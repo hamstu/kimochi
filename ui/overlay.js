@@ -3,6 +3,8 @@ import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm, popupAnkiC
 import { createAnki } from './game-dictionary-anki.js'
 import { audioUrl } from './game-dictionary.js'
 import { createController } from './controller.js'
+import { padButtons, startRegionPad } from './region-pad.js'
+import { buttonName } from './controller-input.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
@@ -1487,6 +1489,14 @@ async function onAction(name) {
   }
 }
 
+/** When a controller was last reported connected (the native `gamepad` state), for the editor. */
+let gamepadSeenAt = 0
+void native.listen('gamepad', ({ payload }) => {
+  if (payload?.activeGamepadIndex != null) gamepadSeenAt = Date.now()
+})
+/** A controller is connected now: the region editor offers its controls. */
+const gamepadConnected = () => Date.now() - gamepadSeenAt < 10000
+
 /** How often the pointer is read while the region editor is up. */
 const POINTER_POLL_MS = 30
 
@@ -1598,6 +1608,11 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alt
         : matchMedia('(prefers-color-scheme: light)').matches
           ? 'light'
           : 'dark'
+    // Under Gamescope there is no mouse: the editor takes a finger and the controller, sized for
+    // both. Elsewhere it offers the controller while one is connected.
+    const gamescope = window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope
+    const buttons = padButtons(setting('controllerButtons'))
+    const usePad = gamescope || gamepadConnected()
     const selector = new RegionSelect({
       container: document.body,
       confirmLabel,
@@ -1607,12 +1622,21 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alt
       initial,
       picture,
       accent,
-      title
+      title,
+      touch: gamescope || matchMedia('(pointer: coarse)').matches,
+      pad: usePad ? { confirm: buttonName(buttons.confirm) ?? 'A', cancel: buttonName(buttons.back) ?? 'B' } : null
     })
     const running = selector.start()
     onStart?.(selector)
     void followPointer(selector, onDisplay)
+    const stopPad = usePad
+      ? await startRegionPad(selector, { native, gamescope, buttons, log }).catch((error) => {
+          log({ check: 'region-pad-failed', error: String(error?.message ?? error) })
+          return null
+        })
+      : null
     const result = await running.catch(() => null)
+    await stopPad?.()
     selector.destroy()
     const rect = result?.local
     return rect && rect.width >= 1 && rect.height >= 1 ? { ...rect, action: result.action ?? 'primary' } : null

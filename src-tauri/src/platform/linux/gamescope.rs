@@ -262,6 +262,20 @@ pub fn keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
     EDITING.store(on, Ordering::SeqCst);
     refresh_input_lease()
 }
+static REGION: AtomicBool = AtomicBool::new(false);
+/// The crop editor is open over the game: the overlay takes touch while it is
+/// (gamescope_touch.rs), so a finger can draw, move and resize the box.
+pub fn region_editing() -> bool {
+    REGION.load(Ordering::SeqCst)
+}
+pub fn region_keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
+    REGION.store(on, Ordering::SeqCst);
+    keyboard(window, on)?;
+    if on && handles(window) {
+        super::gamescope_touch::show(window.app_handle());
+    }
+    Ok(())
+}
 pub fn is_visible(window: &tauri::WebviewWindow) -> bool {
     window.is_visible().unwrap_or(false)
 }

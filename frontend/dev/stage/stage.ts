@@ -47,6 +47,9 @@
  *                    the outlined second button
  *   ?accent=blue (default) | green   region-select: the box's colour (green is the Anki crop area)
  *   ?title=<text>    region-select: the box's name in its foot (e.g. OCR crop area), shown when it fits
+ *   ?touch=1         region-select: sized for a finger (Gaming Mode)
+ *   ?pad=1           region-select: controller mode (Gaming Mode): the bar, and the sticks from a
+ *                    browser gamepad or `window.stageSticks(left, right)` move the corners
  *
  * Studio JSON (`studioJson`): `script` (StageScript: the game's lines, bubbles and dictionary) and
  * `history` (the recent-text entries).
@@ -81,6 +84,35 @@ import { apiEntries, apiTokenize } from './api-dictionary'
 
 const params = new URLSearchParams(location.search)
 const flag = (name: string): boolean => params.get(name) === '1'
+
+type Stick = { x: number; y: number }
+type PadEditor = { sticks: (left: Stick, right: Stick) => void; confirm: () => void; cancel: () => void }
+
+/**
+ * The region editor's controller in the stage: a browser gamepad (sticks with y flipped to
+ * positive up, A saves, B cancels), and `window.stageSticks` for driving it by hand.
+ */
+function stagePad(selector: PadEditor): () => void {
+  const hooks = window as unknown as { stageSticks?: PadEditor['sticks'] }
+  hooks.stageSticks = (left, right) => selector.sticks(left, right)
+  let held: boolean[] | null = null
+  let frame = requestAnimationFrame(function poll() {
+    const pad = [...(navigator.getGamepads?.() ?? [])].find(Boolean)
+    if (pad) {
+      const axis = (i: number): number => (Math.abs(pad.axes[i] ?? 0) >= 0.25 ? (pad.axes[i] ?? 0) : 0)
+      selector.sticks({ x: axis(0), y: -axis(1) }, { x: axis(2), y: -axis(3) })
+      const now = pad.buttons.map((button) => button.pressed)
+      if (held && now[0] && !held[0]) selector.confirm()
+      if (held && now[1] && !held[1]) selector.cancel()
+      held = now
+    }
+    frame = requestAnimationFrame(poll)
+  })
+  return () => {
+    cancelAnimationFrame(frame)
+    delete hooks.stageSticks
+  }
+}
 const scene = params.get('scene') ?? 'overlay-words'
 const script: StageScript = { ...DEFAULT_SCRIPT, ...(studioJson<Partial<StageScript>>('script') ?? {}) }
 const history = studioJson<unknown[]>('history') ?? DEFAULT_HISTORY
@@ -517,11 +549,15 @@ async function play(): Promise<void> {
           initial,
           picture,
           accent: params.get('accent') === 'green' ? 'green' : 'blue',
-          title: params.get('title')
+          title: params.get('title'),
+          touch: flag('touch'),
+          pad: flag('pad') ? { confirm: 'A', cancel: 'B' } : null
         } as unknown as ConstructorParameters<typeof RegionSelect>[0])
         const running = selector.start()
+        const stopPad = flag('pad') ? stagePad(selector) : null
         if (picture) void selector.setPicture(gamePicture(params.get('game') === 'manga' ? 'manga' : 'dialogue'))
         const result = (await running.catch(() => null)) as { local: { width: number; height: number } } | null
+        stopPad?.()
         log.push({ check: 'stage-region', result })
         selector.destroy()
         if (result) toast(`Region ${Math.round(result.local.width)} × ${Math.round(result.local.height)}`)
