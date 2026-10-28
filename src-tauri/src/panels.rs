@@ -626,6 +626,15 @@ fn attach_events(
         tauri::WindowEvent::Focused(focused) => {
             crate::gamepad::panel_focus(spec.label, *focused);
             crate::cover::note(&owned);
+            crate::debug_report::trace(
+                &handle,
+                json!({
+                    "check": "window-focus",
+                    "window": spec.label,
+                    "focused": *focused,
+                    "minimized": owned.is_minimized().ok(),
+                }),
+            );
             #[cfg(target_os = "linux")]
             platform::gamescope::control_focus(&owned, *focused);
         },

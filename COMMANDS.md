@@ -1093,6 +1093,34 @@ main window is mini; `tray::sync_mini` keeps it current), Settings… and Quit K
 from `branding/tray-template.svg`); Windows and Linux show the full-colour `icons/32x32.png`.
 There is no tray window and no tray command or event.
 
+## Debug info
+
+Settings → About → Debug info (`src-tauri/src/debug_report.rs`, `ui/debug-report.ts`).
+
+| Command | Signature |
+| --- | --- |
+| `debug_report` | `() -> DebugReport` |
+| `debug_bundle_save` | `(markdown: string) -> {saved, path?}` |
+| `debug_verbose_set` | `(enabled?: bool) -> bool` (without `enabled`, whether it is on) |
+
+`DebugReport` is `{generatedAt, app: {version, commit, build, tauri, webview}, os: {name,
+version, arch, session}, hardware: {cpu, cores, memoryBytes, gpus}, displays, capture, ocr:
+{selected, engines, models, cloudAccess}, observer, dictionary: {selected, downloads}, session:
+{sourceKind, sourceFocus, autoOcr, scanning, status, overlayVisible, textOverlayVisible,
+overlayThrottled, frontmostApp}, settings, windows: [{label, visible, minimized, focused, scale,
+bounds}], verboseLogging, recentEvents}`, redacted: settings come from a fixed list of fields,
+never the whole file; a key that names a secret (token, key, password, cookie, …) has its value
+replaced, and every string loses bearer tokens, JWTs, URL query strings, `key=` values, e-mail
+addresses, long opaque strings and the user's name in paths. `debug_bundle_save` asks where to
+save, then writes a zip of `report.md` (the page's Markdown, redacted again), `report.json` and
+the redacted last 512 KB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
+`auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `debug_verbose_set` lasts until the app quits;
+while on, window focus changes (`window-focus`) and every scan (`scan`) are recorded too.
+`scan-failed` and `ocr-failed` are always recorded, with the engine and its error.
+
+Every `evidence.jsonl` record carries `at` (Unix ms), and the file is rotated to
+`evidence.1.jsonl` past 8 MB.
+
 ## Yomitan API setup
 
 The Yomitan API engine (`popupType: 'custom-api'`) looks words up through the Yomitan in the
@@ -1667,7 +1695,8 @@ game being played, else the screen.
 The overlay's one Yomitan backend serves app-owned `__setupDictionaries` relay
 requests: `catalog`, `start({dictionaryId})`, `status({id})`, and `practice`.
 `catalog` returns the recommended dictionaries and the installed ones, each marked `enabled`
-when the current profile looks words up with it.
+when the current profile looks words up with it, and `job`: the latest job (running, failed or
+complete) or null, so a guide step that was left, hidden or reloaded resumes its progress.
 `start` returns a job ID immediately; download/import outlives the requesting panel,
 then verifies import success/counts and enables the dictionary through granular
 profile updates. Jobs live for the app process, not across crashes/restarts.

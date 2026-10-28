@@ -1,6 +1,6 @@
 /**
- * Settings → About: what Kimochi is and which version is running, its updates, where to find
- * help, and the open-source work it is built on. macOS's "About Kimochi" menu item and the tray
+ * Settings → About: what Kimochi is and which version is running, its updates, debug info for bug
+ * reports, where to find help, and the open-source work it is built on. macOS's "About Kimochi" menu item and the tray
  * menu open this page.
  */
 import type { ReactNode } from 'react'
@@ -9,6 +9,7 @@ import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { Badge, IconButton, SettingsPage, SettingsRow, SettingsSection } from '@kit'
 import { useUpdateStatus } from '../../bridge/updates'
 import { UpdatesSection } from './UpdatesSection'
+import { DebugInfoSection } from './DebugInfoSection'
 import { ACKNOWLEDGEMENTS } from './acknowledgements'
 import appIcon from '../../assets/app-icon.svg'
 import './about.css'
@@ -69,6 +70,8 @@ export function AboutTab(): ReactNode {
       </header>
 
       <UpdatesSection />
+
+      <DebugInfoSection />
 
       <SettingsSection title="Links">
         {LINKS.map(({ label, description, url, icon }) => (

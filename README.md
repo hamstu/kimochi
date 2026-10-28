@@ -100,6 +100,14 @@ Windows (`scripts/sign-windows.mjs`); setting the same variables locally does th
 Settings, history and downloaded engines live in the app's data folder (on macOS,
 `~/Library/Application Support/dev.kimochi.app/`); dictionaries live in the webview's IndexedDB.
 
+## Reporting a problem
+
+Open an issue with the **Bug report** template, or ask in the
+[Discord](https://discord.gg/vdMge6TBZQ). In Kimochi, **Settings → About → Debug info → Copy**
+gives you the details a report needs (version, OS, hardware, displays, OCR engine, dictionary,
+recent errors), with tokens and your user name left out. **Save debug bundle** adds the recent logs
+as a zip; turn on **Verbose logging** first to record more while you make the problem happen.
+
 ## Contributing
 
 Kimochi is open source under the GPL and open to thoughtful contributions, but it is not

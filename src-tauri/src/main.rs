@@ -18,6 +18,7 @@ mod chrome_storage;
 mod cloud;
 mod compact;
 mod cover;
+mod debug_report;
 mod dictionary_runtime;
 mod engine_probe;
 mod extension_store;
@@ -379,13 +380,21 @@ fn report(app: tauri::AppHandle, state: State<Shared>, value: Value) {
 /// logged by scan, and captured pixels are never logged at all. Native callers use
 /// this rather than `Service::log`, which only feeds the Debug panel and so cannot
 /// record anything that happens before a window is there to read it.
-fn record(app: &tauri::AppHandle, service: &Shared, value: Value) {
+fn record(app: &tauri::AppHandle, service: &Shared, mut value: Value) {
     use std::io::Write;
     if dictionary_runtime::update(&value) {
         let _ = app.emit("dictionary-readiness", &value);
     }
+    // When it happened, for anyone reading the log from a bug report.
+    if let Some(object) = value.as_object_mut() {
+        object.entry("at").or_insert_with(|| json!(now_ms() as u64));
+    }
     service.log(value.clone());
     if let Ok(p) = path(app, "evidence.jsonl") {
+        // Two files at most, like the Auto OCR trace: the current one and the one before.
+        if p.metadata().is_ok_and(|m| m.len() > EVIDENCE_MAX_BYTES) {
+            let _ = std::fs::rename(&p, p.with_file_name("evidence.1.jsonl"));
+        }
         if let Ok(mut f) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -395,6 +404,9 @@ fn record(app: &tauri::AppHandle, service: &Shared, value: Value) {
         }
     }
 }
+
+/// Where `evidence.jsonl` is rotated to `evidence.1.jsonl`.
+const EVIDENCE_MAX_BYTES: u64 = 8 * 1024 * 1024;
 
 /// `chrome.storage` persistence. No `extension` is Yomitan's `chrome-local.json`; an
 /// extension engine id (`[a-z0-9-]{1,32}`) gets its own `chrome-local-<id>.json`. A file that
@@ -1914,16 +1926,27 @@ async fn ocr_frame(
             let _ = std::fs::write(p, &png);
         }
         let started = std::time::Instant::now();
-        let value = match engine.as_str() {
-            "meikiocr" | "local" => meiki_ocr::recognize(&app, &image)?,
-            "mangaocr" => manga_ocr::recognize(&app, &image)?,
-            "googlelens" => google_lens::recognize(&png)?,
+        let recognized = match engine.as_str() {
+            "meikiocr" | "local" => meiki_ocr::recognize(&app, &image),
+            "mangaocr" => manga_ocr::recognize(&app, &image),
+            "googlelens" => google_lens::recognize(&png),
             #[cfg(target_os = "windows")]
-            "oneocr" => oneocr::recognize(&app, &png)?,
+            "oneocr" => oneocr::recognize(&app, &png),
             #[cfg(target_os = "macos")]
-            "livetext" => livetext::recognize(&image)?,
-            _ => post_ocr(&service.settings, &png)?,
+            "livetext" => livetext::recognize(&image),
+            _ => post_ocr(&service.settings, &png),
         };
+        // A failing engine is what a bug report most needs to show, with its own words.
+        let value = recognized.inspect_err(|error| {
+            record(
+                &app,
+                &service,
+                json!({
+                    "check": "ocr-failed", "id": id, "engine": engine, "info": info,
+                    "ms": started.elapsed().as_millis() as u64, "error": error,
+                }),
+            );
+        })?;
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
         record(
             &app,
@@ -2261,13 +2284,37 @@ async fn scan(
     .await
     .map_err(|e| e.to_string())
     .and_then(|r| r);
-    if let Err(e) = &result {
-        let mut v = state.view.lock().unwrap();
-        v.status = e.clone();
-        v.scan = None;
-        v.revision += 1;
-        v.published_frame = None;
-        v.regions.clear();
+    match &result {
+        Err(e) => {
+            {
+                let mut v = state.view.lock().unwrap();
+                v.status = e.clone();
+                v.scan = None;
+                v.revision += 1;
+                v.published_frame = None;
+                v.regions.clear();
+            }
+            record(
+                &app,
+                &state,
+                json!({
+                    "check": "scan-failed",
+                    "ocr": ocr,
+                    "engine": state.settings.get("ocrMode").ok().flatten(),
+                    "error": e,
+                }),
+            );
+        }
+        Ok(value) => debug_report::trace(
+            &app,
+            json!({
+                "check": "scan",
+                "ocr": ocr,
+                "engine": state.settings.get("ocrMode").ok().flatten(),
+                "info": value["info"],
+                "annotations": value["ocr"]["textAnnotations"].as_array().map_or(0, Vec::len),
+            }),
+        ),
     }
     result
 }
@@ -2864,6 +2911,9 @@ fn main() {
             platform::dictionary_images::linux_dictionary_image,
             report,
             scan_trace::scan_trace,
+            debug_report::debug_report,
+            debug_report::debug_bundle_save,
+            debug_report::debug_verbose_set,
             storage_load,
             storage_save,
             storage_backup,
