@@ -301,9 +301,10 @@ const ANKI_LABELS = {
  * @property {() => 'pad'|'keys'} input how the mode was opened, so the hints name the right keys
  * @property {() => void} onClose the view's own Back (a click on it)
  * @property {(record: object) => void} [log]
- * @property {(range: Range, rect: {x: number, y: number, width: number, height: number}) => Promise<boolean>} [lookupInPopup]
- *   the `popup` source: look `range` up in the engine and place its pop-up over `rect` (overlay
- *   points); resolves whether a pop-up is showing for it
+ * @property {(range: Range, rect: {x: number, y: number, width: number, height: number}, request: {text: string, sentence: string, offset: number, word: ?{left: number, top: number, width: number, height: number}}) => Promise<boolean|{shown: boolean, length: ?number}>} [lookupInPopup]
+ *   the `popup` source: look `range` (its `text`, at `offset` in `sentence`, the lit `word` drawn
+ *   there) up in the engine and place its pop-up over `rect` (overlay points); resolves whether a
+ *   pop-up is showing for it, or `{shown, length}` (length 0: no entry)
  * @property {() => boolean} [popupFocusable] the `popup` source: whether A can move into the
  *   engine pop-up's buttons
  */
@@ -315,13 +316,15 @@ const ANKI_LABELS = {
  *
  * @param {{firstChild: {nodeType: number, length: number}|null}[]} spans the sentence's spans in order
  * @param {number} from the lit word's span
+ * @param {number} [length]
+ * @param {number} [offset] the character in that span to start from (the free cursor's)
  */
-export function lookupSpan(spans, from, length = POPUP_SCAN_LENGTH) {
+export function lookupSpan(spans, from, length = POPUP_SCAN_LENGTH, offset = 0) {
   const text = (span) => (span?.firstChild?.nodeType === 3 ? span.firstChild : null);
   const first = text(spans[from]);
-  if (!first) return null;
-  let end = { node: first, offset: Math.min(first.length, length) };
-  let remaining = length - end.offset;
+  if (!first || offset >= first.length) return null;
+  let end = { node: first, offset: Math.min(first.length, offset + length) };
+  let remaining = length - (end.offset - offset);
   for (let at = from + 1; at < spans.length && remaining > 0; at++) {
     const node = text(spans[at]);
     if (!node) continue;
@@ -329,7 +332,29 @@ export function lookupSpan(spans, from, length = POPUP_SCAN_LENGTH) {
     end = { node, offset: take };
     remaining -= take;
   }
-  return { start: { node: first, offset: 0 }, end };
+  return { start: { node: first, offset }, end };
+}
+
+/**
+ * `rects` (a Range's client rects) as one rectangle per line: the pieces a run of text breaks into
+ * on a line (one per text node) joined, the empty ones dropped.
+ */
+export function lineRects(rects) {
+  const lines = [];
+  for (const rect of rects) {
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    const middle = rect.top + rect.height / 2;
+    const line = lines.find((at) => middle > at.top && middle < at.bottom);
+    if (!line) {
+      lines.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+      continue;
+    }
+    line.left = Math.min(line.left, rect.left);
+    line.top = Math.min(line.top, rect.top);
+    line.right = Math.max(line.right, rect.right);
+    line.bottom = Math.max(line.bottom, rect.bottom);
+  }
+  return lines.map(({ left, top, right, bottom }) => ({ left, top, width: right - left, height: bottom - top }));
 }
 
 export class GameDictionary {
@@ -341,6 +366,8 @@ export class GameDictionary {
     this.tokens = [];
     this.text = "";
     this.index = -1;
+    /** Where in the lit word its lookup starts (the free cursor's character; 0 otherwise). */
+    this.offset = 0;
     /** The lit word's lookup: its term, its entries, which one is shown, and its Anki state. */
     this.result = null;
     this.entry = 0;
@@ -447,10 +474,15 @@ export class GameDictionary {
     this.select(this.index);
   }
 
-  /** Light word `index` and look it up. */
-  select(index) {
+  /**
+   * Light word `index` and look it up; from its character `offset` with the engine's pop-up (the
+   * free cursor's choice of where a lookup starts, past a split that came out wrong).
+   */
+  select(index, offset = 0) {
     if (!this.root || !this.tokens[index]?.word) return;
     this.index = index;
+    this.offset = this.source === "popup" ? offset : 0;
+    this.unfitLit();
     for (const span of this.root.querySelectorAll(".gd-word")) {
       const lit = Number(span.dataset.index) === index;
       span.classList.toggle("gd-lit", lit);
@@ -461,8 +493,11 @@ export class GameDictionary {
     const position = this.tokens.slice(0, index + 1).filter((token) => token.word).length;
     const total = this.tokens.filter((token) => token.word).length;
     this.root.querySelector(".gd-count").textContent = `${position} / ${total}`;
-    if (this.source === "popup") void this.lookUpInPopup(index);
-    else void this.lookUp(this.tokens[index].text);
+    if (this.source === "popup") {
+      // The character it starts from, outlined at once; the match fills in when it is known.
+      if (this.offset) this.fitLit(index, 1, this.offset);
+      void this.lookUpInPopup(index, this.offset);
+    } else void this.lookUp(this.tokens[index].text);
   }
 
   /** Scroll the text, inside its own area, so the lit word shows clear of the edge fades. */
@@ -496,14 +531,14 @@ export class GameDictionary {
     return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
   }
 
-  /** The `popup` source: the Range a lookup of word `index` reads, from it on. */
-  wordRange(index) {
+  /** The `popup` source: the Range a lookup of word `index` reads, from it (its character `offset`) on. */
+  wordRange(index, offset = 0) {
     const lit = this.root?.querySelector(`.gd-sentence .gd-word[data-index="${index}"]`);
     // A section is read on its own: a lookup does not run on into the next detected section.
     const scope = this.sectioned ? lit?.closest(".gd-line") : this.root?.querySelector(".gd-sentence");
     const spans = [...(scope?.querySelectorAll(".gd-word, .gd-gap") ?? [])];
     const from = spans.findIndex((span) => span.dataset.index === String(index));
-    const ends = lookupSpan(spans, from);
+    const ends = lookupSpan(spans, from, undefined, offset);
     if (!ends) return null;
     const range = document.createRange();
     range.setStart(ends.start.node, ends.start.offset);
@@ -512,24 +547,132 @@ export class GameDictionary {
   }
 
   /** The `popup` source: look word `index` up in the engine, its pop-up over the space below. */
-  async lookUpInPopup(index) {
+  async lookUpInPopup(index, offset = 0) {
     const ticket = ++this.ticket;
-    const term = this.tokens[index].text;
+    const term = this.tokens[index].text.slice(offset);
     this.layer = "text";
     this.result = null;
     this.renderEntry({ kind: "popup", term });
     this.renderBar();
-    const range = this.wordRange(index);
+    const range = this.wordRange(index, offset);
     const rect = this.slotRect();
+    const lit = this.root.querySelector(`.gd-sentence .gd-word[data-index="${index}"]`)?.getBoundingClientRect();
     let shown = false;
     try {
-      shown = Boolean(range && rect && (await this.context.lookupInPopup?.(range, rect)));
+      const answer =
+        range && rect
+          ? await this.context.lookupInPopup?.(range, rect, {
+              text: range.toString(),
+              sentence: this.text,
+              offset: (this.tokens[index].start ?? 0) + offset,
+              word: lit ? { left: lit.left, top: lit.top, width: lit.width, height: lit.height } : null,
+            })
+          : false;
+      shown = typeof answer === "object" && answer !== null ? answer.shown && answer.length !== 0 : Boolean(answer);
+      if (shown && ticket === this.ticket && answer?.length) this.fitLit(index, answer.length, offset);
     } catch (error) {
       this.context.log?.({ check: "game-dictionary-popup-lookup-failed", error: String(error?.message ?? error) });
     }
     if (ticket !== this.ticket || !this.root) return;
-    // Under the pop-up while it shows; in view when no dictionary had anything for the word.
-    if (!shown) this.renderEntry({ kind: "empty", term });
+    // In view when no dictionary had anything for the word; under the pop-up while it shows, with
+    // nothing in it (a spinner there would keep the screen redrawing for nobody).
+    this.renderEntry(shown ? { kind: "under-popup" } : { kind: "empty", term });
+  }
+
+  /**
+   * Outline the text the engine matched from word `index` (from its character `offset`, `length`
+   * characters) when that is not the word as split: a longer match runs on into the next word
+   * (よ過ぎ over よ|過ぎゆけ), a shorter one ends inside it, and the free cursor can start one
+   * partway in. Drawn over the text in the lit word's style, which stands down
+   * meanwhile; the engine's own mark on the match is hidden in this view (game-dictionary.css).
+   */
+  fitLit(index, length, offset = 0) {
+    this.unfitLit();
+    const sentence = this.root?.querySelector(".gd-sentence");
+    const lit = sentence?.querySelector(`.gd-word[data-index="${index}"]`);
+    if (!lit || (offset === 0 && length === lit.textContent.length)) return;
+    const scope = (this.sectioned ? lit.closest(".gd-line") : sentence) ?? sentence;
+    const spans = [...scope.querySelectorAll(".gd-word, .gd-gap")];
+    const ends = lookupSpan(spans, spans.indexOf(lit), length, offset);
+    if (!ends) return;
+    const range = document.createRange();
+    range.setStart(ends.start.node, ends.start.offset);
+    range.setEnd(ends.end.node, ends.end.offset);
+    const box = sentence.getBoundingClientRect();
+    const layer = document.createElement("div");
+    layer.className = "gd-match";
+    layer.setAttribute("aria-hidden", "true");
+    for (const line of lineRects(range.getClientRects())) {
+      const piece = document.createElement("span");
+      piece.className = "gd-match-piece";
+      piece.style.left = `${line.left - box.left - sentence.clientLeft + sentence.scrollLeft}px`;
+      piece.style.top = `${line.top - box.top - sentence.clientTop + sentence.scrollTop}px`;
+      piece.style.width = `${line.width}px`;
+      piece.style.height = `${line.height}px`;
+      layer.append(piece);
+    }
+    if (!layer.childElementCount) return;
+    sentence.append(layer);
+    sentence.classList.add("gd-fitted");
+  }
+
+  /** The lit word's own outline back, in place of the match's. */
+  unfitLit() {
+    const sentence = this.root?.querySelector(".gd-sentence");
+    sentence?.querySelector(".gd-match")?.remove();
+    sentence?.classList.remove("gd-fitted");
+  }
+
+  // --- the free cursor (the left stick), over the text ------------------------------------------
+
+  /** Where the free cursor may go: the text's own area, in overlay points. */
+  sentenceRect() {
+    const rect = this.root?.querySelector(".gd-sentence")?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+  }
+
+  /** The middle of word `index` as drawn (its first piece), or null. */
+  wordCenter(index) {
+    const rect = this.root?.querySelector(`.gd-sentence .gd-word[data-index="${index}"]`)?.getBoundingClientRect();
+    return rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null;
+  }
+
+  /**
+   * The character drawn nearest (x, y), no further than `reach` points from it, as
+   * `{index, offset}` (its word, and where in it), or null. With the engine's pop-up a lookup can
+   * start at any character; the Yomitan API's entries are by word, so the offset is 0 there.
+   */
+  pointAt(x, y, reach) {
+    const area = this.root?.querySelector(".gd-sentence")?.getBoundingClientRect();
+    if (!area) return null;
+    let best = null;
+    let nearest = Infinity;
+    const range = document.createRange();
+    for (const span of this.root.querySelectorAll(".gd-sentence .gd-word")) {
+      const node = span.firstChild;
+      if (node?.nodeType !== 3) continue;
+      for (let at = 0; at < node.length; at++) {
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const rect = range.getBoundingClientRect();
+        if (rect.width <= 0 || rect.bottom <= area.top || rect.top >= area.bottom) continue;
+        const distance = Math.hypot(Math.max(rect.left - x, 0, x - rect.right), Math.max(rect.top - y, 0, y - rect.bottom));
+        if (distance < nearest) {
+          nearest = distance;
+          best = { index: Number(span.dataset.index), offset: this.source === "popup" ? at : 0 };
+        }
+      }
+    }
+    return nearest <= reach ? best : null;
+  }
+
+  /** Scroll the text by `points` (the free cursor pushed against its top or bottom edge). */
+  scrollSentence(points) {
+    const sentence = this.root?.querySelector(".gd-sentence");
+    if (!sentence) return;
+    sentence.scrollBy({ top: points, behavior: "auto" });
+    this.updateFades();
   }
 
   /** The `popup` source: whether A, the D-pad and B are in the engine pop-up's buttons. */
@@ -715,6 +858,10 @@ export class GameDictionary {
     const body = this.root.querySelector(".gd-body");
     body.scrollTop = 0;
     article.dataset.state = state.kind;
+    if (state.kind === "under-popup") {
+      article.replaceChildren();
+      return;
+    }
     if (state.kind === "popup") {
       article.innerHTML = `<p class="gd-status"><span class="gd-spinner" aria-hidden="true"></span>Looking up <span lang="ja">${escapeHtml(state.term)}</span>…</p>`;
       return;
@@ -788,6 +935,7 @@ export class GameDictionary {
     return `
       <span class="gd-bar-group">
         ${hint(keys ? "← →" : "◀ ▶", "Word")}
+        ${keys ? "" : hint("LS", "Point")}
         ${keys ? "" : hint(pair, "Entry")}
         ${hint(keys ? "↑ ↓" : "RS", "Scroll")}
       </span>
@@ -812,6 +960,7 @@ export class GameDictionary {
     bar.innerHTML = `
       <span class="gd-bar-group">
         ${hint(keys ? "← →" : "◀ ▶", "Word")}
+        ${keys ? "" : hint("LS", "Point")}
         ${entries > 1 ? hint(keys ? "" : pair, `Entry ${this.entry + 1} / ${entries}`) : ""}
         ${hint(keys ? "↑ ↓" : "RS", "Scroll")}
       </span>

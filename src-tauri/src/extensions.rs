@@ -278,11 +278,75 @@ pub fn isolation_headers(id: &str, supported: bool) -> Vec<(&'static str, &'stat
 pub fn lookup(app: &tauri::AppHandle, id: &str, uri_path: &str) -> Option<(&'static str, Vec<u8>)> {
     match target(uri_path) {
         Some(Target::Host(key)) => exact_asset(app, &key).map(|bytes| (mime_for(&key), bytes)),
-        Some(Target::File(rel)) => {
-            crate::extension_store::read(id, &rel).map(|bytes| (mime_for(&rel), bytes))
-        }
+        Some(Target::File(rel)) => crate::extension_store::read(id, &rel).map(|bytes| {
+            let bytes = if rel.ends_with(".js") { json_imports_as_fetch(patched(id, &rel, bytes)) } else { bytes };
+            (mime_for(&rel), bytes)
+        }),
         None => None,
     }
+}
+
+/// One edit from host/ext/patches.json: `find`, which must occur exactly once in `file`, becomes
+/// `replace`.
+#[derive(serde::Deserialize)]
+struct Patch {
+    id: String,
+    engine: String,
+    file: String,
+    find: String,
+    replace: String,
+}
+
+fn patches() -> &'static [Patch] {
+    #[derive(serde::Deserialize)]
+    struct Patches {
+        patches: Vec<Patch>,
+    }
+    static PATCHES: std::sync::OnceLock<Vec<Patch>> = std::sync::OnceLock::new();
+    PATCHES.get_or_init(|| {
+        serde_json::from_str::<Patches>(include_str!("../../host/ext/patches.json"))
+            .expect("host/ext/patches.json is valid")
+            .patches
+    })
+}
+
+/// `bytes` of extension `id`'s file `rel` with Kimochi's patches applied (host/ext/patches.json).
+/// A patch whose `find` is not there exactly once leaves the file as it is: the host notices the
+/// missing hook and keeps to its older path.
+fn patched(id: &str, rel: &str, bytes: Vec<u8>) -> Vec<u8> {
+    let mut wanted = patches().iter().filter(|patch| patch.engine == id && patch.file == rel).peekable();
+    if wanted.peek().is_none() {
+        return bytes;
+    }
+    let Ok(mut text) = String::from_utf8(bytes.clone()) else { return bytes };
+    for patch in wanted {
+        if text.matches(patch.find.as_str()).count() == 1 {
+            text = text.replacen(patch.find.as_str(), &patch.replace, 1);
+        } else {
+            eprintln!("extension patch {} does not apply to {id}/{rel}; served unpatched", patch.id);
+        }
+    }
+    text.into_bytes()
+}
+
+/// `import("./x.json", { with: { type: "json" } })` as the equivalent fetch. WebKitGTK cannot
+/// import a JSON module inside a worker ("Importing a module script failed."), and Hachidori's
+/// engine runs in one: its furigana table is such an import, so every lookup whose results had
+/// an irregular reading (今日 → こんにちは, 大人, 明日) failed whole. Untouched without one.
+fn json_imports_as_fetch(bytes: Vec<u8>) -> Vec<u8> {
+    static PATTERN: std::sync::OnceLock<regex::bytes::Regex> = std::sync::OnceLock::new();
+    let pattern = PATTERN.get_or_init(|| {
+        regex::bytes::Regex::new(
+            r#"import\(\s*("[^"\n]+\.json"|'[^'\n]+\.json')\s*,\s*\{\s*(?:with|assert)\s*:\s*\{\s*type\s*:\s*["']json["']\s*\}\s*\}\s*\)"#,
+        )
+        .expect("valid pattern")
+    });
+    if !pattern.is_match(&bytes) {
+        return bytes;
+    }
+    pattern
+        .replace_all(&bytes, &b"fetch(new URL($1, import.meta.url)).then((response) => response.json()).then((json) => ({ default: json }))"[..])
+        .into_owned()
 }
 
 /// Answers one request on an extension scheme. Runs off the main thread.
@@ -630,6 +694,30 @@ mod script_dialogs {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn json_module_imports_are_served_as_fetches() {
+        let source = b"kanjiReadings ??= createKanjiReadings((await import(\"./vendor/kanjidic/kanji-readings.json\",\n    { with: { type: \"json\" } })).default.readings);".to_vec();
+        let served = String::from_utf8(json_imports_as_fetch(source)).unwrap();
+        assert_eq!(
+            served,
+            "kanjiReadings ??= createKanjiReadings((await fetch(new URL(\"./vendor/kanjidic/kanji-readings.json\", import.meta.url)).then((response) => response.json()).then((json) => ({ default: json }))).default.readings);"
+        );
+        let plain = b"import(\"./engine-service.js\")".to_vec();
+        assert_eq!(json_imports_as_fetch(plain.clone()), plain);
+    }
+
+    #[test]
+    fn patches_apply_once_and_leave_other_files_alone() {
+        let patch = &super::patches()[0];
+        let source = format!("start();\n{}\nend();", patch.find).into_bytes();
+        let served = String::from_utf8(super::patched(&patch.engine, &patch.file, source)).unwrap();
+        assert_eq!(served, format!("start();\n{}\nend();", patch.replace));
+        let twice = format!("{0}\n{0}", patch.find).into_bytes();
+        assert_eq!(super::patched(&patch.engine, &patch.file, twice.clone()), twice);
+        let other = patch.find.clone().into_bytes();
+        assert_eq!(super::patched(&patch.engine, "other.js", other.clone()), other);
+        assert_eq!(super::patched("tenten", &patch.file, other.clone()), other);
+    }
     use super::*;
 
     #[test]

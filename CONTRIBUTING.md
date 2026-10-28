@@ -71,6 +71,14 @@ To move a pin, push the crate change, set the new full commit SHA as `rev` in `s
 (both `mangaocr` lines), then run `cargo update -p mangaocr` (or `meikiocr`) in `src-tauri/` and
 commit both files.
 
+**Moving a dictionary extension's pin.** Hachidori, 10ten and Yomitan are pinned releases
+(`extensions/<id>.source.json`, refreshed by `node scripts/sync-extension.mjs <id> --replace`).
+Kimochi reaches into each one for the controller's lookups, and patches one Hachidori file as it
+serves it (`host/ext/patches.json`). After moving a pin, run `npm test` (it checks every patch still
+fits) and `npm run test:engines`, which runs each engine in headless Chrome against a small
+JMdict excerpt (`$KIMOCHI_YOMITAN_DICTS`, default `../yomitan-dicts`) and checks the lookups, the
+pop-up placement and the misses. Both must pass before the new pin ships.
+
 **Changelog.** If a user would notice your change, add a `- ` line under `## [Unreleased]` in
 [CHANGELOG.md](CHANGELOG.md), written for the person using the app. These lines become the
 release notes and the app's "What's new". Refactors, CI and tests don't need one.

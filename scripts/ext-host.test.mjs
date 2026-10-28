@@ -373,7 +373,8 @@ class World {
   /** What the DOM does when the host appends an element: frames load, scripts run. */
   appended(inner, element) {
     const win = this.sandboxes.get(inner) ?? inner
-    if (element.localName === 'iframe') {
+    // A frame without a source stays blank (the host's own marker for 10ten's lookups).
+    if (element.localName === 'iframe' && element.src) {
       setTimeout(() => this.frame(win, element.src, element), 0)
     } else if (element.localName === 'script' && element.src) {
       setTimeout(() => {
@@ -441,6 +442,14 @@ const HACHIDORI = {
     chrome.runtime.onMessage.addListener((m, sender, sendResponse) => {
       offscreenSeen.push(m)
       if (m?.type === 'hd_status') { sendResponse(globalThis.engineStatus ?? { ok: true, ready: true, dictionaryCount: 1 }); return false }
+      // engine-service.js hd_lookup: the longest match from the start of \`text\`.
+      if (m?.type === 'hd_lookup') {
+        const answer = () => sendResponse({ type: 'hd_lookup_result', requestId: m.requestId, ok: true, results: globalThis.lookupResults?.(m.text) ?? [], dictionaryCount: 1 })
+        const delay = globalThis.lookupDelay?.(m.text) ?? 0
+        if (!delay) { answer(); return false }
+        setTimeout(answer, delay)
+        return true
+      }
       if (m?.case === 'race') sendResponse('fast-offscreen')
       if (m?.case === 'bgsender') sendResponse(sender)
       return false
@@ -521,6 +530,9 @@ const TENTEN = {
         return undefined
       }
       if (req?.type === 'enabled') return Promise.resolve({ frameId: sender.frameId })
+      // background-request.ts searchWords / searchOther, as 10ten answers them.
+      if (req?.type === 'searchWords') return Promise.resolve({ words: globalThis.wordsFor?.(req.input) ?? null, dbStatus: null })
+      if (req?.type === 'searchOther') return Promise.resolve(globalThis.otherFor?.(req.input) ?? null)
       if (req?.type === 'sender') return Promise.resolve(sender)
       return undefined
     })
@@ -541,6 +553,12 @@ const TENTEN = {
       if (req.type === 'enable') {
         const reply = await browser.runtime.sendMessage({ type: 'enabled', src: location.href })
         globalThis.enabledFrameId = reply.frameId
+      }
+      // content.ts \`lookup\` → lookupText → query: its words, then names and kanji; a text it
+      // looked up before comes from its cache, with no message.
+      if (req.type === 'lookup' && req.text !== 'cached') {
+        const words = await browser.runtime.sendMessage({ type: 'searchWords', input: req.text })
+        if (!words?.words) await browser.runtime.sendMessage({ type: 'searchOther', input: req.text, wordsMatchLen: 0 })
       }
       return 'ok'
     })
@@ -1499,6 +1517,24 @@ test("lookupRange, popupControl and dismiss drive Hachidori's hd_reader_command 
   assert.equal(result(overlay, '__kimochiExtensionHost.isPopupVisible()'), false)
 })
 
+test('a Hachidori lookup hovers its first character with Shift held before it touches the selection', async () => {
+  const { overlay } = await hachidoriSession()
+  result(overlay, `
+    globalThis.order = []
+    getSelection = () => ({ removeAllRanges() {}, addRange(r) { order.push('select ' + r.text) } })
+    globalThis.HDReaderReady = Promise.resolve({ scanSelectedText: () => false })
+    const target = { dispatchEvent(e) { order.push(e.type); return true } }
+    document.elementFromPoint = () => target
+    const dispatch = window.dispatchEvent?.bind(window)
+    window.dispatchEvent = (e) => { if (e.type === 'keydown' || e.type === 'keyup') order.push(e.type); return dispatch ? dispatch(e) : true }
+  `)
+  const range = '({ text: "運命", startContainer: { nodeType: 3, parentElement: document.body }, getClientRects: () => [{ left: 10, top: 10, width: 40, height: 20 }], getBoundingClientRect: () => ({ left: 10, top: 10, width: 40, height: 20 }) })'
+  await result(overlay, `__kimochiExtensionHost.lookupRange(${range})`)
+  const order = [...result(overlay, 'order')]
+  assert.deepEqual(order.slice(0, 4), ['keydown', 'pointermove', 'mousemove', 'keyup'])
+  assert.ok(order.indexOf('select 運命') > order.indexOf('keyup'), 'the selection is only the fallback')
+})
+
 test('a Hachidori lookup replaced by a newer one gives up instead of falling back', async () => {
   const { world, overlay } = await hachidoriSession()
   result(overlay, `
@@ -1513,6 +1549,162 @@ test('a Hachidori lookup replaced by a newer one gives up instead of falling bac
   assert.equal(await second, true)
   const fallbacks = world.reports.filter((r) => r.check === 'ext-host-lookup-fallback')
   assert.equal(fallbacks.length, 1, 'only the current lookup falls back to the pointer')
+})
+
+/** A pop-up the driver can see: \`popupShown\` makes the engine's host report one part on screen. */
+const FAKE_POPUP = `
+  globalThis.popupShown = false
+  globalThis.getComputedStyle = () => ({ display: 'block', visibility: 'visible', opacity: '1' })
+  {
+    const part = { getBoundingClientRect: () => ({ left: 300, top: 40, width: 200, height: 120 }), querySelectorAll: () => [] }
+    const popupHost = { shadowRoot: { querySelectorAll: () => [part], querySelector: () => null } }
+    const query = document.querySelector.bind(document)
+    document.querySelector = (selector) =>
+      selector === __kimochiExtensionHost.descriptor.popupSelector ? (popupShown ? popupHost : null) : query(selector)
+  }
+`
+const textRange = (text, offset = 0) =>
+  `({ text: ${JSON.stringify(text)}, toString: () => ${JSON.stringify(text)}, startContainer: globalThis.textNode, startOffset: ${offset}, getClientRects: () => [{ left: 10, top: 10, width: 40, height: 20 }], getBoundingClientRect: () => ({ left: 10, top: 10, width: 40, height: 20 }) })`
+
+test('a read-along lookup asks Hachidori at the text position directly: no keys, pointer events or selection', async () => {
+  const { overlay, offscreen } = await hachidoriSession()
+  result(offscreen, `globalThis.lookupResults = (text) => text.startsWith('食べ') ? [{ matched: '食べました', term: { expression: '食べる' } }] : []`)
+  result(overlay, FAKE_POPUP + `
+    globalThis.events = []
+    getSelection = () => ({ removeAllRanges() { events.push('clear selection') }, addRange() { events.push('select') } })
+    const dispatch = window.dispatchEvent?.bind(window)
+    window.dispatchEvent = (e) => { events.push(e.type); return dispatch ? dispatch(e) : true }
+    globalThis.textNode = { nodeType: 3, length: 12, parentElement: document.body }
+    globalThis.HDReaderReady = Promise.resolve({
+      scanSelectedText: () => false,
+      // The patched reader (host/ext/patches.json): resolves the candidate there and looks it up.
+      kimochiLookupAt(node, offset) {
+        events.push('lookupAt ' + (node === textNode) + ' ' + offset)
+        const text = offset === 3 ? '食べました' : 'ｑｑｑ'
+        chrome.runtime.sendMessage({ type: 'hd_lookup', target: 'hoshidicts-offscreen', requestId: 'lookup-7', text })
+          .then((reply) => { popupShown = reply.results.length > 0 })
+        return true
+      }
+    })
+  `)
+  const found = await result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('食べました', 3)}, text: '食べました' })`)
+  assert.deepEqual({ ...found }, { shown: true, length: 5 })
+  assert.deepEqual([...result(overlay, 'events')], ['lookupAt true 3'])
+  result(overlay, 'popupShown = false')
+  const started = Date.now()
+  const missed = await result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('ｑｑｑ')}, text: 'ｑｑｑ' })`)
+  assert.deepEqual({ ...missed }, { shown: false, length: 0 })
+  assert.ok(Date.now() - started < 1000, 'a miss is known from the engine\'s answer, not waited out')
+})
+
+test("a Hachidori read-along lookup takes its own answer, not the last word's, and clears the last entries just before drawing", async () => {
+  const { overlay, offscreen } = await hachidoriSession()
+  result(offscreen, `
+    globalThis.lookupResults = (text) => [{ matched: text.startsWith('猫') ? '猫' : '犬が', term: { expression: text[0] } }]
+    // The word stepped past is still being looked up when the next is asked for.
+    globalThis.lookupDelay = (text) => (text.startsWith('猫') ? 150 : 0)
+  `)
+  result(overlay, FAKE_POPUP + `
+    globalThis.events = []
+    globalThis.textNode = { nodeType: 3, length: 12, parentElement: document.body }
+    let sent = 0
+    globalThis.HDReaderReady = Promise.resolve({
+      scanSelectedText: () => false,
+      kimochiLookupAt(node, offset) {
+        const text = offset === 0 ? '猫が好き' : '犬が好き'
+        chrome.runtime.sendMessage({ type: 'hd_lookup', target: 'hoshidicts-offscreen', requestId: 'lookup-' + ++sent, text })
+          .then((reply) => { events.push('draw ' + text[0]); popupShown = true })
+        return true
+      },
+      kimochiClear() { events.push('clear') }
+    })
+  `)
+  const first = result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('猫が好き')}, text: '猫が好き' })`)
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  const second = result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('犬が好き', 1)}, text: '犬が好き' })`)
+  assert.deepEqual({ ...(await second) }, { shown: true, length: 2 }, "犬が's match, not 猫's, which answered first")
+  assert.deepEqual({ ...(await first) }, { shown: false, length: null })
+  // The first word's answer clears nothing (a newer word was asked for); the second's clears the
+  // pop-up in the moment before Hachidori draws it.
+  assert.deepEqual([...result(overlay, 'events')], ['draw 猫', 'clear', 'draw 犬'])
+})
+
+test('a read-along lookup Hachidori gave up before drawing (a window blur) is asked for again, its pop-up never left emptied', async () => {
+  const { world, overlay, offscreen } = await hachidoriSession()
+  result(offscreen, `globalThis.lookupResults = (text) => [{ matched: '残酷', term: { expression: '残酷' } }]`)
+  result(overlay, FAKE_POPUP + `
+    globalThis.events = []
+    globalThis.textNode = { nodeType: 3, length: 12, parentElement: document.body }
+    let sent = 0
+    let blurred = true
+    globalThis.HDReaderReady = Promise.resolve({
+      scanSelectedText: () => false,
+      kimochiLookupAt(node, offset) {
+        const id = 'lookup-' + ++sent
+        events.push('ask ' + id)
+        chrome.runtime.sendMessage({ type: 'hd_lookup', target: 'hoshidicts-offscreen', requestId: id, text: '残酷だ' })
+          .then(() => { if (!dropped) { events.push('draw ' + id); popupShown = true } })
+        // The first lookup is cancelled by a blur before its answer comes back.
+        const dropped = blurred
+        blurred = false
+        current = () => !dropped
+        return true
+      },
+      // As the patch: false for a lookup Hachidori no longer means to draw, and then no clear.
+      kimochiClear() {
+        if (!current()) return false
+        events.push('clear')
+        return true
+      }
+    })
+    let current = () => true
+  `)
+  const found = await result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('残酷だ')}, text: '残酷だ' })`)
+  assert.deepEqual({ ...found }, { shown: true, length: 2 })
+  assert.deepEqual([...result(overlay, 'events')], ['ask lookup-1', 'ask lookup-2', 'clear', 'draw lookup-2'])
+  assert.equal(world.reports.filter((r) => r.check === 'ext-host-lookup-retried').length, 1)
+})
+
+test('without the patched reader a Hachidori read-along lookup answers null, for the pointer path instead', async () => {
+  const { world, overlay } = await hachidoriSession()
+  result(overlay, `globalThis.textNode = { nodeType: 3, length: 4, parentElement: document.body }; globalThis.HDReaderReady = Promise.resolve({ scanSelectedText: () => false })`)
+  assert.equal(await result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('運命')}, text: '運命' })`), null)
+  assert.ok(world.reports.some((r) => r.check === 'ext-host-lookup-text-unavailable'))
+})
+
+test("a read-along lookup sends 10ten the message its iframes ask for a pop-up with, and learns the match from its answer", async () => {
+  const { overlay, background } = await tentenSession()
+  result(background, `
+    globalThis.wordsFor = (input) => input.startsWith('運命') ? { type: 'words', data: [], matchLen: 2, more: false } : null
+    globalThis.otherFor = (input) => input.startsWith('滅') ? { kanji: { type: 'kanji', data: [] }, names: null } : null
+  `)
+  result(overlay, FAKE_POPUP + `
+    globalThis.textNode = { nodeType: 3, length: 12, parentElement: document.body }
+    globalThis.moves = []
+    document.body.dispatchEvent = (e) => { moves.push(e.type); return true }
+  `)
+  const found = result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('運命に抗')}, text: '運命に抗' })`)
+  await waitFor(() => result(overlay, 'contentSeen.some((m) => m.type === "lookup")'), 'the lookup message')
+  result(overlay, 'popupShown = true')
+  assert.deepEqual({ ...(await found) }, { shown: true, length: 2 })
+  const lookup = JSON.parse(JSON.stringify(result(overlay, 'contentSeen.find((m) => m.type === "lookup")')))
+  assert.equal(lookup.frame, 'top')
+  assert.equal(lookup.text, '運命に抗')
+  assert.equal(lookup.wordLookup, true)
+  assert.deepEqual(lookup.point, { x: 20, y: 20 }, 'the middle of the first character, as a pointer there would be')
+  assert.deepEqual(Object.keys(lookup.targetProps.textBoxSizes), ['1', '4', '8', '12', '16'])
+  assert.equal(lookup.targetProps.fromPuck, undefined, 'not as a touch: no puck clearance')
+  // 10ten adds the origin of the iframe a lookup names: Kimochi's own, out of sight at (0, 0).
+  assert.equal(result(overlay, `document.documentElement.children.some((e) => e.tagName === 'IFRAME' && e.dataset.frameId === String(${lookup.source.frameId}))`), true)
+  assert.deepEqual([...result(overlay, 'moves')], [], 'no pointer events')
+
+  result(overlay, 'popupShown = false')
+  assert.deepEqual({ ...(await result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('ｑｑ')}, text: 'ｑｑ' })`)) }, { shown: false, length: 0 })
+  const kanji = result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('滅ｑ')}, text: '滅ｑ' })`)
+  await waitFor(() => result(overlay, 'contentSeen.filter((m) => m.type === "lookup").length === 3'), 'the third lookup')
+  result(overlay, 'popupShown = true')
+  assert.deepEqual({ ...(await kanji) }, { shown: true, length: 1 }, 'no word, but the first character\'s kanji')
+  assert.deepEqual({ ...(await result(overlay, `__kimochiExtensionHost.lookupText({ range: ${textRange('cached')}, text: 'cached' })`)) }, { shown: true, length: null }, 'from its cache: no message to learn the match from')
 })
 
 test('lookupRange answers false where no content scripts run', async () => {
