@@ -156,9 +156,20 @@ mod backend {
     /// A kept frame of another app is good enough for a picker thumbnail.
     const THUMBNAIL_AGE: Duration = Duration::from_secs(5);
     const START_WAIT: Duration = Duration::from_secs(3);
+    /// With no capture asked for this long the stream is paused: Gamescope composing a
+    /// frame for it 60 times a second cost the Deck about a tenth of a core. Longer than
+    /// Auto OCR's slowest poll (5 s), so a running loop keeps it going.
+    const IDLE_PAUSE: Duration = Duration::from_secs(6);
+    /// After resuming, how long to wait for a new frame before the kept one is used:
+    /// Gamescope only sends a frame when the app draws, and a still app may not.
+    const RESUME_WAIT: Duration = Duration::from_millis(400);
     const MAX_PIXELS: u64 = 64_000_000;
     const PIXEL_FORMAT: &str = "RGBA8 straight alpha, top-left rows";
     const COLOR_SPACE: &str = "Display native (SDR; no embedded ICC profile)";
+
+    fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+        mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     fn native(e: impl ToString) -> CaptureError {
         CaptureError::new("native", e)
@@ -281,12 +292,30 @@ mod backend {
 
     // ----- Stream ----------------------------------------------------------------
 
+    /// The newest frame of one app, as Gamescope delivered it. Gamescope sends every frame
+    /// the app draws (60 a second); converting each to RGBA kept a CPU core busy on the
+    /// Deck, so a frame is only copied as it arrives and converted when it is asked for.
     struct Latest {
-        app: u32,
         received: Instant,
-        pixels: Vec<u8>,
         width: u32,
         height: u32,
+        /// The plane from the first row on: `stride` bytes per row in `order`.
+        raw: Vec<u8>,
+        stride: i32,
+        order: PixelOrder,
+        pixels: OnceLock<Option<Vec<u8>>>,
+    }
+
+    impl Latest {
+        /// Tightly packed RGBA8, converted once.
+        fn pixels(&self) -> Option<&Vec<u8>> {
+            self.pixels
+                .get_or_init(|| {
+                    let region = crop_region(self.width, self.height, None);
+                    plane_to_rgba(&self.raw, 0, self.stride, self.width, self.height, region, self.order)
+                })
+                .as_ref()
+        }
     }
 
     #[derive(Default)]
@@ -298,14 +327,34 @@ mod backend {
         /// Other clients linked to Gamescope's node (Steam's recording).
         others: AtomicU32,
         ended: AtomicBool,
+        /// The stream is paused for want of requests (`IDLE_PAUSE`).
+        paused: AtomicBool,
+        /// When a capture was last asked for.
+        asked: Mutex<Option<Instant>>,
         frames: Mutex<HashMap<u32, Arc<Latest>>>,
         arrived: Condvar,
     }
 
     impl Shared {
-        fn publish(&self, frame: Latest) {
+        /// Keep `plane` (from its first row) as the newest frame of `app`. The previous
+        /// frame's buffer is reused unless a capture still holds it.
+        #[allow(clippy::too_many_arguments)]
+        fn publish(&self, app: u32, plane: &[u8], stride: i32, width: u32, height: u32, order: PixelOrder) {
             let mut frames = self.frames.lock().unwrap();
-            frames.insert(frame.app, Arc::new(frame));
+            let received = Instant::now();
+            match frames.get_mut(&app).and_then(Arc::get_mut) {
+                Some(frame) => {
+                    frame.raw.clear();
+                    frame.raw.extend_from_slice(plane);
+                    (frame.received, frame.width, frame.height) = (received, width, height);
+                    (frame.stride, frame.order, frame.pixels) = (stride, order, OnceLock::new());
+                }
+                None => {
+                    let raw = plane.to_vec();
+                    let pixels = OnceLock::new();
+                    frames.insert(app, Arc::new(Latest { received, width, height, raw, stride, order, pixels }));
+                }
+            }
             self.arrived.notify_all();
         }
         fn end(&self) {
@@ -353,6 +402,8 @@ mod backend {
 
     enum Command {
         Stream(u32),
+        /// Resume a paused stream.
+        Wake,
         Stop,
     }
 
@@ -502,9 +553,8 @@ mod backend {
                 if w == 0 || h == 0 || u64::from(w) * u64::from(h) > MAX_PIXELS {
                     return;
                 }
-                let region = crop_region(w, h, None);
-                if let Some(pixels) = plane_to_rgba(valid, offset, stride, w, h, region, format.order) {
-                    data.shared.publish(Latest { app, received: Instant::now(), pixels, width: w, height: h });
+                if let Some(plane) = valid.get(offset..) {
+                    data.shared.publish(app, plane, stride, w, h, format.order);
                 }
             })
             .register()
@@ -539,9 +589,15 @@ mod backend {
                         return;
                     }
                     let _ = stream.disconnect();
+                    shared.paused.store(false, Ordering::SeqCst);
                     if let Err(e) = connect(app) {
                         eprintln!("Gamescope capture: {e}");
                         shared.end();
+                    }
+                }
+                Command::Wake => {
+                    if shared.paused.swap(false, Ordering::SeqCst) {
+                        let _ = stream.set_active(true);
                     }
                 }
                 Command::Stop => {
@@ -551,6 +607,16 @@ mod backend {
                 }
             }
         });
+        let idle = mainloop.loop_().add_timer({
+            let (stream, shared) = (stream.clone(), shared.clone());
+            move |_| {
+                let quiet = lock(&shared.asked).is_none_or(|at| at.elapsed() >= IDLE_PAUSE);
+                if quiet && !shared.paused.swap(true, Ordering::SeqCst) {
+                    let _ = stream.set_active(false);
+                }
+            }
+        });
+        let _ = idle.update_timer(Some(Duration::from_secs(1)), Some(Duration::from_secs(1)));
         ready.send(Ok(tx)).map_err(|_| "capture backend went away".to_string())?;
         mainloop.run();
         let _ = stream.disconnect();
@@ -622,12 +688,23 @@ mod backend {
         /// The newest frame of `app`, switching the stream to it when needed.
         fn latest(&self, app: u32, thumbnail: bool) -> Result<Arc<Latest>> {
             let shared = self.cast(app)?;
+            *lock(&shared.asked) = Some(Instant::now());
             if thumbnail {
                 if let Some(kept) = shared.kept(app).filter(|f| f.received.elapsed() < THUMBNAIL_AGE) {
                     return Ok(kept);
                 }
             }
             let streaming = shared.streaming.load(Ordering::SeqCst);
+            if streaming == app && shared.paused.load(Ordering::SeqCst) {
+                let since = Instant::now();
+                self.command(Command::Wake)?;
+                if let Some(frame) = shared.frame(app, Some(since), RESUME_WAIT) {
+                    return Ok(frame);
+                }
+                // A still app sends nothing new; what it last drew is still on screen.
+                eprintln!("Gamescope capture: no new frame {} ms after resuming; using the last one", RESUME_WAIT.as_millis());
+                return shared.kept(app).ok_or_else(|| idle(app));
+            }
             if streaming == app {
                 return shared.frame(app, None, FRAME_WAIT).ok_or_else(|| idle(app));
             }
@@ -638,11 +715,14 @@ mod backend {
                 ));
             }
             let since = Instant::now();
+            self.command(Command::Stream(app))?;
+            shared.frame(app, Some(since), SWITCH_WAIT).ok_or_else(|| idle(app))
+        }
+
+        fn command(&self, command: Command) -> Result<()> {
             let guard = self.cast.lock().unwrap();
             let cast = guard.as_ref().ok_or_else(|| native("Gamescope capture stopped"))?;
-            cast.commands.send(Command::Stream(app)).map_err(|_| native("Gamescope capture stopped"))?;
-            drop(guard);
-            shared.frame(app, Some(since), SWITCH_WAIT).ok_or_else(|| idle(app))
+            cast.commands.send(command).map_err(|_| native("Gamescope capture stopped"))
         }
 
         fn grab(&self, source_id: &str, crop: Option<Crop>, edge: Option<u32>) -> Result<Frame> {
@@ -660,7 +740,10 @@ mod backend {
             let (fw, fh) = (frame.width, frame.height);
             let copying = Instant::now();
             let rect = crop_rect(crop, fw, fh)?;
-            let mut pixels = if rect == [0, 0, fw, fh] { frame.pixels.clone() } else { crop_pixels(&frame.pixels, fw, rect) };
+            let source = frame
+                .pixels()
+                .ok_or_else(|| native("Gamescope sent a frame Kimochi could not read"))?;
+            let mut pixels = if rect == [0, 0, fw, fh] { source.clone() } else { crop_pixels(source, fw, rect) };
             let bounds = output();
             let base = bounds.map_or(1., |b| f64::from(fw) / b.width.max(1.));
             let (mut info_crop, mut full, mut scale) = (rect, (fw, fh), base);

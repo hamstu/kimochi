@@ -37,6 +37,8 @@ struct Link {
     root: u32,
     helper: u32,
     time_atom: u32,
+    /// Interned once: this is polled ten times a second, and every intern is a round trip.
+    atoms: std::cell::RefCell<HashMap<&'static [u8], u32>>,
 }
 impl Link {
     fn connect(name: &str) -> Result<Self, String> {
@@ -70,12 +72,18 @@ impl Link {
             root,
             helper,
             time_atom,
+            atoms: Default::default(),
         })
     }
-    fn atom(&self, name: &[u8]) -> Option<u32> {
-        Some(self.conn.intern_atom(false, name).ok()?.reply().ok()?.atom)
+    fn atom(&self, name: &'static [u8]) -> Option<u32> {
+        if let Some(atom) = self.atoms.borrow().get(name) {
+            return Some(*atom);
+        }
+        let atom = self.conn.intern_atom(false, name).ok()?.reply().ok()?.atom;
+        self.atoms.borrow_mut().insert(name, atom);
+        Some(atom)
     }
-    fn values(&self, window: u32, name: &[u8]) -> Option<Vec<u32>> {
+    fn values(&self, window: u32, name: &'static [u8]) -> Option<Vec<u32>> {
         Some(
             self.conn
                 .get_property(false, window, self.atom(name)?, AtomEnum::ANY, 0, 64)
@@ -86,10 +94,10 @@ impl Link {
                 .collect(),
         )
     }
-    fn scalar(&self, window: u32, name: &[u8]) -> Option<u32> {
+    fn scalar(&self, window: u32, name: &'static [u8]) -> Option<u32> {
         self.values(window, name)?.first().copied()
     }
-    fn display(&self, name: &[u8]) -> Option<String> {
+    fn display(&self, name: &'static [u8]) -> Option<String> {
         let bytes = self
             .values(self.root, name)?
             .iter()

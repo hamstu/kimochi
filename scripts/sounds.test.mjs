@@ -11,6 +11,7 @@ const {
   controlSound,
   createAudioPlayer,
   createBufferPlayer,
+  IDLE_SUSPEND_MS,
   installInteractionSounds,
   leadingSilence,
   LEAD_THRESHOLD,
@@ -457,6 +458,38 @@ test('buffered sounds play from their first audible sample, each on its own sour
   assert.equal(sounds.play('click'), true)
   assert.deepEqual(started, [0.01, 0.01], 'ten silent samples at 1 kHz are skipped, on two sources')
   assert.equal(context.resumed, 1, 'a suspended context is resumed once')
+})
+
+test('a sound output with nothing to play is suspended, and the next sound resumes it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const context = {
+    state: 'running',
+    destination: 'out',
+    suspended: 0,
+    resume() {
+      this.state = 'running'
+      return Promise.resolve()
+    },
+    suspend() {
+      this.suspended++
+      this.state = 'suspended'
+      return Promise.resolve()
+    },
+    decodeAudioData: async () => ({ numberOfChannels: 1, sampleRate: 1000, getChannelData: () => new Float32Array([1]) }),
+    createGain: () => ({ gain: { value: 1 }, connect() {} }),
+    createBufferSource: () => ({ buffer: null, connect() {}, start() {} })
+  }
+  const sounds = createBufferPlayer(context, async () => new ArrayBuffer(0))
+  sounds.load()
+  for (let i = 0; i < 5; i++) await Promise.resolve()
+  t.mock.timers.tick(IDLE_SUSPEND_MS - 1)
+  assert.equal(sounds.play('click'), true)
+  t.mock.timers.tick(IDLE_SUSPEND_MS - 1)
+  assert.equal(context.suspended, 0, 'each sound restarts the wait')
+  t.mock.timers.tick(1)
+  assert.equal(context.suspended, 1)
+  assert.equal(sounds.play('click'), true)
+  assert.equal(context.state, 'running', 'the next sound resumes it')
 })
 
 test('the volume setting is half by default, clamped, and read at each sound', () => {

@@ -80,6 +80,17 @@ pub fn controls_routed() -> bool {
         && CONTROL_OWNER.lock().unwrap_or_else(|e|e.into_inner()).is_some()
         && super::gamescope_focus::owns_input(std::process::id())
 }
+/// Whether Gamescope is showing Kimochi's own windows rather than the game or Steam. A
+/// managed main window stays mapped behind the game, so GTK still calls it visible.
+pub fn shown() -> bool {
+    let Some(own) = super::gamescope_handoff::own_id() else { return true };
+    let Some(d) = super::x11::desktop() else { return true };
+    d.conn.intern_atom(true, b"GAMESCOPE_FOCUSED_APP_GFX").ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .and_then(|atom| d.property32(d.root, atom.atom, AtomEnum::CARDINAL))
+        .and_then(|values| values.first().copied())
+        .is_none_or(|app| app == own)
+}
 pub fn return_to_game(app: &tauri::AppHandle) {
     return_to(app, None);
 }

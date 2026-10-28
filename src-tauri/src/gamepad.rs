@@ -152,7 +152,7 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 "gamepads": devices,
                 "activeGamepadIndex": active,
                 "buttonStates": buttons,
-                "axisStates": axes,
+                "axisStates": axes.iter().map(|value| broadcast_axis(*value)).collect::<Vec<_>>(),
                 "overlayNavigation": navigating(),
             });
             #[cfg(target_os = "linux")]
@@ -165,9 +165,12 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
             };
             // Every change goes out, and the unchanged state now and then, so a window opened
             // since still learns what is connected.
-            let stale = broadcast
-                .as_ref()
-                .is_none_or(|(last, at)| *last != state || at.elapsed() >= RESEND_UNCHANGED);
+            let stale = broadcast.as_ref().is_none_or(|(last, at)| {
+                let since = at.elapsed();
+                since >= RESEND_UNCHANGED
+                    || (*last != state
+                        && (since >= STICK_TICK || last["buttonStates"] != state["buttonStates"]))
+            });
             if stale {
                 let _ = app.emit("gamepad", &state);
                 broadcast = Some((state, Instant::now()));
@@ -253,6 +256,20 @@ const IDLE_TICK: Duration = Duration::from_millis(16);
 const MIN_TICK: Duration = Duration::from_millis(4);
 /// How often an unchanged `gamepad` state is sent again.
 const RESEND_UNCHANGED: Duration = Duration::from_millis(500);
+/// Stick movement alone goes out at most this often; a button change goes out at once.
+const STICK_TICK: Duration = Duration::from_millis(16);
+/// Below this a stick is at rest in `gamepad` events: the Deck's sticks jitter around zero
+/// in every report (about 230 a second), which otherwise woke every window each time.
+const BROADCAST_DEADZONE: f64 = 0.08;
+
+/// A stick axis as windows see it: at rest inside the dead zone, else in steps of 0.02.
+fn broadcast_axis(value: f64) -> f64 {
+    if !value.is_finite() || value.abs() < BROADCAST_DEADZONE {
+        0.0
+    } else {
+        (value * 50.0).round() / 50.0
+    }
+}
 
 /// Controller navigation: the overlay's radial menu is open and the controller drives it.
 static NAV: AtomicBool = AtomicBool::new(false);
@@ -563,6 +580,14 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn resting_stick_jitter_is_not_broadcast() {
+        assert_eq!(broadcast_axis(0.0025), 0.0);
+        assert_eq!(broadcast_axis(-0.07), 0.0);
+        assert_eq!(broadcast_axis(0.501), 0.5);
+        assert_eq!(broadcast_axis(-1.0), -1.0);
+        assert_eq!(broadcast_axis(f64::NAN), 0.0);
+    }
     use super::*;
 
     #[test]
