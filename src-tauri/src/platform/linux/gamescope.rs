@@ -174,6 +174,10 @@ fn input(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
         return Ok(());
     }
     window.set_focusable(on).map_err(|e| e.to_string())?;
+    if window.label() == "overlay" {
+        // Guarded before it is claimed, so a claim is never left without its guard.
+        if on { super::input_guard::renew(super::window::xid(window)?); } else { super::input_guard::release(); }
+    }
     property(window, b"STEAM_OVERLAY", u32::from(on))?;
     property(window, b"STEAM_INPUT_FOCUS", u32::from(on))?;
     if on && controls(window) { super::gamescope_touch::show(window.app_handle()); }

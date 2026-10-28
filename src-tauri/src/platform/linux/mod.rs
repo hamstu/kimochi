@@ -41,6 +41,7 @@ pub mod steam_input;
 mod gamescope_touch;
 mod gamescope_focus;
 mod gamescope_handoff;
+mod input_guard;
 mod controller_neutral;
 pub mod deck_input;
 pub mod hyprland;

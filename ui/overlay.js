@@ -3297,6 +3297,20 @@ const receiveExtensionRelay = ({ payload }) => {
 }
 await Promise.all(['ext-relay', 'ext-relay:overlay'].map((event) => native.listen(event, receiveExtensionRelay)))
 
+/** For a devtools inspector: what the overlay holds and why its text shows or not. */
+window.__kimochiOverlayState = () => ({
+  mode: controller?.mode,
+  annotations: state.annotations.length,
+  wordBoxes: document.querySelectorAll('[data-ocr-word-box]').length,
+  sourceFocus: state.sourceFocus,
+  regionSelecting: state.regionSelecting,
+  textOverlayVisible: state.flags.textOverlayVisible,
+  liveOverlay: setting('liveOverlayEnabled'),
+  visibility: document.visibilityState,
+  origin: state.origin,
+  info: state.info ? { source: state.info.source_id, crop: state.info.crop_pixels } : null
+})
+
 // Gaming Mode: while the controller drives Kimochi, Steam is paused, and the Deck's controller
 // falls back to its keyboard-and-mouse "lizard" mode (its firmware's watchdog): the D-pad sends
 // arrow keys, A Return, B Escape, the right trackpad moves a mouse. Kimochi reads the controller

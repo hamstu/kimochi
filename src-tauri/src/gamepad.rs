@@ -328,14 +328,6 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
             #[cfg(target_os="linux")] { !take_focus && crate::platform::gnome::eligible_popup_session() }
             #[cfg(not(target_os="linux"))] { false }
         };
-        if !was && !local_keys {
-            if let Err(e) = crate::hotkeys::set_nav_keys(app, true) {
-                log(
-                    app,
-                    json!({ "check": "controller-nav", "keys": "failed", "detail": e }),
-                );
-            }
-        }
         // Taking activation stops games that read controllers only in the foreground.
         // Keyboard navigation takes it too: Windows' low-level hook keeps the menu's keys out
         // of the game, but macOS's global shortcuts don't stop a game that reads the keyboard
@@ -367,12 +359,26 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
                 }
             });
         }
-        return *remembered;
+        let previous = *remembered;
+        // Never with NAV_RETURN held: from a background thread, registering waits for the
+        // main thread, which may itself be waiting for NAV_RETURN here (a deadlock that
+        // froze Gaming Mode with the overlay holding Gamescope's input).
+        drop(remembered);
+        if !was && !local_keys {
+            if let Err(e) = crate::hotkeys::set_nav_keys(app, true) {
+                log(
+                    app,
+                    json!({ "check": "controller-nav", "keys": "failed", "detail": e }),
+                );
+            }
+        }
+        return previous;
     }
+    let previous = remembered.take();
+    drop(remembered);
     if was {
         let _ = crate::hotkeys::set_nav_keys(app, false);
     }
-    let previous = remembered.take();
     if let Some(pid) = previous {
         #[cfg(target_os = "macos")]
         let held = BUTTONS_HELD.load(Ordering::SeqCst) || crate::platform::menu_keys_held();
@@ -403,6 +409,13 @@ pub fn release_if_elsewhere(app: &tauri::AppHandle, front: Option<u32>, source: 
         pending_return().take();
     }
     if !navigating() {
+        return;
+    }
+    // Gamescope never makes Kimochi the active window on its X display while the game keeps
+    // the base layer, so this would end every controller menu a moment after it opened.
+    // Losing input there is handled by platform/linux/gamescope.rs (Steam's buttons, focus).
+    #[cfg(target_os = "linux")]
+    if crate::platform::gamescope::active() {
         return;
     }
     let Some(front) = front else { return };

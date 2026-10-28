@@ -2681,6 +2681,12 @@ fn main() {
     #[cfg(target_os = "linux")]
     if platform::dictionary_images::run_check() { return; }
     if sentence_audio::run_check() { return; }
+    // Debugging aid: Yama's ptrace_scope=1 otherwise lets only the launcher (Steam's reaper)
+    // attach a debugger, so a hang in Gaming Mode could not be inspected over SSH.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("KIMOCHI_ALLOW_DEBUGGER").is_some() {
+        unsafe { libc::prctl(libc::PR_SET_PTRACER, libc::PR_SET_PTRACER_ANY) };
+    }
     // Before WebKitGTK starts a web process: Hachidori's threaded engine (loopback.rs).
     loopback::prepare_environment();
     // Before anything claims a shortcut, the gamepad or a capture stream: any other copy

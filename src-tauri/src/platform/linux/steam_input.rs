@@ -153,6 +153,13 @@ pub fn run_watchdog() -> bool {
     if args.get(1).map(String::as_str) != Some(FLAG) {
         return false;
     }
+    if args.get(2).map(String::as_str) == Some("claim") {
+        if let Some(xid) = args.get(3).and_then(|value| value.parse::<u32>().ok()) {
+            signals(c"kimochi-claim");
+            super::input_guard::run_watchdog(xid);
+        }
+        return true;
+    }
     if args.get(2).map(String::as_str) == Some("touch") {
         if super::gamescope::active() {
             signals(c"kimochi-touch");
