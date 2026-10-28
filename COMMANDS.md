@@ -1116,6 +1116,10 @@ save, then writes a zip of `report.md` (the page's Markdown, redacted again), `r
 the redacted last 512 KB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
 `auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `debug_verbose_set` lasts until the app quits;
 while on, window focus changes (`window-focus`) and every scan (`scan`) are recorded too.
+The shared `ocr_frame` path records `scan` phases `started`, `complete` and `failed`, with
+engine, frame id, dimensions, elapsed milliseconds, annotation/line counts and backend where
+available. It never includes pixels or recognized text. Debug capture status uses `capture.permission`;
+the capabilities command retains `capture.authorization`.
 `scan-failed` and `ocr-failed` are always recorded, with the engine and its error.
 
 Every `evidence.jsonl` record carries `at` (Unix ms), and the file is rotated to

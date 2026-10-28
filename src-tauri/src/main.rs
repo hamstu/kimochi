@@ -1916,6 +1916,10 @@ async fn ocr_frame(
             let _ = std::fs::write(p, &png);
         }
         let started = std::time::Instant::now();
+        debug_report::trace(&app, json!({
+            "check": "scan", "phase": "started", "id": id, "engine": engine,
+            "width": info["width"], "height": info["height"],
+        }));
         let recognized = match engine.as_str() {
             "meikiocr" | "local" => meiki_ocr::recognize(&app, &image),
             "mangaocr" => manga_ocr::recognize(&app, &image),
@@ -1928,6 +1932,10 @@ async fn ocr_frame(
         };
         // A failing engine is what a bug report most needs to show, with its own words.
         let value = recognized.inspect_err(|error| {
+            debug_report::trace(&app, json!({
+                "check": "scan", "phase": "failed", "id": id, "engine": engine,
+                "ms": started.elapsed().as_millis() as u64, "error": error,
+            }));
             record(
                 &app,
                 &service,
@@ -1938,6 +1946,12 @@ async fn ocr_frame(
             );
         })?;
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
+        debug_report::trace(&app, json!({
+            "check": "scan", "phase": "complete", "id": id, "engine": engine,
+            "backend": value["backend"], "annotations": count,
+            "lines": value["fullText"].as_str().map_or(0, |text| text.lines().filter(|line| !line.trim().is_empty()).count()),
+            "ms": started.elapsed().as_millis() as u64,
+        }));
         record(
             &app,
             &service,
