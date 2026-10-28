@@ -1121,6 +1121,8 @@ engine, frame id, dimensions, elapsed milliseconds, annotation/line counts and b
 available. It never includes pixels or recognized text. Debug capture status uses `capture.permission`;
 the capabilities command retains `capture.authorization`.
 `scan-failed` and `ocr-failed` are always recorded, with the engine and its error.
+`ocr-empty` is always recorded when frame OCR returns zero annotations, with id, engine,
+backend (when provided), width, height and elapsed ms; it contains no recognized text.
 
 Every `evidence.jsonl` record carries `at` (Unix ms), and the file is rotated to
 `evidence.1.jsonl` past 8 MB.

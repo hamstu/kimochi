@@ -1946,6 +1946,13 @@ async fn ocr_frame(
             );
         })?;
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
+        if count == 0 {
+            record(&app, &service, json!({
+                "check": "ocr-empty", "id": id, "engine": engine,
+                "width": info["width"], "height": info["height"],
+                "backend": value["backend"], "ms": started.elapsed().as_millis() as u64,
+            }));
+        }
         debug_report::trace(&app, json!({
             "check": "scan", "phase": "complete", "id": id, "engine": engine,
             "backend": value["backend"], "annotations": count,
