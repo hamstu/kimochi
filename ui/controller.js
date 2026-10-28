@@ -134,6 +134,8 @@ export function scrollSpeed(y) {
  * @param {(record: object) => void} context.log
  * @param {(mode: 'idle' | 'menu' | 'words' | 'dictionary' | 'history') => void} [context.modeChanged] the menu opened, word
  *   mode started, or controller mode ended; automatic OCR stands still while it is anything but idle
+ * @param {() => boolean} [context.padOnly] only the controller drives controller mode: keys are
+ *   ignored and the hints name pad buttons (Gaming Mode)
  * @param {() => Promise<object[]>} context.history read durable recent text without publishing it
  * @param {object} [context.fullDictionary] Read along as the full-screen dictionary instead of the
  *   outline and pop-up, while `enabled()` (Settings → Game Mode says so); `source()` says what
@@ -149,8 +151,19 @@ export function scrollSpeed(y) {
 export function createController(context) {
   const { host, native } = context;
   let mode = "idle";
+  /**
+   * The last few hundred things controller mode did (commands, modes, navigation), newest last, in
+   * memory only: `window.__kimochiControllerTrace` for reading through a devtools inspector.
+   */
+  const trace = [];
+  globalThis.__kimochiControllerTrace = trace;
+  function note(what, detail) {
+    trace.push({ at: Math.round(performance.now()), what, mode, ...detail });
+    if (trace.length > 400) trace.splice(0, trace.length - 400);
+  }
   function setMode(next) {
     if (next === mode) return;
+    note("mode", { next });
     if (next !== "idle") applyAppearance();
     mode = next;
     context.modeChanged?.(next);
@@ -243,7 +256,10 @@ export function createController(context) {
     onChoose: (id) => void choose(id),
     onClose: () => void close(),
   });
-  const controls = new ControllerInput((command) => void handle(command));
+  const controls = new ControllerInput((command) => {
+    if (command.type !== "aim" && command.type !== "scroll") note("command", command);
+    void handle(command);
+  });
 
   // The menu's own button combination closes it again, so it has to be known here.
   void native.hotkeysLoad?.().then((hotkeys) => {
@@ -255,6 +271,8 @@ export function createController(context) {
   });
 
   void native.listen("controller-nav", ({ payload }) => {
+    if (payload?.pressed?.length || payload?.released?.length)
+      note("nav-event", { pressed: payload.pressed, released: payload.released });
     if (mode === "idle") return;
     if (payload?.pressed?.length) input = "pad";
     controls.nav(payload);
@@ -262,16 +280,18 @@ export function createController(context) {
   // Native ended navigation because another app came to the front: its keys are already
   // given back, so just leave controller mode quietly.
   void native.listen("controller-nav-cancel", () => {
+    note("nav-cancel");
     context.log({ check: "controller-cancelled", reason: "focus-elsewhere" });
     void close();
   });
   void native.listen("controller-key", ({ payload }) => {
-    if (mode === "idle") return;
+    if (mode === "idle" || context.padOnly?.()) return;
     if (payload?.type === "keydown") input = "keys";
     controls.key(payload);
   });
 
   async function setNav(active) {
+    note("nav", { active });
     try {
       await native.controllerNav(active);
     } catch (error) {

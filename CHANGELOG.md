@@ -11,6 +11,14 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Fixed: on Linux, including the Steam Deck, Hachidori lookups from the controller or the overlay were slow and often showed nothing, because Kimochi's hidden windows ran their timers once a second.
+- Fixed: in Gaming Mode, one D-pad tap could move several words, B could close the pop-up twice, and the hints switched to keyboard keys. Kimochi now reads only the controller while it has it.
+- Kimochi uses far less CPU on the Steam Deck and other Linux PCs: game frames are only processed when a scan or preview needs them, the sidebar preview pauses while Kimochi is behind the game, sound effects release the audio output when quiet, and an idle controller no longer wakes every window.
+- Fixed: in Gaming Mode, reopening the controller menu could freeze Kimochi with its overlay still holding the Deck's input, so neither the game, the touchscreen nor the Steam button responded. The menu also no longer closes itself a moment after opening, and if Kimochi ever stops responding, the controls go back to the game and Steam within seconds.
+- Steam Deck: after Return to game, pressing a volume button no longer brings Kimochi back in front of the game.
+- Steam Deck: the back buttons (L4, R4, L5, R5) and trackpad clicks can be bound in Settings → Shortcuts & Controls, and the controller menu now opens with R4 by default, so both sticks stay with your game.
+- Steam Deck: setting a crop area works in Gaming Mode. Draw, move and resize the box with your finger, or move its corners with the sticks, then press A to save or B to cancel. Before, the editor could not be used or closed there.
+- Fixed: on the Steam Deck's touchscreen, tapping a button that opens a menu (Change source, Crop area, the ⋯ menus) often did nothing, or opened the menu and closed it again at once.
 - MeikiOCR recognizes Japanese text correctly through DirectML on Windows, fixing scans that returned no text on affected GPUs.
 - Choosing another dictionary engine during a Jitendex import now waits for installation to finish before switching, so the import is not interrupted. Other choices stay selectable.
 - Debug logs keep complete JSON records when several windows report at once, including when the log rotates.
@@ -20,8 +28,6 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Changing dictionary engines no longer throws a controller cleanup error when an old settings frame unloads.
 - Verbose debug logs now include OCR scan timings and failures from the normal Scan button and Auto OCR, without recording recognized text.
 - Debug reports show capture permission status correctly while keeping credentials redacted.
-- Steam Deck: the back buttons (L4, R4, L5, R5) and trackpad clicks can be bound in Settings → Shortcuts & Controls, and the controller menu now opens with R4 by default, so both sticks stay with your game.
-- Steam Deck: setting a crop area works in Gaming Mode. Draw, move and resize the box with your finger, or move its corners with the sticks, then press A to save or B to cancel. Before, the editor could not be used or closed there.
 - New: **Settings → About → Debug info**. **Copy** puts a report for a bug report on the clipboard (Kimochi's version, your OS, CPU, GPU and memory, displays and scaling, OCR engine and dictionary, Kimochi's windows and recent errors), **Save debug bundle** saves it with the recent logs as a zip, and **Verbose logging** records more detail while you reproduce a problem. Tokens, keys, e-mail addresses and your user name are left out.
 - The welcome guide's Set up Yomitan step works like the others: choosing Install Jitendex, Choose your own or Do it later only selects it, and the button at the bottom right does it. Before, two of them moved on as soon as you clicked.
 - Fixed: in the welcome guide, Jitendex's download and import progress no longer disappears when you switch windows or go to another step and back. The setup always kept going; now the guide shows it again.

@@ -5,6 +5,8 @@
  * (`windows/panel/PanelApp.tsx`). Tauri windows carry a label instead, so this switches on
  * `getCurrentWindow().label` — the same single-shell arrangement.
  */
+// First: one press per tap on WebKitGTK touchscreens, before any other listener.
+import "@ui/install-pointer-dedupe";
 import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";

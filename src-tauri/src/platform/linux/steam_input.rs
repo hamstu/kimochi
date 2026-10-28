@@ -15,11 +15,21 @@ const FLAG: &str = "--gamescope-input-watchdog";
 fn start_time(stat: &str) -> Option<&str> {
     stat.rsplit_once(')')?.1.split_whitespace().nth(19)
 }
+/// `DISPLAY` from a process environment (`/proc/<pid>/environ`).
+fn display_of(environ: &[u8]) -> Option<&[u8]> {
+    environ.split(|byte| *byte == 0).find_map(|entry| entry.strip_prefix(b"DISPLAY="))
+}
 fn identity(pid: u32) -> Option<String> {
     let path = std::path::PathBuf::from(format!("/proc/{pid}"));
     if path.metadata().ok()?.uid() != unsafe { libc::geteuid() }
         || std::fs::read_to_string(path.join("comm")).ok()?.trim() != "steam"
     {
+        return None;
+    }
+    // Only the Steam on this display: a copy of Kimochi under a nested Gamescope must not pause
+    // the Steam outside it.
+    let ours = std::env::var_os("DISPLAY")?;
+    if display_of(&std::fs::read(path.join("environ")).ok()?) != Some(ours.as_encoded_bytes()) {
         return None;
     }
     let stat = std::fs::read_to_string(path.join("stat")).ok()?;
@@ -143,6 +153,13 @@ pub fn run_watchdog() -> bool {
     if args.get(1).map(String::as_str) != Some(FLAG) {
         return false;
     }
+    if args.get(2).map(String::as_str) == Some("claim") {
+        if let Some(xid) = args.get(3).and_then(|value| value.parse::<u32>().ok()) {
+            signals(c"kimochi-claim");
+            super::input_guard::run_watchdog(xid);
+        }
+        return true;
+    }
     if args.get(2).map(String::as_str) == Some("touch") {
         if super::gamescope::active() {
             signals(c"kimochi-touch");
@@ -235,6 +252,13 @@ mod tests {
             start_time(&format!("123 (steam (test)) {suffix}")),
             Some("22")
         );
+    }
+    #[test]
+    fn display_comes_from_the_environment_block() {
+        use super::display_of;
+        assert_eq!(display_of(b"HOME=/home/deck\0DISPLAY=:0\0GAMESCOPE_WAYLAND_DISPLAY=gamescope-0\0"), Some(&b":0"[..]));
+        assert_eq!(display_of(b"WAYLAND_DISPLAY=wayland-0\0"), None);
+        assert_eq!(display_of(b""), None);
     }
     #[test]
     fn malformed_stat_has_no_identity() {

@@ -38,6 +38,7 @@
  * popup exactly where Yomitan put it on the desktop.
  */
 
+import './install-pointer-dedupe.js'
 import {
   anchorViewport,
   asEdges,

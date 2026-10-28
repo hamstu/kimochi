@@ -1499,6 +1499,22 @@ test("lookupRange, popupControl and dismiss drive Hachidori's hd_reader_command 
   assert.equal(result(overlay, '__kimochiExtensionHost.isPopupVisible()'), false)
 })
 
+test('a Hachidori lookup replaced by a newer one gives up instead of falling back', async () => {
+  const { world, overlay } = await hachidoriSession()
+  result(overlay, `
+    getSelection = () => ({ removeAllRanges() {}, addRange() {} })
+    globalThis.HDReaderReady = Promise.resolve({ scanSelectedText: () => false })
+  `)
+  const range = (text) => `({ text: "${text}", startContainer: { nodeType: 3, parentElement: document.body }, getClientRects: () => [{ left: 10, top: 10, width: 40, height: 20 }], getBoundingClientRect: () => ({ left: 10, top: 10, width: 40, height: 20 }) })`
+  const first = result(overlay, `__kimochiExtensionHost.lookupRange(${range('猫')})`)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  const second = result(overlay, `__kimochiExtensionHost.lookupRange(${range('犬')})`)
+  assert.equal(await first, false, 'the first lookup was replaced')
+  assert.equal(await second, true)
+  const fallbacks = world.reports.filter((r) => r.check === 'ext-host-lookup-fallback')
+  assert.equal(fallbacks.length, 1, 'only the current lookup falls back to the pointer')
+})
+
 test('lookupRange answers false where no content scripts run', async () => {
   const world = new World()
   const dictionary = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'dictionary', mirror: 'tenten' }))

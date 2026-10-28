@@ -1,3 +1,4 @@
+import './install-pointer-dedupe.js'
 const invoke = window.__TAURI__.core.invoke,
   $ = (id) => document.getElementById(id),
   label = document.body.dataset.panel

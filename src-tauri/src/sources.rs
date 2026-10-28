@@ -313,6 +313,12 @@ pub fn hover_preview(service: &Shared, source_id: &str) -> Result<Value, String>
 /// refreshes it every few seconds. It shares the source's running stream with scans and
 /// the hover preview, so it is a copy and a shrink rather than a capture of its own.
 pub fn live_thumbnail(service: &Shared, source_id: &str) -> Result<Value, String> {
+    // Behind the game in Gaming Mode nobody sees the preview: skip the capture, shrink and
+    // PNG encode (on the Deck they cost more than everything else Kimochi does while idle).
+    #[cfg(target_os = "linux")]
+    if crate::platform::gamescope::active() && !crate::platform::gamescope::shown() {
+        return Ok(json!({ "url": null }));
+    }
     #[cfg(target_os = "linux")]
     crate::platform::gnome::refresh_identity(service,source_id);
     let frame = capture_isolated(service, source_id)?;

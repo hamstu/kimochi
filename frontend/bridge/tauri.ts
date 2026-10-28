@@ -213,10 +213,11 @@ export const clearScan = (): Promise<void> => invoke('clear')
 export const sourceCatalog = (): Promise<NativeSource[]> => invoke<NativeSource[]>('source_catalog')
 export const sourceThumbnail = (sourceId: string): Promise<{ url: string }> =>
   invoke<{ url: string }>('source_thumbnail', { sourceId })
-/** The chosen source as it looks right now, uncached; `busy:` while a scan holds the capture. */
+/** The chosen source as it looks right now, uncached; `busy:` while a scan holds the capture.
+ *  No `url` while nobody can see the preview (Kimochi behind the game in Gaming Mode). */
 export const sourceLiveThumbnail = (
   sourceId: string
-): Promise<{ url: string; width: number; height: number }> =>
+): Promise<{ url: string | null; width: number; height: number }> =>
   invoke('source_live_thumbnail', { sourceId })
 /** What native tracks about the chosen window (`source-bounds`), or null for a display. */
 export interface SourceWindowState {

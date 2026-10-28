@@ -359,6 +359,9 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
       : null
   // The selection a Hachidori lookup left behind (see `dismiss`).
   let ownSelection = null
+  // The latest `lookupRange`: an earlier one still waiting gives up rather than fall back, since
+  // its fallback's pointer events would cancel the lookup that replaced it.
+  let lookups = 0
   const sameRange = (a, b) =>
     a.startContainer === b.startContainer && a.startOffset === b.startOffset && a.endContainer === b.endContainer && a.endOffset === b.endOffset
 
@@ -413,7 +416,7 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
    * element scrolling counts: the Log's transcript following a new line, the harness's log pane),
    * which would otherwise leave the popup to the 1.5 s fallback below.
    */
-  async function scanSelection() {
+  async function scanSelection(current) {
     let scrolled = false
     const onScroll = () => (scrolled = true)
     win.addEventListener('scroll', onScroll, true)
@@ -423,6 +426,7 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
       let retries = 3
       while (Date.now() - started < 1500) {
         if (visible()) return true
+        if (!current()) return false
         if (scrolled && retries > 0) {
           scrolled = false
           retries -= 1
@@ -504,21 +508,26 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
      */
     async lookupRange(range) {
       const { x, y } = lookupPoint(range)
+      const lookup = ++lookups
+      const current = () => lookup === lookups
       if (engine === 'hachidori') {
         const selection = win.getSelection()
         selection.removeAllRanges()
         selection.addRange(range)
         ownSelection = typeof range.cloneRange === 'function' ? range.cloneRange() : range
-        if (await scanSelection()) return true
+        const started = Date.now()
+        if (await scanSelection(current)) return true
+        if (!current()) return false
         try {
           const reader = await Promise.race([win.HDReaderReady, new Promise((resolve) => setTimeout(resolve, 500))])
-          if (reader?.scanSelectedText?.() && (await waitForPopup(1500))) return true
+          if (current() && reader?.scanSelectedText?.() && (await waitForPopup(1500))) return true
         } catch {
           // Fall through to the pointer.
         }
+        if (!current()) return false
         const target = win.document.elementFromPoint(x, y) ?? win.document.body
         dispatchPointer(win, descriptor, target, x, y)
-        report({ check: 'ext-host-lookup-fallback', engine, via: descriptor.pointerEvents.join('+') })
+        report({ check: 'ext-host-lookup-fallback', engine, via: descriptor.pointerEvents.join('+'), waitedMs: Date.now() - started })
         return true
       }
       const start = range.startContainer

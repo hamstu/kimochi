@@ -217,6 +217,19 @@ fn sync_keys(_app: &tauri::AppHandle) -> Result<(), String> {
 
 #[cfg(not(target_os = "windows"))]
 fn sync_keys(app: &tauri::AppHandle) -> Result<(), String> {
+    // Off the main thread, (un)registering blocks until the main thread runs it, while
+    // holding KEYS_SYNC, which the main thread may be waiting for: hand the whole sync over
+    // instead. It reads the wanted keys when it runs, so the latest request wins.
+    if std::thread::current().name() != Some("main") {
+        let handle = app.clone();
+        return app
+            .run_on_main_thread(move || {
+                if let Err(error) = sync_keys(&handle) {
+                    eprintln!("Controller keys: {error}");
+                }
+            })
+            .map_err(|e| e.to_string());
+    }
     let _serial = KEYS_SYNC
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());

@@ -94,6 +94,9 @@ x11rb = { version = "0.13", features = ["randr", "shape"] }
 zbus = "5.9"
 glib = "0.18"
 raw-window-handle = "0.6"
+# Hidden-page timer throttling off in every webview (platform/linux/webkit_timers.rs); the
+# version wry already uses.
+webkit2gtk = "2.0"
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # macOS coordinates instances itself (platform/macos/instance.rs).
 # `deep-link`: a second launch carrying a `kimochi://` URL hands it to the running copy.

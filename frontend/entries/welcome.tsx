@@ -3,6 +3,7 @@
  * (`PanelShell`: title bar, drag region, pin, minimize, close), with the HashRouter its steps
  * navigate with.
  */
+import '@ui/install-pointer-dedupe'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router'

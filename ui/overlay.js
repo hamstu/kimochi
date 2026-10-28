@@ -1,3 +1,4 @@
+import './install-pointer-dedupe.js'
 import { createDictionarySetup } from './setup-dictionaries.js'
 import { apiTokenize, dismissApiLookup, installApiLookup, lookupTerm, popupAnkiConfig } from './api-lookup.js'
 import { createAnki } from './game-dictionary-anki.js'
@@ -368,6 +369,9 @@ controller = createController({
   popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
   buttons: () => setting('controllerButtons'),
   appearance: () => setting('appearance'),
+  // Gaming Mode reads the Deck's own controller. Paused Steam lets it fall back to its keyboard
+  // and mouse "lizard" mode, whose arrow keys would move the outline a second time.
+  padOnly: () => window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope,
   // Yomitan's frontend module is only imported for Yomitan: it loads Yomitan's own frontend.
   lookupRange: async (range) =>
     extensionHosted
@@ -3292,6 +3296,38 @@ const receiveExtensionRelay = ({ payload }) => {
   void handleRelay(payload.from, payload.payload)
 }
 await Promise.all(['ext-relay', 'ext-relay:overlay'].map((event) => native.listen(event, receiveExtensionRelay)))
+
+/** For a devtools inspector: what the overlay holds and why its text shows or not. */
+window.__kimochiOverlayState = () => ({
+  mode: controller?.mode,
+  annotations: state.annotations.length,
+  wordBoxes: document.querySelectorAll('[data-ocr-word-box]').length,
+  sourceFocus: state.sourceFocus,
+  regionSelecting: state.regionSelecting,
+  textOverlayVisible: state.flags.textOverlayVisible,
+  liveOverlay: setting('liveOverlayEnabled'),
+  visibility: document.visibilityState,
+  origin: state.origin,
+  info: state.info ? { source: state.info.source_id, crop: state.info.crop_pixels } : null
+})
+
+// Gaming Mode: while the controller drives Kimochi, Steam is paused, and the Deck's controller
+// falls back to its keyboard-and-mouse "lizard" mode (its firmware's watchdog): the D-pad sends
+// arrow keys, A Return, B Escape, the right trackpad moves a mouse. Kimochi reads the controller
+// itself, so none of that may reach the page: Hachidori would act on the keys and look up, or
+// cancel a lookup, wherever that mouse is. The lookups' own synthetic events are not trusted, so
+// they still pass.
+for (const type of ['keydown', 'keyup', 'keypress', 'mousemove', 'mousedown', 'mouseup', 'click', 'wheel', 'pointermove', 'pointerdown', 'pointerup']) {
+  window.addEventListener(
+    type,
+    (event) => {
+      if (!event.isTrusted || !nativeGamescope || !controller || controller.mode === 'idle') return
+      event.stopImmediatePropagation()
+      if (event.cancelable) event.preventDefault()
+    },
+    { capture: true, passive: false }
+  )
+}
 
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return

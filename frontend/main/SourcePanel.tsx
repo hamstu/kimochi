@@ -358,16 +358,14 @@ function useLiveFrames(
         const frame = await sourceLiveThumbnail(sourceId)
         if (!alive) return
         staleRef.current?.(null)
-        if (frame.url) {
+        const url = frame.url
+        if (url) {
           setSize((current) => {
             const shape = keepShape(current, frame)
-            lastFrames.set(sourceId, { url: frame.url, size: shape })
+            lastFrames.set(sourceId, { url, size: shape })
             return shape
           })
-          setFrames((current) => [
-            ...current.slice(-1),
-            { id: next.current++, url: frame.url, ready: false }
-          ])
+          setFrames((current) => [...current.slice(-1), { id: next.current++, url, ready: false }])
         }
         schedule(REFRESH_MS)
       } catch (error) {

@@ -397,11 +397,15 @@ export function leadingSilence(channels: readonly Float32Array[], threshold = LE
   return Number.isFinite(first) ? first : 0
 }
 
+/** How long a window's sound output stays running after its last sound. */
+export const IDLE_SUSPEND_MS = 10_000
+
 /** The part of the Web Audio API the buffer player uses. */
 export interface AudioContextLike {
   readonly state: string
   readonly destination: unknown
   resume(): Promise<void>
+  suspend?(): Promise<void>
   decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike>
   createGain(): { gain: { value: number }; connect(to: unknown): unknown }
   createBufferSource(): {
@@ -422,6 +426,10 @@ export interface AudioBufferLike {
  * mix and a quick repeat never cuts the last one off. `play` returns false while a sound is not
  * decoded yet (or could not be), for the caller to fall back; `load` fetches and decodes every
  * sound once.
+ *
+ * A running context keeps the platform's audio output going even in silence (on Linux a
+ * GStreamer pipeline per window, a steady share of a Steam Deck's CPU), so it is suspended
+ * `IDLE_SUSPEND_MS` after the last sound and resumed by the next.
  */
 export function createBufferPlayer(
   context: AudioContextLike,
@@ -433,10 +441,20 @@ export function createBufferPlayer(
   gain.connect(context.destination)
   const sounds = new Map<SoundName, { buffer: AudioBufferLike; offset: number }>()
   let loading = false
+  let idle: ReturnType<typeof setTimeout> | undefined
+  const rest = (): void => {
+    clearTimeout(idle)
+    idle = setTimeout(() => {
+      if (context.state === 'running') void context.suspend?.().catch(() => undefined)
+    }, IDLE_SUSPEND_MS)
+    // Never what keeps a test (Node) process alive.
+    ;(idle as { unref?: () => void }).unref?.()
+  }
   return {
     load() {
       if (loading) return
       loading = true
+      rest()
       for (const name of SOUND_NAMES) {
         fetchSound(name)
           .then((data) => context.decodeAudioData(data))
@@ -460,6 +478,7 @@ export function createBufferPlayer(
       source.buffer = sound.buffer
       source.connect(gain)
       source.start(0, sound.offset)
+      rest()
       return true
     }
   }

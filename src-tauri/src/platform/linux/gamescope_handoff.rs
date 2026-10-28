@@ -20,6 +20,8 @@ use x11rb::{
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 static LAST_GAME: AtomicU32 = AtomicU32::new(0);
+/// The game Kimochi last handed the base layer to; 0 once Kimochi or Steam picks again.
+static RETURNED: AtomicU32 = AtomicU32::new(0);
 pub(super) fn own_id() -> Option<u32> {
     std::env::var("KIMOCHI_STEAM_APP_ID")
         .ok()?
@@ -35,6 +37,8 @@ struct Link {
     root: u32,
     helper: u32,
     time_atom: u32,
+    /// Interned once: this is polled ten times a second, and every intern is a round trip.
+    atoms: std::cell::RefCell<HashMap<&'static [u8], u32>>,
 }
 impl Link {
     fn connect(name: &str) -> Result<Self, String> {
@@ -68,12 +72,18 @@ impl Link {
             root,
             helper,
             time_atom,
+            atoms: Default::default(),
         })
     }
-    fn atom(&self, name: &[u8]) -> Option<u32> {
-        Some(self.conn.intern_atom(false, name).ok()?.reply().ok()?.atom)
+    fn atom(&self, name: &'static [u8]) -> Option<u32> {
+        if let Some(atom) = self.atoms.borrow().get(name) {
+            return Some(*atom);
+        }
+        let atom = self.conn.intern_atom(false, name).ok()?.reply().ok()?.atom;
+        self.atoms.borrow_mut().insert(name, atom);
+        Some(atom)
     }
-    fn values(&self, window: u32, name: &[u8]) -> Option<Vec<u32>> {
+    fn values(&self, window: u32, name: &'static [u8]) -> Option<Vec<u32>> {
         Some(
             self.conn
                 .get_property(false, window, self.atom(name)?, AtomEnum::ANY, 0, 64)
@@ -84,10 +94,10 @@ impl Link {
                 .collect(),
         )
     }
-    fn scalar(&self, window: u32, name: &[u8]) -> Option<u32> {
+    fn scalar(&self, window: u32, name: &'static [u8]) -> Option<u32> {
         self.values(window, name)?.first().copied()
     }
-    fn display(&self, name: &[u8]) -> Option<String> {
+    fn display(&self, name: &'static [u8]) -> Option<String> {
         let bytes = self
             .values(self.root, name)?
             .iter()
@@ -177,6 +187,20 @@ fn target(root: &Link, links: &mut HashMap<String, Link>) -> Option<Target> {
     }
     None
 }
+#[derive(Debug, PartialEq, Eq)]
+enum Steer { Keep, Reselect, Release }
+/// Steam owns GAMESCOPECTRL_BASELAYER_APPID and rewrites it from its own running-app
+/// state (`[…, <its app>, 769]`), which a native handoff cannot change. After our
+/// return, a rewrite that would raise Kimochi while Steam's UI did not have input
+/// (volume OSD, notifications) is stale: put the game back. A pick made from
+/// Steam's menu, or of any other app, is the user's and ends the guard.
+fn steer(returned: u32, own: Option<u32>, order: &[u32], focusable: &[u32], steam_ui: bool) -> Steer {
+    if returned == 0 { return Steer::Keep; }
+    if !focusable.contains(&returned) { return Steer::Release; }
+    let pick = order.iter().find(|id| focusable.contains(id)).copied();
+    if pick == Some(returned) { return Steer::Keep; }
+    if own.is_some() && pick == own && !steam_ui { Steer::Reselect } else { Steer::Release }
+}
 pub(super) fn start() {
     if !super::gamescope::active() || STARTED.swap(true, Ordering::SeqCst) {
         return;
@@ -191,7 +215,24 @@ pub(super) fn start() {
         };
         let mut links = HashMap::new();
         let mut previous = None;
+        let mut order = None;
+        let mut steam_ui = false;
         loop {
+            let current_order = root.values(root.root, b"GAMESCOPECTRL_BASELAYER_APPID");
+            if current_order != order {
+                let focusable = root.values(root.root, b"GAMESCOPE_FOCUSABLE_APPS").unwrap_or_default();
+                let returned = RETURNED.load(Ordering::SeqCst);
+                match steer(returned, own_id(), current_order.as_deref().unwrap_or_default(), &focusable, steam_ui) {
+                    Steer::Keep => {}
+                    Steer::Release => RETURNED.store(0, Ordering::SeqCst),
+                    Steer::Reselect => match select(returned) {
+                        Ok(()) => eprintln!("Gamescope return: Steam re-raised Kimochi; kept game {returned}"),
+                        Err(error) => eprintln!("Gamescope return: {error}"),
+                    },
+                }
+                order = current_order;
+            }
+            steam_ui = root.scalar(root.root, b"GAMESCOPE_FOCUSED_APP") == Some(769);
             if let Some(id) = root
                 .scalar(root.root, b"GAMESCOPE_FOCUSED_APP_GFX")
                 .filter(|id| game(*id))
@@ -255,6 +296,7 @@ pub(super) fn select(app: u32) -> Result<(), String> {
         .reply()
         .map_err(|e| e.to_string())?
         .atom;
+    if own_id().is_some() { RETURNED.store(if Some(app) == own_id() { 0 } else { app }, Ordering::SeqCst); }
     let order = priority(
         d.property32(d.root, atom, AtomEnum::CARDINAL)
             .unwrap_or_default(),
@@ -288,6 +330,20 @@ mod tests {
         ] {
             assert!(!coherent(input, graphics, window, wine, protocol));
         }
+    }
+    #[test]
+    fn stale_steam_rewrite_cannot_raise_kimochi_over_the_returned_game() {
+        let (own, game) = (Some(3826138355), 1244090);
+        let focusable = [3826138355, 1244090, 769];
+        let steam = [413091, 3826138355, 769];
+        assert_eq!(steer(game, own, &steam, &focusable, false), Steer::Reselect);
+        assert_eq!(steer(game, own, &[game, 413091, 3826138355, 769], &focusable, false), Steer::Keep);
+        // Chosen in Steam's menu, another app or Home, the game gone, or no return pending.
+        assert_eq!(steer(game, own, &steam, &focusable, true), Steer::Release);
+        assert_eq!(steer(game, own, &[413091, 769], &focusable, false), Steer::Release);
+        assert_eq!(steer(game, own, &steam, &[3826138355, 769], false), Steer::Release);
+        assert_eq!(steer(0, own, &steam, &focusable, false), Steer::Keep);
+        assert_eq!(steer(game, None, &steam, &focusable, false), Steer::Release);
     }
     #[test]
     fn explicit_switch_preserves_other_app_priorities_without_duplicates() {
