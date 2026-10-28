@@ -254,3 +254,30 @@ test("a dictionary enabled in the current profile is reported ready", async () =
   const { dictionaries } = await jobs.handle({ command: "catalog" });
   assert.equal(dictionaries[0].enabled, true);
 });
+
+test("catalog hands back the latest job, so a reopened guide resumes its progress", async () => {
+  const { jobs } = harness();
+  assert.equal((await jobs.handle({ command: "catalog" })).job, null);
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const slow = createDictionarySetup({
+    api: async (action) => (action === "getDictionaryInfo" ? [] : undefined),
+    countEntries: async () => 1,
+    fetchArchive: async () => {
+      await gate;
+      return { ok: false, status: 503 };
+    },
+    importArchive: async () => ({ errors: [] }),
+  });
+  const { id } = await slow.handle({ command: "start", dictionaryId: "jitendex" });
+  await tick();
+  const during = await slow.handle({ command: "catalog" });
+  assert.equal(during.job.id, id);
+  assert.equal(during.job.stage, "downloading");
+  release();
+  await tick();
+  await tick();
+  const after = await slow.handle({ command: "catalog" });
+  assert.equal(after.job.id, id);
+  assert.equal(after.job.stage, "failed");
+});

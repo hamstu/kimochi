@@ -144,10 +144,15 @@ function YomitanSetup(): JSX.Element {
   // or who imported before reaching this step, is not offered a dictionary they do not need.
   const [installed, setInstalled] = useState<Installed[] | null>(null)
   useEffect(() => {
-    void request<{ catalog: CatalogItem[]; dictionaries?: Installed[] }>({ command: 'catalog' })
+    void request<{ catalog: CatalogItem[]; dictionaries?: Installed[]; job?: Job | null }>({
+      command: 'catalog'
+    })
       .then((result) => {
         setCatalog(result.catalog)
         setInstalled((result.dictionaries ?? []).filter((item) => item.importSuccess !== false))
+        // The setup runs in the overlay's backend and outlives this step: one started before the
+        // step was left (or the window hidden or reloaded) carries on here with its progress.
+        if (result.job) setJob((current) => current ?? result.job ?? null)
       })
       .catch((caught) => {
         setError(String(caught))
