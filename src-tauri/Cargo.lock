@@ -3173,6 +3173,7 @@ dependencies = [
  "tokio",
  "tower-http",
  "tungstenite",
+ "webkit2gtk",
  "windows 0.61.3",
  "x11rb",
  "zbus",

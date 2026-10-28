@@ -1226,8 +1226,13 @@ fn ext_ipc_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         loopback::ext_migration_failed,
     ]);
     tauri::plugin::Builder::new("kimochi-ext")
-        // Not about the extension windows: every webview gets confirm/alert/prompt here.
-        .on_webview_ready(|webview| extensions::enable_script_dialogs(&webview))
+        // Not about the extension windows: every webview gets confirm/alert/prompt here, and on
+        // Linux keeps its timers running while hidden.
+        .on_webview_ready(|webview| {
+            extensions::enable_script_dialogs(&webview);
+            #[cfg(target_os = "linux")]
+            platform::webkit_timers::install(&webview);
+        })
         .invoke_handler(move |invoke: tauri::ipc::Invoke| {
             let label = invoke.message.webview_ref().label().to_string();
             if let Err(message) = loopback::plugin_command_allowed(&label, invoke.message.command()) {

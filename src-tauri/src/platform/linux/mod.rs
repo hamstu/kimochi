@@ -51,6 +51,7 @@ mod rules;
 mod window;
 mod workspace;
 mod x11;
+pub mod webkit_timers;
 
 use rules::{Backend, Session};
 pub use window::{

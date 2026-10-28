@@ -134,6 +134,8 @@ export function scrollSpeed(y) {
  * @param {(record: object) => void} context.log
  * @param {(mode: 'idle' | 'menu' | 'words' | 'dictionary' | 'history') => void} [context.modeChanged] the menu opened, word
  *   mode started, or controller mode ended; automatic OCR stands still while it is anything but idle
+ * @param {() => boolean} [context.padOnly] only the controller drives controller mode: keys are
+ *   ignored and the hints name pad buttons (Gaming Mode)
  * @param {() => Promise<object[]>} context.history read durable recent text without publishing it
  * @param {object} [context.fullDictionary] Read along as the full-screen dictionary instead of the
  *   outline and pop-up, while `enabled()` (Settings → Game Mode says so); `source()` says what
@@ -266,7 +268,7 @@ export function createController(context) {
     void close();
   });
   void native.listen("controller-key", ({ payload }) => {
-    if (mode === "idle") return;
+    if (mode === "idle" || context.padOnly?.()) return;
     if (payload?.type === "keydown") input = "keys";
     controls.key(payload);
   });

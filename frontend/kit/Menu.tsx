@@ -2,6 +2,8 @@ import {
   createContext,
   forwardRef,
   useContext,
+  useRef,
+  useState,
   type ComponentPropsWithoutRef,
   type ElementRef,
   type KeyboardEvent,
@@ -23,14 +25,61 @@ const InContextMenu = createContext(false)
 const usePrimitive = (): typeof MenuPrimitive =>
   useContext(InContextMenu) ? (ContextMenuPrimitive as unknown as typeof MenuPrimitive) : MenuPrimitive
 
-export function Menu(props: ComponentPropsWithoutRef<typeof MenuPrimitive.Root>): ReactNode {
+/** Opens or closes the `Menu` around a trigger; see `MenuTrigger`. */
+const MenuToggle = createContext<(() => void) | null>(null)
+
+export function Menu({
+  open: openProp,
+  defaultOpen = false,
+  onOpenChange,
+  ...props
+}: ComponentPropsWithoutRef<typeof MenuPrimitive.Root>): ReactNode {
+  const [openState, setOpenState] = useState(defaultOpen)
+  const open = openProp ?? openState
+  const setOpen = (next: boolean): void => {
+    if (openProp === undefined) setOpenState(next)
+    onOpenChange?.(next)
+  }
   return (
     <InContextMenu.Provider value={false}>
-      <MenuPrimitive.Root {...props} />
+      <MenuToggle.Provider value={() => setOpen(!open)}>
+        <MenuPrimitive.Root {...props} open={open} onOpenChange={setOpen} />
+      </MenuToggle.Provider>
     </InContextMenu.Provider>
   )
 }
-export const MenuTrigger = MenuPrimitive.Trigger
+
+/**
+ * Radix opens a menu on the press, which suits a mouse. A touch opens it on the tap's click
+ * instead, once the finger is up: on WebKitGTK (the Steam Deck) the rest of a tap (its emulated
+ * mouse press, a doubled touch) otherwise lands after the menu has opened and closes it again.
+ * See ui/pointer-dedupe.ts, which drops those as well.
+ */
+export const MenuTrigger = forwardRef<
+  ElementRef<typeof MenuPrimitive.Trigger>,
+  ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>
+>(function MenuTrigger({ onPointerDown, onClick, ...props }, ref) {
+  const toggle = useContext(MenuToggle)
+  const touched = useRef(false)
+  return (
+    <MenuPrimitive.Trigger
+      ref={ref}
+      {...props}
+      onPointerDown={(event) => {
+        onPointerDown?.(event)
+        touched.current = event.pointerType === 'touch'
+        // Cancelling the press keeps Radix from toggling on it (Radix cancels it itself on opening).
+        if (touched.current && toggle && !event.defaultPrevented) event.preventDefault()
+      }}
+      onClick={(event) => {
+        onClick?.(event)
+        if (!touched.current || !toggle || event.defaultPrevented || props.disabled) return
+        touched.current = false
+        toggle()
+      }}
+    />
+  )
+})
 
 /** A menu opened by right-clicking its trigger, at the pointer, instead of the system's. */
 export function ContextMenu(props: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Root>): ReactNode {
