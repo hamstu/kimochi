@@ -1267,8 +1267,9 @@ mod tests {
         assert_eq!(l.launcher(), Path::new("/home/deck/.local/share/kimochi/gaming-mode/launch.sh"));
         assert_eq!(l.current(), Path::new("/home/deck/.local/share/kimochi/gaming-mode/current"));
         assert_eq!(l.desktop(), Path::new("/home/deck/.local/share/applications/kimochi-gaming-mode.desktop"));
-        let custom = Layout::from_env(Some("/data/xdg"), Path::new("/home/deck"));
-        assert_eq!(custom.launcher(), Path::new("/data/xdg/kimochi/gaming-mode/launch.sh"));
+        let data = std::env::temp_dir().join("kimochi-xdg-layout");
+        let custom = Layout::from_env(data.to_str(), Path::new("/home/deck"));
+        assert_eq!(custom.launcher(), data.join("kimochi/gaming-mode/launch.sh"));
         // A relative XDG_DATA_HOME is invalid by the spec and ignored.
         assert_eq!(Layout::from_env(Some("rel"), Path::new("/home/deck")), l);
     }

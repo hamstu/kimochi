@@ -192,6 +192,14 @@ test("overlay menu chord does not also activate focused controls", () => {
   h.controller.destroy();
 });
 
+test("reset tolerates a document unloaded during an engine switch", () => {
+  const h = harness();
+  h.doc.documentElement = null;
+  assert.doesNotThrow(() => h.callbacks.get("blur")());
+  assert.doesNotThrow(() => h.callbacks.get("blur")());
+  h.controller.destroy();
+});
+
 test("a focused panel ignores the pad while the overlay is reading, held buttons included", () => {
   // Opening the controller menu brings Kimochi to the front, so the Log can be the focused
   // window; its focused control (Quit, once) must not take the overlay's A.

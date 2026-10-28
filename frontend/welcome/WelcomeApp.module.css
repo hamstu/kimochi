@@ -133,7 +133,8 @@
   margin: 0;
 }
 
-/* Built-in Yomitan's setup: the ways to add a dictionary, side by side, the recommended one first. */
+/* Yomitan's setup: the ways to add a dictionary, side by side, the recommended one first. Choosing
+   one only selects it; the bar's primary button acts on it. */
 .options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
@@ -147,8 +148,8 @@
 .option[data-recommended]:not(:disabled) {
   box-shadow: inset 0 0 0 1px var(--k-accent-line);
 }
-.option:disabled {
-  opacity: 1;
+.option[data-state='on'] {
+  box-shadow: inset 0 0 0 1.5px var(--k-accent);
 }
 .optionIcon {
   display: grid;

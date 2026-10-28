@@ -252,6 +252,11 @@ function kimochiDev(): Plugin {
           return
         }
         // The harness's stand-in for native's all-frames Yomitan shim (see ext-dev-server.mjs).
+        if (url.split('?')[0] === '/settings.html' && !harnessInjectsYomitanShim(req.headers.cookie)) {
+          const html = await readFile(file, 'utf8')
+          res.end(req.method === 'HEAD' ? undefined : injectHostScript(html, '<script src="/spike/panel-shim.js"></script>'))
+          return
+        }
         if (file.endsWith('.html') && harnessInjectsYomitanShim(req.headers.cookie)) {
           const html = await readFile(file, 'utf8')
           res.end(req.method === 'HEAD' ? undefined : injectHostScript(html, YOMITAN_SHIM_TAG))

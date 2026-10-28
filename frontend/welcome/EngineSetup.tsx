@@ -36,7 +36,7 @@ export const AFTER_SKIP = STEAM_ROUTE
 
 export default function EngineSetup(): JSX.Element {
   const navigate = useNavigate()
-  const { active, saved, pending, asking, confirmDownload, choose, reloading, applyError } =
+  const { active, saved, pending, asking, confirmDownload, choose, reloading, waitingForImport, applyError } =
     useDictionarySwitch('settings')
   // The panel's button already says "Download · 15 MB": that click is the answer.
   useEffect(() => {
@@ -65,6 +65,8 @@ export default function EngineSetup(): JSX.Element {
         status={
           applyError ? (
             <Callout tone="danger">{applyError}</Callout>
+          ) : waitingForImport ? (
+            <span role="status">Jitendex is still installing. Switching when it finishes.</span>
           ) : reloading ? (
             <span role="status">Switching to {DICTIONARY_ENGINES[active].name}…</span>
           ) : null

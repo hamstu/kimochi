@@ -499,6 +499,28 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "manual CPU/accelerator comparison; requires MEIKIOCR_TEST_IMAGE and MEIKIOCR_MODEL_DIR"]
+    fn fixture_backend_diagnostics() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/meikiocr");
+        initialize_runtime(&root).unwrap();
+        let source = image::open(std::env::var("MEIKIOCR_TEST_IMAGE").unwrap()).unwrap().to_rgb8();
+        for backend in [Backend::Auto, Backend::Cpu] {
+            let mut engine = MeikiOcr::with_config(
+                ModelPaths::from_dir(std::env::var("MEIKIOCR_MODEL_DIR").unwrap()),
+                Config { backend, ..Config::default() },
+            ).unwrap();
+            for image in [source.clone(), image::imageops::resize(&source, source.width() * 2, source.height() * 2, image::imageops::FilterType::Triangle)] {
+                let detections = engine.detect(&image, 0.0).unwrap();
+                let lines = infer(&mut engine, &image).unwrap();
+                println!("backend={:?} size={}x{} candidates={} above_default={} max_score={} lines={}",
+                    engine.backend_info(), image.width(), image.height(), detections.len(),
+                    detections.iter().filter(|item| item.confidence > 0.5).count(),
+                    detections.iter().map(|item| item.confidence).fold(0.0_f32, f32::max), lines.len());
+            }
+        }
+    }
+
+    #[test]
     fn overlay_contract_preserves_text_and_capture_coordinates() {
         let line = TextLine {
             text: "日本語".into(),

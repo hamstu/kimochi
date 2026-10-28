@@ -21,6 +21,9 @@ export function createDictionarySetup({
   const jobs = new Map();
   let serial = 0;
   let running = null;
+  // The most recent job, running or not: a guide window that was reloaded, hidden or left for
+  // another step picks its progress (or its outcome) back up from `catalog`.
+  let latest = null;
   async function run(job, recommended) {
     try {
       const existing = await api("getDictionaryInfo");
@@ -125,6 +128,7 @@ export function createDictionarySetup({
   return {
     handles: (action) => action === "__setupDictionaries",
     async handle({ command, id, dictionaryId } = {}) {
+      if (command === "active") return running ? { ...jobs.get(running) } : null;
       if (command === "practice") {
         const result = await api("termsFind", {
           text: "日本語",
@@ -149,6 +153,7 @@ export function createDictionarySetup({
         );
         return {
           catalog,
+          job: latest && jobs.has(latest) ? { ...jobs.get(latest) } : null,
           dictionaries: dictionaries.map((item) => ({
             ...item,
             enabled: enabled.has(item.title),
@@ -177,6 +182,7 @@ export function createDictionarySetup({
       };
       jobs.set(job.id, job);
       running = job.id;
+      latest = job.id;
       void run(job, recommended);
       return { id: job.id };
     },

@@ -12,8 +12,14 @@ import '../shell/panel.css'
 import Providers from './providers'
 import PanelShell from '../shell/PanelShell'
 import WelcomeApp from '../welcome/WelcomeApp'
+import { reportError, reportUncaughtErrors } from './reportErrors'
 
-createRoot(document.getElementById('root')!).render(
+// A blank guide is otherwise silent: its errors go to the diagnostics record, as the panels' do.
+reportUncaughtErrors('welcome')
+
+createRoot(document.getElementById('root')!, {
+  onUncaughtError: (error) => reportError('welcome', 'render', error)
+}).render(
   <StrictMode>
     <Providers>
       <PanelShell label="welcome" title="Welcome to Kimochi">

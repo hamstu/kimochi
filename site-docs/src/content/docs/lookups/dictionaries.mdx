@@ -1,6 +1,6 @@
 ---
 title: Dictionaries
-description: Choose a pop-up dictionary engine (Built-in Yomitan, Hachidori, 10ten or the Yomitan API) and add dictionaries to it.
+description: Choose a pop-up dictionary engine (Yomitan, Hachidori, 10ten or the Yomitan API) and add dictionaries to it.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -15,13 +15,13 @@ Kimochi looks words up with a **pop-up dictionary engine**. Choose one in the si
 **Dictionary** menu or in **Settings → Dictionary**; Kimochi downloads it from its official release
 the first time.
 
-<Screenshot id="dictionary-picker" alt="The sidebar's Dictionary menu: Built-in Yomitan, Hachidori, 10ten and Yomitan API." width={720} />
+<Screenshot id="dictionary-picker" alt="The sidebar's Dictionary menu: Yomitan, Hachidori, 10ten and Yomitan API." width={720} />
 
-<Screenshot id="settings-dictionary" alt="Settings, Dictionary: the four engines on the left and Built-in Yomitan's details, with a preview of its pop-up." width={760} />
+<Screenshot id="settings-dictionary" alt="Settings, Dictionary: the four engines on the left and Yomitan's details, with a preview of its pop-up." width={760} />
 
 | Engine | What it is | Download | Anki |
 | --- | --- | --- | --- |
-| **Built-in Yomitan** (recommended) | A copy of Yomitan inside Kimochi, with its own dictionaries and settings. | About 15 MB | Yomitan's own mining |
+| **Yomitan** (recommended) | A copy of Yomitan inside Kimochi, with its own dictionaries and settings. | About 15 MB | Yomitan's own mining |
 | **Hachidori** | A fast engine written in C++ and compiled to WebAssembly, with native dictionary indexes. Imports Yomitan dictionaries and MDict. | About 5 MB | Through AnkiConnect |
 | **10ten** | Lightweight, works straight away with a bundled word dictionary, then downloads JMdict, kanji and names dictionaries in the background. | About 18 MB | None |
 | **Yomitan API** | A pop-up built into Kimochi that looks words up through the Yomitan in your browser. | Small helper | Kimochi's card builder |
@@ -41,14 +41,14 @@ background and the current version keeps working until the new one is ready and 
 shows in **Settings → Dictionary**. Your dictionaries and settings are kept, and engines you never
 downloaded stay that way.
 
-## Built-in Yomitan
+## Yomitan
 
 An embedded copy of [Yomitan](https://github.com/yomidevs/yomitan) that runs inside Kimochi, so
 there is no browser extension to install. It needs at least one dictionary:
 
 - **Install Jitendex** (in the welcome guide) downloads the Jitendex Japanese–English dictionary and
   enables it in your current profile.
-- **Open Built-in Yomitan settings** (in **Settings → Dictionary**) opens Yomitan's own settings
+- **Open Yomitan settings** (in **Settings → Dictionary**) opens Yomitan's own settings
   page, where you import dictionaries, restore a settings backup exported from Yomitan in your
   browser, and set up audio, scanning and Anki.
 

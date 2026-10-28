@@ -641,6 +641,23 @@ test('the Yomitan shims install only for yomitan and builtin', async () => {
   }
 })
 
+test('a Yomitan frame registers again when about:blank globals survive navigation', async () => {
+  const shim = await yomitanShimSource('panel-shim.js', { network: 'Promise.resolve()' })
+  const world = new World()
+  const root = world.window({ href: `${APP}/app/panel.html`, label: 'dictionary', mirror: 'builtin' })
+  root.fetch = async () => ({ json: async () => ({}) })
+  world.run(root, shim)
+  const frame = world.window({ href: 'about:blank', parent: root, prelude: 'yomitan' })
+  world.run(frame, shim)
+  const old = frame.chrome.runtime
+  frame.dispatchEvent(new Event('pagehide'))
+  world.run(frame, 'document = { ...document }; location = { ...location, href: top.location.origin + "/settings.html", origin: top.location.origin, protocol: "tauri:" }')
+  world.run(frame, shim)
+  assert.notEqual(frame.chrome.runtime, old)
+  assert.equal(result(frame, '__yomitanPanelShim === document'), true)
+  assert.equal(root.__extensionHost.contexts.size, 2)
+})
+
 test("no host installs for 'none' (nothing downloaded, or the Yomitan API, which needs none)", async () => {
   const panelShim = await yomitanShimSource('panel-shim.js', { network: 'Promise.resolve()' })
   // From the mirror, and from native's prelude when there is no mirror yet. The Yomitan API is

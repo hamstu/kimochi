@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YomitanSettings } from '../../vendor/shared-types'
 import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
+import { waitForDictionarySetup } from '@ui/dictionary-setup-switch'
 import { useSetting } from '../../bridge/useSetting'
 import { setSetting } from '../../bridge/settings'
 import { nativeError, onEvent } from '../../bridge/tauri'
@@ -83,6 +84,9 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
   // itself (the main window), 'others' when only the reader windows are.
   const [reloading, setReloading] = useState<'self' | 'others' | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
+  const [waitingForImport, setWaitingForImport] = useState(false)
+  const switchRequest = useRef(0)
+  useEffect(() => () => { switchRequest.current++ }, [])
 
   if (picked !== null && picked === saved) setPicked(null)
 
@@ -104,14 +108,31 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
 
   const commit = useCallback(
     async (engine: DictionaryEngine): Promise<void> => {
+      const request = ++switchRequest.current
       setPicked(engine)
+      setWaitingForImport(false)
       setApplyError(null)
       setSwitchedTo(null)
       try {
+        const host = (window as unknown as {
+          __extensionHost?: { toBackend: (message: object) => Promise<{ stage: string } | null> }
+        }).__extensionHost
+        if (saved === 'yomitan' && engine !== saved && host) {
+          await waitForDictionarySetup(
+            () => request === switchRequest.current
+              ? host.toBackend({ action: '__setupDictionaries', params: { command: 'active' } })
+              : Promise.resolve(null),
+            () => { if (request === switchRequest.current) setWaitingForImport(true) }
+          )
+        }
+        if (request !== switchRequest.current) return
+        setWaitingForImport(false)
         // Through the settings client directly, not the hook's setter: that one reverts quietly
         // on failure, and a failed save must not go on to mirror and reload the windows.
         await setSetting('yomitanSettings', { ...yomitanSettings, popupType: popupTypeOf(engine) })
       } catch (error) {
+        if (request !== switchRequest.current) return
+        setWaitingForImport(false)
         setPicked(null)
         setApplyError(`Could not save the dictionary engine: ${nativeError(error).message}`)
         return
@@ -263,6 +284,7 @@ export function useDictionarySwitch(from: 'settings' | 'sidebar') {
     confirmDownload,
     choose: handleChoose,
     reloading,
+    waitingForImport,
     applyError,
     switchedTo,
     /** True while a switch to the Yomitan API is checking that it answers. */

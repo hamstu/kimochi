@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest something Kimochi could do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the idea. Say what you'd like to do, and how you get by today. That matters more than how it should be built.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: The feature in a sentence or two.
+      placeholder: Translate the lines I select with my own DeepL or OpenAI key.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Reporter / source
+      description: If this came from somewhere else (a Discord message, a forum post), link it here and say who asked.
+  - type: textarea
+    id: said
+    attributes:
+      label: What was asked for, in their words
+  - type: textarea
+    id: requested
+    attributes:
+      label: Requested
+      description: What you'd like Kimochi to do, and what it would let you do.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: Today
+      description: How you do this now, or what stops you.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Your OS, and the OCR engine and dictionary you use, if it matters. Settings → About → Debug info → Copy has all of it.
+  - type: textarea
+    id: needed
+    attributes:
+      label: Info still needed
+      description: Open questions for the requester (provider, scope, …).

@@ -33,6 +33,7 @@ import {
   type DictionaryEngine
 } from '../bridge/dictionaryEngine'
 import { frameDocument, revealSectionWhenLoaded } from './dictionarySection'
+import { dictionaryPageReady } from './dictionaryPageState'
 import './dictionary-settings.css'
 
 /** The engine's options page, or null when its origin is unknown here (outside Kimochi). */
@@ -92,6 +93,8 @@ export default function DictionarySettingsPanel(): JSX.Element {
 function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'> }): JSX.Element {
   const name = DICTIONARY_ENGINES[engine].name
   const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const frame = useRef<HTMLIFrameElement>(null)
   const [first] = useState(() => {
     const pending = acceptNavigation(engine, extensionHost()?.pendingNavigate)
@@ -102,6 +105,21 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
       : { src: pending ?? options, section: null }
   })
   const [src, setSrc] = useState<string | null>(first.src)
+  useEffect(() => {
+    if (engine !== 'yomitan') return
+    const started = Date.now()
+    const timer = setInterval(() => {
+      if (dictionaryPageReady(frameDocument(frame.current))) {
+        setLoaded(true)
+        setFailed(false)
+        clearInterval(timer)
+      } else if (Date.now() - started >= 30000) {
+        setFailed(true)
+        clearInterval(timer)
+      }
+    }, 250)
+    return () => clearInterval(timer)
+  }, [engine, src, attempt])
   // Yomitan's section to scroll to once its page has loaded and laid itself out (see
   // dictionarySection.ts): its fragment alone is applied too early, and the page opens at the top.
   const yomitanSection = useRef<string | null>(engine === 'yomitan' ? first.section : null)
@@ -191,11 +209,21 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
     <div className="dictionary-settings">
       {!loaded && (
         <div className="dictionary-settings-loading">
-          <Spinner label={`Loading ${name} settings`} />
-          <span>Loading {name} settings…</span>
+          {failed ? <>
+            <span>{name} settings did not finish loading. An import may still be running.</span>
+            <Button onClick={() => {
+              setLoaded(false)
+              setFailed(false)
+              setAttempt((current) => current + 1)
+            }}>Retry</Button>
+          </> : <>
+            <Spinner label={`Loading ${name} settings`} />
+            <span>Loading {name} settings…</span>
+          </>}
         </div>
       )}
       <iframe
+        key={attempt}
         ref={frame}
         title={`${name} settings`}
         src={src}
@@ -205,9 +233,10 @@ function EnginePage({ engine }: { engine: Exclude<DictionaryEngine, 'custom-api'
         allow="clipboard-read; clipboard-write; autoplay"
         data-loaded={loaded || undefined}
         onLoad={() => {
-          setLoaded(true)
+          if (engine !== 'yomitan' || dictionaryPageReady(frameDocument(frame.current))) setLoaded(true)
           revealYomitanSection()
         }}
+        onError={() => setFailed(true)}
       />
     </div>
   )

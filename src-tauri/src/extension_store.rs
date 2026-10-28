@@ -1745,7 +1745,7 @@ impl<R: tauri::Runtime> tauri::Assets<R> for EngineAssets<R> {
 
     fn get(&self, key: &tauri::utils::assets::AssetKey) -> Option<Cow<'_, [u8]>> {
         match yomitan_path(key.as_ref()) {
-            Some(rel) => read("yomitan", rel).map(Cow::Owned),
+            Some(rel) => read("yomitan", rel).map(|bytes| Cow::Owned(settings_host(rel, bytes))),
             None => self.embedded.get(key),
         }
     }
@@ -1760,6 +1760,15 @@ impl<R: tauri::Runtime> tauri::Assets<R> for EngineAssets<R> {
     ) -> Box<dyn Iterator<Item = tauri::utils::assets::CspHash<'_>> + '_> {
         self.embedded.csp_hashes(html_path)
     }
+}
+
+/// WebView2's initial blank frame may receive native initialization without its first
+/// navigated document receiving it. Install the relayed host before Yomitan's settings
+/// module runs as well; its document-scoped guard makes ordinary initialization a no-op.
+fn settings_host(rel: &str, bytes: Vec<u8>) -> Vec<u8> {
+    if rel != "settings.html" { return bytes; }
+    let Ok(html) = std::str::from_utf8(&bytes) else { return bytes; };
+    html.replacen("<head>", "<head><script src=\"/spike/panel-shim.js\"></script>", 1).into_bytes()
 }
 
 // ---------------------------------------------------------------------------- app glue
@@ -1944,6 +1953,14 @@ pub async fn extension_delete(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn settings_install_the_host_after_blank_frame_navigation() {
+        let html = b"<!doctype html><html><head><title>Settings</title></head></html>".to_vec();
+        let patched = settings_host("settings.html", html.clone());
+        assert!(String::from_utf8(patched).unwrap().contains("<head><script src=\"/spike/panel-shim.js\"></script>"));
+        assert_eq!(settings_host("other.html", html.clone()), html);
+        assert_eq!(settings_host("settings.html", vec![255]), vec![255]);
+    }
     use crate::model_store::{Body, Opened};
     use std::sync::atomic::AtomicUsize;
 

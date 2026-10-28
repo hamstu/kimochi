@@ -185,8 +185,13 @@ export function installPanelController(win, { onBack = () => false } = {}) {
         /* Cross-origin frame stays an ordinary focus target. */
       }
     }
-    for (const doc of documents)
+    for (const doc of documents) {
+      if (!doc.documentElement) {
+        documents.delete(doc);
+        continue;
+      }
       doc.documentElement.removeAttribute("data-controller-focus");
+    }
     const doc = element.ownerDocument;
     documents.add(doc);
     if (
@@ -321,8 +326,13 @@ export function installPanelController(win, { onBack = () => false } = {}) {
     input.reset();
     scroll = 0;
     editing = false;
-    for (const doc of documents)
+    for (const doc of documents) {
+      if (!doc.documentElement) {
+        documents.delete(doc);
+        continue;
+      }
       doc.documentElement.removeAttribute("data-controller-focus");
+    }
   }
   const pointer = () => reset();
   win.addEventListener("blur", reset);

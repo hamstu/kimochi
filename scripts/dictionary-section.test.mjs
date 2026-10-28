@@ -80,7 +80,7 @@ test('a page that never finishes, a missing section or no document gives up quie
 test('the dictionary window uses it for Built-in Yomitan on load, and leaves Hachidori to its own fragment', async () => {
   const panel = await readFile(new URL('../frontend/panels/DictionarySettingsPanel.tsx', import.meta.url), 'utf8')
   assert.match(panel, /engine === 'yomitan' \? first\.section : null/)
-  assert.match(panel, /onLoad=\{\(\) => \{\s*setLoaded\(true\)\s*revealYomitanSection\(\)/)
+  assert.match(panel, /onLoad=\{\(\) => \{\s*if \(engine !== 'yomitan' \|\| dictionaryPageReady\(frameDocument\(frame.current\)\)\) setLoaded\(true\)\s*revealYomitanSection\(\)/)
   assert.match(panel, /revealSectionWhenLoaded\(\(\) => frameDocument\(frame\.current\), section\)/)
 })
 

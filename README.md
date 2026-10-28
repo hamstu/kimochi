@@ -29,7 +29,7 @@ Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux buil
 - **OCR where the text is**: Google Lens by default (captures are sent to Google), or local
   engines (MeikiOCR, Manga OCR, Apple Live Text on macOS, OneOCR on Windows 11). Auto OCR waits
   for text to settle, then reads it once.
-- **Pop-up dictionaries**: Built-in Yomitan, Hachidori or 10ten, downloaded on demand from their
+- **Pop-up dictionaries**: Yomitan, Hachidori or 10ten, downloaded on demand from their
   upstream releases, hash-checked and run unmodified, with your own dictionaries; or the Yomitan
   API, which looks words up through the Yomitan already in your browser.
 - **Reading log**: a built-in texthooker with sessions, reading stats, a notebook and VNDB
@@ -99,6 +99,14 @@ Windows (`scripts/sign-windows.mjs`); setting the same variables locally does th
 
 Settings, history and downloaded engines live in the app's data folder (on macOS,
 `~/Library/Application Support/dev.kimochi.app/`); dictionaries live in the webview's IndexedDB.
+
+## Reporting a problem
+
+Open an issue with the **Bug report** template, or ask in the
+[Discord](https://discord.gg/vdMge6TBZQ). In Kimochi, **Settings → About → Debug info → Copy**
+gives you the details a report needs (version, OS, hardware, displays, OCR engine, dictionary,
+recent errors), with tokens and your user name left out. **Save debug bundle** adds the recent logs
+as a zip; turn on **Verbose logging** first to record more while you make the problem happen.
 
 ## Contributing
 

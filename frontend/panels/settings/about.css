@@ -95,3 +95,8 @@
   font-size: var(--k-text-xs);
   line-height: var(--k-leading-xs);
 }
+
+/* Debug info (DebugInfoSection.tsx): a failure under the section reads as one. */
+.about-debug-error {
+  color: var(--k-danger-text);
+}

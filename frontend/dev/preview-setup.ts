@@ -510,6 +510,8 @@ const DISPLAYS = [
 ]
 
 let liveMini = false
+/** Settings → About's verbose logging switch, for this preview. */
+let previewVerbose = false
 
 function panelInfo(label: string): Record<string, unknown> {
   return {
@@ -714,6 +716,27 @@ const HANDLERS: Record<string, Handler> = {
     return panelInfo(String(a?.label))
   },
   panel_content_height: ok,
+  // Settings → About → Debug info.
+  debug_report: () => ({
+    generatedAt: new Date().toISOString(),
+    app: { version: '0.2.0', commit: null, build: 'debug', tauri: '2', webview: 'preview' },
+    os: { name: 'macos', version: '26.0', arch: 'aarch64', session: null },
+    hardware: { cpu: 'Apple M2', cores: 8, memoryBytes: 17179869184, gpus: ['Apple M2'] },
+    displays: [{ id: 1, source_id: 'display:1', bounds: { x: 0, y: 0, width: 1512, height: 982 }, work_area: {}, scale_factor: 2 }],
+    capture: { authorization: 'granted', windowCapture: true, excludesOwnWindows: true },
+    ocr: { selected: 'meikiocr', engines: { meikiocr: { available: true } }, models: [], cloudAccess: false },
+    dictionary: { selected: 'yomitan', downloads: [] },
+    session: { sourceKind: 'window', autoOcr: false, status: 'Idle' },
+    settings: { ocrMode: 'meikiocr' },
+    windows: [{ label: 'settings', visible: true, minimized: false, focused: true }],
+    verboseLogging: previewVerbose,
+    recentEvents: []
+  }),
+  debug_verbose_set: (a) => {
+    if (typeof a?.enabled === 'boolean') previewVerbose = a.enabled
+    return previewVerbose
+  },
+  debug_bundle_save: () => ({ saved: true, path: '~/Downloads/kimochi-debug-preview.zip' }),
   panel_pointer: () => null,
   panel_cursor: ok,
   view_flags: ok,

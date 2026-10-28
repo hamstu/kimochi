@@ -1,7 +1,7 @@
 import { MiniWindow, VisualFrame } from './parts'
 
 const ENGINES = [
-  { name: 'Built-in Yomitan', meta: 'Your own dictionaries', selected: true },
+  { name: 'Yomitan', meta: 'Your own dictionaries', selected: true },
   { name: 'Hachidori', meta: 'One-click download' },
   { name: '10ten', meta: 'One-click download' },
   { name: 'Yomitan API', meta: 'The Yomitan in your browser' }
