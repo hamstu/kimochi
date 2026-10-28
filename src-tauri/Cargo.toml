@@ -8,10 +8,11 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 libc = "0.2"
 # The OCR engines, each pinned to an exact commit so every build records the source it was made
-# from (mangaocr carries GPL code). Keep the macOS mangaocr line below on the same rev. To build
-# against local checkouts, or to move a pin, see "Working on the OCR crates" in CONTRIBUTING.md.
+# from (mangaocr carries GPL code). Keep the macOS, Windows and Linux mangaocr lines below on the
+# same rev. To build against local checkouts, or to move a pin, see "Working on the OCR crates" in
+# CONTRIBUTING.md.
 meikiocr = { git = "https://github.com/hamstu/kimochi-meikiocr", rev = "7a1b9a762acbdf6b09d7386b4395c366f135733b" }
-mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "ab871d47efba3db9edaa55649a03fb9f95e1538f" }
+mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
 # `macos-private-api` stays in this common block: tauri-build requires the common
@@ -62,12 +63,14 @@ regex = "1"
 # Sentence audio's listener, recogniser and clips (speech-core: Silero, SenseVoice, LAME).
 kimochi-speech = { path = "../speech-core" }
 [target.'cfg(target_os = "macos")'.dependencies]
-mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "ab871d47efba3db9edaa55649a03fb9f95e1538f", features = ["metal"] }
+mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd", features = ["metal"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSPanel", "NSApplication", "NSResponder"] }
 objc2-foundation = "0.3"
 block2 = "0.6"
 [target.'cfg(target_os = "windows")'.dependencies]
+# Manga OCR on ONNX Runtime with DirectML (manga_ocr.rs); keep on the common line's rev.
+mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd", features = ["directml"] }
 # The same major as tauri/tao, so one copy of the bindings is compiled.
 windows = { version = "0.61", features = [
   "Wdk_System_SystemServices",
@@ -88,6 +91,8 @@ windows = { version = "0.61", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 [target.'cfg(target_os = "linux")'.dependencies]
+# Manga OCR on ONNX Runtime's CPU kernels (manga_ocr.rs); keep on the common line's rev.
+mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd", features = ["onnx"] }
 # X11 desktop queries (platform/linux), logind sleep/wake over D-Bus, and the GTK
 # main-loop hop for callbacks. All already in the lock file via tauri/arboard.
 x11rb = { version = "0.13", features = ["randr", "shape"] }
@@ -112,3 +117,27 @@ chunks_exact_to_as_chunks = "allow"
 
 [profile.release]
 strip = true
+
+# Manga OCR's arithmetic (Candle, its gemm kernels and the crate's own loops) is optimized in
+# development builds too. Unoptimized, one CPU scan ran for minutes, holding Auto OCR's scan
+# lock; dev builds and `npm run bundle`'s debug installer are where scans get tested.
+[profile.dev.package.mangaocr]
+opt-level = 3
+[profile.dev.package.candle-core]
+opt-level = 3
+[profile.dev.package.candle-nn]
+opt-level = 3
+[profile.dev.package.gemm]
+opt-level = 3
+[profile.dev.package.gemm-common]
+opt-level = 3
+[profile.dev.package.gemm-f32]
+opt-level = 3
+[profile.dev.package.gemm-f16]
+opt-level = 3
+[profile.dev.package.pulp]
+opt-level = 3
+[profile.dev.package.half]
+opt-level = 3
+[profile.dev.package.libm]
+opt-level = 3

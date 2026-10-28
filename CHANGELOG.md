@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Manga OCR is far faster. On Windows it now runs on your graphics card (through DirectML): a full manga page takes about 2 seconds on a GTX 1080, where it took over a minute and a half. Without a usable GPU, and on Linux, it runs on the CPU several times faster than before. On a Mac a full page reads about twice as fast. The recognized text is unchanged.
 - Fixed: on Linux, including the Steam Deck, Hachidori lookups from the controller or the overlay were slow and often showed nothing, because Kimochi's hidden windows ran their timers once a second.
 - Fixed: in Gaming Mode, one D-pad tap could move several words, B could close the pop-up twice, and the hints switched to keyboard keys. Kimochi now reads only the controller while it has it.
 - Kimochi uses far less CPU on the Steam Deck and other Linux PCs: game frames are only processed when a scan or preview needs them, the sidebar preview pauses while Kimochi is behind the game, sound effects release the audio output when quiet, and an idle controller no longer wakes every window.

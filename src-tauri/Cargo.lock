@@ -3387,13 +3387,15 @@ dependencies = [
 [[package]]
 name = "mangaocr"
 version = "0.1.0"
-source = "git+https://github.com/hamstu/kimochi-mangaocr?rev=ab871d47efba3db9edaa55649a03fb9f95e1538f#ab871d47efba3db9edaa55649a03fb9f95e1538f"
+source = "git+https://github.com/hamstu/kimochi-mangaocr?rev=6a5dec4fd59977ca70a76255ca1ff4633aa790bd#6a5dec4fd59977ca70a76255ca1ff4633aa790bd"
 dependencies = [
  "candle-core",
  "candle-nn",
  "image",
  "jpeg-decoder",
+ "ort",
  "prost",
+ "rayon",
  "serde",
  "serde_json",
  "thiserror 2.0.20",

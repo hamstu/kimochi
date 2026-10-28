@@ -241,6 +241,7 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
         if let Some(mode) = value.as_str() {
             model_store::on_engine_selected(app, mode);
         }
+        manga_ocr::prewarm(app);
     }
 }
 
@@ -1914,12 +1915,28 @@ async fn ocr_frame(
                 .ok_or("gone: that frame has been replaced; capture again before running OCR")?;
             image.clone()
         };
-        // Encoding is outside the frame-store lock so observations can continue.
-        let png = image.png()?;
+        // Encoding is outside the frame-store lock so observations can continue. Engines that
+        // read the pixels themselves don't wait for it: their copy of the frame for diagnostics
+        // (`last-ocr-frame.png`) is encoded and written beside the scan.
+        let pixels_only = matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "livetext");
+        let png = if pixels_only { None } else { Some(image.png()?) };
         let info = image.info.clone();
         if let Ok(p) = path(&app, "last-ocr-frame.png") {
-            let _ = std::fs::write(p, &png);
+            match &png {
+                Some(png) => {
+                    let _ = std::fs::write(p, png);
+                }
+                None => {
+                    let image = image.clone();
+                    std::thread::spawn(move || {
+                        if let Ok(png) = image.png() {
+                            let _ = std::fs::write(p, png);
+                        }
+                    });
+                }
+            }
         }
+        let png = png.unwrap_or_default();
         let started = std::time::Instant::now();
         debug_report::trace(&app, json!({
             "check": "scan", "phase": "started", "id": id, "engine": engine,
@@ -1969,7 +1986,7 @@ async fn ocr_frame(
             &service,
             json!({
                 "check": "ocr-debug", "id": id, "info": info,
-                "pngBytes": png.len(),
+                "pngBytes": (!pixels_only).then_some(png.len()),
                 "ms": started.elapsed().as_millis() as u64, "annotations": count,
                 "fullTextLen": value["fullText"].as_str().map_or(0, |t| t.chars().count()),
                 "keys": value.as_object().map(|o| o.keys().cloned().collect::<Vec<_>>()),
@@ -2170,6 +2187,18 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
             "Sign in to a Kimochi account (Settings → Account) to use Kimochi cloud OCR."
         };
         payload["ocrEngines"]["cloud"] = json!({ "available": false, "reason": reason });
+    }
+    // Once an engine's probe has loaded it, the accelerator it actually selected replaces the OS
+    // table's guess: DirectML falls back to the CPU on some adapters.
+    for (key, verified) in [
+        ("meikiocr", meiki_ocr::verification()),
+        ("mangaocr", manga_ocr::verification()),
+    ] {
+        if let Some(engine_probe::Verified { available: true, accelerator: Some(accelerator), .. }) = verified {
+            if payload["ocrEngines"][key]["available"] == json!(true) {
+                payload["ocrEngines"][key]["accelerator"] = json!(accelerator);
+            }
+        }
     }
     // An engine held back only by its models stays selectable: choosing it asks to download them.
     for engine in model_store::Engine::OCR {
@@ -3217,6 +3246,7 @@ fn main() {
             }
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
+            manga_ocr::prewarm(&handle);
 
             let reader_popup = reader::popover::build_window(&handle, 0)?;
             make_panel(&handle, &service, &reader_popup);
