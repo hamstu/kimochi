@@ -247,7 +247,7 @@ function OcrScreen(): JSX.Element {
   return (
     <Step
       title="How should Kimochi read text?"
-      lede="Local engines keep every scan on this computer. Cloud engines need a connection and may need credentials. You can change this later in Settings."
+      lede="None of these needs an API key. Local engines read on this computer and keep every scan here; online ones send each capture over the internet. Results vary by game, so try another any time in Settings."
     >
       <EngineChooser />
       <StepActions>
