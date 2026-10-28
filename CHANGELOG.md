@@ -12,6 +12,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - Debug logs keep complete JSON records when several windows report at once, including when the log rotates.
+- Changing dictionary engines no longer throws a controller cleanup error when an old settings frame unloads.
 - Verbose debug logs now include OCR scan timings and failures from the normal Scan button and Auto OCR, without recording recognized text.
 - Debug reports show capture permission status correctly while keeping credentials redacted.
 - Steam Deck: the back buttons (L4, R4, L5, R5) and trackpad clicks can be bound in Settings → Shortcuts & Controls, and the controller menu now opens with R4 by default, so both sticks stay with your game.
