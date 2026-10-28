@@ -13,6 +13,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - Steam Deck: the back buttons (L4, R4, L5, R5) and trackpad clicks can be bound in Settings → Shortcuts & Controls, and the controller menu now opens with R4 by default, so both sticks stay with your game.
 - Steam Deck: setting a crop area works in Gaming Mode. Draw, move and resize the box with your finger, or move its corners with the sticks, then press A to save or B to cancel. Before, the editor could not be used or closed there.
+- "Built-in Yomitan" is now just **Yomitan** ("Runs inside Kimochi"). It is downloaded when you choose it, so calling it built-in beside "Not downloaded" was confusing. The Yomitan in your browser is still the **Yomitan API**.
 - Clearer OCR engine descriptions in the welcome guide and Settings: what each engine is best at, and that none of them needs an API key (Google Lens is free; Cloud OCR comes with a Kimochi account).
 - Fixed: Kimochi's own windows (the main window, Settings, the welcome guide) can be screenshotted and screen-recorded again, with Snipping Tool, ShareX or anything else. Only the OCR overlay and dictionary pop-ups stay hidden from captures.
 - Fixed: sentence audio recording on Linux AppImages (including Steam Deck), which stopped with a PipeWire error as soon as it started.

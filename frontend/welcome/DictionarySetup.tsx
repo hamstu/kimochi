@@ -47,7 +47,7 @@ async function request<T>(params: object): Promise<T> {
 const NEXT = STEAM_ROUTE
 
 /**
- * Onboarding's dictionary step. Yomitan's quick setup (Jitendex) only applies to Built-in Yomitan;
+ * Onboarding's dictionary step. Yomitan's quick setup (Jitendex) only applies to Yomitan inside Kimochi;
  * the Yomitan API gets its setup wizard (the helper, the browser setting, the connection); the
  * other engines bring their own first-run (Hachidori offers dictionaries, 10ten downloads its
  * own), so for them this explains that and opens their settings. DICTIONARY_ENGINES.md §8.
@@ -201,7 +201,7 @@ function YomitanSetup(): JSX.Element {
       lede={
         offer || installed === null
           ? 'Yomitan needs at least one dictionary before it can show you what words mean. Pick how you’d like to add one.'
-          : 'Built-in Yomitan already has dictionaries to look words up with, so there is nothing to set up. You can add or change them any time in Settings → Dictionary.'
+          : 'Yomitan already has dictionaries to look words up with, so there is nothing to set up. You can add or change them any time in Settings → Dictionary.'
       }
     >
       {installed === null && !error && (

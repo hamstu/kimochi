@@ -29,7 +29,7 @@ Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux buil
 - **OCR where the text is**: Google Lens by default (captures are sent to Google), or local
   engines (MeikiOCR, Manga OCR, Apple Live Text on macOS, OneOCR on Windows 11). Auto OCR waits
   for text to settle, then reads it once.
-- **Pop-up dictionaries**: Built-in Yomitan, Hachidori or 10ten, downloaded on demand from their
+- **Pop-up dictionaries**: Yomitan, Hachidori or 10ten, downloaded on demand from their
   upstream releases, hash-checked and run unmodified, with your own dictionaries; or the Yomitan
   API, which looks words up through the Yomitan already in your browser.
 - **Reading log**: a built-in texthooker with sessions, reading stats, a notebook and VNDB

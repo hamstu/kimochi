@@ -426,10 +426,12 @@ export interface DictionaryEngineInfo {
 
 export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> = {
   yomitan: {
-    name: 'Built-in Yomitan',
-    tagline: 'A copy of Yomitan inside Kimochi',
+    // Not "Built-in": it is downloaded when chosen, and "Built-in" beside "Not downloaded" read as
+    // a contradiction. The Yomitan API is the browser's Yomitan, so the two stay distinct.
+    name: 'Yomitan',
+    tagline: 'Runs inside Kimochi',
     description:
-      'Yomitan running inside Kimochi, with its own dictionaries and settings. Word audio and Anki mining are built in.',
+      'Yomitan running inside Kimochi, with its own dictionaries and settings (separate from any Yomitan in your browser). Word audio and Anki mining are built in.',
     strengths: [
       'Imports any Yomitan dictionary or settings backup',
       'Word audio and Anki mining',
