@@ -10,7 +10,7 @@ import "@ui/install-pointer-dedupe";
 import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
+import { reportError, reportUncaughtErrors } from "./reportErrors";
 import "@radix-ui/themes/styles.css";
 import "../kit/kit.css";
 import "../texthooker/App.css";
@@ -46,28 +46,7 @@ type KnownLabel = keyof typeof PANELS;
 
 const label = getCurrentWindow().label;
 
-// Panel windows have no devtools open in ordinary use: an uncaught error (a blank window) goes to
-// the app's diagnostics record, as the Yomitan relay's own checks do.
-const reportError = (kind: string, error: unknown): void => {
-  const message =
-    error instanceof Error
-      ? `${error.message}\n${error.stack ?? ""}`
-      : String(error);
-  void invoke("report", {
-    value: {
-      check: "panel-error",
-      window: label,
-      kind,
-      message: message.slice(0, 2000),
-    },
-  }).catch(() => undefined);
-};
-window.addEventListener("error", (event) =>
-  reportError("error", event.error ?? event.message),
-);
-window.addEventListener("unhandledrejection", (event) =>
-  reportError("rejection", event.reason),
-);
+reportUncaughtErrors(label);
 const known = (label in PANELS ? label : "log") as KnownLabel;
 const { title, Component, hideTitle } = PANELS[known];
 
@@ -87,7 +66,7 @@ if (known === "log") {
 }
 
 createRoot(document.getElementById("root")!, {
-  onUncaughtError: (error) => reportError("render", error),
+  onUncaughtError: (error) => reportError(label, "render", error),
 }).render(
   <StrictMode>
     <Providers>

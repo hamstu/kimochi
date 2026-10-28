@@ -20,12 +20,12 @@ for the engine you use, with a button to its Anki settings.
 
 | Engine | Who makes the card | Where to set it up |
 | --- | --- | --- |
-| **Built-in Yomitan** | Yomitan | **Open Built-in Yomitan Anki settings**: turn on **Enable Anki integration**, then choose the deck, note type and fields. |
+| **Yomitan** | Yomitan | **Open Yomitan Anki settings**: turn on **Enable Anki integration**, then choose the deck, note type and fields. |
 | **Hachidori** | Hachidori | **Open Hachidori Anki settings**: its **Templates** set the deck, note type and fields. |
 | **10ten** | Nobody: 10ten doesn't make Anki cards. | |
 | **Yomitan API** | Kimochi | **Settings → Anki → Mining**, below. |
 
-Built-in Yomitan and Hachidori keep their own Anki settings, the AnkiConnect address and API key
+Yomitan and Hachidori keep their own Anki settings, the AnkiConnect address and API key
 included: set those there, as you would in the browser.
 
 ## The AnkiConnect connection
@@ -33,7 +33,7 @@ included: set those there, as you would in the browser.
 **Settings → Anki → AnkiConnect** shows whether Kimochi can reach AnkiConnect, whatever dictionary
 you use: the Anki tab, sentence audio and the Yomitan API pop-up all use this connection. The
 defaults are AnkiConnect's own, so it usually works untouched. It checks again every few seconds
-while the tab is open; **Check** asks at once. (Built-in Yomitan and Hachidori add their cards
+while the tab is open; **Check** asks at once. (Yomitan and Hachidori add their cards
 with their own AnkiConnect address, set in their Anki settings under **Mining**.)
 
 | Setting | Default | What it does |
@@ -77,7 +77,7 @@ the reason (for example **Anki not running**) and click it to try again.
 
 The main window's **Anki** tab (beside **Log** and **Notebook**, or <kbd>⌘3</kbd> / <kbd>Ctrl+3</kbd>)
 lists the cards you made in this session, newest first, whichever made them: Kimochi's pop-up,
-Built-in Yomitan or Hachidori. They stay with the session, so switching sessions shows that
+Yomitan or Hachidori. They stay with the session, so switching sessions shows that
 session's cards, and with an account they sync with it. Click a card to open it in Anki's browser.
 A green mark means Kimochi added its sentence audio (and word audio) or its screenshot after it
 was made; hover it to see which. Search finds a card by its word, reading or deck, and the footer counts the
@@ -165,7 +165,7 @@ and for cards you make later; older ones are deleted.
 
 Under sentence audio in **Settings → Anki → Card enhancement**, **Add tags** (on by default) tags
 every new card you make, whichever dictionary made it: Kimochi's pop-up adds them with the card,
-and Built-in Yomitan's and Hachidori's cards get them as soon as they're added (on top of any tags
+and Yomitan's and Hachidori's cards get them as soon as they're added (on top of any tags
 of their own).
 
 **Tags** is a comma-separated list, `kimochi, {{session-name}}` by default.

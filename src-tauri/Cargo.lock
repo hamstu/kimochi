@@ -3154,6 +3154,7 @@ dependencies = [
  "png 0.18.1",
  "prost",
  "raw-window-handle",
+ "regex",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -3428,7 +3429,7 @@ dependencies = [
 [[package]]
 name = "meikiocr"
 version = "0.1.0"
-source = "git+https://github.com/hamstu/kimochi-meikiocr?rev=16f2e4eb429c1f2c9a8dc75bb31eb8133e7f4aae#16f2e4eb429c1f2c9a8dc75bb31eb8133e7f4aae"
+source = "git+https://github.com/hamstu/kimochi-meikiocr?rev=7a1b9a762acbdf6b09d7386b4395c366f135733b#7a1b9a762acbdf6b09d7386b4395c366f135733b"
 dependencies = [
  "image",
  "ndarray",

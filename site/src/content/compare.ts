@@ -165,7 +165,7 @@ export const ROWS: Row[] = [
     label: "Dictionary lookup",
     cells: {
       kimochi: {
-        text: "Built-in Yomitan, Hachidori or 10ten, with dictionaries you import or download, or the Yomitan in your browser through the Yomitan API.",
+        text: "Yomitan, Hachidori or 10ten, with dictionaries you import or download, or the Yomitan in your browser through the Yomitan API.",
       },
       kamui: {
         text: "Built-in dictionary sidebar with context-aware lookups; AI translation.",
