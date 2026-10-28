@@ -12,6 +12,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - Debug logs keep complete JSON records when several windows report at once, including when the log rotates.
+- Yomitan settings register their frame again when WebView2 retains the initial blank page's globals. A loading message and Retry remain available if startup does not finish.
 - The welcome guide's dictionary setup choices support arrow keys, Home and End, with one Tab stop for the group.
 - Changing dictionary engines no longer throws a controller cleanup error when an old settings frame unloads.
 - Verbose debug logs now include OCR scan timings and failures from the normal Scan button and Auto OCR, without recording recognized text.

@@ -68,10 +68,12 @@ import { isExtensionPage } from '../page-actions.js'
 install()
 
 function install() {
-  if (window.__yomitanShim || window.__yomitanPanelShim) return
+  if (window.__yomitanShim || window.__yomitanPanelShim === document) return
   const root = yomitanRoot(window)
   if (!root) return
-  window.__yomitanPanelShim = true
+  // WebView2 can retain the initial about:blank window's globals on its first navigation.
+  // A new document still needs its own runtime listeners and frame registration.
+  window.__yomitanPanelShim = document
 
   /** `chrome.runtime.getPlatformInfo()`, from native's `__KIMOCHI_PLATFORM__`, else sniffed. */
   const platformInfo = () => sharedPlatformInfo(window, root)
