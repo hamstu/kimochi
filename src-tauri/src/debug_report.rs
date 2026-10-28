@@ -207,7 +207,7 @@ fn collect(app: &tauri::AppHandle, service: &Shared) -> Value {
         },
         "hardware": hardware(),
         "displays": crate::platform::desktop_display_infos(),
-        "capture": capabilities["capture"],
+        "capture": capture_summary(&capabilities["capture"]),
         "ocr": {
             "selected": settings.get("ocrMode").cloned().unwrap_or(Value::Null),
             "engines": capabilities["ocrEngines"],
@@ -449,6 +449,14 @@ fn secret_key(key: &str) -> bool {
 }
 
 /// Redacts a report or a log record in place: secret keys' values, and every string.
+fn capture_summary(capture: &Value) -> Value {
+    json!({
+        "permission": capture["authorization"],
+        "windowCapture": capture["windowCapture"],
+        "excludesOwnWindows": capture["excludesOwnWindows"],
+    })
+}
+
 pub fn redact(value: &mut Value) {
     match value {
         Value::Object(map) => {
@@ -600,6 +608,16 @@ fn dos_time() -> (u16, u16) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn permission_survives_redaction_but_authorization_does_not() {
+        let mut report = json!({
+            "capture": capture_summary(&json!({"authorization": "granted", "windowCapture": true})),
+            "authorization": "Bearer private-token",
+        });
+        redact(&mut report);
+        assert_eq!(report["capture"]["permission"], "granted");
+        assert_eq!(report["authorization"], "[redacted]");
+    }
 
     #[test]
     fn secret_keys_are_hidden_whatever_they_hold() {

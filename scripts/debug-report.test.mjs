@@ -15,7 +15,7 @@ const REPORT = {
     { id: 1, source_id: 'screen:1', bounds: { x: 0, y: 0, width: 2560, height: 1440 }, work_area: {}, scale_factor: 1.5 },
     { id: 2, source_id: 'screen:2', bounds: { x: -1920, y: 0, width: 1920, height: 1080 }, work_area: {}, scale_factor: 1 }
   ],
-  capture: { authorization: 'granted', windowCapture: true, excludesOwnWindows: true },
+  capture: { permission: 'granted', windowCapture: true, excludesOwnWindows: true },
   ocr: {
     selected: 'meikiocr',
     engines: { meikiocr: { available: false, reason: 'The model could not load' }, googlelens: { available: true } },
@@ -32,6 +32,7 @@ const REPORT = {
 
 test('the summary names what a bug report needs at a glance', () => {
   const md = debugMarkdown(REPORT)
+  assert.match(md, /Capture:\*\* permission granted/)
   assert.match(md, /Kimochi 0\.2\.1 \(release, commit 45eb5f1b55\), Tauri 2\.9\.0, WebView 131\.0\.2903\.70/)
   assert.match(md, /\*\*OS:\*\* windows 10\.0\.26100 \(x86_64\)/)
   assert.match(md, /AMD Ryzen 7 7800X3D \(16 threads\), \*\*memory:\*\* 32 GB/)

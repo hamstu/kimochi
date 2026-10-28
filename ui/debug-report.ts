@@ -104,7 +104,7 @@ export function debugMarkdown(report: DebugReport): string {
     `- **OS:** ${text(os.name)} ${text(os.version, '')} (${text(os.arch)})${isObj(os.session) ? `, session ${JSON.stringify(os.session)}` : ''}`,
     `- **CPU:** ${text(hardware.cpu)} (${text(hardware.cores, '?')} threads), **memory:** ${formatBytes(hardware.memoryBytes)}`,
     `- **GPU:** ${gpus}`,
-    `- **Capture:** permission ${text(capture.authorization)}, window capture ${yesNo(capture.windowCapture)}, hides its own windows ${yesNo(capture.excludesOwnWindows)}`,
+    `- **Capture:** permission ${text(capture.permission ?? capture.authorization)}, window capture ${yesNo(capture.windowCapture)}, hides its own windows ${yesNo(capture.excludesOwnWindows)}`,
     `- **OCR engine:** ${text(ocr.selected)}${ocr.cloudAccess !== undefined ? ` (Kimochi Cloud: ${yesNo(ocr.cloudAccess)})` : ''}`,
     `- **Dictionary:** ${text(dictionary.selected)}`,
     `- **Source:** ${text(session.sourceKind, 'none')}, ${focus(session.sourceFocus)}`,

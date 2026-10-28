@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 What changed in each release of Kimochi, newest first. Written for the people who use the app:
 what they can now do, what behaves differently, what was fixed. The app shows this file in
@@ -12,6 +12,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ## [Unreleased]
 
 - Debug logs keep complete JSON records when several windows report at once, including when the log rotates.
+- Debug reports show capture permission status correctly while keeping credentials redacted.
 - Steam Deck: the back buttons (L4, R4, L5, R5) and trackpad clicks can be bound in Settings → Shortcuts & Controls, and the controller menu now opens with R4 by default, so both sticks stay with your game.
 - Steam Deck: setting a crop area works in Gaming Mode. Draw, move and resize the box with your finger, or move its corners with the sticks, then press A to save or B to cancel. Before, the editor could not be used or closed there.
 - New: **Settings → About → Debug info**. **Copy** puts a report for a bug report on the clipboard (Kimochi's version, your OS, CPU, GPU and memory, displays and scaling, OCR engine and dictionary, Kimochi's windows and recent errors), **Save debug bundle** saves it with the recent logs as a zip, and **Verbose logging** records more detail while you reproduce a problem. Tokens, keys, e-mail addresses and your user name are left out.
