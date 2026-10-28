@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-28
+
 ### Added
 
 - **Much faster Manga OCR.** This model will now run faster with the compatible GPU, and it's even improved when it falls back to CPU only,
