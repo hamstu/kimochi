@@ -597,15 +597,13 @@ fn ensure(
         }
     }
     let window = builder.build().map_err(|e| format!("native: {e}"))?;
-    // Keep Kimochi's own panels out of captures of the display they sit on, where the
-    // OS honours it. This is the same mechanism as Electron's setContentProtection.
-    // OCR fixtures are source content: protecting them makes window captures blank.
-    // `KIMOCHI_ALLOW_CAPTURE=1` lets a development build's panels be recorded and
-    // screenshotted (UI testing); the OCR overlay and pop-ups stay excluded either way.
-    let capturable = matches!(spec.label, "fixture" | "fixture-chunks")
-        || (cfg!(debug_assertions)
-            && std::env::var_os("KIMOCHI_ALLOW_CAPTURE").is_some_and(|v| v == "1"));
-    let _ = window.set_content_protected(!capturable);
+    // Only what is drawn over the source is kept out of captures (the same mechanism as
+    // Electron's setContentProtection): the Linux crop and controller hosts here, and the OCR
+    // overlay, the pop-ups and the hidden engine windows where they are built. Kimochi's
+    // ordinary windows can be screenshotted and recorded, so a reader can show what they see
+    // when reporting a problem; text one of them covers is hidden by `cover` instead.
+    let protected = matches!(spec.label, "controller-host" | "crop-host");
+    let _ = window.set_content_protected(protected);
     platform::desktop_place(&window, bounds)?;
     attach_events(app, settings, &window, spec);
     Ok(window)
