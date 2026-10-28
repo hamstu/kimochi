@@ -294,10 +294,10 @@ mod tests {
     fn real_binaries_win_over_earlier_shims() {
         let dirs = vec![PathBuf::from("/npm"), PathBuf::from("/local")];
         let have = |p: &Path| {
-            matches!(
-                p.to_str().unwrap(),
-                "/npm/claude.cmd" | "/local/claude.exe" | "/npm/codex.cmd" | "/bin/tool.exe"
-            )
+            [
+                Path::new("/npm/claude.cmd"), Path::new("/local/claude.exe"),
+                Path::new("/npm/codex.cmd"), Path::new("/bin/tool.exe"),
+            ].contains(&p)
         };
         assert_eq!(
             resolve_program("claude", &dirs, have),
