@@ -1,6 +1,7 @@
 // A release build on Windows is a GUI app: no console window behind it.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod reader;
+mod evidence;
 use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
@@ -381,7 +382,6 @@ fn report(app: tauri::AppHandle, state: State<Shared>, value: Value) {
 /// this rather than `Service::log`, which only feeds the Debug panel and so cannot
 /// record anything that happens before a window is there to read it.
 fn record(app: &tauri::AppHandle, service: &Shared, mut value: Value) {
-    use std::io::Write;
     if dictionary_runtime::update(&value) {
         let _ = app.emit("dictionary-readiness", &value);
     }
@@ -391,17 +391,7 @@ fn record(app: &tauri::AppHandle, service: &Shared, mut value: Value) {
     }
     service.log(value.clone());
     if let Ok(p) = path(app, "evidence.jsonl") {
-        // Two files at most, like the Auto OCR trace: the current one and the one before.
-        if p.metadata().is_ok_and(|m| m.len() > EVIDENCE_MAX_BYTES) {
-            let _ = std::fs::rename(&p, p.with_file_name("evidence.1.jsonl"));
-        }
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(p)
-        {
-            let _ = writeln!(f, "{value}");
-        }
+        let _ = evidence::append(&p, &value, EVIDENCE_MAX_BYTES);
     }
 }
 
