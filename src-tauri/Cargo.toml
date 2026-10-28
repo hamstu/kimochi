@@ -10,7 +10,7 @@ libc = "0.2"
 # The OCR engines, each pinned to an exact commit so every build records the source it was made
 # from (mangaocr carries GPL code). Keep the macOS mangaocr line below on the same rev. To build
 # against local checkouts, or to move a pin, see "Working on the OCR crates" in CONTRIBUTING.md.
-meikiocr = { git = "https://github.com/hamstu/kimochi-meikiocr", rev = "16f2e4eb429c1f2c9a8dc75bb31eb8133e7f4aae" }
+meikiocr = { git = "https://github.com/hamstu/kimochi-meikiocr", rev = "7a1b9a762acbdf6b09d7386b4395c366f135733b" }
 mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "ab871d47efba3db9edaa55649a03fb9f95e1538f" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
