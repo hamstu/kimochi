@@ -1,0 +1,83 @@
+name: Bug report
+description: Something in Kimochi doesn't work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The more of this you can fill in, the faster it gets fixed.
+
+        **Debug info:** in Kimochi, open **Settings → About → Debug info** and press **Copy**, then paste it below. Tokens, keys, e-mail addresses and your user name are left out. For a problem you can make happen again, turn on **Verbose logging** first, reproduce it, then use **Save debug bundle** and attach the zip.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences on what's wrong.
+      placeholder: Auto OCR turns itself off when I click it while a fullscreen game is running.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Reporter / source
+      description: If this came from somewhere else (a Discord message, a forum post), link it here and say who reported it.
+      placeholder: "Discord #general: https://discord.com/channels/…"
+  - type: textarea
+    id: debug-info
+    attributes:
+      label: Debug info
+      description: Paste what **Settings → About → Debug info → Copy** gives you. It has your Kimochi version, OS, CPU/GPU, monitors and scaling, OCR engine and dictionary.
+      placeholder: "### Kimochi debug info …"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (if you couldn't copy debug info)
+      description: "Kimochi version (Settings → About), OS and build (Windows: Win+R → `winver`), GPU, number of monitors with resolution and scaling %, and for a game, exclusive or borderless fullscreen."
+      placeholder: |
+        Kimochi 0.2.0, Windows 11 24H2 (26100), RTX 4070, 2 monitors (2560×1440 @150%, 1920×1080 @100%), borderless fullscreen
+  - type: textarea
+    id: said
+    attributes:
+      label: What happened, in your words
+      description: Error messages are most useful copied word for word.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run a game fullscreen on the second monitor.
+        2. Click Auto OCR in Kimochi.
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What should have happened.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: What happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: needed
+    attributes:
+      label: Info still needed
+      description: For maintainers triaging a report from elsewhere. A checklist of what to ask the reporter.
+      placeholder: |
+        - [ ] Which game, and exclusive or borderless fullscreen?
+        - [ ] Debug info from Settings → About
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / attachments
+      description: Drag in the debug bundle zip from **Save debug bundle**, screenshots or a short screen recording.
