@@ -362,7 +362,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
       'Works offline; captures never leave this computer'
     ],
     requirements:
-      'This model uses the GPU where it can (Metal on macOS, CUDA on NVIDIA cards) and the CPU otherwise.'
+      'This model uses the GPU where it can (Metal on macOS, DirectML on Windows) and the CPU otherwise.'
   },
   livetext: {
     label: 'Local (Apple Live Text)',

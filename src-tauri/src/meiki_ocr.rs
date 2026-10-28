@@ -180,8 +180,6 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
 }
 
 /// The verified verdict once the probe has finished: accelerator and diagnostics.
-// TODO(integrator): surface `accelerator` in `ocrEngines.meikiocr` instead of the OS table's guess.
-#[allow(dead_code)]
 pub fn verification() -> Option<Verified> {
     PROBE.verified()
 }
@@ -276,14 +274,14 @@ fn refused_directml(info: &BackendInfo) -> bool {
     info.selected == Backend::Cpu && info.fallback_reasons.iter().any(|r| r.starts_with("DirectMl"))
 }
 
-/// One DirectML inference at a time across every engine in the process.
+/// One DirectML inference at a time across every engine in the process (Manga OCR's too).
 ///
 /// The manual scan and the observer own separate engines so a slow scan cannot
 /// starve observer ticks, but two concurrent DirectML runs on one adapter contend
 /// for the same command queue and are where driver hangs have been reported. CPU
 /// and CoreML runs are not serialised. Neither holder takes another lock while
 /// holding this one, so it cannot deadlock with `MeikiState`.
-static DIRECTML_RUN: Mutex<()> = Mutex::new(());
+pub(crate) static DIRECTML_RUN: Mutex<()> = Mutex::new(());
 
 /// Detection plus recognition on one image, in image pixel coordinates.
 pub(crate) fn infer(
