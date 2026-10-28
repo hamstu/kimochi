@@ -72,6 +72,7 @@ export function DictionaryTab(): ReactNode {
     confirmDownload,
     choose,
     reloading,
+    waitingForImport,
     applyError,
     switchedTo,
     setupOpen,
@@ -149,6 +150,8 @@ export function DictionaryTab(): ReactNode {
           status={
             applyError ? (
               <Callout tone="danger">{applyError}</Callout>
+            ) : waitingForImport ? (
+              <span role="status">Jitendex is still installing. Switching when it finishes.</span>
             ) : reloading === 'self' ? (
               <span role="status">Switching to {DICTIONARY_ENGINES[active].name}…</span>
             ) : reloading === 'others' ? (

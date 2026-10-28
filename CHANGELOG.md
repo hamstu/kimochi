@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Choosing another dictionary engine during a Jitendex import now waits for installation to finish before switching, so the import is not interrupted. Other choices stay selectable.
 - Debug logs keep complete JSON records when several windows report at once, including when the log rotates.
 - Yomitan settings register their frame again when WebView2 retains the initial blank page's globals. A loading message and Retry remain available if startup does not finish.
 - Debug logs explicitly report OCR scans that return no text, including the engine, backend and image size.

@@ -271,6 +271,7 @@ test("catalog hands back the latest job, so a reopened guide resumes its progres
   });
   const { id } = await slow.handle({ command: "start", dictionaryId: "jitendex" });
   await tick();
+  assert.equal((await slow.handle({ command: "active" })).id, id);
   const during = await slow.handle({ command: "catalog" });
   assert.equal(during.job.id, id);
   assert.equal(during.job.stage, "downloading");
@@ -280,4 +281,5 @@ test("catalog hands back the latest job, so a reopened guide resumes its progres
   const after = await slow.handle({ command: "catalog" });
   assert.equal(after.job.id, id);
   assert.equal(after.job.stage, "failed");
+  assert.equal(await slow.handle({ command: "active" }), null);
 });

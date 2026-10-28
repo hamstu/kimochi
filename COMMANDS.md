@@ -1700,6 +1700,9 @@ game being played, else the screen.
 
 The overlay's one Yomitan backend serves app-owned `__setupDictionaries` relay
 requests: `catalog`, `start({dictionaryId})`, `status({id})`, and `practice`.
+`active` returns the running job or null without querying the dictionary database. Engine
+selection waits on this job before saving a different engine or reloading its host. A newer
+choice supersedes the waiting choice; leaving the chooser cancels its pending switch.
 `catalog` returns the recommended dictionaries and the installed ones, each marked `enabled`
 when the current profile looks words up with it, and `job`: the latest job (running, failed or
 complete) or null, so a guide step that was left, hidden or reloaded resumes its progress.

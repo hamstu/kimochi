@@ -128,6 +128,7 @@ export function createDictionarySetup({
   return {
     handles: (action) => action === "__setupDictionaries",
     async handle({ command, id, dictionaryId } = {}) {
+      if (command === "active") return running ? { ...jobs.get(running) } : null;
       if (command === "practice") {
         const result = await api("termsFind", {
           text: "日本語",
