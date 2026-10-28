@@ -11,6 +11,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Fixed: on the Steam Deck, leaving read-along open for several minutes could make Steam's interface crash and restart.
+- Steam Deck: opening Kimochi from the controller menu keeps Kimochi in front, instead of the game coming back a moment later or after a volume change.
+
 ## [0.2.1] - 2026-10-28
 
 ### Added
