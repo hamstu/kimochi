@@ -10,6 +10,7 @@ import {
   type DictionaryEngine
 } from '../bridge/dictionaryEngine'
 import { resolveYomitanApiUrl } from '@ui/yomitan-api-setup'
+import { radioTarget } from '@ui/radio-navigation'
 import { YomitanApiWizard } from '../components/YomitanApiSetup'
 import Step from './Step'
 import { StepActions } from './StepActions'
@@ -249,7 +250,18 @@ function YomitanSetup(): JSX.Element {
         </Callout>
       )}
       {offer && (
-        <div className={style.options} role="radiogroup" aria-label="How to add a dictionary">
+        <div className={style.options} role="radiogroup" aria-label="How to add a dictionary"
+          onKeyDown={(event) => {
+            const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'))
+            const index = radios.indexOf(event.target as HTMLButtonElement)
+            if (index < 0) return
+            const next = radioTarget(event.key, index, radios.length)
+            if (next === null) return
+            event.preventDefault()
+            radios[next].focus()
+            radios[next].click()
+          }}
+        >
           {catalog.map((item) => {
             const thisJob = job && done ? 'done' : busy ? 'busy' : null
             const value = `install:${item.id}`
@@ -348,6 +360,7 @@ function ChoiceCard({
       type="button"
       role="radio"
       aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
       className={`k-choice ${style.option}`}
       data-recommended={recommended ? '' : undefined}
       data-state={selected ? 'on' : undefined}
