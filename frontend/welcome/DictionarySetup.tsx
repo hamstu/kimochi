@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Check, Clock, Download, ExternalLink, Library } from 'lucide-react'
 import { Badge, Button, Callout, Spinner, StatusDot, type Tone } from '@kit'
@@ -160,6 +160,9 @@ function YomitanSetup(): JSX.Element {
       })
   }, [])
   const [starting, setStarting] = useState(false)
+  // Which way to add a dictionary. Choosing a card only selects it, as on the guide's other steps;
+  // the bar's primary button acts on it (installs, opens dictionary settings, or moves on).
+  const [choice, setChoice] = useState<string | null>(null)
   useEffect(() => {
     if (!job || ['complete', 'failed'].includes(job.stage)) return
     let active = true
@@ -200,6 +203,16 @@ function YomitanSetup(): JSX.Element {
   const offer = installed !== null && (ready.length === 0 || job !== null)
   const line = job ? jobLine(job) : null
   const count = job?.progress?.count ?? 0
+  // The recommended dictionary until another card is chosen.
+  const selected = choice ?? (catalog[0] ? `install:${catalog[0].id}` : LATER)
+  const installing = catalog.find((item) => selected === `install:${item.id}`)
+  const primary: { label: string; act: () => void; disabled?: boolean } = !offer
+    ? { label: 'Continue', act: () => void navigate(NEXT) }
+    : selected === OWN
+      ? { label: 'Open dictionary settings', act: () => void navigate('/dictionary-settings') }
+      : installing && !busy && !done
+        ? { label: `Install ${installing.title}`, act: () => void start(installing.id), disabled: starting }
+        : { label: busy ? 'Continue while installing' : 'Continue', act: () => void navigate(NEXT) }
   return (
     <Step
       title={offer || installed === null ? 'Set up Yomitan' : 'Your dictionaries are ready'}
@@ -236,52 +249,43 @@ function YomitanSetup(): JSX.Element {
         </Callout>
       )}
       {offer && (
-        <div className={style.options} role="group" aria-label="How to add a dictionary">
+        <div className={style.options} role="radiogroup" aria-label="How to add a dictionary">
           {catalog.map((item) => {
             const thisJob = job && done ? 'done' : busy ? 'busy' : null
+            const value = `install:${item.id}`
             return (
-              <button
+              <ChoiceCard
                 key={item.id}
-                type="button"
-                className={`k-choice ${style.option}`}
-                data-recommended
-                data-state={thisJob === 'done' ? 'on' : undefined}
-                disabled={thisJob !== null}
-                onClick={() => void start(item.id)}
-              >
-                <span className={style.optionIcon}>
-                  {thisJob === 'busy' ? <Spinner /> : thisJob === 'done' ? <Check /> : <Download />}
-                </span>
-                <span className={style.optionTitle}>
-                  {thisJob === 'done'
+                selected={selected === value}
+                onSelect={() => setChoice(value)}
+                recommended
+                icon={thisJob === 'busy' ? <Spinner /> : thisJob === 'done' ? <Check /> : <Download />}
+                title={
+                  thisJob === 'done'
                     ? `${item.title} installed`
                     : thisJob === 'busy'
                       ? `Installing ${item.title}…`
-                      : `Install ${item.title}`}
-                </span>
-                <span className={style.optionDetail}>
-                  Japanese–English definitions, downloaded and set up for you.
-                </span>
-                {!thisJob && <Badge tone="accent">Recommended</Badge>}
-              </button>
+                      : `Install ${item.title}`
+                }
+                detail="Japanese–English definitions, downloaded and set up for you."
+                badge={!thisJob && <Badge tone="accent">Recommended</Badge>}
+              />
             )
           })}
-          <Link to="/dictionary-settings" className={`k-choice ${style.option}`}>
-            <span className={style.optionIcon}>
-              <Library />
-            </span>
-            <span className={style.optionTitle}>Choose your own</span>
-            <span className={style.optionDetail}>
-              Import dictionaries or a Yomitan backup in Yomitan’s settings.
-            </span>
-          </Link>
-          <Link to={NEXT} className={`k-choice ${style.option}`}>
-            <span className={style.optionIcon}>
-              <Clock />
-            </span>
-            <span className={style.optionTitle}>Do it later</span>
-            <span className={style.optionDetail}>Add a dictionary any time in Settings → Dictionary.</span>
-          </Link>
+          <ChoiceCard
+            selected={selected === OWN}
+            onSelect={() => setChoice(OWN)}
+            icon={<Library />}
+            title="Choose your own"
+            detail="Import dictionaries or a Yomitan backup in Yomitan’s settings."
+          />
+          <ChoiceCard
+            selected={selected === LATER}
+            onSelect={() => setChoice(LATER)}
+            icon={<Clock />}
+            title="Do it later"
+            detail="Add a dictionary any time in Settings → Dictionary."
+          />
         </div>
       )}
       {line && (
@@ -310,11 +314,50 @@ function YomitanSetup(): JSX.Element {
         </p>
       )}
       <StepActions>
-        <Button variant="primary" onClick={() => void navigate(NEXT)}>
-          {busy ? 'Continue while installing' : 'Continue'}
+        <Button variant="primary" disabled={primary.disabled} onClick={primary.act}>
+          {primary.label}
         </Button>
       </StepActions>
     </Step>
+  )
+}
+
+const OWN = 'own'
+const LATER = 'later'
+
+/** One way to add a dictionary: a radio card that only selects (`k-choice`, on when chosen). */
+function ChoiceCard({
+  selected,
+  onSelect,
+  recommended = false,
+  icon,
+  title,
+  detail,
+  badge
+}: {
+  selected: boolean
+  onSelect: () => void
+  recommended?: boolean
+  icon: JSX.Element
+  title: string
+  detail: string
+  badge?: ReactNode
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className={`k-choice ${style.option}`}
+      data-recommended={recommended ? '' : undefined}
+      data-state={selected ? 'on' : undefined}
+      onClick={onSelect}
+    >
+      <span className={style.optionIcon}>{icon}</span>
+      <span className={style.optionTitle}>{title}</span>
+      <span className={style.optionDetail}>{detail}</span>
+      {badge}
+    </button>
   )
 }
 
