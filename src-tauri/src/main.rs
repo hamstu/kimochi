@@ -3985,8 +3985,12 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     };
                     // The Yomitan API pop-up is a window of its own that publishes no regions:
                     // a press on its card is reading it, not a click away from the dictionary.
+                    // A press in one of Kimochi's own windows (the Log, Settings…) is not a
+                    // click away from the app either: counting it closed the dictionary and,
+                    // through the pop-ups' outside-click relay, stopped the shortcut recorder.
                     if dismissed(&v.regions, &hidden, x, y, down, was_down)
                         && !reader::popover::covers(x, y)
+                        && !cover::contains_point(&cover::own_rects(), x, y)
                     {
                         v.dismiss += 1;
                     }

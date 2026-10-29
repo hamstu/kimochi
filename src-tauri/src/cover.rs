@@ -254,6 +254,11 @@ pub fn blank_own_windows(
     blanked
 }
 
+/// Whether a point (desktop points) is on one of `rects`.
+pub fn contains_point(rects: &[Rect], x: f64, y: f64) -> bool {
+    rects.iter().any(|r| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+}
+
 /// Whether one of Kimochi's windows covers the overlay's text right now, from the cache.
 pub fn covered_now() -> bool {
     let frames: Vec<OwnFrame> = frames_lock().values().copied().collect();
@@ -326,6 +331,17 @@ mod tests {
         let n = blank_own_windows(&mut pixels, 8, 4, &display, (8, 4), [0, 0, 8, 4], &[rect(10., 0., 3., 3.)]);
         assert_eq!(n, 0);
         assert!(black_pixels(&pixels, 8).is_empty());
+    }
+
+    #[test]
+    fn a_press_on_one_of_kimochis_windows_is_on_the_app() {
+        let main = rect(500., 600., 900., 560.);
+        assert!(contains_point(&[main], 500., 600.));
+        assert!(contains_point(&[main], 1399.5, 1159.5));
+        // The right and bottom edges are outside, as for any half-open rectangle.
+        assert!(!contains_point(&[main], 1400., 700.));
+        assert!(!contains_point(&[main], 499., 700.));
+        assert!(!contains_point(&[], 0., 0.));
     }
 
     #[test]
