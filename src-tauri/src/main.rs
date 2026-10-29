@@ -2811,7 +2811,11 @@ fn main() {
         if let Some(service) = app.try_state::<Shared>() {
             let settings = service.settings.clone();
             let initial = settings.get("hasCompletedOnboarding").ok().flatten();
-            let _ = panels::act_existing(app, &settings, onboarding_panel(initial.as_ref()), "show", None);
+            // Built again if needed: an unfinished onboarding window is destroyed when closed.
+            let label = onboarding_panel(initial.as_ref());
+            panels::with_panel(app, label, move |app, turn| {
+                let _ = panels::act(turn, app, &settings, label, "show", None);
+            });
         }
     }));
     let builder = builder
