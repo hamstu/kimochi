@@ -29,6 +29,10 @@ public static class Native {
  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h,int x,int y,int w,int t,bool redraw);
  [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int k);
  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr c);
+ [StructLayout(LayoutKind.Sequential)] public struct GUITHREADINFO { public int size; public uint flags; public IntPtr active,focus,capture,menuOwner,moveSize,caret; public RECT caretRect; }
+ [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint thread,ref GUITHREADINFO info);
+ /// The foreground thread's GUI state: flags 0x4 is GUI_INMENUMODE (a window's menu loop is running).
+ public static object GuiInfo(){uint pid;var fg=GetForegroundWindow();var info=new GUITHREADINFO{size=Marshal.SizeOf(typeof(GUITHREADINFO))};GetGUIThreadInfo(GetWindowThreadProcessId(fg,out pid),ref info);return new{foreground=fg.ToInt64(),pid,flags=info.flags,menuOwner=info.menuOwner.ToInt64(),capture=info.capture.ToInt64(),focus=info.focus.ToInt64()};}
  [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public UNION u; }
  [StructLayout(LayoutKind.Explicit)] public struct UNION { [FieldOffset(0)] public MOUSE mouse; [FieldOffset(0)] public KEY key; }
@@ -42,24 +46,33 @@ public static class Native {
 
 public class Game : Form {
  string dir; int page; int ticks; bool[] keys=new bool[256]; string mode="windowed"; Rectangle saved; StreamWriter log; JavaScriptSerializer json=new JavaScriptSerializer();
- public Game(string folder) {
+ // Like a visual novel: Ctrl held skips a page every 100 ms. "focused" polls only while this window
+ // is the foreground one; "active" polls while WM_ACTIVATEAPP last said the app is active, as many
+ // engines do (a game told it is active and never told otherwise keeps reading the keyboard, #27).
+ string skip="off"; bool appActive; bool minimizeOnBlur; int advances;
+ void Advance(string reason){page++;advances++;Write(new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),kind="advance",reason,page,foreground=Native.GetForegroundWindow()==Handle});Invalidate();}
+ public Game(string folder,string title=null) {
   dir=folder; Directory.CreateDirectory(dir); log=new StreamWriter(Path.Combine(dir,"input.jsonl"),true){AutoFlush=true};
-  Text="Kimochi E2E Fake Game (GDI)"; ClientSize=new Size(1001,701); Location=new Point(130,90); StartPosition=FormStartPosition.Manual; DoubleBuffered=true; BackColor=Color.FromArgb(20,28,40); KeyPreview=true;
+  Text=title??"Kimochi E2E Fake Game (GDI)"; ClientSize=new Size(1001,701); Location=new Point(130,90); StartPosition=FormStartPosition.Manual; DoubleBuffered=true; BackColor=Color.FromArgb(20,28,40); KeyPreview=true;
   var timer=new System.Windows.Forms.Timer{Interval=16}; timer.Tick+=(s,e)=>Tick(); timer.Start();
   FormClosed+=(s,e)=>{log.Dispose();log=null;}; Move+=(s,e)=>Invalidate(); Resize+=(s,e)=>Invalidate();
  }
  void Write(object o){if(log!=null)log.WriteLine(json.Serialize(o));}
  protected override void WndProc(ref Message m) {
-  if((m.Msg>=0x100&&m.Msg<=0x109)||(m.Msg>=0x200&&m.Msg<=0x20e)||m.Msg==6||m.Msg==7||m.Msg==8) Write(new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),kind="message",msg=m.Msg,wparam=m.WParam.ToInt64(),lparam=m.LParam.ToInt64(),foreground=Native.GetForegroundWindow().ToInt64()});
-  if(m.Msg==0x100 && (m.WParam.ToInt32()==32||m.WParam.ToInt32()==13)) {page++;Invalidate();}
+  if((m.Msg>=0x100&&m.Msg<=0x109)||(m.Msg>=0x200&&m.Msg<=0x20e)||m.Msg==6||m.Msg==7||m.Msg==8||m.Msg==0x1C||m.Msg==0x86) Write(new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),kind="message",msg=m.Msg,wparam=m.WParam.ToInt64(),lparam=m.LParam.ToInt64(),foreground=Native.GetForegroundWindow().ToInt64()});
+  if(m.Msg==0x100 && (m.WParam.ToInt32()==32||m.WParam.ToInt32()==13)) Advance("key");
+  if(m.Msg==0x1C){appActive=m.WParam!=IntPtr.Zero; if(!appActive&&minimizeOnBlur) BeginInvoke((Action)(()=>WindowState=FormWindowState.Minimized));}
   base.WndProc(ref m);
  }
  void Tick() {
   for(int k=1;k<256;k++){bool down=Native.GetAsyncKeyState(k)<0;if(keys[k]!=down){keys[k]=down;Write(new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),kind="async",key=k,down,focused=Native.GetForegroundWindow()==Handle});}}
   if(++ticks%6!=0)return;
+  if(keys[17]&&(skip=="active"&&appActive||skip=="focused"&&Native.GetForegroundWindow()==Handle)) Advance(Native.GetForegroundWindow()==Handle?"ctrl-skip":"ctrl-skip-unfocused");
   string file=Path.Combine(dir,"command.txt"); if(!File.Exists(file))return; string cmd; try{cmd=File.ReadAllText(file).Trim();File.Delete(file);}catch(IOException){return;}
   Write(new{kind="command",command=cmd,time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()});
-  if(cmd=="advance"){page++;Invalidate();} else if(cmd=="close")Close(); else if(cmd=="minimize")WindowState=FormWindowState.Minimized;
+  if(cmd=="advance")Advance("command");
+  else if(cmd.StartsWith("skip "))skip=cmd.Substring(5);
+  else if(cmd=="minimize-on-blur on"||cmd=="minimize-on-blur off")minimizeOnBlur=cmd.EndsWith("on"); else if(cmd=="close")Close(); else if(cmd=="minimize")WindowState=FormWindowState.Minimized;
   else if(cmd=="restore"){WindowState=FormWindowState.Normal;Native.SetForegroundWindow(Handle);Invalidate();}
   else if(cmd=="borderless"){saved=Bounds;FormBorderStyle=FormBorderStyle.None;Bounds=Screen.FromHandle(Handle).Bounds;mode=cmd;Invalidate();}
   else if(cmd=="windowed"){FormBorderStyle=FormBorderStyle.Sizable;Bounds=saved.Width>0?saved:new Rectangle(130,90,1017,740);mode=cmd;Invalidate();}
@@ -91,7 +104,7 @@ public class Game : Form {
   line(page%2==0?"今日は猫と一緒に学校へ行きます。":"明日は友達と日本語の本を読みます。",50,ClientSize.Height-165,28,false);
   line("青い空と静かな海が好きです。",50,ClientSize.Height-105,28,false);
   targetGraphics.DrawImageUnscaled(bitmap,0,0);
-  var truth=new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),page,mode,renderer="GDI",hwnd=Handle.ToInt64(),dpi=Native.GetDpiForWindow(Handle),client=new{x=origin.X,y=origin.Y,width=ClientSize.Width,height=ClientSize.Height},lines,words};
+  var truth=new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),page,advances,skip,believesActive=appActive,minimizeOnBlur,mode,renderer="GDI",hwnd=Handle.ToInt64(),dpi=Native.GetDpiForWindow(Handle),client=new{x=origin.X,y=origin.Y,width=ClientSize.Width,height=ClientSize.Height},lines,words};
   string path=Path.Combine(dir,"truth.json"); File.WriteAllText(path+".tmp",json.Serialize(truth)); if(File.Exists(path))File.Replace(path+".tmp",path,null);else File.Move(path+".tmp",path);
   }
  }
@@ -100,8 +113,9 @@ public class Game : Form {
 public class Program {
  [STAThread] public static void Main(string[] args){
   Native.SetProcessDpiAwarenessContext(new IntPtr(-4));
-  if(args.Length==0)throw new Exception("game <directory> | windows | key <vk> <down|up> | chord <vk...> | mouse <x> <y> [click|down|up] | focus <hwnd> | show <hwnd> <n> | move <hwnd> <x> <y> <w> <h> | screenshot <path>");
-  if(args[0]=="game"){Application.EnableVisualStyles();Application.Run(new Game(args[1]));}
+  if(args.Length==0)throw new Exception("game <directory> [title] | windows | guiinfo | key <vk> <down|up> | chord <vk...> | mouse <x> <y> [click|down|up] | focus <hwnd> | show <hwnd> <n> | move <hwnd> <x> <y> <w> <h> | screenshot <path>");
+  if(args[0]=="game"){Application.EnableVisualStyles();Application.Run(new Game(args[1],args.Length>2?args[2]:null));}
+  else if(args[0]=="guiinfo") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.GuiInfo()));
   else if(args[0]=="windows") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.Windows()));
   else if(args[0]=="key") Native.Key(int.Parse(args[1]),args[2]=="up");
   else if(args[0]=="chord"){var k=args.Skip(1).Select(int.Parse).ToArray();foreach(int v in k){Native.Key(v,false);Thread.Sleep(60);}Thread.Sleep(100);foreach(int v in k.Reverse()){Native.Key(v,true);Thread.Sleep(40);}}

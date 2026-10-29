@@ -14,7 +14,8 @@ and did not stay exclusively fullscreen through capture, so it is deliberately e
 Requirements: the repo's existing Node/Rust/MSVC setup, .NET Framework's built-in C# compiler,
 and WebView2. No npm packages or toolchains are installed by the harness.
 
-From the repository root, with at least 8 GiB free on both C: and G: on the Arcade PC:
+From the repository root, with at least 8 GiB free on C: and on the drive the build lives on
+(`build.ps1` checks both):
 
 ```powershell
 $env:CARGO_BUILD_JOBS='4'
@@ -60,13 +61,17 @@ Keep binaries, copied profiles and evidence outside the repository:
 
 ```powershell
 $env:KIMOCHI_E2E_DIR="$env:USERPROFILE\dev\kimochi-scratch\e2e-run"
-$env:KIMOCHI_E2E_EXE='G:\dev-build\kimochi-tauri\target\debug\kimochi.exe'
+$env:KIMOCHI_E2E_EXE="$PWD\src-tauri\target\debug\kimochi.exe"   # or wherever your cargo target is
 & scripts/e2e-windows/build.ps1 -RunDir $env:KIMOCHI_E2E_DIR
 
 node scripts/e2e-windows/run.mjs scan window gdi windowed
 node scripts/e2e-windows/run.mjs hover window gdi windowed
 node scripts/e2e-windows/run.mjs windows window gdi windowed
 node scripts/e2e-windows/run.mjs quickshot window gdi windowed
+node scripts/e2e-windows/run.mjs focus window gdi windowed
+node scripts/e2e-windows/run.mjs keys window gdi windowed
+node scripts/e2e-windows/run.mjs alt window gdi windowed
+node scripts/e2e-windows/run.mjs selfocr display gdi windowed
 node scripts/e2e-windows/quit.mjs 22
 ```
 
@@ -101,6 +106,42 @@ and any extra test patches in your handoff.
 
 For GPU comparison, quit first, set `KIMOCHI_E2E_DISABLE_GPU=1`, then launch with run.mjs again.
 Remove that environment variable and restart to return to normal GPU use.
+
+### What each scenario guards
+
+| Scenario | Checks | Guards |
+| --- | --- | --- |
+| `scan` | Source picked in the real UI, scan by the real shortcut, cell-centre alignment | — |
+| `hover` | Shift-hover opens 10ten's lookup near the word and on screen; entering keeps it; leaving closes it | #38 (pop-up closes on leave) |
+| `auto`, `windows` | Auto OCR follows text; move/resize then fresh alignment; long minimise waits; restore resumes; closing stops it | #29 |
+| `quickshot` | Open, Esc with a game focused, second press, draw + Enter reads only the game | #32 |
+| `focus` | A hover leaves the game in front; Space after a lookup reaches the game; Ctrl/Space typed into a second window ("Kimochi E2E Chat") don't move a game that reads keys while it believes it is active | #38 (#27) |
+| `keys` | The bound shortcut's key-down never reaches the game; how many pages an (unbound) Ctrl chord would skip, for #16 | #16, #19 |
+| `alt` | A lone Alt on the main window starts no menu loop (`GetGUIThreadInfo`) and WebView2 still answers | #36 |
+| `selfocr` | A display scan draws no overlay text over Kimochi's own main window | #35 |
+| `quit.mjs N` | N launch/quit cycles; exit code, timing and leftover HWNDs per PID | #30 |
+
+The fake game's VN behaviour is driven over `command.txt`: `skip off|focused|active` (Ctrl held
+skips a page every 100 ms: never, while it is the foreground window, or while `WM_ACTIVATEAPP` last
+said the app is active, as many engines do) and `minimize-on-blur on|off` (exclusive fullscreen's
+habit of minimising on focus loss, for #2/#17 without DXGI). `truth.json` reports `advances` and
+`believesActive`; `input.jsonl` logs `WM_ACTIVATEAPP`/`WM_NCACTIVATE` and every `advance` with
+its reason. `Desktop.exe guiinfo` prints the foreground thread's GUI state (menu mode, capture).
+
+### Traps
+
+- **Scale.** Page coordinates are CSS pixels: `(screenX + x) * devicePixelRatio` is the physical
+  point, never `screenX + x * devicePixelRatio` (the two agree only at 100 %). A fixed point such as
+  "move the pointer to 600, 420" can land inside a pop-up at 200 %; derive points from what is on screen.
+- **Never tap Alt to get foreground rights**: it starts the menu loop that #36 removed from Kimochi's
+  windows but not from other apps. `Desktop.exe focus` attaches thread input instead.
+- **Leftover fake games** under or over the game under test swallow clicks. The runner checks the
+  ground-truth HWND; close strays (`close` into their `command.txt`) before a run.
+- **A quit-hung Kimochi keeps its global shortcuts** (`hotkeys_save` reports them as failed). Builds
+  before #30 can leave one; end it before trusting shortcut results.
+- **Very large displays.** On a 6880×2880 VM with a debug build, a display capture's first frame can
+  miss the 500 ms first-frame wait ("Display produced no image in time"), which fails Quick Shot's
+  draw-and-scan; at 3440×1440 it passes. Record the display mode with results.
 
 ## Evidence and boundaries
 

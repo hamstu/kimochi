@@ -21,7 +21,7 @@ const [
   mode = "windowed",
 ] = process.argv.slice(2);
 assert(
-  ["scan", "hover", "auto", "windows", "quickshot"].includes(scenario),
+  ["scan", "hover", "auto", "windows", "quickshot", "focus", "keys", "alt", "selfocr"].includes(scenario),
   "known scenario",
 );
 assert(
@@ -31,6 +31,10 @@ assert(
 assert(
   scenario !== "windows" || source === "window",
   "window lifecycle requires a window source",
+);
+assert(
+  scenario !== "selfocr" || source === "display",
+  "selfocr checks a display source",
 );
 if (renderer !== "gdi" || !["windowed", "borderless"].includes(mode))
   throw Error(
@@ -85,7 +89,7 @@ const truth = async () =>
 const state = () => invoke(overlay, "snapshot");
 async function clearUiSource(p) {
   const r = await p.eval(
-    `(()=>{const e=document.querySelector('button.src-card');if(!e)return null;const r=e.getBoundingClientRect();return {x:screenX+(r.x+20)*devicePixelRatio,y:screenY+(r.y+20)*devicePixelRatio}})()`,
+    `(()=>{const e=document.querySelector('button.src-card');if(!e)return null;const r=e.getBoundingClientRect();return {x:(screenX+r.x+20)*devicePixelRatio,y:(screenY+r.y+20)*devicePixelRatio}})()`,
   );
   if (r) {
     desktop("mouse", Math.round(r.x), Math.round(r.y));
@@ -360,8 +364,10 @@ try {
       };
     });
     const measureAlignment = async (filename = "alignment.json") => {
+      // A scan with Auto OCR on starts the overlay over (force rescan): wait for the words.
+      await until(async () => (await rendered()).words.length > 2, 30000);
       const chars = await overlay.eval(
-        `(()=>{const out=[];for(const root of document.querySelectorAll('.ocr-word-current')){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){let offset=0;for(const c of node.textContent){const r=document.createRange();r.setStart(node,offset);offset+=c.length;r.setEnd(node,offset);const b=r.getBoundingClientRect();const font=parseFloat(getComputedStyle(node.parentElement).fontSize);if(b.width&&b.height)out.push({c,cx:screenX+(b.x+b.width/2)*devicePixelRatio,cy:screenY+(b.y+b.height/2)*devicePixelRatio,fontSize:font*devicePixelRatio});}}}return out})()`,
+        `(()=>{const out=[];for(const root of document.querySelectorAll('.ocr-word-current')){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){let offset=0;for(const c of node.textContent){const r=document.createRange();r.setStart(node,offset);offset+=c.length;r.setEnd(node,offset);const b=r.getBoundingClientRect();const font=parseFloat(getComputedStyle(node.parentElement).fontSize);if(b.width&&b.height)out.push({c,cx:(screenX+b.x+b.width/2)*devicePixelRatio,cy:(screenY+b.y+b.height/2)*devicePixelRatio,fontSize:font*devicePixelRatio});}}}return out})()`,
       );
       const t = await truth();
       const metrics = alignmentMetrics(t, chars);
@@ -402,8 +408,8 @@ try {
         desktop("key", 16, "down");
         desktop(
           "mouse",
-          Math.round(d.x + (w.rect.x + Math.min(12, w.rect.width / 2)) * d.dpr),
-          Math.round(d.y + (w.rect.y + w.rect.height / 2) * d.dpr),
+          Math.round((d.x + w.rect.x + Math.min(12, w.rect.width / 2)) * d.dpr),
+          Math.round((d.y + w.rect.y + w.rect.height / 2) * d.dpr),
         );
         const pop = await until(popupState, 5000);
         assert(
@@ -412,7 +418,7 @@ try {
             pop.text.includes("日本"),
           "lookup matches hovered text",
         );
-        assert(pop.x + pop.rect.x >= 0 && pop.y + pop.rect.y >= 0);
+        assert(pop.x + pop.rect.x >= 0 && pop.y + pop.rect.y >= 0); // CSS pixels: on screen
         assert(
           pop.rect.right <= pop.viewport.width &&
             pop.rect.bottom <= pop.viewport.height,
@@ -424,17 +430,17 @@ try {
       await check("enter-popup-keeps-it-open", async () => {
         desktop(
           "mouse",
-          Math.round(popup.x + (popup.rect.x + 18) * popup.dpr),
-          Math.round(popup.y + (popup.rect.y + 8) * popup.dpr),
+          Math.round((popup.x + popup.rect.x + 18) * popup.dpr),
+          Math.round((popup.y + popup.rect.y + 8) * popup.dpr),
         );
         await sleep(80);
         desktop(
           "mouse",
           Math.round(
-            popup.x + (popup.rect.x + popup.rect.width / 2) * popup.dpr,
+            (popup.x + popup.rect.x + popup.rect.width / 2) * popup.dpr,
           ),
           Math.round(
-            popup.y + (popup.rect.y + popup.rect.height / 2) * popup.dpr,
+            (popup.y + popup.rect.y + popup.rect.height / 2) * popup.dpr,
           ),
         );
         await sleep(600);
@@ -443,7 +449,12 @@ try {
       });
       await check("leave-clears-popup", async () => {
         desktop("key", 16, "up");
-        desktop("mouse", 600, 420);
+        // Clear of the pop-up and the word, wherever they are at this scale.
+        desktop(
+          "mouse",
+          Math.round((popup.x + popup.rect.right) * popup.dpr + 200),
+          Math.round((popup.y + popup.rect.top) * popup.dpr),
+        );
         await until(async () => !(await popupState()), 5000);
         return true;
       });
@@ -522,6 +533,120 @@ try {
         });
       }
     }
+  } else if (scenario === "focus") {
+    // A hover leaves the game in front: keys after a lookup reach it, and a game that
+    // reads the keyboard while it believes it is active is told when the reader leaves (#27).
+    await check("manual-scan", scan);
+    await command("skip active");
+    const d = await rendered();
+    const w = d.words.find((w) => /今日|明日|青い/.test(w.text)) ?? d.words[0];
+    const t = await truth();
+    const empty = [t.client.x + 300, t.client.y + 220];
+    const game = () => JSON.parse(desktop("windows")).find((x) => x.hwnd === t.hwnd);
+    await check("hover-keeps-game-in-front", async () => {
+      await focusGame();
+      desktop("key", 16, "down");
+      desktop(
+        "mouse",
+        Math.round((d.x + w.rect.x + w.rect.width / 3) * d.dpr),
+        Math.round((d.y + w.rect.y + w.rect.height / 2) * d.dpr),
+      );
+      await sleep(900);
+      const during = game().foreground;
+      desktop("key", 16, "up");
+      desktop("mouse", ...empty);
+      await sleep(1200);
+      assert(game().foreground, "game is in front after the hover");
+      return { word: w.text, inFrontDuringHover: during };
+    });
+    await check("keys-after-hover-reach-the-game", async () => {
+      const before = (await truth()).page;
+      desktop("chord", 32);
+      await sleep(500);
+      assert.equal((await truth()).page, before + 1, "Space advanced the game");
+      return true;
+    });
+    const chatDir = path.join(root, "chat");
+    await check("keys-typed-into-another-app-do-not-reach-the-game", async () => {
+      spawn(path.join(root, "Desktop.exe"), ["game", chatDir, "Kimochi E2E Chat"], {
+        detached: true,
+        windowsHide: true,
+        stdio: "ignore",
+      }).unref();
+      const chat = await until(async () =>
+        JSON.parse(desktop("windows")).find((x) => x.title === "Kimochi E2E Chat"),
+      );
+      desktop("move", chat.hwnd, t.client.x + t.client.width + 80, t.client.y, 700, 500);
+      await sleep(300);
+      desktop("mouse", t.client.x + t.client.width + 300, t.client.y + 250, "click");
+      await sleep(400);
+      const before = await truth();
+      desktop("key", 17, "down");
+      await sleep(700);
+      desktop("key", 17, "up");
+      desktop("chord", 32);
+      await sleep(400);
+      const after = await truth();
+      assert.equal(after.page, before.page, "the game ignored Ctrl/Space typed into the chat window");
+      return { gameBelievedActive: before.believesActive };
+    });
+    await writeFile(path.join(chatDir, "command.txt"), "close").catch(() => {});
+    await command("skip off");
+  } else if (scenario === "keys") {
+    // What a game sees of Kimochi's shortcut (#16, #19).
+    await check("manual-scan", scan);
+    await command("skip focused");
+    await focusGame();
+    const input = path.join(root, "game/input.jsonl");
+    const lines = async () => (await readFile(input, "utf8")).trim().split(/\r?\n/);
+    const since = async (n) => (await lines()).slice(n).map((line) => JSON.parse(line));
+    await check("bound-shortcut-key-down-never-reaches-the-game", async () => {
+      const n = (await lines()).length;
+      const prior = (await state()).scan?.id;
+      desktop("chord", 16, 119);
+      await until(async () => (await state()).scan?.id !== prior, 30000);
+      const seen = await since(n);
+      const keyDowns = seen.filter((e) => e.kind === "message" && e.msg === 0x100).map((e) => e.wparam);
+      assert(!keyDowns.includes(119), "F8's key-down is Kimochi's");
+      return { keyDowns, keyUps: seen.filter((e) => e.kind === "message" && e.msg === 0x101).map((e) => e.wparam) };
+    });
+    await check("a-ctrl-chord-would-skip-text", async () => {
+      // Informational for #16: Ctrl+Shift+8 (unbound here) as a VN sees it.
+      const before = (await truth()).page;
+      desktop("chord", 17, 16, 56);
+      await sleep(700);
+      return { pagesSkipped: (await truth()).page - before };
+    });
+    await command("skip off");
+  } else if (scenario === "alt") {
+    await activateMain();
+    await check("a-lone-alt-does-not-freeze-the-main-window", async () => {
+      desktop("key", 18, "down");
+      desktop("key", 18, "up");
+      await sleep(400);
+      const gui = JSON.parse(desktop("guiinfo"));
+      const start = Date.now();
+      await fetch("http://127.0.0.1:19333/json/version", { signal: AbortSignal.timeout(6000) }).catch(() => {});
+      const devtoolsMs = Date.now() - start;
+      desktop("chord", 27);
+      assert(!(gui.flags & 4), "no menu loop after a lone Alt (GUI_INMENUMODE)");
+      assert(devtoolsMs < 3000, "WebView2 still answers");
+      return { flags: gui.flags, devtoolsMs };
+    });
+  } else if (scenario === "selfocr") {
+    await check("manual-scan", scan);
+    await check("a-display-scan-skips-kimochis-windows", async () => {
+      const main = JSON.parse(desktop("windows")).find((w) => w.pid === app && w.title === "Kimochi" && w.visible);
+      assert(main, "main window on screen");
+      const d = await rendered();
+      const over = d.words.filter((w) => {
+        const x = (d.x + w.rect.x + w.rect.width / 2) * d.dpr;
+        const y = (d.y + w.rect.y + w.rect.height / 2) * d.dpr;
+        return x >= main.rect.x && x < main.rect.x + main.rect.width && y >= main.rect.y && y < main.rect.y + main.rect.height;
+      });
+      assert.equal(over.length, 0, "no overlay text drawn over Kimochi's own window");
+      return { words: d.words.length, overMainWindow: over.length };
+    });
   } else if (scenario === "quickshot") {
     await activateMain();
     let p = await page("panel.html");
