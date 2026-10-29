@@ -434,6 +434,15 @@ pub fn default_hotkeys() -> Map<String, Value> {
 /// R4: the Deck's buttons after the 17 standard ones (platform/linux/deck_input.rs).
 pub const DECK_MENU_BUTTON: usize = 18;
 
+/// The default keys: Shift+F8 and Shift+F9 on Windows and Linux, where a Ctrl chord's Ctrl
+/// reaches the game first and most visual novels skip text while it is held (#16); ⌘⇧8 and
+/// ⌘⇧Space on macOS, where ⌘ never reaches the game and the F-keys are media keys.
+const DEFAULT_KEYS: (&str, &str) = if cfg!(target_os = "macos") {
+    ("CommandOrControl+Shift+8", "CommandOrControl+Shift+Space")
+} else {
+    ("Shift+F8", "Shift+F9")
+};
+
 fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
     let menu_chord = if steam_deck { json!([DECK_MENU_BUTTON]) } else { json!([10, 11]) };
     let mut hotkeys = Map::new();
@@ -441,7 +450,7 @@ fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
         "triggerScan".into(),
         json!({
             "name": "Scan",
-            "accelerator": "CommandOrControl+Shift+8",
+            "accelerator": DEFAULT_KEYS.0,
             "description": "Trigger OCR scan on current source",
             "enabled": true,
             "gamepadButtons": []
@@ -451,7 +460,7 @@ fn default_hotkeys_for(steam_deck: bool) -> Map<String, Value> {
         "openControllerMenu".into(),
         json!({
             "name": "Controller menu",
-            "accelerator": "CommandOrControl+Shift+Space",
+            "accelerator": DEFAULT_KEYS.1,
             "description": "Open the radial menu over your source",
             "enabled": true,
             "gamepadButtons": menu_chord
@@ -711,6 +720,17 @@ mod tests {
     }
 
     #[test]
+    fn default_shortcuts_avoid_ctrl_where_it_reaches_the_game() {
+        let defaults = default_hotkeys_for(false);
+        let (scan, menu) = (&defaults["triggerScan"]["accelerator"], &defaults["openControllerMenu"]["accelerator"]);
+        if cfg!(target_os = "macos") {
+            assert_eq!((scan.as_str(), menu.as_str()), (Some("CommandOrControl+Shift+8"), Some("CommandOrControl+Shift+Space")));
+        } else {
+            assert_eq!((scan.as_str(), menu.as_str()), (Some("Shift+F8"), Some("Shift+F9")));
+        }
+    }
+
+    #[test]
     fn hotkey_overrides_apply_per_field() {
         let s = store();
         s.doc.lock().unwrap()["hotkeys"] =
@@ -720,10 +740,7 @@ mod tests {
         assert_eq!(merged["triggerScan"]["enabled"], false);
         // Description comes from the default, not the override.
         assert_eq!(merged["triggerScan"]["name"], "Scan");
-        assert_eq!(
-            merged["openControllerMenu"]["accelerator"],
-            "CommandOrControl+Shift+Space"
-        );
+        assert_eq!(merged["openControllerMenu"]["accelerator"], DEFAULT_KEYS.1);
         assert_eq!(
             merged["openControllerMenu"]["gamepadButtons"],
             json!([10, 11])

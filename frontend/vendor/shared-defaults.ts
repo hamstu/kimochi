@@ -6,17 +6,20 @@
  */
 import { HotkeysSettings, HotkeyOverrides } from './shared-types'
 
+/** Shift+F8/F9 on Windows and Linux (Ctrl makes visual novels skip text, #16); ⌘⇧8/⌘⇧Space on macOS. */
+const MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
+
 export const DEFAULT_HOTKEYS: HotkeysSettings = {
   triggerScan: {
     name: 'Scan',
-    accelerator: 'CommandOrControl+Shift+8',
+    accelerator: MAC ? 'CommandOrControl+Shift+8' : 'Shift+F8',
     description: 'Trigger OCR scan on current source',
     enabled: true,
     gamepadButtons: []
   },
   openControllerMenu: {
     name: 'Controller menu',
-    accelerator: 'CommandOrControl+Shift+Space',
+    accelerator: MAC ? 'CommandOrControl+Shift+Space' : 'Shift+F9',
     description: 'Open the radial menu over the game',
     enabled: true,
     // LS + RS: both stick clicks, which few games use together. A placeholder until the native
