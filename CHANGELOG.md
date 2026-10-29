@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Quitting Kimochi on Windows now ends it completely. Before, a quit could leave Kimochi running invisibly in the background, still holding the memory it had used (often 0.5–1 GB), until you ended it in Task Manager or restarted.
+
 ## [0.2.1] - 2026-10-28
 
 ### Added
