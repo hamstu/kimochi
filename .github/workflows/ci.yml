@@ -583,46 +583,13 @@ jobs:
           gh release edit "$RELEASE" --draft=false --latest
           echo "Published $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"
 
-      # GITHUB_TOKEN publication does not trigger release workflows, so notify here.
-      # Nightly and other prereleases stay out of the stable #releases channel.
-      - name: Announce release on Discord
-        uses: actions/github-script@v7
-        env:
-          DISCORD_RELEASES_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASES_WEBHOOK_URL }}
-          RELEASE: ${{ needs.plan.outputs.release }}
-        with:
-          script: |
-            const webhook = process.env.DISCORD_RELEASES_WEBHOOK_URL
-            if (!webhook) return
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              ...context.repo, tag: process.env.RELEASE,
-            })
-            if (release.draft || release.prerelease) return
-            const link = `\n\n[Full notes](${release.html_url})`
-            const notes = release.body || ''
-            let description = notes
-            if (notes.length + link.length > 4096) {
-              const budget = 4096 - link.length - 1
-              let excerpt = notes.slice(0, budget)
-              // Prefer a complete line or word; avoid splitting a Unicode surrogate pair.
-              const boundary = Math.max(excerpt.lastIndexOf('\n'), excerpt.lastIndexOf(' '))
-              if (boundary > budget / 2) excerpt = excerpt.slice(0, boundary)
-              excerpt = excerpt.replace(/[\uD800-\uDBFF]$/, '')
-              description = `${excerpt.trimEnd()}…`
-            }
-            const title = `${release.tag_name}: ${release.name || release.tag_name}`
-            const payload = {
-              allowed_mentions: { parse: [] },
-              embeds: [{
-                title: title.length > 256 ? `${title.slice(0, 254).replace(/[\uD800-\uDBFF]$/, '')}…` : title,
-                url: release.html_url,
-                description: description + link,
-              }],
-            }
-            const response = await fetch(webhook, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: AbortSignal.timeout(30000),
-            })
-            if (!response.ok) throw new Error(`Discord notification failed (HTTP ${response.status})`)
+  # GITHUB_TOKEN publication does not trigger release-event workflows.
+  announce:
+    name: Announce release on Discord
+    needs: [plan, manifest]
+    if: needs.plan.outputs.mode == 'release' && needs.plan.outputs.rolling == 'false'
+    uses: ./.github/workflows/discord-release.yml
+    with:
+      tag: ${{ needs.plan.outputs.release }}
+    secrets:
+      DISCORD_RELEASES_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASES_WEBHOOK_URL }}
