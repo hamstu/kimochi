@@ -2,6 +2,10 @@
 //! transparent-window routing alone does not prevent games polling mouse state.
 //! The hook only reads a prepared snapshot with try_lock and queues fixed-size
 //! messages. Region conversion and WebView delivery happen off the hook thread.
+//!
+//! The same hook catches a mouse button bound as an action shortcut (`mouse_buttons`):
+//! middle, back and forward only, never left or right, and only while one is bound.
+use crate::mouse_buttons::{self, Button, Step};
 use crate::state::Service;
 use kimochi_capture::{Rect, SourceId};
 use std::cell::RefCell;
@@ -20,7 +24,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     PeekMessageW, PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
     WindowFromPoint, GetCursorPos, GetForegroundWindow, GA_ROOT, HC_ACTION, MSG, MSLLHOOKSTRUCT, KBDLLHOOKSTRUCT, PM_NOREMOVE, SM_SWAPBUTTON,
     WH_MOUSE_LL, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_USER,
-    WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP, LLMHF_INJECTED,
+    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_XBUTTONDOWN, WM_XBUTTONUP, XBUTTON1, XBUTTON2,
 };
 
 #[derive(Clone, Copy)]
@@ -47,6 +52,10 @@ struct Hook {
     keys_down: [bool; 256],
     owners: [Option<Target>; 2],
     swapped: bool,
+    /// Bound mouse buttons: presses go to `mouse_buttons::fire` on a delivery thread.
+    buttons: SyncSender<u8>,
+    /// Bound-button presses swallowed and not yet released (`mouse_buttons::step`).
+    buttons_owned: u8,
 }
 thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) }; }
 static TARGETS: Mutex<Vec<Target>> = Mutex::new(Vec::new());
@@ -242,6 +251,7 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
     }
     let (sender, receiver) = mpsc::sync_channel::<Press>(1024);
     let (keys, key_receiver) = mpsc::sync_channel(1024);
+    let (buttons, button_receiver) = mpsc::sync_channel::<u8>(16);
     let (ready_tx, ready_rx) = mpsc::channel();
     std::thread::Builder::new()
         .name("kimochi-mouse-guard".into())
@@ -256,6 +266,8 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
                     keys_down: [false; 256],
                     owners: [None, None],
                     swapped: GetSystemMetrics(SM_SWAPBUTTON) != 0,
+                    buttons,
+                    buttons_owned: 0,
                 })
             });
             let module = GetModuleHandleW(None).ok().map(|m| HINSTANCE(m.0));
@@ -289,6 +301,12 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
     *running = Some(ready_rx.recv().map_err(|error| error.to_string())??);
     let app = app.clone();
     let key_app = app.clone();
+    let button_app = app.clone();
+    std::thread::Builder::new().name("kimochi-mouse-shortcuts".into()).spawn(move || {
+        for button in button_receiver {
+            mouse_buttons::fire(&button_app, button);
+        }
+    }).map_err(|e| e.to_string())?;
     std::thread::Builder::new().name("kimochi-key-delivery".into()).spawn(move || {
         for (key, down, region, nav) in key_receiver {
             let Some(name) = key_name(key) else { continue };
@@ -424,6 +442,47 @@ fn target_at(point: POINT) -> Option<Target> {
     }).copied()
 }
 
+/// Whether a bound mouse button can fire: the hook that catches it is the mouse guard, which
+/// runs for the app's lifetime, so there is nothing to install or remove here.
+pub fn sync_mouse_buttons(_app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
+    if wanted && RUNNING.lock().unwrap().is_none() {
+        return Err("the mouse hook is not running".into());
+    }
+    Ok(())
+}
+
+/// Middle, back and forward against the bound buttons. With nothing bound and nothing owned
+/// this is a match on the message and two loads; when a button fires, one `try_send`.
+/// True when the event is swallowed.
+fn bound_button(message: u32, info: &MSLLHOOKSTRUCT) -> bool {
+    let (button, down) = match message {
+        WM_MBUTTONDOWN => (Button::Middle, true),
+        WM_MBUTTONUP => (Button::Middle, false),
+        WM_XBUTTONDOWN | WM_XBUTTONUP => {
+            let button = match (info.mouseData >> 16) as u16 {
+                XBUTTON1 => Button::Back,
+                XBUTTON2 => Button::Forward,
+                _ => return false,
+            };
+            (button, message == WM_XBUTTONDOWN)
+        }
+        _ => return false,
+    };
+    let injected = info.flags & LLMHF_INJECTED != 0;
+    HOOK.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(hook) = state.as_mut() else { return false };
+        match mouse_buttons::step(&mut hook.buttons_owned, mouse_buttons::armed(), button, down, injected) {
+            Step::Pass => false,
+            Step::Swallow => true,
+            Step::Fire => {
+                let _ = hook.buttons.try_send(button as u8);
+                true
+            }
+        }
+    })
+}
+
 pub fn stop_mouse_guard() {
     TARGETS.lock().unwrap().clear();
     if let Some(id) = RUNNING.lock().unwrap().take() {
@@ -433,6 +492,9 @@ pub fn stop_mouse_guard() {
 
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 && lparam.0 != 0 {
+        if bound_button(wparam.0 as u32, unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) }) {
+            return LRESULT(1);
+        }
         let transition = match wparam.0 as u32 {
             WM_LBUTTONDOWN => Some((0, true)),
             WM_LBUTTONUP => Some((0, false)),

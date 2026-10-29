@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- **Mouse buttons as shortcuts:** on Windows, the scan and controller-menu shortcuts can now be the **middle**, **back** or **forward** mouse button. A bound button is kept from the game and other apps; unbound buttons work as before. On macOS this needs Kimochi to be allowed under Accessibility; Linux doesn't support it yet.
+
 ## [0.2.2] - 2026-10-29
 
 ### Changed

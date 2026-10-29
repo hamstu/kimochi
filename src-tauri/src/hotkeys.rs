@@ -4,6 +4,7 @@
 //! names such as `8`, so `CommandOrControl+Shift+8` and the rest of
 //! `src/shared/defaults.ts` register without translation.
 use crate::actions;
+use crate::mouse_buttons::Button as MouseButton;
 use crate::settings::{merged_hotkeys, Settings};
 use crate::state::Shared;
 use serde_json::{json, Value};
@@ -60,6 +61,7 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Value {
     let mut registry = lock();
     let _ = app.global_shortcut().unregister_all();
     registry.active.clear();
+    crate::mouse_buttons::disarm();
     // That also took the region editor's and the controller menu's keys; put back any
     // still in use.
     let _ = sync_keys(app);
@@ -94,6 +96,7 @@ pub fn suspend(app: &tauri::AppHandle, settings: &Arc<Settings>, on: bool) -> Va
         registry.generation += 1;
         let generation = registry.generation;
         registry.suspended = true;
+        crate::mouse_buttons::disarm();
         let shortcuts = app.global_shortcut();
         for shortcut in registry.active.drain(..) {
             let _ = shortcuts.unregister(shortcut);
@@ -133,6 +136,7 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
     let shortcuts = app.global_shortcut();
     let mut registered = Vec::new();
     let mut failed = Vec::new();
+    let mut buttons: Vec<(String, MouseButton)> = Vec::new();
     for (name, definition) in merged_hotkeys(settings) {
         if definition.get("enabled") == Some(&Value::Bool(false)) {
             continue;
@@ -141,6 +145,16 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
             failed.push(json!({"name": name, "accelerator": null, "error": "no accelerator"}));
             continue;
         };
+        // Mouse buttons are caught by the platform's input hook, not registered as shortcuts.
+        if let Some(button) = MouseButton::parse(accelerator) {
+            if buttons.iter().any(|(_, bound)| *bound == button) {
+                failed.push(json!({"name": name, "accelerator": accelerator,
+                    "error": "this mouse button is already bound"}));
+            } else {
+                buttons.push((name, button));
+            }
+            continue;
+        }
         let parsed = match Shortcut::from_str(accelerator) {
             Ok(parsed) => parsed,
             Err(e) => {
@@ -167,6 +181,13 @@ fn register(app: &tauri::AppHandle, settings: &Arc<Settings>, registry: &mut Reg
             Err(e) => failed
                 .push(json!({"name": name, "accelerator": accelerator, "error": e.to_string()})),
         }
+    }
+    // Always, even with no button bound: an empty set removes a hook that is no longer needed.
+    match crate::mouse_buttons::bind(app, &buttons) {
+        Ok(()) => registered.extend(buttons.into_iter().map(|(name, _)| name)),
+        Err(error) => failed.extend(buttons.into_iter().map(|(name, button)| {
+            json!({"name": name, "accelerator": button.accelerator(), "error": error})
+        })),
     }
     json!({ "registered": registered, "failed": failed })
 }

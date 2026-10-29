@@ -2,7 +2,16 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const { acceleratorCaps, acceleratorFromEvent, heldModifierCaps, isPrimaryModifier, keyPlatformOf, formatAccelerator } =
+const {
+  acceleratorCaps,
+  acceleratorFromEvent,
+  heldModifierCaps,
+  isMouseAccelerator,
+  isPrimaryModifier,
+  keyPlatformOf,
+  formatAccelerator,
+  mouseButtonAccelerator
+} =
   await load('../frontend/panels/settings/accelerator.ts')
 const { fallbackCapabilities, normalizeCapabilities, DEFAULT_CAPABILITIES_MACOS } = await load('capabilities.ts')
 
@@ -136,4 +145,35 @@ test('app shortcuts use ⌘ alone on macOS and Ctrl alone elsewhere', () => {
     assert.equal(isPrimaryModifier(held({ metaKey: true }), caps), false)
     assert.equal(isPrimaryModifier(held({ ctrlKey: true, shiftKey: true }), caps), false)
   }
+})
+
+test('middle, back and forward record as mouse accelerators; left and right never do', () => {
+  assert.equal(mouseButtonAccelerator(1), 'MouseMiddle')
+  assert.equal(mouseButtonAccelerator(3), 'MouseBack')
+  assert.equal(mouseButtonAccelerator(4), 'MouseForward')
+  for (const button of [0, 2, 5, -1]) assert.equal(mouseButtonAccelerator(button), null, `button ${button}`)
+  for (const accelerator of ['MouseMiddle', 'MouseBack', 'MouseForward', 'mouseback']) {
+    assert.equal(isMouseAccelerator(accelerator), true, accelerator)
+  }
+  for (const accelerator of ['', 'Insert', 'F8', 'CommandOrControl+Shift+8', 'MouseLeft', 'Shift+MouseBack']) {
+    assert.equal(isMouseAccelerator(accelerator), false, accelerator)
+  }
+})
+
+test('mouse accelerators read as their button on every platform', () => {
+  for (const platform of ['mac', 'windows', 'linux']) {
+    assert.deepEqual(acceleratorCaps('MouseMiddle', platform), ['Middle Click'])
+    assert.deepEqual(acceleratorCaps('MouseBack', platform), ['Mouse Back'])
+    assert.equal(formatAccelerator('MouseForward', platform), 'Mouse Forward')
+  }
+})
+
+test('mouse buttons are offered only where native says they can fire', () => {
+  // An older backend that never mentions them, and the default before native replies: never.
+  assert.equal(DEFAULT_CAPABILITIES_MACOS.keys.mouseButtons, 'unsupported')
+  const old = normalizeCapabilities({ os: 'windows', keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win' } })
+  assert.equal(old.keys.mouseButtons, 'unsupported')
+  assert.equal(fallbackCapabilities({ platform: 'Win32', userAgent: 'Windows NT 10.0' }).keys.mouseButtons, 'unsupported')
+  const windows = normalizeCapabilities({ os: 'windows', keys: { mouseButtons: 'available' } })
+  assert.equal(windows.keys.mouseButtons, 'available')
 })

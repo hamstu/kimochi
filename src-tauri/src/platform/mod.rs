@@ -1038,7 +1038,7 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         "os": std::env::consts::OS,
         "osVersion": "",
         "arch": std::env::consts::ARCH,
-        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super"},
+        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super", "mouseButtons": "unsupported"},
         "capture": {
             "authorization": "unsupported",
             "canOpenSettings": false,
