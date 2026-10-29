@@ -11,9 +11,29 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-### Fixed
-
 - **Windows: clicks on the Log's dictionary pop-up now work.** Clicks stay in the pop-up instead of closing it through the Log; buttons like **Add to Anki** and audio receive the full press and release.
+
+- Clicking a shortcut in Settings → Shortcuts & Controls now starts recording every time; before, a click often started and stopped it at once.
+
+- Windows: tapping Alt while a Kimochi window has focus no longer leaves it unresponsive until you click it or press Esc.
+
+- With a whole display as the source, Kimochi no longer reads its own windows: their text stays out of the Log, and the overlay no longer covers the main window's buttons with boxes of its own text.
+
+- Quick Shot on Windows now accepts Escape to cancel and Enter to scan while your game is focused, even without a window source selected.
+- Auto OCR no longer turns itself off when the game window is minimised. Exclusive-fullscreen games minimise as soon as you click into Kimochi; Auto OCR now waits for the game and starts reading again when you return to it.
+- Shortcuts can now use **Insert** alone or with Shift, as well as a function key. Windows and Linux also support **Pause** and **Scroll Lock**. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
+- Quitting Kimochi on Windows now ends it completely. Before, a quit could leave Kimochi running invisibly in the background, still holding the memory it had used (often 0.5–1 GB) until Windows restarted.
+
+- Fixed: on Linux, including the Steam Deck, Hachidori showed "No dictionary has an entry" for many common words (今日, 大人, ですね…): its lookups failed whenever a result needed its furigana table.
+- Reading along with a controller asks the dictionary for each word directly, in both the pop-up and full-screen styles and with every dictionary: no more pop-ups that never appear, entries from the previous word, or text left selected. A word with no entry now says so.
+- Hachidori: reading along stops on the words Hachidori itself finds.
+- Hachidori keeps up with read-along: each word's entry shows in about half the time on a Steam Deck.
+- Fixed: in Gaming Mode, Hachidori often showed no definition, or a blank dictionary area, for a word you stepped onto, until you stepped off and back. Kimochi no longer takes the arrow keys Steam types for the D-pad, which pulled focus from the overlay at each press and cancelled the lookup.
+- In the full-screen dictionary, the outline covers exactly what the dictionary matched, even when that runs into the next word, instead of a second tint over the rest.
+- Fixed: after the full-screen dictionary was left through the controller menu, the pop-up style's pop-up opened across the whole width of the screen instead of beside the word.
+- The free cursor (left stick) now works in the full-screen dictionary too. Point at any character to look up from there, past a word that was split wrongly; the outline then covers everything the dictionary matched from it, in both styles.
+- Fixed: on the Steam Deck, leaving read-along open for several minutes could make Steam's interface crash and restart.
+- Steam Deck: opening Kimochi from the controller menu keeps Kimochi in front, instead of the game coming back a moment later or after a volume change.
 
 ## [0.2.1] - 2026-10-28
 

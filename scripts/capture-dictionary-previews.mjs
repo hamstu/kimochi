@@ -36,31 +36,26 @@
  * the API answer are left out (`apiPayload`), so the committed images and recording carry nothing
  * but JMdict (EDRDG licence, attributed in the folder's README) and CC100 frequencies.
  */
-import { createServer as createHttpServer } from "node:http";
-import {
-  mkdtemp,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { evaluate, launchChrome, waitFor } from "./cdp.mjs";
 import {
   ANKI_FIELDS_REQUEST,
   SCENE,
   apiPayload,
-  buildExcerpt,
-  dictionaryTitle,
-  lookupTerms,
-  writeZip,
 } from "./dictionary-previews.mjs";
+import {
+  TENTEN_TEXT,
+  excerpts,
+  importIntoHachidori,
+  root,
+  serveFiles,
+  sleep,
+  startServers,
+} from "./engine-browser.mjs";
 import { ensureExtension } from "./sync-extension.mjs";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
 const ENGINES = ["yomitan", "hachidori", "tenten", "custom-api"];
 const THEMES = ["light", "dark"];
 /** CSS pixels and device pixel ratio of every capture: 16:10, shown at most ~720 px wide. */
@@ -105,110 +100,9 @@ function options(argv) {
   };
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const log = (...parts) => console.log("[capture]", ...parts);
 
-// ---------------------------------------------------------------- servers
-
-/** The dev server and the browser preview, in this process (vite's own API, as its CLI runs). */
-async function startServers(port) {
-  process.env.KIMOCHI_DEV_PORT = String(port);
-  process.env.PREVIEW_PORT = String(port + 4000);
-  const { createServer } = await import("vite");
-  const quiet = { logLevel: "warn", clearScreen: false };
-  const dev = await createServer({
-    configFile: path.join(root, "vite.dev.config.ts"),
-    ...quiet,
-  });
-  await dev.listen();
-  // Its own dependency cache: two servers over one root would otherwise re-optimise each other's
-  // dependencies and answer "504 Outdated Optimize Dep".
-  const preview = await createServer({
-    configFile: path.join(root, "vite.preview.config.ts"),
-    cacheDir: path.join(root, "node_modules/.vite-dictionary-previews"),
-    ...quiet,
-  });
-  await preview.listen();
-  const origins = {
-    app: `http://127.0.0.1:${port}`,
-    hachidori: `http://127.0.0.1:${port + 10}`,
-    tenten: `http://127.0.0.1:${port + 11}`,
-    preview: `http://localhost:${port + 4000}`,
-  };
-  // The extension origins listen a moment after the dev server.
-  for (const origin of [origins.hachidori, origins.tenten]) {
-    for (let i = 0; ; i++) {
-      const ok = await fetch(`${origin}/manifest.json`).then(
-        (r) => r.ok,
-        () => false,
-      );
-      if (ok) break;
-      if (i > 100) throw Error(`${origin} did not come up`);
-      await sleep(100);
-    }
-  }
-  return {
-    origins,
-    async close() {
-      await preview.close();
-      await dev.close();
-    },
-  };
-}
-
-/** Serves the dictionary excerpts to the scene page (Yomitan fetches its `?dictionary=` URLs). */
-async function serveFiles(files) {
-  const server = createHttpServer((req, res) => {
-    const data = files.get(
-      decodeURIComponent((req.url ?? "").split("?")[0].slice(1)),
-    );
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    if (!data) {
-      res.statusCode = 404;
-      res.end();
-      return;
-    }
-    res.setHeader("Content-Type", "application/zip");
-    res.end(data);
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address();
-  return {
-    url: (name) => `http://127.0.0.1:${port}/${encodeURIComponent(name)}`,
-    close: () => new Promise((resolve) => server.close(resolve)),
-  };
-}
-
 // ---------------------------------------------------------------- data
-
-/** The JMdict (and CC100, if present) excerpts as zips, from the owner's Yomitan dictionaries. */
-async function excerpts(dir) {
-  const names = (await readdir(dir).catch(() => []))
-    .filter((name) => name.endsWith(".zip"))
-    .sort();
-  const terms = lookupTerms();
-  const found = new Map();
-  for (const name of names) {
-    const buffer = await readFile(path.join(dir, name));
-    const title = dictionaryTitle(buffer) ?? "";
-    const kind = /^JMdict\b/.test(title)
-      ? "jmdict"
-      : title === "CC100"
-        ? "cc100"
-        : null;
-    if (!kind || found.has(kind)) continue;
-    const files = buildExcerpt(buffer, terms);
-    if (files)
-      found.set(kind, {
-        name: `${kind}-excerpt.zip`,
-        title,
-        source: name,
-        zip: writeZip(files),
-      });
-  }
-  if (!found.has("jmdict")) return null;
-  return [...found.values()];
-}
 
 /** The Yomitan API answer for the word: live (and recorded) when reachable, else the recording. */
 async function apiAnswer({ api, offline }) {
@@ -280,89 +174,6 @@ async function settledPopup(page, { timeout = 20000 } = {}) {
   }
   return null;
 }
-
-/** Runs `expression` in the frame whose URL starts with `prefix` (Hachidori's settings page). */
-async function inFrame(page, prefix, expression, { byValue = false } = {}) {
-  const { frameTree } = await page.send("Page.getFrameTree");
-  const frames = [];
-  const walk = (node) => {
-    frames.push(node.frame);
-    for (const child of node.childFrames ?? []) walk(child);
-  };
-  walk(frameTree);
-  const frame = frames.find((f) => f.url.startsWith(prefix));
-  if (!frame) return null;
-  const { executionContextId } = await page.send("Page.createIsolatedWorld", {
-    frameId: frame.id,
-    worldName: "kimochi-capture",
-  });
-  const { result, exceptionDetails } = await page.send("Runtime.evaluate", {
-    expression,
-    contextId: executionContextId,
-    awaitPromise: true,
-    returnByValue: byValue,
-  });
-  if (exceptionDetails)
-    throw Error(
-      exceptionDetails.exception?.description ?? exceptionDetails.text,
-    );
-  return result;
-}
-
-/** Imports the excerpt zips into Hachidori through its settings page's file input. */
-async function importIntoHachidori(page, origins, files) {
-  const settings = `${origins.hachidori}/settings.html`;
-  // A fresh Hachidori opens its first-run page in the options frame as it starts; let that land
-  // first, or it replaces the settings page mid-import.
-  await waitFor(
-    page,
-    "document.getElementById('options').src.includes('/startup.html')",
-    { timeout: 15000 },
-  ).catch(() => {});
-  await sleep(500);
-  await evaluate(
-    page,
-    `document.getElementById('options').src = ${JSON.stringify(settings)}`,
-  );
-  let input = null;
-  for (let i = 0; i < 100 && !input?.objectId; i++) {
-    input = await inFrame(
-      page,
-      settings,
-      "document.getElementById('import-file')",
-    ).catch(() => null);
-    if (!input?.objectId) await sleep(150);
-  }
-  if (!input?.objectId)
-    throw Error("Hachidori's settings page has no #import-file input");
-  await page.send("DOM.enable");
-  await page.send("DOM.setFileInputFiles", { objectId: input.objectId, files });
-  const deadline = Date.now() + 120000;
-  for (;;) {
-    const state = await inFrame(
-      page,
-      settings,
-      "document.getElementById('import-state')?.textContent ?? ''",
-      { byValue: true },
-    );
-    const text = String(state?.value ?? "");
-    if (/Finished/.test(text)) {
-      if (!/ 0 failed/.test(text))
-        throw Error(`Hachidori import: ${text.trim()}`);
-      return text.trim();
-    }
-    if (Date.now() > deadline)
-      throw Error(`Hachidori import did not finish: ${text.trim()}`);
-    await sleep(250);
-  }
-}
-
-/** The visible text of 10ten's pop-up, which lives in a shadow root (its styles left out). */
-const TENTEN_TEXT = `(() => {
-  const root = document.getElementById('tenten-ja-window')?.shadowRoot
-  if (!root) return null
-  return [...root.children].filter((child) => child.tagName !== 'STYLE').map((child) => child.innerText ?? '').join(' ')
-})()`;
 
 async function capture(browser, { engine, theme, origins, data, opts }) {
   const page = await browser.newPage();

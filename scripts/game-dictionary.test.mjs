@@ -12,10 +12,12 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { build } from 'esbuild'
 import {
+  GameDictionary,
   edgeFades,
   entryAudio,
   firstWord,
   inflectionChains,
+  lineRects,
   lookupSpan,
   nextWord,
   scrollToShow,
@@ -208,6 +210,11 @@ test("a pop-up lookup reads from the lit word on, through the spans after it, up
   assert.deepEqual([lookupSpan(spans, 3, 3).end.node.text, lookupSpan(spans, 3, 3).end.offset], ['ですね。', 1])
   assert.equal(lookupSpan(spans, 4), null)
   assert.equal(lookupSpan(spans, -1), null)
+  // From a character inside the word (the free cursor's): いい's second い, then 天気.
+  const inside = lookupSpan(spans, 2, 3, 1)
+  assert.deepEqual([inside.start.node.text, inside.start.offset], ['いい', 1])
+  assert.deepEqual([inside.end.node.text, inside.end.offset], ['天気', 2])
+  assert.equal(lookupSpan(spans, 2, 3, 2), null, 'past the word: nothing to start from')
 })
 
 test('the full-screen dictionary keeps the scan drawn, so it has words to read', async () => {
@@ -271,4 +278,50 @@ test('the text fades at an edge only while there is more that way, and scrolls t
   assert.equal(scrollToShow(30, 50, { scrollTop: 40, clientHeight: 100 }, 10), 20, 'above: clear of the top fade')
   assert.equal(scrollToShow(0, 20, { scrollTop: 30, clientHeight: 100 }, 10), 0, 'never past the top')
   assert.equal(scrollToShow(200, 400, view, 10), 190, 'taller than the room: from its top')
+})
+
+test('the free cursor picks the character drawn nearest it, within reach, and none scrolled out of the text', () => {
+  // Each character 20 wide and 30 high, a word's characters side by side.
+  const span = (index, text, left, top) => ({
+    dataset: { index: String(index) },
+    firstChild: { nodeType: 3, length: text.length, rects: [...text].map((_, at) => ({ left: left + at * 20, top, right: left + at * 20 + 20, bottom: top + 30, width: 20 })) }
+  })
+  const spans = [span(0, '今日', 10, 110), span(2, 'よ過ぎ', 60, 110), span(4, '時', 10, 150), span(6, '残', 10, 230)]
+  const document = globalThis.document
+  globalThis.document = {
+    createRange: () => {
+      const range = { setStart(node, at) { range.node = node; range.at = at }, setEnd() {}, getBoundingClientRect: () => range.node.rects[range.at] }
+      return range
+    }
+  }
+  try {
+    const view = new GameDictionary({}, {})
+    view.source = 'popup'
+    view.root = {
+      querySelector: () => ({ getBoundingClientRect: () => ({ left: 0, top: 100, right: 600, bottom: 200 }) }),
+      querySelectorAll: () => spans
+    }
+    assert.deepEqual(view.pointAt(105, 120, 14), { index: 2, offset: 2 }, 'ぎ, the third character of よ過ぎ')
+    assert.deepEqual(view.pointAt(55, 120, 14), { index: 0, offset: 1 }, 'between two, the nearer: 日')
+    assert.equal(view.pointAt(300, 120, 14), null, 'nothing within reach')
+    assert.deepEqual(view.pointAt(20, 188, 14), { index: 4, offset: 0 }, 'just under the last line in the text')
+    assert.deepEqual(view.pointAt(20, 240, 60), { index: 4, offset: 0 }, 'a character scrolled under the fade is not pointed at')
+    // The Yomitan API's entries are by word: the same point, from the word's start.
+    view.source = 'entries'
+    assert.deepEqual(view.pointAt(105, 120, 14), { index: 2, offset: 0 })
+  } finally {
+    globalThis.document = document
+  }
+})
+
+test("an engine's match is outlined a line at a time: a line's pieces joined, empty ones dropped", () => {
+  const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height })
+  assert.deepEqual(
+    lineRects([rect(100, 10, 20, 30), rect(120, 12, 40, 26), rect(160, 10, 0, 30), rect(0, 50, 30, 30)]),
+    [
+      { left: 100, top: 10, width: 60, height: 30 },
+      { left: 0, top: 50, width: 30, height: 30 }
+    ]
+  )
+  assert.deepEqual(lineRects([]), [])
 })

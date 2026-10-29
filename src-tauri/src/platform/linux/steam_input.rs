@@ -11,6 +11,8 @@ use std::sync::{
 static LEASE: Mutex<Option<Lease>> = Mutex::new(None);
 pub(super) static STOP: AtomicBool = AtomicBool::new(false);
 const FLAG: &str = "--gamescope-input-watchdog";
+/// The longest Steam stays stopped in one go while Kimochi has the controller.
+const MAX_PAUSE: std::time::Duration = std::time::Duration::from_secs(180);
 
 fn start_time(stat: &str) -> Option<&str> {
     stat.rsplit_once(')')?.1.split_whitespace().nth(19)
@@ -180,6 +182,7 @@ pub fn run_watchdog() -> bool {
     signals(c"kimochi-input");
     let mut last_heartbeat = std::time::Instant::now();
     let mut paused = false;
+    let mut paused_at = std::time::Instant::now();
     let mut resume = None;
     // Do not depend on GTK, the webview, or the parent's polling thread to let
     // the Steam/QAM buttons escape a modal input guard.
@@ -192,6 +195,21 @@ pub fn run_watchdog() -> bool {
             || last_heartbeat.elapsed() >= std::time::Duration::from_millis(2500)
         {
             break;
+        }
+        // Steam's UI asserts and restarts once its thread has been stopped too long (12 minutes
+        // of read-along did it on 2026-10-28; 5 did not). Let it run for a moment well before,
+        // which resets that clock, and keep the controller.
+        if paused && paused_at.elapsed() >= MAX_PAUSE {
+            if identity(pid).as_deref() != Some(token) {
+                break;
+            }
+            unsafe { libc::kill(pid as i32, libc::SIGCONT) };
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if unsafe { libc::kill(pid as i32, libc::SIGSTOP) } != 0 {
+                break;
+            }
+            paused_at = std::time::Instant::now();
+            eprintln!("Gamescope input watchdog: let Steam run for 500 ms after {} s paused", MAX_PAUSE.as_secs());
         }
         let mut poll = libc::pollfd {
             fd: 0,
@@ -229,6 +247,7 @@ pub fn run_watchdog() -> bool {
                 break;
             }
             paused = true;
+            paused_at = std::time::Instant::now();
             if let Err(error) = super::controller_neutral::release() {
                 eprintln!("Gamescope input watchdog: {error}; releasing input");
                 break;

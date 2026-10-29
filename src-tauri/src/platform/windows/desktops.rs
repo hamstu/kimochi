@@ -8,25 +8,35 @@
 //! Desktop names and order are not in that interface. Explorer keeps them under
 //! `HKCU\…\Explorer\VirtualDesktops` (the ids in order, and any name the user gave one),
 //! which is read for the label only; without it the label is "Another desktop".
+use std::mem::ManuallyDrop;
+
 use windows::core::{GUID, HSTRING};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
 use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_BINARY, RRF_RT_REG_SZ};
 use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
 
+/// The manager as each thread keeps it: never released, so the thread local has no destructor.
+///
+/// `std::process::exit` runs the UI thread's thread-local destructors from `LdrShutdownProcess`,
+/// after Windows has already ended every other thread, COM's RPC threads included. Releasing this
+/// proxy to Explorer then sends a call whose reply can never arrive, and quitting Kimochi hung for
+/// good with that one thread left, keeping all its memory. Not releasing it leaks one reference
+/// per thread; COM's rundown frees it in Explorer once the process has gone.
+type Slot = ManuallyDrop<Option<IVirtualDesktopManager>>;
+
 thread_local! {
     /// Per thread: a COM interface belongs to the apartment that created it.
-    static MANAGER: Option<IVirtualDesktopManager> = unsafe {
+    static MANAGER: Slot = ManuallyDrop::new(unsafe {
         // Joins the thread's apartment, or finds one (the UI thread's STA); either will do.
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL).ok()
-    };
+    });
 }
 
-/// `None` while the thread's locals are being destroyed: dropping `MANAGER` makes a COM call
-/// that pumps messages, and a foreground event delivered then comes back here.
+/// `None` once the thread's locals are gone (a late foreground event while the thread exits).
 fn with_manager<R>(f: impl FnOnce(&IVirtualDesktopManager) -> Option<R>) -> Option<R> {
-    MANAGER.try_with(|manager| manager.as_ref().and_then(f)).ok().flatten()
+    MANAGER.try_with(|manager| Option::as_ref(manager).and_then(f)).ok().flatten()
 }
 
 /// The desktop a window is on; `None` for one on every desktop, or none (the shell).
@@ -138,6 +148,12 @@ fn registry_string(key: &str, value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_manager_is_never_released_at_exit() {
+        // A destructor here hangs quitting: see `Slot`.
+        assert!(!std::mem::needs_drop::<Slot>());
+    }
 
     #[test]
     fn desktop_ids_read_in_memory_order() {

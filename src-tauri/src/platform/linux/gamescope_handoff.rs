@@ -20,7 +20,8 @@ use x11rb::{
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 static LAST_GAME: AtomicU32 = AtomicU32::new(0);
-/// The game Kimochi last handed the base layer to; 0 once Kimochi or Steam picks again.
+/// The app Kimochi last put on the base layer (the game, or Kimochi itself); 0 once a pick
+/// in Steam's own menu takes over.
 static RETURNED: AtomicU32 = AtomicU32::new(0);
 pub(super) fn own_id() -> Option<u32> {
     std::env::var("KIMOCHI_STEAM_APP_ID")
@@ -190,16 +191,19 @@ fn target(root: &Link, links: &mut HashMap<String, Link>) -> Option<Target> {
 #[derive(Debug, PartialEq, Eq)]
 enum Steer { Keep, Reselect, Release }
 /// Steam owns GAMESCOPECTRL_BASELAYER_APPID and rewrites it from its own running-app
-/// state (`[…, <its app>, 769]`), which a native handoff cannot change. After our
-/// return, a rewrite that would raise Kimochi while Steam's UI did not have input
-/// (volume OSD, notifications) is stale: put the game back. A pick made from
-/// Steam's menu, or of any other app, is the user's and ends the guard.
-fn steer(returned: u32, own: Option<u32>, order: &[u32], focusable: &[u32], steam_ui: bool) -> Steer {
+/// list (`[…, <its app>, 769]`), which nothing outside Steam's UI can reorder
+/// (steamui's `SetRunningApp` is only called from its own menus and launches). So after
+/// Kimochi switches between itself and the game, a rewrite that swaps the two back while
+/// Steam's UI did not have input (volume OSD, notifications) is stale: put ours back. A
+/// pick made from Steam's menu, or of any third app, is the user's and ends the guard.
+/// `game` is the game Kimochi last saw in front.
+fn steer(returned: u32, own: Option<u32>, game: u32, order: &[u32], focusable: &[u32], steam_ui: bool) -> Steer {
     if returned == 0 { return Steer::Keep; }
     if !focusable.contains(&returned) { return Steer::Release; }
     let pick = order.iter().find(|id| focusable.contains(id)).copied();
     if pick == Some(returned) { return Steer::Keep; }
-    if own.is_some() && pick == own && !steam_ui { Steer::Reselect } else { Steer::Release }
+    let ours = own.is_some() && (pick == own || (Some(returned) == own && pick == Some(game)));
+    if ours && !steam_ui { Steer::Reselect } else { Steer::Release }
 }
 pub(super) fn start() {
     if !super::gamescope::active() || STARTED.swap(true, Ordering::SeqCst) {
@@ -222,11 +226,11 @@ pub(super) fn start() {
             if current_order != order {
                 let focusable = root.values(root.root, b"GAMESCOPE_FOCUSABLE_APPS").unwrap_or_default();
                 let returned = RETURNED.load(Ordering::SeqCst);
-                match steer(returned, own_id(), current_order.as_deref().unwrap_or_default(), &focusable, steam_ui) {
+                match steer(returned, own_id(), LAST_GAME.load(Ordering::SeqCst), current_order.as_deref().unwrap_or_default(), &focusable, steam_ui) {
                     Steer::Keep => {}
                     Steer::Release => RETURNED.store(0, Ordering::SeqCst),
                     Steer::Reselect => match select(returned) {
-                        Ok(()) => eprintln!("Gamescope return: Steam re-raised Kimochi; kept game {returned}"),
+                        Ok(()) => eprintln!("Gamescope return: Steam rewrote the base layer outside its menu; kept app {returned}"),
                         Err(error) => eprintln!("Gamescope return: {error}"),
                     },
                 }
@@ -296,7 +300,7 @@ pub(super) fn select(app: u32) -> Result<(), String> {
         .reply()
         .map_err(|e| e.to_string())?
         .atom;
-    if own_id().is_some() { RETURNED.store(if Some(app) == own_id() { 0 } else { app }, Ordering::SeqCst); }
+    if own_id().is_some() { RETURNED.store(app, Ordering::SeqCst); }
     let order = priority(
         d.property32(d.root, atom, AtomEnum::CARDINAL)
             .unwrap_or_default(),
@@ -336,14 +340,25 @@ mod tests {
         let (own, game) = (Some(3826138355), 1244090);
         let focusable = [3826138355, 1244090, 769];
         let steam = [413091, 3826138355, 769];
-        assert_eq!(steer(game, own, &steam, &focusable, false), Steer::Reselect);
-        assert_eq!(steer(game, own, &[game, 413091, 3826138355, 769], &focusable, false), Steer::Keep);
+        assert_eq!(steer(game, own, game, &steam, &focusable, false), Steer::Reselect);
+        assert_eq!(steer(game, own, game, &[game, 413091, 3826138355, 769], &focusable, false), Steer::Keep);
         // Chosen in Steam's menu, another app or Home, the game gone, or no return pending.
-        assert_eq!(steer(game, own, &steam, &focusable, true), Steer::Release);
-        assert_eq!(steer(game, own, &[413091, 769], &focusable, false), Steer::Release);
-        assert_eq!(steer(game, own, &steam, &[3826138355, 769], false), Steer::Release);
-        assert_eq!(steer(0, own, &steam, &focusable, false), Steer::Keep);
-        assert_eq!(steer(game, None, &steam, &focusable, false), Steer::Release);
+        assert_eq!(steer(game, own, game, &steam, &focusable, true), Steer::Release);
+        assert_eq!(steer(game, own, game, &[413091, 769], &focusable, false), Steer::Release);
+        assert_eq!(steer(game, own, game, &steam, &[3826138355, 769], false), Steer::Release);
+        assert_eq!(steer(0, own, game, &steam, &focusable, false), Steer::Keep);
+        assert_eq!(steer(game, None, game, &steam, &focusable, false), Steer::Release);
+    }
+    #[test]
+    fn stale_steam_rewrite_cannot_put_the_game_back_over_kimochi() {
+        let (own, game) = (3826138355, 1244090);
+        let focusable = [own, game, 769];
+        let steam = [413091, game, 769];
+        assert_eq!(steer(own, Some(own), game, &steam, &focusable, false), Steer::Reselect);
+        assert_eq!(steer(own, Some(own), game, &[own, 413091, game, 769], &focusable, false), Steer::Keep);
+        // Chosen in Steam's menu, or a third app, is the user's.
+        assert_eq!(steer(own, Some(own), game, &steam, &focusable, true), Steer::Release);
+        assert_eq!(steer(own, Some(own), game, &[42, 769], &[own, game, 42, 769], false), Steer::Release);
     }
     #[test]
     fn explicit_switch_preserves_other_app_priorities_without_duplicates() {

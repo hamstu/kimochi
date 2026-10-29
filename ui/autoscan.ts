@@ -252,8 +252,21 @@ export type SkipReason =
   | 'empty-result'
   | 'spacing'
   | 'in-flight'
+  | 'hidden'
 
 export type AutoScanState = 'idle' | 'running' | 'paused' | 'suspended' | 'unavailable'
+
+/**
+ * A capture that failed because the source window is out of view for now: native's
+ * `gone: hidden:` (`HIDDEN` in `src-tauri/src/sources.rs`). A minimised window, or one on
+ * another virtual desktop, comes back by itself — an exclusive-fullscreen game minimises
+ * every time the reader clicks into Kimochi — so this is something to wait out, not a failure
+ * that counts towards suspending the loop.
+ */
+export function isSourceOutOfView(error: unknown): boolean {
+  const message = typeof error === 'string' ? error : String((error as Error)?.message ?? error)
+  return /^gone:\s*hidden:/.test(message)
+}
 
 /**
  * Diagnostics. Nothing here carries recognised text, pixels, a key or a URL —
@@ -1053,6 +1066,7 @@ export class AutoScanner<Frame = unknown> {
       sample = await this.deps.captureFrame()
       this.counters.captures++
     } catch (error) {
+      if (isSourceOutOfView(error)) return this.sourceOutOfView(error)
       this.counters.captureErrors++
       this.recordError('capture', error)
       return 'error'
@@ -1799,6 +1813,18 @@ export class AutoScanner<Frame = unknown> {
   }
 
   // --- errors --------------------------------------------------------------
+
+  /**
+   * The source window is minimised or otherwise out of view. Look again after the base error
+   * backoff, without growing it and without moving towards suspension: the loop has to be
+   * there, already running, when the window comes back.
+   */
+  private sourceOutOfView(error: unknown): TickOutcome {
+    const message = typeof error === 'string' ? error : String((error as Error)?.message ?? error)
+    this.backoffUntil = this.now() + this.settings.errorBackoffMs
+    this.emit({ type: 'skip', reason: 'hidden', detail: message.replace(/^gone:\s*hidden:\s*/, '') })
+    return 'backoff'
+  }
 
   /** Clear the backoff, but only the one this stage is responsible for. */
   private noteSuccess(stage: string): void {

@@ -147,6 +147,7 @@
    fading while there is more that way. */
 .gd-sentence {
   --gd-fade: 1.1em;
+  position: relative;
   flex: 0 0 auto;
   margin: 0 -10px;
   padding: 6px 10px;
@@ -230,6 +231,34 @@
   box-shadow:
     inset 0 0 0 2px var(--gd-accent-line),
     0 0 0 3px var(--gd-accent-soft);
+}
+
+/* The engine's match, where it is not the lit word as split (GameDictionary#fitLit): the same
+   outline, drawn over the text, while the lit word's own stands down. */
+.gd-sentence.gd-fitted .gd-word.gd-lit {
+  background-color: transparent;
+  box-shadow: none;
+}
+.gd-match {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+}
+.gd-match-piece {
+  position: absolute;
+  border-radius: var(--gd-radius-sm);
+  background-color: var(--gd-accent-soft);
+  box-shadow:
+    inset 0 0 0 2px var(--gd-accent-line),
+    0 0 0 3px var(--gd-accent-soft);
+}
+/* An engine's own mark on what it matched (Hachidori's tint, 10ten's): a second highlight, in
+   another shape, on the word the outline already shows. */
+.gd-sentence ::highlight(gsm-hoshidicts-match),
+.gd-sentence ::highlight(tenten-selection),
+.gd-sentence ::highlight(tenten-selection-blue) {
+  color: inherit !important;
+  background-color: transparent !important;
 }
 
 /* The rule between the text and its dictionary. */

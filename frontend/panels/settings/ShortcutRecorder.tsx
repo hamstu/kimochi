@@ -1,6 +1,7 @@
 /**
  * A keyboard shortcut shown as key caps; click to record a new one. While recording, the next key
- * combination with a modifier (or a function key) is saved, Escape cancels and Backspace / Delete
+ * combination with a modifier (or a key that can stand alone: a function key, Insert, Pause or
+ * Scroll Lock, `standsAlone` in accelerator.ts) is saved, Escape cancels and Backspace / Delete
  * clears the shortcut. Every global shortcut and gamepad action is paused while recording, so a
  * combination that is already bound is captured instead of firing; leaving the window ends it.
  */

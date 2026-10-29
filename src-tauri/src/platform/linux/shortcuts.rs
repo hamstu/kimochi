@@ -64,6 +64,7 @@ fn trigger(accelerator: &str) -> String {
             "Super" | "Meta" => "LOGO",
             "Space" => "space",
             "Enter" => "Return",
+            "ScrollLock" => "Scroll_Lock",
             other => other,
         })
         .collect::<Vec<_>>()
@@ -428,5 +429,8 @@ mod tests {
     fn accelerator_uses_xdg_spelling() {
         assert_eq!(super::trigger("CommandOrControl+Shift+8"), "CTRL+SHIFT+8");
         assert_eq!(super::trigger("Ctrl+Shift+Space"), "CTRL+SHIFT+space");
+        // Keys bound on their own (#19), in xkb keysym names.
+        assert_eq!(super::trigger("Insert"), "Insert");
+        assert_eq!(super::trigger("Shift+ScrollLock"), "SHIFT+Scroll_Lock");
     }
 }

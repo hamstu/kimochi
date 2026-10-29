@@ -63,7 +63,7 @@ pub use sources::{
     window_fullscreen,
 };
 pub use window::{
-    activate_process, activate_self, activate_window, bounds, inspect, make_panel, order_front, panel_cursor,
+    activate_process, activate_self, activate_window, bounds, ignore_key_menu, inspect, make_panel, order_front, panel_cursor,
     panel_pointer, place, promote_to_key, start_fullscreen_watch,
 };
 pub use workspace::observe_workspace;

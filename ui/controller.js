@@ -40,6 +40,8 @@ import { sectionText } from "./log-sections.js";
 
 /** How long the full-screen dictionary waits for an engine's pop-up before saying there is no entry. */
 const POPUP_WAIT_MS = 1500;
+/** How long a lookup may take before the hint bar says it is still looking. */
+const LOOKING_UP_MS = 350;
 /** How far up or down scrolls the engine's pop-up in the full-screen dictionary, in points. */
 const POPUP_SCROLL_STEP = 120;
 /** Lets the menu's exit animation start before the chosen action changes the screen. */
@@ -244,7 +246,7 @@ export function createController(context) {
         input: () => input,
         onClose: () => void (historical ? backToHistory() : close()),
         log: (record) => context.log(record),
-        lookupInPopup: (range, rect) => popupLookup(range, rect),
+        lookupInPopup: (range, rect, request) => popupLookup(range, rect, request),
         popupFocusable: () => Boolean(context.popupFocusable?.()),
       })
     : null;
@@ -413,8 +415,8 @@ export function createController(context) {
     if (mode === "idle") return;
     generation++;
     const wasWords = mode === "words" || mode === "dictionary";
-    if (mode === "dictionary") leaveDictionary();
-    else fullView?.remove();
+    // Also from the radial menu opened over the full-screen view, which is still up beneath it.
+    leaveDictionary();
     setMode("idle");
     controls.reset();
     scroll(0);
@@ -499,6 +501,11 @@ export function createController(context) {
       if (command.type === "scroll")
         history.content?.scrollBy(0, -command.y * 80);
       return;
+    }
+    if (mode === "dictionary") {
+      // The left stick points at the text's words; a step from the D-pad carries on from there.
+      if (command.type === "aim") return void aimPointer(command.x, command.y);
+      if (command.type === "dir" && command.source !== "stick") hidePointer();
     }
     if (enginePopup()) return void dictionaryPopupCommand(command);
     if (mode === "dictionary") {
@@ -646,7 +653,13 @@ export function createController(context) {
   function aimPointer(x, y) {
     pointer.stick = { x, y };
     if (x === 0 && y === 0) return;
-    if (!charCursor?.words.length) return;
+    if (mode === "dictionary") {
+      if (!fullView?.open || fullView.index < 0) return;
+      if (fullView.layer === "popup") {
+        context.popupControl({ focus: "exit" });
+        fullView.setLayer("text");
+      }
+    } else if (!charCursor?.words.length) return;
     if (layer === "popup") leavePopup();
     if (!pointer.active) startPointer();
     if (pointer.frame === null) {
@@ -658,6 +671,22 @@ export function createController(context) {
   function startPointer() {
     pointer.active = true;
     pointer.char = -1;
+    if (mode === "dictionary") {
+      // From the lit word, which is already looked up.
+      const at = fullView.wordCenter(fullView.index);
+      const area = fullView.sentenceRect();
+      pointer.char = `${fullView.index}:${fullView.offset ?? 0}`;
+      pointer.x = at?.x ?? (area ? area.x + area.width / 2 : window.innerWidth / 2);
+      pointer.y = at?.y ?? (area ? area.y + area.height / 2 : window.innerHeight / 2);
+      if (!pointer.element) {
+        pointer.element = document.createElement("div");
+        pointer.element.className = "cm-free-cursor";
+        host.append(pointer.element);
+      }
+      placePointer();
+      context.log({ check: "controller-pointer", active: true, view: "dictionary" });
+      return;
+    }
     // From the middle of the word the outline is on, so the cursor picks up where the reader is.
     const word = cursor?.current;
     const range = word ? rangeFor(word) : null;
@@ -679,7 +708,7 @@ export function createController(context) {
   function tickPointer(now) {
     const { x, y } = pointer.stick;
     const magnitude = Math.hypot(x, y);
-    if (!pointer.active || mode !== "words" || magnitude === 0) {
+    if (!pointer.active || (mode !== "words" && mode !== "dictionary") || magnitude === 0) {
       pointer.frame = null;
       return;
     }
@@ -690,7 +719,13 @@ export function createController(context) {
     pointer.x += (x / magnitude) * speed;
     pointer.y -= (y / magnitude) * speed;
     const { area } = context.status();
-    const bounds = area ?? { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+    const room = mode === "dictionary" ? fullView.sentenceRect() : area;
+    const bounds = room ?? { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight };
+    // Pushed past the top or bottom of the full-screen text: the text scrolls under the cursor.
+    if (mode === "dictionary") {
+      const over = pointer.y < bounds.y ? pointer.y - bounds.y : pointer.y > bounds.y + bounds.height ? pointer.y - bounds.y - bounds.height : 0;
+      if (over) fullView.scrollSentence(over);
+    }
     pointer.x = Math.max(bounds.x, Math.min(bounds.x + bounds.width, pointer.x));
     pointer.y = Math.max(bounds.y, Math.min(bounds.y + bounds.height, pointer.y));
     placePointer();
@@ -716,6 +751,18 @@ export function createController(context) {
 
   /** The character under the free cursor, looked up once the cursor rests on it. */
   function hoverPointer() {
+    if (mode === "dictionary") {
+      // A character, as in the pop-up style: a lookup can start inside a word split wrongly.
+      const point = fullView.pointAt(pointer.x, pointer.y, POINTER_REACH);
+      const key = point ? `${point.index}:${point.offset}` : null;
+      if (!key || key === pointer.char) return;
+      pointer.char = key;
+      clearTimeout(pointer.dwell);
+      pointer.dwell = setTimeout(() => {
+        if (pointer.active && mode === "dictionary" && pointer.char === key) fullView.select(point.index, point.offset);
+      }, POINTER_DWELL_MS);
+      return;
+    }
     const index = characterAt(pointerTargets(), pointer.x, pointer.y, POINTER_REACH);
     if (index < 0 || index === pointer.char) return;
     pointer.char = index;
@@ -814,6 +861,8 @@ export function createController(context) {
   /** Start word mode, or with `rescan`, start over on new text keeping whoever is reading. */
   async function enterWords(rescan = false) {
     if (fullView && context.fullDictionary.enabled()) return enterDictionary();
+    // The style changed to the pop-up while the full-screen view was open.
+    if (mode === "dictionary") leaveDictionary();
     setMode("words");
     if (!rescan) {
       driver = "controller";
@@ -854,12 +903,20 @@ export function createController(context) {
 
   /**
    * Words split the way the dictionary in use would match them: the Yomitan API's own
-   * `/tokenize` with its dictionaries; else the built-in Yomitan's parser; else (Hachidori,
-   * 10ten) the platform's segmenter, kanji kept with their kana (`tokensFromSegmenter`).
+   * `/tokenize` with its dictionaries; else the built-in Yomitan's parser; else Hachidori's own
+   * segmenter (`hd_segment`); else (10ten) the platform's segmenter, kanji kept with their kana
+   * (`tokensFromSegmenter`).
    */
   function parser() {
     if (context.popupType() === "custom-api") return context.apiParse;
     const api = context.dictionary();
+    if (!api && typeof context.segment === "function") {
+      return async (text) => {
+        const spans = await context.segment(text);
+        if (!spans) throw new Error("no segmentation from the dictionary engine");
+        return { spans };
+      };
+    }
     return api
       ? (text) =>
           api("parseText", {
@@ -879,6 +936,7 @@ export function createController(context) {
   async function enterDictionary() {
     if (mode === "words") leaveWords();
     if (mode === "dictionary" && fullView.source === "popup") context.dismiss();
+    hidePointer();
     setMode("dictionary");
     const ticket = ++generation;
     context.redraw();
@@ -910,25 +968,42 @@ export function createController(context) {
     });
   }
 
-  /** Close the full-screen dictionary, and the engine pop-up it placed, which goes back to its own placing. */
+  /**
+   * Close the full-screen dictionary, and the engine pop-up it placed, which goes back to its own
+   * placing. The placing is given back whatever the view's state: left set, the pop-up style's
+   * pop-ups opened in the full-screen view's space, the full width of the screen.
+   */
   function leaveDictionary() {
+    hidePointer();
     const engine = fullView?.source === "popup" && fullView.open;
     fullView?.remove();
-    if (!engine) return;
-    context.popupControl({ focus: "exit" });
-    context.dismiss();
+    if (engine) {
+      context.popupControl({ focus: "exit" });
+      context.dismiss();
+    }
     context.placePopup?.(null);
   }
 
   /**
    * The full-screen dictionary's engine pop-up: look the lit word up (`range`, in the view's own
-   * text) with the pop-up placed over `rect`, and resolve whether it shows.
+   * text; `request` its text, sentence and drawn box, for a direct lookup) with the pop-up placed
+   * over `rect`, and resolve whether it shows, or `{shown, length}` from a direct lookup.
    */
-  async function popupLookup(range, rect) {
+  async function popupLookup(range, rect, request = null) {
     const ticket = generation;
     // A new lookup replaces the pop-up's entries, and the focus on its buttons with them.
     context.popupControl({ focus: "exit" });
     context.placePopup?.(rect);
+    if (request?.word) {
+      let result;
+      try {
+        result = await lookupWord(range, { ...request, rect: request.word, vertical: false });
+      } catch (error) {
+        context.log({ check: "controller-lookup-failed", error: String(error?.message ?? error) });
+        return false;
+      }
+      if (result !== null) return ticket === generation && enginePopup() ? result : false;
+    }
     try {
       await context.lookupRange(range);
     } catch (error) {
@@ -1133,10 +1208,19 @@ export function createController(context) {
 
   /** The outline pieces, one per line, reusing what is there so a one-line move glides. */
   let segments = [];
+  /**
+   * What the dictionary matched from the character cursor's character, `{word, length}`: drawn as
+   * the outline while the cursor stays on that character (`render`). Only for that character.
+   */
+  let charMatch = null;
 
   function render() {
-    const word = cursor?.current;
-    if (!word) return;
+    const at = cursor?.current;
+    if (!at) return;
+    // A character the reader chose (the free cursor, or stepping by character) stays where it
+    // is; the outline shows what the dictionary matched from it.
+    const word =
+      cursor === charCursor && charMatch?.word === at ? { ...at, end: at.start + charMatch.length } : at;
     const range = rangeFor(word);
     if (!range) {
       // The scan was replaced underneath us; start again on the new text.
@@ -1310,6 +1394,9 @@ export function createController(context) {
       <footer>Change these buttons in Settings → Shortcuts &amp; Controls.</footer>`;
   }
 
+  /** Bumped on every lookup, so one that answers late cannot speak for a newer word. */
+  let lookups = 0;
+
   async function lookup() {
     const word = cursor?.current;
     if (!word) return;
@@ -1321,6 +1408,7 @@ export function createController(context) {
     const ahead = spanRange(word.unit, word.start, SCAN_LENGTH);
     // A new lookup replaces the popup's entries, and the focus on its buttons with them.
     leavePopup();
+    const ticket = ++lookups;
     try {
       if (context.popupType() === "custom-api") {
         const rect = wordRect(range);
@@ -1331,17 +1419,81 @@ export function createController(context) {
           origin.y + rect.top + rect.height / 2,
           unit.text,
         );
-      } else {
-        await context.lookupRange(ahead ?? range);
-        // Only a word is fitted to the match: a character is where the reader chose to start.
-        if (cursor === wordCursor) void fitToMatch(word);
+        return;
       }
+      const slow = setTimeout(() => {
+        if (ticket === lookups && cursor?.current === word) showHud("Looking up…");
+      }, LOOKING_UP_MS);
+      // Beside the word: never in the space the full-screen view gave the pop-up.
+      context.placePopup?.(null);
+      let result;
+      try {
+        result = await lookupWord(ahead ?? range, {
+          text: ahead?.toString() || unit.text.slice(word.start),
+          sentence: unit.text,
+          offset: word.start,
+          rect: outlineRect(word, range),
+          vertical: Boolean(unit.vertical),
+        });
+      } finally {
+        clearTimeout(slow);
+      }
+      if (ticket !== lookups || cursor?.current !== word) return;
+      if (result === null) {
+        // This engine has no direct lookup (an extension whose hook is missing): as a pointer would.
+        await context.lookupRange(ahead ?? range);
+        if (cursor === wordCursor) void fitToMatch(word);
+        return;
+      }
+      if (result.length === 0) return void showHud(`No entry for ${word.text}`);
+      // A word is fitted to the match. A character is where the reader chose to start: the
+      // cursor stays on it, and only the outline grows over what was matched from there.
+      if (cursor === wordCursor && result.length && cursor.fit(result.length)) {
+        context.log({ check: "controller-fit-match", length: result.length });
+        render();
+      } else if (cursor === charCursor && result.length > 1) {
+        charMatch = { word, length: result.length };
+        context.log({ check: "controller-fit-match", length: result.length, character: true });
+        render();
+      } else showHud(null);
     } catch (error) {
       context.log({
         check: "controller-lookup-failed",
         error: String(error?.message ?? error),
       });
     }
+  }
+
+  /** The box the outline draws around `word` (where it is on the source), as {left, top, width, height}. */
+  function outlineRect(word, range) {
+    const pieces = wordSegments(word, range);
+    return union(pieces.map((rect) => ({ x: rect.left, y: rect.top, width: rect.width, height: rect.height })));
+  }
+
+  /**
+   * Look `range` up in the engine and show its pop-up, asked for directly with the text, its
+   * sentence and where the word is (`context.lookupText`): no pointer events, key presses or
+   * selection. `{shown, length}` (length: the characters matched, 0 for none, null unknown), or
+   * null when the engine has no such lookup.
+   */
+  async function lookupWord(range, { text, sentence, offset, rect, vertical }) {
+    if (!context.lookupText) return null;
+    const started = performance.now();
+    const result = await context.lookupText({
+      range,
+      text,
+      sentence,
+      offset,
+      rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height, vertical },
+    });
+    context.log({
+      check: "controller-lookup",
+      shown: result?.shown ?? null,
+      length: result?.length ?? null,
+      direct: result !== null,
+      ms: Math.round(performance.now() - started),
+    });
+    return result;
   }
 
   /**

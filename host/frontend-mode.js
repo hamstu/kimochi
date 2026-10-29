@@ -56,3 +56,64 @@ export async function lookupRange(range) {
   await frontend.setTextSource(TextSourceRange.create(range));
   return true;
 }
+
+/**
+ * Read along's lookup: `text` (the characters from the word on) looked up and shown in Yomitan's
+ * own popup beside `rect` (this document's CSS pixels), with `sentence` (and the word's `offset`
+ * in it) as the popup's sentence for Anki. Yomitan's search and popup are asked for directly
+ * (`api.termsFind`, then `kanjiFind` for the first character as its scanner does, and
+ * `Popup#showContent`), so there is no Range, no selection and nothing scanned under a pointer.
+ * Resolves `{shown, length}`: whether the popup shows entries, and how many characters matched (0
+ * for none), or null when no frontend here can (the caller falls back to `lookupRange`).
+ */
+export async function lookupText({ text, sentence = "", offset = 0, rect }) {
+  const frontend = [...frontends][0];
+  if (!frontend || !enabled) return null;
+  const popup = frontend._popup;
+  const scanner = frontend._textScanner;
+  const api = frontend._application?.api;
+  if (!popup || !api || typeof popup.showContent !== "function" || typeof frontend._getOptionsContext !== "function") {
+    console.error("[kimochi] Yomitan's frontend has no popup, api or options context; read along falls back.");
+    return null;
+  }
+  const query = String(text ?? "").slice(0, scanner?._scanLength || 16);
+  if (!query) return { shown: false, length: 0 };
+  const optionsContext = await frontend._getOptionsContext();
+  // A lookup the pointer made may have left its text selected (Yomitan's "select matched text").
+  scanner?.clearSelection?.();
+  let type = "terms";
+  let { dictionaryEntries, originalTextLength } = await api.termsFind(query, {}, optionsContext);
+  if (!dictionaryEntries?.length) {
+    type = "kanji";
+    dictionaryEntries = await api.kanjiFind(query.slice(0, 1), optionsContext);
+    originalTextLength = dictionaryEntries?.length ? 1 : 0;
+  }
+  if (!dictionaryEntries?.length) {
+    void popup.hide(false);
+    return { shown: false, length: 0 };
+  }
+  const { tabId, frameId } = frontend._application;
+  const pageTheme = scanner?._themeController?.computeSiteTheme?.() ?? "light";
+  const vertical = rect?.vertical === true;
+  await popup.showContent(
+    {
+      optionsContext,
+      sourceRects: [{ left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height }],
+      writingMode: vertical ? "vertical-rl" : "horizontal-tb",
+    },
+    {
+      focus: false,
+      historyMode: "clear",
+      params: { type, query: type === "kanji" ? query.slice(0, 1) : query, wildcards: "off" },
+      state: {
+        focusEntry: 0,
+        optionsContext,
+        url: optionsContext.url,
+        pageTheme,
+        sentence: { text: sentence || query, offset: sentence ? offset : 0 },
+      },
+      content: { contentOrigin: { tabId, frameId }, dictionaryEntries },
+    },
+  );
+  return { shown: true, length: originalTextLength ?? null };
+}
