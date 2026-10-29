@@ -589,3 +589,14 @@ jobs:
         run: |
           gh release edit "$RELEASE" --draft=false --latest
           echo "Published $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"
+
+  # GITHUB_TOKEN publication does not trigger release-event workflows.
+  announce:
+    name: Announce release on Discord
+    needs: [plan, manifest]
+    if: needs.plan.outputs.mode == 'release' && needs.plan.outputs.rolling == 'false'
+    uses: ./.github/workflows/discord-release.yml
+    with:
+      tag: ${{ needs.plan.outputs.release }}
+    secrets:
+      DISCORD_RELEASES_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASES_WEBHOOK_URL }}
