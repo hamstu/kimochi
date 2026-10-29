@@ -47,6 +47,10 @@ function harness({ screen, recognise, settings = {} }) {
       generation: () => 1,
       captureFrame: async () => {
         if (state.captureError) throw state.captureError
+        if (state.observerBusy) {
+          return { frame: { id: ++state.frames, lines: [] }, generation: 1, hash: '0000000000000000', observation: null,
+            observerError: 'The local MeikiOCR observer is still reading an earlier frame; retrying.', observerBusy: true }
+        }
         const lines = screen(state)
         if (state.captureGate) await state.captureGate
         const frame = { id: ++state.frames, lines }
@@ -128,6 +132,33 @@ test('text mode waits through a long minimisation and resumes without suspending
   for (let i = 0; i < 12; i++) await step(500)
   assert.ok(state.recognitions > 0, 'restored text is recognised')
   assert.ok(state.scenes.some((text) => text.startsWith(FULL)), 'the restored scene is drawn')
+})
+
+test('a busy observer is waited for, never counted towards suspension (#41)', async () => {
+  const { scanner, state, step } = harness({
+    screen: () => DIALOGUE,
+    recognise: (frame) => reading(frame.lines),
+    settings: { maxConsecutiveErrors: 3 }
+  })
+  state.observerBusy = true
+  for (let i = 0; i < 20; i++) await step(2500)
+  assert.notEqual(scanner.state, 'suspended', 'a slow observer is not a failing one')
+  assert.equal(scanner.stats().observerErrors, 0)
+  const waits = state.events.filter((e) => e.type === 'skip' && e.reason === 'observer-busy')
+  assert.ok(waits.length >= 19, 'keeps looking at the base backoff')
+  state.observerBusy = false
+  for (let i = 0; i < 12; i++) await step(500)
+  assert.ok(state.scenes.some((text) => text.startsWith(FULL)), 'the scene is read once the observer keeps up')
+})
+
+test('a missing observation that is not busy still counts', async () => {
+  const { scanner, state, step } = harness({ screen: () => DIALOGUE, recognise: (frame) => reading(frame.lines), settings: { maxConsecutiveErrors: 3 } })
+  state.observerBusy = true
+  // A failure without the busy flag: the observer returned nothing.
+  const capture = scanner.deps.captureFrame
+  scanner.deps.captureFrame = async () => ({ ...(await capture()), observerBusy: false })
+  for (let i = 0; i < 6; i++) await step(60000)
+  assert.equal(scanner.state, 'suspended')
 })
 
 test('text mode still suspends for a genuinely closed source', async () => {

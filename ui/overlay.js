@@ -1083,7 +1083,8 @@ const scanDeps = {
       contentFingerprint: captured?.contentFingerprint ?? null,
       observation: observationFrom(captured),
       observerError: captured?.observerError ?? null,
-      observerUnsupported: !!captured?.observerUnsupported
+      observerUnsupported: !!captured?.observerUnsupported,
+      observerBusy: !!captured?.observerBusy
     }
   },
   recognize: async (frame) => {

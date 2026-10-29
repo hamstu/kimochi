@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Auto OCR on a whole display no longer switches itself off when the local text reader can't keep up (a very large screen, a slow computer). It waits for the reader instead.
+
 - The Welcome guide frees its memory when it closes (about 150 MB on Windows) instead of staying loaded, hidden, for the rest of the session. Opening it again from Settings builds it afresh.
 
 - Windows and Linux: the default shortcuts are now **Shift+F8** (Scan) and **Shift+F9** (Controller menu). The old Ctrl+Shift+8 and Ctrl+Shift+Space made many visual novels skip text, because the game sees Ctrl first. Shortcuts you changed yourself are kept; macOS keeps ⌘⇧8 and ⌘⇧Space.
