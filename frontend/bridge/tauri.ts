@@ -5,7 +5,9 @@
  * (`busy:`, `permission:`, `gone:`, `invalid:`, `native:`); `nativeError()` parses them so callers
  * can branch, and every panel shows the human-facing remainder rather than swallowing it. A
  * `pick-again:` tag after the prefix (`gone: pick-again: …`) marks a system-picker source that can
- * only come back through the picker; it surfaces as `pickAgain: true`.
+ * only come back through the picker; it surfaces as `pickAgain: true`. A `hidden:` tag
+ * (`gone: hidden: …`) marks a window that is only out of view for now (minimised, on another
+ * desktop); it surfaces as `hidden: true`.
  *
  * Shared with the overlay workstream — do not fork this file.
  */
@@ -76,11 +78,15 @@ export interface NativeError {
   raw: string
   /** The source was shared through the system picker and must be chosen there again. */
   pickAgain: boolean
+  /** The source window still exists but is out of view (minimised, on another desktop). */
+  hidden: boolean
 }
 
 const PREFIXES: NativeErrorKind[] = ['busy', 'permission', 'gone', 'invalid', 'native']
 /** `PICK_AGAIN` in `src-tauri/src/sources.rs`. */
 const PICK_AGAIN = 'pick-again:'
+/** `HIDDEN` in `src-tauri/src/sources.rs`. */
+const HIDDEN = 'hidden:'
 
 /** Parses a rejected invoke into its machine-readable kind plus the human-facing text. */
 export function nativeError(error: unknown): NativeError {
@@ -100,11 +106,13 @@ export function nativeError(error: unknown): NativeError {
     if (raw.startsWith(`${kind}:`)) {
       const rest = raw.slice(kind.length + 1).trim()
       const pickAgain = rest.startsWith(PICK_AGAIN)
-      const message = pickAgain ? rest.slice(PICK_AGAIN.length).trim() : rest
-      return { kind, message, raw, pickAgain }
+      const hidden = rest.startsWith(HIDDEN)
+      const tag = pickAgain ? PICK_AGAIN : hidden ? HIDDEN : ''
+      const message = rest.slice(tag.length).trim()
+      return { kind, message, raw, pickAgain, hidden }
     }
   }
-  return { kind: 'unknown', message: raw, raw, pickAgain: false }
+  return { kind: 'unknown', message: raw, raw, pickAgain: false, hidden: false }
 }
 
 /** `busy:` means the single capture mutex is held; retrying is always safe. */

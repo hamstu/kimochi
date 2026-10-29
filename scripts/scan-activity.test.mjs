@@ -54,6 +54,10 @@ test('native error prefixes become plain sentences with the right tone', () => {
     ['The source is gone: that shared source has closed', 'warn']
   )
   assert.deepEqual(
+    said(scanFailed('gone: hidden: Window is minimized; restore it before capturing.', 'capture', 'cloud')),
+    ['The window is out of view: Window is minimized; restore it before capturing.', 'warn']
+  )
+  assert.deepEqual(
     said(scanFailed('gone: that frame has been replaced; capture again before running OCR', 'recognise', 'cloud')),
     ['Scan discarded: the captured frame was replaced', 'warn']
   )

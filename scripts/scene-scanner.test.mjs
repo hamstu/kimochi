@@ -40,12 +40,13 @@ function reading(lines) {
 }
 
 function harness({ screen, recognise, settings = {} }) {
-  const state = { time: 100000, frames: 0, scenes: [], published: [], recognitions: 0, pins: new Map() }
+  const state = { time: 100000, frames: 0, scenes: [], published: [], recognitions: 0, pins: new Map(), events: [] }
   const scanner = new SceneScanner(
     {
       now: () => state.time,
       generation: () => 1,
       captureFrame: async () => {
+        if (state.captureError) throw state.captureError
         const lines = screen(state)
         if (state.captureGate) await state.captureGate
         const frame = { id: ++state.frames, lines }
@@ -62,6 +63,7 @@ function harness({ screen, recognise, settings = {} }) {
       },
       retainFrame: (frame) => state.pins.set(frame.id, (state.pins.get(frame.id) ?? 0) + 1),
       releaseFrame: (frame) => state.pins.set(frame.id, (state.pins.get(frame.id) ?? 0) - 1),
+      onEvent: (event) => state.events.push(event),
       onScene: (update) => {
         state.scenes.push(update.result.fullText.replace(/\n/g, ''))
         for (const passage of update.publish) {
@@ -107,6 +109,34 @@ const DIALOGUE = [
 ]
 const ARROW = line('▼', 470, 460, 20, 30)
 const FULL = '今日はいい天気ですね散歩に行きましょうかそれとも家で'
+
+test('text mode waits through a long minimisation and resumes without suspending (#2)', async () => {
+  const { scanner, state, step } = harness({
+    screen: () => DIALOGUE,
+    recognise: (frame) => reading(frame.lines),
+    settings: { maxConsecutiveErrors: 3 }
+  })
+  state.captureError = 'gone: hidden: Window is minimized; restore it before capturing.'
+  for (let i = 0; i < 20; i++) await step(5000)
+  assert.notEqual(scanner.state, 'suspended', '100 seconds out of view is not a capture failure')
+  assert.equal(scanner.stats().captureErrors, 0)
+  assert.equal(state.events.filter((e) => e.type === 'error').length, 0)
+  const waits = state.events.filter((e) => e.type === 'skip' && e.reason === 'hidden')
+  assert.equal(waits.length, 20, 'keeps checking at the base backoff instead of doubling it')
+  assert.equal(waits[0].detail, 'Window is minimized; restore it before capturing.')
+  state.captureError = null
+  for (let i = 0; i < 12; i++) await step(500)
+  assert.ok(state.recognitions > 0, 'restored text is recognised')
+  assert.ok(state.scenes.some((text) => text.startsWith(FULL)), 'the restored scene is drawn')
+})
+
+test('text mode still suspends for a genuinely closed source', async () => {
+  const { scanner, state, step } = harness({ screen: () => DIALOGUE, recognise: (frame) => reading(frame.lines) })
+  state.captureError = 'gone: Source has closed or disconnected.'
+  for (let i = 0; i < 5; i++) await step(60000)
+  assert.equal(scanner.state, 'suspended')
+  assert.equal(scanner.stats().captureErrors, 5)
+})
 
 test('a blinking element beside the dialogue never replaces a full reading with a partial one', async () => {
   const { state, step } = harness({

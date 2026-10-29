@@ -604,6 +604,8 @@ fn ensure(
     // when reporting a problem; text one of them covers is hidden by `cover` instead.
     let protected = matches!(spec.label, "controller-host" | "crop-host");
     let _ = window.set_content_protected(protected);
+    #[cfg(target_os = "windows")]
+    let _ = platform::ignore_key_menu(&window);
     platform::desktop_place(&window, bounds)?;
     attach_events(app, settings, &window, spec);
     Ok(window)

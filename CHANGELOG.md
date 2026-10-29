@@ -11,6 +11,19 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: looking up a word over a game no longer takes the game's focus. Space and Enter advance the text right after a lookup, visual novels no longer skip text when you press Ctrl in another app afterwards, and the dictionary pop-up closes on its own shortly after you move away from the word and the pop-up.
+
+- Clicking a shortcut in Settings → Shortcuts & Controls now starts recording every time; before, a click often started and stopped it at once.
+
+- Windows: tapping Alt while a Kimochi window has focus no longer leaves it unresponsive until you click it or press Esc.
+
+- With a whole display as the source, Kimochi no longer reads its own windows: their text stays out of the Log, and the overlay no longer covers the main window's buttons with boxes of its own text.
+
+- Quick Shot on Windows now accepts Escape to cancel and Enter to scan while your game is focused, even without a window source selected.
+- Auto OCR no longer turns itself off when the game window is minimised. Exclusive-fullscreen games minimise as soon as you click into Kimochi; Auto OCR now waits for the game and starts reading again when you return to it.
+- Shortcuts can now use **Insert** alone or with Shift, as well as a function key. Windows and Linux also support **Pause** and **Scroll Lock**. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
+- Quitting Kimochi on Windows now ends it completely. Before, a quit could leave Kimochi running invisibly in the background, still holding the memory it had used (often 0.5–1 GB) until Windows restarted.
+
 - Fixed: on Linux, including the Steam Deck, Hachidori showed "No dictionary has an entry" for many common words (今日, 大人, ですね…): its lookups failed whenever a result needed its furigana table.
 - Reading along with a controller asks the dictionary for each word directly, in both the pop-up and full-screen styles and with every dictionary: no more pop-ups that never appear, entries from the previous word, or text left selected. A word with no entry now says so.
 - Hachidori: reading along stops on the words Hachidori itself finds.

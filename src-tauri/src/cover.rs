@@ -206,6 +206,59 @@ pub fn set_text(rects: Vec<Rect>) {
     changing(|| *text_lock() = rects);
 }
 
+/// Kimochi's own windows on screen, in desktop points, from the cache.
+pub fn own_rects() -> Vec<Rect> {
+    frames_lock()
+        .values()
+        .filter(|frame| frame.on_screen())
+        .filter_map(|frame| frame.bounds)
+        .filter(finite)
+        .collect()
+}
+
+/// Blanks what a display capture shows of Kimochi's own windows (`own`, desktop points), so
+/// a Display source never reads Kimochi itself: its Log and Settings would come back as
+/// lines in the Log, and as overlay boxes drawn over the very buttons the reader is using.
+/// `bounds` is where the frame's full image sits in desktop points, `full` its size in
+/// pixels and `crop` the part of it the frame holds (`[x, y, width, height]`, pixels).
+/// Returns how many windows were blanked.
+pub fn blank_own_windows(
+    pixels: &mut [u8],
+    width: u32,
+    height: u32,
+    bounds: &Rect,
+    full: (u32, u32),
+    crop: [u32; 4],
+    own: &[Rect],
+) -> usize {
+    if !finite(bounds) || full.0 == 0 || full.1 == 0 || pixels.len() < width as usize * height as usize * 4 {
+        return 0;
+    }
+    let (sx, sy) = (f64::from(full.0) / bounds.width, f64::from(full.1) / bounds.height);
+    let mut blanked = 0;
+    for window in own.iter().filter(|r| finite(r) && intersects(r, bounds)) {
+        // Desktop points to the frame's own pixels, clamped to the frame.
+        let to_x = |x: f64| (((x - bounds.x) * sx).round() - f64::from(crop[0])).clamp(0., f64::from(width)) as usize;
+        let to_y = |y: f64| (((y - bounds.y) * sy).round() - f64::from(crop[1])).clamp(0., f64::from(height)) as usize;
+        let (x0, x1) = (to_x(window.x), to_x(window.x + window.width));
+        let (y0, y1) = (to_y(window.y), to_y(window.y + window.height));
+        if x0 >= x1 || y0 >= y1 {
+            continue;
+        }
+        for y in y0..y1 {
+            let row = y * width as usize * 4;
+            pixels[row + x0 * 4..row + x1 * 4].fill(0);
+        }
+        blanked += 1;
+    }
+    blanked
+}
+
+/// Whether a point (desktop points) is on one of `rects`.
+pub fn contains_point(rects: &[Rect], x: f64, y: f64) -> bool {
+    rects.iter().any(|r| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+}
+
 /// Whether one of Kimochi's windows covers the overlay's text right now, from the cache.
 pub fn covered_now() -> bool {
     let frames: Vec<OwnFrame> = frames_lock().values().copied().collect();
@@ -237,6 +290,58 @@ mod tests {
     /// Two lines of text in a game window at the left of a 1728×1117 display.
     fn text() -> Vec<Rect> {
         vec![rect(200., 700., 600., 40.), rect(200., 760., 480., 40.)]
+    }
+
+    /// A 4×2-point display captured at 2× (8×4 pixels), all white.
+    fn white() -> Vec<u8> {
+        vec![255; 8 * 4 * 4]
+    }
+
+    fn black_pixels(pixels: &[u8], width: usize) -> Vec<(usize, usize)> {
+        pixels.chunks(4).enumerate().filter(|(_, p)| p.iter().all(|v| *v == 0)).map(|(i, _)| (i % width, i / width)).collect()
+    }
+
+    #[test]
+    fn a_display_capture_blanks_kimochis_own_windows() {
+        let mut pixels = white();
+        let display = rect(0., 0., 4., 2.);
+        // The main window over the right half of the top row of points.
+        let n = blank_own_windows(&mut pixels, 8, 4, &display, (8, 4), [0, 0, 8, 4], &[rect(2., 0., 2., 1.)]);
+        assert_eq!(n, 1);
+        let black = black_pixels(&pixels, 8);
+        assert_eq!(black.len(), 4 * 2, "2×1 points at 2× are 4×2 pixels");
+        assert!(black.iter().all(|(x, y)| *x >= 4 && *y < 2));
+    }
+
+    #[test]
+    fn a_cropped_capture_blanks_only_its_part_of_the_window() {
+        let mut pixels = vec![255; 4 * 2 * 4];
+        let display = rect(0., 0., 4., 2.);
+        // The frame holds pixels x 4..8, y 2..4 of the 8×4 display; the window covers
+        // points (1..3, 0..2), pixels (2..6, 0..4): its last two columns of pixels.
+        blank_own_windows(&mut pixels, 4, 2, &display, (8, 4), [4, 2, 4, 2], &[rect(1., 0., 2., 2.)]);
+        let black = black_pixels(&pixels, 4);
+        assert_eq!(black, vec![(0, 0), (1, 0), (0, 1), (1, 1)]);
+    }
+
+    #[test]
+    fn windows_off_the_captured_display_are_left_alone() {
+        let mut pixels = white();
+        let display = rect(0., 0., 4., 2.);
+        let n = blank_own_windows(&mut pixels, 8, 4, &display, (8, 4), [0, 0, 8, 4], &[rect(10., 0., 3., 3.)]);
+        assert_eq!(n, 0);
+        assert!(black_pixels(&pixels, 8).is_empty());
+    }
+
+    #[test]
+    fn a_press_on_one_of_kimochis_windows_is_on_the_app() {
+        let main = rect(500., 600., 900., 560.);
+        assert!(contains_point(&[main], 500., 600.));
+        assert!(contains_point(&[main], 1399.5, 1159.5));
+        // The right and bottom edges are outside, as for any half-open rectangle.
+        assert!(!contains_point(&[main], 1400., 700.));
+        assert!(!contains_point(&[main], 499., 700.));
+        assert!(!contains_point(&[], 0., 0.));
     }
 
     #[test]
