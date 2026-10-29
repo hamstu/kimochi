@@ -280,6 +280,14 @@ try {
       main.close();
     }
     const caps = await invoke(overlay, "platform_capabilities");
+    if (scenario === "hover") {
+      const engine = await invoke(overlay, "dictionary_engine_effective");
+      assert.equal(
+        engine.effective,
+        "tenten",
+        "hover oracle requires downloaded, active 10ten; select it in Settings first",
+      );
+    }
     app = caps.ownPids[0];
     assert(app);
     return {
