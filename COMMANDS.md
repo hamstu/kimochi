@@ -196,6 +196,12 @@ hover are **user-confirmed**. `panel_cursor`'s cursor shapes and first-gesture c
 resizing are **physically unverified** — `NSCursor.set` returning successfully is not
 proof that a background window's cursor visibly changed.
 
+On Windows the panels do not run the bridge (`useNativeHover` is off there): WebView2 keeps
+`:hover` and the cursor current in an inactive window by itself, and a second highlight from
+`GetCursorPos` disagreed with Chromium's whenever another pointer (a pen tablet in range) moved
+last. `panel_pointer` still answers there, measured from the client area: `GetWindowRect`
+includes the invisible resize borders (about 7 px a side at 100 %).
+
 `panel_cursor` is only called while the webview itself receives no real mouse events
 (`CursorOwnership` in `frontend/shell/nativeCursor.ts`). Whenever it does (the key window,
 and Windows/Linux always) the webview sets the cursor on every move, and a second writer
@@ -1115,14 +1121,25 @@ version, arch, session}, hardware: {cpu, cores, memoryBytes, gpus}, displays, ca
 {selected, engines, models, cloudAccess}, observer, dictionary: {selected, downloads}, session:
 {sourceKind, sourceFocus, autoOcr, scanning, status, overlayVisible, textOverlayVisible,
 overlayThrottled, frontmostApp}, settings, windows: [{label, visible, minimized, focused, scale,
-bounds}], verboseLogging, recentEvents}`, redacted: settings come from a fixed list of fields,
+bounds}], input, verboseLogging, recentEvents}`, redacted: settings come from a fixed list of fields,
 never the whole file; a key that names a secret (token, key, password, cookie, …) has its value
 replaced, and every string loses bearer tokens, JWTs, URL query strings, `key=` values, e-mail
 addresses, long opaque strings and the user's name in paths. `debug_bundle_save` asks where to
 save, then writes a zip of `report.md` (the page's Markdown, redacted again), `report.json` and
 the redacted last 512 KB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
-`auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `debug_verbose_set` lasts until the app quits;
-while on, window focus changes (`window-focus`) and every scan (`scan`) are recorded too.
+`auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `input` is Windows only (`null` elsewhere):
+`{pointerDevices: [{type, product, maxContacts}], digitizer, maxTouches}`, the pens,
+touchscreens and Windows Ink tablets that reach the webviews as pointers of their own.
+`debug_verbose_set` lasts until the app quits, and each change emits `verbose-logging` (the new
+`bool`) so open windows start or stop their own diagnostics. While on, window focus changes
+(`window-focus`) and every scan (`scan`) are recorded too, and pointer diagnostics:
+`pointer-trace` from each panel and from the overlay while its region editor is open
+(`ui/pointer-diagnostics.js`: the window's geometry beside native's, pointer down/up/cancel,
+moves at 5 a second per pointer, hover changes, and each region-editor gesture with the pointer
+that drove it and the ones it ignored), and on Windows `pointer-press` for every press the mouse
+hook delivers to the overlay (screen and local point, and whether it came from a mouse, a pen or
+touch, or was injected). Elements are described by tag, classes, role and label, never their
+text.
 The shared `ocr_frame` path records `scan` phases `started`, `complete` and `failed`, with
 engine, frame id, dimensions, elapsed milliseconds, annotation/line counts and backend where
 available. It never includes pixels or recognized text. Debug capture status uses `capture.permission`;
