@@ -5,15 +5,38 @@ import { installWindowsPointer } from '../host/windows-pointer.js'
 class Event {
   constructor(type, init) { this.type = type; Object.assign(this, init) }
 }
-function fixture() {
+function fixture(label = 'overlay', bus = []) {
   const received = []
   const target = { tagName: 'BUTTON', dispatchEvent: e => received.push(e), contains: () => false }
   let hit = target
-  let listener
   const doc = { elementFromPoint: () => hit, defaultView: { PointerEvent: Event, MouseEvent: Event } }
-  const win = { document: doc, __TAURI__: { event: { listen: async (_, callback) => { listener = callback } } } }
-  return { win, doc, target, received, point: value => { hit = value }, send: payload => listener({ payload }) }
+  const win = { document: doc, __TAURI__: {
+    window: { getCurrentWindow: () => ({ label }) },
+    event: { listen: async (_, callback, options) => { bus.push({ callback, target: options?.target ?? { kind: 'Any' } }) } }
+  } }
+  return { win, doc, target, received, point: value => { hit = value }, send: (payload, destination = label) => {
+    // Tauri delivers emit_to to Any subscriptions as well as matching targets.
+    for (const listener of bus) if (listener.target.kind === 'Any' || listener.target.label === destination) listener.callback({ payload })
+  } }
 }
+
+test('popup presses stay in their window instead of clearing the Log source selection', async () => {
+  const bus = []
+  const log = fixture('log', bus)
+  const overlay = fixture('overlay', bus)
+  const popup = fixture('popup-host', bus)
+  for (const f of [log, overlay, popup]) await installWindowsPointer(f.win)
+  popup.send({ x: 40, y: 57, button: 0, down: true })
+  popup.send({ x: 40, y: 57, button: 0, down: false })
+  assert.deepEqual(log.received, [], 'popup-local presses must never hit the Log scanner')
+  assert.deepEqual(overlay.received, [], 'popup-local presses must never hit the overlay')
+  assert.deepEqual(popup.received.map(e => e.type), ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'])
+  overlay.send({ x: 12, y: 18, button: 0, down: true })
+  overlay.send({ x: 12, y: 18, button: 0, down: false })
+  assert.deepEqual(log.received, [])
+  assert.equal(popup.received.length, 5, 'the popup must not replay overlay presses either')
+  assert.equal(overlay.received.at(-1).type, 'click')
+})
 
 test('consumed clicks deliver a complete gesture to the DOM button', async () => {
   const f = fixture()

@@ -13,7 +13,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
-- **Windows: clicks on the Log's dictionary pop-up now work.** Buttons like **Add to Anki** and audio used to do nothing when clicked.
+- **Windows: clicks on the Log's dictionary pop-up now work.** Clicks stay in the pop-up instead of closing it through the Log; buttons like **Add to Anki** and audio receive the full press and release.
 
 ## [0.2.1] - 2026-10-28
 
