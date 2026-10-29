@@ -86,6 +86,8 @@ const KEY_LABELS: Record<string, { mac: string; other: string }> = {
   end: { mac: 'End', other: 'End' },
   pageup: { mac: 'PgUp', other: 'PgUp' },
   pagedown: { mac: 'PgDn', other: 'PgDn' },
+  pause: { mac: 'Pause', other: 'Pause' },
+  scrolllock: { mac: 'ScrLk', other: 'ScrLk' },
   plus: { mac: '+', other: '+' }
 }
 
@@ -173,6 +175,8 @@ const NAMED_CODES: Record<string, string> = {
   PageUp: 'PageUp',
   PageDown: 'PageDown',
   Insert: 'Insert',
+  Pause: 'Pause',
+  ScrollLock: 'ScrollLock',
   NumpadAdd: 'Plus',
   ...PUNCTUATION_CODES
 }
@@ -203,9 +207,18 @@ function keyToken(event: KeyComboEvent): string | null {
 }
 
 /**
+ * Keys that type nothing and that apps and games rarely use, so they can be a shortcut on their
+ * own (or with Shift): the function keys, Insert, Pause and Scroll Lock. Games often leave these
+ * free, and a chord with Ctrl makes many visual novels skip text while Ctrl is held.
+ */
+function standsAlone(key: string): boolean {
+  return /^F\d+$/.test(key) || key === 'Insert' || key === 'Pause' || key === 'ScrollLock'
+}
+
+/**
  * The Tauri accelerator for a key press, or null when it is not a usable global shortcut: the key
- * must be a function key, or come with Command / Control / Alt (Shift alone would swallow typing).
- * ⌘ on macOS and Ctrl elsewhere become `CommandOrControl`.
+ * must stand alone (`standsAlone`), or come with Command / Control / Alt (Shift alone would
+ * swallow typing). ⌘ on macOS and Ctrl elsewhere become `CommandOrControl`.
  */
 export function acceleratorFromEvent(event: KeyComboEvent, platform: KeyPlatform): string | null {
   if (isModifierOnly(event)) return null
@@ -222,7 +235,7 @@ export function acceleratorFromEvent(event: KeyComboEvent, platform: KeyPlatform
   if (event.altKey) parts.push('Alt')
   const hasModifier = parts.length > 0
   if (event.shiftKey) parts.push('Shift')
-  if (!hasModifier && !/^F\d+$/.test(key)) return null
+  if (!hasModifier && !standsAlone(key)) return null
   return [...parts, key].join('+')
 }
 
