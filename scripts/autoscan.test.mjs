@@ -99,6 +99,7 @@ function harness(overrides = {}, depOverrides = {}) {
             : { text: state.text, lines: state.lines ?? (state.text ? [line(state.text)] : []) },
           observerError: state.observerError,
           observerUnsupported: state.observerUnsupported,
+          observerBusy: state.observerBusy,
           generation: state.generation
         }
       },
@@ -600,6 +601,24 @@ test('an observer failure never becomes a recognition request', async () => {
   }
   assert.equal(h.state.recognizeCalls.length, 0, 'a broken gate sends nothing')
   assert.equal(h.scanner.stats().observerErrors, 3)
+})
+
+test('a busy observer is waited out, never counted towards suspension (#41)', async () => {
+  const h = harness({ errorBackoffMs: 2000, maxConsecutiveErrors: 3 })
+  h.sees('台詞')
+  h.state.observerError = 'The local MeikiOCR observer is still reading an earlier frame; retrying.'
+  h.state.observerBusy = true
+  for (let i = 0; i < 10; i++) {
+    h.state.time += 60000
+    assert.equal(await h.scanner.tick(), 'backoff')
+  }
+  assert.notEqual(h.scanner.state, 'suspended')
+  assert.equal(h.scanner.stats().observerErrors, 0)
+  h.state.observerError = null
+  h.state.observerBusy = false
+  await h.step(5000)
+  await h.step(5000)
+  assert.equal(h.state.recognizeCalls.length, 1, 'reads the text once the observer keeps up')
 })
 
 test('a failing observer backs off, then recovers without a restart', async () => {

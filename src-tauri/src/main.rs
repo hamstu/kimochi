@@ -1634,6 +1634,7 @@ async fn capture_frame(
         let mut observation = Value::Null;
         let mut observer_error = Value::Null;
         let mut observer_unsupported = false;
+        let mut observer_busy = false;
         let mut hash = Value::Null;
         let mut fingerprint = Value::Null;
         if observe.unwrap_or(false) {
@@ -1673,6 +1674,8 @@ async fn capture_frame(
                         // the app restarts — retrying would only report the same
                         // refusal every tick.
                         observer_unsupported = matches!(error.code, "unsupported" | "stalled");
+                        // Still reading an earlier frame: a reason to wait, not a failure.
+                        observer_busy = error.code == "busy";
                         observer_error = Value::from(error.message);
                     }
                 }
@@ -1707,6 +1710,7 @@ async fn capture_frame(
             "observation": observation,
             "observerError": observer_error,
             "observerUnsupported": observer_unsupported,
+            "observerBusy": observer_busy,
         }))
     })
     .await

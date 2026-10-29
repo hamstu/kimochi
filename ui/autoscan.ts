@@ -208,6 +208,11 @@ export interface CaptureSample<Frame = unknown> {
   /** This platform has no local observer at all. */
   observerUnsupported?: boolean
   /**
+   * The observer is still reading an earlier frame (a large display on a slow CPU). A reason
+   * to wait, never a failure: counting it suspended display Auto OCR within a minute (#41).
+   */
+  observerBusy?: boolean
+  /**
    * Exact digest of the captured pixels, from native.
    *
    * Byte-identical pixels cannot have different words on them, so a reading that
@@ -253,6 +258,7 @@ export type SkipReason =
   | 'spacing'
   | 'in-flight'
   | 'hidden'
+  | 'observer-busy'
 
 export type AutoScanState = 'idle' | 'running' | 'paused' | 'suspended' | 'unavailable'
 
@@ -1085,6 +1091,7 @@ export class AutoScanner<Frame = unknown> {
       // missing text observer is not an error and not a reason to stop.
       if (this.settings.observerMode === 'text') return this.observerUnavailable(sample)
     } else if (this.settings.observerMode === 'text' && !sample.observation) {
+      if (sample.observerBusy) return this.observerStillBusy(sample)
       return this.observerFailed(sample)
     }
 
@@ -1143,6 +1150,13 @@ export class AutoScanner<Frame = unknown> {
     this.stopTimer()
     this.emit({ type: 'status', state: 'unavailable', message: this.unavailableReason })
     return 'unavailable'
+  }
+
+  /** The observer is still on an earlier frame: look again at the base backoff (#41). */
+  private observerStillBusy(sample: CaptureSample<Frame>): TickOutcome {
+    this.backoffUntil = this.now() + this.settings.errorBackoffMs
+    this.emit({ type: 'skip', reason: 'observer-busy', detail: sample.observerError ?? undefined })
+    return 'backoff'
   }
 
   /** The observer exists but did not answer: back off and retry, never upload. */

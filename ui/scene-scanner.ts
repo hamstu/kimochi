@@ -526,6 +526,12 @@ export class SceneScanner<Frame = unknown> {
       this.emit({ type: 'status', state: 'unavailable', message: this.unavailableReason })
       return 'unavailable'
     }
+    if (!sample.observation && sample.observerBusy) {
+      // Still reading an earlier frame: wait at the base backoff, never count it (#41).
+      this.backoffUntil = this.now() + this.settings.errorBackoffMs
+      this.emit({ type: 'skip', reason: 'observer-busy', detail: sample.observerError ?? undefined })
+      return 'backoff'
+    }
     if (!sample.observation) {
       this.counters.observerErrors++
       this.recordError('observer', sample.observerError ?? 'the local text observer returned nothing')
