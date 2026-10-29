@@ -444,13 +444,25 @@ fn force_foreground(target: HWND) -> bool {
             GetWindowThreadProcessId(foreground, None)
         };
         let ours = GetCurrentThreadId();
-        if theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, true).as_bool() {
+        // Without a shared queue, handing the foreground back from one of our own windows
+        // only activated the target inside its own queue (WM_ACTIVATE, WM_NCACTIVATE(FALSE)):
+        // the keyboard stayed ours and the game believed it was still in front (#27).
+        let other = attach_thread(ours, theirs, GetWindowThreadProcessId(target, None));
+        if let Some(other) = other.filter(|&other| AttachThreadInput(ours, other, true).as_bool()) {
             let _ = BringWindowToTop(target);
             let _ = SetForegroundWindow(target);
-            let _ = AttachThreadInput(ours, theirs, false);
+            let _ = AttachThreadInput(ours, other, false);
         }
         foreground_ready(target)
     }
+}
+
+/// The input queue `force_foreground` shares while it asks for the foreground: the foreground
+/// thread's when another app has it, else the target's (one of our own windows has it, as when
+/// a hover lease hands the game back). `None` when there is nobody else to share with.
+fn attach_thread(ours: u32, foreground: u32, target: u32) -> Option<u32> {
+    let other = if foreground != 0 && foreground != ours { foreground } else { target };
+    (other != 0 && other != ours).then_some(other)
 }
 
 /// Return a completed hover lease to its exact source window, not a launcher.
@@ -780,5 +792,18 @@ mod tests {
         // Other system commands and other messages pass.
         assert!(!lone_alt_menu(WM_SYSCOMMAND, 0xF060, 0)); // SC_CLOSE
         assert!(!lone_alt_menu(WM_NULL, SC_KEYMENU as usize, 0));
+    }
+
+    #[test]
+    fn handing_the_foreground_back_shares_the_targets_queue() {
+        // Another app in front: share its queue, as before.
+        assert_eq!(attach_thread(1, 2, 3), Some(2));
+        // Our own window in front (the hover lease ending): the game's queue. Without it,
+        // Windows only activated the game inside its own queue and kept the keyboard ours.
+        assert_eq!(attach_thread(1, 1, 3), Some(3));
+        assert_eq!(attach_thread(1, 0, 3), Some(3));
+        // Nothing to share with.
+        assert_eq!(attach_thread(1, 1, 1), None);
+        assert_eq!(attach_thread(1, 0, 0), None);
     }
 }

@@ -11,7 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- **Windows: clicks on the Log's dictionary pop-up now work.** Clicks stay in the pop-up instead of closing it through the Log; buttons like **Add to Anki** and audio receive the full press and release.
+- Windows: looking up a word over a game no longer takes the game's focus. Space and Enter advance the text right after a lookup, visual novels no longer skip text when you press Ctrl in another app afterwards, and the dictionary pop-up closes on its own shortly after you move away from the word and the pop-up.
 
 - Clicking a shortcut in Settings → Shortcuts & Controls now starts recording every time; before, a click often started and stopped it at once.
 
@@ -34,6 +34,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - The free cursor (left stick) now works in the full-screen dictionary too. Point at any character to look up from there, past a word that was split wrongly; the outline then covers everything the dictionary matched from it, in both styles.
 - Fixed: on the Steam Deck, leaving read-along open for several minutes could make Steam's interface crash and restart.
 - Steam Deck: opening Kimochi from the controller menu keeps Kimochi in front, instead of the game coming back a moment later or after a volume change.
+
+- **Windows: clicks on the Log's dictionary pop-up now work.** Clicks stay in the pop-up instead of closing it through the Log; buttons like **Add to Anki** and audio receive the full press and release.
 
 ## [0.2.1] - 2026-10-28
 
