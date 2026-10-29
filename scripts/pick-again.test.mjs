@@ -63,7 +63,8 @@ test('every other error keeps its kind and message and is not pickAgain', async 
     kind: 'gone',
     message: 'that source has closed; refresh the list and pick again',
     raw: 'gone: that source has closed; refresh the list and pick again',
-    pickAgain: false
+    pickAgain: false,
+    hidden: false
   })
   assert.equal(nativeError('busy: a capture is already running').pickAgain, false)
   // The tag only means something after a known prefix.
@@ -79,4 +80,25 @@ test('the frontend tag matches the one native writes', async () => {
   const ui = bridge.match(/const PICK_AGAIN = '([^']+)'/)
   assert.ok(native && ui, 'PICK_AGAIN must be declared on both sides')
   assert.equal(ui[1], `${native[1]}:`)
+})
+
+test('a window that is only out of view parses as hidden with a clean message', async () => {
+  const { nativeError } = await loadBridge()
+  const minimised = nativeError('gone: hidden: Window is minimized; restore it before capturing.')
+  assert.equal(minimised.kind, 'gone')
+  assert.equal(minimised.hidden, true)
+  assert.equal(minimised.pickAgain, false)
+  assert.equal(minimised.message, 'Window is minimized; restore it before capturing.')
+  assert.equal(nativeError('gone: that source has closed').hidden, false)
+})
+
+test('the frontend hidden tag matches the one native writes', async () => {
+  const sources = await readFile(new URL('src-tauri/src/sources.rs', root), 'utf8')
+  const bridge = await readFile(new URL('frontend/bridge/tauri.ts', root), 'utf8')
+  const autoscan = await readFile(new URL('ui/autoscan.ts', root), 'utf8')
+  const native = sources.match(/pub const HIDDEN: &str = "([^"]+)";/)
+  const ui = bridge.match(/const HIDDEN = '([^']+)'/)
+  assert.ok(native && ui, 'HIDDEN must be declared on both sides')
+  assert.equal(ui[1], `${native[1]}:`)
+  assert.ok(autoscan.includes(String.raw`/^gone:\s*${native[1]}:/`), 'autoscan recognises the same tag')
 })

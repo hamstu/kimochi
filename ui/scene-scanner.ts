@@ -31,6 +31,7 @@
 import {
   FrameKeeper,
   migrateAutoScanSettings,
+  isSourceOutOfView,
   DEFAULT_AUTO_OCR_SETTINGS,
   type AutoScanDeps,
   type AutoScanEvent,
@@ -487,6 +488,14 @@ export class SceneScanner<Frame = unknown> {
       sample = await this.deps.captureFrame()
       this.counters.captures++
     } catch (error) {
+      if (isSourceOutOfView(error)) {
+        // Text mode uses this loop, not AutoScanner. A minimised game must wait
+        // here too, rather than silently suspending while the Auto OCR switch is on.
+        this.backoffUntil = this.now() + this.settings.errorBackoffMs
+        const message = typeof error === 'string' ? error : String((error as Error)?.message ?? error)
+        this.emit({ type: 'skip', reason: 'hidden', detail: message.replace(/^gone:\s*hidden:\s*/, '') })
+        return 'backoff'
+      }
       this.counters.captureErrors++
       this.recordError('capture', error)
       return 'error'

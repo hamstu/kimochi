@@ -58,8 +58,8 @@ export function scanOutcome(publication: Publication | null, { auto = false } = 
 /** Where a scan failed: getting the pixels, reading them, or handing the text on. */
 export type ScanStage = 'capture' | 'recognise' | 'publish'
 
-/** The native error prefixes (`sources::err`), and the portal tag that can follow one. */
-const PREFIX = /^(busy|permission|gone|invalid|native):\s*(?:pick-again:\s*)?/
+/** The native error prefixes (`sources::err`), and the tags that can follow one. */
+const PREFIX = /^(busy|permission|gone|invalid|native):\s*(?:(pick-again|hidden):\s*)?/
 
 /** An engine held back by its model: `<Engine> is not ready: <model_store::reason>`. */
 function modelProblem(name: string, reason: string): ActivityPost | null {
@@ -76,7 +76,9 @@ function modelProblem(name: string, reason: string): ActivityPost | null {
 /** A failed scan, in words: the error's machine prefix becomes the tone and the lead-in. */
 export function scanFailed(error: unknown, stage: ScanStage, mode: unknown): ActivityPost {
   const raw = String((error as Error)?.message ?? error ?? '').trim()
-  const kind = raw.match(PREFIX)?.[1] ?? null
+  const match = raw.match(PREFIX)
+  const kind = match?.[1] ?? null
+  const hidden = match?.[2] === 'hidden'
   const message = raw.replace(PREFIX, '') || 'unknown error'
 
   if (kind === 'busy') return scan('Scan skipped: a capture is already running', 'info')
@@ -87,6 +89,7 @@ export function scanFailed(error: unknown, stage: ScanStage, mode: unknown): Act
 
   if (stage === 'capture') {
     if (kind === 'permission') return scan(`Screen capture is not permitted: ${message}`, 'error')
+    if (hidden) return scan(`The window is out of view: ${message}`, 'warn')
     if (kind === 'gone') return scan(`The source is gone: ${message}`, 'warn')
     return scan(`Capture failed: ${message}`, 'error')
   }
@@ -124,6 +127,8 @@ export function autoScanSkipped(reason: string): ActivityPost | null {
       return scan('Scan discarded: the captured frame was replaced', 'warn')
     case 'empty-result':
       return scan('No new text', 'info')
+    case 'hidden':
+      return scan('Auto-scan waiting: the window is minimised or out of view', 'info')
     default:
       return null
   }

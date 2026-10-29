@@ -9,6 +9,7 @@ use crate::state::{descriptor_key, descriptor_type, Image, Service, Shared, Thum
 use base64::Engine;
 use kimochi_capture::{
     crop_rect, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop, Frame, Source,
+    SourceId,
 };
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -49,18 +50,41 @@ pub fn needs_pick_again(source_id: &str, code: &str) -> bool {
 
 /// Insert the pick-again tag after an already formatted `prefix: message` error.
 fn tag_pick_again(error: String) -> String {
+    tag(error, PICK_AGAIN)
+}
+
+/// The tag after `gone:` (`gone: hidden: …`) that says a window source still exists but is out
+/// of view for now: minimised, on another virtual desktop or workspace, or showing nothing. It
+/// comes back on its own (an exclusive-fullscreen game minimises whenever it loses focus and
+/// restores when clicked), so automatic scanning waits for it instead of stopping.
+/// `nativeError()` in `frontend/bridge/tauri.ts` turns it into `hidden: true`.
+pub const HIDDEN: &str = "hidden";
+
+/// Whether a failure on this source means "out of view for now" rather than "closed". The
+/// backends report a minimised or off-desktop window as `unavailable`; a closed one is
+/// `stale_source`.
+pub fn is_hidden(source_id: &str, code: &str) -> bool {
+    code == "unavailable" && SourceId::parse(source_id).is_some_and(|id| id.is_window())
+}
+
+/// Insert a tag after an already formatted `prefix: message` error.
+fn tag(error: String, tag: &str) -> String {
     match error.split_once(": ") {
-        Some((prefix, message)) => format!("{prefix}: {PICK_AGAIN}: {message}"),
-        None => format!("{PICK_AGAIN}: {error}"),
+        Some((prefix, message)) => format!("{prefix}: {tag}: {message}"),
+        None => format!("{tag}: {error}"),
     }
 }
 
-/// `err`, tagged with `pick-again` when this source can only come back through the picker.
+/// `err`, tagged with `pick-again` when this source can only come back through the picker,
+/// or `hidden` when it is a window that is merely out of view.
 pub fn err_for(source_id: &str, e: CaptureError) -> String {
     let pick_again = needs_pick_again(source_id, e.code);
+    let hidden = is_hidden(source_id, e.code);
     let text = err(e);
     if pick_again {
         tag_pick_again(text)
+    } else if hidden {
+        tag(text, HIDDEN)
     } else {
         text
     }
@@ -498,10 +522,17 @@ pub fn clear(service: &Shared) -> Result<Value, String> {
     Ok(json!({ "sourceId": Value::Null, "previous": previous }))
 }
 
-/// Turn automatic scanning off when a capture of the chosen source finds it gone (`err`'s
-/// `gone:` prefix): the window closed, so every later round would fail the same way.
+/// Whether a capture error means the source is gone for good: `err`'s `gone:` prefix, but not
+/// a window that is only out of view (`gone: hidden:`), which comes back by itself.
+fn gone_for_good(error: &str) -> bool {
+    error.starts_with("gone:") && !error.starts_with(&format!("gone: {HIDDEN}:"))
+}
+
+/// Turn automatic scanning off when a capture of the chosen source finds it gone for good: the
+/// window closed, so every later round would fail the same way. A minimised window is not
+/// gone; the loop waits for it (`ui/autoscan.ts`).
 pub fn stop_auto_if_gone(service: &Service, source_id: &str, error: &str) {
-    if !error.starts_with("gone:") {
+    if !gone_for_good(error) {
         return;
     }
     if service.selection.lock().unwrap().as_deref() != Some(source_id) {
@@ -931,6 +962,30 @@ mod tests {
             "gone: that source has closed; refresh the list and pick again"
         );
         assert!(closed("portal:window:3").starts_with("gone: pick-again: "));
+    }
+
+    #[test]
+    fn a_window_out_of_view_is_hidden_not_gone_for_good() {
+        // What a minimised window reports on every desktop backend (#2: an exclusive-fullscreen
+        // game minimises as soon as Kimochi is clicked).
+        let minimised = CaptureError::new("unavailable", "Window is minimized; restore it.");
+        let error = err_for("windows:window:0x1A2B:42", minimised.clone());
+        assert_eq!(error, "gone: hidden: Window is minimized; restore it.");
+        assert!(!gone_for_good(&error), "a minimised game must not turn Auto OCR off");
+        for id in ["macos:window:7:1", "x11:window:5"] {
+            assert!(err_for(id, minimised.clone()).starts_with("gone: hidden: "), "{id}");
+        }
+        // A closed window is still gone for good, and stops automatic scanning as before.
+        let closed_window = err_for(
+            "windows:window:0x1A2B:42",
+            CaptureError::new("stale_source", "Source has closed."),
+        );
+        assert_eq!(closed_window, "gone: Source has closed.");
+        assert!(gone_for_good(&closed_window));
+        assert!(gone_for_good(&closed("windows:window:0x1A2B:42")));
+        // Only window sources can be out of view; a display reporting it keeps the plain text.
+        assert_eq!(err_for("windows:display:0x1", minimised), "gone: Window is minimized; restore it.");
+        assert!(!gone_for_good("busy: a capture is already running"));
     }
 
     #[test]
