@@ -172,6 +172,15 @@ pub static PANELS: &[PanelSpec] = &[
     ),
 ];
 
+/// Panels that are destroyed rather than hidden when they close or are hidden: windows used
+/// once in a while, whose renderer would otherwise stay alive for the rest of the session
+/// (#9: a hidden Welcome kept ~140–165 MB). The next `show` builds them again.
+pub const DESTROYED_ON_CLOSE: &[&str] = &["welcome"];
+
+pub fn destroyed_on_close(label: &str) -> bool {
+    DESTROYED_ON_CLOSE.contains(&label)
+}
+
 pub fn spec(label: &str) -> Option<&'static PanelSpec> {
     PANELS.iter().find(|p| p.label == label)
 }
@@ -666,10 +675,14 @@ fn attach_events(
             // A hidden Settings window can no longer finish recording a shortcut.
             crate::hotkeys::resume(&handle, &store);
             crate::cover::note_gone(spec.label);
-            #[cfg(target_os = "linux")]
-            let _ = platform::gamescope::hide(&owned);
-            #[cfg(not(target_os = "linux"))]
-            let _ = owned.hide();
+            if destroyed_on_close(spec.label) {
+                let _ = owned.destroy();
+            } else {
+                #[cfg(target_os = "linux")]
+                let _ = platform::gamescope::hide(&owned);
+                #[cfg(not(target_os = "linux"))]
+                let _ = owned.hide();
+            }
             let _ = handle.emit("panel:closed", json!({ "label": spec.label }));
         }
         _ => {}
@@ -745,6 +758,16 @@ fn apply(
     rect: Option<Rect>,
 ) -> Result<Value, String> {
     let native_err = |e: tauri::Error| format!("native: {e}");
+    if action == "hide" && destroyed_on_close(label) {
+        if let Some(spec) = spec(label) {
+            save_bounds(settings, window, spec);
+        }
+        crate::gamepad::panel_focus(label, false);
+        crate::cover::note_gone(label);
+        window.destroy().map_err(native_err)?;
+        let _ = app.emit("panel:state", json!({ "label": label, "visible": false }));
+        return Ok(json!({ "label": label, "visible": false, "destroyed": true }));
+    }
     match action {
         "mini" | "expand" if label == MAIN => {
             crate::compact::set(window, action == "mini")?;
@@ -1011,6 +1034,15 @@ mod tests {
         assert!(!spec("log").unwrap().pinned);
         assert!(!spec("settings").unwrap().pinned);
         assert!(!spec("diagnostics").unwrap().pinned);
+    }
+
+    #[test]
+    fn onboarding_is_destroyed_when_it_closes() {
+        assert!(destroyed_on_close("welcome"));
+        // The main window quits on close; the others keep their state hidden.
+        for label in [MAIN, "settings", "dictionary", "diagnostics"] {
+            assert!(!destroyed_on_close(label), "{label}");
+        }
     }
 
     #[test]
