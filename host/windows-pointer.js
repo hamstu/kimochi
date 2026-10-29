@@ -5,6 +5,10 @@ export async function installWindowsPointer(win = window, getPopups = () => []) 
   if (win.__windowsPointerInstalled) return
   win.__windowsPointerInstalled = true
   const pressed = new Map()
+  // A global Tauri listener also receives emit_to events for other windows.
+  // Replaying popup-local coordinates in the Log clears its source selection
+  // and hides the popup before its release can arrive.
+  const label = win.__TAURI__.window.getCurrentWindow().label
   await win.__TAURI__.event.listen('windows-pointer-button', ({ payload }) => {
     const first = pressed.get(payload.button)
     let doc = win.document
@@ -57,5 +61,5 @@ export async function installWindowsPointer(win = window, getPopups = () => []) 
         target.dispatchEvent(new view.MouseEvent(button === 0 ? 'click' : 'contextmenu', init))
       }
     }
-  })
+  }, { target: { kind: 'Window', label } })
 }

@@ -35,6 +35,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Fixed: on the Steam Deck, leaving read-along open for several minutes could make Steam's interface crash and restart.
 - Steam Deck: opening Kimochi from the controller menu keeps Kimochi in front, instead of the game coming back a moment later or after a volume change.
 
+- **Windows: clicks on the Log's dictionary pop-up now work.** Clicks stay in the pop-up instead of closing it through the Log; buttons like **Add to Anki** and audio receive the full press and release.
+
 ## [0.2.1] - 2026-10-28
 
 ### Added
