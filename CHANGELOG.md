@@ -11,43 +11,18 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- Windows: Kimochi uses far less CPU while a game is running. It used to read and convert every frame the game drew, even when nothing was being scanned (about a whole CPU core with a fullscreen game on a large screen); now it only reads a frame when it scans.
+### Changed
 
-- Windows: with a game window as the source, screen recorders (NVIDIA's included) can record everything, the overlay and dictionary too. Kimochi only hides its overlay from screen capture while it reads a whole display or a Quick Shot, where it would otherwise read its own text.
+- **New default shortcuts on Windows and Linux:** **Shift+F8** to scan and **Shift+F9** for the controller menu. The old Ctrl shortcuts made many visual novels skip text. Shortcuts you've changed yourself are kept, and macOS is unchanged.
+- Shortcuts can now also use **Insert** (alone or with Shift), and on Windows and Linux **Pause** or **Scroll Lock**.
+- **Far less CPU use on Windows while a game is running:** Kimochi now reads the game's frames only when it scans, instead of all the time.
 
-- The overlay follows a change of screen resolution or scaling straight away, instead of keeping its old size until the next scan.
+### Fixed
 
-- Auto OCR on a whole display no longer switches itself off when the local text reader can't keep up (a very large screen, a slow computer). It waits for the reader instead.
-
-- The Welcome guide frees its memory when it closes (about 150 MB on Windows) instead of staying loaded, hidden, for the rest of the session. Opening it again from Settings builds it afresh.
-
-- Windows and Linux: the default shortcuts are now **Shift+F8** (Scan) and **Shift+F9** (Controller menu). The old Ctrl+Shift+8 and Ctrl+Shift+Space made many visual novels skip text, because the game sees Ctrl first. Shortcuts you changed yourself are kept; macOS keeps ⌘⇧8 and ⌘⇧Space.
-
-- Windows: looking up a word over a game no longer takes the game's focus. Space and Enter advance the text right after a lookup, visual novels no longer skip text when you press Ctrl in another app afterwards, and the dictionary pop-up closes on its own shortly after you move away from the word and the pop-up.
-
-- Clicking a shortcut in Settings → Shortcuts & Controls now starts recording every time; before, a click often started and stopped it at once.
-
-- Windows: tapping Alt while a Kimochi window has focus no longer leaves it unresponsive until you click it or press Esc.
-
-- With a whole display as the source, Kimochi no longer reads its own windows: their text stays out of the Log, and the overlay no longer covers the main window's buttons with boxes of its own text.
-
-- Quick Shot on Windows now accepts Escape to cancel and Enter to scan while your game is focused, even without a window source selected.
-- Auto OCR no longer turns itself off when the game window is minimised. Exclusive-fullscreen games minimise as soon as you click into Kimochi; Auto OCR now waits for the game and starts reading again when you return to it.
-- Shortcuts can now use **Insert** alone or with Shift, as well as a function key. Windows and Linux also support **Pause** and **Scroll Lock**. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
-- Quitting Kimochi on Windows now ends it completely. Before, a quit could leave Kimochi running invisibly in the background, still holding the memory it had used (often 0.5–1 GB) until Windows restarted.
-
-- Fixed: on Linux, including the Steam Deck, Hachidori showed "No dictionary has an entry" for many common words (今日, 大人, ですね…): its lookups failed whenever a result needed its furigana table.
-- Reading along with a controller asks the dictionary for each word directly, in both the pop-up and full-screen styles and with every dictionary: no more pop-ups that never appear, entries from the previous word, or text left selected. A word with no entry now says so.
-- Hachidori: reading along stops on the words Hachidori itself finds.
-- Hachidori keeps up with read-along: each word's entry shows in about half the time on a Steam Deck.
-- Fixed: in Gaming Mode, Hachidori often showed no definition, or a blank dictionary area, for a word you stepped onto, until you stepped off and back. Kimochi no longer takes the arrow keys Steam types for the D-pad, which pulled focus from the overlay at each press and cancelled the lookup.
-- In the full-screen dictionary, the outline covers exactly what the dictionary matched, even when that runs into the next word, instead of a second tint over the rest.
-- Fixed: after the full-screen dictionary was left through the controller menu, the pop-up style's pop-up opened across the whole width of the screen instead of beside the word.
-- The free cursor (left stick) now works in the full-screen dictionary too. Point at any character to look up from there, past a word that was split wrongly; the outline then covers everything the dictionary matched from it, in both styles.
-- Fixed: on the Steam Deck, leaving read-along open for several minutes could make Steam's interface crash and restart.
-- Steam Deck: opening Kimochi from the controller menu keeps Kimochi in front, instead of the game coming back a moment later or after a volume change.
-
-- **Windows: clicks on the Log's dictionary pop-up now work.** Clicks stay in the pop-up instead of closing it through the Log; buttons like **Add to Anki** and audio receive the full press and release.
+- **Windows:** looking up a word no longer steals the game's focus, the Log's dictionary pop-up accepts clicks, tapping Alt no longer freezes Kimochi's windows, Quick Shot's Escape and Enter work while the game is focused, screen recorders can capture the overlay and dictionary when a game window is the source, and quitting really quits instead of lingering in the background.
+- **Steam Deck and Gaming Mode:** read-along with a controller is faster and more reliable, the free cursor works in the full-screen dictionary, Hachidori finds common words again on Linux, and Steam's interface no longer crashes when read-along is left open.
+- **OCR:** Auto OCR keeps going when the game minimises or the text reader falls behind, the overlay adjusts at once to resolution and scaling changes, and with a whole display as the source Kimochi no longer reads its own windows.
+- **Memory and settings:** the Welcome guide frees its memory when closed.
 
 ## [0.2.1] - 2026-10-28
 
