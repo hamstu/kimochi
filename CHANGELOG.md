@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: with a game window as the source, screen recorders (NVIDIA's included) can record everything, the overlay and dictionary too. Kimochi only hides its overlay from screen capture while it reads a whole display or a Quick Shot, where it would otherwise read its own text.
+
 - The overlay follows a change of screen resolution or scaling straight away, instead of keeping its old size until the next scan.
 
 - Auto OCR on a whole display no longer switches itself off when the local text reader can't keep up (a very large screen, a slow computer). It waits for the reader instead.

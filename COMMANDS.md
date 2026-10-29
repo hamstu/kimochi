@@ -750,7 +750,7 @@ overlay (the earlier design) WebKit kept them only for the session, so Hachidori
 dictionaries and 10ten's `jpdict` database were gone after every relaunch. Native creates
 the window at startup when the active engine is an extension engine, and on a switch as
 above. The window is never shown and never focused: `visible(false)`, `focused(false)`,
-`focusable(false)`, `skip_taskbar`, no decorations, 1×1, content-protected, background
+`focusable(false)`, `skip_taskbar`, no decorations, 1×1 (never shown, so not content-protected), background
 throttling off like the overlay's, and it is not a panel, so `panel` refuses its label. Its
 document-start scripts, for all frames, are the platform prelude, the label prelude
 (label `ext-<id>`, no frame band, no popup host) and `ext-host.js`; never a Yomitan shim.

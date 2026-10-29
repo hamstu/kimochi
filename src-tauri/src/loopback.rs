@@ -578,7 +578,8 @@ pub fn start_migration(_turn: &crate::panels::MainTurn, app: &tauri::AppHandle) 
         .shadow(false)
         .resizable(false)
         .inner_size(1., 1.)
-        .content_protected(true)
+        // Never shown, so never captured: protecting it only made recorders refuse (#26).
+        .content_protected(false)
         .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |u| {
             u.as_str() == "about:blank"
