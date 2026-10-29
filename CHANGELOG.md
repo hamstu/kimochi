@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows and Linux: the default shortcuts are now **Shift+F8** (Scan) and **Shift+F9** (Controller menu). The old Ctrl+Shift+8 and Ctrl+Shift+Space made many visual novels skip text, because the game sees Ctrl first. Shortcuts you changed yourself are kept; macOS keeps ⌘⇧8 and ⌘⇧Space.
+
 - Windows: looking up a word over a game no longer takes the game's focus. Space and Enter advance the text right after a lookup, visual novels no longer skip text when you press Ctrl in another app afterwards, and the dictionary pop-up closes on its own shortly after you move away from the word and the pop-up.
 
 - Clicking a shortcut in Settings → Shortcuts & Controls now starts recording every time; before, a click often started and stopped it at once.
