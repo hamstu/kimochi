@@ -50,8 +50,9 @@ on:
       - '.github/workflows/ci.yml'
       - 'ci/**'
 
+# Pull requests' runs are independent, so a push to try one platform never cancels another's.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_id || github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
@@ -113,7 +114,7 @@ jobs:
             // pushes, tags and manual runs; on a pull request that changes CI, only TRIAL, and
             // always on GitHub's runners. macOS stays on the fleet's Mac.
             const HOSTED = []
-            const TRIAL = ['Linux x64']
+            const TRIAL = ['Windows x64', 'Windows ARM64', 'Linux ARM64']
             const pr = context.eventName === 'pull_request'
             const tag = context.ref.startsWith('refs/tags/')
             const mode = tag ? 'release' : process.env.INPUT_MODE || 'bundle'
@@ -230,13 +231,6 @@ jobs:
           git clean -ffdx -e src-tauri/target -e capture-core/target -e speech-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
           bash ci/runners/prune-build-cache.sh
 
-      # A GitHub runner's image has about 14 GB free, too little for the Rust targets; these
-      # preinstalled toolchains are unused here and give back about 20 GB.
-      - name: Free disk space
-        if: matrix.onGitHub && runner.os == 'Linux'
-        working-directory: .
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift && df -h /
-
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         working-directory: .
@@ -349,12 +343,9 @@ jobs:
 
       # GitHub's Ubuntu image has no FUSE, which the AppImage tools tauri downloads would mount
       # themselves with; they unpack and run instead.
-      - name: Free disk space
+      - name: AppImage tools without FUSE
         if: matrix.onGitHub && runner.os == 'Linux'
-        working-directory: .
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift && df -h /
-          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
+        run: echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
