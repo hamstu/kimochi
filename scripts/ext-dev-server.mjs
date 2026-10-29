@@ -12,6 +12,7 @@
 // Kept out of `vite.dev.config.ts` so the path and injection rules are unit-testable.
 import { createReadStream } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
+import { applyPatches, patchesFile } from './extension-patches.mjs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -352,12 +353,13 @@ export function harnessTagFor(urlPath, query, scriptUrl) {
  * An HTTP server for one extension origin. `mime` maps a lowercase extension (`.js`) to a
  * Content-Type. Not listening yet: the caller calls `listen`. `middleware` (connect-style, tried
  * in order before the files) adds the dev proxy and the relay bus; `harnessScript` is the URL of
- * the harness's native stand-in for the extension window's page (see `harnessTagFor`).
+ * the harness's native stand-in for the extension window's page (see `harnessTagFor`). `engine`
+ * names the extension, so its files are served with Kimochi's patches (host/ext/patches.json).
  *
- * @param {{extRoot: string, spikeRoot: string, mime: Record<string, string>, log?: (message: string) => void, middleware?: Array<(req: any, res: any, next: () => void) => unknown>, harnessScript?: string | null}} options
+ * @param {{engine?: string | null, extRoot: string, spikeRoot: string, mime: Record<string, string>, log?: (message: string) => void, middleware?: Array<(req: any, res: any, next: () => void) => unknown>, harnessScript?: string | null}} options
  */
-export function createExtensionServer({ extRoot, spikeRoot, mime, log = () => {}, middleware = [], harnessScript = null }) {
-  const files = createExtensionFiles({ extRoot, spikeRoot, mime, log, harnessScript })
+export function createExtensionServer({ engine = null, extRoot, spikeRoot, mime, log = () => {}, middleware = [], harnessScript = null }) {
+  const files = createExtensionFiles({ engine, extRoot, spikeRoot, mime, log, harnessScript })
   return http.createServer((req, res) => {
     let index = 0
     const next = () => {
@@ -372,7 +374,7 @@ export function createExtensionServer({ extRoot, spikeRoot, mime, log = () => {}
   })
 }
 
-function createExtensionFiles({ extRoot, spikeRoot, mime, log, harnessScript }) {
+function createExtensionFiles({ engine, extRoot, spikeRoot, mime, log, harnessScript }) {
   return async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Cache-Control', 'no-store')
@@ -398,6 +400,16 @@ function createExtensionFiles({ extRoot, spikeRoot, mime, log, harnessScript }) 
       const harnessTag = harnessTagFor(urlPath, query, harnessScript)
       if (harnessTag) {
         const body = Buffer.from(injectHostScript(await readFile(found.file, 'utf8'), harnessTag))
+        res.setHeader('Content-Length', body.length)
+        res.end(req.method === 'HEAD' ? undefined : body)
+        return
+      }
+      // Kimochi's edits to the engine's own files, as the app serves them (host/ext/patches.json).
+      const rel = path.relative(extRoot, found.file).split(path.sep).join('/')
+      if (engine && !found.inject && patchesFile(engine, rel)) {
+        const { text, skipped } = applyPatches(engine, rel, await readFile(found.file, 'utf8'))
+        for (const id of skipped) log(`patch ${id} does not apply to ${rel}; served unpatched`)
+        const body = Buffer.from(text)
         res.setHeader('Content-Length', body.length)
         res.end(req.method === 'HEAD' ? undefined : body)
         return

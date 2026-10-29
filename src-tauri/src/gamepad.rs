@@ -341,8 +341,12 @@ pub fn set_navigation(app: &tauri::AppHandle, active: bool, take_focus: bool) ->
         if let Some((pid, _)) = pending_return().take() {
             remembered.get_or_insert(pid);
         }
+        // No global keys in Gaming Mode either: the overlay reads only the controller there
+        // (ui/overlay.js `padOnly`), and Steam types the D-pad as arrow keys too, so a grab on
+        // them took the overlay's keyboard focus at every press. The blur cancelled Hachidori's
+        // lookup in flight, and the word showed nothing.
         let local_keys = {
-            #[cfg(target_os="linux")] { !take_focus && crate::platform::gnome::eligible_popup_session() }
+            #[cfg(target_os="linux")] { (!take_focus && crate::platform::gnome::eligible_popup_session()) || crate::platform::gamescope::active() }
             #[cfg(not(target_os="linux"))] { false }
         };
         // Taking activation stops games that read controllers only in the foreground.
