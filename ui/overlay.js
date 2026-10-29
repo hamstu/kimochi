@@ -1024,6 +1024,8 @@ async function performScan(explicit = null) {
  * that one rather than to whatever the loop is looking at now.
  */
 let autoJob = null
+/** The source window was out of view at the last automatic capture (`isSourceOutOfView`). */
+let autoSourceHidden = false
 const scanDeps = {
   generation: () => generation.current,
   // Held by the *other* path. The loop's own request takes this lock too, so it
@@ -1049,6 +1051,7 @@ const scanDeps = {
       trace('capture-failed', { durationMs: performance.now() - started })
       throw error
     }
+    autoSourceHidden = false
     try {
       scanTrace.observation({
         frameId: captured.id,
@@ -1343,6 +1346,16 @@ function onAutoScanEvent(event) {
       }
       return
     case 'skip':
+      if (event.reason === 'hidden') {
+        // The game is minimised (an exclusive-fullscreen one is, whenever Kimochi has focus):
+        // say so once, and keep Auto OCR on to pick it up when it comes back.
+        if (!autoSourceHidden) {
+          autoSourceHidden = true
+          publish({ scanning: false, status: `Auto OCR is waiting for the window: ${event.detail}` })
+          activity(scanActivity.autoScanSkipped(event.reason))
+        }
+        return log({ check: 'auto-scan-skip', reason: event.reason, detail: event.detail ?? null })
+      }
       // Only the skips that end a recognition the ticker has already announced.
       if (autoRound && !autoRound.outcome) autoRound.outcome = scanActivity.autoScanSkipped(event.reason)
       return log({ check: 'auto-scan-skip', reason: event.reason, detail: event.detail ?? null })

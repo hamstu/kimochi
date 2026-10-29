@@ -29,6 +29,13 @@ parsing prose. The text after the prefix is human-facing and actionable.
 | `invalid:` | Bad arguments, or a crop outside its reference. | Fix the request. |
 | `native:` | An AppKit / ScreenCaptureKit / HTTP call failed. | Surface the message. |
 
+A tag can follow the prefix. `gone: pick-again: …` is a system-picker source that only comes
+back through the picker (`pickAgain: true` from `nativeError()`). `gone: hidden: …` is a window
+source that still exists but is out of view for now: minimised (an exclusive-fullscreen game
+minimises whenever it loses focus), on another virtual desktop or workspace, or showing no
+image (`hidden: true`). A hidden source does not turn Auto OCR off; the automatic loop waits for
+it at its base error backoff without counting the failure towards suspension.
+
 `Rect` is `{x, y, width, height}` in **macOS desktop points, top-left origin**, and may
 be negative on secondary displays. Never derive it from a WebView's `devicePixelRatio`.
 
