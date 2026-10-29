@@ -6,7 +6,7 @@ const { code } = await transform(
   await readFile(new URL('../ui/geometry.ts', import.meta.url), 'utf8'),
   { loader: 'ts', format: 'esm' }
 )
-const { boxes, sourceDisplay } = await import(
+const { boxes, sourceDisplay, displayAfterLayout } = await import(
   'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
 )
 const a = {
@@ -107,4 +107,20 @@ test('Windows frames map through desktop points like a Retina frame on macOS', (
     overlay
   )
   for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(mac[key] - box[key]) < 1e-9)
+})
+
+test('after a display change the overlay covers the display it was on, as it is now (#42)', () => {
+
+  // One display, its resolution halved: same origin, new size.
+  const before = { x: 0, y: 0, width: 3440, height: 1440 }
+  const after = [{ x: 0, y: 0, width: 1720, height: 720 }]
+  assert.deepEqual(displayAfterLayout(before, after, null), after[0])
+  // Two displays: the source's display wins.
+  const two = [{ x: 0, y: 0, width: 1920, height: 1080 }, { x: 1920, y: 0, width: 2560, height: 1440 }]
+  assert.deepEqual(displayAfterLayout(two[0], two, { x: 2400, y: 200, width: 800, height: 600 }), two[1])
+  // A source off every display: where the overlay was.
+  assert.deepEqual(displayAfterLayout(two[1], two, { x: 9000, y: 0, width: 10, height: 10 }), two[1])
+  // The overlay's display was removed: the first one left.
+  assert.deepEqual(displayAfterLayout({ x: 5000, y: 0, width: 100, height: 100 }, two, null), two[0])
+  assert.equal(displayAfterLayout(before, [], null), null)
 })

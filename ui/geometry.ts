@@ -187,6 +187,25 @@ export function sourceDisplay(source: Rect, displays: Rect[]): Rect {
 }
 
 /**
+ * The display the overlay should cover after the display layout changed (#42): the source's
+ * display when there is a source, else the display holding the overlay's old top-left corner
+ * (a resolution change keeps it), else the first. Null when there is no display at all.
+ */
+export function displayAfterLayout(origin: Rect, displays: Rect[], source: Rect | null): Rect | null {
+  if (source) {
+    try {
+      return sourceDisplay(source, displays)
+    } catch {
+      // The source's centre is off every display: fall back to where the overlay was.
+    }
+  }
+  const corner = displays.find(
+    (d) => origin.x >= d.x && origin.y >= d.y && origin.x < d.x + d.width && origin.y < d.y + d.height
+  )
+  return corner ?? displays[0] ?? null
+}
+
+/**
  * A desktop point in the overlay window's own coordinates.
  *
  * Both spaces are desktop points, so this is a translation and never a scale: the
