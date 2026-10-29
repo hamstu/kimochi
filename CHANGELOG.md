@@ -11,6 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Quick Shot on Windows now accepts Escape to cancel and Enter to scan while your game is focused, even without a window source selected.
 - Auto OCR no longer turns itself off when the game window is minimised. Exclusive-fullscreen games minimise as soon as you click into Kimochi; Auto OCR now waits for the game and starts reading again when you return to it.
 - Shortcuts can now use **Insert** alone or with Shift, as well as a function key. Windows and Linux also support **Pause** and **Scroll Lock**. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
 - Quitting Kimochi on Windows now ends it completely. Before, a quit could leave Kimochi running invisibly in the background, still holding the memory it had used (often 0.5–1 GB) until Windows restarted.
