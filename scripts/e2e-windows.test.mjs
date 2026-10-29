@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { assertIsolatedPaths, IDENTIFIER } from "./e2e-windows/profile.mjs";
+import { acquireDesktop } from "./e2e-windows/desktop-lock.mjs";
+
+test("desktop runners exclude concurrent leases and release them for the next run", async () => {
+  const first = await acquireDesktop(0);
+  const port = first.address().port;
+  try {
+    await assert.rejects(acquireDesktop(port), /another runner may be active/);
+  } finally {
+    await new Promise((resolve) => first.close(resolve));
+  }
+  const next = await acquireDesktop(port);
+  await new Promise((resolve) => next.close(resolve));
+});
 
 test("desktop harness refuses either installed profile before changing settings", () => {
   const roaming = "C:\\Users\\tester\\AppData\\Roaming\\dev.kimochi.e2e\\";

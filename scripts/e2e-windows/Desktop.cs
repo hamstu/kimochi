@@ -80,7 +80,10 @@ public class Game : Form {
    }
    int width=vertical?size:text.Length*size,height=vertical?text.Length*size:size;
    lines.Add(new{text,size,vertical,x=x+origin.X,y=y+origin.Y,width,height,glyphs});
-   words.Add(new{text,x=x+origin.X,y=y+origin.Y,width,height});
+   foreach(string word in new[]{"回想","音楽","日本語","本","読む","今日","明日","猫","犬","一緒","学校","青い","空","静かな","海","好き","にほんご"}) {
+    int at=text.IndexOf(word,StringComparison.Ordinal); if(at<0)continue;
+    words.Add(new{text=word,x=x+origin.X+(vertical?0:at*size),y=y+origin.Y+(vertical?at*size:0),width=vertical?size:word.Length*size,height=vertical?word.Length*size:size});
+   }
   };
   line("回想",65,55,38,false);line("音楽",65,125,38,false);line("想",65,195,38,false);line("回",135,195,38,false);
   line("日本語の本を読む",ClientSize.Width-90,45,28,true);
@@ -89,7 +92,7 @@ public class Game : Form {
   line("青い空と静かな海が好きです。",50,ClientSize.Height-105,28,false);
   targetGraphics.DrawImageUnscaled(bitmap,0,0);
   var truth=new{time=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),page,mode,renderer="GDI",hwnd=Handle.ToInt64(),dpi=Native.GetDpiForWindow(Handle),client=new{x=origin.X,y=origin.Y,width=ClientSize.Width,height=ClientSize.Height},lines,words};
-  string path=Path.Combine(dir,"truth.json"); File.WriteAllText(path+".tmp",json.Serialize(truth)); if(File.Exists(path))File.Delete(path);File.Move(path+".tmp",path);
+  string path=Path.Combine(dir,"truth.json"); File.WriteAllText(path+".tmp",json.Serialize(truth)); if(File.Exists(path))File.Replace(path+".tmp",path,null);else File.Move(path+".tmp",path);
   }
  }
 }

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { open, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { acquireDesktop } from "./desktop-lock.mjs";
 import {
   root,
   page,
@@ -12,6 +13,9 @@ import {
   verifyIsolation,
 } from "./app.mjs";
 const count = Number(process.argv[2] || 20);
+if (!Number.isInteger(count) || count < 1)
+  throw Error("quit count must be a positive integer");
+const desktopLease = await acquireDesktop();
 const exe =
   process.env.KIMOCHI_E2E_EXE ||
   (() => {
@@ -37,7 +41,11 @@ for (let i = 0; i < count; i++) {
   try {
     for (let n = 0; n < 100; n++) {
       try {
-        if (!JSON.parse(desktop("windows")).some(w => w.pid === child.pid && w.title === "Kimochi")) {
+        if (
+          !JSON.parse(desktop("windows")).some(
+            (w) => w.pid === child.pid && w.title === "Kimochi",
+          )
+        ) {
           await sleep(100);
           continue;
         }
@@ -110,3 +118,4 @@ await writeFile(
 );
 if (results.length !== count || results.some((r) => !r.pass))
   process.exitCode = 1;
+desktopLease.close();

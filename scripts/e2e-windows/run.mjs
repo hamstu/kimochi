@@ -13,16 +13,30 @@ import {
   verifyIsolation,
 } from "./app.mjs";
 import { alignmentMetrics } from "../overlay-alignment-metrics.mjs";
+import { acquireDesktop } from "./desktop-lock.mjs";
 const [
   scenario = "scan",
   source = "window",
   renderer = "gdi",
   mode = "windowed",
 ] = process.argv.slice(2);
+assert(
+  ["scan", "hover", "auto", "windows", "quickshot"].includes(scenario),
+  "known scenario",
+);
+assert(
+  ["window", "display"].includes(source),
+  "source must be window or display",
+);
+assert(
+  scenario !== "windows" || source === "window",
+  "window lifecycle requires a window source",
+);
 if (renderer !== "gdi" || !["windowed", "borderless"].includes(mode))
   throw Error(
     "This harness currently supports GDI windowed/borderless only; DXGI prototype remains external",
   );
+const desktopLease = await acquireDesktop();
 const stamp = `${scenario}-${source}-${renderer}-${mode}-${Date.now()}`;
 const out = path.join(root, "evidence", stamp);
 await mkdir(out, { recursive: true });
@@ -293,9 +307,20 @@ try {
       );
     }
     desktop("show", g.hwnd, 5);
-    await command("gdi");
+    const ownedTruth = await until(async () => {
+      try {
+        const value = await truth();
+        return value.hwnd === g.hwnd ? value : false;
+      } catch {
+        return false;
+      }
+    }, 3000);
+    assert.equal(
+      ownedTruth.hwnd,
+      g.hwnd,
+      "fake game belongs to this run directory; close other fake games first",
+    );
     await command("windowed");
-    if (renderer === "d3d") await command("d3d");
     return await truth();
   });
   await check("pick-source-in-real-ui", chooseSource);
@@ -306,7 +331,7 @@ try {
     scenario === "windows"
   ) {
     await check("manual-scan", scan);
-    if (mode !== "exclusive") await focusGame();
+    await focusGame();
     await sleep(300);
     await check("overlay-lines", async () => {
       const d = await rendered();
@@ -316,7 +341,7 @@ try {
         text: d.words.map((w) => w.text).join("|"),
       };
     });
-    await check("alignment-physical-pixels", async () => {
+    const measureAlignment = async (filename = "alignment.json") => {
       const chars = await overlay.eval(
         `(()=>{const out=[];for(const root of document.querySelectorAll('.ocr-word-current')){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){let offset=0;for(const c of node.textContent){const r=document.createRange();r.setStart(node,offset);offset+=c.length;r.setEnd(node,offset);const b=r.getBoundingClientRect();const font=parseFloat(getComputedStyle(node.parentElement).fontSize);if(b.width&&b.height)out.push({c,cx:screenX+(b.x+b.width/2)*devicePixelRatio,cy:screenY+(b.y+b.height/2)*devicePixelRatio,fontSize:font*devicePixelRatio});}}}return out})()`,
       );
@@ -332,7 +357,7 @@ try {
         };
       });
       await writeFile(
-        path.join(out, "alignment.json"),
+        path.join(out, filename),
         JSON.stringify({ metrics, lines, chars }, null, 2),
       );
       assert(metrics.coverage > 0.5, "at least half truth glyphs render");
@@ -341,7 +366,8 @@ try {
         "mean cell center error below half glyph",
       );
       return { metrics, lines };
-    });
+    };
+    await check("alignment-physical-pixels", () => measureAlignment());
     await evidence("scan");
     if (scenario === "hover") {
       const d = await rendered();
@@ -352,7 +378,7 @@ try {
       assert(w, "lookup candidate");
       const popupState = () =>
         overlay.eval(
-          `(()=>{const h=document.querySelector('#tenten-ja-window'),e=h?.shadowRoot?.querySelector('.container:not(.hidden) .window');if(!e)return null;const r=e.getBoundingClientRect();return {text:e.innerText,html:h.shadowRoot.innerHTML,rect:r.toJSON(),x:screenX,y:screenY,dpr:devicePixelRatio}})()`,
+          `(()=>{const h=document.querySelector('#tenten-ja-window'),e=h?.shadowRoot?.querySelector('.container:not(.hidden) .window');if(!e)return null;const r=e.getBoundingClientRect();return {text:e.innerText,html:h.shadowRoot.innerHTML,rect:r.toJSON(),x:screenX,y:screenY,dpr:devicePixelRatio,viewport:{width:innerWidth,height:innerHeight}}})()`,
         );
       const popup = await check("hover-opens-dictionary", async () => {
         desktop("key", 16, "down");
@@ -370,8 +396,9 @@ try {
         );
         assert(pop.x + pop.rect.x >= 0 && pop.y + pop.rect.y >= 0);
         assert(
-          pop.rect.right <= 2560 && pop.rect.bottom <= 1440,
-          "popup on primary screen",
+          pop.rect.right <= pop.viewport.width &&
+            pop.rect.bottom <= pop.viewport.height,
+          "popup fits the overlay viewport",
         );
         return { lookupWord: w.text, ...pop };
       });
@@ -437,12 +464,27 @@ try {
             truth: await truth(),
           };
         });
+        await check("fresh-alignment-after-move", async () => {
+          await scan();
+          await sleep(300);
+          return measureAlignment("moved-alignment.json");
+        });
         await evidence("moved");
         await check("minimize-waits", async () => {
           await command("minimize");
           await sleep(Number(process.env.KIMOCHI_E2E_HIDDEN_MS || 4500));
           let s = await state();
           assert(s.autoOcrEnabled, "Auto OCR stays enabled");
+          assert(
+            !/suspended/i.test(s.status),
+            "scanner has not silently suspended",
+          );
+          assert(
+            !s.logs.some(
+              (log) => log.reason === "suspended" || log.state === "suspended",
+            ),
+            "no suspension in recent scanner logs",
+          );
           return { enabled: s.autoOcrEnabled, status: s.status };
         });
         await evidence("minimized");
@@ -529,7 +571,20 @@ try {
         return s.scan?.id !== prior && s.scan?.ocr.fullText ? s : false;
       }, 30000);
       assert(/今日|明日|青/.test(s.scan.ocr.fullText));
-      return { text: s.scan.ocr.fullText };
+      const expected = t.lines
+        .filter((line) => !line.vertical && line.size === 28)
+        .map((line) => line.text);
+      const compact = (text) => text.replace(/\s+/g, "");
+      for (const line of expected)
+        assert(
+          compact(s.scan.ocr.fullText).includes(compact(line)),
+          "current selected dialogue is recognised",
+        );
+      assert(
+        !/Scanning|\blines\b|\bchars\b|Kimochi/i.test(s.scan.ocr.fullText),
+        "selected game region contains no Kimochi UI",
+      );
+      return { text: s.scan.ocr.fullText, expected };
     });
     await evidence("quickshot-scanned");
   }
@@ -546,6 +601,7 @@ try {
   desktop("key", 16, "up");
   overlay?.close();
   closeAll();
+  desktopLease.close();
   result.ms = Date.now() - result.started;
   await writeFile(
     path.join(out, "result.json"),

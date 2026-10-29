@@ -72,6 +72,11 @@ otherwise they launch the configured binary with remote debugging on loopback po
 The fake game and app remain open for inspection after a scenario. Stop the game by writing
 `close` to `<run>/game/command.txt`; quit Kimochi normally. No scheduled tasks are used.
 
+Runners lease a fixed loopback port (19334) before touching the desktop. A second scenario or
+quit-series process fails immediately, even with a different run directory; the OS releases the
+lease when the first process exits. Use one fake-game run directory at a time. The runner also
+checks that the game's ground-truth HWND matches the actual game before proceeding.
+
 `source` may be `window` or `display`; `mode` may be `windowed` or `borderless`. The `auto` case
 checks a text change without closing the fake game. The `windows` case additionally moves,
 resizes, minimises, restores and closes it. It is a **window-source** lifecycle assertion:
@@ -84,7 +89,9 @@ Remove-Item Env:KIMOCHI_E2E_HIDDEN_MS
 ```
 
 The lifecycle test catches the bug addressed by draft #29; quit catches #30; Quick Shot's Escape
-case catches #32. Running against unfixed main is expected to expose these failures. A second
+case catches #32. The lifecycle case also checks fresh overlay alignment after moving/resizing
+and rejects silent scanner suspension while minimised. Running against unfixed main is expected
+to expose these failures. A second
 Quick Shot shortcut currently does nothing; its assertion records that reproduction, rather
 than claiming cancellation works. Never silently combine fixes: record the binary's Git SHA
 and any extra test patches in your handoff.
@@ -102,7 +109,7 @@ nonzero on failure. The quit series records process exit code/timing and remaini
 each launched PID. It does not infer exit from disappearing windows.
 
 Ground truth records physical screen coordinates, DPI, every line and glyph cell, and each
-rendered word. It measures **cell-centre** alignment, not ink outlines; the existing repository
+known word (selected menu/dialogue vocabulary). It measures **cell-centre** alignment, not ink outlines; the existing repository
 alignment metrics score actual DOM Range rectangles. Menu, horizontal VN dialogue, vertical
 Japanese, small furigana-like text and Space/Enter text advancement are included. IPC supports
 `advance`, `windowed`, `borderless`, `minimize`, `restore`, `move x y width height`, and `close`.
@@ -112,8 +119,11 @@ Capture protection hides overlays/popups from screenshots. DOM, native visibilit
 and input logs are the assertions; ordinary screenshots alone do not establish overlay success.
 The script reuses `scripts/cdp.mjs` and `overlay-alignment-metrics.mjs`.
 
+Quick Shot checks both complete current dialogue lines and rejects recognisable Kimochi UI
+text. It does not yet inspect the raw captured pixels or render a unique per-run dialogue token,
+so it cannot rule out every self-capture or stale-history failure.
+
 Known gaps: popup-entry/leave and fast-hover stability need further work; a 10ten popup-entry
-failure was observed in native runs. The move/resize test records tracked geometry but does not
-yet assert fresh per-glyph alignment after the move. Multi-monitor, DPI, exclusive fullscreen,
+failure was observed in native runs. Multi-monitor, DPI, exclusive fullscreen,
 NVIDIA recording, tray Quit, browser-process memory attribution and a full input-leak matrix
 remain outside this initial suite. Test every supported claim before broadening it.
