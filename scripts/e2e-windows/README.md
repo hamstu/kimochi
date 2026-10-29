@@ -47,8 +47,9 @@ copy from an offline backup of the installed profile into the separate test prof
   corresponding gitignored `src-tauri/resources` development directories.
 
 Current lookup assertions support **10ten**, and the measured scan baseline uses **OneOCR**.
-The hover runner verifies that downloaded 10ten is the effective native engine before testing;
-an unavailable or different engine is a setup failure, not a failed popup assertion.
+The hover runner verifies that downloaded 10ten is the effective native engine and its dictionary
+data is ready before testing; a download in progress or different engine is a setup failure,
+not a failed popup assertion. Wait for 10ten's automatic dictionary update to finish first.
 The runner enables Show overlay through the real UI. It uses isolated Shift+F8/F9 bindings;
 these are changes to the test profile. Other copies of Kimochi, including hung shutdown threads,
 can hold the default shortcuts. Record `hotkeys_reapply` failures before attributing them to OCR.

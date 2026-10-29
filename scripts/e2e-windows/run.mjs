@@ -287,6 +287,16 @@ try {
         "tenten",
         "hover oracle requires downloaded, active 10ten; select it in Settings first",
       );
+      const readiness = await until(async () => {
+        const status = await invoke(overlay, "dictionary_runtime_status", {
+          engine: "tenten",
+        });
+        return status.phase === "starting" ? false : status;
+      }, 15000);
+      assert(
+        readiness.phase === "ready" && readiness.lookups === true,
+        `10ten dictionary data must finish loading before hover tests: ${readiness.message}`,
+      );
     }
     app = caps.ownPids[0];
     assert(app);
