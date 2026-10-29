@@ -503,7 +503,8 @@ pub fn extension_window(
         .shadow(false)
         .resizable(false)
         .inner_size(1., 1.)
-        .content_protected(true)
+        // Never shown, so never captured: protecting it only made recorders refuse (#26).
+        .content_protected(false)
         .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .initialization_script_for_all_frames(platform::platform_prelude())
         .initialization_script_for_all_frames(spec.prelude.clone())

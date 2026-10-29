@@ -3934,6 +3934,36 @@ fn sync_input_shapes(
 /// Where the OS supports native input regions (`sync_input_shapes`), the poll keeps the
 /// window's shape in step with its regions instead of toggling click-through, and still
 /// does everything else: dismissal, focus, and the `pointer` event.
+/// Whether the windows drawn over the source must hide from screen capture (#26). A window
+/// source is captured from that window alone, so Kimochi's overlay and pop-ups are never in
+/// it; a display (and Quick Shot, which captures a display) would read them back as text. So
+/// they hide only then: recorders that refuse any capture-excluded window (NVIDIA's) and those
+/// that draw it black can record everything while a game window is the source.
+#[cfg(any(target_os = "windows", test))]
+fn needs_capture_protection(selection: Option<&str>) -> bool {
+    !selection.and_then(SourceId::parse).is_some_and(|id| id.is_window())
+}
+
+/// Applies `needs_capture_protection` to the overlay and the dictionary pop-ups whenever it,
+/// or the set of those windows (a pop-up level built later), changes.
+#[cfg(target_os = "windows")]
+fn sync_capture_protection(handle: &tauri::AppHandle, service: &Shared, applied: &mut Option<(bool, usize)>) {
+    let protect = needs_capture_protection(service.selection.lock().unwrap().as_deref());
+    let windows: Vec<_> = handle
+        .webview_windows()
+        .into_iter()
+        .filter(|(label, _)| label == OVERLAY || label == POPUP_HOST || label.starts_with("reader-popup"))
+        .collect();
+    if *applied == Some((protect, windows.len())) {
+        return;
+    }
+    *applied = Some((protect, windows.len()));
+    for (_, window) in &windows {
+        let _ = window.set_content_protected(protect);
+    }
+    record(handle, service, json!({ "check": "capture-protection", "protected": protect, "windows": windows.len() }));
+}
+
 fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut history: HashMap<String, PointerHistory> = HashMap::new();
@@ -3946,6 +3976,8 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut last_popup_shift = false;
         let mut ticks: u64 = 0;
         let mut shapes: HashMap<&'static str, InputShape> = HashMap::new();
+        #[cfg(target_os = "windows")]
+        let mut protection: Option<(bool, usize)> = None;
         loop {
             std::thread::sleep(Duration::from_millis(16));
             ticks = ticks.wrapping_add(1);
@@ -3954,6 +3986,8 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             }
             #[cfg(target_os = "windows")]
             platform::update_mouse_guard(&handle, &service);
+            #[cfg(target_os = "windows")]
+            sync_capture_protection(&handle, &service, &mut protection);
             // About every two seconds, rewrite native shapes even when unchanged.
             let refresh = ticks.is_multiple_of(125);
             for label in sync_input_shapes(&handle, &service, &mut shapes, refresh) {
@@ -4355,6 +4389,16 @@ fn request_accessibility() -> Reply<bool> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn overlay_hides_from_capture_only_when_a_capture_could_read_it() {
+        // A window source never contains Kimochi's overlay; a display, Quick Shot (no source)
+        // or an unknown id does.
+        assert!(!super::needs_capture_protection(Some("windows:window:0x1A2B:42")));
+        assert!(super::needs_capture_protection(Some("windows:display:0x10001")));
+        assert!(super::needs_capture_protection(None));
+        assert!(super::needs_capture_protection(Some("not a source id")));
+    }
     #[test]
     fn onboarding_requires_an_explicit_completion_flag() {
         assert_eq!(super::onboarding_panel(None), "welcome");
