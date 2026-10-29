@@ -86,6 +86,34 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
   // still executes every queued request. Keep only the newest waiting word.
   // Other requests (including parallel dictionary-tab reads) retain Chrome semantics.
   const lookups = createLookupQueue((request) => call('sendMessage', request))
+  /**
+   * Who hears the content context's messages to its engine and their answers (`onReply`): read
+   * along learns from these what a lookup it asked for found, as the engine itself does.
+   */
+  const replyListeners = new Set()
+  const tell = (event) => {
+    for (const listener of [...replyListeners]) {
+      try {
+        listener(event)
+      } catch (error) {
+        console.error(error)
+      }
+    }
+  }
+  const heard = (message, answer) => {
+    if (kind !== 'content' || !replyListeners.size) return answer
+    tell({ phase: 'sent', message })
+    return Promise.resolve(answer).then(
+      (reply) => {
+        tell({ phase: 'answered', message, reply, error: null })
+        return reply
+      },
+      (error) => {
+        tell({ phase: 'answered', message, reply: null, error })
+        throw error
+      }
+    )
+  }
   /** Hachidori settings: files and backups whose blob: URLs must cross windows (blob-bridge.js). */
   let blobBridge = null
 
@@ -342,9 +370,9 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
         const message = json(messageArgs(args))
         if (engine === 'hachidori' && kind === 'content' && message?.target === 'hoshidicts-offscreen' &&
           message.type === 'hd_lookup' && /^lookup-\d+$/.test(message.requestId)) {
-          return lookups.submit({ message, capture: hint() })
+          return heard(message, lookups.submit({ message, capture: hint() }))
         }
-        const send = (value) => call('sendMessage', { message: value, capture: hint() })
+        const send = (value) => heard(value, call('sendMessage', { message: value, capture: hint() }))
         if (engine === 'hachidori' && kind === 'page') {
           if (isLocalZipImport(message)) return importLocalZip(win, message, send, report)
           // blob: URLs do not cross from this window to the offscreen document's (blob-bridge.js).
@@ -527,6 +555,14 @@ export function createExtensionContext({ win, engine, descriptor, origin, kind, 
     events,
     handleEvent,
     deliverLocal,
+    /**
+     * `listener({phase, message, reply, error})` as this content context sends each message
+     * (`sent`) and as its answer comes (`answered`); returns its removal.
+     */
+    onReply(listener) {
+      replyListeners.add(listener)
+      return () => replyListeners.delete(listener)
+    },
     getURL,
     runtimeId,
     setMessages(state) {

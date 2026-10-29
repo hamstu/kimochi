@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      DEV-ONLY. The scene of the engine contract suite (`npm run test:engines`,
+      scripts/engine-contract.mjs): a few lines of Japanese in plain text nodes, one of them held at
+      opacity 0 as the overlay holds its text while the controller reads, and each engine started
+      exactly as ui/dictionary-harness.html starts it (same native stand-in, hosts and parameters:
+      ?engine=yomitan|hachidori|tenten, ?hachidori=, ?tenten=, ?fetch=proxy, ?dictionary=). The
+      suite drives Read along's direct lookups through `window.__contract` and checks the engine's
+      own pop-up. By hand: http://127.0.0.1:1430/app/dev/engine-contract.html?engine=tenten&fetch=proxy
+      then `await __contract.lookup('kyou')` in the console. Not part of any build.
+    -->
+    <script>
+      ;(() => {
+        const engine = new URLSearchParams(location.search).get('engine') ?? 'hachidori'
+        document.documentElement.dataset.engine = engine
+        // The engines' hosts read everything synchronously when they install, so they are parsed
+        // here, before the body, in the harness's order (see ui/dictionary-harness.html).
+        for (const src of ['/ui/dictionary-harness-native.js', '/ui/dictionary-harness.js', '/spike/ext-host.js', '/spike/shim.js']) {
+          document.write(`<script src="${src}"><\/script>`)
+        }
+      })()
+    </script>
+    <title>Engine contract scene</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #f4f1ea; color: #1d2433; }
+      body { font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif; }
+      /* Where the overlay draws a scan: lines low on the screen, the pop-up's room above them. */
+      .text { position: absolute; left: 48px; right: 48px; bottom: 40px; }
+      .line { margin: 0 0 6px; font-size: 26px; line-height: 1.5; }
+      /* The overlay's text while the controller reads (ui/render.js `setQuiet`): there, not shown. */
+      .quiet { opacity: 0; }
+      /* The harness's own panels, kept for its scripts but out of the picture. */
+      .internals { position: fixed; left: -4000px; top: 0; width: 900px; height: 700px; overflow: hidden; }
+      .internals iframe { width: 900px; height: 700px; border: 0; }
+      #stray { position: fixed; left: 200px; top: 150px; width: 120px; height: 80px; border: 4px solid #999; padding: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="text">
+      <p class="line quiet" id="line-quiet">あの日は怖くて、何も<span id="taberu">食べられなかった</span>んだ。</p>
+      <p class="line"><span id="kyou">今日</span>も<span id="otona">大人</span>が<span id="hashiru">走る</span>。</p>
+      <p class="line">とても<span id="kirei">綺麗</span>な花です。</p>
+      <p class="line"><span id="neko">猫</span>がいる。</p>
+      <!-- No entry: the first in no engine at all, the second in the suite's excerpt (Yomitan, Hachidori). -->
+      <p class="line"><span id="miss">＃＃＃</span>。</p>
+      <p class="line"><span id="kana-miss">ぬぬぬ</span>。</p>
+    </div>
+    <div class="internals" aria-hidden="true">
+      <span id="engine"></span><span id="origin"></span><span id="ready"></span>
+      <pre id="status"></pre>
+      <pre id="log"></pre>
+      <iframe id="options" title="Engine options page"></iframe>
+    </div>
+    <script>
+      /**
+       * `window.__contract`, what scripts/engine-contract.mjs drives. Each word is a `<span>` whose
+       * id names it; a lookup is made the way the overlay's controller makes it (ui/controller.js
+       * `lookupWord` → ui/overlay.js `lookupText`): the text from the word on (up to 16
+       * characters, to the end of its line), its range, its sentence and its box.
+       *
+       *   lookup(id)          `{result, ms}`: the engine's direct lookup of that word
+       *   wordRect(id)        the word's box
+       *   popup()             `{visible, rect, text}`: the engine's own pop-up, as the page shows it
+       *   place(rect|null)    Read along's full-screen placing (extensions `placePopup`, Yomitan
+       *                       popup-bridge.js `setPopupTarget`)
+       *   dismiss()           the overlay's dismissal
+       *   selection()         `{rangeCount, collapsed}` of the page's selection
+       *   opacity(id)         computed opacity of the element
+       *   stray(on)           an unrelated iframe at (200, 150), or none
+       *   reader()            Hachidori: what `HDReaderReady` resolves to (its patched lookup)
+       */
+      ;(() => {
+        const engine = document.documentElement.dataset.engine
+        const SCAN_LENGTH = 16
+        const host = () => (engine === 'yomitan' ? window.__harness?.host : window.__kimochiExtensionHost)
+
+        function ahead(id) {
+          const word = document.getElementById(id)
+          const line = word.closest('.line')
+          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+          walker.currentNode = word.firstChild
+          const range = document.createRange()
+          range.setStart(word.firstChild, 0)
+          let left = SCAN_LENGTH
+          for (let node = word.firstChild; node && left > 0; node = walker.nextNode()) {
+            const take = Math.min(left, node.length)
+            range.setEnd(node, take)
+            left -= take
+          }
+          const sentence = line.textContent
+          const before = document.createRange()
+          before.setStart(line, 0)
+          before.setEnd(word.firstChild, 0)
+          return { range, text: range.toString(), sentence, offset: before.toString().length }
+        }
+
+        const box = (rect) => (rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null)
+
+        /** The extension engines' pop-up, as host/ext/content.js `popupRect` measures it. */
+        function extensionPopup() {
+          const { popupSelector, popupParts } = host().descriptor
+          const root = document.querySelector(popupSelector)?.shadowRoot
+          if (!root) return { visible: false, rect: null, text: null }
+          let rect = null
+          const texts = []
+          for (const element of root.querySelectorAll(popupParts)) {
+            const style = getComputedStyle(element)
+            if (style.display === 'none' || style.visibility === 'hidden') continue
+            const r = element.getBoundingClientRect()
+            if (r.width <= 0 || r.height <= 0) continue
+            texts.push(element.innerText ?? '')
+            rect = rect
+              ? { left: Math.min(rect.left, r.left), top: Math.min(rect.top, r.top), right: Math.max(rect.right, r.right), bottom: Math.max(rect.bottom, r.bottom) }
+              : { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
+          }
+          if (!rect) return { visible: false, rect: null, text: null }
+          return { visible: true, rect: { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top }, text: texts.join('\n') }
+        }
+
+        let stray = null
+        let yomitanPopups = null
+        window.__contract = {
+          engine,
+          /**
+           * `lookup(id)` with the window blurred while the engine's answer is on its way, as a
+           * key grab does on Linux (Steam types the Deck's D-pad as arrow keys).
+           */
+          async lookupBlurred(id) {
+            const blur = () => window.dispatchEvent(new FocusEvent('blur'))
+            setTimeout(blur, 0)
+            return this.lookup(id)
+          },
+          async lookup(id) {
+            const { range, text, sentence, offset } = ahead(id)
+            const started = performance.now()
+            let result
+            if (engine === 'yomitan') {
+              // The controller's outline: the word's box.
+              const rect = document.getElementById(id).getBoundingClientRect()
+              const { lookupText } = await import(new URL('/spike/frontend-mode.js', location.origin).href)
+              result = await lookupText({ text, sentence, offset, rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height, vertical: false } })
+            } else {
+              result = await host().lookupText({ range, text })
+            }
+            return { result: result ?? null, ms: Math.round(performance.now() - started), text, word: document.getElementById(id).textContent }
+          },
+          wordRect: (id) => box(document.getElementById(id).getBoundingClientRect()),
+          async popup() {
+            if (engine !== 'yomitan') return extensionPopup()
+            // Yomitan's popups, from the factory as the overlay finds them (popup-bridge.js; a
+            // second caller shares the first one's set): the top-level frame's box, read now.
+            yomitanPopups ??= (await import(new URL('/spike/popup-bridge.js', location.origin).href)).observePopups({ window: 'contract' }).then((r) => r.popups)
+            const top = [...(await yomitanPopups)].find((popup) => (popup.depth ?? 0) === 0 && popup.isVisibleSync?.())
+            const frame = top?.getFrameRect?.()
+            if (!top || !frame?.valid) return { visible: false, rect: null, text: null }
+            return {
+              visible: true,
+              rect: { x: frame.left, y: frame.top, width: frame.right - frame.left, height: frame.bottom - frame.top },
+              text: top._frame?.contentDocument?.getElementById('dictionary-entries')?.innerText ?? null
+            }
+          },
+          async place(rect) {
+            if (engine !== 'yomitan') return host().placePopup(rect)
+            ;(await import(new URL('/spike/popup-bridge.js', location.origin).href)).setPopupTarget(rect)
+          },
+          dismiss: () => host().dismiss(),
+          selection() {
+            const selection = getSelection()
+            return { rangeCount: selection?.rangeCount ?? 0, collapsed: selection ? selection.isCollapsed : true }
+          },
+          opacity: (id) => getComputedStyle(document.getElementById(id)).opacity,
+          stray(on) {
+            if (on && !stray) {
+              stray = document.createElement('iframe')
+              stray.id = 'stray'
+              stray.title = 'An unrelated frame'
+              stray.srcdoc = '<p>unrelated</p>'
+              document.body.append(stray)
+            } else if (!on && stray) {
+              stray.remove()
+              stray = null
+            }
+            return box(stray?.getBoundingClientRect() ?? null)
+          },
+          /** Hachidori: the patched `kimochiClear` on the shown pop-up, and the pop-up's text after. */
+          async clear() {
+            const reader = await window.HDReaderReady
+            try {
+              return { error: null, cleared: reader.kimochiClear() }
+            } catch (error) {
+              return { error: String(error?.message ?? error) }
+            }
+          },
+          async reader() {
+            const reader = await Promise.race([window.HDReaderReady, new Promise((resolve) => setTimeout(resolve, 3000))])
+            return { ready: Boolean(reader), kimochiLookupAt: typeof reader?.kimochiLookupAt === 'function', kimochiClear: typeof reader?.kimochiClear === 'function', keys: reader ? Object.keys(reader) : [] }
+          }
+        }
+      })()
+    </script>
+  </body>
+</html>
