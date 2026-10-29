@@ -11,7 +11,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- Shortcuts can now be a single key that games rarely use: **Insert**, **Pause** or **Scroll Lock** (alone or with Shift), as well as a function key. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
+- Shortcuts can now use **Insert** alone or with Shift, as well as a function key. Windows and Linux also support **Pause** and **Scroll Lock**. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
 
 ## [0.2.1] - 2026-10-28
 

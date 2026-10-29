@@ -282,7 +282,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keys_that_stand_alone_register() {
+    fn keys_that_stand_alone_parse() {
         // What Settings records for a key on its own (`standsAlone` in accelerator.ts, #19).
         for accelerator in ["Insert", "Pause", "ScrollLock", "F8", "Shift+F8", "Shift+ScrollLock"] {
             assert!(Shortcut::from_str(accelerator).is_ok(), "{accelerator}");

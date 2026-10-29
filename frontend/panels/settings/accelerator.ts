@@ -224,6 +224,9 @@ export function acceleratorFromEvent(event: KeyComboEvent, platform: KeyPlatform
   if (isModifierOnly(event)) return null
   const key = keyToken(event)
   if (!key) return null
+  // global-hotkey's macOS backend has no native key code for either key,
+  // even with modifiers. Do not record a shortcut it cannot register.
+  if (platform === 'mac' && (key === 'Pause' || key === 'ScrollLock')) return null
   const parts: string[] = []
   if (platform === 'mac') {
     if (event.metaKey) parts.push('CommandOrControl')
