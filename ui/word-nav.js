@@ -44,6 +44,27 @@ export function tokensFromParse(text, content) {
   return tokens
 }
 
+/**
+ * Tokens from Hachidori's `hd_segment` spans (`{start, length}` in `text`): each span is the
+ * word a lookup there matches; text between spans is a gap the reader does not stop on.
+ */
+export function tokensFromSpans(text, spans) {
+  const tokens = []
+  let offset = 0
+  const ordered = [...(spans ?? [])]
+    .filter((span) => Number.isInteger(span?.start) && Number.isInteger(span?.length) && span.length > 0)
+    .sort((a, b) => a.start - b.start)
+  for (const { start, length } of ordered) {
+    if (start < offset || start + length > text.length) continue
+    if (start > offset) tokens.push({ start: offset, end: start, text: text.slice(offset, start), word: false })
+    const value = text.slice(start, start + length)
+    tokens.push({ start, end: start + length, text: value, word: isWordText(value) })
+    offset = start + length
+  }
+  if (offset < text.length) tokens.push({ start: offset, end: text.length, text: text.slice(offset), word: false })
+  return tokens
+}
+
 /** Tokens from the platform's word segmenter, when there is no dictionary to ask. */
 export function tokensFromSegmenter(text, Segmenter = globalThis.Intl?.Segmenter) {
   if (!Segmenter) {
@@ -112,7 +133,8 @@ const OKURIGANA_MAX = 6
 const PARTICLE_START = /[をのがへはや]/
 
 /**
- * Split `text` into tokens, asking `parse` (Yomitan's `parseText`) first.
+ * Split `text` into tokens, asking `parse` first: Yomitan's `parseText` results, or
+ * `{ spans }` from Hachidori's `hd_segment` (`tokensFromSpans`).
  *
  * A parse that matches nothing in Japanese text means there is no usable dictionary — none
  * installed, or lookups served by another app — so the segmenter's answer is better than a
@@ -123,8 +145,9 @@ export async function segmentText(text, parse) {
   if (parse) {
     try {
       const results = await parse(text)
-      const scanning = (results ?? []).find((result) => result?.source === 'scanning-parser')
-      const tokens = tokensFromParse(text, scanning?.content)
+      const tokens = Array.isArray(results?.spans)
+        ? tokensFromSpans(text, results.spans)
+        : tokensFromParse(text, (results ?? []).find((result) => result?.source === 'scanning-parser')?.content)
       if (tokens.some((token) => token.word) || !JAPANESE.test(text)) return tokens
     } catch {
       // Fall through to the segmenter: a backend that is not ready yet must not leave the

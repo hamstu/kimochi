@@ -284,11 +284,14 @@ export function installApp(win, { engine, descriptor }) {
   }
   api.observePopup = (callback) => watchPopup(win, descriptor, callback)
   api.isPopupVisible = () => Boolean(driver?.visible())
-  api.lookupRange = async (range) => {
-    if (!contentRunning || !driver) return false
-    // The same gate a pointer lookup meets. 10ten's lookup is a pointer move, so the scope
-    // wrappers already refuse it; Hachidori's is a selection plus `scanTextAtSelection`, which
-    // never hit-tests, and would otherwise look up text outside the scope or while disabled.
+  /** Hachidori: the words a lookup would match in `text` (its `hd_segment`), else null. */
+  api.segment = async (text) => (contentRunning && driver?.segment ? driver.segment(text) : null)
+  /**
+   * The same gate a pointer lookup meets. 10ten's pointer lookup hits the scope wrappers; the
+   * controller's lookups never hit-test, and would otherwise look up text outside the scope or
+   * while disabled.
+   */
+  const lookupAllowed = (range) => {
     if (!scopeState.enabled) return false
     if (scopeState.scope) {
       const start = range?.startContainer
@@ -297,11 +300,34 @@ export function installApp(win, { engine, descriptor }) {
       if (!line) return false
       scopeState.lastTarget = line
     }
+    return true
+  }
+  api.lookupRange = async (range) => {
+    if (!contentRunning || !driver) return false
+    // The same gate a pointer lookup meets. 10ten's lookup is a pointer move, so the scope
+    // wrappers already refuse it; Hachidori's is a selection plus `scanTextAtSelection`, which
+    // never hit-tests, and would otherwise look up text outside the scope or while disabled.
+    if (!lookupAllowed(range)) return false
     try {
       return await driver.lookupRange(range)
     } catch (error) {
       report({ check: 'ext-host-lookup-failed', error: describe(error) })
       return false
+    }
+  }
+  /**
+   * Read along's lookup of the text from `range` on (`text`, the same characters): the engine's
+   * own lookup and pop-up, asked for directly (content.js `lookupText`). `{shown, length}`, or
+   * null when this engine cannot, for `lookupRange` instead.
+   */
+  api.lookupText = async ({ range, text }) => {
+    if (!contentRunning || !driver || !range) return { shown: false, length: null }
+    if (!lookupAllowed(range)) return { shown: false, length: null }
+    try {
+      return await driver.lookupText({ range, text: String(text ?? range.toString()) })
+    } catch (error) {
+      report({ check: 'ext-host-lookup-failed', error: describe(error) })
+      return { shown: false, length: null }
     }
   }
   api.matchedRange = () => driver?.matched() ?? null
