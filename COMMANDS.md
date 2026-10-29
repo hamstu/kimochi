@@ -549,6 +549,10 @@ fixes.
 
 All of them emit `hotkey` `{name, seq}`; everything beyond the native part above is the
 renderer's decision.
+With Quick Shot on, a `triggerScan` that arrives while its region editor is up does not
+start another: with no box drawn it cancels (as Escape), with one it scans it (as Return), and
+mid-drag, or within 300 ms of the editor opening, it does nothing (`shortcutPressOutcome` in
+`ui/region-select.js`). It is keyed on the action, so every trigger behaves the same.
 
 Accelerators use Electron's exact syntax and defaults from `src/shared/defaults.ts`.
 Verified against the parser rather than assumed: `global-hotkey` accepts

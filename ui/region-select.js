@@ -12,7 +12,9 @@
  * slides left near its right side, so it is always on screen. Letting go does not commit: the box
  * becomes editable — drag inside or on the foot to move it, drag an edge or corner to resize, the
  * arrow keys nudge it — and Return, a double-click inside, or the foot's confirm button commits.
- * Escape cancels at any point. Dragging outside an existing box starts a new one.
+ * Escape cancels at any point. Dragging outside an existing box starts a new one. A caller can
+ * forward its own trigger with `shortcutPressed` (Quick Shot's shortcut pressed again): it cancels
+ * while there is no box and confirms once there is.
  *
  * ## Limits and a picture
  *
@@ -193,6 +195,27 @@ function isRect(value) {
 const bigEnough = (rect) =>
   isRect(rect) && rect.width >= MINIMUM_DRAG && rect.height >= MINIMUM_DRAG
 
+/**
+ * How long after the editor opens a press of the shortcut that opened it is ignored. Every native
+ * trigger already reports one press per physical press (none passes on auto-repeat), so this only
+ * guards against the opening press arriving twice or a held trigger bouncing.
+ */
+export const SHORTCUT_SETTLE_MS = 300
+
+/**
+ * What a press of the shortcut that opened the editor does while it is up (Quick Shot): with no
+ * box worth confirming it cancels, as Escape does; with one it confirms, as Return does. Mid-drag
+ * it does nothing: the box is still being shaped, and letting go and pressing again confirms it.
+ *
+ * @param {{running: boolean, dragging: boolean, box: boolean, openFor: number}} editor `openFor`
+ *   is how long it has been up, in milliseconds.
+ * @returns {'cancel' | 'confirm' | 'ignore'}
+ */
+export function shortcutPressOutcome({ running, dragging, box, openFor }) {
+  if (!running || dragging || !(openFor >= SHORTCUT_SETTLE_MS)) return 'ignore'
+  return box ? 'confirm' : 'cancel'
+}
+
 function systemTheme() {
   try {
     return globalThis.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
@@ -285,6 +308,7 @@ export class RegionSelect {
     this._editing = false
     this._gesture = null
     this._settle = null
+    this._startedAt = 0
     this._detach = []
   }
 
@@ -477,6 +501,7 @@ export class RegionSelect {
     this._rect = null
     this._editing = false
     this._pristine = false
+    this._startedAt = performance.now()
     this._render()
     if (this._initial) this.reset(this._initial)
     this._publishHitRects()
@@ -528,6 +553,22 @@ export class RegionSelect {
           }
         : { action, local, desktop: null, bounds: null }
     )
+  }
+
+  /**
+   * The shortcut that opened the editor was pressed again: cancel or confirm through the same
+   * paths as Escape and Return, as `shortcutPressOutcome` decides. Returns what it did.
+   */
+  shortcutPressed(now = performance.now()) {
+    const outcome = shortcutPressOutcome({
+      running: Boolean(this._settle),
+      dragging: this.dragging,
+      box: this._editing && bigEnough(this._rect),
+      openFor: now - this._startedAt
+    })
+    if (outcome === 'confirm') this.confirm()
+    else if (outcome === 'cancel') this.cancel()
+    return outcome
   }
 
   /** Cancels a running editor; its promise resolves with null. Safe to call when inactive. */
@@ -1369,4 +1410,4 @@ export async function selectRegion(target = {}, options = {}) {
   }
 }
 
-export default { RegionSelect, selectRegion, stickTravel, MINIMUM_DRAG }
+export default { RegionSelect, selectRegion, stickTravel, shortcutPressOutcome, MINIMUM_DRAG, SHORTCUT_SETTLE_MS }
