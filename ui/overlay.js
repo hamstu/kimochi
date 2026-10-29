@@ -366,6 +366,8 @@ controller = createController({
       : (setting('yomitanSettings')?.popupType ?? 'builtin') !== 'custom-api',
   redraw: () => draw(),
   dictionary: () => extensionApi,
+  // Hachidori's own split of a scan into words (null for the other engines).
+  segment: (text) => (extensionHosted ? extensionHost()?.segment?.(text) ?? null : null),
   popupType: () => setting('yomitanSettings')?.popupType ?? 'builtin',
   buttons: () => setting('controllerButtons'),
   appearance: () => setting('appearance'),
@@ -377,6 +379,13 @@ controller = createController({
     extensionHosted
       ? (await extensionHost()?.lookupRange(range)) ?? false
       : (await import('/spike/frontend-mode.js')).lookupRange(range),
+  // Read along's direct lookup (ui/controller.js `lookupWord`): `{shown, length}`, or null when
+  // the engine has none here and `lookupRange` stands in.
+  lookupText: async (request) => {
+    if (extensionHosted) return (await extensionHost()?.lookupText?.(request)) ?? null
+    const frontendMode = await import('/spike/frontend-mode.js')
+    return typeof frontendMode.lookupText === 'function' ? frontendMode.lookupText(request) : null
+  },
   lookupTerm,
   apiParse: (text) => apiTokenize(text),
   // What an extension engine's lookup matched (Hachidori, 10ten); Yomitan's own selection already

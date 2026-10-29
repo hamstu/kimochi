@@ -270,7 +270,9 @@ pub fn keyboard(window: &tauri::WebviewWindow, on: bool) -> Result<(), String> {
     if on {
         hide_controls(window)?;
     }
-    if on && managed() && window.label()=="overlay" {
+    // Only as controller mode takes the input: its 500 ms renewals land here too, and one
+    // arriving as the main window opens would put the game back over Kimochi.
+    if on && managed() && window.label()=="overlay" && !EDITING.load(Ordering::SeqCst) {
         if let Some(game)=super::gamescope_handoff::game_id() { super::gamescope_handoff::select(game)?; }
     }
     input(window, on)?;

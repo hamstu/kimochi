@@ -466,3 +466,56 @@ test("leaving reading leaves Show overlay as it was", async (t) => {
   assert.equal(h.controller.mode, "idle");
   assert.deepEqual(h.textVisible, [], "the overlay's own switch is never turned off");
 });
+
+test("read along asks the engine for each word directly, and says so when it has no entry", async (t) => {
+  const asked = [];
+  const h = controllerHarness(t, async () => [{ id: "old", text: "猫 犬" }], {
+    lookupText: async (request) => {
+      asked.push({ text: request.text, sentence: request.sentence, offset: request.offset });
+      return request.text.startsWith("猫") ? { shown: true, length: 1 } : { shown: false, length: 0 };
+    },
+  });
+  await h.controller.recentText();
+  await h.press(0);
+  assert.equal(h.controller.mode, "words");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(asked[0], { text: "猫 犬", sentence: "猫 犬", offset: 0 });
+  await h.press(15);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(asked.at(-1), { text: "犬", sentence: "猫 犬", offset: 2 });
+  assert.ok(h.host.textContent.includes("No entry for 犬"), "a miss is said, not left to look like a hang");
+  assert.deepEqual(h.lookups, [], "no pointer-style lookup while the engine answers directly");
+  assert.ok(h.logs.some((record) => record.check === "controller-lookup" && record.direct === true && record.length === 0));
+});
+
+test("by character, the outline covers what the dictionary matched while the cursor stays on its character", async (t) => {
+  const asked = [];
+  const h = controllerHarness(t, async () => [{ id: "old", text: "時よ過ぎゆけ" }], {
+    lookupText: async (request) => {
+      asked.push(request.offset);
+      return { shown: true, length: request.text.startsWith("よ過ぎ") ? 3 : 1 };
+    },
+  });
+  await h.controller.recentText();
+  await h.press(0);
+  await new Promise((resolve) => setImmediate(resolve));
+  await h.press(3); // Y: by character
+  await h.press(15);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(asked.at(-1), 1, "looked up from よ, where the reader put it");
+  assert.ok(h.logs.some((record) => record.check === "controller-fit-match" && record.character && record.length === 3));
+  // The next step is the next character, 過, not past the match.
+  await h.press(15);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(asked.at(-1), 2);
+});
+
+test("read along falls back to the pointer-style lookup for an engine without a direct one", async (t) => {
+  const h = controllerHarness(t, async () => [{ id: "old", text: "猫 犬" }], {
+    lookupText: async () => null,
+  });
+  await h.controller.recentText();
+  await h.press(0);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(h.lookups, ["猫 犬"]);
+});

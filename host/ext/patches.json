@@ -1,0 +1,35 @@
+{
+  "//": [
+    "Edits Kimochi makes to an extension's files as it serves them (src-tauri/src/extensions.rs and,",
+    "for the dev server, scripts/extension-patches.mjs). Keep these to a minimum: each is a single",
+    "exact `find` that must occur once in the pinned file; a file where it does not is served",
+    "unpatched and the host falls back to its older path. `requires` names what the replacement",
+    "calls inside the file, so an upstream rename is caught by scripts/extension-patches.test.mjs",
+    "before it ships, and the engine contract suite (npm run test:engines) checks the result in a",
+    "real browser. Run both after moving a pin (scripts/sync-extension.mjs)."
+  ],
+  "patches": [
+    {
+      "id": "hachidori-lookup-at",
+      "engine": "hachidori",
+      "file": "content.js",
+      "why": "Read along looks a word up by its place in the text, the way a hover there would, with no pointer events, key presses or selection (host/ext/content.js lookupText). Hachidori exposes only scanSelectedText, which needs a selection. kimochiClear empties the pop-up as the next word's answer arrives, through the pop-up's own clear: Hachidori would otherwise restyle and lay out the last word's entries once more before replacing them, which doubled each step's time on a Steam Deck. It answers whether Hachidori will still draw that answer: a lookup it dropped meanwhile (a window blur cancels one in flight) is asked for again, and its pop-up is not left emptied.",
+      "find": "const reader = Object.freeze({ scanSelectedText });",
+      "replace": "const reader = Object.freeze({ scanSelectedText, kimochiLookupAt(node, offset) { if (disposed || !options.hoverEnabled || !node) return false; const candidate = resolveCandidateAt(node, offset); if (!candidate) return false; clearScanTimer(); cancelScanDwell(); clearHideTimer(); activeSelectionCandidate = null; lookupCandidate(candidate); return true; }, kimochiClear() { if (disposed || !pendingCandidateLookup || pendingCandidateLookup.token !== rootLevel.lookupToken) return false; if (rootLevel.popup && !rootLevel.popup.hidden) rootLevel.view?.clear(); return true; } });",
+      "requires": [
+        "let disposed",
+        "let options",
+        "let activeSelectionCandidate",
+        "function resolveCandidateAt(startNode, startOffset)",
+        "function clearScanTimer()",
+        "function cancelScanDwell()",
+        "function clearHideTimer()",
+        "function lookupCandidate(candidate",
+        "const rootLevel",
+        "rootLevel.view.clear()",
+        "let pendingCandidateLookup",
+        "globalThis.HDReaderReady"
+      ]
+    }
+  ]
+}
