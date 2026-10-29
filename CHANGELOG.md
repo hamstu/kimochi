@@ -17,6 +17,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - Shortcuts can now use **Insert** alone or with Shift, as well as a function key. Windows and Linux also support **Pause** and **Scroll Lock**. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
 
+- Quick Shot on Windows now accepts Escape to cancel and Enter to scan while your game is focused, even without a window source selected.
 - Fixed: on Linux, including the Steam Deck, Hachidori showed "No dictionary has an entry" for many common words (今日, 大人, ですね…): its lookups failed whenever a result needed its furigana table.
 - Reading along with a controller asks the dictionary for each word directly, in both the pop-up and full-screen styles and with every dictionary: no more pop-ups that never appear, entries from the previous word, or text left selected. A word with no entry now says so.
 - Hachidori: reading along stops on the words Hachidori itself finds.
