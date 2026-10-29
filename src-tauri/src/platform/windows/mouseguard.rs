@@ -92,6 +92,13 @@ fn captures_key(owned: bool, down: bool, was_down: bool, modal: bool, hover: boo
     owned || down && !was_down && (modal && (ours || source) || hover && source && !ours)
 }
 
+/// Quick Shot has a display, not a source HWND. Its editing keys must still reach the
+/// selector while a foreign application owns the keyboard. Keep ordinary typing and
+/// system escape routes subject to the existing focus policy.
+fn region_key_target(region: bool, key: u32, source: bool) -> bool {
+    source || region && matches!(key, 13 | 27 | 32)
+}
+
 pub(super) fn primary_down() -> Option<bool> {
     PRIMARY_DOWN.load(Ordering::Relaxed).then_some(true)
 }
@@ -322,7 +329,7 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
                 let owned = hook.key_owners[key as usize];
                 let was_down = hook.keys_down[key as usize];
                 hook.keys_down[key as usize] = down;
-                if !captures_key(owned, down, was_down, region || nav, hover, ours, source) { return false; }
+                if !captures_key(owned, down, was_down, region || nav, hover, ours, region_key_target(region, key, source)) { return false; }
                 if down && (region || nav) && key_name(key).is_some()
                     && hook.keys.try_send((key, true, region, nav)).is_err() { return owned; }
                 if up { let _ = hook.keys.try_send((key, false, region, nav)); }
@@ -340,6 +347,24 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quick_shot_editing_keys_work_with_a_foreign_foreground_and_no_window_source() {
+        // Quick Shot leaves the game focused and its full-display target has source == 0.
+        // Previously Escape was delivered to that game, leaving the selector stuck open.
+        for key in [13, 27, 32] {
+            let target = region_key_target(true, key, false);
+            assert!(captures_key(false, true, false, true, false, false, target));
+            // Closing the selector on key-down must not leak the matching release.
+            assert!(captures_key(true, false, true, false, false, false, false));
+            assert!(!captures_key(false, true, false, false, false, false,
+                region_key_target(false, key, false)));
+        }
+        for key in [9, 18, 65, 91, 162] {
+            assert!(!captures_key(false, true, false, true, false, false,
+                region_key_target(true, key, false)), "foreign app keeps key {key}");
+        }
+    }
 
     #[test]
     fn a_claimed_key_keeps_its_release_after_the_menu_closes_or_focus_changes() {
