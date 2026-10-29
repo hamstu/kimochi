@@ -1,0 +1,11 @@
+{
+  "identifier": "dev.kimochi.e2e",
+  "productName": "Kimochi E2E",
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["kimochi-e2e"]
+      }
+    }
+  }
+}
