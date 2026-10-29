@@ -288,6 +288,7 @@ async function startExtensionServers(server: ViteDevServer, middleware: Middlewa
       continue
     }
     const http = createExtensionServer({
+      engine: id,
       extRoot,
       spikeRoot: path.join(dist, 'spike'),
       mime: MIME,

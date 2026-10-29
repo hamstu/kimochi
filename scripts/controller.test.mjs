@@ -19,6 +19,7 @@ import {
   segmentText,
   tokensFromParse,
   tokensFromSegmenter,
+  tokensFromSpans,
   readingUnits,
   dominantVertical,
   segmentAcross
@@ -215,6 +216,31 @@ test('a parse that matches nothing in Japanese falls back to the segmenter', asy
   ])
   assert.ok(tokens.filter((token) => token.word).length > 1)
   assert.equal(tokens.map((token) => token.text).join(''), text)
+})
+
+test("Hachidori's own segments are the reader's stops, gaps between them skipped", async () => {
+  // hd_segment on the Deck for this text (2026-10-28): 今日は, いい天気, ですね; 。 unmatched.
+  const text = '今日はいい天気ですね。'
+  const spans = [
+    { start: 7, length: 3, functionWord: true },
+    { start: 0, length: 3, functionWord: false },
+    { start: 3, length: 4, functionWord: false }
+  ]
+  const tokens = await segmentText(text, async () => ({ spans }))
+  assert.deepEqual(
+    tokens.map((token) => [token.text, token.start, token.word]),
+    [
+      ['今日は', 0, true],
+      ['いい天気', 3, true],
+      ['ですね', 7, true],
+      ['。', 10, false]
+    ]
+  )
+  assert.deepEqual(
+    tokensFromSpans('あいう', [{ start: 1, length: 1 }, { start: 0, length: 2 }, { start: 2, length: 5 }]).map((t) => [t.text, t.word]),
+    [['あい', true], ['う', false]],
+    'a span overlapping an earlier one, or running past the text, is ignored'
+  )
 })
 
 test('a failing parser falls back rather than leaving nothing to step through', async () => {
