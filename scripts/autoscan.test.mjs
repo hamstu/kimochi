@@ -672,6 +672,37 @@ test('a capture failure is reported and the loop survives it', async () => {
   assert.equal(h.state.recognizeCalls.length, 1)
 })
 
+test('a minimised source window is waited out, never suspends the loop, and is read on return', async () => {
+  // #2: an exclusive-fullscreen game minimises whenever the reader clicks into Kimochi, so a
+  // minimised window is the normal state while Auto OCR is being switched on.
+  const h = harness({ errorBackoffMs: 2000, maxErrorBackoffMs: 30000, maxConsecutiveErrors: 3 })
+  h.state.captureError = 'gone: hidden: Window is minimized; restore it before capturing.'
+  for (let i = 0; i < 20; i++) await h.step(5000)
+
+  assert.notEqual(h.scanner.state, 'suspended', 'a minute and a half away is not a failure')
+  assert.equal(h.scanner.stats().captureErrors, 0)
+  assert.equal(h.state.events.filter((e) => e.type === 'error').length, 0)
+  const waits = h.state.events.filter((e) => e.type === 'skip' && e.reason === 'hidden')
+  assert.ok(waits.length > 0)
+  assert.equal(waits[0].detail, 'Window is minimized; restore it before capturing.')
+  // It keeps looking at the base backoff rather than growing it.
+  assert.equal(await h.step(500), 'backoff')
+  assert.equal(await h.step(2000), 'backoff', 'still out of view: wait another base backoff')
+
+  h.state.captureError = null
+  h.sees('戻ってきた')
+  await h.step(2000)
+  await h.step(2000)
+  assert.equal(h.state.recognizeCalls.length, 1, 'the game is read as soon as it is back')
+})
+
+test('a closed source still counts towards suspension', async () => {
+  const h = harness({ maxConsecutiveErrors: 3 })
+  h.state.captureError = 'gone: Source has closed or disconnected. Refresh sources and select again.'
+  for (let i = 0; i < 3; i++) await h.step(60000)
+  assert.equal(h.scanner.state, 'suspended')
+})
+
 // --- platform availability -------------------------------------------------
 
 test('a platform with no observer reports automatic mode unavailable and uploads nothing', async () => {

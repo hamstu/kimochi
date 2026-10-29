@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Auto OCR no longer turns itself off when the game window is minimised. Exclusive-fullscreen games minimise as soon as you click into Kimochi; Auto OCR now waits for the game and starts reading again when you return to it.
+
 ## [0.2.1] - 2026-10-28
 
 ### Added
