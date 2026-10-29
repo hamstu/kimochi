@@ -458,6 +458,14 @@ await window.__TAURI__?.event?.listen('popup-host:pointer', ({ payload }) => {
   })
 })
 
+// On Windows the mouse hook (mouseguard.rs) consumes every press on this window's region before
+// the window sees it, and sends it here instead. Without this listener a click on the popup — its
+// Anki buttons, audio, links — reaches nothing at all.
+if (window.__KIMOCHI_PLATFORM__?.os === 'windows') {
+  const { installWindowsPointer } = await import('/spike/windows-pointer.js')
+  await installWindowsPointer(window, () => placed.keys())
+}
+
 // A monitor added, removed or rearranged changes which work area a popup belongs in.
 await window.__TAURI__?.event?.listen('display-layout', () => void refreshDisplays())
 

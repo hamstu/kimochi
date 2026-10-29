@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows: clicks on the Log's dictionary pop-up now work.** Buttons like **Add to Anki** and audio used to do nothing when clicked.
+
 ## [0.2.1] - 2026-10-28
 
 ### Added

@@ -50,3 +50,15 @@ test('dictionary button in a closed-shadow popup receives local frame coordinate
   assert.equal(f.received.at(-1).type, 'click')
   assert.deepEqual([f.received.at(-1).clientX, f.received.at(-1).clientY], [18, 27])
 })
+
+test('every window the Windows mouse hook delivers to replays the presses it consumed', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
+  const guard = await read('src-tauri/src/platform/windows/mouseguard.rs')
+  const labels = JSON.parse(guard.match(/for label in (\[[^\]]+\])/)[1])
+  const pages = { overlay: 'ui/overlay.js', 'popup-host': 'ui/popup-host.js' }
+  assert.deepEqual(labels.toSorted(), Object.keys(pages).toSorted())
+  for (const label of labels) {
+    assert.match(await read(pages[label]), /installWindowsPointer\(/, `${label} drops every click on Windows`)
+  }
+})
