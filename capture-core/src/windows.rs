@@ -109,8 +109,14 @@ mod wgc {
     use std::sync::{Arc, Condvar, Mutex};
     use std::time::{Duration, Instant};
 
-    use ::windows::core::{BOOL, PWSTR};
+    use ::windows::core::{Interface, BOOL, PWSTR};
     use ::windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT, TRUE};
+    use ::windows::Win32::Graphics::Direct3D11::{
+        ID3D11Device, ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
+        D3D11_CPU_ACCESS_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_TEXTURE2D_DESC,
+        D3D11_USAGE_STAGING,
+    };
+    use ::windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC;
     use ::windows::Win32::Graphics::Dwm::{
         DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
     };
@@ -408,10 +414,106 @@ mod wgc {
         generation: u64,
     }
 
+    /// The newest frame as WGC delivered it, copied on the GPU into a texture the CPU
+    /// can map. Reading it back and converting it waits for a capture that asks: a
+    /// game presenting 20 frames a second would otherwise cost a full readback and
+    /// conversion each (about a CPU core at 6880×2880, #40) for frames nobody reads.
+    struct GpuFrame {
+        texture: ID3D11Texture2D,
+        context: ID3D11DeviceContext,
+        width: u32,
+        height: u32,
+        generation: u64,
+    }
+
+    // SAFETY: the texture is only touched under `Slot::frames`, and the device's
+    // immediate context is multithread-protected before a frame is kept on the GPU
+    // (`Handler::protected`), so the capture thread may map it.
+    unsafe impl Send for GpuFrame {}
+
+    impl GpuFrame {
+        fn read(&self) -> Option<LatestFrame> {
+            let (width, height) = (self.width, self.height);
+            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+            unsafe {
+                self.context
+                    .Map(&self.texture, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
+                    .ok()?;
+            }
+            // Mapped staging textures pad rows to the driver's pitch.
+            let stride = mapped.RowPitch as usize;
+            let row_bytes = width as usize * 4;
+            let pixels = (stride >= row_bytes && !mapped.pData.is_null()).then(|| {
+                let len = stride * (height as usize - 1) + row_bytes;
+                let raw = unsafe { std::slice::from_raw_parts(mapped.pData as *const u8, len) };
+                bgra_crop_to_rgba(raw, stride, [0, 0, width, height])
+            });
+            unsafe { self.context.Unmap(&self.texture, 0) };
+            Some(LatestFrame {
+                pixels: pixels?,
+                width,
+                height,
+                generation: self.generation,
+            })
+        }
+    }
+
+    fn staging_texture(
+        device: &ID3D11Device,
+        source: &D3D11_TEXTURE2D_DESC,
+    ) -> ::windows::core::Result<Option<ID3D11Texture2D>> {
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: source.Width,
+            Height: source.Height,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: source.Format,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_STAGING,
+            BindFlags: 0,
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            MiscFlags: 0,
+        };
+        let mut texture = None;
+        unsafe { device.CreateTexture2D(&desc, None, Some(&mut texture))? };
+        Ok(texture)
+    }
+
+    #[derive(Default)]
+    struct Frames {
+        gpu: Option<GpuFrame>,
+        /// The last frame read back, reused until a newer one arrives.
+        latest: Option<Arc<LatestFrame>>,
+    }
+
+    impl Frames {
+        fn newest(&self) -> u64 {
+            self.gpu
+                .as_ref()
+                .map(|g| g.generation)
+                .max(self.latest.as_ref().map(|f| f.generation))
+                .unwrap_or(0)
+        }
+        /// The newest frame as pixels, reading the GPU copy back if it is newer.
+        fn resolve(&mut self) -> Option<Arc<LatestFrame>> {
+            if let Some(gpu) = &self.gpu {
+                if self.latest.as_ref().is_none_or(|f| f.generation < gpu.generation) {
+                    if let Some(frame) = gpu.read() {
+                        self.latest = Some(Arc::new(frame));
+                    }
+                }
+            }
+            self.latest.clone()
+        }
+    }
+
     /// What a session's handler shares with captures and with its idle timer.
     #[derive(Default)]
     struct Slot {
-        latest: Mutex<Option<Arc<LatestFrame>>>,
+        frames: Mutex<Frames>,
         arrived: Condvar,
         generation: AtomicU64,
         /// The session has stopped, failed, or its item closed: nothing more comes.
@@ -437,24 +539,27 @@ mod wgc {
         }
         /// The newest frame newer than generation `after`, waiting up to `limit`.
         fn wait_newer(&self, after: u64, limit: Duration) -> Option<Arc<LatestFrame>> {
-            let latest = self.latest.lock().unwrap();
-            let (latest, _) = self
+            let frames = self.frames.lock().unwrap();
+            let (mut frames, _) = self
                 .arrived
-                .wait_timeout_while(latest, limit, |frame| {
-                    frame.as_ref().is_none_or(|f| f.generation <= after)
-                        && !self.ended.load(Ordering::SeqCst)
+                .wait_timeout_while(frames, limit, |frames| {
+                    frames.newest() <= after && !self.ended.load(Ordering::SeqCst)
                 })
                 .unwrap();
-            latest.clone().filter(|f| f.generation > after)
+            frames.resolve().filter(|f| f.generation > after)
         }
         fn current(&self) -> Option<Arc<LatestFrame>> {
-            self.latest.lock().unwrap().clone()
+            self.frames.lock().unwrap().resolve()
         }
     }
 
     /// Runs on the session's own thread (windows-capture's message loop).
     struct Handler {
         slot: Arc<Slot>,
+        /// The immediate context is multithread-protected, so frames may stay on the
+        /// GPU for the capture thread to map. Without it (it never fails on the
+        /// Windows versions WGC runs on), each frame is read back here as before.
+        protected: Option<bool>,
     }
 
     impl GraphicsCaptureApiHandler for Handler {
@@ -462,7 +567,10 @@ mod wgc {
         type Error = String;
 
         fn new(ctx: Context<Self::Flags>) -> std::result::Result<Self, Self::Error> {
-            Ok(Self { slot: ctx.flags })
+            Ok(Self {
+                slot: ctx.flags,
+                protected: None,
+            })
         }
 
         fn on_frame_arrived(
@@ -474,22 +582,42 @@ mod wgc {
             if width == 0 || height == 0 || u64::from(width) * u64::from(height) > MAX_PIXELS {
                 return Ok(());
             }
-            let mut buffer = frame.buffer().map_err(|e| e.to_string())?;
-            // Mapped staging textures pad rows to the driver's pitch.
-            let stride = buffer.row_pitch() as usize;
-            let raw = buffer.as_raw_buffer();
-            let row_bytes = width as usize * 4;
-            if stride < row_bytes || raw.len() < stride * (height as usize - 1) + row_bytes {
-                return Ok(());
+            let context = frame.device_context();
+            let protected = *self.protected.get_or_insert_with(|| {
+                context
+                    .cast::<ID3D11Multithread>()
+                    .map(|m| unsafe { m.SetMultithreadProtected(true) })
+                    .is_ok()
+            });
+            {
+                let mut frames = self.slot.frames.lock().unwrap();
+                // One staging texture per session, replaced when the source resizes.
+                let reuse = frames
+                    .gpu
+                    .take()
+                    .filter(|g| (g.width, g.height) == (width, height))
+                    .map(|g| g.texture);
+                let texture = match reuse {
+                    Some(texture) => texture,
+                    None => match staging_texture(frame.device(), frame.desc()) {
+                        Ok(Some(texture)) => texture,
+                        Ok(None) => return Ok(()),
+                        Err(e) => return Err(e.to_string()),
+                    },
+                };
+                unsafe { context.CopyResource(&texture, frame.as_raw_texture()) };
+                let generation = self.slot.generation.fetch_add(1, Ordering::SeqCst) + 1;
+                frames.gpu = Some(GpuFrame {
+                    texture,
+                    context: context.clone(),
+                    width,
+                    height,
+                    generation,
+                });
+                if !protected {
+                    frames.resolve();
+                }
             }
-            let pixels = bgra_crop_to_rgba(raw, stride, [0, 0, width, height]);
-            let generation = self.slot.generation.fetch_add(1, Ordering::SeqCst) + 1;
-            *self.slot.latest.lock().unwrap() = Some(Arc::new(LatestFrame {
-                pixels,
-                width,
-                height,
-                generation,
-            }));
             self.slot.arrived.notify_all();
             Ok(())
         }
