@@ -72,6 +72,33 @@ test('converts key presses to Tauri accelerators', () => {
   assert.equal(acceleratorFromEvent(press('Comma', ',', { metaKey: true }), 'mac'), 'CommandOrControl+,')
 })
 
+test('keys that type nothing can be a shortcut on their own or with Shift (#19)', () => {
+  for (const platform of ['windows', 'linux', 'mac']) {
+    assert.equal(acceleratorFromEvent(press('Insert', 'Insert'), platform), 'Insert')
+    assert.equal(acceleratorFromEvent(press('Pause', 'Pause'), platform), platform === 'mac' ? null : 'Pause')
+    assert.equal(acceleratorFromEvent(press('ScrollLock', 'ScrollLock'), platform), platform === 'mac' ? null : 'ScrollLock')
+    assert.equal(acceleratorFromEvent(press('F8', 'F8', { shiftKey: true }), platform), 'Shift+F8')
+    assert.equal(acceleratorFromEvent(press('Insert', 'Insert', { shiftKey: true }), platform), 'Shift+Insert')
+  }
+  assert.deepEqual(acceleratorCaps('Insert', 'windows'), ['Ins'])
+  assert.deepEqual(acceleratorCaps('Shift+ScrollLock', 'windows'), ['Shift', 'ScrLk'])
+  assert.deepEqual(acceleratorCaps('Pause', 'linux'), ['Pause'])
+  // Keys that move the cursor or scroll stay modifier-only: taking them globally breaks every app.
+  for (const [code, key] of [['Home', 'Home'], ['PageDown', 'PageDown'], ['ArrowUp', 'ArrowUp'], ['Space', ' '], ['Enter', 'Enter'], ['Digit8', '8']]) {
+    assert.equal(acceleratorFromEvent(press(code, key), 'windows'), null, code)
+  }
+})
+
+test('macOS rejects unsupported Pause and Scroll Lock even with modifiers', () => {
+  for (const key of ['Pause', 'ScrollLock']) {
+    for (const modifiers of [{}, { shiftKey: true }, { ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      assert.equal(acceleratorFromEvent(press(key, key, modifiers), 'mac'), null)
+    }
+    assert.equal(acceleratorFromEvent(press(key, key, { shiftKey: true }), 'windows'), `Shift+${key}`)
+    assert.equal(acceleratorFromEvent(press(key, key, { ctrlKey: true }), 'linux'), `CommandOrControl+${key}`)
+  }
+})
+
 test('rejects keys that cannot be global shortcuts', () => {
   assert.equal(acceleratorFromEvent(press('KeyA', 'a'), 'mac'), null)
   assert.equal(acceleratorFromEvent(press('KeyA', 'A', { shiftKey: true }), 'mac'), null)
