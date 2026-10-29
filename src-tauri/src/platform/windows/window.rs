@@ -64,7 +64,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IDC_HELP, IDC_IBEAM, IDC_NO, IDC_SIZEALL, IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE,
     IDC_WAIT, MA_NOACTIVATE, SMTO_ABORTIFHUNG, SMTO_ERRORONEXIT, STYLESTRUCT, SWP_FRAMECHANGED,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, SW_SHOWNA, WA_INACTIVE,
-    WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NULL, WM_STYLECHANGING,
+    SC_KEYMENU, WINDOWPOS, WM_ACTIVATE, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NULL, WM_STYLECHANGING,
+    WM_SYSCOMMAND,
     WM_WINDOWPOSCHANGING, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
     WS_EX_TOPMOST, WS_EX_TRANSPARENT,
 };
@@ -530,6 +531,46 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
     Ok(applied & PANEL_EX == PANEL_EX)
 }
 
+/// Our subclass id for `ignore_key_menu`.
+const KEY_MENU_SUBCLASS_ID: usize = 0x4B49_4D41; // "KIMA"
+
+/// Stop a lone Alt press from opening a window's (absent) menu. `DefWindowProc` turns it
+/// into `SC_KEYMENU`, a modal menu loop on the UI thread: the window ignores the keyboard
+/// and WebView2 stalls (its pages stop updating) until Esc or a click ends it, which reads
+/// as a frozen window. Kimochi's windows have no menu bar, so nothing is lost; Alt+Space
+/// (the system menu) and Alt with a key still reach `DefWindowProc`. Must run on the main
+/// thread, like `make_panel`.
+pub fn ignore_key_menu(w: &tauri::WebviewWindow) -> Result<(), String> {
+    let hwnd = hwnd(w)?;
+    if unsafe { SetWindowSubclass(hwnd, Some(key_menu_proc), KEY_MENU_SUBCLASS_ID, 0) }.as_bool() {
+        Ok(())
+    } else {
+        Err("native: SetWindowSubclass refused the window (not on its thread?)".into())
+    }
+}
+
+/// `WM_SYSCOMMAND`'s `SC_KEYMENU` from the keyboard with no character: Alt (or F10) alone.
+fn lone_alt_menu(msg: u32, wparam: usize, lparam: isize) -> bool {
+    msg == WM_SYSCOMMAND && (wparam & 0xFFF0) as u32 == SC_KEYMENU && lparam == 0
+}
+
+unsafe extern "system" fn key_menu_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    if lone_alt_menu(msg, wparam.0, lparam.0) {
+        return LRESULT(0);
+    }
+    if msg == WM_NCDESTROY {
+        let _ = unsafe { RemoveWindowSubclass(hwnd, Some(key_menu_proc), KEY_MENU_SUBCLASS_ID) };
+    }
+    unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
+}
+
 const PANEL_EX: u32 = WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0;
 /// Our subclass id; tao uses its own, and the pair (proc, id) is what identifies one.
 const PANEL_SUBCLASS_ID: usize = 0x4B49_4D4F; // "KIMO"
@@ -721,4 +762,23 @@ pub fn activate_window(id: &kimochi_capture::SourceId) -> Result<Value, String> 
 /// Exposed for `icon.rs`.
 pub(super) fn representative_window(pid: u32) -> Option<HWND> {
     main_window_of(pid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_lone_alt_is_kept_from_the_menu_loop() {
+        // Alt alone (or F10): SC_KEYMENU with no character.
+        assert!(lone_alt_menu(WM_SYSCOMMAND, SC_KEYMENU as usize, 0));
+        // The low four bits are the system's own; only the command counts.
+        assert!(lone_alt_menu(WM_SYSCOMMAND, SC_KEYMENU as usize | 0x3, 0));
+        // Alt+Space opens the system menu, Alt+a key is a mnemonic: both left alone.
+        assert!(!lone_alt_menu(WM_SYSCOMMAND, SC_KEYMENU as usize, ' ' as isize));
+        assert!(!lone_alt_menu(WM_SYSCOMMAND, SC_KEYMENU as usize, 'f' as isize));
+        // Other system commands and other messages pass.
+        assert!(!lone_alt_menu(WM_SYSCOMMAND, 0xF060, 0)); // SC_CLOSE
+        assert!(!lone_alt_menu(WM_NULL, SC_KEYMENU as usize, 0));
+    }
 }
