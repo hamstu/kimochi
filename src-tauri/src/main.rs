@@ -1582,6 +1582,23 @@ const OBSERVE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// it, and something in that fetch-decode-canvas sequence threw `Load failed`,
 /// which took change detection with it. The failing step was never identified,
 /// so the sequence is gone rather than fixed.
+/// A Display source never reads Kimochi's own windows: they are blanked in the frame before
+/// anything looks at it (`cover::blank_own_windows`).
+fn blank_own_windows(source_id: &str, frame: &mut kimochi_capture::Frame) {
+    if !kimochi_capture::SourceId::parse(source_id).is_some_and(|id| id.is_display()) {
+        return;
+    }
+    let info = &frame.info;
+    if info.stride != info.width as usize * 4 {
+        return;
+    }
+    let Some(bounds) = platform::desktop_frame_info(info).source_bounds else {
+        return;
+    };
+    let (width, height, full, crop) = (info.width, info.height, (info.full_width, info.full_height), info.crop_pixels);
+    cover::blank_own_windows(&mut frame.pixels, width, height, &bounds, full, crop, &cover::own_rects());
+}
+
 #[tauri::command]
 async fn capture_frame(
     app: tauri::AppHandle,
@@ -1611,6 +1628,8 @@ async fn capture_frame(
         // Release the capture lock before observing: an observation must not hold
         // up the next capture, and the frame owns its own pixels from here.
         drop(backend);
+        let mut frame = frame;
+        blank_own_windows(&request.source_id, &mut frame);
 
         let mut observation = Value::Null;
         let mut observer_error = Value::Null;
@@ -2273,6 +2292,8 @@ async fn scan(
             // The frame owns its pixels: release the backend before encoding and OCR,
             // which take far longer than the capture, so previews are not held up.
             drop(backend);
+            let mut frame = frame;
+            blank_own_windows(&request.source_id, &mut frame);
             let info = serde_json::to_value(platform::desktop_frame_info(&frame.info))
                 .map_err(|e| e.to_string())?;
             // Pixels are kept (encoded lazily, on the first PNG read): an engine that
