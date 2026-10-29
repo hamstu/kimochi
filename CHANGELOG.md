@@ -11,6 +11,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- **Windows:** with a pen tablet or touchscreen, Settings and the title bars no longer light up a second row or button away from the mouse, and a Quick Shot box keeps following the mouse while a pen is in range or after a touch.
+- With **Verbose logging** on (Settings → About), Kimochi now also records how the mouse, pens and touch reach its windows, to help track down pointer problems.
+
 ## [0.2.2] - 2026-10-29
 
 ### Changed

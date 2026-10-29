@@ -13,7 +13,9 @@
 //! query strings, long opaque strings, e-mail addresses, and the user's name in paths).
 //!
 //! Verbose logging (`debug_verbose_set`) is a switch for this run only: while on, `trace` adds
-//! window focus and visibility changes and every scan's outcome to `evidence.jsonl`.
+//! window focus and visibility changes, every scan's outcome and pointer diagnostics to
+//! `evidence.jsonl`. Each change is announced as `verbose-logging` so open windows start or
+//! stop their own diagnostics (`ui/pointer-diagnostics.js`).
 use crate::state::Shared;
 use regex::Regex;
 use serde_json::{json, Map, Value};
@@ -25,7 +27,7 @@ use std::{
         LazyLock,
     },
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// How much of the end of each log goes in a bundle.
 const TAIL_BYTES: u64 = 512 * 1024;
@@ -80,6 +82,7 @@ pub fn debug_verbose_set(app: tauri::AppHandle, state: tauri::State<Shared>, ena
     let Some(enabled) = enabled else { return verbose() };
     if VERBOSE.swap(enabled, Ordering::Relaxed) != enabled {
         crate::record(&app, &state, json!({ "check": "verbose-logging", "enabled": enabled }));
+        let _ = app.emit("verbose-logging", enabled);
     }
     enabled
 }
@@ -219,11 +222,23 @@ fn collect(app: &tauri::AppHandle, service: &Shared) -> Value {
         "session": session,
         "settings": settings,
         "windows": windows(app),
+        "input": input_devices(),
         "verboseLogging": verbose(),
         "recentEvents": recent,
     });
     redact(&mut report);
     report
+}
+
+/// The pointing devices besides the mouse (Windows: pens, touchscreens and tablets in
+/// Windows Ink mode), which reach the webviews as pointers of their own.
+#[cfg(target_os = "windows")]
+fn input_devices() -> Value {
+    crate::platform::pointer_devices()
+}
+#[cfg(not(target_os = "windows"))]
+fn input_devices() -> Value {
+    Value::Null
 }
 
 /// Kimochi's webview windows: which exist, which are shown, where. Each one is a WebView2 (or
