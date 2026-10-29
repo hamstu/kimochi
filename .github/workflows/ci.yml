@@ -114,7 +114,7 @@ jobs:
             // pushes, tags and manual runs; on a pull request that changes CI, only TRIAL, and
             // always on GitHub's runners. macOS stays on the fleet's Mac.
             const HOSTED = []
-            const TRIAL = ['Windows x64', 'Windows ARM64', 'Linux ARM64']
+            const TRIAL = ['Linux x64', 'Linux ARM64', 'Windows x64', 'Windows ARM64']
             const pr = context.eventName === 'pull_request'
             const tag = context.ref.startsWith('refs/tags/')
             const mode = tag ? 'release' : process.env.INPUT_MODE || 'bundle'
@@ -268,9 +268,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          # npm's download cache, on GitHub's runners only (the fleet keeps node_modules).
+          cache: ${{ matrix.onGitHub && 'npm' || '' }}
+          cache-dependency-path: kimochi-tauri/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # GitHub's runners start cold, so they build leaner: line tables instead of full debug
+      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux,
+      # LLVM's linker on Windows, and Defender kept out of the build. Before the cache, whose key
+      # includes these variables.
+      - name: Tune the GitHub runner for Rust builds
+        if: matrix.onGitHub
+        run: |
+          echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+          if [[ $RUNNER_OS == Windows ]]; then
+            echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+            echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+          fi
+      - name: Keep Defender out of the build
+        if: matrix.onGitHub && runner.os == 'Windows'
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup", $env:RUNNER_TEMP
+      - uses: rui314/setup-mold@v1
+        if: matrix.onGitHub && runner.os == 'Linux'
       # The fleet keeps its target directories; a GitHub runner restores them from the cache.
       - uses: Swatinem/rust-cache@v2
         if: matrix.onGitHub
@@ -357,6 +378,7 @@ jobs:
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
+          # xdg-utils: tauri's AppImage step runs xdg-mime, which GitHub's ARM64 image lacks.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -378,12 +400,34 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
             gstreamer1.0-pulseaudio \
-            libavif-dev
+            libavif-dev \
+            xdg-utils
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          # npm's download cache, on GitHub's runners only (the fleet keeps node_modules).
+          cache: ${{ matrix.onGitHub && 'npm' || '' }}
+          cache-dependency-path: kimochi-tauri/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+      # GitHub's runners start cold, so they build leaner: line tables instead of full debug
+      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux,
+      # LLVM's linker on Windows, and Defender kept out of the build. Before the cache, whose key
+      # includes these variables.
+      - name: Tune the GitHub runner for Rust builds
+        if: matrix.onGitHub
+        run: |
+          echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+          if [[ $RUNNER_OS == Windows ]]; then
+            echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+            echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+          fi
+      - name: Keep Defender out of the build
+        if: matrix.onGitHub && runner.os == 'Windows'
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup", $env:RUNNER_TEMP
+      - uses: rui314/setup-mold@v1
+        if: matrix.onGitHub && runner.os == 'Linux'
       # Restored from the last build on GitHub's runners; never shared with the checks' cache
       # (different profile and features). Cached bundles are not kept.
       - uses: Swatinem/rust-cache@v2
