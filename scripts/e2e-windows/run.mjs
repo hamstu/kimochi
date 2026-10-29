@@ -1,0 +1,571 @@
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { readFile, writeFile, mkdir, open } from "node:fs/promises";
+import path from "node:path";
+import {
+  root,
+  page,
+  invoke,
+  click,
+  desktop,
+  sleep,
+  closeAll,
+  verifyIsolation,
+} from "./app.mjs";
+import { alignmentMetrics } from "../overlay-alignment-metrics.mjs";
+const [
+  scenario = "scan",
+  source = "window",
+  renderer = "gdi",
+  mode = "windowed",
+] = process.argv.slice(2);
+if (renderer !== "gdi" || !["windowed", "borderless"].includes(mode))
+  throw Error(
+    "This harness currently supports GDI windowed/borderless only; DXGI prototype remains external",
+  );
+const stamp = `${scenario}-${source}-${renderer}-${mode}-${Date.now()}`;
+const out = path.join(root, "evidence", stamp);
+await mkdir(out, { recursive: true });
+const result = {
+  scenario,
+  source,
+  renderer,
+  mode,
+  started: Date.now(),
+  checks: [],
+  out,
+};
+let app, overlay;
+async function check(name, fn) {
+  const start = Date.now();
+  try {
+    const value = await fn();
+    result.checks.push({ name, pass: true, ms: Date.now() - start, value });
+    return value;
+  } catch (error) {
+    result.checks.push({
+      name,
+      pass: false,
+      ms: Date.now() - start,
+      error: String(error),
+    });
+    throw error;
+  }
+}
+async function until(fn, ms = 15000) {
+  const end = Date.now() + ms;
+  let last;
+  while (Date.now() < end) {
+    last = await fn();
+    if (last) return last;
+    await sleep(100);
+  }
+  throw Error("Condition timed out: " + JSON.stringify(last));
+}
+const command = async (text) => {
+  await writeFile(path.join(root, "game/command.txt"), text);
+  await sleep(350);
+};
+const truth = async () =>
+  JSON.parse(await readFile(path.join(root, "game/truth.json"), "utf8"));
+const state = () => invoke(overlay, "snapshot");
+async function clearUiSource(p) {
+  const r = await p.eval(
+    `(()=>{const e=document.querySelector('button.src-card');if(!e)return null;const r=e.getBoundingClientRect();return {x:screenX+(r.x+20)*devicePixelRatio,y:screenY+(r.y+20)*devicePixelRatio}})()`,
+  );
+  if (r) {
+    desktop("mouse", Math.round(r.x), Math.round(r.y));
+    await sleep(150);
+  }
+  await click(p, 'button[aria-label="Clear source"]');
+  await until(
+    () =>
+      p.eval(
+        `Boolean(document.querySelector('button[aria-label="Choose a source"]'))`,
+      ),
+    3000,
+  );
+}
+async function activateMain() {
+  let w = JSON.parse(desktop("windows")).find(
+    (w) => w.pid === app && w.title === "Kimochi",
+  );
+  assert(w, "main HWND exists");
+  desktop("show", w.hwnd, 5);
+  if (w.rect.width < 480) {
+    let p = await page("panel.html");
+    try {
+      await click(p, 'button[aria-label="Expand Kimochi"]');
+    } finally {
+      p.close();
+    }
+    await sleep(200);
+    w = JSON.parse(desktop("windows")).find((x) => x.hwnd === w.hwnd);
+  }
+  desktop("focus", w.hwnd);
+  await sleep(100);
+  desktop("mouse", w.rect.x + w.rect.width - 180, w.rect.y + 15, "click");
+  await sleep(150);
+}
+async function chooseSource() {
+  await activateMain();
+  let p = await page("panel.html");
+  try {
+    let clear = await p.eval(
+      `Boolean(document.querySelector('button[aria-label="Clear source"]'))`,
+    );
+    if (clear) {
+      await clearUiSource(p);
+    }
+    if (
+      await p.eval(
+        `Boolean(document.querySelector('button[aria-label="Choose a source"]'))`,
+      )
+    )
+      await click(p, 'button[aria-label="Choose a source"]');
+    else await click(p, "button.src-card");
+    await sleep(100);
+    await click(p, '[role="menuitem"]', "Window or screen");
+    await sleep(350);
+    await click(
+      p,
+      '[role="menuitem"]',
+      source === "window" ? "Kimochi E2E Fake Game" : "Display 1",
+    );
+    await sleep(300);
+    if (
+      await p.eval(
+        `document.querySelector('button[aria-label="Show overlay"]')?.getAttribute('aria-checked')==='false'`,
+      )
+    ) {
+      await click(p, 'button[aria-label="Show overlay"]');
+      await sleep(200);
+    }
+  } finally {
+    p.close();
+  }
+}
+async function scan() {
+  let prior;
+  let p = await page("panel.html");
+  try {
+    await activateMain();
+    if (
+      await p.eval(
+        `document.querySelector('button[aria-label="Show overlay"]')?.getAttribute('aria-checked')==='false'`,
+      )
+    ) {
+      await click(p, 'button[aria-label="Show overlay"]');
+      await sleep(150);
+    }
+    await until(
+      () =>
+        p.eval(
+          `Boolean(document.querySelector('button.src-scan:not(:disabled)'))`,
+        ),
+      30000,
+    );
+    const registration = await invoke(p, "hotkeys_save", {
+      hotkeys: {
+        triggerScan: { accelerator: "Shift+F8", enabled: true },
+        openControllerMenu: { accelerator: "Shift+F9", enabled: true },
+      },
+    });
+    assert.equal(registration.failed.length, 0, "isolated shortcuts register");
+    prior = (await state()).scan?.id;
+  } finally {
+    p.close();
+  }
+  await focusGame();
+  if (mode !== "windowed") {
+    await command(mode);
+    await focusGame();
+  }
+  desktop("chord", 16, 119);
+  return await until(async () => {
+    let s = await state();
+    if (s.scan?.id !== prior && s.scan?.ocr?.fullText)
+      return { id: s.scan.id, text: s.scan.ocr.fullText, status: s.status };
+    return false;
+  }, 30000);
+}
+async function focusGame() {
+  const t = await truth();
+  const g = JSON.parse(desktop("windows")).find((w) => w.hwnd === t.hwnd);
+  if (g.iconic) desktop("show", t.hwnd, 9);
+  desktop("focus", t.hwnd);
+  await sleep(100);
+  desktop("mouse", t.client.x + 300, t.client.y + 220, "click");
+  await sleep(180);
+  const w = JSON.parse(desktop("windows")).find((w) => w.hwnd === t.hwnd);
+  assert(w.foreground, "game is foreground");
+}
+async function rendered() {
+  return overlay.eval(
+    `({x:screenX,y:screenY,dpr:devicePixelRatio,words:[...document.querySelectorAll('.ocr-word')].map(e=>({text:e.querySelector('.ocr-word-current')?.textContent,rect:e.getBoundingClientRect().toJSON(),vertical:e.classList.contains('ocr-vertical')}))})`,
+  );
+}
+async function evidence(name) {
+  const s = await state();
+  await writeFile(
+    path.join(out, name + "-state.json"),
+    JSON.stringify(s, null, 2),
+  );
+  await writeFile(
+    path.join(out, name + "-dom.json"),
+    JSON.stringify(await rendered(), null, 2),
+  );
+  await writeFile(
+    path.join(out, name + "-truth.json"),
+    JSON.stringify(await truth(), null, 2),
+  );
+  await writeFile(path.join(out, name + "-windows.json"), desktop("windows"));
+}
+try {
+  await check("app-ready-and-isolated", async () => {
+    try {
+      overlay = await page("overlay.html");
+    } catch {
+      const log = await open(path.join(out, "app.log"), "w");
+      const child = spawn(
+        process.env.KIMOCHI_E2E_EXE ||
+          (() => {
+            throw Error(
+              "Set KIMOCHI_E2E_EXE to an identifier-isolated debug build",
+            );
+          })(),
+        [],
+        {
+          detached: true,
+          windowsHide: true,
+          stdio: ["ignore", log.fd, log.fd],
+          env: {
+            ...process.env,
+            WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:
+              "--remote-debugging-port=19333" +
+              (process.env.KIMOCHI_E2E_DISABLE_GPU ? " --disable-gpu" : ""),
+          },
+        },
+      );
+      child.unref();
+      await log.close();
+      await until(async () => {
+        try {
+          overlay = await page("overlay.html");
+          return true;
+        } catch {
+          return false;
+        }
+      });
+    }
+    let main = await page("panel.html");
+    let paths;
+    try {
+      paths = await verifyIsolation(main);
+    } finally {
+      main.close();
+    }
+    const caps = await invoke(overlay, "platform_capabilities");
+    app = caps.ownPids[0];
+    assert(app);
+    return {
+      pid: app,
+      paths,
+      observer: caps.observer,
+      engines: caps.ocrEngines,
+      displays: await invoke(overlay, "displays"),
+    };
+  });
+  await check("game-ready", async () => {
+    let g = JSON.parse(desktop("windows")).find((w) =>
+      w.title.includes("E2E Fake"),
+    );
+    if (!g) {
+      spawn(path.join(root, "Desktop.exe"), ["game", path.join(root, "game")], {
+        detached: true,
+        windowsHide: true,
+        stdio: "ignore",
+      }).unref();
+      g = await until(async () =>
+        JSON.parse(desktop("windows")).find((w) =>
+          w.title.includes("E2E Fake"),
+        ),
+      );
+    }
+    desktop("show", g.hwnd, 5);
+    await command("gdi");
+    await command("windowed");
+    if (renderer === "d3d") await command("d3d");
+    return await truth();
+  });
+  await check("pick-source-in-real-ui", chooseSource);
+  if (
+    scenario === "scan" ||
+    scenario === "hover" ||
+    scenario === "auto" ||
+    scenario === "windows"
+  ) {
+    await check("manual-scan", scan);
+    if (mode !== "exclusive") await focusGame();
+    await sleep(300);
+    await check("overlay-lines", async () => {
+      const d = await rendered();
+      assert(d.words.length > 2);
+      return {
+        words: d.words.length,
+        text: d.words.map((w) => w.text).join("|"),
+      };
+    });
+    await check("alignment-physical-pixels", async () => {
+      const chars = await overlay.eval(
+        `(()=>{const out=[];for(const root of document.querySelectorAll('.ocr-word-current')){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){let offset=0;for(const c of node.textContent){const r=document.createRange();r.setStart(node,offset);offset+=c.length;r.setEnd(node,offset);const b=r.getBoundingClientRect();const font=parseFloat(getComputedStyle(node.parentElement).fontSize);if(b.width&&b.height)out.push({c,cx:screenX+(b.x+b.width/2)*devicePixelRatio,cy:screenY+(b.y+b.height/2)*devicePixelRatio,fontSize:font*devicePixelRatio});}}}return out})()`,
+      );
+      const t = await truth();
+      const metrics = alignmentMetrics(t, chars);
+      const lines = t.lines.map((line) => {
+        const m = alignmentMetrics({ lines: [line] }, chars);
+        return {
+          text: line.text,
+          ...m,
+          alongMeanPixels: m.alongMean * line.size,
+          acrossMeanPixels: m.acrossMean * line.size,
+        };
+      });
+      await writeFile(
+        path.join(out, "alignment.json"),
+        JSON.stringify({ metrics, lines, chars }, null, 2),
+      );
+      assert(metrics.coverage > 0.5, "at least half truth glyphs render");
+      assert(
+        metrics.alongMean < 0.5 && metrics.acrossMean < 0.5,
+        "mean cell center error below half glyph",
+      );
+      return { metrics, lines };
+    });
+    await evidence("scan");
+    if (scenario === "hover") {
+      const d = await rendered();
+      const w =
+        d.words.find((w) => w.text.includes("回想")) ||
+        d.words.find((w) => w.text.includes("猫")) ||
+        d.words.find((w) => /日本/.test(w.text));
+      assert(w, "lookup candidate");
+      const popupState = () =>
+        overlay.eval(
+          `(()=>{const h=document.querySelector('#tenten-ja-window'),e=h?.shadowRoot?.querySelector('.container:not(.hidden) .window');if(!e)return null;const r=e.getBoundingClientRect();return {text:e.innerText,html:h.shadowRoot.innerHTML,rect:r.toJSON(),x:screenX,y:screenY,dpr:devicePixelRatio}})()`,
+        );
+      const popup = await check("hover-opens-dictionary", async () => {
+        desktop("key", 16, "down");
+        desktop(
+          "mouse",
+          Math.round(d.x + (w.rect.x + Math.min(12, w.rect.width / 2)) * d.dpr),
+          Math.round(d.y + (w.rect.y + w.rect.height / 2) * d.dpr),
+        );
+        const pop = await until(popupState, 5000);
+        assert(
+          pop.text.includes("回想") ||
+            pop.text.includes("猫") ||
+            pop.text.includes("日本"),
+          "lookup matches hovered text",
+        );
+        assert(pop.x + pop.rect.x >= 0 && pop.y + pop.rect.y >= 0);
+        assert(
+          pop.rect.right <= 2560 && pop.rect.bottom <= 1440,
+          "popup on primary screen",
+        );
+        return { lookupWord: w.text, ...pop };
+      });
+      await evidence("hover");
+      await check("enter-popup-keeps-it-open", async () => {
+        desktop(
+          "mouse",
+          Math.round(popup.x + (popup.rect.x + 18) * popup.dpr),
+          Math.round(popup.y + (popup.rect.y + 8) * popup.dpr),
+        );
+        await sleep(80);
+        desktop(
+          "mouse",
+          Math.round(
+            popup.x + (popup.rect.x + popup.rect.width / 2) * popup.dpr,
+          ),
+          Math.round(
+            popup.y + (popup.rect.y + popup.rect.height / 2) * popup.dpr,
+          ),
+        );
+        await sleep(600);
+        assert(await popupState());
+        return true;
+      });
+      await check("leave-clears-popup", async () => {
+        desktop("key", 16, "up");
+        desktop("mouse", 600, 420);
+        await until(async () => !(await popupState()), 5000);
+        return true;
+      });
+    }
+    if (scenario === "auto" || scenario === "windows") {
+      await activateMain();
+      let p = await page("panel.html");
+      await click(p, 'button[aria-label="Auto OCR"]');
+      p.close();
+      await until(async () => (await state()).autoOcrEnabled);
+      await focusGame();
+      await check("auto-text-change", async () => {
+        const before = (await state()).scan?.id;
+        desktop("chord", 32);
+        await sleep(150);
+        const expected = (await truth()).lines
+          .find((l) => l.text.startsWith("今日") || l.text.startsWith("明日"))
+          .text.slice(0, 2);
+        await until(async () => {
+          let s = await state();
+          return (
+            s.scan?.id !== before && s.scan?.ocr.fullText.includes(expected)
+          );
+        }, 30000);
+        return { expected };
+      });
+      await evidence("auto");
+      if (scenario === "windows") {
+        await check("move-and-resize", async () => {
+          await command("move 190 130 1127 809");
+          await sleep(1000);
+          let s = await state();
+          return {
+            sourceWindow: await invoke(overlay, "source_window_state"),
+            origin: s.origin,
+            truth: await truth(),
+          };
+        });
+        await evidence("moved");
+        await check("minimize-waits", async () => {
+          await command("minimize");
+          await sleep(Number(process.env.KIMOCHI_E2E_HIDDEN_MS || 4500));
+          let s = await state();
+          assert(s.autoOcrEnabled, "Auto OCR stays enabled");
+          return { enabled: s.autoOcrEnabled, status: s.status };
+        });
+        await evidence("minimized");
+        await check("restore-resumes", async () => {
+          await command("restore");
+          await focusGame();
+          const old = (await state()).scan?.id;
+          await command("advance");
+          await until(async () => (await state()).scan?.id !== old, 30000);
+          return true;
+        });
+        await evidence("restored");
+        await check("close-stops-auto", async () => {
+          await command("close");
+          await until(async () => !(await state()).autoOcrEnabled, 10000);
+          return true;
+        });
+      }
+    }
+  } else if (scenario === "quickshot") {
+    await activateMain();
+    let p = await page("panel.html");
+    try {
+      await clearUiSource(p);
+      await click(p, 'button[aria-label="Choose a source"]');
+      await sleep(100);
+      await click(p, '[role="menuitem"]', "Quick Shot");
+      await invoke(p, "hotkeys_save", {
+        hotkeys: {
+          triggerScan: { accelerator: "Shift+F8", enabled: true },
+          openControllerMenu: { accelerator: "Shift+F9", enabled: true },
+        },
+      });
+    } finally {
+      p.close();
+    }
+    const selecting = () =>
+      overlay.eval(`window.__kimochiOverlayState().regionSelecting`);
+    await focusGame();
+    await check("quickshot-open", async () => {
+      desktop("chord", 16, 119);
+      return until(selecting, 5000);
+    });
+    await check("quickshot-escape", async () => {
+      desktop("chord", 27);
+      await until(async () => !(await selecting()), 5000);
+      return true;
+    });
+    await evidence("quickshot-escape");
+    await check("quickshot-second-press-is-noop", async () => {
+      desktop("chord", 16, 119);
+      await until(selecting, 5000);
+      desktop("chord", 16, 119);
+      await sleep(400);
+      assert(await selecting(), "second shortcut is currently ignored (#25)");
+      desktop("chord", 27);
+      await until(async () => !(await selecting()), 5000);
+      return { reproduced: true };
+    });
+    await check("quickshot-draw-and-scan", async () => {
+      const prior = (await state()).scan?.id;
+      await focusGame();
+      const t = await truth();
+      desktop("chord", 16, 119);
+      await until(selecting, 5000);
+      desktop(
+        "mouse",
+        t.client.x + 25,
+        t.client.y + t.client.height - 205,
+        "down",
+      );
+      desktop("mouse", t.client.x + 650, t.client.y + t.client.height - 30);
+      desktop(
+        "mouse",
+        t.client.x + 650,
+        t.client.y + t.client.height - 30,
+        "up",
+      );
+      await sleep(250);
+      desktop("chord", 13);
+      await until(async () => !(await selecting()), 5000);
+      const s = await until(async () => {
+        const s = await state();
+        return s.scan?.id !== prior && s.scan?.ocr.fullText ? s : false;
+      }, 30000);
+      assert(/今日|明日|青/.test(s.scan.ocr.fullText));
+      return { text: s.scan.ocr.fullText };
+    });
+    await evidence("quickshot-scanned");
+  }
+  result.pass = true;
+} catch (error) {
+  result.pass = false;
+  result.error = String(error);
+  try {
+    await evidence("failure");
+  } catch (e) {
+    result.evidenceError = String(e);
+  }
+} finally {
+  desktop("key", 16, "up");
+  overlay?.close();
+  closeAll();
+  result.ms = Date.now() - result.started;
+  await writeFile(
+    path.join(out, "result.json"),
+    JSON.stringify(result, null, 2),
+  );
+  console.log(
+    JSON.stringify({
+      scenario,
+      source,
+      mode,
+      pass: result.pass,
+      ms: result.ms,
+      error: result.error,
+      checks: result.checks.map((c) => ({
+        name: c.name,
+        pass: c.pass,
+        ms: c.ms,
+      })),
+      out,
+    }),
+  );
+}
+if (!result.pass) process.exitCode = 1;
