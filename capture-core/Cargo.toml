@@ -60,6 +60,9 @@ windows = { version = "0.62", features = [
   "Win32_UI_WindowsAndMessaging",
   "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
+  # Frames stay on the GPU until a capture reads them (src/windows.rs, GpuFrame).
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi_Common",
   "Win32_System_Threading",
 ] }
 # `#[implement]` (the process-loopback activation's completion handler) expands to windows_core

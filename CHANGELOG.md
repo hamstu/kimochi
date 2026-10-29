@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: Kimochi uses far less CPU while a game is running. It used to read and convert every frame the game drew, even when nothing was being scanned (about a whole CPU core with a fullscreen game on a large screen); now it only reads a frame when it scans.
+
 - Windows: with a game window as the source, screen recorders (NVIDIA's included) can record everything, the overlay and dictionary too. Kimochi only hides its overlay from screen capture while it reads a whole display or a Quick Shot, where it would otherwise read its own text.
 
 - The overlay follows a change of screen resolution or scaling straight away, instead of keeping its old size until the next scan.
