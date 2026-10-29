@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Windows: looking up a word over a game no longer takes the game's focus. Space and Enter advance the text right after a lookup, visual novels no longer skip text when you press Ctrl in another app afterwards, and the dictionary pop-up closes on its own shortly after you move away from the word and the pop-up.
+
 - Clicking a shortcut in Settings → Shortcuts & Controls now starts recording every time; before, a click often started and stopped it at once.
 
 - Windows: tapping Alt while a Kimochi window has focus no longer leaves it unresponsive until you click it or press Esc.

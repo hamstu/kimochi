@@ -99,6 +99,12 @@ fn region_key_target(region: bool, key: u32, source: bool) -> bool {
     source || region && matches!(key, 13 | 27 | 32)
 }
 
+/// Whether a hover may take the foreground: only with controller buttons held, never for
+/// the mouse alone (see `update_hover_focus`).
+fn lease_wanted(buttons_held: bool) -> bool {
+    buttons_held
+}
+
 pub(super) fn primary_down() -> Option<bool> {
     PRIMARY_DOWN.load(Ordering::Relaxed).then_some(true)
 }
@@ -165,6 +171,11 @@ pub fn update_mouse_guard(app: &tauri::AppHandle, service: &Service) {
 // A foreground lease also stops games that read input only while active from
 // polling the controller under a hovered dictionary. Never activate the main
 // window, and never pull focus back after an intentional Alt-Tab elsewhere.
+//
+// Only while controller buttons are held (`lease_wanted`): a mouse hover leaves the game
+// in front. Taking the foreground for a mouse hover and handing it back left the game
+// believing it was active after the reader had moved to another app, so visual novels that
+// poll the keyboard while "active" skipped text on Ctrl typed elsewhere (#27).
 fn update_hover_focus(app: &tauri::AppHandle) {
     let mut point = POINT::default();
     let foreground = unsafe { GetForegroundWindow() }.0 as usize;
@@ -183,6 +194,7 @@ fn update_hover_focus(app: &tauri::AppHandle) {
     if target.is_none() && !HOVER_LEASE.load(Ordering::Relaxed) { return; }
     if target.is_some() && HOVER_LEASE.load(Ordering::Relaxed) { return; }
     if !leased {
+        if !lease_wanted(crate::gamepad::buttons_held()) { return; }
         if target.is_none_or(|target| target.source == 0 || target.source != foreground) { return; }
         let mut retry = LAST_FOCUS_TRY.lock().unwrap();
         if retry.is_some_and(|t| t.elapsed() < Duration::from_millis(500)) { return; }
@@ -364,6 +376,12 @@ mod tests {
             assert!(!captures_key(false, true, false, true, false, false,
                 region_key_target(true, key, false)), "foreign app keeps key {key}");
         }
+    }
+
+    #[test]
+    fn a_mouse_hover_never_takes_the_games_focus() {
+        assert!(!lease_wanted(false));
+        assert!(lease_wanted(true));
     }
 
     #[test]

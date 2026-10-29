@@ -8,6 +8,7 @@ import { padButtons, startRegionPad } from './region-pad.js'
 import { buttonName } from './controller-input.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
+import { PopupLeave } from './popup-leave.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
  * The overlay window: Yomitan host, text renderer and scan orchestrator.
@@ -2594,6 +2595,28 @@ async function importFixtureDictionary() {
  * frame; the extension engines are told by their host (only while one is showing, since their
  * dismissal sends commands and synthetic events).
  */
+/**
+ * Windows: the dictionary pop-up closes once the pointer has left the words and the pop-up
+ * (ui/popup-leave.ts). A hover there no longer takes the keyboard, so the click or Escape that
+ * would otherwise close it would reach the game too. Not while the controller reads.
+ */
+const popupLeave = new PopupLeave()
+let popupLeavePointer = null
+let popupLeaveTimer = null
+function checkPopupLeave(pointer = popupLeavePointer) {
+  popupLeavePointer = pointer
+  if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || controller.drivesLookups) return
+  const open = Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
+  clearTimeout(popupLeaveTimer)
+  if (popupLeave.update(performance.now(), pointer, hitRects(), open)) {
+    log({ check: 'popup-left' })
+    dismissPopup()
+    return
+  }
+  const wait = popupLeave.remaining(performance.now())
+  if (wait !== null) popupLeaveTimer = setTimeout(() => checkPopupLeave(), wait + 20)
+}
+
 function dismissPopup() {
   dismissApiLookup()
   if (extensionHosted) {
@@ -3450,6 +3473,7 @@ await native.listen('pointer', ({ payload }) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') gnomeOverlay?.pointer(payload)
   if (!state.origin || typeof payload?.x !== 'number') return
   const local = toOverlayLocal(payload, state.origin)
+  checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
   if (payload.over === false || !local) {
     renderer.clearPointer()
     syncReadingHold()
