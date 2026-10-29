@@ -29,7 +29,7 @@ import { PopupLeave } from './popup-leave.js'
  * costs lookups and says so, instead of leaving the user with no OCR at all.
  */
 
-import { mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
+import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
 import { scanPointerInit } from './scan-input.js'
 import { visibleAnnotations } from './annotations.js'
 import { AutoScanner } from './autoscan.js'
@@ -3324,6 +3324,21 @@ await native.listen('source-bounds', async ({ payload }) => {
       origin: state.origin,
       first: renderer.firstBox()
     })
+  }
+})
+
+// A display changed (resolution, scaling, a monitor added or rearranged): the overlay covers
+// the display it is on as it is now, as when the source window moves, rather than keeping the
+// old size until the next scan places it (#42).
+await native.listen('display-layout', async () => {
+  if (!state.origin || waylandDisabled || waylandLayer) return
+  try {
+    const source = state.sourceBounds && !state.detached ? state.sourceBounds : null
+    const next = displayAfterLayout(state.origin, await native.desktop(), source)
+    if (next) await placeOverlayOn(next)
+    log({ check: 'overlay-display-layout', origin: state.origin })
+  } catch (error) {
+    log({ check: 'overlay-display-layout', error: String(error?.message ?? error) })
   }
 })
 
