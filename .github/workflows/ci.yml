@@ -60,9 +60,16 @@ jobs:
   # run started on one); a manual run on a branch chooses; a push to main bundles.
   # Only this repository has the self-hosted runners and the signing secrets: in a fork the plan
   # job is skipped, and with it every job that needs it, instead of waiting a day for a runner.
+  # The release commit ("Kimochi x.y.z", which sets the version in tauri.conf.json) reaches main
+  # in the same push as its tag; the tag's run builds it, so main's run of that commit is skipped
+  # instead of building nightly from it and holding the runners the release needs.
   plan:
     name: Plan
-    if: github.repository == 'hamstu/kimochi'
+    if: >-
+      github.repository == 'hamstu/kimochi' &&
+      !(github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+        startsWith(github.event.head_commit.message, 'Kimochi ') &&
+        contains(github.event.head_commit.modified, 'src-tauri/tauri.conf.json'))
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write
@@ -269,7 +276,7 @@ jobs:
       contents: write
     # Bundles follow the checks but do not wait on other platforms' results: one machine's red
     # check must not withhold every other platform's build. A release still needs them all green.
-    if: always() && needs.plan.result == 'success' && (needs.checks.result == 'success' || needs.plan.outputs.mode != 'release')
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.checks.result == 'success' || needs.plan.outputs.mode != 'release') }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
