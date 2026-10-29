@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- With a whole display as the source, Kimochi no longer reads its own windows: their text stays out of the Log, and the overlay no longer covers the main window's buttons with boxes of its own text.
+
 - Quick Shot on Windows now accepts Escape to cancel and Enter to scan while your game is focused, even without a window source selected.
 - Auto OCR no longer turns itself off when the game window is minimised. Exclusive-fullscreen games minimise as soon as you click into Kimochi; Auto OCR now waits for the game and starts reading again when you return to it.
 - Shortcuts can now use **Insert** alone or with Shift, as well as a function key. Windows and Linux also support **Pause** and **Scroll Lock**. Handy for visual novels, where a shortcut with Ctrl makes the game skip text.
