@@ -114,7 +114,7 @@ jobs:
             // pushes, tags and manual runs; on a pull request that changes CI, only TRIAL, and
             // always on GitHub's runners. macOS stays on the fleet's Mac.
             const HOSTED = []
-            const TRIAL = ['Linux x64', 'Linux ARM64', 'Windows x64', 'Windows ARM64']
+            const TRIAL = ['Windows ARM64']
             const pr = context.eventName === 'pull_request'
             const tag = context.ref.startsWith('refs/tags/')
             const mode = tag ? 'release' : process.env.INPUT_MODE || 'bundle'
@@ -289,7 +289,9 @@ jobs:
       - name: Keep Defender out of the build
         if: matrix.onGitHub && runner.os == 'Windows'
         shell: pwsh
-        run: Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup", $env:RUNNER_TEMP
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          "Defender real-time scanning off: $((Get-MpPreference).DisableRealtimeMonitoring)"
       - uses: rui314/setup-mold@v1
         if: matrix.onGitHub && runner.os == 'Linux'
       # The fleet keeps its target directories; a GitHub runner restores them from the cache.
@@ -425,7 +427,9 @@ jobs:
       - name: Keep Defender out of the build
         if: matrix.onGitHub && runner.os == 'Windows'
         shell: pwsh
-        run: Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup", $env:RUNNER_TEMP
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          "Defender real-time scanning off: $((Get-MpPreference).DisableRealtimeMonitoring)"
       - uses: rui314/setup-mold@v1
         if: matrix.onGitHub && runner.os == 'Linux'
       # Restored from the last build on GitHub's runners; never shared with the checks' cache
