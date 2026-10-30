@@ -20,6 +20,14 @@ const FILES: Record<ModelEngine, { name: string; files: [string, number][] }> = 
       ['meiki.text.rec.v0.vertical.32x480.onnx', 12872961]
     ]
   },
+  ppocr: {
+    name: 'PP-OCRv6',
+    files: [
+      ['PP-OCRv6_small_det.onnx', 9880512],
+      ['PP-OCRv6_small_rec.onnx', 21159378],
+      ['PP-OCRv6_small_rec.yml', 150579]
+    ]
+  },
   mangaocr: {
     name: 'Manga OCR',
     files: [
@@ -71,7 +79,7 @@ function at(engine: ModelEngine, received: number): { file: string; got: number;
 
 const seeded = new URLSearchParams(location.search).get('model')
 const states = new Map<ModelEngine, ModelStatus>(
-  (['meikiocr', 'mangaocr', 'sensevoice'] as ModelEngine[]).map((engine) => {
+  (['meikiocr', 'mangaocr', 'ppocr', 'sensevoice'] as ModelEngine[]).map((engine) => {
     const half = Math.round(total(engine) * 0.32)
     const seed =
       seeded === 'downloading' || seeded === 'paused'
@@ -161,12 +169,12 @@ function start(engine: ModelEngine): ModelStatus {
  * their download (the pickers only save it after the download confirmation).
  */
 export function onModelSettingSet(key: string, value: unknown): void {
-  if (key !== 'ocrMode' || (value !== 'meikiocr' && value !== 'mangaocr')) return
+  if (key !== 'ocrMode' || (value !== 'meikiocr' && value !== 'mangaocr' && value !== 'ppocr')) return
   if (states.get(value)?.state === 'absent') start(value)
 }
 
 const engineOf = (args: Record<string, unknown> | undefined): ModelEngine =>
-  args?.engine === 'mangaocr' || args?.engine === 'sensevoice' ? args.engine : 'meikiocr'
+  args?.engine === 'mangaocr' || args?.engine === 'ppocr' || args?.engine === 'sensevoice' ? args.engine : 'meikiocr'
 
 /** Merged into the preview's command table. */
 export const MODEL_HANDLERS: Record<

@@ -10,7 +10,7 @@
  */
 
 export type PlatformOs = 'macos' | 'windows' | 'linux'
-export type OcrEngineKey = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
+export type OcrEngineKey = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'livetext' | 'oneocr'
 
 export interface OcrEngineCapability {
   available: boolean
@@ -133,6 +133,7 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
     cloud: { available: true },
     meikiocr: { available: true },
     mangaocr: { available: true },
+    ppocr: { available: true },
     livetext: { available: true },
     oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
   },

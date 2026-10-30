@@ -322,6 +322,7 @@ function previewCapabilities(): PlatformCapabilities {
         cloud: { available: true },
         meikiocr: { available: true, accelerator: 'directml' },
         mangaocr: { available: false, reason: 'Not available on Windows yet' },
+        ppocr: { available: true, accelerator: 'directml' },
         livetext: { available: false, reason: 'Apple Live Text is available on macOS only.' },
         oneocr: { available: true }
       },
@@ -367,6 +368,7 @@ function previewCapabilities(): PlatformCapabilities {
         cloud: { available: true },
         meikiocr: { available: true, accelerator: 'cpu' },
         mangaocr: { available: true, accelerator: 'cpu' },
+        ppocr: { available: true, accelerator: 'cpu' },
         livetext: { available: false, reason: 'Apple Live Text is available on macOS only.' },
         oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
       },

@@ -33,6 +33,7 @@ const OCR_PICTURES: Record<OcrMode, Picture> = {
   cloud: { src: kimochiCloud },
   meikiocr: { monogram: 'M' },
   mangaocr: { monogram: '漫', lang: 'ja' },
+  ppocr: { monogram: 'P' },
   livetext: { glyph: <ScanText /> },
   oneocr: { src: windows, tile: true }
 }
