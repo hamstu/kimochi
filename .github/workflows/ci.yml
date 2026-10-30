@@ -271,9 +271,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          # npm's download cache, on GitHub's runners only (the fleet keeps node_modules).
-          cache: ${{ matrix.onGitHub && 'npm' || '' }}
-          cache-dependency-path: kimochi-tauri/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -417,9 +414,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          # npm's download cache, on GitHub's runners only (the fleet keeps node_modules).
-          cache: ${{ matrix.onGitHub && 'npm' || '' }}
-          cache-dependency-path: kimochi-tauri/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       # GitHub's runners start cold, so they build leaner: line tables instead of full debug
       # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux
@@ -436,10 +430,13 @@ jobs:
       - uses: rui314/setup-mold@v1
         if: matrix.onGitHub && runner.os == 'Linux'
       # Restored from the last build on GitHub's runners; never shared with the checks' cache
-      # (different profile and features). Cached bundles are not kept.
+      # (different profile and features). Cached bundles are not kept. A release's optimised
+      # targets are not saved: a tag's run cannot read another tag's cache, so they would only
+      # crowd main's out of the repository's 10 GB.
       - uses: Swatinem/rust-cache@v2
         if: matrix.onGitHub
         with:
+          save-if: ${{ needs.plan.outputs.profile != 'release' }}
           key: bundle-${{ needs.plan.outputs.profile }}
           workspaces: |
             kimochi-tauri/src-tauri -> target
