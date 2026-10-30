@@ -1,8 +1,8 @@
 name: CI
 
 # Native compile, lint and test gates on every OS, then a bundle of the app per target, all on
-# the self-hosted runners described in ci/runners/README.md (nothing here uses GitHub-hosted
-# minutes). Bundles go straight to GitHub Releases, which are not metered like workflow
+# the self-hosted runners described in ci/runners/README.md, or on GitHub's own runners for the
+# platforms the plan job lists in HOSTED (free and unlimited for a public repository). Bundles go straight to GitHub Releases, which are not metered like workflow
 # artifacts: a push to main replaces the assets of the rolling `nightly` pre-release, and a tag
 # `v*` (made by `npm run release -- <x.y.z>`, scripts/cut-release.mjs) builds optimised bundles
 # into a draft release of that tag, which the `manifest` job publishes once every platform has
@@ -42,9 +42,17 @@ on:
       - '!**/*.md'
       - 'CHANGELOG.md'
       - 'COMMANDS.md'
+  # A pull request that changes CI builds the platforms in the plan job's TRIAL list, on GitHub's
+  # runners only, and keeps its bundles as workflow artifacts: a CI change can be tried without
+  # the fleet, nightly or a release. Other pull requests run nothing here.
+  pull_request:
+    paths:
+      - '.github/workflows/ci.yml'
+      - 'ci/**'
 
+# Pull requests' runs are independent, so a push to try one platform never cancels another's.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_id || github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
@@ -59,7 +67,8 @@ jobs:
   # Which machines build, and whether optimised or debug. A tag always releases (even a manual
   # run started on one); a manual run on a branch chooses; a push to main bundles.
   # Only this repository has the self-hosted runners and the signing secrets: in a fork the plan
-  # job is skipped, and with it every job that needs it, instead of waiting a day for a runner.
+  # job is skipped, and with it every job that needs it, instead of waiting a day for a runner;
+  # so is a pull request from a fork.
   # The release commit ("Kimochi x.y.z", which sets the version in tauri.conf.json) reaches main
   # in the same push as its tag; the tag's run builds it, so main's run of that commit is skipped
   # instead of building nightly from it and holding the runners the release needs.
@@ -67,10 +76,12 @@ jobs:
     name: Plan
     if: >-
       github.repository == 'hamstu/kimochi' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       !(github.event_name == 'push' && github.ref == 'refs/heads/main' &&
         startsWith(github.event.head_commit.message, 'Kimochi ') &&
         contains(github.event.head_commit.modified, 'src-tauri/tauri.conf.json'))
-    runs-on: [self-hosted, macOS]
+    # Light work (a script and the GitHub API), so it takes no machine from the fleet.
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     defaults:
@@ -85,12 +96,10 @@ jobs:
       release: ${{ steps.release.outputs.tag }}
       rolling: ${{ steps.release.outputs.rolling }}
     steps:
-      # For the tag's version and its CHANGELOG.md section. Same directory and no clean as the
-      # other jobs on this machine, so their kept build caches are untouched.
+      # For the tag's version and its CHANGELOG.md section.
       - uses: actions/checkout@v4
         with:
           path: kimochi-tauri
-          clean: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -101,8 +110,17 @@ jobs:
           INPUT_ARCH_LINUX: ${{ inputs.arch_linux }}
         with:
           script: |
+            // Platforms that build on GitHub's runner (`hosted`) instead of the fleet: HOSTED on
+            // pushes, tags and manual runs; on a pull request that changes CI, only TRIAL, and
+            // always on GitHub's runners. macOS stays on the fleet's Mac.
+            const HOSTED = []
+            const TRIAL = ['Linux x64', 'Linux ARM64', 'Windows x64', 'Windows ARM64']
+            // `bundle` (debug) or `release` (optimised, updater-signed; still uploaded only as
+            // workflow artifacts on a pull request).
+            const TRIAL_MODE = 'bundle'
+            const pr = context.eventName === 'pull_request'
             const tag = context.ref.startsWith('refs/tags/')
-            const mode = tag ? 'release' : process.env.INPUT_MODE || 'bundle'
+            const mode = tag ? 'release' : pr ? TRIAL_MODE : process.env.INPUT_MODE || 'bundle'
             const profile = mode === 'release' ? 'release' : 'debug'
             // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
             const script = mode === 'release' ? 'release:bundle' : 'bundle'
@@ -110,23 +128,30 @@ jobs:
             const include = [
               { name: 'macOS', labels: ['self-hosted', 'macOS', 'ARM64'], target: 'aarch64-apple-darwin',
                 artifacts: `${bundle}/macos/Kimochi.app.zip` },
-              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64'], target: 'x86_64-pc-windows-msvc',
+              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64'], hosted: 'windows-2025', target: 'x86_64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
-              { name: 'Windows ARM64', labels: ['self-hosted', 'Windows', 'ARM64'], target: 'aarch64-pc-windows-msvc',
+              { name: 'Windows ARM64', labels: ['self-hosted', 'Windows', 'ARM64'], hosted: 'windows-11-arm', target: 'aarch64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
-              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64'], target: 'x86_64-unknown-linux-gnu',
+              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64'], hosted: 'ubuntu-24.04', target: 'x86_64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
-              { name: 'Linux ARM64', labels: ['self-hosted', 'Linux', 'ARM64', 'ubuntu'], target: 'aarch64-unknown-linux-gnu',
+              { name: 'Linux ARM64', labels: ['self-hosted', 'Linux', 'ARM64', 'ubuntu'], hosted: 'ubuntu-24.04-arm', target: 'aarch64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
             ]
             if (process.env.INPUT_ARCH_LINUX === 'true') include.push(
               { name: 'Linux ARM64 (Arch)', labels: ['self-hosted', 'Linux', 'ARM64', 'arch'], target: 'aarch64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage`, suffix: '-arch' })
+            // `onGitHub` tells the steps whether this machine is a fresh GitHub runner (no kept
+            // caches, nothing preinstalled beyond the image) or one of the fleet's.
+            const platforms = (pr ? include.filter((p) => TRIAL.includes(p.name)) : include).map((p) => {
+              const onGitHub = Boolean(p.hosted) && (pr || HOSTED.includes(p.name))
+              return { ...p, labels: onGitHub ? [p.hosted] : p.labels, onGitHub }
+            })
+            if (!platforms.length) core.setFailed('No platform to build: TRIAL (pull requests) names none with a GitHub runner')
             core.setOutput('mode', mode)
             core.setOutput('script', script)
             core.setOutput('profile', profile)
-            core.setOutput('matrix', JSON.stringify({ include }))
-            core.summary.addHeading(`Mode: ${mode}`).addList(include.map((p) => `${p.name} → ${p.labels.join(', ')}`)).write()
+            core.setOutput('matrix', JSON.stringify({ include: platforms }))
+            core.summary.addHeading(`Mode: ${mode}`).addList(platforms.map((p) => `${p.name} → ${p.labels.join(', ')}`)).write()
 
       # The release the bundle jobs upload into. A tag gets a draft release of its own, with its
       # CHANGELOG.md section as the notes (which also become latest.json's notes, the app's
@@ -139,7 +164,9 @@ jobs:
       # bundles is ever stored. That includes a manual run in release mode on a branch: it
       # builds optimised, updater-signed bundles into `nightly` to try the release build, and
       # publishes nothing (there is no tag to publish, and the manifest job is skipped).
+      # A pull request touches neither: its bundles stay in the run as artifacts.
       - name: Prepare release
+        if: github.event_name != 'pull_request'
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -199,8 +226,10 @@ jobs:
           path: kimochi-tauri
           clean: false
       # Drop stale build output but keep the expensive, regenerable caches, wiping those weekly
-      # or when they outgrow the machine (ci/runners/prune-build-cache.sh).
+      # or when they outgrow the machine (ci/runners/prune-build-cache.sh). A GitHub runner
+      # starts empty.
       - name: Clean workspace
+        if: ${{ !matrix.onGitHub }}
         run: |
           git clean -ffdx -e src-tauri/target -e capture-core/target -e speech-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
           bash ci/runners/prune-build-cache.sh
@@ -245,6 +274,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # GitHub's runners start cold, so they build leaner: line tables instead of full debug
+      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux
+      # and LLVM's linker on Windows. Before the cache, whose key includes these variables.
+      # (Defender cannot be turned off on GitHub's Windows images: tamper protection.)
+      - name: Tune the GitHub runner for Rust builds
+        if: matrix.onGitHub
+        run: |
+          echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+          if [[ $RUNNER_OS == Windows ]]; then
+            echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+            echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+          fi
+      - uses: rui314/setup-mold@v1
+        if: matrix.onGitHub && runner.os == 'Linux'
+      # The fleet keeps its target directories; a GitHub runner restores them from the cache.
+      - uses: Swatinem/rust-cache@v2
+        if: matrix.onGitHub
+        with:
+          key: checks
+          workspaces: |
+            kimochi-tauri/src-tauri -> target
+            kimochi-tauri/capture-core -> target
+            kimochi-tauri/speech-core -> target
 
       # The engine trees (Yomitan, Hachidori, 10ten) are gitignored; the tests and the harness read
       # the pinned releases from the kept extensions/ cache. A no-op when they already match
@@ -252,7 +304,19 @@ jobs:
       - name: Fetch vendored extensions
         run: node scripts/sync-extension.mjs --all --if-missing
       # `npm ci` runs the `prepare` lifecycle script (scripts/prepare.mjs), which builds dist/.
+      # GitHub's runners restore node_modules whole when package-lock.json is unchanged: `npm ci`
+      # takes three minutes on the Windows ARM64 image. Then only `prepare` runs, building dist/.
+      - name: Restore node_modules
+        id: node-modules
+        if: matrix.onGitHub
+        uses: actions/cache@v4
+        with:
+          path: kimochi-tauri/node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('kimochi-tauri/package-lock.json') }}
       - run: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+      - run: npm run prepare
+        if: steps.node-modules.outputs.cache-hit == 'true'
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint
@@ -299,11 +363,18 @@ jobs:
           path: kimochi-tauri
           clean: false
       - name: Clean workspace
+        if: ${{ !matrix.onGitHub }}
         run: |
           git clean -ffdx -e src-tauri/target -e capture-core/target -e speech-core/target -e oneocr-worker/target -e node_modules -e src-tauri/resources -e extensions
           # Only this run's bundles (and updater artifacts) may be uploaded.
           rm -rf src-tauri/target/${{ needs.plan.outputs.profile }}/bundle ../updater
           bash ci/runners/prune-build-cache.sh
+
+      # GitHub's Ubuntu image has no FUSE, which the AppImage tools tauri downloads would mount
+      # themselves with; they unpack and run instead.
+      - name: AppImage tools without FUSE
+        if: matrix.onGitHub && runner.os == 'Linux'
+        run: echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -315,6 +386,7 @@ jobs:
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
+          # xdg-utils: tauri's AppImage step runs xdg-mime, which GitHub's ARM64 image lacks.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -336,12 +408,39 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
             gstreamer1.0-pulseaudio \
-            libavif-dev
+            libavif-dev \
+            xdg-utils
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+      # GitHub's runners start cold, so they build leaner: line tables instead of full debug
+      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux
+      # and LLVM's linker on Windows. Before the cache, whose key includes these variables.
+      # (Defender cannot be turned off on GitHub's Windows images: tamper protection.)
+      - name: Tune the GitHub runner for Rust builds
+        if: matrix.onGitHub
+        run: |
+          echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+          if [[ $RUNNER_OS == Windows ]]; then
+            echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+            echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
+          fi
+      - uses: rui314/setup-mold@v1
+        if: matrix.onGitHub && runner.os == 'Linux'
+      # Restored from the last build on GitHub's runners; never shared with the checks' cache
+      # (different profile and features). Cached bundles are not kept. A release's optimised
+      # targets are not saved: a tag's run cannot read another tag's cache, so they would only
+      # crowd main's out of the repository's 10 GB.
+      - uses: Swatinem/rust-cache@v2
+        if: matrix.onGitHub
+        with:
+          save-if: ${{ needs.plan.outputs.profile != 'release' }}
+          key: bundle-${{ needs.plan.outputs.profile }}
+          workspaces: |
+            kimochi-tauri/src-tauri -> target
+            kimochi-tauri/oneocr-worker -> target
 
       # Every Linux build links libavif for dictionary images (Jitendex): fail in seconds, naming
       # the package, rather than at the end of the bundle. Arch runners install their own packages.
@@ -367,9 +466,18 @@ jobs:
             if ($process.ExitCode -notin @(0, 3010)) { throw "ARM64 C++ tools installation failed: $($process.ExitCode)" }
           }
 
+      # Compiling the signing tool takes about three minutes. GitHub's runners keep the binary in a
+      # cache of its own, which a tag's run can read from main (its Rust cache always starts
+      # cold). Bump the key's suffix to pick up a new version.
+      - name: Restore Windows signing CLI
+        if: matrix.onGitHub && runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/artifact-signing-cli.exe
+          key: artifact-signing-cli-${{ runner.os }}-${{ runner.arch }}-v1
       - name: Install Windows signing CLI
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
-        run: cargo install --locked artifact-signing-cli
+        run: command -v artifact-signing-cli >/dev/null || cargo install --locked artifact-signing-cli
 
       # makensis maps the whole installer in the temp directory; the system drive of a runner can
       # be nearly full while its work drive has plenty, so use the runner's own temp directory.
@@ -425,7 +533,19 @@ jobs:
 
       # No engine tree is needed here: bundles carry none (the app downloads them on demand), and
       # scripts/prepare.mjs checks that dist/ holds none.
+      # GitHub's runners restore node_modules whole when package-lock.json is unchanged: `npm ci`
+      # takes three minutes on the Windows ARM64 image. Then only `prepare` runs, building dist/.
+      - name: Restore node_modules
+        id: node-modules
+        if: matrix.onGitHub
+        uses: actions/cache@v4
+        with:
+          path: kimochi-tauri/node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('kimochi-tauri/package-lock.json') }}
       - run: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+      - run: npm run prepare
+        if: steps.node-modules.outputs.cache-hit == 'true'
       - name: Bundle (${{ needs.plan.outputs.mode }})
         run: npm run ${{ needs.plan.outputs.script }}
         env:
@@ -491,6 +611,7 @@ jobs:
       # Tag releases keep tauri's versioned file names. The rolling nightly drops the version
       # from the name so each push replaces the previous asset instead of piling up beside it.
       - name: Upload to release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -527,6 +648,16 @@ jobs:
           if [[ -d ../updater ]]; then cp ../updater/* ../upload/; fi
           ls -l ../upload
           gh release upload "$RELEASE" ../upload/* --clobber
+
+      # A pull request's bundles, to download from the run's page and try.
+      - name: Upload as workflow artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kimochi-${{ matrix.target }}${{ matrix.suffix }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 7
 
   # A tag's release: `latest.json`, the document the app's updater fetches
   # (`https://github.com/<repo>/releases/latest/download/latest.json`), composed from the
