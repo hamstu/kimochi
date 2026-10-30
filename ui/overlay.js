@@ -1824,7 +1824,7 @@ async function gnomeCropAvailable(sourceId = null) {
     (!sourceId?.startsWith('portal:window:') || status.tracked?.sourceId === sourceId)
 }
 
-async function editGnomeRegion(sourceId, {quick = false, region = REGIONS.ocr} = {}) {
+async function editGnomeRegion(sourceId, {quick = false, region = REGIONS.ocr, onStart} = {}) {
   if (!/^portal:(display|window):[0-9]+$/.test(sourceId)) throw new Error('Desktop crop requires a shared screen or linked window.')
   state.regionSelecting = true
   syncAutoScanner()
@@ -1839,7 +1839,7 @@ async function editGnomeRegion(sourceId, {quick = false, region = REGIONS.ocr} =
     const frame = await native.sourceHoverPreview(sourceId)
     if (!frame?.width || !frame?.height) throw new Error('No shared screen frame available. Choose a screen first.')
     const {selectGnomeCrop} = await import('./gnome-crop.js')
-    const crop = await selectGnomeCrop(native, {sourceId, frame, initial:regionInitialCrop(region, frame), quick, theme:setting('appearance') === 'light' ? 'light' : setting('appearance') === 'dark' ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
+    const crop = await selectGnomeCrop(native, {sourceId, frame, initial:regionInitialCrop(region, frame), quick, onStart, theme:setting('appearance') === 'light' ? 'light' : setting('appearance') === 'dark' ? 'dark' : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
       ...(quick ? {} : {accent:region.accent, title:region.title})})
     if (!crop) return false
     if (await native.selectedSource() !== sourceId) throw new Error('The shared screen changed while editing. Open the editor again.')
@@ -1895,7 +1895,7 @@ async function editLinuxSourceImage(sourceId, region = REGIONS.ocr) {
 }
 
 /** Portal captures have pixel dimensions, but no desktop display catalogue or window origin. */
-async function editPortalRegion(sourceId, kind, { quick = false, region = REGIONS.ocr } = {}) {
+async function editPortalRegion(sourceId, kind, { quick = false, region = REGIONS.ocr, onStart } = {}) {
   let pictureUrl = null
   const frame = await native.sourceHoverPreview(sourceId)
   if (!frame?.width || !frame?.height) {
@@ -1943,7 +1943,10 @@ async function editPortalRegion(sourceId, kind, { quick = false, region = REGION
       area,
       initial: saved ? cropToLocal(saved, origin, bounds) : !quick && region.whole ? area : null,
       picture: kind === 'window' && !linked ? bounds : undefined,
-      onStart: pictureUrl ? (selector) => void selector.setPicture(pictureUrl) : undefined
+      onStart: (selector) => {
+        if (pictureUrl) void selector.setPicture(pictureUrl)
+        onStart?.(selector)
+      }
     })
     if (!rect) return false
     if (await native.selectedSource() !== sourceId) throw new Error('The shared source changed while editing. Open the editor again.')
@@ -2134,14 +2137,49 @@ async function editWindowRegion(sourceId, region = REGIONS.ocr) {
 }
 
 /**
+ * The Quick Shot being taken, from its shortcut press until its editor closes; null otherwise.
+ * Its trigger pressed again goes to `press` (the editor's `shortcutPressed`) instead of starting
+ * another, whatever the trigger: a key, a gamepad or mouse button all arrive as `triggerScan`.
+ */
+let quickShotRun = null
+/** When the last Quick Shot editor closed. */
+let quickShotClosedAt = -Infinity
+/**
+ * A trigger this soon after an editor closed opens nothing: one press delivered twice (a gamepad
+ * button that is both the editor's Cancel and the Quick Shot binding) must not close the editor
+ * and then open a new one.
+ */
+const QUICK_SHOT_REOPEN_MS = 300
+
+/**
  * Quick Shot: draw a region on the display under the pointer, scan it, show the Log.
  *
  * Nothing is chosen or saved: the region is captured from that display directly as a one-off job,
  * so the reader's chosen source and its crop are untouched, and the text is published detached
  * from them (no source name on the history entry, so no session switch).
+ *
+ * Pressed again while its editor is up, it cancels with no box drawn and scans the box once there
+ * is one (see `shortcutPressOutcome` in ui/region-select.js).
  */
 async function quickShot() {
+  if (quickShotRun) {
+    const outcome = quickShotRun.press()
+    log({ check: 'quick-shot-pressed-again', outcome })
+    return
+  }
   if (state.regionSelecting) return
+  if (performance.now() - quickShotClosedAt < QUICK_SHOT_REOPEN_MS) return
+  // Until the editor is up there is nothing to cancel or confirm.
+  const run = { press: () => 'ignore' }
+  quickShotRun = run
+  const pressGoesTo = (editor) => {
+    run.press = () => editor.shortcutPressed()
+  }
+  const closed = () => {
+    if (quickShotRun !== run) return
+    quickShotRun = null
+    quickShotClosedAt = performance.now()
+  }
   try {
     if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (await native.capabilities()).capture.pickerRequired) {
       const { runWaylandQuickShot } = await import('./linux-quick-shot.js')
@@ -2149,7 +2187,9 @@ async function quickShot() {
         available: waylandLayer || await gnomeCropAvailable(),
         catalog: () => native.invoke('enumerate'),
         pick: () => native.invoke('capture_pick_source', { fresh: true }),
-        edit: (id) => waylandLayer ? editPortalRegion(id, 'display', { quick: true }) : editGnomeRegion(id, {quick:true}),
+        edit: (id) => (waylandLayer
+          ? editPortalRegion(id, 'display', { quick: true, onStart: pressGoesTo })
+          : editGnomeRegion(id, { quick: true, onStart: pressGoesTo })).finally(closed),
         scan: async (sourceId, crop) => {
           await processView(await native.snapshot())
           for (let attempt = 0; handling || pendingView; attempt++) {
@@ -2188,8 +2228,9 @@ async function quickShot() {
     const rect = await editRegion('Scan', {
       onDisplay: (next) => {
         target = next
-      }
-    })
+      },
+      onStart: pressGoesTo
+    }).finally(closed)
     if (!rect) {
       log({ check: 'quick-shot-cancelled' })
       return
@@ -2211,6 +2252,8 @@ async function quickShot() {
     log({ check: 'quick-shot-error', error: String(error?.message ?? error) })
     publish({ scanning: false, status: `Quick Shot failed: ${error?.message ?? error}` })
     reportOutcome({ text: `Quick Shot failed: ${error?.message ?? error}`, tone: 'error' })
+  } finally {
+    closed()
   }
 }
 
