@@ -4474,7 +4474,7 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 [[package]]
 name = "ppocr"
 version = "0.1.0"
-source = "git+https://github.com/hamstu/kimochi-ppocr?rev=fe058f2f2573ed6374f7faaf438750024997c835#fe058f2f2573ed6374f7faaf438750024997c835"
+source = "git+https://github.com/hamstu/kimochi-ppocr?rev=5e37539fed0fe55c5352da77625929179a5c354c#5e37539fed0fe55c5352da77625929179a5c354c"
 dependencies = [
  "image",
  "ndarray",
