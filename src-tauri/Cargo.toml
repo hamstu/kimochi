@@ -13,7 +13,7 @@ libc = "0.2"
 # CONTRIBUTING.md.
 meikiocr = { git = "https://github.com/hamstu/kimochi-meikiocr", rev = "7a1b9a762acbdf6b09d7386b4395c366f135733b" }
 mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd" }
-ppocr = { git = "https://github.com/hamstu/kimochi-ppocr", rev = "bf55329db11ad25f60675529dfd03f04ea62b0c5" }
+ppocr = { git = "https://github.com/hamstu/kimochi-ppocr", rev = "fe058f2f2573ed6374f7faaf438750024997c835" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
 # `macos-private-api` stays in this common block: tauri-build requires the common
