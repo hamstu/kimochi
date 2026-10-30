@@ -254,6 +254,7 @@ pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
     let models = ModelPaths::from_dir(&assets.models);
     let config = Config {
         backend: if DIRECTML_REFUSED.load(Ordering::Relaxed) { Backend::Cpu } else { Backend::Auto },
+        intra_threads: cpu_threads(),
         ..Config::default()
     };
     let engine = engine_probe::guarded(|| {

@@ -19,6 +19,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.
 
+### Changed
+
+- **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
+
 ## [0.2.2] - 2026-10-29
 
 ### Changed
