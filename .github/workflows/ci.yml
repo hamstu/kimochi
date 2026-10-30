@@ -114,10 +114,13 @@ jobs:
             // pushes, tags and manual runs; on a pull request that changes CI, only TRIAL, and
             // always on GitHub's runners. macOS stays on the fleet's Mac.
             const HOSTED = []
-            const TRIAL = ['Windows ARM64']
+            const TRIAL = ['Linux x64', 'Linux ARM64', 'Windows x64', 'Windows ARM64']
+            // `bundle` (debug) or `release` (optimised, updater-signed; still uploaded only as
+            // workflow artifacts on a pull request).
+            const TRIAL_MODE = 'release'
             const pr = context.eventName === 'pull_request'
             const tag = context.ref.startsWith('refs/tags/')
-            const mode = tag ? 'release' : process.env.INPUT_MODE || 'bundle'
+            const mode = tag ? 'release' : pr ? TRIAL_MODE : process.env.INPUT_MODE || 'bundle'
             const profile = mode === 'release' ? 'release' : 'debug'
             // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
             const script = mode === 'release' ? 'release:bundle' : 'bundle'
@@ -275,9 +278,9 @@ jobs:
         with:
           components: clippy
       # GitHub's runners start cold, so they build leaner: line tables instead of full debug
-      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux,
-      # LLVM's linker on Windows, and Defender kept out of the build. Before the cache, whose key
-      # includes these variables.
+      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux
+      # and LLVM's linker on Windows. Before the cache, whose key includes these variables.
+      # (Defender cannot be turned off on GitHub's Windows images: tamper protection.)
       - name: Tune the GitHub runner for Rust builds
         if: matrix.onGitHub
         run: |
@@ -286,12 +289,6 @@ jobs:
             echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
             echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
           fi
-      - name: Keep Defender out of the build
-        if: matrix.onGitHub && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-          "Defender real-time scanning off: $((Get-MpPreference).DisableRealtimeMonitoring)"
       - uses: rui314/setup-mold@v1
         if: matrix.onGitHub && runner.os == 'Linux'
       # The fleet keeps its target directories; a GitHub runner restores them from the cache.
@@ -310,7 +307,19 @@ jobs:
       - name: Fetch vendored extensions
         run: node scripts/sync-extension.mjs --all --if-missing
       # `npm ci` runs the `prepare` lifecycle script (scripts/prepare.mjs), which builds dist/.
+      # GitHub's runners restore node_modules whole when package-lock.json is unchanged: `npm ci`
+      # takes three minutes on the Windows ARM64 image. Then only `prepare` runs, building dist/.
+      - name: Restore node_modules
+        id: node-modules
+        if: matrix.onGitHub
+        uses: actions/cache@v4
+        with:
+          path: kimochi-tauri/node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('kimochi-tauri/package-lock.json') }}
       - run: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+      - run: npm run prepare
+        if: steps.node-modules.outputs.cache-hit == 'true'
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint
@@ -413,9 +422,9 @@ jobs:
           cache-dependency-path: kimochi-tauri/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       # GitHub's runners start cold, so they build leaner: line tables instead of full debug
-      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux,
-      # LLVM's linker on Windows, and Defender kept out of the build. Before the cache, whose key
-      # includes these variables.
+      # info (smaller caches, faster links; backtraces keep their files and lines), mold on Linux
+      # and LLVM's linker on Windows. Before the cache, whose key includes these variables.
+      # (Defender cannot be turned off on GitHub's Windows images: tamper protection.)
       - name: Tune the GitHub runner for Rust builds
         if: matrix.onGitHub
         run: |
@@ -424,12 +433,6 @@ jobs:
             echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
             echo "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=rust-lld" >> "$GITHUB_ENV"
           fi
-      - name: Keep Defender out of the build
-        if: matrix.onGitHub && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-          "Defender real-time scanning off: $((Get-MpPreference).DisableRealtimeMonitoring)"
       - uses: rui314/setup-mold@v1
         if: matrix.onGitHub && runner.os == 'Linux'
       # Restored from the last build on GitHub's runners; never shared with the checks' cache
@@ -524,7 +527,19 @@ jobs:
 
       # No engine tree is needed here: bundles carry none (the app downloads them on demand), and
       # scripts/prepare.mjs checks that dist/ holds none.
+      # GitHub's runners restore node_modules whole when package-lock.json is unchanged: `npm ci`
+      # takes three minutes on the Windows ARM64 image. Then only `prepare` runs, building dist/.
+      - name: Restore node_modules
+        id: node-modules
+        if: matrix.onGitHub
+        uses: actions/cache@v4
+        with:
+          path: kimochi-tauri/node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('kimochi-tauri/package-lock.json') }}
       - run: npm ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+      - run: npm run prepare
+        if: steps.node-modules.outputs.cache-hit == 'true'
       - name: Bundle (${{ needs.plan.outputs.mode }})
         run: npm run ${{ needs.plan.outputs.script }}
         env:
