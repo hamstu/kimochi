@@ -384,7 +384,7 @@ fn report(app: tauri::AppHandle, state: State<Shared>, value: Value) {
 /// this rather than `Service::log`, which only feeds the Debug panel and so cannot
 /// record anything that happens before a window is there to read it.
 fn record(app: &tauri::AppHandle, service: &Shared, mut value: Value) {
-    if dictionary_runtime::update(&value) {
+    if dictionary_runtime::update(&mut value) {
         let _ = app.emit("dictionary-readiness", &value);
     }
     // When it happened, for anyone reading the log from a bug report.

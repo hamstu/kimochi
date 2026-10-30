@@ -60,9 +60,16 @@ jobs:
   # run started on one); a manual run on a branch chooses; a push to main bundles.
   # Only this repository has the self-hosted runners and the signing secrets: in a fork the plan
   # job is skipped, and with it every job that needs it, instead of waiting a day for a runner.
+  # The release commit ("Kimochi x.y.z", which sets the version in tauri.conf.json) reaches main
+  # in the same push as its tag; the tag's run builds it, so main's run of that commit is skipped
+  # instead of building nightly from it and holding the runners the release needs.
   plan:
     name: Plan
-    if: github.repository == 'hamstu/kimochi'
+    if: >-
+      github.repository == 'hamstu/kimochi' &&
+      !(github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+        startsWith(github.event.head_commit.message, 'Kimochi ') &&
+        contains(github.event.head_commit.modified, 'src-tauri/tauri.conf.json'))
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write
@@ -103,11 +110,11 @@ jobs:
             const include = [
               { name: 'macOS', labels: ['self-hosted', 'macOS', 'ARM64'], target: 'aarch64-apple-darwin',
                 artifacts: `${bundle}/macos/Kimochi.app.zip` },
-              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64'], target: 'x86_64-pc-windows-msvc',
+              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64', 'media-pc'], target: 'x86_64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
               { name: 'Windows ARM64', labels: ['self-hosted', 'Windows', 'ARM64'], target: 'aarch64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
-              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64'], target: 'x86_64-unknown-linux-gnu',
+              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64', 'media-pc'], target: 'x86_64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
               { name: 'Linux ARM64', labels: ['self-hosted', 'Linux', 'ARM64', 'ubuntu'], target: 'aarch64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
@@ -269,7 +276,7 @@ jobs:
       contents: write
     # Bundles follow the checks but do not wait on other platforms' results: one machine's red
     # check must not withhold every other platform's build. A release still needs them all green.
-    if: always() && needs.plan.result == 'success' && (needs.checks.result == 'success' || needs.plan.outputs.mode != 'release')
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.checks.result == 'success' || needs.plan.outputs.mode != 'release') }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -308,6 +315,7 @@ jobs:
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
+          # xdg-utils: tauri's AppImage step runs xdg-mime, which a minimal Ubuntu (WSL) lacks.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -329,7 +337,8 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
             gstreamer1.0-pulseaudio \
-            libavif-dev
+            libavif-dev \
+            xdg-utils
 
       - uses: actions/setup-node@v4
         with:
@@ -582,3 +591,14 @@ jobs:
         run: |
           gh release edit "$RELEASE" --draft=false --latest
           echo "Published $GITHUB_SERVER_URL/$GH_REPO/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"
+
+  # GITHUB_TOKEN publication does not trigger release-event workflows.
+  announce:
+    name: Announce release on Discord
+    needs: [plan, manifest]
+    if: needs.plan.outputs.mode == 'release' && needs.plan.outputs.rolling == 'false'
+    uses: ./.github/workflows/discord-release.yml
+    with:
+      tag: ${{ needs.plan.outputs.release }}
+    secrets:
+      DISCORD_RELEASES_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASES_WEBHOOK_URL }}
