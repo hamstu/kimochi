@@ -20,6 +20,11 @@ upstream revision 52aa607ecdc1038c7bf390f37cd9a8b306e8a08a; its
 preprocessing and postprocessing were adapted from meikiocr/ocr.py. The
 Apache License 2.0 is in LICENSE-APACHE.
 
+ppocr (crate from https://github.com/hamstu/kimochi-ppocr), Apache-2.0.
+Native inference for PaddleOCR's PP-OCRv6 models
+(https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0); its preprocessing
+and postprocessing follow PaddleOCR/PaddleX's reference behaviour.
+
 mangaocr (crate from https://github.com/hamstu/kimochi-mangaocr),
 GPL-3.0-only. Native Rust inference and page grouping for:
   - Manga OCR: https://github.com/kha-white/manga-ocr (Apache-2.0); the
