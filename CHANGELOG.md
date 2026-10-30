@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Mouse buttons as shortcuts:** on Windows, the scan and controller-menu shortcuts can now be the **middle**, **back** or **forward** mouse button. A bound button is kept from the game and other apps; unbound buttons work as before. On macOS this needs Kimochi to be allowed under Accessibility; Linux doesn't support it yet.
+
 ### Fixed
 
 - After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.

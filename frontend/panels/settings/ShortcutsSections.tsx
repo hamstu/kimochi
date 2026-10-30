@@ -5,7 +5,7 @@ import { useHotkeys } from '../../bridge/useHotkeys'
 import type { HotkeyName } from '../../bridge/types'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { gamepadChord } from '../../vendor/shared-defaults'
-import { formatAccelerator, keyPlatformOf } from './accelerator'
+import { formatAccelerator, isMouseAccelerator, keyPlatformOf } from './accelerator'
 import { useCapabilities } from '../../bridge/capabilities'
 import { ShortcutRecorder } from './ShortcutRecorder'
 
@@ -46,9 +46,11 @@ export function ShortcutsSections(): ReactNode {
           {hotkeyFailures.length === 1 ? 'This shortcut' : 'These shortcuts'} could not be
           registered, usually because another application already owns the combination:{' '}
           {hotkeyFailures
-            .map(
-              (failure) =>
-                `${failure.name} (${formatAccelerator(failure.accelerator, keyPlatform)})`
+            .map((failure) =>
+              // A mouse button fails for its own reason (no hook here, or no Accessibility).
+              isMouseAccelerator(failure.accelerator ?? '')
+                ? `${failure.name} (${formatAccelerator(failure.accelerator, keyPlatform)}: ${failure.error})`
+                : `${failure.name} (${formatAccelerator(failure.accelerator, keyPlatform)})`
             )
             .join(', ')}
         </Callout>

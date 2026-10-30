@@ -122,9 +122,17 @@ pub fn apply(app: &tauri::AppHandle, settings: &Arc<Settings>, suspended: bool) 
         return json!({"registered":[],"failed":[],"suspended":true,"backend":"portal"});
     }
     let generation = GENERATION.load(Ordering::SeqCst);
-    let definitions = merged_hotkeys(settings);
+    let mut definitions = merged_hotkeys(settings);
+    // A mouse button (bound on another computer, then synced) is not a key the portal can take.
+    let mouse: Vec<String> = definitions.iter()
+        .filter(|(_, d)| d["enabled"] != false && d["accelerator"].as_str().is_some_and(|a| crate::mouse_buttons::Button::parse(a).is_some()))
+        .map(|(name, _)| name.clone()).collect();
+    let failed: Vec<Value> = mouse.iter().map(|name| {
+        let accelerator = definitions.remove(name).map(|d| d["accelerator"].clone()).unwrap_or(Value::Null);
+        json!({"name":name,"accelerator":accelerator,"error":"mouse buttons can't be shortcuts on Linux"})
+    }).collect();
     let app = app.clone();
-    let pending = json!({"registered":[],"failed":[],"backend":"portal","pending":true});
+    let pending = json!({"registered":[],"failed":failed,"backend":"portal","pending":true});
     *REPORT.lock().unwrap() = Some(pending.clone());
     std::thread::spawn(move || {
         let result = if super::gnome::status()["nativeShortcuts"]==true {bind_gnome(&app,definitions,generation)}else{bind(&app,definitions,generation)};

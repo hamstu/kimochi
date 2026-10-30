@@ -29,6 +29,7 @@ mod gamepad;
 mod google_lens;
 mod history_merge;
 mod hotkeys;
+mod mouse_buttons;
 mod manga_ocr;
 mod meiki_ocr;
 #[cfg(target_os = "windows")]

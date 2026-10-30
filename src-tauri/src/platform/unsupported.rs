@@ -146,6 +146,14 @@ pub fn accessibility_status() -> Option<bool> {
     None
 }
 
+/// Mouse buttons as action shortcuts (`mouse_buttons`) are not available on this platform.
+pub fn sync_mouse_buttons(_app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
+    if wanted {
+        return Err("mouse buttons can't be shortcuts on this platform".into());
+    }
+    Ok(())
+}
+
 pub fn request_accessibility() -> Result<bool, String> {
     Err(UNSUPPORTED.into())
 }
@@ -171,7 +179,7 @@ pub fn run_cli(
 pub fn capabilities() -> Value {
     json!({
         "os": std::env::consts::OS,
-        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super"},
+        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super", "mouseButtons": "unsupported"},
         "input": {"globalShortcuts": false},
         "tray": true,
         "gamepad": true,
