@@ -6,11 +6,12 @@
 //! here: without it the binding is reported as failed and Settings explains why.
 //!
 //! The callback sits on the system's input path for those two event types, so it does what the
-//! Windows hook does: two atomic loads, a `try_send`, nothing that allocates or locks.
+//! Windows hook does: an atomic load, thread-local reads, a `try_send`, nothing that allocates
+//! or locks.
 use crate::mouse_buttons::{self, Button, Step};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -62,11 +63,15 @@ const HID_SYSTEM_STATE: i64 = 1; // kCGEventSourceStateHIDSystemState: the hardw
 
 /// The running tap's run loop (as an address) and its stop flag.
 static RUNNING: Mutex<Option<(usize, Arc<AtomicBool>)>> = Mutex::new(None);
-/// The live tap, so the callback can turn it back on after the system turned it off.
-static TAP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-/// Presses swallowed and not yet released (`mouse_buttons::step`). Only the tap thread writes.
-static OWNED: AtomicU8 = AtomicU8::new(0);
-thread_local! { static SENDER: RefCell<Option<SyncSender<u8>>> = const { RefCell::new(None) }; }
+// Per tap thread, where its callback runs: a tap still tearing down after a quick unbind and
+// rebind cannot clear the new tap's pointer or its swallowed presses.
+thread_local! {
+    static SENDER: RefCell<Option<SyncSender<u8>>> = const { RefCell::new(None) };
+    /// The live tap, so the callback can turn it back on after the system turned it off.
+    static TAP: Cell<CFMachPortRef> = const { Cell::new(std::ptr::null_mut()) };
+    /// Presses swallowed and not yet released (`mouse_buttons::step`).
+    static OWNED: Cell<u8> = const { Cell::new(0) };
+}
 
 /// macOS numbers the other buttons from 2: middle, then back (3) and forward (4).
 fn button(number: i64) -> Option<Button> {
@@ -80,7 +85,7 @@ fn button(number: i64) -> Option<Button> {
 
 extern "C" fn callback(_proxy: CGEventTapProxy, kind: u32, event: CGEventRef, _info: *mut c_void) -> CGEventRef {
     if kind == DISABLED_BY_TIMEOUT || kind == DISABLED_BY_USER_INPUT {
-        let tap = TAP.load(Ordering::Relaxed);
+        let tap = TAP.get();
         if !tap.is_null() {
             unsafe { CGEventTapEnable(tap, true) };
         }
@@ -95,9 +100,9 @@ extern "C" fn callback(_proxy: CGEventTapProxy, kind: u32, event: CGEventRef, _i
         return event;
     };
     let injected = unsafe { CGEventGetIntegerValueField(event, SOURCE_STATE_ID) } != HID_SYSTEM_STATE;
-    let mut owned = OWNED.load(Ordering::Relaxed);
+    let mut owned = OWNED.get();
     let step = mouse_buttons::step(&mut owned, mouse_buttons::armed(), button, down, injected);
-    OWNED.store(owned, Ordering::Relaxed);
+    OWNED.set(owned);
     match step {
         Step::Pass => event,
         Step::Swallow => std::ptr::null_mut(),
@@ -151,7 +156,7 @@ pub fn sync(app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
             SENDER.with(|slot| *slot.borrow_mut() = Some(sender));
             let run_loop = CFRunLoopGetCurrent();
             CFRunLoopAddSource(run_loop, source, kCFRunLoopDefaultMode);
-            TAP.store(tap, Ordering::Relaxed);
+            TAP.set(tap);
             CGEventTapEnable(tap, true);
             let _ = ready_tx.send(Ok(run_loop as usize));
             // In slices, so a stop that lands before the loop starts is still seen.
@@ -159,11 +164,10 @@ pub fn sync(app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
                 CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, false);
             }
             CGEventTapEnable(tap, false);
-            TAP.store(std::ptr::null_mut(), Ordering::Relaxed);
+            TAP.set(std::ptr::null_mut());
             CFMachPortInvalidate(tap);
             CFRelease(source);
             CFRelease(tap);
-            OWNED.store(0, Ordering::Relaxed);
             SENDER.with(|slot| slot.borrow_mut().take());
         })
         .map_err(|e| e.to_string())?;
