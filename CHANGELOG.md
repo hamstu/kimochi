@@ -15,6 +15,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **New offline OCR engine, PP-OCRv6:** a fast, accurate local engine for game text, horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay.
 
+### Changed
+
+- **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
+
 ## [0.2.2] - 2026-10-29
 
 ### Changed
