@@ -10,6 +10,8 @@
  * Logos are the files in frontend/assets/engine-icons/ (sources and licences in the README there
  * and in NOTICE). Apple Live Text has no logo of its own here, so it gets a lucide glyph in the
  * neutral tile; MeikiOCR and Manga OCR publish none, so they get a monogram in the same tile.
+ * PaddleOCR's only marks are wordmarks, unreadable at this size, so it gets a paddle drawn here in
+ * lucide's style.
  * The pictures are decorative: the engine's name always sits beside them.
  */
 import type { ReactNode } from 'react'
@@ -28,12 +30,30 @@ import './engine-icon.css'
 /** `tile`: a bare mark drawn inside the neutral tile rather than filling the square itself. */
 type Picture = { src: string; tile?: boolean } | { glyph: ReactNode } | { monogram: string; lang?: string }
 
+/** A paddle, for PaddleOCR: lucide's grid and stroke, so it sits in the tile like `ScanText`. */
+function Paddle(): ReactNode {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12.5 11.5 5 19" />
+      <path d="m3 17 4 4" />
+      <rect x="9.6" y="4.6" width="13.4" height="5.6" rx="2.8" transform="rotate(-45 16.3 7.4)" />
+    </svg>
+  )
+}
+
 const OCR_PICTURES: Record<OcrMode, Picture> = {
   googlelens: { src: googleLens, tile: true },
   cloud: { src: kimochiCloud },
   meikiocr: { monogram: 'M' },
   mangaocr: { monogram: '漫', lang: 'ja' },
-  ppocr: { monogram: 'P' },
+  ppocr: { glyph: <Paddle /> },
   livetext: { glyph: <ScanText /> },
   oneocr: { src: windows, tile: true }
 }

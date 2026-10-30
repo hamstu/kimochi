@@ -77,7 +77,7 @@
       ]
     },
     "ppocr": {
-      "name": "PP-OCRv6",
+      "name": "PaddleOCR",
       "files": [
         {
           "name": "PP-OCRv6_small_det.onnx",

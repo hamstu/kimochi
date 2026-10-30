@@ -21,7 +21,7 @@ const FILES: Record<ModelEngine, { name: string; files: [string, number][] }> = 
     ]
   },
   ppocr: {
-    name: 'PP-OCRv6',
+    name: 'PaddleOCR',
     files: [
       ['PP-OCRv6_small_det.onnx', 9880512],
       ['PP-OCRv6_small_rec.onnx', 21159378],

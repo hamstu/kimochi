@@ -365,20 +365,20 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
       'This model uses the GPU where it can (Metal on macOS, DirectML on Windows) and the CPU otherwise.'
   },
   ppocr: {
-    label: 'Local (PP-OCRv6)',
-    name: 'PP-OCRv6',
+    label: 'Local (PaddleOCR)',
+    name: 'PaddleOCR',
     tagline: 'Offline, fast and accurate',
     geometry: true,
     runs: 'local',
     description:
-      "PaddleOCR's PP-OCRv6 recognizer, running on your computer. Reads game dialogue, menus and vertical text accurately, keeps full-width characters as they appear on screen, and is quick on a graphics card.",
+      "PaddleOCR's PP-OCRv6 model, running on your computer. Reads game dialogue, menus and vertical text accurately, keeps full-width characters as they appear on screen, and is quickest on a graphics card.",
     strengths: [
-      'Fast on a graphics card (DirectML on Windows)',
+      'Fast on a graphics card (Core ML on a Mac, DirectML on Windows)',
       'Accurate on horizontal and vertical text',
       'Works offline; captures never leave this computer'
     ],
     requirements:
-      'A one-time model download of about 30 MB. Uses the GPU where it can and the CPU otherwise.'
+      'A one-time model download of about 30 MB. Uses the GPU where it can and the CPU otherwise. On a Mac, the first start takes a few seconds while macOS prepares the model; later starts take about two.'
   },
   livetext: {
     label: 'Local (Apple Live Text)',

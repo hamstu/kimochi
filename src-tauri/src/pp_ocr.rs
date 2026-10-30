@@ -52,7 +52,7 @@ fn load_engine(app: &tauri::AppHandle) -> Result<PpOcr, String> {
     let config = config(compiled_cache(app));
     engine_probe::guarded(|| {
         PpOcr::with_config(ModelPaths::from_dir(models, TIER), config)
-            .map_err(|e| format!("PP-OCR models: {e}"))
+            .map_err(|e| format!("PaddleOCR models: {e}"))
     })
 }
 
@@ -91,11 +91,11 @@ pub fn availability(app: &tauri::AppHandle) -> (bool, Option<String>) {
         });
         if selected {
             if let Some(state) = probe_app.try_state::<PpState>() {
-                let mut slot = state.0.lock().map_err(|_| "PP-OCR worker unavailable".to_string())?;
+                let mut slot = state.0.lock().map_err(|_| "PaddleOCR worker unavailable".to_string())?;
                 if slot.is_none() {
                     *slot = Some(load_engine(&probe_app)?);
                 }
-                return Ok(describe(slot.as_ref().ok_or("PP-OCR initialization failed")?));
+                return Ok(describe(slot.as_ref().ok_or("PaddleOCR initialization failed")?));
             }
         }
         Ok(describe(&load_engine(&probe_app)?))
@@ -133,18 +133,18 @@ fn as_meiki(lines: Vec<ppocr::TextLine>) -> Vec<meikiocr::TextLine> {
 }
 
 pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
-    let image = image.rgb().map_err(|e| format!("PP-OCR {e}"))?;
+    let image = image.rgb().map_err(|e| format!("PaddleOCR {e}"))?;
     let state = app.state::<PpState>();
-    let mut engine = state.0.lock().map_err(|_| "PP-OCR worker unavailable".to_string())?;
+    let mut engine = state.0.lock().map_err(|_| "PaddleOCR worker unavailable".to_string())?;
     if engine.is_none() {
-        *engine = Some(load_engine(app).map_err(|reason| format!("PP-OCR is not ready: {reason}"))?);
+        *engine = Some(load_engine(app).map_err(|reason| format!("PaddleOCR is not ready: {reason}"))?);
     }
-    let engine = engine.as_mut().ok_or("PP-OCR initialization failed")?;
+    let engine = engine.as_mut().ok_or("PaddleOCR initialization failed")?;
     // Shares Meiki's lock: two DirectML runs on one adapter contend for its command queue.
     let _serial = (engine.backend_info().selected == Backend::DirectMl)
         .then(|| crate::meiki_ocr::DIRECTML_RUN.lock().unwrap_or_else(|p| p.into_inner()));
     let mut lines = engine_probe::guarded(|| {
-        engine.ocr(&image, OcrOptions::default()).map_err(|e| format!("PP-OCR inference: {e}"))
+        engine.ocr(&image, OcrOptions::default()).map_err(|e| format!("PaddleOCR inference: {e}"))
     })?;
     ppocr::japanese::fix_lines(&mut lines);
     let mut result = crate::meiki_ocr::annotations(&as_meiki(lines), "ppocr");

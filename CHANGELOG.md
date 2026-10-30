@@ -13,15 +13,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **New offline OCR engine, PP-OCRv6:** a fast, accurate local engine for game text, horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay. On a Mac it takes a few seconds to prepare the first time it starts, and about two seconds after that.
-
-### Fixed
-
-- After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.
+- **New offline OCR engine, PaddleOCR:** a fast, accurate local engine for game text (PaddleOCR's PP-OCRv6 model), horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay. On a Mac it takes a few seconds to get ready the first time it starts, and about two seconds after that.
 
 ### Changed
 
 - **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
+
+### Fixed
+
+- After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.
 
 ## [0.2.2] - 2026-10-29
 
