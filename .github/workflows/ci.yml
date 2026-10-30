@@ -117,7 +117,7 @@ jobs:
             const TRIAL = ['Linux x64', 'Linux ARM64', 'Windows x64', 'Windows ARM64']
             // `bundle` (debug) or `release` (optimised, updater-signed; still uploaded only as
             // workflow artifacts on a pull request).
-            const TRIAL_MODE = 'release'
+            const TRIAL_MODE = 'bundle'
             const pr = context.eventName === 'pull_request'
             const tag = context.ref.startsWith('refs/tags/')
             const mode = tag ? 'release' : pr ? TRIAL_MODE : process.env.INPUT_MODE || 'bundle'
@@ -469,9 +469,18 @@ jobs:
             if ($process.ExitCode -notin @(0, 3010)) { throw "ARM64 C++ tools installation failed: $($process.ExitCode)" }
           }
 
+      # Compiling the signing tool takes about three minutes. GitHub's runners keep the binary in a
+      # cache of its own, which a tag's run can read from main (its Rust cache always starts
+      # cold). Bump the key's suffix to pick up a new version.
+      - name: Restore Windows signing CLI
+        if: matrix.onGitHub && runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/artifact-signing-cli.exe
+          key: artifact-signing-cli-${{ runner.os }}-${{ runner.arch }}-v1
       - name: Install Windows signing CLI
         if: runner.os == 'Windows' && env.HAS_WINDOWS_SIGNING == 'true'
-        run: cargo install --locked artifact-signing-cli
+        run: command -v artifact-signing-cli >/dev/null || cargo install --locked artifact-signing-cli
 
       # makensis maps the whole installer in the temp directory; the system drive of a runner can
       # be nearly full while its work drive has plenty, so use the runner's own temp directory.
