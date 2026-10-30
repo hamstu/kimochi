@@ -675,6 +675,9 @@ Settings buttons stay hidden until then. `phase` is `starting`, `downloading`, `
 `setup-needed`, `ready` or `failed`; `progress` is a percentage when the engine supplies one.
 The overlay publishes changes through `report` (`check: "dictionary-readiness"`); native keeps
 the latest value per engine so newly opened Settings and onboarding see the current state.
+Native stamps each stored value with a rising `seq` (`0` for the "nothing reported yet"
+default); a window keeps the higher one, because its first `dictionary_runtime_status` answer
+can arrive after a newer event.
 Hachidori uses `hd_status` and observes `hd_setup_progress` without starting any installation.
 10ten uses the same `options` runtime port as its options page (`dbstateupdated`); every data
 series must be `ok` and database updates idle. Yomitan requires an installed, enabled dictionary.

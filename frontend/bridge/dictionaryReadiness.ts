@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { downloadEngineFor } from "@ui/extension-download";
-import { readinessView, type DownloadState, type ReadinessView } from "@ui/dictionary-readiness";
+import { newerReadiness, readinessView, type DownloadState, type ReadinessView } from "@ui/dictionary-readiness";
 import { onEvent } from "./tauri";
 import { DICTIONARY_ENGINES, hostEngineOf, type DictionaryEngine } from "./dictionaryEngine";
 import { useExtensionStatus } from "./extensions";
@@ -21,6 +21,8 @@ export interface DictionaryReadiness {
   progress?: number | null;
   /** Lookups work now, whatever the phase (10ten reads its bundled words while it downloads). */
   lookups?: boolean;
+  /** Native's number for this report (`src-tauri/src/dictionary_runtime.rs`): higher is newer. */
+  seq?: number;
   /** The engine's download (`extension_status`), or null when there is none to report. */
   download: DownloadState;
   /** What Settings, the sidebar and onboarding show for it (`ui/dictionary-readiness.ts`). */
@@ -43,7 +45,9 @@ export function useDictionaryReadiness(
     let live = true;
     let stop: (() => void) | undefined;
     const accept = (next: Reported): void => {
-      if (live && next.engine === host) setStatus(next);
+      if (live && next.engine === host) {
+        setStatus((current) => (newerReadiness(current, next) ? next : current));
+      }
     };
     // Subscribe before reading: a fast startup cannot land between the read and listener.
     void onEvent<Reported>("dictionary-readiness", accept)
