@@ -265,6 +265,20 @@ pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
     Ok(engine)
 }
 
+/// CPU threads for an ONNX Runtime session; `None` keeps ONNX Runtime's default.
+///
+/// That default spreads each session over every logical core. On Linux (Ryzen 7 7800X3D,
+/// 16 threads, WSL2) it measured slower than about one thread per physical core, capped at six:
+/// PP-OCR 116 → 91 ms and MeikiOCR 172 → 95 ms per scan on the overlay-alignment fixtures, and
+/// it leaves cores to the game. Other platforms keep the default until measured there.
+pub(crate) fn cpu_threads() -> Option<usize> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    let logical = std::thread::available_parallelism().map_or(2, |n| n.get());
+    Some((logical / 2).clamp(1, 6))
+}
+
 /// Set once an adapter accepts DirectML sessions but fails the crate's first-inference probe
 /// (seen on Windows on ARM under virtualisation). Every engine after that asks for CPU
 /// directly, instead of repeating the failed run and its ONNX Runtime error on stderr.
