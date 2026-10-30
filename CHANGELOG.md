@@ -13,7 +13,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **New offline OCR engine, PP-OCRv6:** a fast, accurate local engine for game text, horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay.
+- **New offline OCR engine, PP-OCRv6:** a fast, accurate local engine for game text, horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can (on Windows it is ready about a second after you pick it, even on a GTX 1080), and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay.
 
 ## [0.2.2] - 2026-10-29
 
