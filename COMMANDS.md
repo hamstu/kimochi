@@ -1468,7 +1468,7 @@ data directory on macOS and Linux, `%LOCALAPPDATA%` rather than the roaming prof
 Windows) from the pinned list in `src-tauri/ocr-models.json` (repository, revision, URL,
 SHA-256 and size per file). Implementation: `src-tauri/src/model_store.rs`.
 
-`engine` is `"meikiocr"`, `"mangaocr"` or `"sensevoice"` (SenseVoice-Small, sentence audio's
+`engine` is `"meikiocr"`, `"mangaocr"`, `"ppocr"` (PP-OCRv6) or `"sensevoice"` (SenseVoice-Small, sentence audio's
 speech recogniser; never an `ocrMode`). Every command answers with the engine's
 `ModelStatus` after acting:
 

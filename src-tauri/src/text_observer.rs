@@ -98,6 +98,7 @@ fn announce_verified_capabilities(app: &tauri::AppHandle) {
     };
     crate::meiki_ocr::on_verified(announce(app.clone()));
     crate::manga_ocr::on_verified(announce(app.clone()));
+    crate::pp_ocr::on_verified(announce(app.clone()));
 }
 
 fn unavailable_detail(reason: &str) -> String {

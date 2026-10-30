@@ -57,6 +57,7 @@ export function EngineSettings({
       return DEV_BUILD ? <CloudServerNote /> : null
     case 'meikiocr':
     case 'mangaocr':
+    case 'ppocr':
       return <ModelDownload controls={model} emphasis={emphasis} />
     case 'googlelens':
     case 'oneocr':

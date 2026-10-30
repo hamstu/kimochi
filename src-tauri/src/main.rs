@@ -30,6 +30,7 @@ mod google_lens;
 mod history_merge;
 mod hotkeys;
 mod manga_ocr;
+mod pp_ocr;
 mod meiki_ocr;
 #[cfg(target_os = "windows")]
 #[path = "platform/windows/oneocr.rs"]
@@ -1835,6 +1836,7 @@ fn native_ocr(app: &tauri::AppHandle, settings: &Settings, image: &Image) -> Rep
         "livetext" => return Err("Apple Live Text is available on macOS only.".into()),
         "meikiocr" | "local" => return meiki_ocr::recognize(app, image),
         "mangaocr" => return manga_ocr::recognize(app, image),
+        "ppocr" => return pp_ocr::recognize(app, image),
         _ => {}
     }
     let png = image.png()?;
@@ -1908,7 +1910,7 @@ fn post_ocr(settings: &Settings, png: &[u8]) -> Reply<Value> {
 /// The engines `ocr_frame` can dispatch to in this build: the portable ones, plus
 /// the OS engine of the OS this was built for.
 fn native_engine_known(engine: &str) -> bool {
-    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr")
+    matches!(engine, "googlelens" | "cloud" | "meikiocr" | "mangaocr" | "ppocr")
         || (cfg!(target_os = "windows") && engine == "oneocr")
         || (cfg!(target_os = "macos") && engine == "livetext")
 }
@@ -1941,7 +1943,7 @@ async fn ocr_frame(
         // Encoding is outside the frame-store lock so observations can continue. Engines that
         // read the pixels themselves don't wait for it: their copy of the frame for diagnostics
         // (`last-ocr-frame.png`) is encoded and written beside the scan.
-        let pixels_only = matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "livetext");
+        let pixels_only = matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext");
         let png = if pixels_only { None } else { Some(image.png()?) };
         let info = image.info.clone();
         if let Ok(p) = path(&app, "last-ocr-frame.png") {
@@ -1968,6 +1970,7 @@ async fn ocr_frame(
         let recognized = match engine.as_str() {
             "meikiocr" | "local" => meiki_ocr::recognize(&app, &image),
             "mangaocr" => manga_ocr::recognize(&app, &image),
+            "ppocr" => pp_ocr::recognize(&app, &image),
             "googlelens" => google_lens::recognize(&png),
             #[cfg(target_os = "windows")]
             "oneocr" => oneocr::recognize(&app, &png),
@@ -2190,6 +2193,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
         observer,
         meikiocr: meiki_ocr::availability(app),
         mangaocr: manga_ocr::availability(app),
+        ppocr: pp_ocr::availability(app),
     });
     #[cfg(target_os = "windows")]
     {
@@ -2216,6 +2220,7 @@ fn capabilities_value(app: &tauri::AppHandle, service: &Shared) -> Value {
     for (key, verified) in [
         ("meikiocr", meiki_ocr::verification()),
         ("mangaocr", manga_ocr::verification()),
+        ("ppocr", pp_ocr::verification()),
     ] {
         if let Some(engine_probe::Verified { available: true, accelerator: Some(accelerator), .. }) = verified {
             if payload["ocrEngines"][key]["available"] == json!(true) {
@@ -3275,6 +3280,7 @@ fn main() {
             }
             app.manage(meiki_ocr::MeikiState::default());
             app.manage(manga_ocr::MangaState::default());
+            app.manage(pp_ocr::PpState::default());
             manga_ocr::prewarm(&handle);
 
             let reader_popup = reader::popover::build_window(&handle, 0)?;

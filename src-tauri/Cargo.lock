@@ -3152,6 +3152,7 @@ dependencies = [
  "objc2-foundation",
  "ort",
  "png 0.18.1",
+ "ppocr",
  "prost",
  "raw-window-handle",
  "regex",
@@ -4469,6 +4470,17 @@ name = "powerfmt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
+
+[[package]]
+name = "ppocr"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "ndarray",
+ "ort",
+ "serde",
+ "thiserror 2.0.20",
+]
 
 [[package]]
 name = "ppv-lite86"
