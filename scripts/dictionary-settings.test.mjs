@@ -32,7 +32,7 @@ async function bundle(entry, name, external = []) {
   return import(pathToFileURL(outfile).href)
 }
 
-const { readinessView } = await bundle('../ui/dictionary-readiness.ts', 'readiness.mjs')
+const { readinessView, newerReadiness } = await bundle('../ui/dictionary-readiness.ts', 'readiness.mjs')
 const { buildAnkiConfigForPopover, ankiMiningGap } = await bundle('../frontend/texthooker/lib/ankiConfig.ts', 'anki-config.mjs')
 const { popupAnkiConfig } = await bundle('../ui/api-lookup.js', 'api-lookup.mjs', ['/spike/*'])
 
@@ -68,6 +68,21 @@ test('a downloaded engine follows its readiness', () => {
   assert.equal(start.badge.label, 'Setting up')
   assert.equal(start.settingsAvailable, false)
   assert.equal(start.text, 'Starting the dictionary… Words are looked up once setup is complete.')
+})
+
+test('a late status read cannot undo a newer readiness (stuck on "Starting Yomitan…" after a switch)', () => {
+  // A reloaded window reads the status (answered "starting") just before the host reports
+  // "ready"; the "ready" event lands first, then the read's answer.
+  const ready = { engine: 'yomitan', phase: 'ready', seq: 8 }
+  const lateRead = { engine: 'yomitan', phase: 'starting', seq: 7 }
+  assert.equal(newerReadiness(ready, lateRead), false)
+  assert.equal(newerReadiness(lateRead, ready), true)
+  assert.equal(newerReadiness(ready, { ...ready }), true, 'the same report again is harmless')
+  // Nothing yet, or another engine's: the report is taken whatever its number.
+  assert.equal(newerReadiness(null, lateRead), true)
+  assert.equal(newerReadiness({ engine: 'hachidori', phase: 'ready', seq: 40 }, lateRead), true)
+  // Native's "nothing reported yet" default is numbered 0, older than any report.
+  assert.equal(newerReadiness(ready, { engine: 'yomitan', phase: 'starting', seq: 0 }), false)
 })
 
 test("the note joins the engine's message as sentences, and tells the truth about lookups", () => {

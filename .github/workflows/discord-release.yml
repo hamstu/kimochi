@@ -1,0 +1,79 @@
+name: Announce release on Discord
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to announce
+        required: true
+        type: string
+    secrets:
+      DISCORD_RELEASES_WEBHOOK_URL:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag to announce
+        required: true
+        type: string
+      allow_prerelease:
+        description: Allow announcing a published prerelease
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    runs-on: [self-hosted, macOS]
+    steps:
+      - name: Announce release on Discord
+        uses: actions/github-script@v7
+        env:
+          DISCORD_RELEASES_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASES_WEBHOOK_URL }}
+          RELEASE: ${{ inputs.tag }}
+          ALLOW_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_prerelease }}
+        with:
+          script: |
+            const webhook = process.env.DISCORD_RELEASES_WEBHOOK_URL
+            if (!webhook) return
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              ...context.repo, tag: process.env.RELEASE,
+            })
+            if (release.draft) {
+              if (context.eventName === 'workflow_dispatch') core.setFailed('Cannot announce a draft release')
+              return
+            }
+            if (release.prerelease && process.env.ALLOW_PRERELEASE !== 'true') {
+              if (context.eventName === 'workflow_dispatch') core.setFailed('Prereleases require allow_prerelease=true')
+              return
+            }
+            const link = `\n\n[Full notes](${release.html_url})`
+            const notes = release.body || ''
+            let description = notes
+            if (notes.length + link.length > 4096) {
+              const budget = 4096 - link.length - 1
+              let excerpt = notes.slice(0, budget)
+              // Prefer a complete line or word; avoid splitting a Unicode surrogate pair.
+              const boundary = Math.max(excerpt.lastIndexOf('\n'), excerpt.lastIndexOf(' '))
+              if (boundary > budget / 2) excerpt = excerpt.slice(0, boundary)
+              excerpt = excerpt.replace(/[\uD800-\uDBFF]$/, '')
+              description = `${excerpt.trimEnd()}…`
+            }
+            const title = `${release.tag_name}: ${release.name || release.tag_name}`
+            const payload = {
+              allowed_mentions: { parse: [] },
+              embeds: [{
+                title: title.length > 256 ? `${title.slice(0, 254).replace(/[\uD800-\uDBFF]$/, '')}…` : title,
+                url: release.html_url,
+                description: description + link,
+              }],
+            }
+            const response = await fetch(webhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(30000),
+            })
+            if (!response.ok) throw new Error(`Discord notification failed (HTTP ${response.status})`)
