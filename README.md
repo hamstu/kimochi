@@ -59,7 +59,8 @@ You need Node 22+ and stable Rust, plus per OS:
   (details in [src-tauri/src/platform/linux/DEPS.md](src-tauri/src/platform/linux/DEPS.md)).
 
 The OCR engines are separate crates ([kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr),
-[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr)); Cargo fetches them at the exact
+[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr),
+[kimochi-ppocr](https://github.com/hamstu/kimochi-ppocr)); Cargo fetches them at the exact
 revisions pinned in `src-tauri/Cargo.toml`, so there is nothing else to clone:
 
 ```sh
