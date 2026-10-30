@@ -24,11 +24,29 @@ pub fn unload(app: &tauri::AppHandle) {
     }
 }
 
+/// Core ML's compiled models, one per input shape and seconds each to build: kept across launches
+/// (6.4 s to load cold, 1.7 s from here on an M5 Max) and pruned by ppocr itself. Other platforms'
+/// providers compile nothing worth keeping.
+fn compiled_cache(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    app.path().app_cache_dir().ok().map(|dir| dir.join("ppocr-coreml"))
+}
+
+/// Remove the compiled-model cache along with the models (`model_delete`).
+pub fn delete_cache(app: &tauri::AppHandle) {
+    if let Some(dir) = compiled_cache(app) {
+        let _ = model_store::remove_dir(&dir);
+    }
+}
+
 fn load_engine(app: &tauri::AppHandle) -> Result<PpOcr, String> {
     let models = model_store::models_dir(app, model_store::Engine::PpOcr)?;
     crate::meiki_ocr::onnx_runtime(app)?;
+    let config = Config { cache_dir: compiled_cache(app), ..Config::default() };
     engine_probe::guarded(|| {
-        PpOcr::with_config(ModelPaths::from_dir(models, TIER), Config::default())
+        PpOcr::with_config(ModelPaths::from_dir(models, TIER), config)
             .map_err(|e| format!("PP-OCR models: {e}"))
     })
 }

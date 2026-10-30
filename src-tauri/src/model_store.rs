@@ -1276,7 +1276,10 @@ pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<Model
                 }
             }
             Engine::Manga => crate::manga_ocr::unload(app),
-            Engine::PpOcr => crate::pp_ocr::unload(app),
+            Engine::PpOcr => {
+                crate::pp_ocr::unload(app);
+                crate::pp_ocr::delete_cache(app);
+            }
             Engine::SenseVoice => crate::sentence_audio::unload_model(app),
         }
         store.delete(engine)
