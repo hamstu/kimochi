@@ -41,10 +41,15 @@ pub fn delete_cache(app: &tauri::AppHandle) {
     }
 }
 
+/// The app's engine settings: Linux's CPU thread count and, on macOS, the compiled-model cache.
+fn config(cache_dir: Option<std::path::PathBuf>) -> Config {
+    Config { intra_threads: crate::meiki_ocr::cpu_threads(), cache_dir, ..Config::default() }
+}
+
 fn load_engine(app: &tauri::AppHandle) -> Result<PpOcr, String> {
     let models = model_store::models_dir(app, model_store::Engine::PpOcr)?;
     crate::meiki_ocr::onnx_runtime(app)?;
-    let config = Config { cache_dir: compiled_cache(app), ..Config::default() };
+    let config = config(compiled_cache(app));
     engine_probe::guarded(|| {
         PpOcr::with_config(ModelPaths::from_dir(models, TIER), config)
             .map_err(|e| format!("PP-OCR models: {e}"))
@@ -145,4 +150,26 @@ pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<
     let mut result = crate::meiki_ocr::annotations(&as_meiki(lines), "ppocr");
     result["backend"] = serde_json::to_value(engine.backend_info()).map_err(|e| e.to_string())?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The scan path without a window: the app's config, the Japanese fixes and the overlay
+    /// annotations, on whichever runtime ORT_DYLIB_PATH names.
+    #[test]
+    #[ignore = "manual: requires ORT_DYLIB_PATH and PPOCR_MODEL_DIR"]
+    fn reads_a_fixture_through_the_scan_path() {
+        let models = std::env::var("PPOCR_MODEL_DIR").unwrap();
+        let mut engine = PpOcr::with_config(ModelPaths::from_dir(models, TIER), config(None)).unwrap();
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/fixtures/overlay-alignment/dialogue.png");
+        let image = image::open(fixture).unwrap().to_rgb8();
+        let mut lines = engine.ocr(&image, OcrOptions::default()).unwrap();
+        ppocr::japanese::fix_lines(&mut lines);
+        let value = crate::meiki_ocr::annotations(&as_meiki(lines), "ppocr");
+        assert!(value["fullText"].as_str().unwrap().contains("今日は一緒に図書館へ行かない"));
+        println!("PP-OCR: {:?}, threads {:?}", engine.backend_info(), config(None).intra_threads);
+    }
 }
