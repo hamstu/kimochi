@@ -315,6 +315,7 @@ jobs:
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
+          # xdg-utils: tauri's AppImage step runs xdg-mime, which a minimal Ubuntu (WSL) lacks.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -336,7 +337,8 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
             gstreamer1.0-pulseaudio \
-            libavif-dev
+            libavif-dev \
+            xdg-utils
 
       - uses: actions/setup-node@v4
         with:
