@@ -5,6 +5,8 @@
  * before anything reaches a page (see `platform::DesktopGeometry`). Frame pixels
  * (`full_*`, `crop_pixels`, OCR vertices) are capture pixels and never desktop points.
  */
+import type { Surface } from './annotations.js'
+
 export interface Rect {
   x: number
   y: number
@@ -35,6 +37,8 @@ export interface Annotation {
   /** The typeface the overlay sets this engine's text in (TYPEFACES in ocr-result.ts). */
   typeface?: string
   groupId?: string
+  /** What the box sits on (Annotation.surface in annotations.ts). */
+  surface?: Surface
   boundingPoly: { vertices: { x?: number; y?: number }[] }
 }
 /** A word or character of a line, mapped like everything else. */
@@ -52,6 +56,7 @@ export type MappedBox = Rect & {
   segments?: MappedSegment[]
   inkMargin?: number[]
   typeface?: string
+  surface?: Surface
 }
 /**
  * Current full capture pixels → desktop points, per axis.
@@ -157,7 +162,8 @@ export function mapAnnotations(
         ...(lineTexts.length ? { lineTexts } : {}),
         ...(segments.length ? { segments } : {}),
         ...(a.inkMargin?.length === 4 ? { inkMargin: a.inkMargin } : {}),
-        ...(a.typeface ? { typeface: a.typeface } : {})
+        ...(a.typeface ? { typeface: a.typeface } : {}),
+        ...(a.surface ? { surface: a.surface } : {})
       }
     ]
   })

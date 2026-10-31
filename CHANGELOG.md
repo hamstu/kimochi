@@ -19,10 +19,13 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Smarter Auto OCR:** with a local engine selected, that engine now watches the screen for new text itself, so lines no longer flicker out of the overlay when a different engine misreads them. With an online engine or Manga OCR, Auto OCR watches with the best engine already on your computer (PaddleOCR, Apple Live Text or OneOCR, then MeikiOCR), and it no longer downloads MeikiOCR in the background to do it. It also looks less often when the watching engine is slow, leaving more of the processor to your game. You can choose the watching engine under Auto OCR's advanced options.
 - **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
+- **A new look for the overlay.** Scanned text is marked with a soft tinted box instead of an underline, and hovering a word turns it into a floating card in the style of Kimochi's own windows, with a little room around the text and a lighter weight. With "Group text into regions" on, nearby lines share one box that works the same way. Everything fades in and out, except when you leave the game's window, which still hides the overlay at once.
+- **Settings → OCR & Overlay → Overlay look:** choose the highlight colour and how strongly it shows, and whether the cards are light, dark or the same as Kimochi, with live previews of each. A fourth choice, **Blend**, fills each hovered card with the colours behind that word on your screen and picks light or dark text to match, so it looks as if the game drew it.
 
 ### Fixed
 
 - After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.
+- With "Group text into regions" on, text read by Apple Live Text or Google Lens now merges into one region per dialogue box, as it does with the other engines, instead of a separate box for every line or paragraph.
 
 ## [0.2.2] - 2026-10-29
 

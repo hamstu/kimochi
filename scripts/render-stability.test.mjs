@@ -216,22 +216,97 @@ test('even a one-point actual source movement bypasses OCR jitter tolerance', ()
   assert.equal(host.children[0].style.left, '11px')
 })
 
-test('vertical words retain direction through geometry mapping and use a side marker', () => {
+test('vertical words retain direction through geometry mapping and light like any other', () => {
   const host=element(), renderer=new TextOverlayRenderer(host)
   renderer.render(view([{...word('縦書き',20),isVertical:true,orientation:'vertical',groupId:'v'}]))
   assert.match(host.children[0].className,/ocr-vertical/)
   renderer.setPointer(25,10)
   renderer.updateProximity()
-  assert.equal(host.children[0].style.borderBottom,'none')
-  assert.ok(host.children[0].style.borderRight)
+  // Hovered: the card (`data-lit`, overlay-text.css), and nothing inline that moves the text.
+  assert.equal(host.children[0].dataset.lit,'')
+  assert.equal(host.children[0].style.borderBottom,undefined)
+  assert.equal(host.children[0].style.borderRight,undefined)
+  renderer.setPointer(500,500)
+  renderer.updateProximity()
+  assert.equal(host.children[0].dataset.lit,undefined)
   renderer.destroy()
 })
 
 test('grouped overlay never merges separately identified bubbles or extends lookup across them', () => {
   const host=element(), renderer=new TextOverlayRenderer(host)
-  renderer.render(view([{...word('泡一',10),groupId:'a',granularity:'block',isVertical:true},{...word('泡二',42),groupId:'b',granularity:'block',isVertical:true}],{grouping:{enabled:true,filterSmallText:true,proximityThreshold:1000}}))
+  renderer.render(view([{...word('泡一',10),groupId:'a',granularity:'block',bubble:true,isVertical:true},{...word('泡二',42),groupId:'b',granularity:'block',bubble:true,isVertical:true}],{grouping:{enabled:true,filterSmallText:true,proximityThreshold:1000}}))
   assert.equal(host.children.length,2)
   assert.match(host.children[0].className,/ocr-vertical/)
   assert.equal(host.children[0].querySelector('.ocr-lookahead').textContent,'')
+  renderer.destroy()
+})
+
+test('grouped overlay merges nearby blocks that are not bubbles (Live Text lines, Google Lens paragraphs)', () => {
+  const host=element(), renderer=new TextOverlayRenderer(host)
+  renderer.render(view([{...word('一行目',10),groupId:'livetext-line-0',granularity:'block'},{...word('二行目',42),groupId:'livetext-line-1',granularity:'block'}],{grouping:{enabled:true,filterSmallText:true,proximityThreshold:1000}}))
+  assert.equal(host.children.length,1)
+  renderer.destroy()
+})
+
+test('a grouped region rests as a highlight and lights as its card only when hovered, as a word box does', () => {
+  globalThis.cancelAnimationFrame ??= () => {}
+  const host = element(),
+    renderer = new TextOverlayRenderer(host)
+  renderer.render(
+    view([word('一行目', 10), word('二行目', 42)], {
+      grouping: { enabled: true, filterSmallText: false, proximityThreshold: 1000 }
+    })
+  )
+  assert.equal(host.children.length, 1)
+  const [region] = renderer.regions
+  assert.equal(region.element, host.children[0])
+  renderer.setPointer(-5000, -5000)
+  renderer.flushPointer()
+  assert.equal('lit' in region.element.dataset, false)
+  renderer.setPointer(region.centerX, region.centerY)
+  renderer.flushPointer()
+  assert.equal(region.element.dataset.lit, '')
+  renderer.setPointer(region.box.x + region.box.width + 400, region.centerY)
+  renderer.flushPointer()
+  assert.equal('lit' in region.element.dataset, false)
+  renderer.destroy()
+})
+
+test('a word box carries what it sits on, for Blend cards to fill with', () => {
+  const host = element(),
+    renderer = new TextOverlayRenderer(host)
+  const surface = { top: '#1a2343', bottom: '#20223a', ink: 'light' }
+  renderer.render(view([{ ...word('猫', 10), surface }, word('犬', 60)]))
+  const [cat, dog] = host.children
+  assert.equal(cat.dataset.surface, 'light')
+  assert.equal(cat.style['--ocr-surface-top'], '#1a2343')
+  assert.equal(cat.style['--ocr-surface-bottom'], '#20223a')
+  assert.equal('surface' in dog.dataset, false)
+  renderer.destroy()
+})
+
+test("a grouped region combines its boxes' readings for Blend: top from the top box, bottom from the bottom one", () => {
+  const host = element(),
+    renderer = new TextOverlayRenderer(host)
+  const line = (text, y, surface) => ({
+    description: text,
+    surface,
+    boundingPoly: { vertices: [{ x: 10, y }, { x: 200, y }, { x: 200, y: y + 20 }, { x: 10, y: y + 20 }] }
+  })
+  renderer.render(
+    view(
+      [
+        line('一行目', 0, { top: '#101830', bottom: '#141c34', ink: 'light' }),
+        line('二行目', 26, { top: '#141c34', bottom: '#182038', ink: 'light' }),
+        line('三行目', 52, { top: '#182038', bottom: '#1c243c', ink: 'dark' })
+      ],
+      { grouping: { enabled: true, filterSmallText: false, proximityThreshold: 1000 } }
+    )
+  )
+  assert.equal(host.children.length, 1)
+  const [region] = host.children
+  assert.equal(region.dataset.surface, 'light')
+  assert.equal(region.style['--ocr-surface-top'], '#101830')
+  assert.equal(region.style['--ocr-surface-bottom'], '#1c243c')
   renderer.destroy()
 })

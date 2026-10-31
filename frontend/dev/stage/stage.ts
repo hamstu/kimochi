@@ -15,8 +15,12 @@
  *   ?fragments=1     OCR reports a box per word (a particle a box), not a box per line
  *   ?filter=0        keep furigana and small text (the overlay's small-text filter off)
  *   ?grouping=1      Group text into regions (the grouped overlay)
- *   ?opacity=<0-100> the grouped overlay's background opacity (default 80)
  *   ?typeface=manga  set the text in Manga OCR's typeface
+ *   ?highlight=<rrggbb>  the highlight colour over hoverable text (Settings → Overlay look;
+ *                    default: the app's indigo)
+ *   ?strength=<0-100> the highlight's opacity (Settings → Overlay look; default 40)
+ *   ?cards=light|dark|blend  the hovered cards' and grouped regions' appearance (default: the pop-up's,
+ *                    `theme`, as "Same as Kimochi" does)
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open)
  *   ?theme=light|dark  the pop-up's, the region editor's and the controller's appearance (default:
@@ -60,6 +64,7 @@
  * `stick:0,0` to let go), or `key:<Key>` (`key:ArrowRight`, `key:Enter`, `key:Escape`, `key:Space`).
  */
 import overlayHtml from '@ui/overlay.html?raw'
+import '@ui/overlay-text.css'
 import '@ui/controller.css'
 import '@ui/controller-variants.css'
 // The app bundles Figtree for the overlay as fonts/figtree.css (prepare.mjs); here, from the package.
@@ -170,6 +175,21 @@ const renderer = new TextOverlayRenderer(words, {
   onLookupStart: () => undefined,
   onActivity: () => undefined
 })
+// The look, as overlay.js applies it from Settings → Overlay look.
+renderer.setStyle({
+  color: /^[0-9a-f]{6}$/i.test(params.get('highlight') ?? '')
+    ? `#${params.get('highlight')}`
+    : SETTINGS_DEFAULTS.overlayStyle.color,
+  opacity: Number(params.get('strength') ?? SETTINGS_DEFAULTS.overlayStyle.opacity),
+  theme: ['light', 'dark', 'blend'].includes(params.get('cards') ?? '') ? params.get('cards') : theme
+})
+
+/** Blend reads the frame behind each word (surface.rs); the stage has none, so its words say
+ *  they sit on its dialogue box. */
+const stageSurface =
+  params.get('game') === 'manga'
+    ? { surface: { top: '#fbfaf7', bottom: '#f3f1ec', ink: 'dark' } }
+    : { surface: { top: '#1a2343', bottom: '#20223a', ink: 'light' } }
 
 function grouping(): Record<string, unknown> {
   return {
@@ -185,7 +205,7 @@ function draw(): void {
   const typeface = params.get('typeface') === 'manga' ? { typeface: 'manga' } : {}
   // The renderer's JSDoc types predate `bounds`; this is the view overlay.js passes.
   renderer.render({
-    annotations: game.annotations.map((a) => ({ ...a, ...typeface })),
+    annotations: game.annotations.map((a) => ({ ...a, ...typeface, ...stageSurface })),
     info: {
       full_width: area.width,
       full_height: area.height,
