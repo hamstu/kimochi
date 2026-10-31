@@ -14,6 +14,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - **New offline OCR engine, PaddleOCR:** a fast, accurate local engine for game text (PaddleOCR's PP-OCRv6 model), horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay. On Windows it's ready about a second after you pick it, even on an older graphics card; on a Mac the first start takes a few seconds, and later ones about two.
+- **Quick Shot:** pressing its shortcut again now closes it if you haven't drawn a box yet, or scans the box you've drawn, the same as Esc and Enter.
 
 ### Changed
 
