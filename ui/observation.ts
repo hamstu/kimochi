@@ -56,6 +56,8 @@ export interface ObservedLine {
 export interface Observation {
   text: string
   lines: ObservedLine[]
+  /** How long the watcher took to read the frame, when it says. */
+  durationMs?: number
 }
 
 /**

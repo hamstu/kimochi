@@ -1607,6 +1607,7 @@ async fn capture_frame(
     request: CaptureRequest,
     observe: Option<bool>,
     observer_mode: Option<String>,
+    observer_engine: Option<String>,
 ) -> Reply<Value> {
     if state.scanning.swap(true, Ordering::SeqCst) {
         return Err("busy: a capture is already running; retry shortly".into());
@@ -1649,6 +1650,8 @@ async fn capture_frame(
                     .observer
                     .lock()
                     .map_err(|_| "busy: the local observer is poisoned".to_string())?;
+                // Which engine watches is the overlay's choice (`ui/watcher.ts`).
+                observer.select(observer_engine.as_deref().unwrap_or(text_observer::DEFAULT_ENGINE));
                 match observer.observe(&frame, OBSERVE_TIMEOUT) {
                     Ok(read) => {
                         sentence_audio::screen_text(&app, &read.text, captured_at);
@@ -3183,7 +3186,7 @@ fn main() {
             let backend = platform::capture::protect(handle.clone(), backend);
             let service: Shared = Arc::new(Service {
                 backend: Mutex::new(backend),
-                observer: Mutex::new(text_observer::local_observer(&handle)),
+                observer: Mutex::new(text_observer::Observers::new(&handle)),
                 images: Mutex::new(Default::default()),
                 settings: store.clone(),
                 selection: Mutex::new(None),

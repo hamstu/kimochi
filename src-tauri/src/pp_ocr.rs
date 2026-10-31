@@ -1,9 +1,8 @@
 //! PP-OCRv6 (PaddleOCR) sessions for scans, loaded lazily and reused.
 //!
 //! Runs on the ONNX Runtime MeikiOCR bundles (`meiki_ocr::onnx_runtime`); only the models are
-//! downloaded, as their own engine in `model_store`. Automatic scanning's change detection
-//! still uses MeikiOCR (`text_observer.rs`); PP-OCR reads the frames it settles on, like any
-//! other selected engine.
+//! downloaded, as their own engine in `model_store`. The same engine also watches the screen
+//! for automatic scanning when the overlay chooses it (`text_observer.rs`, `read_lines`).
 use crate::engine_probe::{self, Loaded, Probe, Verified};
 use crate::model_store;
 use ppocr::{Backend, Config, ModelPaths, OcrOptions, PpOcr, Tier};
@@ -132,23 +131,50 @@ fn as_meiki(lines: Vec<ppocr::TextLine>) -> Vec<meikiocr::TextLine> {
         .collect()
 }
 
-pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
-    let image = image.rgb().map_err(|e| format!("PaddleOCR {e}"))?;
+/// The models directory is complete (`text_observer`'s gate; nothing is downloaded here).
+pub(crate) fn models_ready(app: &tauri::AppHandle) -> Result<(), String> {
+    model_store::models_dir(app, model_store::Engine::PpOcr).map(|_| ())
+}
+
+/// Why `read_lines` could not read: the engine cannot load, or this image failed.
+pub(crate) enum ReadError {
+    Unavailable(String),
+    Inference(String),
+}
+
+/// One read on the scan engine (loading it on first use): the lines with the Japanese fixes,
+/// and which backend ran them.
+fn read(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<(Vec<ppocr::TextLine>, Value), ReadError> {
     let state = app.state::<PpState>();
-    let mut engine = state.0.lock().map_err(|_| "PaddleOCR worker unavailable".to_string())?;
+    let mut engine = state.0.lock().map_err(|_| ReadError::Inference("PaddleOCR worker unavailable".into()))?;
     if engine.is_none() {
-        *engine = Some(load_engine(app).map_err(|reason| format!("PaddleOCR is not ready: {reason}"))?);
+        *engine = Some(load_engine(app).map_err(|reason| ReadError::Unavailable(format!("PaddleOCR is not ready: {reason}")))?);
     }
-    let engine = engine.as_mut().ok_or("PaddleOCR initialization failed")?;
+    let engine = engine.as_mut().ok_or(ReadError::Inference("PaddleOCR initialization failed".into()))?;
     // Shares Meiki's lock: two DirectML runs on one adapter contend for its command queue.
     let _serial = (engine.backend_info().selected == Backend::DirectMl)
         .then(|| crate::meiki_ocr::DIRECTML_RUN.lock().unwrap_or_else(|p| p.into_inner()));
     let mut lines = engine_probe::guarded(|| {
-        engine.ocr(&image, OcrOptions::default()).map_err(|e| format!("PaddleOCR inference: {e}"))
-    })?;
+        engine.ocr(image, OcrOptions::default()).map_err(|e| format!("PaddleOCR inference: {e}"))
+    })
+    .map_err(ReadError::Inference)?;
     ppocr::japanese::fix_lines(&mut lines);
+    let backend = serde_json::to_value(engine.backend_info()).unwrap_or(Value::Null);
+    Ok((lines, backend))
+}
+
+/// The lines automatic scanning watches with, in MeikiOCR's shape (`text_observer`).
+pub(crate) fn read_lines(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<Vec<meikiocr::TextLine>, ReadError> {
+    read(app, image).map(|(lines, _)| as_meiki(lines))
+}
+
+pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
+    let image = image.rgb().map_err(|e| format!("PaddleOCR {e}"))?;
+    let (lines, backend) = read(app, &image).map_err(|e| match e {
+        ReadError::Unavailable(reason) | ReadError::Inference(reason) => reason,
+    })?;
     let mut result = crate::meiki_ocr::annotations(&as_meiki(lines), "ppocr");
-    result["backend"] = serde_json::to_value(engine.backend_info()).map_err(|e| e.to_string())?;
+    result["backend"] = backend;
     Ok(result)
 }
 

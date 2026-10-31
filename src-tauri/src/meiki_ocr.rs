@@ -1,8 +1,8 @@
 //! Native MeikiOCR sessions are loaded lazily and reused by both scan paths.
 //!
 //! Three users of the runtime live here: the manual scan (`recognize`, one shared
-//! engine in `MeikiState`), the automatic-scan observer (`text_observer.rs`, its
-//! own engine on its own worker), and the availability probe (`availability`,
+//! engine in `MeikiState`), the automatic-scan observer when it watches with MeikiOCR
+//! (`text_observer.rs`, its own engine on its own worker), and the availability probe (`availability`,
 //! a background check). When MeikiOCR is selected, the check warms the manual engine;
 //! otherwise its temporary engine is dropped. The observer has its own sessions.
 use crate::engine_probe::{self, Loaded, Probe, Verified};
@@ -44,7 +44,6 @@ pub(crate) struct Assets {
 }
 
 /// The models directory, or why MeikiOCR cannot scan yet ("Downloading model… 32%").
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(crate) fn models_ready(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     model_store::models_dir(app, model_store::Engine::Meiki)
 }

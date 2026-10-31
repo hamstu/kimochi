@@ -64,6 +64,7 @@ const AGREED = {
     adaptivePollMin: 250,
     adaptivePollMax: 500,
     observerMode: 'text',
+    watcher: 'auto',
     stableObservations: 2,
     maxCandidateAgeMs: 4000,
     minRequestSpacingMs: 1200,

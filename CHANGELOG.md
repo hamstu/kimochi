@@ -17,6 +17,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- **Smarter Auto OCR:** with a local engine selected, that engine now watches the screen for new text itself, so lines no longer flicker out of the overlay when a different engine misreads them. With an online engine or Manga OCR, Auto OCR watches with the best engine already on your computer (PaddleOCR, Apple Live Text or OneOCR, then MeikiOCR), and it no longer downloads MeikiOCR in the background to do it. It also looks less often when the watching engine is slow, leaving more of the processor to your game. You can choose the watching engine under Auto OCR's advanced options.
 - **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
 
 ### Fixed
