@@ -19,10 +19,25 @@ does not update, or an engine that stopped answering.
 
 ## How it decides when to scan
 
-Auto OCR reads the screen locally several times a second (nothing is sent anywhere for this) and only
-sends a capture to the OCR engine once the text stops changing: by default, two identical readings in
-a row. Text that never stops animating is read anyway after a while, and requests are spaced out so a
-fast-moving scene doesn't flood the engine; only the newest frame is kept.
+Auto OCR watches the screen with a local OCR engine several times a second (nothing is sent anywhere
+for this) and only hands a capture to your OCR engine once the text stops changing: by default, two
+identical readings in a row. Text that never stops animating is read anyway after a while, and
+requests are spaced out so a fast-moving scene doesn't flood the engine; only the newest frame is
+kept.
+
+Which engine watches depends on the one you read with:
+
+- **A local engine** (PaddleOCR, MeikiOCR, Apple Live Text or OneOCR) watches for itself, so what
+  the overlay shows between scans always matches what it read.
+- **An online engine or Manga OCR** gets the best watcher already on your computer: PaddleOCR on a
+  graphics card, then Apple Live Text or OneOCR, then PaddleOCR on the CPU, then MeikiOCR. Nothing
+  is downloaded just to watch.
+- **With none of those** (for example a fresh Linux install), Kimochi compares pictures instead of
+  text, so a moving background can also set it off. Download PaddleOCR in
+  [OCR engines](/reading/ocr-engines/#paddleocr) for smarter watching.
+
+**Settings → OCR & Overlay → Auto OCR** names the watcher under the switch. When the watcher is slow
+(PaddleOCR on a CPU, say), Auto OCR looks less often, leaving more of the processor to your game.
 
 The Log's activity ticker (bottom of the Log) says what happened: **Screen settled, scanning…**,
 **Added 1 line**, **Same text as before, not added**, **No new text**. Click it for the recent history.
@@ -38,6 +53,7 @@ Open **Advanced options** (the arrow beside it) under **Settings → OCR & Overl
 
 | Setting | Options | Default | What it does |
 | --- | --- | --- | --- |
+| **Watch the screen with** | Automatic, any local engine you have, or Image comparison | Automatic | The engine that notices new text before yours reads it. Only shown when you read with an online engine or Manga OCR. |
 | **Adaptive polling** | On / off | On | Looks more often while text is moving, and backs off once it settles. |
 | **Settle after** | 2, 3 or 4 readings | 2 readings | Identical readings in a row before the text counts as settled. More means fewer requests and a longer wait after a line finishes drawing. |
 | **Give up waiting after** | 2, 4 or 8 seconds | 4 seconds | Text that never stops animating is recognised anyway after this long. |

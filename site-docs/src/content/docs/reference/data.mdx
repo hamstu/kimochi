@@ -20,12 +20,14 @@ Kimochi keeps everything on your computer, in its data folder, under the app id 
 | The Log, sessions, stats and Notebook (no account) | The data folder itself: `sessions.json`, `sessions/`, `stats.json` and friends |
 | The same, per signed-in account | `profiles/<server>-<account>/` |
 | Downloaded dictionary engines | `extensions/<engine>/<version>/` |
-| Downloaded OCR models | `models/<engine>/` |
+| Downloaded OCR models (and the speech model) | `models/<engine>/` |
+| Screenshots of the newest scans | `screenshots/` (on Windows, under `%LOCALAPPDATA%`, like the models) |
 | The sync log | `sync-log.jsonl` |
 | Dictionaries you import | The app's web storage (IndexedDB), managed in the engine's settings |
 
-Captured images are held in memory while Kimochi reads them and aren't saved to disk (images you add
-to the Notebook are). Deleting the data folder removes all of it.
+Captured images are held in memory while Kimochi reads them. What is saved is a screenshot of each
+of the newest scans (50 by default; see [Screenshot](/lookups/anki/#screenshot)) and the images you add
+to the Notebook. Deleting the data folder removes all of it.
 
 Imported dictionaries live in the app's web storage, outside the data folder: on macOS in
 `~/Library/WebKit/dev.kimochi.app/`, on Windows inside `%LOCALAPPDATA%\dev.kimochi.app\` (the

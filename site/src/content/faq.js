@@ -65,7 +65,7 @@ export const FAQ = [
     q: 'Does Kimochi send my screen to the cloud? Is it private?',
     a: [
       'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads. Your captures, log, notebook, statistics and settings stay on your computer, unless you turn on Sync with Kimochi Cloud, which keeps them in step between your computers.',
-      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. If you’d rather nothing leave your machine, pick an on-device engine: Apple Live Text (macOS), MeikiOCR, Manga OCR or OneOCR (Windows). The privacy policy lists exactly what each feature sends and when.'
+      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. If you’d rather nothing leave your machine, pick an on-device engine: PaddleOCR, Apple Live Text (macOS), MeikiOCR, Manga OCR or OneOCR (Windows). The privacy policy lists exactly what each feature sends and when.'
     ],
     links: [{ href: '/privacy', label: 'Privacy policy' }]
   },
@@ -81,7 +81,7 @@ export const FAQ = [
     id: 'engines-and-dictionaries',
     q: 'Which OCR engines and dictionaries does Kimochi support?',
     a: [
-      'OCR engines: Google Lens (the default, online), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), or OneOCR (Windows 11, built in).',
+      'OCR engines: Google Lens (the default, online), PaddleOCR (on device, fast and accurate), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), or OneOCR (Windows 11, built in).',
       'Dictionaries: a built-in copy of Yomitan with your own dictionaries, Hachidori, 10ten, or the Yomitan in your browser through the Yomitan API.'
     ],
     links: [
