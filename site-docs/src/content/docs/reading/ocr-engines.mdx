@@ -1,6 +1,6 @@
 ---
 title: OCR engines
-description: Google Lens, Kimochi cloud OCR, MeikiOCR, Manga OCR, Apple Live Text and OneOCR, and how to choose between them.
+description: Google Lens, Kimochi cloud OCR, PaddleOCR, MeikiOCR, Manga OCR, Apple Live Text and OneOCR, and how to choose between them.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -8,7 +8,7 @@ import Screenshot from '../../../components/Screenshot.astro'
 The OCR engine turns each capture into text. Choose it in the sidebar's **OCR model** menu, or in
 **Settings → OCR & Overlay**, where each engine has its description, strengths and requirements.
 
-<Screenshot id="ocr-picker" alt="The sidebar's OCR model menu: Google Lens, MeikiOCR, Manga OCR and Apple Live Text." width={720} />
+<Screenshot id="ocr-picker" alt="The sidebar's OCR model menu: Google Lens, MeikiOCR, Manga OCR, PaddleOCR and Apple Live Text." width={720} />
 
 <Screenshot id="settings-ocr" alt="Settings, OCR & Overlay: the engine list on the left and Google Lens's details on the right, marked Active." width={760} />
 
@@ -16,6 +16,7 @@ The OCR engine turns each capture into text. Choose it in the sidebar's **OCR mo
 | --- | --- | --- | --- | --- |
 | **Google Lens** (default) | Online, sent to Google | All | None | Accurate on game text, manga and busy backgrounds, vertical or horizontal. |
 | **Cloud OCR** | Online, on the Kimochi server (Google Cloud Vision) | All | None | Dependable on almost any Japanese text. Needs [Kimochi Cloud](/cloud/). |
+| **PaddleOCR** | On this computer | All | About 30 MB, once | Fast, accurate offline reading of game dialogue, menus and vertical text. |
 | **MeikiOCR** | On this computer | All | About 46 MB, once | Fast, offline reading of game text: dialogue boxes, menus, subtitles. |
 | **Manga OCR** | On this computer | All | About 539 MB, once | Manga, stylised lettering and vertical text. Slower per scan. |
 | **Apple Live Text** | On this computer | macOS | None | Part of macOS: fast, offline, vertical and horizontal. |
@@ -40,6 +41,20 @@ Sends each capture to the Kimochi server, which reads it with Google Cloud Visio
 position of every word. It needs a signed-in account with Kimochi Cloud; each scan counts towards the
 month's cloud OCR allowance. The server doesn't store the images or the text.
 
+## PaddleOCR
+
+PaddleOCR's PP-OCRv6 model, running entirely on this computer. It reads game dialogue, menus and
+vertical text accurately, and keeps full-width characters as they appear on screen. It uses the GPU
+where it can (Core ML on macOS, DirectML on Windows) and the CPU otherwise.
+
+The first start after launching Kimochi loads the model: on Windows it's ready about a second after
+you choose it; on a Mac the very first start takes a few seconds while macOS prepares the model, and
+later ones about two.
+
+PaddleOCR is also the engine [Auto OCR](/reading/auto-ocr/#how-it-decides-when-to-scan) prefers for
+watching the screen when you read with an online engine or Manga OCR, so downloading it helps even if
+you scan with something else.
+
 ## MeikiOCR
 
 A small, fast recogniser tuned for Japanese video game text, running entirely on this computer. A
@@ -50,8 +65,8 @@ Windows) and the CPU otherwise.
 
 Finds speech bubbles and text blocks with the comic text detector, then reads each one with Manga
 OCR, a model trained on manga. It reads each column of a bubble on its own, the way mokuro does, so
-characters stay in the column they were printed in. It uses Metal on macOS and CUDA on NVIDIA cards
-where it can.
+characters stay in the column they were printed in. It uses the GPU where it can (Metal on macOS,
+DirectML on Windows) and the CPU otherwise.
 
 The [overlay](/reading/overlay/) works with Manga OCR: each bubble's text is drawn back over the page where it was printed, ready to hover.
 
@@ -69,7 +84,7 @@ Windows 11 Snipping Tool package; see [Install on Windows](/install/windows/#one
 
 ## Model downloads
 
-MeikiOCR and Manga OCR download their models the first time you choose them (from Hugging Face),
+PaddleOCR, MeikiOCR and Manga OCR download their models the first time you choose them (from Hugging Face),
 once. Each file is checked against a pinned hash before it is used. The model row shows progress and
 lets you **Pause**, **Resume**, **Cancel** or **Retry**; **Remove downloaded model…** in the engine's
 menu frees the space again.
@@ -84,4 +99,4 @@ menu frees the space again.
 | --- | --- | --- |
 | **Filter out furigana and small text** | On | Removes text much smaller than the main text, such as reading aids above kanji. |
 | ↳ **Filter strength** | Balanced | Behind the arrow beside the switch. Five steps from Gentle (only text half the main size or smaller) to Strict (anything noticeably smaller than the main text); each step says what it removes. |
-| **Group text into regions** | Off | Gives nearby text boxes a shared background. |
+| **Group text into regions** | Off | Marks nearby lines with one shared box to hover, instead of a box for each line. |

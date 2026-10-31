@@ -110,7 +110,7 @@ export const ROWS: Row[] = [
     label: "OCR engines",
     cells: {
       kimochi: {
-        text: "Google Lens (the default), Apple Live Text (macOS), MeikiOCR, Manga OCR, or OneOCR (Windows).",
+        text: "Google Lens (the default), PaddleOCR, Apple Live Text (macOS), MeikiOCR, Manga OCR, or OneOCR (Windows).",
       },
       kamui: { text: "Google Cloud Vision (cloud)." },
       gsm: {
