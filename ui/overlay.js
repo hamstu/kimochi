@@ -1438,6 +1438,8 @@ async function reportObserver() {
   if (!status) return
   log({
     check: 'auto-scan-observer',
+    // What will watch (`ui/watcher.ts`); `engine` is the native default until the first capture.
+    watcher: autoWatcher(),
     engine: status.engine,
     supported: status.supported,
     privateApi: status.private_api ?? status.privateApi ?? false,
