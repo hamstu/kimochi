@@ -306,7 +306,7 @@ function previewCapabilities(): PlatformCapabilities {
       os: 'windows',
       osVersion: '10.0.26100',
       arch: 'x86_64',
-      keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win' },
+      keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Win', mouseButtons: 'available' },
       capture: {
         authorization: 'notRequired',
         canOpenSettings: false,
@@ -336,7 +336,7 @@ function previewCapabilities(): PlatformCapabilities {
       osVersion: '6.8',
       arch: 'x86_64',
       session: { backend: 'wayland', compositor: 'gnome', layerShell: false },
-      keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Super' },
+      keys: { primaryModifier: 'ctrl', labels: 'words', superName: 'Super', mouseButtons: 'unsupported' },
       capture: {
         authorization: 'promptOnSelect',
         canOpenSettings: false,

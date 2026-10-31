@@ -560,10 +560,22 @@ Verified against the parser rather than assumed: `global-hotkey` accepts
 so `CommandOrControl+Shift+8` registers unchanged. Per-key registration failures are
 reported in `failed` instead of disabling the whole set silently.
 
+**Mouse buttons.** An accelerator of `MouseMiddle`, `MouseBack` or `MouseForward` (always on its
+own, never with modifiers; left and right cannot be bound) is not a global shortcut: the
+platform's input hook catches the button and swallows its press and release, only while a button
+is bound and the shortcuts are not suspended (`mouse_buttons.rs`). Injected input is never
+swallowed. On Windows the hook is the overlay's existing `WH_MOUSE_LL` mouse guard; on macOS an
+active `CGEventTap` for other-mouse down/up, created only while a button is bound and only when
+Accessibility is already allowed (Kimochi never asks for it for this). Linux has no hook. Where a
+button cannot fire, it is reported in `failed` with the reason, and `platform_capabilities`
+`keys.mouseButtons` (`available`, `needsAccessibility`, `unsupported`) tells Settings whether to
+record one.
+
 **Auto-scan trigger.** The gamepad button in `autoScanSettings.gamepadButton` fires
 `triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`). Kimochi does not watch
 individual keyboard keys in other applications on any platform: a keyboard scan is a
-global shortcut (`hotkeys`), which needs no Accessibility or other input permission.
+global shortcut (`hotkeys`), which needs no Accessibility or other input permission (a bound
+mouse button on macOS is the exception, above).
 
 **Gamepad is owned by Rust, not the webview.** Emits `gamepad`
 `{gamepads, activeGamepadIndex, buttonStates, axisStates}` in the shape of

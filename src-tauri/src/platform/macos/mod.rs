@@ -5,6 +5,7 @@
 //! per-OS contract described in `platform/mod.rs`, and the shared types it returns live
 //! there.
 mod focus;
+mod mouse_tap;
 pub mod instance;
 mod spaces;
 
@@ -1306,6 +1307,11 @@ pub fn request_accessibility() -> Result<bool, String> {
     Ok(focus::request())
 }
 
+/// Mouse buttons as action shortcuts: a tap while one is bound (`mouse_tap`).
+pub fn sync_mouse_buttons(app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
+    mouse_tap::sync(app, wanted)
+}
+
 // ---------------------------------------------------------------- system links
 
 fn open_url(url: &str) -> Result<(), String> {
@@ -1377,7 +1383,11 @@ pub fn capabilities() -> Value {
         "os": "macos",
         "osVersion": os_version(),
         "arch": std::env::consts::ARCH,
-        "keys": {"primaryModifier": "meta", "labels": "symbols", "superName": "Command"},
+        "keys": {
+            "primaryModifier": "meta", "labels": "symbols", "superName": "Command",
+            // An active event tap needs Accessibility; Kimochi does not ask for it on this account.
+            "mouseButtons": if focus::trusted() { "available" } else { "needsAccessibility" },
+        },
         "capture": {
             "canOpenSettings": true,
             "restartAfterGrant": true,

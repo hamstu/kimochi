@@ -57,7 +57,7 @@ mod workspace;
 pub use cli::run_cli;
 pub use icon::app_icon_png;
 pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
-pub use mouseguard::set_keyboard_guard;
+pub use mouseguard::{set_keyboard_guard, sync_mouse_buttons};
 pub use sources::{
     front_window, frontmost_app, frontmost_pid, picker_sources, source_spaces, window_bounds,
     window_fullscreen,
@@ -351,7 +351,7 @@ pub fn capabilities() -> Value {
         "osVersion": os_version(),
         "arch": std::env::consts::ARCH,
         "session": null,
-        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Win"},
+        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Win", "mouseButtons": "available"},
         "capture": {
             "authorization": "granted",
             "canOpenSettings": false,
