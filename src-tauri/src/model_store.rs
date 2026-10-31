@@ -1257,6 +1257,16 @@ pub async fn model_download_cancel(
     act(app, engine, |_, store, engine| store.cancel(engine)).await
 }
 
+/// Drop automatic scanning's observer for `engine`, which holds its model files open.
+fn close_observer(app: &tauri::AppHandle, engine: &str) {
+    use tauri::Manager;
+    if let Some(service) = app.try_state::<crate::state::Shared>() {
+        if let Ok(mut observer) = service.observer.lock() {
+            observer.close_engine(engine);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<ModelStatus, String> {
     act(app, engine, |app, store, engine| {
@@ -1264,21 +1274,14 @@ pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<Model
         match engine {
             Engine::Meiki => {
                 crate::meiki_ocr::unload(app);
-                // The Windows/Linux automatic-scan observer owns a second MeikiOCR engine.
-                #[cfg(not(target_os = "macos"))]
-                {
-                    use tauri::Manager;
-                    if let Some(service) = app.try_state::<crate::state::Shared>() {
-                        if let Ok(mut observer) = service.observer.lock() {
-                            observer.close();
-                        }
-                    }
-                }
+                // Automatic scanning's MeikiOCR observer owns a second engine.
+                close_observer(app, "meikiocr");
             }
             Engine::Manga => crate::manga_ocr::unload(app),
             Engine::PpOcr => {
                 crate::pp_ocr::unload(app);
                 crate::pp_ocr::delete_cache(app);
+                close_observer(app, "ppocr");
             }
             Engine::SenseVoice => crate::sentence_audio::unload_model(app),
         }
