@@ -151,6 +151,15 @@ interface Job<Frame> {
 /** Longest gap between looks while anything on screen is moving or being read. */
 const ACTIVE_POLL_MS = 150
 
+/**
+ * Looks are at least this many watcher reads apart. A watcher on a GPU reads a frame in
+ * 10-40 ms and is unaffected; PaddleOCR on a CPU (90-250 ms) would otherwise spend most of
+ * the processor watching while the game runs.
+ */
+const WATCH_COST_FACTOR = 3
+/** However slow the watcher, look at least this often. */
+const WATCH_COST_MAX_GAP_MS = 2000
+
 /** Shortest wait between two recognitions of a screen the observer reads nothing on. */
 const BLIND_GAP_MS = 1500
 const BLIND_MAX_GAP_MS = 30000
@@ -168,6 +177,8 @@ export class SceneScanner<Frame = unknown> {
   private tickInFlight = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private interval: number
+  /** The watcher's recent read time (moving average), which paces the looks. */
+  private watchCostMs = 0
   private quietStreak = 0
   private epoch = 0
 
@@ -539,6 +550,10 @@ export class SceneScanner<Frame = unknown> {
     }
     this.noteSuccess('observer')
     this.counters.observations++
+    const cost = sample.observation.durationMs
+    if (typeof cost === 'number' && Number.isFinite(cost) && cost > 0) {
+      this.watchCostMs = this.watchCostMs ? this.watchCostMs * 0.7 + cost * 0.3 : cost
+    }
 
     // Byte-identical pixels cannot carry different words: a reading that changed while they
     // did not is the observer disagreeing with itself, and the last reading stands.
@@ -825,8 +840,17 @@ export class SceneScanner<Frame = unknown> {
     }
   }
 
-  /** Look often while anything is moving or being read; ease off when the screen is still. */
+  /**
+   * Look often while anything is moving or being read; ease off when the screen is still.
+   * Never more often than the watcher can afford (`WATCH_COST_FACTOR`).
+   */
   private adapt(active: boolean): void {
+    this.adaptToScreen(active)
+    const floor = Math.min(this.watchCostMs * WATCH_COST_FACTOR, WATCH_COST_MAX_GAP_MS)
+    this.interval = Math.max(this.interval, floor)
+  }
+
+  private adaptToScreen(active: boolean): void {
     const { adaptivePollingEnabled, adaptivePollMin, adaptivePollMax, pollInterval } = this.settings
     if (!adaptivePollingEnabled) {
       this.interval = pollInterval

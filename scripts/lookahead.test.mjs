@@ -347,10 +347,10 @@ test("the box a selection starts in carries the extension and the swallowed boxe
   // The stem is lit, and stays where it was read: hovering neither scales nor moves it, and its
   // text keeps its place from the start. The hidden box is not lit.
   renderer.updateProximity();
-  assert.equal(stem.style.backgroundColor, "rgba(0, 0, 0, 0.9)");
+  assert.equal(stem.dataset.lit, "", "the stem is lit");
   assert.ok(!stem.style.transform, "a lit box is not scaled");
   assert.equal(stem.querySelector(".ocr-word-current").style.textAlign, "left");
-  assert.equal(ending.style.backgroundColor, "rgba(0, 0, 0, 0)");
+  assert.equal(ending.dataset.lit, undefined, "the hidden box is not lit");
   // Text nodes are untouched: Yomitan's Range lives in them.
   assert.equal(stem.querySelector(".ocr-word-current").textContent, "食べ");
   assert.equal(stem.querySelector(".ocr-lookahead").textContent, "ました走っている");
@@ -464,16 +464,15 @@ test("group mode never extends or hides: its lookahead is empty", () => {
 
 // --- the vendored scanner over the rendered tree -----------------------------------
 
-const overlayHtml = readFileSync(
-  new URL("../ui/overlay.html", import.meta.url),
-  "utf8",
-);
+// The overlay's rules: its page, and the text's stylesheet (ui/overlay-text.css) the page links.
+const overlayHtml =
+  readFileSync(new URL("../ui/overlay.html", import.meta.url), "utf8") +
+  readFileSync(new URL("../ui/overlay-text.css", import.meta.url), "utf8");
 
-/** Declarations of a single-class rule in overlay.html, e.g. `.ocr-lookahead { ... }`. */
-function rule(className, css = overlayHtml) {
-  const match = css.match(
-    new RegExp(`^\\s*\\.${className}\\s*\\{([^}]*)\\}`, "m"),
-  );
+/** Declarations of the rule with exactly this selector, e.g. `.ocr-lookahead { ... }`. */
+function ruleFor(selector, css = overlayHtml) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = css.match(new RegExp(`^\\s*${escaped}\\s*\\{([^}]*)\\}`, "m"));
   const declarations = {};
   for (const part of (match?.[1] ?? "").split(";")) {
     const at = part.indexOf(":");
@@ -486,6 +485,10 @@ function rule(className, css = overlayHtml) {
   }
   return declarations;
 }
+/** Declarations of a single-class rule, e.g. `.ocr-lookahead { ... }`. */
+const rule = (className, css) => ruleFor(`.${className}`, css);
+/** The hovered box's text is shown by this rule (overlay-text.css), not by an inline style. */
+const LIT_TEXT = ruleFor(".ocr-word[data-lit] .ocr-word-text");
 
 /** What a browser would compute for the properties `DOMTextScanner` reads. */
 const INHERITED = [
@@ -526,6 +529,9 @@ function computedStyle(node, rules = node.rules) {
       rules?.[className] ?? rule(className),
     ))
       style[name] = normalise(name, value);
+  if (node.className === "ocr-word-text" && node.parentNode?.lit)
+    for (const [name, value] of Object.entries(LIT_TEXT))
+      style[name] = normalise(name, value);
   for (const [name, value] of Object.entries(node.inline))
     if (typeof value === "string" && value)
       style[name] = normalise(name, value);
@@ -548,6 +554,8 @@ function toDom(fake, parentNode = null, rules) {
     nodeName: fake.tag === "fragment" ? "DIV" : fake.tag.toUpperCase(),
     className: fake.className,
     inline: fake.style,
+    // Hovered (`data-lit`, set by `updateProximity`): the rule showing its text applies.
+    lit: fake.dataset?.lit === "",
     rules,
     parentNode,
     nextSibling: null,

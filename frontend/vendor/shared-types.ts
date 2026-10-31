@@ -218,6 +218,9 @@ export type AutoOCRSettings = {
   // hash instead and is only ever chosen deliberately, because it cannot tell a
   // moving background from new dialogue.
   observerMode: 'text' | 'image'
+  // Which engine watches when the selected one cannot watch for itself (an online engine,
+  // Manga OCR): 'auto' picks the best one here (ui/watcher.ts). Default: 'auto'.
+  watcher: 'auto' | 'ppocr' | 'livetext' | 'oneocr' | 'meikiocr' | 'image'
   stableObservations: number // Identical readings before recognising (default: 2, minimum 2)
   maxCandidateAgeMs: number // Longest wait for text that keeps moving (default: 4000)
   minRequestSpacingMs: number // Floor between two accurate recognitions (default: 1200)

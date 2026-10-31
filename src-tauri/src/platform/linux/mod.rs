@@ -355,7 +355,7 @@ pub fn capabilities() -> Value {
         "ownAppNames": ["Kimochi", "kimochi"],
         "tray": true,
         "gamepad": true,
-        "ocrAccelerators": {"meikiocr": "cpu", "mangaocr": "cpu"},
+        "ocrAccelerators": {"meikiocr": "cpu", "mangaocr": "cpu", "ppocr": "cpu"},
     })
 }
 

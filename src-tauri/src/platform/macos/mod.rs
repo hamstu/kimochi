@@ -1412,7 +1412,7 @@ pub fn capabilities() -> Value {
         "ownAppNames": ["Kimochi", "Kimochi Next", "Kimochi Next POC"],
         "tray": true,
         "gamepad": true,
-        "ocrAccelerators": {"meikiocr": "coreml", "mangaocr": "metal"},
+        "ocrAccelerators": {"meikiocr": "coreml", "mangaocr": "metal", "ppocr": "coreml"},
     })
 }
 

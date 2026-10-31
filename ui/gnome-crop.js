@@ -4,7 +4,7 @@
  * `title` style the editor box (see RegionSelect); they ride on the open notification to the
  * crop host, so the Shell extension does not need to know them.
  */
-export async function selectGnomeCrop(native, {sourceId, frame, initial = null, quick = false, theme = 'dark', accent = 'blue', title = null}) {
+export async function selectGnomeCrop(native, {sourceId, frame, initial = null, quick = false, theme = 'dark', accent = 'blue', title = null, onStart}) {
   const request = (payload) => native.invoke('gnome_overlay', {operation:'crop', payload})
   const id = crypto.randomUUID()
   let finish, fail, keep, pending = false
@@ -21,6 +21,8 @@ export async function selectGnomeCrop(native, {sourceId, frame, initial = null, 
       void request({operation:'keep', id}).catch(fail).finally(() => { pending = false })
     }, 1000)
     await native.panel('crop-host','show_inactive')
+    // The editor runs in the crop host: a press of the shortcut that opened it is forwarded there.
+    onStart?.({shortcutPressed:()=>{void window.__TAURI__.event.emit('gnome-crop-press',{id});return 'forwarded'}})
     // A new WebKit panel loads asynchronously. Repeat only the idempotent open
     // notification during this selection; the host ignores a duplicate id.
     const open=setInterval(()=>void window.__TAURI__.event.emit('gnome-crop-open',{id,accent,title}),150)

@@ -1,8 +1,8 @@
 //! Native MeikiOCR sessions are loaded lazily and reused by both scan paths.
 //!
 //! Three users of the runtime live here: the manual scan (`recognize`, one shared
-//! engine in `MeikiState`), the automatic-scan observer (`text_observer.rs`, its
-//! own engine on its own worker), and the availability probe (`availability`,
+//! engine in `MeikiState`), the automatic-scan observer when it watches with MeikiOCR
+//! (`text_observer.rs`, its own engine on its own worker), and the availability probe (`availability`,
 //! a background check). When MeikiOCR is selected, the check warms the manual engine;
 //! otherwise its temporary engine is dropped. The observer has its own sessions.
 use crate::engine_probe::{self, Loaded, Probe, Verified};
@@ -44,7 +44,6 @@ pub(crate) struct Assets {
 }
 
 /// The models directory, or why MeikiOCR cannot scan yet ("Downloading model… 32%").
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(crate) fn models_ready(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     model_store::models_dir(app, model_store::Engine::Meiki)
 }
@@ -254,6 +253,7 @@ pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
     let models = ModelPaths::from_dir(&assets.models);
     let config = Config {
         backend: if DIRECTML_REFUSED.load(Ordering::Relaxed) { Backend::Cpu } else { Backend::Auto },
+        intra_threads: cpu_threads(),
         ..Config::default()
     };
     let engine = engine_probe::guarded(|| {
@@ -263,6 +263,20 @@ pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
         DIRECTML_REFUSED.store(true, Ordering::Relaxed);
     }
     Ok(engine)
+}
+
+/// CPU threads for an ONNX Runtime session; `None` keeps ONNX Runtime's default.
+///
+/// That default spreads each session over every logical core. On Linux (Ryzen 7 7800X3D,
+/// 16 threads, WSL2) it measured slower than about one thread per physical core, capped at six:
+/// PP-OCR 116 → 91 ms and MeikiOCR 172 → 95 ms per scan on the overlay-alignment fixtures, and
+/// it leaves cores to the game. Other platforms keep the default until measured there.
+pub(crate) fn cpu_threads() -> Option<usize> {
+    if !cfg!(target_os = "linux") {
+        return None;
+    }
+    let logical = std::thread::available_parallelism().map_or(2, |n| n.get());
+    Some((logical / 2).clamp(1, 6))
 }
 
 /// Set once an adapter accepts DirectML sessions but fails the crate's first-inference probe
@@ -311,7 +325,7 @@ pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<
     }
     let engine = engine.as_mut().ok_or("MeikiOCR initialization failed")?;
     let lines = infer(engine, &image)?;
-    let mut result = annotations(&lines);
+    let mut result = annotations(&lines, "meikiocr");
     result["backend"] = serde_json::to_value(engine.backend_info()).map_err(|e| e.to_string())?;
     Ok(result)
 }
@@ -418,7 +432,8 @@ mod windows_dll {
 }
 
 /// The overlay's cloud-compatible annotation contract uses capture pixel coordinates.
-fn annotations(lines: &[TextLine]) -> Value {
+/// PP-OCR's lines have the same shape and use it too (`pp_ocr`), under their own engine name.
+pub(crate) fn annotations(lines: &[TextLine], engine: &str) -> Value {
     let nonempty: Vec<_> = lines.iter().filter(|l| !l.text.is_empty()).collect();
     let text = nonempty
         .iter()
@@ -456,7 +471,7 @@ fn annotations(lines: &[TextLine]) -> Value {
             ]}}),
         );
     }
-    json!({"fullText": text, "textAnnotations": annotations, "engine": "meikiocr"})
+    json!({"fullText": text, "textAnnotations": annotations, "engine": engine})
 }
 
 #[cfg(test)]
@@ -488,7 +503,7 @@ mod tests {
             )
             .unwrap();
         assert!(lines.iter().any(|l| l.text.contains("ナルホド")));
-        let value = annotations(&lines);
+        let value = annotations(&lines, "meikiocr");
         assert_eq!(
             value["textAnnotations"].as_array().unwrap().len(),
             lines.iter().filter(|l| !l.text.is_empty()).count() + 1
@@ -531,7 +546,7 @@ mod tests {
             text: String::new(),
             ..line.clone()
         };
-        let result = annotations(&[line, empty]);
+        let result = annotations(&[line, empty], "meikiocr");
         assert_eq!(result["fullText"], "日本語");
         assert_eq!(result["textAnnotations"].as_array().unwrap().len(), 2);
         assert_eq!(

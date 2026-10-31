@@ -58,7 +58,7 @@ function harness({ screen, recognise, settings = {} }) {
           frame,
           generation: 1,
           hash: '0000000000000000',
-          observation: { text: lines.map((l) => l.text).join('\n'), lines }
+          observation: { text: lines.map((l) => l.text).join('\n'), lines, durationMs: state.watchMs }
         }
       },
       recognize: async (frame) => {
@@ -328,4 +328,18 @@ test('entering an overlay lookup while a capture is out freezes visible text unt
  scanner.resume()
  for(let n=0;n<5;n++)await step()
  assert.equal(state.scenes.at(-1),'','real disappearance is still processed after leaving')
+})
+
+test('a slow watcher is never asked more often than three of its reads apart', async () => {
+  const { scanner, state, step } = harness({
+    screen: () => DIALOGUE,
+    recognise: (frame) => reading(frame.lines),
+    settings: { adaptivePollingEnabled: true, adaptivePollMin: 250, adaptivePollMax: 500 }
+  })
+  state.watchMs = 240 // PaddleOCR on an older CPU
+  for (let i = 0; i < 6; i++) await step(800)
+  assert.ok(scanner.currentInterval >= 3 * 240 * 0.99, `interval ${scanner.currentInterval}`)
+  state.watchMs = 10 // on a GPU: the screen sets the pace again
+  for (let i = 0; i < 20; i++) await step(500)
+  assert.ok(scanner.currentInterval <= 500, `interval ${scanner.currentInterval}`)
 })

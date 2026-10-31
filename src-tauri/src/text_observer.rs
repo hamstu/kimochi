@@ -1,17 +1,26 @@
-//! Which local text observer automatic scanning uses, and the MeikiOCR one.
+//! The local text observers automatic scanning watches the screen with.
 //!
-//! macOS keeps Apple Live Text (`kimochi_capture::platform_observer()`) exactly
-//! as before. Windows and Linux have no OS engine Kimochi can use unpackaged, so
-//! they read frames with the bundled MeikiOCR (detection plus recognition on the
-//! whole frame, the same pipeline the manual scan uses).
+//! Automatic scanning reads each frame with a fast local engine, waits for its text to stop
+//! changing, and only then lets the selected engine read it. Which engine watches is the
+//! overlay's choice (`ui/watcher.ts`), made from what this machine has: with a local engine
+//! selected, that same engine watches; with an online one, the best local engine here. Each
+//! `capture_frame` names it, and [`Observers`] builds that observer on first use:
+//!
+//!  - `livetext` (macOS): Apple Live Text, `kimochi_capture::platform_observer()`.
+//!  - `ppocr`: PaddleOCR, sharing the scan engine (`pp_ocr::read_lines`).
+//!  - `meikiocr`: MeikiOCR, with an engine of its own (below).
+//!  - `oneocr` (Windows): the Snipping Tool engine, through its worker process.
+//!
+//! None of them downloads anything: a watcher whose models are missing reports
+//! `unsupported`, and the overlay picks another.
 //!
 //! # Thread and memory model
 //!
-//! `TextObserver::observe` promises to return within its timeout, and Meiki on a
-//! CPU can take longer than that on a large frame. So the observer never runs
+//! `TextObserver::observe` promises to return within its timeout, and an engine on a
+//! CPU can take longer than that on a large frame. So an engine observer never runs
 //! inference on the caller's thread:
 //!
-//!  - one dedicated worker thread owns one `MeikiOcr` engine, loaded lazily on
+//!  - one dedicated worker thread per engine observer, its engine loaded lazily on
 //!    the first observation (never at startup);
 //!  - the queue is one slot deep and latest-wins: a request that has not started
 //!    is replaced by a newer one, so the worker never works through a backlog of
@@ -23,18 +32,16 @@
 //!    (exactly when settling matters) still converges instead of timing out on
 //!    every tick.
 //!
-//! The observer's engine is separate from the manual scan's (`MeikiState`), so a
-//! slow accurate scan cannot starve observer ticks and neither path ever waits
-//! on the other's lock. The cost is a second copy of the three ONNX sessions
-//! while automatic scanning has been used: the models are 44 MB on disk and the
-//! sessions take very roughly 100-150 MB resident on CPU (plus GPU memory on
-//! DirectML). Two DirectML engines never run at once: `meiki_ocr::infer` holds a
-//! process-wide run lock for DirectML sessions only, which no holder nests.
+//! MeikiOCR's observer engine is separate from the manual scan's (`MeikiState`), so a slow
+//! accurate scan cannot starve observer ticks; the cost is a second copy of its sessions
+//! (very roughly 100-150 MB on CPU). PaddleOCR's observer shares the scan engine instead:
+//! its sessions are larger (500+ MB) and fast enough that a scan waits at most one
+//! observation for the lock. Two DirectML runs never overlap: `meiki_ocr::DIRECTML_RUN`.
 //!
 //! # Error codes (see `capture_frame` in main.rs)
 //!
-//!  - `unsupported`: the runtime or models cannot be loaded here. A standing
-//!    fact; automatic text mode turns itself off with this message.
+//!  - `unsupported`: this engine cannot run here (models missing, runtime absent). The
+//!    overlay chooses another watcher.
 //!  - `stalled`: one inference has been running for longer than `STALL_AFTER`.
 //!    The engine took a request and has not given it back; nothing more can be
 //!    started on it, so this is also treated as standing.
@@ -45,43 +52,101 @@
 //!    hands it the answer once one exists.
 //!  - `observe`: inference ran and failed for this frame. Non-fatal.
 
-// macOS keeps only the Live Text branch; the Meiki worker below is compiled but unused there.
-#![cfg_attr(target_os = "macos", allow(dead_code))]
-#[cfg(not(target_os = "macos"))]
 use kimochi_capture::text::UnsupportedObserver;
 use kimochi_capture::{
     text::{join_lines, CachedObserver},
     CaptureError, Frame, Observation, ObserverStatus, TextLine, TextObserver,
 };
 use std::{
+    collections::HashMap,
     sync::{Arc, Condvar, Mutex, MutexGuard},
     thread::JoinHandle,
     time::{Duration, Instant},
 };
 
-/// The observer automatic scanning uses on this OS, behind the one-frame cache.
+/// The watcher used when a caller names none: what each OS used before watchers were chosen.
+pub const DEFAULT_ENGINE: &str = if cfg!(target_os = "macos") { "livetext" } else { "meikiocr" };
+
+/// Every observer automatic scanning can watch with, built on first use and kept.
 ///
-/// Infallible like `platform_observer()`: when MeikiOCR is not installed the
-/// answer is an `UnsupportedObserver` that says why.
-pub fn local_observer(app: &tauri::AppHandle) -> Box<dyn TextObserver> {
-    announce_verified_capabilities(app);
-    #[cfg(target_os = "macos")]
-    {
-        Box::new(CachedObserver::new(kimochi_capture::platform_observer()))
+/// Implements [`TextObserver`] for whichever was [`select`](Self::select)ed last, so the
+/// status the overlay reads describes the watcher it is using.
+pub struct Observers {
+    app: tauri::AppHandle,
+    current: &'static str,
+    built: HashMap<&'static str, Box<dyn TextObserver>>,
+}
+
+impl Observers {
+    pub fn new(app: &tauri::AppHandle) -> Self {
+        announce_verified_capabilities(app);
+        Self { app: app.clone(), current: DEFAULT_ENGINE, built: HashMap::new() }
     }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // Only the bundled runtime is a standing fact here: the models may still be
-        // downloading, and `MeikiObserver` waits for them (see `models_gate`).
-        let inner: Box<dyn TextObserver> = match crate::meiki_ocr::runtime_available(app) {
-            Ok(()) => Box::new(MeikiObserver::new(app.clone())),
-            // Leaked once at startup: `UnsupportedObserver` holds a `&'static str`.
-            Err(reason) => Box::new(UnsupportedObserver::new(Box::leak(
-                unavailable_detail(&reason).into_boxed_str(),
-            ))),
-        };
-        Box::new(CachedObserver::new(inner))
+
+    /// Watch with `engine` from now on (unknown names keep the current one).
+    pub fn select(&mut self, engine: &str) {
+        if let Some(engine) = known(engine) {
+            self.current = engine;
+        }
     }
+
+    /// Drop one engine's observer (its models are being deleted); rebuilt on next use.
+    pub fn close_engine(&mut self, engine: &str) {
+        if let Some(mut observer) = self.built.remove(engine) {
+            observer.close();
+        }
+    }
+
+    fn observer(&mut self) -> &mut Box<dyn TextObserver> {
+        let (app, engine) = (&self.app, self.current);
+        self.built.entry(engine).or_insert_with(|| build(app, engine))
+    }
+}
+
+impl TextObserver for Observers {
+    fn status(&self) -> ObserverStatus {
+        match self.built.get(self.current) {
+            Some(observer) => observer.status(),
+            None => build(&self.app, self.current).status(),
+        }
+    }
+
+    fn observe(&mut self, frame: &Frame, timeout: Duration) -> kimochi_capture::Result<Observation> {
+        self.observer().observe(frame, timeout)
+    }
+
+    fn close(&mut self) {
+        for observer in self.built.values_mut() {
+            observer.close();
+        }
+        self.built.clear();
+    }
+}
+
+fn known(engine: &str) -> Option<&'static str> {
+    ["livetext", "ppocr", "meikiocr", "oneocr"].into_iter().find(|known| *known == engine)
+}
+
+fn build(app: &tauri::AppHandle, engine: &'static str) -> Box<dyn TextObserver> {
+    let unsupported = |detail: String| -> Box<dyn TextObserver> {
+        // Leaked once per engine: `UnsupportedObserver` holds a `&'static str`.
+        Box::new(UnsupportedObserver::new(Box::leak(detail.into_boxed_str())))
+    };
+    let inner: Box<dyn TextObserver> = match engine {
+        #[cfg(target_os = "macos")]
+        "livetext" => kimochi_capture::platform_observer(),
+        "meikiocr" => match crate::meiki_ocr::runtime_available(app) {
+            Ok(()) => Box::new(EngineObserver::meiki(app.clone())),
+            Err(reason) => unsupported(unavailable_detail("MeikiOCR", &reason)),
+        },
+        "ppocr" => Box::new(EngineObserver::paddle(app.clone())),
+        #[cfg(target_os = "windows")]
+        "oneocr" => Box::new(EngineObserver::oneocr(app.clone())),
+        _ => unsupported(format!(
+            "Automatic scanning cannot watch with {engine} on this computer. Manual scanning works normally."
+        )),
+    };
+    Box::new(CachedObserver::new(inner))
 }
 
 /// Re-announce `platform-capabilities` when an engine's availability probe
@@ -98,12 +163,11 @@ fn announce_verified_capabilities(app: &tauri::AppHandle) {
     };
     crate::meiki_ocr::on_verified(announce(app.clone()));
     crate::manga_ocr::on_verified(announce(app.clone()));
+    crate::pp_ocr::on_verified(announce(app.clone()));
 }
 
-fn unavailable_detail(reason: &str) -> String {
-    format!(
-        "Automatic scanning needs the local MeikiOCR engine, which is not available: {reason} Manual scanning works normally."
-    )
+fn unavailable_detail(engine: &str, reason: &str) -> String {
+    format!("Automatic scanning cannot watch with {engine}: {reason} Manual scanning works normally.")
 }
 
 /// How long one inference may run before the observer is reported stalled.
@@ -125,32 +189,40 @@ enum Failure {
 }
 
 type Answer = Result<Read, Failure>;
+type Run = Box<dyn FnMut(image::RgbImage) -> Answer + Send>;
 
-/// The Windows/Linux `TextObserver`: MeikiOCR on a dedicated worker.
-pub struct MeikiObserver {
+/// A local OCR engine as a `TextObserver`, on a dedicated worker.
+pub struct EngineObserver {
     app: tauri::AppHandle,
+    engine: &'static str,
+    name: &'static str,
+    /// Ready to read, or why not yet; checked before every observation.
+    gate: fn(&tauri::AppHandle) -> Result<(), String>,
+    /// The worker's job, made when the worker starts.
+    make_run: fn(tauri::AppHandle) -> Run,
     worker: Option<LatestWorker<image::RgbImage, Answer>>,
     /// Set once the engine has failed to load; every later call says so.
     unsupported: Option<String>,
     timeouts: u32,
 }
 
-impl MeikiObserver {
-    pub fn new(app: tauri::AppHandle) -> Self {
-        Self {
-            app,
-            worker: None,
-            unsupported: None,
-            timeouts: 0,
-        }
+impl EngineObserver {
+    fn new(
+        app: tauri::AppHandle,
+        engine: &'static str,
+        name: &'static str,
+        gate: fn(&tauri::AppHandle) -> Result<(), String>,
+        make_run: fn(tauri::AppHandle) -> Run,
+    ) -> Self {
+        Self { app, engine, name, gate, make_run, worker: None, unsupported: None, timeouts: 0 }
     }
 
-    fn worker(&mut self) -> Result<&mut LatestWorker<image::RgbImage, Answer>, CaptureError> {
-        if self.worker.is_none() {
-            let app = self.app.clone();
+    /// MeikiOCR with an engine of its own, so a slow manual scan cannot starve it.
+    pub fn meiki(app: tauri::AppHandle) -> Self {
+        Self::new(app, "meikiocr", "MeikiOCR", |app| crate::meiki_ocr::models_ready(app).map(|_| ()), |app| {
             let mut engine = None;
             let mut failed: Option<String> = None;
-            let run = move |image: image::RgbImage| -> Answer {
+            Box::new(move |image: image::RgbImage| -> Answer {
                 if let Some(reason) = &failed {
                     return Err(Failure::Unavailable(reason.clone()));
                 }
@@ -182,57 +254,72 @@ impl MeikiObserver {
                         Err(Failure::Inference(e))
                     }
                 }
-            };
-            let worker = LatestWorker::spawn("kimochi-meiki-observer", run)
-                .map_err(|e| CaptureError::new("observe", format!("MeikiOCR observer: {e}")))?;
+            })
+        })
+    }
+
+    /// PaddleOCR on the scan engine, which loads (and keeps) it on first use.
+    pub fn paddle(app: tauri::AppHandle) -> Self {
+        Self::new(app, "ppocr", "PaddleOCR", crate::pp_ocr::models_ready, |app| {
+            Box::new(move |image: image::RgbImage| -> Answer {
+                let started = Instant::now();
+                match crate::pp_ocr::read_lines(&app, &image) {
+                    Ok(lines) => Ok(Read {
+                        lines: text_lines(&lines, image.width(), image.height()),
+                        duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                    }),
+                    Err(crate::pp_ocr::ReadError::Unavailable(reason)) => Err(Failure::Unavailable(reason)),
+                    Err(crate::pp_ocr::ReadError::Inference(reason)) => Err(Failure::Inference(reason)),
+                }
+            })
+        })
+    }
+
+    /// The Snipping Tool engine through its worker process, line by line.
+    #[cfg(target_os = "windows")]
+    pub fn oneocr(app: tauri::AppHandle) -> Self {
+        Self::new(app, "oneocr", "OneOCR", |_| Ok(()), |app| {
+            Box::new(move |image: image::RgbImage| -> Answer {
+                let started = Instant::now();
+                let mut png = Vec::new();
+                image::DynamicImage::ImageRgb8(image)
+                    .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                    .map_err(|e| Failure::Inference(format!("OneOCR frame: {e}")))?;
+                let result = crate::oneocr::recognize(&app, &png).map_err(Failure::Inference)?;
+                Ok(Read {
+                    lines: annotation_lines(&result),
+                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                })
+            })
+        })
+    }
+
+    fn worker(&mut self) -> Result<&mut LatestWorker<image::RgbImage, Answer>, CaptureError> {
+        if self.worker.is_none() {
+            let run = (self.make_run)(self.app.clone());
+            let worker = LatestWorker::spawn(&format!("kimochi-{}-observer", self.engine), run)
+                .map_err(|e| CaptureError::new("observe", format!("{} observer: {e}", self.name)))?;
             self.worker = Some(worker);
         }
         Ok(self.worker.as_mut().expect("worker was just created"))
     }
 }
 
-/// Automatic scanning reads frames with MeikiOCR whichever engine recognises the text,
-/// so its models are needed even with Cloud OCR selected. Missing models start their
-/// download (about 45 MB). While it runs the observer answers `busy`, which the
-/// scheduler retries without turning automatic scanning off; a paused or failed
-/// download is `unsupported` until the user resumes it in Settings → OCR.
-///
-/// Never sticky: once the models are ready the next observation proceeds.
-fn models_gate(app: &tauri::AppHandle) -> Result<(), CaptureError> {
-    use crate::model_store::{self, Engine};
-    let Err(reason) = crate::meiki_ocr::models_ready(app) else {
-        return Ok(());
-    };
-    model_store::ensure_started(app, Engine::Meiki);
-    let waiting = matches!(
-        model_store::status(app, Engine::Meiki).state,
-        "downloading" | "verifying"
-    );
-    if waiting {
-        Err(CaptureError::new(
-            "busy",
-            format!("Automatic scanning is waiting for the MeikiOCR model: {reason}"),
-        ))
-    } else {
-        Err(CaptureError::new(
-            "unsupported",
-            unavailable_detail(&reason),
-        ))
-    }
-}
-
-impl TextObserver for MeikiObserver {
+impl TextObserver for EngineObserver {
     fn status(&self) -> ObserverStatus {
-        let models = crate::meiki_ocr::models_ready(&self.app).err();
-        let reason = self.unsupported.as_ref().or(models.as_ref());
+        let gate = (self.gate)(&self.app).err();
+        let reason = self.unsupported.as_ref().or(gate.as_ref());
         ObserverStatus {
             supported: reason.is_none(),
-            engine: "meikiocr",
+            engine: self.engine,
             minimum_os: "",
             private_api: false,
             detail: match reason {
-                Some(reason) => unavailable_detail(reason),
-                None => "Automatic scanning reads each changed frame with the bundled MeikiOCR engine on this computer; nothing leaves it until the text settles.".into(),
+                Some(reason) => unavailable_detail(self.name, reason),
+                None => format!(
+                    "Automatic scanning reads each changed frame with {} on this computer; nothing leaves it until the text settles.",
+                    self.name
+                ),
             },
             timeouts: self.timeouts,
         }
@@ -244,20 +331,24 @@ impl TextObserver for MeikiObserver {
         timeout: Duration,
     ) -> kimochi_capture::Result<Observation> {
         if let Some(reason) = &self.unsupported {
-            return Err(CaptureError::new("unsupported", unavailable_detail(reason)));
+            return Err(CaptureError::new("unsupported", unavailable_detail(self.name, reason)));
         }
-        models_gate(&self.app)?;
+        // Never sticky: once the models are downloaded the next observation proceeds.
+        if let Err(reason) = (self.gate)(&self.app) {
+            return Err(CaptureError::new("unsupported", unavailable_detail(self.name, &reason)));
+        }
         let key = frame_key(frame);
         let image = rgb_image(frame)?;
+        let (engine, name) = (self.engine, self.name);
         match self.worker()?.submit(key, image, timeout) {
             Outcome::Ready(Ok(read)) => Ok(Observation {
-                engine: "meikiocr",
+                engine,
                 text: join_lines(&read.lines),
                 lines: read.lines,
                 duration_ms: read.duration_ms,
             }),
             Outcome::Ready(Err(Failure::Unavailable(reason))) => {
-                let error = CaptureError::new("unsupported", unavailable_detail(&reason));
+                let error = CaptureError::new("unsupported", unavailable_detail(name, &reason));
                 self.unsupported = Some(reason);
                 Err(error)
             }
@@ -266,7 +357,7 @@ impl TextObserver for MeikiObserver {
             }
             Outcome::Busy { running_for } => {
                 self.timeouts += 1;
-                Err(busy_error(running_for))
+                Err(busy_error(name, running_for))
             }
         }
     }
@@ -275,24 +366,50 @@ impl TextObserver for MeikiObserver {
         // Detached, not joined: a wedged inference must not hang the caller.
         // The next observation starts a fresh worker and engine.
         self.worker = None;
+        self.unsupported = None;
     }
 }
 
 /// The error for an answer that was not ready in time (see the module docs).
-fn busy_error(running_for: Option<Duration>) -> CaptureError {
+fn busy_error(name: &str, running_for: Option<Duration>) -> CaptureError {
     match running_for {
         Some(running) if running >= STALL_AFTER => CaptureError::new(
             "stalled",
             format!(
-                "The local MeikiOCR observer has been reading one frame for {} s and has not answered; restart Kimochi to use automatic scanning again. Manual scanning works normally.",
+                "The local {name} observer has been reading one frame for {} s and has not answered; restart Kimochi to use automatic scanning again. Manual scanning works normally.",
                 running.as_secs()
             ),
         ),
         _ => CaptureError::new(
             "busy",
-            "The local MeikiOCR observer is still reading an earlier frame; retrying.",
+            format!("The local {name} observer is still reading an earlier frame; retrying."),
         ),
     }
+}
+
+/// OneOCR's line annotations (`granularity: "line"`) as frame-pixel lines.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn annotation_lines(result: &serde_json::Value) -> Vec<TextLine> {
+    let Some(annotations) = result["textAnnotations"].as_array() else { return Vec::new() };
+    annotations
+        .iter()
+        .filter(|a| a["granularity"] == "line")
+        .filter_map(|a| {
+            let text = a["description"].as_str()?.trim();
+            let vertices = a["boundingPoly"]["vertices"].as_array()?;
+            let xs = vertices.iter().filter_map(|v| v["x"].as_f64());
+            let ys = vertices.iter().filter_map(|v| v["y"].as_f64());
+            let (left, right) = xs.fold((f64::MAX, f64::MIN), |(l, r), x| (l.min(x), r.max(x)));
+            let (top, bottom) = ys.fold((f64::MAX, f64::MIN), |(t, b), y| (t.min(y), b.max(y)));
+            (!text.is_empty() && right > left && bottom > top).then(|| TextLine {
+                text: text.to_string(),
+                x: left,
+                y: top,
+                width: right - left,
+                height: bottom - top,
+            })
+        })
+        .collect()
 }
 
 /// Meiki lines in frame pixels: `[left, top, right, bottom)` to origin + size,
@@ -596,10 +713,26 @@ mod tests {
     }
 
     #[test]
+    fn oneocr_line_annotations_become_lines_and_its_fragments_do_not() {
+        let poly = |x: f64, y: f64| serde_json::json!({"vertices": [
+            {"x": x, "y": y}, {"x": x + 100.0, "y": y}, {"x": x + 100.0, "y": y + 20.0}, {"x": x, "y": y + 20.0}
+        ]});
+        let result = serde_json::json!({"textAnnotations": [
+            {"description": "全部", "granularity": "aggregate", "boundingPoly": poly(0.0, 0.0)},
+            {"description": "今日は", "granularity": "line", "boundingPoly": poly(10.0, 30.0)},
+            {"description": "今日", "granularity": "fragment", "boundingPoly": poly(10.0, 30.0)},
+            {"description": "  ", "granularity": "line", "boundingPoly": poly(10.0, 60.0)},
+        ]});
+        let lines = annotation_lines(&result);
+        assert_eq!(lines.len(), 1);
+        assert_eq!((lines[0].text.as_str(), lines[0].x, lines[0].y, lines[0].width), ("今日は", 10.0, 30.0, 100.0));
+    }
+
+    #[test]
     fn slow_is_busy_and_only_a_long_stall_is_standing() {
-        assert_eq!(busy_error(None).code, "busy");
-        assert_eq!(busy_error(Some(Duration::from_secs(2))).code, "busy");
-        assert_eq!(busy_error(Some(STALL_AFTER)).code, "stalled");
+        assert_eq!(busy_error("MeikiOCR", None).code, "busy");
+        assert_eq!(busy_error("MeikiOCR", Some(Duration::from_secs(2))).code, "busy");
+        assert_eq!(busy_error("MeikiOCR", Some(STALL_AFTER)).code, "stalled");
     }
 
     /// The worker, the sender that releases one run, and the inputs it ran.

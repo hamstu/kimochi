@@ -8,6 +8,10 @@ if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
   await event.listen('gnome-crop-result',({payload})=>{
     if(active?.id===payload.id)active.selector.cancel()
   })
+  // Quick Shot's shortcut pressed again: the editor cancels or confirms, as it would in the overlay.
+  await event.listen('gnome-crop-press',({payload})=>{
+    if(active?.id===payload?.id)active.selector.shortcutPressed()
+  })
   await event.listen('gnome-crop-open',async ({payload})=>{
     if(active?.id===payload.id)return
     active?.selector.cancel()

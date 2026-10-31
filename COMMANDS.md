@@ -299,7 +299,7 @@ choosing that source again brings its region back.
 | `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
 | `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
 | `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |
-| `capture_frame` | `({request}) -> {id, info, url}` |
+| `capture_frame` | `({request, observe?, observerMode?, observerEngine?}) -> {id, info, url, observation, …}` — with `observe`, the watcher reads the frame: `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts` |
 | `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, and `'livetext'` / `'oneocr'` on their OS) |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
 | `scan` | `({request, ocr}) -> {id, info, ocr}` |
@@ -549,6 +549,10 @@ fixes.
 
 All of them emit `hotkey` `{name, seq}`; everything beyond the native part above is the
 renderer's decision.
+With Quick Shot on, a `triggerScan` that arrives while its region editor is up does not
+start another: with no box drawn it cancels (as Escape), with one it scans it (as Return), and
+mid-drag, or within 300 ms of the editor opening, it does nothing (`shortcutPressOutcome` in
+`ui/region-select.js`). It is keyed on the action, so every trigger behaves the same.
 
 Accelerators use Electron's exact syntax and defaults from `src/shared/defaults.ts`.
 Verified against the parser rather than assumed: `global-hotkey` accepts
@@ -1483,7 +1487,7 @@ data directory on macOS and Linux, `%LOCALAPPDATA%` rather than the roaming prof
 Windows) from the pinned list in `src-tauri/ocr-models.json` (repository, revision, URL,
 SHA-256 and size per file). Implementation: `src-tauri/src/model_store.rs`.
 
-`engine` is `"meikiocr"`, `"mangaocr"` or `"sensevoice"` (SenseVoice-Small, sentence audio's
+`engine` is `"meikiocr"`, `"mangaocr"`, `"ppocr"` (PaddleOCR) or `"sensevoice"` (SenseVoice-Small, sentence audio's
 speech recogniser; never an `ocrMode`). Every command answers with the engine's
 `ModelStatus` after acting:
 
@@ -1524,9 +1528,9 @@ sidebar and the engine list in Settings → OCR & Overlay, both through `fronten
 when the picked engine is `absent` ("Download Manga OCR?", with the size) and save `ocrMode`
 only on Download; Cancel leaves it unchanged. Nothing starts at launch: an engine selected
 before its models were downloaded (an upgrade from a build that bundled them) reports
-`absent`, and that engine's panel in Settings → OCR & Overlay offers "Download (539 MB)". On Windows and Linux the automatic-scan observer reads frames with MeikiOCR whatever
-engine is selected, so it starts the MeikiOCR download too and answers `busy` until it is
-ready.
+`absent`, and that engine's panel in Settings → OCR & Overlay offers "Download (539 MB)". Auto OCR
+never starts a download either: it watches with an engine that is already here (`ui/watcher.ts`),
+and with none, compares pictures instead.
 
 **Resolution order** for an engine's models: the downloaded store when complete and
 verified, then `<resources>/<engine>/models` (a build that still bundles them), then

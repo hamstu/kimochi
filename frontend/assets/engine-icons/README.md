@@ -16,8 +16,9 @@ Dictionary) and onboarding's dictionary step, drawn by `frontend/components/Engi
 | `windows.svg` | OneOCR | The four-pane Windows logo, drawn here |
 
 Engines with no logo of their own are drawn in code, in a neutral tile that follows the theme:
-Apple Live Text with lucide's `ScanText` (Apple's logo is not used), MeikiOCR with an "M" and
-Manga OCR with 漫 (neither project publishes a logo).
+Apple Live Text with lucide's `ScanText` (Apple's logo is not used), PaddleOCR with a paddle drawn
+for Kimochi in lucide's style (the project's marks are wordmarks, unreadable at this size), MeikiOCR
+with an "M" and Manga OCR with 漫 (neither project publishes a logo).
 
 Keep the files small (the test allows 8 KB each), give every SVG a `viewBox`, and use no
 `<text>`: the pictures must not depend on an installed font. Check new ones at 20 and 40 px on

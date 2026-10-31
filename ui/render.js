@@ -26,6 +26,7 @@
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
 import { layoutParts, characterCells } from './text-layout.js'
+import { hexToRgbTriplet, highlightStrength } from './settings.js'
 
 const LOOKAHEAD = 10
 const PROXIMITY_MAX_DISTANCE = 300
@@ -35,7 +36,8 @@ const GROUP_LINE_HEIGHT = 1.3
 /** Japanese glyphs are close to square; 0.85 leaves room without clipping. */
 const CHAR_ASPECT_RATIO = 0.85
 /** The card's own border: its runs are placed against the padding box inside it. */
-const GROUP_BORDER = 1
+/** The card's edge is an inset shadow (overlay-text.css), so its padding box is its whole box. */
+const GROUP_BORDER = 0
 /**
  * Grouped text is set in the platform's Japanese gothic, whose kana and kanji all advance one
  * em, so a run's cells are even and spacing alone can stretch it over the original.
@@ -51,30 +53,37 @@ export const GROUP_FONT =
  */
 export const MANGA_FONT = `'Zen Kaku Gothic Antique', ${GROUP_FONT}`
 
-/** How each typeface is drawn: its family, its weight, and the heavier weight big text takes. */
+/**
+ * How each typeface is drawn: its family, its weight, and the heavier weight big text takes.
+ * Light weights: the text is read off an opaque card (overlay-text.css), where a bold face only
+ * looks heavy. The platform gothic at its regular (Hiragino W4, Yu Gothic Regular); the manga
+ * face at its medium, which is its lighter bundled weight.
+ */
 const TYPEFACES = {
-  default: { family: GROUP_FONT, weight: 'bold', bold: 'bold' },
+  default: { family: GROUP_FONT, weight: '400', bold: '700' },
   manga: { family: MANGA_FONT, weight: '500', bold: '700' }
 }
 const faceOf = (typeface) => TYPEFACES[typeface] ?? TYPEFACES.default
 
 /**
- * Text at least this many times its page's typical size, or at least BOLD_SIZE px, is set in its
- * typeface's heavier weight: a heading or a shout, which a manga letters bold.
+ * Text at least this many times its page's typical size, and at least BOLD_SIZE px, is set in
+ * its typeface's heavier weight: a heading or a shout, which a manga letters bold. Both bars are
+ * high: ordinary dialogue stays light however a page sizes it.
  */
-const BOLD_RATIO = 1.5
-const BOLD_SIZE = 48
+const BOLD_RATIO = 1.8
+const BOLD_SIZE = 56
 
 /** Each run's weight in its typeface (`run.weight`), heavier where it is big for its page. */
 function weigh(layouts, typefaces) {
   const sizes = layouts
-    .flatMap((runs, index) => (typefaces[index] === 'manga' ? runs.map((run) => run.fontSize) : []))
+    .flatMap((runs) => runs.map((run) => run.fontSize))
     .sort((a, b) => a - b)
-  const typical = sizes.length ? sizes[(sizes.length - 1) >> 1] : Infinity
+  // One run alone is its own typical size, so only the absolute bar applies to it.
+  const typical = sizes.length > 1 ? sizes[(sizes.length - 1) >> 1] : 0
   return layouts.map((runs, index) => {
     const face = faceOf(typefaces[index])
     return runs.map((run) => {
-      const big = run.fontSize >= Math.min(BOLD_RATIO * typical, BOLD_SIZE)
+      const big = run.fontSize >= BOLD_SIZE && run.fontSize >= BOLD_RATIO * typical
       return { ...run, weight: big ? face.bold : face.weight }
     })
   })
@@ -361,20 +370,27 @@ export function selectionExtension(selectedText, startIndex, words) {
 }
 
 /**
- * Boxes brighten as the pointer approaches, so the reader can see what is
- * hoverable without the overlay ever being opaque enough to obscure the source.
+ * How a box shows for the pointer: `lit`, the card with its text (hovered, or a selection's);
+ * else `near`, 0–1, how much its resting highlight brightens as the pointer approaches, so the
+ * reader can see what is hoverable without the overlay obscuring the source (overlay-text.css
+ * reads both).
  */
 function proximityStyle(mouse, centerX, centerY, hovering) {
   const distance = Math.hypot(mouse.x - centerX, mouse.y - centerY)
-  const proximity = Math.max(0, 1 - distance / PROXIMITY_MAX_DISTANCE)
-  return {
-    borderBottom: hovering
-      ? 'none'
-      : `3px solid hsla(210, 100%, ${30 + proximity * 50}%, ${proximity})`,
-    backgroundColor: hovering ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0)',
-    textOpacity: hovering ? 1 : 0
-  }
+  const near = Math.max(0, 1 - distance / PROXIMITY_MAX_DISTANCE)
+  return { near: Math.round(near * 100) / 100, lit: hovering }
 }
+
+/**
+ * The hovered card's padding past the box, in px: a share of the text's size, so a caption's
+ * card is snug and a headline's roomy, within sensible bounds. Nothing inside moves for it.
+ */
+function cardPadding(fontSize) {
+  return Math.round(Math.max(5, Math.min(14, fontSize * 0.32)))
+}
+
+/** The fade a box leaves by, where the Web Animations API exists (not in the tests' DOM). */
+const LEAVE_MS = 180
 
 function dispatchEscape() {
   document.dispatchEvent(
@@ -424,6 +440,8 @@ export class TextOverlayRenderer {
     this.hooks = hooks
     this.mouse = { x: -1000, y: -1000 }
     this.words = []
+    /** Grouped mode's regions, which light on hover as word boxes do: {element, index, box, centerX, centerY}. */
+    this.regions = []
     this.lastLookupIndex = null
     /** Boxes a selection starts in: lit as if hovered. */
     this.selectionIndices = new Set()
@@ -435,6 +453,8 @@ export class TextOverlayRenderer {
     this.quiet = false
     this.mode = 'words'
     this.frame = null
+    /** Boxes fading out, each with the timer that removes it; see `retire`. */
+    this.leaving = new Map()
 
     this.onMouseMove = (event) => this.setPointer(event.clientX, event.clientY)
     this.onSelectionChange = () => this.updateSelectionHighlight()
@@ -472,7 +492,12 @@ export class TextOverlayRenderer {
       cancelAnimationFrame(this.frame)
       this.frame = null
     }
-    if (this.mode === 'words' && this.words.length > 0) this.updateProximity()
+    if (this.hoverables().length > 0) this.updateProximity()
+  }
+
+  /** What lights as the pointer nears and rests on it: word boxes, or grouped mode's regions. */
+  hoverables() {
+    return this.mode === 'groups' ? this.regions : this.words
   }
 
   /** Hold every box unlit and unmarked (true), or let hovering and selection show again. */
@@ -480,6 +505,22 @@ export class TextOverlayRenderer {
     if (this.quiet === quiet) return
     this.quiet = quiet
     this.updateProximity()
+  }
+
+  /**
+   * The look (Settings → OCR & Overlay → Overlay look): the highlight colour, `#rrggbb`, and
+   * the cards' appearance, light, dark or blend. Set on the container, where overlay-text.css reads
+   * them; everything drawn, or still to be drawn, follows.
+   */
+  setStyle({ color, theme, opacity }) {
+    if (Number.isFinite(opacity)) {
+      this.container.style.setProperty('--ocr-hl-strength', String(highlightStrength(opacity)))
+    } else this.container.style.removeProperty('--ocr-hl-strength')
+    const rgb = hexToRgbTriplet(color)
+    if (rgb) this.container.style.setProperty('--ocr-hl-rgb', rgb)
+    else this.container.style.removeProperty('--ocr-hl-rgb')
+    if (theme === 'light' || theme === 'dark' || theme === 'blend') this.container.dataset.ocrTheme = theme
+    else delete this.container.dataset.ocrTheme
   }
 
   /**
@@ -507,15 +548,59 @@ export class TextOverlayRenderer {
     this.clear()
   }
 
-  clear() {
+  /**
+   * Take everything off screen: at once, so text that belongs to a window the reader just
+   * left goes with its click targets; or, `fade`, each box fading out where it was (a scan
+   * that found nothing).
+   */
+  clear({ fade = false } = {}) {
     this.renderSignature = null
     this.placementSignature = null
-    if (this.container.children.length) this.container.replaceChildren()
+    if (fade) for (const element of [...this.container.children]) this.retire(element)
+    else {
+      for (const timer of this.leaving.values()) clearTimeout(timer)
+      this.leaving.clear()
+      if (this.container.children.length) this.container.replaceChildren()
+    }
     this.words = []
+    this.regions = []
     this.lastLookupIndex = null
     this.selectionIndices = new Set()
     this.consumedIndices = new Set()
     this.extension = null
+  }
+
+  /**
+   * Fade a box out and remove it. It stops being a hit target at once (`hitRects`,
+   * `[data-leaving]`), stays a child until it has faded, and is revived if the next render wants
+   * it back (`render`): a scan that flickers a word away and back does not blink it. Without
+   * the Web Animations API (the tests' DOM) it goes at once.
+   */
+  retire(element) {
+    if (this.leaving.has(element)) return
+    if (typeof element.animate !== 'function') {
+      element.remove()
+      return
+    }
+    element.dataset.leaving = ''
+    element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: LEAVE_MS, easing: 'ease-out', fill: 'forwards' })
+    this.leaving.set(
+      element,
+      setTimeout(() => {
+        this.leaving.delete(element)
+        element.remove()
+      }, LEAVE_MS + 20)
+    )
+  }
+
+  /** A box on its way out that the next render wants after all: back to stay. */
+  revive(element) {
+    const timer = this.leaving.get(element)
+    if (timer === undefined) return
+    clearTimeout(timer)
+    this.leaving.delete(element)
+    delete element.dataset.leaving
+    for (const animation of element.getAnimations?.() ?? []) animation.cancel()
   }
 
   /**
@@ -545,6 +630,7 @@ export class TextOverlayRenderer {
     if (!origin) return []
     return [...this.container.children]
       .filter((element) => {
+        if (this.leaving.has(element)) return false
         const style = getComputedStyle(element)
         return style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0'
       })
@@ -568,7 +654,7 @@ export class TextOverlayRenderer {
   render(view) {
     const { annotations, info, origin, grouping, opacity, bounds } = view
     if (!annotations?.length || !info || !origin) {
-      this.clear()
+      this.clear({ fade: true })
       return
     }
     const placement = JSON.stringify([
@@ -593,11 +679,11 @@ export class TextOverlayRenderer {
       opacity
     ])
     if (signature === this.renderSignature)
-      return { created: 0, retained: this.container.children.length, removed: 0 }
+      return { created: 0, retained: this.container.children.length - this.leaving.size, removed: 0 }
     this.renderSignature = signature
     const filtered = visibleAnnotations(annotations, grouping)
     if (!filtered.length) {
-      this.clear()
+      this.clear({ fade: true })
       return
     }
     // Laid out now in the fallback if a bundled face is still loading, and again once it has.
@@ -619,7 +705,9 @@ export class TextOverlayRenderer {
     )
     const extended = this.words.find((word) => word.index === this.extension?.index)?.element ?? null
     const lookup = oldChildren.find((element) => element.ocrIndex === this.lastLookupIndex)
+    const oldRegions = new Map(this.regions.map((region) => [region.element, region]))
     this.words = []
+    this.regions = []
     this.mode = grouping.enabled ? 'groups' : 'words'
     const fragment = grouping.enabled
       ? this.renderGroups(filtered, info, origin, grouping, opacity, false, bounds)
@@ -643,11 +731,14 @@ export class TextOverlayRenderer {
       }
       if (!old) return fresh
       available.delete(old.renderKey)
+      this.revive(old)
       old.ocrIndex = fresh.ocrIndex
       const ahead = old.querySelector('.ocr-lookahead')
       const nextAhead = fresh.querySelector('.ocr-lookahead')
       if (ahead && nextAhead && ahead.textContent !== nextAhead.textContent)
         ahead.textContent = nextAhead.textContent
+      const region = this.regions.find((region) => region.element === fresh)
+      if (region && oldRegions.has(old)) region.element = old
       const word = this.words.find((word) => word.element === fresh)
       const previous = oldWords.get(old)
       if (word && previous)
@@ -663,7 +754,7 @@ export class TextOverlayRenderer {
       return old
     })
     const keep = new Set(desired)
-    for (const element of oldChildren) if (!keep.has(element)) element.remove()
+    for (const element of oldChildren) if (!keep.has(element)) this.retire(element)
     desired.forEach((element, index) => {
       if (this.container.children[index] !== element)
         this.container.insertBefore(element, this.container.children[index] ?? null)
@@ -707,7 +798,7 @@ export class TextOverlayRenderer {
         left: `${box.x}px`,
         top: `${box.y}px`,
         width: `${box.width}px`,
-        height: `${box.height + 5}px`
+        height: `${box.height}px`
       })
       // The box OCR saw, for the floor a box extended past its text keeps (overlay.html).
       element.style.setProperty('--ocr-width', `${box.width}px`)
@@ -725,7 +816,18 @@ export class TextOverlayRenderer {
       element.className = `ocr-word${vertical ? ' ocr-vertical' : ''}${block ? ' ocr-block' : ''}${
         box.typeface === 'manga' ? ' ocr-manga' : ''
       }`
+      // What the box sits on (surface.rs), which a Blend card is filled with (overlay-text.css).
+      if (box.surface) {
+        element.dataset.surface = box.surface.ink
+        element.style.setProperty('--ocr-surface-top', box.surface.top)
+        element.style.setProperty('--ocr-surface-bottom', box.surface.bottom)
+      }
       const runs = layouts[index]
+      // The hovered card reaches this far past the box (overlay-text.css); the text stays put.
+      element.style.setProperty(
+        '--ocr-pad',
+        `${cardPadding(Math.max(...runs.map((run) => run.fontSize), 0))}px`
+      )
       // A word or a single line is drawn as the box's own text; a block's lines each as a run.
       const single = runs.length === 1 && runs[0].text === box.text
       // Where the box's text starts to flow: its top-left, or top-right for a vertical-rl line.
@@ -880,7 +982,14 @@ export class TextOverlayRenderer {
         fontSize: `${fontSize}px`,
         lineHeight: String(GROUP_LINE_HEIGHT)
       })
-      element.style.setProperty('--backdrop-opacity', String(opacity / 100))
+
+      // What the cluster sits on, for Blend: its boxes' readings combined (`groupSurface`).
+      const surface = groupSurface(group.annotations)
+      if (surface) {
+        element.dataset.surface = surface.ink
+        element.style.setProperty('--ocr-surface-top', surface.top)
+        element.style.setProperty('--ocr-surface-bottom', surface.bottom)
+      }
 
       if (scanning) {
         element.classList.add('scanning')
@@ -920,6 +1029,20 @@ export class TextOverlayRenderer {
       element.renderText = text
       element.renderBox = rect
       this.attachInteraction(element, index)
+      // A shared box over the cluster: highlighted at rest and lit on hover, as a word box is.
+      const region = {
+        x: rect.x - GROUP_PADDING_X,
+        y: rect.y - GROUP_PADDING_Y,
+        width: rect.width + GROUP_PADDING_X * 2,
+        height: rect.height + GROUP_PADDING_Y * 2
+      }
+      this.regions.push({
+        element,
+        index,
+        box: region,
+        centerX: region.x + region.width / 2,
+        centerY: region.y + region.height / 2
+      })
       fragment.append(element)
     })
 
@@ -953,7 +1076,7 @@ export class TextOverlayRenderer {
   }
 
   scheduleProximityUpdate() {
-    if (this.mode !== 'words' || this.words.length === 0 || this.frame !== null) return
+    if (this.hoverables().length === 0 || this.frame !== null) return
     this.frame = requestAnimationFrame(() => {
       this.frame = null
       this.updateProximity()
@@ -961,7 +1084,7 @@ export class TextOverlayRenderer {
   }
 
   updateProximity() {
-    for (const word of this.words) {
+    for (const word of this.hoverables()) {
       const { box } = word
       const consumed = this.consumedIndices.has(word.index)
       const hovering =
@@ -974,15 +1097,14 @@ export class TextOverlayRenderer {
             this.mouse.y <= box.y + box.height))
       const far = { x: -100000, y: -100000 }
       const style = proximityStyle(this.quiet ? far : this.mouse, word.centerX, word.centerY, hovering)
-      const vertical = box.orientation === 'vertical' || box.isVertical === true
-      word.element.style.borderBottom = vertical ? 'none' : style.borderBottom
-      word.element.style.borderRight = vertical ? style.borderBottom : 'none'
-      word.element.style.backgroundColor = style.backgroundColor
-      word.element.style.borderRadius = hovering ? '6px' : '6px 6px 0 0'
-      // Hovering lights the box and shows its text, and moves and resizes nothing: the text
-      // stays exactly over the source it was read from (an extended box only grows past its
-      // end, over the boxes it hides).
-      word.text.style.opacity = String(style.textOpacity)
+      // Lit, the box turns into its card and shows its text (`[data-lit]`, overlay-text.css), and
+      // moves and resizes nothing: the text stays exactly over the source it was read from (an
+      // extended box only grows past its end, over the boxes it hides). At rest its highlight
+      // brightens with the pointer's approach. Attributes and a custom property, never a class:
+      // `render` matches a nudged box on its class name.
+      if (style.lit) word.element.dataset.lit = ''
+      else delete word.element.dataset.lit
+      word.element.style.setProperty('--ocr-near', String(style.near))
     }
   }
 
@@ -1056,4 +1178,23 @@ export class TextOverlayRenderer {
   }
 }
 
-export { proximityStyle, dispatchEscape, dispatchLookup, getBoundingBox }
+/**
+ * What a grouped region sits on, from what its boxes do (surface.rs reads each box's own): the
+ * top box's colour above, the bottom box's below, and the text most of them call for (light on
+ * a tie). Null when none of them has a reading.
+ */
+function groupSurface(annotations) {
+  const read = annotations.filter((a) => a.surface)
+  if (!read.length) return null
+  const y = (a) => getBoundingBox(a)
+  const top = read.reduce((best, a) => (y(a).minY < y(best).minY ? a : best))
+  const bottom = read.reduce((best, a) => (y(a).maxY > y(best).maxY ? a : best))
+  const dark = read.filter((a) => a.surface.ink === 'dark').length
+  return {
+    top: top.surface.top,
+    bottom: bottom.surface.bottom,
+    ink: dark > read.length - dark ? 'dark' : 'light'
+  }
+}
+
+export { proximityStyle, dispatchEscape, dispatchLookup, getBoundingBox, groupSurface }

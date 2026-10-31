@@ -1026,6 +1026,7 @@ pub struct DynamicCapabilities {
     pub meikiocr: (bool, Option<String>),
     /// `(available, reason)` for the bundled Manga OCR models.
     pub mangaocr: (bool, Option<String>),
+    pub ppocr: (bool, Option<String>),
 }
 
 /// The full `platform_capabilities` payload (see CROSS_PLATFORM_PLAN.md §3.3).
@@ -1101,6 +1102,7 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         "cloud": {"available": true},
         "meikiocr": engine(dynamic.meikiocr, &accelerators["meikiocr"]),
         "mangaocr": engine(dynamic.mangaocr, &accelerators["mangaocr"]),
+        "ppocr": engine(dynamic.ppocr, &accelerators["ppocr"]),
     });
     payload["observer"] = dynamic.observer;
     payload["ownPids"] = json!([std::process::id()]);

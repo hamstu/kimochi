@@ -63,6 +63,12 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
         url: 'https://github.com/rtr46/meikiocr'
       },
       {
+        name: 'PaddleOCR (PP-OCRv6)',
+        role: 'On-device text detection and recognition',
+        license: 'Apache-2.0 · models Apache-2.0',
+        url: 'https://github.com/PaddlePaddle/PaddleOCR'
+      },
+      {
         name: 'Manga OCR',
         role: 'On-device OCR for manga',
         license: 'Apache-2.0',
