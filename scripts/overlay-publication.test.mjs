@@ -162,6 +162,7 @@ async function scanContext({ recognise = async () => ({ fullText: 'text' }), app
       context.state.scanning = scanning
     },
     observationFrom: () => null,
+    observerArgs: () => ['text', null],
     beginJob: async () => ({ request: {} }),
     setting: (key) => (key === 'autoOCRSettings' ? { observerMode: 'text' } : 'meikiocr'),
     recognize: (...args) => recognise(...args),

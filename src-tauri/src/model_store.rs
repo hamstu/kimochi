@@ -12,6 +12,7 @@
 //! <app local data>/models/
 //!   meikiocr/  meiki.text.detect.v0.1.960x544.onnx ... verified.json
 //!   mangaocr/  pytorch_model.bin ... pytorch_model.bin.part  verified.json
+//!   ppocr/  PP-OCRv6_small_det.onnx  PP-OCRv6_small_rec.onnx  PP-OCRv6_small_rec.yml  verified.json
 //!   sensevoice/  model.int8.onnx  tokens.txt  verified.json
 //! ```
 //!
@@ -152,20 +153,22 @@ pub fn manifest() -> &'static Manifest {
 pub enum Engine {
     Meiki,
     Manga,
+    PpOcr,
     /// Sentence audio's speech recogniser: not an OCR engine, never an `ocrMode`.
     SenseVoice,
 }
 
 impl Engine {
-    pub const ALL: [Engine; 3] = [Engine::Meiki, Engine::Manga, Engine::SenseVoice];
+    pub const ALL: [Engine; 4] = [Engine::Meiki, Engine::Manga, Engine::PpOcr, Engine::SenseVoice];
     /// The OCR engines among them.
-    pub const OCR: [Engine; 2] = [Engine::Meiki, Engine::Manga];
+    pub const OCR: [Engine; 3] = [Engine::Meiki, Engine::Manga, Engine::PpOcr];
 
     /// The `ocrMode` setting value (OCR engines), the directory name and the manifest key.
     pub fn key(self) -> &'static str {
         match self {
             Engine::Meiki => "meikiocr",
             Engine::Manga => "mangaocr",
+            Engine::PpOcr => "ppocr",
             Engine::SenseVoice => "sensevoice",
         }
     }
@@ -175,6 +178,7 @@ impl Engine {
         match key {
             "meikiocr" | "local" => Some(Engine::Meiki),
             "mangaocr" => Some(Engine::Manga),
+            "ppocr" => Some(Engine::PpOcr),
             "sensevoice" => Some(Engine::SenseVoice),
             _ => None,
         }
@@ -1253,6 +1257,16 @@ pub async fn model_download_cancel(
     act(app, engine, |_, store, engine| store.cancel(engine)).await
 }
 
+/// Drop automatic scanning's observer for `engine`, which holds its model files open.
+fn close_observer(app: &tauri::AppHandle, engine: &str) {
+    use tauri::Manager;
+    if let Some(service) = app.try_state::<crate::state::Shared>() {
+        if let Ok(mut observer) = service.observer.lock() {
+            observer.close_engine(engine);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<ModelStatus, String> {
     act(app, engine, |app, store, engine| {
@@ -1260,18 +1274,15 @@ pub async fn model_delete(app: tauri::AppHandle, engine: String) -> Result<Model
         match engine {
             Engine::Meiki => {
                 crate::meiki_ocr::unload(app);
-                // The Windows/Linux automatic-scan observer owns a second MeikiOCR engine.
-                #[cfg(not(target_os = "macos"))]
-                {
-                    use tauri::Manager;
-                    if let Some(service) = app.try_state::<crate::state::Shared>() {
-                        if let Ok(mut observer) = service.observer.lock() {
-                            observer.close();
-                        }
-                    }
-                }
+                // Automatic scanning's MeikiOCR observer owns a second engine.
+                close_observer(app, "meikiocr");
             }
             Engine::Manga => crate::manga_ocr::unload(app),
+            Engine::PpOcr => {
+                crate::pp_ocr::unload(app);
+                crate::pp_ocr::delete_cache(app);
+                close_observer(app, "ppocr");
+            }
             Engine::SenseVoice => crate::sentence_audio::unload_model(app),
         }
         store.delete(engine)
@@ -1435,6 +1446,10 @@ mod tests {
             assert!(names(Engine::Manga).contains(&path.to_string_lossy().into_owned()));
         }
         assert!(names(Engine::Manga).contains(&"comic-text-detector.onnx".to_string()));
+        let pp = ppocr::ModelPaths::from_dir("", crate::pp_ocr::TIER);
+        for path in [pp.detection, pp.recognition, pp.dictionary] {
+            assert!(names(Engine::PpOcr).contains(&path.to_string_lossy().into_owned()));
+        }
         assert!(manifest.engine(Engine::Manga).total_size() > 500_000_000);
         for file in [kimochi_speech::sense_voice::MODEL_FILE, kimochi_speech::sense_voice::TOKENS_FILE] {
             assert!(names(Engine::SenseVoice).contains(&file.to_string()));
@@ -1448,7 +1463,7 @@ mod tests {
                 r#"{{"name":"{name}","repository":"r","revision":"v","url":"https://x/y","sha256":"{sha}","size":1}}"#
             );
             format!(
-                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}}}}}}"#
+                r#"{{"engines":{{"meikiocr":{{"name":"M","files":[{entry}]}},"mangaocr":{{"name":"G","files":[{entry}]}},"ppocr":{{"name":"P","files":[{entry}]}},"sensevoice":{{"name":"S","files":[{entry}]}}}}}}"#
             )
         };
         let good = "a".repeat(64);

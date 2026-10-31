@@ -11,6 +11,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **New offline OCR engine, PaddleOCR:** a fast, accurate local engine for game text (PaddleOCR's PP-OCRv6 model), horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay. On Windows it's ready about a second after you pick it, even on an older graphics card; on a Mac the first start takes a few seconds, and later ones about two.
+
+### Changed
+
+- **Smarter Auto OCR:** with a local engine selected, that engine now watches the screen for new text itself, so lines no longer flicker out of the overlay when a different engine misreads them. With an online engine or Manga OCR, Auto OCR watches with the best engine already on your computer (PaddleOCR, Apple Live Text or OneOCR, then MeikiOCR), and it no longer downloads MeikiOCR in the background to do it. It also looks less often when the watching engine is slow, leaving more of the processor to your game. You can choose the watching engine under Auto OCR's advanced options.
+- **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
+
 ### Fixed
 
 - After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.

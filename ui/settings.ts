@@ -22,7 +22,7 @@ import { DEFAULT_GROUPING, type GroupingSettings } from './annotations.js'
 
 export type ServerMode = 'cloud' | 'local'
 /** Backends available to both manual and automatic scanning. */
-export type OcrMode = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
+export type OcrMode = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'livetext' | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
@@ -363,6 +363,22 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     ],
     requirements:
       'This model uses the GPU where it can (Metal on macOS, DirectML on Windows) and the CPU otherwise.'
+  },
+  ppocr: {
+    label: 'Local (PaddleOCR)',
+    name: 'PaddleOCR',
+    tagline: 'Offline, fast and accurate',
+    geometry: true,
+    runs: 'local',
+    description:
+      "PaddleOCR's PP-OCRv6 model, running on your computer. Reads game dialogue, menus and vertical text accurately, keeps full-width characters as they appear on screen, and is quickest on a graphics card.",
+    strengths: [
+      'Fast on a graphics card (Core ML on a Mac, DirectML on Windows)',
+      'Accurate on horizontal and vertical text',
+      'Works offline; captures never leave this computer'
+    ],
+    requirements:
+      'A one-time model download of about 30 MB. Uses the GPU where it can and the CPU otherwise. On a Mac, the first start takes a few seconds while macOS prepares the model; later starts take about two.'
   },
   livetext: {
     label: 'Local (Apple Live Text)',

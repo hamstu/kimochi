@@ -20,6 +20,11 @@ upstream revision 52aa607ecdc1038c7bf390f37cd9a8b306e8a08a; its
 preprocessing and postprocessing were adapted from meikiocr/ocr.py. The
 Apache License 2.0 is in LICENSE-APACHE.
 
+ppocr (crate from https://github.com/hamstu/kimochi-ppocr), Apache-2.0.
+Native inference for PaddleOCR's PP-OCRv6 models
+(https://github.com/PaddlePaddle/PaddleOCR, Apache-2.0); its preprocessing
+and postprocessing follow PaddleOCR/PaddleX's reference behaviour.
+
 mangaocr (crate from https://github.com/hamstu/kimochi-mangaocr),
 GPL-3.0-only. Native Rust inference and page grouping for:
   - Manga OCR: https://github.com/kha-white/manga-ocr (Apache-2.0); the
@@ -177,7 +182,8 @@ welcome guide are in frontend/assets/engine-icons/ (README there):
   - windows.svg: the four-pane Windows logo, drawn for Kimochi, for OneOCR
     (the OCR in Windows Snipping Tool).
 Apple Live Text, MeikiOCR and Manga OCR are shown with a lucide glyph
-(ScanText, ISC) or a monogram, not a logo.
+(ScanText, ISC) or a monogram, not a logo. PaddleOCR is shown with a paddle
+drawn for Kimochi, not PaddlePaddle's logo.
 
 Google, Google Lens, Microsoft, Windows, Snipping Tool, Apple and Live Text
 are trademarks of their respective owners. Product names and logos are used

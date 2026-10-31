@@ -2,7 +2,7 @@
 //! the `capture:` protocol, and the view snapshot panels read.
 use crate::platform::FrontWindow;
 use crate::settings::Settings;
-use kimochi_capture::{CaptureBackend, Rect, SourceId, TextObserver};
+use kimochi_capture::{CaptureBackend, Rect, SourceId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -563,7 +563,7 @@ pub struct Service {
     /// Separate from `backend` so an observation cannot be held up by a capture
     /// or a source enumeration, and vice versa. On a platform with no observer
     /// this is the honest stub, which reports unsupported and reads nothing.
-    pub observer: Mutex<Box<dyn TextObserver>>,
+    pub observer: Mutex<crate::text_observer::Observers>,
     pub images: Mutex<Images>,
     pub settings: Arc<Settings>,
     pub view: Mutex<View>,

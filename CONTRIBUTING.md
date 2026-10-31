@@ -51,14 +51,15 @@ changes made in place. Its catalogue of states is in [frontend/dev/studio/](fron
 update it alongside any change to the interface.
 
 **Working on the OCR crates.** `src-tauri/Cargo.toml` pins
-[kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr) and
-[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr) to exact git revisions, so every
+[kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr),
+[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr) and
+[kimochi-ppocr](https://github.com/hamstu/kimochi-ppocr) to exact git revisions, so every
 build names the source it was made from. To build against local checkouts instead, clone them
 beside this repository and create the gitignored `.cargo/config.local.toml` (paths are relative
 to the repository root):
 
 ```toml
-paths = ["../kimochi-meikiocr", "../kimochi-mangaocr"]
+paths = ["../kimochi-meikiocr", "../kimochi-mangaocr", "../kimochi-ppocr"]
 ```
 
 Cargo then compiles your checkouts, and the OCR staging scripts copy their licences and model
