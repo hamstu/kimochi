@@ -13,21 +13,21 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **New offline OCR engine, PaddleOCR:** a fast, accurate local engine for game text (PaddleOCR's PP-OCRv6 model), horizontal or vertical, that keeps full-width characters as they appear on screen. It uses your graphics card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay. On Windows it's ready about a second after you pick it, even on an older graphics card; on a Mac the first start takes a few seconds, and later ones about two.
-- **Quick Shot:** pressing its shortcut again now closes it if you haven't drawn a box yet, or scans the box you've drawn, the same as Esc and Enter.
-- **Mouse buttons as shortcuts:** on Windows, the scan and controller-menu shortcuts can now be the **middle**, **back** or **forward** mouse button. A bound button is kept from the game and other apps; unbound buttons work as before. On macOS this needs Kimochi to be allowed under Accessibility; Linux doesn't support it yet.
+- **New offline OCR engine, PaddleOCR:** This model is a fast, accurate local engine for game text (PaddleOCR's PP-OCRv6 model). It uses your GPU card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay. Shout out to _Nadekai_ in Discord for the suggestion and early benchmarking. 💥
+- **Quick Shot:** pressing its shortcut again now closes it if you haven't drawn a box yet, or scans the box you've drawn, the same as Esc and Enter. 🎯
+- **Mouse buttons as shortcuts:** on Windows, the scan and controller-menu shortcuts can now be the **middle**, **back** or **forward** mouse button.
 
 ### Changed
 
-- **Smarter Auto OCR:** with a local engine selected, that engine now watches the screen for new text itself, so lines no longer flicker out of the overlay when a different engine misreads them. With an online engine or Manga OCR, Auto OCR watches with the best engine already on your computer (PaddleOCR, Apple Live Text or OneOCR, then MeikiOCR), and it no longer downloads MeikiOCR in the background to do it. It also looks less often when the watching engine is slow, leaving more of the processor to your game. You can choose the watching engine under Auto OCR's advanced options.
-- **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
-- **A new look for the overlay.** Scanned text is marked with a soft tinted box instead of an underline, and hovering a word turns it into a floating card in the style of Kimochi's own windows, with a little room around the text and a lighter weight. With "Group text into regions" on, nearby lines share one box that works the same way. Everything fades in and out, except when you leave the game's window, which still hides the overlay at once.
-- **Settings → OCR & Overlay → Overlay look:** choose the highlight colour and how strongly it shows, and whether the cards are light, dark or the same as Kimochi, with live previews of each. A fourth choice, **Blend**, fills each hovered card with the colours behind that word on your screen and picks light or dark text to match, so it looks as if the game drew it.
+- **Smarter Auto OCR:** with a local engine selected, that engine now watches the screen for new text itself, so lines no longer flicker out of the overlay when a different engine misreads them. With an online engine or Manga OCR, Auto OCR watches with the best engine already on your computer. You can choose the watching engine under Auto OCR's advanced options. ⏩
+- **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and use less CPU. ⚡
+- **A new look for the overlay.** Scanned text is marked with a soft tinted box instead of an underline, and hovering a word turns it into a floating card in the style of Kimochi's own windows, with a little room around the text and a lighter weight. With the "Group text into regions" setting on, nearby lines share one box that works the same way.
+  - **Settings → OCR & Overlay → Overlay look:** choose the highlight colour and how strongly it shows, and whether the cards are light, dark or the same as Kimochi, with live previews of each. A fourth choice, **Blend**, fills each hovered card with the colours behind that word on your screen to blend in with the source. 🎨
 
 ### Fixed
 
 - After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.
-- With "Group text into regions" on, text read by Apple Live Text or Google Lens now merges into one region per dialogue box, as it does with the other engines, instead of a separate box for every line or paragraph.
+- With "Group text into regions" on, text read by Apple Live Text or Google Lens now merges correctly into one region per dialogue box.
 
 ## [0.2.2] - 2026-10-29
 
