@@ -53,6 +53,22 @@ impl Image {
             .map_err(|error| format!("{}: {}", error.code, error.message))
     }
 
+    /// The frame's RGBA pixels, lent to `read`: the captured ones where this image has them,
+    /// decoded from its PNG otherwise. None when neither can be read.
+    pub fn with_pixels<R>(&self, read: impl FnOnce(&crate::surface::Pixels) -> R) -> Option<R> {
+        if let Some(frame) = &self.raw {
+            let (width, height) = (frame.info.width, frame.info.height);
+            let stride = frame.info.stride.max(width as usize * 4);
+            if width == 0 || height == 0 || frame.pixels.len() < stride * (height as usize - 1) + width as usize * 4 {
+                return None;
+            }
+            return Some(read(&crate::surface::Pixels { rgba: &frame.pixels, width, height, stride }));
+        }
+        let decoded = image::load_from_memory_with_format(&self.png().ok()?, image::ImageFormat::Png).ok()?.to_rgba8();
+        let (width, height) = decoded.dimensions();
+        Some(read(&crate::surface::Pixels { rgba: decoded.as_raw(), width, height, stride: width as usize * 4 }))
+    }
+
     /// Local models read captured pixels directly. Keep encoded-only previews working too.
     pub fn rgb(&self) -> Result<image::RgbImage, String> {
         if let Some(frame) = &self.raw {

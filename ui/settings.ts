@@ -28,9 +28,10 @@ export type Appearance = 'system' | 'light' | 'dark'
 
 /**
  * How the overlay's text cards look (the card a hovered word turns into, and the grouped
- * overlay's regions): `app` takes Kimochi's own appearance, the others are fixed.
+ * overlay's regions): `app` takes Kimochi's own appearance, `light` and `dark` are fixed, and
+ * `blend` takes the colours of the source behind each word or region.
  */
-export type OverlayCardAppearance = 'app' | 'light' | 'dark'
+export type OverlayCardAppearance = 'app' | 'light' | 'dark' | 'blend'
 
 /** Settings → OCR & Overlay → Overlay look (ui/overlay-text.css draws it). */
 export interface OverlayStyleSettings {
@@ -38,6 +39,8 @@ export interface OverlayStyleSettings {
   color: string
   /** The cards' appearance; see `OverlayCardAppearance`. */
   appearance: OverlayCardAppearance
+  /** How opaque the highlight is, 0–100; see `highlightStrength`. */
+  opacity: number
 }
 
 /** The highlight colours Settings offers; any `#rrggbb` is accepted. The first is the default. */
@@ -54,7 +57,16 @@ export const OVERLAY_HIGHLIGHT_PRESETS: readonly { value: string; label: string 
 
 export const DEFAULT_OVERLAY_STYLE: OverlayStyleSettings = {
   color: OVERLAY_HIGHLIGHT_PRESETS[0].value,
-  appearance: 'app'
+  appearance: 'app',
+  opacity: 40
+}
+
+/**
+ * The highlight's opacity setting as a multiple of the default look (overlay-text.css scales its
+ * tint and outline by it): 40, the default, is 1; 100 is two and a half times as strong.
+ */
+export function highlightStrength(opacity: number): number {
+  return Math.round((Math.min(100, Math.max(0, opacity)) / DEFAULT_OVERLAY_STYLE.opacity) * 1000) / 1000
 }
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
@@ -76,10 +88,17 @@ export function overlayStyleOf(stored: unknown): OverlayStyleSettings {
       ? raw.color.toLowerCase()
       : DEFAULT_OVERLAY_STYLE.color
   const appearance =
-    raw.appearance === 'light' || raw.appearance === 'dark' || raw.appearance === 'app'
+    raw.appearance === 'light' ||
+    raw.appearance === 'dark' ||
+    raw.appearance === 'app' ||
+    raw.appearance === 'blend'
       ? raw.appearance
       : DEFAULT_OVERLAY_STYLE.appearance
-  return { color, appearance }
+  const opacity =
+    typeof raw.opacity === 'number' && Number.isFinite(raw.opacity)
+      ? Math.min(100, Math.max(0, Math.round(raw.opacity)))
+      : DEFAULT_OVERLAY_STYLE.opacity
+  return { color, appearance, opacity }
 }
 
 /**
@@ -90,7 +109,7 @@ export function resolveOverlayCardAppearance(
   style: OverlayStyleSettings,
   appearance: Appearance,
   systemDark: boolean
-): 'light' | 'dark' {
+): 'light' | 'dark' | 'blend' {
   if (style.appearance !== 'app') return style.appearance
   if (appearance === 'light' || appearance === 'dark') return appearance
   return systemDark ? 'dark' : 'light'

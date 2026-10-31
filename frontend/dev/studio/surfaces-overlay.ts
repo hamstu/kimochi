@@ -50,7 +50,7 @@ const TEXT: ControlGroup = {
   title: 'Overlay text',
   controls: [
     { kind: 'toggle', param: 'grouping', label: 'Group text into regions', on: '1' },
-    { kind: 'text', param: 'opacity', label: 'Region opacity (0–100)', placeholder: '80' },
+    { kind: 'text', param: 'strength', label: 'Highlight opacity (0–100)', placeholder: '40' },
     {
       kind: 'toggle',
       param: 'filter',

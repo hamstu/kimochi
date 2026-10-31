@@ -8,6 +8,7 @@ import {
   wordAnnotations,
   type Annotation,
   type GroupingSettings,
+  type Surface,
 } from "./annotations.js";
 export type Orientation = "horizontal" | "vertical";
 /** A piece of a line (a word, or a character) with its own box, in capture pixels. */
@@ -24,6 +25,8 @@ export interface OcrGroup {
   linePolygons?: number[][][];
   /** Per line of `linePolygons`, the words found on it with their boxes, when the engine gives them. */
   lineSegments?: Segment[][];
+  /** What the group sits on, read from the scanned frame (src-tauri/src/surface.rs). */
+  surface?: Surface;
   /**
    * Per line of `linePolygons`, its text, when the engine read each line on its own (Manga OCR,
    * as mokuro does). The overlay sets each line's text on its line as it is.
@@ -62,18 +65,30 @@ export const TYPEFACES: Record<string, string> = {
   mangaocr: "manga",
 };
 
-/** Annotations stamped with their engine's ink margins and typeface, where it has them. */
+/**
+ * Engines whose groups are separate passages the overlay must never merge: Manga OCR's speech
+ * bubbles. Every other engine's groups (Live Text's lines, Google Lens's paragraphs) are only how
+ * it happened to split the text, and "Group text into regions" clusters them by proximity.
+ */
+export const BUBBLE_ENGINES: ReadonlySet<string> = new Set(["mangaocr"]);
+
+/**
+ * Annotations stamped with their engine's ink margins and typeface, where it has them, and its
+ * blocks marked as bubbles where they are (`BUBBLE_ENGINES`).
+ */
 export function withInkMargins(
   annotations: Annotation[],
   engine: string,
 ): Annotation[] {
   const margin = INK_MARGINS[engine];
   const typeface = TYPEFACES[engine];
-  if (!margin && !typeface) return annotations;
+  const bubbles = BUBBLE_ENGINES.has(engine);
+  if (!margin && !typeface && !bubbles) return annotations;
   return annotations.map((a) => ({
     ...a,
     ...(margin ? { inkMargin: margin } : {}),
     ...(typeface ? { typeface } : {}),
+    ...(bubbles && a.granularity === "block" ? { bubble: true } : {}),
   }));
 }
 
@@ -434,6 +449,8 @@ export function normalizeOcrResult(
         ...lineSegmentsOf(g, fragments),
         // And each line's own text, where the engine read the lines one by one.
         ...lineTextsOf(g),
+        // And what it sits on, read from the frame (surface.rs), for Blend cards.
+        ...(g.surface ? { surface: g.surface } : {}),
         boundingPoly: {
           vertices: [
             { x: g.bbox![0], y: g.bbox![1] },

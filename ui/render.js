@@ -26,7 +26,7 @@
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
 import { layoutParts, characterCells } from './text-layout.js'
-import { hexToRgbTriplet } from './settings.js'
+import { hexToRgbTriplet, highlightStrength } from './settings.js'
 
 const LOOKAHEAD = 10
 const PROXIMITY_MAX_DISTANCE = 300
@@ -440,6 +440,8 @@ export class TextOverlayRenderer {
     this.hooks = hooks
     this.mouse = { x: -1000, y: -1000 }
     this.words = []
+    /** Grouped mode's regions, which light on hover as word boxes do: {element, index, box, centerX, centerY}. */
+    this.regions = []
     this.lastLookupIndex = null
     /** Boxes a selection starts in: lit as if hovered. */
     this.selectionIndices = new Set()
@@ -490,7 +492,12 @@ export class TextOverlayRenderer {
       cancelAnimationFrame(this.frame)
       this.frame = null
     }
-    if (this.mode === 'words' && this.words.length > 0) this.updateProximity()
+    if (this.hoverables().length > 0) this.updateProximity()
+  }
+
+  /** What lights as the pointer nears and rests on it: word boxes, or grouped mode's regions. */
+  hoverables() {
+    return this.mode === 'groups' ? this.regions : this.words
   }
 
   /** Hold every box unlit and unmarked (true), or let hovering and selection show again. */
@@ -502,14 +509,17 @@ export class TextOverlayRenderer {
 
   /**
    * The look (Settings → OCR & Overlay → Overlay look): the highlight colour, `#rrggbb`, and
-   * the cards' appearance, light or dark. Set on the container, where overlay-text.css reads
+   * the cards' appearance, light, dark or blend. Set on the container, where overlay-text.css reads
    * them; everything drawn, or still to be drawn, follows.
    */
-  setStyle({ color, theme }) {
+  setStyle({ color, theme, opacity }) {
+    if (Number.isFinite(opacity)) {
+      this.container.style.setProperty('--ocr-hl-strength', String(highlightStrength(opacity)))
+    } else this.container.style.removeProperty('--ocr-hl-strength')
     const rgb = hexToRgbTriplet(color)
     if (rgb) this.container.style.setProperty('--ocr-hl-rgb', rgb)
     else this.container.style.removeProperty('--ocr-hl-rgb')
-    if (theme === 'light' || theme === 'dark') this.container.dataset.ocrTheme = theme
+    if (theme === 'light' || theme === 'dark' || theme === 'blend') this.container.dataset.ocrTheme = theme
     else delete this.container.dataset.ocrTheme
   }
 
@@ -553,6 +563,7 @@ export class TextOverlayRenderer {
       if (this.container.children.length) this.container.replaceChildren()
     }
     this.words = []
+    this.regions = []
     this.lastLookupIndex = null
     this.selectionIndices = new Set()
     this.consumedIndices = new Set()
@@ -694,7 +705,9 @@ export class TextOverlayRenderer {
     )
     const extended = this.words.find((word) => word.index === this.extension?.index)?.element ?? null
     const lookup = oldChildren.find((element) => element.ocrIndex === this.lastLookupIndex)
+    const oldRegions = new Map(this.regions.map((region) => [region.element, region]))
     this.words = []
+    this.regions = []
     this.mode = grouping.enabled ? 'groups' : 'words'
     const fragment = grouping.enabled
       ? this.renderGroups(filtered, info, origin, grouping, opacity, false, bounds)
@@ -724,6 +737,8 @@ export class TextOverlayRenderer {
       const nextAhead = fresh.querySelector('.ocr-lookahead')
       if (ahead && nextAhead && ahead.textContent !== nextAhead.textContent)
         ahead.textContent = nextAhead.textContent
+      const region = this.regions.find((region) => region.element === fresh)
+      if (region && oldRegions.has(old)) region.element = old
       const word = this.words.find((word) => word.element === fresh)
       const previous = oldWords.get(old)
       if (word && previous)
@@ -801,6 +816,12 @@ export class TextOverlayRenderer {
       element.className = `ocr-word${vertical ? ' ocr-vertical' : ''}${block ? ' ocr-block' : ''}${
         box.typeface === 'manga' ? ' ocr-manga' : ''
       }`
+      // What the box sits on (surface.rs), which a Blend card is filled with (overlay-text.css).
+      if (box.surface) {
+        element.dataset.surface = box.surface.ink
+        element.style.setProperty('--ocr-surface-top', box.surface.top)
+        element.style.setProperty('--ocr-surface-bottom', box.surface.bottom)
+      }
       const runs = layouts[index]
       // The hovered card reaches this far past the box (overlay-text.css); the text stays put.
       element.style.setProperty(
@@ -961,7 +982,14 @@ export class TextOverlayRenderer {
         fontSize: `${fontSize}px`,
         lineHeight: String(GROUP_LINE_HEIGHT)
       })
-      element.style.setProperty('--backdrop-opacity', String(opacity / 100))
+
+      // What the cluster sits on, for Blend: its boxes' readings combined (`groupSurface`).
+      const surface = groupSurface(group.annotations)
+      if (surface) {
+        element.dataset.surface = surface.ink
+        element.style.setProperty('--ocr-surface-top', surface.top)
+        element.style.setProperty('--ocr-surface-bottom', surface.bottom)
+      }
 
       if (scanning) {
         element.classList.add('scanning')
@@ -1001,6 +1029,20 @@ export class TextOverlayRenderer {
       element.renderText = text
       element.renderBox = rect
       this.attachInteraction(element, index)
+      // A shared box over the cluster: highlighted at rest and lit on hover, as a word box is.
+      const region = {
+        x: rect.x - GROUP_PADDING_X,
+        y: rect.y - GROUP_PADDING_Y,
+        width: rect.width + GROUP_PADDING_X * 2,
+        height: rect.height + GROUP_PADDING_Y * 2
+      }
+      this.regions.push({
+        element,
+        index,
+        box: region,
+        centerX: region.x + region.width / 2,
+        centerY: region.y + region.height / 2
+      })
       fragment.append(element)
     })
 
@@ -1034,7 +1076,7 @@ export class TextOverlayRenderer {
   }
 
   scheduleProximityUpdate() {
-    if (this.mode !== 'words' || this.words.length === 0 || this.frame !== null) return
+    if (this.hoverables().length === 0 || this.frame !== null) return
     this.frame = requestAnimationFrame(() => {
       this.frame = null
       this.updateProximity()
@@ -1042,7 +1084,7 @@ export class TextOverlayRenderer {
   }
 
   updateProximity() {
-    for (const word of this.words) {
+    for (const word of this.hoverables()) {
       const { box } = word
       const consumed = this.consumedIndices.has(word.index)
       const hovering =
@@ -1136,4 +1178,23 @@ export class TextOverlayRenderer {
   }
 }
 
-export { proximityStyle, dispatchEscape, dispatchLookup, getBoundingBox }
+/**
+ * What a grouped region sits on, from what its boxes do (surface.rs reads each box's own): the
+ * top box's colour above, the bottom box's below, and the text most of them call for (light on
+ * a tie). Null when none of them has a reading.
+ */
+function groupSurface(annotations) {
+  const read = annotations.filter((a) => a.surface)
+  if (!read.length) return null
+  const y = (a) => getBoundingBox(a)
+  const top = read.reduce((best, a) => (y(a).minY < y(best).minY ? a : best))
+  const bottom = read.reduce((best, a) => (y(a).maxY > y(best).maxY ? a : best))
+  const dark = read.filter((a) => a.surface.ink === 'dark').length
+  return {
+    top: top.surface.top,
+    bottom: bottom.surface.bottom,
+    ink: dark > read.length - dark ? 'dark' : 'light'
+  }
+}
+
+export { proximityStyle, dispatchEscape, dispatchLookup, getBoundingBox, groupSurface }

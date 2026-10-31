@@ -1,6 +1,57 @@
 /* Settings → OCR & Overlay → Overlay look (OverlayLook.tsx): colour swatches, and the card
    choices with a preview each, built from the overlay's own word boxes (ui/overlay-text.css). */
 
+/* --- the highlight: colour and opacity ------------------------------------------------------ */
+/* Two columns, parted by a rule, while the window is wide enough for both; one under the other
+   (the group's usual row rule) when it is not. */
+.overlay-look-highlight {
+  container-type: inline-size;
+}
+.overlay-look-highlight-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+/* Side by side, the shorter column keeps its control under its text, not at its foot. */
+.overlay-look-highlight-grid .k-settings-row-text {
+  flex: none;
+}
+.overlay-look-highlight + .k-settings-row {
+  border-top: 1px solid var(--k-line);
+}
+/* The colour column is a little wider, so all nine swatches stay on one line. */
+@container (min-width: 36rem) {
+  .overlay-look-highlight-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+  .overlay-look-highlight-grid > .k-settings-row + .k-settings-row {
+    border-top: 0;
+    border-left: 1px solid var(--k-line);
+  }
+}
+.overlay-look-opacity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  width: 100%;
+}
+.overlay-look-opacity-control {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+}
+.overlay-look-opacity-control .k-slider {
+  flex: 1;
+}
+.overlay-look-opacity-value {
+  min-width: 2.75rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--k-text-2);
+}
+.overlay-look-opacity .overlay-look-preview {
+  height: 3.25rem;
+}
+
 /* --- the colour --------------------------------------------------------------------------- */
 .overlay-look-swatches,
 .overlay-look-presets {
@@ -76,11 +127,24 @@
 }
 
 /* --- the cards --------------------------------------------------------------------------- */
+.overlay-look-cards-frame {
+  container-type: inline-size;
+  width: 100%;
+}
 .overlay-look-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: var(--k-space-2);
   width: 100%;
+}
+/* Four choices (Blend among them): two by two, or one row once each has room for its preview. */
+.overlay-look-cards[data-count='4'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container (min-width: 44rem) {
+  .overlay-look-cards[data-count='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 .k-choice.overlay-look-card {
   gap: var(--k-space-1-5);

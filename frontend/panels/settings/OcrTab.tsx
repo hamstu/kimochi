@@ -159,7 +159,7 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Group text into regions"
           controlId="ocr-grouping"
-          description="Gives nearby text boxes a shared background."
+          description="Marks nearby lines with one shared box to hover, instead of a box for each line."
         >
           <Switch
             id="ocr-grouping"

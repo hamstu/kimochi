@@ -3223,6 +3223,7 @@ function applyOverlayStyle() {
   const style = setting('overlayStyle')
   renderer.setStyle({
     color: style.color,
+    opacity: style.opacity,
     theme: resolveOverlayCardAppearance(style, setting('appearance'), systemDark.matches)
   })
 }

@@ -48,6 +48,7 @@ mod sentence_audio;
 mod settings;
 mod sources;
 mod state;
+mod surface;
 mod steam_library;
 mod text_observer;
 mod texthooker;
@@ -1996,6 +1997,9 @@ async fn ocr_frame(
                 }),
             );
         })?;
+        // What each box sits on, for the overlay's Blend cards: read now, from this frame.
+        let mut value = value;
+        image.with_pixels(|pixels| surface::annotate(&mut value, pixels));
         let count = value["textAnnotations"].as_array().map_or(0, Vec::len);
         if count == 0 {
             record(&app, &service, json!({
