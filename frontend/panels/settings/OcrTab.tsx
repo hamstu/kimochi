@@ -36,6 +36,7 @@ import { useViewState } from '../../bridge/state'
 import { triggerAction } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { EngineChooser } from './EngineChooser'
+import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
 import './ocr-tab.css'
 
@@ -147,7 +148,7 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Overlay mode"
           controlId="ocr-live-overlay"
-          description="Hover scanned text on your source to see its definition. Look for the faint blue underlines."
+          description="Hover scanned text on your source to see its definition. Look for the faint highlights."
         >
           <Switch
             id="ocr-live-overlay"
@@ -176,6 +177,13 @@ export function OcrTab(): ReactNode {
             void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
           }
         />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Overlay look"
+        description="How scanned text is marked on your source, and the card it turns into when you hover it."
+      >
+        <OverlayLook />
       </SettingsSection>
 
       <SettingsSection title="Auto-scan">

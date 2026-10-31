@@ -25,6 +25,76 @@ export type ServerMode = 'cloud' | 'local'
 export type OcrMode = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'livetext' | 'oneocr'
 /** Window appearance. `system` follows the OS light/dark setting. */
 export type Appearance = 'system' | 'light' | 'dark'
+
+/**
+ * How the overlay's text cards look (the card a hovered word turns into, and the grouped
+ * overlay's regions): `app` takes Kimochi's own appearance, the others are fixed.
+ */
+export type OverlayCardAppearance = 'app' | 'light' | 'dark'
+
+/** Settings → OCR & Overlay → Overlay look (ui/overlay-text.css draws it). */
+export interface OverlayStyleSettings {
+  /** The highlight over text that can be hovered: its tint and outline, as `#rrggbb`. */
+  color: string
+  /** The cards' appearance; see `OverlayCardAppearance`. */
+  appearance: OverlayCardAppearance
+}
+
+/** The highlight colours Settings offers; any `#rrggbb` is accepted. The first is the default. */
+export const OVERLAY_HIGHLIGHT_PRESETS: readonly { value: string; label: string }[] = [
+  { value: '#3e63dd', label: 'Indigo' },
+  { value: '#0090ff', label: 'Blue' },
+  { value: '#12a594', label: 'Teal' },
+  { value: '#30a46c', label: 'Green' },
+  { value: '#ffb224', label: 'Amber' },
+  { value: '#e5484d', label: 'Red' },
+  { value: '#e93d82', label: 'Pink' },
+  { value: '#8e4ec6', label: 'Violet' }
+]
+
+export const DEFAULT_OVERLAY_STYLE: OverlayStyleSettings = {
+  color: OVERLAY_HIGHLIGHT_PRESETS[0].value,
+  appearance: 'app'
+}
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
+/** `#rrggbb` as "r, g, b" for an `rgba(var(--x), a)` colour, or null for anything else. */
+export function hexToRgbTriplet(color: unknown): string | null {
+  if (typeof color !== 'string' || !HEX_COLOR.test(color)) return null
+  return [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16)).join(', ')
+}
+
+/** A stored overlay style made whole: an unknown colour or appearance falls back to the default. */
+export function overlayStyleOf(stored: unknown): OverlayStyleSettings {
+  const raw =
+    stored && typeof stored === 'object' && !Array.isArray(stored)
+      ? (stored as Partial<OverlayStyleSettings>)
+      : {}
+  const color =
+    typeof raw.color === 'string' && HEX_COLOR.test(raw.color)
+      ? raw.color.toLowerCase()
+      : DEFAULT_OVERLAY_STYLE.color
+  const appearance =
+    raw.appearance === 'light' || raw.appearance === 'dark' || raw.appearance === 'app'
+      ? raw.appearance
+      : DEFAULT_OVERLAY_STYLE.appearance
+  return { color, appearance }
+}
+
+/**
+ * Which appearance the overlay's cards take, from its own setting and Kimochi's (`system` is
+ * the OS's, which the caller reads as `systemDark`).
+ */
+export function resolveOverlayCardAppearance(
+  style: OverlayStyleSettings,
+  appearance: Appearance,
+  systemDark: boolean
+): 'light' | 'dark' {
+  if (style.appearance !== 'app') return style.appearance
+  if (appearance === 'light' || appearance === 'dark') return appearance
+  return systemDark ? 'dark' : 'light'
+}
 /** Interface scale: type, spacing and controls move together. Transcript text has its own size. */
 /**
  * How `yomitanSettings.popupType` is stored. `'builtin'` (Yomitan) and `'custom-api'` predate the
@@ -146,6 +216,8 @@ export interface Settings {
   overlayOpacity: number
   liveOverlayEnabled: boolean
   textOverlayGrouping: GroupingSettings
+  /** How the overlay's highlights and cards look; see `OverlayStyleSettings`. */
+  overlayStyle: OverlayStyleSettings
   autoOCRSettings: AutoScanSettings
   autoScanSettings: {
     enabled: boolean
@@ -240,6 +312,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   overlayOpacity: 80,
   liveOverlayEnabled: false,
   textOverlayGrouping: DEFAULT_GROUPING,
+  overlayStyle: DEFAULT_OVERLAY_STYLE,
   autoOCRSettings: DEFAULT_AUTO_OCR_SETTINGS,
   autoScanSettings: { enabled: false, scanDelay: 500 },
   texthookerSettings: {
@@ -666,6 +739,8 @@ export function withDefaults<K extends keyof Settings>(key: K, stored: unknown):
   // Automatic OCR is the one key whose stored shape changed meaning rather than
   // only gaining fields, so it gets a real migration instead of a shallow merge.
   if (key === 'autoOCRSettings') return migrateAutoScanSettings(stored) as Settings[K]
+  // A colour or appearance this build does not know reads as the default, not as a broken look.
+  if (key === 'overlayStyle') return overlayStyleOf(stored) as Settings[K]
   if (key === 'yomitanSettings') {
     // A popupType written by a newer build (an engine this one does not ship) reads as Yomitan
     // rather than leaving every window guessing.

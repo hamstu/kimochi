@@ -68,6 +68,25 @@ const TEXT: ControlGroup = {
         { value: 'manga', label: 'Manga OCR’s (Zen Kaku Gothic)' }
       ],
       default: 'default'
+    },
+    {
+      kind: 'text',
+      param: 'highlight',
+      label: 'Highlight colour (rrggbb)',
+      placeholder: '3e63dd',
+      help: 'Settings → OCR & Overlay → Overlay look: the tint and outline over hoverable text.'
+    },
+    {
+      kind: 'select',
+      param: 'cards',
+      label: 'Cards',
+      options: [
+        { value: 'theme', label: 'Same as the pop-up' },
+        { value: 'light', label: 'Light' },
+        { value: 'dark', label: 'Dark' }
+      ],
+      default: 'theme',
+      help: 'The card a hovered word turns into, and the grouped regions.'
     }
   ]
 }

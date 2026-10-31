@@ -17,6 +17,10 @@
  *   ?grouping=1      Group text into regions (the grouped overlay)
  *   ?opacity=<0-100> the grouped overlay's background opacity (default 80)
  *   ?typeface=manga  set the text in Manga OCR's typeface
+ *   ?highlight=<rrggbb>  the highlight colour over hoverable text (Settings → Overlay look;
+ *                    default: the app's indigo)
+ *   ?cards=light|dark  the hovered cards' and grouped regions' appearance (default: the pop-up's,
+ *                    `theme`, as "Same as Kimochi" does)
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open)
  *   ?theme=light|dark  the pop-up's, the region editor's and the controller's appearance (default:
@@ -60,6 +64,7 @@
  * `stick:0,0` to let go), or `key:<Key>` (`key:ArrowRight`, `key:Enter`, `key:Escape`, `key:Space`).
  */
 import overlayHtml from '@ui/overlay.html?raw'
+import '@ui/overlay-text.css'
 import '@ui/controller.css'
 import '@ui/controller-variants.css'
 // The app bundles Figtree for the overlay as fonts/figtree.css (prepare.mjs); here, from the package.
@@ -169,6 +174,13 @@ let textVisible = true
 const renderer = new TextOverlayRenderer(words, {
   onLookupStart: () => undefined,
   onActivity: () => undefined
+})
+// The look, as overlay.js applies it from Settings → Overlay look.
+renderer.setStyle({
+  color: /^[0-9a-f]{6}$/i.test(params.get('highlight') ?? '')
+    ? `#${params.get('highlight')}`
+    : SETTINGS_DEFAULTS.overlayStyle.color,
+  theme: params.get('cards') === 'light' || params.get('cards') === 'dark' ? params.get('cards') : theme
 })
 
 function grouping(): Record<string, unknown> {

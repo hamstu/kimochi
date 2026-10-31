@@ -1,0 +1,300 @@
+/*
+ * The overlay's recognised text: how a word box and a grouped region look (render.js draws them).
+ * Loaded by overlay.html, by the dev stage (frontend/dev/stage/stage.ts) and by Settings → OCR &
+ * Overlay's look previews, which are built of the same elements, so the preview is the overlay.
+ *
+ * The renderer sets two things on its container (`#words`): `data-ocr-theme`, light or dark, for
+ * the cards; and `--ocr-hl-rgb`, the highlight colour as "r, g, b" (Settings → Overlay look).
+ *
+ * A word box has two faces, both pseudo-elements so neither moves or resizes the text, which
+ * stays exactly over the glyphs OCR read it from (text-layout.js):
+ *  - at rest, `::after`: a faint tint and outline a little outside the box, which brightens as
+ *    the pointer nears (`--ocr-near`, 0–1, set by render.js each frame);
+ *  - hovered (`data-lit`), `::before`: an opaque card padded out by `--ocr-pad`, in the look of
+ *    Kimochi's own panels, with the box's text set over it.
+ * Each fades in and out; the whole box fades in when drawn and out when it goes (render.js).
+ */
+
+/* --- the look ---------------------------------------------------------------------------- */
+/* Dark unless the container says light (`:where` keeps the id from outranking the attribute). */
+[data-ocr-theme],
+:where(#words) {
+  --ocr-card: #1b1c1f;
+  --ocr-card-rgb: 27, 28, 31;
+  --ocr-ink: #edeef0;
+  --ocr-card-line: rgba(255, 255, 255, 0.11);
+  --ocr-card-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 10px 28px -6px rgba(0, 0, 0, 0.6);
+  --ocr-card-radius: 8px;
+  --ocr-fade: 180ms;
+}
+[data-ocr-theme='light'] {
+  --ocr-card: #ffffff;
+  --ocr-card-rgb: 255, 255, 255;
+  --ocr-ink: #1c2024;
+  --ocr-card-line: rgba(0, 0, 45, 0.13);
+  --ocr-card-shadow:
+    0 1px 2px rgba(15, 17, 26, 0.1),
+    0 10px 28px -6px rgba(15, 17, 26, 0.28);
+}
+
+@keyframes ocr-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+/* --- per-word mode ----------------------------------------------------------------------- */
+/* Boxes sitting exactly over the source's own glyphs. The text inside is fitted over the source
+   glyphs (text-layout.js) and set in the font it was measured in, and hovering never moves or
+   scales it; it is unseen until the box is lit, so the source text is never obscured by our copy
+   of it. `z-index: 0` makes each box its own stacking context, so its faces (z-index -1) sit
+   behind its text and never behind the page. */
+.ocr-word {
+  position: absolute;
+  z-index: 0;
+  display: inline-flex;
+  align-items: flex-start;
+  overflow: visible;
+  white-space: nowrap;
+  text-align: left;
+  color: var(--ocr-ink);
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+    'Yu Gothic', 'Meiryo', sans-serif;
+  font-weight: 400;
+  font-kerning: none;
+  cursor: default;
+  animation: ocr-appear var(--ocr-fade) ease-out;
+}
+.ocr-word::before,
+.ocr-word::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  transition: opacity var(--ocr-fade) ease-out;
+}
+/* At rest: the highlight, a little outside the box so the tint is not tight against the glyphs. */
+.ocr-word::after {
+  inset: -2px;
+  border-radius: 4px;
+  background: rgba(var(--ocr-hl-rgb, 62, 99, 221), calc(0.1 + 0.12 * var(--ocr-near, 0)));
+  box-shadow: inset 0 0 0 1px rgba(var(--ocr-hl-rgb, 62, 99, 221), calc(0.32 + 0.4 * var(--ocr-near, 0)));
+}
+/* Hovered: the card, padded out from the box by `--ocr-pad` (render.js sizes it to the text). */
+.ocr-word::before {
+  inset: calc(-1 * var(--ocr-pad, 6px));
+  border-radius: var(--ocr-card-radius);
+  background: var(--ocr-card);
+  box-shadow:
+    inset 0 0 0 1px var(--ocr-card-line),
+    var(--ocr-card-shadow);
+  opacity: 0;
+}
+.ocr-word[data-lit] {
+  z-index: 2;
+}
+.ocr-word[data-lit]::before {
+  opacity: 1;
+}
+.ocr-word[data-lit]::after {
+  opacity: 0;
+}
+.ocr-word-text {
+  opacity: 0;
+  transition: opacity var(--ocr-fade) ease-out;
+}
+.ocr-word[data-lit] .ocr-word-text {
+  opacity: 1;
+}
+/* On its way out (render.js fades it): no longer something to point at. */
+.ocr-word[data-leaving],
+.ocr-group[data-leaving] {
+  pointer-events: none;
+}
+/* Top-aligned, so it starts at the box's top (or, vertical, its right) edge whatever the
+   line around it; `render.js` offsets it from there to where the fit puts its glyphs. */
+.ocr-word-current {
+  display: inline-block;
+  position: relative;
+  vertical-align: top;
+  text-align: left;
+}
+/* A block's lines (a paragraph or bubble read as several lines): zero-size inline blocks,
+   each offset from the box's corner to its line. Inline, not absolutely positioned, so the
+   box's text stays one flow Yomitan's scanner reads through from line to line (an absolute
+   element ends a scan, see `.ocr-lookahead`); zero-size, so where each flows is known. */
+.ocr-word .ocr-run {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+  vertical-align: top;
+}
+
+/* --- grouped mode ------------------------------------------------------------------------ */
+/* One card per cluster, in the hovered box's look, replacing the source text rather than
+   overlaying it, for sources whose own typography is hard to read. Its ground takes the
+   Region opacity setting (`--backdrop-opacity`). */
+.ocr-group {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: pre;
+  text-align: center;
+  padding: 6px 8px;
+  border-radius: var(--ocr-card-radius);
+  cursor: pointer;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+    'Yu Gothic', 'Meiryo', sans-serif;
+  font-weight: 400;
+  font-kerning: none;
+  color: var(--ocr-ink);
+  background: rgba(var(--ocr-card-rgb), var(--backdrop-opacity, 0.8));
+  box-shadow:
+    inset 0 0 0 1px var(--ocr-card-line),
+    var(--ocr-card-shadow);
+  animation: ocr-appear var(--ocr-fade) ease-out;
+}
+.ocr-group.scanning {
+  cursor: default;
+}
+.ocr-group .ocr-run {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+/* --- the text ---------------------------------------------------------------------------- */
+/* Lookahead: the following words' text, after the hovered word, for a lookup to
+   run into when OCR split a word (render.js). It has to satisfy two readers.
+
+   Yomitan's `DOMTextScanner` (yomitan/js/dom/dom-text-scanner.js) only enters an
+   element whose computed style `isStyleVisible` accepts: `visibility` not hidden,
+   `opacity` > 0, `font-size` > 0, and not a transparent colour unless selectable.
+   It also turns `position: absolute|fixed|sticky` into two newlines and a block,
+   flex, grid, list-item or table display into one, either of which ends the match.
+   `opacity: 0` and `font-size: 0` were exactly what kept every split word from
+   being found.
+
+   Yomitan's popup is placed from `Range.getClientRects()` of the match, so this
+   text must contribute no rectangle with area, or the popup follows the following
+   words. Clipping (`clip-path`, `overflow: hidden`, a zero-width box) only stops
+   painting; the text keeps its full-size rectangles.
+
+   `transform: scale(0)` does both. Every computed style the scanner reads stays
+   ordinary, `inline-block` is not a layout-changing display to it, and a degenerate
+   transform collapses every client rectangle of the text to a point: nothing is
+   painted, nothing hit-tests, and the popup host drops zero-area source rectangles
+   (`withExtent` in popup-geometry.ts). The zero-size box keeps the line from
+   growing. Transforms need a non-inline box, hence `inline-block`. */
+.ocr-lookahead {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  vertical-align: top;
+  transform: scale(0);
+}
+.ocr-group .ocr-lookahead {
+  position: absolute;
+}
+/* A selection that ran past its box (食べ|ました looked up from 食べ). The box it
+   started in shows the whole word and the boxes whose text it took are hidden
+   under it; see `applySelectionMarks` in render.js, which sets these attributes.
+
+   The extension is pseudo-element content, `attr(data-ext)`, never a text node:
+   Yomitan's scanner walks DOM text, so on the next hover it still reads the box's
+   own text and then its lookahead, as if nothing were shown. The box and its text
+   span grow along the reading axis (width when horizontal, height when vertical)
+   from the size OCR gave them, anchored at their start, so the stem stays over
+   the source glyphs and the extension runs on over the hidden boxes. `!important`
+   beats the inline sizes `renderWords` sets; `updateProximity` rewrites other
+   inline styles every frame and leaves these alone. Attributes rather than classes
+   because `render` matches a nudged box on its class name. */
+.ocr-word[data-extended] {
+  width: auto !important;
+  min-width: var(--ocr-width);
+  z-index: 3;
+}
+.ocr-word.ocr-vertical[data-extended] {
+  width: var(--ocr-width) !important;
+  height: auto !important;
+  min-height: var(--ocr-height);
+}
+.ocr-word-current[data-ext] {
+  width: auto !important;
+  min-width: var(--ocr-width);
+}
+.ocr-vertical .ocr-word-current[data-ext] {
+  width: auto !important;
+  min-width: 0;
+  height: auto !important;
+  min-height: var(--ocr-height);
+}
+.ocr-word-current[data-ext]::after {
+  content: attr(data-ext);
+}
+/* Hidden, not transparent: a hidden box takes no pointer events and leaves the
+   click-through regions (`hitRects`), which the extended box over it now covers. */
+.ocr-word[data-consumed] {
+  visibility: hidden !important;
+}
+/* Each run sits over the line or word it was read from; see text-layout.js. Glyphs are
+   centred across the run by its line height (and its offset), and placed along it by its
+   offset and letter spacing. */
+.ocr-run {
+  white-space: nowrap;
+  text-align: left;
+  overflow: visible;
+  font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
+    'Yu Gothic', 'Meiryo', sans-serif;
+  font-kerning: none;
+}
+/* Manga OCR's text, in the bundled manga face (MANGA_FONT in render.js; fonts/manga.css). Its
+   weight is set per run, heavier for text big for its page. */
+.ocr-manga,
+.ocr-manga .ocr-run {
+  font-family: 'Zen Kaku Gothic Antique', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
+    'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif;
+  font-weight: 500;
+}
+.ocr-vertical .ocr-run,
+.ocr-vertical,
+.ocr-vertical .ocr-word-current {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+.ocr-word.ocr-vertical {
+  padding: 0;
+  align-items: stretch;
+}
+.ocr-vertical .ocr-word-text {
+  width: 100%;
+  height: 100%;
+}
+.ocr-group.ocr-vertical {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ocr-word::selection,
+.ocr-word-current::selection,
+.ocr-group::selection {
+  background: rgba(var(--ocr-hl-rgb, 62, 99, 221), 0.35);
+  color: var(--ocr-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ocr-word,
+  .ocr-group {
+    animation: none;
+  }
+  .ocr-word::before,
+  .ocr-word::after,
+  .ocr-word-text {
+    transition: none;
+  }
+}

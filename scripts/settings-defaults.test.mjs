@@ -27,8 +27,13 @@ await build({
 const {
   SETTINGS_DEFAULTS,
   DEFAULT_VOICE_ID,
+  DEFAULT_OVERLAY_STYLE,
   effectiveControllerButtons,
-  sharedButtonActions
+  hexToRgbTriplet,
+  overlayStyleOf,
+  resolveOverlayCardAppearance,
+  sharedButtonActions,
+  withDefaults
 } = await import(pathToFileURL(outfile).href)
 process.on('exit', () => {
   rm(outDir, { recursive: true, force: true }).catch(() => {})
@@ -116,4 +121,29 @@ test('controller buttons: new actions take their defaults, and the retired secon
   // The overlay's own defaults are the same buttons.
   const { DEFAULT_BUTTONS } = await import('../ui/controller-input.js')
   assert.deepEqual(DEFAULT_BUTTONS, SETTINGS_DEFAULTS.controllerButtons)
+})
+
+test('overlay look: the default, the Rust store, and what a stored style reads as', async () => {
+  assert.deepEqual(SETTINGS_DEFAULTS.overlayStyle, { color: '#3e63dd', appearance: 'app' })
+  assert.deepEqual(DEFAULT_OVERLAY_STYLE, SETTINGS_DEFAULTS.overlayStyle)
+  const rust = await readFile(new URL('../src-tauri/src/settings.rs', import.meta.url), 'utf8')
+  assert.match(rust, /"overlayStyle": \{ "color": "#3e63dd", "appearance": "app" \}/)
+  // A stored style is made whole, and anything this build cannot draw falls back to the default.
+  assert.deepEqual(withDefaults('overlayStyle', undefined), DEFAULT_OVERLAY_STYLE)
+  assert.deepEqual(withDefaults('overlayStyle', { color: '#0090FF' }), { color: '#0090ff', appearance: 'app' })
+  assert.deepEqual(overlayStyleOf({ color: 'blue', appearance: 'sepia' }), DEFAULT_OVERLAY_STYLE)
+  assert.deepEqual(overlayStyleOf({ appearance: 'light' }), { color: '#3e63dd', appearance: 'light' })
+  assert.equal(hexToRgbTriplet('#3e63dd'), '62, 99, 221')
+  assert.equal(hexToRgbTriplet('#fff'), null)
+  assert.equal(hexToRgbTriplet(12), null)
+})
+
+test('overlay look: the cards follow Kimochi unless told otherwise', () => {
+  const app = { color: '#3e63dd', appearance: 'app' }
+  assert.equal(resolveOverlayCardAppearance(app, 'light', true), 'light')
+  assert.equal(resolveOverlayCardAppearance(app, 'dark', false), 'dark')
+  assert.equal(resolveOverlayCardAppearance(app, 'system', true), 'dark')
+  assert.equal(resolveOverlayCardAppearance(app, 'system', false), 'light')
+  assert.equal(resolveOverlayCardAppearance({ ...app, appearance: 'light' }, 'dark', true), 'light')
+  assert.equal(resolveOverlayCardAppearance({ ...app, appearance: 'dark' }, 'light', false), 'dark')
 })

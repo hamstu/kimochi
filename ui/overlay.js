@@ -59,7 +59,8 @@ import {
   isOverlayTextVisible,
   nextOverlayToggle,
   overlayTextChange,
-  resolveHostEngine
+  resolveHostEngine,
+  resolveOverlayCardAppearance
 } from './settings.js'
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
@@ -3211,12 +3212,30 @@ native.onCapabilityGap((command) =>
 
 await native.loadSettings()
 await mirrorDictionaryEngine({ repair: true })
+
+/**
+ * The text's look (Settings → OCR & Overlay → Overlay look): the highlight colour, and whether
+ * the cards are light or dark, which with "Same as Kimochi" follows the app's appearance and,
+ * for `system`, the OS.
+ */
+const systemDark = matchMedia('(prefers-color-scheme: dark)')
+function applyOverlayStyle() {
+  const style = setting('overlayStyle')
+  renderer.setStyle({
+    color: style.color,
+    theme: resolveOverlayCardAppearance(style, setting('appearance'), systemDark.matches)
+  })
+}
+applyOverlayStyle()
+systemDark.addEventListener('change', applyOverlayStyle)
+
 await native.watchSettings((key) => {
   // The selected engine decides the watcher too (`autoWatcher`).
   if (key === 'autoOCRSettings' || key === 'quickShotEnabled' || key === 'superTexthooker' || key === 'ocrMode')
     syncAutoScanner()
   // Mirror only: a switch is reloaded by Settings (`dictionary_engine_apply`), not from here.
   if (key === 'yomitanSettings') void mirrorDictionaryEngine()
+  if (key === 'overlayStyle' || key === 'appearance') applyOverlayStyle()
   syncOverlayText()
 })
 

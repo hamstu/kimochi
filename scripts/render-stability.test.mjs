@@ -216,14 +216,19 @@ test('even a one-point actual source movement bypasses OCR jitter tolerance', ()
   assert.equal(host.children[0].style.left, '11px')
 })
 
-test('vertical words retain direction through geometry mapping and use a side marker', () => {
+test('vertical words retain direction through geometry mapping and light like any other', () => {
   const host=element(), renderer=new TextOverlayRenderer(host)
   renderer.render(view([{...word('縦書き',20),isVertical:true,orientation:'vertical',groupId:'v'}]))
   assert.match(host.children[0].className,/ocr-vertical/)
   renderer.setPointer(25,10)
   renderer.updateProximity()
-  assert.equal(host.children[0].style.borderBottom,'none')
-  assert.ok(host.children[0].style.borderRight)
+  // Hovered: the card (`data-lit`, overlay-text.css), and nothing inline that moves the text.
+  assert.equal(host.children[0].dataset.lit,'')
+  assert.equal(host.children[0].style.borderBottom,undefined)
+  assert.equal(host.children[0].style.borderRight,undefined)
+  renderer.setPointer(500,500)
+  renderer.updateProximity()
+  assert.equal(host.children[0].dataset.lit,undefined)
   renderer.destroy()
 })
 

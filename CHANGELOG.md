@@ -19,6 +19,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Smarter Auto OCR:** with a local engine selected, that engine now watches the screen for new text itself, so lines no longer flicker out of the overlay when a different engine misreads them. With an online engine or Manga OCR, Auto OCR watches with the best engine already on your computer (PaddleOCR, Apple Live Text or OneOCR, then MeikiOCR), and it no longer downloads MeikiOCR in the background to do it. It also looks less often when the watching engine is slow, leaving more of the processor to your game. You can choose the watching engine under Auto OCR's advanced options.
 - **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and leave more of the processor to your game.
+- **A new look for the overlay.** Scanned text is marked with a soft tinted box instead of an underline, and hovering a word turns it into a floating card in the style of Kimochi's own windows, with a little room around the text and a lighter weight. Grouped regions take the same card look. Everything fades in and out, except when you leave the game's window, which still hides the overlay at once.
+- **Settings → OCR & Overlay → Overlay look:** choose the highlight colour, and whether the cards are light, dark or the same as Kimochi, with live previews of each.
 
 ### Fixed
 
