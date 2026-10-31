@@ -36,7 +36,7 @@ site/
     main.tsx              BrowserRouter + App; hydrates prerendered HTML, renders empty shells
     entry-server.tsx      the prerender entry: render(url) with StaticRouter
     App.tsx               routes; keeps the head in step on client-side navigation
-    content/              compare.ts (the /compare table), faq.js (/faq, the home FAQ and its JSON-LD)
+    content/              faq.js (/faq, the home FAQ and its JSON-LD)
     pages/                one component per route: Home, Faq, Privacy, Terms, Compare, DownloadLinux, NotFound,
                           Account*, LinkApp (see "Account pages")
     components/           Layout, Section, Prose, Button, DownloadButton, ThemeToggle,
@@ -69,7 +69,7 @@ hairlines), `divider?` (hairline on top), `className?`, `children`. The header n
 ids `features`, `demo` and `download` on `/`, so keep those ids. Only the home hero uses an h1
 (`text-display`).
 
-**Long-form pages** (privacy, terms, compare) use `<Prose title lede? updated?>` and plain
+**Long-form pages** (privacy, terms, compare, faq) use `<Prose title lede? page?>` and plain
 semantic HTML inside (h2, h3, p, ul, ol, table, blockquote, a, code); `.prose-k` in `index.css`
 styles them at ~65ch. Tables scroll horizontally on narrow screens.
 
@@ -258,5 +258,10 @@ pages say they cannot reach it, and the marketing pages work as before.
   `<LiveDemo />` inside `#demo` and a `<DownloadButton />` inside `#download`.
 - The demo fills its container's width (16:10 on desktop; it may grow taller on phones) and must
   not cause horizontal scroll at 360px.
-- Privacy and Terms carry `updated="YYYY-MM-DD"`; change it with their content.
+- Every indexed route in `ROUTES` has `published` and `updated` dates (JSON-LD `datePublished` /
+  `dateModified`, sitemap `lastmod`; long-form pages show them via `<Prose page="/route">`). Bump
+  `updated` whenever a page's copy changes.
+- Write for people and for AI crawlers alike: key facts (prices, platforms, what it is) as plain
+  text in the prerendered HTML, never only behind a toggle, an image or a fetch; clear definitions
+  over slogans; dated facts say "as of <month year>".
 - Verify with `npm --prefix site run typecheck && npm --prefix site test && npm --prefix site run build`.

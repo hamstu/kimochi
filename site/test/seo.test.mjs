@@ -27,6 +27,18 @@ test('account pages are shells with noindex; marketing pages are prerendered and
   }
 })
 
+test('indexed pages carry published and updated dates, in JSON-LD and the sitemap', () => {
+  const xml = sitemapXml()
+  for (const r of ROUTES.filter((r) => r.index)) {
+    assert.match(r.published ?? '', /^\d{4}-\d{2}-\d{2}$/, r.path)
+    assert.match(r.updated ?? '', /^\d{4}-\d{2}-\d{2}$/, r.path)
+    assert.ok(r.updated >= r.published, r.path)
+    const page = jsonLd(r)['@graph'].find((n) => n['@type'] === 'WebPage')
+    assert.equal(page.dateModified, r.updated, r.path)
+    assert.ok(xml.includes(`<loc>${canonicalUrl(r.path)}</loc><lastmod>${r.updated}</lastmod>`), r.path)
+  }
+})
+
 test('routeMeta ignores trailing slashes and falls back to the 404 page', () => {
   assert.equal(routeMeta('/compare/').path, '/compare')
   assert.equal(routeMeta('').path, '/')

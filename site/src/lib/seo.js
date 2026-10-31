@@ -30,6 +30,10 @@ export const OG_IMAGE = {
  * @property {'full' | 'shell'} render  `full` prerenders the page's content; `shell` only its head
  *   (pages that need the browser: the session, `?token=` and so on).
  * @property {string} [file]    Output file under dist/ (default `<path>.html`, `index.html` for /).
+ * @property {string} [published] Indexed pages: when the page first went up (YYYY-MM-DD).
+ * @property {string} [updated]  Indexed pages: when its content last changed (YYYY-MM-DD). Bump it
+ *   with any real change to the page's copy: it is shown on long-form pages ("Updated …"), and goes
+ *   into JSON-LD (dateModified) and the sitemap (lastmod), which crawlers use to judge freshness.
  */
 
 /** @type {RouteMeta[]} */
@@ -40,7 +44,9 @@ export const ROUTES = [
     description:
       'Kimochi is a free, open-source desktop app for macOS, Windows and Linux that reads the Japanese text in your games, manga, videos and apps, draws it right over them, and lets you hover any word to look it up and make Anki cards.',
     index: true,
-    render: 'full'
+    render: 'full',
+    published: '2026-10-09',
+    updated: '2026-10-31'
   },
   {
     path: '/faq',
@@ -48,15 +54,19 @@ export const ROUTES = [
     description:
       'Answers about Kimochi: what it is, who it is for, what it costs, which platforms, OCR engines and dictionaries it supports, and what leaves your computer.',
     index: true,
-    render: 'full'
+    render: 'full',
+    published: '2026-10-21',
+    updated: '2026-10-31'
   },
   {
     path: '/compare',
-    title: 'Kimochi vs Game Sentence Miner, Kamui, owocr and YomiNinja',
+    title: 'Kimochi vs GameSentenceMiner, owocr and YomiNinja',
     description:
-      'A fair, sourced comparison of tools for reading Japanese games: Kimochi, Game Sentence Miner, Kamui, owocr and YomiNinja. Platforms, OCR engines, overlays, dictionaries, Anki and price.',
+      'Which tool is best for reading Japanese games? When to pick Kimochi, GameSentenceMiner, owocr or YomiNinja, with links to each.',
     index: true,
-    render: 'full'
+    render: 'full',
+    published: '2026-10-09',
+    updated: '2026-10-31'
   },
   {
     path: '/download/linux',
@@ -64,7 +74,9 @@ export const ROUTES = [
     description:
       'How to install Kimochi on Steam Deck, Ubuntu and Debian, Fedora, Arch and other Linux systems, plus updating, uninstalling and what to do if it won’t start.',
     index: true,
-    render: 'full'
+    render: 'full',
+    published: '2026-10-20',
+    updated: '2026-10-22'
   },
   {
     path: '/privacy',
@@ -72,14 +84,18 @@ export const ROUTES = [
     description:
       'Kimochi has no analytics, telemetry or ads. Exactly what stays on your computer and what leaves it, feature by feature, and what an optional account stores.',
     index: true,
-    render: 'full'
+    render: 'full',
+    published: '2026-10-09',
+    updated: '2026-10-21'
   },
   {
     path: '/terms',
     title: 'Terms of use · Kimochi',
     description: 'The terms for using the Kimochi app, the website and an optional Kimochi account and Kimochi Cloud.',
     index: true,
-    render: 'full'
+    render: 'full',
+    published: '2026-10-09',
+    updated: '2026-10-21'
   },
   { path: '/account', title: 'Account · Kimochi', description: 'Your Kimochi account.', index: false, render: 'shell' },
   { path: '/account/sign-in', title: 'Sign in · Kimochi', description: 'Sign in to your Kimochi account.', index: false, render: 'shell' },
@@ -227,6 +243,8 @@ export function jsonLd(route) {
     name: route.title,
     description: route.description,
     isPartOf: { '@id': WEBSITE_ID },
+    ...(route.published ? { datePublished: route.published } : {}),
+    ...(route.updated ? { dateModified: route.updated } : {}),
     ...(route.path === '/' ? { about: { '@id': APP_ID } } : {})
   })
   return { '@context': 'https://schema.org', '@graph': graph }
@@ -269,7 +287,7 @@ export function headTags(route) {
 export function sitemapXml(routes = ROUTES) {
   const urls = routes
     .filter((r) => r.index)
-    .map((r) => `  <url><loc>${canonicalUrl(r.path)}</loc></url>`)
+    .map((r) => `  <url><loc>${canonicalUrl(r.path)}</loc>${r.updated ? `<lastmod>${r.updated}</lastmod>` : ''}</url>`)
     .join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
 }

@@ -6,7 +6,7 @@ export function Terms() {
     <Prose
       title="Terms of use"
       lede="Kimochi is free software made by one person. These terms are short and meant to be read."
-      updated="2026-10-21"
+      page="/terms"
     >
       <h2 id="agreement">1. These terms</h2>
       <p>

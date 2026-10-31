@@ -9,6 +9,7 @@ export function Faq() {
     <Prose
       title="Frequently asked questions"
       lede="What Kimochi is, who it’s for, what it costs, and what leaves your computer."
+      page="/faq"
     >
       <nav aria-label="Questions">
         <ul>
