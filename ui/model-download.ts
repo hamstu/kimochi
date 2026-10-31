@@ -6,7 +6,7 @@
  */
 
 /** The local OCR engines: an `ocrMode` value whose models are downloaded. */
-export type OcrModelEngine = 'meikiocr' | 'mangaocr'
+export type OcrModelEngine = 'meikiocr' | 'mangaocr' | 'ppocr'
 /** Every downloadable model: the OCR engines', and sentence audio's speech recogniser. */
 export type ModelEngine = OcrModelEngine | 'sensevoice'
 export type ModelState = 'absent' | 'downloading' | 'paused' | 'failed' | 'verifying' | 'ready'
@@ -58,7 +58,7 @@ const SOURCES: readonly ModelSource[] = ['downloaded', 'bundled', 'development']
 
 /** Whether an `ocrMode` value is a local OCR engine with downloaded models. */
 export const isModelEngine = (mode: unknown): mode is OcrModelEngine =>
-  mode === 'meikiocr' || mode === 'mangaocr'
+  mode === 'meikiocr' || mode === 'mangaocr' || mode === 'ppocr'
 
 const isDownloadable = (engine: unknown): engine is ModelEngine =>
   isModelEngine(engine) || engine === 'sensevoice'

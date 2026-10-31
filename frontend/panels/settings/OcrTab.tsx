@@ -17,6 +17,15 @@ import {
   cn
 } from '@kit'
 import { DEFAULT_AUTO_OCR_SETTINGS } from '../../../ui/autoscan'
+import {
+  resolveWatcher,
+  watcherChoiceApplies,
+  WATCHER_ENGINES,
+  type Watcher,
+  type WatcherChoice
+} from '../../../ui/watcher'
+import { OCR_MODES, type OcrMode } from '../../bridge/settings'
+import { useCapabilities } from '../../bridge/capabilities'
 import type {
   AutoOCRSettings,
   AutoScanSettings,
@@ -27,6 +36,7 @@ import { useViewState } from '../../bridge/state'
 import { triggerAction } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { EngineChooser } from './EngineChooser'
+import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
 import './ocr-tab.css'
 
@@ -67,6 +77,23 @@ const POLL_OPTIONS = [
   { value: '5000', label: '5 seconds' }
 ]
 
+/** What a watcher is called in Settings. */
+function watcherName(watcher: Watcher): string {
+  return watcher.kind === 'image' ? 'image comparison' : OCR_MODES[watcher.engine].name
+}
+
+/** The Auto OCR row's description: what watches, and what reads. */
+function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
+  const reader = OCR_MODES[ocrMode]?.name ?? 'the selected engine'
+  if (watcher.kind === 'text' && watcher.because === 'selected') {
+    return `Reads the screen again whenever its text changes. ${reader} watches for new text and reads it.`
+  }
+  if (watcher.kind === 'image') {
+    return `Reads the screen again whenever it changes. With no local text engine here, Kimochi watches for the picture changing, then ${reader} reads it. Download PaddleOCR in the engine list above for smarter watching.`
+  }
+  return `Reads the screen again whenever its text changes. ${watcherName(watcher)} watches for new text on this computer, then ${reader} reads it once it settles.`
+}
+
 export function OcrTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
   const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
@@ -86,6 +113,19 @@ export function OcrTab(): ReactNode {
     'autoOCRSettings',
     DEFAULT_AUTO_OCR_SETTINGS
   )
+  const [ocrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
+  const engines = useCapabilities().ocrEngines
+  const watcherChoice: WatcherChoice = autoOCRSettings.watcher ?? 'auto'
+  const watcher = resolveWatcher(ocrMode, engines, watcherChoice)
+  const best = resolveWatcher(ocrMode, engines, 'auto')
+  const watcherOptions = [
+    { value: 'auto', label: 'Automatic', detail: watcherName(best) },
+    ...WATCHER_ENGINES.filter((engine) => engines[engine]?.available).map((engine) => ({
+      value: engine,
+      label: OCR_MODES[engine].name
+    })),
+    { value: 'image', label: 'Image comparison', detail: 'Any change of picture' }
+  ]
   const filterSmallText = textOverlayGrouping.filterSmallText ?? true
   // Auto OCR is the overlay's live flag, the same one the main window's Auto OCR row flips.
   const autoOcrEnabled = Boolean(useViewState().state.autoOcrEnabled)
@@ -108,7 +148,7 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Overlay mode"
           controlId="ocr-live-overlay"
-          description="Hover scanned text on your source to see its definition. Look for the faint blue underlines."
+          description="Hover scanned text on your source to see its definition. Look for the faint highlights."
         >
           <Switch
             id="ocr-live-overlay"
@@ -119,7 +159,7 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Group text into regions"
           controlId="ocr-grouping"
-          description="Gives nearby text boxes a shared background."
+          description="Marks nearby lines with one shared box to hover, instead of a box for each line."
         >
           <Switch
             id="ocr-grouping"
@@ -137,6 +177,13 @@ export function OcrTab(): ReactNode {
             void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
           }
         />
+      </SettingsSection>
+
+      <SettingsSection
+        title="Overlay look"
+        description="How scanned text is marked on your source, and the card it turns into when you hover it."
+      >
+        <OverlayLook />
       </SettingsSection>
 
       <SettingsSection title="Auto-scan">
@@ -178,7 +225,7 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Auto OCR"
           controlId="ocr-auto"
-          description="Reads the screen again whenever its text changes."
+          description={autoOcrDescription(ocrMode, watcher)}
         >
           <Switch
             id="ocr-auto"
@@ -204,6 +251,19 @@ export function OcrTab(): ReactNode {
         {advancedOpen && (
           <SettingsSubgroup>
             <div id={advancedPanel}>
+              {watcherChoiceApplies(ocrMode, engines) && (
+                <SettingsRow
+                  label="Watch the screen with"
+                  description="The local engine that notices new text before the selected engine reads it. Automatic picks the best one on this computer."
+                >
+                  <Select
+                    aria-label="Watch the screen with"
+                    value={watcherOptions.some((o) => o.value === watcherChoice) ? watcherChoice : 'auto'}
+                    onValueChange={(value) => updateAutoOCR({ watcher: value as WatcherChoice })}
+                    options={watcherOptions}
+                  />
+                </SettingsRow>
+              )}
               <SettingsRow
                 label="Adaptive polling"
                 controlId="ocr-adaptive"

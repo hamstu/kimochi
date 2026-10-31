@@ -63,6 +63,9 @@ pub fn defaults() -> Value {
         },
         "overlayOpacity": 80,
         "liveOverlayEnabled": false,
+        // The overlay's highlight colour, its cards' appearance and the highlight's opacity
+        // (ui/settings.ts DEFAULT_OVERLAY_STYLE); `app` follows Kimochi's own appearance.
+        "overlayStyle": { "color": "#3e63dd", "appearance": "app", "opacity": 40 },
         // Sentence audio (sentence_audio/): off until the user turns it on.
         "sentenceAudio": {
             "enabled": false,

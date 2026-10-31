@@ -33,6 +33,7 @@ import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } fro
 import { scanPointerInit } from './scan-input.js'
 import { visibleAnnotations } from './annotations.js'
 import { AutoScanner } from './autoscan.js'
+import { resolveWatcher, observerModeOf } from './watcher.js'
 import { SceneScanner } from './scene-scanner.js'
 import { ScanTrace } from './scan-trace.js'
 import { scanWasPublished, markScanPublished } from './scan-publication.js'
@@ -58,7 +59,8 @@ import {
   isOverlayTextVisible,
   nextOverlayToggle,
   overlayTextChange,
-  resolveHostEngine
+  resolveHostEngine,
+  resolveOverlayCardAppearance
 } from './settings.js'
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
@@ -148,6 +150,19 @@ const state = {
 }
 
 const setting = (key) => native.getSetting(key)
+
+/** Which OCR engines this machine has (`platform_capabilities`), for choosing Auto OCR's watcher. */
+let ocrEngines = {}
+/** The engine that watches the screen for Auto OCR (`ui/watcher.ts`). */
+const autoWatcher = () =>
+  resolveWatcher(setting('ocrMode'), ocrEngines, setting('autoOCRSettings')?.watcher ?? 'auto')
+/** Auto OCR's settings with the signal the watcher gives: text, or image comparison. */
+const autoSettings = () => ({ ...setting('autoOCRSettings'), observerMode: observerModeOf(autoWatcher()) })
+/** `capture_frame`'s observer arguments for the current watcher. */
+const observerArgs = () => {
+  const watcher = autoWatcher()
+  return [observerModeOf(watcher), watcher.kind === 'text' ? watcher.engine : null]
+}
 
 /**
  * The dictionary engine whose host this document installed, as the injected scripts resolved it
@@ -953,11 +968,7 @@ async function performScan(explicit = null) {
         reportOutcome(scanActivity.noSource())
         return
       }
-      const frame = await native.captureFrame(
-        job.request,
-        scanner.isRunning,
-        setting('autoOCRSettings').observerMode
-      )
+      const frame = await native.captureFrame(job.request, scanner.isRunning, ...observerArgs())
       stage = 'recognise'
       activity(scanActivity.recognising(setting('ocrMode')))
       const result = await recognize(frame, { ocrMode: setting('ocrMode') })
@@ -1043,11 +1054,7 @@ const scanDeps = {
     trace('capture-start', { generation: autoJob.generation })
     let captured
     try {
-      captured = await native.captureFrame(
-        autoJob.request,
-        true,
-        setting('autoOCRSettings').observerMode
-      )
+      captured = await native.captureFrame(autoJob.request, true, ...observerArgs())
     } catch (error) {
       trace('capture-failed', { durationMs: performance.now() - started })
       throw error
@@ -1263,6 +1270,7 @@ function observationFrom(frame) {
   if (!observation || typeof observation.text !== 'string') return null
   return {
     text: observation.text,
+    durationMs: observation.duration_ms,
     lines: (observation.lines ?? []).map((line) => ({
       text: line.text ?? '',
       box: { x: line.x ?? 0, y: line.y ?? 0, width: line.width ?? 0, height: line.height ?? 0 },
@@ -1298,10 +1306,11 @@ function onAutoScanEvent(event) {
       return
     case 'status':
       if (event.state === 'running') {
-        const settings = setting('autoOCRSettings')
+        const settings = autoSettings()
         trace('auto-start', {
           mode: setting('ocrMode'),
           observerMode: settings.observerMode,
+          watcher: autoWatcher(),
           settings: Object.fromEntries(
             Object.entries(settings).filter(
               ([, value]) => typeof value === 'number' || typeof value === 'boolean'
@@ -1385,9 +1394,17 @@ export function autoScanStats() {
   return { state: scanner.state, reason: scanner.stateReason, ...scanner.stats() }
 }
 
+/** The watcher the running loop was started with: another one reads lines differently. */
+let runningWatcher = null
+
 function syncAutoScanner() {
-  const settings = setting('autoOCRSettings')
+  const settings = autoSettings()
+  const watcher = JSON.stringify(autoWatcher())
   const wantedScanner = settings?.observerMode === 'image' ? imageScanner : sceneScanner
+  if (scanner.isRunning && runningWatcher !== null && runningWatcher !== watcher) {
+    log({ check: 'auto-scan-watcher-changed', from: runningWatcher, to: watcher })
+    scanner.stop()
+  }
   if (wantedScanner !== scanner) {
     if (scanner.isRunning) scanner.stop()
     scanner.resume()
@@ -1404,6 +1421,7 @@ function syncAutoScanner() {
   if (wanted && !scanner.isRunning) {
     scanner.reset()
     scanner.start()
+    runningWatcher = watcher
   } else if (!wanted && scanner.isRunning) {
     scanner.stop()
   }
@@ -1421,6 +1439,8 @@ async function reportObserver() {
   if (!status) return
   log({
     check: 'auto-scan-observer',
+    // What will watch (`ui/watcher.ts`); `engine` is the native default until the first capture.
+    watcher: autoWatcher(),
     engine: status.engine,
     supported: status.supported,
     privateApi: status.private_api ?? status.privateApi ?? false,
@@ -3235,11 +3255,31 @@ native.onCapabilityGap((command) =>
 
 await native.loadSettings()
 await mirrorDictionaryEngine({ repair: true })
+
+/**
+ * The text's look (Settings → OCR & Overlay → Overlay look): the highlight colour, and whether
+ * the cards are light or dark, which with "Same as Kimochi" follows the app's appearance and,
+ * for `system`, the OS.
+ */
+const systemDark = matchMedia('(prefers-color-scheme: dark)')
+function applyOverlayStyle() {
+  const style = setting('overlayStyle')
+  renderer.setStyle({
+    color: style.color,
+    opacity: style.opacity,
+    theme: resolveOverlayCardAppearance(style, setting('appearance'), systemDark.matches)
+  })
+}
+applyOverlayStyle()
+systemDark.addEventListener('change', applyOverlayStyle)
+
 await native.watchSettings((key) => {
-  if (key === 'autoOCRSettings' || key === 'quickShotEnabled' || key === 'superTexthooker')
+  // The selected engine decides the watcher too (`autoWatcher`).
+  if (key === 'autoOCRSettings' || key === 'quickShotEnabled' || key === 'superTexthooker' || key === 'ocrMode')
     syncAutoScanner()
   // Mirror only: a switch is reloaded by Settings (`dictionary_engine_apply`), not from here.
   if (key === 'yomitanSettings') void mirrorDictionaryEngine()
+  if (key === 'overlayStyle' || key === 'appearance') applyOverlayStyle()
   syncOverlayText()
 })
 
@@ -3253,6 +3293,9 @@ await native.listen('frontmost-app', ({ payload }) =>
 // Which pids and app names are ours, so our own windows are recognised by process
 // where the platform can tell; the default names stand until it says.
 await native.watchCapabilities(async (caps) => {
+  // An engine downloaded or verified can change which one watches.
+  ocrEngines = caps.ocrEngines ?? {}
+  syncAutoScanner()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true

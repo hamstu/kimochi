@@ -254,6 +254,7 @@ export async function measure({ Renderer, css, imageUrl, view, scale, hover = tr
     ${
       diagnostic
         ? `.ocr-word, .ocr-group { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+           .ocr-word::before, .ocr-word::after, .ocr-group::before, .ocr-group::after { display: none !important; }
            .ocr-word { color: rgba(255, 0, 64, 0.85) !important; }
            .ocr-group { color: rgba(255, 0, 64, 0.85) !important; }`
         : ''

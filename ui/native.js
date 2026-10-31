@@ -161,8 +161,8 @@ export async function watchCapabilities(onChange) {
  * fetch the PNG and hash it in a canvas. That second trip is where the recorded
  * `Load failed` errors came from, though not which part of it threw.
  */
-export function captureFrame(request, observe = false, observerMode = 'text') {
-  return invoke('capture_frame', { request, observe, observerMode })
+export function captureFrame(request, observe = false, observerMode = 'text', observerEngine = null) {
+  return invoke('capture_frame', { request, observe, observerMode, observerEngine })
 }
 
 /**
