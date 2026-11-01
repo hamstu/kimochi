@@ -54,6 +54,12 @@ pub fn build_window(
     .initialization_script_for_all_frames(crate::platform::platform_prelude());
     #[cfg(target_os = "linux")]
     let builder = builder.focusable(crate::platform::wayland_overlay_unavailable());
+    // Without a shadow from the start. An undecorated window built with one is sized for its
+    // frame, and turning the shadow off while the window was still hidden (`reader_popup_ready`)
+    // left that whole frame on screen as a solid white box over the reader's game, which stayed
+    // until Kimochi quit; screenshots showed it whenever capture protection was off.
+    #[cfg(target_os = "windows")]
+    let builder = builder.shadow(false);
     builder.build()
 }
 
