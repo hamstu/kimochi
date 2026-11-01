@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- On macOS, clicking a source now brings its window to the front even when Kimochi isn't allowed under Accessibility. Before, the app's menu bar took over but its window stayed behind, however often you clicked, until you switched to it with ⌘Tab.
+
 ## [0.3.0] - 2026-10-31
 
 ### Added
