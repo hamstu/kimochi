@@ -18,6 +18,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - With the overlay's grouped mode on, a card's sentence is the whole bubble again rather than only the line you looked the word up on, and a word that wraps onto the next line can now be looked up.
 - The bottoms of letters like g, y and p are no longer cut off in dropdowns and buttons, such as the OCR model and Dictionary pickers.
 - On Windows, a blank white box no longer sits near the top-left of the screen, over whatever is there, until you quit Kimochi. It was the dictionary pop-up's hidden window showing through, and it also turned up in screenshots and recordings when a game window was the source.
+- Hovering the source card no longer covers it with a picture of the source window when that window sits behind Kimochi (a large or maximised game, say), so Crop area and Change source stay in view. The window is still outlined when it is somewhere else on screen.
 - On Windows, holding your lookup key (Shift) while moving onto a word in the overlay opens the dictionary again. Most of the time nothing happened until you let go and pressed the key again.
 
 ## [0.3.0] - 2026-10-31

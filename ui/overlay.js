@@ -39,7 +39,7 @@ import { ScanTrace } from './scan-trace.js'
 import { scanWasPublished, markScanPublished } from './scan-publication.js'
 import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
-import { HoverOverlay, HoverPreview } from './hover.js'
+import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
@@ -134,7 +134,7 @@ const state = {
   crop: null,
   /** The chosen source's Anki crop (what goes on cards as the screenshot), or null for all of it. */
   ankiCrop: null,
-  hover: { selectRegion: false, source: false, isWindow: false },
+  hover: { selectRegion: false, source: false, isWindow: false, underPointer: false },
   /** While true the overlay claims the whole display so a drag can be seen. */
   regionSelecting: false,
   /** From opening a source's region editor until its new crop is saved and taken in. */
@@ -703,8 +703,15 @@ function draw() {
  * is on another Space or desktop: it would be drawn over whatever the reader has in front.
  */
 function hoverMarksWindow() {
-  return state.hover.isWindow && !state.sourceWindow?.fullscreen && state.sourceWindow?.onScreen !== false
+  return (
+    state.hover.isWindow &&
+    !state.hover.underPointer &&
+    !state.sourceWindow?.fullscreen &&
+    state.sourceWindow?.onScreen !== false
+  )
 }
+/** Bumped by every source-card hover, so a pointer reading from an earlier one is dropped. */
+let hoverSourceTurn = 0
 
 function drawHover() {
   const marked = state.hover.source && hoverMarksWindow()
@@ -1521,16 +1528,27 @@ async function onAction(name) {
     // The window was brought to the front: its markings dissipate instead of waiting for the
     // pointer to leave the card.
     case 'hoverSourceDismiss':
+      hoverSourceTurn++
       state.hover.source = false
       hoverPreview.stop()
       hover.dissipate()
       return drawHover()
     case 'hoverSourceOn':
-    case 'hoverSourceOff':
-      state.hover.source = name.endsWith('On')
+    case 'hoverSourceOff': {
+      const hovering = name.endsWith('On')
+      const turn = ++hoverSourceTurn
+      state.hover.source = hovering
+      state.hover.underPointer = false
+      if (hovering) {
+        // Where the pointer is decides whether there is anything to mark: see marksUnderPointer.
+        const at = await native.pointerLocation().catch(() => null)
+        if (turn !== hoverSourceTurn) return undefined
+        state.hover.underPointer = marksUnderPointer(state.sourceBounds, at)
+      }
       if (state.hover.source && hoverMarksWindow()) hoverPreview.start()
       else hoverPreview.stop()
       return drawHover()
+    }
     default:
       // Everything else native has already applied before emitting.
       return undefined

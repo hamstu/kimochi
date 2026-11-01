@@ -147,3 +147,20 @@ test('show() is ignored for another source and after the hover ends', async () =
   calls[2]('win-1')
   assert.equal(preview.url, null, 'nothing once the hover has ended')
 })
+
+test('the window is not marked when its markings would cover the hovered card', async () => {
+  const { marksUnderPointer } = await import('../ui/hover.js')
+  // A maximised game behind Kimochi: the card being hovered is inside the game's bounds, so
+  // its outline and picture would be drawn over the card and its Crop area / Change source.
+  const game = { x: 0, y: 0, width: 2560, height: 1400 }
+  assert.equal(marksUnderPointer(game, { x: 300, y: 200 }), true)
+  // A window elsewhere on the desktop, or on a display left of the primary, is marked.
+  assert.equal(marksUnderPointer(game, { x: 2600, y: 200 }), false)
+  assert.equal(marksUnderPointer({ x: -1920, y: 0, width: 1920, height: 1080 }, { x: 100, y: 10 }), false)
+  // Edges are half-open, like every other rectangle test here.
+  assert.equal(marksUnderPointer(game, { x: 2560, y: 0 }), false)
+  // No pointer reading (Wayland, a failed call) or no bounds yet: mark as before.
+  assert.equal(marksUnderPointer(game, null), false)
+  assert.equal(marksUnderPointer(null, { x: 1, y: 1 }), false)
+  assert.equal(marksUnderPointer(game, { x: Number.NaN, y: 1 }), false)
+})
