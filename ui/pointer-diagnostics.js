@@ -105,6 +105,8 @@ function windowRecord(label) {
     type: 'window',
     dpr: globalThis.devicePixelRatio,
     screenXY: [globalThis.screenX, globalThis.screenY],
+    // What a screen coordinate is multiplied by for desktop points (webview_scale.rs).
+    screenScale: globalThis.__KIMOCHI_PLATFORM__?.screenScale ?? null,
     inner: [globalThis.innerWidth, globalThis.innerHeight],
     outer: [globalThis.outerWidth, globalThis.outerHeight],
     screen: [globalThis.screen?.width, globalThis.screen?.height],

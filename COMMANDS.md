@@ -492,7 +492,8 @@ host/popup-bridge.js), whose scanner opens Yomitan's nested popup.
 ### The Yomitan API pop-up stack
 
 `show_popover({term, cursorX, cursorY, anchor?, width, height, baseUrl, …, level?})` opens
-the API pop-up; `level` (0–4, default 0) is its place in a stack of windows,
+the API pop-up (`cursorX/Y` and `anchor` in desktop points: from a pointer event, through
+`desktopPointOf`, see Webview scale below); `level` (0–4, default 0) is its place in a stack of windows,
 `reader-popup`, then `reader-popup-2` … `reader-popup-5`, each built the first time the
 one below it shows. A word Shift-scanned inside the pop-up at one level opens the next;
 showing a level closes those above it. `hide_popover({level?})` closes a level and every
@@ -1105,7 +1106,7 @@ posts through `postActivity` in `ui/native.js`, with its wording in `ui/scan-act
 | `system_state` | `() -> {frontmostApp, displays}` |
 | `app_quit` | `() -> ()` |
 | `open_screen_capture_preferences` | `() -> ()` |
-| `webview_scale_sync` | `(ratio) -> number \| null` |
+| `webview_scale_sync` | `(ratio) -> {zoom, screenScale} \| null` |
 
 **Webview scale (Windows).** Everything native on Windows takes one CSS pixel to be the window's
 DPI scale (`GetDpiForWindow / 96`) in physical pixels: Tauri's logical sizes, the overlay's
@@ -1116,9 +1117,18 @@ handed a page then landed 1.5 times as far from the corner. The Windows `platfor
 reports each top-level page's `devicePixelRatio` to `webview_scale_sync` on load and on every
 change; native reads the page zoom WebView2 applies and sets the one that brings a CSS pixel
 back to the DPI scale (`webview_scale.rs`), recording `webview-scale` `{window, ratio, dpiScale,
-zoom, applied}` whenever it changes one. It returns the zoom in force (1 when nothing needed
-changing), and `null` on other systems, where it does nothing. Pages on Hachidori's loopback
-origin cannot reach it and keep WebView2's scale.
+zoom, applied, screenScale}` whenever it changes one. It returns the zoom in force (1 when
+nothing needed changing) and `screenScale`, and `null` on other systems, where it does nothing.
+Pages on Hachidori's loopback origin cannot reach it and keep WebView2's scale.
+
+Page zoom corrects CSS pixels but not Chromium's screen coordinates: with WebView2 at 1.5 on a
+100 % display, `event.screenX/Y` and `window.screenX/Y` stay at two thirds of the desktop
+point, zoom or no zoom. `screenScale` is the factor that takes them to desktop points
+(`ratio / zoom / dpiScale`, 1.5 in that case, 1 when nothing is off); the prelude keeps the
+latest in `__KIMOCHI_PLATFORM__.screenScale`, and every page that hands native a desktop point
+read off a pointer event (`show_popover`'s `cursorX/Y` and `anchor`) goes through
+`ui/desktop-point.ts`'s `desktopPointOf(event)`, which applies it to trusted events and leaves
+the events native replays into a page (already desktop points) alone.
 
 Emits `system-suspend` and `system-resume` from
 `NSWorkspaceWillSleepNotification` / `NSWorkspaceDidWakeNotification` — the macOS

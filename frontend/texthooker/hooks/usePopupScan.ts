@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { createScanner, type ScanPoint } from "@ui/scan-text";
+import { desktopPointOf } from "@ui/desktop-point";
 import type { AnkiConfig } from "@texthooker/components/PopoverAddToAnki";
 
 /** How many pop-ups can stand on one another (`LEVELS` in src-tauri/src/reader/popover.rs). */
@@ -115,7 +116,8 @@ export function usePopupScan(level: number, lookup: PopupLookup | null): void {
     });
     const onMouseMove = (e: MouseEvent) => {
       if (performance.now() - lastNative < NATIVE_GRACE_MS) return;
-      last = { x: e.clientX, y: e.clientY, screenX: e.screenX, screenY: e.screenY };
+      const desktop = desktopPointOf(e);
+      last = { x: e.clientX, y: e.clientY, screenX: desktop.x, screenY: desktop.y };
       feed(last, e.shiftKey || desktopShift);
     };
     const desktop = listen<{ shift?: boolean }>("linux-dictionary-modifier", (e) => {
