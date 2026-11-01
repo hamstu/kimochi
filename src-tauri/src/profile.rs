@@ -33,6 +33,8 @@ pub const SETTINGS_FILE: &str = "profile-settings.json";
 /// permission and choice), and account bookkeeping.
 pub const MACHINE_KEYS: &[&str] = &[
     "windowPositions",
+    // Whether screen capture can see the overlay: this computer's recording setup.
+    "excludeOverlayFromCapture",
     "nativeWindowBounds",
     "nativeWindowPinned",
     "capture",

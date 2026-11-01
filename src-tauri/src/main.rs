@@ -238,6 +238,9 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     if key == "appearance" {
         apply_appearance(app, Some(value));
     }
+    if key == settings::EXCLUDE_FROM_CAPTURE {
+        apply_capture_exclusion(app, settings);
+    }
     // Choosing a local engine whose models are missing starts their download (the pickers
     // only save that choice after the user confirms the download).
     if key == "ocrMode" {
@@ -3357,7 +3360,7 @@ fn main() {
             .resizable(false)
             .shadow(false)
             .always_on_top(true)
-            .content_protected(true)
+            .content_protected(settings::exclude_from_capture(&store))
             .focused(false)
             .inner_size(1728., 1117.)
             // Only the overlay hosts the Yomitan backend. Panels get the relay shim
@@ -3462,7 +3465,7 @@ fn main() {
                 #[cfg(target_os = "linux")]
                 let window_builder = window_builder.focusable(platform::wayland_overlay_unavailable());
                 let window = window_builder.build()?;
-                let _ = window.set_content_protected(true);
+                let _ = window.set_content_protected(settings::exclude_from_capture(&store));
                 // The dictionary is hovered and clicked while the reader stays in their
                 // game; a panel is what lets it be used without activating this app.
                 make_panel(&handle, &service, &window);
@@ -3953,20 +3956,49 @@ fn sync_input_shapes(
 /// it; a display (and Quick Shot, which captures a display) would read them back as text. So
 /// they hide only then: recorders that refuse any capture-excluded window (NVIDIA's) and those
 /// that draw it black can record everything while a game window is the source.
+///
+/// `excluding` is the reader's `excludeOverlayFromCapture`: off, nothing hides, whatever the source.
 #[cfg(any(target_os = "windows", test))]
-fn needs_capture_protection(selection: Option<&str>) -> bool {
-    !selection.and_then(SourceId::parse).is_some_and(|id| id.is_window())
+fn needs_capture_protection(selection: Option<&str>, excluding: bool) -> bool {
+    excluding && !selection.and_then(SourceId::parse).is_some_and(|id| id.is_window())
+}
+
+/// The windows drawn over the source, which `exclude_from_capture` is about.
+fn drawn_over_source(label: &str) -> bool {
+    label == OVERLAY
+        || label == POPUP_HOST
+        || label.starts_with("reader-popup")
+        || label == "controller-host"
+        || label == "crop-host"
+}
+
+/// `excludeOverlayFromCapture` changed: the windows already built follow it now. On Windows the
+/// cursor poll does it within a tick instead (`sync_capture_protection`, which also narrows it
+/// to display sources), so this is macOS and Linux.
+fn apply_capture_exclusion(app: &tauri::AppHandle, settings: &Settings) {
+    if cfg!(target_os = "windows") {
+        return;
+    }
+    let excluding = settings::exclude_from_capture(settings);
+    for (label, window) in app.webview_windows() {
+        if drawn_over_source(&label) {
+            let _ = window.set_content_protected(excluding);
+        }
+    }
 }
 
 /// Applies `needs_capture_protection` to the overlay and the dictionary pop-ups whenever it,
 /// or the set of those windows (a pop-up level built later), changes.
 #[cfg(target_os = "windows")]
 fn sync_capture_protection(handle: &tauri::AppHandle, service: &Shared, applied: &mut Option<(bool, usize)>) {
-    let protect = needs_capture_protection(service.selection.lock().unwrap().as_deref());
+    let protect = needs_capture_protection(
+        service.selection.lock().unwrap().as_deref(),
+        settings::exclude_from_capture(&service.settings),
+    );
     let windows: Vec<_> = handle
         .webview_windows()
         .into_iter()
-        .filter(|(label, _)| label == OVERLAY || label == POPUP_HOST || label.starts_with("reader-popup"))
+        .filter(|(label, _)| drawn_over_source(label))
         .collect();
     if *applied == Some((protect, windows.len())) {
         return;
@@ -4408,10 +4440,13 @@ mod tests {
     fn overlay_hides_from_capture_only_when_a_capture_could_read_it() {
         // A window source never contains Kimochi's overlay; a display, Quick Shot (no source)
         // or an unknown id does.
-        assert!(!super::needs_capture_protection(Some("windows:window:0x1A2B:42")));
-        assert!(super::needs_capture_protection(Some("windows:display:0x10001")));
-        assert!(super::needs_capture_protection(None));
-        assert!(super::needs_capture_protection(Some("not a source id")));
+        assert!(!super::needs_capture_protection(Some("windows:window:0x1A2B:42"), true));
+        assert!(super::needs_capture_protection(Some("windows:display:0x10001"), true));
+        assert!(super::needs_capture_protection(None, true));
+        assert!(super::needs_capture_protection(Some("not a source id"), true));
+        // Turned off by the reader (excludeOverlayFromCapture): nothing hides, for any source.
+        assert!(!super::needs_capture_protection(Some("windows:display:0x10001"), false));
+        assert!(!super::needs_capture_protection(None, false));
     }
     #[test]
     fn onboarding_requires_an_explicit_completion_flag() {

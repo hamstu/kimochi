@@ -612,7 +612,8 @@ fn ensure(
     // overlay, the pop-ups and the hidden engine windows where they are built. Kimochi's
     // ordinary windows can be screenshotted and recorded, so a reader can show what they see
     // when reporting a problem; text one of them covers is hidden by `cover` instead.
-    let protected = matches!(spec.label, "controller-host" | "crop-host");
+    let protected = matches!(spec.label, "controller-host" | "crop-host")
+        && crate::settings::exclude_from_capture(settings);
     let _ = window.set_content_protected(protected);
     #[cfg(target_os = "windows")]
     let _ = platform::ignore_key_menu(&window);

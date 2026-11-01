@@ -96,6 +96,7 @@ function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
 
 export function OcrTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
+  const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
     enabled: false,
     scanDelay: 500
@@ -177,6 +178,17 @@ export function OcrTab(): ReactNode {
             void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
           }
         />
+        <SettingsRow
+          label="Exclude overlay from screen recording"
+          controlId="ocr-exclude-capture"
+          description="Keeps the overlay and dictionary pop-ups out of screenshots and recordings, so Kimochi never reads its own text back. Turn it off to show them; with a whole screen as your source, Kimochi may then scan its own pop-ups."
+        >
+          <Switch
+            id="ocr-exclude-capture"
+            checked={excludeFromCapture}
+            onCheckedChange={(checked) => void setExcludeFromCapture(checked)}
+          />
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection

@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Exclude overlay from screen recording** in Settings → OCR & Overlay. It's on, as before: the overlay and dictionary pop-ups stay out of screenshots and recordings (on Windows, only while a whole screen is the source). Turn it off to see them in your captures; with a whole screen as the source, Kimochi may then read its own pop-ups as text.
+
 ### Changed
 
 - 10ten now waits for <kbd>Shift</kbd> before looking a word up, like Yomitan and Hachidori, instead of opening its pop-up whenever the pointer crosses a word. It's set once when 10ten next starts; if you had already chosen a key in 10ten's settings, yours is kept, and you can go back to plain hover under **Show popup** in 10ten's settings.
