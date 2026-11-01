@@ -10,7 +10,7 @@
  */
 
 export type PlatformOs = 'macos' | 'windows' | 'linux'
-export type OcrEngineKey = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'livetext' | 'oneocr'
+export type OcrEngineKey = 'googlelens' | 'cloud' | 'meikiocr' | 'mangaocr' | 'ppocr' | 'livetext' | 'oneocr'
 
 export interface OcrEngineCapability {
   available: boolean
@@ -41,6 +41,12 @@ export interface PlatformCapabilities {
     primaryModifier: 'meta' | 'ctrl'
     labels: 'symbols' | 'words'
     superName: 'Command' | 'Win' | 'Super'
+    /**
+     * Whether a mouse button (middle, back, forward) can be an action shortcut: `available` on
+     * Windows, on macOS once Accessibility is allowed (`needsAccessibility` until then), and
+     * `unsupported` elsewhere. Absent from older backends, which could not.
+     */
+    mouseButtons: 'available' | 'needsAccessibility' | 'unsupported'
   }
   capture: {
     authorization: CaptureAuthorization
@@ -103,7 +109,7 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
   osVersion: '',
   arch: '',
   session: null,
-  keys: { primaryModifier: 'meta', labels: 'symbols', superName: 'Command' },
+  keys: { primaryModifier: 'meta', labels: 'symbols', superName: 'Command', mouseButtons: 'unsupported' },
   capture: {
     authorization: 'denied',
     canOpenSettings: true,
@@ -133,6 +139,7 @@ export const DEFAULT_CAPABILITIES_MACOS: PlatformCapabilities = Object.freeze({
     cloud: { available: true },
     meikiocr: { available: true },
     mangaocr: { available: true },
+    ppocr: { available: true },
     livetext: { available: true },
     oneocr: { available: false, reason: 'OneOCR is available on Windows only.' }
   },
@@ -162,7 +169,8 @@ export function fallbackCapabilities(
     keys: {
       primaryModifier: 'ctrl',
       labels: 'words',
-      superName: windows ? 'Win' : 'Super'
+      superName: windows ? 'Win' : 'Super',
+      mouseButtons: 'unsupported'
     }
   }
 }

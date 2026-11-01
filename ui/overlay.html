@@ -15,181 +15,8 @@
       position: absolute;
       inset: 0;
     }
-
-    /* --- per-word mode ---------------------------------------------------
-       Transparent boxes sitting exactly over the source's own glyphs. They
-       stay invisible until the pointer is near, so the source text is never
-       obscured by our copy of it. The text inside is fitted over the source
-       glyphs (text-layout.js) and set in the font it was measured in, and
-       hovering never moves or scales it. */
-    .ocr-word {
-      position: absolute;
-      display: inline-flex;
-      align-items: flex-start;
-      overflow: hidden;
-      white-space: nowrap;
-      text-align: left;
-      color: white;
-      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-        'Yu Gothic', 'Meiryo', sans-serif;
-      font-weight: bold;
-      font-kerning: none;
-      cursor: default;
-      border-radius: 6px 6px 0 0;
-      transition:
-        background-color 0.1s ease-in-out,
-        border-bottom 0.1s ease-in-out,
-        opacity 0.1s ease-in-out,
-        color 0.1s ease-in-out;
-    }
-    .ocr-word-text {
-      opacity: 0;
-    }
-    /* Top-aligned, so it starts at the box's top (or, vertical, its right) edge whatever the
-       line around it; `render.js` offsets it from there to where the fit puts its glyphs. */
-    .ocr-word-current {
-      display: inline-block;
-      position: relative;
-      vertical-align: top;
-      text-align: left;
-    }
-    /* A block's lines (a paragraph or bubble read as several lines): zero-size inline blocks,
-       each offset from the box's corner to its line. Inline, not absolutely positioned, so the
-       box's text stays one flow Yomitan's scanner reads through from line to line (an absolute
-       element ends a scan, see `.ocr-lookahead`); zero-size, so where each flows is known. */
-    .ocr-word .ocr-run {
-      display: inline-block;
-      position: relative;
-      width: 0;
-      height: 0;
-      vertical-align: top;
-    }
-
-    /* --- grouped mode ----------------------------------------------------
-       One opaque card per cluster, replacing the source text rather than
-       overlaying it, for sources whose own typography is hard to read. */
-    .ocr-group {
-      position: absolute;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      white-space: pre;
-      text-align: center;
-      padding: 6px 8px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-weight: bold;
-      color: #14181c;
-      background: rgba(228, 243, 255, var(--backdrop-opacity, 0.8));
-      border: 1px solid #0b192233;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    }
-    .ocr-group.scanning {
-      cursor: default;
-    }
-    /* Lookahead: the following words' text, after the hovered word, for a lookup to
-       run into when OCR split a word (render.js). It has to satisfy two readers.
-
-       Yomitan's `DOMTextScanner` (yomitan/js/dom/dom-text-scanner.js) only enters an
-       element whose computed style `isStyleVisible` accepts: `visibility` not hidden,
-       `opacity` > 0, `font-size` > 0, and not a transparent colour unless selectable.
-       It also turns `position: absolute|fixed|sticky` into two newlines and a block,
-       flex, grid, list-item or table display into one, either of which ends the match.
-       `opacity: 0` and `font-size: 0` were exactly what kept every split word from
-       being found.
-
-       Yomitan's popup is placed from `Range.getClientRects()` of the match, so this
-       text must contribute no rectangle with area, or the popup follows the following
-       words. Clipping (`clip-path`, `overflow: hidden`, a zero-width box) only stops
-       painting; the text keeps its full-size rectangles.
-
-       `transform: scale(0)` does both. Every computed style the scanner reads stays
-       ordinary, `inline-block` is not a layout-changing display to it, and a degenerate
-       transform collapses every client rectangle of the text to a point: nothing is
-       painted, nothing hit-tests, and the popup host drops zero-area source rectangles
-       (`withExtent` in popup-geometry.ts). The zero-size box keeps the line from
-       growing. Transforms need a non-inline box, hence `inline-block`. */
-    .ocr-lookahead {
-      display: inline-block;
-      width: 0;
-      height: 0;
-      overflow: hidden;
-      vertical-align: top;
-      transform: scale(0);
-    }
-    .ocr-group .ocr-lookahead {
-      position: absolute;
-    }
-    /* A selection that ran past its box (食べ|ました looked up from 食べ). The box it
-       started in shows the whole word and the boxes whose text it took are hidden
-       under it; see `applySelectionMarks` in render.js, which sets these attributes.
-
-       The extension is pseudo-element content, `attr(data-ext)`, never a text node:
-       Yomitan's scanner walks DOM text, so on the next hover it still reads the box's
-       own text and then its lookahead, as if nothing were shown. The box and its text
-       span grow along the reading axis (width when horizontal, height when vertical)
-       from the size OCR gave them, anchored at their start, so the stem stays over
-       the source glyphs and the extension runs on over the hidden boxes. `!important`
-       beats the inline sizes `renderWords` sets; `updateProximity` rewrites other
-       inline styles every frame and leaves these alone. Attributes rather than classes
-       because `render` matches a nudged box on its class name. */
-    .ocr-word[data-extended] {
-      width: auto !important;
-      min-width: var(--ocr-width);
-      z-index: 1;
-    }
-    .ocr-word.ocr-vertical[data-extended] {
-      width: var(--ocr-width) !important;
-      height: auto !important;
-      min-height: var(--ocr-height);
-    }
-    .ocr-word-current[data-ext] {
-      width: auto !important;
-      min-width: var(--ocr-width);
-    }
-    .ocr-vertical .ocr-word-current[data-ext] {
-      width: auto !important;
-      min-width: 0;
-      height: auto !important;
-      min-height: var(--ocr-height);
-    }
-    .ocr-word-current[data-ext]::after {
-      content: attr(data-ext);
-    }
-    /* Hidden, not transparent: a hidden box takes no pointer events and leaves the
-       click-through regions (`hitRects`), which the extended box over it now covers. */
-    .ocr-word[data-consumed] {
-      visibility: hidden !important;
-    }
-    /* Each run sits over the line or word it was read from; see text-layout.js. Glyphs are
-       centred across the run by its line height (and its offset), and placed along it by its
-       offset and letter spacing. */
-    .ocr-run {
-      white-space: nowrap;
-      text-align: left;
-      overflow: visible;
-      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Noto Sans CJK JP',
-        'Yu Gothic', 'Meiryo', sans-serif;
-      font-kerning: none;
-    }
-    /* Manga OCR's text, in the bundled manga face (MANGA_FONT in render.js; fonts/manga.css). Its
-       weight is set per run, heavier for text big for its page. */
-    .ocr-manga,
-    .ocr-manga .ocr-run {
-      font-family: 'Zen Kaku Gothic Antique', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN',
-        'Noto Sans JP', 'Noto Sans CJK JP', 'Yu Gothic', 'Meiryo', sans-serif;
-      font-weight: 500;
-    }
-    .ocr-group .ocr-run {
-      position: absolute;
-      box-sizing: border-box;
-    }
-    .ocr-vertical .ocr-run {
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-    }
+    /* The recognised text itself (word boxes, grouped regions) is styled in overlay-text.css,
+       which Settings' look previews share. */
 
     /* --- hover markings ---------------------------------------------------
        Passive outlines showing what a scan will cover. Never interactive, so
@@ -295,21 +122,6 @@
       }
     }
 
-    @media (prefers-color-scheme: dark) {
-      .ocr-group {
-        color: #edeff2;
-        background: rgba(17, 17, 17, var(--backdrop-opacity, 0.8));
-        border-color: rgb(172 184 223 / 18%);
-      }
-    }
-
-    .ocr-word::selection,
-    .ocr-word-current::selection,
-    .ocr-group::selection {
-      background: #85b2ff99;
-      color: #132113;
-    }
-
     /* Toggled from the controller: draws the real hit rectangles. */
     .debug .ocr-word,
     .debug .ocr-group,
@@ -352,16 +164,8 @@
       width: 100%;
       height: calc(100% - 44px);
     }
-  
-      .ocr-vertical, .ocr-vertical .ocr-word-current {
-        writing-mode: vertical-rl;
-        text-orientation: mixed;
-      }
-      .ocr-word.ocr-vertical { padding: 0; align-items: stretch; }
-      .ocr-vertical .ocr-word-text { width: 100%; height: 100%; }
-      .ocr-group.ocr-vertical { white-space: pre-wrap; overflow-wrap: anywhere; }
-
   </style>
+  <link rel="stylesheet" href="overlay-text.css">
   <link rel="stylesheet" href="controller.css">
   <link rel="stylesheet" href="controller-variants.css">
   <link rel="stylesheet" href="game-dictionary.css">

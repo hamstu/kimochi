@@ -8,7 +8,7 @@ export function Privacy() {
     <Prose
       title="Privacy"
       lede="Kimochi is a desktop app with no analytics, and accounts are optional. Most of what it does happens on your computer. This page lists exactly what leaves it, and when."
-      updated="2026-10-21"
+      page="/privacy"
     >
       <h2 id="summary">The short version</h2>
       <ul>

@@ -27,6 +27,14 @@ export const PRICES: Record<Choice, PriceInfo> = {
   lifetime: { choice: 'lifetime', label: 'Lifetime', amount: '$125', per: 'once', note: 'Pay once, keep Kimochi Cloud for good.' }
 }
 
+/**
+ * Every price in one plain sentence, rendered as static text under the plan cards so crawlers and
+ * screen readers get all three without the toggle. Bump PRICES_AS_OF when the prices are checked
+ * or changed.
+ */
+export const PRICES_AS_OF = 'October 2026'
+export const PRICE_SUMMARY = `As of ${PRICES_AS_OF}, Kimochi is free, and Kimochi Cloud costs US$6 a month, US$60 a year or US$125 once for lifetime, with a ${TRIAL_DAYS}-day free trial on the monthly and yearly plans.`
+
 export const CHOICES: Choice[] = ['monthly', 'yearly', 'lifetime']
 
 export function isChoice(v: unknown): v is Choice {

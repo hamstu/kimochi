@@ -26,7 +26,7 @@ export function DemoShowcase() {
           <div className="max-w-3xl">
             <p className="mb-3 text-meta tracking-[0.08em] text-accent-ink uppercase">デモを試す</p>
             <h2 id="demo-heading" className="text-title text-ink">
-              Try the Live Demo
+              Preview
             </h2>
           </div>
           <div role="tablist" aria-label="Preview" className="flex shrink-0 gap-1 self-start rounded-lg border border-hairline bg-bar p-1 md:self-auto">

@@ -7,6 +7,10 @@
  * it was and what it is now, and "Copy summary" puts them on the clipboard as text to paste back.
  * Changes are kept in localStorage, so a hot reload or a page change does not lose them.
  *
+ * Enter starts a new paragraph, Shift+Enter a line break, Cmd/Ctrl+B and +I bold and italic, Esc
+ * (or Cmd/Ctrl+Enter, or clicking away) finishes. Text is recorded as light Markdown: **bold**,
+ * *italic*, `code`, a blank line between paragraphs, so the summary carries the formatting.
+ *
  * It only changes the DOM, never the source: a reload shows the original text again (the panel still
  * lists the change).
  */
@@ -51,7 +55,49 @@ function save(key: string, value: unknown): void {
   }
 }
 
-const textOf = (el: HTMLElement): string => el.innerText.replace(/ /g, ' ').trim()
+const textOf = (el: HTMLElement): string => el.innerText.replace(/\u00a0/g, ' ').trim()
+
+/** A block's text as light Markdown: **bold**, *italic*, `code`, newlines for breaks. */
+function markdownOf(el: HTMLElement): string {
+  const walk = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+    if (!(node instanceof Element) || node.getAttribute('aria-hidden') === 'true') return ''
+    const tag = node.tagName.toLowerCase()
+    if (tag === 'br') return '\n'
+    if (tag === 'svg' || tag === 'script' || tag === 'style') return ''
+    const inner = [...node.childNodes].map(walk).join('')
+    const wrap = (mark: string): string => {
+      const m = inner.match(/^(\s*)([\s\S]*?)(\s*)$/)!
+      return m[2] ? `${m[1]}${mark}${m[2]}${mark}${m[3]}` : inner
+    }
+    if (tag === 'b' || tag === 'strong') return wrap('**')
+    if (tag === 'i' || tag === 'em') return wrap('*')
+    if (tag === 'code') return wrap('`')
+    // Blocks a browser may create while editing.
+    if (tag === 'div' || tag === 'p') return `\n${inner}\n`
+    return inner
+  }
+  return walk(el)
+    .replace(/\u00a0/g, ' ')
+    .replace(/\*\*\*\*/g, '')
+    .replace(/[^\S\n]+/g, ' ')
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/** The reverse of markdownOf, for putting a kept edit back on the page after a reload. */
+function htmlOf(markdown: string): string {
+  return escapeHtml(markdown)
+    .replace(/\*\*([\s\S]+?)\*\*/g, '<b>$1</b>')
+    .replace(/\*([^*\n]+?)\*/g, '<i>$1</i>')
+    .replace(/`([^`\n]+?)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>')
+}
 
 const hasOwnText = (el: Element): boolean =>
   [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim() !== '')
@@ -124,7 +170,7 @@ function CopyEditor() {
   const record = useCallback((el: HTMLElement): void => {
     const before = originals.current.get(el)
     if (before === undefined) return
-    const after = textOf(el)
+    const after = markdownOf(el)
     const key = `${location.pathname}|${before}`
     el.toggleAttribute('data-copy-changed', after !== before)
     setChanges((list) => {
@@ -149,18 +195,18 @@ function CopyEditor() {
       for (const el of findBlocks(root)) {
         if (el.hasAttribute(ATTR)) continue
         if (!originals.current.has(el)) {
-          const text = textOf(el)
+          const text = markdownOf(el)
           // A change kept from before a reload: show it again where the text is plain.
           const kept = saved.find((c) => c.path === location.pathname && c.before === text)
           originals.current.set(el, text)
           if (kept && el.children.length === 0) {
-            el.textContent = kept.after
+            el.innerHTML = htmlOf(kept.after)
             el.setAttribute('data-copy-changed', '')
           }
         }
         el.setAttribute(ATTR, '')
-        el.contentEditable = 'plaintext-only'
-        if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true'
+        // Rich, not plaintext-only, so bold and italic can be applied; pastes stay plain (onPaste).
+        el.contentEditable = 'true'
         el.spellcheck = true
       }
     }
@@ -190,9 +236,19 @@ function CopyEditor() {
       const el = editable(event.target)
       if (!el) return
       event.stopPropagation()
-      if (event.key === 'Escape' || (event.key === 'Enter' && !event.shiftKey)) {
+      const mod = event.metaKey || event.ctrlKey
+      if (event.key === 'Escape' || (event.key === 'Enter' && mod)) {
         event.preventDefault()
         el.blur()
+      } else if (event.key === 'Enter') {
+        // Shift+Enter: a line break. Enter: a new paragraph (a blank line in the summary).
+        event.preventDefault()
+        const breaks = event.shiftKey ? 1 : 2
+        for (let i = 0; i < breaks; i++) document.execCommand('insertLineBreak')
+      } else if (mod && !event.altKey && (event.key === 'b' || event.key === 'i')) {
+        event.preventDefault()
+        document.execCommand('styleWithCSS', false, 'false')
+        document.execCommand(event.key === 'b' ? 'bold' : 'italic')
       }
     }
     const onPaste = (event: ClipboardEvent): void => {
@@ -223,7 +279,7 @@ function CopyEditor() {
   const revert = (change: Change): void => {
     for (const el of document.querySelectorAll<HTMLElement>('[data-copy-changed]')) {
       if (originals.current.get(el) !== change.before) continue
-      if (el.children.length === 0) el.textContent = change.before
+      if (el.querySelector('a, button, svg') === null) el.innerHTML = htmlOf(change.before)
       el.removeAttribute('data-copy-changed')
     }
     setChanges((list) => list.filter((c) => c.key !== change.key))
@@ -271,7 +327,7 @@ function CopyEditor() {
             {changes.length === 0 ? (
               <p className="px-3.5 py-4 text-ink-3">
                 {editing
-                  ? 'Click any text on the page and type. Enter or Esc finishes; Shift+Enter for a new line. Changes show up here.'
+                  ? 'Click any text on the page and type. Enter adds a paragraph, Shift+Enter a line break, ⌘B / ⌘I bold and italic; Esc finishes. Changes show up here.'
                   : 'Turn on Editing, then click any text on the page and type.'}
               </p>
             ) : (
@@ -290,8 +346,8 @@ function CopyEditor() {
                         Undo
                       </button>
                     </div>
-                    <p className="text-ink-3 line-through decoration-[color-mix(in_oklab,currentColor_50%,transparent)]">{c.before}</p>
-                    <p className="mt-0.5 text-ink">{c.after}</p>
+                    <p className="whitespace-pre-wrap text-ink-3 line-through decoration-[color-mix(in_oklab,currentColor_50%,transparent)]">{c.before}</p>
+                    <p className="mt-0.5 whitespace-pre-wrap text-ink">{c.after}</p>
                   </li>
                 ))}
               </ol>

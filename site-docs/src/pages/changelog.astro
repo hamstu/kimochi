@@ -10,7 +10,7 @@ import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro'
 
 const body = source.slice(Math.max(0, source.search(/^## /m)))
 const processor = await createMarkdownProcessor()
-const { code } = await processor.render(body)
+const { code, metadata } = await processor.render(body)
 ---
 
 <StarlightPage
@@ -20,11 +20,10 @@ const { code } = await processor.render(body)
     editUrl: false,
     description: 'What changed in each release of Kimochi, newest first. Unreleased changes are on the nightly build.'
   }}
-  headings={[...body.matchAll(/^## (.+)$/gm)].map(([, text]) => ({
-    depth: 2,
-    text: text.replace(/[[\]]/g, ''),
-    slug: text.toLowerCase().replace(/[^\w]+/g, '-').replace(/^-|-$/g, '')
-  }))}
+  // The rendered headings' own ids, so the table of contents links to them.
+  headings={metadata.headings
+    .filter((h) => h.depth === 2)
+    .map((h) => ({ ...h, text: h.text.replace(/[[\]]/g, '') }))}
 >
   <p>
     What changed in each release, newest first. The app shows the same notes in <strong>What's new</strong>, and

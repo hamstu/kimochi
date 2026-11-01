@@ -105,6 +105,63 @@ test('grouped text uses a full-width space for word gaps and a newline for new l
   assert.equal(groupTextAnnotations([left, below], 200)[0].text, '日\n語')
 })
 
+// What the overlay draws in grouped mode: the engine's result as normalizeOcrResult leaves it
+// (an engine's own groups become blocks there), the visible annotations, then the clustering.
+const { normalizeOcrResult } = await load('ocr-result.ts')
+const drawnGroups = (raw, engine) =>
+  groupTextAnnotations(
+    visibleAnnotations(normalizeOcrResult(raw, engine).textAnnotations, { enabled: true, filterSmallText: true }),
+    100
+  )
+/** A result shaped like livetext.rs's and google_lens.rs's: a group per line or paragraph. */
+const grouped = (engine, prefix, lines) => {
+  const groups = lines.map(([text, x1, y1, x2, y2], i) => ({
+    id: `${engine}-${prefix}-${i}`,
+    text,
+    bbox: [x1, y1, x2, y2],
+    orientation: 'horizontal',
+    linePolygons: [[[x1, y1], [x2, y1], [x2, y2], [x1, y2]]]
+  }))
+  return {
+    engine,
+    fullText: lines.map(([text]) => text).join('\n'),
+    groups,
+    textAnnotations: lines.map(([text, x1, y1, x2, y2], i) => ({
+      ...at(text, x1, y1, x2 - x1, y2 - y1),
+      granularity: 'line',
+      groupId: groups[i].id
+    }))
+  }
+}
+const dialogue = [
+  ['今日はいい天気ですね。', 100, 600, 520, 640],
+  ['一緒に海まで散歩しませんか？', 100, 660, 640, 700],
+  ['ええ、行きましょう。', 100, 720, 480, 760]
+]
+
+test('grouped mode makes one region of a dialogue box read by Live Text or Google Lens', () => {
+  for (const [engine, prefix] of [['livetext', 'line'], ['googlelens', 'paragraph']]) {
+    const groups = drawnGroups(grouped(engine, prefix, dialogue), engine)
+    assert.equal(groups.length, 1, engine)
+    assert.equal(groups[0].text, dialogue.map(([text]) => text).join('\n'), engine)
+  }
+  // Overlapping boxes too, which are the plainest case of all.
+  const overlapping = [['今日は', 100, 600, 300, 650], ['いい天気', 100, 640, 340, 690]]
+  assert.equal(drawnGroups(grouped('livetext', 'line', overlapping), 'livetext').length, 1)
+  // Text far apart is still two regions.
+  const apart = [dialogue[0], ['メニュー', 1500, 80, 1640, 120]]
+  assert.equal(drawnGroups(grouped('googlelens', 'paragraph', apart), 'googlelens').length, 2)
+})
+
+test("Manga OCR's speech bubbles stay their own regions, however close", () => {
+  const bubbles = grouped('mangaocr', 'bubble', [
+    ['あ', 0, 0, 40, 200],
+    ['い', 50, 0, 90, 200]
+  ])
+  bubbles.groups.forEach((g) => (g.orientation = 'vertical'))
+  assert.equal(drawnGroups(bubbles, 'mangaocr').length, 2)
+})
+
 test('tight kerning on one line stays a single run', () => {
   const a = at('日', 0, 0, 40, 40)
   const b = at('本', 42, 0, 40, 40) // 2 px gap, well under the word-boundary threshold

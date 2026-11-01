@@ -1,7 +1,7 @@
 // Checks the built site the way a crawler without JavaScript sees it: every route's file in dist/
 // has its own title and description, canonical (indexed pages) or noindex (the rest), JSON-LD that
 // parses, and its content in #root (prerendered pages). Run after `npm run build`.
-import { readFile } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { NOT_FOUND, ROUTES, canonicalUrl, escapeHtml, outputFile } from '../src/lib/seo.js'
@@ -39,6 +39,32 @@ for (const route of [...ROUTES, NOT_FOUND]) {
   if (route.render === 'full' && !/<h1[\s>]/.test(root)) fail('no h1 in the prerendered content')
   if (route.render === 'full' && text.length < 30) fail('no prerendered content')
   console.log(`${problems.length ? '' : 'ok'} ${file.padEnd(24)} ${String(text.length).padStart(6)} chars  ${types.join(', ')}`)
+}
+
+// Internal links in the prerendered pages: every path resolves to a route or a file in dist/, and
+// every #fragment to an id on the target page (broken links stop crawlers exploring the site).
+const ids = async (file) =>
+  new Set([...(await readFile(join(dist, file), 'utf8')).matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]))
+for (const route of ROUTES.filter((r) => r.render === 'full')) {
+  const file = outputFile(route)
+  const html = await readFile(join(dist, file), 'utf8')
+  const root = html.match(/<div id="root">([\s\S]*)<\/div>\s*<\/body>/)?.[1] ?? ''
+  for (const [, raw] of root.matchAll(/\shref="([^"]*)"/g)) {
+    const href = raw.replace(/&amp;/g, '&')
+    if (!href.startsWith('/') && !href.startsWith('#')) continue
+    if (href.startsWith('//')) continue
+    const [pathAndQuery, hash] = href.split('#')
+    const path = pathAndQuery.split('?')[0] || route.path
+    const target = ROUTES.find((r) => r.path === (path.replace(/\/+$/, '') || '/'))
+    if (!target) {
+      const ok = await access(join(dist, path)).then(() => true, () => false)
+      if (!ok) problems.push(`${file}: broken link ${href}`)
+      continue
+    }
+    if (hash && target.render === 'full' && !(await ids(outputFile(target))).has(decodeURIComponent(hash))) {
+      problems.push(`${file}: broken anchor ${href}`)
+    }
+  }
 }
 
 for (const extra of ['sitemap.xml', 'robots.txt', 'llms.txt', 'favicon.ico', 'site.webmanifest', '_headers']) {

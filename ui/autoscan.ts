@@ -70,8 +70,13 @@ export interface AutoScanSettings {
   adaptivePollMin: number
   adaptivePollMax: number
 
-  /** Which local signal settles a candidate. */
+  /**
+   * Which local signal settles a candidate. The overlay sets it from the watcher
+   * (`ui/watcher.ts`) on every update: image comparison only when that is the watcher.
+   */
   observerMode: ObserverMode
+  /** The watcher chosen in Settings, for online engines and Manga OCR (`ui/watcher.ts`). */
+  watcher: import('./watcher.js').WatcherChoice
   /** Consecutive identical observations before a candidate may be recognised. */
   stableObservations: number
   /** Longest a still-moving candidate may be held before it is sent anyway. */
@@ -132,6 +137,7 @@ export const DEFAULT_AUTO_OCR_SETTINGS: AutoScanSettings = {
   adaptivePollMax: 500,
 
   observerMode: 'text',
+  watcher: 'auto',
   // Two is the minimum that means anything: one observation is a sighting, two
   // consecutive identical ones are a screen that has stopped.
   stableObservations: 2,
@@ -164,6 +170,10 @@ export function migrateAutoScanSettings(stored: unknown): AutoScanSettings {
   // A stored file from before observer mode existed has no opinion about it.
   if (merged.observerMode !== 'text' && merged.observerMode !== 'image') {
     merged.observerMode = DEFAULT_AUTO_OCR_SETTINGS.observerMode
+  }
+  // Image comparison used to be chosen through `observerMode`; it is a watcher choice now.
+  if (!['auto', 'ppocr', 'livetext', 'oneocr', 'meikiocr', 'image'].includes(merged.watcher)) {
+    merged.watcher = merged.observerMode === 'image' ? 'image' : 'auto'
   }
 
   // Inherit a retuned cadence, but only where the stored value is the old

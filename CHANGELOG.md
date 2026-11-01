@@ -11,8 +11,33 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-- **Windows:** with a pen tablet or touchscreen, Settings and the title bars no longer light up a second row or button away from the mouse, and a Quick Shot box keeps following the mouse while a pen is in range or after a touch.
-- With **Verbose logging** on (Settings → About), Kimochi now also records how the mouse, pens and touch reach its windows, to help track down pointer problems.
+### Fixed
+
+- On macOS, clicking a source now brings its window to the front even when Kimochi isn't allowed under Accessibility. Before, the app's menu bar took over but its window stayed behind, however often you clicked, until you switched to it with ⌘Tab.
+- Cards added from a dictionary popup get their screenshot again when the dictionary saved only part of the line as the sentence (a short phrase cut from a longer line, say). The card now gets the most recent screenshot when no line matches its sentence.
+- With the overlay's grouped mode on, a card's sentence is the whole bubble again rather than only the line you looked the word up on, and a word that wraps onto the next line can now be looked up.
+- The bottoms of letters like g, y and p are no longer cut off in dropdowns and buttons, such as the OCR model and Dictionary pickers.
+- On Windows, a blank white box no longer sits near the top-left of the screen, over whatever is there, until you quit Kimochi. It was the dictionary pop-up's hidden window showing through, and it also turned up in screenshots and recordings when a game window was the source.
+
+## [0.3.0] - 2026-10-31
+
+### Added
+
+- **New offline OCR engine, PaddleOCR:** This model is a fast, accurate local engine for game text (PaddleOCR's PP-OCRv6 model). It uses your GPU card where it can, and its model (about 30 MB) downloads separately the first time you choose it in Settings → OCR & Overlay. Shout out to _Nadekai_ in Discord for the suggestion and early benchmarking. 💥
+- **Quick Shot:** pressing its shortcut again now closes it if you haven't drawn a box yet, or scans the box you've drawn, the same as Esc and Enter. 🎯
+- **Mouse buttons as shortcuts:** on Windows, the scan and controller-menu shortcuts can now be the **middle**, **back** or **forward** mouse button.
+
+### Changed
+
+- **Smarter Auto OCR:** with a local engine selected, that engine now watches the screen for new text itself, so lines no longer flicker out of the overlay when a different engine misreads them. With an online engine or Manga OCR, Auto OCR watches with the best engine already on your computer. You can choose the watching engine under Auto OCR's advanced options. ⏩
+- **Faster local OCR on Linux:** MeikiOCR scans on the CPU take about half as long, and use less CPU. ⚡
+- **A new look for the overlay.** Scanned text is marked with a soft tinted box instead of an underline, and hovering a word turns it into a floating card in the style of Kimochi's own windows, with a little room around the text and a lighter weight. With the "Group text into regions" setting on, nearby lines share one box that works the same way.
+  - **Settings → OCR & Overlay → Overlay look:** choose the highlight colour and how strongly it shows, and whether the cards are light, dark or the same as Kimochi, with live previews of each. A fourth choice, **Blend**, fills each hovered card with the colours behind that word on your screen to blend in with the source. 🎨
+
+### Fixed
+
+- After switching dictionaries, the sidebar and Settings could keep showing "Starting Yomitan…" even though Yomitan was already working.
+- With "Group text into regions" on, text read by Apple Live Text or Google Lens now merges correctly into one region per dialogue box.
 
 ## [0.2.2] - 2026-10-29
 

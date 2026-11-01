@@ -28,7 +28,7 @@ export function Home() {
         divider
         eyebrow="主な機能"
         heading="Features"
-        lede="Kimochi is packed with useful features, all bundled into a beautiful, clean interface"
+        lede="Screen capture, OCR, an overlay on your game, dictionaries, a reading log and Anki cards, all in one clean, simple app."
       >
         <FeatureGrid />
       </Section>

@@ -66,7 +66,9 @@ const doc = {
 }
 globalThis.document = doc
 
-const { RegionSelect, selectRegion, MINIMUM_DRAG } = (await import('../ui/region-select.js')).default
+const { RegionSelect, selectRegion, shortcutPressOutcome, MINIMUM_DRAG, SHORTCUT_SETTLE_MS } = (
+  await import('../ui/region-select.js')
+).default
 
 const BOUNDS = { x: -1920, y: 240, width: 1920, height: 1080 }
 const surface = () => doc.body.children.at(-1)
@@ -580,4 +582,55 @@ test('a throwing onTrace never breaks a drag', async () => {
   assert.deepEqual(selector.rect, { x: 0, y: 0, width: 40, height: 30 })
   selector.cancel()
   await pending
+})
+
+test('the opening shortcut pressed again cancels with no box and confirms with one; never mid-drag or at once', () => {
+  const settled = SHORTCUT_SETTLE_MS
+  const editor = { running: true, dragging: false, box: false, openFor: settled }
+  assert.equal(shortcutPressOutcome(editor), 'cancel')
+  assert.equal(shortcutPressOutcome({ ...editor, box: true }), 'confirm')
+  // Mid-drag the box is still being shaped.
+  assert.equal(shortcutPressOutcome({ ...editor, box: true, dragging: true }), 'ignore')
+  assert.equal(shortcutPressOutcome({ ...editor, dragging: true }), 'ignore')
+  // The press that opened the editor arriving again, or a held trigger repeating.
+  assert.equal(shortcutPressOutcome({ ...editor, openFor: 0 }), 'ignore')
+  assert.equal(shortcutPressOutcome({ ...editor, box: true, openFor: settled - 1 }), 'ignore')
+  assert.equal(shortcutPressOutcome({ ...editor, openFor: Number.NaN }), 'ignore')
+  // Closed: nothing to cancel or confirm.
+  assert.equal(shortcutPressOutcome({ ...editor, running: false, box: true }), 'ignore')
+})
+
+test('shortcutPressed cancels and confirms through the Escape and Return paths', async () => {
+  const later = () => performance.now() + SHORTCUT_SETTLE_MS
+
+  const empty = new RegionSelect()
+  const cancelled = empty.start({ bounds: BOUNDS })
+  assert.equal(empty.shortcutPressed(), 'ignore', 'a press right after opening is the opening one')
+  assert.equal(empty.active, true)
+  assert.equal(empty.shortcutPressed(later()), 'cancel')
+  assert.equal(await cancelled, null)
+  assert.equal(empty.active, false)
+  assert.equal(empty.shortcutPressed(later()), 'ignore', 'closed, a press does nothing')
+
+  const drawn = new RegionSelect()
+  const confirmed = drawn.start({ bounds: BOUNDS })
+  drag(surface(), { x: 10, y: 20 }, { x: 110, y: 70 })
+  assert.equal(drawn.shortcutPressed(later()), 'confirm')
+  const result = await confirmed
+  assert.deepEqual(result.local, { x: 10, y: 20, width: 100, height: 50 })
+  assert.equal(result.action, 'primary', 'the same commit as Return')
+})
+
+test('shortcutPressed mid-drag leaves the drag alone', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  element.dispatch('pointerdown', { button: 0, pointerId: 1, clientX: 10, clientY: 10 })
+  element.dispatch('pointermove', { pointerId: 1, clientX: 90, clientY: 60 })
+  assert.equal(selector.shortcutPressed(performance.now() + SHORTCUT_SETTLE_MS), 'ignore')
+  assert.equal(selector.active, true)
+  element.dispatch('pointerup', { pointerId: 1, clientX: 90, clientY: 60 })
+  // Let go, a press confirms what was drawn.
+  assert.equal(selector.shortcutPressed(performance.now() + SHORTCUT_SETTLE_MS), 'confirm')
+  assert.deepEqual((await pending).local, { x: 10, y: 10, width: 80, height: 50 })
 })

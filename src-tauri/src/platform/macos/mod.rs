@@ -5,6 +5,7 @@
 //! per-OS contract described in `platform/mod.rs`, and the shared types it returns live
 //! there.
 mod focus;
+mod mouse_tap;
 pub mod instance;
 mod spaces;
 
@@ -1276,23 +1277,42 @@ pub fn window_fullscreen(id: &SourceId) -> Option<bool> {
 pub fn activate_window(id: &SourceId) -> Result<Value, String> {
     let pid = id.pid().filter(|pid| *pid > 0).ok_or("invalid: the window has no process")?;
     let mut report = serde_json::Map::new();
-    if let Some(number) = id.handle_u32() {
-        let pid = i32::try_from(pid).map_err(|_| "invalid: process id out of range")?;
-        if focus::front_window(pid, number, &mut report) {
-            // The window is the application's front window now, but macOS 14 switches Spaces
-            // only for an activation: activate the application, and with only its front window
-            // (not all of them, which can pull its other windows' Space instead).
-            report.insert("activated".into(), json!(activate_app(pid as u32, false).err()));
-            // Activation lands asynchronously; a raise sent before it can leave the window
-            // behind ours. Raised once more after it has, off the main thread.
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(120));
-                let _ = focus::raise_again(pid, number);
-            });
-            return Ok(Value::Object(report));
-        }
+    let Some(number) = id.handle_u32() else {
+        report.insert("fallback".into(), json!(activate_app(pid, true).err()));
+        return Ok(Value::Object(report));
+    };
+    let process = i32::try_from(pid).map_err(|_| "invalid: process id out of range")?;
+    // The window itself first, so it is its application's front window before anything
+    // activates the application: activated with another of its windows on the Space being
+    // shown (OpenEmu's library, beside its game in full screen), macOS stays on that Space.
+    if let Some(raised) = focus::raise_window(process, number, &mut report) {
+        let fronted = focus::front_only(process, number, &mut report);
+        report.insert("skylight".into(), json!(fronted));
+        // And raised again, as AltTab does: a raise sent while Kimochi was still the active
+        // application did not always stay above Kimochi's own window (OpenEmu became active with
+        // its game left behind the sidebar until the card had been clicked a few times).
+        report.insert("raiseAfter".into(), json!(raised.raise()));
+        // The window is the application's front window now, but macOS 14 switches Spaces
+        // only for an activation: activate the application, and with only its front window
+        // (not all of them, which can pull its other windows' Space instead).
+        report.insert("activated".into(), json!(activate_app(pid, false).err()));
+        // Activation lands asynchronously; a raise sent before it can leave the window
+        // behind ours. Raised once more after it has, off the main thread.
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            let _ = focus::raise_again(process, number);
+        });
+        return Ok(Value::Object(report));
     }
-    report.insert("fallback".into(), json!(activate_app(pid, true).err()));
+    // Nothing has ordered the window (no Accessibility, or no element for it): making its
+    // process frontmost alone left it behind Kimochi's windows however often the reader
+    // clicked, and an activation asked for after that was ignored, Kimochi no longer being
+    // the active application that macOS 14 lets hand activation on. So the application is
+    // activated first, with all its windows, as ⌘Tab does; then SkyLight puts this window in
+    // front and key, switching to its Space if it is on another.
+    report.insert("activated".into(), json!(activate_app(pid, true).err()));
+    let fronted = focus::front_only(process, number, &mut report);
+    report.insert("skylight".into(), json!(fronted));
     Ok(Value::Object(report))
 }
 
@@ -1304,6 +1324,11 @@ pub fn accessibility_status() -> Option<bool> {
 /// Ask for Accessibility (the system prompt, and its Settings pane). Whether it is granted now.
 pub fn request_accessibility() -> Result<bool, String> {
     Ok(focus::request())
+}
+
+/// Mouse buttons as action shortcuts: a tap while one is bound (`mouse_tap`).
+pub fn sync_mouse_buttons(app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
+    mouse_tap::sync(app, wanted)
 }
 
 // ---------------------------------------------------------------- system links
@@ -1377,7 +1402,11 @@ pub fn capabilities() -> Value {
         "os": "macos",
         "osVersion": os_version(),
         "arch": std::env::consts::ARCH,
-        "keys": {"primaryModifier": "meta", "labels": "symbols", "superName": "Command"},
+        "keys": {
+            "primaryModifier": "meta", "labels": "symbols", "superName": "Command",
+            // An active event tap needs Accessibility; Kimochi does not ask for it on this account.
+            "mouseButtons": if focus::trusted() { "available" } else { "needsAccessibility" },
+        },
         "capture": {
             "canOpenSettings": true,
             "restartAfterGrant": true,
@@ -1402,7 +1431,7 @@ pub fn capabilities() -> Value {
         "ownAppNames": ["Kimochi", "Kimochi Next", "Kimochi Next POC"],
         "tray": true,
         "gamepad": true,
-        "ocrAccelerators": {"meikiocr": "coreml", "mangaocr": "metal"},
+        "ocrAccelerators": {"meikiocr": "coreml", "mangaocr": "metal", "ppocr": "coreml"},
     })
 }
 

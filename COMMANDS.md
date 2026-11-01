@@ -305,7 +305,7 @@ choosing that source again brings its region back.
 | `accessibility_status` | `() -> bool \| null` — macOS Accessibility, read-only, never prompts; `null` where the platform has no such permission |
 | `request_accessibility` | `() -> bool` — shows the system's Accessibility prompt and opens its Privacy & Security pane; whether it is granted now |
 | `source_window_state` | `() -> {sourceId, bounds, onScreen, fullscreen, settling, display} \| null` — the tracked window's last `source-bounds`, for a page opened after it |
-| `capture_frame` | `({request}) -> {id, info, url}` |
+| `capture_frame` | `({request, observe?, observerMode?, observerEngine?}) -> {id, info, url, observation, …}` — with `observe`, the watcher reads the frame: `observerMode: 'image'` hashes it instead, and `observerEngine` (`'ppocr'`, `'meikiocr'`, `'livetext'` / `'oneocr'` on their OS; default Live Text on macOS, MeikiOCR elsewhere) names the engine, chosen by `ui/watcher.ts` |
 | `ocr_frame` | `({id, engine?}) -> {id, info, ocr}` — pure; `engine` is a native `ocrMode` (`'googlelens'`, `'cloud'` when omitted, `'meikiocr'`, `'mangaocr'`, and `'livetext'` / `'oneocr'` on their OS) |
 | `scan_state` | `({scanning?, status?, scan?, publish?}) -> {revision, published}` |
 | `scan` | `({request, ocr}) -> {id, info, ocr}` |
@@ -555,6 +555,10 @@ fixes.
 
 All of them emit `hotkey` `{name, seq}`; everything beyond the native part above is the
 renderer's decision.
+With Quick Shot on, a `triggerScan` that arrives while its region editor is up does not
+start another: with no box drawn it cancels (as Escape), with one it scans it (as Return), and
+mid-drag, or within 300 ms of the editor opening, it does nothing (`shortcutPressOutcome` in
+`ui/region-select.js`). It is keyed on the action, so every trigger behaves the same.
 
 Accelerators use Electron's exact syntax and defaults from `src/shared/defaults.ts`.
 Verified against the parser rather than assumed: `global-hotkey` accepts
@@ -562,10 +566,22 @@ Verified against the parser rather than assumed: `global-hotkey` accepts
 so `CommandOrControl+Shift+8` registers unchanged. Per-key registration failures are
 reported in `failed` instead of disabling the whole set silently.
 
+**Mouse buttons.** An accelerator of `MouseMiddle`, `MouseBack` or `MouseForward` (always on its
+own, never with modifiers; left and right cannot be bound) is not a global shortcut: the
+platform's input hook catches the button and swallows its press and release, only while a button
+is bound and the shortcuts are not suspended (`mouse_buttons.rs`). Injected input is never
+swallowed. On Windows the hook is the overlay's existing `WH_MOUSE_LL` mouse guard; on macOS an
+active `CGEventTap` for other-mouse down/up, created only while a button is bound and only when
+Accessibility is already allowed (Kimochi never asks for it for this). Linux has no hook. Where a
+button cannot fire, it is reported in `failed` with the reason, and `platform_capabilities`
+`keys.mouseButtons` (`available`, `needsAccessibility`, `unsupported`) tells Settings whether to
+record one.
+
 **Auto-scan trigger.** The gamepad button in `autoScanSettings.gamepadButton` fires
 `triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`). Kimochi does not watch
 individual keyboard keys in other applications on any platform: a keyboard scan is a
-global shortcut (`hotkeys`), which needs no Accessibility or other input permission.
+global shortcut (`hotkeys`), which needs no Accessibility or other input permission (a bound
+mouse button on macOS is the exception, above).
 
 **Gamepad is owned by Rust, not the webview.** Emits `gamepad`
 `{gamepads, activeGamepadIndex, buttonStates, axisStates}` in the shape of
@@ -681,6 +697,9 @@ Settings buttons stay hidden until then. `phase` is `starting`, `downloading`, `
 `setup-needed`, `ready` or `failed`; `progress` is a percentage when the engine supplies one.
 The overlay publishes changes through `report` (`check: "dictionary-readiness"`); native keeps
 the latest value per engine so newly opened Settings and onboarding see the current state.
+Native stamps each stored value with a rising `seq` (`0` for the "nothing reported yet"
+default); a window keeps the higher one, because its first `dictionary_runtime_status` answer
+can arrive after a newer event.
 Hachidori uses `hd_status` and observes `hd_setup_progress` without starting any installation.
 10ten uses the same `options` runtime port as its options page (`dbstateupdated`); every data
 series must be `ok` and database updates idle. Yomitan requires an installed, enabled dictionary.
@@ -1485,7 +1504,7 @@ data directory on macOS and Linux, `%LOCALAPPDATA%` rather than the roaming prof
 Windows) from the pinned list in `src-tauri/ocr-models.json` (repository, revision, URL,
 SHA-256 and size per file). Implementation: `src-tauri/src/model_store.rs`.
 
-`engine` is `"meikiocr"`, `"mangaocr"` or `"sensevoice"` (SenseVoice-Small, sentence audio's
+`engine` is `"meikiocr"`, `"mangaocr"`, `"ppocr"` (PaddleOCR) or `"sensevoice"` (SenseVoice-Small, sentence audio's
 speech recogniser; never an `ocrMode`). Every command answers with the engine's
 `ModelStatus` after acting:
 
@@ -1526,9 +1545,9 @@ sidebar and the engine list in Settings → OCR & Overlay, both through `fronten
 when the picked engine is `absent` ("Download Manga OCR?", with the size) and save `ocrMode`
 only on Download; Cancel leaves it unchanged. Nothing starts at launch: an engine selected
 before its models were downloaded (an upgrade from a build that bundled them) reports
-`absent`, and that engine's panel in Settings → OCR & Overlay offers "Download (539 MB)". On Windows and Linux the automatic-scan observer reads frames with MeikiOCR whatever
-engine is selected, so it starts the MeikiOCR download too and answers `busy` until it is
-ready.
+`absent`, and that engine's panel in Settings → OCR & Overlay offers "Download (539 MB)". Auto OCR
+never starts a download either: it watches with an engine that is already here (`ui/watcher.ts`),
+and with none, compares pictures instead.
 
 **Resolution order** for an engine's models: the downloaded store when complete and
 verified, then `<resources>/<engine>/models` (a build that still bundles them), then

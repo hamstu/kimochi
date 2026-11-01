@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Fixes for capture permission, scans that find nothing, the overlay, dictionaries, Anki, Linux and signing in.
+description: Fixes for capture permission, scans that find nothing, the overlay, shortcuts, dictionaries, Anki, Linux and signing in.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -65,7 +65,7 @@ removed) or Gentle (less). A crop area around the dialogue also helps.
 ### Google Lens stopped working
 
 Kimochi uses the service Chrome's Lens uses, which is not a published API, so Google could change or
-stop it at any time. Switch to another engine, such as MeikiOCR, in the meantime.
+stop it at any time. Switch to another engine, such as PaddleOCR, in the meantime.
 
 ## The overlay
 
@@ -75,6 +75,18 @@ stop it at any time. Switch to another engine, such as MeikiOCR, in the meantime
   overlay yet. See [The overlay on Wayland](/install/linux/#the-overlay-on-wayland).
 - **Nothing happens when I hover**: hold <kbd>Shift</kbd> (10ten needs no key; see [Which key to hold](/lookups/looking-up/#which-key-to-hold)) and
   check that a dictionary is set up (next section).
+
+## Shortcuts
+
+- **The game skips text when I press the scan shortcut**: some visual novels skip while
+  <kbd>Ctrl</kbd> is held. Use a shortcut without it, such as the default <kbd>Shift+F8</kbd>, in
+  **Settings → Shortcuts & Controls**.
+- **"Mouse buttons need Accessibility"** (macOS): allow Kimochi under Accessibility in
+  **Settings → Sources → macOS permissions**, then record the button again.
+- **"Mouse buttons can't be shortcuts here"**: mouse buttons work on Windows and macOS, not yet on
+  Linux. Use a key instead.
+
+See [Keyboard shortcuts](/reference/shortcuts/).
 
 ## Dictionaries
 
@@ -138,6 +150,15 @@ See [Anki](/lookups/anki/#the-ankiconnect-connection).
 ## Still stuck?
 
 Ask in [Kimochi's Discord](https://discord.gg/vdMge6TBZQ), or open an issue on
-[GitHub](https://github.com/hamstu/kimochi/issues). Either way, include your OS, the Kimochi
-version (**Settings → About → Updates**), the OCR engine and dictionary engine you use, and what
-you expected to happen.
+[GitHub](https://github.com/hamstu/kimochi/issues). Either way, say what you did and what you
+expected to happen, and include Kimochi's debug info:
+
+1. Open **Settings → About → Debug info**.
+2. **Copy debug info** puts your Kimochi version, system and displays, OCR engine, dictionary,
+   Kimochi's windows and recent errors on your clipboard, as text to paste.
+3. For a GitHub issue, **Save debug bundle** saves the same with Kimochi's recent logs as a zip to
+   attach. To catch more, turn on **Verbose logging** first, make the problem happen, then save the
+   bundle. Verbose logging stays on until Kimochi quits.
+
+Tokens, keys, e-mail addresses and your user name are left out of both. Nothing is sent anywhere
+unless you send it.

@@ -85,7 +85,9 @@
   border: 0;
   border-radius: var(--k-radius-md);
   font-size: var(--k-text-md);
-  line-height: 1;
+  /* Not 1: a label that truncates (overflow: hidden) clips to its line box, and at 1 that cuts
+     off descenders (g, y, p). The control's height is fixed, so the taller line moves nothing. */
+  line-height: 1.25;
   font-weight: var(--k-weight-medium);
   white-space: nowrap;
   text-decoration: none;
@@ -305,7 +307,8 @@
   color: var(--k-text);
   font-size: var(--k-text-md);
   font-weight: var(--k-weight-regular);
-  line-height: 1;
+  /* Not 1: the value truncates, and clipping to a line box of 1 cuts off descenders (see .k-button). */
+  line-height: 1.25;
   text-align: left;
   white-space: nowrap;
   cursor: default;

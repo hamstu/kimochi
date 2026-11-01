@@ -19,12 +19,23 @@ export interface Vertex {
   y?: number
 }
 
+/** The source's background around a box, top and bottom (`#rrggbb`), and the text that suits it. */
+export interface Surface {
+  top: string
+  bottom: string
+  ink: 'light' | 'dark'
+}
+
 export interface Annotation {
   description: string
+  /** What the box sits on, read from the scanned frame (src-tauri/src/surface.rs), for Blend cards. */
+  surface?: Surface
   orientation?: 'horizontal' | 'vertical'
   isVertical?: boolean
   groupId?: string
   granularity?: 'aggregate' | 'block' | 'line' | 'fragment'
+  /** A speech bubble (Manga OCR's blocks): its own passage, never grouped with a neighbour. */
+  bubble?: boolean
   boundingPoly: { vertices: Vertex[] }
   /** For a block: the lines found inside it, each a polygon of [x, y] points, in capture pixels. */
   linePolygons?: number[][][]
@@ -237,6 +248,9 @@ function areBoxesNearby(box1: BoundingBox, box2: BoundingBox, threshold: number)
   return Math.sqrt(horizontal ** 2 + vertical ** 2) <= threshold
 }
 
+/** Set top to bottom: Live Text says so only by `orientation`, Google Lens also by `isVertical`. */
+const isVertical = (a: Annotation): boolean => a.isVertical ?? a.orientation === 'vertical'
+
 /** Union-find proximity clustering, so a paragraph becomes one readable card. */
 export function groupTextAnnotations(
   annotations: Annotation[],
@@ -259,11 +273,15 @@ export function groupTextAnnotations(
     if (rootI !== rootJ) parent[rootJ] = rootI
   }
 
+  // An engine's group always holds together, but only a speech bubble is kept apart from its
+  // neighbours: Live Text calls every line a group and Google Lens every paragraph (both arrive
+  // here as blocks, from normalizeOcrResult), and they cluster by proximity like any engine's lines.
   for (let i = 0; i < boxed.length; i++) {
     for (let j = i + 1; j < boxed.length; j++) {
       const a=boxed[i].annotation, b=boxed[j].annotation
-      if (a.groupId || b.groupId) { if (a.groupId && a.groupId===b.groupId) union(i,j); continue }
-      if ((a.isVertical??false)!==(b.isVertical??false)) continue
+      if (a.groupId && a.groupId===b.groupId) { union(i,j); continue }
+      if (a.bubble || b.bubble) continue
+      if (isVertical(a)!==isVertical(b)) continue
       if (areBoxesNearby(boxed[i].box, boxed[j].box, proximityThreshold)) union(i, j)
     }
   }
@@ -286,7 +304,7 @@ export function groupTextAnnotations(
     const height = maxY - minY
 
     // Reading order within the group: 5px tolerance decides "same line".
-    const vertical=groupAnnotations[0].isVertical===true
+    const vertical=isVertical(groupAnnotations[0])
     const sortedAnnotations = [...groupAnnotations].sort((a, b) => {
       const aBox = getBoundingBox(a)
       const bBox = getBoundingBox(b)

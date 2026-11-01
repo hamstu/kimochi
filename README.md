@@ -27,8 +27,8 @@ a running log of every line with audio, Anki export and a notebook for names and
 Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux builds.
 
 - **OCR where the text is**: Google Lens by default (captures are sent to Google), or local
-  engines (MeikiOCR, Manga OCR, Apple Live Text on macOS, OneOCR on Windows 11). Auto OCR waits
-  for text to settle, then reads it once.
+  engines (PaddleOCR, MeikiOCR, Manga OCR, Apple Live Text on macOS, OneOCR on Windows 11). Auto
+  OCR watches for new text with a local engine, waits for it to settle, then reads it once.
 - **Pop-up dictionaries**: Yomitan, Hachidori or 10ten, downloaded on demand from their
   upstream releases, hash-checked and run unmodified, with your own dictionaries; or the Yomitan
   API, which looks words up through the Yomitan already in your browser.
@@ -59,7 +59,8 @@ You need Node 22+ and stable Rust, plus per OS:
   (details in [src-tauri/src/platform/linux/DEPS.md](src-tauri/src/platform/linux/DEPS.md)).
 
 The OCR engines are separate crates ([kimochi-meikiocr](https://github.com/hamstu/kimochi-meikiocr),
-[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr)); Cargo fetches them at the exact
+[kimochi-mangaocr](https://github.com/hamstu/kimochi-mangaocr),
+[kimochi-ppocr](https://github.com/hamstu/kimochi-ppocr)); Cargo fetches them at the exact
 revisions pinned in `src-tauri/Cargo.toml`, so there is nothing else to clone:
 
 ```sh
@@ -91,11 +92,13 @@ Windows (`scripts/sign-windows.mjs`); setting the same variables locally does th
 | --- | --- |
 | `src-tauri/` | The native app: windows, settings, capture, OCR, input, tray, updater and the texthooker server. Its command interface is documented in [COMMANDS.md](COMMANDS.md). |
 | `capture-core/` | Screen and window capture (ScreenCaptureKit, Windows Graphics Capture, PipeWire). |
+| `speech-core/` | Sentence audio: finds each line's voice in recorded system audio ([README](speech-core/README.md)). |
 | `frontend/` | The React windows: controller, settings, log/texthooker, notebook, welcome. Built from the kit in [frontend/kit](frontend/kit/README.md). |
 | `ui/` | The always-present overlay: scanning, change detection, OCR backends and the boxes drawn over the game. |
 | `host/` | The extension host that runs the downloaded dictionary engines unmodified. |
 | `oneocr-worker/` | Small helpers that run Windows' built-in OneOCR. |
 | `site/` | The marketing site. |
+| `site-docs/` | The user documentation at docs.kimochiapp.com ([README](site-docs/README.md)). |
 
 Settings, history and downloaded engines live in the app's data folder (on macOS,
 `~/Library/Application Support/dev.kimochi.app/`); dictionaries live in the webview's IndexedDB.

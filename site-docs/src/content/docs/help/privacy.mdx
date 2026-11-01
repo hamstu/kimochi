@@ -11,13 +11,17 @@ Most of what it does happens on your computer.
 
 ## What stays on your computer
 
-- **Captures** are held in memory while Kimochi reads them, and are not saved to disk or uploaded,
-  except to an online OCR engine you chose.
+- **Captures** are held in memory while Kimochi reads them, and are not uploaded, except to an
+  online OCR engine you chose. Kimochi keeps a **screenshot** of the newest scans on disk (50 by
+  default, **Settings → Anki → Card enhancement → Screenshots kept**) so the Log can show where each
+  line came from and Anki cards can carry the picture.
 - **Sentence audio** (**Enhance Anki cards** in the sidebar), when you turn it on, keeps the last few seconds of your computer's audio in
   memory only; a clip goes into the Anki card you add, through AnkiConnect on this computer.
 - **The Log, sessions, stats and Notebook** are in Kimochi's [data folder](/reference/data/).
 - **Dictionaries** are stored locally, and lookups run locally.
 - **Settings**, including API keys such as your DeepL key.
+- **Debug info** (**Settings → About**) is put together on your computer and goes nowhere unless you
+  paste or attach it yourself.
 
 ## What each online feature sends
 
@@ -29,14 +33,14 @@ Most of what it does happens on your computer.
 | **Translation and explanations** (Kimochi Cloud) | The line, and the lines before it for explanations | Kimochi's server, then DeepL or an AI provider (Anthropic or OpenAI) through Cloudflare AI Gateway, which keeps request logs tagged with your account id. |
 | **Translation with your DeepL key** | The line | DeepL, with your key. |
 | **Explain with Codex CLI or Claude CLI** | The prompt | Whatever that tool on your computer sends. |
-| **Model downloads** (MeikiOCR, Manga OCR) | A download request | Hugging Face and GitHub, the first time you choose the engine. |
+| **Model downloads** (PaddleOCR, MeikiOCR, Manga OCR, the speech model for sentence audio) | A download request | Hugging Face and GitHub, the first time you choose the engine or turn the feature on. |
 | **Dictionary engine and dictionary downloads** | A download request | The publisher's host, such as GitHub or data.10ten.life. Importing a file uses no network. |
 | **VNDB import** | Your search | VNDB's API. |
 | **Anki** | Cards | AnkiConnect on this computer. |
 | **Clipboard and WebSocket** | — | Stay on your computer or network. |
 
-To keep everything on your computer, choose an on-device OCR engine (Apple Live Text, MeikiOCR, Manga
-OCR or OneOCR) and don't sign in.
+To keep everything on your computer, choose an on-device OCR engine (PaddleOCR, Apple Live Text, MeikiOCR,
+Manga OCR or OneOCR) and don't sign in.
 
 ## With an account
 

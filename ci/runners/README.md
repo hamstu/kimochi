@@ -12,7 +12,7 @@ Runner fleet: https://github.com/hamstu/kimochi/settings/actions/runners
 ## The fleet
 
 A Mac (Apple Silicon) runs the macOS runner and, in Parallels VMs, the ARM64 Windows and Linux
-ones; a Windows 11 x64 PC runs the x64 Windows runner and, in WSL, the x64 Linux one.
+ones; a Windows 11 x64 PC (`media-pc`) runs the x64 Windows runner and, in WSL, the x64 Linux one.
 
 | Machine | Labels | Builds |
 | --- | --- | --- |
@@ -20,12 +20,16 @@ ones; a Windows 11 x64 PC runs the x64 Windows runner and, in WSL, the x64 Linux
 | Windows 11 ARM64 VM | `Windows`, `ARM64` | Windows ARM64 |
 | Ubuntu 24.04 ARM64 VM | `Linux`, `ARM64`, `ubuntu` | Linux ARM64 |
 | Arch Linux ARM64 VM | `Linux`, `ARM64`, `arch` | Linux ARM64, only when a manual run ticks "Arch" |
-| Windows 11 x64 PC | `Windows`, `X64` | Windows x64 |
-| WSL Ubuntu on that PC | `Linux`, `X64`, `ubuntu` | Linux x64 |
+| Windows 11 x64 PC (`media-pc`) | `Windows`, `X64`, `media-pc` | Windows x64 |
+| WSL Ubuntu on that PC (`media-pc-wsl`) | `Linux`, `X64`, `ubuntu`, `media-pc` | Linux x64 |
+| Older Windows 11 x64 PC (`arcade-pc`, plus `arcade-pc-wsl`) | `Windows`/`Linux`, `X64` | Nothing; a standby until `media-pc` has proved itself |
 
 Every runner also carries the `kimochi` label and the automatic `self-hosted` one. The
 workflow picks machines by OS + architecture (+ distro) labels, never by name, so a
-replacement machine only needs the same labels.
+replacement machine only needs the same labels. The exception is the x64 pair, which also asks
+for the custom `media-pc` label so jobs skip the slower standby PC; move that label (repo
+Settings → Actions → Runners, or `gh api -X POST repos/hamstu/kimochi/actions/runners/ID/labels
+-f 'labels[]=media-pc'`) to hand x64 builds to another machine.
 
 ## How a runner stays up
 

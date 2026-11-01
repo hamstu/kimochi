@@ -1,6 +1,6 @@
 [package]
 name = "kimochi"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 license = "GPL-3.0-only"
 [build-dependencies]
@@ -13,6 +13,7 @@ libc = "0.2"
 # CONTRIBUTING.md.
 meikiocr = { git = "https://github.com/hamstu/kimochi-meikiocr", rev = "7a1b9a762acbdf6b09d7386b4395c366f135733b" }
 mangaocr = { git = "https://github.com/hamstu/kimochi-mangaocr", rev = "6a5dec4fd59977ca70a76255ca1ff4633aa790bd" }
+ppocr = { git = "https://github.com/hamstu/kimochi-ppocr", rev = "2972b089c1e9d00b6354a42b555c6f549df26a1f" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
 # `macos-private-api` stays in this common block: tauri-build requires the common
@@ -118,9 +119,12 @@ chunks_exact_to_as_chunks = "allow"
 [profile.release]
 strip = true
 
-# Manga OCR's arithmetic (Candle, its gemm kernels and the crate's own loops) is optimized in
-# development builds too. Unoptimized, one CPU scan ran for minutes, holding Auto OCR's scan
-# lock; dev builds and `npm run bundle`'s debug installer are where scans get tested.
+# Manga OCR's arithmetic (Candle, its gemm kernels and the crate's own loops), and PP-OCR's pre-
+# and post-processing, are optimized in development builds too. Unoptimized, one CPU scan ran for
+# minutes, holding Auto OCR's scan lock; dev builds and `npm run bundle`'s debug installer are
+# where scans get tested.
+[profile.dev.package.ppocr]
+opt-level = 3
 [profile.dev.package.mangaocr]
 opt-level = 3
 [profile.dev.package.candle-core]

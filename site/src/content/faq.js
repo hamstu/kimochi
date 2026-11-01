@@ -45,7 +45,7 @@ export const FAQ = [
     q: 'Is Kimochi free? What does Kimochi Cloud cost?',
     a: [
       'Yes, Kimochi is free forever, with no account and no limits on the core app: the overlay, Auto OCR, on-device and online OCR engines, the Log, Sessions, the Notebook, dictionaries, one-click Anki cards and Gaming Mode.',
-      'Kimochi Cloud is optional and costs US$6 a month, US$60 a year (two months free, so $5 a month), or US$125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial. A free account on its own doesn’t include any of these.'
+      'Kimochi Cloud is optional and, as of October 2026, costs US$6 a month, US$60 a year (two months free, so $5 a month), or US$125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial. A free account on its own doesn’t include any of these.'
     ],
     links: [{ href: '/#open-source', label: 'Plans on the home page' }]
   },
@@ -53,7 +53,7 @@ export const FAQ = [
     id: 'platforms',
     q: 'Which platforms does Kimochi run on?',
     a: [
-      'Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in early testing. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
+      'As of October 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in early testing. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
     ],
     links: [
       { href: '/download/linux', label: 'Installing on Linux and Steam Deck' },
@@ -65,7 +65,7 @@ export const FAQ = [
     q: 'Does Kimochi send my screen to the cloud? Is it private?',
     a: [
       'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads. Your captures, log, notebook, statistics and settings stay on your computer, unless you turn on Sync with Kimochi Cloud, which keeps them in step between your computers.',
-      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. If you’d rather nothing leave your machine, pick an on-device engine: Apple Live Text (macOS), MeikiOCR, Manga OCR or OneOCR (Windows). The privacy policy lists exactly what each feature sends and when.'
+      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. If you’d rather nothing leave your machine, pick an on-device engine: PaddleOCR, Apple Live Text (macOS), MeikiOCR, Manga OCR or OneOCR (Windows). The privacy policy lists exactly what each feature sends and when.'
     ],
     links: [{ href: '/privacy', label: 'Privacy policy' }]
   },
@@ -81,7 +81,7 @@ export const FAQ = [
     id: 'engines-and-dictionaries',
     q: 'Which OCR engines and dictionaries does Kimochi support?',
     a: [
-      'OCR engines: Google Lens (the default, online), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), or OneOCR (Windows 11, built in).',
+      'OCR engines: Google Lens (the default, online), PaddleOCR (on device, fast and accurate), Apple Live Text (macOS, built in), MeikiOCR (on device, on the GPU), Manga OCR (on device, tuned for manga), or OneOCR (Windows 11, built in).',
       'Dictionaries: a built-in copy of Yomitan with your own dictionaries, Hachidori, 10ten, or the Yomitan in your browser through the Yomitan API.'
     ],
     links: [
@@ -109,11 +109,11 @@ export const FAQ = [
   },
   {
     id: 'alternatives',
-    q: 'How is Kimochi different from Game Sentence Miner, Kamui, owocr or YomiNinja?',
+    q: 'How is Kimochi different from GameSentenceMiner, owocr or YomiNinja?',
     a: [
-      'Kimochi puts capture, OCR, the overlay, a log, Yomitan, Anki and a notebook in one app, with no OBS and no browser tabs, and a controller works too. Game Sentence Miner is better if you want rich Anki sentence cards with screenshots or GIFs and AI translation (it needs OBS). owocr is great if you like building your own setup. Kamui is a paid, closed-source web and Windows app if you want everything handled for you in the cloud. YomiNinja is a free, open-source overlay with Yomitan and 10ten built in; Anki integration is on its planned list.'
+      'Kimochi puts capture, OCR, the overlay, a log, Yomitan, Anki and a notebook in one app, with no OBS and no browser tabs, and a controller works too. GameSentenceMiner is great, and it’s better if you want more advanced features and control. owocr is a nice CLI too if you prefer a more minimal setup. YomiNinja is a free, open-source overlay with Yomitan and 10ten built in, but it hasn’t been very actively developed.'
     ],
-    links: [{ href: '/compare', label: 'The full, sourced comparison' }]
+    links: [{ href: '/compare', label: 'How Kimochi compares' }]
   },
   {
     id: 'controller',

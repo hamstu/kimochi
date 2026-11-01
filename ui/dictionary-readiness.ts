@@ -39,6 +39,20 @@ export interface ReadinessView {
   settingsAvailable: boolean
 }
 
+/**
+ * Whether the readiness `next` replaces `current`: the newer report wins (native numbers each one,
+ * `seq`). A window reads the status once and then follows the event, and the two travel
+ * separately: a read answered just before the host reported "ready" can arrive after that event,
+ * and taking it would leave "Starting…" up for good.
+ */
+export function newerReadiness(
+  current: { engine: string; seq?: number } | null,
+  next: { engine: string; seq?: number }
+): boolean {
+  if (!current || current.engine !== next.engine) return true
+  return (next.seq ?? 0) >= (current.seq ?? 0)
+}
+
 const sentence = (text: string): string => {
   const trimmed = text.trim()
   return !trimmed || /[.!?…:]$/.test(trimmed) ? trimmed : `${trimmed}.`

@@ -2,6 +2,7 @@ import { MiniWindow, VisualFrame } from './parts'
 
 const ENGINES = [
   { name: 'Google Lens', meta: 'Default · online', selected: true },
+  { name: 'PaddleOCR', meta: 'On device · GPU' },
   { name: 'Apple Live Text', meta: 'macOS · built in' },
   { name: 'MeikiOCR', meta: 'On device · GPU' },
   { name: 'manga-ocr', meta: 'On device · manga' },

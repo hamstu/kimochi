@@ -245,38 +245,35 @@ pub fn is_full_screen(pid: i32, number: u32) -> Option<bool> {
     }
 }
 
-/// Bring window `number` of process `pid` to the front, switching to its Space if it is on
-/// another. True when either route took; the caller activates the application otherwise.
+/// A window of another application that Accessibility has raised, to raise again later.
+pub struct Raised(Owned);
+
+impl Raised {
+    /// `AXRaise` once more; the AX error code, 0 for success.
+    pub fn raise(&self) -> i32 {
+        raise(&self.0)
+    }
+}
+
+/// Raise window `number` of process `pid` through Accessibility, wherever it is: made its
+/// application's main window and ordered to the front of it. `None` when Accessibility is not
+/// allowed, the window has no element, or the raise was refused; then nothing has ordered the
+/// window, and making its process frontmost will not either (`front_only` reorders nothing).
 /// `report` says what each step answered, for the evidence log.
-pub fn front_window(pid: i32, number: u32, report: &mut serde_json::Map<String, serde_json::Value>) -> bool {
+pub fn raise_window(pid: i32, number: u32, report: &mut serde_json::Map<String, serde_json::Value>) -> Option<Raised> {
     use serde_json::json;
-    let mut fronted = false;
-    // The window itself first, so it is its application's front window before anything
-    // activates the application: activated with another of its windows on the Space being
-    // shown (OpenEmu's library, beside its game in full screen), macOS stays on that Space.
     report.insert("trusted".into(), json!(trusted()));
     let element = window_element_anywhere(pid, number);
     report.insert("element".into(), json!(element.is_some()));
-    if let Some(element) = element.as_ref() {
-        unsafe {
-            let main = ns_string!("AXMain");
-            let main = AXUIElementSetAttributeValue(element.0, (main as *const NSString).cast(), kCFBooleanTrue);
-            let raised = raise(element);
-            report.insert("main".into(), json!(main));
-            report.insert("raise".into(), json!(raised));
-            fronted |= raised == 0;
-        }
+    let element = element?;
+    unsafe {
+        let main = ns_string!("AXMain");
+        let main = AXUIElementSetAttributeValue(element.0, (main as *const NSString).cast(), kCFBooleanTrue);
+        let raised = raise(&element);
+        report.insert("main".into(), json!(main));
+        report.insert("raise".into(), json!(raised));
+        (raised == 0).then_some(Raised(element))
     }
-    report.insert("skylight".into(), json!(calls().is_some()));
-    fronted |= front_only(pid, number, report);
-    // And raised again, last, as AltTab does: making the process frontmost does not reorder
-    // windows, and a raise sent while Kimochi was still the active application did not always
-    // stay above Kimochi's own window (OpenEmu became active with its game left behind the
-    // sidebar until the card had been clicked a few times).
-    if let Some(element) = element.as_ref() {
-        report.insert("raiseAfter".into(), json!(raise(element)));
-    }
-    fronted
 }
 
 /// Raise window `number` of process `pid` once more if it is on the Space that is showing; the

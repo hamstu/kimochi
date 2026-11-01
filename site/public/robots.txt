@@ -1,6 +1,28 @@
+# Every crawler may read the whole site, AI and search crawlers included. The named groups below
+# repeat that explicitly for crawlers that look for their own name.
 # Account pages are crawlable on purpose: they carry noindex (meta tag and X-Robots-Tag), which
 # crawlers only see if they may fetch them.
 User-agent: *
+Allow: /
+
+User-agent: Googlebot
+User-agent: Bingbot
+User-agent: Applebot
+User-agent: Applebot-Extended
+User-agent: Google-Extended
+User-agent: DuckAssistBot
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: meta-externalagent
+User-agent: meta-webindexer
+User-agent: MistralAI-User
+User-agent: CCBot
 Allow: /
 
 Sitemap: https://kimochiapp.com/sitemap.xml

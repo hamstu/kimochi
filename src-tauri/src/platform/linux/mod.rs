@@ -239,6 +239,16 @@ pub fn accessibility_status() -> Option<bool> {
     None
 }
 
+/// Mouse buttons as action shortcuts (`mouse_buttons`) are not available on Linux.
+/// No hook here: the portal and X11 shortcuts take keys only, and catching a button for every
+/// application would need raw input access Kimochi does not ask for.
+pub fn sync_mouse_buttons(_app: &tauri::AppHandle, wanted: bool) -> Result<(), String> {
+    if wanted {
+        return Err("mouse buttons can't be shortcuts on Linux".into());
+    }
+    Ok(())
+}
+
 pub fn request_accessibility() -> Result<bool, String> {
     Err("unsupported: Linux has no Accessibility permission to grant".into())
 }
@@ -300,7 +310,7 @@ pub fn capabilities() -> Value {
             "nativeGnomeShell": gnome,
             "xwayland": s.xwayland || gamescope::active(),
         },
-        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super"},
+        "keys": {"primaryModifier": "ctrl", "labels": "words", "superName": "Super", "mouseButtons": "unsupported"},
         "capture": {
             "authorization": if !portal { "granted" } else { "promptOnSelect" },
             "canOpenSettings": false,
@@ -345,7 +355,7 @@ pub fn capabilities() -> Value {
         "ownAppNames": ["Kimochi", "kimochi"],
         "tray": true,
         "gamepad": true,
-        "ocrAccelerators": {"meikiocr": "cpu", "mangaocr": "cpu"},
+        "ocrAccelerators": {"meikiocr": "cpu", "mangaocr": "cpu", "ppocr": "cpu"},
     })
 }
 

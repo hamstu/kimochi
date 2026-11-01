@@ -110,11 +110,11 @@ jobs:
             const include = [
               { name: 'macOS', labels: ['self-hosted', 'macOS', 'ARM64'], target: 'aarch64-apple-darwin',
                 artifacts: `${bundle}/macos/Kimochi.app.zip` },
-              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64'], target: 'x86_64-pc-windows-msvc',
+              { name: 'Windows x64', labels: ['self-hosted', 'Windows', 'X64', 'media-pc'], target: 'x86_64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
               { name: 'Windows ARM64', labels: ['self-hosted', 'Windows', 'ARM64'], target: 'aarch64-pc-windows-msvc',
                 artifacts: `${bundle}/nsis/*-setup.exe` },
-              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64'], target: 'x86_64-unknown-linux-gnu',
+              { name: 'Linux x64', labels: ['self-hosted', 'Linux', 'X64', 'media-pc'], target: 'x86_64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
               { name: 'Linux ARM64', labels: ['self-hosted', 'Linux', 'ARM64', 'ubuntu'], target: 'aarch64-unknown-linux-gnu',
                 artifacts: `${bundle}/deb/*.deb\n${bundle}/appimage/*.AppImage` },
@@ -315,6 +315,7 @@ jobs:
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
+          # xdg-utils: tauri's AppImage step runs xdg-mime, which a minimal Ubuntu (WSL) lacks.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -336,7 +337,8 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
             gstreamer1.0-pulseaudio \
-            libavif-dev
+            libavif-dev \
+            xdg-utils
 
       - uses: actions/setup-node@v4
         with:

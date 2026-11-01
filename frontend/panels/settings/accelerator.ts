@@ -1,6 +1,9 @@
 /**
  * Tauri accelerator strings (`CommandOrControl+Shift+8`) as key caps, and key events back into
  * accelerators. Pure functions so `scripts/accelerator.test.mjs` can exercise them.
+ *
+ * A mouse button is stored as an accelerator of its own (`MouseMiddle`, `MouseBack`,
+ * `MouseForward`, always alone); native catches it with an input hook (`mouse_buttons.rs`).
  */
 
 export type KeyPlatform = 'mac' | 'windows' | 'linux'
@@ -88,7 +91,10 @@ const KEY_LABELS: Record<string, { mac: string; other: string }> = {
   pagedown: { mac: 'PgDn', other: 'PgDn' },
   pause: { mac: 'Pause', other: 'Pause' },
   scrolllock: { mac: 'ScrLk', other: 'ScrLk' },
-  plus: { mac: '+', other: '+' }
+  plus: { mac: '+', other: '+' },
+  mousemiddle: { mac: 'Middle Click', other: 'Middle Click' },
+  mouseback: { mac: 'Mouse Back', other: 'Mouse Back' },
+  mouseforward: { mac: 'Mouse Forward', other: 'Mouse Forward' }
 }
 
 /** Split an accelerator into tokens; an empty token (from `++` or a trailing `+`) is the plus key. */
@@ -240,6 +246,23 @@ export function acceleratorFromEvent(event: KeyComboEvent, platform: KeyPlatform
   if (event.shiftKey) parts.push('Shift')
   if (!hasModifier && !standsAlone(key)) return null
   return [...parts, key].join('+')
+}
+
+/** `MouseEvent.button` for the buttons that can be a shortcut. Never left (0) or right (2). */
+const MOUSE_BUTTONS: Record<number, string> = { 1: 'MouseMiddle', 3: 'MouseBack', 4: 'MouseForward' }
+
+/** Whether an accelerator names a mouse button rather than a key. */
+export function isMouseAccelerator(accelerator: string): boolean {
+  const lower = accelerator.trim().toLowerCase()
+  return Object.values(MOUSE_BUTTONS).some((name) => name.toLowerCase() === lower)
+}
+
+/**
+ * The accelerator for a mouse button press (`MouseEvent.button`), or null for left, right and
+ * anything else. Modifiers are ignored: a mouse button is always a shortcut on its own.
+ */
+export function mouseButtonAccelerator(button: number): string | null {
+  return MOUSE_BUTTONS[button] ?? null
 }
 
 /** Caps for the modifiers currently held, shown live while recording. */
