@@ -948,7 +948,11 @@ pub fn platform_prelude() -> String {
         "arch": std::env::consts::ARCH,
         "debug": cfg!(debug_assertions)
     });
-    format!(";(function(){{try{{window.__KIMOCHI_PLATFORM__={info};}}catch(e){{}}}})();\n")
+    let prelude = format!(";(function(){{try{{window.__KIMOCHI_PLATFORM__={info};}}catch(e){{}}}})();\n");
+    // Windows: keep each webview's CSS pixel at the window's DPI scale (webview_scale.rs).
+    #[cfg(target_os = "windows")]
+    let prelude = prelude + crate::webview_scale::prelude();
+    prelude
 }
 
 /// A URL on the `capture:` protocol, as a page loads it on this OS.

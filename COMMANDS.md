@@ -199,7 +199,8 @@ proof that a background window's cursor visibly changed.
 On Windows the panels do not run the bridge (`useNativeHover` is off there): WebView2 keeps
 `:hover` and the cursor current in an inactive window by itself, and a second highlight from
 `GetCursorPos` disagreed with Chromium's whenever another pointer (a pen tablet in range) moved
-last. `panel_pointer` still answers there, measured from the client area: `GetWindowRect`
+last, or whenever the webview's scale differed from the window's DPI scale (see **Webview
+scale** under System). `panel_pointer` still answers there, measured from the client area: `GetWindowRect`
 includes the invisible resize borders (about 7 px a side at 100 %).
 
 `panel_cursor` is only called while the webview itself receives no real mouse events
@@ -1104,6 +1105,20 @@ posts through `postActivity` in `ui/native.js`, with its wording in `ui/scan-act
 | `system_state` | `() -> {frontmostApp, displays}` |
 | `app_quit` | `() -> ()` |
 | `open_screen_capture_preferences` | `() -> ()` |
+| `webview_scale_sync` | `(ratio) -> number \| null` |
+
+**Webview scale (Windows).** Everything native on Windows takes one CSS pixel to be the window's
+DPI scale (`GetDpiForWindow / 96`) in physical pixels: Tauri's logical sizes, the overlay's
+desktop points, the mouse hook's press positions and `panel_pointer`. WebView2 can render at a
+larger device scale factor than that (a reader on a 100 % display had every webview at
+`devicePixelRatio` 1.5, its outer size shrunk too, so not page zoom), and every point native
+handed a page then landed 1.5 times as far from the corner. The Windows `platform_prelude`
+reports each top-level page's `devicePixelRatio` to `webview_scale_sync` on load and on every
+change; native reads the page zoom WebView2 applies and sets the one that brings a CSS pixel
+back to the DPI scale (`webview_scale.rs`), recording `webview-scale` `{window, ratio, dpiScale,
+zoom, applied}` whenever it changes one. It returns the zoom in force (1 when nothing needed
+changing), and `null` on other systems, where it does nothing. Pages on Hachidori's loopback
+origin cannot reach it and keep WebView2's scale.
 
 Emits `system-suspend` and `system-resume` from
 `NSWorkspaceWillSleepNotification` / `NSWorkspaceDidWakeNotification` — the macOS
