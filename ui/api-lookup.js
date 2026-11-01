@@ -1,6 +1,6 @@
 /**
- * The Yomitan API pop-up (Kimochi's own) over the overlay's text: Shift-scan and click, through
- * the scanner the Log uses (`scan-text.ts`).
+ * The Yomitan API pop-up (Kimochi's own) over the overlay's text: Shift over a word, as with every
+ * dictionary engine, through the scanner the Log uses (`scan-text.ts`).
  *
  * The overlay is click-through and never the key window, so it sees neither the pointer nor
  * Shift for itself. Native reads both and the overlay replays them as `pointermove` events on
@@ -25,7 +25,7 @@ export async function apiTokenize(text) {
   return tokenizeText(text)
 }
 
-/** The controller's word cursor: look `term` up as if it had been clicked at (x, y). */
+/** The controller's word cursor: look `term` up at (x, y). */
 export async function lookupTerm(term, x, y, sentence) {
   if (!showTerm) throw Error('The Yomitan API pop-up is not ready')
   await showTerm({ term, cursorX: x, cursorY: y, anchor: null, sentence, focus: false })
@@ -112,8 +112,8 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     },
     tokenize: (text, scanLength) =>
       invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: scanLength } }),
-    show: ({ term, sentence, anchor, point, clicked }) =>
-      void open({ term, cursorX: point.screenX, cursorY: point.screenY, anchor, sentence, focus: clicked })
+    show: ({ term, sentence, anchor, point }) =>
+      void open({ term, cursorX: point.screenX, cursorY: point.screenY, anchor, sentence, focus: false })
   })
 
   const update = () => {
@@ -150,14 +150,6 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
       else scanner.stop()
     },
     true
-  )
-  document.addEventListener(
-    'click',
-    (event) => {
-      if (!apiMode() || !event.target?.closest?.(WORD_BOX)) return
-      event.stopPropagation()
-      scanner.lookUp(pointOf(event))
-    }
   )
 
   showTerm = open

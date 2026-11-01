@@ -3683,7 +3683,7 @@ async function startNoEngine() {
 
 /**
  * The Yomitan API: no host and nothing downloaded. Words are split and looked up through the
- * browser's Yomitan over its API, so the lookup hook (Shift-hover and click over the text) is all
+ * browser's Yomitan over its API, so the lookup hook (Shift over the text) is all
  * there is to install; the pointer replay and the controller see it as a ready dictionary.
  */
 async function startApiEngine() {

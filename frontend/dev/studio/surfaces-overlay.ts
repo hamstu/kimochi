@@ -146,7 +146,7 @@ export const OVERLAY_SURFACES: Surface[] = [
         title: 'Pointer and pop-up',
         when: inScene('overlay-words', ''),
         controls: [
-          { kind: 'text', param: 'hover', label: 'Rest the pointer at (x,y)', placeholder: '200,656', help: 'Or move the mouse over the text; Shift-click looks a word up.' },
+          { kind: 'text', param: 'hover', label: 'Rest the pointer at (x,y)', placeholder: '200,656', help: 'Or move the mouse over the text; hold Shift over a word to look it up.' },
           { kind: 'toggle', param: 'lookup', label: 'Pop-up open on the first line', on: '1' },
           THEME
         ]
