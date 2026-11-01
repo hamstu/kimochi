@@ -59,18 +59,47 @@ export interface ScanPointerInit {
  */
 export const REAL_POINTER_GRACE_MS = 250
 
+/** The modifiers a real pointer event reported; see `scanPointerInit`. */
+export interface HeldModifiers {
+  shiftKey?: boolean
+  ctrlKey?: boolean
+  altKey?: boolean
+  metaKey?: boolean
+}
+
+/**
+ * Whether the sample holds a modifier the last real event did not report.
+ *
+ * A real event is only the better answer if it knows what the native sample knows. On
+ * Windows it often does not: the overlay is not the window with the keyboard, so its
+ * events can report every modifier as up while the game has focus, even with Shift held.
+ * Muting the native sample then discards the only correct reading of the trigger key, and
+ * since the feed sends nothing new until the pointer moves or a modifier changes, the
+ * lookup never happens: moving onto a word with Shift already held did nothing. Where the
+ * real event does carry the modifiers (it reports the same keys), it still wins.
+ */
+function addsModifier(sample: PointerSample, real: HeldModifiers | null): boolean {
+  return (
+    (!!sample.shift && !real?.shiftKey) ||
+    (!!sample.ctrl && !real?.ctrlKey) ||
+    (!!sample.alt && !real?.altKey) ||
+    (!!sample.meta && !real?.metaKey)
+  )
+}
+
 /**
  * The event to dispatch for this sample, or `null` to dispatch nothing.
  *
  * `local` is the sample translated into the overlay's own coordinates; see
  * `toOverlayLocal`. It is passed in rather than computed here so that this stays one
  * decision — whether to speak at all — and the translation stays the one place that
- * knows where the window is.
+ * knows where the window is. `real` is the modifiers the last real pointer event carried.
  */
 export function scanPointerInit(
   sample: PointerSample,
   local: { x: number; y: number } | null,
-  sinceRealPointer: number
+  sinceRealPointer: number,
+  real: HeldModifiers | null = null
 ): ScanPointerInit | null {
   // No window, no coordinates, nothing to scan.
   if (!local) return null
@@ -80,7 +109,7 @@ export function scanPointerInit(
   // The dictionary floats above the overlay, so a point inside it is over the popup's
   // own text. Scanning through it would look up whatever the popup is covering.
   if (sample.blocked) return null
-  if (sinceRealPointer < REAL_POINTER_GRACE_MS) return null
+  if (sinceRealPointer < REAL_POINTER_GRACE_MS && !addsModifier(sample, real)) return null
   return {
     pointerType: 'mouse',
     isPrimary: true,
