@@ -407,7 +407,7 @@ try {
       assert(w, "lookup candidate");
       const popupState = () =>
         overlay.eval(
-          `(()=>{const h=document.querySelector('#tenten-ja-window'),e=h?.shadowRoot?.querySelector('.container:not(.hidden) .window');if(!e)return null;const r=e.getBoundingClientRect();return {text:e.innerText,html:h.shadowRoot.innerHTML,rect:r.toJSON(),x:screenX*${SCREEN_SCALE},y:screenY*${SCREEN_SCALE},dpr:devicePixelRatio,viewport:{width:innerWidth,height:innerHeight}}})()`,
+          `(()=>{const h=document.querySelector('#tenten-ja-window'),k=h?.shadowRoot?.querySelector('.container:not(.hidden)'),e=k?.querySelector('.window');if(!e)return null;const r=e.getBoundingClientRect();return {text:e.innerText,html:h.shadowRoot.innerHTML,rect:r.toJSON(),ghost:k.classList.contains('ghost'),x:screenX*${SCREEN_SCALE},y:screenY*${SCREEN_SCALE},dpr:devicePixelRatio,viewport:{width:innerWidth,height:innerHeight}}})()`,
         );
       const popup = await check("hover-opens-dictionary", async () => {
         desktop("key", 16, "down");
@@ -437,6 +437,16 @@ try {
       });
       await evidence("hover");
       await check("enter-popup-keeps-it-open", async () => {
+        // 10ten opens its pop-up as a "ghost": no pointer events, so a pointer moving into it
+        // falls through to the page and the lookup under it clears. It becomes hoverable 400 ms
+        // later, or, with hold-to-show keys set, when the key is released. Release Shift (the
+        // leave check below does not need it held) and wait for the interactive pop-up, as a
+        // reader does, before moving in.
+        desktop("key", 16, "up");
+        await until(async () => {
+          const p = await popupState();
+          return p && !p.ghost;
+        }, 3000);
         desktop(
           "mouse",
           Math.round((popup.x + popup.rect.x + 18) * popup.dpr),
@@ -457,8 +467,7 @@ try {
         return true;
       });
       await check("leave-clears-popup", async () => {
-        desktop("key", 16, "up");
-        // Clear of the pop-up and the word, wherever they are at this scale.
+        // Shift is already up. Clear of the pop-up and the word, wherever they are at this scale.
         desktop(
           "mouse",
           Math.round((popup.x + popup.rect.right) * popup.dpr + 200),

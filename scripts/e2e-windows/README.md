@@ -170,7 +170,9 @@ Quick Shot checks both complete current dialogue lines and rejects recognisable 
 text. It does not yet inspect the raw captured pixels or render a unique per-run dialogue token,
 so it cannot rule out every self-capture or stale-history failure.
 
-Known gaps: popup-entry/leave and fast-hover stability need further work; a 10ten popup-entry
-failure was observed in native runs. Multi-monitor, DPI, exclusive fullscreen,
+Known gaps: fast-hover stability needs further work. (The earlier 10ten popup-entry failure was
+the check moving into the pop-up while it was still 10ten's non-interactive "ghost", which
+lasts 400 ms, or until the hold-to-show key is released once one is set; the check now releases
+Shift and waits for the interactive pop-up.) Multi-monitor, DPI, exclusive fullscreen,
 NVIDIA recording, tray Quit, browser-process memory attribution and a full input-leak matrix
 remain outside this initial suite. Test every supported claim before broadening it.
