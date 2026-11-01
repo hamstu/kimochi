@@ -90,6 +90,21 @@ export const ENGINES = {
     // tab-manager.ts `#getStoredEnabledState`: 10ten stays off until its toolbar button is
     // pressed, and Kimochi has no toolbar. Seeded once, on the first load of the storage file.
     storageSeed: { local: { enabled: true } },
+    // Look-ups wait for Shift, as they do with Yomitan and Hachidori, instead of opening on bare
+    // hover (10ten's own default). Its "Show popup" keys (options page), stored by
+    // config.ts as `holdToShowKeys` ("Shift", "Alt+Ctrl"…; absent means hover). Once per
+    // storage file, new or old, and only where no key is set: one the reader chose is kept,
+    // and so is hover if they switch back to it afterwards.
+    storageMigrations: [
+      {
+        id: 'tenten-hold-shift',
+        apply: (store) => {
+          if (typeof store.sync.holdToShowKeys !== 'string' || !store.sync.holdToShowKeys) {
+            store.sync.holdToShowKeys = 'Shift'
+          }
+        }
+      }
+    ],
     // §5.4.1: `lastDbUpdateTime` (jpdict-state.ts) says the jpdict IndexedDB was downloaded; it
     // is stale when that database is empty or absent in this store.
     persistence: {

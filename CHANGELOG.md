@@ -11,6 +11,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Changed
+
+- 10ten now waits for <kbd>Shift</kbd> before looking a word up, like Yomitan and Hachidori, instead of opening its pop-up whenever the pointer crosses a word. It's set once when 10ten next starts; if you had already chosen a key in 10ten's settings, yours is kept, and you can go back to plain hover under **Show popup** in 10ten's settings.
+- With the Yomitan API, clicking a word in the overlay no longer looks it up: hold <kbd>Shift</kbd> over it, as with every other dictionary.
+
 ### Fixed
 
 - On macOS, clicking a source now brings its window to the front even when Kimochi isn't allowed under Accessibility. Before, the app's menu bar took over but its window stayed behind, however often you clicked, until you switched to it with ⌘Tab.

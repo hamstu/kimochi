@@ -94,6 +94,8 @@ export class Hub {
       this.store.sync = json(seed.sync ?? {})
       this.hostState = {}
       this.report({ check: 'ext-host-storage-load-failed', engine: this.engine, action: 'read-only', error: this.storageUnreadable })
+      // In memory only, like the seed: `persist` stands down for this session.
+      this.migrateStorage()
       return
     }
     const fresh = !file || typeof file !== 'object' || !('local' in file)
@@ -108,6 +110,30 @@ export class Hub {
       this.store.sync = file.sync ?? {}
       this.hostState = file.host ?? {}
     }
+    if (this.migrateStorage()) await this.persist().catch(() => {})
+  }
+
+  /**
+   * The descriptor's `storageMigrations`, each applied once to the file whatever its age: a
+   * seed reaches only a file created after it was added, and a default Kimochi changes has to
+   * reach the people who already have the engine too. Each is recorded by id in the host's own
+   * bookkeeping, so a reader who changes the setting back afterwards keeps their choice.
+   * Returns whether there is anything to write.
+   */
+  migrateStorage() {
+    const migrations = this.descriptor.storageMigrations ?? []
+    const done = new Set(Array.isArray(this.hostState.migrations) ? this.hostState.migrations : [])
+    const applied = []
+    for (const migration of migrations) {
+      if (done.has(migration.id)) continue
+      migration.apply(this.store)
+      done.add(migration.id)
+      applied.push(migration.id)
+    }
+    if (!applied.length) return false
+    this.hostState.migrations = [...done]
+    this.report({ check: 'ext-host-storage-migrated', engine: this.engine, migrations: applied })
+    return true
   }
 
   /**

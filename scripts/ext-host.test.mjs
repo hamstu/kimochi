@@ -2174,3 +2174,31 @@ test("from the Log, captureVisibleTab asks for the frame of the transcript line 
   await result(background, 'chrome.tabs.captureVisibleTab(1, { format: "jpeg" })')
   assert.equal(world.invoked.filter((i) => i.command === 'capture_frame_source').at(-1).args.scan, null)
 })
+
+// 10ten waits for Shift like the other engines (engines.js `storageMigrations`): set once per
+// storage file, new or existing, and never over a key the reader chose.
+test('10ten: Shift becomes the hold-to-show key for a new file and an existing one, once', async () => {
+  const fresh = await tentenSession()
+  assert.equal(fresh.world.storage.tenten.sync.holdToShowKeys, 'Shift')
+  assert.deepEqual(fresh.world.storage.tenten.host.migrations, ['tenten-hold-shift'])
+  assert.deepEqual(
+    { ...(await result(fresh.overlay, 'browser.storage.sync.get("holdToShowKeys")')) },
+    { holdToShowKeys: 'Shift' }
+  )
+
+  const existing = { tenten: { local: { enabled: true }, sync: { fontSize: 'large' }, host: { installed: { version: '1.28.0' } } } }
+  const updated = await tentenSession({ storage: existing })
+  assert.equal(updated.world.storage.tenten.sync.holdToShowKeys, 'Shift')
+  assert.equal(updated.world.storage.tenten.sync.fontSize, 'large')
+  assert.ok(updated.world.reports.some((r) => r.check === 'ext-host-storage-migrated'))
+
+  const chosen = { tenten: { local: { enabled: true }, sync: { holdToShowKeys: 'Alt+Ctrl' }, host: {} } }
+  const kept = await tentenSession({ storage: chosen })
+  assert.equal(kept.world.storage.tenten.sync.holdToShowKeys, 'Alt+Ctrl')
+
+  // Back to hover after the migration ran: that choice stands on the next launch.
+  const reverted = { tenten: { local: { enabled: true }, sync: {}, host: { migrations: ['tenten-hold-shift'] } } }
+  const later = await tentenSession({ storage: reverted })
+  assert.equal(later.world.storage.tenten.sync.holdToShowKeys, undefined)
+  assert.ok(!later.world.reports.some((r) => r.check === 'ext-host-storage-migrated'))
+})
