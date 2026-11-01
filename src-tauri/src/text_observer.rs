@@ -387,9 +387,37 @@ fn busy_error(name: &str, running_for: Option<Duration>) -> CaptureError {
     }
 }
 
-/// OneOCR's line annotations (`granularity: "line"`) as frame-pixel lines.
+/// OneOCR's lines as frame-pixel lines.
+///
+/// The worker puts each line in `groups` (`text`, `bbox: [left, top, right, bottom]`) and
+/// its words in `textAnnotations` as `fragment`s; a `line` annotation appears only for a line
+/// with no words. The groups are the lines, then; the `line` annotations are the fallback for a
+/// result without groups (an older worker), never both, so a line is not counted twice.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn annotation_lines(result: &serde_json::Value) -> Vec<TextLine> {
+    if let Some(groups) = result["groups"].as_array() {
+        let lines: Vec<TextLine> = groups
+            .iter()
+            .filter_map(|group| {
+                let text = group["text"].as_str()?.trim();
+                let bbox = group["bbox"].as_array()?;
+                let [left, top, right, bottom] = <[f64; 4]>::try_from(
+                    bbox.iter().map(|v| v.as_f64()).collect::<Option<Vec<_>>>()?,
+                )
+                .ok()?;
+                (!text.is_empty() && right > left && bottom > top).then(|| TextLine {
+                    text: text.to_string(),
+                    x: left,
+                    y: top,
+                    width: right - left,
+                    height: bottom - top,
+                })
+            })
+            .collect();
+        if !lines.is_empty() {
+            return lines;
+        }
+    }
     let Some(annotations) = result["textAnnotations"].as_array() else { return Vec::new() };
     annotations
         .iter()
@@ -713,7 +741,36 @@ mod tests {
     }
 
     #[test]
+    fn oneocr_groups_are_its_lines_and_fragments_are_not_counted_again() {
+        // What the worker sends for a line with words: the line as a group, each word a
+        // fragment, and no `line` annotation at all (oneocr-worker/src/main.rs `parse`).
+        let poly = |x: f64, y: f64| serde_json::json!({"vertices": [
+            {"x": x, "y": y}, {"x": x + 40.0, "y": y}, {"x": x + 40.0, "y": y + 20.0}, {"x": x, "y": y + 20.0}
+        ]});
+        let result = serde_json::json!({
+            "fullText": "今日は\n猫",
+            "groups": [
+                {"id": "oneocr-line-0", "text": "今日は", "bbox": [10.0, 30.0, 110.0, 50.0], "orientation": "horizontal", "linePolygons": [[[10.0, 30.0], [110.0, 30.0], [110.0, 50.0], [10.0, 50.0]]]},
+                {"id": "oneocr-line-1", "text": "猫", "bbox": [10.0, 60.0, 30.0, 80.0], "orientation": "horizontal", "linePolygons": [[[10.0, 60.0], [30.0, 60.0], [30.0, 80.0], [10.0, 80.0]]]},
+                {"id": "oneocr-line-2", "text": "  ", "bbox": [10.0, 90.0, 30.0, 110.0], "orientation": "horizontal", "linePolygons": []}
+            ],
+            "textAnnotations": [
+                {"description": "今日は\n猫", "granularity": "aggregate", "boundingPoly": poly(0.0, 0.0)},
+                {"description": "今日", "granularity": "fragment", "boundingPoly": poly(10.0, 30.0), "groupId": "oneocr-line-0"},
+                {"description": "は", "granularity": "fragment", "boundingPoly": poly(50.0, 30.0), "groupId": "oneocr-line-0"},
+                {"description": "猫", "granularity": "fragment", "boundingPoly": poly(10.0, 60.0), "groupId": "oneocr-line-1"}
+            ]
+        });
+        let lines = annotation_lines(&result);
+        assert_eq!(lines.len(), 2);
+        assert_eq!((lines[0].text.as_str(), lines[0].x, lines[0].y, lines[0].width, lines[0].height), ("今日は", 10.0, 30.0, 100.0, 20.0));
+        assert_eq!(lines[1].text.as_str(), "猫");
+        assert_eq!(join_lines(&lines), "今日は\n猫");
+    }
+
+    #[test]
     fn oneocr_line_annotations_become_lines_and_its_fragments_do_not() {
+        // A result without groups (an older worker): its `line` annotations are the lines.
         let poly = |x: f64, y: f64| serde_json::json!({"vertices": [
             {"x": x, "y": y}, {"x": x + 100.0, "y": y}, {"x": x + 100.0, "y": y + 20.0}, {"x": x, "y": y + 20.0}
         ]});
