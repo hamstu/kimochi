@@ -17,6 +17,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Cards added from a dictionary popup get their screenshot again when the dictionary saved only part of the line as the sentence (a short phrase cut from a longer line, say). The card now gets the most recent screenshot when no line matches its sentence.
 - With the overlay's grouped mode on, a card's sentence is the whole bubble again rather than only the line you looked the word up on, and a word that wraps onto the next line can now be looked up.
 - The bottoms of letters like g, y and p are no longer cut off in dropdowns and buttons, such as the OCR model and Dictionary pickers.
+- On Windows, a blank white box no longer sits near the top-left of the screen, over whatever is there, until you quit Kimochi. It was the dictionary pop-up's hidden window showing through, and it also turned up in screenshots and recordings when a game window was the source.
 
 ## [0.3.0] - 2026-10-31
 
