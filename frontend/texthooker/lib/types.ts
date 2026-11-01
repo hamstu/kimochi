@@ -90,6 +90,8 @@ export interface Settings {
   // Dedupe + line management (Bucket 3)
   dedupeDepth: number;
   cjkOnly: boolean;
+  /** With `cjkOnly`: also drop lines whose first or last letter is Roman (`latinAtEdge`). */
+  cjkOnlyLatinEdges: boolean;
   startMergeEnabled: boolean;
   startMergePrefixLen: number;
   maxLines: number;
@@ -185,6 +187,7 @@ export const SETTINGS_DEFAULTS: Settings = {
 
   dedupeDepth: 1,
   cjkOnly: false,
+  cjkOnlyLatinEdges: false,
   startMergeEnabled: false,
   startMergePrefixLen: 4,
   maxLines: 5000,

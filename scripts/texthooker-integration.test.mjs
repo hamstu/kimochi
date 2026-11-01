@@ -19,7 +19,7 @@ function bundle() {
     write: false,
     format: "esm",
     platform: "node",
-    alias: { "@texthooker": `${root}frontend/texthooker` },
+    alias: { "@texthooker": `${root}frontend/texthooker`, "@ui": `${root}ui` },
     plugins: [
       {
         name: "native-test-transport",
@@ -490,3 +490,30 @@ test("Sync's hold pauses the Log's writes, and its release reloads the merged li
   assert.equal(h.snapshot().sessions.sessions.find((s) => s.id === sid).name, "Renamed");
   assert.equal(linesFile(h, sid).lines.length, 2, "the merged file is kept");
 });
+
+test('Japanese only, stricter: lines that start or end in Roman letters are dropped too', async () => {
+  const lines = ['Save データ', '猫が好きです', 'Lv.5 勇者', 'もう一度Start', 'Options', '「はい」']
+  const history = lines.map((text, i) => entry(String(i + 1), 'Game', text))
+  const plain = await harness({
+    scannedTextHistory: history,
+    superTexthooker: { inputSource: 'ocr', dedupeDepth: 0, cjkOnly: true, tokenizeOnArrival: false }
+  })
+  await plain.drain()
+  // The plain filter drops only the line with no Japanese at all.
+  // Newest first in the snapshot; which lines got in is what matters here.
+  const texts = (h) => h.snapshot().lines.map((l) => l.text).toSorted()
+  assert.deepEqual(texts(plain), ['Save データ', '猫が好きです', 'Lv.5 勇者', 'もう一度Start', '「はい」'].toSorted())
+  const strict = await harness({
+    scannedTextHistory: history,
+    superTexthooker: { inputSource: 'ocr', dedupeDepth: 0, cjkOnly: true, cjkOnlyLatinEdges: true, tokenizeOnArrival: false }
+  })
+  await strict.drain()
+  assert.deepEqual(texts(strict), ['猫が好きです', '「はい」'].toSorted())
+  // Without Japanese only it does nothing on its own.
+  const off = await harness({
+    scannedTextHistory: history,
+    superTexthooker: { inputSource: 'ocr', dedupeDepth: 0, cjkOnly: false, cjkOnlyLatinEdges: true, tokenizeOnArrival: false }
+  })
+  await off.drain()
+  assert.equal(off.snapshot().lines.length, lines.length)
+})

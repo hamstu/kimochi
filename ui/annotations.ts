@@ -14,6 +14,8 @@
  * Retina captures.
  */
 
+import { dropsText, type JapaneseFilter } from './japanese-text.js'
+
 export interface Vertex {
   x?: number
   y?: number
@@ -354,13 +356,26 @@ export function groupTextAnnotations(
   })
 }
 
-/** The filtered word annotations the overlay renders, honouring the settings. */
+/**
+ * The filtered word annotations the overlay renders, honouring the settings: the small-text
+ * filter, then "Japanese only" (`grouping` carries the Log's `cjkOnly` settings, see
+ * `overlayGrouping` in overlay.js), judged per line or passage as the Log judges a line. Word
+ * fragments are left alone: a Roman word inside a Japanese line is not a line of its own.
+ */
 export function visibleAnnotations(
   annotations: Annotation[],
-  grouping: GroupingSettings
+  grouping: GroupingSettings & JapaneseFilter
 ): Annotation[] {
-  const words = wordAnnotations(annotations)
+  return byLanguage(sizedAnnotations(wordAnnotations(annotations), grouping), grouping)
+}
+
+function sizedAnnotations(words: Annotation[], grouping: GroupingSettings): Annotation[] {
   if (!grouping.filterSmallText || words.length <= 1) return words
   if (words.some(a=>a.granularity==='block')) return words
   return filterSmallTextAnnotations(words, grouping.filterSmallTextThreshold)
+}
+
+function byLanguage(words: Annotation[], filter: JapaneseFilter): Annotation[] {
+  if (!filter.japaneseOnly) return words
+  return words.filter((a) => a.granularity === 'fragment' || !dropsText(a.description, filter))
 }

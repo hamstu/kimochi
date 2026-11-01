@@ -25,6 +25,7 @@ import { AVAILABLE_VOICES } from '../../vendor/voices'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
 import { WithReaderSettings } from './ReaderSettingsProvider'
+import { JapaneseOnlyRows } from './JapaneseOnlyRows'
 import { NumberField } from './fields'
 
 const VOICE_OPTIONS = AVAILABLE_VOICES.map((voice) => ({ value: voice.id, label: voice.name }))
@@ -93,17 +94,7 @@ export function LogTab(): ReactNode {
             </SettingsSection>
 
             <SettingsSection title="Incoming lines">
-              <SettingsRow
-                label="Japanese only"
-                controlId="log-cjk"
-                description="Drop lines with no Japanese characters."
-              >
-                <Switch
-                  id="log-cjk"
-                  checked={settings.cjkOnly}
-                  onCheckedChange={(v) => void updateSettings({ cjkOnly: v })}
-                />
-              </SettingsRow>
+              <JapaneseOnlyRows idPrefix="log" />
               <SettingsRow
                 label="Skip repeats"
                 controlId="log-dedupe"

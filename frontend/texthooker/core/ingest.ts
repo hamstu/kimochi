@@ -8,7 +8,7 @@ import {
 import { getSettings } from "@texthooker/lib/settings";
 import { applyReplacements } from "./replacements";
 import { recordCharDelta, recordLine } from "./stats";
-import { hasCJK } from "@texthooker/lib/utils";
+import { dropsText, japaneseFilterOf } from "@ui/japanese-text";
 import { acceptsInput } from "../input-source";
 import type { Line, LineSource } from "@texthooker/lib/types";
 
@@ -29,7 +29,7 @@ export function preparedText(text: string): string | null {
  *   3. applyReplacements
  *   4. trim again
  *   5. drop if empty
- *   6. drop if cjkOnly && !hasCJK
+ *   6. drop if "Japanese only" drops it (ui/japanese-text.ts; the overlay applies the same)
  *   7. start-merge if enabled and prefix matches → replace last line
  *   8. drop if duplicate within last N
  *   9. append + stats
@@ -55,7 +55,7 @@ export const ingestText = async (
   if (!value) return;
 
   // 6 — CJK-only filter
-  if (settings.cjkOnly && !hasCJK(value)) return;
+  if (dropsText(value, japaneseFilterOf(settings))) return;
 
   // 7 — start-merge: streaming-VN-style continuation
   if (!ocr && settings.startMergeEnabled && lastLineText()) {

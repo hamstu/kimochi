@@ -32,6 +32,7 @@ import { PopupLeave } from './popup-leave.js'
 import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
 import { scanPointerInit } from './scan-input.js'
 import { visibleAnnotations } from './annotations.js'
+import { japaneseFilterOf } from './japanese-text.js'
 import { AutoScanner } from './autoscan.js'
 import { resolveWatcher, observerModeOf } from './watcher.js'
 import { SceneScanner } from './scene-scanner.js'
@@ -149,7 +150,17 @@ const state = {
   yomitan: { ready: false, error: null }
 }
 
-const setting = (key) => native.getSetting(key)
+/**
+ * A setting, as this window reads it. `textOverlayGrouping` comes with "Japanese only" folded in:
+ * that is the Log's setting (`superTexthooker.cjkOnly`, and its stricter `cjkOnlyLatinEdges`), and
+ * the overlay applies the same rule to what it draws (`visibleAnnotations`). Folding it in here
+ * means every reader of the grouping (drawing, click targets, GNOME's surface, what a scan
+ * publishes) filters the same way.
+ */
+const setting = (key) =>
+  key === 'textOverlayGrouping'
+    ? { ...(native.getSetting(key) ?? {}), ...japaneseFilterOf(native.getSetting('superTexthooker')) }
+    : native.getSetting(key)
 
 /** Which OCR engines this machine has (`platform_capabilities`), for choosing Auto OCR's watcher. */
 let ocrEngines = {}
