@@ -196,6 +196,13 @@ hover are **user-confirmed**. `panel_cursor`'s cursor shapes and first-gesture c
 resizing are **physically unverified** — `NSCursor.set` returning successfully is not
 proof that a background window's cursor visibly changed.
 
+On Windows the panels do not run the bridge (`useNativeHover` is off there): WebView2 keeps
+`:hover` and the cursor current in an inactive window by itself, and a second highlight from
+`GetCursorPos` disagreed with Chromium's whenever another pointer (a pen tablet in range) moved
+last, or whenever the webview's scale differed from the window's DPI scale (see **Webview
+scale** under System). `panel_pointer` still answers there, measured from the client area: `GetWindowRect`
+includes the invisible resize borders (about 7 px a side at 100 %).
+
 `panel_cursor` is only called while the webview itself receives no real mouse events
 (`CursorOwnership` in `frontend/shell/nativeCursor.ts`). Whenever it does (the key window,
 and Windows/Linux always) the webview sets the cursor on every move, and a second writer
@@ -485,7 +492,8 @@ host/popup-bridge.js), whose scanner opens Yomitan's nested popup.
 ### The Yomitan API pop-up stack
 
 `show_popover({term, cursorX, cursorY, anchor?, width, height, baseUrl, …, level?})` opens
-the API pop-up; `level` (0–4, default 0) is its place in a stack of windows,
+the API pop-up (`cursorX/Y` and `anchor` in desktop points: from a pointer event, through
+`desktopPointOf`, see Webview scale below); `level` (0–4, default 0) is its place in a stack of windows,
 `reader-popup`, then `reader-popup-2` … `reader-popup-5`, each built the first time the
 one below it shows. A word Shift-scanned inside the pop-up at one level opens the next;
 showing a level closes those above it. `hide_popover({level?})` closes a level and every
@@ -1098,6 +1106,29 @@ posts through `postActivity` in `ui/native.js`, with its wording in `ui/scan-act
 | `system_state` | `() -> {frontmostApp, displays}` |
 | `app_quit` | `() -> ()` |
 | `open_screen_capture_preferences` | `() -> ()` |
+| `webview_scale_sync` | `(ratio) -> {zoom, screenScale} \| null` |
+
+**Webview scale (Windows).** Everything native on Windows takes one CSS pixel to be the window's
+DPI scale (`GetDpiForWindow / 96`) in physical pixels: Tauri's logical sizes, the overlay's
+desktop points, the mouse hook's press positions and `panel_pointer`. WebView2 can render at a
+larger device scale factor than that (a reader on a 100 % display had every webview at
+`devicePixelRatio` 1.5, its outer size shrunk too, so not page zoom), and every point native
+handed a page then landed 1.5 times as far from the corner. The Windows `platform_prelude`
+reports each top-level page's `devicePixelRatio` to `webview_scale_sync` on load and on every
+change; native reads the page zoom WebView2 applies and sets the one that brings a CSS pixel
+back to the DPI scale (`webview_scale.rs`), recording `webview-scale` `{window, ratio, dpiScale,
+zoom, applied, screenScale}` whenever it changes one. It returns the zoom in force (1 when
+nothing needed changing) and `screenScale`, and `null` on other systems, where it does nothing.
+Pages on Hachidori's loopback origin cannot reach it and keep WebView2's scale.
+
+Page zoom corrects CSS pixels but not Chromium's screen coordinates: with WebView2 at 1.5 on a
+100 % display, `event.screenX/Y` and `window.screenX/Y` stay at two thirds of the desktop
+point, zoom or no zoom. `screenScale` is the factor that takes them to desktop points
+(`ratio / zoom / dpiScale`, 1.5 in that case, 1 when nothing is off); the prelude keeps the
+latest in `__KIMOCHI_PLATFORM__.screenScale`, and every page that hands native a desktop point
+read off a pointer event (`show_popover`'s `cursorX/Y` and `anchor`) goes through
+`ui/desktop-point.ts`'s `desktopPointOf(event)`, which applies it to trusted events and leaves
+the events native replays into a page (already desktop points) alone.
 
 Emits `system-suspend` and `system-resume` from
 `NSWorkspaceWillSleepNotification` / `NSWorkspaceDidWakeNotification` — the macOS
@@ -1134,14 +1165,25 @@ version, arch, session}, hardware: {cpu, cores, memoryBytes, gpus}, displays, ca
 {selected, engines, models, cloudAccess}, observer, dictionary: {selected, downloads}, session:
 {sourceKind, sourceFocus, autoOcr, scanning, status, overlayVisible, textOverlayVisible,
 overlayThrottled, frontmostApp}, settings, windows: [{label, visible, minimized, focused, scale,
-bounds}], verboseLogging, recentEvents}`, redacted: settings come from a fixed list of fields,
+bounds}], input, verboseLogging, recentEvents}`, redacted: settings come from a fixed list of fields,
 never the whole file; a key that names a secret (token, key, password, cookie, …) has its value
 replaced, and every string loses bearer tokens, JWTs, URL query strings, `key=` values, e-mail
 addresses, long opaque strings and the user's name in paths. `debug_bundle_save` asks where to
 save, then writes a zip of `report.md` (the page's Markdown, redacted again), `report.json` and
 the redacted last 512 KB of `evidence.jsonl`, `evidence.1.jsonl`, `auto-ocr-trace.jsonl`,
-`auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `debug_verbose_set` lasts until the app quits;
-while on, window focus changes (`window-focus`) and every scan (`scan`) are recorded too.
+`auto-ocr-trace.1.jsonl` and `sync-log.jsonl`. `input` is Windows only (`null` elsewhere):
+`{pointerDevices: [{type, product, maxContacts}], digitizer, maxTouches}`, the pens,
+touchscreens and Windows Ink tablets that reach the webviews as pointers of their own.
+`debug_verbose_set` lasts until the app quits, and each change emits `verbose-logging` (the new
+`bool`) so open windows start or stop their own diagnostics. While on, window focus changes
+(`window-focus`) and every scan (`scan`) are recorded too, and pointer diagnostics:
+`pointer-trace` from each panel and from the overlay while its region editor is open
+(`ui/pointer-diagnostics.js`: the window's geometry beside native's, pointer down/up/cancel,
+moves at 5 a second per pointer, hover changes, and each region-editor gesture with the pointer
+that drove it and the ones it ignored), and on Windows `pointer-press` for every press the mouse
+hook delivers to the overlay (screen and local point, and whether it came from a mouse, a pen or
+touch, or was injected). Elements are described by tag, classes, role and label, never their
+text.
 The shared `ocr_frame` path records `scan` phases `started`, `complete` and `failed`, with
 engine, frame id, dimensions, elapsed milliseconds, annotation/line counts and backend where
 available. It never includes pixels or recognized text. Debug capture status uses `capture.permission`;

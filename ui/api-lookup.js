@@ -8,6 +8,7 @@
  * real events arrive too while the pointer is over a word. Both are read here.
  */
 import { createScanner } from './scan-text.js'
+import { desktopPointOf } from './desktop-point.js'
 
 /** Opens the Yomitan API pop-up for a term at a desktop point, once installed. */
 let showTerm = null
@@ -136,12 +137,12 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     scanner.clearSelection()
   })
 
-  const pointOf = (event) => ({
-    x: event.clientX,
-    y: event.clientY,
-    screenX: event.screenX,
-    screenY: event.screenY
-  })
+  // Desktop points: a real event's screen coordinates need the webview's scale factor
+  // applied (Windows); a replayed one's are desktop points already.
+  const pointOf = (event) => {
+    const desktop = desktopPointOf(event)
+    return { x: event.clientX, y: event.clientY, screenX: desktop.x, screenY: desktop.y }
+  }
   window.addEventListener(
     'pointermove',
     (event) => {

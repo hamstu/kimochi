@@ -437,8 +437,9 @@ pub async fn show_popover(
         let _ = window.set_size(LogicalSize::new(win_w, win_h));
     }
 
-    // cursor_x / cursor_y arrive in desktop points (event.screenX/Y on macOS, where
-    // they coincide). Find the monitor that contains the cursor so we put the popover
+    // cursor_x / cursor_y arrive in desktop points (event.screenX/Y on macOS, where they
+    // coincide; on Windows through ui/desktop-point.ts, since WebView2 may render at a scale
+    // above the display's). Find the monitor that contains the cursor so we put the popover
     // on the same physical display the user is reading on.
     let (tx, rx) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {

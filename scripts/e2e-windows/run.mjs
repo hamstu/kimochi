@@ -89,7 +89,7 @@ const truth = async () =>
 const state = () => invoke(overlay, "snapshot");
 async function clearUiSource(p) {
   const r = await p.eval(
-    `(()=>{const e=document.querySelector('button.src-card');if(!e)return null;const r=e.getBoundingClientRect();return {x:(screenX+r.x+20)*devicePixelRatio,y:(screenY+r.y+20)*devicePixelRatio}})()`,
+    `(()=>{const e=document.querySelector('button.src-card');if(!e)return null;const r=e.getBoundingClientRect();return {x:(screenX*${SCREEN_SCALE}+r.x+20)*devicePixelRatio,y:(screenY*${SCREEN_SCALE}+r.y+20)*devicePixelRatio}})()`,
   );
   if (r) {
     desktop("mouse", Math.round(r.x), Math.round(r.y));
@@ -218,9 +218,14 @@ async function focusGame() {
   const w = JSON.parse(desktop("windows")).find((w) => w.hwnd === t.hwnd);
   assert(w.foreground, "game is foreground");
 }
+// Desktop points from a page's screen coordinates. Chromium's screenX/Y are at WebView2's own
+// device scale, which Windows Text size raises above the display's (the page's CSS pixels are
+// zoomed back, screenX is not); native reports the factor (COMMANDS.md, "Webview scale"),
+// 1 wherever nothing is off. A physical point is (screenX * this + x) * devicePixelRatio.
+const SCREEN_SCALE = "(window.__KIMOCHI_PLATFORM__?.screenScale||1)";
 async function rendered() {
   return overlay.eval(
-    `({x:screenX,y:screenY,dpr:devicePixelRatio,words:[...document.querySelectorAll('.ocr-word')].map(e=>({text:e.querySelector('.ocr-word-current')?.textContent,rect:e.getBoundingClientRect().toJSON(),vertical:e.classList.contains('ocr-vertical')}))})`,
+    `({x:screenX*${SCREEN_SCALE},y:screenY*${SCREEN_SCALE},dpr:devicePixelRatio,words:[...document.querySelectorAll('.ocr-word')].map(e=>({text:e.querySelector('.ocr-word-current')?.textContent,rect:e.getBoundingClientRect().toJSON(),vertical:e.classList.contains('ocr-vertical')}))})`,
   );
 }
 async function evidence(name) {
@@ -367,7 +372,7 @@ try {
       // A scan with Auto OCR on starts the overlay over (force rescan): wait for the words.
       await until(async () => (await rendered()).words.length > 2, 30000);
       const chars = await overlay.eval(
-        `(()=>{const out=[];for(const root of document.querySelectorAll('.ocr-word-current')){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){let offset=0;for(const c of node.textContent){const r=document.createRange();r.setStart(node,offset);offset+=c.length;r.setEnd(node,offset);const b=r.getBoundingClientRect();const font=parseFloat(getComputedStyle(node.parentElement).fontSize);if(b.width&&b.height)out.push({c,cx:(screenX+b.x+b.width/2)*devicePixelRatio,cy:(screenY+b.y+b.height/2)*devicePixelRatio,fontSize:font*devicePixelRatio});}}}return out})()`,
+        `(()=>{const out=[];for(const root of document.querySelectorAll('.ocr-word-current')){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){let offset=0;for(const c of node.textContent){const r=document.createRange();r.setStart(node,offset);offset+=c.length;r.setEnd(node,offset);const b=r.getBoundingClientRect();const font=parseFloat(getComputedStyle(node.parentElement).fontSize);if(b.width&&b.height)out.push({c,cx:(screenX*${SCREEN_SCALE}+b.x+b.width/2)*devicePixelRatio,cy:(screenY*${SCREEN_SCALE}+b.y+b.height/2)*devicePixelRatio,fontSize:font*devicePixelRatio});}}}return out})()`,
       );
       const t = await truth();
       const metrics = alignmentMetrics(t, chars);
@@ -402,15 +407,19 @@ try {
       assert(w, "lookup candidate");
       const popupState = () =>
         overlay.eval(
-          `(()=>{const h=document.querySelector('#tenten-ja-window'),e=h?.shadowRoot?.querySelector('.container:not(.hidden) .window');if(!e)return null;const r=e.getBoundingClientRect();return {text:e.innerText,html:h.shadowRoot.innerHTML,rect:r.toJSON(),x:screenX,y:screenY,dpr:devicePixelRatio,viewport:{width:innerWidth,height:innerHeight}}})()`,
+          `(()=>{const h=document.querySelector('#tenten-ja-window'),e=h?.shadowRoot?.querySelector('.container:not(.hidden) .window');if(!e)return null;const r=e.getBoundingClientRect();return {text:e.innerText,html:h.shadowRoot.innerHTML,rect:r.toJSON(),x:screenX*${SCREEN_SCALE},y:screenY*${SCREEN_SCALE},dpr:devicePixelRatio,viewport:{width:innerWidth,height:innerHeight}}})()`,
         );
       const popup = await check("hover-opens-dictionary", async () => {
         desktop("key", 16, "down");
-        desktop(
-          "mouse",
-          Math.round((d.x + w.rect.x + Math.min(12, w.rect.width / 2)) * d.dpr),
-          Math.round((d.y + w.rect.y + w.rect.height / 2) * d.dpr),
-        );
+        const wx = Math.round((d.x + w.rect.x + Math.min(12, w.rect.width / 2)) * d.dpr);
+        const wy = Math.round((d.y + w.rect.y + w.rect.height / 2) * d.dpr);
+        // A hand arrives in more than one step. Landing on the word in one jump from far away
+        // opened 10ten only one time in four on the Arcade PC (the replayed and the real move
+        // then reach it within the same instant); a short second move, which a real approach
+        // ends with anyway, opened it every time.
+        desktop("mouse", wx - 2, wy - 1);
+        await sleep(120);
+        desktop("mouse", wx, wy);
         const pop = await until(popupState, 5000);
         assert(
           pop.text.includes("回想") ||
@@ -677,15 +686,14 @@ try {
       return true;
     });
     await evidence("quickshot-escape");
-    await check("quickshot-second-press-is-noop", async () => {
+    await check("quickshot-second-press-closes", async () => {
       desktop("chord", 16, 119);
       await until(selecting, 5000);
+      // Pressed again before a box is drawn, the shortcut closes the editor like Esc (0.3.0;
+      // before that it was ignored, #25).
       desktop("chord", 16, 119);
-      await sleep(400);
-      assert(await selecting(), "second shortcut is currently ignored (#25)");
-      desktop("chord", 27);
       await until(async () => !(await selecting()), 5000);
-      return { reproduced: true };
+      return true;
     });
     await check("quickshot-draw-and-scan", async () => {
       const prior = (await state()).scan?.id;

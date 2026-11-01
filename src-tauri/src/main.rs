@@ -55,6 +55,7 @@ mod text_observer;
 mod texthooker;
 mod tray;
 mod updater;
+mod webview_scale;
 
 use kimochi_capture::*;
 use serde::{Deserialize, Serialize};
@@ -3007,6 +3008,7 @@ fn main() {
             debug_report::debug_report,
             debug_report::debug_bundle_save,
             debug_report::debug_verbose_set,
+            webview_scale::webview_scale_sync,
             storage_load,
             storage_save,
             storage_backup,

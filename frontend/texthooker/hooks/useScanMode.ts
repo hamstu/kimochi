@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createScanner, type ScanPoint } from "@ui/scan-text";
+import { desktopPointOf } from "@ui/desktop-point";
 import { buildAnkiConfigForPopover } from "@texthooker/lib/ankiConfig";
 import { getSettings } from "@texthooker/lib/settings";
 
@@ -92,12 +93,9 @@ export function useScanMode(enabled = true) {
     };
     const onBlur = () => setShift(false);
     const onMouseMove = (e: MouseEvent) => {
-      pointer = {
-        x: e.clientX,
-        y: e.clientY,
-        screenX: e.screenX,
-        screenY: e.screenY,
-      };
+      // Desktop points, like the pop-ups' rectangles and what show_popover takes.
+      const desktop = desktopPointOf(e);
+      pointer = { x: e.clientX, y: e.clientY, screenX: desktop.x, screenY: desktop.y };
       // event.shiftKey is the source of truth: keydown can be missed when the
       // window doesn't have focus, but mousemove carries the modifier state.
       if (e.shiftKey !== shift) setShift(e.shiftKey);

@@ -8,6 +8,7 @@ import { padButtons, startRegionPad } from './region-pad.js'
 import { buttonName } from './controller-input.js'
 import { createPopupFocus, YOMITAN_FOCUS } from './popup-focus.js'
 import { ReadingHold } from './reading-hold.js'
+import { installPointerDiagnostics, pointerTrace, pointerTracing } from './pointer-diagnostics.js'
 import { PopupLeave } from './popup-leave.js'
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
@@ -1555,10 +1556,24 @@ const POINTER_POLL_MS = 30
  * keeps the overlay where it is. `onDisplay` returns the box to open with on the new display.
  */
 async function followPointer(selector, onDisplay) {
+  const windows = window.__KIMOCHI_PLATFORM__?.os === 'windows'
+  let tracedAt = -Infinity
   while (selector.active) {
-    // Mid-drag the editor has the pointer itself and nothing here can change; stay out of the
-    // way of its frames.
+    // Mid-drag the editor has the pointer itself. On Windows the webview's mouse moves can stop
+    // while the hook holds the button (a pen in range or a touch takes its input), so the native
+    // pointer is offered too; the editor uses it only once its own pointer has gone quiet.
     if (selector.dragging) {
+      if (windows && state.origin) {
+        const at = await native.pointerLocation().catch(() => null)
+        if (at && selector.dragging) {
+          const local = { x: at.x - state.origin.x, y: at.y - state.origin.y }
+          const used = selector.dragAt?.(local) ?? false
+          if (pointerTracing() && (used || performance.now() - tracedAt > 200)) {
+            tracedAt = performance.now()
+            pointerTrace('overlay', { type: 'native-pointer', local, used })
+          }
+        }
+      }
       await new Promise((done) => setTimeout(done, POINTER_POLL_MS))
       continue
     }
@@ -1672,7 +1687,8 @@ async function editRegion(confirmLabel, { onDisplay, area, initial, picture, alt
       accent,
       title,
       touch: gamescope || matchMedia('(pointer: coarse)').matches,
-      pad: usePad ? { confirm: buttonName(buttons.confirm) ?? 'A', cancel: buttonName(buttons.back) ?? 'B' } : null
+      pad: usePad ? { confirm: buttonName(buttons.confirm) ?? 'A', cancel: buttonName(buttons.back) ?? 'B' } : null,
+      onTrace: (record) => pointerTrace('region-editor', record)
     })
     const running = selector.start()
     onStart?.(selector)
@@ -3571,6 +3587,11 @@ function noteScanFeed(payload, dispatched) {
 // The pointer, including where this window cannot see it: it drives the proximity
 // effect on scanned words, and the scan itself. See ui/scan-input.ts for why the
 // scan arrives this way rather than from an event addressed to this window.
+// With verbose logging on, the region editor's pointer events (Quick Shot, Select region) go to
+// the diagnostics log. Only while it is open: otherwise this window sees the scan feed's
+// synthetic moves all the time, which say nothing about the reader's devices.
+installPointerDiagnostics('overlay', { label: 'overlay', active: () => state.regionSelecting })
+
 await native.listen('pointer', ({ payload }) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') gnomeOverlay?.pointer(payload)
   if (!state.origin || typeof payload?.x !== 'number') return

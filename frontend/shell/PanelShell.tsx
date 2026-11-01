@@ -9,7 +9,9 @@
  *    shared state from the bridge;
  *  - dragging calls `panel(label, 'drag')` rather than relying on `-webkit-app-region: drag`, so
  *    the first click in an INACTIVE window still starts a drag (the POC's user-confirmed fix);
- *  - `useNativeHover()` supplies hover and cursor feedback while the window is inactive.
+ *  - `useNativeHover()` supplies hover and cursor feedback while the window is inactive, except on
+ *    Windows (see below);
+ *  - with verbose logging on, pointer diagnostics go to the log (`ui/pointer-diagnostics.js`).
  */
 import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } from 'react'
 import { Minus, Pin, PinOff, Volume2, VolumeX, X } from 'lucide-react'
@@ -20,6 +22,8 @@ import { useNativeHover } from './useNativeHover'
 import { TitleBarSlotContext } from './titleBarSlot'
 import { useSetting } from '../bridge/useSetting'
 import { recordingAudio } from '@ui/sounds'
+import { installPointerDiagnostics } from '@ui/pointer-diagnostics.js'
+import { useCapabilities } from '../bridge/capabilities'
 
 interface PanelShellProps {
   label: string
@@ -48,8 +52,13 @@ export default function PanelShell({
   const [sentenceAudio] = useSetting<unknown>('sentenceAudio', null)
   const recording = recordingAudio(sentenceAudio)
 
-  useNativeHover()
+  const capabilities = useCapabilities()
+  // Not on Windows: WebView2 keeps `:hover` and the cursor up to date in an inactive window
+  // itself, so the bridge only adds a second highlight, and a wrong one whenever the system cursor
+  // and the page's last pointer differ (a pen tablet in range is a pointer of its own).
+  useNativeHover(capabilities.os !== 'windows')
   usePanelController(label)
+  useEffect(() => installPointerDiagnostics(`panel:${label}`, { label }), [label])
 
   useEffect(() => {
     document.title = title

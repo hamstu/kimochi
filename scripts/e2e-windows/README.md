@@ -99,9 +99,9 @@ Remove-Item Env:KIMOCHI_E2E_HIDDEN_MS
 The lifecycle test catches the bug addressed by draft #29; quit catches #30; Quick Shot's Escape
 case catches #32. The lifecycle case also checks fresh overlay alignment after moving/resizing
 and rejects silent scanner suspension while minimised. Running against unfixed main is expected
-to expose these failures. A second
-Quick Shot shortcut currently does nothing; its assertion records that reproduction, rather
-than claiming cancellation works. Never silently combine fixes: record the binary's Git SHA
+to expose these failures. A second Quick Shot shortcut before a box is drawn closes the editor
+like Esc (since 0.3.0; it was ignored before, #25), and its check asserts that. Never silently
+combine fixes: record the binary's Git SHA
 and any extra test patches in your handoff.
 
 For GPU comparison, quit first, set `KIMOCHI_E2E_DISABLE_GPU=1`, then launch with run.mjs again.
@@ -130,9 +130,12 @@ its reason. `Desktop.exe guiinfo` prints the foreground thread's GUI state (menu
 
 ### Traps
 
-- **Scale.** Page coordinates are CSS pixels: `(screenX + x) * devicePixelRatio` is the physical
-  point, never `screenX + x * devicePixelRatio` (the two agree only at 100 %). A fixed point such as
-  "move the pointer to 600, 420" can land inside a pop-up at 200 %; derive points from what is on screen.
+- **Scale.** Page coordinates are CSS pixels: `(screenX * screenScale + x) * devicePixelRatio` is
+  the physical point, never `screenX + x * devicePixelRatio` (the two agree only at 100 %).
+  `screenScale` is `__KIMOCHI_PLATFORM__.screenScale` (1 unless Windows Text size has WebView2
+  rendering above the display's scale, when `screenX` is that much too small; COMMANDS.md,
+  "Webview scale"). A fixed point such as "move the pointer to 600, 420" can land inside a pop-up
+  at 200 %; derive points from what is on screen.
 - **Never tap Alt to get foreground rights**: it starts the menu loop that #36 removed from Kimochi's
   windows but not from other apps. `Desktop.exe focus` attaches thread input instead.
 - **Leftover fake games** under or over the game under test swallow clicks. The runner checks the
