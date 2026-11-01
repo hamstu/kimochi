@@ -117,7 +117,19 @@ pub fn card_score(line: &str, texts: &[&str]) -> u8 {
     if line.is_empty() {
         return 0;
     }
-    texts.iter().map(|t| normalize(t)).filter(|t| !t.is_empty()).map(|t| similarity(&line, &t)).max().unwrap_or(0)
+    let texts: Vec<String> = texts.iter().map(|t| normalize(t)).filter(|t| !t.is_empty()).collect();
+    let score = texts.iter().map(|t| similarity(&line, t)).max().unwrap_or(0);
+    if score > 0 {
+        return score;
+    }
+    // A sentence cut short (the overlay's runs, or a dictionary's own cut) is too little to be
+    // `sentence_sized`, but a field holding the card's word with more of the line around it is
+    // the line's own text, not just the word: 原始の~ (with 原始 in another field) in 原始の~リズム~♪.
+    let word_in_context = texts.iter().any(|t| {
+        line.contains(t.as_str())
+            && texts.iter().any(|w| w.chars().count() < t.chars().count() && t.contains(w.as_str()))
+    });
+    u8::from(word_in_context)
 }
 
 /// Text as compared: no markup, no furigana brackets' readings, no spaces.
@@ -160,6 +172,16 @@ pub fn similarity(line: &str, card: &str) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cut_short_sentence_matches_when_it_holds_the_word_with_more_of_the_line() {
+        let line = "原始の~リズム~♪";
+        assert_eq!(card_score(line, &["原始の~", "原始"]), 1);
+        // The word alone is no match: it would pick any line using it.
+        assert_eq!(card_score(line, &["原始", "原始"]), 0);
+        // A field from somewhere else holding the word is no match either.
+        assert_eq!(card_score(line, &["原始時代", "原始"]), 0);
+    }
 
     fn line(uid: &str, text: &str, ts: f64) -> Line {
         Line {

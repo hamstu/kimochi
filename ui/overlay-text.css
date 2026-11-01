@@ -218,7 +218,17 @@
 .ocr-group[data-lit]::after {
   opacity: 0;
 }
+/* The card's padding box, pinned to its corner (the card centres its children), holding the
+   runs as one inline flow from its start: top-left, or top-right for vertical-rl. Absolute
+   itself is fine: Yomitan's scan ends at its edges, which are the cluster's. */
 .ocr-group .ocr-runs {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 0;
+  line-height: 0;
+  text-align: left;
+  white-space: nowrap;
   opacity: 0;
   transition: opacity var(--ocr-fade) ease-out;
 }
@@ -228,9 +238,13 @@
 .ocr-group.scanning {
   cursor: default;
 }
+/* Zero-size inline blocks offset to their lines, as a word box's are (`.ocr-word .ocr-run`). */
 .ocr-group .ocr-run {
-  position: absolute;
-  box-sizing: border-box;
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 0;
+  vertical-align: top;
 }
 
 /* --- the text ---------------------------------------------------------------------------- */

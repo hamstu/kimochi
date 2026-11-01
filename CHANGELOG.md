@@ -14,6 +14,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - On macOS, clicking a source now brings its window to the front even when Kimochi isn't allowed under Accessibility. Before, the app's menu bar took over but its window stayed behind, however often you clicked, until you switched to it with ⌘Tab.
+- Cards added from a dictionary popup get their screenshot again when the dictionary saved only part of the line as the sentence (a short phrase cut from a longer line, say). The card now gets the most recent screenshot when no line matches its sentence.
+- With the overlay's grouped mode on, a card's sentence is the whole bubble again rather than only the line you looked the word up on, and a word that wraps onto the next line can now be looked up.
 
 ## [0.3.0] - 2026-10-31
 
