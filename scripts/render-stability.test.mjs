@@ -310,3 +310,25 @@ test("a grouped region combines its boxes' readings for Blend: top from the top 
   assert.equal(region.style['--ocr-surface-bottom'], '#1c243c')
   renderer.destroy()
 })
+
+test("a group's lines are one inline flow, so a lookup's sentence and words run on from line to line", () => {
+  // An absolutely positioned run ends Yomitan's scan: each line (or piece of one) was a sentence
+  // of its own on the card, and a word wrapped onto the next line could not be found.
+  const host = element(),
+    renderer = new TextOverlayRenderer(host)
+  renderer.render(
+    view([word('ダッシュで', 10), word('走り回って', 42)], {
+      grouping: { enabled: true, filterSmallText: false, proximityThreshold: 1000 }
+    })
+  )
+  const body = host.children[0].querySelector('.ocr-runs')
+  assert.ok(body.style.width && body.style.height, 'the flow is laid in the card\'s padding box')
+  const runs = body.children.filter((child) => child.className === 'ocr-run')
+  assert.ok(runs.length >= 2)
+  for (const run of runs) {
+    assert.equal(run.style.width, undefined, 'a run is a zero-size inline block, not a sized absolute box')
+    assert.equal(run.style.height, undefined)
+    assert.ok(run.style.left && run.style.top && run.style.fontSize)
+  }
+  renderer.destroy()
+})

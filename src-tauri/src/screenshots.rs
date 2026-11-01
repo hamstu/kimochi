@@ -35,6 +35,9 @@ const KEEP_QUALITY: u8 = 85;
 /// A card's picture: enough to recognise the scene without bloating the collection.
 const CARD_EDGE: u32 = 1280;
 const CARD_QUALITY: u8 = 80;
+/// How recent the newest screenshot must be to go on a card no scan's text matches: a card
+/// mined minutes after the line was read still gets it, one mined from elsewhere much later not.
+const NEWEST_FOR_CARD_MS: f64 = 10.0 * 60.0 * 1000.0;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -235,6 +238,15 @@ impl Screenshots {
         }
         best.map(|(shot, _)| shot.clone())
     }
+
+    /// The screenshot a new card gets: the scan it names, else the scan its text matches, else
+    /// the newest one when it was taken in the last few minutes. A dictionary's sentence is often
+    /// only part of the scan's text (cut at a line or a run of the overlay), too little to match.
+    pub fn pick_for_card(&self, fields: &[(String, String)], scan: Option<&str>, now: f64) -> Option<Shot> {
+        scan.and_then(|s| self.get(s))
+            .or_else(|| self.for_card(fields))
+            .or_else(|| self.newest().filter(|shot| now - shot.at <= NEWEST_FOR_CARD_MS))
+    }
 }
 
 /// `scan`'s picture as a card gets it: the source's Anki crop area when it has one, no larger
@@ -418,9 +430,8 @@ fn spawn_attach(app: &tauri::AppHandle, anki: crate::sentence_audio::Anki, note_
     let service = service.inner().clone();
     let config = service.config();
     let field = field.filter(|f| !f.trim().is_empty()).unwrap_or(config.field);
-    let shot = scan.and_then(|s| service.get(&s)).or_else(|| service.for_card(&fields));
-    let Some(shot) = shot else {
-        service.note(true, "The card's sentence is not from a scan with a screenshot, so none was added.");
+    let Some(shot) = service.pick_for_card(&fields, scan.as_deref(), now_ms()) else {
+        service.note(true, "No recent screenshot matches the card, so none was added.");
         return;
     };
     let app = app.clone();
@@ -600,6 +611,12 @@ mod tests {
         assert!(!dir.join("shots/shot-0.jpg").exists());
         let card = vec![("Sentence".to_string(), "<b>猫</b>が好きです。".to_string())];
         assert_eq!(store.for_card(&card).unwrap().scan, "s5");
+        // A sentence cut too short to match gets the newest shot, while it is recent.
+        let cut = vec![("Sentence".to_string(), "原始の~".to_string()), ("Expression".to_string(), "原始".to_string())];
+        assert!(store.for_card(&cut).is_none());
+        assert_eq!(store.pick_for_card(&cut, None, 11.0).unwrap().scan, "s11");
+        assert!(store.pick_for_card(&cut, None, 11.0 + NEWEST_FOR_CARD_MS + 1.0).is_none());
+        assert_eq!(store.pick_for_card(&cut, Some("s4"), 11.0).unwrap().scan, "s4");
         // Reopened from disk.
         let again = Screenshots::open(dir.join("shots"), Arc::new(Settings::load(dir.join("settings.json"))));
         assert_eq!(again.list().len(), 10);

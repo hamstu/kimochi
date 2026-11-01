@@ -1013,12 +1013,22 @@ export class TextOverlayRenderer {
       const runs = runsOf[index]
       const body = document.createElement('span')
       body.className = 'ocr-runs'
-      // The card's padding box, which its runs are absolutely positioned in.
+      // The card's padding box, which its text is laid in. The runs are inline, one flow from
+      // the first to the last, as a word box's lines are: an absolutely positioned run ends
+      // Yomitan's scan (two newlines), so each line, or piece of a line cut at a gap, would be
+      // a sentence of its own and no word could run on past a line's end. Each run is offset
+      // from where the flow starts: the box's top-left, or top-right for vertical-rl.
       const corner = {
         x: rect.x - GROUP_PADDING_X + GROUP_BORDER,
         y: rect.y - GROUP_PADDING_Y + GROUP_BORDER
       }
-      for (const run of runs) body.append(runElement(run, corner, vertical, false))
+      const inner = {
+        width: rect.width + GROUP_PADDING_X * 2 - GROUP_BORDER * 2,
+        height: rect.height + GROUP_PADDING_Y * 2 - GROUP_BORDER * 2
+      }
+      Object.assign(body.style, { width: `${inner.width}px`, height: `${inner.height}px` })
+      const flow = { x: vertical ? corner.x + inner.width : corner.x, y: corner.y }
+      for (const run of runs) body.append(runElement(run, flow, vertical, true))
       const lookahead = document.createElement('span')
       lookahead.className = 'ocr-lookahead'
       lookahead.textContent = '' // Semantic groups must not extend a lookup into another bubble.
