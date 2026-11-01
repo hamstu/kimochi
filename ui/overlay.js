@@ -3534,11 +3534,19 @@ await native.listen('source-focus', ({ payload }) => {
  * rather than searching the same point twice.
  */
 let lastRealPointer = -Infinity
+/** The modifiers that event reported: on Windows, none while the game has the keyboard. */
+let lastRealModifiers = null
 window.addEventListener(
   'pointermove',
   (event) => {
     if (!event.isTrusted) return
     lastRealPointer = performance.now()
+    lastRealModifiers = {
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey
+    }
     // The box under a real pointer is lit before the engine sees the event (`flushPointer`):
     // this listener is the window's first, registered before any content script.
     if (extensionHosted && !controller.drivesLookups) {
@@ -3587,7 +3595,12 @@ await native.listen('pointer', ({ payload }) => {
   // While the controller is reading, the pointer must not steer Yomitan: an idle mouse resting
   // somewhere else would otherwise close the controller's popup.
   if (!state.yomitan.ready || controller.drivesLookups) return
-  const init = scanPointerInit(payload, local, performance.now() - lastRealPointer)
+  const init = scanPointerInit(
+    payload,
+    local,
+    performance.now() - lastRealPointer,
+    lastRealModifiers
+  )
   // Over Yomitan's own popup the sample is the popup's: its scanner opens a nested popup for the
   // word under it. The page's scanner would only ignore it.
   if (init && !extensionHosted && replayPopupPointer?.(livePopups, local.x, local.y, init)) {
