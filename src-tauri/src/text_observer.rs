@@ -275,6 +275,8 @@ pub struct EngineObserver {
     previous: Option<crate::incremental::Previous>,
     /// Incremental looks since the last whole read.
     partial_looks: u32,
+    /// The backend of the first read has been logged (`watcher-backend`).
+    backend_logged: bool,
 }
 
 impl EngineObserver {
@@ -298,6 +300,7 @@ impl EngineObserver {
             regions,
             previous: None,
             partial_looks: 0,
+            backend_logged: false,
         }
     }
 
@@ -454,8 +457,12 @@ impl TextObserver for EngineObserver {
         if let Err(reason) = (self.gate)(&self.app) {
             return Err(CaptureError::new("unsupported", unavailable_detail(self.name, &reason)));
         }
+        let audit = std::env::var_os("KIMOCHI_CAPTURE_AUDIT").is_some();
+        let clock = Instant::now();
         let key = frame_key(frame);
+        let key_ms = clock.elapsed().as_secs_f64() * 1000.0;
         let image = rgb_image(frame)?;
+        let convert_ms = clock.elapsed().as_secs_f64() * 1000.0 - key_ms;
         let (engine, name) = (self.engine, self.name);
         // Only what changed since the last reading, unless it is time for a whole one.
         // `KIMOCHI_WATCH_FULL` reads every look whole, for comparing the two.
@@ -468,8 +475,29 @@ impl TextObserver for EngineObserver {
             }
             _ => None,
         };
+        let regions = plan.as_ref().map(|p| p.regions.clone());
+        let plan_ms = clock.elapsed().as_secs_f64() * 1000.0 - key_ms - convert_ms;
+        let submitted = Instant::now();
         match self.worker()?.submit(key, Request { image, plan }, timeout) {
             Outcome::Ready(Ok(read)) => {
+                // Per-look diagnostics with the capture audit: what was read, and where the time went
+                // besides the engine (hashing the frame, converting it, planning, the worker round trip).
+                if audit {
+                    eprintln!(
+                        "kimochi: {}",
+                        serde_json::json!({"check": "watch-look", "engine": engine, "partial": read.partial,
+                            "regions": regions, "ms": read.duration_ms.round(), "lines": read.lines.len(),
+                            "keyMs": key_ms.round(), "convertMs": convert_ms.round(), "planMs": plan_ms.round(),
+                            "submitMs": (submitted.elapsed().as_secs_f64() * 1000.0).round()})
+                    );
+                }
+                if !self.backend_logged {
+                    self.backend_logged = true;
+                    eprintln!(
+                        "kimochi: {}",
+                        serde_json::json!({"check": "watcher-backend", "engine": engine, "backend": read.scan["backend"]})
+                    );
+                }
                 // A ready answer is for these pixels: this request's, or identical ones.
                 *LAST_SCAN.lock().unwrap_or_else(|p| p.into_inner()) = Some((engine, key, read.scan));
                 if self.regions.is_some() {
@@ -504,6 +532,7 @@ impl TextObserver for EngineObserver {
         self.worker = None;
         self.unsupported = None;
         self.previous = None;
+        self.backend_logged = false;
     }
 }
 

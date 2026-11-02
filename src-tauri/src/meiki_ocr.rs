@@ -252,7 +252,7 @@ pub(crate) fn load_engine(assets: &Assets) -> Result<MeikiOcr, String> {
     initialize_runtime(&assets.runtime)?;
     let models = ModelPaths::from_dir(&assets.models);
     let config = Config {
-        backend: if DIRECTML_REFUSED.load(Ordering::Relaxed) { Backend::Cpu } else { Backend::Auto },
+        backend: if DIRECTML_REFUSED.load(Ordering::Relaxed) || force_cpu() { Backend::Cpu } else { Backend::Auto },
         intra_threads: cpu_threads(),
         ..Config::default()
     };
@@ -277,6 +277,12 @@ pub(crate) fn cpu_threads() -> Option<usize> {
     }
     let logical = std::thread::available_parallelism().map_or(2, |n| n.get());
     Some((logical / 2).clamp(1, 6))
+}
+
+/// `KIMOCHI_OCR_CPU=1` runs every local engine on the CPU whatever the adapter offers: a
+/// diagnostic for comparing the two regimes on one machine (tools/auto-ocr-bench).
+pub(crate) fn force_cpu() -> bool {
+    std::env::var_os("KIMOCHI_OCR_CPU").is_some()
 }
 
 /// Set once an adapter accepts DirectML sessions but fails the crate's first-inference probe

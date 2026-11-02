@@ -42,7 +42,12 @@ pub fn delete_cache(app: &tauri::AppHandle) {
 
 /// The app's engine settings: Linux's CPU thread count and, on macOS, the compiled-model cache.
 fn config(cache_dir: Option<std::path::PathBuf>) -> Config {
-    Config { intra_threads: crate::meiki_ocr::cpu_threads(), cache_dir, ..Config::default() }
+    Config {
+        backend: if crate::meiki_ocr::force_cpu() { Backend::Cpu } else { Backend::Auto },
+        intra_threads: crate::meiki_ocr::cpu_threads(),
+        cache_dir,
+        ..Config::default()
+    }
 }
 
 fn load_engine(app: &tauri::AppHandle) -> Result<PpOcr, String> {

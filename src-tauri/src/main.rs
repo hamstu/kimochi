@@ -1628,6 +1628,7 @@ async fn capture_frame(
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         // When the frame was taken: sentence audio dates a line's first appearance by it.
         let captured_at = kimochi_capture::audio::now_ms();
+        let captured_at_clock = std::time::Instant::now();
         let frame = backend.capture(&request).map_err(|error| {
             let error = sources::err_for(&request.source_id, error);
             sources::stop_auto_if_gone(&service, &request.source_id, &error);
@@ -1646,8 +1647,12 @@ async fn capture_frame(
         let mut observer_busy = false;
         let mut hash = Value::Null;
         let mut fingerprint = Value::Null;
+        // Where a look's time goes besides the engine, for the capture audit.
+        let (mut fingerprint_ms, mut observe_ms) = (0.0, 0.0);
         if observe.unwrap_or(false) {
+            let clock = std::time::Instant::now();
             fingerprint = Value::from(kimochi_capture::hash::content_fingerprint(&frame));
+            fingerprint_ms = clock.elapsed().as_secs_f64() * 1000.0;
             if observer_mode.as_deref() == Some("image") {
                 hash =
                     kimochi_capture::dhash_rgba(&frame.pixels, frame.info.width, frame.info.height)
@@ -1659,7 +1664,10 @@ async fn capture_frame(
                     .map_err(|_| "busy: the local observer is poisoned".to_string())?;
                 // Which engine watches is the overlay's choice (`ui/watcher.ts`).
                 observer.select(observer_engine.as_deref().unwrap_or(text_observer::DEFAULT_ENGINE));
-                match observer.observe(&frame, OBSERVE_TIMEOUT) {
+                let clock = std::time::Instant::now();
+                let observed = observer.observe(&frame, OBSERVE_TIMEOUT);
+                observe_ms = clock.elapsed().as_secs_f64() * 1000.0;
+                match observed {
                     Ok(read) => {
                         sentence_audio::screen_text(&app, &read.text, captured_at);
                         observation = serde_json::to_value(&read).map_err(|e| e.to_string())?;
@@ -1714,7 +1722,9 @@ async fn capture_frame(
                 "at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default().as_millis() as u64,
                 "captureMs":info["total_ms"], "width":info["width"], "height":info["height"],
-                "observerMs":observation["duration_ms"], "observerError":observer_error}),
+                "observerMs":observation["duration_ms"], "observerError":observer_error,
+                "fingerprintMs": fingerprint_ms.round(), "observeMs": observe_ms.round(),
+                "commandMs": (captured_at_clock.elapsed().as_secs_f64() * 1000.0).round()}),
             );
         }
         Ok(json!({
