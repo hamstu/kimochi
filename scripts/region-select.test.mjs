@@ -506,6 +506,84 @@ test('a touch press grabs an edge from further away than a mouse press', async (
   await pending
 })
 
+const quiet = () => new Promise((resolve) => setTimeout(resolve, 150))
+
+test('native samples move a mouse drag only once its own pointer has gone quiet', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  element.dispatch('pointerdown', { button: 0, pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100 })
+  element.dispatch('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 200, clientY: 150 })
+  // The pointer is still speaking: a native sample is not used.
+  assert.equal(selector.dragAt({ x: 500, y: 500 }), false)
+  assert.deepEqual(selector.rect, { x: 100, y: 100, width: 100, height: 50 })
+
+  // A pen in range takes the webview's input: the mouse goes quiet, and the native samples move
+  // the box. The pen's own moves are not followed.
+  await quiet()
+  element.dispatch('pointermove', { pointerId: 2, pointerType: 'pen', clientX: 900, clientY: 900 })
+  assert.equal(selector.dragAt({ x: 300, y: 250 }), true)
+  assert.deepEqual(selector.rect, { x: 100, y: 100, width: 200, height: 150 })
+
+  // The mouse speaks again and wins over the samples.
+  element.dispatch('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 320, clientY: 260 })
+  assert.equal(selector.dragAt({ x: 999, y: 999 }), false)
+  element.dispatch('pointerup', { pointerId: 1, pointerType: 'mouse', clientX: 330, clientY: 270 })
+  assert.deepEqual(selector.rect, { x: 100, y: 100, width: 230, height: 170 })
+  selector.cancel()
+  await pending
+})
+
+test('native samples never move a pen or touch drag, nor anything when idle', async () => {
+  const selector = new RegionSelect()
+  const pending = selector.start({ bounds: BOUNDS })
+  assert.equal(selector.dragAt({ x: 10, y: 10 }), false, 'no gesture')
+  const element = surface()
+  element.dispatch('pointerdown', { button: 0, pointerId: 3, pointerType: 'pen', clientX: 100, clientY: 100 })
+  element.dispatch('pointermove', { pointerId: 3, pointerType: 'pen', clientX: 150, clientY: 150 })
+  await quiet()
+  assert.equal(selector.dragAt({ x: 600, y: 600 }), false)
+  assert.deepEqual(selector.rect, { x: 100, y: 100, width: 50, height: 50 })
+  selector.cancel()
+  await pending
+})
+
+test('onTrace hears each gesture, with the other pointers it ignored', async () => {
+  const traced = []
+  const selector = new RegionSelect({ onTrace: (record) => traced.push(record) })
+  const pending = selector.start({ bounds: BOUNDS })
+  const element = surface()
+  element.dispatch('pointerdown', { button: 0, pointerId: 1, pointerType: 'mouse', isTrusted: false, clientX: 10, clientY: 20 })
+  element.dispatch('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 50, clientY: 60 })
+  element.dispatch('pointermove', { pointerId: 2, pointerType: 'pen', clientX: 90, clientY: 90 })
+  element.dispatch('pointermove', { pointerId: 2, pointerType: 'pen', clientX: 95, clientY: 95 })
+  element.dispatch('pointermove', { pointerId: 0, pointerType: 'mouse', isTrusted: false, clientX: 5, clientY: 5 })
+  element.dispatch('pointerup', { pointerId: 1, pointerType: 'mouse', clientX: 60, clientY: 70 })
+  assert.deepEqual(traced.map((record) => record.type), ['gesture-begin', 'gesture-end'])
+  assert.deepEqual(traced[0].start, { x: 10, y: 20 })
+  assert.equal(traced[0].isTrusted, false)
+  const end = traced[1]
+  assert.deepEqual(end.end, { x: 60, y: 70 })
+  assert.equal(end.moves, 1)
+  assert.equal(end.nativeMoves, 0)
+  assert.deepEqual(end.ignored, { pen: 2, 'mouse-synthetic': 1 })
+  selector.cancel()
+  await pending
+})
+
+test('a throwing onTrace never breaks a drag', async () => {
+  const selector = new RegionSelect({
+    onTrace: () => {
+      throw Error('diagnostics failed')
+    }
+  })
+  const pending = selector.start({ bounds: BOUNDS })
+  drag(surface(), { x: 0, y: 0 }, { x: 40, y: 30 })
+  assert.deepEqual(selector.rect, { x: 0, y: 0, width: 40, height: 30 })
+  selector.cancel()
+  await pending
+})
+
 test('the opening shortcut pressed again cancels with no box and confirms with one; never mid-drag or at once', () => {
   const settled = SHORTCUT_SETTLE_MS
   const editor = { running: true, dragging: false, box: false, openFor: settled }

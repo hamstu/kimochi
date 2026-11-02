@@ -8,6 +8,7 @@ import {
 } from "@texthooker/lib/notebook";
 import { notebookCardSize } from "@texthooker/lib/notebookCardSize";
 import { useNotebookEntry } from "@texthooker/hooks/useNotebookEntry";
+import { desktopPointOf } from "@ui/desktop-point";
 
 interface Props {
   entryId: string;
@@ -52,6 +53,8 @@ export function NotebookMatchChip({ entryId, text, sentence }: Props) {
     e.stopPropagation();
     if (!entry) return;
     const settings = getSettings();
+    // Desktop points, which is what show_popover takes.
+    const cursor = desktopPointOf(e.nativeEvent);
     try {
       // A fixed size like the dictionary pop-up's, whatever the Log's text size.
       const serialized = await serializeEntryForPopover(entry);
@@ -59,8 +62,8 @@ export function NotebookMatchChip({ entryId, text, sentence }: Props) {
       await invoke("show_popover", {
         kind: "notebook",
         term: text,
-        cursorX: e.screenX,
-        cursorY: e.screenY,
+        cursorX: cursor.x,
+        cursorY: cursor.y,
         // A fixed card width and the content's own height (measured here, before the window
         // opens), so short entries get a compact popover.
         width: size.width,

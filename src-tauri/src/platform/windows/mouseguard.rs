@@ -44,6 +44,27 @@ struct Press {
     y: i32,
     button: u8,
     down: bool,
+    /// `MSLLHOOKSTRUCT.flags` and `dwExtraInfo`, for verbose logging only: they tell a real
+    /// mouse from injected input and from a pen or touch press Windows promoted to the mouse.
+    flags: u32,
+    extra: usize,
+}
+
+/// Where a hooked press came from, read from its `dwExtraInfo` and flags (verbose logging).
+/// Windows marks mouse messages it synthesises from pen and touch input with the signature
+/// `0xFF515700` in the extra info (`0x80` set for touch); `LLMHF_INJECTED` marks
+/// `SendInput` (tablet drivers in mouse mode, remote desktops, automation).
+fn press_origin(flags: u32, extra: usize) -> (&'static str, bool) {
+    const SIGNATURE_MASK: usize = 0xFFFF_FF00;
+    const PEN_OR_TOUCH: usize = 0xFF51_5700;
+    const TOUCH: usize = 0x80;
+    const LLMHF_INJECTED: u32 = 0x1;
+    let kind = if extra & SIGNATURE_MASK == PEN_OR_TOUCH {
+        if extra & TOUCH != 0 { "touch" } else { "pen" }
+    } else {
+        "mouse"
+    };
+    (kind, flags & LLMHF_INJECTED != 0)
 }
 struct Hook {
     sender: SyncSender<Press>,
@@ -324,15 +345,28 @@ pub fn start_mouse_guard(app: &tauri::AppHandle) -> Result<(), String> {
                 } else {
                     "overlay"
                 };
+                let x = (f64::from(press.x) - press.target.origin.0) / press.target.scale;
+                let y = (f64::from(press.y) - press.target.origin.1) / press.target.scale;
                 let _ = app.emit_to(
                     label,
                     "windows-pointer-button",
-                    serde_json::json!({
-                        "x": (f64::from(press.x) - press.target.origin.0) / press.target.scale,
-                        "y": (f64::from(press.y) - press.target.origin.1) / press.target.scale,
-                        "button": press.button, "down": press.down,
-                    }),
+                    serde_json::json!({ "x": x, "y": y, "button": press.button, "down": press.down }),
                 );
+                // A Quick Shot box starts where this press says; a ghost anchor shows up here
+                // as a point away from where the page's own pointer events put the cursor.
+                let (origin, injected) = press_origin(press.flags, press.extra);
+                crate::debug_report::trace(&app, serde_json::json!({
+                    "check": "pointer-press",
+                    "window": label,
+                    "button": press.button,
+                    "down": press.down,
+                    "screen": [press.x, press.y],
+                    "local": [x, y],
+                    "targetOrigin": [press.target.origin.0, press.target.origin.1],
+                    "targetScale": press.target.scale,
+                    "source": origin,
+                    "injected": injected,
+                }));
             }
         })
         .map_err(|error| error.to_string())?;
@@ -394,6 +428,16 @@ mod tests {
             assert!(!captures_key(false, true, false, true, false, false,
                 region_key_target(true, key, false)), "foreign app keeps key {key}");
         }
+    }
+
+    #[test]
+    fn a_press_says_whether_it_was_a_mouse_a_pen_or_a_finger() {
+        assert_eq!(press_origin(0, 0), ("mouse", false));
+        assert_eq!(press_origin(0x1, 0), ("mouse", true));
+        assert_eq!(press_origin(0, 0xFF51_5700), ("pen", false));
+        assert_eq!(press_origin(0, 0xFF51_5780), ("touch", false));
+        // Another app's extra info is not the pen signature.
+        assert_eq!(press_origin(0, 0x1234_5678), ("mouse", false));
     }
 
     #[test]
@@ -548,6 +592,8 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                             y: info.pt.y,
                             button,
                             down,
+                            flags: info.flags,
+                            extra: info.dwExtraInfo,
                         };
                         if hook.sender.try_send(press).is_ok() {
                             hook.owners[physical] = Some(target);
@@ -564,6 +610,8 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                         y: info.pt.y,
                         button,
                         down,
+                        flags: info.flags,
+                        extra: info.dwExtraInfo,
                     });
                     if button == 0 {
                         PRIMARY_DOWN.store(false, Ordering::Relaxed);

@@ -40,6 +40,18 @@
  * which button saves and which cancels (and can be tapped). A box drawn by touch or mouse leaves
  * stick mode until a stick moves again.
  *
+ * ## A drag whose pointer goes quiet
+ *
+ * On Windows the press that starts a drag reaches the overlay from the native mouse hook, and the
+ * moves from the webview. The webview's mouse moves can stop mid-drag: a pen in range, or a touch,
+ * is a pointer of its own and takes over its input. A caller that tracks the pointer natively
+ * feeds `dragAt`; once the gesture's own pointer has been silent for `QUIET_MS`, those samples move
+ * the box instead, until the pointer speaks again or the button is released.
+ *
+ * `onTrace` (optional) receives a record of each gesture: where it began and ended, which pointer
+ * drove it, how many of its moves came from the pointer or from `dragAt`, and how many events
+ * from other pointers it ignored. It is for diagnostics; the editor works the same without it.
+ *
  * Until a box exists, a small bubble rides just above the cursor saying what to do. It follows the
  * container's own pointer events, and `pointerAt` for callers that track the pointer themselves (a
  * non-key panel sees no hover events). Drawing hides it.
@@ -69,6 +81,11 @@
  */
 
 const Z_INDEX_OVERLAY = 6000
+
+/** How long a drag's own pointer must be silent before `dragAt` samples move the box. */
+const QUIET_MS = 120
+
+const now = () => globalThis.performance?.now() ?? Date.now()
 
 /** A box needs some size in both axes: a plain click draws nothing. */
 const MINIMUM_DRAG = 1
@@ -276,7 +293,8 @@ export class RegionSelect {
     accent = 'blue',
     title = null,
     touch = false,
-    pad = null
+    pad = null,
+    onTrace = null
   } = {}) {
     this._touch = Boolean(touch)
     this._pad = pad && typeof pad === 'object' ? { confirm: pad.confirm ?? 'A', cancel: pad.cancel ?? 'B' } : null
@@ -296,6 +314,7 @@ export class RegionSelect {
     this._bubble = null
     this._frame = 0
     this._onHitRects = onHitRects
+    this._onTrace = typeof onTrace === 'function' ? onTrace : null
     this._mount = container ?? null
     this._cancelOnMisclick = cancelOnMisclick
     this._confirmLabel = confirmLabel
@@ -660,17 +679,49 @@ export class RegionSelect {
     if (zone === 'outside') {
       this._editing = false
       this._rect = null
-      this._gesture = { kind: 'draw', start: point, pointerId: event.pointerId }
+      this._gesture = this._newGesture(event, { kind: 'draw', start: point })
     } else {
-      this._gesture = {
+      this._gesture = this._newGesture(event, {
         kind: zone === 'move' ? 'move' : 'resize',
         edges: zone,
         start: point,
-        from: { ...this._rect },
-        pointerId: event.pointerId
-      }
+        from: { ...this._rect }
+      })
     }
     this._draw()
+  }
+
+  /** A gesture owned by `event`'s pointer, with the bookkeeping `dragAt` and `onTrace` use. */
+  _newGesture(event, fields) {
+    const gesture = {
+      ...fields,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType || 'mouse',
+      movedAt: now(),
+      began: now(),
+      moves: 0,
+      nativeMoves: 0,
+      ignored: {}
+    }
+    this._trace('gesture-begin', {
+      kind: gesture.kind,
+      edges: gesture.edges,
+      start: gesture.start,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      isPrimary: event.isPrimary,
+      isTrusted: event.isTrusted
+    })
+    return gesture
+  }
+
+  _trace(type, fields) {
+    if (!this._onTrace) return
+    try {
+      this._onTrace({ type, ...fields })
+    } catch {
+      // Diagnostics never break the editor.
+    }
   }
 
   /** The foot's own background is a handle for moving the box; its edge still resizes. */
@@ -683,12 +734,11 @@ export class RegionSelect {
     event.preventDefault()
     event.stopPropagation()
     this._container.setPointerCapture(event.pointerId)
-    this._gesture = {
+    this._gesture = this._newGesture(event, {
       kind: 'move',
       start: this._point(event),
-      from: { ...this._rect },
-      pointerId: event.pointerId
-    }
+      from: { ...this._rect }
+    })
   }
 
   _update(event) {
@@ -701,8 +751,35 @@ export class RegionSelect {
         zone === 'outside' && !this._inArea(point) ? 'default' : CURSORS[zone]
       return
     }
-    if (gesture.pointerId !== event.pointerId) return
-    const point = this._clampPoint(this._point(event))
+    if (gesture.pointerId !== event.pointerId) {
+      // Another pointer (a pen in range, a finger, a synthetic feed): counted, never followed.
+      const key = `${event.pointerType || '?'}${event.isTrusted === false ? '-synthetic' : ''}`
+      gesture.ignored[key] = (gesture.ignored[key] ?? 0) + 1
+      return
+    }
+    gesture.movedAt = now()
+    gesture.moves++
+    this._drag(gesture, this._clampPoint(this._point(event)))
+  }
+
+  /**
+   * The drag's pointer as sampled natively (overlay-local points), for when the webview stops
+   * reporting it. Moves the box only while the gesture's own pointer has been silent for
+   * `QUIET_MS`, and only for a mouse gesture: a pen or finger drag is the webview's own. Returns
+   * whether the sample was used.
+   */
+  dragAt(point) {
+    const gesture = this._gesture
+    if (!gesture || gesture.pointerType !== 'mouse') return false
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return false
+    if (now() - gesture.movedAt < QUIET_MS) return false
+    gesture.nativeMoves++
+    this._drag(gesture, this._clampPoint(point))
+    return true
+  }
+
+  /** Moves the box for `gesture` to the (clamped) pointer `point`. */
+  _drag(gesture, point) {
     if (gesture.kind === 'draw') {
       // With Space held the start travels with the pointer, so the whole box moves.
       if (gesture.spacing && gesture.last) {
@@ -746,6 +823,19 @@ export class RegionSelect {
     if (gesture.kind === 'draw') {
       this._rect = rectangleFrom(gesture.start, this._clampPoint(this._point(event)))
     }
+    this._trace('gesture-end', {
+      kind: gesture.kind,
+      start: gesture.start,
+      end: this._point(event),
+      rect: this._rect,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      isTrusted: event.isTrusted,
+      ms: Math.round(now() - gesture.began),
+      moves: gesture.moves,
+      nativeMoves: gesture.nativeMoves,
+      ignored: gesture.ignored
+    })
     // An edit that collapses the box to nothing is undone; the box stays as it was.
     if (gesture.kind !== 'draw' && !bigEnough(this._rect)) {
       this._rect = gesture.from
@@ -771,6 +861,16 @@ export class RegionSelect {
     const gesture = this._gesture
     if (gesture?.pointerId !== event.pointerId) return
     this._gesture = null
+    this._trace('gesture-abandoned', {
+      kind: gesture.kind,
+      reason: event.type,
+      start: gesture.start,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+      moves: gesture.moves,
+      nativeMoves: gesture.nativeMoves,
+      ignored: gesture.ignored
+    })
     if (gesture.kind === 'draw') {
       this._rect = null
       this._editing = false

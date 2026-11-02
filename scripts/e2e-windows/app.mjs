@@ -121,9 +121,13 @@ export async function dump(label) {
   desktop("screenshot", path.join(out, "desktop.png"));
   return out;
 }
+// Desktop points from a page's screen coordinates (see SCREEN_SCALE in run.mjs): Chromium's
+// screenX/Y stay at WebView2's own device scale when Windows Text size raises it above the
+// display's, so a click computed from them alone lands short of the element.
+const SCREEN_SCALE = "(window.__KIMOCHI_PLATFORM__?.screenScale||1)";
 export async function click(p, selector, text) {
   const r = await p.eval(
-    `(()=>{const es=[...document.querySelectorAll(${JSON.stringify(selector)})];const e=es.find(e=>${text === undefined ? "true" : `(e.innerText||e.getAttribute('aria-label')||e.title||'').includes(${JSON.stringify(text)})`}&&e.getBoundingClientRect().width>0);if(!e)throw Error('Missing element: '+${JSON.stringify(selector)});e.scrollIntoView({block:'nearest',inline:'nearest'});const r=e.getBoundingClientRect();for(const fx of [.5,.2,.8,.05,.95]){const x=r.x+r.width*fx,y=r.y+r.height/2,h=document.elementFromPoint(x,y);if(h===e||e.contains(h))return {x:(screenX+x)*devicePixelRatio,y:(screenY+y)*devicePixelRatio,label:e.innerText,screenX,screenY,dpr:devicePixelRatio};}throw Error('Element is occluded: '+${JSON.stringify(selector)})})()`,
+    `(()=>{const es=[...document.querySelectorAll(${JSON.stringify(selector)})];const e=es.find(e=>${text === undefined ? "true" : `(e.innerText||e.getAttribute('aria-label')||e.title||'').includes(${JSON.stringify(text)})`}&&e.getBoundingClientRect().width>0);if(!e)throw Error('Missing element: '+${JSON.stringify(selector)});e.scrollIntoView({block:'nearest',inline:'nearest'});const r=e.getBoundingClientRect();for(const fx of [.5,.2,.8,.05,.95]){const x=r.x+r.width*fx,y=r.y+r.height/2,h=document.elementFromPoint(x,y);if(h===e||e.contains(h))return {x:(screenX*${SCREEN_SCALE}+x)*devicePixelRatio,y:(screenY*${SCREEN_SCALE}+y)*devicePixelRatio,label:e.innerText,screenX,screenY,dpr:devicePixelRatio};}throw Error('Element is occluded: '+${JSON.stringify(selector)})})()`,
   );
   desktop("mouse", Math.round(r.x), Math.round(r.y), "click");
   return r;

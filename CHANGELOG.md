@@ -23,6 +23,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Windows:** Auto OCR works again with OneOCR as the engine. Since 0.3.0 it watched the screen with OneOCR but read none of its lines, so it never noticed the text changing and never scanned. Manual scans were not affected.
 - On macOS, clicking a source now brings its window to the front even when Kimochi isn't allowed under Accessibility. Before, the app's menu bar took over but its window stayed behind, however often you clicked, until you switched to it with ⌘Tab.
 - Cards added from a dictionary popup get their screenshot again when the dictionary saved only part of the line as the sentence (a short phrase cut from a longer line, say). The card now gets the most recent screenshot when no line matches its sentence.
 - With the overlay's grouped mode on, a card's sentence is the whole bubble again rather than only the line you looked the word up on, and a word that wraps onto the next line can now be looked up.
@@ -30,6 +31,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - On Windows, a blank white box no longer sits near the top-left of the screen, over whatever is there, until you quit Kimochi. It was the dictionary pop-up's hidden window showing through, and it also turned up in screenshots and recordings when a game window was the source.
 - Hovering the source card no longer covers it with a picture of the source window when that window sits behind Kimochi (a large or maximised game, say), so Crop area and Change source stay in view. The window is still outlined when it is somewhere else on screen.
 - On Windows, holding your lookup key (Shift) while moving onto a word in the overlay opens the dictionary again. Most of the time nothing happened until you let go and pressed the key again.
+- **Windows:** on some PCs Kimochi's windows were drawn larger than Windows' display scale, so a Quick Shot box ran away from the mouse and snapped back when you let go, and highlights lit up away from the cursor. Kimochi now draws its windows at the display's scale, so everything lines up with the mouse again, and the dictionary pop-up opened from the Log or the overlay appears beside the word instead of nearer the top-left of the screen.
+- **Windows:** with a pen tablet or touchscreen, Settings and the title bars no longer light up a second row or button away from the mouse, and a Quick Shot box keeps following the mouse while a pen is in range or after a touch.
+- With **Verbose logging** on (Settings → About), Kimochi now also records how the mouse, pens and touch reach its windows, to help track down pointer problems.
 
 ## [0.3.0] - 2026-10-31
 

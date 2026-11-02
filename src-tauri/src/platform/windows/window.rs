@@ -51,13 +51,14 @@ use std::sync::{
 };
 use tauri::Manager;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, BringWindowToTop, GetAncestor, GetForegroundWindow, GetWindow,
-    GetWindowLongPtrW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
+    AllowSetForegroundWindow, BringWindowToTop, GetAncestor, GetClientRect, GetForegroundWindow,
+    GetWindow, GetWindowLongPtrW, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
     IsWindowVisible, LoadCursorW, SendMessageTimeoutW, SetCursor, SetForegroundWindow,
     SetWindowLongPtrW, SetWindowPos, ShowWindow, WindowFromPoint, ASFW_ANY, GA_ROOT, GWL_EXSTYLE,
     GWL_STYLE, GW_OWNER, HWND_TOP, HWND_TOPMOST, IDC_APPSTARTING, IDC_ARROW, IDC_CROSS, IDC_HAND,
@@ -78,6 +79,24 @@ fn window_rect(hwnd: HWND) -> Result<Rect, String> {
     let mut r = RECT::default();
     unsafe { GetWindowRect(hwnd, &mut r) }.map_err(|e| format!("native: {e}"))?;
     Ok(rect_of(r))
+}
+
+/// The client area in physical virtual-screen pixels: where the webview, and so the page's
+/// (0, 0), actually is. `GetWindowRect` is larger: these windows keep `WS_THICKFRAME` for
+/// resizing, so it also covers DWM's invisible resize borders (7 px a side at 100 %).
+fn client_rect(hwnd: HWND) -> Result<Rect, String> {
+    let mut r = RECT::default();
+    unsafe { GetClientRect(hwnd, &mut r) }.map_err(|e| format!("native: {e}"))?;
+    let mut origin = POINT::default();
+    if !unsafe { ClientToScreen(hwnd, &mut origin) }.as_bool() {
+        return Err("native: ClientToScreen failed".into());
+    }
+    Ok(Rect {
+        x: f64::from(origin.x),
+        y: f64::from(origin.y),
+        width: f64::from(r.right - r.left),
+        height: f64::from(r.bottom - r.top),
+    })
 }
 
 fn ex_style(hwnd: HWND) -> u32 {
@@ -124,8 +143,9 @@ pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
     Ok(())
 }
 
-/// The window's outer rectangle in physical virtual-screen pixels. Kimochi's windows
-/// are undecorated, so there is no invisible resize border to subtract.
+/// The window's outer rectangle in physical virtual-screen pixels, as `place` takes it.
+/// It includes DWM's invisible resize borders, so it is not where the page starts: use
+/// `client_rect` for anything in the page's coordinates.
 pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
     window_rect(hwnd(w)?)
 }
@@ -133,18 +153,21 @@ pub fn bounds(w: &tauri::WebviewWindow) -> Result<Rect, String> {
 /// The pointer's position inside this window, if it is over this window and nothing
 /// else is in front of it there; `None` otherwise.
 ///
-/// Returned in the window's CSS pixels (local physical offset / DPI scale), because the
-/// window's own page hit-tests with it. `WindowFromPoint` answers "who is under this
-/// point" the way the system routes a click: it skips hidden, disabled and
-/// `WS_EX_TRANSPARENT` (click-through) windows, so the click-through overlay never
-/// occludes a panel, and the WebView2 child window it returns walks up (`GA_ROOT`) to
-/// the top-level window that hosts it.
+/// Returned in the window's CSS pixels (offset from the client area's corner / DPI scale),
+/// because the window's own page hit-tests with it. Measured from the client area, not
+/// `GetWindowRect`: the latter includes the invisible resize borders and put every point
+/// about 7 px (at 100 %) right of where the page has it.
+///
+/// `WindowFromPoint` answers "who is under this point" the way the system routes a click:
+/// it skips hidden, disabled and `WS_EX_TRANSPARENT` (click-through) windows, so the
+/// click-through overlay never occludes a panel, and the WebView2 child window it returns
+/// walks up (`GA_ROOT`) to the top-level window that hosts it.
 pub fn panel_pointer(w: &tauri::WebviewWindow) -> Result<Option<(f64, f64)>, String> {
     let Some(sample) = cursor() else {
         return Ok(None);
     };
     let hwnd = hwnd(w)?;
-    let r = window_rect(hwnd)?;
+    let r = client_rect(hwnd)?;
     let (x, y) = (sample.x, sample.y);
     if x < r.x || y < r.y || x >= r.x + r.width || y >= r.y + r.height {
         return Ok(None);
@@ -184,7 +207,7 @@ pub fn panel_cursor(w: &tauri::WebviewWindow, kind: &str) -> Result<(), String> 
         return Ok(()); // Leave native dragging/resizing cursor tracking alone.
     }
     let hwnd = hwnd(w)?;
-    let r = window_rect(hwnd)?;
+    let r = client_rect(hwnd)?;
     let scale = window_scale(hwnd);
     let edge = rules::resize_edge(
         x,
@@ -240,6 +263,11 @@ pub fn inspect(w: &tauri::WebviewWindow) -> Result<Value, String> {
         "panel_subclass": is_panel(hwnd),
         "editing": editing(hwnd),
         "dpi_scale": window_scale(hwnd),
+        "dpi": unsafe { GetDpiForWindow(hwnd) },
+        // Physical pixels: the outer rectangle (with the invisible resize borders) and the
+        // client area the page fills. Pointer diagnostics compare these with the page's own.
+        "window_rect": window_rect(hwnd).map(|r| json!([r.x, r.y, r.width, r.height])).ok(),
+        "client_rect": client_rect(hwnd).map(|r| json!([r.x, r.y, r.width, r.height])).ok(),
     }))
 }
 

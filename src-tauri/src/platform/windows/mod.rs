@@ -134,6 +134,68 @@ pub fn cursor() -> Option<PointerSample> {
     })
 }
 
+/// The pointer devices Windows knows (`GetPointerDevices`): pens, touchscreens, touchpads and
+/// tablets in Windows Ink mode, each a separate pointer stream in the webviews, plus the
+/// digitizer summary from `GetSystemMetrics`. For bug reports (`debug_report` → `input`).
+pub fn pointer_devices() -> serde_json::Value {
+    use windows::Win32::UI::WindowsAndMessaging::{SM_DIGITIZER, SM_MAXIMUMTOUCHES};
+    // Declared here rather than through the `windows` crate, whose struct lives in the very
+    // large `Win32_UI_Controls` feature.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct PointerDeviceInfo {
+        display_orientation: u32,
+        device: isize,
+        pointer_device_type: i32,
+        monitor: isize,
+        starting_cursor_id: u32,
+        max_active_contacts: u16,
+        product_string: [u16; 520],
+    }
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetPointerDevices(count: *mut u32, devices: *mut PointerDeviceInfo) -> i32;
+    }
+    let empty = PointerDeviceInfo {
+        display_orientation: 0,
+        device: 0,
+        pointer_device_type: 0,
+        monitor: 0,
+        starting_cursor_id: 0,
+        max_active_contacts: 0,
+        product_string: [0; 520],
+    };
+    let mut count = 0u32;
+    let mut devices = Vec::new();
+    if unsafe { GetPointerDevices(&mut count, std::ptr::null_mut()) } != 0 && count > 0 {
+        let mut list = vec![empty; count as usize];
+        if unsafe { GetPointerDevices(&mut count, list.as_mut_ptr()) } != 0 {
+            list.truncate(count as usize);
+            for device in &list {
+                let name = String::from_utf16_lossy(&device.product_string);
+                devices.push(serde_json::json!({
+                    "type": match device.pointer_device_type {
+                        1 => "integrated-pen",
+                        2 => "external-pen",
+                        3 => "touch",
+                        4 => "touchpad",
+                        _ => "other",
+                    },
+                    "product": name.trim_end_matches(' '),
+                    "maxContacts": device.max_active_contacts,
+                }));
+            }
+        }
+    }
+    serde_json::json!({
+        "pointerDevices": devices,
+        // NID_* bits: 0x01 integrated touch, 0x02 external touch, 0x04 integrated pen,
+        // 0x08 external pen, 0x40 multi-input, 0x80 ready.
+        "digitizer": unsafe { GetSystemMetrics(SM_DIGITIZER) },
+        "maxTouches": unsafe { GetSystemMetrics(SM_MAXIMUMTOUCHES) },
+    })
+}
+
 // ---------------------------------------------------------------- displays
 
 struct Monitor {
