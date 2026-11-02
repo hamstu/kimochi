@@ -103,6 +103,24 @@ export const ENGINES = {
             store.sync.holdToShowKeys = 'Shift'
           }
         }
+      },
+      // With Shift held to look up, Shift must not also be a "Switch dictionaries" key (default
+      // Shift + Enter; popup-keys.ts `nextDictionary`): each key-repeat of the held Shift would
+      // flip the pop-up between words and kanji. 10ten itself drops Shift only from
+      // `kanjiLookup` in that case (config.ts `get keys`). Enter stays, and so does the
+      // controller's tab step (content.js `stepTenTenTab` clicks the tabs). Stored as
+      // `keys: { nextDictionary: [...] }`, merged over the defaults; a list the reader set is
+      // trimmed, and nothing changes unless Shift is in the hold-to-show keys.
+      {
+        id: 'tenten-shift-not-next-dictionary',
+        apply: (store) => {
+          const hold = store.sync.holdToShowKeys
+          if (typeof hold !== 'string' || !hold.split('+').includes('Shift')) return
+          const keys = store.sync.keys && typeof store.sync.keys === 'object' ? store.sync.keys : {}
+          const current = Array.isArray(keys.nextDictionary) ? keys.nextDictionary : ['Shift', 'Enter']
+          if (!current.includes('Shift')) return
+          store.sync.keys = { ...keys, nextDictionary: current.filter((key) => key !== 'Shift') }
+        }
       }
     ],
     // §5.4.1: `lastDbUpdateTime` (jpdict-state.ts) says the jpdict IndexedDB was downloaded; it

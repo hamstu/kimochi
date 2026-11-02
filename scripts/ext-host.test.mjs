@@ -2180,7 +2180,7 @@ test("from the Log, captureVisibleTab asks for the frame of the transcript line 
 test('10ten: Shift becomes the hold-to-show key for a new file and an existing one, once', async () => {
   const fresh = await tentenSession()
   assert.equal(fresh.world.storage.tenten.sync.holdToShowKeys, 'Shift')
-  assert.deepEqual(fresh.world.storage.tenten.host.migrations, ['tenten-hold-shift'])
+  assert.deepEqual(fresh.world.storage.tenten.host.migrations, ['tenten-hold-shift', 'tenten-shift-not-next-dictionary'])
   assert.deepEqual(
     { ...(await result(fresh.overlay, 'browser.storage.sync.get("holdToShowKeys")')) },
     { holdToShowKeys: 'Shift' }
@@ -2200,5 +2200,30 @@ test('10ten: Shift becomes the hold-to-show key for a new file and an existing o
   const reverted = { tenten: { local: { enabled: true }, sync: {}, host: { migrations: ['tenten-hold-shift'] } } }
   const later = await tentenSession({ storage: reverted })
   assert.equal(later.world.storage.tenten.sync.holdToShowKeys, undefined)
-  assert.ok(!later.world.reports.some((r) => r.check === 'ext-host-storage-migrated'))
+})
+
+// Held Shift must not also switch dictionaries: every key-repeat would flip words ↔ kanji.
+test('10ten: with Shift held to look up, Shift no longer switches dictionaries', async () => {
+  const fresh = await tentenSession()
+  assert.deepEqual(fresh.world.storage.tenten.sync.keys, { nextDictionary: ['Enter'] })
+
+  // A reader who already had the first migration gets this one on the next launch, and their
+  // other keys are kept.
+  const upgraded = {
+    tenten: {
+      local: { enabled: true },
+      sync: { holdToShowKeys: 'Shift', keys: { nextDictionary: ['Shift', 'n'], expandPopup: ['x'] } },
+      host: { migrations: ['tenten-hold-shift'] }
+    }
+  }
+  const later = await tentenSession({ storage: upgraded })
+  assert.deepEqual(later.world.storage.tenten.sync.keys, { nextDictionary: ['n'], expandPopup: ['x'] })
+
+  // Another hold key, or hover: Shift keeps switching dictionaries.
+  const alt = { tenten: { local: { enabled: true }, sync: { holdToShowKeys: 'Alt+Ctrl' }, host: {} } }
+  const kept = await tentenSession({ storage: alt })
+  assert.equal(kept.world.storage.tenten.sync.keys, undefined)
+  const hover = { tenten: { local: { enabled: true }, sync: {}, host: { migrations: ['tenten-hold-shift'] } } }
+  const hovering = await tentenSession({ storage: hover })
+  assert.equal(hovering.world.storage.tenten.sync.keys, undefined)
 })

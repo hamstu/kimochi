@@ -19,7 +19,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Changed
 
 - **Japanese only** now applies to the overlay as well as the Log, so lines with no Japanese aren't drawn over your game either. It's the same switch, now also in Settings → OCR & Overlay.
-- 10ten now waits for <kbd>Shift</kbd> before looking a word up, like Yomitan and Hachidori, instead of opening its pop-up whenever the pointer crosses a word. It's set once when 10ten next starts; if you had already chosen a key in 10ten's settings, yours is kept, and you can go back to plain hover under **Show popup** in 10ten's settings.
+- 10ten now waits for <kbd>Shift</kbd> before looking a word up, like Yomitan and Hachidori, instead of opening its pop-up whenever the pointer crosses a word. It's set once when 10ten next starts; if you had already chosen a key in 10ten's settings, yours is kept, and you can go back to plain hover under **Show popup** in 10ten's settings. While <kbd>Shift</kbd> is the lookup key, it no longer also switches between words and kanji (holding it made the pop-up flicker between them): use <kbd>Enter</kbd>, or click the tabs.
 - With the Yomitan API, clicking a word in the overlay no longer looks it up: hold <kbd>Shift</kbd> over it, as with every other dictionary.
 
 ### Fixed
