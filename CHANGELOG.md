@@ -14,11 +14,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - **Exclude overlay from screen recording** in Settings → OCR & Overlay. It's on, as before: the overlay and dictionary pop-ups stay out of screenshots and recordings (on Windows, only while a whole screen is the source). Turn it off to see them in your captures; with a whole screen as the source, Kimochi may then read its own pop-ups as text.
-- A stricter **Japanese only**: **Also drop lines that start or end in English** drops lines whose first or last letter is a Roman one, such as an English menu item with a little Japanese in it. It's off by default, since it can drop real lines too (one starting with HP, say).
 
 ### Changed
 
-- **Japanese only** now applies to the overlay as well as the Log, so lines with no Japanese aren't drawn over your game either. It's the same switch, now also in Settings → OCR & Overlay.
+- **Japanese only** is now **Drop lines**, a choice of three, and it's on for everyone: by default the Log and the overlay skip lines with no Japanese in them, so English menus and stray OCR junk stay out of both. Choose **Mostly not Japanese** to also skip lines that are mostly something else, with only a kana or two, or **Off** to keep everything. It's in Settings → Log & Sessions and Settings → OCR & Overlay (the same setting in both).
 - 10ten now waits for <kbd>Shift</kbd> before looking a word up, like Yomitan and Hachidori, instead of opening its pop-up whenever the pointer crosses a word. It's set once when 10ten next starts; if you had already chosen a key in 10ten's settings, yours is kept, and you can go back to plain hover under **Show popup** in 10ten's settings. While <kbd>Shift</kbd> is the lookup key, it no longer also switches between words and kanji (holding it made the pop-up flicker between them): use <kbd>Enter</kbd>, or click the tabs.
 - With the Yomitan API, clicking a word in the overlay no longer looks it up: hold <kbd>Shift</kbd> over it, as with every other dictionary.
 

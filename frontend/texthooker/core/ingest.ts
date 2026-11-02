@@ -54,7 +54,7 @@ export const ingestText = async (
   const value = preparedText(text);
   if (!value) return;
 
-  // 6 — CJK-only filter
+  // 6 — Japanese filter
   if (dropsText(value, japaneseFilterOf(settings))) return;
 
   // 7 — start-merge: streaming-VN-style continuation

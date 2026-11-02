@@ -35,7 +35,7 @@ import { useSetting } from '../../bridge/useSetting'
 import { useViewState } from '../../bridge/state'
 import { triggerAction } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
-import { JapaneseOnlyRows } from './JapaneseOnlyRows'
+import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { EngineChooser } from './EngineChooser'
 import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
@@ -179,7 +179,7 @@ export function OcrTab(): ReactNode {
             void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
           }
         />
-        <JapaneseOnlyRows idPrefix="ocr" />
+        <JapaneseFilterRow />
         <SettingsRow
           label="Exclude overlay from screen recording"
           controlId="ocr-exclude-capture"

@@ -1,6 +1,7 @@
 /* Shared TypeScript types. */
 import { API_URLS } from "../../vendor/shared-constants";
 import type { TranslationProvider } from "../../../ui/account";
+import { DEFAULT_JAPANESE_FILTER, type JapaneseFilterMode } from "../../../ui/japanese-text";
 
 export type { TranslationProvider };
 
@@ -89,9 +90,8 @@ export interface Settings {
 
   // Dedupe + line management (Bucket 3)
   dedupeDepth: number;
-  cjkOnly: boolean;
-  /** With `cjkOnly`: also drop lines whose first or last letter is Roman (`latinAtEdge`). */
-  cjkOnlyLatinEdges: boolean;
+  /** Which lines to drop for not being Japanese, here and on the overlay (ui/japanese-text.ts). */
+  japaneseFilter: JapaneseFilterMode;
   startMergeEnabled: boolean;
   startMergePrefixLen: number;
   maxLines: number;
@@ -186,8 +186,7 @@ export const SETTINGS_DEFAULTS: Settings = {
   statsShowSpeed: true,
 
   dedupeDepth: 1,
-  cjkOnly: false,
-  cjkOnlyLatinEdges: false,
+  japaneseFilter: DEFAULT_JAPANESE_FILTER,
   startMergeEnabled: false,
   startMergePrefixLen: 4,
   maxLines: 5000,

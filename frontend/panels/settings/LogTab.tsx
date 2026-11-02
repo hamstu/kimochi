@@ -25,7 +25,7 @@ import { AVAILABLE_VOICES } from '../../vendor/voices'
 import { useSetting } from '../../bridge/useSetting'
 import { useCapabilities } from '../../bridge/capabilities'
 import { WithReaderSettings } from './ReaderSettingsProvider'
-import { JapaneseOnlyRows } from './JapaneseOnlyRows'
+import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { NumberField } from './fields'
 
 const VOICE_OPTIONS = AVAILABLE_VOICES.map((voice) => ({ value: voice.id, label: voice.name }))
@@ -94,7 +94,7 @@ export function LogTab(): ReactNode {
             </SettingsSection>
 
             <SettingsSection title="Incoming lines">
-              <JapaneseOnlyRows idPrefix="log" />
+              <JapaneseFilterRow />
               <SettingsRow
                 label="Skip repeats"
                 controlId="log-dedupe"

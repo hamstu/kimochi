@@ -358,7 +358,7 @@ export function groupTextAnnotations(
 
 /**
  * The filtered word annotations the overlay renders, honouring the settings: the small-text
- * filter, then "Japanese only" (`grouping` carries the Log's `cjkOnly` settings, see
+ * filter, then the Japanese filter (`grouping` carries the Log's `japaneseFilter`, see
  * `overlayGrouping` in overlay.js), judged per line or passage as the Log judges a line. Word
  * fragments are left alone: a Roman word inside a Japanese line is not a line of its own.
  */
@@ -376,6 +376,6 @@ function sizedAnnotations(words: Annotation[], grouping: GroupingSettings): Anno
 }
 
 function byLanguage(words: Annotation[], filter: JapaneseFilter): Annotation[] {
-  if (!filter.japaneseOnly) return words
+  if ((filter.japaneseFilter ?? 'off') === 'off') return words
   return words.filter((a) => a.granularity === 'fragment' || !dropsText(a.description, filter))
 }

@@ -1,53 +1,66 @@
 /**
- * "Japanese only", for the Log and the overlay alike: one setting (the Log's `cjkOnly` and
- * `cjkOnlyLatinEdges`, in `superTexthooker`), one rule, applied to each line as it arrives in
- * the Log and to each line or passage the overlay draws.
+ * The Japanese filter, for the Log and the overlay alike: one setting (the Log's `japaneseFilter`,
+ * in `superTexthooker`), one rule, applied to each line as it arrives in the Log and to each line
+ * or passage the overlay draws.
  */
+
+const CJK = /[぀-ゟ゠-ヿㇰ-ㇿｦ-ﾟ一-鿿㐀-䶿々〆]/
 
 /**
  * True if the text contains any Japanese / CJK characters: Hiragana, Katakana (full and
  * half-width), CJK Unified Ideographs and Ext A, and 々, 〆.
  */
 export function hasCJK(text: string): boolean {
-  return /[぀-ゟ゠-ヿㇰ-ㇿｦ-ﾟ一-鿿㐀-䶿々〆]/.test(text)
+  return CJK.test(text)
 }
 
-const LETTER = /\p{L}/u
-const LATIN = /\p{Script=Latin}/u
+/** Spaces and punctuation (、。「」…!?) say nothing about the language either way. */
+const NEUTRAL = /[\s\p{P}]/u
 
 /**
- * Whether a line's first or last letter is a Roman one: the stricter mode, for an English menu
- * item or label that happens to carry a kana or a kanji ("Save データ", "Lv.5 勇者"), which the
- * plain filter lets through because it drops only lines with no Japanese at all.
- *
- * Letters only: punctuation, brackets, digits, spaces and symbols at either end are looked past,
- * so 「はい」 or …123 are judged by the letters inside them. Full-width Roman letters (Ｈ, ｐ) count
- * as Roman. It can drop real lines that begin or end with a Roman word ("HPが減った"), which is
- * why it is off unless asked for.
+ * Whether more than half of the text is not Japanese: OCR junk or an English label with a kana or
+ * two in it. Spaces and punctuation are left out of the count; letters, digits and symbols that
+ * are not Japanese count against it. Text with nothing to count is not judged.
  */
-export function latinAtEdge(text: string): boolean {
-  const letters = Array.from(text).filter((ch) => LETTER.test(ch))
-  if (letters.length === 0) return false
-  return LATIN.test(letters[0]) || LATIN.test(letters[letters.length - 1])
+export function mostlyNonJapanese(text: string): boolean {
+  let japanese = 0
+  let other = 0
+  for (const ch of text) {
+    if (CJK.test(ch)) japanese++
+    else if (!NEUTRAL.test(ch)) other++
+  }
+  return other > japanese
 }
 
+/**
+ * - `off`: keep everything.
+ * - `noJapanese` (the default): drop text with no Japanese at all.
+ * - `mostlyNonJapanese`: also drop text that is more than half not Japanese.
+ */
+export type JapaneseFilterMode = 'off' | 'noJapanese' | 'mostlyNonJapanese'
+
+export const JAPANESE_FILTER_MODES: readonly JapaneseFilterMode[] = ['off', 'noJapanese', 'mostlyNonJapanese']
+export const DEFAULT_JAPANESE_FILTER: JapaneseFilterMode = 'noJapanese'
+
 export interface JapaneseFilter {
-  /** `cjkOnly`: drop text with no Japanese at all. */
-  japaneseOnly?: boolean
-  /** `cjkOnlyLatinEdges`: with `japaneseOnly`, also drop text whose first or last letter is Roman. */
-  latinEdges?: boolean
+  /** Absent means no filtering: only callers that read the Log's setting filter at all. */
+  japaneseFilter?: JapaneseFilterMode
 }
 
 /** The filter from the Log's settings (`superTexthooker`), however much of them is there. */
-export function japaneseFilterOf(
-  reader: { cjkOnly?: unknown; cjkOnlyLatinEdges?: unknown } | null | undefined
-): JapaneseFilter {
-  return { japaneseOnly: reader?.cjkOnly === true, latinEdges: reader?.cjkOnlyLatinEdges === true }
+export function japaneseFilterOf(reader: { japaneseFilter?: unknown } | null | undefined): Required<JapaneseFilter> {
+  const mode = reader?.japaneseFilter
+  return {
+    japaneseFilter: JAPANESE_FILTER_MODES.includes(mode as JapaneseFilterMode)
+      ? (mode as JapaneseFilterMode)
+      : DEFAULT_JAPANESE_FILTER
+  }
 }
 
-/** Whether "Japanese only" drops this text. */
+/** Whether the Japanese filter drops this text. */
 export function dropsText(text: string, filter: JapaneseFilter): boolean {
-  if (!filter.japaneseOnly) return false
+  const mode = filter.japaneseFilter ?? 'off'
+  if (mode === 'off') return false
   if (!hasCJK(text)) return true
-  return Boolean(filter.latinEdges) && latinAtEdge(text)
+  return mode === 'mostlyNonJapanese' && mostlyNonJapanese(text)
 }
