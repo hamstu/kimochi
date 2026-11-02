@@ -356,12 +356,17 @@ impl EngineObserver {
     /// PaddleOCR on the scan engine, which loads (and keeps) it on first use.
     ///
     /// Its detector takes an image at its own size up to 960 on the longest side, so a region
-    /// costs in proportion to its area: any size is read as it is.
+    /// costs in proportion to its area: any size is read as it is. Only on the CPU, though: on a
+    /// GPU backend every new size may compile anew (`pp_ocr::runs_on_cpu`), so there it reads
+    /// whole frames, whose size does not change.
     pub fn paddle(app: tauri::AppHandle) -> Self {
         let regions = Some((0, 0));
         Self::new(app, "ppocr", "PaddleOCR", crate::pp_ocr::models_ready, |app| {
+            // Learned from the first read, which is always whole.
+            let mut on_cpu = false;
             Box::new(move |Request { image, plan }| -> Answer {
                 let started = Instant::now();
+                let plan = plan.filter(|_| on_cpu);
                 let mut backend = Value::Null;
                 let read = read_planned(&image, plan, |part| match crate::pp_ocr::read_lines(&app, part) {
                     Ok((lines, used)) => {
@@ -372,6 +377,7 @@ impl EngineObserver {
                     Err(crate::pp_ocr::ReadError::Inference(reason)) => Err(Failure::Inference(reason)),
                 });
                 let (lines, partial) = read?;
+                on_cpu = crate::pp_ocr::runs_on_cpu(&backend);
                 Ok(Read {
                     lines: text_lines(&lines, image.width(), image.height()),
                     duration_ms: started.elapsed().as_secs_f64() * 1000.0,

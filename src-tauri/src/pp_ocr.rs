@@ -173,6 +173,13 @@ pub(crate) fn read_lines(
     read(app, image).map(|(lines, backend)| (as_meiki(lines), backend))
 }
 
+/// Whether `backend` (as `read_lines` reports it) is the CPU. On a GPU backend each new input
+/// size can cost a graph compile (Core ML compiles one per shape, taking seconds), so only on the
+/// CPU does the watcher read regions of a frame rather than the whole of it (`incremental`).
+pub(crate) fn runs_on_cpu(backend: &Value) -> bool {
+    serde_json::to_value(Backend::Cpu).is_ok_and(|cpu| backend["selected"] == cpu)
+}
+
 pub(crate) fn scan_result(lines: &[meikiocr::TextLine], backend: Value) -> Value {
     let mut result = crate::meiki_ocr::annotations(lines, "ppocr");
     result["backend"] = backend;
