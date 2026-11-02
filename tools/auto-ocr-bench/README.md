@@ -14,8 +14,12 @@ result, and whether that result is the exact text.
 | `fakegame/` | `fakegame.exe`: a fake VN window with known Japanese text, driven over a named pipe (`text a\|b` sets the dialogue lines; `--blink` adds a blinking element, like an animated "next" arrow or icon, which defeats the identical-pixels cache). `w32.exe`: Win32 helper (focus, clicks). |
 | `scen-settle.mjs` | The scenario: types each sentence glyph by glyph (90 ms per glyph), then reads Kimochi's own `auto-ocr-trace.jsonl` for the accurate pass of a frame captured **after** the last glyph, and checks the overlay's text (right away: `exact`; 1.5 s later: `eventual`). |
 | `app.mjs`, `lib.mjs`, `overlay.mjs` | Start/stop the debug app with DevTools, pick the source, read overlay boxes. |
-| `ocrbench/` | Standalone engine benchmark (PaddleOCR / MeikiOCR via the same crates, models and ONNX Runtime as the app): detection vs recognition time, downscaling, detector size, threads, crops, with character error rate. |
+| `ocrbench/` | Standalone engine benchmark (PaddleOCR / MeikiOCR via the same crates, models and ONNX Runtime as the app): detection vs recognition time, downscaling, detector size, threads, crops, backend, with character error rate. |
+| `scen-idle.mjs` | The cost of watching: CPU time of the app and its WebView2 processes (`cpu-tree.ps1`) while Auto OCR watches a still (or `--blink`ing) screen for `--seconds`, with the per-look audit, each page's DevTools metrics and a CPU profile of the overlay and panel pages. `--no-auto`, `--no-source` and `--no-anim` (panel animations off) isolate what costs what. |
+| `scen-state.mjs` | How often the panels' `state` broadcast and `snapshot` poll fire while Auto OCR idles, and which animations run in the panel. |
+| `scen-trace.mjs` | A Chromium trace of every WebView2 process for a few seconds while Auto OCR idles, summarised per process and event. |
 | `vmtest.conf.json` | Tauri config overlay giving the test build its own identifier/profile. |
+| `RESULTS-x86.md` | The second machine's results (x86, GTX 1080, DirectML and forced CPU). |
 
 ## Setup (once)
 
@@ -56,7 +60,13 @@ Diagnostics (environment of the app, passed through by `app.mjs`):
   `{"check":"watch-verify","same":…}` to the app log (`logs/app-*.log`). Expect differences only
   in text whose pixels did not change (which keeps its earlier reading by design), never in a line
   that changed.
-- `KIMOCHI_CAPTURE_AUDIT=1`: per-capture timing in evidence.
+- `KIMOCHI_CAPTURE_AUDIT=1`: per-capture timing in evidence (`captureMs`, `fingerprintMs`, `observeMs`,
+  `commandMs`), and one `{"check":"watch-look",…}` line per look in the app log with what was read
+  (`partial`, `regions`), the engine's time (`ms`) and the time around it (`keyMs`, `convertMs`,
+  `planMs`, `submitMs`).
+- `KIMOCHI_OCR_CPU=1`: every local engine on the CPU whatever the adapter offers, to measure both
+  regimes on one machine. The watcher logs `{"check":"watcher-backend",…}` with the backend its first
+  read used, so a run's regime is in `logs/app-*.log`.
 
 Engine benchmark:
 
@@ -67,9 +77,12 @@ PATH="$R:$PATH" ORT_DYLIB_PATH="$R/onnxruntime.dll" MODELS="$LOCALAPPDATA/dev.ki
   ./target/release/ocrbench.exe ppocr frame.png truth.txt s=1 s=0.5 s=1,d=736 s=1,t=4 "c=380:810:820:75"
 ```
 
-Variants: `s=` scale, `d=` PaddleOCR detector max side, `t=` threads, `c=x:y:w:h` crop. `truth.txt`
-is one expected line per line. Any frame works; `%APPDATA%\<identifier>\last-ocr-frame.png` is the
-last frame the app scanned.
+Variants: `s=` scale, `d=` PaddleOCR detector max side, `t=` threads, `c=x:y:w:h` crop, `b=cpu|dml|auto`
+backend. `truth.txt` is one expected line per line (empty for timing only). Any frame works;
+`%APPDATA%\<identifier>\last-ocr-frame.png` is the last frame the app scanned. `first` in the output
+is the warm-up call; with `SHARE=1` one engine serves every variant of the same backend/detector/threads,
+so `first` is what a warm session pays for a variant's input shape (DirectML builds a session per
+shape). It also prints what PNG-encoding the frame costs.
 
 ## Results on the first machine
 
@@ -98,6 +111,16 @@ Engine costs on the real 1924x1004 game frame (release build, `ocrbench`):
 
 Downscaling the source does not help: both detectors already shrink to ~960 px, and recognition
 reads fixed-height line crops. ORT's default thread count was the fastest here.
+
+## Results on the second machine
+
+x86 Windows 11 with a GTX 1080 (DirectML) and forced CPU: see [RESULTS-x86.md](RESULTS-x86.md). In
+short: the branch's wins reproduce on both backends (PaddleOCR 1.4 s → 0.5 s on DirectML, 4.1 s →
+0.5 s on the CPU), DirectML does pay ~210-240 ms per new PaddleOCR input shape (so regions stay
+CPU-only), `KIMOCHI_WATCH_VERIFY` found no disagreement in changed lines, and two more things were
+fixed from what the harness showed: the observer's frame hash ran unoptimised (31 ms a look), and the
+Source panel's live dot animated its box-shadow every display frame (~45 % of a core while Auto OCR
+was on).
 
 ## Worth checking on x86 / a real GPU
 

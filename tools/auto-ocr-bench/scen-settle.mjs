@@ -125,7 +125,10 @@ for (let n = 0; n < lines; n++) {
       const want = norm(sentence);
       const parts = sentence.split(/[s　]+/).map(norm).filter(Boolean);
       row.exact = shown.some((t) => t === want) || parts.every((p) => shown.includes(p)) || shown.join("").includes(want);
-      if (!row.exact) row.shown = shown.filter((t) => t.length > 4 && [...want].filter((c) => t.includes(c)).length > want.length / 2);
+      if (!row.exact) {
+        row.shown = shown.filter((t) => t.length > 4 && [...want].filter((c) => t.includes(c)).length > want.length / 2);
+        row.shownAll = shown;
+      }
       // And a moment later: a line read just before its last glyph is read again once that lands.
       await l.sleep(1500);
       const later = (await o.overlayBoxes().catch(() => [])).map((b) => norm(b.text ?? ""));

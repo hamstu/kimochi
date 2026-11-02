@@ -1,7 +1,10 @@
 // OCR cost benchmark: where an observation's time goes, and what downscaling / detector size /
 // thread count do to speed and accuracy. Usage:
 //   ocrbench <engine ppocr|meiki> <image.png> <truth.txt> [variants...]
-// variant syntax: s=<scale>,d=<det max side>,t=<threads>   e.g. s=0.5,d=640,t=4
+// variant syntax: s=<scale>,d=<det max side>,t=<threads>,b=<cpu|dml|auto>,c=<x:y:w:h>
+//   e.g. s=0.5,d=640,t=4   or   b=dml,c=380:810:820:75
+// SHARE=1 keeps one engine per (backend, det, threads) across variants, so the "first" time of
+// a variant is what a session that has run before pays for a new input shape (DirectML).
 use image::{imageops::FilterType, RgbImage};
 use std::time::Instant;
 
@@ -40,10 +43,11 @@ struct Variant {
     scale: f64,
     det: u32,
     threads: Option<usize>,
+    backend: &'static str,
 }
 
 fn parse(v: &str) -> Variant {
-    let mut out = Variant { crop: None, scale: 1.0, det: 960, threads: None };
+    let mut out = Variant { crop: None, scale: 1.0, det: 960, threads: None, backend: "auto" };
     for part in v.split(',') {
         let (k, val) = part.split_once('=').unwrap();
         match k {
@@ -51,6 +55,7 @@ fn parse(v: &str) -> Variant {
             "d" => out.det = val.parse().unwrap(),
             "t" => out.threads = Some(val.parse().unwrap()),
             "c" => { let v: Vec<u32> = val.split(":").map(|x| x.parse().unwrap()).collect(); out.crop = Some([v[0], v[1], v[2], v[3]]); }
+            "b" => out.backend = match val { "cpu" => "cpu", "dml" => "dml", "auto" => "auto", _ => panic!("{val}") },
             _ => panic!("{k}"),
         }
     }
@@ -68,7 +73,10 @@ fn main() {
     let lib = std::env::var("ORT_DYLIB_PATH").unwrap();
     ort::init_from(lib).commit().unwrap();
     let models = std::env::var("MODELS").unwrap();
-    println!("{engine} {}x{} runs={runs}", source.width(), source.height());
+    let share = std::env::var_os("SHARE").is_some();
+    println!("{engine} {}x{} runs={runs} share={share}", source.width(), source.height());
+    let mut pp_engines: std::collections::HashMap<String, ppocr::PpOcr> = Default::default();
+    let mut mk_engines: std::collections::HashMap<String, meikiocr::MeikiOcr> = Default::default();
 
     // Cost of the pixel plumbing alone at this size: RGBA -> RGB as text_observer does.
     let rgba = image::DynamicImage::ImageRgb8(source.clone()).to_rgba8();
@@ -82,6 +90,16 @@ fn main() {
         std::hint::black_box(out);
     }
     println!("rgba->rgb: {:.1} ms", t.elapsed().as_secs_f64() * 1000.0 / 5.0);
+    // And PNG-encoding the frame, as `last-ocr-frame.png` and the OneOCR watcher do per scan/look.
+    let t = Instant::now();
+    let mut png = Vec::new();
+    for _ in 0..3 {
+        png.clear();
+        image::DynamicImage::ImageRgb8(source.clone())
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+    }
+    println!("png encode: {:.1} ms, {} bytes", t.elapsed().as_secs_f64() * 1000.0 / 3.0, png.len());
 
     for v in variants {
         let t = Instant::now();
@@ -91,13 +109,25 @@ fn main() {
         let (mut det_ms, mut total_ms) = (Vec::new(), Vec::new());
         let mut text = Vec::new();
         let mut backend = String::new();
+        let key = format!("{}-{}-{:?}", v.backend, v.det, v.threads);
+        let mut first_ms = 0.0;
         match engine {
             "ppocr" => {
-                let config = ppocr::Config { intra_threads: v.threads, detection_max_side: v.det, ..Default::default() };
-                let mut e = ppocr::PpOcr::with_config(ppocr::ModelPaths::from_dir(&models, ppocr::Tier::Small), config).unwrap();
+                let config = ppocr::Config {
+                    intra_threads: v.threads,
+                    detection_max_side: v.det,
+                    backend: match v.backend { "cpu" => ppocr::Backend::Cpu, "dml" => ppocr::Backend::DirectMl, _ => ppocr::Backend::Auto },
+                    ..Default::default()
+                };
+                if !share { pp_engines.clear(); }
+                let e = pp_engines.entry(key).or_insert_with(|| {
+                    ppocr::PpOcr::with_config(ppocr::ModelPaths::from_dir(&models, ppocr::Tier::Small), config).unwrap()
+                });
                 backend = format!("{:?}", e.backend_info().selected);
                 let o = ppocr::OcrOptions::default();
+                let t = Instant::now();
                 e.ocr(&image, o).unwrap();
+                first_ms = t.elapsed().as_secs_f64() * 1000.0;
                 for _ in 0..runs {
                     let t = Instant::now();
                     e.detect(&image, o).unwrap();
@@ -110,11 +140,20 @@ fn main() {
                 }
             }
             "meiki" => {
-                let config = meikiocr::Config { intra_threads: v.threads, ..Default::default() };
-                let mut e = meikiocr::MeikiOcr::with_config(meikiocr::ModelPaths::from_dir(&models), config).unwrap();
+                let config = meikiocr::Config {
+                    intra_threads: v.threads,
+                    backend: match v.backend { "cpu" => meikiocr::Backend::Cpu, "dml" => meikiocr::Backend::DirectMl, _ => meikiocr::Backend::Auto },
+                    ..Default::default()
+                };
+                if !share { mk_engines.clear(); }
+                let e = mk_engines.entry(key).or_insert_with(|| {
+                    meikiocr::MeikiOcr::with_config(meikiocr::ModelPaths::from_dir(&models), config).unwrap()
+                });
                 backend = format!("{:?}", e.backend_info().selected);
                 let o = meikiocr::OcrOptions::default();
+                let t = Instant::now();
                 e.ocr(&image, o).unwrap();
+                first_ms = t.elapsed().as_secs_f64() * 1000.0;
                 for _ in 0..runs {
                     let t = Instant::now();
                     e.detect(&image, o.detection_threshold).unwrap();
@@ -138,7 +177,7 @@ fn main() {
         let det = median(det_ms);
         let total = median(total_ms);
         println!(
-            "s={:.2} {}x{} d={} t={:?} [{backend}] resize {:.0} ms | det {:.0} ms, rec {:.0} ms, total {:.0} ms | CER {:.1}% ({errors}/{chars}) | {}",
+            "s={:.2} {}x{} d={} t={:?} [{backend}] resize {:.0} ms | first {first_ms:.0} ms | det {:.0} ms, rec {:.0} ms, total {:.0} ms | CER {:.1}% ({errors}/{chars}) | {}",
             v.scale, image.width(), image.height(), v.det, v.threads, resize_ms, det, (total - det).max(0.0), total,
             100.0 * errors as f64 / chars.max(1) as f64, text.join(" / ")
         );
