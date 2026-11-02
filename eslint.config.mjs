@@ -6,7 +6,9 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'evidence/**', 'docs/**', '.claude/**', 'extensions/**', 'site/**', 'site-docs/**'] },
+  { ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'evidence/**', 'docs/**', '.claude/**', 'extensions/**', 'site/**', 'site-docs/**',
+    // Benchmark harness for perf/auto-ocr-settle, dropped before merge with its folder.
+    'tools/auto-ocr-bench/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
