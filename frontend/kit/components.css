@@ -608,6 +608,37 @@
 .k-slider-thumb:hover { transform: scale(1.1); }
 .k-slider-thumb:focus-visible { outline: 2px solid var(--k-focus); outline-offset: 2px; }
 
+/* Step slider: notches on the track, the steps' names under them (first left, last right). */
+.k-step-slider { display: flex; flex-direction: column; gap: var(--k-space-1-5); width: 100%; }
+.k-step-slider-track { cursor: pointer; }
+.k-step-slider-notch {
+  position: absolute;
+  top: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--k-line-strong);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.k-step-slider-notch[data-passed] { background: var(--k-accent); }
+.k-step-slider-labels { display: flex; justify-content: space-between; }
+.k-step-slider-label {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--k-text-2);
+  font: inherit;
+  font-size: var(--k-text-sm);
+  text-align: center;
+  cursor: pointer;
+}
+.k-step-slider-label:first-child { text-align: left; }
+.k-step-slider-label:last-child { text-align: right; }
+.k-step-slider-label:hover { color: var(--k-text); }
+.k-step-slider-label[data-selected] { color: var(--k-text); font-weight: 500; }
+
 /* ------------------------------------------------------------------ badge */
 .k-badge {
   display: inline-flex;

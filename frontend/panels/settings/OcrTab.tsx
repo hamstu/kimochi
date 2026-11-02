@@ -183,7 +183,7 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Exclude overlay from screen recording"
           controlId="ocr-exclude-capture"
-          description="Keeps the overlay and dictionary pop-ups out of screenshots and recordings, so Kimochi never reads its own text back. Turn it off to show them; with a whole screen as your source, Kimochi may then scan its own pop-ups."
+          description="Hides the overlay and pop-ups from captures, so Kimochi doesn't read its own text."
         >
           <Switch
             id="ocr-exclude-capture"
