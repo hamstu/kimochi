@@ -22,6 +22,15 @@ pub const HASH_HEIGHT: u32 = 8;
 /// The native observation cache also compares bytes, so cache reuse never
 /// depends on a hash collision. This digest is only a session-local UI hint.
 pub fn content_fingerprint(frame: &crate::Frame) -> String {
+    format!("{:016x}", content_key(frame))
+}
+
+/// The digest behind `content_fingerprint`, as the number it is: the key the text observers
+/// cache their reads under, so a read is handed only to the frame it was made from. One
+/// function, so the two can never drift apart; and here rather than in the app so that it
+/// is compiled optimised in development builds too (hashing a 1910x997 frame took 31 ms
+/// unoptimised, 2 ms here).
+pub fn content_key(frame: &crate::Frame) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     frame.info.source_id.hash(&mut hash);
@@ -29,7 +38,7 @@ pub fn content_fingerprint(frame: &crate::Frame) -> String {
     frame.info.height.hash(&mut hash);
     frame.info.crop_pixels.hash(&mut hash);
     frame.pixels.hash(&mut hash);
-    format!("{:016x}", hash.finish())
+    hash.finish()
 }
 
 /// Rec. 601 luminance, matching `ui/dhash.ts` so the two describe the same thing.
@@ -137,6 +146,34 @@ mod tests {
             }
         }
         pixels
+    }
+
+    #[test]
+    fn the_fingerprint_is_the_content_key_and_follows_the_pixels() {
+        let frame = |pixels: Vec<u8>| crate::Frame {
+            info: crate::FrameInfo {
+                source_id: "s".into(),
+                width: 4,
+                height: 2,
+                stride: 16,
+                full_width: 4,
+                full_height: 2,
+                crop_pixels: [0, 0, 4, 2],
+                scale_factor: 1.0,
+                source_bounds: None,
+                pixel_format: "rgba8",
+                color_space: "srgb",
+                resolve_ms: 0.0,
+                acquisition_ms: 0.0,
+                pixels_ms: 0.0,
+                total_ms: 0.0,
+            },
+            pixels,
+        };
+        let a = frame(solid(4, 2, 10));
+        assert_eq!(content_fingerprint(&a), format!("{:016x}", content_key(&a)));
+        assert_eq!(content_key(&a), content_key(&frame(solid(4, 2, 10))));
+        assert_ne!(content_key(&a), content_key(&frame(solid(4, 2, 11))));
     }
 
     #[test]

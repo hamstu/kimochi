@@ -40,6 +40,20 @@ pub fn unpremultiply(pixels: &mut [u8]) {
     }
 }
 
+/// Packed RGB from `height` rows of RGBA, `stride` bytes apart, dropping alpha: the shape the
+/// local OCR engines read. Here rather than in the app so it is compiled optimised in
+/// development builds too (`[profile.dev.package.kimochi-capture]`), where it runs on every
+/// Auto OCR look.
+pub fn rgba_rows_to_rgb(source: &[u8], width: usize, height: usize, stride: usize) -> Vec<u8> {
+    let mut rgb = vec![0u8; width * height * 3];
+    for (row, target) in source.chunks(stride).take(height).zip(rgb.chunks_exact_mut(width * 3)) {
+        for (p, q) in row[..width * 4].chunks_exact(4).zip(target.chunks_exact_mut(3)) {
+            q.copy_from_slice(&p[..3]);
+        }
+    }
+    rgb
+}
+
 /// Copy a rectangle out of a tightly packed RGBA buffer.
 ///
 /// The caller has already established, via `crop_rect`, that the rectangle lies

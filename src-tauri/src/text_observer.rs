@@ -57,6 +57,7 @@ use kimochi_capture::{
     text::{join_lines, CachedObserver},
     CaptureError, Frame, Observation, ObserverStatus, TextLine, TextObserver,
 };
+use serde_json::Value;
 use std::{
     collections::HashMap,
     sync::{Arc, Condvar, Mutex, MutexGuard},
@@ -178,6 +179,69 @@ const STALL_AFTER: Duration = Duration::from_secs(30);
 struct Read {
     lines: Vec<TextLine>,
     duration_ms: f64,
+    /// The same read in the shape a scan of this engine returns (`ocr_frame`).
+    scan: Value,
+    /// The engine's own lines, for the next look to read only what changed (`incremental`);
+    /// empty for an engine that is always read whole.
+    raw: Vec<meikiocr::TextLine>,
+    /// Only the changed regions were read; the rest is the previous reading.
+    partial: bool,
+}
+
+/// What the worker is asked to read: the frame, and the part of it that changed when only that
+/// is to be read.
+struct Request {
+    image: image::RgbImage,
+    plan: Option<crate::incremental::Plan>,
+}
+
+/// Read the regions `plan` names with `read`, merged into the previous reading, or the whole
+/// image without one. True when only regions were read.
+fn read_planned(
+    image: &image::RgbImage,
+    plan: Option<crate::incremental::Plan>,
+    mut read: impl FnMut(&image::RgbImage) -> Result<Vec<meikiocr::TextLine>, Failure>,
+) -> Result<(Vec<meikiocr::TextLine>, bool), Failure> {
+    let Some(plan) = plan else {
+        return read(image).map(|lines| (lines, false));
+    };
+    let (width, height) = image.dimensions();
+    let regions = plan.regions.clone();
+    let mut found = Vec::new();
+    for &[left, top, right, bottom] in &regions {
+        let region = image::imageops::crop_imm(image, left, top, right - left, bottom - top).to_image();
+        found.extend(crate::incremental::place(read(&region)?, [left, top, right, bottom], width, height));
+    }
+    let merged = crate::incremental::merge(plan, found);
+    // Diagnostics: read the whole frame too and report where the two disagree.
+    if std::env::var_os("KIMOCHI_WATCH_VERIFY").is_some() {
+        let whole = read(image)?;
+        let text = |lines: &[meikiocr::TextLine]| lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join(" | ");
+        let (a, b) = (text(&merged), text(&whole));
+        eprintln!(
+            "kimochi: {}",
+            serde_json::json!({"check": "watch-verify", "same": a == b, "regions": regions,
+                "incremental": (a != b).then_some(&a), "whole": (a != b).then_some(&b)})
+        );
+    }
+    Ok((merged, true))
+}
+
+/// The watcher's latest full read: which engine, of which pixels (`frame_key`), and the scan
+/// result it amounts to.
+///
+/// When the watcher is also the engine the reader chose, the recognition Auto OCR asks for once
+/// a line settles is of the very frame the watcher just read, with the same engine and options.
+/// Running the models again would only reproduce this, so `capture_frame` attaches it to the
+/// stored frame and `ocr_frame` returns it. Keyed on the pixels, so it is never handed to a
+/// frame it was not read from.
+static LAST_SCAN: Mutex<Option<(&'static str, u64, Value)>> = Mutex::new(None);
+
+/// The watcher's scan result for a frame whose `content_fingerprint` is `fingerprint`.
+pub fn scan_for(fingerprint: &str) -> Option<(&'static str, Value)> {
+    let last = LAST_SCAN.lock().unwrap_or_else(|p| p.into_inner());
+    let (engine, key, scan) = last.as_ref()?;
+    (format!("{key:016x}") == fingerprint).then(|| (*engine, scan.clone()))
 }
 
 #[derive(Clone)]
@@ -189,7 +253,7 @@ enum Failure {
 }
 
 type Answer = Result<Read, Failure>;
-type Run = Box<dyn FnMut(image::RgbImage) -> Answer + Send>;
+type Run = Box<dyn FnMut(Request) -> Answer + Send>;
 
 /// A local OCR engine as a `TextObserver`, on a dedicated worker.
 pub struct EngineObserver {
@@ -200,10 +264,19 @@ pub struct EngineObserver {
     gate: fn(&tauri::AppHandle) -> Result<(), String>,
     /// The worker's job, made when the worker starts.
     make_run: fn(tauri::AppHandle) -> Run,
-    worker: Option<LatestWorker<image::RgbImage, Answer>>,
+    worker: Option<LatestWorker<Request, Answer>>,
     /// Set once the engine has failed to load; every later call says so.
     unsupported: Option<String>,
     timeouts: u32,
+    /// The smallest region this engine reads well, when it can read regions at all
+    /// (`incremental`); None reads every frame whole.
+    regions: Option<(u32, u32)>,
+    /// The last frame read and its reading, which the next look is compared with.
+    previous: Option<crate::incremental::Previous>,
+    /// Incremental looks since the last whole read.
+    partial_looks: u32,
+    /// The backend of the first read has been logged (`watcher-backend`).
+    backend_logged: bool,
 }
 
 impl EngineObserver {
@@ -213,16 +286,34 @@ impl EngineObserver {
         name: &'static str,
         gate: fn(&tauri::AppHandle) -> Result<(), String>,
         make_run: fn(tauri::AppHandle) -> Run,
+        regions: Option<(u32, u32)>,
     ) -> Self {
-        Self { app, engine, name, gate, make_run, worker: None, unsupported: None, timeouts: 0 }
+        Self {
+            app,
+            engine,
+            name,
+            gate,
+            make_run,
+            worker: None,
+            unsupported: None,
+            timeouts: 0,
+            regions,
+            previous: None,
+            partial_looks: 0,
+            backend_logged: false,
+        }
     }
 
     /// MeikiOCR with an engine of its own, so a slow manual scan cannot starve it.
+    ///
+    /// Its detector reads every image at 960x544, scaling a small one up: regions narrower or
+    /// shorter than half that are widened, so none reaches it more than twice enlarged.
     pub fn meiki(app: tauri::AppHandle) -> Self {
+        let regions = Some((480, 272));
         Self::new(app, "meikiocr", "MeikiOCR", |app| crate::meiki_ocr::models_ready(app).map(|_| ()), |app| {
             let mut engine = None;
             let mut failed: Option<String> = None;
-            Box::new(move |image: image::RgbImage| -> Answer {
+            Box::new(move |Request { image, plan }| -> Answer {
                 if let Some(reason) = &failed {
                     return Err(Failure::Unavailable(reason.clone()));
                 }
@@ -241,45 +332,71 @@ impl EngineObserver {
                     return Err(Failure::Inference("MeikiOCR engine missing".into()));
                 };
                 let started = Instant::now();
-                match crate::meiki_ocr::infer(meiki, &image) {
-                    Ok(lines) => Ok(Read {
+                let read = read_planned(&image, plan, |part| {
+                    crate::meiki_ocr::infer(meiki, part).map_err(Failure::Inference)
+                });
+                match read {
+                    Ok((lines, partial)) => Ok(Read {
                         lines: text_lines(&lines, image.width(), image.height()),
                         duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                        scan: crate::meiki_ocr::scan_result(&lines, meiki),
+                        raw: lines,
+                        partial,
                     }),
-                    Err(e) => {
+                    Err(Failure::Inference(e)) => {
                         // A panicking session may be left inconsistent: rebuild it next time.
                         if e.starts_with(crate::engine_probe::PANIC_PREFIX) {
                             engine = None;
                         }
                         Err(Failure::Inference(e))
                     }
+                    Err(failure) => Err(failure),
                 }
             })
-        })
+        }, regions)
     }
 
     /// PaddleOCR on the scan engine, which loads (and keeps) it on first use.
+    ///
+    /// Its detector takes an image at its own size up to 960 on the longest side, so a region
+    /// costs in proportion to its area: any size is read as it is. Only on the CPU, though: on a
+    /// GPU backend every new size may compile anew (`pp_ocr::runs_on_cpu`), so there it reads
+    /// whole frames, whose size does not change.
     pub fn paddle(app: tauri::AppHandle) -> Self {
+        let regions = Some((0, 0));
         Self::new(app, "ppocr", "PaddleOCR", crate::pp_ocr::models_ready, |app| {
-            Box::new(move |image: image::RgbImage| -> Answer {
+            // Learned from the first read, which is always whole.
+            let mut on_cpu = false;
+            Box::new(move |Request { image, plan }| -> Answer {
                 let started = Instant::now();
-                match crate::pp_ocr::read_lines(&app, &image) {
-                    Ok(lines) => Ok(Read {
-                        lines: text_lines(&lines, image.width(), image.height()),
-                        duration_ms: started.elapsed().as_secs_f64() * 1000.0,
-                    }),
+                let plan = plan.filter(|_| on_cpu);
+                let mut backend = Value::Null;
+                let read = read_planned(&image, plan, |part| match crate::pp_ocr::read_lines(&app, part) {
+                    Ok((lines, used)) => {
+                        backend = used;
+                        Ok(lines)
+                    }
                     Err(crate::pp_ocr::ReadError::Unavailable(reason)) => Err(Failure::Unavailable(reason)),
                     Err(crate::pp_ocr::ReadError::Inference(reason)) => Err(Failure::Inference(reason)),
-                }
+                });
+                let (lines, partial) = read?;
+                on_cpu = crate::pp_ocr::runs_on_cpu(&backend);
+                Ok(Read {
+                    lines: text_lines(&lines, image.width(), image.height()),
+                    duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                    scan: crate::pp_ocr::scan_result(&lines, backend),
+                    raw: lines,
+                    partial,
+                })
             })
-        })
+        }, regions)
     }
 
     /// The Snipping Tool engine through its worker process, line by line.
     #[cfg(target_os = "windows")]
     pub fn oneocr(app: tauri::AppHandle) -> Self {
         Self::new(app, "oneocr", "OneOCR", |_| Ok(()), |app| {
-            Box::new(move |image: image::RgbImage| -> Answer {
+            Box::new(move |Request { image, .. }| -> Answer {
                 let started = Instant::now();
                 let mut png = Vec::new();
                 image::DynamicImage::ImageRgb8(image)
@@ -289,12 +406,15 @@ impl EngineObserver {
                 Ok(Read {
                     lines: annotation_lines(&result),
                     duration_ms: started.elapsed().as_secs_f64() * 1000.0,
+                    scan: result,
+                    raw: Vec::new(),
+                    partial: false,
                 })
             })
-        })
+        }, None)
     }
 
-    fn worker(&mut self) -> Result<&mut LatestWorker<image::RgbImage, Answer>, CaptureError> {
+    fn worker(&mut self) -> Result<&mut LatestWorker<Request, Answer>, CaptureError> {
         if self.worker.is_none() {
             let run = (self.make_run)(self.app.clone());
             let worker = LatestWorker::spawn(&format!("kimochi-{}-observer", self.engine), run)
@@ -337,16 +457,60 @@ impl TextObserver for EngineObserver {
         if let Err(reason) = (self.gate)(&self.app) {
             return Err(CaptureError::new("unsupported", unavailable_detail(self.name, &reason)));
         }
+        let audit = std::env::var_os("KIMOCHI_CAPTURE_AUDIT").is_some();
+        let clock = Instant::now();
         let key = frame_key(frame);
+        let key_ms = clock.elapsed().as_secs_f64() * 1000.0;
         let image = rgb_image(frame)?;
+        let convert_ms = clock.elapsed().as_secs_f64() * 1000.0 - key_ms;
         let (engine, name) = (self.engine, self.name);
-        match self.worker()?.submit(key, image, timeout) {
-            Outcome::Ready(Ok(read)) => Ok(Observation {
-                engine,
-                text: join_lines(&read.lines),
-                lines: read.lines,
-                duration_ms: read.duration_ms,
-            }),
+        // Only what changed since the last reading, unless it is time for a whole one.
+        // `KIMOCHI_WATCH_FULL` reads every look whole, for comparing the two.
+        let incremental = std::env::var_os("KIMOCHI_WATCH_FULL").is_none();
+        let plan = match (self.regions, &self.previous) {
+            (Some(min_size), Some(previous))
+                if incremental && self.partial_looks < crate::incremental::FULL_EVERY =>
+            {
+                crate::incremental::plan(previous, frame, min_size)
+            }
+            _ => None,
+        };
+        let regions = plan.as_ref().map(|p| p.regions.clone());
+        let plan_ms = clock.elapsed().as_secs_f64() * 1000.0 - key_ms - convert_ms;
+        let submitted = Instant::now();
+        match self.worker()?.submit(key, Request { image, plan }, timeout) {
+            Outcome::Ready(Ok(read)) => {
+                // Per-look diagnostics with the capture audit: what was read, and where the time went
+                // besides the engine (hashing the frame, converting it, planning, the worker round trip).
+                if audit {
+                    eprintln!(
+                        "kimochi: {}",
+                        serde_json::json!({"check": "watch-look", "engine": engine, "partial": read.partial,
+                            "regions": regions, "ms": read.duration_ms.round(), "lines": read.lines.len(),
+                            "keyMs": key_ms.round(), "convertMs": convert_ms.round(), "planMs": plan_ms.round(),
+                            "submitMs": (submitted.elapsed().as_secs_f64() * 1000.0).round()})
+                    );
+                }
+                if !self.backend_logged {
+                    self.backend_logged = true;
+                    eprintln!(
+                        "kimochi: {}",
+                        serde_json::json!({"check": "watcher-backend", "engine": engine, "backend": read.scan["backend"]})
+                    );
+                }
+                // A ready answer is for these pixels: this request's, or identical ones.
+                *LAST_SCAN.lock().unwrap_or_else(|p| p.into_inner()) = Some((engine, key, read.scan));
+                if self.regions.is_some() {
+                    self.partial_looks = if read.partial { self.partial_looks + 1 } else { 0 };
+                    self.previous = Some(crate::incremental::Previous::new(frame, read.raw));
+                }
+                Ok(Observation {
+                    engine,
+                    text: join_lines(&read.lines),
+                    lines: read.lines,
+                    duration_ms: read.duration_ms,
+                })
+            }
             Outcome::Ready(Err(Failure::Unavailable(reason))) => {
                 let error = CaptureError::new("unsupported", unavailable_detail(name, &reason));
                 self.unsupported = Some(reason);
@@ -367,6 +531,8 @@ impl TextObserver for EngineObserver {
         // The next observation starts a fresh worker and engine.
         self.worker = None;
         self.unsupported = None;
+        self.previous = None;
+        self.backend_logged = false;
     }
 }
 
@@ -471,26 +637,15 @@ pub(crate) fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImag
             "the frame is empty or shorter than its geometry",
         ));
     }
-    let mut rgb = Vec::with_capacity(width * height * 3);
-    for row in frame.pixels.chunks(stride).take(height) {
-        for pixel in row[..width * 4].as_chunks::<4>().0 {
-            rgb.extend_from_slice(&pixel[..3]);
-        }
-    }
+    let rgb = kimochi_capture::pixels::rgba_rows_to_rgb(&frame.pixels, width, height, stride);
     image::RgbImage::from_raw(frame.info.width, frame.info.height, rgb)
         .ok_or_else(|| CaptureError::new("observe", "the frame could not be converted"))
 }
 
-/// Identity of a frame's content, for reusing a result on identical pixels.
+/// Identity of a frame's content, for reusing a result on identical pixels: the number behind
+/// `capture_frame`'s `contentFingerprint`, which is how `scan_for` finds this read again.
 fn frame_key(frame: &Frame) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hash = std::collections::hash_map::DefaultHasher::new();
-    frame.info.source_id.hash(&mut hash);
-    frame.info.width.hash(&mut hash);
-    frame.info.height.hash(&mut hash);
-    frame.info.crop_pixels.hash(&mut hash);
-    frame.pixels.hash(&mut hash);
-    hash.finish()
+    kimochi_capture::hash::content_key(frame)
 }
 
 // --- the worker -------------------------------------------------------------

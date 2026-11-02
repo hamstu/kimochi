@@ -42,7 +42,12 @@ pub fn delete_cache(app: &tauri::AppHandle) {
 
 /// The app's engine settings: Linux's CPU thread count and, on macOS, the compiled-model cache.
 fn config(cache_dir: Option<std::path::PathBuf>) -> Config {
-    Config { intra_threads: crate::meiki_ocr::cpu_threads(), cache_dir, ..Config::default() }
+    Config {
+        backend: if crate::meiki_ocr::force_cpu() { Backend::Cpu } else { Backend::Auto },
+        intra_threads: crate::meiki_ocr::cpu_threads(),
+        cache_dir,
+        ..Config::default()
+    }
 }
 
 fn load_engine(app: &tauri::AppHandle) -> Result<PpOcr, String> {
@@ -163,9 +168,27 @@ fn read(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<(Vec<ppocr::T
     Ok((lines, backend))
 }
 
-/// The lines automatic scanning watches with, in MeikiOCR's shape (`text_observer`).
-pub(crate) fn read_lines(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<Vec<meikiocr::TextLine>, ReadError> {
-    read(app, image).map(|(lines, _)| as_meiki(lines))
+/// The lines automatic scanning watches with, in MeikiOCR's shape (`text_observer`), and the
+/// backend that read them: with `scan_result`, what `recognize` returns for the same image. The
+/// watcher and the scan share this engine, so the scan of a frame the watcher read reuses it.
+pub(crate) fn read_lines(
+    app: &tauri::AppHandle,
+    image: &image::RgbImage,
+) -> Result<(Vec<meikiocr::TextLine>, Value), ReadError> {
+    read(app, image).map(|(lines, backend)| (as_meiki(lines), backend))
+}
+
+/// Whether `backend` (as `read_lines` reports it) is the CPU. On a GPU backend each new input
+/// size can cost a graph compile (Core ML compiles one per shape, taking seconds), so only on the
+/// CPU does the watcher read regions of a frame rather than the whole of it (`incremental`).
+pub(crate) fn runs_on_cpu(backend: &Value) -> bool {
+    serde_json::to_value(Backend::Cpu).is_ok_and(|cpu| backend["selected"] == cpu)
+}
+
+pub(crate) fn scan_result(lines: &[meikiocr::TextLine], backend: Value) -> Value {
+    let mut result = crate::meiki_ocr::annotations(lines, "ppocr");
+    result["backend"] = backend;
+    result
 }
 
 pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
@@ -173,9 +196,7 @@ pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<
     let (lines, backend) = read(app, &image).map_err(|e| match e {
         ReadError::Unavailable(reason) | ReadError::Inference(reason) => reason,
     })?;
-    let mut result = crate::meiki_ocr::annotations(&as_meiki(lines), "ppocr");
-    result["backend"] = backend;
-    Ok(result)
+    Ok(scan_result(&as_meiki(lines), backend))
 }
 
 #[cfg(test)]
