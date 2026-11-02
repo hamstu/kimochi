@@ -29,6 +29,7 @@ mod gamepad;
 mod google_lens;
 mod history_merge;
 mod hotkeys;
+mod incremental;
 mod mouse_buttons;
 mod manga_ocr;
 mod pp_ocr;
@@ -1694,12 +1695,17 @@ async fn capture_frame(
 
         let info = serde_json::to_value(platform::desktop_frame_info(&frame.info))
             .map_err(|e| e.to_string())?;
+        // The watcher's own reading of these pixels, for a scan of this frame by the same engine.
+        let observed = match (&observation, fingerprint.as_str()) {
+            (Value::Object(_), Some(fingerprint)) => text_observer::scan_for(fingerprint),
+            _ => None,
+        };
         // One id space shared with `scan`, so `ocr_frame` can pick this exact frame up.
         let id = service
             .images
             .lock()
             .unwrap()
-            .put_latest(Image::captured(frame, info.clone()));
+            .put_latest(Image::captured(frame, info.clone()).with_observed(observed));
         if std::env::var_os("KIMOCHI_CAPTURE_AUDIT").is_some() {
             record(
                 &app,
@@ -1952,7 +1958,11 @@ async fn ocr_frame(
         // Encoding is outside the frame-store lock so observations can continue. Engines that
         // read the pixels themselves don't wait for it: their copy of the frame for diagnostics
         // (`last-ocr-frame.png`) is encoded and written beside the scan.
-        let pixels_only = matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext");
+        // Auto OCR's watcher already read these exact pixels with this engine: that read is
+        // this scan's result, and running the models again would only repeat it.
+        let reused = image.observed_by(&engine);
+        let pixels_only = reused.is_some()
+            || matches!(engine.as_str(), "meikiocr" | "local" | "mangaocr" | "ppocr" | "livetext");
         let png = if pixels_only { None } else { Some(image.png()?) };
         let info = image.info.clone();
         if let Ok(p) = path(&app, "last-ocr-frame.png") {
@@ -1977,6 +1987,7 @@ async fn ocr_frame(
             "width": info["width"], "height": info["height"],
         }));
         let recognized = match engine.as_str() {
+            _ if reused.is_some() => Ok(reused.clone().unwrap_or_default()),
             "meikiocr" | "local" => meiki_ocr::recognize(&app, &image),
             "mangaocr" => manga_ocr::recognize(&app, &image),
             "ppocr" => pp_ocr::recognize(&app, &image),
@@ -2015,7 +2026,7 @@ async fn ocr_frame(
         }
         debug_report::trace(&app, json!({
             "check": "scan", "phase": "complete", "id": id, "engine": engine,
-            "backend": value["backend"], "annotations": count,
+            "backend": value["backend"], "annotations": count, "reused": reused.is_some(),
             "lines": value["fullText"].as_str().map_or(0, |text| text.lines().filter(|line| !line.trim().is_empty()).count()),
             "ms": started.elapsed().as_millis() as u64,
         }));

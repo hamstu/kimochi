@@ -325,9 +325,15 @@ pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<
     }
     let engine = engine.as_mut().ok_or("MeikiOCR initialization failed")?;
     let lines = infer(engine, &image)?;
-    let mut result = annotations(&lines, "meikiocr");
-    result["backend"] = serde_json::to_value(engine.backend_info()).map_err(|e| e.to_string())?;
-    Ok(result)
+    Ok(scan_result(&lines, engine))
+}
+
+/// What `recognize` returns for `lines` read by `engine`; the watcher builds the same value for
+/// the frames it reads, so a scan of one of those frames reuses it (`text_observer`).
+pub(crate) fn scan_result(lines: &[TextLine], engine: &MeikiOcr) -> Value {
+    let mut result = annotations(lines, "meikiocr");
+    result["backend"] = serde_json::to_value(engine.backend_info()).unwrap_or(Value::Null);
+    result
 }
 
 /// Secure DLL loading for the Windows ONNX Runtime.

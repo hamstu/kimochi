@@ -343,3 +343,25 @@ test('a slow watcher is never asked more often than three of its reads apart', a
   for (let i = 0; i < 20; i++) await step(500)
   assert.ok(scanner.currentInterval <= 500, `interval ${scanner.currentInterval}`)
 })
+
+test('a slow watcher looks again soon for a new line waiting to be confirmed, then eases off', async () => {
+  let screen = DIALOGUE
+  const { scanner, state, step } = harness({
+    screen: () => screen,
+    recognise: (frame) => reading(frame.lines),
+    settings: { adaptivePollingEnabled: true, adaptivePollMin: 250, adaptivePollMax: 500 }
+  })
+  state.watchMs = 360 // PaddleOCR on a laptop CPU
+  for (let i = 0; i < 6; i++) await step(1200)
+  assert.ok(scanner.currentInterval >= 3 * 360 * 0.99, `idle: interval ${scanner.currentInterval}`)
+
+  // The next line replaces the last one in its box: nobody has read it yet.
+  screen = [line('明日は雨だそうです', 396)]
+  await step(1200)
+  assert.ok(scanner.currentInterval <= 360, `confirming: interval ${scanner.currentInterval}`)
+
+  // Confirmed and read: back to the watcher's budget.
+  for (let i = 0; i < 4; i++) await step(400)
+  assert.equal(state.scenes.at(-1), '明日は雨だそうです')
+  assert.ok(scanner.currentInterval >= 3 * 360 * 0.99, `read: interval ${scanner.currentInterval}`)
+})

@@ -72,7 +72,7 @@ export interface SceneScanDeps<Frame> extends Omit<AutoScanDeps<Frame>, 'onResul
     event: SceneScanEvent,
     frame: Frame | undefined,
     counters: SceneCounters,
-    context: { intervalMs: number; holdMs: number; generation: number; tick: number }
+    context: { intervalMs: number; holdMs: number; generation: number; tick: number; confirming: boolean }
   ): void
 }
 
@@ -157,6 +157,13 @@ const ACTIVE_POLL_MS = 150
  * the processor watching while the game runs.
  */
 const WATCH_COST_FACTOR = 3
+/**
+ * The same budget while a line nobody has read yet waits for the look that confirms it has
+ * stopped (`SceneMemory.awaitingConfirmation`). That look is what the reader is waiting on:
+ * three reads apart, a CPU watcher at 350 ms a read made a line that had finished typing wait
+ * over two seconds for its confirmation. The hurry lasts only until the line is read.
+ */
+const CONFIRM_COST_FACTOR = 0.5
 /** However slow the watcher, look at least this often. */
 const WATCH_COST_MAX_GAP_MS = 2000
 
@@ -179,6 +186,8 @@ export class SceneScanner<Frame = unknown> {
   private interval: number
   /** The watcher's recent read time (moving average), which paces the looks. */
   private watchCostMs = 0
+  /** The current interval was shortened for a line waiting to be confirmed. */
+  private confirming = false
   private quietStreak = 0
   private epoch = 0
 
@@ -288,7 +297,8 @@ export class SceneScanner<Frame = unknown> {
         intervalMs: this.interval,
         holdMs: Math.max(0, this.requestHold - this.now()),
         generation: this.deps.generation?.() ?? 0,
-        tick: this.counters.ticks
+        tick: this.counters.ticks,
+        confirming: this.confirming
       })
     } catch {
       /* Diagnostics cannot change recognition behaviour. */
@@ -627,7 +637,10 @@ export class SceneScanner<Frame = unknown> {
     }
 
     if (previous) this.keeper.release(previous.frame)
-    this.adapt(observed.displayChanged || this.scene.unsettled || this.inFlight !== null)
+    this.adapt(
+      observed.displayChanged || this.scene.unsettled || this.inFlight !== null,
+      this.scene.awaitingConfirmation(at)
+    )
     return outcome
   }
 
@@ -842,11 +855,14 @@ export class SceneScanner<Frame = unknown> {
 
   /**
    * Look often while anything is moving or being read; ease off when the screen is still.
-   * Never more often than the watcher can afford (`WATCH_COST_FACTOR`).
+   * Never more often than the watcher can afford (`WATCH_COST_FACTOR`), except that a line
+   * waiting to be confirmed gets its next look sooner (`CONFIRM_COST_FACTOR`).
    */
-  private adapt(active: boolean): void {
+  private adapt(active: boolean, confirming = false): void {
     this.adaptToScreen(active)
-    const floor = Math.min(this.watchCostMs * WATCH_COST_FACTOR, WATCH_COST_MAX_GAP_MS)
+    this.confirming = confirming
+    const factor = confirming ? CONFIRM_COST_FACTOR : WATCH_COST_FACTOR
+    const floor = Math.min(this.watchCostMs * factor, WATCH_COST_MAX_GAP_MS)
     this.interval = Math.max(this.interval, floor)
   }
 

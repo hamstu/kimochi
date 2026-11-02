@@ -163,9 +163,20 @@ fn read(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<(Vec<ppocr::T
     Ok((lines, backend))
 }
 
-/// The lines automatic scanning watches with, in MeikiOCR's shape (`text_observer`).
-pub(crate) fn read_lines(app: &tauri::AppHandle, image: &image::RgbImage) -> Result<Vec<meikiocr::TextLine>, ReadError> {
-    read(app, image).map(|(lines, _)| as_meiki(lines))
+/// The lines automatic scanning watches with, in MeikiOCR's shape (`text_observer`), and the
+/// backend that read them: with `scan_result`, what `recognize` returns for the same image. The
+/// watcher and the scan share this engine, so the scan of a frame the watcher read reuses it.
+pub(crate) fn read_lines(
+    app: &tauri::AppHandle,
+    image: &image::RgbImage,
+) -> Result<(Vec<meikiocr::TextLine>, Value), ReadError> {
+    read(app, image).map(|(lines, backend)| (as_meiki(lines), backend))
+}
+
+pub(crate) fn scan_result(lines: &[meikiocr::TextLine], backend: Value) -> Value {
+    let mut result = crate::meiki_ocr::annotations(lines, "ppocr");
+    result["backend"] = backend;
+    result
 }
 
 pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<Value, String> {
@@ -173,9 +184,7 @@ pub fn recognize(app: &tauri::AppHandle, image: &crate::state::Image) -> Result<
     let (lines, backend) = read(app, &image).map_err(|e| match e {
         ReadError::Unavailable(reason) | ReadError::Inference(reason) => reason,
     })?;
-    let mut result = crate::meiki_ocr::annotations(&as_meiki(lines), "ppocr");
-    result["backend"] = backend;
-    Ok(result)
+    Ok(scan_result(&as_meiki(lines), backend))
 }
 
 #[cfg(test)]

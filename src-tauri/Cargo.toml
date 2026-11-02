@@ -145,3 +145,28 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.libm]
 opt-level = 3
+# Auto OCR's per-look work, also optimized in development builds: MeikiOCR's pre-processing, the
+# capture crate's pixel conversion and hashing, and PNG coding. Unoptimized, a 1924x1004 look
+# spent about 200 ms in them, and MeikiOCR read a frame in 734 ms instead of 156.
+[profile.dev.package.meikiocr]
+opt-level = 3
+[profile.dev.package.kimochi-capture]
+opt-level = 3
+[profile.dev.package.ndarray]
+opt-level = 3
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.flate2]
+opt-level = 3
+[profile.dev.package.crc32fast]
+opt-level = 3
+[profile.dev.package.adler2]
+opt-level = 3
+[profile.dev.package.simd-adler32]
+opt-level = 3

@@ -19,6 +19,10 @@ pub struct Image {
     /// frame's own geometry, never against a later recapture whose dimensions or
     /// crop may differ.
     pub info: Value,
+    /// What the Auto OCR watcher already read on exactly these pixels, as `(engine, scan
+    /// result)`: the same engine asked to read this frame again returns it instead of running
+    /// its models a second time (`text_observer::scan_for`).
+    observed: Option<Arc<(&'static str, Value)>>,
 }
 
 impl Image {
@@ -27,6 +31,7 @@ impl Image {
             png: Arc::new(OnceLock::from(Ok(png))),
             raw: None,
             info,
+            observed: None,
         }
     }
 
@@ -36,7 +41,21 @@ impl Image {
             png: Arc::new(OnceLock::new()),
             raw: Some(Arc::new(frame)),
             info,
+            observed: None,
         }
+    }
+
+    /// Keep the watcher's reading of these exact pixels for the scan that follows.
+    pub fn with_observed(mut self, observed: Option<(&'static str, Value)>) -> Self {
+        self.observed = observed.map(Arc::new);
+        self
+    }
+
+    /// The watcher's reading of these pixels, when `engine` is the one that made it.
+    pub fn observed_by(&self, engine: &str) -> Option<Value> {
+        let observed = self.observed.as_ref()?;
+        let engine = if engine == "local" { "meikiocr" } else { engine };
+        (observed.0 == engine).then(|| observed.1.clone())
     }
 
     /// The captured pixels, when this image still has them (an engine that reads

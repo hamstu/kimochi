@@ -764,6 +764,26 @@ export class SceneMemory {
     return this.tracks.some((t) => t.present && (t.pending !== null || t.stable < this.options.stableObservations))
   }
 
+  /**
+   * A line nobody has read yet is waiting for the look that confirms it has stopped: the one
+   * moment where the next look decides how soon the reader gets the line, so the loop should
+   * not make it wait out its usual budget. Blinking and churning lines never count, so a timer
+   * or a flickering sprite cannot keep the loop in a hurry.
+   */
+  awaitingConfirmation(at: number): boolean {
+    const o = this.options
+    return this.tracks.some(
+      (t) =>
+        t.present &&
+        !this.blinking(t, at) &&
+        !this.volatile(t, at) &&
+        // New text in the line's place, not yet confirmed: never read, whatever the line
+        // said before has been. Otherwise, the line's current content still settling, unread.
+        (t.pending !== null ||
+          (t.stable < o.stableObservations && !this.readingFor(t) && t.version.attempts < o.maxAttempts))
+    )
+  }
+
   /** Which version of which line the current frame shows, to file a recognition of it against. */
   snapshot(at: number): SceneSnapshot {
     return {
