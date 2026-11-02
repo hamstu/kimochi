@@ -613,16 +613,10 @@ pub(crate) fn rgb_image(frame: &Frame) -> kimochi_capture::Result<image::RgbImag
         .ok_or_else(|| CaptureError::new("observe", "the frame could not be converted"))
 }
 
-/// Identity of a frame's content, for reusing a result on identical pixels.
+/// Identity of a frame's content, for reusing a result on identical pixels: the number behind
+/// `capture_frame`'s `contentFingerprint`, which is how `scan_for` finds this read again.
 fn frame_key(frame: &Frame) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hash = std::collections::hash_map::DefaultHasher::new();
-    frame.info.source_id.hash(&mut hash);
-    frame.info.width.hash(&mut hash);
-    frame.info.height.hash(&mut hash);
-    frame.info.crop_pixels.hash(&mut hash);
-    frame.pixels.hash(&mut hash);
-    hash.finish()
+    kimochi_capture::hash::content_key(frame)
 }
 
 // --- the worker -------------------------------------------------------------
