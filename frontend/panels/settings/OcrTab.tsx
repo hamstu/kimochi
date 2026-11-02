@@ -35,6 +35,7 @@ import { useSetting } from '../../bridge/useSetting'
 import { useViewState } from '../../bridge/state'
 import { triggerAction } from '../../bridge/tauri'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
+import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { EngineChooser } from './EngineChooser'
 import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
@@ -96,6 +97,7 @@ function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
 
 export function OcrTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
+  const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
     enabled: false,
     scanDelay: 500
@@ -177,6 +179,18 @@ export function OcrTab(): ReactNode {
             void setTextOverlayGrouping({ ...textOverlayGrouping, filterSmallTextThreshold: value })
           }
         />
+        <JapaneseFilterRow />
+        <SettingsRow
+          label="Exclude overlay from screen recording"
+          controlId="ocr-exclude-capture"
+          description="Hides the overlay and pop-ups from captures, so Kimochi doesn't read its own text."
+        >
+          <Switch
+            id="ocr-exclude-capture"
+            checked={excludeFromCapture}
+            onCheckedChange={(checked) => void setExcludeFromCapture(checked)}
+          />
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection

@@ -63,6 +63,9 @@ pub fn defaults() -> Value {
         },
         "overlayOpacity": 80,
         "liveOverlayEnabled": false,
+        // Whether what Kimochi draws over the source (the overlay, the dictionary pop-ups) hides
+        // from screen capture where a capture could read it back (`exclude_from_capture`).
+        "excludeOverlayFromCapture": true,
         // The overlay's highlight colour, its cards' appearance and the highlight's opacity
         // (ui/settings.ts DEFAULT_OVERLAY_STYLE); `app` follows Kimochi's own appearance.
         "overlayStyle": { "color": "#3e63dd", "appearance": "app", "opacity": 40 },
@@ -87,6 +90,17 @@ pub fn defaults() -> Value {
         // `endpoint` is intentionally absent: an unset endpoint follows
         // serverSettings.mode. See `resolve_endpoint`.
     })
+}
+
+/// The setting behind `exclude_from_capture`.
+pub const EXCLUDE_FROM_CAPTURE: &str = "excludeOverlayFromCapture";
+
+/// Whether the windows drawn over the source (the overlay, the dictionary pop-ups, Linux's
+/// controller and crop hosts) may hide from screen capture at all. On by default: a capture of
+/// the display would otherwise read them back as text. Off, nothing is hidden, so screenshots and
+/// recordings show the pop-ups, and a display source can read them.
+pub fn exclude_from_capture(settings: &Settings) -> bool {
+    settings.get_or(EXCLUDE_FROM_CAPTURE, true)
 }
 
 pub struct Settings {

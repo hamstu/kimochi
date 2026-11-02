@@ -50,6 +50,7 @@ The shared design system for every Kimochi window. Import components from `@kit`
 | `Segmented` | 2–4 short exclusive options (theme, size). |
 | `ChoiceGroup` | Exclusive modes that each need a detail line (input source, engine). |
 | `Slider` | Continuous values. |
+| `StepSlider` | 3–5 ordered options on a scale (off → strict): notched track, step names below. |
 | `Badge tone`, `StatusDot tone`, `Callout tone`, `EmptyState`, `Spinner`, `Kbd` | Feedback and status. |
 | `SettingsPage`, `SettingsSection`, `SettingsRow`, `SettingsSubgroup` | Every settings page. |
 | `SettingsTabs` | Tabs across the top of a settings page with several kinds of settings (Anki), in place of its title; wrap them and a title-less `SettingsPage` in `k-settings-tabbed`. |

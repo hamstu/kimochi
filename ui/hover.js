@@ -13,6 +13,25 @@
  * current source bounds rather than by a single factor.
  */
 
+/**
+ * Whether the hovered window's markings would land under the pointer.
+ *
+ * The pointer is on the source card, in Kimochi's own window. When the source window sits
+ * behind that point (a large or maximised game under Kimochi), its outline and picture would
+ * be drawn over the very card being hovered, covering it and its Crop area and Change source
+ * buttons for as long as the pointer stays. Then nothing is marked. Desktop points, both; an
+ * unknown pointer (no native cursor, as on Wayland) marks as before.
+ */
+export function marksUnderPointer(bounds, pointer) {
+  if (!bounds || !pointer || !Number.isFinite(pointer.x) || !Number.isFinite(pointer.y)) return false
+  return (
+    pointer.x >= bounds.x &&
+    pointer.y >= bounds.y &&
+    pointer.x < bounds.x + bounds.width &&
+    pointer.y < bounds.y + bounds.height
+  )
+}
+
 /** A capture this recent is reused for the same source rather than taken again. */
 export const HOVER_PREVIEW_REUSE_MS = 2000
 

@@ -19,7 +19,7 @@ function bundle() {
     write: false,
     format: "esm",
     platform: "node",
-    alias: { "@texthooker": `${root}frontend/texthooker` },
+    alias: { "@texthooker": `${root}frontend/texthooker`, "@ui": `${root}ui` },
     plugins: [
       {
         name: "native-test-transport",
@@ -278,7 +278,7 @@ test("disabled matching keeps manual sessions and all input paths share deduplic
 
 test("only the selected input is accepted, and excluded scans never replay on switching back", async () => {
   const h = await harness({
-    superTexthooker: { inputSource: "clipboard", autoMatchSource: false },
+    superTexthooker: { inputSource: "clipboard", autoMatchSource: false, japaneseFilter: "off" },
   });
   await h.call("host", "ingest", ["clipboard line", "clipboard"]);
   await h.call("host", "ingest", ["wrong socket", "websocket"]);
@@ -352,7 +352,7 @@ test('semantic OCR groups remain separate with independent durable replay IDs', 
     {id:'bubble-2',text:'同じ台詞',bbox:[50,0,70,80],orientation:'vertical'},
     {id:'bubble-3',text:'同じ台詞の続き',bbox:[100,0,120,80],orientation:'vertical'}
   ]}
-  const h=await harness({scannedTextHistory:[scan],superTexthooker:{inputSource:'ocr',startMergeEnabled:true,startMergePrefixLen:2,dedupeDepth:100,cjkOnly:true,tokenizeOnArrival:false}})
+  const h=await harness({scannedTextHistory:[scan],superTexthooker:{inputSource:'ocr',startMergeEnabled:true,startMergePrefixLen:2,dedupeDepth:100,tokenizeOnArrival:false}})
   assert.deepEqual(h.snapshot().lines.map(l=>l.text),scan.groups.map(g=>g.text))
   assert.deepEqual(h.snapshot().lines.map(l=>l.ocr.groupIndex),[0,1,2])
   assert.equal(h.snapshot().lines[0].ocr.groupCount,3)
@@ -490,3 +490,20 @@ test("Sync's hold pauses the Log's writes, and its release reloads the merged li
   assert.equal(h.snapshot().sessions.sessions.find((s) => s.id === sid).name, "Renamed");
   assert.equal(linesFile(h, sid).lines.length, 2, "the merged file is kept");
 });
+
+test('Japanese filter: on by default, stricter when asked, and can be turned off', async () => {
+  const lines = ['Save データ', '猫が好きです', 'Options 設定', 'Options', '「はい」']
+  const history = lines.map((text, i) => entry(String(i + 1), 'Game', text))
+  const run = async (extra) => {
+    const h = await harness({
+      scannedTextHistory: history,
+      superTexthooker: { inputSource: 'ocr', dedupeDepth: 0, tokenizeOnArrival: false, ...extra }
+    })
+    await h.drain()
+    // Newest first in the snapshot; which lines got in is what matters here.
+    return h.snapshot().lines.map((l) => l.text).toSorted()
+  }
+  assert.deepEqual(await run({}), ['Save データ', '猫が好きです', 'Options 設定', '「はい」'].toSorted())
+  assert.deepEqual(await run({ japaneseFilter: 'mostlyNonJapanese' }), ['猫が好きです', '「はい」'].toSorted())
+  assert.deepEqual(await run({ japaneseFilter: 'off' }), lines.toSorted())
+})

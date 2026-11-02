@@ -50,7 +50,12 @@ pub fn build_window(
     .accept_first_mouse(true)
     .skip_taskbar(true)
     .inner_size(500., 380.)
-    .content_protected(true)
+    // Hidden from capture unless the reader turned that off (`exclude_from_capture`); on
+    // Windows the cursor poll then narrows it to display sources (`sync_capture_protection`).
+    .content_protected(
+        app.try_state::<crate::state::Shared>()
+            .is_none_or(|service| crate::settings::exclude_from_capture(&service.settings)),
+    )
     .initialization_script_for_all_frames(crate::platform::platform_prelude());
     #[cfg(target_os = "linux")]
     let builder = builder.focusable(crate::platform::wayland_overlay_unavailable());

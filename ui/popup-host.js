@@ -218,11 +218,15 @@ function scheduleHide() {
   hideTimer = setTimeout(() => {
     hideTimer = null
     if ([...placed].some(([popup]) => popup.isVisibleSync())) return
-    windowRect = null
-    void invoke('popup_window', { rect: null, visible: false }).catch((error) => {
-      report({ check: 'popup-host-place-failed', error: String(error?.message ?? error) })
-    })
+    hideWindow()
   }, HIDE_GRACE_MS)
+}
+
+function hideWindow() {
+  windowRect = null
+  void invoke('popup_window', { rect: null, visible: false }).catch((error) => {
+    report({ check: 'popup-host-place-failed', error: String(error?.message ?? error) })
+  })
 }
 
 let readingPopupVisible = false
@@ -243,9 +247,21 @@ async function relayout() {
   // every click on both of them. A chain that cannot fit on one screen is a bug
   // somewhere else; the window stays around the popup that opened last, and says so.
   const whole = chainWindow(visible.map(([, rect]) => rect))
-  const screen = whole ? anchorViewport([asEdges(whole)], displays, whole) : null
+  if (!whole) {
+    // Visible, but with nothing to place: every rectangle has no extent (a resize to
+    // zero) or no position. Placing it threw on the missing box below, before the
+    // window was told anything, so a window already on screen stayed there, empty.
+    // There is nothing to show, so the window goes now: not through `scheduleHide`,
+    // which keeps it for as long as a popup still says it is visible.
+    report({ check: 'popup-host-invalid-geometry', rects: visible.map(([, rect]) => rect) })
+    cancelHide()
+    void invoke('regions', { rects: [] }).catch(() => {})
+    hideWindow()
+    return
+  }
+  const screen = anchorViewport([asEdges(whole)], displays, whole)
   let container = whole
-  if (whole && screen && !fitsIn(whole, screen)) {
+  if (screen && !fitsIn(whole, screen)) {
     const latest = visible.find(([popup]) => popup === newest) ?? visible[visible.length - 1]
     container = latest ? latest[1] : whole
     report({ check: 'popup-host-chain-implausible', chain: whole, used: container })

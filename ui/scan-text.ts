@@ -34,8 +34,6 @@ export interface ScanHit {
   /** The word's box on the desktop. */
   anchor: { x: number; y: number; width: number; height: number } | null
   point: ScanPoint
-  /** Looked up by a click (`lookUp`) rather than by Shift. */
-  clicked: boolean
 }
 
 export interface ScannerOptions {
@@ -190,8 +188,6 @@ export function wordAtStart(chunks: unknown, windowText: string): string | null 
 export interface Scanner {
   /** The pointer is at `point` with Shift held. */
   scan(point: ScanPoint): void
-  /** Look up the word at `point` once, now (a click). */
-  lookUp(point: ScanPoint): void
   /** Shift was let go: nothing more is looked up. The pop-up and its word's selection stay. */
   stop(): void
   /** The pop-up closed: clear its word's selection, unless the reader selected something else. */
@@ -200,8 +196,6 @@ export interface Scanner {
 
 export function createScanner(options: ScannerOptions): Scanner {
   let active = false
-  /** The current look is a one-off `lookUp`. */
-  let once = false
   let latest: ScanPoint | null = null
   let lastTick = 0
   let tickTimer: ReturnType<typeof setTimeout> | null = null
@@ -250,10 +244,6 @@ export function createScanner(options: ScannerOptions): Scanner {
     if (!windowText.trim()) return
     const term = await wordAt(windowText)
     if (!active) return
-    if (once && !term) {
-      once = active = false
-      return
-    }
     if (!term) {
       // Off any word: whatever was about to open is not wanted. The pop-up already open stays.
       cancelPending()
@@ -274,14 +264,6 @@ export function createScanner(options: ScannerOptions): Scanner {
     // The same word at the same place is the pop-up already showing; elsewhere it moves.
     const key = `${term}@${Math.round(anchor?.x ?? point.screenX)},${Math.round(anchor?.y ?? point.screenY)}`
     const sentence = options.sentenceOf(hit.node)
-    if (once) {
-      once = active = false
-      cancelPending()
-      shown = key
-      if (range) select(range)
-      options.show({ term, sentence, anchor, point, clicked: true })
-      return
-    }
     if (key === shown) {
       cancelPending()
       return
@@ -293,7 +275,7 @@ export function createScanner(options: ScannerOptions): Scanner {
       if (!active) return
       shown = key
       if (range) select(range)
-      options.show({ term, sentence, anchor, point, clicked: false })
+      options.show({ term, sentence, anchor, point })
     }, DWELL_MS)
     pending = { key, timer }
   }
@@ -326,13 +308,8 @@ export function createScanner(options: ScannerOptions): Scanner {
       if (since >= THROTTLE_MS) void tick()
       else tickTimer ??= setTimeout(() => void tick(), THROTTLE_MS - since)
     },
-    lookUp(point) {
-      latest = point
-      active = once = true
-      void tick()
-    },
     stop() {
-      if (!active || once) return
+      if (!active) return
       active = false
       shown = null
       rerun = false

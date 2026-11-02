@@ -33,6 +33,7 @@ import { PopupLeave } from './popup-leave.js'
 import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
 import { scanPointerInit } from './scan-input.js'
 import { visibleAnnotations } from './annotations.js'
+import { japaneseFilterOf } from './japanese-text.js'
 import { AutoScanner } from './autoscan.js'
 import { resolveWatcher, observerModeOf } from './watcher.js'
 import { SceneScanner } from './scene-scanner.js'
@@ -40,7 +41,7 @@ import { ScanTrace } from './scan-trace.js'
 import { scanWasPublished, markScanPublished } from './scan-publication.js'
 import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
-import { HoverOverlay, HoverPreview } from './hover.js'
+import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
@@ -135,7 +136,7 @@ const state = {
   crop: null,
   /** The chosen source's Anki crop (what goes on cards as the screenshot), or null for all of it. */
   ankiCrop: null,
-  hover: { selectRegion: false, source: false, isWindow: false },
+  hover: { selectRegion: false, source: false, isWindow: false, underPointer: false },
   /** While true the overlay claims the whole display so a drag can be seen. */
   regionSelecting: false,
   /** From opening a source's region editor until its new crop is saved and taken in. */
@@ -150,7 +151,17 @@ const state = {
   yomitan: { ready: false, error: null }
 }
 
-const setting = (key) => native.getSetting(key)
+/**
+ * A setting, as this window reads it. `textOverlayGrouping` comes with the Japanese filter folded
+ * in: that is the Log's setting (`superTexthooker.japaneseFilter`, on unless turned off), and
+ * the overlay applies the same rule to what it draws (`visibleAnnotations`). Folding it in here
+ * means every reader of the grouping (drawing, click targets, GNOME's surface, what a scan
+ * publishes) filters the same way.
+ */
+const setting = (key) =>
+  key === 'textOverlayGrouping'
+    ? { ...(native.getSetting(key) ?? {}), ...japaneseFilterOf(native.getSetting('superTexthooker')) }
+    : native.getSetting(key)
 
 /** Which OCR engines this machine has (`platform_capabilities`), for choosing Auto OCR's watcher. */
 let ocrEngines = {}
@@ -704,8 +715,15 @@ function draw() {
  * is on another Space or desktop: it would be drawn over whatever the reader has in front.
  */
 function hoverMarksWindow() {
-  return state.hover.isWindow && !state.sourceWindow?.fullscreen && state.sourceWindow?.onScreen !== false
+  return (
+    state.hover.isWindow &&
+    !state.hover.underPointer &&
+    !state.sourceWindow?.fullscreen &&
+    state.sourceWindow?.onScreen !== false
+  )
 }
+/** Bumped by every source-card hover, so a pointer reading from an earlier one is dropped. */
+let hoverSourceTurn = 0
 
 function drawHover() {
   const marked = state.hover.source && hoverMarksWindow()
@@ -1522,16 +1540,27 @@ async function onAction(name) {
     // The window was brought to the front: its markings dissipate instead of waiting for the
     // pointer to leave the card.
     case 'hoverSourceDismiss':
+      hoverSourceTurn++
       state.hover.source = false
       hoverPreview.stop()
       hover.dissipate()
       return drawHover()
     case 'hoverSourceOn':
-    case 'hoverSourceOff':
-      state.hover.source = name.endsWith('On')
+    case 'hoverSourceOff': {
+      const hovering = name.endsWith('On')
+      const turn = ++hoverSourceTurn
+      state.hover.source = hovering
+      state.hover.underPointer = false
+      if (hovering) {
+        // Where the pointer is decides whether there is anything to mark: see marksUnderPointer.
+        const at = await native.pointerLocation().catch(() => null)
+        if (turn !== hoverSourceTurn) return undefined
+        state.hover.underPointer = marksUnderPointer(state.sourceBounds, at)
+      }
       if (state.hover.source && hoverMarksWindow()) hoverPreview.start()
       else hoverPreview.stop()
       return drawHover()
+    }
     default:
       // Everything else native has already applied before emitting.
       return undefined
@@ -3550,11 +3579,19 @@ await native.listen('source-focus', ({ payload }) => {
  * rather than searching the same point twice.
  */
 let lastRealPointer = -Infinity
+/** The modifiers that event reported: on Windows, none while the game has the keyboard. */
+let lastRealModifiers = null
 window.addEventListener(
   'pointermove',
   (event) => {
     if (!event.isTrusted) return
     lastRealPointer = performance.now()
+    lastRealModifiers = {
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey
+    }
     // The box under a real pointer is lit before the engine sees the event (`flushPointer`):
     // this listener is the window's first, registered before any content script.
     if (extensionHosted && !controller.drivesLookups) {
@@ -3608,7 +3645,12 @@ await native.listen('pointer', ({ payload }) => {
   // While the controller is reading, the pointer must not steer Yomitan: an idle mouse resting
   // somewhere else would otherwise close the controller's popup.
   if (!state.yomitan.ready || controller.drivesLookups) return
-  const init = scanPointerInit(payload, local, performance.now() - lastRealPointer)
+  const init = scanPointerInit(
+    payload,
+    local,
+    performance.now() - lastRealPointer,
+    lastRealModifiers
+  )
   // Over Yomitan's own popup the sample is the popup's: its scanner opens a nested popup for the
   // word under it. The page's scanner would only ignore it.
   if (init && !extensionHosted && replayPopupPointer?.(livePopups, local.x, local.y, init)) {
@@ -3673,7 +3715,7 @@ async function startNoEngine() {
 
 /**
  * The Yomitan API: no host and nothing downloaded. Words are split and looked up through the
- * browser's Yomitan over its API, so the lookup hook (Shift-hover and click over the text) is all
+ * browser's Yomitan over its API, so the lookup hook (Shift over the text) is all
  * there is to install; the pointer replay and the controller see it as a ready dictionary.
  */
 async function startApiEngine() {

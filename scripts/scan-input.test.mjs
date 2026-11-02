@@ -81,6 +81,30 @@ test('real pointer events suppress the feed while they are arriving', () => {
   assert.notEqual(feed({}, REAL_POINTER_GRACE_MS), null)
 })
 
+test('a modifier the real event did not report is not muted by it', () => {
+  // Windows: the game has the keyboard, so the overlay's own pointermove reports Shift up
+  // while it is held. Muting the native sample then lost the lookup entirely, because the
+  // feed sends nothing new until the pointer moves again or a modifier changes.
+  const s = sample({ shift: true })
+  const unaware = { shiftKey: false, ctrlKey: false, altKey: false, metaKey: false }
+  const init = scanPointerInit(s, local(s), REAL_POINTER_GRACE_MS - 1, unaware)
+  assert.notEqual(init, null)
+  assert.equal(init.shiftKey, true)
+  // No record of a real event's modifiers counts as none reported.
+  assert.notEqual(scanPointerInit(s, local(s), 0), null)
+})
+
+test('a real event that already carries the modifier still wins', () => {
+  // macOS and Linux, or Windows with Kimochi focused: the real event is the better
+  // answer, and sending the native one too would scan the same point twice.
+  const s = sample({ shift: true })
+  const aware = { shiftKey: true, ctrlKey: false, altKey: false, metaKey: false }
+  assert.equal(scanPointerInit(s, local(s), REAL_POINTER_GRACE_MS - 1, aware), null)
+  // One the real event lacks is still enough, whichever key it is.
+  const ctrl = sample({ shift: true, ctrl: true })
+  assert.notEqual(scanPointerInit(ctrl, local(ctrl), REAL_POINTER_GRACE_MS - 1, aware), null)
+})
+
 test('a modifier alone is enough: the pointer need not have moved', () => {
   // Holding Shift over the word already under the pointer is how a reader asks for
   // the one they are looking at, so the sample carries no notion of movement at all.

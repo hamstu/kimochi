@@ -49,6 +49,7 @@ const SETTINGS: &[&str] = &[
     "autoOCRSettings",
     "autoScanSettings.enabled",
     "liveOverlayEnabled",
+    "excludeOverlayFromCapture",
     "hasCompletedOnboarding",
     "gamepadSettings.enabled",
     "serverSettings.mode",
