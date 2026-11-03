@@ -5,8 +5,8 @@
 //! verifies its minisign signature against the public key there, and swaps the installed app
 //! (macOS: the `.app`; Linux: the AppImage, or `dpkg` through `pkexec` for a `.deb`; Windows: the
 //! NSIS installer, which relaunches the app). The endpoint is the `latest` release's asset, which
-//! GitHub resolves to the newest *published, non-prerelease* release: the rolling `nightly`
-//! pre-release and the draft a tag creates are never offered. CI writes `latest.json`
+//! GitHub resolves to the newest *published, non-prerelease* release: pre-releases and the
+//! draft a tag creates are never offered. CI writes `latest.json`
 //! (`scripts/updater-artifacts.mjs`).
 //!
 //! This module keeps one `UpdateStatus` for every window, runs the periodic check, holds the

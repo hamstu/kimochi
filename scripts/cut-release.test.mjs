@@ -191,7 +191,14 @@ test('CI takes release notes from the changelog, checks the tag first and publis
   assert.match(ci, /--notes-file \.\.\/release-notes\.md/)
   assert.doesNotMatch(ci, /--generate-notes/)
   const manifest = ci.slice(ci.indexOf('\n  manifest:'))
-  assert.match(manifest, /if: needs\.plan\.outputs\.mode == 'release' && needs\.plan\.outputs\.rolling == 'false'/)
+  assert.match(manifest, /if: needs\.plan\.outputs\.mode == 'release'\n/)
+  // Only a tag builds bundles (there is no nightly), and main's run of the release commit, which
+  // arrives in the same push as its tag, skips rather than repeating the tag's checks.
+  const bundle = ci.slice(ci.indexOf('\n  bundle:'), ci.indexOf('\n  manifest:'))
+  assert.match(bundle, /needs\.plan\.outputs\.mode == 'release' && needs\.checks\.result == 'success'/)
+  assert.doesNotMatch(ci, /tag=nightly|--prerelease/)
+  assert.match(ci, /git ls-remote --tags origin 'refs\/tags\/v\*'/)
+  assert.match(ci, /\n {4}if: needs\.plan\.outputs\.mode != 'skip'\n/, 'checks skip a release commit on main')
   assert.ok(
     manifest.indexOf('gh release edit "$RELEASE" --draft=false --latest') > manifest.indexOf('gh release delete-asset'),
     'publishing is the last step, after latest.json is uploaded and the sidecars removed'

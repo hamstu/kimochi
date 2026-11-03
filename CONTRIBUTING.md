@@ -85,7 +85,7 @@ pop-up placement and the misses. Both must pass before the new pin ships.
 release notes and the app's "What's new". Refactors, CI and tests don't need one.
 
 **Releases** are cut by the maintainer. `main` is the development line: every push that changes the app
-refreshes the rolling `nightly` pre-release (website- and documentation-only pushes build nothing), and nothing on `main` is offered to users as an update. A release
+runs the checks on every platform but builds no bundles (website- and documentation-only pushes run nothing), and nothing on `main` is offered to users as an update. A release
 is a `v<x.y.z>` tag made by `npm run release -- <x.y.z>` on a clean `main`; CI builds, signs and
 publishes it, and installed copies update to it. Never bump the version or tag by hand.
 

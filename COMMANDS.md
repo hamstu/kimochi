@@ -1592,7 +1592,7 @@ models are ready scans at once.
 Kimochi updates itself from the project's GitHub Releases through `tauri-plugin-updater`
 (`src-tauri/src/updater.rs`). The endpoint, `plugins.updater.endpoints` in `tauri.conf.json`, is
 the *latest* release's `latest.json`, which GitHub resolves to the newest published,
-non-prerelease release: the rolling `nightly` pre-release and the draft a `v*` tag creates are
+non-prerelease release: pre-releases and the draft a `v*` tag creates are
 never offered, so only a release someone published by hand is. CI signs each platform's bundle
 with the minisign key whose public half is `plugins.updater.pubkey`, and composes `latest.json`
 (`scripts/updater-artifacts.mjs`, the `manifest` job in `ci.yml`); the app verifies the

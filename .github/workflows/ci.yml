@@ -1,12 +1,12 @@
 name: CI
 
-# Native compile, lint and test gates on every OS, then a bundle of the app per target, all on
-# the self-hosted runners described in ci/runners/README.md (nothing here uses GitHub-hosted
-# minutes). Bundles go straight to GitHub Releases, which are not metered like workflow
-# artifacts: a push to main replaces the assets of the rolling `nightly` pre-release, and a tag
-# `v*` (made by `npm run release -- <x.y.z>`, scripts/cut-release.mjs) builds optimised bundles
-# into a draft release of that tag, which the `manifest` job publishes once every platform has
-# built and signed. Tags are the only way a release is published; main stays the development line.
+# Native compile, lint and test gates on every OS, all on the self-hosted runners described in
+# ci/runners/README.md (nothing here uses GitHub-hosted minutes). A push to main runs only these
+# checks. A tag `v*` (made by `npm run release -- <x.y.z>`, scripts/cut-release.mjs) also builds
+# optimised bundles per target straight into a draft release of that tag (GitHub Releases are not
+# metered like workflow artifacts), which the `manifest` job publishes once every platform has
+# built and signed. Tags are the only thing that builds or publishes; main stays the development
+# line. There is no nightly build.
 #
 # OCR engines: src-tauri pins the public meikiocr and mangaocr crates to exact git revisions
 # (src-tauri/Cargo.toml and Cargo.lock), so Cargo fetches the recorded source itself and the
@@ -18,22 +18,18 @@ name: CI
 # build on a machine is incremental.
 
 on:
+  # A manual run on a branch runs the checks; on a `v*` tag it re-runs that release.
   workflow_dispatch:
     inputs:
-      mode:
-        description: Build mode
-        type: choice
-        options: [bundle, release]
-        default: bundle
       arch_linux:
-        description: Also build Linux ARM64 on the Arch runner
+        description: On a tag, also build Linux ARM64 on the Arch runner
         type: boolean
         default: false
   push:
     branches: [main]
     tags: ['v*']
-    # A push to main that only touches the website or documentation builds nothing: the app and
-    # nightly are unchanged by it. Later patterns win, so CHANGELOG.md (compiled into the app's
+    # A push to main that only touches the website or documentation runs nothing: the app is
+    # unchanged by it. Later patterns win, so CHANGELOG.md (compiled into the app's
     # "What's new") and COMMANDS.md (read by the tests) still build. GitHub does not apply path
     # filters to tag pushes, so a release always builds.
     paths:
@@ -56,20 +52,13 @@ env:
   COPYFILE_DISABLE: '1'
 
 jobs:
-  # Which machines build, and whether optimised or debug. A tag always releases (even a manual
-  # run started on one); a manual run on a branch chooses; a push to main bundles.
+  # Which machines run, and the mode: `release` for a `v*` tag (even a manual run started on one),
+  # `check` for anything else, and `skip` for main's run of a release commit.
   # Only this repository has the self-hosted runners and the signing secrets: in a fork the plan
   # job is skipped, and with it every job that needs it, instead of waiting a day for a runner.
-  # The release commit ("Kimochi x.y.z", which sets the version in tauri.conf.json) reaches main
-  # in the same push as its tag; the tag's run builds it, so main's run of that commit is skipped
-  # instead of building nightly from it and holding the runners the release needs.
   plan:
     name: Plan
-    if: >-
-      github.repository == 'hamstu/kimochi' &&
-      !(github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-        startsWith(github.event.head_commit.message, 'Kimochi ') &&
-        contains(github.event.head_commit.modified, 'src-tauri/tauri.conf.json'))
+    if: github.repository == 'hamstu/kimochi'
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write
@@ -83,7 +72,6 @@ jobs:
       profile: ${{ steps.plan.outputs.profile }}
       matrix: ${{ steps.plan.outputs.matrix }}
       release: ${{ steps.release.outputs.tag }}
-      rolling: ${{ steps.release.outputs.rolling }}
     steps:
       # For the tag's version and its CHANGELOG.md section. Same directory and no clean as the
       # other jobs on this machine, so their kept build caches are untouched.
@@ -94,15 +82,31 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The release commit ("Kimochi x.y.z") reaches main in the same atomic push as its tag, so
+      # the tag is already on origin when main's run starts. The tag's run checks and builds that
+      # commit; main's run of it would only repeat the checks and hold the runners the release
+      # needs, so it skips. Asks origin for the tag rather than trusting the push payload's file
+      # lists, which an earlier guard relied on and which never skipped a run.
+      - name: Detect a release commit on main
+        id: tagged
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]] &&
+            git ls-remote --tags origin 'refs/tags/v*' | awk -v sha="$GITHUB_SHA" '$1 == sha { found = 1 } END { exit !found }'; then
+            echo "::notice::$GITHUB_SHA is a release commit; its tag's run checks and builds it."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/github-script@v7
         id: plan
         env:
-          INPUT_MODE: ${{ inputs.mode }}
+          SKIP: ${{ steps.tagged.outputs.skip }}
           INPUT_ARCH_LINUX: ${{ inputs.arch_linux }}
         with:
           script: |
-            const tag = context.ref.startsWith('refs/tags/')
-            const mode = tag ? 'release' : process.env.INPUT_MODE || 'bundle'
+            const tag = context.ref.startsWith('refs/tags/v')
+            const mode = tag ? 'release' : process.env.SKIP === 'true' ? 'skip' : 'check'
             const profile = mode === 'release' ? 'release' : 'debug'
             // The npm script per mode: `npm run release` itself cuts a release (cut-release.mjs).
             const script = mode === 'release' ? 'release:bundle' : 'bundle'
@@ -133,58 +137,33 @@ jobs:
       # "What's new"); the `manifest` job publishes it once every platform has built and signed.
       # The tag must be `v` plus tauri.conf.json's version, checked here before anything builds
       # (the manifest job would refuse it after an hour of bundling otherwise).
-      #
-      # Anything else refreshes the rolling `nightly` pre-release: its tag is moved to this
-      # commit and each bundle job replaces its own assets, so only one set of development
-      # bundles is ever stored. That includes a manual run in release mode on a branch: it
-      # builds optimised, updater-signed bundles into `nightly` to try the release build, and
-      # publishes nothing (there is no tag to publish, and the manifest job is skipped).
       - name: Prepare release
         id: release
+        if: steps.plan.outputs.mode == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          MODE: ${{ steps.plan.outputs.mode }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            tag="$GITHUB_REF_NAME"
-            version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
-            if [[ "$tag" != "v$version" ]]; then
-              echo "::error::Tag $tag does not match version $version in src-tauri/tauri.conf.json (expected v$version). Cut releases with \`npm run release -- <x.y.z>\`, which sets both."
-              exit 1
-            fi
-            # Fails (with the reason) when CHANGELOG.md has no entries for this version.
-            node scripts/changelog.mjs section "$version" > ../release-notes.md
-            if gh release view "$tag" >/dev/null 2>&1; then
-              gh release edit "$tag" --notes-file ../release-notes.md >/dev/null
-            else
-              gh release create "$tag" --draft --verify-tag --title "Kimochi $tag" --notes-file ../release-notes.md
-            fi
-            echo "tag=$tag" >> "$GITHUB_OUTPUT"
-            echo "rolling=false" >> "$GITHUB_OUTPUT"
-          else
-            tag=nightly
-            if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
-              gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$tag" -f sha="$GITHUB_SHA" -F force=true >/dev/null
-            else
-              gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" >/dev/null
-            fi
-            kind="unsigned debug bundles"
-            [[ "$MODE" == release ]] && kind="optimised bundles from a manual release-mode run, not a release"
-            notes="Development build of \`$GITHUB_REF_NAME\` at ${GITHUB_SHA:0:7} (run [#$GITHUB_RUN_NUMBER]($GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID)). Replaced on every push; $kind."
-            if gh release view "$tag" >/dev/null 2>&1; then
-              gh release edit "$tag" --prerelease --title "Latest development build" --notes "$notes" >/dev/null
-            else
-              gh release create "$tag" --prerelease --title "Latest development build" --notes "$notes"
-            fi
-            echo "tag=$tag" >> "$GITHUB_OUTPUT"
-            echo "rolling=true" >> "$GITHUB_OUTPUT"
+          tag="$GITHUB_REF_NAME"
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          if [[ "$tag" != "v$version" ]]; then
+            echo "::error::Tag $tag does not match version $version in src-tauri/tauri.conf.json (expected v$version). Cut releases with \`npm run release -- <x.y.z>\`, which sets both."
+            exit 1
           fi
+          # Fails (with the reason) when CHANGELOG.md has no entries for this version.
+          node scripts/changelog.mjs section "$version" > ../release-notes.md
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes-file ../release-notes.md >/dev/null
+          else
+            gh release create "$tag" --draft --verify-tag --title "Kimochi $tag" --notes-file ../release-notes.md
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   checks:
     name: Checks (${{ matrix.name }})
     needs: plan
+    if: needs.plan.outputs.mode != 'skip'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -274,9 +253,8 @@ jobs:
     needs: [plan, checks]
     permissions:
       contents: write
-    # Bundles follow the checks but do not wait on other platforms' results: one machine's red
-    # check must not withhold every other platform's build. A release still needs them all green.
-    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.checks.result == 'success' || needs.plan.outputs.mode != 'release') }}
+    # Only a tag bundles, and only once every platform's checks passed.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.mode == 'release' && needs.checks.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -490,14 +468,12 @@ jobs:
         if: runner.os == 'macOS'
         run: ditto -c -k --keepParent src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/macos/Kimochi.app src-tauri/target/${{ needs.plan.outputs.profile }}/bundle/macos/Kimochi.app.zip
 
-      # Tag releases keep tauri's versioned file names. The rolling nightly drops the version
-      # from the name so each push replaces the previous asset instead of piling up beside it.
+      # Releases keep tauri's versioned file names.
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE: ${{ needs.plan.outputs.release }}
-          ROLLING: ${{ needs.plan.outputs.rolling }}
           SUFFIX: ${{ matrix.suffix }}
           PATTERNS: ${{ matrix.artifacts }}
         run: |
@@ -514,9 +490,6 @@ jobs:
               case "$name" in
                 Kimochi.app.zip) name="Kimochi_${version}_aarch64.app.zip" ;;
               esac
-              if [[ "$ROLLING" == true ]]; then
-                name="$(printf '%s' "$name" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.]+)?_/_/')"
-              fi
               if [[ -n "$SUFFIX" ]]; then
                 name="${name%.*}${SUFFIX}.${name##*.}"
               fi
@@ -524,8 +497,8 @@ jobs:
             done
           done <<< "$PATTERNS"
           [[ $found == 1 ]] || { echo "no bundle matched: $PATTERNS" >&2; exit 1; }
-          # Release mode: the updater's signatures, sidecars and the macOS tar.gz, named as the
-          # manifest will name them (never renamed, so no rolling-release handling here).
+          # The updater's signatures, sidecars and the macOS tar.gz, named as the manifest will
+          # name them.
           if [[ -d ../updater ]]; then cp ../updater/* ../upload/; fi
           ls -l ../upload
           gh release upload "$RELEASE" ../upload/* --clobber
@@ -539,11 +512,10 @@ jobs:
   # fails, nothing is published and the release stays a draft: re-run the failed jobs for a
   # flaky machine, or delete the draft and the tag and cut a new version for a code fix.
   # GitHub resolves `latest` only once the draft is published, so publishing offers the update.
-  # A manual release-mode run on a branch has no tag, so it skips this job (see Prepare release).
   manifest:
     name: Update manifest and publish
     needs: [plan, bundle]
-    if: needs.plan.outputs.mode == 'release' && needs.plan.outputs.rolling == 'false'
+    if: needs.plan.outputs.mode == 'release'
     runs-on: [self-hosted, macOS]
     permissions:
       contents: write
@@ -596,7 +568,7 @@ jobs:
   announce:
     name: Announce release on Discord
     needs: [plan, manifest]
-    if: needs.plan.outputs.mode == 'release' && needs.plan.outputs.rolling == 'false'
+    if: needs.plan.outputs.mode == 'release'
     uses: ./.github/workflows/discord-release.yml
     with:
       tag: ${{ needs.plan.outputs.release }}

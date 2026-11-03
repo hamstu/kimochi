@@ -168,13 +168,12 @@ Bundles are published to GitHub Releases, not kept as workflow artifacts: releas
 not metered the way Actions artifact storage is (500 MB on the Free plan), each file may be up
 to 2 GB, and there is no total cap beyond fair use.
 
-- Push to `main`: debug bundles for every platform, uploaded into the rolling `nightly`
-  pre-release. Its tag moves to the pushed commit and each platform replaces its own asset
-  (version-less names such as `Kimochi_x64-setup.exe`), so only one set is ever stored.
-- Manual run: choose `bundle` or `release`, and optionally add the Arch runner (its Linux ARM64
-  bundles get an `-arch` suffix).
+- Push to `main`: the checks on every platform, no bundles (there is no nightly). The release
+  commit's push skips them, because its tag's run checks the same commit.
+- Manual run: on a branch, the checks; on a `v*` tag, that release again. Optionally add the
+  Arch runner (its Linux ARM64 bundles get an `-arch` suffix).
 - Tag `v*`: optimised bundles, uploaded into a draft release of that tag with tauri's versioned
-  file names. Publish the draft by hand once the bundles look right.
+  file names, which the `manifest` job publishes once every platform built and signed.
 
 GitHub has no retention setting for releases; a release stays until deleted. To prune old
 versions, `gh release list` and `gh release delete <tag> --cleanup-tag`, or add a scheduled job

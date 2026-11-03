@@ -1,7 +1,7 @@
 # Kimochi (Tauri) — notes for agents
 
-- **Workflow**: `main` is the dev line (every app-changing push refreshes the `nightly`
-  pre-release; `site/`- and Markdown-only pushes skip CI). Releases
+- **Workflow**: `main` is the dev line (every app-changing push runs the checks on every
+  platform but builds nothing; `site/`- and Markdown-only pushes skip CI; there is no nightly). Releases
   happen only through `npm run release -- <x.y.z>` on a clean `main`; CI builds, signs and
   publishes on its own. Read `RELEASING.md` (maintainer's local copy) or CONTRIBUTING.md's
   Releases paragraph before touching versions, tags, `CHANGELOG.md` or
