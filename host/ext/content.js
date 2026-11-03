@@ -190,6 +190,43 @@ export function observePopup(win, descriptor, callback) {
  *    held at the box's width, and between its height as a minimum and a maximum, so a short entry
  *    still fills the box and a long one scrolls inside it; the arrow at the word is hidden.
  */
+/**
+ * The most room 10ten's pop-up may take, by the `tentenPopupSize` setting: `compact` (the
+ * default; Yomitan's own 400 × 250), `medium`, or `large`, which leaves 10ten's own sizing (up to
+ * 600 px wide and as tall as the window).
+ */
+export const TENTEN_POPUP_SIZES = {
+  compact: { width: 400, height: 250 },
+  medium: { width: 480, height: 400 },
+  large: null
+}
+
+/** The size `tentenPopupSize` asks for: one of {@link TENTEN_POPUP_SIZES}, compact if unknown. */
+export function tentenPopupSize(value) {
+  return Object.hasOwn(TENTEN_POPUP_SIZES, value) ? TENTEN_POPUP_SIZES[value] : TENTEN_POPUP_SIZES.compact
+}
+
+/**
+ * The stylesheet that keeps 10ten's pop-up within `size`, in the host's shadow root. 10ten has no
+ * setting for it (only Font size), but its own rules read the room it may take from two custom
+ * properties it writes on the host while the window is too small (`--tenten-max-width`,
+ * `--tenten-max-height`): the cap is the smaller of theirs and ours, so it still fits the window,
+ * and is in force while 10ten measures the pop-up to place it. Not shown, the pop-up fades out at
+ * the cap as it does at the window's edge; once it is interactive, it scrolls. '' for no cap.
+ */
+export function sizeCss(engine, size) {
+  if (engine !== 'tenten' || !size) return ''
+  const width = `min(var(--tenten-max-width, ${size.width}px), ${size.width}px)`
+  const height = `min(var(--tenten-max-height, ${size.height}px), ${size.height}px)`
+  const fade = `linear-gradient(to bottom, black calc(${height} - 5px), transparent)`
+  return `.window { max-width: ${width} !important; }
+.container:not(.interactive) {
+  max-height: ${height} !important;
+  -webkit-mask-image: ${fade} !important; mask-image: ${fade} !important;
+}
+.container.interactive .window { max-height: ${height} !important; }`
+}
+
 export function fillCss(engine, rect) {
   if (!rect || !(rect.width > 0) || !(rect.height > 0)) return ''
   const px = (value) => `${Math.round(value * 100) / 100}px`
@@ -490,6 +527,48 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
     }
     if (style.textContent !== css) style.textContent = css
   }
+  /**
+   * The room the pop-up may take (`size`, as {@link sizeCss}), kept in the host's shadow root like
+   * the fill: the host is made lazily and 10ten may make it again. Not while a fill is in force,
+   * which sizes the pop-up itself.
+   */
+  let size = null
+  let sizeWatch = null
+  let sizeRoot = null
+  const SIZE_ATTRIBUTE = 'data-kimochi-size'
+  function applySize() {
+    const host = win.document.querySelector(descriptor.popupSelector)
+    const root = host?.shadowRoot
+    if (!root) return
+    if (root !== sizeRoot && sizeWatch) {
+      // 10ten may empty its shadow root to redraw: watch this one too.
+      sizeRoot = root
+      sizeWatch.observe(root, { childList: true })
+    }
+    let style = root.querySelector(`style[${SIZE_ATTRIBUTE}]`)
+    const css = fill ? '' : sizeCss(engine, size)
+    if (!css) return void style?.remove()
+    if (!style) {
+      style = win.document.createElement('style')
+      style.setAttribute(SIZE_ATTRIBUTE, '')
+    }
+    // Last, after the engine's own stylesheet.
+    if (root.lastElementChild !== style) root.append(style)
+    if (style.textContent !== css) style.textContent = css
+  }
+  function setSize(next) {
+    size = next ? { width: next.width, height: next.height } : null
+    if (size && !sizeWatch && typeof win.MutationObserver === 'function') {
+      sizeWatch = new win.MutationObserver(() => applySize())
+      sizeWatch.observe(win.document.documentElement, { childList: true, subtree: true })
+    } else if (!size && sizeWatch) {
+      sizeWatch.disconnect()
+      sizeWatch = null
+      sizeRoot = null
+    }
+    applySize()
+  }
+
   function watchFill(on) {
     if (on && !fillWatch && typeof win.MutationObserver === 'function') {
       fillWatch = new win.MutationObserver(() => applyFill())
@@ -591,12 +670,15 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
      * give it back to the engine's own placing. That waits until the pop-up it filled has closed
      * (up to a second), so a dismissal does not jump it to the word on its way out.
      */
+    /** Keep the pop-up within `{width, height}` (CSS pixels), or with null leave it to the engine. */
+    size: setSize,
     place(rect) {
       const clear = ++fillClear
       if (rect) {
         fill = { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
         watchFill(true)
         applyFill()
+        applySize()
         return
       }
       if (!fill) return
@@ -607,6 +689,7 @@ export function createDriver(win, { descriptor, context, report, backgroundSende
         fill = null
         watchFill(false)
         applyFill()
+        applySize()
       }
       release()
     },
