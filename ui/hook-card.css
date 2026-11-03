@@ -256,3 +256,10 @@
   padding: 6px 8px;
   text-align: left;
 }
+/* The old text, fading out over the new as it fades in (hook-card.js `crossfade`): where the old
+   text was laid out, taking no room and no pointer. */
+.hook-card-text-ghost {
+  position: absolute;
+  margin: 0;
+  pointer-events: none;
+}

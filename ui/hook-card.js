@@ -168,10 +168,48 @@ export function createHookCard(parent, hooks) {
     }
   }
 
+  /**
+   * A copy of the text as it is laid out now, over it and taking nothing from it: no layout, no
+   * pointer, no lookups (`data-no-scan`), not read aloud. After the real text in the card, so
+   * `.hook-card-text` still finds the real one first.
+   */
+  const ghostOf = () => {
+    const ghost = text.cloneNode(true)
+    ghost.classList.add('hook-card-text-ghost')
+    ghost.setAttribute('aria-hidden', 'true')
+    ghost.setAttribute('data-no-scan', '')
+    ghost.style.left = `${text.offsetLeft}px`
+    ghost.style.top = `${text.offsetTop}px`
+    ghost.style.width = `${text.offsetWidth}px`
+    text.after(ghost)
+    return ghost
+  }
+  /**
+   * The new text fades in over the old one fading out: quick for a new line; a little softer when
+   * it is the same line laid out again (the game's line breaks found, a size measured), so it
+   * settles into its new shape rather than blinking out and back. Skipped for reduced motion.
+   */
+  const crossfade = (ghost, relayout) => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || typeof text.animate !== 'function') {
+      ghost?.remove()
+      return
+    }
+    const ms = relayout ? 200 : 140
+    for (const old of card.querySelectorAll('.hook-card-text-ghost')) if (old !== ghost) old.remove()
+    text.getAnimations().forEach((a) => a.cancel())
+    text.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' })
+    if (!ghost) return
+    const out = ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-in', fill: 'forwards' })
+    out.onfinish = out.oncancel = () => ghost.remove()
+  }
+  /** The same words, laid out differently (line breaks, spacing). */
+  const sameWords = (a, b) => a.replace(/\s/g, '') === b.replace(/\s/g, '')
+
   function show(next) {
     if (!next) {
       card.hidden = true
       menu.hidden = true
+      for (const ghost of card.querySelectorAll('.hook-card-text-ghost')) ghost.remove()
       view = null
       return
     }
@@ -188,7 +226,12 @@ export function createHookCard(parent, hooks) {
     card.style.setProperty('--hook-card-opacity', String(next.opacity ?? 1))
     for (const option of opacities.children)
       option.toggleAttribute('data-current', Number(option.dataset.opacity) === (next.opacity ?? 1))
-    if (text.textContent !== next.text) text.textContent = next.text
+    const previous = text.textContent
+    if (previous !== next.text) {
+      // Laid out as it was, before the new text replaces it: the old text's copy fades from here.
+      if (wasShown && previous) crossfade(ghostOf(), sameWords(previous, next.text))
+      text.textContent = next.text
+    }
     text.style.lineHeight = String(next.lineHeight ?? 1.5)
     if (drag) return
     const placed = clampBox(next)
