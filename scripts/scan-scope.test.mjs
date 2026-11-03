@@ -37,6 +37,12 @@ function el(attrs = {}, ...children) {
         const s = part.trim()
         const attr = /^\[([\w-]+)\]$/.exec(s)
         if (attr) return attr[1] in this.attrs
+        // `[attr] *`: inside an element that has it.
+        const within = /^\[([\w-]+)\] \*$/.exec(s)
+        if (within) {
+          for (let up = this.parentNode; up; up = up.parentNode) if (within[1] in up.attrs) return true
+          return false
+        }
         const cls = /^\.([\w-]+)$/.exec(s)
         if (cls) return (this.attrs.class ?? '').split(' ').includes(cls[1])
         throw Error(`fake matches() cannot parse ${s}`)
@@ -83,12 +89,13 @@ function source(nodes, nodeIndex, offset, length = 0) {
   }
 }
 
-function scan(includeSelector, nodes, nodeIndex, offset, length = 10) {
+function scan(includeSelector, nodes, nodeIndex, offset, length = 10, excludeSelector = null) {
   const scanner = Object.create(TextScanner.prototype)
   scanner._includeSelector = null
   scanner._excludeSelector = null
   scanner._touchExcludeSelector = null
   scanner.includeSelector = includeSelector
+  scanner.excludeSelector = excludeSelector
   return scanner.getTextSourceContent(source(nodes, nodeIndex, offset), length, false, 'mouse')
 }
 
@@ -127,6 +134,30 @@ test('with no scope (the overlay, the popup host, popup iframes) everything scan
   const nodes = mainWindow()
   assert.equal(scan(null, nodes, 0, 0, 4), '設定食べ')
   assert.equal(scan(null, nodes, 4, 0), '表示')
+})
+
+// --- Kimochi's own controls over scannable text: `data-no-scan`. ------------------------------
+
+const NO_SCAN = '[data-no-scan], [data-no-scan] *'
+
+/** The overlay's shape: a hooked line on the card, then the card's open menu. */
+function hookCard() {
+  const line = el({ class: 'hook-card-text' }, text('食べました'))
+  const menu = el(
+    { class: 'hook-card-menu', 'data-no-scan': '' },
+    el({ class: 'hook-card-menu-label' }, text('不透明度')),
+    text('設定')
+  )
+  return textNodes(el({ class: 'hook-card' }, line, menu))
+}
+
+test('text marked data-no-scan is never read, even where everything else scans', () => {
+  const nodes = hookCard()
+  // nodes: 食べました | 不透明度 | 設定
+  assert.equal(scan(null, nodes, 1, 0, 4, NO_SCAN), '')
+  assert.equal(scan(null, nodes, 2, 0, 2, NO_SCAN), '')
+  // The line still reads, and stops where the menu starts.
+  assert.equal(scan(null, nodes, 0, 0, 8, NO_SCAN), '食べました')
 })
 
 // --- frontend-mode.js, with the vendored Frontend replaced by a stand-in. -------------------
@@ -177,6 +208,17 @@ test('setScanScope scopes a frontend before it prepares, and later ones too', as
   assert.deepEqual(calls, [['prepare', SCAN_SELECTOR]])
   mode.setScanScope(null)
   assert.equal(frontend._textScanner.includeSelector, null)
+  // Kimochi's own controls stay out of every scan, scoped or not.
+  assert.equal(frontend._textScanner.excludeSelector, NO_SCAN)
+})
+
+test('the hook card\'s controls and the hint bar carry data-no-scan; the hooked line does not', () => {
+  const card = read('ui/hook-card.js')
+  assert.match(card, /for \(const element of \[bar, controls, corner, menu\]\) element\.setAttribute\('data-no-scan', ''\)/)
+  assert.doesNotMatch(card, /text\.setAttribute\('data-no-scan'/)
+  assert.match(read('ui/overlay-hints.js'), /bar\.setAttribute\('data-no-scan', ''\)/)
+  // Hachidori and 10ten skip it too: their scope check refuses a point inside the marker first.
+  assert.match(read('host/ext/content.js'), /if \(element\?\.closest\?\.\('\[data-no-scan\]'\)\) return false/)
 })
 
 test('a document that never sets a scope keeps Yomitan\'s default of scanning everything', async () => {

@@ -56,8 +56,10 @@ export function installScope(win, { origin, popupSelector, state }) {
   }
   const allowed = (x, y) => {
     if (!state.enabled) return false
-    if (!state.scope) return true
     const element = native.elementFromPoint.call(doc, x, y)
+    // Kimochi's own controls over scannable text (`data-no-scan`) are never looked up.
+    if (element?.closest?.('[data-no-scan]')) return false
+    if (!state.scope) return true
     if (!element) return false
     const inScope = element.closest?.(state.scope)
     // The line being read, for a mining screenshot of the frame it came from (capture.js).

@@ -91,6 +91,9 @@ export function createHookCard(parent, hooks) {
     hooks.onSettings()
   })
   menu.append(opacityLabel, opacities, settings)
+  // Only the line is looked up: with Shift still held after a click on ⋯, a pointer over the
+  // menu or the buttons must not open a dictionary pop-up (`data-no-scan`, host/frontend-mode.js).
+  for (const element of [bar, controls, corner, menu]) element.setAttribute('data-no-scan', '')
   card.append(bar, text, controls, corner, menu)
   parent.append(card)
 

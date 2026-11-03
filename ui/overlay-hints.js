@@ -36,6 +36,8 @@ export function createOverlayHints(parent, hooks) {
   const bar = make('div', 'overlay-hints')
   bar.hidden = true
   bar.setAttribute('role', 'note')
+  // Kimochi's own words, never looked up (host/frontend-mode.js).
+  bar.setAttribute('data-no-scan', '')
   // One line: Hold [Shift] to … (what Shift does depends on click-through, `sync`).
   const line = make('span', 'overlay-hint')
   const rest = document.createTextNode('')

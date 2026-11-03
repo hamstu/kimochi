@@ -12,12 +12,20 @@ let scanScope = null;
  */
 function applyScanScope(frontend) {
   const scanner = frontend._textScanner;
-  if (!scanner || !("includeSelector" in scanner)) {
-    console.error("[kimochi] Frontend#_textScanner.includeSelector is gone; lookups are not scoped.");
+  if (!scanner || !("includeSelector" in scanner) || !("excludeSelector" in scanner)) {
+    console.error("[kimochi] Frontend#_textScanner.includeSelector/excludeSelector is gone; lookups are not scoped.");
     return;
   }
   scanner.includeSelector = scanScope;
+  scanner.excludeSelector = NO_SCAN;
 }
+
+/**
+ * Kimochi's own controls that sit over scannable text (the hook card's menu and buttons, the
+ * overlay's hint bar) are never looked up, in any window: `data-no-scan` on a container. Yomitan
+ * matches each node of the scanned text, so the container and everything inside it are named.
+ */
+const NO_SCAN = "[data-no-scan], [data-no-scan] *";
 
 const prepare = Frontend.prototype.prepare;
 Frontend.prototype.prepare = async function (...args) {
