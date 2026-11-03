@@ -811,6 +811,9 @@ fn apply(
         }
         "pin" | "unpin" => {
             let pinned = action == "pin";
+            if label == MAIN {
+                crate::compact::pinned_by_hand(window);
+            }
             #[cfg(target_os = "linux")]
             let gnome = platform::gnome::desktop_popup() && platform::gnome::pin_supported(label);
             #[cfg(not(target_os = "linux"))]

@@ -8,7 +8,9 @@
 //! - Not hookable: Kimochi itself, Windows' own processes and Store apps, native ARM64
 //!   processes (the hook DLLs are x86/x64), and any process we may not open for injection
 //!   (protected, anti-cheat, or elevated while Kimochi is not).
-use std::path::{Path, PathBuf};
+#[cfg(any(windows, test))]
+use std::path::Path;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Target {
@@ -19,6 +21,7 @@ pub struct Target {
 
 /// The PE image's bitness from its header: 32 for i386, 64 for x64, `None` for anything else
 /// (ARM64 native images cannot take x86/x64 hook DLLs). `bytes` is the start of the file.
+#[cfg(any(windows, test))]
 pub fn pe_bits(bytes: &[u8]) -> Option<u32> {
     if bytes.get(..2)? != b"MZ" {
         return None;
@@ -36,6 +39,7 @@ pub fn pe_bits(bytes: &[u8]) -> Option<u32> {
 
 /// Windows' own programs, which are never games: anything under the Windows directory, and
 /// packaged Store apps (their processes refuse injection).
+#[cfg(any(windows, test))]
 pub fn is_system_image(exe: &Path) -> bool {
     let lower = exe.to_string_lossy().to_ascii_lowercase().replace('/', "\\");
     let windows = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into()).to_ascii_lowercase();
@@ -43,6 +47,7 @@ pub fn is_system_image(exe: &Path) -> bool {
 }
 
 /// A launcher's child that is the real game: same family of image, another extension.
+#[cfg(any(windows, test))]
 pub fn is_engine_child(exe: &Path) -> bool {
     exe.extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())

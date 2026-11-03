@@ -8,7 +8,7 @@
  */
 import { scanOf } from './capture.js'
 import { createExtensionContext } from './chrome-api.js'
-import { createDriver, injectContentScripts, installScope, observePopup as watchPopup } from './content.js'
+import { createDriver, injectContentScripts, installScope, observePopup as watchPopup, tentenPopupSize } from './content.js'
 import { Hub } from './hub.js'
 import { loadMessages } from './i18n.js'
 import { Router, connectRelay, localUpstream, serveRelay } from './links.js'
@@ -210,6 +210,20 @@ export function installApp(win, { engine, descriptor }) {
     await contentLink.registered
   }
 
+  /** 10ten's pop-up size (Settings → Dictionary, `tentenPopupSize`), now and as it changes. */
+  function followPopupSize() {
+    const apply = (value) => driver?.size(tentenPopupSize(value))
+    apply(undefined)
+    void Promise.resolve(invoke('settings_get', { key: 'tentenPopupSize' }))
+      .then(apply)
+      .catch(() => {})
+    void tauri?.event
+      ?.listen('settings:changed', ({ payload }) => {
+        if (payload?.key === 'tentenPopupSize') apply(payload.value)
+      })
+      .catch(() => {})
+  }
+
   async function startContent(scope) {
     if (!context) return
     scopeState.scope = scope ?? null
@@ -223,6 +237,7 @@ export function installApp(win, { engine, descriptor }) {
       report,
       backgroundSender: () => ({ id: context.runtimeId, url: `${origin}/${descriptor.background.script}`, origin })
     })
+    if (descriptor.id === 'tenten') followPopupSize()
     if (win.document.readyState === 'loading') {
       await new Promise((resolve) => win.document.addEventListener('DOMContentLoaded', resolve, { once: true }))
     }

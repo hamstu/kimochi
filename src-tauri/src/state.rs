@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicBool, Arc, Mutex, OnceLock},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 #[derive(Clone)]
@@ -308,6 +308,12 @@ pub struct Region {
     /// payloads, where nothing was focusable, hence the default.
     #[serde(default)]
     pub focus: bool,
+    /// Takes the mouse only while Shift is held ([`View::shift_gate`]); otherwise clicks pass
+    /// through to the application underneath. The overlay's words and the Text Hooker's card are
+    /// drawn over the game's own buttons, so a reader reaches for them by holding Shift, the key
+    /// that looks words up anyway. Absent in older payloads, which were always interactive.
+    #[serde(default)]
+    pub shift: bool,
 }
 
 impl Region {
@@ -564,7 +570,12 @@ pub struct View {
     pub scan: Option<Value>,
     pub status: String,
     pub logs: Vec<Value>,
+    /// Every window's published rectangles, Shift-only ones included; what takes the mouse
+    /// now is [`View::live_regions`].
     pub regions: Regions,
+    /// Whether Shift-only rectangles take the mouse: Shift is held, or a press that began while
+    /// it was is still down (a drag of the hook card outlives letting go of Shift).
+    pub shift_gate: bool,
     pub source_focus: SourceFocus,
     pub origin: Option<Rect>,
     pub interactive: bool,
@@ -589,6 +600,58 @@ pub struct View {
     /// The frame id whose result is currently published. Lets a repeated publish for
     /// the same frame be ignored instead of bumping the revision and re-rendering.
     pub published_frame: Option<u64>,
+}
+
+impl View {
+    /// The rectangles that take the mouse now: every published one, less the Shift-only ones
+    /// while the gate is shut. Windows left with nothing are absent, as if they had published
+    /// nothing.
+    pub fn live_regions(&self) -> Regions {
+        live_regions(&self.regions, self.shift_gate)
+    }
+}
+
+/// [`View::live_regions`] for a given map and gate.
+pub fn live_regions(regions: &Regions, gate: bool) -> Regions {
+    regions
+        .iter()
+        .filter_map(|(label, rects)| {
+            let live: Vec<Region> = rects.iter().copied().filter(|r| gate || !r.shift).collect();
+            (!live.is_empty()).then(|| (label.clone(), live))
+        })
+        .collect()
+}
+
+/// Whether Shift-only rectangles take the mouse ([`View::shift_gate`]), sample by sample.
+///
+/// Shift opens it. Once open it is sticky: it stays open while the pointer is over a Shift-only
+/// rectangle (a reader glides along a line without holding Shift), while a press begun with it
+/// open is still down (a drag of the hook card outlives letting go), and for [`ShiftGate::GRACE`]
+/// after the pointer last left one (the gaps between a line's word boxes).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ShiftGate {
+    open: bool,
+    /// When the pointer was last over a Shift-only rectangle while the gate was open.
+    inside_at: Option<Instant>,
+}
+
+impl ShiftGate {
+    pub const GRACE: Duration = Duration::from_millis(350);
+
+    /// One sample: Shift held, a button down, and the pointer over a Shift-only rectangle.
+    pub fn update(&mut self, shift: bool, down: bool, over: bool, now: Instant) -> bool {
+        let lingering = self
+            .inside_at
+            .is_some_and(|at| now.saturating_duration_since(at) < Self::GRACE);
+        let open = shift || (self.open && (down || over || lingering));
+        self.inside_at = match (open, over) {
+            (false, _) => None,
+            (true, true) => Some(now),
+            (true, false) => self.inside_at,
+        };
+        self.open = open;
+        open
+    }
 }
 
 pub struct Service {
@@ -1108,6 +1171,7 @@ mod pointer_tests {
             width: 100.,
             height: 40.,
             focus,
+            shift: false,
         }
     }
 
@@ -1300,6 +1364,7 @@ mod pointer_tests {
             width: 3440.,
             height: 1440.,
             focus: false,
+            shift: false,
         }];
         let v = classify_pointer(
             &whole_display,
@@ -1380,6 +1445,48 @@ mod pointer_tests {
         assert!(r.contains(200., 500.));
         assert!(!r.contains(300., 540.));
         assert!(r.contains(299.9, 539.9));
+    }
+
+    #[test]
+    fn shift_only_rectangles_take_the_mouse_only_while_the_gate_is_open() {
+        let word = Region { shift: true, ..region(0., 0., false) };
+        let popup = region(200., 0., true);
+        let mut regions = Regions::new();
+        regions.insert("overlay".into(), vec![word, popup]);
+        regions.insert("hook".into(), vec![word]);
+        let shut = live_regions(&regions, false);
+        assert_eq!(shut.get("overlay").map(Vec::len), Some(1), "the popup stays, the word goes");
+        assert!(!shut.contains_key("hook"), "a window left with nothing is absent");
+        let open = live_regions(&regions, true);
+        assert_eq!(open.get("overlay").map(Vec::len), Some(2));
+        assert_eq!(open.get("hook").map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn the_gate_opens_with_shift_and_sticks_while_the_pointer_stays_on_text() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut gate = ShiftGate::default();
+        assert!(!gate.update(false, false, true, at(0)), "text alone never opens it");
+        assert!(!gate.update(false, true, true, at(10)), "nor a press without Shift");
+        assert!(gate.update(true, false, true, at(20)));
+        assert!(gate.update(false, false, true, at(30)), "Shift let go, still on the text");
+        assert!(gate.update(false, false, true, at(900)), "for as long as it stays there");
+        assert!(gate.update(false, false, false, at(1000)), "a gap between words");
+        assert!(gate.update(false, false, true, at(1100)), "and on along the line");
+        assert!(gate.update(false, false, false, at(1200)));
+        assert!(!gate.update(false, false, false, at(1200 + 351)), "off the text past the grace");
+        assert!(!gate.update(false, false, true, at(1600)), "coming back needs Shift again");
+    }
+
+    #[test]
+    fn a_press_begun_with_the_gate_open_keeps_it_open_until_release() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut gate = ShiftGate::default();
+        assert!(gate.update(true, true, true, at(0)));
+        assert!(gate.update(false, true, false, at(5000)), "dragging the card away, Shift let go");
+        assert!(!gate.update(false, false, false, at(5010)), "released far from any text");
     }
 
     #[test]

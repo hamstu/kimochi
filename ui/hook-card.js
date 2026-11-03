@@ -91,6 +91,9 @@ export function createHookCard(parent, hooks) {
     hooks.onSettings()
   })
   menu.append(opacityLabel, opacities, settings)
+  // Only the line is looked up: with Shift still held after a click on ⋯, a pointer over the
+  // menu or the buttons must not open a dictionary pop-up (`data-no-scan`, host/frontend-mode.js).
+  for (const element of [bar, controls, corner, menu]) element.setAttribute('data-no-scan', '')
   card.append(bar, text, controls, corner, menu)
   parent.append(card)
 
@@ -165,14 +168,63 @@ export function createHookCard(parent, hooks) {
     }
   }
 
+  /**
+   * A copy of the text as it is laid out now, over it and taking nothing from it: no layout, no
+   * pointer, no lookups (`data-no-scan`), not read aloud. After the real text in the card, so
+   * `.hook-card-text` still finds the real one first.
+   */
+  const ghostOf = () => {
+    const ghost = text.cloneNode(true)
+    ghost.classList.add('hook-card-text-ghost')
+    ghost.setAttribute('aria-hidden', 'true')
+    ghost.setAttribute('data-no-scan', '')
+    ghost.style.left = `${text.offsetLeft}px`
+    ghost.style.top = `${text.offsetTop}px`
+    ghost.style.width = `${text.offsetWidth}px`
+    // Frozen as it looks now: held on one line and faded at its end, it stays so while it fades,
+    // whatever the card becomes.
+    const now = getComputedStyle(text)
+    ghost.style.whiteSpace = now.whiteSpace
+    ghost.style.overflow = now.overflow
+    ghost.style.height = `${text.offsetHeight}px`
+    ghost.style.maskImage = now.maskImage
+    text.after(ghost)
+    return ghost
+  }
+  /**
+   * The new text fades in over the old one fading out: quick for a new line; a little softer when
+   * it is the same line laid out again (the game's line breaks found, a size measured), so it
+   * settles into its new shape rather than blinking out and back. Skipped for reduced motion.
+   */
+  const crossfade = (ghost, relayout) => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || typeof text.animate !== 'function') {
+      ghost?.remove()
+      return
+    }
+    const ms = relayout ? 200 : 140
+    for (const old of card.querySelectorAll('.hook-card-text-ghost')) if (old !== ghost) old.remove()
+    text.getAnimations().forEach((a) => a.cancel())
+    text.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms, easing: 'ease-out' })
+    if (!ghost) return
+    const out = ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-in', fill: 'forwards' })
+    out.onfinish = out.oncancel = () => ghost.remove()
+  }
+  /** The same words, laid out differently (line breaks, spacing). */
+  const sameWords = (a, b) => a.replace(/\s/g, '') === b.replace(/\s/g, '')
+
   function show(next) {
     if (!next) {
       card.hidden = true
       menu.hidden = true
+      for (const ghost of card.querySelectorAll('.hook-card-text-ghost')) ghost.remove()
       view = null
       return
     }
     const wasShown = !card.hidden && view !== null
+    // A line held on one line until it was placed, now placed: it wraps into its box. The same
+    // words, laid out anew, so they settle softly into it rather than a row popping into view.
+    const settling = wasShown && card.hasAttribute('data-pending') && !next.pending && text.textContent === next.text
+    if (settling) crossfade(ghostOf(), true)
     view = next
     card.hidden = false
     card.dataset.ocrTheme = next.theme ?? 'dark'
@@ -185,7 +237,12 @@ export function createHookCard(parent, hooks) {
     card.style.setProperty('--hook-card-opacity', String(next.opacity ?? 1))
     for (const option of opacities.children)
       option.toggleAttribute('data-current', Number(option.dataset.opacity) === (next.opacity ?? 1))
-    if (text.textContent !== next.text) text.textContent = next.text
+    const previous = text.textContent
+    if (previous !== next.text) {
+      // Laid out as it was, before the new text replaces it: the old text's copy fades from here.
+      if (wasShown && previous) crossfade(ghostOf(), sameWords(previous, next.text))
+      text.textContent = next.text
+    }
     text.style.lineHeight = String(next.lineHeight ?? 1.5)
     if (drag) return
     const placed = clampBox(next)
@@ -237,12 +294,16 @@ export function createHookCard(parent, hooks) {
   addEventListener('pointercancel', end, true)
 
   /**
-   * The pointer, in overlay coordinates, and whether its button is down: moves a dragged card,
-   * and shows the controls while it is over the card. True when the pointer was the card's.
+   * The pointer, in overlay coordinates, whether its button is down, and whether Shift is held
+   * (`armed`): moves a dragged card, and lights the control under it. The card takes the mouse
+   * only while Shift is held, so only then does a control light; the open menu takes it anyway.
+   * True when the pointer was the card's.
    */
-  function pointer(x, y, down) {
+  function pointer(x, y, down, armed = true) {
     if (!drag) {
-      hover(card.hidden ? null : (hoverable.find((element) => inside(element, x, y)) ?? null))
+      const reachable = card.hidden ? [] : armed ? hoverable : menu.hidden ? [] : [...opacities.children, settings]
+      hover(reachable.find((element) => inside(element, x, y)) ?? null)
+      card.toggleAttribute('data-armed', armed && !card.hidden)
       return false
     }
     if (!down) {

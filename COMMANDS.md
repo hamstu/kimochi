@@ -1618,6 +1618,9 @@ HookStatus = {
   selected, selectedBy: 'saved' | 'auto' | 'manual' | null,
   pickNote,                       // why no thread was chosen automatically yet
   fallback,                       // why the first engine was given up for the one in use
+  hookFailures,                   // hook codes the hooker found but could not insert (LunaHook's
+                                  // "钩子注入失败 <code>"); with nothing selected, the sidebar
+                                  // suggests restarting the game
   threads: [{key, name, hookcode, preview, count, generic, selected}]
 }
 ```

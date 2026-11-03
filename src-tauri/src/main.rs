@@ -1672,7 +1672,8 @@ async fn capture_frame(
                 let mut observer = service
                     .observer
                     .lock()
-                    .map_err(|_| "busy: the local observer is poisoned".to_string())?;
+                    // A panic during an earlier read leaves the engines usable.
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 // Which engine watches is the overlay's choice (`ui/watcher.ts`).
                 observer.select(observer_engine.as_deref().unwrap_or(text_observer::DEFAULT_ENGINE));
                 let clock = std::time::Instant::now();
@@ -1849,7 +1850,7 @@ async fn observer_status(state: State<'_, Shared>) -> Reply<Value> {
     let status = state
         .observer
         .lock()
-        .map_err(|_| "busy: the local observer is poisoned".to_string())?
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .status();
     serde_json::to_value(&status).map_err(|e| e.to_string())
 }
@@ -3947,7 +3948,7 @@ fn sync_input_shapes(
             if label == OVERLAY && !v.overlay_visible {
                 Vec::new()
             } else {
-                v.regions.get(label).cloned().unwrap_or_default()
+                v.live_regions().remove(label).unwrap_or_default()
             }
         };
         // Regions are desktop points; the shape is window-local CSS pixels, which are
@@ -4075,12 +4076,32 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut shapes: HashMap<&'static str, InputShape> = HashMap::new();
         #[cfg(target_os = "windows")]
         let mut protection: Option<(bool, usize)> = None;
+        let mut gate = state::ShiftGate::default();
         loop {
             std::thread::sleep(Duration::from_millis(16));
             ticks = ticks.wrapping_add(1);
             if handle.get_webview_window(OVERLAY).is_none() {
                 break;
             }
+            // Read first: Shift opens the gate on the overlay's words and the hook card, and
+            // the mouse guard and native shapes below must already follow it this tick.
+            let sample = platform::desktop_cursor();
+            let gate_open = {
+                let mut v = service.view.lock().unwrap();
+                // No global pointer (Wayland): Shift cannot be read, so everything takes the
+                // mouse as it always has, the surface's own events driving lookups.
+                v.shift_gate = match &sample {
+                    None => true,
+                    Some(s) => {
+                        let over = v.regions.iter().any(|(label, rects)| {
+                            (label != OVERLAY || v.overlay_visible)
+                                && rects.iter().any(|r| r.shift && r.contains(s.x, s.y))
+                        });
+                        gate.update(s.modifiers.shift, s.down, over, Instant::now())
+                    }
+                };
+                v.shift_gate
+            };
             #[cfg(target_os = "windows")]
             platform::update_mouse_guard(&handle, &service);
             #[cfg(target_os = "windows")]
@@ -4100,7 +4121,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 y,
                 down,
                 modifiers,
-            }) = platform::desktop_cursor()
+            }) = sample
             {
                 if down && !was_down {
                     reader::popover::pointer_down(&handle, x, y);
@@ -4127,14 +4148,15 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     // A press in one of Kimochi's own windows (the Log, Settings…) is not a
                     // click away from the app either: counting it closed the dictionary and,
                     // through the pop-ups' outside-click relay, stopped the shortcut recorder.
-                    if dismissed(&v.regions, &hidden, x, y, down, was_down)
+                    let live = v.live_regions();
+                    if dismissed(&live, &hidden, x, y, down, was_down)
                         && !reader::popover::covers(x, y)
                         && !cover::contains_point(&cover::own_rects(), x, y)
                     {
                         v.dismiss += 1;
                     }
                     let mut interactive_anywhere = false;
-                    for (label, rects) in &v.regions {
+                    for (label, rects) in &live {
                         let was = *history.get(label).unwrap_or(&PointerHistory::default());
                         let verdict = classify_pointer(
                             rects,
@@ -4167,11 +4189,11 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     // it stays on screen with nothing in it, and an empty window that
                     // still swallows clicks is worse than one that is merely there.
                     for (label, was) in history.iter() {
-                        if was.interactive && !v.regions.contains_key(label) {
+                        if was.interactive && !live.contains_key(label) {
                             changed.push((label.clone(), false));
                         }
                     }
-                    history.retain(|label, _| v.regions.contains_key(label));
+                    history.retain(|label, _| live.contains_key(label));
                     v.interactive = interactive_anywhere;
                 }
                 was_down = down;
@@ -4249,6 +4271,9 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                                 "y": y,
                                 "over": over,
                                 "blocked": blocked,
+                                // Whether the words and the hook card take the mouse now
+                                // (`state::ShiftGate`): they light up only while it is open.
+                                "gate": gate_open,
                                 "down": down,
                                 "shift": modifiers.shift,
                                 "ctrl": modifiers.ctrl,
@@ -4425,17 +4450,17 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             if ticks.is_multiple_of(5) { compact::maintain_pin(&handle); }
             let watching = service.watching.lock().unwrap().clone();
             let Some(source_id) = watching else {
-                compact::forget_source();
+                compact::forget_source(&handle);
                 last = None;
                 continue;
             };
             let Some(window) = SourceId::parse(&source_id).filter(|id| id.is_window()) else {
-                compact::forget_source();
+                compact::forget_source(&handle);
                 continue;
             };
             let previous = last.as_ref().filter(|(id, _)| *id == source_id).map(|(_, state)| *state);
             let Some(state) = platform::desktop_window_state(&window, previous.as_ref()) else {
-                compact::forget_source();
+                compact::forget_source(&handle);
                 continue;
             };
             if previous.is_some_and(|p| !p.differs(&state)) {

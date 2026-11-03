@@ -89,6 +89,9 @@ struct Session {
     /// Lines sent this session, for their ids.
     lines: u64,
     observer_engine: Option<String>,
+    /// Hooks the hooker found in the game but could not insert (`failed_hook`): the game took the
+    /// hook, yet the code its text goes through could not be patched.
+    hook_failures: Vec<String>,
     child: Option<Child>,
     stdin: Option<ChildStdin>,
 }
@@ -182,6 +185,7 @@ fn status_of(session: &Session) -> Value {
         "selectedBy": session.selected_by,
         "pickNote": session.pick_note,
         "fallback": session.fallback,
+        "hookFailures": session.hook_failures,
         "threads": threads.iter().map(|t| json!({
             "key": t.key,
             "name": pick::display_name(&t.hookcode, &t.name),
@@ -391,6 +395,14 @@ fn read_events(
                 }
                 continue;
             }
+            "info" => {
+                let Some(code) = failed_hook(event["text"].as_str().unwrap_or_default()) else { continue };
+                if session.hook_failures.contains(&code) || session.hook_failures.len() >= 32 {
+                    continue;
+                }
+                crate::debug_report::trace(&hook.app, json!({ "check": "texthook-hook-failed", "hookcode": code }));
+                session.hook_failures.push(code);
+            }
             "thread_removed" => {
                 let key = str_of("key");
                 session.threads.retain(|t| t.key != key);
@@ -425,6 +437,24 @@ fn read_events(
         session.stdin = None;
         hook.publish(&session);
     }
+}
+
+/// The hook code in a hooker's message that it could not insert a hook it found, as LunaHook says
+/// it (`钩子注入失败 <code>`, or its English `Failed to insert hook <code>`): the hooker reached
+/// the game but could not patch the code there, which a fresh start of the game often gets past
+/// (the patch needs free memory near that code). `None` for any other message.
+fn failed_hook(message: &str) -> Option<String> {
+    let rest = message
+        .strip_prefix("钩子注入失败")
+        .or_else(|| {
+            let lower = message.to_ascii_lowercase();
+            ["failed to insert hook", "hook insert failed", "insert hook failed"]
+                .iter()
+                .find(|p| lower.starts_with(*p))
+                .map(|p| &message[p.len()..])
+        })?
+        .trim_matches(|c: char| c.is_whitespace() || c == ':' || c == '：');
+    Some(rest.split_whitespace().next().unwrap_or("").to_string())
 }
 
 fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
@@ -533,7 +563,8 @@ fn read_screen(hook: &Hook, source_id: &str, engine: Option<&str>) -> Result<Vec
     use kimochi_capture::TextObserver;
     let service = hook.app.state::<Shared>().inner().clone();
     let frame = crate::sources::capture_whole(&service, source_id)?;
-    let mut observer = service.observer.lock().map_err(|_| "the local OCR is unavailable".to_string())?;
+    // A panic during an earlier read leaves the engines usable; it must not end every read after.
+    let mut observer = service.observer.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     // The engine the page asked for (the Auto OCR watcher), else whichever local engine this
     // computer has: a hint from a page that has not loaded its capabilities yet may name an
     // engine that does not exist here.
@@ -810,5 +841,22 @@ pub fn texthook_forget(exe: String, all: bool) -> Result<(), String> {
 pub fn shutdown() {
     if let Some(hook) = hook() {
         stop_child(&mut hook.lock());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::failed_hook;
+
+    #[test]
+    fn a_hook_the_hooker_could_not_insert_is_told_apart() {
+        assert_eq!(
+            failed_hook("钩子注入失败 EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY").as_deref(),
+            Some("EXHMXF2@Unity.TextMeshPro:TMPro:TMP_Text:set_text:1:JIT:UNITY")
+        );
+        assert_eq!(failed_hook("Failed to insert hook: HQXF1@mscorlib:System:String:Substring").as_deref(), Some("HQXF1@mscorlib:System:String:Substring"));
+        assert_eq!(failed_hook("MH_ERROR_MEMORY_ALLOC"), None);
+        assert_eq!(failed_hook("注入钩子: String:String: 000001DCD4B56610"), None);
+        assert_eq!(failed_hook("移除钩子: String:String:"), None);
     }
 }

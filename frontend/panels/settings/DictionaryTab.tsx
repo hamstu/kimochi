@@ -36,6 +36,7 @@ import {
   SettingsRow,
   SettingsSection,
   SettingsSubgroup,
+  Segmented,
   Slider,
   Switch
 } from '@kit'
@@ -49,6 +50,7 @@ import {
 } from '../../bridge/dictionaryEngine'
 import { describeUrlRestriction } from '../../bridge/yomitan'
 import { setSetting } from '../../bridge/settings'
+import { useSetting } from '../../bridge/useSetting'
 import { clearAudioCache } from '@texthooker/lib/audio'
 import { updateSettings } from '@texthooker/lib/settings'
 import type { Settings } from '@texthooker/lib/types'
@@ -107,6 +109,7 @@ export function DictionaryTab(): ReactNode {
               </Button>
             </div>
           )}
+          {inUse && engine === 'tenten' && runtime.view.settingsAvailable && <TentenPopupSize />}
           {inUse && (runtime.download === null || runtime.download === 'ready') && <AnkiLink engine={engine} />}
         </>
       )
@@ -298,6 +301,41 @@ function KimochiPopupSections({ settings }: { settings: Settings }): ReactNode {
       </SettingsSection>
 
       <AnkiLink />
+    </div>
+  )
+}
+
+const TENTEN_SIZES = [
+  { value: 'compact', label: 'Compact' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' }
+] as const
+type TentenSize = (typeof TENTEN_SIZES)[number]['value']
+
+/**
+ * How much room 10ten's pop-up may take (`tentenPopupSize`, applied by the extension host's
+ * `sizeCss`). 10ten has no setting of its own for it, only Font size.
+ */
+function TentenPopupSize(): ReactNode {
+  const [size, setSize] = useSetting<TentenSize>('tentenPopupSize', 'compact')
+  const description =
+    size === 'large'
+      ? '10ten’s own size: up to 600 pixels wide and as tall as the screen allows.'
+      : size === 'medium'
+        ? 'Up to 480 × 400 pixels. Longer entries fade out; hover the pop-up to scroll.'
+        : 'Up to 400 × 250 pixels, the size of Yomitan’s. Longer entries fade out; hover the pop-up to scroll.'
+  return (
+    <div className="dictionary-engine-action">
+      <div className="engine-setting-text">
+        <span className="engine-setting-label">Pop-up size</span>
+        <span className="k-description">{description} Text size is Font size in 10ten’s settings.</span>
+      </div>
+      <Segmented
+        aria-label="Pop-up size"
+        value={size}
+        onValueChange={(value) => void setSize(value)}
+        options={TENTEN_SIZES}
+      />
     </div>
   )
 }

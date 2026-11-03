@@ -45,6 +45,8 @@ export interface HookStatus {
   pickNote?: string | null
   /** Why the first engine was given up for the one in use. */
   fallback?: string | null
+  /** Hook codes the hooker found in the game but could not insert. */
+  hookFailures?: string[]
   threads: HookThread[]
 }
 

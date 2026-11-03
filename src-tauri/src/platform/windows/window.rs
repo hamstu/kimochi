@@ -320,7 +320,7 @@ pub fn start_fullscreen_watch(app: &tauri::AppHandle, service: crate::state::Sha
             if app.get_webview_window("overlay").is_none() {
                 break;
             }
-            if (!crate::compact::active() && fullscreen_foreground().is_none()) || pending.swap(true, Ordering::Relaxed) {
+            if (!crate::compact::over_fullscreen() && fullscreen_foreground().is_none()) || pending.swap(true, Ordering::Relaxed) {
                 continue;
             }
             let handle = app.clone();
@@ -359,7 +359,7 @@ fn fullscreen_foreground() -> Option<HWND> {
 
 fn repair_fullscreen_order(app: &tauri::AppHandle, service: &crate::state::Service) {
     let selected = || {
-        if !crate::compact::active() || window_pid(unsafe { GetForegroundWindow() }) != std::process::id() { return None; }
+        if !crate::compact::over_fullscreen() || window_pid(unsafe { GetForegroundWindow() }) != std::process::id() { return None; }
         let source = service.watching.lock().unwrap().as_deref().and_then(kimochi_capture::SourceId::parse)?;
         if super::window_fullscreen(&source) != Some(true) { return None; }
         if !super::window_bounds(&source)?.1 { return None; }
@@ -378,7 +378,7 @@ fn repair_fullscreen_order(app: &tauri::AppHandle, service: &crate::state::Servi
         .enumerate()
         .filter_map(|(rank, hwnd)| {
             let window = windows.values().find(|w| w.hwnd().ok() == Some(*hwnd))?;
-            let mini = window.label() == crate::panels::MAIN && crate::compact::active();
+            let mini = window.label() == crate::panels::MAIN && crate::compact::over_fullscreen();
             if (ex_style(*hwnd) & WS_EX_TOPMOST.0 == 0 && !mini)
                 || !unsafe { IsWindowVisible(*hwnd) }.as_bool()
                 || unsafe { IsIconic(*hwnd) }.as_bool()

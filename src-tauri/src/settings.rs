@@ -66,6 +66,12 @@ pub fn defaults() -> Value {
         // Whether what Kimochi draws over the source (the overlay, the dictionary pop-ups) hides
         // from screen capture where a capture could read it back (`exclude_from_capture`).
         "excludeOverlayFromCapture": true,
+        // Clicks on the overlay's text and the hook card go to the game unless Shift is held
+        // (`Region::shift`); off, they take the mouse as before.
+        "overlayClickThrough": true,
+        // Mini mode when the watched game goes full screen on Kimochi's display (compact.rs).
+        // Off: Kimochi is kept on top over the game instead, at its own size.
+        "autoMiniMode": false,
         // The overlay's highlight colour, its cards' appearance and the highlight's opacity
         // (ui/settings.ts DEFAULT_OVERLAY_STYLE); `app` follows Kimochi's own appearance.
         "overlayStyle": { "color": "#3e63dd", "appearance": "app", "opacity": 40 },
