@@ -133,7 +133,12 @@ test('hashTree sorts POSIX keys; compareHashes reports missing, changed and adde
     const tree = await hashTree(dir)
     assert.deepEqual(Object.keys(tree), ['a.txt', 'b/z.txt'])
     assert.equal(tree['a.txt'], sha256('a'))
-    await symlink(path.join(dir, 'a.txt'), path.join(dir, 'link'))
+    // A file symlink needs Developer Mode or an administrator on Windows; a directory junction
+    // needs neither, and is a link all the same.
+    await symlink(path.join(dir, 'a.txt'), path.join(dir, 'link')).catch((error) => {
+      if (process.platform !== 'win32' || error.code !== 'EPERM') throw error
+      return symlink(path.join(dir, 'b'), path.join(dir, 'link'), 'junction')
+    })
     assert.equal((await hashTree(dir)).link, 'not-a-regular-file')
     assert.deepEqual(compareHashes(tree, tree), [])
     assert.deepEqual(compareHashes({ a: '1', b: '2' }, { a: '9', c: '3' }), ['changed: a', 'missing: b', 'added: c'])
