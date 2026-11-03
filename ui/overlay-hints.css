@@ -1,6 +1,6 @@
 /*
- * The overlay's hint bar (overlay-hints.js): a dark frosted pill along the bottom of the overlay
- * that says what Shift does. It lets clicks through except on its ×, so it never needs :hover;
+ * The overlay's hint bar (overlay-hints.js): a dark frosted pill that says what Shift does, under
+ * the scan area (placed by script, `place`) or along the bottom of the overlay. It lets clicks through except on its ×, so it never needs :hover;
  * the × lights from `data-hover`.
  */
 .overlay-hints {
@@ -33,9 +33,6 @@
 }
 .overlay-hint {
   white-space: nowrap;
-}
-.overlay-hint-quiet {
-  color: rgb(255 255 255 / 0.55);
 }
 .overlay-hint-key {
   display: inline-block;

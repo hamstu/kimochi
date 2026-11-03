@@ -1,6 +1,7 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
 /**
- * The overlay's hint bar: a pill along the bottom of the overlay that says what Shift does, shown
+ * The overlay's hint bar: a pill under the scan area (or along the bottom of the overlay for a
+ * full-screen source) that says what Shift does, shown
  * while there is text on the overlay until the reader closes it (`overlayHintsDismissed`;
  * Settings → General → Overlay hints shows it again).
  *
@@ -35,17 +36,11 @@ export function createOverlayHints(parent, hooks) {
   const bar = make('div', 'overlay-hints')
   bar.hidden = true
   bar.setAttribute('role', 'note')
-  const hint = (key, rest) => {
-    const item = make('span', 'overlay-hint')
-    item.append(make('kbd', 'overlay-hint-key', key), document.createTextNode(` ${rest}`))
-    return item
-  }
-  const key = shiftKey()
-  bar.append(
-    hint(key, '+ point at a word to look it up'),
-    hint(key, '+ click or drag text and the card'),
-    make('span', 'overlay-hint overlay-hint-quiet', 'Without Shift, clicks go to the game')
-  )
+  // One line: Hold [Shift] to … (what Shift does depends on click-through, `sync`).
+  const line = make('span', 'overlay-hint')
+  const rest = document.createTextNode('')
+  line.append(document.createTextNode('Hold '), make('kbd', 'overlay-hint-key', shiftKey()), rest)
+  bar.append(line)
   const close = make('button', 'overlay-hints-close')
   close.type = 'button'
   close.setAttribute('aria-label', 'Hide these hints')
@@ -60,13 +55,46 @@ export function createOverlayHints(parent, hooks) {
   bar.append(close)
   parent.append(bar)
 
+  let gatedNow = null
   return {
-    /** Show the bar or not; whether it is shown. */
-    sync(shown) {
+    /**
+     * Show the bar or not; whether it is shown. `gated`: clicks on text go to the game unless
+     * Shift is held (`overlayClickThrough`), so Shift is what makes text clickable too.
+     */
+    sync(shown, gated = true) {
+      if (gated !== gatedNow) {
+        gatedNow = gated
+        rest.textContent = gated ? ' to look up words and click text' : ' over a word to look it up'
+      }
       if (bar.hidden === !shown) return shown
       bar.hidden = !shown
       if (!shown) close.removeAttribute('data-hover')
       return shown
+    },
+    /**
+     * Put the bar under `area` (overlay coordinates: the scan area), centred, or inside its bottom
+     * edge where there is no room below; with null, at the bottom of the overlay.
+     */
+    place(area) {
+      if (bar.hidden) return
+      if (!area) {
+        bar.style.removeProperty('left')
+        bar.style.removeProperty('top')
+        bar.style.removeProperty('bottom')
+        return
+      }
+      const width = bar.offsetWidth
+      const height = bar.offsetHeight
+      const margin = 8
+      const below = area.y + area.height + 10
+      const top =
+        below + height + margin <= innerHeight
+          ? below
+          : Math.max(margin, Math.min(innerHeight - height - margin, area.y + area.height - height - 12))
+      const centre = Math.max(width / 2 + margin, Math.min(innerWidth - width / 2 - margin, area.x + area.width / 2))
+      bar.style.left = `${Math.round(centre)}px`
+      bar.style.top = `${Math.round(top)}px`
+      bar.style.bottom = 'auto'
     },
     /** The pointer in overlay coordinates: lights the × under it. */
     pointer(x, y) {

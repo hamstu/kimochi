@@ -98,6 +98,7 @@ function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
 export function OcrTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
   const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
+  const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
   const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
     enabled: false,
     scanDelay: 500
@@ -180,6 +181,21 @@ export function OcrTab(): ReactNode {
           }
         />
         <JapaneseFilterRow />
+        <SettingsRow
+          label="Click through text to the game"
+          controlId="ocr-click-through"
+          description={
+            clickThrough
+              ? 'Clicks on scanned text go to the game. Hold Shift to light up text, look words up and click them.'
+              : 'Scanned text lights up as you hover it and takes your clicks. Hold Shift to look words up.'
+          }
+        >
+          <Switch
+            id="ocr-click-through"
+            checked={clickThrough}
+            onCheckedChange={(checked) => void setClickThrough(checked)}
+          />
+        </SettingsRow>
         <SettingsRow
           label="Exclude overlay from screen recording"
           controlId="ocr-exclude-capture"

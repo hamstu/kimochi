@@ -81,6 +81,19 @@ let waylandLayer = false
  * (`View::live_regions`). Wayland has no global pointer: there they take the mouse as before.
  */
 let shiftGated = true
+/**
+ * Whether clicks on the overlay's text and the hook card go to the game unless Shift is held
+ * (`overlayClickThrough`, on unless turned off). Off, they take the mouse as before.
+ */
+function clickThrough() {
+  return native.getSetting('overlayClickThrough') !== false
+}
+/** Whether the whole overlay is taking the next click (`hitRects`, `onFreeClick`). */
+let catching = false
+/** Whether Shift's gate is open (`state::ShiftGate`), from the native pointer feed. */
+let gateOpen = false
+/** The rest of a press the free click took: swallowed up to its click. */
+let swallowClick = false
 
 const hub = window.__extensionHost
 const log = (value) => {
@@ -297,7 +310,27 @@ function syncHints() {
     (controller?.mode ?? 'idle') === 'idle' &&
     Boolean(state.origin) &&
     (renderer.hitRects(state.origin).length > 0 || (hook.card?.rects().length ?? 0) > 0)
-  hints.sync(shown)
+  hints.sync(shown, clickThrough())
+  if (shown) hints.place(hintArea())
+}
+
+/**
+ * Where the hint bar goes: under the scan area (the crop, else the source window), or at the
+ * bottom of it where there is no room below, so a game in a window on a big screen shows it where
+ * the reader is looking. Null for a full-screen or display source: the overlay's own bottom.
+ */
+function hintArea() {
+  const bounds = state.detached ? null : (state.sourceBounds ?? state.info?.source_bounds ?? null)
+  if (!bounds || !state.origin || state.sourceWindow?.fullscreen) return null
+  let area = { x: bounds.x - state.origin.x, y: bounds.y - state.origin.y, width: bounds.width, height: bounds.height }
+  const crop = state.crop
+  if (crop && crop.reference_width > 0 && crop.reference_height > 0) {
+    const sx = bounds.width / crop.reference_width
+    const sy = bounds.height / crop.reference_height
+    area = { x: area.x + crop.x * sx, y: area.y + crop.y * sy, width: crop.width * sx, height: crop.height * sy }
+  }
+  if (area.width >= innerWidth * 0.9 && area.height >= innerHeight * 0.9) return null
+  return area
 }
 
 /** Which OCR engines this machine has (`platform_capabilities`), for choosing Auto OCR's watcher. */
@@ -3307,7 +3340,8 @@ let popupLeavePointer = null
 let popupLeaveTimer = null
 function checkPopupLeave(pointer = popupLeavePointer) {
   popupLeavePointer = pointer
-  if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || controller.drivesLookups) return
+  // With click-through, a click away is free (`onFreeClick`), so the pop-up stays until then.
+  if (window.__KIMOCHI_PLATFORM__?.os !== 'windows' || controller.drivesLookups || clickThrough()) return
   const open = Boolean(extensionPopupRect) || [...livePopups].some((popup) => popup.isVisibleSync?.())
   clearTimeout(popupLeaveTimer)
   if (popupLeave.update(performance.now(), pointer, hitRects(), open)) {
@@ -3620,7 +3654,8 @@ function hitRects() {
   // Selecting a region needs every event on the display, not just the parts of
   // it that happen to have text under them.
   if (state.regionSelecting || hook.card?.dragging()) return [{ ...state.origin, focus: false }]
-  const rects = renderer.hitRects(state.origin)
+  const gated = clickThrough()
+  const rects = renderer.hitRects(state.origin).map((rect) => ({ ...rect, shift: gated }))
   const add = (rect, focus, shift = false) => {
     if (rect.width > 0 && rect.height > 0) {
       rects.push({
@@ -3650,11 +3685,59 @@ function hitRects() {
   // like the words, is Shift-only (it sits over the game); its menu, once Shift and a click have
   // opened it, takes the mouse until it closes.
   const [card, menu] = hook.card?.rects() ?? []
-  if (card) add(card, false, true)
+  if (card) add(card, false, gated)
   if (menu) add(menu, false)
   // The hint bar's ×: the one part of it that takes the mouse, Shift or not.
   for (const rect of hints.rects()) add(rect, false)
+  // A pop-up is open: the whole overlay takes the next click, so clicking away closes the pop-up
+  // without the click reaching the game (`onFreeClick`).
+  catching = gated && popupShown() && (controller?.mode ?? 'idle') === 'idle'
+  if (catching) add({ x: 0, y: 0, width: innerWidth, height: innerHeight }, false)
   return rects
+}
+
+/** Whether a dictionary pop-up is showing in this window. */
+function popupShown() {
+  return Boolean(extensionPopupRect) || popupRects().length > 0
+}
+
+/**
+ * The free click: with a pop-up open, a click anywhere on the overlay that is not on the pop-up,
+ * the card's menu, the hint bar or the controller closes the pop-up and goes no further: not to
+ * the game (the overlay took it, `catching`), nor to a word under it (a lookup). The game keeps
+ * the keyboard throughout; the next click goes through to it. With Shift's gate open, clicks are
+ * the words' and the card's as usual.
+ */
+function onFreeClick(event) {
+  // Every press starts clean: one that ended without a click must not swallow the next.
+  swallowClick = false
+  if (!catching || gateOpen) return
+  const target = event.target instanceof Element ? event.target : null
+  const popupHost = extensionHost()?.descriptor?.popupSelector
+  if (target?.closest('.hook-card-menu, .overlay-hints, #controller, .pages, iframe')) return
+  if (popupHost && target?.closest(popupHost)) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  swallowClick = true
+  catching = false
+  log({ check: 'overlay-free-click' })
+  dismissPopup()
+  window.getSelection()?.removeAllRanges()
+  renderer.clearPointer()
+  void publishRegions()
+}
+document.addEventListener('pointerdown', onFreeClick, true)
+for (const type of ['mousedown', 'mouseup', 'pointerup', 'click']) {
+  document.addEventListener(
+    type,
+    (event) => {
+      if (!swallowClick) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (type === 'click') swallowClick = false
+    },
+    true
+  )
 }
 
 /** Drops the text read from the selection, from the overlay and the scanner's memory. */
@@ -4253,7 +4336,9 @@ await native.listen('pointer', ({ payload }) => {
   const local = toOverlayLocal(payload, state.origin)
   // Words and the hook card are Shift-only: without Shift a click goes to the game (native
   // leaves them out of what takes the mouse, `View::live_regions`), so nothing lights up either.
-  const armed = Boolean(payload.shift)
+  // Without click-through, text lights up on hover as it always has.
+  gateOpen = Boolean(payload.gate ?? payload.shift)
+  const armed = !clickThrough() || gateOpen
   if (local) hints.pointer(local.x, local.y)
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
   if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down), armed)) return

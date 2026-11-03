@@ -4075,6 +4075,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut shapes: HashMap<&'static str, InputShape> = HashMap::new();
         #[cfg(target_os = "windows")]
         let mut protection: Option<(bool, usize)> = None;
+        let mut gate = state::ShiftGate::default();
         loop {
             std::thread::sleep(Duration::from_millis(16));
             ticks = ticks.wrapping_add(1);
@@ -4084,15 +4085,22 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             // Read first: Shift opens the gate on the overlay's words and the hook card, and
             // the mouse guard and native shapes below must already follow it this tick.
             let sample = platform::desktop_cursor();
-            {
+            let gate_open = {
                 let mut v = service.view.lock().unwrap();
-                let was_open = v.shift_gate;
                 // No global pointer (Wayland): Shift cannot be read, so everything takes the
                 // mouse as it always has, the surface's own events driving lookups.
-                v.shift_gate = sample
-                    .as_ref()
-                    .is_none_or(|s| state::shift_gate(s.modifiers.shift, s.down, was_open));
-            }
+                v.shift_gate = match &sample {
+                    None => true,
+                    Some(s) => {
+                        let over = v.regions.iter().any(|(label, rects)| {
+                            (label != OVERLAY || v.overlay_visible)
+                                && rects.iter().any(|r| r.shift && r.contains(s.x, s.y))
+                        });
+                        gate.update(s.modifiers.shift, s.down, over, Instant::now())
+                    }
+                };
+                v.shift_gate
+            };
             #[cfg(target_os = "windows")]
             platform::update_mouse_guard(&handle, &service);
             #[cfg(target_os = "windows")]
@@ -4262,6 +4270,9 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                                 "y": y,
                                 "over": over,
                                 "blocked": blocked,
+                                // Whether the words and the hook card take the mouse now
+                                // (`state::ShiftGate`): they light up only while it is open.
+                                "gate": gate_open,
                                 "down": down,
                                 "shift": modifiers.shift,
                                 "ctrl": modifiers.ctrl,
