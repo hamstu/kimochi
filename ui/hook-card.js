@@ -181,6 +181,13 @@ export function createHookCard(parent, hooks) {
     ghost.style.left = `${text.offsetLeft}px`
     ghost.style.top = `${text.offsetTop}px`
     ghost.style.width = `${text.offsetWidth}px`
+    // Frozen as it looks now: held on one line and faded at its end, it stays so while it fades,
+    // whatever the card becomes.
+    const now = getComputedStyle(text)
+    ghost.style.whiteSpace = now.whiteSpace
+    ghost.style.overflow = now.overflow
+    ghost.style.height = `${text.offsetHeight}px`
+    ghost.style.maskImage = now.maskImage
     text.after(ghost)
     return ghost
   }
@@ -214,6 +221,10 @@ export function createHookCard(parent, hooks) {
       return
     }
     const wasShown = !card.hidden && view !== null
+    // A line held on one line until it was placed, now placed: it wraps into its box. The same
+    // words, laid out anew, so they settle softly into it rather than a row popping into view.
+    const settling = wasShown && card.hasAttribute('data-pending') && !next.pending && text.textContent === next.text
+    if (settling) crossfade(ghostOf(), true)
     view = next
     card.hidden = false
     card.dataset.ocrTheme = next.theme ?? 'dark'
