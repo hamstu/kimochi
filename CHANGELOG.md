@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-03
+
 ### Added
 
 - **Exclude overlay from screen recording** in Settings → OCR & Overlay. This is on by default, but if you want to be able to screenshot the overlay and other parts of Kimochi, you can turn it off. 
