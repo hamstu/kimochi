@@ -34,6 +34,15 @@ function threadLabel(thread: HookThread): string {
   return firstLine(thread.preview) || thread.name
 }
 
+/**
+ * The game took the hook, but the hooker could not patch some of the code its text may go through,
+ * and no dialogue has been found since. Unlike a game that cannot be hooked at all (the session
+ * fails), this is often a matter of the game's memory in this run: restarting the game helps.
+ */
+function couldNotHook(status: HookStatus): boolean {
+  return status.phase === 'hooked' && !status.threads.some((t) => t.selected) && (status.hookFailures?.length ?? 0) > 0
+}
+
 /** What the select shows, and whether it is still working on it. */
 function shown(status: HookStatus, selected: HookThread | null): { busy: boolean; warn?: boolean; text: string } {
   const engine = status.engine?.name ?? 'the hooker'
@@ -51,7 +60,8 @@ function shown(status: HookStatus, selected: HookThread | null): { busy: boolean
       break
   }
   if (selected) return { busy: false, text: threadLabel(selected) }
-  if (status.threads.length === 0) return { busy: true, text: 'Waiting for text…' }
+  if (status.threads.length === 0)
+    return couldNotHook(status) ? { busy: false, warn: true, text: 'No text hooked' } : { busy: true, text: 'Waiting for text…' }
   // Nothing matched the screen yet: the reader can choose.
   if (status.pickNote) return { busy: false, warn: true, text: 'Choose the text…' }
   return { busy: true, text: 'Finding the dialogue…' }
@@ -78,6 +88,14 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
       {failed && status.detail && (
         <Callout tone="warn" className="src-notice">
           <span>{status.detail}</span>
+        </Callout>
+      )}
+      {couldNotHook(status) && (
+        <Callout tone="warn" className="src-notice">
+          <span title={status.hookFailures?.join('\n')}>
+            Kimochi reached the game but couldn&apos;t hook some of its text. If the dialogue doesn&apos;t
+            show up, restart the game while Kimochi is open; it often works on the next try.
+          </span>
         </Callout>
       )}
       {status.fallback && status.phase === 'hooked' && (

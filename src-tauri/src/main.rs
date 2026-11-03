@@ -1672,7 +1672,8 @@ async fn capture_frame(
                 let mut observer = service
                     .observer
                     .lock()
-                    .map_err(|_| "busy: the local observer is poisoned".to_string())?;
+                    // A panic during an earlier read leaves the engines usable.
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 // Which engine watches is the overlay's choice (`ui/watcher.ts`).
                 observer.select(observer_engine.as_deref().unwrap_or(text_observer::DEFAULT_ENGINE));
                 let clock = std::time::Instant::now();
@@ -1849,7 +1850,7 @@ async fn observer_status(state: State<'_, Shared>) -> Reply<Value> {
     let status = state
         .observer
         .lock()
-        .map_err(|_| "busy: the local observer is poisoned".to_string())?
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .status();
     serde_json::to_value(&status).map_err(|e| e.to_string())
 }
