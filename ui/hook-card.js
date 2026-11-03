@@ -237,12 +237,16 @@ export function createHookCard(parent, hooks) {
   addEventListener('pointercancel', end, true)
 
   /**
-   * The pointer, in overlay coordinates, and whether its button is down: moves a dragged card,
-   * and shows the controls while it is over the card. True when the pointer was the card's.
+   * The pointer, in overlay coordinates, whether its button is down, and whether Shift is held
+   * (`armed`): moves a dragged card, and lights the control under it. The card takes the mouse
+   * only while Shift is held, so only then does a control light; the open menu takes it anyway.
+   * True when the pointer was the card's.
    */
-  function pointer(x, y, down) {
+  function pointer(x, y, down, armed = true) {
     if (!drag) {
-      hover(card.hidden ? null : (hoverable.find((element) => inside(element, x, y)) ?? null))
+      const reachable = card.hidden ? [] : armed ? hoverable : menu.hidden ? [] : [...opacities.children, settings]
+      hover(reachable.find((element) => inside(element, x, y)) ?? null)
+      card.toggleAttribute('data-armed', armed && !card.hidden)
       return false
     }
     if (!down) {

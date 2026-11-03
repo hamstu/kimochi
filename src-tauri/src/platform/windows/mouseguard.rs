@@ -154,7 +154,7 @@ pub fn update_mouse_guard(app: &tauri::AppHandle, service: &Service) {
     // lock across them: UI commands also acquire that lock.
     let (regions, overlay_visible) = {
         let view = service.view.lock().unwrap();
-        (view.regions.clone(), view.overlay_visible)
+        (view.live_regions(), view.overlay_visible)
     };
     let mut targets = Vec::new();
     // Popup takes precedence over a word underneath it.

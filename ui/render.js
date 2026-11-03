@@ -625,6 +625,9 @@ export class TextOverlayRenderer {
    * type into, and the keyboard the overlay would be taking belongs to the game the
    * reader is playing. Looking a word up needs no focus at all: the modifier arrives
    * with the pointer from native (see the cursor poll in `main.rs`).
+   *
+   * All of them are Shift-only (`shift`): words are drawn over the game's own buttons, so
+   * a click goes to the game unless Shift, the key that looks words up, is held.
    */
   hitRects(origin) {
     if (!origin) return []
@@ -641,7 +644,8 @@ export class TextOverlayRenderer {
         y: origin.y + rect.y,
         width: rect.width,
         height: rect.height,
-        focus: false
+        focus: false,
+        shift: true
       }))
   }
 

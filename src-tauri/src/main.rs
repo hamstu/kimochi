@@ -3947,7 +3947,7 @@ fn sync_input_shapes(
             if label == OVERLAY && !v.overlay_visible {
                 Vec::new()
             } else {
-                v.regions.get(label).cloned().unwrap_or_default()
+                v.live_regions().remove(label).unwrap_or_default()
             }
         };
         // Regions are desktop points; the shape is window-local CSS pixels, which are
@@ -4081,6 +4081,18 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             if handle.get_webview_window(OVERLAY).is_none() {
                 break;
             }
+            // Read first: Shift opens the gate on the overlay's words and the hook card, and
+            // the mouse guard and native shapes below must already follow it this tick.
+            let sample = platform::desktop_cursor();
+            {
+                let mut v = service.view.lock().unwrap();
+                let was_open = v.shift_gate;
+                // No global pointer (Wayland): Shift cannot be read, so everything takes the
+                // mouse as it always has, the surface's own events driving lookups.
+                v.shift_gate = sample
+                    .as_ref()
+                    .is_none_or(|s| state::shift_gate(s.modifiers.shift, s.down, was_open));
+            }
             #[cfg(target_os = "windows")]
             platform::update_mouse_guard(&handle, &service);
             #[cfg(target_os = "windows")]
@@ -4100,7 +4112,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 y,
                 down,
                 modifiers,
-            }) = platform::desktop_cursor()
+            }) = sample
             {
                 if down && !was_down {
                     reader::popover::pointer_down(&handle, x, y);
@@ -4127,14 +4139,15 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     // A press in one of Kimochi's own windows (the Log, Settings…) is not a
                     // click away from the app either: counting it closed the dictionary and,
                     // through the pop-ups' outside-click relay, stopped the shortcut recorder.
-                    if dismissed(&v.regions, &hidden, x, y, down, was_down)
+                    let live = v.live_regions();
+                    if dismissed(&live, &hidden, x, y, down, was_down)
                         && !reader::popover::covers(x, y)
                         && !cover::contains_point(&cover::own_rects(), x, y)
                     {
                         v.dismiss += 1;
                     }
                     let mut interactive_anywhere = false;
-                    for (label, rects) in &v.regions {
+                    for (label, rects) in &live {
                         let was = *history.get(label).unwrap_or(&PointerHistory::default());
                         let verdict = classify_pointer(
                             rects,
@@ -4167,11 +4180,11 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     // it stays on screen with nothing in it, and an empty window that
                     // still swallows clicks is worse than one that is merely there.
                     for (label, was) in history.iter() {
-                        if was.interactive && !v.regions.contains_key(label) {
+                        if was.interactive && !live.contains_key(label) {
                             changed.push((label.clone(), false));
                         }
                     }
-                    history.retain(|label, _| v.regions.contains_key(label));
+                    history.retain(|label, _| live.contains_key(label));
                     v.interactive = interactive_anywhere;
                 }
                 was_down = down;

@@ -33,6 +33,7 @@ export function GeneralTab(): ReactNode {
   const [sentenceAudio] = useSetting<unknown>('sentenceAudio', null)
   const recording = recordingAudio(sentenceAudio)
   const volume = Math.round(volumeOf(soundVolume) * 100)
+  const [hintsDismissed, setHintsDismissed] = useSetting<boolean>('overlayHintsDismissed', false)
   const { props: controller } = useController()
   const { capture } = useCapabilities()
   // Screen recording is a step only where it is granted in the system's settings.
@@ -156,6 +157,14 @@ export function GeneralTab(): ReactNode {
         >
           <Button size="sm" onClick={() => void panel('welcome', 'show').catch(() => undefined)}>
             Open
+          </Button>
+        </SettingsRow>
+        <SettingsRow
+          label="Overlay hints"
+          description="The bar under the text on the overlay that explains Shift. Closed with its ×."
+        >
+          <Button size="sm" disabled={!hintsDismissed} onClick={() => void setHintsDismissed(false)}>
+            {hintsDismissed ? 'Show again' : 'Showing'}
           </Button>
         </SettingsRow>
       </SettingsSection>

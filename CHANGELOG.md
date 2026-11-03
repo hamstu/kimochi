@@ -18,6 +18,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Settings → Text Hooker**: defaults for every game, and a page for each game you've hooked, with its icon, its name and its Log session (renaming the game renames the session). A game can change any default; changed settings are marked, with a reset beside each. Games you've hooked are hooked again automatically when they start. Set a longer line delay for games whose lines arrive in pieces, undo text sent as ここここ, keep speaker names on the nameplate or not, and set the card's alignment, text size and opacity. For a game nothing useful hooks in, add a hook code; to clean up a game's text, add find-and-replace rules. Deleting a game forgets its settings, and its session too if you ask. Open it from **Manage** beside **Text hooker** in the sidebar, or from the card's ⋯ menu.
 - Hooked text arrives cleaner: tags and furigana markup some games leave in their text are taken out, and a wall of text sent when you open a game's backlog or skip through a scene is left out of the Log.
 - **10ten's pop-up size** in Settings → Dictionary, under 10ten's settings: **Compact** (new default, the size of Yomitan's), **Medium**, or **Large** (10ten's own). Longer entries fade out at the edge; move onto the pop-up to scroll. For bigger or smaller text, use Font size in 10ten's settings.
+- A **hint bar** along the bottom of the overlay explains Shift. Close it with its ×; Settings → General → Overlay hints brings it back.
+
+### Changed
+
+- **Clicks go through the overlay's text to the game.** Text boxes over a game's buttons no longer get in the way: without Shift, clicking on them clicks the game. Hold **Shift** to look words up as before, to click a word, or to drag and use the Text Hooker card. A dictionary pop-up you're in, and the card's ⋯ menu once it's open, stay clickable without Shift. (Linux Wayland keeps the old behaviour, since Kimochi can't see Shift there.)
 
 ## [0.4.0] - 2026-11-03
 

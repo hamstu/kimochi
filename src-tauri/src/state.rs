@@ -308,6 +308,12 @@ pub struct Region {
     /// payloads, where nothing was focusable, hence the default.
     #[serde(default)]
     pub focus: bool,
+    /// Takes the mouse only while Shift is held ([`View::shift_gate`]); otherwise clicks pass
+    /// through to the application underneath. The overlay's words and the Text Hooker's card are
+    /// drawn over the game's own buttons, so a reader reaches for them by holding Shift, the key
+    /// that looks words up anyway. Absent in older payloads, which were always interactive.
+    #[serde(default)]
+    pub shift: bool,
 }
 
 impl Region {
@@ -564,7 +570,12 @@ pub struct View {
     pub scan: Option<Value>,
     pub status: String,
     pub logs: Vec<Value>,
+    /// Every window's published rectangles, Shift-only ones included; what takes the mouse
+    /// now is [`View::live_regions`].
     pub regions: Regions,
+    /// Whether Shift-only rectangles take the mouse: Shift is held, or a press that began while
+    /// it was is still down (a drag of the hook card outlives letting go of Shift).
+    pub shift_gate: bool,
     pub source_focus: SourceFocus,
     pub origin: Option<Rect>,
     pub interactive: bool,
@@ -589,6 +600,33 @@ pub struct View {
     /// The frame id whose result is currently published. Lets a repeated publish for
     /// the same frame be ignored instead of bumping the revision and re-rendering.
     pub published_frame: Option<u64>,
+}
+
+impl View {
+    /// The rectangles that take the mouse now: every published one, less the Shift-only ones
+    /// while the gate is shut. Windows left with nothing are absent, as if they had published
+    /// nothing.
+    pub fn live_regions(&self) -> Regions {
+        live_regions(&self.regions, self.shift_gate)
+    }
+}
+
+/// [`View::live_regions`] for a given map and gate.
+pub fn live_regions(regions: &Regions, gate: bool) -> Regions {
+    regions
+        .iter()
+        .filter_map(|(label, rects)| {
+            let live: Vec<Region> = rects.iter().copied().filter(|r| gate || !r.shift).collect();
+            (!live.is_empty()).then(|| (label.clone(), live))
+        })
+        .collect()
+}
+
+/// Whether Shift-only rectangles take the mouse on this sample: Shift is held, or the gate was
+/// open and a button has stayed down since (letting go of Shift mid-drag must not drop the press
+/// into the game).
+pub fn shift_gate(shift: bool, down: bool, was_open: bool) -> bool {
+    shift || (down && was_open)
 }
 
 pub struct Service {
@@ -1108,6 +1146,7 @@ mod pointer_tests {
             width: 100.,
             height: 40.,
             focus,
+            shift: false,
         }
     }
 
@@ -1300,6 +1339,7 @@ mod pointer_tests {
             width: 3440.,
             height: 1440.,
             focus: false,
+            shift: false,
         }];
         let v = classify_pointer(
             &whole_display,
@@ -1380,6 +1420,29 @@ mod pointer_tests {
         assert!(r.contains(200., 500.));
         assert!(!r.contains(300., 540.));
         assert!(r.contains(299.9, 539.9));
+    }
+
+    #[test]
+    fn shift_only_rectangles_take_the_mouse_only_while_the_gate_is_open() {
+        let word = Region { shift: true, ..region(0., 0., false) };
+        let popup = region(200., 0., true);
+        let mut regions = Regions::new();
+        regions.insert("overlay".into(), vec![word, popup]);
+        regions.insert("hook".into(), vec![word]);
+        let shut = live_regions(&regions, false);
+        assert_eq!(shut.get("overlay").map(Vec::len), Some(1), "the popup stays, the word goes");
+        assert!(!shut.contains_key("hook"), "a window left with nothing is absent");
+        let open = live_regions(&regions, true);
+        assert_eq!(open.get("overlay").map(Vec::len), Some(2));
+        assert_eq!(open.get("hook").map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn the_gate_follows_shift_and_outlives_it_only_through_a_held_press() {
+        assert!(shift_gate(true, false, false));
+        assert!(!shift_gate(false, false, true), "letting go of Shift shuts it");
+        assert!(shift_gate(false, true, true), "a press begun with it open keeps it open");
+        assert!(!shift_gate(false, true, false), "a press without Shift never opens it");
     }
 
     #[test]

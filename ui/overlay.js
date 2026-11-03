@@ -45,6 +45,7 @@ import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
 import { createHookCard } from './hook-card.js'
+import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
 import { hookSettings } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
@@ -75,6 +76,11 @@ import * as native from './native.js'
 
 let waylandDisabled = false
 let waylandLayer = false
+/**
+ * Whether native can read Shift, so the words and the hook card let clicks through without it
+ * (`View::live_regions`). Wayland has no global pointer: there they take the mouse as before.
+ */
+let shiftGated = true
 
 const hub = window.__extensionHost
 const log = (value) => {
@@ -272,6 +278,27 @@ hook.card = createHookCard(document.body, {
     await window.__TAURI__.event.emit('main:show-settings')
   }
 })
+
+// What Shift does, along the bottom while there is text, until the reader closes it.
+const hints = createOverlayHints(document.body, {
+  onDismiss: () => {
+    void native.setSetting(HINTS_DISMISSED, true)
+    void publishRegions()
+  }
+})
+
+/** Show the hint bar while there is text to point at and nothing else is using the overlay. */
+function syncHints() {
+  const shown =
+    shiftGated &&
+    native.getSetting(HINTS_DISMISSED) !== true &&
+    !state.regionSelecting &&
+    !state.dictionaryOpen &&
+    (controller?.mode ?? 'idle') === 'idle' &&
+    Boolean(state.origin) &&
+    (renderer.hitRects(state.origin).length > 0 || (hook.card?.rects().length ?? 0) > 0)
+  hints.sync(shown)
+}
 
 /** Which OCR engines this machine has (`platform_capabilities`), for choosing Auto OCR's watcher. */
 let ocrEngines = {}
@@ -3594,14 +3621,15 @@ function hitRects() {
   // it that happen to have text under them.
   if (state.regionSelecting || hook.card?.dragging()) return [{ ...state.origin, focus: false }]
   const rects = renderer.hitRects(state.origin)
-  const add = (rect, focus) => {
+  const add = (rect, focus, shift = false) => {
     if (rect.width > 0 && rect.height > 0) {
       rects.push({
         x: state.origin.x + rect.x,
         y: state.origin.y + rect.y,
         width: rect.width,
         height: rect.height,
-        focus
+        focus,
+        shift
       })
     }
   }
@@ -3618,8 +3646,14 @@ function hitRects() {
   // An extension engine's popup: a shadow host in this document, reported by its host.
   if (extensionPopupRect) add(extensionPopupRect, true)
   for (const rect of controller.hitRects()) add(rect, false)
-  // The Text Hooker's card and its menu: its text is looked up, its controls pressed.
-  for (const rect of hook.card?.rects() ?? []) add(rect, false)
+  // The Text Hooker's card and its menu: its text is looked up, its controls pressed. The card,
+  // like the words, is Shift-only (it sits over the game); its menu, once Shift and a click have
+  // opened it, takes the mouse until it closes.
+  const [card, menu] = hook.card?.rects() ?? []
+  if (card) add(card, false, true)
+  if (menu) add(menu, false)
+  // The hint bar's ×: the one part of it that takes the mouse, Shift or not.
+  for (const rect of hints.rects()) add(rect, false)
   return rects
 }
 
@@ -3835,7 +3869,7 @@ async function publishRegions() {
 }
 
 function startRegionLoop() {
-  setInterval(() => { void refreshLayerPointer(); syncReadingHold(); void publishRegions() }, 100)
+  setInterval(() => { void refreshLayerPointer(); syncReadingHold(); syncHints(); void publishRegions() }, 100)
 }
 
 async function refreshLayerPointer() {
@@ -3925,6 +3959,7 @@ await native.watchCapabilities(async (caps) => {
   ocrEngines = caps.ocrEngines ?? {}
   syncAutoScanner()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') shiftGated = caps.session?.backend !== 'wayland'
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true
     if (caps.session.backend === 'wayland' && caps.session.nativeLayerShell) {
@@ -4216,15 +4251,18 @@ await native.listen('pointer', ({ payload }) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') gnomeOverlay?.pointer(payload)
   if (!state.origin || typeof payload?.x !== 'number') return
   const local = toOverlayLocal(payload, state.origin)
+  // Words and the hook card are Shift-only: without Shift a click goes to the game (native
+  // leaves them out of what takes the mouse, `View::live_regions`), so nothing lights up either.
+  const armed = Boolean(payload.shift)
+  if (local) hints.pointer(local.x, local.y)
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
-  if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down))) return
+  if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down), armed)) return
   checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
-  if (payload.over === false || !local) {
+  if (payload.over === false || !local || !armed) {
     renderer.clearPointer()
     syncReadingHold()
-    return
-  }
-  renderer.setPointer(local.x, local.y)
+    if (payload.over === false || !local) return
+  } else renderer.setPointer(local.x, local.y)
   syncReadingHold()
   controller.pointer(local.x, local.y)
   // While the controller is reading, the pointer must not steer Yomitan: an idle mouse resting
