@@ -242,6 +242,13 @@ const hook = {
   chasing: null,
   /** The line a whole reading last placed the card on: a new one is placed at once. */
   placed: null,
+  /**
+   * Where the game wraps the line, as a whole reading found it (`{line, shown, rows}`): the hooked
+   * text cut at OCR's line breaks. A game that wraps its text itself sends one unbroken line; the
+   * card, aligned on the game's text, breaks it where the game does instead of where its own font
+   * happens to run out of room.
+   */
+  wrap: null,
   /** The last reading that did not find the line whole (`hook-line-chase` logs its blocks). */
   missed: null,
   /** The last reading aligned with, so the same one is not counted twice. */
@@ -1040,6 +1047,17 @@ function hookAligned(annotations) {
   // wherever OCR found it is where it is (a game that writes each line below the last one).
   const fresh = whole && hook.placed !== hook.line
   if (whole) hook.placed = hook.line
+  // The game's own line breaks: only from a reading of the whole line that cut it into rows
+  // holding exactly the line's text (hook-match.ts `splitAcrossLines`).
+  const rows = placed.annotations[0]?.lineTexts
+  const bare = (value) => String(value).replace(/\s/g, '')
+  if (whole && Array.isArray(rows) && rows.length > 1 && bare(rows.join('')) === bare(placed.shown)) {
+    const wrap = { line: hook.line, shown: placed.shown, rows }
+    if (JSON.stringify(wrap) !== JSON.stringify(hook.wrap)) {
+      hook.wrap = wrap
+      queueMicrotask(syncHookCard)
+    }
+  }
   let box = null
   if (fresh && !stays) {
     box = found
@@ -1172,8 +1190,17 @@ function hookCardView() {
   const surface = theme === 'blend' && inside ? game.surface ?? null : null
   if (theme === 'blend' && !surface)
     theme = resolveOverlayCardAppearance({ ...style, appearance: 'app' }, setting('appearance'), systemDark.matches)
+  // On the game's text (Auto align, the line placed), the card breaks the line where the game
+  // does; anywhere else it wraps to its own width.
+  const shownText = hook.shown ?? hook.line
+  const wrap = hook.wrap
+  const gameRows =
+    saved && saved === game.ocrBox && hook.placed === hook.line && wrap?.line === hook.line && wrap.shown === shownText
+      ? wrap.rows
+      : null
+  if (gameRows) lines = gameRows.length
   return {
-    text: hook.shown ?? hook.line,
+    text: gameRows ? gameRows.join('\n') : shownText,
     ...where,
     lines,
     pending,
