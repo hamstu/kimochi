@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-03
+
 ### Added
 
 - ⭐ **Text Hooker** is now available as a new source option (Windows-only): choose a game in the source menu and Kimochi reads its text from inside the game, with no OCR required. It downloads a text hooker the first time (LunaHook, about 6 MB; or Textractor if LunaHook can't hook the game), picks the dialogue out of the game's text by matching it to what's on screen, and remembers that choice for the game.
