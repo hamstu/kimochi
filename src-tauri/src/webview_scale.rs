@@ -24,6 +24,7 @@ use serde_json::json;
 /// The page zoom that makes one CSS pixel `dpi_scale` physical pixels, for a page whose
 /// `devicePixelRatio` is `ratio` at page zoom `zoom`. 1 when they agree to within 1 %, and
 /// `None` for nonsense input or a correction too large to be one.
+#[cfg(any(target_os = "windows", test))]
 pub fn matching_zoom(dpi_scale: f64, ratio: f64, zoom: f64) -> Option<f64> {
     let valid = |value: f64| value.is_finite() && value > 0.;
     if !(valid(dpi_scale) && valid(ratio) && valid(zoom)) {
@@ -44,6 +45,7 @@ pub fn matching_zoom(dpi_scale: f64, ratio: f64, zoom: f64) -> Option<f64> {
 /// The factor that takes a page's screen coordinate (Chromium's, at WebView2's device scale
 /// factor `ratio / zoom`) to desktop points (physical pixels over the window's DPI scale).
 /// 1 when the webview renders at the DPI scale; the same before and after a zoom of ours.
+#[cfg(any(target_os = "windows", test))]
 pub fn screen_scale(dpi_scale: f64, ratio: f64, zoom: f64) -> f64 {
     ratio / zoom / dpi_scale
 }
