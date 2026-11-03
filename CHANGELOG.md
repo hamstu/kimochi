@@ -13,29 +13,25 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **Exclude overlay from screen recording** in Settings → OCR & Overlay. It's on, as before: the overlay and dictionary pop-ups stay out of screenshots and recordings (on Windows, only while a whole screen is the source). Turn it off to see them in your captures; with a whole screen as the source, Kimochi may then read its own pop-ups as text.
+- **Exclude overlay from screen recording** in Settings → OCR & Overlay. This is on by default, but if you want to be able to screenshot the overlay and other parts of Kimochi, you can turn it off. 
 
 ### Changed
 
-- **Japanese only** is now **Drop lines**, a choice of three, and it's on for everyone: by default the Log and the overlay skip lines with no Japanese in them, so English menus and stray OCR junk stay out of both. Choose **Mostly not Japanese** to also skip lines that are mostly something else, with only a kana or two, or **Off** to keep everything. It's in Settings → Log & Sessions and Settings → OCR & Overlay (the same setting in both).
-- 10ten now waits for <kbd>Shift</kbd> before looking a word up, like Yomitan and Hachidori, instead of opening its pop-up whenever the pointer crosses a word. It's set once when 10ten next starts; if you had already chosen a key in 10ten's settings, yours is kept, and you can go back to plain hover under **Show popup** in 10ten's settings. While <kbd>Shift</kbd> is the lookup key, it no longer also switches between words and kanji (holding it made the pop-up flicker between them): use <kbd>Enter</kbd>, or click the tabs.
-- With the Yomitan API, clicking a word in the overlay no longer looks it up: hold <kbd>Shift</kbd> over it, as with every other dictionary.
-- Auto OCR no longer keeps part of a CPU core busy while it watches a screen where nothing is happening: the green dot in the Source card's **Auto** badge pulsed in a way that made the window repaint on every screen refresh.
-- **Auto OCR is much quicker to catch a line once it stops typing out**, especially with a local engine on a computer without a graphics card. With PaddleOCR or MeikiOCR, a finished line used to take around 3 seconds to arrive; now it's well under one. Kimochi no longer reads the same frame twice when the engine watching the screen is also the one you chose, looks again sooner when a new line is waiting to be confirmed, and between looks reads only the part of the screen that changed.
+- **Auto OCR is much quicker**, especially with a local engine on a machine without a fancy GPU.
+- **Japanese only** filtering has been tweaked and renamed to **Drop lines**: by default the Log and the overlay skip lines with no Japanese in them. Choose **Mostly not Japanese** to also skip lines that are mostly something else, with only a kana or two, or **Off** to keep everything. It's in Settings → Log & Sessions and Settings → OCR & Overlay (the same setting in both).
+- 10ten now waits for <kbd>Shift</kbd> before looking a word up, like Yomitan and Hachidori, instead of opening its pop-up whenever the pointer crosses a word.
 
 ### Fixed
 
-- **Windows:** Auto OCR works again with OneOCR as the engine. Since 0.3.0 it watched the screen with OneOCR but read none of its lines, so it never noticed the text changing and never scanned. Manual scans were not affected.
-- On macOS, clicking a source now brings its window to the front even when Kimochi isn't allowed under Accessibility. Before, the app's menu bar took over but its window stayed behind, however often you clicked, until you switched to it with ⌘Tab.
-- Cards added from a dictionary popup get their screenshot again when the dictionary saved only part of the line as the sentence (a short phrase cut from a longer line, say). The card now gets the most recent screenshot when no line matches its sentence.
+- On Windows, Auto OCR now works properly with OneOCR as the engine.
 - With the overlay's grouped mode on, a card's sentence is the whole bubble again rather than only the line you looked the word up on, and a word that wraps onto the next line can now be looked up.
-- The bottoms of letters like g, y and p are no longer cut off in dropdowns and buttons, such as the OCR model and Dictionary pickers.
-- On Windows, a blank white box no longer sits near the top-left of the screen, over whatever is there, until you quit Kimochi. It was the dictionary pop-up's hidden window showing through, and it also turned up in screenshots and recordings when a game window was the source.
-- Hovering the source card no longer covers it with a picture of the source window when that window sits behind Kimochi (a large or maximised game, say), so Crop area and Change source stay in view. The window is still outlined when it is somewhere else on screen.
-- On Windows, holding your lookup key (Shift) while moving onto a word in the overlay opens the dictionary again. Most of the time nothing happened until you let go and pressed the key again.
-- **Windows:** on some PCs Kimochi's windows were drawn larger than Windows' display scale, so a Quick Shot box ran away from the mouse and snapped back when you let go, and highlights lit up away from the cursor. Kimochi now draws its windows at the display's scale, so everything lines up with the mouse again, and the dictionary pop-up opened from the Log or the overlay appears beside the word instead of nearer the top-left of the screen.
-- **Windows:** with a pen tablet or touchscreen, Settings and the title bars no longer light up a second row or button away from the mouse, and a Quick Shot box keeps following the mouse while a pen is in range or after a touch.
+- On Windows, fixed an issue that was showing a blank white box on the screen.
+- Hovering the source card no longer covers it with a picture of the source window when that window sits behind Kimochi.
+- On Windows, holding your lookup key (Shift) while moving onto a word in the overlay opens the dictionary again.
+- **Windows:** Fix some issues with screen DPI and scaling when rendering quick shot and the overlays, as well as issues with pen/tablet devices.
 - With **Verbose logging** on (Settings → About), Kimochi now also records how the mouse, pens and touch reach its windows, to help track down pointer problems.
+- Cards added from a dictionary popup get enhanced with a screenshot again when the dictionary saved only part of the line as the sentence.
+- On macOS, clicking a source now brings its window to the front properly.
 
 ## [0.3.0] - 2026-10-31
 
