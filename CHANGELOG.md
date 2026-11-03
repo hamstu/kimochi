@@ -23,6 +23,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Changed
 
 - **Clicks go through the overlay's text to the game.** Text boxes over a game's buttons no longer get in the way: without Shift, clicking on them clicks the game. Hold **Shift** to look words up as before, to click a word, or to drag and use the Text Hooker card. A dictionary pop-up you're in, and the card's ⋯ menu once it's open, stay clickable without Shift. (Linux Wayland keeps the old behaviour, since Kimochi can't see Shift there.)
+- **Kimochi no longer switches to mini mode on its own** when the game goes full screen. Instead, if the game goes full screen on the same screen as Kimochi, Kimochi stays its size and is kept on top of the game until the game leaves full screen; unpin it to stop that. On another screen, nothing changes. To get mini mode back, turn on **Switch to mini mode** in Settings → General → Full-screen games; it now only happens when the game is on Kimochi's screen.
 
 ## [0.4.0] - 2026-11-03
 

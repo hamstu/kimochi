@@ -33,6 +33,7 @@ export function GeneralTab(): ReactNode {
   const [sentenceAudio] = useSetting<unknown>('sentenceAudio', null)
   const recording = recordingAudio(sentenceAudio)
   const volume = Math.round(volumeOf(soundVolume) * 100)
+  const [autoMini, setAutoMini] = useSetting<boolean>('autoMiniMode', false)
   const [hintsDismissed, setHintsDismissed] = useSetting<boolean>('overlayHintsDismissed', false)
   const { props: controller } = useController()
   const { capture } = useCapabilities()
@@ -67,6 +68,19 @@ export function GeneralTab(): ReactNode {
             onValueChange={(value) => void setScale(value)}
             options={SCALES}
           />
+        </SettingsRow>
+      </SettingsSection>
+      <SettingsSection title="Full-screen games">
+        <SettingsRow
+          label="Switch to mini mode"
+          controlId="general-auto-mini"
+          description={
+            autoMini
+              ? 'When the game you read goes full screen on Kimochi’s screen, Kimochi shrinks to mini mode in a corner.'
+              : 'Off: when the game goes full screen on Kimochi’s screen, Kimochi stays its size and is kept on top of the game. On another screen, nothing changes.'
+          }
+        >
+          <Switch id="general-auto-mini" checked={autoMini} onCheckedChange={(checked) => void setAutoMini(checked)} />
         </SettingsRow>
       </SettingsSection>
       <SettingsSection title="Sound">

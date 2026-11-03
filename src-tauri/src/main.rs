@@ -4438,17 +4438,17 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             if ticks.is_multiple_of(5) { compact::maintain_pin(&handle); }
             let watching = service.watching.lock().unwrap().clone();
             let Some(source_id) = watching else {
-                compact::forget_source();
+                compact::forget_source(&handle);
                 last = None;
                 continue;
             };
             let Some(window) = SourceId::parse(&source_id).filter(|id| id.is_window()) else {
-                compact::forget_source();
+                compact::forget_source(&handle);
                 continue;
             };
             let previous = last.as_ref().filter(|(id, _)| *id == source_id).map(|(_, state)| *state);
             let Some(state) = platform::desktop_window_state(&window, previous.as_ref()) else {
-                compact::forget_source();
+                compact::forget_source(&handle);
                 continue;
             };
             if previous.is_some_and(|p| !p.differs(&state)) {

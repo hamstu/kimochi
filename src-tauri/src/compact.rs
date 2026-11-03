@@ -19,36 +19,161 @@ static CROP_VISIBLE: Mutex<bool> = Mutex::new(false);
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 static PIN_PENDING: AtomicBool = AtomicBool::new(false);
 
+/// The setting that turns on mini mode when the source goes full screen. Off by default: a
+/// reader with Kimochi on another monitor saw it shrink whenever a game went full screen.
+pub const AUTO_MINI: &str = "autoMiniMode";
+
+/// What a full-screen episode of the source asks of the main window: nothing, mini mode, or to
+/// be kept over the game (pinned) without changing size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Want {
+    Nothing,
+    Mini,
+    Over,
+}
+
+/// One full-screen episode of the watched source. Mini mode is entered once per episode (an
+/// expand by hand is respected); keeping Kimochi over the game lasts while the game is full screen
+/// on Kimochi's display, unless the reader unpins it by hand.
 #[derive(Default)]
 struct AutoMini {
     source: String,
     entered: bool,
+    /// The reader unpinned Kimochi during this episode: leave it unpinned.
+    declined: bool,
 }
 
 impl AutoMini {
-    fn observe(&mut self, source: &str, fullscreen: bool, on_screen: bool, settling: bool) -> bool {
+    /// `same_display`: the main window is on the display the source fills.
+    fn observe(
+        &mut self,
+        source: &str,
+        fullscreen: bool,
+        on_screen: bool,
+        settling: bool,
+        same_display: bool,
+        auto_mini: bool,
+    ) -> Want {
         if self.source != source {
             self.source = source.to_owned();
             self.entered = false;
+            self.declined = false;
         }
         if !fullscreen {
             self.entered = false;
+            self.declined = false;
+            return Want::Nothing;
         }
-        let enter = fullscreen && on_screen && !settling && !self.entered;
-        if enter {
+        if !on_screen || settling || !same_display {
+            return Want::Nothing;
+        }
+        if auto_mini {
+            if self.entered {
+                return Want::Nothing;
+            }
             self.entered = true;
+            return Want::Mini;
         }
-        enter
+        if self.declined {
+            Want::Nothing
+        } else {
+            Want::Over
+        }
     }
 }
 
 static AUTO: Mutex<AutoMini> = Mutex::new(AutoMini {
     source: String::new(),
     entered: false,
+    declined: false,
 });
 
-pub fn forget_source() {
+/// What keeping Kimochi over a full-screen game changed, to undo when it ends.
+struct Over {
+    pinned: bool,
+    #[cfg(target_os = "macos")]
+    mac: MacFrame,
+}
+static OVER: Mutex<Option<Over>> = Mutex::new(None);
+static OVER_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// A main-thread check already queued, so the 10 Hz watch never stacks them.
+static CHECK_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// The source stopped being watched: whatever its full screen asked of the main window ends.
+pub fn forget_source(app: &tauri::AppHandle) {
     *AUTO.lock().unwrap() = AutoMini::default();
+    if OVER_ACTIVE.load(Ordering::Relaxed) {
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Some(window) = handle.get_webview_window(crate::panels::MAIN) {
+                let _ = set_over(&window, false);
+            }
+        });
+    }
+}
+
+/// Whether the main window is kept over a full-screen game (mini mode, or pinned over it).
+#[cfg(target_os = "windows")]
+pub fn over_fullscreen() -> bool {
+    active() || OVER_ACTIVE.load(Ordering::Relaxed)
+}
+
+/// The reader pinned or unpinned the main window by hand while it was kept over the game: their
+/// choice stands, and nothing is undone later.
+pub fn pinned_by_hand(window: &tauri::WebviewWindow) {
+    if !OVER_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    AUTO.lock().unwrap().declined = true;
+    #[cfg(target_os = "macos")]
+    if let Some(over) = OVER.lock().unwrap().as_ref() {
+        let _ = mac_mini(window, Some(&over.mac));
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
+    OVER.lock().unwrap().take();
+    OVER_ACTIVE.store(false, Ordering::Relaxed);
+}
+
+/// Keep the main window over a full-screen game, pinned and (on macOS) on its Space, or put it
+/// back as it was. Never persisted; a no-op while mini mode, which does the same and more, is on.
+fn set_over(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    let mut over = OVER.lock().unwrap();
+    if enabled == over.is_some() || (enabled && active()) {
+        return Ok(());
+    }
+    if enabled {
+        let pinned = window.is_always_on_top().map_err(|e| e.to_string())?;
+        *over = Some(Over {
+            pinned,
+            #[cfg(target_os = "macos")]
+            mac: mac_mini(window, None)?,
+        });
+        OVER_ACTIVE.store(true, Ordering::Relaxed);
+        window.set_always_on_top(true).map_err(|e| e.to_string())?;
+    } else if let Some(previous) = over.take() {
+        OVER_ACTIVE.store(false, Ordering::Relaxed);
+        #[cfg(target_os = "macos")]
+        mac_mini(window, Some(&previous.mac))?;
+        window
+            .set_always_on_top(previous.pinned)
+            .map_err(|e| e.to_string())?;
+    }
+    let pinned = enabled || over.is_some() || window.is_always_on_top().unwrap_or(false);
+    let _ = window.emit(
+        "panel:state",
+        serde_json::json!({ "label": crate::panels::MAIN, "pinned": pinned }),
+    );
+    Ok(())
+}
+
+/// Whether the main window's centre is on `display`.
+fn on_display(window: &tauri::WebviewWindow, display: Option<kimochi_capture::Rect>) -> bool {
+    let (Some(display), Ok(bounds)) = (display, crate::platform::desktop_bounds(window)) else {
+        return false;
+    };
+    let (x, y) = (bounds.x + bounds.width / 2., bounds.y + bounds.height / 2.);
+    x >= display.x && y >= display.y && x < display.x + display.width && y < display.y + display.height
 }
 
 pub fn observe_source(
@@ -57,34 +182,63 @@ pub fn observe_source(
     source: &str,
     state: &crate::platform::WindowState,
 ) {
-    if !AUTO
-        .lock()
-        .unwrap()
-        .observe(source, state.fullscreen, state.on_screen, state.settling)
-    {
+    // Nothing to decide outside full screen unless something is to be undone.
+    if !state.fullscreen && !OVER_ACTIVE.load(Ordering::Relaxed) {
+        AUTO.lock().unwrap().observe(source, false, false, false, false, false);
+        return;
+    }
+    // Where the main window is takes the main thread; one check at a time is plenty.
+    if CHECK_PENDING.swap(true, Ordering::Relaxed) {
         return;
     }
     let source = source.to_owned();
+    let state = *state;
     let handle = app.clone();
     let service = service.clone();
-    let _ = app.run_on_main_thread(move || {
-        // A selection or shape change can overtake this queued main-thread turn.
-        if service.watching.lock().unwrap().as_deref() != Some(source.as_str())
-            || !service.source_fullscreen.load(Ordering::Relaxed)
-        {
+    let queued = app.run_on_main_thread(move || {
+        CHECK_PENDING.store(false, Ordering::Relaxed);
+        let Some(window) = handle.get_webview_window(crate::panels::MAIN) else {
+            return;
+        };
+        // A selection change can overtake this queued main-thread turn.
+        if service.watching.lock().unwrap().as_deref() != Some(source.as_str()) {
             return;
         }
-        if let Some(window) = handle.get_webview_window(crate::panels::MAIN) {
-            let result = set(&window, true);
+        let same_display = on_display(&window, state.display);
+        let auto_mini = service.settings.get_or(AUTO_MINI, false);
+        let want = AUTO.lock().unwrap().observe(
+            &source,
+            state.fullscreen,
+            state.on_screen,
+            state.settling,
+            same_display,
+            auto_mini,
+        );
+        let (result, check) = match want {
+            Want::Mini => {
+                let _ = set_over(&window, false);
+                let result = set(&window, true);
+                crate::tray::sync_mini(&handle);
+                (result, "mini-fullscreen")
+            }
+            Want::Over => (set_over(&window, true), "over-fullscreen"),
+            // The episode is over, Kimochi left the game's display, or the reader declined:
+            // put the pin back as it was.
+            Want::Nothing => (set_over(&window, false), "over-fullscreen-ended"),
+        };
+        if want != Want::Nothing || result.is_err() {
             crate::record(
                 &handle,
                 &service,
                 serde_json::json!({
-                    "check": "mini-fullscreen", "sourceId": source, "error": result.err(),
+                    "check": check, "sourceId": source, "error": result.err(),
                 }),
             );
         }
     });
+    if queued.is_err() {
+        CHECK_PENDING.store(false, Ordering::Relaxed);
+    }
 }
 
 pub fn maintain_pin(app: &tauri::AppHandle) {
@@ -119,6 +273,8 @@ pub fn set(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
         return Ok(());
     }
     if enabled {
+        // Pinned over the game already: mini mode does that and more, and keeps the pin to undo.
+        let _ = set_over(window, false);
         let bounds = crate::platform::desktop_bounds(window)?;
         *saved = Some(Saved {
             bounds,
@@ -245,22 +401,36 @@ fn mac_mini(window: &tauri::WebviewWindow, restore: Option<&MacFrame>) -> Result
 mod tests {
     use super::*;
     #[test]
-    fn enters_once_per_source_fullscreen_episode_and_respects_manual_expand() {
+    fn mini_mode_enters_once_per_episode_on_kimochis_display_only_when_turned_on() {
         let mut policy = AutoMini::default();
-        assert!(!policy.observe("game", false, true, false));
-        assert!(policy.observe("game", true, true, false));
-        assert!(!policy.observe("game", true, true, false));
-        assert!(!policy.observe("game", true, false, false));
-        assert!(!policy.observe("game", true, true, false));
-        assert!(!policy.observe("game", false, true, false));
-        assert!(policy.observe("game", true, true, false));
-        assert!(policy.observe("another", true, true, false));
+        let mut see = |source: &str, fullscreen: bool, on_screen: bool, same: bool| {
+            policy.observe(source, fullscreen, on_screen, false, same, true)
+        };
+        assert_eq!(see("game", false, true, true), Want::Nothing);
+        assert_eq!(see("game", true, true, false), Want::Nothing, "another display: left alone");
+        assert_eq!(see("game", true, true, true), Want::Mini);
+        assert_eq!(see("game", true, true, true), Want::Nothing, "an expand by hand stands");
+        assert_eq!(see("game", false, true, true), Want::Nothing);
+        assert_eq!(see("game", true, true, true), Want::Mini);
+        assert_eq!(see("another", true, true, true), Want::Mini);
+    }
+    #[test]
+    fn by_default_kimochi_is_kept_over_the_game_on_its_display_until_unpinned() {
+        let mut policy = AutoMini::default();
+        assert_eq!(policy.observe("game", true, true, false, true, false), Want::Over);
+        assert_eq!(policy.observe("game", true, true, false, true, false), Want::Over);
+        assert_eq!(policy.observe("game", true, true, false, false, false), Want::Nothing, "moved to another display");
+        assert_eq!(policy.observe("game", true, true, false, true, false), Want::Over, "and back");
+        policy.declined = true;
+        assert_eq!(policy.observe("game", true, true, false, true, false), Want::Nothing, "unpinned by hand");
+        assert_eq!(policy.observe("game", false, true, false, true, false), Want::Nothing);
+        assert_eq!(policy.observe("game", true, true, false, true, false), Want::Over, "a new episode");
     }
     #[test]
     fn selecting_fullscreen_waits_until_visible_and_finished_settling() {
         let mut policy = AutoMini::default();
-        assert!(!policy.observe("game", true, false, false));
-        assert!(!policy.observe("game", true, true, true));
-        assert!(policy.observe("game", true, true, false));
+        assert_eq!(policy.observe("game", true, false, false, true, true), Want::Nothing);
+        assert_eq!(policy.observe("game", true, true, true, true, true), Want::Nothing);
+        assert_eq!(policy.observe("game", true, true, false, true, true), Want::Mini);
     }
 }
