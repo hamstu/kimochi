@@ -72,6 +72,7 @@ node scripts/e2e-windows/run.mjs focus window gdi windowed
 node scripts/e2e-windows/run.mjs keys window gdi windowed
 node scripts/e2e-windows/run.mjs alt window gdi windowed
 node scripts/e2e-windows/run.mjs selfocr display gdi windowed
+node scripts/e2e-windows/run.mjs hook window gdi windowed
 node scripts/e2e-windows/quit.mjs 22
 ```
 
@@ -119,6 +120,7 @@ Remove that environment variable and restart to return to normal GPU use.
 | `keys` | The bound shortcut's key-down never reaches the game; how many pages an (unbound) Ctrl chord would skip, for #16 | #16, #19 |
 | `alt` | A lone Alt on the main window starts no menu loop (`GetGUIThreadInfo`) and WebView2 still answers | #36 |
 | `selfocr` | A display scan draws no overlay text over Kimochi's own main window | #35 |
+| `hook` | Text Hooker: the fake game is offered (Kimochi is not), LunaHook attaches, the dialogue thread is chosen by matching the screen over the nameplate, HUD and menu threads, the Log gets exactly the dialogue lines, and choosing another thread by hand takes effect | — |
 | `quit.mjs N` | N launch/quit cycles; exit code, timing and leftover HWNDs per PID | #30 |
 
 The fake game's VN behaviour is driven over `command.txt`: `skip off|focused|active` (Ctrl held
@@ -126,7 +128,23 @@ skips a page every 100 ms: never, while it is the foreground window, or while `W
 said the app is active, as many engines do) and `minimize-on-blur on|off` (exclusive fullscreen's
 habit of minimising on focus loss, for #2/#17 without DXGI). `truth.json` reports `advances` and
 `believesActive`; `input.jsonl` logs `WM_ACTIVATEAPP`/`WM_NCACTIVATE` and every `advance` with
-its reason. `Desktop.exe guiinfo` prints the foreground thread's GUI state (menu mode, capture).
+its reason, and `say <text>` shows that line as the dialogue until the next advance. `Desktop.exe game <dir> "" hookable` draws the dialogue with GDI `TextOutW`, a speaker
+nameplate with `DrawTextW` and a HUD string with `DrawTextExW`, so a text hooker's generic Windows
+API hooks see several threads; `truth.json` then reports `dialogue`, `speaker`, `hud` and `bits`.
+`type <a>|<b>` types like a game read by clicking twice quickly: the first frames of `<a>`, all of
+`<a>` at once, then `<b>` a character at a time, a frame every 30 ms, so the hooker gets them in one
+burst (`truth.json` `typing` is true until it is done). `typeout <text>` types `<text>` a character a
+frame and holds for a second at each `‖` in it, longer than the hooker waits, so a line arrives in
+two bursts, the second carrying on the first. After the Log checks the hook scenario
+checks the card over the game (ui/hook-card.js): Auto align's place and size over several lines,
+that burst arriving as two clean lines, a paused line arriving as one, dragging (which turns Auto align off), −/+ and the opacity
+menu, Auto align turned back on, and Read along over the card and as the full-screen dictionary,
+driven by `controller-nav` events emitted from the overlay page (the pointer is moved off the
+radial menu first: its wedges follow the mouse).
+`build.ps1` also builds `Desktop-x64.exe` and `Desktop-x86.exe`: the hook scenario runs the game as
+a real x64 process (or x86 with `KIMOCHI_E2E_HOOK_BITS=32`), since "Any CPU" runs as native ARM64
+on Windows ARM64, where hook DLLs cannot go. The first run downloads LunaHook (about 6 MB) into the
+test profile. `Desktop.exe guiinfo` prints the foreground thread's GUI state (menu mode, capture).
 
 ### Traps
 

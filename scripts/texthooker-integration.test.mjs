@@ -507,3 +507,18 @@ test('Japanese filter: on by default, stricter when asked, and can be turned off
   assert.deepEqual(await run({ japaneseFilter: 'mostlyNonJapanese' }), ['猫が好きです', '「はい」'].toSorted())
   assert.deepEqual(await run({ japaneseFilter: 'off' }), lines.toSorted())
 })
+
+test("a hooked line that carries on the last one replaces it, and only that one", async () => {
+  const h = await harness({
+    superTexthooker: { inputSource: "hook", autoMatchSource: false, japaneseFilter: "off" },
+  });
+  await h.call("host", "ingest", ["「はぁっ、もうだめよぉ、ん", "hook", 1, "hook-1"]);
+  await h.call("host", "ingest", ["「はぁっ、もうだめよぉ、んーーっ」", "hook", 2, "hook-2", null, "hook-1"]);
+  // Naming a line that is not the last one adds a line: an older line is never rewritten.
+  await h.call("host", "ingest", ["「何よ……！」", "hook", 3, "hook-3"]);
+  await h.call("host", "ingest", ["「何よ……！　私を」", "hook", 4, "hook-4", null, "hook-1"]);
+  const lines = h.snapshot().lines;
+  assert.deepEqual(lines.map((l) => l.text), ["「はぁっ、もうだめよぉ、んーーっ」", "「何よ……！」", "「何よ……！　私を」"]);
+  assert.deepEqual(lines[0].ingestIds, ["hook-1", "hook-2"]);
+  await h.call("stats", "resetStats");
+});

@@ -28,6 +28,7 @@ import {
   ImageIcon,
   Info,
   Monitor,
+  Plug,
   Plus,
   Radio,
   ScanSearch,
@@ -54,6 +55,13 @@ import {
   Tooltip
 } from '@kit'
 import { SourceGrid, SystemPickerButton } from './SourceGrid'
+import { HookControls } from './HookControls'
+import { texthookStart, texthookStatus, texthookStop, texthookTargets, useHookStatus } from '../bridge/textHook'
+import { gameKey, hookSettings, openTextHookerSettings, useHookDefaults, useHookGames } from './hookGames'
+import { invoke } from '@tauri-apps/api/core'
+import { bestWatcher, resolveWatcher, type WatcherChoice } from '../../ui/watcher'
+import type { OcrMode } from '../bridge/settings'
+import type { AutoOCRSettings } from '../vendor/shared-types'
 import { getSettings, onSettingsChange, updateSettings } from '@texthooker/lib/settings'
 import type { InputSource } from '@texthooker/input-source'
 import { SourceIcon } from '../components/SourceIcon'
@@ -87,6 +95,7 @@ import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 import { GnomeWindowLink } from './GnomeWindowLink'
 import { HyprlandWindowLink } from './HyprlandWindowLink'
 import { LinuxSourceCrop } from './LinuxSourceCrop'
+import { useHookPlacement } from './hookPlacement'
 import type { ControllerWiring } from '../panels/useController'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { keepShape } from '@ui/preview-shape'
@@ -131,6 +140,14 @@ const TYPES = [
   }
 ] as const satisfies readonly { mode: Mode; label: string; icon: ReactNode; detail: string }[]
 
+/** Text Hooker: a window, read from inside its game rather than off its pixels (Windows only). */
+const HOOK_TYPE = {
+  mode: 'hook',
+  label: 'Text Hooker',
+  icon: <Plug />,
+  detail: "Hook a game's text from inside it, with no OCR."
+} as const
+
 function useInputSource(): [Mode, (next: Mode) => void] {
   const [input, setInput] = useState<InputSource>(() => getSettings().inputSource)
   useEffect(() => onSettingsChange((next) => setInput(next.inputSource)), [])
@@ -170,6 +187,7 @@ function SourceRow({
   info,
   caution,
   settingsLabel,
+  sub,
   onToggle,
   onSettings
 }: {
@@ -182,11 +200,13 @@ function SourceRow({
   /** A catch in this mode: an amber pip on the info mark, and this line in its tooltip. */
   caution?: ReactNode
   settingsLabel: string
+  /** A sub-option of the row above it, indented under it. */
+  sub?: boolean
   onToggle: () => void
   onSettings: () => void
 }): ReactNode {
   return (
-    <div className="k-row src-row src-row-layered" data-disabled={disabled ? '' : undefined} title={title}>
+    <div className={sub ? 'k-row src-row src-row-layered src-row-sub' : 'k-row src-row src-row-layered'} data-disabled={disabled ? '' : undefined} title={title}>
       <button
         type="button"
         role="switch"
@@ -563,6 +583,7 @@ function SourceMenuContent({
   onGridOpen,
   onChooseType,
   onChooseSource,
+  onChooseHook,
   onSystemPick,
   onLinkWindow,
   onClearSource,
@@ -576,6 +597,8 @@ function SourceMenuContent({
   onGridOpen: (open: boolean) => void
   onChooseType: (mode: Mode) => void
   onChooseSource: (sourceId: string) => void
+  /** Present where text hooking works: hook the game behind this window. */
+  onChooseHook?: (sourceId: string) => void
   onSystemPick: () => void
   onLinkWindow?: () => void
   /** Present while a window or screen is chosen. */
@@ -619,6 +642,16 @@ function SourceMenuContent({
           </MenuSubContent>
         </MenuSub>
       )}
+      {onChooseHook && (
+        <MenuSub>
+          <MenuPrimitive.SubTrigger className="src-type">
+            <TypeBody type={HOOK_TYPE} selected={mode === 'hook'} sub />
+          </MenuPrimitive.SubTrigger>
+          <MenuSubContent className="src-grid-menu">
+            <SourceGrid hookable currentId={mode === 'hook' ? currentId : null} onChoose={(source) => onChooseHook(source.id)} />
+          </MenuSubContent>
+        </MenuSub>
+      )}
       {others.map((type) => (
         <MenuPrimitive.Item
           key={type.mode}
@@ -643,6 +676,11 @@ function SourceMenuContent({
 
 /** Requests from elsewhere (the tray, a shortcut) to open the menu on the window grid. */
 let handledChooseRequest = 0
+/**
+ * The reader cleared a Text Hooker source: Hook automatically waits until the app next starts,
+ * or until they choose a game to hook themselves.
+ */
+let autoHookPaused = false
 
 // ---------------------------------------------------------------------------- panel
 
@@ -701,8 +739,103 @@ export function SourcePanel({
 
   const source = controller.currentSource
   const fullScreen = useFullScreen(source?.type === 'window' ? source.sourceId : '')
+  // Text Hooker reads a chosen window too: its card is the window's, with the hook under it.
+  const windowMode = mode === 'ocr' || mode === 'hook'
   // A window or screen that has not been picked yet reads as no source at all.
-  const empty = mode === 'ocr' && !source
+  const empty = windowMode && !source
+  const hook = useHookStatus()
+  const hookAvailable = capabilities.os === 'windows' && !isGamingMode(capabilities)
+  // The OCR that matches hooked text to the screen: the Auto OCR watcher, else the best one here.
+  const [ocrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
+  const [autoOcr] = useSetting<AutoOCRSettings | null>('autoOCRSettings', null)
+  const watcher = resolveWatcher(ocrMode, capabilities.ocrEngines, (autoOcr?.watcher ?? 'auto') as WatcherChoice)
+  const hookObserver = watcher.kind === 'text' ? watcher.engine : bestWatcher(capabilities.ocrEngines)
+  // The source the menu just started hooking, so the restore below does not start it again.
+  const startedHook = useRef<string | null>(null)
+  const startHook = (sourceId: string): void => {
+    startedHook.current = sourceId
+    void texthookStart(sourceId, hookObserver).catch(() => {})
+  }
+  // A Text Hooker source restored at launch (or changed from elsewhere) is hooked again.
+  const hookSourceId = mode === 'hook' && source?.type === 'window' ? source.sourceId : null
+  useEffect(() => {
+    if (!hookSourceId || !hookAvailable || startedHook.current === hookSourceId) return
+    let live = true
+    // Asked afresh: a reloaded window must not restart a session that is already running.
+    void texthookStatus()
+      .then((current) => {
+        if (!live || (current.sourceId === hookSourceId && current.phase !== 'idle')) return
+        return texthookStart(hookSourceId, hookObserver)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per source, not per observer change
+  }, [hookSourceId, hookAvailable])
+  // Hook automatically: while the Text Hooker is the input, a game hooked before whose settings
+  // say so is hooked as soon as its window is open. With nothing hooked, any such window open now;
+  // with a game hooked, only a window opened since (the newest game takes over: one hook at a
+  // time, as the native session is). Each window is tried once, so a game that cannot be hooked
+  // is not tried over and over. Paused once the reader clears the source (`autoHookPaused`).
+  const [hookDefaults] = useHookDefaults()
+  const hookGames = useHookGames()
+  const autoGames = Object.entries(hookGames)
+    .filter(([, game]) => hookSettings(hookDefaults, game).autoHook)
+    .map(([key]) => key)
+    .join('|')
+  const hookBusy = ['starting', 'downloading', 'attaching', 'hooked'].includes(hook.phase)
+  const triedAuto = useRef(new Set<string>())
+  /** Every window the last look saw, so a window opened since is told apart. Null before a look. */
+  const seenWindows = useRef<Set<string> | null>(null)
+  const chooseHookRef = useRef<(sourceId: string) => void>(() => undefined)
+  useEffect(() => {
+    chooseHookRef.current = (sourceId: string): void => {
+      choose('hook')
+      controller.onSelectSource(sourceId)
+      startHook(sourceId)
+    }
+  })
+  useEffect(() => {
+    if (mode !== 'hook' || !hookAvailable || !autoGames) return
+    const wanted = new Set(autoGames.split('|'))
+    let live = true
+    const look = async (): Promise<void> => {
+      const catalog = await invoke<{ id: string; kind: string }[]>('source_catalog')
+      if (!live) return
+      const open = catalog.filter((s) => s.kind !== 'display' && s.kind !== 'screen')
+      const seen = seenWindows.current
+      seenWindows.current = new Set(open.map((s) => s.id))
+      if (autoHookPaused) return
+      const windows = open.filter(
+        (s) => !triedAuto.current.has(s.id) && s.id !== hookSourceId && (!hookBusy || (seen !== null && !seen.has(s.id)))
+      )
+      if (!windows.length) return
+      const targets = await texthookTargets(windows.map((s) => s.id))
+      const found = windows.find((s) => {
+        const target = targets[s.id]
+        return target?.hookable && target.exe && wanted.has(gameKey(target.exe))
+      })
+      if (!live || !found) return
+      triedAuto.current.add(found.id)
+      chooseHookRef.current(found.id)
+    }
+    // Not at once: a source restored at launch is hooked again by the effect above first.
+    const timer = setInterval(() => void look().catch(() => {}), 3000)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [mode, hookAvailable, hookBusy, autoGames, hookSourceId])
+  const leaveHook = (): void => {
+    if (mode === 'hook') void texthookStop().catch(() => {})
+  }
+  /** Clearing the source: and, from a hooked game, no hooking on its own until the next launch. */
+  const clearSource = (): void => {
+    if (mode === 'hook') autoHookPaused = true
+    leaveHook()
+    controller.onClearSource()
+  }
   const scanKey = hotkeys.triggerScan?.enabled
     ? formatAccelerator(hotkeys.triggerScan.accelerator, keyPlatform)
     : null
@@ -725,6 +858,7 @@ export function SourcePanel({
       onGridOpen={setGridOpen}
       onChooseType={(next) => {
         closeMenu()
+        leaveHook()
         choose(next)
       }}
       pickerRequired={pickerRequired}
@@ -732,18 +866,31 @@ export function SourcePanel({
       onLinkWindow={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && ['GNOME', 'Hyprland'].includes(capabilities.session.compositor ?? '') && capabilities.overlay.passive && mode === 'ocr' && source?.sourceId?.startsWith('portal:window:') ? () => {closeMenu();window.dispatchEvent(new Event('kimochi-link-window'))} : undefined}
       onChooseSource={(sourceId) => {
         closeMenu()
+        leaveHook()
         choose('ocr')
         controller.onSelectSource(sourceId)
       }}
+      onChooseHook={
+        hookAvailable
+          ? (sourceId) => {
+              closeMenu()
+              // Choosing a game to hook is the reader back: Hook automatically resumes.
+              autoHookPaused = false
+              choose('hook')
+              controller.onSelectSource(sourceId)
+              startHook(sourceId)
+            }
+          : undefined
+      }
       onSystemPick={() => {
         closeMenu()
         void startSystemPick()
       }}
       onClearSource={
-        mode === 'ocr' && source
+        windowMode && source
           ? () => {
               closeMenu()
-              controller.onClearSource()
+              clearSource()
             }
           : undefined
       }
@@ -770,7 +917,7 @@ export function SourcePanel({
         <span className="src-empty-detail">Window, screen, clipboard…</span>
       </button>
     )
-  } else if (mode === 'ocr' && source) {
+  } else if (windowMode && source) {
     const isScreen = source.type === 'screen'
     const title = isScreen ? source.name || 'Screen' : source.appName || source.name || 'Window'
     const detail = isScreen
@@ -852,7 +999,7 @@ export function SourcePanel({
             className="src-clear"
             aria-label="Clear source"
             title="Clear source"
-            onClick={() => controller.onClearSource()}
+            onClick={clearSource}
           >
             <X />
           </button>
@@ -975,6 +1122,7 @@ export function SourcePanel({
       </Callout>
     ) : null
 
+  const placement = useHookPlacement(mode === 'hook' ? hook.exe : null)
   const overlayUnavailable = capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
   const overlayRow = (
     <SourceRow
@@ -992,7 +1140,7 @@ export function SourcePanel({
 
   return (
     <div className="src-panel">
-      {mode === 'ocr' && source ? (
+      {windowMode && source ? (
         card
       ) : (
         <Menu open={open} onOpenChange={onMenuOpen}>
@@ -1038,6 +1186,27 @@ export function SourcePanel({
             {overlayRow}
           </div>
           {gameModeNotice}
+        </div>
+      )}
+      {mode === 'hook' && source && (
+        <div className="src-controls">
+          <HookControls status={hook} onManage={() => void openTextHookerSettings(hook.exe)} />
+          <div className="src-rows">
+            {overlayRow}
+            {placement && overlayOn && !overlayUnavailable && (
+              <SourceRow
+                sub
+                icon={<ScanSearch aria-hidden />}
+                label="Auto align"
+                checked={placement.on}
+                info="Lines the card up with the game's own text, found by OCR in the background (the OCR model is in the sidebar). Off, drag the card by its top edge and resize it by its corner. This switch is for this game; the default for every game is in Text Hooker settings."
+                settingsLabel="Text Hooker settings"
+                onToggle={placement.toggle}
+                onSettings={() => void openTextHookerSettings(hook.exe)}
+              />
+            )}
+            <EnhanceCardsRow />
+          </div>
         </div>
       )}
       {(mode === 'clipboard' || mode === 'websocket') && (

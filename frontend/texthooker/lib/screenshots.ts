@@ -30,9 +30,10 @@ export interface Shot {
 }
 
 /** The scan a Log line was read in: its OCR group's, or, for a scan read as one text, its own
-    ingest id (host.ts). */
+    ingest id (host.ts). A hooked line's screenshot is under its own ingest id (text_hook). */
 export function scanOf(line: Line): string | undefined {
   if (line.ocr?.scanId) return line.ocr.scanId;
+  if (line.source === "hook") return line.ingestIds?.[0];
   if (line.source !== "ocr") return undefined;
   return line.ingestIds?.[0]?.split(":group:")[0];
 }

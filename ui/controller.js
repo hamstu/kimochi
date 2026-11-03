@@ -133,6 +133,8 @@ export function scrollSpeed(y) {
  *   where each character of a word-mode box is on the source, by code unit; null in grouped mode
  * @param {(quiet: boolean) => void} context.quietText hold the text overlay's boxes unlit
  * @param {(x: number, y: number) => boolean} context.nearText whether a point is on or close to scanned text
+ * @param {() => {element: HTMLElement, node: Text, text: string, vertical: boolean, box: object}[]} [context.extraUnits]
+ *   text to read along that is not in the scan's boxes (the Text Hooker's card), as `readUnits` has it
  * @param {(record: object) => void} context.log
  * @param {(mode: 'idle' | 'menu' | 'words' | 'dictionary' | 'history') => void} [context.modeChanged] the menu opened, word
  *   mode started, or controller mode ended; automatic OCR stands still while it is anything but idle
@@ -307,24 +309,31 @@ export function createController(context) {
 
   function menuItems() {
     const status = context.status();
+    // With the Text Hooker as the source the text comes from the game: nothing to scan, and no
+    // Auto OCR to turn on or off. Read along reads the hooked line.
+    const hooked = Boolean(status.hooked);
     return [
-      { id: "scan", label: "Scan", icon: ICONS.scan, enabled: true },
+      ...(hooked ? [] : [{ id: "scan", label: "Scan", icon: ICONS.scan, enabled: true }]),
       {
         id: "dictionary",
         label: "Read along",
         icon: ICONS.dictionary,
         enabled: status.hasText,
         lit: status.hasText,
-        unavailable: "Scan first",
+        unavailable: hooked ? "No line yet" : "Scan first",
       },
-      {
-        id: "auto",
-        label: "Auto OCR",
-        icon: ICONS.auto,
-        enabled: status.autoAvailable,
-        detail: status.autoOcr ? "On" : "Off",
-        unavailable: "Not in Quick Shot",
-      },
+      ...(hooked
+        ? []
+        : [
+            {
+              id: "auto",
+              label: "Auto OCR",
+              icon: ICONS.auto,
+              enabled: status.autoAvailable,
+              detail: status.autoOcr ? "On" : "Off",
+              unavailable: "Not in Quick Shot",
+            },
+          ]),
     ].concat([
       {
         id: "history",
@@ -398,10 +407,11 @@ export function createController(context) {
       y: window.innerHeight / 2,
     };
     const items = menuItems();
-    // With automatic OCR on the text is usually already current, so reading along is the
-    // likely choice: start on it, and A alone opens it.
+    // With automatic OCR on (or the Text Hooker, whose line is always current) the text is
+    // usually already current, so reading along is the likely choice: start on it, and A alone
+    // opens it.
     const initial =
-      status.autoOcr && status.hasText
+      (status.autoOcr || status.hooked) && status.hasText
         ? items.findIndex((i) => i.id === "dictionary")
         : -1;
     menu.show(center, items, input, initial);
@@ -835,6 +845,8 @@ export function createController(context) {
         });
       }
     }
+    // Text drawn outside the scan's boxes: the Text Hooker's card.
+    for (const extra of context.extraUnits?.() ?? []) units.push(extra);
     return readingUnits(units, dominantVertical(units));
   }
 

@@ -18,12 +18,14 @@ import { useEffect, type JSX } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { SettingsShell, SettingsTab } from './settings/SettingsShell'
 import { SettingsPageFor } from './settings/SettingsPageFor'
-import { SETTINGS_NAV, settingsTabOf } from './settings/settingsNav'
+import { settingsNavFor, settingsTabOf } from './settings/settingsNav'
+import { useCapabilities } from '../bridge/capabilities'
 import { ReaderSettingsProvider } from './settings/ReaderSettingsProvider'
 import { useSetting } from '../bridge/useSetting'
 import './settings-panel.css'
 
 function SettingsPanel(): JSX.Element {
+  const nav = settingsNavFor(useCapabilities().os)
   const [stored, setActiveTab] = useSetting<string>('settingsActiveTab', 'general')
   const activeTab = settingsTabOf(stored)
   useEffect(() => {
@@ -36,8 +38,8 @@ function SettingsPanel(): JSX.Element {
   return (
     <div style={{ height: '100%' }}>
       <ReaderSettingsProvider>
-        <SettingsShell value={activeTab} onValueChange={setActiveTab} items={SETTINGS_NAV}>
-          {SETTINGS_NAV.map((item) => (
+        <SettingsShell value={activeTab} onValueChange={setActiveTab} items={nav}>
+          {nav.map((item) => (
             <SettingsTab key={item.value} value={item.value}>
               <SettingsPageFor tab={item.value} />
             </SettingsTab>

@@ -44,6 +44,7 @@ import { getSnapshot, subscribe } from "./bridge";
 import { startHost } from "./host";
 import { useClipboardPoll } from "./hooks/useClipboardPoll";
 import { useWebSocketInput } from "./hooks/useWebSocketInput";
+import { useTextHookInput } from "./hooks/useTextHookInput";
 import type { SocketStatus } from "./websocket-input";
 import { useScanMode } from "./hooks/useScanMode";
 import { useLineHotkeys } from "./hooks/useLineHotkeys";
@@ -155,6 +156,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   );
   useClipboardPoll();
   useWebSocketInput(socketStatus);
+  useTextHookInput();
   useScanMode(apiMode);
   useLineHotkeys();
   useLayoutEffect(() => {
@@ -268,7 +270,8 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
             </div>
           </LineContextMenu>
         </main>
-        <ActivityTicker visible={visible} />
+        {/* The scan feed is OCR's; a hooked game's lines speak for themselves. */}
+        {settings.inputSource !== "hook" && <ActivityTicker visible={visible} />}
       </div>
       <Bar position="bottom">
         <StatsFooter lineCount={snap.lines.length} />

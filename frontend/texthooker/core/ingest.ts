@@ -30,7 +30,8 @@ export function preparedText(text: string): string | null {
  *   4. trim again
  *   5. drop if empty
  *   6. drop if "Japanese only" drops it (ui/japanese-text.ts; the overlay applies the same)
- *   7. start-merge if enabled and prefix matches → replace last line
+ *   7. a line that replaces the last (`replaces`, its ingest id), or start-merge if enabled and
+ *      prefix matches → replace last line
  *   8. drop if duplicate within last N
  *   9. append + stats
  *  10. tokenize with stale-text guard
@@ -41,6 +42,7 @@ export const ingestText = async (
   ts?: number,
   ingestId?: string,
   ocr?: Line["ocr"],
+  replaces?: string,
 ) => {
   const settings = getSettings();
   if (!acceptsInput(settings, source)) return;
@@ -56,6 +58,17 @@ export const ingestText = async (
 
   // 6 — Japanese filter
   if (dropsText(value, japaneseFilterOf(settings))) return;
+
+  // 7 — the rest of the last line (the Text Hooker's typewriter, paused longer than it waits)
+  const last = snapshotLines().at(-1);
+  if (replaces && last?.ingestIds?.includes(replaces)) {
+    const prev = last.text;
+    const merged = replaceLastLineText(value);
+    if (merged && ingestId)
+      merged.ingestIds = [...(merged.ingestIds || []), ingestId];
+    recordCharDelta(value.length - prev.length);
+    return;
+  }
 
   // 7 — start-merge: streaming-VN-style continuation
   if (!ocr && settings.startMergeEnabled && lastLineText()) {

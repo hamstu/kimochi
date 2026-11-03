@@ -3,7 +3,7 @@
  * OCR scans are also sent. The same input choice is the main window's source menu.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Aperture, Camera, Check, Clipboard, ExternalLink, Radio } from 'lucide-react'
+import { Aperture, Camera, Check, Clipboard, ExternalLink, Plug, Radio } from 'lucide-react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import {
   Button,
@@ -23,6 +23,7 @@ import { useCapabilities } from '../../bridge/capabilities'
 import { useHasScreenRecordingPermission } from '../../welcome/useHasScreenRecordingPermission'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { OutputSections } from './OutputSections'
+import { openTextHookerSettings } from '../../main/hookGames'
 
 type InputSource = Settings['inputSource']
 /** The texthooker's inputs, with OCR split into Screen and Quick Shot. */
@@ -52,6 +53,12 @@ const INPUT_SOURCES = [
     label: 'WebSocket',
     icon: <Radio />,
     detail: 'Receives plain-text messages from a text source on your network.'
+  },
+  {
+    value: 'hook',
+    label: 'Text Hooker',
+    icon: <Plug />,
+    detail: "Hooks a game's text from inside it. Choose the game in the source menu. (Windows)"
   }
 ] as const satisfies readonly {
   value: Mode
@@ -135,6 +142,8 @@ function MacPermissionsSection(): ReactNode {
 
 export function SourcesTab(): ReactNode {
   const [quickShot, setQuickShot] = useSetting<boolean>('quickShotEnabled', false)
+  // Text hooking works on Windows only.
+  const windows = useCapabilities().os === 'windows'
   const choose = (next: Mode): void => {
     void updateSettings({ inputSource: next === 'quickshot' ? 'ocr' : next })
     if ((next === 'quickshot') !== quickShot) void setQuickShot(next === 'quickshot')
@@ -158,7 +167,7 @@ export function SourcesTab(): ReactNode {
                   className="input-source-list"
                   aria-label="Input"
                 >
-                  {INPUT_SOURCES.map((option) => (
+                  {INPUT_SOURCES.filter((option) => option.value !== 'hook' || windows).map((option) => (
                     <ToggleGroup.Item
                       key={option.value}
                       value={option.value}
@@ -188,6 +197,16 @@ export function SourcesTab(): ReactNode {
                       onValueChange={(v) => void updateSettings({ clipboardPollMs: Number(v) })}
                       options={CLIPBOARD_POLL}
                     />
+                  </SettingsRow>
+                ) : null}
+                {settings.inputSource === 'hook' ? (
+                  <SettingsRow
+                    label="Text Hooker settings"
+                    description="Defaults for every game, and each game's own."
+                  >
+                    <Button size="sm" onClick={() => void openTextHookerSettings()}>
+                      Open
+                    </Button>
                   </SettingsRow>
                 ) : null}
                 {settings.inputSource === 'websocket' ? (

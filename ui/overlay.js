@@ -43,6 +43,9 @@ import { annotationsInLines } from './current-lines.js'
 import { TextOverlayRenderer } from './render.js'
 import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
+import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
+import { createHookCard } from './hook-card.js'
+import { hookSettings } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
 import { logSections } from './log-sections.js'
 import { publishOcrResult, listHistory } from './output.js'
@@ -105,6 +108,8 @@ const state = {
   origin: null,
   info: null,
   annotations: [],
+  /** What OCR last read, before the Text Hooker kept only the hooked line (setOcrAnnotations). */
+  rawAnnotations: [],
   geometry: true,
   scannedApp: null,
   source: null,
@@ -163,11 +168,116 @@ const setting = (key) =>
     ? { ...(native.getSetting(key) ?? {}), ...japaneseFilterOf(native.getSetting('superTexthooker')) }
     : native.getSetting(key)
 
+
+// ---------------------------------------------------------------------------
+// Text Hooker on the overlay (src-tauri/src/text_hook, ui/hook-match.ts)
+// ---------------------------------------------------------------------------
+//
+// With the Text Hooker as the Log's input, the hooked line is the text and OCR only says where it
+// is. Nothing OCR read is drawn: the line is shown in the card (hook-card.js), always visible while
+// the game is in front, and looked up like any text on the overlay. Per game (`textHookerGames`,
+// keyed by the game's exe path, as the thread it reads is in text_hook):
+//
+// - `autoAlign` (on unless turned off): Auto OCR runs in the background with the scan engine and
+//   each reading is matched against the line (`hookAnnotations`); a new line is looked for at once
+//   (`chaseHookLine`) rather than when the loop next reads. The first match sets the text's size
+//   (`text`, `leading`), which then stays: a game's text size does not change from line to line,
+//   and a card whose text grew and shrank with every reading was the worst of it (readings of two
+//   other lines must agree to change it). The match also says where the text starts (`ocrBox` x,
+//   y): the first whole reading of a new line puts the card there; after that it moves only when
+//   readings put it clearly somewhere else (more than a line away). And how big the text is,
+//   which only ever grows the box (`ocrBox` width, height), so a short line after a long one in
+//   the same place keeps the long one's box rather than the card shrinking and growing under the
+//   reader. The card wraps the line onto no more lines than the game does (hook-card.js `fit`).
+// - Off, the reader places the card (`box`): moved by the bar along its top, resized by its corner;
+//   the text keeps its size either way.
+//
+// Boxes are fractions of the game window, of the text itself (the card's padding is outside it),
+// so the card follows the window; `text` is the text's size as a fraction of the window's height.
+
+/** Where the card goes before anything placed it: centred along the bottom of the game window. */
+const HOOK_DEFAULT = { x: 0.2, bottom: 0.94, width: 0.6, lines: 2 }
+/** The text's size before OCR measured it (Settings → Text Hooker) is held within these points. */
+const HOOK_TEXT_POINTS = [14, 40]
+/** A reading that puts the text more than this many lines' height away has moved it. */
+const HOOK_MOVE_LINES = 1
+/** How much a reading's size must differ from the kept one, twice running, to replace it. */
+const HOOK_RESIZE = 0.3
+const hook = {
+  /** The newest hooked line. */
+  line: null,
+  /** The session's game and window (`texthook-status`), while hooked. */
+  exe: null,
+  sourceId: null,
+  /** Auto align moved the card: it glides there. */
+  glide: false,
+  /** When the newest line arrived (`performance.now()`), to log how soon it was aligned. */
+  lineAt: 0,
+  /** What the card shows of the line: all of it, or what its speaker says (`splitSpeaker`). */
+  shown: null,
+  /** The speaker's name as OCR text where the game shows it, drawn as OCR is (`hookAligned`). */
+  names: [],
+  /** The line `names` was found for, kept through readings of it that miss the name. */
+  namesLine: null,
+  /** The line being looked for (`chaseHookLine`): until it is found the card holds it on one line. */
+  chasing: null,
+  /** The line a whole reading last placed the card on: a new one is placed at once. */
+  placed: null,
+  /** The last reading that did not find the line whole (`hook-line-chase` logs its blocks). */
+  missed: null,
+  /** The last reading aligned with, so the same one is not counted twice. */
+  reading: null,
+  /**
+   * A size that differed from the kept one (`HOOK_RESIZE`) and the line it was read on, waiting
+   * for a reading of another line to agree.
+   */
+  resize: null,
+  /** A whole reading somewhere new (`HOOK_MOVE_LINES` away), waiting for a second to agree. */
+  moveTo: null,
+  /** Why the card is hidden (`hookCardHidden`), as last logged. */
+  hidden: undefined,
+  /** The card (hook-card.js), made once the overlay's document is ready. */
+  card: null
+}
+const hookMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'hook'
+const hookKey = () => hook.exe?.toLowerCase() ?? null
+const hookGame = () => (hookKey() && setting('textHookerGames')?.[hookKey()]) || {}
+/** The game's settings, with the defaults (Settings → Text Hooker) where it has none (hook-games.ts). */
+const hookSet = () => hookSettings(setting('textHookerDefaults'), hookGame())
+const hookAutoAlign = () => hookSet().autoAlign
+const hookOcrOn = () => hookMode() && Boolean(hook.sourceId) && hookAutoAlign()
+/** The OCR engine in use (Auto align uses the scan engine too). */
+const ocrModeNow = () => native.getSetting('ocrMode')
+async function saveHookGame(change) {
+  const key = hookKey()
+  if (!key) return
+  const games = setting('textHookerGames') ?? {}
+  await native.setSetting('textHookerGames', { ...games, [key]: { ...(games[key] ?? {}), ...change } })
+}
+
+// The card itself; it tells the overlay when it is dragged (the pointer then comes at full rate,
+// and the whole display is the overlay's until it is let go) and where it was left.
+hook.card = createHookCard(document.body, {
+  onMoved: (box) => onHookCardMoved(box),
+  onDrag: (active) => {
+    void native.optional('overlay_drag', { active })
+    void publishRegions()
+  },
+  onTextSize: (step, box) => onHookCardTextSize(step, box),
+  onOpacity: (opacity) => void saveHookGame({ opacity }),
+  onSettings: async () => {
+    await native.setSetting('textHookerSettingsGame', hookKey())
+    await native.setSetting('settingsActiveTab', 'texthooker')
+    await native.panel('log', 'show')
+    await window.__TAURI__.event.emit('main:show-settings')
+  }
+})
+
 /** Which OCR engines this machine has (`platform_capabilities`), for choosing Auto OCR's watcher. */
 let ocrEngines = {}
 /** The engine that watches the screen for Auto OCR (`ui/watcher.ts`). */
 const autoWatcher = () =>
-  resolveWatcher(setting('ocrMode'), ocrEngines, setting('autoOCRSettings')?.watcher ?? 'auto')
+  resolveWatcher(ocrModeNow(), ocrEngines, setting('autoOCRSettings')?.watcher ?? 'auto')
 /** Auto OCR's settings with the signal the watcher gives: text, or image comparison. */
 const autoSettings = () => ({ ...setting('autoOCRSettings'), observerMode: observerModeOf(autoWatcher()) })
 /** `capture_frame`'s observer arguments for the current watcher. */
@@ -359,7 +469,8 @@ controller = createController({
         : null
     return {
       gamescope: window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope,
-      hasText: state.annotations.length > 0 && Boolean(state.geometry),
+      hasText: (state.annotations.length > 0 && Boolean(state.geometry)) || (hookMode() && Boolean(hook.line)),
+      hooked: hookMode(),
       autoOcr: Boolean(state.flags.autoOcrEnabled),
       autoAvailable: !isQuickShot(),
       textVisible: isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible),
@@ -419,11 +530,17 @@ controller = createController({
   // What an extension engine's lookup matched (Hachidori, 10ten); Yomitan's own selection already
   // widens the overlay's boxes.
   matchedRange: () => (extensionHosted ? (extensionHost()?.matchedRange?.() ?? null) : null),
-  charRects: (element) => (renderer.mode === 'words' ? renderer.charRects(element) : null),
+  charRects: (element) =>
+    renderer.mode === 'words' && element !== hook.card?.element ? renderer.charRects(element) : null,
+  // Read along over the Text Hooker's card.
+  extraUnits: () => {
+    const unit = hookCardUnit()
+    return unit ? [unit] : []
+  },
   quietText: (quiet) => renderer.setQuiet(quiet),
   nearText: (x, y) => {
     const reach = 32
-    for (const element of wordsContainer.children) {
+    for (const element of [...wordsContainer.children, ...(hook.card?.rects().length ? [hook.card.element] : [])]) {
       const rect = element.getBoundingClientRect()
       if (
         x >= rect.left - reach &&
@@ -446,7 +563,11 @@ controller = createController({
   // The drawn scan as the Log has it, a section per group (`publishOcrResult` logs these same
   // groups), for the full-screen dictionary; null without boxes to group.
   sections: () =>
-    state.geometry && state.annotations.length
+    hookMode()
+      ? hook.line
+        ? [hook.line]
+        : null
+      : state.geometry && state.annotations.length
       ? logSections(scanGroups(state.annotations, setting('textOverlayGrouping') ?? {}))
       : null,
   log: (record) => log(record),
@@ -641,6 +762,8 @@ function draw() {
   }
   // A full-screen app's Space is sliding: its text would crawl behind the picture.
   const settling = Boolean(state.sourceWindow?.settling) && !state.detached
+  // The Text Hooker's line is in its own window, which follows the game's focus and place too.
+  syncHookCard()
   const visible =
     !settling &&
     (controller.holdsText ||
@@ -707,6 +830,440 @@ function draw() {
     controllerScanId = state.appliedScanId
     controller.scanChanged()
   }
+}
+
+
+/**
+ * What OCR read becomes what is drawn. Outside the Text Hooker, as it is. While hooked, only the
+ * speaker's name where the game shows it apart (`hookAligned`): the line is in its card, and a
+ * reading otherwise only says where the card goes. OCR's raw
+ * reading is kept so a line that arrives after the screen was read is placed without reading it
+ * again.
+ */
+function setOcrAnnotations(annotations) {
+  state.rawAnnotations = annotations
+  if (!hookMode()) {
+    state.annotations = annotations
+    return
+  }
+  // With Auto align turned off, a reading still in flight when it was places nothing.
+  state.annotations = hookOcrOn() ? hookAligned(annotations) : []
+}
+
+const median = (values) => {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : NaN
+}
+
+/**
+ * The size and line pitch of the matched text, in capture pixels: a line's width over its
+ * characters (full-width CJK text is a whole em per character, as the card's is), the median over
+ * the lines; a line's height when no line is long enough to measure. `known`, the hooked line,
+ * stands for what OCR read when the reading is it on one line: OCR drops brackets and dots now
+ * and then, and a line counted a character short measures large.
+ */
+function measuredText(block, box, known = null) {
+  const lines = block?.lineTexts ?? []
+  const polygons = block?.linePolygons ?? []
+  const widths = []
+  const tops = []
+  polygons.forEach((p, i) => {
+    const xs = p.map(([x]) => x)
+    const ys = p.map(([, y]) => y)
+    tops.push(Math.min(...ys))
+    const chars = [...((polygons.length === 1 && known) || lines[i] || '').replace(/\s/g, '')]
+    // The ink of a closing mark (。、」) is a sliver at one side of its em, as is an opening one's
+    // (「『) at the other, and every line's ink stops a little short of its first and last ems:
+    // counted in whole ems, it would read small.
+    const line = chars.join('')
+    const short = (/[。、，．」』）】〉》！？]$/.test(line) ? 0.6 : 0.05) + (/^[「『（【〈《]/.test(line) ? 0.55 : 0.05)
+    if (chars.length >= 3) widths.push((Math.max(...xs) - Math.min(...xs)) / (chars.length - short))
+  })
+  const count = Math.max(1, polygons.length || lines.length)
+  const lineHeight = (box[3] - box[1]) / count
+  const size = widths.length ? median(widths) : lineHeight * 0.92
+  const pitch = tops.length >= 2 ? (Math.max(...tops) - Math.min(...tops)) / (tops.length - 1) : null
+  return { size: Math.min(size, lineHeight * 1.3), pitch }
+}
+
+/**
+ * A reading matched the line: Auto align's place for the card (`ocrBox`) and the text's size
+ * (`text`, `leading`), kept for the game. See the section's comment for why each moves as it does.
+ * Returns what OCR read that is still drawn: the speaker's name, where the game shows it apart.
+ */
+function hookAligned(annotations) {
+  if (!hook.line || !annotations?.length || !state.info) return (hook.names = [])
+  // One reading reaches here more than once (as it is applied, and again as the scene redraws):
+  // it counts once, or "two readings agree" would be one reading twice.
+  const reading = `${hook.line}\u0000${JSON.stringify(annotations.map((a) => [a.description, a.boundingPoly]))}`
+  if (reading === hook.reading) return hook.names
+  hook.reading = reading
+  const info = state.info
+  const [cx, cy] = info.crop_pixels ?? [0, 0]
+  const fw = info.full_width
+  const fh = info.full_height
+  const game = hookGame()
+  const nameAt = game.nameBox
+    ? [
+        game.nameBox.x * fw - cx,
+        game.nameBox.y * fh - cy,
+        (game.nameBox.x + game.nameBox.width) * fw - cx,
+        (game.nameBox.y + game.nameBox.height) * fh - cy
+      ]
+    : null
+  const placed = hookAnnotations(annotations, hook.line, {
+    nameAt,
+    apart: Boolean(game.namesApart),
+    speakers: hookSet().speakerNames
+  })
+  const whole = placed.recall >= 0.9 && placed.precision >= 0.8
+  // A name is only ever returned where it is the speaker's; the card shows what they say even when
+  // their quote could not be placed (「……」 OCR did not read). A name found for this line stays
+  // through readings that miss it: OCR reads a lone character only now and then.
+  if (placed.names.length || hook.namesLine !== hook.line) {
+    hook.names = placed.names
+    hook.namesLine = placed.names.length ? hook.line : null
+  }
+  if ((whole || placed.shown !== hook.line) && placed.shown !== hook.shown) {
+    hook.shown = placed.shown
+    queueMicrotask(syncHookCard)
+  }
+  // What the last reading that did not find the line whole held, for the chase to log.
+  if (!whole) hook.missed = { line: hook.line, recall: placed.recall, precision: placed.precision, annotations }
+  if (!placed.box) return hook.names
+  const change = {}
+  // A name shown apart from the quote: the game shows names so, and where (a nameplate keeps its
+  // place), so the next speaker's line is shown without the name at once and their name found.
+  if (whole && placed.nameBox) {
+    const nameBox = {
+      x: (placed.nameBox[0] + cx) / fw,
+      y: (placed.nameBox[1] + cy) / fh,
+      width: (placed.nameBox[2] - placed.nameBox[0]) / fw,
+      height: (placed.nameBox[3] - placed.nameBox[1]) / fh
+    }
+    if (!game.namesApart) change.namesApart = true
+    if (!game.nameBox || ['x', 'y', 'width', 'height'].some((k) => Math.abs(game.nameBox[k] - nameBox[k]) > 0.01))
+      change.nameBox = nameBox
+  }
+  // The hooked line counts for OCR's text only where OCR read it and nothing else.
+  const exact = placed.recall >= 0.95 && placed.precision >= 0.95
+  const measured = measuredText(placed.annotations[0], placed.box, exact ? placed.shown : null)
+  const size = measured.size / fh
+  // Only a reading that found (nearly) the whole line, and little else (`whole`), may say what
+  // size the text is or where it starts: part of a line (one row of two, say) is somewhere else.
+  // The size is kept; it is only replaced when readings of two different lines both disagree
+  // with it, and with each other by little: one odd reading (a line with ruby, or one OCR ran
+  // into its neighbour) says nothing about the game's text.
+  if (!whole) {
+    // Nothing to learn about the size.
+  } else if (!game.text) {
+    change.text = size
+    if (measured.pitch) change.leading = Math.min(2.2, Math.max(1.1, measured.pitch / measured.size))
+  } else if (Math.abs(size - game.text) / game.text > HOOK_RESIZE) {
+    if (hook.resize && hook.resize.line !== hook.line && Math.abs(size - hook.resize.size) / hook.resize.size < HOOK_RESIZE / 2) {
+      change.text = (size + hook.resize.size) / 2
+      hook.resize = null
+    } else if (!hook.resize || hook.resize.line !== hook.line) hook.resize = { size, line: hook.line }
+  } else hook.resize = null
+  const text = change.text ?? game.text
+  const found = {
+    x: (placed.box[0] + cx) / fw,
+    y: (placed.box[1] + cy) / fh,
+    width: (placed.box[2] - placed.box[0]) / fw,
+    height: (placed.box[3] - placed.box[1]) / fh
+  }
+  const saved = game.ocrBox
+  const line = (text ?? size) * fh * HOOK_MOVE_LINES
+  const near = (a, b) => Math.abs(a.x - b.x) * fw < line && Math.abs(a.y - b.y) * fh < line
+  const stays = saved?.height !== undefined && near(found, saved)
+  // The first whole reading of a new line puts the card on it at once: the line is new text, so
+  // wherever OCR found it is where it is (a game that writes each line below the last one).
+  const fresh = whole && hook.placed !== hook.line
+  if (whole) hook.placed = hook.line
+  let box = null
+  if (fresh && !stays) {
+    box = found
+    hook.moveTo = null
+    hook.glide = true
+  } else if (stays) {
+    // Where the text starts stays put; its box only grows, to the furthest the text has reached.
+    if (placed.precision >= 0.8)
+      box = {
+        x: saved.x,
+        y: saved.y,
+        width: Math.min(Math.max(saved.width, found.x + found.width - saved.x), 1 - saved.x),
+        height: Math.max(saved.height, found.y + found.height - saved.y)
+      }
+    hook.moveTo = null
+  } else if (whole && (!saved?.height || (hook.moveTo && near(found, hook.moveTo)))) {
+    // A first place, or a new one two whole readings in a row agree on (a game that moved its
+    // text box): the box starts again from this reading.
+    box = found
+    hook.moveTo = null
+    hook.glide = true
+  } else if (whole) hook.moveTo = found
+  if (box && (!saved || ['x', 'y', 'width', 'height'].some((k) => Math.abs((saved[k] ?? -1) - box[k]) > 0.002)))
+    change.ocrBox = box
+  const surface = placed.annotations[0]?.surface
+  if (whole && surface && JSON.stringify(surface) !== JSON.stringify(game.surface)) change.surface = surface
+  // A line placed where the card already is changes nothing kept: the card still shows it placed.
+  if (fresh) queueMicrotask(syncHookCard)
+  if (!Object.keys(change).length) return hook.names
+  log({
+    check: 'hook-card-aligned',
+    box,
+    ...(placed.names.length ? { name: placed.names[0].description } : {}),
+    stays,
+    whole,
+    fresh,
+    text,
+    size,
+    recall: placed.recall,
+    precision: placed.precision,
+    // What OCR read, when it measured the text other than the size kept.
+    ...(text && Math.abs(size - text) / text > 0.1 ? { read: placed.annotations[0]?.lineTexts } : {}),
+    ...(fresh && hook.lineAt ? { afterLineMs: Math.round(performance.now() - hook.lineAt) } : {})
+  })
+  void saveHookGame(change)
+  return hook.names
+}
+
+/**
+ * What the card shows now (hook-card.js `show`), in overlay coordinates: the line, its text box
+ * (Auto align's, the reader's, or centred along the bottom before either) and its size; null
+ * while it is not to be seen (the overlay is off, or the game is not in front).
+ */
+/** Why the card is not shown, or null when it is (logged as it changes: `hook-card-shown`). */
+function hookCardHidden(bounds) {
+  if (!hookMode()) return 'not-hooking'
+  if (!hook.line) return 'no-line'
+  if (!hook.sourceId) return 'no-game'
+  if (!state.origin) return 'no-display'
+  if (!bounds?.width || !bounds?.height) return 'no-window'
+  if (!isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)) return 'overlay-off'
+  if (state.sourceWindow?.settling && !state.detached) return 'window-settling'
+  const focus = state.sourceFocus
+  const held = Boolean(hook.card?.dragging()) || Boolean(controller?.holdsText)
+  if (focus && !(focus.focused && focus.present) && !held) return focus.present ? 'game-behind' : 'game-gone'
+  return null
+}
+
+function hookCardView() {
+  const bounds = state.sourceBounds ?? state.info?.source_bounds
+  const hidden = hookCardHidden(bounds)
+  if (hidden !== hook.hidden) {
+    hook.hidden = hidden
+    if (hookMode()) log({ check: 'hook-card-shown', shown: !hidden, why: hidden ?? undefined })
+  }
+  if (hidden) return null
+  const game = hookGame()
+  const auto = hookAutoAlign()
+  const fontPx = game.text
+    ? Math.max(8, game.text * bounds.height)
+    : Math.min(HOOK_TEXT_POINTS[1], Math.max(HOOK_TEXT_POINTS[0], hookSet().textSize * bounds.height))
+  const lineHeight = game.leading ?? 1.5
+  const saved = (auto ? game.ocrBox ?? game.box : game.box) ?? null
+  const ox = bounds.x - state.origin.x
+  const oy = bounds.y - state.origin.y
+  let where
+  // How many lines the game shows the line on, as OCR found it: the card wraps onto no more.
+  let lines
+  let pending = false
+  if (saved && saved === game.ocrBox) {
+    // OCR's box is the ink: the text's first line box starts above its ink by half the line's
+    // leading (and a little more, above the glyphs inside their em), and its height is so many
+    // lines of the game's pitch.
+    const ink = (saved.height ?? 0) * bounds.height
+    const rows = Math.max(1, Math.round((ink - fontPx) / (fontPx * lineHeight)) + 1)
+    // Only once a reading has found this line: until then the box is the last line's, and while
+    // a reading is on its way the line stays on one line, fading out at the box's end, rather
+    // than wrapping into a box made for another line.
+    if (hook.placed === hook.line) lines = rows
+    else pending = hook.chasing === hook.line
+    where = {
+      x: ox + saved.x * bounds.width,
+      y: oy + saved.y * bounds.height - ((lineHeight - 1) / 2 + 0.06) * fontPx,
+      // A little over the measured width: the card's font is not quite the game's.
+      width: saved.width * bounds.width + fontPx * 0.6,
+      height: rows * lineHeight * fontPx
+    }
+  } else if (saved) {
+    where = {
+      x: ox + saved.x * bounds.width,
+      y: oy + saved.y * bounds.height,
+      width: saved.width * bounds.width,
+      height: (saved.height ?? 0) * bounds.height || fontPx * lineHeight
+    }
+  } else {
+    const height = fontPx * lineHeight * HOOK_DEFAULT.lines
+    where = {
+      x: ox + HOOK_DEFAULT.x * bounds.width,
+      y: oy + HOOK_DEFAULT.bottom * bounds.height - height,
+      width: HOOK_DEFAULT.width * bounds.width,
+      height
+    }
+  }
+  // Blend takes the colours of what the game's text sits on, so only while the card is over the
+  // game and a reading said what that is; otherwise the app's own light or dark.
+  const style = setting('overlayStyle') ?? {}
+  let theme = resolveOverlayCardAppearance(style, setting('appearance'), systemDark.matches)
+  const inside =
+    where.x >= ox && where.y >= oy && where.x + where.width <= ox + bounds.width && where.y + where.height <= oy + bounds.height
+  const surface = theme === 'blend' && inside ? game.surface ?? null : null
+  if (theme === 'blend' && !surface)
+    theme = resolveOverlayCardAppearance({ ...style, appearance: 'app' }, setting('appearance'), systemDark.matches)
+  return {
+    text: hook.shown ?? hook.line,
+    ...where,
+    lines,
+    pending,
+    fontPx,
+    lineHeight,
+    theme,
+    surface,
+    opacity: hookSet().opacity
+  }
+}
+
+/** The card's text as Read along takes a box's (ui/controller.js `readUnits`); null while it is not shown. */
+function hookCardUnit() {
+  const element = hook.card?.element
+  const node = element && !element.hidden ? element.querySelector('.hook-card-text')?.firstChild : null
+  if (!node || node.nodeType !== Node.TEXT_NODE || !node.textContent) return null
+  const range = document.createRange()
+  range.selectNodeContents(node)
+  const { left, top, width, height } = range.getBoundingClientRect()
+  return { element, node, text: node.textContent, vertical: false, box: { x: left, y: top, width, height } }
+}
+
+/** Shows the card as it should be now, and publishes it as somewhere the pointer may go. */
+function syncHookCard() {
+  if (!hook.card) return
+  const view = hookCardView()
+  const glide = hook.glide
+  hook.glide = false
+  hook.card.show(view && { ...view, glide })
+  const signature = JSON.stringify(hook.card.rects())
+  if (signature !== hook.cardRect) {
+    hook.cardRect = signature
+    void publishRegions()
+  }
+}
+
+/** A text box on the overlay as fractions of the game window, as `box` keeps it; null without one. */
+function hookBoxOf(box) {
+  const bounds = state.sourceBounds ?? state.info?.source_bounds
+  if (!box || !bounds?.width || !bounds?.height || !state.origin) return null
+  return {
+    x: (box.x - (bounds.x - state.origin.x)) / bounds.width,
+    y: (box.y - (bounds.y - state.origin.y)) / bounds.height,
+    width: box.width / bounds.width,
+    height: box.height / bounds.height
+  }
+}
+
+/**
+ * The reader moved or resized the card: kept for the game. Placing it by hand is the reader
+ * taking over, so Auto align turns off (turning it back on aligns again).
+ */
+function onHookCardMoved(box) {
+  const saved = hookBoxOf(box)
+  if (!saved || !hookKey()) return
+  log({ check: 'hook-card-moved', box: saved })
+  void saveHookGame({ box: saved, autoAlign: false })
+}
+
+/**
+ * Smaller or larger text (−/+ on the card): a tenth at a time, kept for the game. The card stays
+ * where it is, now the reader's, and Auto align turns off as it does for a move.
+ */
+function onHookCardTextSize(step, box) {
+  const bounds = state.sourceBounds ?? state.info?.source_bounds
+  if (!bounds?.height || !hookKey()) return
+  const game = hookGame()
+  const now = (game.text ?? hookSet().textSize) * bounds.height
+  const next = Math.min(96, Math.max(10, Math.round(now * (step > 0 ? 1.1 : 1 / 1.1) * 10) / 10))
+  const saved = hookBoxOf(box)
+  log({ check: 'hook-card-text-size', from: now, to: next })
+  void saveHookGame({ text: next / bounds.height, ...(saved ? { box: saved } : {}), autoAlign: false })
+}
+
+/** A new hooked line: shown at once, aligned with what OCR last read if the line is there. */
+function onHookLine(payload) {
+  if (!hookMode() || typeof payload?.text !== 'string') return
+  hook.line = payload.text
+  hook.lineAt = performance.now()
+  hook.names = []
+  // A game known to show its speakers' names apart, or one that sends the name after the quote on
+  // a line of its own: the card shows what they say from the start, Auto align on or off.
+  const speech = hookSet().speakerNames ? splitSpeaker(payload.text) : null
+  hook.shown = (speech && (speech.after || hookGame().namesApart) && speech.body) || payload.text
+  // The chase first: the card shows the line held for it (`pending`) from the start.
+  void chaseHookLine(payload.text)
+  setOcrAnnotations(state.rawAnnotations ?? [])
+  syncHookCard()
+}
+
+/**
+ * Looks for a new line at once rather than when Auto OCR next reads the screen. The loop waits
+ * for text to settle before reading it, a second or more, and some games never quite settle (an
+ * animated backdrop, a blinking cue): but the Text Hooker only sends a line once the game has
+ * finished typing it, so it is on screen now. Reads straight away, then a little later while no
+ * reading has found the whole line, and stops once one has. A first reading may have caught the
+ * line still fading in, which the loop counts as read: the later looks read it again.
+ */
+const HOOK_CHASE_MS = [0, 300, 700, 1200, 2000]
+async function chaseHookLine(line) {
+  if (!hookOcrOn()) return
+  const started = performance.now()
+  const reads = []
+  hook.chasing = line
+  for (const wait of HOOK_CHASE_MS) {
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait))
+    if (hook.line !== line || hook.placed === line || !hookOcrOn()) break
+    if (scanner !== sceneScanner || !scanner.isRunning) break
+    const from = performance.now()
+    await sceneScanner.refresh(reads.length > 0).catch(() => false)
+    reads.push([Math.round(from - started), Math.round(performance.now() - from)])
+  }
+  if (hook.line !== line) return
+  hook.chasing = null
+  // Given up: the line wraps in the box it has (`pending` no longer holds it on one line).
+  syncHookCard()
+  const placed = hook.placed === line
+  const missed = !placed && hook.missed?.line === line ? hook.missed : null
+  log({
+    check: 'hook-line-chase',
+    placed,
+    reads,
+    ms: Math.round(performance.now() - started),
+    // Not found: what OCR's blocks were, to see why.
+    ...(missed && {
+      recall: missed.recall,
+      precision: missed.precision,
+      blocks: annotationGroups(missed.annotations).map((g) => g.text.slice(0, 80))
+    })
+  })
+}
+
+function onHookStatus(status) {
+  const hooked = status && status.phase !== 'idle' && status.phase !== 'failed' && status.phase !== 'ended'
+  const sourceId = hooked ? (status.sourceId ?? null) : null
+  if (sourceId !== hook.sourceId) {
+    hook.line = null
+    hook.shown = null
+    hook.names = []
+    hook.placed = null
+    hook.missed = null
+    hook.reading = null
+    hook.resize = null
+    hook.moveTo = null
+  }
+  hook.exe = status?.exe ?? null
+  hook.sourceId = sourceId
+  void followSource(followedSource())
+  syncAutoScanner()
+  draw()
 }
 
 /**
@@ -854,6 +1411,12 @@ async function beginJob() {
  * between scans — Electron did this with its window-position watcher.
  */
 let watchedSourceId = null
+/**
+ * The window the overlay follows: the one picked as the source, or with the Text Hooker as the
+ * input, the hooked game's (whatever window was last picked for OCR), so its card sits over the game
+ * and goes when the game is left.
+ */
+const followedSource = () => (hookMode() && hook.sourceId ? { sourceId: hook.sourceId } : state.viewSource)
 async function followSource(source) {
   const id = source?.sourceId ?? source?.id ?? null
   if (id === watchedSourceId) return
@@ -913,7 +1476,7 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
   state.info = info
   state.detached = !!job.detached
   state.geometry = result.geometry !== false
-  state.annotations = state.geometry ? (result.textAnnotations ?? []) : []
+  setOcrAnnotations(state.geometry ? (result.textAnnotations ?? []) : [])
   state.source = job.source
   const kind = state.source?.kind ?? state.source?.type
   state.scannedApp =
@@ -953,7 +1516,7 @@ async function applyResult(result, frame, job, outcome = { publish: true }) {
 
   log({
     check: 'overlay-scan-applied',
-    mode: setting('ocrMode'),
+    mode: ocrModeNow(),
     geometry: state.geometry,
     words: state.geometry ? visibleAnnotations(state.annotations, grouping).length : 0,
     published: published.length,
@@ -989,8 +1552,8 @@ async function performScan(explicit = null) {
       }
       const frame = await native.captureFrame(job.request, scanner.isRunning, ...observerArgs())
       stage = 'recognise'
-      activity(scanActivity.recognising(setting('ocrMode')))
-      const result = await recognize(frame, { ocrMode: setting('ocrMode') })
+      activity(scanActivity.recognising(ocrModeNow()))
+      const result = await recognize(frame, { ocrMode: ocrModeNow() })
       if (!result) {
         setScanning(false, 'No result from the OCR engine.')
         reportOutcome(scanActivity.nothingRecognised())
@@ -1023,7 +1586,7 @@ async function performScan(explicit = null) {
       state.scanning = false
       draw()
       publish({ scanning: false, status: message })
-      reportOutcome(scanActivity.scanFailed(error, stage, setting('ocrMode')))
+      reportOutcome(scanActivity.scanFailed(error, stage, ocrModeNow()))
       return
     } finally {
       if (state.scanning) setScanning(false)
@@ -1115,9 +1678,9 @@ const scanDeps = {
   },
   recognize: async (frame) => {
     const started = performance.now()
-    trace('second-pass-start', { frameId: frame.id, mode: setting('ocrMode') })
+    trace('second-pass-start', { frameId: frame.id, mode: ocrModeNow() })
     try {
-      const result = await recognize(frame, { ocrMode: setting('ocrMode') })
+      const result = await recognize(frame, { ocrMode: ocrModeNow() })
       try {
         scanTrace.result(frame.id, result?.fullText ?? '', performance.now() - started)
       } catch {
@@ -1243,13 +1806,13 @@ async function applyScene(update) {
     })
   } else {
     if (update.generation !== generation.current) return
-    state.annotations = update.result.geometry ? update.result.textAnnotations : []
-    if (state.annotations.length) state.geometry = true
+    setOcrAnnotations(update.result.geometry ? update.result.textAnnotations : [])
+    if (state.rawAnnotations.length) state.geometry = true
     draw()
     void publishRegions()
   }
   let published = 0
-  for (const passage of update.publish) {
+  for (const passage of hookMode() ? [] : update.publish) {
     published += (await publishPassage(passage, grouping, update.frame?.id ?? null)).length
   }
   log({
@@ -1312,9 +1875,9 @@ function onAutoScanEvent(event) {
     case 'visual-invalidated':
       // Local observation controls visual freshness; never wait for the cloud
       // to tell us that text which disappeared is no longer on screen.
-      state.annotations = event.keepBoxes
-        ? annotationsInLines(state.annotations, event.keepBoxes)
-        : []
+      setOcrAnnotations(
+        event.keepBoxes ? annotationsInLines(state.rawAnnotations ?? state.annotations, event.keepBoxes) : []
+      )
       draw()
       void publishRegions()
       log({
@@ -1327,7 +1890,7 @@ function onAutoScanEvent(event) {
       if (event.state === 'running') {
         const settings = autoSettings()
         trace('auto-start', {
-          mode: setting('ocrMode'),
+          mode: ocrModeNow(),
           observerMode: settings.observerMode,
           watcher: autoWatcher(),
           settings: Object.fromEntries(
@@ -1364,14 +1927,14 @@ function onAutoScanEvent(event) {
       if (event.stage === 'capture') {
         // A manual scan holding the capture is the loop's normal rhythm, not news.
         if (!/^busy:/.test(event.message))
-          reportOutcome(scanActivity.scanFailed(event.message, 'capture', setting('ocrMode')), {
+          reportOutcome(scanActivity.scanFailed(event.message, 'capture', ocrModeNow()), {
             auto: true
           })
       } else if ((event.stage === 'recognize' || event.stage === 'publish') && autoRound) {
         autoRound.outcome = scanActivity.scanFailed(
           event.message,
           event.stage === 'recognize' ? 'recognise' : 'publish',
-          setting('ocrMode')
+          ocrModeNow()
         )
       }
       return
@@ -1436,7 +1999,10 @@ function syncAutoScanner() {
   // run on this page, where they would stutter the drag. Nor until an edited region has been
   // saved and taken in: a round started against the old crop would only be discarded.
   const wanted =
-    state.flags.autoOcrEnabled && !isQuickShot() && !state.regionSelecting && !state.regionCommitting
+    (hookMode() ? hookOcrOn() : state.flags.autoOcrEnabled) &&
+    !isQuickShot() &&
+    !state.regionSelecting &&
+    !state.regionCommitting
   if (wanted && !scanner.isRunning) {
     scanner.reset()
     scanner.start()
@@ -3026,7 +3592,7 @@ function hitRects() {
   if (!state.origin) return []
   // Selecting a region needs every event on the display, not just the parts of
   // it that happen to have text under them.
-  if (state.regionSelecting) return [{ ...state.origin, focus: false }]
+  if (state.regionSelecting || hook.card?.dragging()) return [{ ...state.origin, focus: false }]
   const rects = renderer.hitRects(state.origin)
   const add = (rect, focus) => {
     if (rect.width > 0 && rect.height > 0) {
@@ -3052,6 +3618,8 @@ function hitRects() {
   // An extension engine's popup: a shadow host in this document, reported by its host.
   if (extensionPopupRect) add(extensionPopupRect, true)
   for (const rect of controller.hitRects()) add(rect, false)
+  // The Text Hooker's card and its menu: its text is looked up, its controls pressed.
+  for (const rect of hook.card?.rects() ?? []) add(rect, false)
   return rects
 }
 
@@ -3062,7 +3630,7 @@ function clearSelectionText() {
   remoteReadingPopup = false
   apiReadingPopup = false
   syncScanHold()
-  state.annotations = []
+  setOcrAnnotations([])
   state.info = null
   state.appliedScanId = null
   state.detached = false
@@ -3120,7 +3688,7 @@ async function processView(view) {
         dismissPopup()
         window.getSelection()?.removeAllRanges()
         if (view.scan?.ocr) {
-          const ocr = normalizeOcrResult(view.scan.ocr, view.scan.ocr.engine ?? setting('ocrMode'))
+          const ocr = normalizeOcrResult(view.scan.ocr, view.scan.ocr.engine ?? ocrModeNow())
           await applyResult(
             { ...ocr, nativeScanId: scanId },
             view.scan,
@@ -3136,7 +3704,7 @@ async function processView(view) {
         } else if (!view.scan && !pipeline.isHeld && !state.scanning) {
           // An explicit clear. A scan in flight has not produced its frame yet
           // and must not wipe what is currently readable.
-          state.annotations = []
+          setOcrAnnotations([])
           state.info = null
           state.appliedScanId = null
           renderer.clear()
@@ -3178,7 +3746,7 @@ async function processView(view) {
     state.viewSource = view.source ?? null
     const kind = view.source?.kind ?? view.source?.type
     state.hover.isWindow = kind === 'window'
-    await followSource(view.source)
+    await followSource(followedSource())
     drawHover()
 
     if (view.dictionary !== state.dictionaryOpen) {
@@ -3320,13 +3888,28 @@ systemDark.addEventListener('change', applyOverlayStyle)
 
 await native.watchSettings((key) => {
   // The selected engine decides the watcher too (`autoWatcher`).
-  if (key === 'autoOCRSettings' || key === 'quickShotEnabled' || key === 'superTexthooker' || key === 'ocrMode')
+  if (
+    key === 'autoOCRSettings' ||
+    key === 'quickShotEnabled' ||
+    key === 'superTexthooker' ||
+    key === 'ocrMode' ||
+    key === 'textHookerGames' ||
+    key === 'textHookerDefaults'
+  )
     syncAutoScanner()
+  if (key === 'textHookerGames' || key === 'textHookerDefaults' || key === 'superTexthooker') {
+    setOcrAnnotations(state.rawAnnotations ?? [])
+    draw()
+  }
   // Mirror only: a switch is reloaded by Settings (`dictionary_engine_apply`), not from here.
   if (key === 'yomitanSettings') void mirrorDictionaryEngine()
   if (key === 'overlayStyle' || key === 'appearance') applyOverlayStyle()
   syncOverlayText()
 })
+
+await native.listen('texthook-line', ({ payload }) => onHookLine(payload))
+await native.listen('texthook-status', ({ payload }) => onHookStatus(payload))
+void native.optional('texthook_status').then((status) => status && onHookStatus(status))
 
 // The raw name, ours included: "Kimochi is frontmost" and "no signal yet" are
 // different states, and only the tracker may collapse them.
@@ -3633,6 +4216,8 @@ await native.listen('pointer', ({ payload }) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') gnomeOverlay?.pointer(payload)
   if (!state.origin || typeof payload?.x !== 'number') return
   const local = toOverlayLocal(payload, state.origin)
+  // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
+  if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down))) return
   checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
   if (payload.over === false || !local) {
     renderer.clearPointer()
@@ -3751,7 +4336,7 @@ const apiEngine =
 
 log({
   check: 'overlay-ready',
-  ocrMode: setting('ocrMode'),
+  ocrMode: ocrModeNow(),
   liveOverlay: setting('liveOverlayEnabled'),
   missingCommands: native.unavailableCommands()
 })

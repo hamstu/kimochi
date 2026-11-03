@@ -18,6 +18,7 @@ function page(tab: SettingsTabName): ComponentType {
 const PAGES: Record<SettingsTabName, ComponentType> = {
   general: page('general'),
   sources: page('sources'),
+  texthooker: page('texthooker'),
   ocr: page('ocr'),
   log: page('log'),
   dictionary: page('dictionary'),

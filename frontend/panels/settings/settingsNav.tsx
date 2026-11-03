@@ -6,6 +6,7 @@ import {
   Info,
   Layers,
   Languages,
+  Plug,
   ScanText,
   ScrollText,
   SlidersHorizontal,
@@ -18,6 +19,7 @@ import type { SettingsNavItem } from './SettingsShell'
 export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName })[] = [
   { value: 'general', label: 'General', icon: <SlidersHorizontal /> },
   { value: 'sources', label: 'Sources', icon: <Waypoints /> },
+  { value: 'texthooker', label: 'Text Hooker', icon: <Plug /> },
   { value: 'ocr', label: 'OCR & Overlay', icon: <ScanText /> },
   { value: 'log', label: 'Log & Sessions', icon: <ScrollText /> },
   { value: 'dictionary', label: 'Dictionary', icon: <BookOpen /> },
@@ -29,11 +31,15 @@ export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName 
   { value: 'about', label: 'About', icon: <Info /> }
 ]
 
+/** The pages this computer has: Text Hooker only on Windows, where games can be hooked. */
+export function settingsNavFor(os: string | undefined): typeof SETTINGS_NAV {
+  return os === 'windows' ? SETTINGS_NAV : SETTINGS_NAV.filter((item) => item.value !== 'texthooker')
+}
+
 /** Page names stored by earlier builds, mapped onto the pages that now hold their settings. */
 const LEGACY_TABS: Record<string, SettingsTabName> = {
   mode: 'ocr',
   yomitan: 'dictionary',
-  texthooker: 'log',
   audio: 'log',
   shortcuts: 'controls',
   gamepad: 'controls'

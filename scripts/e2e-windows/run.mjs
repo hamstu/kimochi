@@ -21,7 +21,7 @@ const [
   mode = "windowed",
 ] = process.argv.slice(2);
 assert(
-  ["scan", "hover", "auto", "windows", "quickshot", "focus", "keys", "alt", "selfocr"].includes(scenario),
+  ["scan", "hover", "auto", "windows", "quickshot", "focus", "keys", "alt", "selfocr", "hook"].includes(scenario),
   "known scenario",
 );
 assert(
@@ -36,6 +36,12 @@ assert(
   scenario !== "selfocr" || source === "display",
   "selfocr checks a display source",
 );
+assert(
+  scenario !== "hook" || source === "window",
+  "the Text Hooker hooks a window's game",
+);
+// The hook scenario runs the game as a real x64 (default) or x86 process: KIMOCHI_E2E_HOOK_BITS.
+const hookBits = process.env.KIMOCHI_E2E_HOOK_BITS === "32" ? "x86" : "x64";
 if (renderer !== "gdi" || !["windowed", "borderless"].includes(mode))
   throw Error(
     "This harness currently supports GDI windowed/borderless only; DXGI prototype remains external",
@@ -228,6 +234,421 @@ async function rendered() {
     `({x:screenX*${SCREEN_SCALE},y:screenY*${SCREEN_SCALE},dpr:devicePixelRatio,words:[...document.querySelectorAll('.ocr-word')].map(e=>({text:e.querySelector('.ocr-word-current')?.textContent,rect:e.getBoundingClientRect().toJSON(),vertical:e.classList.contains('ocr-vertical')}))})`,
   );
 }
+/** The Log's lines, oldest first, as the main window shows them (its newest 100). */
+async function logEntries() {
+  const p = await page("panel.html");
+  try {
+    return await p.eval(
+      `[...document.querySelectorAll('[data-line-text]')].map(e=>({id:e.dataset.lineId,text:e.dataset.lineText}))`,
+    );
+  } finally {
+    p.close();
+  }
+}
+const logLines = async () => (await logEntries()).map((e) => e.text);
+/** The texts of lines added since `seen` (a set of line ids). */
+const newLines = async (seen) =>
+  (await logEntries()).filter((e) => !seen.has(e.id)).map((e) => e.text);
+const hookStatus = () => invoke(overlay, "texthook_status");
+/**
+ * A dialogue line no earlier run has shown (the Log drops repeats of recent lines): hiragana
+ * words, one per digit of a counter, which OCR reads reliably.
+ */
+const WORDS = ["そら", "うみ", "やま", "かわ", "もり", "はな", "ほし", "つき", "かぜ", "あめ"];
+let said = Date.now() % 100000;
+const freshLine = () =>
+  "きょうは" + [...String(++said).padStart(5, "0")].map((d) => WORDS[d]).join("と") + "をみます。";
+const say = () => command("say " + freshLine());
+async function chooseThread(text) {
+  const p = await page("panel.html");
+  try {
+    await click(p, 'button[aria-label="Text thread"]');
+    await sleep(300);
+    await click(p, '[role="menuitemradio"]', text);
+  } finally {
+    p.close();
+  }
+}
+/**
+ * Text Hooker: pick the fake game in the real source menu, let it hook, check the dialogue
+ * thread is chosen by matching the screen (not the nameplate, HUD or menu threads), that the
+ * Log gets exactly the dialogue lines, and that choosing another thread by hand takes effect.
+ */
+async function hookScenario() {
+  await check("hook-pick-in-real-ui", async () => {
+    await activateMain();
+    const p = await page("panel.html");
+    try {
+      if (
+        await p.eval(
+          `Boolean(document.querySelector('button[aria-label="Clear source"]'))`,
+        )
+      )
+        await clearUiSource(p);
+      if (
+        await p.eval(
+          `Boolean(document.querySelector('button[aria-label="Choose a source"]'))`,
+        )
+      )
+        await click(p, 'button[aria-label="Choose a source"]');
+      else await click(p, "button.src-card");
+      await sleep(150);
+      await click(p, '[role="menuitem"]', "Text Hooker");
+      // Hookable windows come first; Kimochi's own windows are never offered.
+      const tiles = await until(
+        () =>
+          p.eval(
+            `(()=>{const t=[...document.querySelectorAll('.sg-tile')];return t.some(e=>e.innerText.includes('E2E Fake'))?t.map(e=>({text:e.innerText.replace(/\\s+/g,' '),disabled:e.hasAttribute('data-disabled')})):false})()`,
+          ),
+        20000,
+      );
+      const game = tiles.find((t) => t.text.includes("E2E Fake"));
+      assert(game && !game.disabled, "the fake game can be hooked");
+      assert(
+        tiles.filter((t) => /^Kimochi\b/.test(t.text)).every((t) => t.disabled),
+        "Kimochi's own windows are not offered",
+      );
+      await click(p, ".sg-tile", "Kimochi E2E Fake Game");
+      await sleep(300);
+      return { tiles };
+    } finally {
+      p.close();
+    }
+  });
+  const hooked = await check("hook-attached", async () => {
+    const { pid } = await truth();
+    // This game's session: an earlier one may still report "hooked" for a moment.
+    const status = await until(async () => {
+      const s = await hookStatus();
+      if (!s.pids?.includes(pid)) return false;
+      assert.notEqual(s.phase, "failed", s.detail);
+      return s.phase === "hooked" ? s : false;
+    }, 90000);
+    assert.equal(status.engine?.id, "luna", "LunaHook is the first engine");
+    return { engine: status.engine, pids: status.pids, exe: status.exe };
+  });
+  // Forget a thread remembered by an earlier run, so the choice below is made by the screen.
+  await invoke(overlay, "texthook_select", { key: null });
+  await focusGame();
+  const before = new Set((await logEntries()).map((e) => e.id));
+  await say();
+  const picked = await check("hook-auto-selects-dialogue", async () => {
+    const status = await until(async () => {
+      const s = await hookStatus();
+      return s.selected ? s : false;
+    }, 30000);
+    const t = await truth();
+    const thread = status.threads.find((x) => x.key === status.selected);
+    assert.equal(status.selectedBy, "auto", "chosen by matching the screen");
+    assert.equal(thread.name, "TextOutW", "the dialogue's thread, not a decoy's");
+    assert.equal(thread.preview, t.dialogue);
+    return {
+      selected: thread,
+      threads: status.threads.map((x) => ({ name: x.name, preview: x.preview })),
+      hooked,
+    };
+  });
+  await check("hook-log-receives-dialogue", async () => {
+    const first = await truth();
+    await until(async () => (await newLines(before)).includes(first.dialogue), 10000);
+    await say();
+    const second = await truth();
+    assert.notEqual(second.dialogue, first.dialogue);
+    const lines = await until(async () => {
+      const all = await newLines(before);
+      return all.at(-1) === second.dialogue ? all : false;
+    }, 15000);
+    // Exactly the dialogue: no nameplate, HUD or menu text, no repeats.
+    assert.deepEqual(lines, [first.dialogue, second.dialogue]);
+    return { lines };
+  });
+  await check("hook-manual-override", async () => {
+    const t = await truth();
+    await chooseThread(t.speaker);
+    const status = await until(async () => {
+      const s = await hookStatus();
+      return s.selectedBy === "manual" ? s : false;
+    }, 5000);
+    const thread = status.threads.find((x) => x.key === status.selected);
+    assert.equal(thread.preview, t.speaker);
+    const lines = await until(async () => {
+      const all = await logLines();
+      return all.at(-1) === t.speaker ? all : false;
+    }, 10000);
+    // Back to choosing automatically, which also forgets the manual choice for this game.
+    await chooseThread("Choose automatically");
+    await focusGame();
+    await say();
+    const auto = await until(async () => {
+      const s = await hookStatus();
+      return s.selectedBy === "auto" ? s : false;
+    }, 30000);
+    return {
+      manual: thread.name,
+      logged: lines.at(-1),
+      backTo: auto.threads.find((x) => x.selected)?.name,
+    };
+  });
+  // --- the card: the hooked line over the game (ui/hook-card.js) ---------------------------------
+  const status = await hookStatus();
+  const key = status.exe.toLowerCase();
+  const games = async () => (await invoke(overlay, "settings_get", { key: "textHookerGames" })) ?? {};
+  const game = async () => (await games())[key] ?? {};
+  const setGame = async (value) => {
+    const all = await games();
+    all[key] = value;
+    await invoke(overlay, "settings_set", { key: "textHookerGames", value: all });
+    await sleep(400);
+  };
+  // The card on screen in physical pixels: its text box, the top of its glyphs' em box, its text
+  // size, and where its controls are.
+  const card = () =>
+    overlay.eval(`(()=>{const c=document.querySelector('.hook-card');if(!c||c.hidden)return null;const t=c.querySelector('.hook-card-text');const s=${SCREEN_SCALE},d=devicePixelRatio;const at=(e)=>{const r=e.getBoundingClientRect();return {x:(screenX*s+r.left+r.width/2)*d,y:(screenY*s+r.top+r.height/2)*d}};const r=t.getBoundingClientRect();const cs=getComputedStyle(t);const font=parseFloat(cs.fontSize),lh=parseFloat(cs.lineHeight);return {text:t.textContent,x:(screenX*s+r.left)*d,y:(screenY*s+r.top)*d,emTop:(screenY*s+r.top+(lh-font)/2)*d,font:font*d,bar:at(c.querySelector('.hook-card-bar')),smaller:at(c.querySelectorAll('.hook-card-button')[0]),larger:at(c.querySelectorAll('.hook-card-button')[1]),more:at(c.querySelector('.hook-card-more')),menu:c.querySelector('.hook-card-menu').hidden?null:[...c.querySelectorAll('.hook-card-opacity')].map(o=>({value:Number(o.dataset.opacity),...at(o)}))}})()`);
+  const compact = (text) => String(text ?? "").replace(/\s/g, "");
+  const shown = async (text) => {
+    try {
+      return await until(async () => { const c = await card(); return c && compact(c.text) === compact(text) ? c : false; }, 8000);
+    } catch {
+      const c = await card();
+      const st = await state();
+      const why = (st.logs ?? []).filter((l) => l.check === "hook-card-shown").slice(-3);
+      throw Error(`the card shows ${JSON.stringify(c?.text ?? null)}, not ${JSON.stringify(text)} (focus ${JSON.stringify(st.sourceFocus)}, ${JSON.stringify(why)})`);
+    }
+  };
+  const press = async (point) => {
+    desktop("mouse", Math.round(point.x), Math.round(point.y));
+    await sleep(150);
+    desktop("mouse", Math.round(point.x), Math.round(point.y), "click");
+    await sleep(500);
+  };
+  const p = await page("panel.html");
+  try {
+    if (await p.eval(`document.querySelector('button[aria-label="Show overlay"]')?.getAttribute('aria-checked')==='false'`))
+      await click(p, 'button[aria-label="Show overlay"]');
+  } finally {
+    p.close();
+  }
+
+  await check("hook-card-shows-line", async () => {
+    // From nothing learned: Auto align on, no size, no place.
+    await setGame({ autoAlign: true });
+    await focusGame();
+    await say();
+    const t = await truth();
+    const c = await shown(t.dialogue);
+    return { text: c.text, font: c.font };
+  });
+
+  await check("hook-card-auto-aligns-steadily", async () => {
+    // Several lines, long and short: once aligned, the card's text sits on the game's, at the
+    // game's size, and neither moves from line to line.
+    await until(async () => (await game()).ocrBox, 20000);
+    const seen = [];
+    for (const line of [freshLine(), "はい。", freshLine(), "そうか。"]) {
+      await focusGame();
+      await command("say " + line);
+      const t = await truth();
+      await shown(t.dialogue);
+      await sleep(3000);
+      const c = await card();
+      const first = t.lines.find((l) => l.text === line);
+      seen.push({ line, x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size, at: [c.x, c.emTop] });
+    }
+    for (const s of seen) {
+      assert(Math.abs(s.x) <= 8, `the text starts where the game's does (${s.x.toFixed(1)} px off)`);
+      assert(Math.abs(s.y) <= 8, `the glyphs sit on the game's (${s.y.toFixed(1)} px off)`);
+      assert(Math.abs(s.font - 1) <= 0.1, `at the game's size (${s.font.toFixed(3)})`);
+    }
+    const xs = seen.map((s) => s.at[0]), ys = seen.map((s) => s.at[1]);
+    assert(Math.max(...xs) - Math.min(...xs) <= 2 && Math.max(...ys) - Math.min(...ys) <= 2, "the card does not move between lines");
+    return seen;
+  });
+
+  await check("hook-typewriter-double-click", async () => {
+    // A line typed out, skipped to its end, and the next one typed out, all in one burst: two
+    // clean lines in the Log, the second on the card, nothing jumbled.
+    const seen = new Set((await logEntries()).map((e) => e.id));
+    const a = "「" + freshLine() + "」";
+    const b = "「" + freshLine() + "」";
+    await focusGame();
+    await command(`type ${a}|${b}`);
+    await until(async () => !(await truth()).typing, 10000);
+    const lines = await until(async () => { const l = await newLines(seen); return l.includes(b) ? l : false; }, 10000);
+    assert(lines.includes(a), "the first line reaches the Log whole: " + JSON.stringify(lines));
+    assert(lines.every((l) => l === a || l === b), "nothing jumbled reaches the Log: " + JSON.stringify(lines));
+    await shown(b);
+    return lines;
+  });
+
+  await check("hook-typewriter-pause", async () => {
+    // A line that holds for a second before a drawn-out "ーーー", longer than the hooker waits: it
+    // arrives in two bursts, the second carrying on the first. One whole line in the Log (the
+    // part before the pause replaced, never left as a fragment) and on the card.
+    const seen = new Set((await logEntries()).map((e) => e.id));
+    const line = "「" + freshLine() + "、ん" + "ーーーーーっ」";
+    // Each webview hears a broadcast once per webview: kept once per id.
+    await overlay.eval(`window.__hookLines=new Map();window.__TAURI__.event.listen("texthook-line",(e)=>window.__hookLines.set(e.payload.id,e.payload))`);
+    await focusGame();
+    await command(`typeout ${line.replace("、んー", "、ん‖ー")}`);
+    await until(async () => !(await truth()).typing, 15000);
+    const lines = await until(async () => { const l = await newLines(seen); return l.includes(line) ? l : false; }, 10000);
+    const sent = await overlay.eval(`JSON.stringify([...window.__hookLines.values()])`).then(JSON.parse);
+    assert(lines.length === 1, "one line in the Log, the part before the pause replaced: " + JSON.stringify({ lines, sent }));
+    assert(sent.length >= 2 && sent.at(-1).replaces === sent.at(-2).id, "it came in two pieces, the second replacing the first: " + JSON.stringify(sent));
+    await shown(line).catch((error) => { throw Error(error.message + " after " + JSON.stringify(sent)); });
+    return lines;
+  });
+
+  await check("hook-card-drag-takes-over", async () => {
+    await focusGame();
+    await say();
+    const before = await shown((await truth()).dialogue);
+    const from = { x: Math.round(before.bar.x - 60), y: Math.round(before.bar.y) };
+    desktop("mouse", from.x, from.y);
+    await sleep(200);
+    desktop("mouse", from.x, from.y, "down");
+    await sleep(120);
+    const trail = [];
+    for (let i = 1; i <= 8; i++) {
+      desktop("mouse", from.x - i * 20, from.y - i * 12);
+      await sleep(35);
+      const c = await card();
+      trail.push([Math.round(c.x - before.x), Math.round(c.y - before.y)]);
+    }
+    desktop("mouse", from.x - 160, from.y - 96, "up");
+    await sleep(600);
+    const after = await card();
+    const g = await game();
+    for (const [i, [dx, dy]] of trail.entries())
+      assert(Math.abs(dx + (i + 1) * 20) <= 3 && Math.abs(dy + (i + 1) * 12) <= 3, "the card follows the pointer: " + JSON.stringify(trail));
+    assert(Math.abs(after.x - before.x + 160) <= 3 && Math.abs(after.y - before.y + 96) <= 3, "and stays where it was let go");
+    assert(g.autoAlign === false && g.box, "dragging turns Auto align off and keeps the place");
+    // A new line keeps the reader's place.
+    await focusGame();
+    await say();
+    const next = await shown((await truth()).dialogue);
+    assert(Math.abs(next.x - after.x) <= 2 && Math.abs(next.y - after.y) <= 2, "the next line stays there");
+    return { trail, box: g.box };
+  });
+
+  await check("hook-card-text-size-and-menu", async () => {
+    const before = await card();
+    await press(before.larger);
+    const larger = await until(async () => { const c = await card(); return c.font > before.font * 1.05 ? c : false; }, 4000);
+    await press(larger.smaller);
+    const back = await until(async () => { const c = await card(); return Math.abs(c.font - before.font) < 1 ? c : false; }, 4000);
+    await press(back.more);
+    const open = await until(async () => { const c = await card(); return c.menu ? c : false; }, 4000);
+    await press(open.menu.find((o) => o.value === 0.7));
+    const g = await until(async () => { const g = await game(); return g.opacity === 0.7 ? g : false; }, 4000);
+    const opacity = await overlay.eval(`getComputedStyle(document.querySelector('.hook-card'),'::before').opacity`);
+    assert(Math.abs(Number(opacity) - 0.7) < 0.01, "the card's background fades, not its text");
+    return { font: [before.font, larger.font, back.font], opacity: g.opacity };
+  });
+
+  await check("hook-auto-align-back-on", async () => {
+    // Back on from the panel, it forgets the reader's size and aligns again. The reader's size is
+    // made plainly bigger than the game's first, so taking the game's again shows.
+    const reader = await game();
+    await setGame({ ...reader, text: (reader.text ?? 0.035) * 1.4 });
+    const p = await page("panel.html");
+    try {
+      await until(() => p.eval(`document.querySelector('button[aria-label="Auto align"]')?.getAttribute('aria-checked')==='false'`), 4000);
+      await click(p, 'button[aria-label="Auto align"]');
+    } finally {
+      p.close();
+    }
+    await until(async () => (await game()).autoAlign === true, 4000);
+    await focusGame();
+    await say();
+    const t = await truth();
+    await until(async () => (await game()).ocrBox, 20000);
+    await sleep(800);
+    const c = await card();
+    const first = t.lines.find((l) => l.text.length > 3 && t.dialogue.startsWith(l.text));
+    assert(Math.abs(c.font / first.size - 1) <= 0.1, `the game's text size again, not the reader's (${c.font} vs ${first.size})`);
+    assert(Math.abs(c.x - first.x) <= 8 && Math.abs(c.emTop - first.y) <= 8, "and lines up with the game's text again");
+    return { x: c.x - first.x, y: c.emTop - first.y, font: c.font / first.size };
+  });
+
+  // A pad button pressed and let go, as native reports the controller (src-tauri/src/gamepad.rs).
+  const navEvent = (pressed, released, held) =>
+    overlay.eval(
+      `window.__TAURI__.event.emit('controller-nav',${JSON.stringify({ pressed, released, held, stick: { x: 0, y: 0 }, rstick: { x: 0, y: 0 } })})`,
+    );
+  const nav = async (buttons) => {
+    await navEvent(buttons, [], buttons);
+    await sleep(80);
+    await navEvent([], buttons, []);
+  };
+  let menuSeen = null;
+  const readAlong = async () => {
+    await focusGame();
+    // Out of the way: the menu's wedges follow the mouse, and a pad reader's is wherever it was.
+    desktop("mouse", 2, 2);
+    await sleep(150);
+    await invoke(overlay, "trigger_action", { name: "openControllerMenu" });
+    await until(() => overlay.eval(`Boolean(document.querySelector('#controller .cm-ring'))`), 4000).catch(() => null);
+    await sleep(400);
+    // What the menu offers and has selected, for a failure to say.
+    menuSeen = await overlay.eval(`[...document.querySelectorAll("#controller .cm-item")].map((e) => (e.classList.contains("cm-selected") ? "*" : "") + e.textContent.trim())`);
+    await nav([0]); // A: Read along, where the menu starts when the line is in
+  };
+  const leave = async () => {
+    await nav([1]); // B
+    await sleep(500);
+    await nav([1]);
+    await sleep(500);
+  };
+
+  await check("hook-read-along", async () => {
+    // Read along as the pop-up style, over the text (Settings → Game Mode).
+    const view = (await invoke(overlay, "settings_get", { key: "gameModeSettings" })) ?? {};
+    await invoke(overlay, "settings_set", { key: "gameModeSettings", value: { ...view, dictionaryView: "popup" } });
+    await focusGame();
+    await say();
+    const t = await truth();
+    await shown(t.dialogue);
+    await readAlong();
+    // Stepping through the card's words: the lit word is on the card, which stays up although the
+    // game no longer has the focus.
+    let miss = null;
+    const lit = await until(
+      async () => {
+        const v = await overlay.eval(`(()=>{const w=document.querySelector('#controller .cm-word');const c=document.querySelector('.hook-card');if(!w||!c||c.hidden)return {miss:{word:Boolean(w),card:c?!c.hidden:null,controller:document.querySelector('#controller')?.innerText.slice(0,80)}};const a=w.getBoundingClientRect(),b=c.querySelector('.hook-card-text').getBoundingClientRect();return a.left>=b.left-4&&a.right<=b.right+4&&a.top>=b.top-4&&a.bottom<=b.bottom+4?{word:a.toJSON(),card:b.toJSON()}:{miss:{word:a.toJSON(),card:b.toJSON()}}})()`);
+        if (!v?.miss) return v;
+        miss = { ...v.miss, foreground: JSON.parse(desktop("windows")).find((w) => w.foreground)?.title };
+        return false;
+      },
+      8000,
+    ).catch((error) => {
+      throw Error(`no lit word on the card: ${JSON.stringify(miss)}, menu ${JSON.stringify(menuSeen)} (${error})`);
+    });
+    await leave();
+    return lit;
+  });
+
+  await check("hook-read-along-full-screen", async () => {
+    const before = (await invoke(overlay, "settings_get", { key: "gameModeSettings" })) ?? {};
+    await invoke(overlay, "settings_set", { key: "gameModeSettings", value: { ...before, dictionaryView: "fullscreen" } });
+    await sleep(300);
+    try {
+      const t = await truth();
+      await readAlong();
+      const text = await until(
+        () => overlay.eval(`(()=>{const e=document.querySelector('.gd-root');return e?[...e.querySelectorAll('.gd-line')].map(x=>x.textContent).join(''):null})()`),
+        8000,
+      );
+      assert(compact(text) === compact(t.dialogue), "the hooked line across the top: " + text);
+      await leave();
+      return text;
+    } finally {
+      await invoke(overlay, "settings_set", { key: "gameModeSettings", value: before });
+    }
+  });
+  await evidence("hook");
+  return picked;
+}
 async function evidence(name) {
   const s = await state();
   await writeFile(
@@ -321,16 +742,30 @@ try {
     let g = JSON.parse(desktop("windows")).find((w) =>
       w.title.includes("E2E Fake"),
     );
+    // The hook scenario needs the hookable game of the chosen bitness; any other copy goes.
+    if (g && scenario === "hook") {
+      const t = await truth().catch(() => null);
+      if (!t?.hookable || t.bits !== (hookBits === "x86" ? 32 : 64)) {
+        await command("close");
+        await until(async () => !JSON.parse(desktop("windows")).some((w) => w.hwnd === g.hwnd), 10000);
+        g = null;
+      }
+    }
     if (!g) {
-      spawn(path.join(root, "Desktop.exe"), ["game", path.join(root, "game")], {
+      const [exe, extra] =
+        scenario === "hook" ? [`Desktop-${hookBits}.exe`, ["", "hookable"]] : ["Desktop.exe", []];
+      spawn(path.join(root, exe), ["game", path.join(root, "game"), ...extra], {
         detached: true,
         windowsHide: true,
         stdio: "ignore",
       }).unref();
-      g = await until(async () =>
-        JSON.parse(desktop("windows")).find((w) =>
-          w.title.includes("E2E Fake"),
-        ),
+      g = await until(
+        async () =>
+          JSON.parse(desktop("windows")).find((w) =>
+            w.title.includes("E2E Fake"),
+          ),
+        // An emulated x86 .NET game starts slowly on ARM64.
+        30000,
       );
     }
     desktop("show", g.hwnd, 5);
@@ -350,7 +785,8 @@ try {
     await command("windowed");
     return await truth();
   });
-  await check("pick-source-in-real-ui", chooseSource);
+  if (scenario === "hook") await hookScenario();
+  else await check("pick-source-in-real-ui", chooseSource);
   if (
     scenario === "scan" ||
     scenario === "hover" ||

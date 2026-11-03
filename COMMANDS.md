@@ -72,7 +72,7 @@ Keys and defaults mirror `src/main/settings.ts`:
 
 `hasCompletedOnboarding`, `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
-`ankiCropRegions.<appName>`,
+`ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
 `hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `scannedTextFontSize` (14),
 `scannedTextHistory[]`, `audioSettings.voiceId`,
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
@@ -413,7 +413,9 @@ panels can render those toggles without each keeping its own copy.
 
 `watch_source` emits `source-bounds` `{sourceId, bounds, onScreen, fullscreen, settling,
 display}` when the tracked window moves, resizes, changes on-screen state or goes in or out
-of full screen. It polls `CGWindowListCopyWindowInfo` for one window id ten times a second
+of full screen, and once whenever it is called (a reloaded page asking again gets the window's
+bounds without waiting for it to change). While the Text Hooker is the input, the overlay watches
+the hooked game's window, whatever source was last picked for OCR. It polls `CGWindowListCopyWindowInfo` for one window id ten times a second
 rather than re-running a full `SCShareableContent` enumeration per tick, which would be far
 too expensive at this cadence, and needs no Screen Recording permission because it reads
 geometry, not pixels. `fullscreen` is a full-screen app (on macOS, a window on a full-screen
@@ -1586,6 +1588,211 @@ status `ready` with that `source`; they cannot be deleted from the app.
 path refuses with the same reason: `ocr_frame` and `scan` fail with
 `"<Engine> is not ready: <reason>"`, and the observer as above. Switching to an engine whose
 models are ready scans at once.
+
+## Text Hooker (Windows)
+
+The `inputSource` `"hook"`: the game behind a chosen window is hooked and its text read from
+inside it. Implementation: `src-tauri/src/text_hook/` (session, process resolution, thread
+choice, download store) and the `kimochi-hookd` sidecar (`hookd/`). Elsewhere the commands
+answer `supported: false` or refuse.
+
+| Command | Signature |
+| --- | --- |
+| `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi) |
+| `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its launcher children (`.bin`/`.log`/`.dat`); replaces any session. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher) |
+| `texthook_stop` | `() -> HookStatus` — detaches and stops the sidecar |
+| `texthook_status` | `() -> HookStatus` |
+| `texthook_select` | `({key}) -> HookStatus` — the thread the Log reads, remembered for the game; `key: null` forgets it and chooses automatically again |
+| `texthook_insert` | `({code}) -> ()` — inserts an H-code into every process of the hooked game now (Settings keeps it in the game's `hookCodes` too); fails when nothing is hooked |
+| `texthook_game` | `({exe}) -> {thread: string | null}` — the hook code of the thread remembered for the game |
+| `texthook_game_icon` | `({exe}) -> string | null` — the game's icon as a PNG data URI, saved from its window when it was last hooked (`<app local data>/texthook/icons/`) |
+| `texthook_forget` | `({exe, all}) -> ()` — forgets the thread remembered for the game; with `all`, its icon too |
+
+```ts
+HookStatus = {
+  supported, phase: 'idle' | 'starting' | 'downloading' | 'attaching' | 'hooked' | 'ended' | 'failed',
+  detail,                         // why it failed or ended, or which engine it fell back from
+  sourceId, exe, pids,
+  engine: {id: 'luna' | 'textractor', name, version} | null,
+  download: {done, total} | null, // bytes, while downloading the hooker
+  selected, selectedBy: 'saved' | 'auto' | 'manual' | null,
+  pickNote,                       // why no thread was chosen automatically yet
+  fallback,                       // why the first engine was given up for the one in use
+  threads: [{key, name, hookcode, preview, count, generic, selected}]
+}
+```
+
+Events: `texthook-status` (a `HookStatus`, on every change and every hooked sentence) and
+`texthook-line` (`{text, key, at, id, replaces}`: a sentence of the selected thread, consecutive
+repeats dropped; `replaces` is the id of the line it finishes, or null), which the texthooker ingests as source `"hook"` while `inputSource` is `"hook"`.
+
+**Thread choice.** A thread is selected as soon as it speaks if it matches the one remembered
+for this exe (`<app local data>/texthook/games.json`: `hookcode`, `ctx & 0xFFFF`, `ctx2 & 0xFFFF`).
+Otherwise, 700 ms after new text, the window is captured and read with the local OCR, the lines
+grouped into blocks, and each thread's latest sentence looked for in each block after
+normalising width, punctuation and whitespace (exact containment, never fuzzy). Matches in the
+largest block count double; a block found inside a longer sentence counts only for the share of
+the sentence it is; engine hooks beat the generic Windows API hooks, a thread repeating itself
+rapidly is halved, and of two copies of a line the one with fewer line breaks wins. Threads
+under 30 % kana and kanji are never chosen, and at least 6 effective matched characters are
+needed. A choice made this way or by hand is remembered for the game. The window is read with
+`observerEngine`, else the first local engine available (`oneocr`, `ppocr`, `meikiocr`,
+`livetext`).
+
+**Game settings.** `textHookerDefaults` (`HookSettings`) and each game's record,
+`textHookerGames[<exe path, lowercased>]`, edited in Settings → Text Hooker; `ui/hook-games.ts`
+types both and resolves a game's settings (its own value, else the default, else Kimochi's). A
+game's record holds what the reader changed for it and what was learned about it:
+
+```ts
+HookSettings = { autoHook: true, flushMs: 300, repeats: 'auto' | 'off' | 2 | 3 | 4,
+                 speakerNames: true, autoAlign: true, opacity: 1, textSize: 0.034 }
+textHookerGames[exe] = Partial<HookSettings> (textSize is `text`) & {
+  exe, name, sessionId, addedAt, hookedAt,            // the game, its Log session, when hooked
+  hookCodes: string[],                                 // inserted on every attach
+  replacements: [{find, replace, regex?, enabled?}],   // applied in order to each line
+  text, leading, box, ocrBox, surface, namesApart, nameBox   // the card (below)
+}
+```
+
+`flushMs` is LunaHook's `--flush-ms`, read when the sidecar starts. Each hooked line is cleaned
+natively before it is sent (`text_hook/clean.rs`): markup engines leave in their text is taken
+out, keeping the text it marks up (HTML-like tags, `<rt>` readings, `{漢字/かんじ}`, Ren'Py's
+`{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`); repeated characters are undone (`auto`: only when
+every run of a character in the line, three runs at least, is a multiple of the same count); the
+game's replacements apply; and a line over 300 characters (a backlog or skip sent at once) is
+dropped, logged as `texthook-dropped` with verbose logging on.
+
+**Hook automatically.** While `inputSource` is `"hook"`, the source panel looks at the open
+windows every 3 s (`source_catalog`, `texthook_targets`) and hooks the first whose exe is a game
+with `autoHook` on, trying each window once. With nothing hooked, any such window counts; with a
+game hooked, only a window opened since the last look, so a game started later takes over (one
+hook at a time: `texthook_start` stops the session before it). Clearing a Text Hooker source
+pauses it until the app next starts, or until the reader chooses a game to hook from the menu.
+
+**Sessions.** With **Auto switch sessions** on, a game is tied to a Log session
+(`frontend/texthooker/host.ts` `linkHookedGame`): hooked for the first time, it takes the session
+chosen for its window by name; hooked again, it switches to its own session whatever its window
+is called, and the window's name no longer picks one while it is hooked. A game's name is its
+session's name, so renaming either renames both. Deleting a game in Settings removes its record
+and calls `texthook_forget(all)`; its session goes too only when asked.
+
+**Typewriter text.** A game that types text out sets it again every frame, and the hooker joins
+those calls into one sentence ("「", "「旅", "「旅人", …). A sentence made only of prefixes of its
+last part that never get shorter (line breaks ignored) is reduced to that last part, before it
+is shown, matched or sent to the Log.
+
+**Downloads.** `src-tauri/texthook-manifest.json` (written by `scripts/texthook-package.mjs`)
+pins each engine file by size and SHA-256 with its sources in order: the upstream release
+zip's entry (read by HTTP range: the zip's size, its tail and directory, the entry), then the
+mirror's copy (`https://downloads.kimochiapp.com/texthook/<engine>/<version>/<file>`). Files
+land in `<app local data>/texthook/.staging-…` and the directory is renamed to
+`<engine>-<version>/` once every file is verified. LunaHook is tried first; if it cannot be
+downloaded, started or attached, Textractor is.
+
+### On the game: the card
+
+While `inputSource` is `"hook"` the overlay draws nothing OCR read. The hooked line is shown in a
+card on the overlay (`ui/hook-card.js`, `ui/hook-card.css`): one element of its own, not drawn by
+the OCR renderer, always visible while **Show overlay** is on and the game is in front (or Read
+along holds it), its text looked up like any text on the overlay. It is published with the
+overlay's hit regions, so presses on it never reach the game. It looks the same however it is
+placed: a bar along its top moves it, its corner resizes it, −/+ beside the corner change the
+text's size, and ⋯ opens a menu with the background's opacity and **Text Hooker settings…** (the
+game's page in Settings → Text Hooker, through `textHookerSettingsGame`). Any of these by the reader turns Auto align off and keeps the card where it is.
+
+- `overlay_drag({ active: boolean }) -> ()`: the overlay is dragging the card. While it is, the
+  pointer poll sends the overlay every move (`pointer`) rather than every other one, and the
+  overlay's hit region is its whole display.
+- Gaming Mode: with the Text Hooker as the source the radial menu has no Scan or Auto OCR, and
+  starts on Read along, which steps through the card's text (`extraUnits`) or, as the full-screen
+  dictionary, shows the hooked line across the top (`sections`). The card stays up while it does.
+
+Per game, `textHookerGames[<exe path, lowercased>]` (`ui/overlay.js`):
+
+- `autoAlign` (the default's when unset; the older `placeWithOcr`, or `ocr: "none"` for off, are
+  read first): **Auto align**, in Settings → Text Hooker and under Show overlay in the sidebar
+  (both set the game's own value; one equal to the default is not stored, so the game follows
+  the default, and no setting shows as changed while it equals the default). On, Auto OCR runs in the background
+  with the scan engine (`ocrMode`, shown in the sidebar again), whatever the Auto OCR switch says,
+  and each reading is matched against the newest line (`ui/hook-match.ts` `hookAnnotations`:
+  groups, runs of stacked groups and runs of lines within a group, scored by LCS recall and
+  precision after folding width and dropping punctuation; recall ≥ 0.6, precision ≥ 0.55). A new
+  line does not wait for the loop to see the screen settle: the overlay reads at once
+  (`SceneScanner.refresh`) and again at 0.3, 0.7, 1.2 and 2 s while no reading has found it whole,
+  the later reads looking again at text already read (`Scene.lookAgain`: it may have been read
+  while fading in), and logs `hook-line-chase` `{placed, reads, ms}` (with OCR's blocks when it
+  never was). Turning it back on for a game in Settings forgets `text`, `leading`, `ocrBox` and
+  `surface`, so it aligns afresh.
+- `text`, `leading`: the text's size (a fraction of the window's height) and line pitch (in ems).
+  Auto align sets them from the first whole reading (recall ≥ 0.9, precision ≥ 0.8: the size from a
+  line's ink width over its characters, the hooked line's when OCR read exactly it on one line) and
+  then keeps them; only whole readings of two different lines, both more than 30% off and within
+  15% of each other, replace the size. Each reading counts once, however often it is applied. The card's −/+ set `text` a tenth at a time. Resizing the card
+  never changes it.
+- `ocrBox`: where Auto align puts the text, `{x, y, width, height}` of its ink, fractions of the
+  game window. The first whole reading of a new line puts it there; after that, where it starts
+  moves only when two whole readings in a row put the text more than a line away, and its width and
+  height only grow, to the furthest the text has reached. Once a reading has placed the line, the
+  card wraps it onto no more lines than the game does (its ink's height), shrinking the text for
+  that line, by up to a fifth, if it must. Until then the card is on the last line's box, and while the overlay is looking
+  for the new line it holds it on one line, faded out where it runs past the box, rather than
+  wrapping it into a box made for another line; if no reading finds it, it wraps as it is.
+- `box`: where the reader left the card's text box, same units. Kept apart from `ocrBox`, so turning
+  Auto align off puts the card back. With neither, the card is centred along the bottom.
+- `surface`: what the game's text sits on (`{ink, top, bottom}`, surface.rs), from the last whole
+  reading. With the overlay look set to Blend the card takes those colours, but only while it is
+  over the game window; otherwise, and before a reading, it is the app's light or dark. The card
+  fades between colours (500 ms).
+- `opacity`: the card's background opacity (1, 0.85, 0.7, 0.55 or 0.4); the text stays opaque.
+- `namesApart`, `nameBox`: the game shows its speakers' names apart from what they say (a
+  nameplate over the text box), and where the last one was (same units as `ocrBox`). A hooked
+  line a short name leads, then one quote and nothing else (`アキ「……」`, `【アキ】「……」`;
+  `hook-match.ts` `splitSpeaker`), is placed by its quote alone when OCR finds the name on a line
+  of its own above the quote, before it on its row, or near `nameBox`: the card shows the quote,
+  and the name is drawn where the game shows it as OCR text is (hovered and looked up the same),
+  carrying the hooked name. That sets `namesApart`, after which such a line's card shows the quote
+  from the start, and the quote alone wherever it is found whole even if OCR missed the name. A
+  name the game shows inline, and narration that only looks like a speech (`そして「……」`), stay
+  whole: their quote alone is not a whole reading. The Log keeps the line as hooked.
+
+Lines reach the Log and the card after a game's typewriter effect is undone (`text_hook/pick.rs`
+`typewriter_lines`): a burst of frames, each a prefix of the next, short at first and growing a
+little at a time, is the sentence it ends on, and a burst holding two such runs (a line finished
+with a click, the next typed out) is two lines. Of the ways to read a burst, the one taken leaves the
+least text in sentences, so a row of one character ("ーーー", "……") is not mistaken for frames. A
+line whose typing pauses longer than the hooker waits arrives in two bursts: the second carries
+on the first (`typewriter_lines_after`, within 5 s), and its line is sent with `replaces`, the id
+of the line it finishes, which the Log replaces rather than adding to. With verbose logging on,
+each burst of the chosen thread is logged as `texthook-burst` (`{text, lines, carriesOn}`).
+
+### Sidecar protocol (`kimochi-hookd`)
+
+`kimochi-hookd-x64.exe luna --dir <LunaHook dir> [--flush-ms N]` or
+`… textractor --dir <Textractor dir>` reads one JSON command per line on stdin and writes one
+JSON event per line on stdout; closing stdin detaches every process and exits.
+`kimochi-hookd-{x64,x86}.exe inject --pid N --dll <path>` injects one DLL
+(`CreateRemoteThread(LoadLibraryW)`); the x64 sidecar runs the x86 build for 32-bit games.
+
+| Command | Fields |
+| --- | --- |
+| `attach` | `pid`, `bits` (32/64, from the process; the other bitness is tried if the first never connects), `pcHooks`: `"auto"` (default: the generic Windows API hooks only when no engine is detected) / `"on"` / `"off"` |
+| `detach` | `pid` |
+| `insert` | `pid`, `code` (an H-code) |
+| `pchooks` | `pid` |
+| `quit` | |
+
+| Event | Fields |
+| --- | --- |
+| `ready` | `engine`, `version` |
+| `connected` / `disconnected` | `pid` |
+| `attached` | `pid`, `bits`, `reused?` |
+| `attach_error` | `pid`, `text` |
+| `thread` / `thread_removed` | `key` (`pid:addr:ctx:ctx2`, hex), `pid`, `addr`, `ctx`, `ctx2`, `hookcode`, `name` |
+| `text` | `key`, `pid`, `text` (one sentence) |
+| `hook` | `pid`, `addr`, `hookcode` (a hook was inserted) |
+| `info` | `level` (`console`, `warning`, `engine`, `emulator`), `text` |
+| `error` | `text` |
 
 ## App updates
 

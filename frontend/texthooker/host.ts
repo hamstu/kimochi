@@ -14,6 +14,7 @@ import { loadSettings, getSettings } from "./lib/settings";
 import { acceptSnapshot, type ReaderSnapshot } from "./bridge";
 import { matchedSession, sourceKey, type SourceName } from "./source-sessions";
 import { loadProfileRoot, setWritesPaused } from "./core/profile";
+import { gameKey, type HookGames } from "../../ui/hook-games";
 
 /** What a Sync merge changed on disk (`sync_core::Changed`). */
 interface SyncChanged {
@@ -81,6 +82,8 @@ let queue: Promise<unknown> = Promise.resolve();
 let currentSource: SourceName | null = null;
 let bindings: Record<string, string> = {};
 let seen: string[] = [];
+/** The game whose session was last settled (`linkHookedGame`), until it is unhooked. */
+let linkedGame: string | null = null;
 export const enqueue = <T>(fn: () => Promise<T>): Promise<T> => {
   const result = queue.then(fn);
   queue = result.catch(() => undefined);
@@ -112,8 +115,10 @@ async function selectSource(
 ): Promise<void> {
   if (!force && sourceKey(source) === sourceKey(currentSource)) return;
   currentSource = source;
+  // A hooked game keeps its own session, whatever its window is called now.
+  if (getSettings().inputSource === "hook" && linkedGame) return;
   if (
-    getSettings().inputSource !== "ocr" ||
+    !["ocr", "hook"].includes(getSettings().inputSource) ||
     !source ||
     !sourceKey(source) ||
     !getSettings().autoMatchSource
@@ -124,6 +129,38 @@ async function selectSource(
   else await sessions.createSession(source.name || source.appName);
   bindings[sourceKey(source)!] = sessions.getActiveSession().id;
   await setSetting("texthookerSourceSessions", bindings);
+}
+/**
+ * A hooked game and its session go together (Settings → Text Hooker): the game's lines go to its
+ * session, and renaming one renames the other. The first time a game is hooked, it takes the
+ * session chosen for its window (by its name, `selectSource`); after that, hooking it switches to
+ * that session whatever its window is called. Only with "Auto switch sessions" on.
+ */
+async function linkHookedGame(exe: string): Promise<boolean> {
+  const key = gameKey(exe);
+  if (linkedGame === key || getSettings().inputSource !== "hook") return false;
+  linkedGame = key;
+  const games = { ...((await getSetting<HookGames>("textHookerGames", {})) ?? {}) };
+  const game = { ...(games[key] ?? {}) };
+  const now = Date.now();
+  if (getSettings().autoMatchSource) {
+    const own = game.sessionId ? sessions.listSessions().find((s) => s.id === game.sessionId) : undefined;
+    if (own && sessions.getActiveSession().id !== own.id) await sessions.switchSession(own.id);
+    const session = sessions.getActiveSession();
+    game.sessionId = session.id;
+    game.name = session.name;
+    const windowKey = sourceKey(currentSource);
+    if (windowKey && bindings[windowKey] !== session.id) {
+      bindings[windowKey] = session.id;
+      await setSetting("texthookerSourceSessions", bindings);
+    }
+  }
+  game.exe = exe;
+  game.addedAt ??= now;
+  game.hookedAt = now;
+  games[key] = game;
+  await setSetting("textHookerGames", games);
+  return true;
 }
 interface ScanEntry {
   groups?: OcrGroup[] | null;
@@ -334,6 +371,17 @@ export function startHost(): Promise<void> {
             await selectSource(e.payload.source!);
             broadcast();
           }).catch(reportError);
+      });
+      await listen<{ phase?: string; exe?: string | null }>("texthook-status", (e) => {
+        const { phase, exe } = e.payload;
+        if (phase !== "hooked" || !exe) {
+          linkedGame = null;
+          return;
+        }
+        if (linkedGame === gameKey(exe)) return;
+        void enqueue(async () => {
+          if (await linkHookedGame(exe)) broadcast();
+        }).catch(reportError);
       });
       let previousInput = getSettings().inputSource;
       onSettingsChange((key, value) => {

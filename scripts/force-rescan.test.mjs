@@ -21,6 +21,7 @@ test('the scan action clears what was read and starts Auto OCR over before scann
   assert.match(force, /clearSelectionText\(\)/)
   assert.match(force, /scanner\.resume\(\)/)
   const clear = overlay.match(/function clearSelectionText\(\) \{([\s\S]*?)\n\}/)[1]
-  assert.match(clear, /state\.annotations = \[\]/)
+  // What OCR read, and what the Text Hooker drew from it (overlay.js setOcrAnnotations).
+  assert.match(clear, /setOcrAnnotations\(\[\]\)/)
   assert.match(clear, /scanner\.reset\(\)/)
 })

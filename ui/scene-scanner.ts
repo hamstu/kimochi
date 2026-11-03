@@ -405,13 +405,15 @@ export class SceneScanner<Frame = unknown> {
    * text read while still drawing in — without waiting for it to settle, past any hold or
    * spacing. When the memory already describes the screen, nothing is recognised and this
    * resolves at once: there is nothing to catch up on. Resolves to whether there is text.
+   * `again` reads what is showing even if it has been read (`Scene.lookAgain`).
    */
-  async refresh(): Promise<boolean> {
+  async refresh(again = false): Promise<boolean> {
     if (!this.running || this.paused || this.suspended || this.unavailable) return false
     await this.idle()
     for (let tries = 0; tries < 20 && this.tickInFlight; tries++) {
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
+    if (again) this.scene.lookAgain()
     this.forceNext = true
     await this.tick()
     this.forceNext = false

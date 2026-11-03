@@ -834,6 +834,68 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   font-size: var(--k-text-xs);
   line-height: var(--k-leading-xs);
 }
+/* Text Hooker: the hook's progress, and the thread the Log reads (HookControls.tsx). */
+.src-hook {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+}
+.src-hook-status {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.src-hook-status > svg {
+  flex: none;
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+/* The hooked text: a select like the OCR model's, with a spinner or warning in place of the
+   thread's icon while there is nothing to show yet. */
+.src-hook-label {
+  padding-left: var(--k-space-1);
+  padding-right: var(--k-space-1);
+  /* As close to its select as the OCR model's and the Dictionary's labels are. */
+  padding-bottom: var(--k-space-1);
+  margin-bottom: calc(var(--k-space-2) * -1);
+}
+.src-hook-select {
+  text-align: start;
+}
+.src-hook-select-value {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--k-space-2);
+  min-width: 0;
+}
+.src-hook-select-value > svg,
+.src-hook-select-value > .k-spinner {
+  flex: none;
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+  color: var(--k-text-2);
+}
+.src-hook-select-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.src-hook-select[data-placeholder] .src-hook-select-text {
+  color: var(--k-text-2);
+}
+.src-hook-menu {
+  max-width: min(28rem, calc(100vw - var(--k-space-4)));
+}
+.src-hook-item .k-menu-item-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .src-notice-link {
   padding: 0;
   border: 0;
@@ -1453,3 +1515,21 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
 .gaming-mode-notice { flex: none; border-radius: 0; border-width: 0 0 1px; }
 .gaming-mode-notice-row { display: flex; align-items: center; justify-content: space-between; gap: var(--k-space-3); flex-wrap: wrap; }
 .gaming-mode-chord { white-space: nowrap; }
+/* A sub-option of the row above it (the Text Hooker's "Place text with OCR" under Show overlay):
+   indented to sit under that row's label, with a hairline joining them. */
+.src-row-sub {
+  position: relative;
+  padding-left: calc(var(--k-space-2-5) + var(--k-icon-sm) + var(--k-space-2));
+}
+.src-row-sub::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--k-space-2-5) + var(--k-icon-sm) / 2);
+  top: 0;
+  bottom: 50%;
+  width: var(--k-space-1-5, 6px);
+  border-left: 1px solid var(--k-line);
+  border-bottom: 1px solid var(--k-line);
+  border-bottom-left-radius: 4px;
+  pointer-events: none;
+}

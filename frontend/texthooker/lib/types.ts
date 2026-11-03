@@ -5,7 +5,7 @@ import { DEFAULT_JAPANESE_FILTER, type JapaneseFilterMode } from "../../../ui/ja
 
 export type { TranslationProvider };
 
-export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket";
+export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket" | "hook";
 
 export interface Line {
   ocr?: { scanId: string; groupId: string; groupIndex: number; groupCount: number; engine?: string; orientation: "horizontal" | "vertical" };
@@ -59,7 +59,7 @@ export const UI_SCALE_LABELS: Record<UiScale, string> = {
 };
 
 export interface Settings {
-  inputSource: "ocr" | "clipboard" | "websocket";
+  inputSource: "ocr" | "clipboard" | "websocket" | "hook";
   websocketUrl: string;
   dictionaryMode: "builtin" | "custom-api";
   autoMatchSource: boolean;

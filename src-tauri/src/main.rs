@@ -53,6 +53,7 @@ mod state;
 mod surface;
 mod steam_library;
 mod text_observer;
+mod text_hook;
 mod texthooker;
 mod tray;
 mod updater;
@@ -1096,6 +1097,16 @@ fn pointer_location() -> Option<Value> {
         x >= b.x && y >= b.y && x < b.x + b.width && y < b.y + b.height
     });
     Some(json!({ "x": x, "y": y, "display": display }))
+}
+
+/// Whether the overlay is dragging something (`overlay_drag`): the pointer poll then sends it
+/// every move rather than every other one.
+static OVERLAY_DRAG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The overlay started or stopped dragging something (the Text Hooker's card).
+#[tauri::command]
+fn overlay_drag(active: bool) {
+    OVERLAY_DRAG.store(active, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The calling window's own bounds, in desktop points.
@@ -2431,6 +2442,8 @@ async fn scan(
 #[tauri::command]
 fn watch_source(app: tauri::AppHandle, state: State<Shared>, source_id: Option<String>) {
     *state.watching.lock().unwrap() = source_id;
+    // Asked again (a reloaded overlay, or a source watched anew): report it once more, changed or not.
+    WATCH_ASKED.fetch_add(1, Ordering::Relaxed);
     let _ = app.emit(
         "source-watch",
         json!({"watching": state.watching.lock().unwrap().clone()}),
@@ -2977,6 +2990,15 @@ fn main() {
             dictionary_runtime_status,
             extension_window_ensure,
             extension_store::extension_status,
+            text_hook::texthook_targets,
+            text_hook::texthook_start,
+            text_hook::texthook_stop,
+            text_hook::texthook_status,
+            text_hook::texthook_select,
+            text_hook::texthook_insert,
+            text_hook::texthook_game_icon,
+            text_hook::texthook_game,
+            text_hook::texthook_forget,
             extension_store::extension_download_start,
             extension_store::extension_download_pause,
             extension_store::extension_download_resume,
@@ -3107,6 +3129,7 @@ fn main() {
             extensions::ext_save_file,
             window_bounds,
             popup_window,
+            overlay_drag,
             yomitan_request,
             cloud::tts_speak,
             cloud::cloud_translate,
@@ -3186,6 +3209,7 @@ fn main() {
             apply_appearance(&handle, store.get("appearance").ok().flatten().as_ref());
             // Before anything asks whether a local engine's models are ready.
             model_store::install(&handle).map_err(std::io::Error::other)?;
+            text_hook::install(&handle);
             // Before any window is built: the windows' engine and Yomitan's files come from it.
             let engine_store = {
                 let reporter = handle.clone();
@@ -3630,6 +3654,7 @@ fn main() {
             // downloads so their partial files are kept and resumed next launch.
             if let tauri::RunEvent::Exit = event {
                 model_store::shutdown(app);
+                text_hook::shutdown();
                 extension_store::shutdown(app);
             }
         });
@@ -4041,6 +4066,9 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         let mut was_over_overlay = false;
         let mut noted_focus: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut last_modifiers = Modifiers::default();
+        // A move not yet sent (moves go every other tick): sent at the next, so the last place the
+        // pointer stopped is never lost.
+        let mut unsent_move = false;
         let mut last_buttons = false;
         let mut last_popup_shift = false;
         let mut ticks: u64 = 0;
@@ -4162,10 +4190,14 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 // rate while merely moving. A modifier or a button going up or down is
                 // sent at once — holding Shift without moving is how a reader asks for
                 // the word already under the pointer.
-                let due = (moved && ticks.is_multiple_of(2))
+                // While the overlay drags something (the Text Hooker's card), every move is sent, so
+                // what is dragged keeps up with the pointer.
+                unsent_move |= moved;
+                let due = (unsent_move && (ticks.is_multiple_of(2) || OVERLAY_DRAG.load(std::sync::atomic::Ordering::Relaxed)))
                     || modifiers != last_modifiers
                     || down != last_buttons;
                 if due {
+                    unsent_move = false;
                     last_modifiers = modifiers;
                     last_buttons = down;
                     let (wanted, over, blocked) = {
@@ -4374,13 +4406,22 @@ static SOURCE_STATE: Mutex<Option<(String, platform::WindowState)>> = Mutex::new
 /// When the window goes full screen or comes back from it, the crop that applies changes
 /// with it (`state::shaped_crop_key`) and the text on screen was read from the other shape,
 /// so the scan is cleared as a change of crop would clear it.
+/// Bumped by each `watch_source`, so the watch reports the window again.
+static WATCH_ASKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut last: Option<(String, platform::WindowState)> = None;
         let mut ticks = 0_u32;
+        let mut asked = 0_u64;
         loop {
             std::thread::sleep(Duration::from_millis(100));
             ticks = ticks.wrapping_add(1);
+            let now_asked = WATCH_ASKED.load(Ordering::Relaxed);
+            if now_asked != asked {
+                asked = now_asked;
+                last = None;
+            }
             if ticks.is_multiple_of(5) { compact::maintain_pin(&handle); }
             let watching = service.watching.lock().unwrap().clone();
             let Some(source_id) = watching else {

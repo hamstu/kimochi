@@ -1,0 +1,257 @@
+{
+  "engines": {
+    "luna": {
+      "name": "LunaHook",
+      "version": "12.1.3.8",
+      "project": "https://github.com/HIllya51/LunaTranslator",
+      "license": "GPL-3.0",
+      "files": [
+        {
+          "name": "LunaHost64.dll",
+          "size": 259896,
+          "sha256": "750a0a0c9244a8d2a850b3cf6d0c31e5c58e9b4d27bd81bec6d703d13ca4a1cc",
+          "sources": [
+            {
+              "url": "https://github.com/HIllya51/LunaTranslator/releases/download/v12.1.3.8/LunaTranslator_x64.zip",
+              "zipEntry": "LunaTranslator_x64/files/LunaHook/LunaHost64.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/luna/12.1.3.8/LunaHost64.dll"
+            }
+          ]
+        },
+        {
+          "name": "LunaHook64.dll",
+          "size": 2706232,
+          "sha256": "618aa8a07d19e59a16b1b0be5fbebbe219311436c7e633910d402d0a2bc03003",
+          "sources": [
+            {
+              "url": "https://github.com/HIllya51/LunaTranslator/releases/download/v12.1.3.8/LunaTranslator_x64.zip",
+              "zipEntry": "LunaTranslator_x64/files/LunaHook/LunaHook64.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/luna/12.1.3.8/LunaHook64.dll"
+            }
+          ]
+        },
+        {
+          "name": "LunaHook32.dll",
+          "size": 2143544,
+          "sha256": "459f41e2dfe6309e72dbcb0e11864087f4c9dbc020aabd8de96feb639cd3fc7a",
+          "sources": [
+            {
+              "url": "https://github.com/HIllya51/LunaTranslator/releases/download/v12.1.3.8/LunaTranslator_x64.zip",
+              "zipEntry": "LunaTranslator_x64/files/LunaHook/LunaHook32.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/luna/12.1.3.8/LunaHook32.dll"
+            }
+          ]
+        },
+        {
+          "name": "msvcp140.dll",
+          "size": 643512,
+          "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+          "sources": [
+            {
+              "url": "https://github.com/HIllya51/LunaTranslator/releases/download/v12.1.3.8/LunaTranslator_x64.zip",
+              "zipEntry": "LunaTranslator_x64/files/runtime3.13-64/msvcp140.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/luna/12.1.3.8/msvcp140.dll"
+            }
+          ]
+        },
+        {
+          "name": "vcruntime140.dll",
+          "size": 178616,
+          "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+          "sources": [
+            {
+              "url": "https://github.com/HIllya51/LunaTranslator/releases/download/v12.1.3.8/LunaTranslator_x64.zip",
+              "zipEntry": "LunaTranslator_x64/files/runtime3.13-64/vcruntime140.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/luna/12.1.3.8/vcruntime140.dll"
+            }
+          ]
+        },
+        {
+          "name": "vcruntime140_1.dll",
+          "size": 50112,
+          "sha256": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
+          "sources": [
+            {
+              "url": "https://github.com/HIllya51/LunaTranslator/releases/download/v12.1.3.8/LunaTranslator_x64.zip",
+              "zipEntry": "LunaTranslator_x64/files/runtime3.13-64/vcruntime140_1.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/luna/12.1.3.8/vcruntime140_1.dll"
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 35823,
+          "sha256": "230184f60bae2feaf244f10a8bac053c8ff33a183bcc365b4d8b876d2b7f4809",
+          "sources": [
+            {
+              "url": "https://github.com/HIllya51/LunaTranslator/releases/download/v12.1.3.8/LunaTranslator_x64.zip",
+              "zipEntry": "LunaTranslator_x64/LICENSES/LICENSE.LunaTranslator"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/luna/12.1.3.8/LICENSE.txt"
+            }
+          ]
+        }
+      ]
+    },
+    "textractor": {
+      "name": "Textractor",
+      "version": "5.2.0",
+      "project": "https://github.com/Artikash/Textractor",
+      "license": "GPL-3.0",
+      "files": [
+        {
+          "name": "x64/TextractorCLI.exe",
+          "size": 155000,
+          "sha256": "3c70e50a33fe1165e430eb3df6b9658c3a848257d294b92aab29d87632fe3783",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x64/TextractorCLI.exe"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x64/TextractorCLI.exe"
+            }
+          ]
+        },
+        {
+          "name": "x64/texthook.dll",
+          "size": 279928,
+          "sha256": "43b966f566e1d6362416041bfb55dc4e04aef7bcb8b5aae2da8179c24b2dd58e",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x64/texthook.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x64/texthook.dll"
+            }
+          ]
+        },
+        {
+          "name": "x64/msvcp140.dll",
+          "size": 565640,
+          "sha256": "d86ac158123a245b927592c80cc020fea29c8c4addc144466c4625a00ca9c77a",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x64/msvcp140.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x64/msvcp140.dll"
+            }
+          ]
+        },
+        {
+          "name": "x64/vcruntime140.dll",
+          "size": 97160,
+          "sha256": "e1d6f78a72836ea120bd27a33ae89cbdc3f3ca7d9d0231aaa3aac91996d2fa4e",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x64/vcruntime140.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x64/vcruntime140.dll"
+            }
+          ]
+        },
+        {
+          "name": "x64/vcruntime140_1.dll",
+          "size": 37256,
+          "sha256": "04e7ccbdcad7cbaf0ed28692fb08eab832c38aad9071749037ee7a58f45e9d7d",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x64/vcruntime140_1.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x64/vcruntime140_1.dll"
+            }
+          ]
+        },
+        {
+          "name": "x86/TextractorCLI.exe",
+          "size": 129400,
+          "sha256": "b8cebf066023db1ef5921135e0aa0f68f17bade795d910a2df58a3da2bebf233",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x86/TextractorCLI.exe"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x86/TextractorCLI.exe"
+            }
+          ]
+        },
+        {
+          "name": "x86/texthook.dll",
+          "size": 337784,
+          "sha256": "8fde589a24ef861c581b61829626d35d6b0fcc958aaaeca620dff630f1ed465b",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x86/texthook.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x86/texthook.dll"
+            }
+          ]
+        },
+        {
+          "name": "x86/msvcp140.dll",
+          "size": 436600,
+          "sha256": "885a0a146a83b0d5a19b88c4eb6372b648cfaed817bd31d8cd3fb91313dea13d",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x86/msvcp140.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x86/msvcp140.dll"
+            }
+          ]
+        },
+        {
+          "name": "x86/vcruntime140.dll",
+          "size": 76168,
+          "sha256": "1e0f8f7f13502f5cee17232e9bebca7b44dd6ec29f1842bb61033044c65b2bbf",
+          "sources": [
+            {
+              "url": "https://github.com/Artikash/Textractor/releases/download/v5.2.0/Textractor-5.2.0-Zip-Version-English-Only.zip",
+              "zipEntry": "Textractor/x86/vcruntime140.dll"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/x86/vcruntime140.dll"
+            }
+          ]
+        },
+        {
+          "name": "LICENSE.txt",
+          "size": 35147,
+          "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+          "sources": [
+            {
+              "url": "https://raw.githubusercontent.com/Artikash/Textractor/v5.2.0/LICENSE"
+            },
+            {
+              "url": "https://downloads.kimochiapp.com/texthook/textractor/5.2.0/LICENSE.txt"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

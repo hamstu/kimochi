@@ -168,6 +168,7 @@ export const panel = (
 export type SettingsTabName =
   | 'general'
   | 'sources'
+  | 'texthooker'
   | 'ocr'
   | 'log'
   | 'dictionary'

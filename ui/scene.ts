@@ -399,6 +399,19 @@ export class SceneMemory {
     this.recent = []
   }
 
+  /**
+   * Whatever is showing is owed one more look, read or not: something outside the screen (the
+   * Text Hooker) knows a line is there that no reading has found yet, perhaps because it was
+   * read while still fading in, which the observer did not see as ink moving.
+   */
+  lookAgain(): void {
+    for (const track of this.tracks) {
+      if (!track.present || !this.readingFor(track)) continue
+      track.version.inkChanged = true
+      track.version.refreshes = Math.min(track.version.refreshes, this.options.maxRefreshes - 1)
+    }
+  }
+
   reset(): void {
     this.tracks = []
     this.units = []

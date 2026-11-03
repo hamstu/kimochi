@@ -3,7 +3,8 @@
   "bundle": {
     "useLocalToolsDir": true,
     "resources": {
-      "resources/oneocr/": "oneocr/"
+      "resources/oneocr/": "oneocr/",
+      "resources/hookd/": "hookd/"
     },
     "targets": [
       "nsis"

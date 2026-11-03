@@ -15,6 +15,8 @@ import { ConfirmDialog, ResizeHandle, Row, SelectContent, SelectItem, SelectRoot
 import { getSettings, onSettingsChange } from '@texthooker/lib/settings'
 import { engineListed } from '@ui/ocr-engines'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
+import { useHookStatus } from '../bridge/textHook'
+import { useHookPlacement } from './hookPlacement'
 import { useEngineSelection } from '../bridge/useEngineSelection'
 import { useCapabilities } from '../bridge/capabilities'
 import { DictionaryEngineIcon, DictionaryRunsIcon, OcrEngineIcon, OcrRunsIcon } from '../components/EngineIcon'
@@ -22,12 +24,13 @@ import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryE
 import { YomitanApiSetupDialog } from '../components/YomitanApiSetup'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
 import { DictionaryReadiness } from '../components/DictionaryReadiness'
-import { SETTINGS_NAV } from '../panels/settings/settingsNav'
+import { settingsNavFor } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 import { preloadSettingsPage } from '../panels/settings/settingsPages'
 import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
+import { ManageLink } from './ManageLink'
 import { ModelStatusBadge } from './ModelStatusBadge'
 import { UpdateNotice } from './UpdateNotice'
 import { activeAccount } from '@ui/account'
@@ -40,15 +43,6 @@ export type MainView = 'log' | 'notebook' | 'anki' | 'settings'
 const MIN_WIDTH = 200
 const MAX_WIDTH = 360
 export const DEFAULT_WIDTH = 272
-
-/** The quiet "Manage" link at the right of a group's label, on the label's baseline. */
-function ManageLink({ label, onClick }: { label: string; onClick: () => void }): JSX.Element {
-  return (
-    <button type="button" className="sb-manage" aria-label={label} onClick={onClick}>
-      Manage
-    </button>
-  )
-}
 
 const OCR_MODE_LIST = Object.keys(OCR_MODES) as OcrMode[]
 
@@ -180,11 +174,16 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
   )
 }
 
-/** The OCR model only matters while the Log reads the screen. */
+/**
+ * The OCR model only matters while the Log reads the screen, or while OCR places the Text Hooker's
+ * card on the game (Auto align, kept per game).
+ */
 function useReadsScreen(): boolean {
   const [input, setInput] = useState(() => getSettings().inputSource)
   useEffect(() => onSettingsChange((next) => setInput(next.inputSource)), [])
-  return input === 'ocr'
+  const hook = useHookStatus()
+  const placement = useHookPlacement(input === 'hook' ? hook.exe : null)
+  return input === 'ocr' || Boolean(placement?.on)
 }
 
 export function MainSidebar({
@@ -217,6 +216,7 @@ export function MainSidebar({
   const [live, setLive] = useState<number | null>(null)
   const style = mini ? undefined : { width: live ?? width }
   const readsScreen = useReadsScreen()
+  const { os } = useCapabilities()
   // While an account is in use, its switcher takes Settings' place in the foot.
   const signedIn = activeAccount(useAccount()) !== null
   const handle = (
@@ -239,7 +239,7 @@ export function MainSidebar({
             Back
           </Row>
           <nav className="sb-nav" aria-label="Settings pages">
-            {SETTINGS_NAV.map((item) => (
+            {settingsNavFor(os).map((item) => (
               <Row
                 key={item.value}
                 icon={item.icon}

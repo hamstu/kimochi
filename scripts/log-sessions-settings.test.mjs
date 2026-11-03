@@ -9,7 +9,9 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 test('the Log page is "Log & Sessions" and still answers to log', async () => {
   const nav = await read('frontend/panels/settings/settingsNav.tsx')
   assert.ok(nav.includes("{ value: 'log', label: 'Log & Sessions'"), 'the nav entry is not Log & Sessions on the log value')
-  assert.match(nav, /texthooker: 'log'/, 'older stored page names no longer land on the Log page')
+  assert.match(nav, /audio: 'log'/, 'older stored page names no longer land on the Log page')
+  // 'texthooker' once named this page; it is the Text Hooker's own page now.
+  assert.ok(nav.includes("{ value: 'texthooker', label: 'Text Hooker'"), 'Text Hooker has no page of its own')
   const tab = await read('frontend/panels/settings/LogTab.tsx')
   assert.ok(tab.includes('title="Log & Sessions"'), 'the page title is not Log & Sessions')
   const studio = await read('frontend/dev/studio/surfaces.ts')

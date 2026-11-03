@@ -6,14 +6,15 @@
  *
  * URL parameters:
  *   ?window=<label>  panel window label (log, settings, diagnostics, yomitan)
- *   ?tab=<id>        settings tab (general, sources, ocr, log, dictionary, anki, assist, controls,
+ *   ?tab=<id>        settings tab (general, sources, texthooker, ocr, log, dictionary, anki, assist, controls,
  *                    account)
  *   ?view=notebook   main window: start on the Notebook view
  *   ?sidebar=0       main window: sidebar hidden
  *   ?theme=light|dark|system  seeds the `appearance` setting (default: system, i.e. the browser's
  *                    prefers-color-scheme; emulate it in DevTools for CSS that reads the media query)
  *   ?scale=small|medium|large|xlarge  seeds the `interfaceScale` setting
- *   ?input=ocr|clipboard|websocket  main window: the Log's input source
+ *   ?input=ocr|clipboard|websocket|hook  main window: the Log's input source (hook: a hooked game
+ *                                   with its threads; pair it with ?platform=windows)
  *   ?quickshot=1     main window: Quick Shot (with input=ocr)
  *   ?nosource=1      main window: no window or screen chosen yet (choosing one in Change source
  *                    selects it: the view state follows `commit_source`, `clear_source` and the
@@ -162,6 +163,24 @@ function demoCapture(): unknown {
   }
 }
 
+// ---------------------------------------------------------------- text hooker
+
+const HOOK_THREADS = [
+  { key: '1:1:503a:0', name: 'KiriKiri', hookcode: 'HS-8@1A2B3:Game.exe', preview: '今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。', count: 12, generic: false, selected: true },
+  { key: '1:2:4f2b:0', name: 'DrawTextW', hookcode: 'HQ-24@0:user32.dll:DrawTextW', preview: 'ミサキ', count: 12, generic: true, selected: false },
+  { key: '1:3:5164:0', name: 'DrawTextExW', hookcode: 'HQ-24@0:user32.dll:DrawTextExW', preview: 'オート　スキップ　セーブ', count: 3, generic: true, selected: false }
+]
+const HOOK_STATUS: Record<string, unknown> & { threads: typeof HOOK_THREADS } = {
+  supported: true,
+  phase: 'hooked',
+  sourceId: 'window:101',
+  exe: 'C:/Games/Moonlit Harbor/Game.exe',
+  engine: { id: 'luna', name: 'LunaHook', version: '12.1.3.8' },
+  selected: HOOK_THREADS[0].key,
+  selectedBy: 'auto',
+  threads: HOOK_THREADS
+}
+
 // ---------------------------------------------------------------- settings store
 
 const settings: Record<string, unknown> = {
@@ -177,6 +196,28 @@ const settings: Record<string, unknown> = {
   },
   nativeWindowPinned: { log: true },
   texthookerSourceSessions: { 'steins;gate': SESSION_IDS.steinsGate },
+  // Settings → Text Hooker: the hooked game, with a few settings of its own, and one hooked before.
+  textHookerGames: {
+    'c:/games/moonlit harbor/game.exe': {
+      exe: 'C:/Games/Moonlit Harbor/Game.exe',
+      sessionId: SESSION_IDS.steinsGate,
+      name: 'Moonlit Harbor',
+      addedAt: Date.now() - 9 * 86_400_000,
+      hookedAt: Date.now(),
+      flushMs: 500,
+      opacity: 0.85,
+      hookCodes: ['HS-8@4A2F0:Game.exe'],
+      replacements: [{ find: '^\\s+', replace: '', regex: true }],
+      box: { x: 0.1, y: 0.7, width: 0.8 }
+    },
+    'c:/games/paper lanterns/lanterns.exe': {
+      exe: 'C:/Games/Paper Lanterns/lanterns.exe',
+      sessionId: SESSION_IDS.ace,
+      addedAt: Date.now() - 30 * 86_400_000,
+      hookedAt: Date.now() - 3 * 86_400_000,
+      speakerNames: false
+    }
+  },
   texthookerIngestedHistory: [],
   lastSelectedSource: {
     type: 'window',
@@ -754,6 +795,28 @@ const HANDLERS: Record<string, Handler> = {
       bounds: s.bounds,
       on_screen: s.on_screen
     })),
+  // Text Hooker (src-tauri/src/text_hook): every window but the first can be hooked.
+  texthook_targets: (a) =>
+    Object.fromEntries(
+      ((a?.sourceIds as string[] | undefined) ?? []).map((id, i) => [
+        id,
+        i === 0 ? { hookable: false, reason: 'this is part of Windows' } : { hookable: true, bits: 32 }
+      ])
+    ),
+  texthook_status: () => HOOK_STATUS,
+  texthook_game: () => ({ thread: 'HS-4@1A2B3:Game.exe' }),
+  texthook_game_icon: (a) => appIcon(String(a?.exe ?? '').split(/[\\/]/).pop()!.replace(/\.exe$/i, '')),
+  texthook_forget: () => null,
+  texthook_insert: () => null,
+  texthook_start: () => HOOK_STATUS,
+  texthook_stop: () => ({ supported: true, phase: 'idle', threads: [] }),
+  texthook_select: (a) => {
+    const key = (a?.key as string | null) ?? null
+    HOOK_STATUS.selected = key ?? HOOK_THREADS[0].key
+    HOOK_STATUS.selectedBy = key ? 'manual' : 'auto'
+    HOOK_STATUS.threads = HOOK_THREADS.map((t) => ({ ...t, selected: t.key === HOOK_STATUS.selected }))
+    return HOOK_STATUS
+  },
   source_catalog: () =>
     catalog().map((s) => ({ id: s.id, kind: s.kind, name: s.name, app: s.app, icon: s.icon, space: s.space })),
   source_thumbnail: (a) => {

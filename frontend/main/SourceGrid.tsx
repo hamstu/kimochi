@@ -6,6 +6,10 @@
  * Thumbnails are requested only as tiles scroll into view, at most two at a time, and a capture
  * that is momentarily `busy:` behind a scan is retried rather than shown as missing.
  *
+ * With `hookable` (the Text Hooker submenu) only app windows are listed, and only those whose
+ * process can be hooked are offered; the rest (Windows' own apps, protected or elevated apps,
+ * native ARM64 apps) are shown dimmed with the reason.
+ *
  * Where the system chooses what is shared (`capture.pickerRequired`, the Wayland portal) there is
  * no list to show: the grid becomes one "Choose in system picker" button, and the pick's progress
  * lives in a per-window store so it outlives the menu that started it.
@@ -23,6 +27,7 @@ import {
   type NativeError
 } from '../bridge/tauri'
 import { isGamingMode, useCapabilities } from '../bridge/capabilities'
+import { texthookTargets, type HookTarget } from '../bridge/textHook'
 
 export interface CatalogSource {
   id: string
@@ -75,6 +80,7 @@ function Tile({
   current,
   root,
   noPreview = false,
+  unavailable,
   onChoose
 }: {
   source: CatalogSource
@@ -82,6 +88,8 @@ function Tile({
   root: HTMLElement | null
   /** Shown without a thumbnail (Gaming Mode's screen, which is Kimochi itself right now). */
   noPreview?: boolean
+  /** Why this window cannot be chosen; the tile is shown dimmed with it. */
+  unavailable?: string
   onChoose: () => void
 }): ReactNode {
   const ref = useRef<HTMLDivElement>(null)
@@ -122,7 +130,9 @@ function Tile({
     }
   }, [source.id, source.app, source.space, noPreview, root])
   const Icon = isDisplay(source) ? Monitor : AppWindow
-  const detail = noPreview
+  const detail = unavailable
+    ? unavailable
+    : noPreview
     ? 'Whatever is in front'
     : source.app && source.name !== source.app
       ? source.name || 'Untitled window'
@@ -132,7 +142,8 @@ function Tile({
       ref={ref}
       className="sg-tile"
       data-current={current ? '' : undefined}
-      title={[source.app, source.name, source.space].filter(Boolean).join(' — ')}
+      disabled={Boolean(unavailable)}
+      title={[source.app, source.name, source.space, unavailable].filter(Boolean).join(' — ')}
       onSelect={onChoose}
     >
       <span className="sg-thumb">
@@ -210,9 +221,12 @@ export function SystemPickerButton({ message = null }: { message?: string | null
 /** The grid, or on a system-picker platform the one button that stands in for it. */
 export function SourceGrid({
   currentId,
+  hookable = false,
   onChoose
 }: {
   currentId: string | null
+  /** Text Hooker: app windows only, those that cannot be hooked dimmed. */
+  hookable?: boolean
   onChoose: (source: CatalogSource) => void
 }): ReactNode {
   const capabilities = useCapabilities()
@@ -225,7 +239,7 @@ export function SourceGrid({
       </div>
     )
   }
-  return <WindowGrid currentId={currentId} onChoose={onChoose} />
+  return <WindowGrid currentId={currentId} hookable={hookable} onChoose={onChoose} />
 }
 
 /**
@@ -255,12 +269,15 @@ function GrantCaptureItem({ os }: { os: string }): ReactNode {
 
 function WindowGrid({
   currentId,
+  hookable,
   onChoose
 }: {
   currentId: string | null
+  hookable: boolean
   onChoose: (source: CatalogSource) => void
 }): ReactNode {
   const [sources, setSources] = useState<CatalogSource[] | null>(null)
+  const [targets, setTargets] = useState<Record<string, HookTarget> | null>(null)
   const [error, setError] = useState<NativeError | null>(null)
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
   const capabilities = useCapabilities()
@@ -277,8 +294,16 @@ function WindowGrid({
   useEffect(() => {
     let live = true
     invoke<CatalogSource[]>('source_catalog').then(
-      (catalog) => {
-        if (live) setSources(catalog)
+      async (catalog) => {
+        if (!hookable) {
+          if (live) setSources(catalog)
+          return
+        }
+        const windows = catalog.filter((source) => !isDisplay(source))
+        const found = await texthookTargets(windows.map((source) => source.id)).catch(() => ({}))
+        if (!live) return
+        setTargets(found)
+        setSources(windows)
       },
       (caught: unknown) => {
         if (live) setError(nativeError(caught))
@@ -287,7 +312,7 @@ function WindowGrid({
     return () => {
       live = false
     }
-  }, [])
+  }, [hookable])
 
   // Gaming Mode lists games first, and its screen has no thumbnail: only one app shows at a
   // time, and while this menu is open that app is Kimochi.
@@ -299,11 +324,16 @@ function WindowGrid({
       current={source.id === currentId}
       root={root}
       noPreview={gaming && isDisplay(source)}
+      unavailable={hookable && !targets?.[source.id]?.hookable ? (targets?.[source.id]?.reason ?? 'Cannot be hooked') : undefined}
       onChoose={() => onChoose(source)}
     />
   )
   const displays = sources?.filter(isDisplay) ?? []
-  const windows = sources?.filter((source) => !isDisplay(source)) ?? []
+  const allWindows = sources?.filter((source) => !isDisplay(source)) ?? []
+  // Hookable windows first; the others stay listed, dimmed, so a missing game can be explained.
+  const windows = hookable
+    ? [...allWindows.filter((s) => targets?.[s.id]?.hookable), ...allWindows.filter((s) => !targets?.[s.id]?.hookable)]
+    : allWindows
   const screens = root && displays.length > 0 && (
     <section className="sg-section" aria-label="Screens">
       <h3 className="sg-section-title">{gaming ? 'Screen' : 'Screens'}</h3>
@@ -332,7 +362,8 @@ function WindowGrid({
       {root && windows.length > 0 && (
         <section className="sg-section" aria-label={gaming ? 'Games and apps' : 'App windows'}>
           <h3 className="sg-section-title">
-            {gaming ? 'Games and apps' : 'App windows'} <span className="k-num">{windows.length}</span>
+            {gaming ? 'Games and apps' : hookable ? 'Apps to hook' : 'App windows'}{' '}
+            <span className="k-num">{hookable ? windows.filter((s) => targets?.[s.id]?.hookable).length : windows.length}</span>
           </h3>
           <div className="sg-grid">{windows.map(tile)}</div>
         </section>

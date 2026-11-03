@@ -24,6 +24,8 @@ test('the real overlay application awaits native publication before releasing it
   let drawn = 0
   let history = 0
   const context = vm.createContext({
+    // The engine in use (overlay.js ocrModeNow: the scan engine outside the Text Hooker).
+    ocrModeNow: () => 'meikiocr',
     markScanPublished,
     sessionStorage: { setItem() {} },
     native: { publishScanState: () => ack },
@@ -40,6 +42,11 @@ test('the real overlay application awaits native publication before releasing it
     },
     log: () => {}
   })
+  // Outside the Text Hooker, what OCR read is drawn as it is (overlay.js setOcrAnnotations).
+  context.setOcrAnnotations = (annotations) => {
+    context.state.rawAnnotations = annotations
+    context.state.annotations = annotations
+  }
   vm.runInContext(functions, context)
   let returned = false
   const result = context
@@ -59,6 +66,8 @@ test('the real overlay application awaits native publication before releasing it
 
 test('a refused native publication is not presented as a successful overlay result', async () => {
   const context = vm.createContext({
+    // The engine in use (overlay.js ocrModeNow: the scan engine outside the Text Hooker).
+    ocrModeNow: () => 'meikiocr',
     native: {
       publishScanState: async () => {
         throw new Error('gone: evicted frame')
@@ -70,6 +79,11 @@ test('a refused native publication is not presented as a successful overlay resu
     draw: () => assert.fail('must not draw'),
     publishOcrResult: () => assert.fail('must not publish')
   })
+  // Outside the Text Hooker, what OCR read is drawn as it is (overlay.js setOcrAnnotations).
+  context.setOcrAnnotations = (annotations) => {
+    context.state.rawAnnotations = annotations
+    context.state.annotations = annotations
+  }
   vm.runInContext(functions, context)
   await assert.rejects(
     context.applyResult({ geometry: false }, { id: 1 }, { source: {} }),
@@ -81,6 +95,8 @@ test('the overlay tells the activity feed how a result ended', async () => {
   const posts = []
   const reports = []
   const context = vm.createContext({
+    // The engine in use (overlay.js ocrModeNow: the scan engine outside the Text Hooker).
+    ocrModeNow: () => 'meikiocr',
     markScanPublished,
     sessionStorage: { setItem() {} },
     native: { publishScanState: async () => undefined },
@@ -100,6 +116,11 @@ test('the overlay tells the activity feed how a result ended', async () => {
     scanActivity: { sourceChanged: () => ({ text: 'source changed', key: 'scan' }) },
     autoRound: null
   })
+  // Outside the Text Hooker, what OCR read is drawn as it is (overlay.js setOcrAnnotations).
+  context.setOcrAnnotations = (annotations) => {
+    context.state.rawAnnotations = annotations
+    context.state.annotations = annotations
+  }
   vm.runInContext(functions, context)
 
   // An applied result hands the publisher's report to whoever is waiting for it.
@@ -150,6 +171,8 @@ async function scanContext({ recognise = async () => ({ fullText: 'text' }), app
   const { outcomeSound } = await load('sounds.ts')
   const sounds = []
   const context = vm.createContext({
+    // The engine in use (overlay.js ocrModeNow: the scan engine outside the Text Hooker).
+    ocrModeNow: () => 'meikiocr',
     scanActivity,
     outcomeSound,
     playSound: (name, options = {}) => sounds.push([name, Boolean(options.auto)]),

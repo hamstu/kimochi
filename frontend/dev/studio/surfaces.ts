@@ -37,6 +37,7 @@ export const GLOBAL_CONTROLS: readonly Control[] = [
 const SETTINGS_TABS = opts(
   ['general', 'General'],
   ['sources', 'Sources'],
+  ['texthooker', 'Text Hooker'],
   ['ocr', 'OCR & Overlay'],
   ['log', 'Log & Sessions'],
   ['dictionary', 'Dictionary'],
@@ -283,7 +284,7 @@ const MAIN: Surface = {
           param: 'input',
           label: 'Log input',
           default: 'ocr',
-          options: opts(['ocr', 'Screen (OCR)'], ['clipboard', 'Clipboard'], ['websocket', 'Texthooker (WebSocket)'])
+          options: opts(['ocr', 'Screen (OCR)'], ['clipboard', 'Clipboard'], ['websocket', 'Texthooker (WebSocket)'], ['hook', 'Text Hooker'])
         },
         { kind: 'toggle', param: 'nosource', label: 'No source chosen', on: '1' },
         {

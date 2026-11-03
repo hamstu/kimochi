@@ -1,10 +1,10 @@
 import type { LineSource, Settings } from "./lib/types";
 
-export type InputSource = "ocr" | "clipboard" | "websocket";
+export type InputSource = "ocr" | "clipboard" | "websocket" | "hook";
 
 /** Legacy clipboard users retain that choice; all other existing installs use OCR. */
 export function inputSourceOf(settings: Partial<Settings>): InputSource {
-  if (["ocr", "clipboard", "websocket"].includes(settings.inputSource || "")) {
+  if (["ocr", "clipboard", "websocket", "hook"].includes(settings.inputSource || "")) {
     return settings.inputSource as InputSource;
   }
   return settings.clipboardEnabled ? "clipboard" : "ocr";

@@ -11,4 +11,10 @@ New-Item -ItemType Directory -Force $runRoot,(Join-Path $runRoot 'game'),(Join-P
 $output=Join-Path $runRoot 'Desktop.exe'
 & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe /platform:anycpu "/out:$output" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "$PSScriptRoot\Desktop.cs"
 if ($LASTEXITCODE -ne 0) { throw 'Desktop helper compilation failed' }
+# The Text Hooker scenario needs the game as a real x64 or x86 process: "Any CPU" runs as native
+# ARM64 on Windows ARM64, which hook DLLs cannot enter.
+foreach ($platform in 'x64','x86') {
+    & "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:winexe "/platform:$platform" "/out:$(Join-Path $runRoot "Desktop-$platform.exe")" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "$PSScriptRoot\Desktop.cs"
+    if ($LASTEXITCODE -ne 0) { throw "Desktop helper ($platform) compilation failed" }
+}
 Write-Output "Built $output; set KIMOCHI_E2E_DIR to $runRoot."

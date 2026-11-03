@@ -329,9 +329,9 @@ jobs:
         if: runner.os == 'Linux'
         run: node scripts/linux-appimage.mjs --check-avif
 
-      - name: Install OneOCR helper Rust targets
+      - name: Install OneOCR and text hook helper Rust targets
         if: runner.os == 'Windows'
-        run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+        run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc i686-pc-windows-msvc
 
       - name: Ensure ARM64 C++ tools for OneOCR helper
         if: runner.os == 'Windows'
