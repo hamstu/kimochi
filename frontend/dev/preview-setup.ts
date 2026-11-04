@@ -87,7 +87,8 @@
  *                    parent, and it takes `postMessage` commands from the same-origin parent
  *                    (see `listenToEmbedder`)
  */
-import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
+import { setPreviewIpc } from './preview-ipc'
+import { mockWindows } from '@tauri-apps/api/mocks'
 import { emit, listen } from '@tauri-apps/api/event'
 import { DICTIONARY_ENGINE_KEY, SETTINGS_DEFAULTS, dictionaryEngineOf, hostEngineOf, nextOverlayToggle } from '@ui/settings'
 import { SOUND_NAMES, createSoundPlayer, soundKind, soundKindOn, type SoundName } from '@ui/sounds'
@@ -1039,7 +1040,7 @@ const HANDLERS: Record<string, Handler> = {
 const warned = new Set<string>()
 
 function installIpc(label: string): void {
-  mockIPC(
+  setPreviewIpc(
     (cmd, args) => {
       const handler = HANDLERS[cmd]
       if (EMBED) {
@@ -1064,8 +1065,7 @@ function installIpc(label: string): void {
         console.warn(`[preview] unmocked command "${cmd}" resolved null`, args)
       }
       return null
-    },
-    { shouldMockEvents: true }
+    }
   )
 }
 
