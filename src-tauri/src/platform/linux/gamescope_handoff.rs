@@ -267,6 +267,10 @@ pub(super) fn start() {
         }
     });
 }
+/// The game Gamescope last showed in front (graphics focus), or 0 before any.
+pub(super) fn last_game() -> u32 {
+    LAST_GAME.load(Ordering::SeqCst)
+}
 pub(super) fn game_id() -> Option<u32> {
     let d = super::x11::desktop()?;
     let atom = d

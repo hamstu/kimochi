@@ -942,13 +942,23 @@ fn has_origin(url: &tauri::Url, origin: &str) -> bool {
 /// read it for Yomitan's `getPlatformInfo` instead of sniffing the user agent. `debug` is
 /// true in a debug build (`tauri dev` or `npm run bundle`): a debug bundle loads a `vite build`,
 /// so this, not `import.meta.env.DEV`, is how its pages tell a local build from a release.
+/// Steam Deck Gaming Mode (Gamescope), on Linux only.
+fn gaming_mode() -> bool {
+    #[cfg(target_os = "linux")]
+    return gamescope::active();
+    #[cfg(not(target_os = "linux"))]
+    false
+}
+
 pub fn platform_prelude() -> String {
     let info = json!({
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "debug": cfg!(debug_assertions),
         // Process start, so a page can time itself from launch (boot.rs).
-        "bootAt": crate::boot::epoch_ms()
+        "bootAt": crate::boot::epoch_ms(),
+        // Steam Deck Gaming Mode, known before a page's first frame (its layout and scale differ).
+        "gamescope": gaming_mode()
     });
     let prelude = format!(";(function(){{try{{window.__KIMOCHI_PLATFORM__={info};}}catch(e){{}}}})();\n");
     // Windows: keep each webview's CSS pixel at the window's DPI scale (webview_scale.rs).

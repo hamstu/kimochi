@@ -684,12 +684,20 @@ let autoHookPaused = false
 
 // ---------------------------------------------------------------------------- panel
 
+/**
+ * Which part of the Source to draw: all of it (the sidebar), or the card and the controls under it
+ * separately, for a layout that puts them in columns of their own (Gaming Mode's Source view). The
+ * live preview runs only where the card is drawn.
+ */
+export type SourceParts = 'all' | 'card' | 'controls'
+
 export function SourcePanel({
   controller,
   onOpenSettings,
   chooseRequest = 0,
   mini = false,
-  onChooseSource
+  onChooseSource,
+  parts = 'all'
 }: {
   controller: Controller
   onOpenSettings: () => void
@@ -697,6 +705,7 @@ export function SourcePanel({
   chooseRequest?: number
   mini?: boolean
   onChooseSource?: () => void
+  parts?: SourceParts
 }): ReactNode {
   const [mode, choose] = useInputSource()
   const [open, setOpen] = useState(false)
@@ -836,7 +845,8 @@ export function SourcePanel({
     leaveHook()
     controller.onClearSource()
   }
-  const scanKey = hotkeys.triggerScan?.enabled
+  // Gaming Mode has no keyboard to press it on: Scan is in the game menu there.
+  const scanKey = hotkeys.triggerScan?.enabled && !isGamingMode(capabilities)
     ? formatAccelerator(hotkeys.triggerScan.accelerator, keyPlatform)
     : null
   const overlayOn = isOverlayTextVisible(
@@ -969,20 +979,16 @@ export function SourcePanel({
             <CardHead icon={isScreen ? <Monitor /> : <SourceIcon source={source} />}
               title={title} />
           </button>
-        ) : isScreen && !isGamingMode(capabilities) ? (
+        ) : isScreen || isGamingMode(capabilities) ? (
+          // Gaming Mode: Gamescope only really hands the game input when Steam switches to it, so
+          // the card does not pretend to; the Source view says how to switch instead.
           <div className="src-card-body">{preview}</div>
         ) : (
           <button
             type="button"
             className="src-card-body"
             aria-label={
-              isScreen
-                ? 'Return to your source'
-                : isGamingMode(capabilities)
-                  ? `Switch to ${title}`
-                  : fullScreen
-                    ? `Go to ${title} in full screen`
-                    : `Bring ${title} to the front`
+              fullScreen ? `Go to ${title} in full screen` : `Bring ${title} to the front`
             }
             onClick={() => controller.onActivateSource()}
             onMouseEnter={() => controller.onSourceHover(true)}
@@ -1124,7 +1130,8 @@ export function SourcePanel({
 
   const placement = useHookPlacement(mode === 'hook' ? hook.exe : null)
   const overlayUnavailable = capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
-  const overlayRow = (
+  // Gaming Mode always draws the overlay (ui/overlay.js `overlayTextOn`): no switch for it.
+  const overlayRow = isGamingMode(capabilities) ? null : (
     <SourceRow
       icon={<Eye aria-hidden />}
       label={overlayUnavailable ? 'Overlay unavailable' : 'Show overlay'}
@@ -1138,8 +1145,8 @@ export function SourcePanel({
     />
   )
 
-  return (
-    <div className="src-panel">
+  const cardPart = (
+    <>
       {windowMode && source ? (
         card
       ) : (
@@ -1154,6 +1161,13 @@ export function SourcePanel({
         (systemPick.waiting || systemPick.error || stale || !source) && (
           <SystemPickerButton message={stale} />
         )}
+    </>
+  )
+  if (parts === 'card') return <div className="src-panel">{cardPart}</div>
+
+  return (
+    <div className="src-panel">
+      {parts === 'all' && cardPart}
 
       {mode === 'ocr' && source && (
         <div className="src-controls">

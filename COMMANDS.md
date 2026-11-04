@@ -1972,7 +1972,14 @@ while Kimochi is in front; the one stream switches apps on demand. While another
 game recording) reads the node, capturing an app other than the streamed one fails with `busy`.
 `activate_source` on an app switches Gamescope to it and hands input back to Steam; on the screen
 it is `return_to_game`. At launch the saved source is restored if that app is running, else the
-game being played, else the screen.
+game being played, else the screen. Afterwards the source follows the game Gamescope brings to the
+front (switching through Steam): when the selected source is another game's window, the game now in
+front is selected with its own saved crop (`gaming_sources::follow`); the screen and other sources
+stay.
+
+Event `gamescope-shown` (a bool): whether Gamescope is showing Kimochi rather than a game or Steam,
+emitted on every change and again every 5 s. The main window pauses its CSS animations while it
+is false (`[data-behind-game]`): mapped behind the game, WebKit would otherwise keep painting them.
 
 ## Dictionary setup relay
 

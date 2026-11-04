@@ -1485,6 +1485,14 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   installIpc(label)
   startSeededDownloads()
   document.documentElement.dataset.preview = label
+  // What native's platform prelude says before any page runs (platform::platform_prelude): Gaming
+  // Mode's layout and its larger scale are decided from it at boot.
+  if (params.get('session') === 'gamescope')
+    (window as { __KIMOCHI_PLATFORM__?: Record<string, unknown> }).__KIMOCHI_PLATFORM__ = {
+      os: 'linux',
+      debug: true,
+      gamescope: true
+    }
   if (page === 'welcome') setupWelcome()
 
   const embed = params.get('embed') === '1'
