@@ -58,9 +58,10 @@ pub(super) fn xid(w: &tauri::WebviewWindow) -> Result<u32, String> {
 
 /// Place by Tauri's logical coordinates (desktop units on X11).
 pub fn place(w: &tauri::WebviewWindow, r: Rect) -> Result<(), String> {
-    if w.label() == "log" && super::gnome::eligible_popup_session() {
-        // Set before first map, so the bridge never races the first lookup.
-        w.set_title("Kimochi · log").map_err(|e| e.to_string())?;
+    if super::gnome::pin_supported(w.label()) && super::gnome::eligible_popup_session() {
+        // Set before first map, so the bridge never races the first lookup, and so the Shell
+        // can say where the window is (a display capture blanks it, `gnome::own_frames`).
+        w.set_title(&format!("Kimochi · {}", w.label())).map_err(|e| e.to_string())?;
     }
     if session().backend == Backend::Wayland && w.is_resizable().unwrap_or(false) {
         // A tiling compositor can allocate less than a panel's preferred minimum.

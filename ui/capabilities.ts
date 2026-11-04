@@ -171,6 +171,12 @@ export function fallbackCapabilities(
       labels: 'words',
       superName: windows ? 'Win' : 'Super',
       mouseButtons: 'unsupported'
+    },
+    // Native leaves Live Text out here, so the macOS default would stand and Auto OCR would
+    // pick it as the watcher for Google Lens or Manga OCR (ui/watcher.ts).
+    ocrEngines: {
+      ...DEFAULT_CAPABILITIES_MACOS.ocrEngines,
+      livetext: { available: false, reason: 'Apple Live Text is available on macOS only.' }
     }
   }
 }

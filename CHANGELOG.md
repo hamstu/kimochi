@@ -15,6 +15,16 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Kimochi opens faster**, and opens cleanly: the main window appears sooner, already in your theme's colours and laid out like the app (no more blank grey window), and your Log is there as soon as it's loaded instead of after a "Loading the log…" screen. The overlay, the dictionary pop-up and the tray follow a moment later, without holding up the window.
 - **The Linux installer no longer offers nightly builds**, which no longer exist: `--nightly` (or `KIMOCHI_CHANNEL=nightly`) now stops with a message instead of installing an old development build. Run it without the option to get the latest release.
+- **Kimochi uses much less memory after you change OCR engine.** The engines you switched away from (Manga OCR's alone takes over 500 MB) stayed loaded until you quit; now only the ones you use stay, and one you choose again loads on its first scan.
+
+### Fixed
+
+- **Auto OCR works with Google Lens and Manga OCR on Windows and Linux again.** It was trying to watch the screen with Apple Live Text, which only exists on a Mac, and said "Auto-scan unavailable"; it now watches with PaddleOCR, MeikiOCR or OneOCR, whichever you have.
+- **On Linux with GNOME, Kimochi's windows take clicks again after you look a word up.** The overlay over the game kept taking every click on the screen for a few seconds at a time, so tabs and buttons in the Log, or anything else on the desktop, often did nothing.
+- **On Linux with GNOME, scanning your whole screen no longer reads Kimochi itself.** Lines from the Log (and Settings) came back as new lines in the Log; Kimochi's windows are now left out of the picture wherever they are on screen.
+- **On Linux with GNOME, a new crop area is the one that's saved.** The crop editor could open twice on top of itself, and pressing Enter then sometimes saved your old crop instead of the one you'd just drawn.
+- On Linux, Yomitan's pop-up uses Kimochi's fonts unless you chose one in Yomitan's settings, as it was meant to.
+- **Settings → About → Copy debug info works on Linux.** It showed "The request is not allowed by the user agent…" instead of copying the report.
 
 ## [0.5.0] - 2026-11-03
 

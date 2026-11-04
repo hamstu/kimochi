@@ -660,7 +660,8 @@ function install() {
     }).catch(error => hub.log({ check: 'gamescope-context-menu-failed', error: String(error) }))
     // Settings previews and nested dictionary frames do not call host.start().
     // Give every Linux Yomitan document the same modifier-edge handling.
-    if (platformInfo().os === 'linux' && hub.label === 'popup-host' && window !== root) {
+    // Not the blank document a frame has before its page loads; the page gets its own call.
+    if (platformInfo().os === 'linux' && hub.label === 'popup-host' && window !== root && window.location.href !== 'about:blank') {
       void import(asset('/spike/linux-popup-document.js'))
         .then(({ installLinuxPopupDocument }) => installLinuxPopupDocument(window))
         .catch(error => hub.log({ check: 'linux-popup-document-failed', error: String(error) }))

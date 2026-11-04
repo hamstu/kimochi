@@ -315,6 +315,19 @@ pub fn own_bounds(w: &tauri::WebviewWindow) -> Result<kimochi_capture::Rect, Str
     serde_json::from_value(value).map_err(|e| e.to_string())
 }
 
+/// Where Kimochi's own windows among `labels` are on screen, from the Shell: a Wayland client
+/// is never told where its windows are, so what GTK reports (the origin) is no use for blanking
+/// them out of a capture. `None` outside GNOME's integration; a window the Shell cannot find
+/// (not mapped, or not titled `Kimochi · label`) is left out.
+pub fn own_frames(app: &tauri::AppHandle, labels: &[&str]) -> Option<Vec<kimochi_capture::Rect>> {
+    if !eligible() { return None; }
+    Some(labels.iter()
+        .filter_map(|label| app.get_webview_window(label))
+        .filter(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+        .filter_map(|w| own_bounds(&w).ok())
+        .collect())
+}
+
 pub fn eligible_popup_session() -> bool { eligible() }
 pub fn shared_overlay() -> bool { eligible() && SHARED_OVERLAY.load(Ordering::SeqCst) }
 pub fn pin_supported(label: &str) -> bool { matches!(label,"log"|"settings"|"diagnostics"|"dictionary"|"welcome"|"sync-log") }

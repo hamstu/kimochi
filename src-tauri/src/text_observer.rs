@@ -68,7 +68,8 @@ use std::{
 /// The watcher used when a caller names none: what each OS used before watchers were chosen.
 pub const DEFAULT_ENGINE: &str = if cfg!(target_os = "macos") { "livetext" } else { "meikiocr" };
 
-/// Every observer automatic scanning can watch with, built on first use and kept.
+/// The observer automatic scanning watches with, built on first use and kept until another
+/// is selected.
 ///
 /// Implements [`TextObserver`] for whichever was [`select`](Self::select)ed last, so the
 /// status the overlay reads describes the watcher it is using.
@@ -85,10 +86,25 @@ impl Observers {
     }
 
     /// Watch with `engine` from now on (unknown names keep the current one).
+    ///
+    /// The one it replaces is closed: each holds a model, some hundreds of MB, and one picked
+    /// again is built in about the time of a read. PaddleOCR's model is the scan engine's, so
+    /// it goes too unless PaddleOCR is still what scans.
     pub fn select(&mut self, engine: &str) {
-        if let Some(engine) = known(engine) {
-            self.current = engine;
+        let Some(engine) = known(engine) else { return };
+        let previous = std::mem::replace(&mut self.current, engine);
+        if previous == engine || !self.built.contains_key(previous) {
+            return;
         }
+        self.close_engine(previous);
+        if previous == "ppocr" && !crate::scans_with(&self.app, "ppocr") {
+            crate::pp_ocr::unload(&self.app);
+        }
+    }
+
+    /// The engine watching now, if it has been built.
+    pub fn watching(&self) -> Option<&'static str> {
+        self.built.contains_key(self.current).then_some(self.current)
     }
 
     /// Drop one engine's observer (its models are being deleted); rebuilt on next use.

@@ -11,6 +11,7 @@ import { Button, SettingsRow, SettingsSection, Switch } from '@kit'
 import { debugMarkdown } from '@ui/debug-report'
 import { debugReport, saveDebugBundle, verboseLogging } from '../../bridge/debugReport'
 import { nativeError } from '../../bridge/tauri'
+import { writeTextSelf } from '@texthooker/lib/clipboardWrite'
 
 type Outcome = { tone: 'ok' | 'danger'; text: string } | null
 
@@ -42,7 +43,9 @@ export function DebugInfoSection(): ReactNode {
     setBusy('copy')
     setOutcome(null)
     try {
-      await navigator.clipboard.writeText(debugMarkdown(await debugReport()))
+      // Natively: by the time the report arrives the click's user activation has passed, and
+      // WebKitGTK then refuses navigator.clipboard ("not allowed by the user agent").
+      await writeTextSelf(debugMarkdown(await debugReport()))
       setCopied(true)
       setOutcome({ tone: 'ok', text: 'Copied. Paste it into Discord or your GitHub issue.' })
     } catch (error) {
