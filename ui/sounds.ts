@@ -155,8 +155,9 @@ export function createSoundPlayer({
   now = Date.now
 }: SoundPlayerOptions): SoundPlayer {
   let lastErrorAt: number | null = null
-  // Decoded now, so the first sound already plays from a buffer.
-  if (play === playAudio) preloadSounds()
+  // Decoded ahead of the first sound, so it already plays from a buffer; but not while the window is
+  // starting, where making the AudioContext alone held up the first frame by ~130 ms.
+  if (play === playAudio) preloadSoundsSoon()
   return (name, { auto = false } = {}) => {
     // Anything but an explicit `false` is on: the default, and a store that predates the key.
     if (!name || enabled(name) === false) return false
@@ -513,6 +514,20 @@ function buffers(): ReturnType<typeof createBufferPlayer> | null {
 /** Fetch and decode every sound in this window now, so none waits on its first play. */
 export function preloadSounds(): void {
   buffers()
+}
+
+/**
+ * `preloadSounds` after the window has started, when it is idle (a sound played sooner loads them
+ * itself). Not merely idle: a launching window is idle while it waits on native, and making the
+ * AudioContext then held its first frame back by ~270 ms.
+ */
+export function preloadSoundsSoon(): void {
+  const idle = (globalThis as { requestIdleCallback?: (run: () => void, options?: { timeout: number }) => number })
+    .requestIdleCallback
+  setTimeout(() => {
+    if (idle) idle(() => preloadSounds(), { timeout: 2000 })
+    else preloadSounds()
+  }, 3000)
 }
 
 /** Play one sound from `ui/sounds/` in this window. */

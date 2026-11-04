@@ -283,10 +283,14 @@ export function startHost(): Promise<void> {
       await loadSettings();
       await sessions.migrateIfNeeded();
       await sessions.loadSessions();
-      await stats.loadStats();
-      await presets.loadPresets();
-      await store.loadLines();
-      await notebook.loadNotebook();
+      // Each is its own file in the profile (the lines and notebook in the active session's), so
+      // they load together: one after another they were most of the Log's wait at launch.
+      await Promise.all([
+        stats.loadStats(),
+        presets.loadPresets(),
+        store.loadLines(),
+        notebook.loadNotebook(),
+      ]);
       // Scans that repeat a line already logged are dropped upstream (the history merge and the
       // automatic scanners remember what they published). Once the log is cleared, or another
       // session's lines are loaded in its place, that line may no longer be there, so they must
@@ -295,8 +299,10 @@ export function startHost(): Promise<void> {
         if (event.type === "clear" || event.type === "load")
           void invoke("history_merge_reset").catch(reportError);
       });
-      bindings = await getSetting("texthookerSourceSessions", {});
-      seen = await getSetting("texthookerIngestedHistory", []);
+      [bindings, seen] = await Promise.all([
+        getSetting<typeof bindings>("texthookerSourceSessions", {}),
+        getSetting<typeof seen>("texthookerIngestedHistory", []),
+      ]);
       store.onLinesFlushed(pokeSync);
       await listen<{ id: number; changed: SyncChanged }>("sync:release", (e) => {
         releases.get(e.payload.id)?.(e.payload.changed);

@@ -11,7 +11,6 @@ import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { reportError, reportUncaughtErrors } from "./reportErrors";
-import "@radix-ui/themes/styles.css";
 import "../kit/kit.css";
 import "../texthooker/App.css";
 import "../shell/panel.css";
@@ -20,6 +19,8 @@ import PanelShell from "../shell/PanelShell";
 import MainPanel from "../main/MainPanel";
 import DictionaryPanelShell from "../shell/DictionaryPanelShell";
 import { preloadPanelDictionary } from "../shell/panelDictionary";
+import { BootReady, bootMark, bootReady } from "./boot";
+import { seedSettings } from "../bridge/useSetting";
 
 import { SettingsPanel, DiagnosticsPanel, DictionarySettingsPanel, SyncLogPanel } from "../panels/deferred";
 
@@ -44,6 +45,7 @@ const PANELS = {
 
 type KnownLabel = keyof typeof PANELS;
 
+bootMark("modules");
 const label = getCurrentWindow().label;
 
 reportUncaughtErrors(label);
@@ -61,10 +63,26 @@ if (!(label in PANELS)) {
 // must publish this window's native label and install its chrome.* host BEFORE React mounts; for
 // Hachidori and 10ten the injected extension host is already in place. `start()` is called
 // separately, after the log content is in the DOM — see `usePanelDictionary` in the Log panel.
-if (known === "log") {
-  await preloadPanelDictionary(label);
+// The settings, read in one round trip that `panel.html` started before any module loaded, so the
+// first render has the stored values rather than defaults that change a frame later. Bounded: a
+// busy native side never holds the window back for long; hooks still load what was missed.
+async function preloadSettings(): Promise<void> {
+  const pending = (window as { __kimochiSettings?: Promise<unknown> }).__kimochiSettings;
+  if (!pending) return;
+  const all = await Promise.race([
+    pending.catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 400)),
+  ]);
+  if (all && typeof all === "object") seedSettings(all as Record<string, unknown>);
 }
 
+await Promise.all([known === "log" ? preloadPanelDictionary(label) : null, preloadSettings()]);
+bootMark("preloaded");
+
+// Never leave the first frame over a window whose render failed or stalled.
+setTimeout(() => bootReady(label), 10_000);
+
+bootMark("render-start");
 createRoot(document.getElementById("root")!, {
   onUncaughtError: (error) => reportError(label, "render", error),
 }).render(
@@ -81,6 +99,8 @@ createRoot(document.getElementById("root")!, {
             <Component />
           </PanelShell>
         )}
+        {/* The main window's content is ready once its log has loaded (MainPanel). */}
+        {known !== "log" && <BootReady label={label} />}
       </Suspense>
     </Providers>
   </StrictMode>,

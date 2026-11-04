@@ -42,6 +42,7 @@ import { onEditModalRequest } from "./lib/editModal";
 import { getSettings, onSettingsChange, updateSettings } from "./lib/settings";
 import { getSnapshot, subscribe } from "./bridge";
 import { startHost } from "./host";
+import { bootMark } from "../entries/boot";
 import { useClipboardPoll } from "./hooks/useClipboardPoll";
 import { useWebSocketInput } from "./hooks/useWebSocketInput";
 import { useTextHookInput } from "./hooks/useTextHookInput";
@@ -52,6 +53,11 @@ import { usePanelDictionary } from "../shell/panelDictionary";
 import { openSettings } from "../bridge/tauri";
 import { useAccount } from "../bridge/account";
 import { translationAvailable } from "../../ui/account";
+
+/** Lines the Log shows at a time ("Show earlier lines" adds as many again). */
+const PAGE_LINES = 100;
+/** Lines in the Log's first frame, before the rest of the page is laid out. */
+const FIRST_FRAME_LINES = 30;
 
 /** Starts the session owner, then renders its children; shows progress or the failure meanwhile. */
 export function ReaderHost({ children }: { children: ReactNode }) {
@@ -66,8 +72,10 @@ export function ReaderHost({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    bootMark("log-start");
     void startHost()
       .then(() => {
+        bootMark("log-loaded");
         if (active) setReady(true);
       })
       .catch((e) => {
@@ -118,7 +126,13 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
 
   const [addText, setAddText] = useState<string | null>(null);
   const hasActivity = useActivity().length > 0;
-  const [shown, setShown] = useState(100);
+  // The first frame lays out only the newest lines (laying out a full page of furigana held the
+  // window's first frame back by ~130 ms); the rest follow right after it, below the fold.
+  const [shown, setShown] = useState(FIRST_FRAME_LINES);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setTimeout(() => setShown((n) => Math.max(n, PAGE_LINES)), 0));
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const scroll = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const apiMode = settings.dictionaryMode === "custom-api";
@@ -162,7 +176,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   useLayoutEffect(() => {
     if (follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [snap.lines.length, snap.sessions.activeId]);
+  }, [snap.lines.length, snap.sessions.activeId, shown]);
   const changeFont = (delta: number) =>
     void updateSettings({
       fontSizePx: Math.max(12, Math.min(48, settings.fontSizePx + delta)),
@@ -239,7 +253,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShown((n) => n + 100)}
+                onClick={() => setShown((n) => n + PAGE_LINES)}
               >
                 <ChevronUp />
                 Show earlier lines

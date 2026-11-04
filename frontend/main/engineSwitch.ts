@@ -71,6 +71,15 @@ export function forgetEngineSwitch(): void {
 }
 
 let taken = false
+
+function reloaded(): boolean {
+  try {
+    const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+    return navigation === undefined || navigation.type === 'reload'
+  } catch {
+    return true
+  }
+}
 let record: EngineSwitchRecord | null = null
 
 /**
@@ -80,6 +89,9 @@ let record: EngineSwitchRecord | null = null
 export function engineSwitchRecord(): EngineSwitchRecord | null {
   if (taken) return record
   taken = true
+  // A switch reloads the window, so a document that was not reloaded has no record, and does not
+  // open `sessionStorage` to find that out: a window's first touch of it costs WebView2 ~200 ms.
+  if (!reloaded()) return record
   try {
     record = decodeEngineSwitch(sessionStorage.getItem(ENGINE_SWITCH_KEY), Date.now())
     sessionStorage.removeItem(ENGINE_SWITCH_KEY)
