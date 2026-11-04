@@ -12,9 +12,9 @@ screen instead of in the Log. Look for the faint highlights on scanned text: hov
 
 ## Turning it on
 
-Turn on **Show overlay** in the sidebar (under Auto OCR). The overlay follows the window you read
-and stays click-through everywhere except over the words themselves, so whatever is underneath
-keeps working.
+Turn on **Show overlay** in the sidebar (under Auto OCR). The overlay follows the window you read,
+and clicks go through it to whatever is underneath, words included, so the game keeps working (see
+[Clicking through to the game](#clicking-through-to-the-game)).
 
 <Screenshot id="overlay-switch" alt="The sidebar with the Show overlay switch highlighted." width={240} />
 
@@ -25,12 +25,50 @@ Hover a word with <kbd>Shift</kbd> held to open its pop-up (see
 choose **Scan** or **Read along** to step through the words with the D-pad. See
 [Looking up words](/lookups/looking-up/).
 
+## Clicking through to the game
+
+Text on the overlay often sits over the game's own buttons: a dialogue box you click to advance, a
+choice, a menu. So clicks go **through** the overlay's text to the game, unless you hold
+<kbd>Shift</kbd>:
+
+- **Without Shift**, clicking on scanned text clicks the game underneath.
+- **With Shift held**, text lights up as you point at it, and you can look words up, click a word,
+  and move or use the [Text Hooker's card](/reading/text-hooker/#the-card-over-the-game). Once text
+  is lit it stays clickable while your pointer is on it, even after you let go of Shift.
+- **With a dictionary pop-up open**, your next click outside it only closes the pop-up and doesn't
+  reach the game. The pop-up itself, and the Text Hooker card's ⋯ menu once it is open, stay
+  clickable without Shift.
+
+Prefer the old way, where scanned text lights up as you hover it and takes your clicks? Turn off
+**Click through text to the game** in **Settings → OCR & Overlay**. You still hold <kbd>Shift</kbd>
+to look words up.
+
+On **Linux with Wayland**, Kimochi can't see Shift while another app is in front, so there the
+overlay's text always takes your clicks, as it did before.
+
+### The hint bar
+
+While there is text on the overlay, a small bar just below it says what Shift does: **Hold Shift to
+look up words and click text** (or, with click-through off, **Hold Shift over a word to look it
+up**). It sits just below the crop area or the game's window, or at the bottom of the screen for a
+full-screen game. Clicks go through the bar too, except on its **×**, which closes it for good.
+**Settings → General → Help → Overlay hints → Show again** brings it back. On Linux with
+Wayland, where Shift doesn't gate clicks, the bar isn't shown.
+
+:::note[Screenshot to come]
+The docs' screenshots come from a preview of Kimochi's windows that doesn't draw the overlay, so the
+hint bar isn't pictured here yet.
+:::
+
 ## Options
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | **Group text into regions** | Off | Marks nearby lines with one shared box to hover, instead of a box for each line. |
 | **Filter out furigana and small text** | On | Leaves reading aids above kanji out of the overlay and the Log. |
+| **Drop lines** | No Japanese | Leaves lines without Japanese out of the overlay and the Log; the same setting as in [The Log](/log/the-log/#which-lines-are-kept). |
+| **Click through text to the game** | On | Clicks on scanned text go to the game unless you hold Shift. See [above](#clicking-through-to-the-game). |
+| **Exclude overlay from screen recording** | On | Hides the overlay and dictionary pop-ups from screenshots and screen recordings, so Kimochi never reads its own text back. Turn it off to capture them, for example to share a clip. |
 
 <Screenshot id="settings-ocr-overlay" alt="Settings, OCR & Overlay: the Overlay switches, then Overlay look with highlight colours, Highlight opacity at 40% and the Cards choices with previews." width={760} />
 

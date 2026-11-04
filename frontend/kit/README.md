@@ -1,7 +1,7 @@
 # Kimochi kit
 
 The shared design system for every Kimochi window. Import components from `@kit`; import
-`frontend/kit/kit.css` once per window entry (after `@radix-ui/themes/styles.css`).
+`frontend/kit/kit.css` once per window entry (it brings in the Radix Themes tokens it builds on, `radix.css`).
 
 ## Rules
 

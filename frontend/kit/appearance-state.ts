@@ -25,10 +25,18 @@ interface Prefs {
 }
 
 function readCache(): Prefs {
+  // What native put in the page from the store as the window was built (`appearance_prelude` in
+  // panels.rs), ahead of this window's cache, which a change made elsewhere can leave stale.
+  const stored = (window as { __kimochiAppearance?: Partial<Record<keyof Prefs, string | null>> })
+    .__kimochiAppearance
   try {
     const raw = localStorage.getItem(CACHE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<Prefs>
+    if (raw || stored) {
+      const cached = (raw ? JSON.parse(raw) : {}) as Partial<Prefs>
+      const parsed: Partial<Prefs> = {
+        appearance: (stored?.appearance as Appearance | null | undefined) ?? cached.appearance,
+        interfaceScale: (stored?.interfaceScale as InterfaceScale | null | undefined) ?? cached.interfaceScale
+      }
       return {
         appearance: parsed.appearance ?? 'system',
         interfaceScale: parsed.interfaceScale ?? 'medium'

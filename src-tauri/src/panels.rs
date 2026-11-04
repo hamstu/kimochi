@@ -538,6 +538,27 @@ pub fn close_extension_windows(app: &tauri::AppHandle, keep: Option<&str>) -> Ve
     closed
 }
 
+/// The stored appearance and interface scale, for `panel.html`'s first frame: what it would
+/// otherwise take from the last values a window cached, which a change made elsewhere (another
+/// device through Sync, an edit to the store) leaves stale for one launch.
+fn appearance_prelude(settings: &Settings) -> String {
+    let read = |key: &str| settings.get(key).ok().flatten().filter(Value::is_string).unwrap_or(Value::Null);
+    format!(
+        ";(function(){{try{{window.__kimochiAppearance={{appearance:{},interfaceScale:{}}};}}catch(e){{}}}})();
+",
+        read("appearance"),
+        read("interfaceScale")
+    )
+}
+
+/// A panel's window colour for `theme`: `--color-background` of the slate scale.
+fn theme_background(theme: Option<tauri::Theme>) -> tauri::window::Color {
+    match theme {
+        Some(tauri::Theme::Light) => tauri::window::Color(0xff, 0xff, 0xff, 0xff),
+        _ => tauri::window::Color(0x11, 0x11, 0x13, 0xff),
+    }
+}
+
 /// Builds the panels marked `eager`. For `setup` only, which runs before the event loop and
 /// outside any command or callback.
 pub fn create_eager(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), String> {
@@ -574,7 +595,7 @@ fn ensure(
             .inner_size(spec.width, spec.height)
             .min_inner_size(spec.min_width, spec.min_height)
             .decorations(spec.decorated)
-            .background_color(tauri::window::Color(0x19, 0x19, 0x19, 0xff))
+            .background_color(theme_background(None))
             // Deliver the activating click to the WKWebView too, including the header
             // mousedown that starts a native window drag.
             .accept_first_mouse(true)
@@ -582,7 +603,8 @@ fn ensure(
             .maximizable(spec.resizable)
             .always_on_top(pinned)
             .visible(false)
-            .initialization_script_for_all_frames(platform::platform_prelude());
+            .initialization_script_for_all_frames(platform::platform_prelude())
+            .initialization_script(appearance_prelude(settings));
     #[cfg(target_os = "linux")]
     if matches!(spec.label, "crop-host" | "controller-host") {
         if !crate::platform::gnome::eligible_popup_session() {
@@ -607,6 +629,17 @@ fn ensure(
         }
     }
     let window = builder.build().map_err(|e| format!("native: {e}"))?;
+    // The ground of the theme the page will draw, so the window is never a different colour before
+    // its first frame (the slate background of kit/tokens.css; `NATIVE_BACKGROUND` in
+    // kit/appearance-state.ts sets the same once the page runs). The appearance is already applied
+    // to the app (`apply_appearance`), so the window's theme is the one the page resolves.
+    #[cfg(target_os = "linux")]
+    let opaque = !matches!(spec.label, "crop-host" | "controller-host");
+    #[cfg(not(target_os = "linux"))]
+    let opaque = true;
+    if opaque {
+        let _ = window.set_background_color(Some(theme_background(window.theme().ok())));
+    }
     // Only what is drawn over the source is kept out of captures (the same mechanism as
     // Electron's setContentProtection): the Linux crop and controller hosts here, and the OCR
     // overlay, the pop-ups and the hidden engine windows where they are built. Kimochi's

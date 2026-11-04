@@ -3,8 +3,77 @@
   <head>
     <meta charset="UTF-8" />
     <title>Kimochi</title>
+    <!--
+      The window's first frame, before any script loads: the theme's ground and the shape of the
+      window (title bar, and for the main window its sidebar), from what the last launch left in
+      localStorage (`kimochi.appearance.v1`, `kimochi.boot.v1`). React renders under it and fades
+      it out (`bootReady` in entries/boot.ts), so the window goes from this to its content
+      without a blank frame or a jump. Colours are the slate tokens of kit/tokens.css.
+    -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      html.dark, html.dark body { background: #111113; }
+      #kimochi-boot {
+        position: fixed; inset: 0; z-index: 2147483647; display: flex; flex-direction: column;
+        background: #fff; pointer-events: none; transition: opacity 140ms ease-out;
+      }
+      #kimochi-boot.done { opacity: 0; }
+      #kimochi-boot > i { flex: none; height: 2rem; box-sizing: border-box; background: #f9f9fb; border-bottom: 1px solid #e8e8ec; }
+      #kimochi-boot > b { flex: 1; display: flex; }
+      #kimochi-boot > b > i { flex: none; width: var(--kimochi-boot-side, 0); background: #f9f9fb; border-right: 1px solid #e8e8ec; }
+      /* Only if the window is slow to be ready (a long log, a slow disk): a quiet spinner. */
+      #kimochi-boot > b > u {
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        opacity: 0; animation: kimochi-boot-in 240ms ease-out 1200ms forwards;
+      }
+      #kimochi-boot > b > u::before {
+        content: ""; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
+        border: 2px solid #e0e1e6; border-top-color: #8b8d98; animation: kimochi-boot-spin 800ms linear infinite;
+      }
+      html.dark #kimochi-boot > b > u::before { border-color: #2e3135; border-top-color: #696e77; }
+      @keyframes kimochi-boot-in { to { opacity: 1; } }
+      @keyframes kimochi-boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { #kimochi-boot > b > u::before { animation-duration: 2400ms; } }
+      html.dark #kimochi-boot { background: #111113; }
+      html.dark #kimochi-boot > i, html.dark #kimochi-boot > b > i { background: #18191b; border-color: #272a2d; }
+    </style>
+    <script>
+      ;(function () {
+        // Mirrors INTERFACE_SCALES (ui/settings.ts) and DEFAULT_WIDTH (main/MainSidebar.tsx).
+        var marks = (window.__kimochiBoot = window.__kimochiBoot || {})
+        marks.html = performance.now()
+        var root = document.documentElement
+        try {
+          // Native's stored values first (`appearance_prelude` in panels.rs), the cache otherwise.
+          var cached = JSON.parse(localStorage.getItem('kimochi.appearance.v1') || '{}')
+          var stored = window.__kimochiAppearance || {}
+          var appearance = {
+            appearance: stored.appearance || cached.appearance,
+            interfaceScale: stored.interfaceScale || cached.interfaceScale
+          }
+          var mode = appearance.appearance || 'system'
+          var dark = mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+          root.classList.add(dark ? 'dark' : 'light')
+          var scale = { small: 0.92, medium: 1, large: 1.1, xlarge: 1.22 }[appearance.interfaceScale] || 1
+          root.style.fontSize = 16 * scale + 'px'
+          var internals = window.__TAURI_INTERNALS__
+          // The whole settings store in one round trip, running while the modules load
+          // (`preloadSettings` in entries/panel.tsx).
+          if (internals && internals.invoke) window.__kimochiSettings = internals.invoke('settings_all')
+          var label = window.__kimochiPanelLabel ||
+            (internals && internals.metadata && internals.metadata.currentWindow && internals.metadata.currentWindow.label)
+          var shape = JSON.parse(localStorage.getItem('kimochi.boot.v1') || '{}')
+          if (label === 'log' && shape.sidebar !== false && !shape.mini) {
+            root.style.setProperty('--kimochi-boot-side', (shape.sidebarWidth || 272) + 'px')
+          }
+        } catch (e) {
+          /* No storage: the plain light frame. */
+        }
+      })()
+    </script>
   </head>
   <body>
+    <div id="kimochi-boot" aria-hidden="true"><i></i><b><i></i><u></u></b></div>
     <div id="root"></div>
     <script type="module" src="./entries/panel.tsx"></script>
   </body>

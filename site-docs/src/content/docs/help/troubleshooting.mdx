@@ -17,7 +17,7 @@ System Audio Recording**, and reopen Kimochi if macOS asks.
 ### Screen Recording is on, but capture is still refused (macOS)
 
 macOS ties the permission to how the app was signed. If you switched between builds (for example a
-nightly and a release), System Settings can show Kimochi as allowed while capture is refused. Reset
+build you made yourself and a release), System Settings can show Kimochi as allowed while capture is refused. Reset
 the old grant in Terminal, then allow Kimochi again:
 
 ```sh
@@ -75,6 +75,26 @@ stop it at any time. Switch to another engine, such as PaddleOCR, in the meantim
   overlay yet. See [The overlay on Wayland](/install/linux/#the-overlay-on-wayland).
 - **Nothing happens when I hover**: hold <kbd>Shift</kbd> (see [Which key to hold](/lookups/looking-up/#which-key-to-hold)) and
   check that a dictionary is set up (next section).
+- **Clicking a word clicks the game instead**: that's on purpose, so text over the game's buttons
+  doesn't get in the way. Hold <kbd>Shift</kbd> to click text, or turn off **Click through text to
+  the game** in **Settings → OCR & Overlay**. See
+  [Clicking through to the game](/reading/overlay/#clicking-through-to-the-game).
+- **My click only closed the dictionary**: with a pop-up open, the next click outside it just closes
+  it. Click again to reach the game.
+- **The hint bar under the text is in the way**: close it with its ×. **Settings → General → Help →
+  Overlay hints** brings it back.
+- **Kimochi stays on top of my full-screen game**: it does that when the game is on the same screen,
+  until the game leaves full screen. Unpin it in its title bar, or turn on **Switch to mini mode**
+  in **Settings → General**. See [Mini mode](/reading/mini-mode/#when-the-game-goes-full-screen).
+
+## Text Hooker (Windows)
+
+- **My game is dimmed in the Text Hooker grid**: its tile says why. Windows' own apps, protected
+  apps, apps running as administrator and ARM64 apps can't be hooked.
+- **"Kimochi reached the game but couldn't hook some of its text"**: restart the game while Kimochi
+  is open.
+- **The wrong text comes through, or lines arrive in pieces**: see
+  [When it doesn't work](/reading/text-hooker/#when-it-doesnt-work).
 
 ## Shortcuts
 

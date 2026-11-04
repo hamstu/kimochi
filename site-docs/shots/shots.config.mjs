@@ -218,6 +218,32 @@ export const SHOTS = [
     crop: SIDEBAR,
     ready: '.src-card'
   },
+  // Text Hooker (Windows only): a hooked game in the sidebar, and its submenu in the source menu.
+  {
+    id: 'hook-card',
+    page: 'panel.html?window=log&input=hook&platform=windows',
+    size: [900, 640],
+    crop: { x: 0, y: 0, width: 271, height: 640 },
+    ready: '.src-hook-select'
+  },
+  {
+    id: 'hook-source-menu',
+    page: 'panel.html?window=log&platform=windows',
+    size: [900, 640],
+    ready: '.src-card-live',
+    actions: [
+      { click: sourceAction('Change source'), after: 500 },
+      { hover: { selector: '.src-type', text: 'Text Hooker' }, after: 1200 }
+    ]
+  },
+  {
+    id: 'hook-thread-menu',
+    page: 'panel.html?window=log&input=hook&platform=windows',
+    size: [900, 640],
+    ready: '.src-hook-select',
+    actions: [{ click: '.src-hook-select', after: 600 }],
+    marks: [{ type: 'glow', target: { selector: '.src-hook-menu', pad: 0 }, radius: 10 }]
+  },
   {
     id: 'ocr-picker',
     page: 'panel.html?window=log',
@@ -402,6 +428,25 @@ export const SHOTS = [
     page: settingsTab('dictionary', '&popup=custom-api'),
     size: SETTINGS,
     ready: '.settings-page-scroll'
+  },
+  {
+    id: 'settings-dictionary-tenten',
+    page: settingsTab('dictionary', '&popup=tenten'),
+    size: SETTINGS,
+    ready: '.engine-chooser'
+  },
+  {
+    id: 'settings-texthooker',
+    page: settingsTab('texthooker', '&platform=windows'),
+    size: SETTINGS,
+    ready: '.th-game-row'
+  },
+  {
+    id: 'settings-texthooker-game',
+    page: settingsTab('texthooker', '&platform=windows'),
+    size: SETTINGS,
+    ready: '.th-game-row',
+    actions: [{ click: { selector: '.th-game-row', index: 0 }, after: 800 }]
   },
   {
     id: 'settings-anki',

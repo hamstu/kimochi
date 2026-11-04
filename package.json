@@ -35,6 +35,7 @@
     "check:rust": "node scripts/run.mjs check",
     "check:all": "node scripts/run.mjs check:all",
     "trace:summary": "node scripts/trace-report.mjs",
+    "bench:startup": "node scripts/startup-bench.mjs",
     "trace:mark": "node scripts/trace-report.mjs --mark",
     "test:native:reader-popup": "node scripts/test-reader-popup-native.mjs",
     "prepare:meikiocr": "node scripts/prepare-meikiocr.mjs",
