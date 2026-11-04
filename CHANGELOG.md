@@ -15,6 +15,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Kimochi opens faster**, and opens cleanly: the main window appears sooner, already in your theme's colours and laid out like the app (no more blank grey window), and your Log is there as soon as it's loaded instead of after a "Loading the log…" screen. The overlay, the dictionary pop-up and the tray follow a moment later, without holding up the window.
 - **The Linux installer no longer offers nightly builds**, which no longer exist: `--nightly` (or `KIMOCHI_CHANNEL=nightly`) now stops with a message instead of installing an old development build. Run it without the option to get the latest release.
+- **Auto OCR uses far less CPU while you read a line.** A blinking ▼ or cursor next to the dialogue made it re-read the same text about twice a second for as long as the line stayed up; it now remembers what it read on each blink state, so a still line costs almost nothing. This applies on every platform; on a Steam Deck, Kimochi's CPU use while you read a line dropped from over half a CPU core to about a tenth of one.
 - **Kimochi uses much less memory after you change OCR engine.** The engines you switched away from (Manga OCR's alone can take over 2 GB) stayed loaded until you quit; now only the ones you use stay, and one you choose again loads on its first scan.
 
 ### Fixed

@@ -30,7 +30,10 @@
 //!    for an older frame is dropped rather than reported as the current screen;
 //!  - a result for identical pixels is reused, so a slow engine on a static screen
 //!    (exactly when settling matters) still converges instead of timing out on
-//!    every tick.
+//!    every tick;
+//!  - the reads of the last few distinct frames are kept too (`RecentReads`), so a
+//!    screen that only flips between a few states (a blinking ▼ beside the dialogue)
+//!    is read once per state instead of on every look.
 //!
 //! MeikiOCR's observer engine is separate from the manual scan's (`MeikiState`), so a slow
 //! accurate scan cannot starve observer ticks; the cost is a second copy of its sessions
@@ -190,6 +193,55 @@ fn unavailable_detail(engine: &str, reason: &str) -> String {
 /// How long one inference may run before the observer is reported stalled.
 const STALL_AFTER: Duration = Duration::from_secs(30);
 
+/// How many recent reads an engine observer keeps, by exact frame (`frame_key`).
+const RECENT_READS: usize = 4;
+
+/// The last few reads, each for the exact pixels it was made from, so a screen that flips
+/// between a few states (a blinking ▼ beside the dialogue, a cursor, A/B alternating) is read
+/// once per state rather than on every look. The worker's own reuse covers only the frame it
+/// read last, which an A/B/A/B screen never repeats. Identical pixels give an identical read,
+/// so a hit changes nothing but the cost. Emptied whenever the source or crop changes (the
+/// key would differ anyway; this keeps no stale reads around) and when the observer closes,
+/// which is what changing the engine does.
+struct RecentReads<T> {
+    /// The source and crop the reads were made in.
+    scope: Option<(String, [u32; 4])>,
+    /// Newest last.
+    reads: std::collections::VecDeque<(u64, T)>,
+}
+
+impl<T: Clone> RecentReads<T> {
+    fn new() -> Self {
+        Self { scope: None, reads: std::collections::VecDeque::with_capacity(RECENT_READS) }
+    }
+
+    /// Start a look at `frame`: forgets every read if its source or crop differs.
+    fn enter(&mut self, frame: &Frame) {
+        let scope = (frame.info.source_id.clone(), frame.info.crop_pixels);
+        if self.scope.as_ref() != Some(&scope) {
+            self.reads.clear();
+            self.scope = Some(scope);
+        }
+    }
+
+    fn get(&self, key: u64) -> Option<T> {
+        self.reads.iter().find(|(k, _)| *k == key).map(|(_, read)| read.clone())
+    }
+
+    fn put(&mut self, key: u64, read: T) {
+        self.reads.retain(|(k, _)| *k != key);
+        if self.reads.len() == RECENT_READS {
+            self.reads.pop_front();
+        }
+        self.reads.push_back((key, read));
+    }
+
+    fn clear(&mut self) {
+        self.reads.clear();
+        self.scope = None;
+    }
+}
+
 /// One read, as the worker returns it.
 #[derive(Clone)]
 struct Read {
@@ -293,6 +345,8 @@ pub struct EngineObserver {
     partial_looks: u32,
     /// The backend of the first read has been logged (`watcher-backend`).
     backend_logged: bool,
+    /// Reads of the last few distinct frames (`RecentReads`).
+    recent: RecentReads<Read>,
 }
 
 impl EngineObserver {
@@ -317,6 +371,7 @@ impl EngineObserver {
             previous: None,
             partial_looks: 0,
             backend_logged: false,
+            recent: RecentReads::new(),
         }
     }
 
@@ -430,6 +485,21 @@ impl EngineObserver {
         }, None)
     }
 
+    /// Take `read` as the reading of `frame` (whose `frame_key` is `key`): what the scan reuses,
+    /// and what the next look's changed regions are measured against.
+    fn accept(&mut self, frame: &Frame, key: u64, read: Read) -> Observation {
+        *LAST_SCAN.lock().unwrap_or_else(|p| p.into_inner()) = Some((self.engine, key, read.scan));
+        if self.regions.is_some() {
+            self.previous = Some(crate::incremental::Previous::new(frame, read.raw));
+        }
+        Observation {
+            engine: self.engine,
+            text: join_lines(&read.lines),
+            lines: read.lines,
+            duration_ms: read.duration_ms,
+        }
+    }
+
     fn worker(&mut self) -> Result<&mut LatestWorker<Request, Answer>, CaptureError> {
         if self.worker.is_none() {
             let run = (self.make_run)(self.app.clone());
@@ -477,6 +547,20 @@ impl TextObserver for EngineObserver {
         let clock = Instant::now();
         let key = frame_key(frame);
         let key_ms = clock.elapsed().as_secs_f64() * 1000.0;
+        self.recent.enter(frame);
+        if let Some(mut read) = self.recent.get(key) {
+            // What this look cost, not what the original read did.
+            read.duration_ms = key_ms;
+            // These exact pixels were read a moment ago (a blinking indicator flipped back).
+            if audit {
+                eprintln!(
+                    "kimochi: {}",
+                    serde_json::json!({"check": "watch-look", "engine": self.engine, "recent": true,
+                        "lines": read.lines.len(), "keyMs": key_ms.round()})
+                );
+            }
+            return Ok(self.accept(frame, key, read));
+        }
         let image = rgb_image(frame)?;
         let convert_ms = clock.elapsed().as_secs_f64() * 1000.0 - key_ms;
         let (engine, name) = (self.engine, self.name);
@@ -515,17 +599,11 @@ impl TextObserver for EngineObserver {
                     );
                 }
                 // A ready answer is for these pixels: this request's, or identical ones.
-                *LAST_SCAN.lock().unwrap_or_else(|p| p.into_inner()) = Some((engine, key, read.scan));
                 if self.regions.is_some() {
                     self.partial_looks = if read.partial { self.partial_looks + 1 } else { 0 };
-                    self.previous = Some(crate::incremental::Previous::new(frame, read.raw));
                 }
-                Ok(Observation {
-                    engine,
-                    text: join_lines(&read.lines),
-                    lines: read.lines,
-                    duration_ms: read.duration_ms,
-                })
+                self.recent.put(key, read.clone());
+                Ok(self.accept(frame, key, read))
             }
             Outcome::Ready(Err(Failure::Unavailable(reason))) => {
                 let error = CaptureError::new("unsupported", unavailable_detail(name, &reason));
@@ -549,6 +627,7 @@ impl TextObserver for EngineObserver {
         self.unsupported = None;
         self.previous = None;
         self.backend_logged = false;
+        self.recent.clear();
     }
 }
 
@@ -889,6 +968,78 @@ mod tests {
             },
             pixels: (0..stride * height as usize).map(|i| i as u8).collect(),
         }
+    }
+
+    /// What `EngineObserver::observe` does with its `RecentReads`: reuse a read of these exact
+    /// pixels, or read the frame (counting reads) and remember it.
+    fn look(recent: &mut RecentReads<String>, frame: &Frame, reads: &mut usize) -> String {
+        recent.enter(frame);
+        let key = frame_key(frame);
+        if let Some(read) = recent.get(key) {
+            return read;
+        }
+        *reads += 1;
+        let read = format!("read {}", frame.pixels[0]);
+        recent.put(key, read.clone());
+        read
+    }
+
+    fn with_pixel(mut frame: Frame, value: u8) -> Frame {
+        frame.pixels[0] = value;
+        frame
+    }
+
+    #[test]
+    fn a_screen_flipping_between_two_states_is_read_once_per_state() {
+        // A blinking ▼: the frame alternates A/B/A/B for as long as the player reads.
+        let (a, b) = (with_pixel(frame(4, 2, 16), 1), with_pixel(frame(4, 2, 16), 2));
+        let mut recent = RecentReads::new();
+        let mut reads = 0;
+        for _ in 0..10 {
+            assert_eq!(look(&mut recent, &a, &mut reads), "read 1");
+            assert_eq!(look(&mut recent, &b, &mut reads), "read 2");
+        }
+        assert_eq!(reads, 2);
+    }
+
+    #[test]
+    fn recent_reads_keep_only_the_last_few_frames() {
+        let frames: Vec<_> = (0..=RECENT_READS as u8).map(|v| with_pixel(frame(4, 2, 16), v)).collect();
+        let mut recent = RecentReads::new();
+        let mut reads = 0;
+        for f in &frames {
+            look(&mut recent, f, &mut reads);
+        }
+        assert_eq!(reads, RECENT_READS + 1);
+        // The newest four are still there; the oldest was dropped and is read again.
+        for f in &frames[1..] {
+            look(&mut recent, f, &mut reads);
+        }
+        assert_eq!(reads, RECENT_READS + 1);
+        look(&mut recent, &frames[0], &mut reads);
+        assert_eq!(reads, RECENT_READS + 2);
+    }
+
+    #[test]
+    fn a_new_source_or_crop_forgets_every_recent_read() {
+        let a = with_pixel(frame(4, 2, 16), 1);
+        let mut recent = RecentReads::new();
+        let mut reads = 0;
+        look(&mut recent, &a, &mut reads);
+        let mut other_source = with_pixel(frame(4, 2, 16), 1);
+        other_source.info.source_id = "other".into();
+        look(&mut recent, &other_source, &mut reads);
+        assert_eq!(recent.reads.len(), 1, "the first source's reads are gone");
+        let mut cropped = with_pixel(frame(4, 2, 16), 1);
+        cropped.info.source_id = "other".into();
+        cropped.info.crop_pixels = [1, 0, 3, 2];
+        look(&mut recent, &cropped, &mut reads);
+        assert_eq!(recent.reads.len(), 1, "the uncropped reads are gone");
+        // Back to the first source: read again, not served from before.
+        look(&mut recent, &a, &mut reads);
+        assert_eq!(reads, 4);
+        recent.clear();
+        assert!(recent.reads.is_empty() && recent.scope.is_none());
     }
 
     #[test]
