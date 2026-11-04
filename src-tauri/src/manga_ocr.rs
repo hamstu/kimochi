@@ -6,7 +6,8 @@
 use crate::engine_probe::{self, Loaded, Probe, Verified};
 use crate::model_store;
 use mangaocr::{
-    Backend, ComicTextDetector, DetectionOptions, MangaOcr, ModelPaths, OcrOptions, PageResult,
+    Backend, ComicTextDetector, DetectedGroup, DetectionOptions, MangaOcr, ModelPaths, OcrOptions,
+    Orientation, PageDetector, PageResult, TextMask,
 };
 use serde_json::{json, Value};
 #[cfg(not(target_os = "macos"))]
@@ -122,6 +123,12 @@ pub fn prewarm(app: &tauri::AppHandle) {
 pub fn unload(app: &tauri::AppHandle) {
     if let Some(state) = app.try_state::<MangaState>() {
         *state.0.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        // glibc keeps the freed gigabyte in its arenas; give it back to the system.
+        #[cfg(target_os = "linux")]
+        // SAFETY: malloc_trim only returns free heap pages; it touches no live allocation.
+        unsafe {
+            libc::malloc_trim(0);
+        }
     }
 }
 static PROBE: LazyLock<Arc<Probe>> = LazyLock::new(Default::default);
@@ -238,7 +245,7 @@ fn read(
             detector,
         } => {
             let page = recognizer
-                .recognize_region(image, detector, &options, &detection)
+                .recognize_region(image, &mut Rows(detector), &options, &detection)
                 .map_err(|e| format!("Manga page inference: {e}"))?;
             let backend =
                 serde_json::to_value(recognizer.backend_info()).map_err(|e| e.to_string())?;
@@ -255,7 +262,8 @@ fn read(
                         .unwrap_or_else(|p| p.into_inner())
                 });
                 engine_probe::guarded(|| {
-                    page.recognize_region(image, &options, &detection)
+                    let mangaocr::onnx::OnnxPage { detector, reader, .. } = page;
+                    mangaocr::read_region(reader, image, &mut Rows(detector), &options, &detection)
                         .map_err(|e| e.to_string())
                 })
             };
@@ -286,6 +294,106 @@ fn read(
         read(app, root, engine, image)
     }
 }
+/// The detector, with each horizontal block's pieces of one row read as that one row.
+///
+/// The comic text detector can cut a long horizontal line (a game's dialogue) into overlapping
+/// pieces. Read one by one, each piece's edge glyphs come out twice or as noise (今日は天気がいいから、イ,
+/// 、公園に行きる, きましょう。), and the reference's corner-distance order can put them right to left.
+/// A row read whole has neither problem. Vertical blocks (manga) keep the reference's lines.
+struct Rows<'a, D: PageDetector + ?Sized>(&'a mut D);
+
+impl<D: PageDetector + ?Sized> PageDetector for Rows<'_, D> {
+    fn detect_page(
+        &mut self,
+        image: &image::RgbImage,
+        options: &DetectionOptions,
+    ) -> mangaocr::Result<Vec<DetectedGroup>> {
+        Ok(self.detect_page_with_mask(image, options)?.0)
+    }
+    fn detect_page_with_mask(
+        &mut self,
+        image: &image::RgbImage,
+        options: &DetectionOptions,
+    ) -> mangaocr::Result<(Vec<DetectedGroup>, Option<TextMask>)> {
+        let (groups, mask) = self.0.detect_page_with_mask(image, options)?;
+        Ok((join_rows(groups), mask))
+    }
+}
+
+/// Horizontal blocks that hold pieces of one row become one block, then each block's pieces of
+/// a row become that row ([`rows`]). The detector can put the two halves of a line in two blocks.
+fn join_rows(groups: Vec<DetectedGroup>) -> Vec<DetectedGroup> {
+    let horizontal = |g: &DetectedGroup| matches!(g.orientation, Orientation::Horizontal);
+    let shares_row = |a: &DetectedGroup, b: &DetectedGroup| {
+        a.line_polygons.iter().any(|p| b.line_polygons.iter().any(|q| same_row(quad_rect(p), quad_rect(q))))
+    };
+    let mut out: Vec<DetectedGroup> = Vec::with_capacity(groups.len());
+    for group in groups {
+        match out.iter_mut().find(|o| horizontal(o) && horizontal(&group) && shares_row(o, &group)) {
+            Some(o) => {
+                let lines = (o.line_polygons.len() + group.line_polygons.len()) as f32;
+                o.font_size = (o.font_size * o.line_polygons.len() as f32
+                    + group.font_size * group.line_polygons.len() as f32)
+                    / lines.max(1.);
+                o.bbox = [
+                    o.bbox[0].min(group.bbox[0]),
+                    o.bbox[1].min(group.bbox[1]),
+                    o.bbox[2].max(group.bbox[2]),
+                    o.bbox[3].max(group.bbox[3]),
+                ];
+                o.confidence = o.confidence.max(group.confidence);
+                o.line_polygons.extend(group.line_polygons);
+            }
+            None => out.push(group),
+        }
+    }
+    for group in out.iter_mut().filter(|g| matches!(g.orientation, Orientation::Horizontal)) {
+        group.line_polygons = rows(&group.line_polygons);
+    }
+    out
+}
+
+/// A line quad's bounds, `[left, top, right, bottom]`.
+fn quad_rect(q: &[[u32; 2]; 4]) -> [u32; 4] {
+    let xs = q.map(|p| p[0]);
+    let ys = q.map(|p| p[1]);
+    [*xs.iter().min().unwrap(), *ys.iter().min().unwrap(), *xs.iter().max().unwrap(), *ys.iter().max().unwrap()]
+}
+
+/// Two line bounds on one row: their heights overlap by most of the shorter one, and their ends
+/// overlap or nearly meet.
+fn same_row(a: [u32; 4], b: [u32; 4]) -> bool {
+    let (ha, hb) = ((a[3] - a[1]) as f64, (b[3] - b[1]) as f64);
+    let overlap = a[3].min(b[3]) as f64 - a[1].max(b[1]) as f64;
+    let gap = a[0].max(b[0]) as f64 - a[2].min(b[2]) as f64;
+    overlap >= 0.6 * ha.min(hb) && gap <= 0.5 * ha.max(hb)
+}
+
+/// Line quads, with pieces of one row ([`same_row`]) joined. Lines are left as they were, in their
+/// order, unless something was joined; then the rows are read top to bottom, left to right.
+fn rows(lines: &[[[u32; 2]; 4]]) -> Vec<[[u32; 2]; 4]> {
+    let mut rects: Vec<[u32; 4]> = lines.iter().map(quad_rect).collect();
+    let mut joined = false;
+    'again: loop {
+        for i in 0..rects.len() {
+            for j in i + 1..rects.len() {
+                if same_row(rects[i], rects[j]) {
+                    let (a, b) = (rects[i], rects.remove(j));
+                    rects[i] = [a[0].min(b[0]), a[1].min(b[1]), a[2].max(b[2]), a[3].max(b[3])];
+                    joined = true;
+                    continue 'again;
+                }
+            }
+        }
+        break;
+    }
+    if !joined {
+        return lines.to_vec();
+    }
+    rects.sort_by_key(|r| (r[1], r[0]));
+    rects.into_iter().map(|[l, t, r, b]| [[l, t], [r, t], [r, b], [l, b]]).collect()
+}
+
 /// Manga OCR's dots as the ellipses they were on the page.
 ///
 /// Its post-processing (upstream's, kept as is) spells every `…` as three full-width periods, so
@@ -347,6 +455,45 @@ mod tests {
         assert_eq!(ellipses("．．．．．"), "……");
         assert_eq!(ellipses("．．．．．．．"), "……");
         assert_eq!(ellipses("ひらがな"), "ひらがな");
+    }
+    #[test]
+    fn pieces_of_one_row_are_read_as_that_row() {
+        let quad = |l, t, r, b| [[l, t], [r, t], [r, b], [l, b]];
+        // As the detector cut 今日は天気がいいから、公園に行きましょう。, last piece first.
+        let pieces = [quad(933, 98, 1229, 177), quad(49, 103, 665, 166), quad(645, 102, 971, 170)];
+        assert_eq!(rows(&pieces), vec![quad(49, 98, 1229, 177)]);
+        // Two rows: each joined, read top to bottom.
+        let two = [quad(400, 200, 700, 260), quad(10, 100, 300, 160), quad(10, 205, 410, 262), quad(290, 98, 600, 158)];
+        assert_eq!(rows(&two), vec![quad(10, 98, 600, 160), quad(10, 200, 700, 262)]);
+    }
+    #[test]
+    fn halves_of_a_row_in_two_blocks_become_one_block() {
+        let quad = |l, t, r, b| [[l, t], [r, t], [r, b], [l, b]];
+        let group = |bbox, lines: Vec<[[u32; 2]; 4]>| DetectedGroup {
+            bbox,
+            confidence: 0.5,
+            orientation: Orientation::Horizontal,
+            line_polygons: lines,
+            font_size: 60.,
+            language: mangaocr::Language::Ja,
+        };
+        // The name, then 昨日の夜、美 | 美味しいラーメンを食べました。 split across two blocks.
+        let joined = join_rows(vec![
+            group([40, 20, 640, 170], vec![quad(40, 20, 200, 70), quad(40, 100, 640, 170)]),
+            group([600, 98, 1500, 172], vec![quad(600, 98, 1500, 172)]),
+            group([40, 400, 400, 460], vec![quad(40, 400, 400, 460)]),
+        ]);
+        assert_eq!(joined.len(), 2);
+        assert_eq!(joined[0].bbox, [40, 20, 1500, 172]);
+        assert_eq!(joined[0].line_polygons, vec![quad(40, 20, 200, 70), quad(40, 98, 1500, 172)]);
+        assert_eq!(joined[1].line_polygons, vec![quad(40, 400, 400, 460)]);
+    }
+    #[test]
+    fn separate_lines_are_left_as_the_detector_gave_them() {
+        let quad = |l, t, r, b| [[l, t], [r, t], [r, b], [l, b]];
+        // Stacked rows, and two lines of one row far apart (a menu), keep their quads and order.
+        let lines = [quad(10, 200, 500, 260), quad(10, 100, 500, 160), quad(900, 100, 1200, 160)];
+        assert_eq!(rows(&lines), lines.to_vec());
     }
     #[test]
     fn empty_page_has_no_invented_geometry() {

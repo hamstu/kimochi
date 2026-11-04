@@ -5,10 +5,11 @@
 use kimochi_capture::{Frame, Rect};
 use serde::Deserialize;
 use std::{
+    collections::HashMap,
     io::{Read, Write},
     os::unix::net::UnixStream,
     path::PathBuf,
-    sync::Mutex,
+    sync::{LazyLock, Mutex},
     time::{Duration, Instant},
 };
 
@@ -266,6 +267,80 @@ pub fn enrich(frame: &mut Frame) {
     }
 }
 
+/// The linked window's title and app (its class), as GNOME's Shell integration reports them,
+/// so the anonymous portal source is named after the game and its crop is the game's own.
+pub fn identity(source: &str) -> Option<serde_json::Value> {
+    let binding = BINDING.lock().ok()?.clone()?;
+    if binding.source != source {
+        return None;
+    }
+    let snapshot = snapshot()?;
+    let client = resolve(&snapshot, &binding)?;
+    let class = client.app.trim();
+    if class.is_empty() {
+        return Some(serde_json::json!({"title": client.title, "appName": null, "appId": null, "iconName": null}));
+    }
+    let (name, icon) = desktop_entry(class).unwrap_or_else(|| (class.to_owned(), class.to_owned()));
+    Some(serde_json::json!({"title": client.title, "appName": name, "appId": class, "iconName": icon}))
+}
+
+/// The `Name` and `Icon` of the application whose desktop entry claims windows of `class`
+/// (`StartupWMClass`, or an entry named after the class), as GNOME's app system would name it.
+/// Looked up once per class.
+fn desktop_entry(class: &str) -> Option<(String, String)> {
+    /// `(Name, Icon)` by window class; `None` where no entry claims the class.
+    type Entries = HashMap<String, Option<(String, String)>>;
+    static FOUND: LazyLock<Mutex<Entries>> = LazyLock::new(Default::default);
+    if let Some(found) = FOUND.lock().ok()?.get(class) {
+        return found.clone();
+    }
+    let home = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
+    let system = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    let dirs = home.into_iter().chain(system.split(':').filter(|d| !d.is_empty()).map(PathBuf::from));
+    let found = dirs
+        .filter_map(|dir| std::fs::read_dir(dir.join("applications")).ok())
+        .flatten()
+        .flatten()
+        .filter(|entry| entry.path().extension().is_some_and(|e| e == "desktop"))
+        .find_map(|entry| {
+            let stem = entry.path().file_stem()?.to_string_lossy().into_owned();
+            entry_for(class, &stem, &std::fs::read_to_string(entry.path()).ok()?)
+        });
+    if let Ok(mut cache) = FOUND.lock() {
+        cache.insert(class.to_owned(), found.clone());
+    }
+    found
+}
+
+/// A desktop entry's `(Name, Icon)` when it claims windows of `class`: its `StartupWMClass` is
+/// the class, or the file is named after it, and it is an application someone could see.
+fn entry_for(class: &str, stem: &str, text: &str) -> Option<(String, String)> {
+    let mut section = false;
+    let (mut name, mut icon, mut wm_class, mut hidden) = (None, None, None, false);
+    for line in text.lines().map(str::trim) {
+        if line.starts_with('[') {
+            section = line == "[Desktop Entry]";
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=').filter(|_| section) else { continue };
+        match key.trim() {
+            "Name" => name = Some(value.trim().to_owned()),
+            "Icon" => icon = Some(value.trim().to_owned()),
+            "StartupWMClass" => wm_class = Some(value.trim().to_owned()),
+            "NoDisplay" | "Hidden" => hidden |= value.trim() == "true",
+            _ => {}
+        }
+    }
+    let claims = wm_class.is_some_and(|c| c.eq_ignore_ascii_case(class))
+        || stem.eq_ignore_ascii_case(class)
+        || stem.rsplit('.').next().is_some_and(|tail| tail.eq_ignore_ascii_case(class));
+    (claims && !hidden).then_some(())?;
+    let name = name.filter(|n| !n.is_empty())?;
+    Some((name, icon.unwrap_or_else(|| class.to_owned())))
+}
+
 /// User-visible association status; no capture permissions or compositor state change.
 pub fn status(source: &str) -> serde_json::Value {
     let snapshot = snapshot();
@@ -331,6 +406,15 @@ pub fn link(source: &str, address: &str, width: u32, height: u32) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_desktop_entry_names_the_windows_it_claims() {
+        let entry = "[Desktop Entry]\nName=Firefox\nIcon=firefox\nStartupWMClass=firefox\n[Desktop Action new]\nName=New Window\n";
+        assert_eq!(entry_for("firefox", "org.mozilla.firefox", entry), Some(("Firefox".into(), "firefox".into())));
+        assert_eq!(entry_for("Steam", "steam", "[Desktop Entry]\nName=Steam\n"), Some(("Steam".into(), "Steam".into())));
+        assert_eq!(entry_for("org.gnome.Nautilus", "org.gnome.Nautilus", "[Desktop Entry]\nName=Files\nIcon=nautilus\n"), Some(("Files".into(), "nautilus".into())));
+        assert_eq!(entry_for("mpv", "other", "[Desktop Entry]\nName=Other\n"), None);
+        assert_eq!(entry_for("mpv", "mpv", "[Desktop Entry]\nName=mpv\nNoDisplay=true\n"), None);
+    }
     fn sample() -> Snapshot {
         let monitor = serde_json::from_value(serde_json::json!({"id":0,"x":0,"y":0,"width":3440,"height":1440,"scale":1.33,"activeWorkspace":{"id":1}})).unwrap();
         let client = serde_json::from_value(serde_json::json!({"address":"0x1","pid":42,"class":"game","at":[100,40],"size":[1245,1030],"mapped":true,"hidden":false,"monitor":0,"workspace":{"id":1}})).unwrap();

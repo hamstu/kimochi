@@ -15,7 +15,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Kimochi opens faster**, and opens cleanly: the main window appears sooner, already in your theme's colours and laid out like the app (no more blank grey window), and your Log is there as soon as it's loaded instead of after a "Loading the log…" screen. The overlay, the dictionary pop-up and the tray follow a moment later, without holding up the window.
 - **The Linux installer no longer offers nightly builds**, which no longer exist: `--nightly` (or `KIMOCHI_CHANNEL=nightly`) now stops with a message instead of installing an old development build. Run it without the option to get the latest release.
-- **Kimochi uses much less memory after you change OCR engine.** The engines you switched away from (Manga OCR's alone takes over 500 MB) stayed loaded until you quit; now only the ones you use stay, and one you choose again loads on its first scan.
+- **Kimochi uses much less memory after you change OCR engine.** The engines you switched away from (Manga OCR's alone can take over 2 GB) stayed loaded until you quit; now only the ones you use stay, and one you choose again loads on its first scan.
 
 ### Fixed
 
@@ -25,6 +25,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **On Linux with GNOME, a new crop area is the one that's saved.** The crop editor could open twice on top of itself, and pressing Enter then sometimes saved your old crop instead of the one you'd just drawn.
 - On Linux, Yomitan's pop-up uses Kimochi's fonts unless you chose one in Yomitan's settings, as it was meant to.
 - **Settings → About → Copy debug info works on Linux.** It showed "The request is not allowed by the user agent…" instead of copying the report.
+- **Linux (Wayland): scanned text shows over the game again after Kimochi starts or you switch dictionaries.** The overlay could stay hidden, with nothing to hover or look up, until you opened the crop editor.
+- **Linux (Wayland): Hachidori looks words up over the game.** Holding Shift over scanned text now opens Hachidori's pop-up, as it already did for Yomitan.
+- **Linux (Wayland): 10ten looks words up over the game.** Holding Shift over scanned text did nothing with 10ten; its pop-up now opens as with the other dictionaries.
+- **Manga OCR reads a game's long horizontal lines whole.** A dialogue line could come back with a stray character or a repeated one where the line was cut, or with its halves swapped.
+- **Linux (Hyprland): a shared window is named after its app**, with its icon, instead of "Shared window", and each game keeps its own crop area. Before, every window you shared on Hyprland used the last one's crop.
+- **Linux AppImage: Kimochi's sounds play again.** The AppImage was missing two audio components, so its sounds failed to load.
 
 ## [0.5.0] - 2026-11-03
 

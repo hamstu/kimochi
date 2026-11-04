@@ -265,7 +265,7 @@ pub(crate) fn scans_with(app: &tauri::AppHandle, engine: &str) -> bool {
 }
 
 /// Unload the local scan engines the selected one replaced. Each keeps its model in memory once
-/// it has scanned (Manga OCR's are over 500 MB), and choosing another engine never needs it
+/// it has scanned (Manga OCR's can pass 2 GB), and choosing another engine never needs it
 /// again; choosing it back loads it again on the first scan. PaddleOCR stays while it is what
 /// Auto OCR watches with. Off the caller's thread: an unload waits for a scan in progress.
 fn release_scan_engines(app: &tauri::AppHandle) {
@@ -282,6 +282,13 @@ fn release_scan_engines(app: &tauri::AppHandle) {
         });
         if !scans_with(&app, "ppocr") && watching != Some("ppocr") {
             pp_ocr::unload(&app);
+        }
+        // glibc keeps what the engines freed in its arenas; give it back to the system
+        // (Manga OCR's own unload already does, for its other callers).
+        #[cfg(target_os = "linux")]
+        // SAFETY: malloc_trim only returns free heap pages; it touches no live allocation.
+        unsafe {
+            libc::malloc_trim(0);
         }
     });
 }

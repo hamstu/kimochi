@@ -324,18 +324,29 @@ export function installAudioValidity(win, root, log) {
     .catch((error) => log({ check: 'audio-bridge-failed', error: String(error?.message ?? error) }))
 }
 
+/**
+ * `task()`, tried once more a moment later if it fails while `win` is still open: a frame's first
+ * document (`about:blank`) is replaced as it loads, and WebKit fails the imports it had begun.
+ */
+function settled(win, task) {
+  return task().catch((error) => new Promise((resolve, reject) => {
+    if (win.closed) return reject(error)
+    setTimeout(() => task().then(resolve, reject), 250)
+  }))
+}
+
 /** Linux: dictionary images WebKitGTK cannot decode natively (see /spike/linux-dictionary-images.js). */
 export function installLinuxDictionaryImages(win, root, log, extra = {}) {
   if (win.__KIMOCHI_PLATFORM__?.os !== 'linux') return
-  void import(assetUrl(root, '/spike/linux-dictionary-images.js'))
-    .then(({ installLinuxDictionaryImages }) => installLinuxDictionaryImages(win))
+  void settled(win, () => import(assetUrl(root, '/spike/linux-dictionary-images.js'))
+    .then(({ installLinuxDictionaryImages }) => installLinuxDictionaryImages(win)))
     .catch((error) => log({ check: 'linux-dictionary-images-failed', error: String(error), ...extra }))
 }
 
 /** Linux: modifier-edge scan input for this document (see /spike/linux-scan-input.js). */
 export function installLinuxScanInput(win, root, log, options, extra = {}) {
-  void import(assetUrl(root, '/spike/linux-scan-input.js'))
-    .then(({ installLinuxScanInput }) => installLinuxScanInput(win, options))
+  void settled(win, () => import(assetUrl(root, '/spike/linux-scan-input.js'))
+    .then(({ installLinuxScanInput }) => installLinuxScanInput(win, options)))
     .catch((error) => log({ check: 'linux-scan-input-failed', error: String(error), ...extra }))
 }
 

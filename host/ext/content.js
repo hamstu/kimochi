@@ -9,9 +9,15 @@ import { createPopupFocus, HACHIDORI_FOCUS } from '../../ui/popup-focus.js'
 /** `contentCss` as links and `contentScripts` as classic scripts, in manifest order, one at a time. */
 export async function injectContentScripts(win, { origin, descriptor, report }) {
   const doc = win.document
+  // An http(s) page (`tauri dev`'s server) may not load a custom scheme's script or stylesheet
+  // in no-cors mode in WebKit ("Domains, protocols and ports must match"); in CORS mode it may,
+  // since the extension origins answer `Access-Control-Allow-Origin: *`. App-origin pages
+  // (bundles) keep the plain load.
+  const cors = /^https?:$/.test(win.location.protocol) && !/^https?:/.test(origin)
   for (const file of descriptor.contentCss) {
     const link = doc.createElement('link')
     link.rel = 'stylesheet'
+    if (cors) link.crossOrigin = 'anonymous'
     link.href = `${origin}/${file}`
     link.dataset.kimochiExtension = descriptor.id
     doc.head.append(link)
@@ -19,6 +25,7 @@ export async function injectContentScripts(win, { origin, descriptor, report }) 
   for (const file of descriptor.contentScripts) {
     await new Promise((resolve, reject) => {
       const script = doc.createElement('script')
+      if (cors) script.crossOrigin = 'anonymous'
       script.src = `${origin}/${file}`
       script.async = false
       script.dataset.kimochiExtension = descriptor.id
