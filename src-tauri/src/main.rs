@@ -250,6 +250,12 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
     if key == "ocrMode" {
         if let Some(mode) = value.as_str() {
             model_store::on_engine_selected(app, mode);
+            // Manga OCR's model is half a gigabyte in memory, and nothing but a scan with it as
+            // the chosen engine uses it (it never watches for Auto OCR): leaving it, free it.
+            // Choosing it again loads it again (`prewarm`, or the next scan).
+            if mode != "mangaocr" {
+                manga_ocr::unload(app);
+            }
         }
         manga_ocr::prewarm(app);
     }
