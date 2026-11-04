@@ -123,6 +123,12 @@ pub fn prewarm(app: &tauri::AppHandle) {
 pub fn unload(app: &tauri::AppHandle) {
     if let Some(state) = app.try_state::<MangaState>() {
         *state.0.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        // glibc keeps the freed gigabyte in its arenas; give it back to the system.
+        #[cfg(target_os = "linux")]
+        // SAFETY: malloc_trim only returns free heap pages; it touches no live allocation.
+        unsafe {
+            libc::malloc_trim(0);
+        }
     }
 }
 static PROBE: LazyLock<Arc<Probe>> = LazyLock::new(Default::default);
