@@ -13,6 +13,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- **The overlay always shows in Steam Deck Gaming Mode, and only over your game.** Its highlight boxes disappear while Kimochi, Steam's menus or another game is in front, and come back when you return to the game; the Show overlay setting is gone there.
 - **Kimochi's windows no longer move focus with a controller.** Use touch, a mouse or the keyboard; on a Steam Deck, a controller press in Kimochi's window says to tap instead. The game menu and reading with the controller over a game are unchanged.
 - **Kimochi opens faster**, and opens cleanly: the main window appears sooner, already in your theme's colours and laid out like the app (no more blank grey window), and your Log is there as soon as it's loaded instead of after a "Loading the log…" screen. The overlay, the dictionary pop-up and the tray follow a moment later, without holding up the window.
 - **The Linux installer no longer offers nightly builds**, which no longer exist: `--nightly` (or `KIMOCHI_CHANNEL=nightly`) now stops with a message instead of installing an old development build. Run it without the option to get the latest release.

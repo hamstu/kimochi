@@ -536,6 +536,14 @@ const renderer = new TextOverlayRenderer(wordsContainer, {
  * which would otherwise hide the text as belonging to an app that is no longer in front.
  */
 let nativeGamescope = false
+/**
+ * Whether scanned text is drawn at all. Always in Gaming Mode, which has no Show overlay switch:
+ * over a game the overlay is the only way to read with Kimochi, and what Gamescope draws in front
+ * decides when it shows (`gamescopeFront`).
+ */
+const overlayTextOn = () =>
+  (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) ||
+  isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)
 let gamescopeMenuCenter = null
 let controller = null
 controller = createController({
@@ -555,7 +563,7 @@ controller = createController({
       hooked: hookMode(),
       autoOcr: Boolean(state.flags.autoOcrEnabled),
       autoAvailable: !isQuickShot(),
-      textVisible: isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible),
+      textVisible: overlayTextOn(),
       origin,
       area,
       scanId: state.appliedScanId,
@@ -763,7 +771,7 @@ function syncReadingHold() {
   }
   const popup = remoteReadingPopup || apiReadingPopup || Boolean(extensionPopupRect) ||
     [...livePopups].some(popup => popup.isVisibleSync?.())
-  const enabled = isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && !state.regionSelecting
+  const enabled = overlayTextOn() && !state.regionSelecting
   if (!enabled) reading.reset()
   const next = enabled && reading.update(renderer.mouse, renderer.hitRects({x:0,y:0}), popup)
   if (next === readingHold) return
@@ -799,7 +807,7 @@ function holdAutoScan() {
 function textBoxes() {
   if (waylandDisabled || waylandLayer) return []
   if (!state.info || !state.origin || !state.annotations.length) return []
-  if (!isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)) return []
+  if (!overlayTextOn()) return []
   const bounds = state.detached
     ? (state.info.source_bounds ?? null)
     : (state.sourceBounds ?? state.info.source_bounds ?? null)
@@ -846,17 +854,17 @@ function draw() {
   const settling = Boolean(state.sourceWindow?.settling) && !state.detached
   // The Text Hooker's line is in its own window, which follows the game's focus and place too.
   syncHookCard()
+  // Gaming Mode: native says whether Gamescope is drawing the source (the game, for a game's text)
+  // in front; over Kimochi, Steam's menus or another game the text goes. Reading holds it.
+  const gamescopeFront = !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) || state.sourceFocus?.focused !== false
   const visible =
     !settling &&
     (controller.holdsText ||
-    (isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) &&
-      (waylandLayer ||
+    (overlayTextOn() &&
+      ((waylandLayer && gamescopeFront) ||
         shouldShowScannedText(state.source, state.sourceFocus, foreground.current, state.scannedApp))))
 
-  const reason = !isOverlayTextVisible(
-    setting('liveOverlayEnabled'),
-    state.flags.textOverlayVisible
-  )
+  const reason = !overlayTextOn()
     ? 'disabled'
     : settling
       ? 'source-settling'
@@ -1133,7 +1141,7 @@ function hookCardHidden(bounds) {
   if (!hook.sourceId) return 'no-game'
   if (!state.origin) return 'no-display'
   if (!bounds?.width || !bounds?.height) return 'no-window'
-  if (!isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)) return 'overlay-off'
+  if (!overlayTextOn()) return 'overlay-off'
   if (state.sourceWindow?.settling && !state.detached) return 'window-settling'
   const focus = state.sourceFocus
   const held = Boolean(hook.card?.dragging()) || Boolean(controller?.holdsText)
@@ -3955,7 +3963,7 @@ async function processView(view) {
  */
 let overlayTextShown = null
 function syncOverlayText() {
-  const shown = isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible)
+  const shown = overlayTextOn()
   const was = overlayTextShown
   overlayTextShown = shown
   draw()
@@ -4133,7 +4141,7 @@ await native.watchCapabilities(async (caps) => {
     waylandDisabled = true
     if (!gnomeOverlay && caps.session.compositor === 'GNOME') {
       const { installGnomeOverlay } = await import('./gnome-overlay.js')
-      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && (gnomeControllerWords || isOverlayTextVisible(setting('liveOverlayEnabled'), state.flags.textOverlayVisible) && state.flags.overlayVisible), log, {renderer,setting})
+      gnomeOverlay = await installGnomeOverlay(native, state, () => !state.regionSelecting && (gnomeControllerWords || overlayTextOn() && state.flags.overlayVisible), log, {renderer,setting})
       const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
       await installLinuxScanInput(window, { passive: true })
     }

@@ -71,6 +71,40 @@ pub fn default_source() -> Option<Source> {
         .cloned()
 }
 
+/// Whether `source` (a Gamescope source id, or none) is what Gamescope shows while it draws `front`
+/// (`GAMESCOPE_FOCUSED_APP_GFX`; `own` is Kimochi's app ID): a game's text belongs on screen only
+/// over that game, and the screen's only over a game, never over Kimochi or Steam's own UI.
+fn source_in_front(source: Option<&str>, front: u32, own: Option<u32>) -> bool {
+    let game = front != 0 && front != linux_gamescope::STEAM_CLIENT_APP && Some(front) != own;
+    match source.map(linux_gamescope::app_of) {
+        None => true,
+        Some(Some(0)) => game,
+        Some(Some(app)) => app == front,
+        Some(None) => true,
+    }
+}
+
+/// The overlay's `source-focus` in Gaming Mode, where the window rules have nothing to go on (one
+/// full-screen app at a time, Kimochi's main window always mapped): from what Gamescope draws in
+/// front. None outside Gaming Mode, or when that cannot be read (the window rules then stand).
+pub fn source_focus(source: Option<&str>) -> Option<crate::state::SourceFocus> {
+    if !active() {
+        return None;
+    }
+    let front = super::gamescope::graphics_app()?;
+    let own = super::gamescope_handoff::own_id();
+    let focused = source_in_front(source, front, own);
+    Some(crate::state::SourceFocus {
+        focused,
+        present: true,
+        held: false,
+        source_front: focused,
+        covered: !focused && Some(front) == own,
+        front_window: front,
+        source_window: source.and_then(linux_gamescope::app_of).unwrap_or(0),
+    })
+}
+
 /// Whether the reader should move to `game`, just brought to the front, from the source
 /// `selected` (a Gamescope source id, or none). Only from another game's window: the screen
 /// already shows whatever is in front, and a source the player is already reading stays.
@@ -141,7 +175,27 @@ pub fn activate(app: &tauri::AppHandle, source_id: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::follows;
+    use super::{follows, source_in_front};
+
+    const OWN: Option<u32> = Some(3148519714);
+
+    #[test]
+    fn a_game_s_text_shows_only_over_that_game() {
+        let sakura = Some("gamescope:window:3280396386:384924");
+        assert!(source_in_front(sakura, 3280396386, OWN));
+        assert!(!source_in_front(sakura, 3456462794, OWN), "another game");
+        assert!(!source_in_front(sakura, 769, OWN), "Steam's menus");
+        assert!(!source_in_front(sakura, 3148519714, OWN), "Kimochi itself");
+    }
+
+    #[test]
+    fn the_screen_s_text_shows_over_any_game_but_not_kimochi_or_steam() {
+        let screen = Some("gamescope:display:0");
+        assert!(source_in_front(screen, 3280396386, OWN));
+        assert!(!source_in_front(screen, 769, OWN));
+        assert!(!source_in_front(screen, 3148519714, OWN));
+        assert!(source_in_front(None, 769, OWN), "no source: nothing to hide");
+    }
 
     #[test]
     fn the_reader_moves_to_the_game_brought_to_the_front() {

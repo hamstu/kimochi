@@ -25,7 +25,7 @@ import {
   type WatcherChoice
 } from '../../../ui/watcher'
 import { OCR_MODES, type OcrMode } from '../../bridge/settings'
-import { useCapabilities } from '../../bridge/capabilities'
+import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
 import type {
   AutoOCRSettings,
   AutoScanSettings,
@@ -97,6 +97,8 @@ function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
 
 export function OcrTab(): ReactNode {
   const [liveOverlayEnabled, setLiveOverlayEnabled] = useSetting<boolean>('liveOverlayEnabled', false)
+  // Gaming Mode always draws the overlay (ui/overlay.js `overlayTextOn`): nothing to switch.
+  const gaming = isGamingMode(useCapabilities())
   const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
   const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
@@ -148,17 +150,19 @@ export function OcrTab(): ReactNode {
       </SettingsSection>
 
       <SettingsSection title="Overlay">
-        <SettingsRow
-          label="Overlay mode"
-          controlId="ocr-live-overlay"
-          description="Hover scanned text on your source to see its definition. Look for the faint highlights."
-        >
-          <Switch
-            id="ocr-live-overlay"
-            checked={liveOverlayEnabled}
-            onCheckedChange={(checked) => void setLiveOverlayEnabled(checked)}
-          />
-        </SettingsRow>
+        {!gaming && (
+          <SettingsRow
+            label="Overlay mode"
+            controlId="ocr-live-overlay"
+            description="Hover scanned text on your source to see its definition. Look for the faint highlights."
+          >
+            <Switch
+              id="ocr-live-overlay"
+              checked={liveOverlayEnabled}
+              onCheckedChange={(checked) => void setLiveOverlayEnabled(checked)}
+            />
+          </SettingsRow>
+        )}
         <SettingsRow
           label="Group text into regions"
           controlId="ocr-grouping"

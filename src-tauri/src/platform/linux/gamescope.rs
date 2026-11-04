@@ -107,12 +107,16 @@ pub fn controls_routed() -> bool {
 /// managed main window stays mapped behind the game, so GTK still calls it visible.
 pub fn shown() -> bool {
     let Some(own) = super::gamescope_handoff::own_id() else { return true };
-    let Some(d) = super::x11::desktop() else { return true };
+    graphics_app().is_none_or(|app| app == own)
+}
+/// The app Gamescope is drawing in front (`GAMESCOPE_FOCUSED_APP_GFX`): a game, Steam's own UI
+/// (769) or Kimochi. None when it cannot be read.
+pub fn graphics_app() -> Option<u32> {
+    let d = super::x11::desktop()?;
     d.conn.intern_atom(true, b"GAMESCOPE_FOCUSED_APP_GFX").ok()
         .and_then(|cookie| cookie.reply().ok())
         .and_then(|atom| d.property32(d.root, atom.atom, AtomEnum::CARDINAL))
         .and_then(|values| values.first().copied())
-        .is_none_or(|app| app == own)
 }
 pub fn return_to_game(app: &tauri::AppHandle) {
     return_to(app, None);
