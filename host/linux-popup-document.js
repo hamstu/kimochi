@@ -17,7 +17,9 @@ export async function installLinuxPopupDocument(win = window) {
     html[data-is-resizing=true], html[data-is-resizing=true] * { -webkit-user-select: none !important; user-select: none !important; }
   `
   d.head.append(style)
-  const { Display } = await import(win.chrome.runtime.getURL('js/display/display.js'))
+  // Imported in the popup's own realm: from this module it would be another, failing load of a
+  // second Display, which the popup never uses.
+  const { Display } = await new win.Function('url', 'return import(url)')(win.chrome.runtime.getURL('js/display/display.js'))
   const setFontOptions = Display.prototype.setFontOptions
   Display.prototype.setFontOptions = function (fontFamily, ...rest) {
     return setFontOptions.call(this, fontFamily || '"Figtree Variable", "Noto Sans JP Variable", sans-serif', ...rest)
