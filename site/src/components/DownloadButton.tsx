@@ -42,8 +42,7 @@ const OTHER_OSES = ['macos', 'windows', 'linux'] as const
 /**
  * The download button: the visitor's OS mark, "Download Kimochi" and the version, linking to the
  * installer for their OS and CPU, with every other installer one click away in the chevron's menu.
- * The release is resolved at runtime from GitHub (the nightly development build until the first
- * tagged release). Without one (none published yet, or GitHub unreachable) the button and the menu
+ * The release (the latest tagged one) is resolved at runtime from GitHub. Without one (none published yet, or GitHub unreachable) the button and the menu
  * go to the releases page, and nothing explains why. On Linux the button goes to the install guide
  * (/download/linux) instead of a file, because the right way to install depends on the system;
  * the menu still lists every file, plus a "Linux install guide" item.

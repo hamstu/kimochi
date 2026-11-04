@@ -10,17 +10,10 @@ export const REPO = 'hamstu/kimochi'
 export const RELEASES_URL = `https://github.com/${REPO}/releases`
 const API = `https://api.github.com/repos/${REPO}/releases`
 const LATEST_API = `${API}/latest`
-/** The rolling pre-release CI refreshes on every push to main. */
-export const NIGHTLY_TAG = 'nightly'
-const NIGHTLY_API = `${API}/tags/${NIGHTLY_TAG}`
-const CACHE_KEY = 'kimochi-site-release-v2'
+const CACHE_KEY = 'kimochi-site-release-v3'
 const CACHE_MS = 10 * 60 * 1000
 
-/** "stable" = the latest tagged release; "nightly" = the rolling development build. */
-export type ReleaseChannel = 'stable' | 'nightly'
-
 export interface Release {
-  channel: ReleaseChannel
   tag: string
   name: string
   url: string
@@ -77,32 +70,22 @@ async function fetchRelease(url: string, signal?: AbortSignal): Promise<GitHubRe
   return (await res.json()) as GitHubRelease
 }
 
-/**
- * The release to offer: the latest published tagged release, or, when none is published yet
- * (`/releases/latest` 404s; it never returns drafts or prereleases), the rolling `nightly`
- * pre-release, marked `channel: 'nightly'`. Unauthenticated: 60 requests/hour per IP, so the
- * result is cached in sessionStorage for 10 min. Throws ReleaseFetchError; callers fall back to
- * RELEASES_URL.
- */
-/** The release's version to show: its tag ("v0.2.0"), or "Nightly" for the development build. */
+/** The release's version to show: its tag ("v0.2.0"). */
 export function versionLabel(release: Release): string {
-  return release.channel === 'nightly' ? 'Nightly' : release.tag
+  return release.tag
 }
 
+/**
+ * The release to offer: the latest published tagged release (`/releases/latest`; it never
+ * returns drafts or prereleases). Unauthenticated: 60 requests/hour per IP, so the result is
+ * cached in sessionStorage for 10 min. Throws ReleaseFetchError; callers fall back to
+ * RELEASES_URL.
+ */
 export async function fetchLatestRelease(signal?: AbortSignal): Promise<Release> {
   const cached = readCache()
   if (cached) return cached
-  let channel: ReleaseChannel = 'stable'
-  let data: GitHubRelease
-  try {
-    data = await fetchRelease(LATEST_API, signal)
-  } catch (err) {
-    if (!(err instanceof ReleaseFetchError) || err.kind !== 'no-release') throw err
-    channel = 'nightly'
-    data = await fetchRelease(NIGHTLY_API, signal)
-  }
+  const data = await fetchRelease(LATEST_API, signal)
   const release: Release = {
-    channel,
     tag: data.tag_name,
     name: data.name || data.tag_name,
     url: data.html_url,

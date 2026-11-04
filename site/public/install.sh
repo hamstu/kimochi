@@ -19,7 +19,6 @@
 # Options (or environment variables):
 #   --uninstall                 remove the app and its menu entries (app data is kept)
 #   --no-launch                 KIMOCHI_NO_LAUNCH=1: do not start Kimochi afterwards
-#   --nightly                   KIMOCHI_CHANNEL=nightly: the rolling development build
 #   --appimage <file>           KIMOCHI_APPIMAGE=<file>: install this AppImage, no download
 #   --help
 # For testing and mirrors: KIMOCHI_INSTALL_REPO (owner/name), KIMOCHI_INSTALL_API (releases API
@@ -34,16 +33,16 @@ kimochi_install() {
   api=${KIMOCHI_INSTALL_API:-https://api.github.com/repos/$repo/releases}
   raw=${KIMOCHI_INSTALL_RAW:-https://raw.githubusercontent.com/$repo}
   releases_page="https://github.com/$repo/releases"
-  channel=${KIMOCHI_CHANNEL:-stable}
   no_launch=${KIMOCHI_NO_LAUNCH:-0}
   local_appimage=${KIMOCHI_APPIMAGE:-}
   action=install
+  no_nightly="Kimochi no longer has nightly builds. Run the installer without --nightly (and unset KIMOCHI_CHANNEL) to install the latest release."
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --uninstall) action=uninstall ;;
       --no-launch) no_launch=1 ;;
-      --nightly) channel=nightly ;;
+      --nightly) die "$no_nightly" ;;
       --appimage)
         [ "$#" -ge 2 ] || die "--appimage needs a file"
         local_appimage=$2
@@ -55,7 +54,13 @@ kimochi_install() {
     shift
   done
   case "$no_launch" in 1 | true | yes) no_launch=1 ;; *) no_launch=0 ;; esac
-  case "$channel" in stable | nightly) ;; *) die "KIMOCHI_CHANNEL must be stable or nightly" ;; esac
+  # KIMOCHI_CHANNEL and --nightly used to choose a rolling `nightly` pre-release; that build is
+  # gone (its tag would be an old one), so ask for the release instead of installing it.
+  case "${KIMOCHI_CHANNEL:-stable}" in
+    stable) ;;
+    nightly) die "$no_nightly" ;;
+    *) die "KIMOCHI_CHANNEL is no longer used; unset it to install the latest release." ;;
+  esac
 
   [ "$(uname -s)" = Linux ] || [ -n "${KIMOCHI_INSTALL_ARCH:-}" ] || die "This installer is for Linux. For macOS and Windows, see $releases_page"
   [ -n "${HOME:-}" ] || die "HOME is not set."
@@ -90,7 +95,6 @@ Install or update Kimochi for this user (no sudo needed).
 Options:
   --uninstall          Remove Kimochi and its menu entries (your data is kept)
   --no-launch          Do not start Kimochi when done   (KIMOCHI_NO_LAUNCH=1)
-  --nightly            Install the development build     (KIMOCHI_CHANNEL=nightly)
   --appimage <file>    Install a downloaded AppImage     (KIMOCHI_APPIMAGE=<file>)
   --help               Show this help
 USAGE
@@ -138,16 +142,9 @@ json_strings() {
   tr ',{}' '\n\n\n' <"$2" | sed -n "s/^[[:space:]]*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }
 
-# The release document for the chosen channel in $1; sets `release_kind`. A tagged release comes
-# from /releases/latest (never a pre-release); until one exists that 404s and the rolling
-# `nightly` pre-release is used, as on the website.
+# The latest tagged release's document in $1 (/releases/latest never returns a pre-release).
 fetch_release() {
-  if [ "$channel" = stable ]; then
-    if status=$(fetch "$api/latest" "$1"); then release_kind=stable; return 0; fi
-    [ "$status" = 404 ] || release_error "$status"
-  fi
-  if status=$(fetch "$api/tags/nightly" "$1"); then release_kind=nightly; return 0; fi
-  release_error "$status"
+  status=$(fetch "$api/latest" "$1") || release_error "$status"
 }
 
 release_error() {
@@ -254,7 +251,6 @@ install() {
     [ -f "$local_appimage" ] || die "AppImage not found: $local_appimage"
     step "Installing $local_appimage"
     cp -- "$local_appimage" "$download"
-    release_kind=local
   else
     have curl || have wget || die "Neither curl nor wget is installed. Install one of them (for example: sudo apt install curl) and try again."
     step "Looking up the newest Kimochi release"
@@ -262,8 +258,7 @@ install() {
     tag=$(json_strings tag_name "$work/release.json" | head -n 1)
     url=$(pick_asset "$work/release.json")
     [ -n "$url" ] || die "The ${tag:-latest} release has no AppImage for $arch. See $releases_page"
-    if [ "$release_kind" = nightly ]; then label="development build (nightly)"; else label=$tag; fi
-    step "Downloading Kimochi $label for $arch"
+    step "Downloading Kimochi $tag for $arch"
     say "    $url"
     status=$(fetch "$url" "$download" progress) || die "The download failed (HTTP $status). Try again, or see $releases_page"
   fi
