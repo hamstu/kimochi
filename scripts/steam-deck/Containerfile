@@ -23,5 +23,10 @@ RUN curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
     && rm /tmp/rustup-init.sh \
     && chmod -R a+rX /opt/rustup /opt/cargo
 ENV PATH=/opt/cargo/bin:$PATH
+# The Text Hooker helper is a Windows program, cross-built with MinGW (scripts/prepare-hookd.mjs).
+RUN apt-get update && apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 \
+    && rm -rf /var/lib/apt/lists/* \
+    && rustup target add x86_64-pc-windows-gnu i686-pc-windows-gnu \
+    && chmod -R a+rX /opt/rustup /opt/cargo
 USER ubuntu
 WORKDIR /work/kimochi-tauri

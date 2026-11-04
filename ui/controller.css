@@ -6,6 +6,8 @@
 #controller {
   position: absolute;
   inset: 0;
+  /* Above everything else on the overlay, the Text Hooker's card (z-index 3) included. */
+  z-index: 10;
   pointer-events: none;
   --cm-accent: #7dd3fc;
   --cm-accent-rgb: 125, 211, 252;
@@ -637,4 +639,152 @@
     animation-duration: 1ms !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* --- the Text Hooker card's panel (ui/controller-card.js) -------------------------------------
+   Recent text's panel, narrower, its rows a setting each: the name, and its value on the right. */
+.cm-card-panel {
+  width: min(560px, 80vw);
+}
+.cm-card-panel[hidden] {
+  display: none;
+}
+.cm-card-row {
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+.cm-card-row[data-disabled] {
+  opacity: 0.45;
+}
+.cm-card-row.cm-refuse {
+  animation: cm-shake 0.32s ease;
+}
+.cm-card-label {
+  font-weight: 560;
+}
+.cm-card-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cm-dim);
+}
+.cm-card-value b {
+  min-width: 96px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--cm-ink);
+}
+.cm-card-value[data-on] {
+  min-width: 52px;
+  justify-content: center;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-weight: 650;
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.08);
+}
+.cm-card-value[data-on="true"] {
+  color: #fff;
+  background: var(--cm-accent);
+}
+.cm-card-arrow {
+  font-style: normal;
+  font-size: 1.2em;
+  opacity: 0.6;
+}
+.cm-card-detail {
+  flex-basis: 100%;
+}
+.cm-card-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+.cm-card-hints .cm-hint {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Placing the card with the sticks: the hint bar along the bottom (`.cm-hud`'s look). */
+.cm-place-bar {
+  gap: 18px;
+  padding: 10px 18px;
+}
+.cm-place-bar .cm-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The Text Hooker panel's hooked text: what the hook is doing, or the line in use. */
+.cm-card-thread {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.cm-card-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+.cm-card-icon {
+  width: 18px;
+  height: 18px;
+  opacity: 0.7;
+}
+.cm-card-warn {
+  color: #f5a524;
+  opacity: 1;
+}
+.cm-card-thread-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cm-card-thread[data-busy] .cm-card-thread-text,
+.cm-card-thread[data-warn] .cm-card-thread-text {
+  color: var(--cm-dim);
+}
+.cm-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--cm-accent);
+  animation: cm-spin 0.8s linear infinite;
+}
+@keyframes cm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* The list of threads: a mark on the choice in force, each thread's latest line and hook name. */
+.cm-card-choice {
+  justify-content: flex-start !important;
+  gap: 4px 12px;
+}
+.cm-card-check {
+  flex: none;
+  width: 14px;
+  color: var(--cm-accent);
+  font-size: 0.7em;
+}
+.cm-card-choice-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-card-choice .cm-card-detail {
+  padding-left: 26px;
 }

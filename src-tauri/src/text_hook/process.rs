@@ -5,23 +5,30 @@
 //!   (`game.exe` starting `game.bin` or `game.log`); those children are hooked too.
 //! - Bitness comes from the image's PE header, corrected by what the process actually runs
 //!   as: a .NET "Any CPU" image says i386 in its header but runs 64-bit (or ARM64).
+//! - On Linux the window's process is a Wine loader running a Windows game (`wine.rs`); its
+//!   target carries how to run programs in the game's prefix, and its Wine process ids are
+//!   found when hooking starts.
 //! - Not hookable: Kimochi itself, Windows' own processes and Store apps, native ARM64
 //!   processes (the hook DLLs are x86/x64), and any process we may not open for injection
 //!   (protected, anti-cheat, or elevated while Kimochi is not).
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 use std::path::Path;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Target {
+    /// The process id the hooker addresses it by: Windows', or under Wine the prefix's own.
     pub pid: u32,
+    /// The game's image (a Linux path under Wine), which keys what is remembered for the game.
     pub exe: PathBuf,
     pub bits: u32,
+    /// Under Wine: how to run the hook helper alongside the game. `None` on Windows.
+    pub wine: Option<super::wine::Wine>,
 }
 
 /// The PE image's bitness from its header: 32 for i386, 64 for x64, `None` for anything else
 /// (ARM64 native images cannot take x86/x64 hook DLLs). `bytes` is the start of the file.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 pub fn pe_bits(bytes: &[u8]) -> Option<u32> {
     if bytes.get(..2)? != b"MZ" {
         return None;
@@ -47,7 +54,7 @@ pub fn is_system_image(exe: &Path) -> bool {
 }
 
 /// A launcher's child that is the real game: same family of image, another extension.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "linux", test))]
 pub fn is_engine_child(exe: &Path) -> bool {
     exe.extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
@@ -148,7 +155,7 @@ mod imp {
             Some(None) => return Err("this app runs as native ARM64, which text hooks cannot enter".into()),
             None => from_header.ok_or("this app is not an x86 or x64 program")?,
         };
-        Ok(Target { pid, exe, bits })
+        Ok(Target { pid, exe, bits, wine: None })
     }
 
     /// Every process with its parent and image name, from one snapshot.
@@ -190,11 +197,20 @@ mod imp {
 #[cfg(windows)]
 pub use imp::{game_processes, target};
 
-#[cfg(not(windows))]
-pub fn target(_pid: u32) -> Result<Target, String> {
-    Err("text hooking runs on Windows".into())
+#[cfg(target_os = "linux")]
+pub use super::wine::target;
+/// Under Wine, the window's process alone; its engine children are found inside the prefix
+/// (`wine::windows_targets`), where the parent links are.
+#[cfg(target_os = "linux")]
+pub fn game_processes(pid: u32) -> Vec<Target> {
+    target(pid).into_iter().collect()
 }
-#[cfg(not(windows))]
+
+#[cfg(not(any(windows, target_os = "linux")))]
+pub fn target(_pid: u32) -> Result<Target, String> {
+    Err("text hooking runs on Windows and Linux".into())
+}
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn game_processes(_pid: u32) -> Vec<Target> {
     Vec::new()
 }

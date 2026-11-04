@@ -18,6 +18,10 @@
  * −/+ beside the corner change the text's size, and ⋯ opens a menu (opacity, the game's settings);
  * each tells the overlay (`hooks`), which keeps the result for the game.
  *
+ * In Steam Deck Gaming Mode nothing can point at the card, so it is drawn `bare` (the text alone)
+ * and the controller places it instead (`steer`, then `release`), from the game menu's Card panel
+ * (ui/controller-card.js).
+ *
  * The overlay delivers the pointer: presses as DOM events (the Windows hook, host/windows-pointer.js)
  * and position through `pointer(x, y, down)` from the native pointer feed, which keeps a dragged
  * card under the pointer however fast it moves and shows the controls while it is over the card.
@@ -119,6 +123,8 @@ export function createHookCard(parent, hooks) {
   let view = null
   let box = null
   let drag = null
+  /** The controller is placing the card (`steer`): what is shown keeps its text, not its place. */
+  let steered = false
 
   const clampBox = (b) => {
     const width = Math.max(MIN_WIDTH, Math.min(b.width, innerWidth - PAD_X * 2))
@@ -229,6 +235,9 @@ export function createHookCard(parent, hooks) {
     card.hidden = false
     card.dataset.ocrTheme = next.theme ?? 'dark'
     card.toggleAttribute('data-pending', Boolean(next.pending))
+    // An example (no line yet, its settings open in the game menu): marked so, and not looked up.
+    card.toggleAttribute('data-example', Boolean(next.example))
+    text.toggleAttribute('data-no-scan', Boolean(next.example))
     if (next.surface) {
       card.dataset.surface = next.surface.ink
       card.style.setProperty('--ocr-surface-top', next.surface.top)
@@ -244,7 +253,7 @@ export function createHookCard(parent, hooks) {
       text.textContent = next.text
     }
     text.style.lineHeight = String(next.lineHeight ?? 1.5)
-    if (drag) return
+    if (drag || steered) return
     const placed = clampBox(next)
     // Shown again unchanged (the overlay redraws often): leave it, and any glide, alone.
     const same = wasShown && box && ['x', 'y', 'width', 'height'].every((k) => Math.abs(placed[k] - box[k]) < 0.5)
@@ -323,9 +332,33 @@ export function createHookCard(parent, hooks) {
     return true
   }
 
+  /** The controller places the card's text box at `next` (overlay coordinates); its box as placed. */
+  function steer(next) {
+    if (card.hidden || !next) return null
+    steered = true
+    menu.hidden = true
+    card.classList.remove('hook-card-glide')
+    card.toggleAttribute('data-steering', true)
+    box = clampBox(next)
+    apply(false)
+    return { ...box }
+  }
+  /** The controller is done placing: kept for the game with `commit`, else back where it was. */
+  function release(commit) {
+    if (!steered) return
+    steered = false
+    card.toggleAttribute('data-steering', false)
+    if (commit && box) hooks.onMoved({ ...box })
+    else box = null
+  }
+
   return {
     show,
     pointer,
+    steer,
+    release,
+    /** Just the text: no bar, no size buttons, no menu, no corner (nothing can point at them). */
+    bare: (on) => card.toggleAttribute('data-bare', Boolean(on)),
     dragging: () => drag !== null,
     /** Where the card and its open menu are on the overlay; empty when it is not shown. */
     rects: () => (card.hidden ? [] : [card.getBoundingClientRect(), ...(menu.hidden ? [] : [menu.getBoundingClientRect()])]),

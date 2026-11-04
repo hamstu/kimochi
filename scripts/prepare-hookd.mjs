@@ -2,19 +2,39 @@
 // small helper ships with Kimochi; the hookers it hosts (LunaHook, Textractor) are downloaded on
 // demand (src-tauri/src/text_hook/store.rs). The x64 build hosts LunaHook and injects 64-bit
 // games; the i686 build injects 32-bit ones. Both run emulated on Windows ARM64.
+//
+// Linux x64 builds ship the same two Windows programs, cross-built with MinGW: Kimochi runs them
+// with a Proton or Wine game's own Wine, inside its prefix (src-tauri/src/text_hook/wine.rs).
+// Linux ARM64 builds have no x86 games to hook and ship none.
 import { spawnSync } from 'node:child_process'
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
-if (process.platform === 'win32') {
-  const destination = path.join(root, 'src-tauri/resources/hookd')
+const destination = path.join(root, 'src-tauri/resources/hookd')
+const linuxTarget = process.env.KIMOCHI_TARGET ?? (process.arch === 'x64' ? 'x86_64-unknown-linux-gnu' : process.arch)
+const builds =
+  process.platform === 'win32'
+    ? [
+        ['x86_64-pc-windows-msvc', 'x64', 'the MSVC x86/x64 C++ tools'],
+        ['i686-pc-windows-msvc', 'x86', 'the MSVC x86/x64 C++ tools']
+      ]
+    : process.platform === 'linux' && linuxTarget.startsWith('x86_64')
+      ? [
+          ['x86_64-pc-windows-gnu', 'x64', 'MinGW-w64 (gcc-mingw-w64-x86-64 and gcc-mingw-w64-i686, or mingw-w64-gcc)'],
+          ['i686-pc-windows-gnu', 'x86', 'MinGW-w64 (gcc-mingw-w64-x86-64 and gcc-mingw-w64-i686, or mingw-w64-gcc)']
+        ]
+      : []
+
+if (process.platform === 'win32' || process.platform === 'linux') {
   await mkdir(destination, { recursive: true })
-  for (const [target, arch] of [
-    ['x86_64-pc-windows-msvc', 'x64'],
-    ['i686-pc-windows-msvc', 'x86']
-  ]) {
+  // The bundle names this directory on Linux whether or not it has helpers in it.
+  await writeFile(
+    path.join(destination, 'README.txt'),
+    'kimochi-hookd: the Text Hooker helper (GPL-3.0-only; source in hookd/ of the Kimochi repository).\n'
+  )
+  for (const [target, arch, tools] of builds) {
     const built = spawnSync(
       'cargo',
       ['build', '--locked', '--release', '--manifest-path', path.join(root, 'hookd/Cargo.toml'), '--target', target],
@@ -22,11 +42,11 @@ if (process.platform === 'win32') {
     )
     if (built.error) throw built.error
     if (built.status !== 0)
-      throw new Error(`Text hook helper ${arch} build failed (${built.status}). Install the ${target} Rust target and the MSVC x86/x64 C++ tools.`)
+      throw new Error(`Text hook helper ${arch} build failed (${built.status}). Install the ${target} Rust target and ${tools}.`)
     await copyFile(
       path.join(root, `hookd/target/${target}/release/kimochi-hookd.exe`),
       path.join(destination, `kimochi-hookd-${arch}.exe`)
     )
   }
-  console.log('Text hook helpers (x64, x86) staged.')
+  console.log(builds.length ? 'Text hook helpers (x64, x86) staged.' : 'No text hook helpers for this target.')
 }

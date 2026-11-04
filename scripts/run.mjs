@@ -156,8 +156,9 @@ if (
   // tauri.windows.conf.json also bundles the OneOCR helper directory (prepare-oneocr.mjs
   // fills it for a real build).
   if (process.platform === 'win32') await mkdir('src-tauri/resources/oneocr', { recursive: true })
-  // ...and the Text Hooker sidecar's (prepare-hookd.mjs).
-  if (process.platform === 'win32') await mkdir('src-tauri/resources/hookd', { recursive: true })
+  // ...and the Text Hooker sidecar's (prepare-hookd.mjs), which Linux bundles too.
+  if (process.platform === 'win32' || process.platform === 'linux')
+    await mkdir('src-tauri/resources/hookd', { recursive: true })
   const legal = [
     ['meikiocr', 'LICENSE', 'src-tauri/resources/meikiocr/LICENSE'],
     ['meikiocr', 'NOTICE', 'src-tauri/resources/meikiocr/NOTICE'],
@@ -173,6 +174,9 @@ if (
 
 if (process.platform === 'win32' && ['dev', 'bundle', 'release'].includes(task)) {
   await import('./prepare-oneocr.mjs')
+  await import('./prepare-hookd.mjs')
+}
+if (process.platform === 'linux' && ['dev', 'bundle', 'release'].includes(task)) {
   await import('./prepare-hookd.mjs')
 }
 

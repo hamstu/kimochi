@@ -142,8 +142,9 @@ function MacPermissionsSection(): ReactNode {
 
 export function SourcesTab(): ReactNode {
   const [quickShot, setQuickShot] = useSetting<boolean>('quickShotEnabled', false)
-  // Text hooking works on Windows only.
-  const windows = useCapabilities().os === 'windows'
+  // Text hooking reads Windows games: on Windows, and on Linux through Proton or Wine.
+  const os = useCapabilities().os
+  const hookable = os === 'windows' || os === 'linux'
   const choose = (next: Mode): void => {
     void updateSettings({ inputSource: next === 'quickshot' ? 'ocr' : next })
     if ((next === 'quickshot') !== quickShot) void setQuickShot(next === 'quickshot')
@@ -167,7 +168,7 @@ export function SourcesTab(): ReactNode {
                   className="input-source-list"
                   aria-label="Input"
                 >
-                  {INPUT_SOURCES.filter((option) => option.value !== 'hook' || windows).map((option) => (
+                  {INPUT_SOURCES.filter((option) => option.value !== 'hook' || hookable).map((option) => (
                     <ToggleGroup.Item
                       key={option.value}
                       value={option.value}

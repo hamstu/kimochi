@@ -10,15 +10,20 @@
 //! kimochi-hookd luna --dir <LunaHook dir> [--flush-ms 400]
 //! kimochi-hookd textractor --dir <Textractor dir>
 //! kimochi-hookd inject --pid <pid> --dll <path>
+//! kimochi-hookd processes
 //! ```
 //! `luna` and `textractor` read JSON commands on stdin and write JSON events on stdout
 //! (`protocol.rs`, documented in COMMANDS.md). Stdin closing detaches everything and exits.
+//! `processes` lists the processes it can see and exits: on Linux the app runs this exe with the
+//! game's own Wine, in the game's prefix, where the game's process ids are Wine's, not Linux's.
 mod protocol;
 
 #[cfg(windows)]
 mod inject;
 #[cfg(windows)]
 mod luna;
+#[cfg(windows)]
+mod processes;
 #[cfg(windows)]
 mod textractor;
 
@@ -93,6 +98,9 @@ fn run(args: &[String]) -> Result<(), String> {
         emit("injected", json!({ "pid": pid }));
         return Ok(());
     }
+    if mode == "processes" {
+        return processes::list();
+    }
     let dir = PathBuf::from(arg(args, "--dir").ok_or("--dir is required")?);
 
     enum Engine {
@@ -105,7 +113,11 @@ fn run(args: &[String]) -> Result<(), String> {
             Engine::Luna(luna::Luna::load(&dir, flush)?)
         }
         "textractor" => Engine::Textractor(textractor::Textractor::new(&dir)?),
-        _ => return Err("usage: kimochi-hookd luna|textractor --dir <dir> | inject --pid <pid> --dll <path>".into()),
+        _ => {
+            return Err(
+                "usage: kimochi-hookd luna|textractor --dir <dir> | inject --pid <pid> --dll <path> | processes".into(),
+            )
+        }
     };
     emit("ready", json!({ "engine": mode, "version": env!("CARGO_PKG_VERSION") }));
 

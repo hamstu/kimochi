@@ -44,7 +44,7 @@ import { TextOverlayRenderer } from './render.js'
 import { HoverOverlay, HoverPreview, marksUnderPointer } from './hover.js'
 import { recognize } from './ocr.js'
 import { annotationGroups, hookAnnotations, splitSpeaker } from './hook-match.js'
-import { createHookCard } from './hook-card.js'
+import { createHookCard, HOOK_CARD_OPACITIES } from './hook-card.js'
 import { createOverlayHints, HINTS_DISMISSED } from './overlay-hints.js'
 import { hookSettings } from './hook-games.js'
 import { normalizeOcrResult, scanGroups } from './ocr-result.js'
@@ -263,22 +263,35 @@ const hook = {
   /** Why the card is hidden (`hookCardHidden`), as last logged. */
   hidden: undefined,
   /** The card (hook-card.js), made once the overlay's document is ready. */
-  card: null
+  card: null,
+  /** The session as native last reported it (`texthook-status`), for the game menu's panel. */
+  status: null
 }
+/**
+ * What the card shows while the game menu's Text Hooker panel is open and no line has come yet,
+ * so its place, size and look can be set: marked as an example (hook-card.css), in the reader's
+ * own settings. Natsume Sōseki's opening line, long out of copyright.
+ */
+const HOOK_EXAMPLE = '吾輩は猫である。名前はまだ無い。'
 const hookMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'hook'
 const hookKey = () => hook.exe?.toLowerCase() ?? null
 const hookGame = () => (hookKey() && setting('textHookerGames')?.[hookKey()]) || {}
 /** The game's settings, with the defaults (Settings → Text Hooker) where it has none (hook-games.ts). */
 const hookSet = () => hookSettings(setting('textHookerDefaults'), hookGame())
 const hookAutoAlign = () => hookSet().autoAlign
-const hookOcrOn = () => hookMode() && Boolean(hook.sourceId) && hookAutoAlign()
+/** The card over the game at all (Settings → Text Hooker → Show the card; the game menu's Card). */
+const hookCardOn = () => setting('textHookerShowCard') !== false
+/** Auto align reads the screen with OCR: only while there is a card to align. */
+const hookOcrOn = () => hookMode() && Boolean(hook.sourceId) && hookAutoAlign() && hookCardOn()
 /** The OCR engine in use (Auto align uses the scan engine too). */
 const ocrModeNow = () => native.getSetting('ocrMode')
-async function saveHookGame(change) {
+async function saveHookGame(change, forget = []) {
   const key = hookKey()
   if (!key) return
   const games = setting('textHookerGames') ?? {}
-  await native.setSetting('textHookerGames', { ...games, [key]: { ...(games[key] ?? {}), ...change } })
+  const game = { ...(games[key] ?? {}), ...change }
+  for (const name of forget) delete game[name]
+  await native.setSetting('textHookerGames', { ...games, [key]: game })
 }
 
 // The card itself; it tells the overlay when it is dragged (the pointer then comes at full rate,
@@ -574,12 +587,21 @@ controller = createController({
   run: async (id) => {
     if (id === 'auto') return void onAction('toggleAutoOcr')
     if (id === 'controls' || id === 'ocr-settings') {
-      if (id === 'ocr-settings') await native.setSetting('settingsActiveTab', 'ocr')
+      // With the Text Hooker as the source, its settings (open at the hooked game's page).
+      if (id === 'ocr-settings' && hookMode()) {
+        await native.setSetting('textHookerSettingsGame', hookKey())
+        await native.setSetting('settingsActiveTab', 'texthooker')
+      } else if (id === 'ocr-settings') await native.setSetting('settingsActiveTab', 'ocr')
       await native.panel('log', 'show')
       if (id === 'ocr-settings') await window.__TAURI__.event.emit('main:show-settings')
     }
   },
-  history: () => native.invoke('settings_get', { key: 'scannedTextHistory' }),
+  // The Log's own newest lines (OCR, Text Hooker, clipboard, WebSocket alike); the overlay's scan
+  // history only if the Log has no session yet.
+  history: async () => {
+    const lines = await native.invoke('log_recent', { limit: 50 }).catch(() => [])
+    return lines.length ? lines : native.invoke('settings_get', { key: 'scannedTextHistory' })
+  },
   // With automatic OCR on, Scan catches the loop up at once instead of a separate scan;
   // either way it resolves once the text on screen is current.
   scan: async () => {
@@ -594,6 +616,46 @@ controller = createController({
       ? Boolean(extensionHost()?.popupFocusable?.())
       : (setting('yomitanSettings')?.popupType ?? 'builtin') !== 'custom-api',
   redraw: () => draw(),
+  // The Text Hooker's card, for the game menu's Card panel (ui/controller-card.js).
+  card: {
+    opacities: HOOK_CARD_OPACITIES,
+    state: () => {
+      const bounds = state.sourceBounds ?? state.info?.source_bounds
+      const game = hookGame()
+      const set = hookSet()
+      const fontPx = bounds?.height
+        ? game.text
+          ? Math.max(8, game.text * bounds.height)
+          : Math.min(HOOK_TEXT_POINTS[1], Math.max(HOOK_TEXT_POINTS[0], set.textSize * bounds.height))
+        : null
+      return {
+        shown: hookCardOn(),
+        autoAlign: set.autoAlign,
+        opacity: set.opacity,
+        fontPx,
+        look: setting('overlayStyle')?.appearance ?? 'app',
+        box: hook.card?.box() ?? null
+      }
+    },
+    hook: () => hook.status,
+    // A thread by hand (remembered for the game), or `null` to choose automatically again.
+    selectThread: (key) => native.invoke('texthook_select', { key }).catch(() => {}),
+    setShown: (on) => native.setSetting('textHookerShowCard', Boolean(on)),
+    // Back on, as in Settings: straight back to where it last found the game's text, the size
+    // measured again (a size set by hand goes), and the screen read at once (`realignHookCard`).
+    setAutoAlign: (on) => (on ? saveHookGame({ autoAlign: true }, ['text', 'leading']) : saveHookGame({ autoAlign: false })),
+    textSize: (step) => {
+      const box = hook.card?.box()
+      return box ? onHookCardTextSize(step, box) : undefined
+    },
+    setOpacity: (opacity) => saveHookGame({ opacity }),
+    setLook: (appearance) => native.setSetting('overlayStyle', { ...(setting('overlayStyle') ?? {}), appearance }),
+    steer: (box) => hook.card?.steer(box) ?? null,
+    release: (commit) => {
+      hook.card?.release(commit)
+      syncHookCard()
+    }
+  },
   dictionary: () => extensionApi,
   // Hachidori's own split of a scan into words (null for the other engines).
   segment: (text) => (extensionHosted ? extensionHost()?.segment?.(text) ?? null : null),
@@ -1137,14 +1199,16 @@ function hookAligned(annotations) {
 /** Why the card is not shown, or null when it is (logged as it changes: `hook-card-shown`). */
 function hookCardHidden(bounds) {
   if (!hookMode()) return 'not-hooking'
-  if (!hook.line) return 'no-line'
+  if (!hook.line && !controller?.holdsCard) return 'no-line'
   if (!hook.sourceId) return 'no-game'
   if (!state.origin) return 'no-display'
   if (!bounds?.width || !bounds?.height) return 'no-window'
   if (!overlayTextOn()) return 'overlay-off'
   if (state.sourceWindow?.settling && !state.detached) return 'window-settling'
+  // Off, the card still comes up to be read along (or set up from the game menu).
+  const held = Boolean(hook.card?.dragging()) || Boolean(controller?.holdsText) || Boolean(controller?.holdsCard)
+  if (!hookCardOn() && !held) return 'card-off'
   const focus = state.sourceFocus
-  const held = Boolean(hook.card?.dragging()) || Boolean(controller?.holdsText)
   if (focus && !(focus.focused && focus.present) && !held) return focus.present ? 'game-behind' : 'game-gone'
   return null
 }
@@ -1215,7 +1279,8 @@ function hookCardView() {
     theme = resolveOverlayCardAppearance({ ...style, appearance: 'app' }, setting('appearance'), systemDark.matches)
   // On the game's text (Auto align, the line placed), the card breaks the line where the game
   // does; anywhere else it wraps to its own width.
-  const shownText = hook.shown ?? hook.line
+  const example = !hook.line
+  const shownText = example ? HOOK_EXAMPLE : (hook.shown ?? hook.line)
   const wrap = hook.wrap
   const gameRows =
     saved && saved === game.ocrBox && hook.placed === hook.line && wrap?.line === hook.line && wrap.shown === shownText
@@ -1223,7 +1288,8 @@ function hookCardView() {
       : null
   if (gameRows) lines = gameRows.length
   return {
-    text: gameRows ? gameRows.join('\n') : shownText,
+    text: gameRows && !example ? gameRows.join('\n') : shownText,
+    example,
     ...where,
     lines,
     pending,
@@ -1249,6 +1315,8 @@ function hookCardUnit() {
 /** Shows the card as it should be now, and publishes it as somewhere the pointer may go. */
 function syncHookCard() {
   if (!hook.card) return
+  // Gaming Mode: nothing can point at the card's bar, buttons or menu; the game menu has them.
+  hook.card.bare(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)
   const view = hookCardView()
   const glide = hook.glide
   hook.glide = false
@@ -1295,7 +1363,7 @@ function onHookCardTextSize(step, box) {
   const next = Math.min(96, Math.max(10, Math.round(now * (step > 0 ? 1.1 : 1 / 1.1) * 10) / 10))
   const saved = hookBoxOf(box)
   log({ check: 'hook-card-text-size', from: now, to: next })
-  void saveHookGame({ text: next / bounds.height, ...(saved ? { box: saved } : {}), autoAlign: false })
+  return saveHookGame({ text: next / bounds.height, ...(saved ? { box: saved } : {}), autoAlign: false })
 }
 
 /** A new hooked line: shown at once, aligned with what OCR last read if the line is there. */
@@ -1312,6 +1380,7 @@ function onHookLine(payload) {
   void chaseHookLine(payload.text)
   setOcrAnnotations(state.rawAnnotations ?? [])
   syncHookCard()
+  controller?.hookChanged?.()
 }
 
 /**
@@ -1323,6 +1392,28 @@ function onHookLine(payload) {
  * line still fading in, which the loop counts as read: the later looks read it again.
  */
 const HOOK_CHASE_MS = [0, 300, 700, 1200, 2000]
+/**
+ * Auto align was turned back on: the card goes back to where Auto align last found the game's
+ * text (its `ocrBox`, kept while it was off) at once, and the screen is read now, as for a new
+ * line, so the line is measured again and the card follows if the text has moved.
+ */
+let hookAligning = null
+function realignHookCard() {
+  const on = hookOcrOn()
+  const was = hookAligning
+  hookAligning = on
+  if (!on || was !== false) return
+  hook.placed = null
+  hook.reading = null
+  hook.moveTo = null
+  hook.resize = null
+  hook.wrap = null
+  log({ check: 'hook-card-realign', line: Boolean(hook.line) })
+  syncHookCard()
+  // After the scanner the same change starts (`syncAutoScanner`) is running.
+  if (hook.line) setTimeout(() => void chaseHookLine(hook.line), 0)
+}
+
 async function chaseHookLine(line) {
   if (!hookOcrOn()) return
   const started = performance.now()
@@ -1371,6 +1462,8 @@ function onHookStatus(status) {
   }
   hook.exe = status?.exe ?? null
   hook.sourceId = sourceId
+  hook.status = status ?? null
+  controller?.hookChanged?.()
   void followSource(followedSource())
   syncAutoScanner()
   draw()
@@ -4080,10 +4173,18 @@ await native.watchSettings((key) => {
     key === 'superTexthooker' ||
     key === 'ocrMode' ||
     key === 'textHookerGames' ||
-    key === 'textHookerDefaults'
+    key === 'textHookerDefaults' ||
+    key === 'textHookerShowCard'
   )
     syncAutoScanner()
-  if (key === 'textHookerGames' || key === 'textHookerDefaults' || key === 'superTexthooker') {
+  if (
+    key === 'textHookerGames' ||
+    key === 'textHookerDefaults' ||
+    key === 'superTexthooker' ||
+    key === 'textHookerShowCard'
+  ) {
+    // First, so the last reading is matched afresh too: the line may still be where it was read.
+    realignHookCard()
     setOcrAnnotations(state.rawAnnotations ?? [])
     draw()
   }

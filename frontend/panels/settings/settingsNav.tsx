@@ -31,9 +31,10 @@ export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName 
   { value: 'about', label: 'About', icon: <Info /> }
 ]
 
-/** The pages this computer has: Text Hooker only on Windows, where games can be hooked. */
+/** The pages this computer has: Text Hooker only where Windows games can be hooked (Windows,
+ * and Linux through Proton or Wine). */
 export function settingsNavFor(os: string | undefined): typeof SETTINGS_NAV {
-  return os === 'windows' ? SETTINGS_NAV : SETTINGS_NAV.filter((item) => item.value !== 'texthooker')
+  return os === 'windows' || os === 'linux' ? SETTINGS_NAV : SETTINGS_NAV.filter((item) => item.value !== 'texthooker')
 }
 
 /** Page names stored by earlier builds, mapped onto the pages that now hold their settings. */

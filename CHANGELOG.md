@@ -11,6 +11,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- ⭐ **Text Hooker on Linux and Steam Deck.** Windows games running through Proton or Wine can now be hooked on Linux, including in Steam Deck Gaming Mode: choose **Text Hooker** and pick the game, and Kimochi reads its text from inside the game as it does on Windows (LunaHook downloads the first time). Native Linux games can't be hooked; keep using OCR for those.
+- **The Text Hooker's settings are in the controller menu.** While you're hooking a game, the menu has a **Text Hooker** item: pick which of the game's text is the dialogue (as in the sidebar, with what the hook is doing while it works), show or hide the card, move and resize it with the sticks, and change Auto align, its text size, its background's opacity and its look (light, dark or blend) without going back to Kimochi. Before the first line arrives, the card shows an example so you can set it up. In Steam Deck Gaming Mode the card is just the text, without the bar and buttons you can't reach there.
+- **You can hide the Text Hooker card.** Turn off **Show the card over the game** in Settings → Text Hooker (or from the controller menu's **Card**): lines still reach the Log, Read along still shows the line while you read, and Auto align stops reading the screen in the background.
+
 ### Changed
 
 - **Steam Deck Gaming Mode has a layout of its own.** Kimochi opens on a new Source tab that sets you up in three steps: choose your game and its crop area, check how it's read (Scan, Auto OCR, the OCR model and dictionary), then see how to switch back to your game and open the game menu. Settings is a tab too, everything is a quarter larger, and the sidebar, mini mode, keep-on-top, minimize and the Gaming Mode bar are gone. Kimochi no longer tries to switch to your game itself: Steam's own button does that properly.
@@ -25,6 +31,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **The controller menu opens over the Text Hooker card** instead of underneath it.
+- **Recent text in the controller menu matches the Log.** It lists the Log's newest lines, whatever they came from (the Text Hooker, the clipboard, a WebSocket or OCR), instead of only scans.
 - **Steam Deck: menus open on every tap.** The session picker and the ⋯ menu under the Log often ignored a tap; they now open as soon as your finger lifts. A long press no longer opens a right-click menu that left Kimochi untappable.
 - **Steam Deck Gaming Mode: the hint under the text tells you how to read it.** It used to say to hold Shift, which a Deck doesn't have, in text too small to read; it now names the button that opens the game menu, at a size you can read on the Deck, and goes away once you've opened the menu.
 - **Steam Deck Gaming Mode: Kimochi follows the game you switch to.** With two games running, switching between them through Steam left Kimochi reading the first one, so Scan and Auto OCR showed the other game's text over the one you were playing. It now reads the game in front, with that game's own crop area.
