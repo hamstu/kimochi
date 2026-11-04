@@ -148,8 +148,9 @@ function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<
     else
       void updateHookGame(scope.exe, (game) => {
         const changed = withSetting(game, key, next, defaults)
-        // Auto align back on aligns afresh: what it learned before (and a size set by hand) goes.
-        if (key === 'autoAlign' && next) for (const learned of ['text', 'leading', 'ocrBox', 'surface'] as const) delete changed[learned]
+        // Auto align back on goes straight back to where it last found the game's text (`ocrBox`)
+        // and measures the text again: a size set by hand goes (the overlay reads at once).
+        if (key === 'autoAlign' && next) for (const learned of ['text', 'leading'] as const) delete changed[learned]
         return changed
       })
   }
@@ -605,6 +606,22 @@ function GameList({ onOpen }: { onOpen: (key: string) => void }): ReactNode {
   )
 }
 
+/** Whether the hooked line's card is shown over the game at all (`textHookerShowCard`). */
+function ShowCard(): ReactNode {
+  const [shown, setShown] = useSetting<boolean>('textHookerShowCard', true)
+  return (
+    <SettingsSection title="Card">
+      <SettingsRow
+        label="Show the card over the game"
+        controlId="th-show-card"
+        description="Off, each line still reaches the Log, and Read along shows it while you read. Auto align only reads the screen while the card is shown."
+      >
+        <Switch id="th-show-card" checked={shown !== false} onCheckedChange={(on) => void setShown(on)} />
+      </SettingsRow>
+    </SettingsSection>
+  )
+}
+
 export function TextHookerTab(): ReactNode {
   const [open, setOpen] = useSetting<string | null>('textHookerSettingsGame', null)
   const games = useHookGames()
@@ -616,6 +633,7 @@ export function TextHookerTab(): ReactNode {
           <GamePage key={open} gameId={open} game={game} onBack={() => void setOpen(null)} />
         ) : (
           <SettingsPage title="Text Hooker" description="How hooked games are read and shown.">
+            <ShowCard />
             <GameList onOpen={(key) => void setOpen(key)} />
             <div className="th-scope-head">
               <h2 className="k-heading">Defaults</h2>

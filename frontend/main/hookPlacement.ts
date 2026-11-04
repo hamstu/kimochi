@@ -18,9 +18,11 @@ export function useHookPlacement(exe: string | null | undefined): { on: boolean;
     void updateHookGame(exe, (game) => {
       const next = withSetting(game, 'autoAlign', !on, defaults)
       if (on) return next
-      // Back on, it aligns afresh: what it learned before (and the reader's text size, which
-      // replaced it) is forgotten. The reader's own place stays, for when they turn it off again.
-      for (const learned of ['text', 'leading', 'ocrBox', 'surface'] as const) delete next[learned]
+      // Back on, it goes straight back to where it last found the game's text (`ocrBox`) and
+      // measures the text again: the reader's text size, which replaced the measured one, goes, and
+      // the overlay reads the screen at once. The reader's own place stays, for when they turn it
+      // off again.
+      for (const learned of ['text', 'leading'] as const) delete next[learned]
       return next
     })
   }

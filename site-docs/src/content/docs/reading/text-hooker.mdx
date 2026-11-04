@@ -1,15 +1,17 @@
 ---
 title: Text Hooker
-description: On Windows, read a game's text straight from inside the game, with no OCR, and show each line in a card over the game.
+description: Read a Windows game's text straight from inside the game, with no OCR, and show each line in a card over the game. On Windows, and on Linux and Steam Deck through Proton or Wine.
 ---
 
 import { Steps } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
 
-:::note[Windows only]
-The Text Hooker works on **Windows** only. On macOS and Linux it isn't in the source menu or in
-Settings; read games with [a window source and OCR](/reading/sources/) instead, or feed Kimochi
-from a texthooker you run yourself ([Texthookers and clipboard](/reading/texthookers/)).
+:::note[Windows games]
+The Text Hooker reads **Windows games**: on Windows, and on Linux and Steam Deck when the game
+runs through Proton or Wine (see [Linux and Steam Deck](#linux-and-steam-deck)). Native Linux
+games can't be hooked, and on macOS it isn't in the source menu or in Settings; read those with
+[a window source and OCR](/reading/sources/) instead, or feed Kimochi from a texthooker you run
+yourself ([Texthookers and clipboard](/reading/texthookers/)).
 :::
 
 The **Text Hooker** reads a game's text from inside the game instead of off the screen. Lines reach
@@ -45,6 +47,19 @@ official GitHub release (or Kimochi's copy of it), checks every file against pin
 Windows Kimochi can't hook stay in the grid, dimmed, with the reason: Windows' own apps,
 apps that are protected or running as administrator, and apps built for ARM64 (the game must be a
 32- or 64-bit x86 program). Kimochi itself can't be hooked either.
+
+## Linux and Steam Deck
+
+On Linux, Kimochi hooks Windows games that run through **Proton** (Steam's compatibility layer,
+which every Windows game on a Steam Deck uses) or **Wine** (Lutris, Bottles, Heroic and the like).
+It runs LunaHook with the game's own Proton or Wine, inside the game's prefix, so there is nothing
+to install or set up: start the game, then choose **Text Hooker** and pick it as you would on
+Windows. In Steam Deck Gaming Mode, choose the game in Kimochi's **Source** tab the same way.
+
+Games that run natively on Linux are dimmed in the grid: only Windows games can be hooked. If a
+game has a native Linux version, you can make Steam run its Windows version instead (the game's
+**Properties → Compatibility → Force the use of a specific Steam Play compatibility tool**).
+Linux on ARM64 computers can't hook games.
 
 ## Choosing the dialogue
 
@@ -87,6 +102,32 @@ overlay: hold <kbd>Shift</kbd> and hover a word. With a controller, **Read along
 
 Without <kbd>Shift</kbd>, clicks go through the card to the game, as they do through the rest of the
 overlay; see [Clicking through to the game](/reading/overlay/#clicking-through-to-the-game).
+
+Don't want the card at all? Turn off **Show the card over the game** at the top of
+[Settings → Text Hooker](#settings). Lines still reach the Log, **Read along** still shows the line
+while you read it, and Auto align stops reading the screen, which saves battery on a handheld.
+
+### With a controller (Steam Deck)
+
+With a controller, the [controller menu](/controller/#the-controller-menu) starts on **Read along**
+while you're hooking a game, and has a **Text Hooker** item for its settings. In Steam Deck Gaming
+Mode, where nothing can point at the sidebar or the card, the card is just the text, and **Text
+Hooker** is where you change things. Until the first line arrives, the card shows an example so you
+can see where it will be and how it will look.
+
+- **Hooked text** shows the line in use, or what Kimochi is doing (hooking, waiting for text,
+  finding the dialogue), as the sidebar does. Press **A** to see every thread and pick the dialogue
+  yourself, or **Choose automatically**; **B** goes back.
+- **Show card** turns the card on or off.
+- **Move and resize**: the left stick moves the card, the right stick resizes it, and the D-pad
+  nudges it. **A** or **B** leaves it there (moving it turns Auto align off, as moving it by hand
+  does).
+- **Auto align**, **Text size**, **Background** (its opacity) and **Look** (like Kimochi, Light,
+  Dark or Blend). Left and right on the D-pad change a setting.
+
+Every change is saved as you make it, so **B** just closes the panel.
+
+**Recent text** in the same menu lists the Log's newest lines, hooked ones included.
 
 :::note[Screenshot to come]
 A picture of the card over a game isn't here yet: the docs' screenshots are drawn from a preview
@@ -155,7 +196,8 @@ reset button beside them. It also has what only a game has:
 ## When it doesn't work
 
 - **The game is dimmed in the grid**: the reason is on its tile. If it says the app may be
-  running as administrator, start the game normally instead.
+  running as administrator, start the game normally instead. On Linux, if it says it's a Linux
+  app, the game runs natively rather than through Proton or Wine.
 - **"Kimochi reached the game but couldn't hook some of its text"**: restart the game while
   Kimochi is open; it often works on the next try.
 - **"LunaHook could not hook this game … Using Textractor."**: Kimochi switched hookers by itself.

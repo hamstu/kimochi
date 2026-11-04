@@ -55,6 +55,7 @@ mod surface;
 mod steam_library;
 mod text_observer;
 mod text_hook;
+mod log_lines;
 mod texthooker;
 mod tray;
 mod updater;
@@ -3203,6 +3204,7 @@ fn main() {
             history_add,
             history_delete,
             history_clear,
+            log_lines::log_recent,
             history_merge_reset,
             ext_relay,
             ext_relay_listen,

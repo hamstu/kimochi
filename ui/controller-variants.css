@@ -525,3 +525,52 @@
   border-radius: 10px;
   box-shadow: 0 0 0 4px var(--cm-accent-soft);
 }
+
+/* --- the Text Hooker card's panel (ui/controller-card.js) ----------------------------------- */
+[data-cm-variant] .cm-card-panel {
+  width: min(600px, 80vw);
+}
+[data-cm-variant] .cm-history .cm-card-row {
+  min-height: var(--cm-row-h);
+  padding: 8px 16px;
+}
+[data-cm-variant] .cm-card-label {
+  font: 560 var(--cm-text-md) var(--cm-font);
+  color: var(--cm-text);
+}
+[data-cm-variant] .cm-card-value {
+  font: 520 var(--cm-text-sm) var(--cm-font);
+  color: var(--cm-text-2);
+}
+[data-cm-variant] .cm-card-value b {
+  color: var(--cm-text);
+}
+[data-cm-variant] .cm-card-value[data-on] {
+  background: var(--cm-key);
+  box-shadow: inset 0 0 0 1px var(--cm-line-strong);
+}
+[data-cm-variant] .cm-card-value[data-on="true"] {
+  color: var(--cm-accent-contrast);
+  background: var(--cm-accent-9);
+  box-shadow: none;
+}
+[data-cm-variant] .cm-card-detail {
+  font: 520 var(--cm-text-xs) var(--cm-font);
+  color: var(--cm-text-3);
+}
+[data-cm-variant] .cm-card-thread-text[lang="ja"],
+[data-cm-variant] .cm-card-choice-text[lang="ja"] {
+  font-family: var(--cm-font-jp);
+  font-size: 19px;
+}
+[data-cm-variant] .cm-card-thread[data-busy] .cm-card-thread-text,
+[data-cm-variant] .cm-card-thread[data-warn] .cm-card-thread-text {
+  color: var(--cm-text-2);
+}
+[data-cm-variant] .cm-spinner {
+  border-color: var(--cm-line-strong);
+  border-top-color: var(--cm-accent-text);
+}
+[data-cm-variant] .cm-card-check {
+  color: var(--cm-accent-text);
+}

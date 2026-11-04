@@ -12,6 +12,10 @@
  *           ▲                       │                     │
  *           └──── B / Escape / an action / menu button ◀──┘
  *
+ * With the Text Hooker as the source the menu also has Text Hooker (`card`): the hooked text and
+ * the card's settings (ui/controller-card.js), whose Move and resize (`place`) moves the card's top-left with
+ * the left stick and its size with the right; A or B keeps it, as every change in the panel is kept.
+ *
  * With Settings → Game Mode's full-screen dictionary on, Read along opens `dictionary` instead of
  * `words`: the scan across the top of a dimmed screen and the lit word's dictionary below it
  * (ui/game-dictionary.js). With the Yomitan API that is Kimochi's own drawing of its entries; with
@@ -35,6 +39,8 @@ import {
   SCAN_LENGTH,
 } from "./word-nav.js";
 import { ControllerHistory } from "./controller-history.js";
+import { ControllerCard, nextLook, stepValue, CARD_LOOKS, hookSummary, threadChoices } from "./controller-card.js";
+import { stickTravel } from "./region-select.js";
 import { GameDictionary } from "./game-dictionary.js";
 import { sectionText } from "./log-sections.js";
 
@@ -118,6 +124,9 @@ export function scrollSpeed(y) {
  * @param {() => boolean} [context.popupFocusable] whether the engine's popup has buttons the
  *   controller can focus (Yomitan, Hachidori; not 10ten or the Yomitan API pop-up)
  * @param {() => void} context.redraw redraw the text overlay (it is held visible in word mode)
+ * @param {object} [context.card] the Text Hooker card (ui/overlay.js): `state()` →
+ *   `{shown, autoAlign, opacity, fontPx, look, box}`, `opacities`, and the setters `setShown`,
+ *   `setAutoAlign`, `textSize(step)`, `setOpacity`, `setLook`, `steer(box)` → box, `release(commit)`
  * @param {() => ((action: string, params: object) => Promise<any>)|null} context.dictionary Yomitan's backend API, once ready
  * @param {() => object} context.buttons the command buttons from settings (`controllerButtons`)
  * @param {() => string} context.popupType `yomitanSettings.popupType`: only `custom-api` (the Yomitan
@@ -261,7 +270,7 @@ export function createController(context) {
     onClose: () => void close(),
   });
   const controls = new ControllerInput((command) => {
-    if (command.type !== "aim" && command.type !== "scroll") note("command", command);
+    if (command.type !== "aim" && command.type !== "scroll" && command.type !== "rstick") note("command", command);
     void handle(command);
   });
 
@@ -334,7 +343,11 @@ export function createController(context) {
               unavailable: "Not in Quick Shot",
             },
           ]),
-    ].concat([
+    ].concat(
+      hooked && context.card
+        ? [{ id: "card", label: "Text Hooker", icon: ICONS.card, enabled: true, detail: context.card.state().shown ? undefined : "Card hidden" }]
+        : [],
+    ).concat([
       {
         id: "history",
         label: "Recent text",
@@ -350,7 +363,7 @@ export function createController(context) {
       },
       {
         id: "ocr-settings",
-        label: "OCR settings",
+        label: hooked ? "App settings" : "OCR settings",
         icon: ICONS.settings,
         enabled: true,
       },
@@ -436,11 +449,15 @@ export function createController(context) {
     if (wasWords) leaveWords();
     historical = false;
     history.remove();
+    leavePlace(true);
+    cardPanel.remove();
+    context.redraw?.();
     await setNav(false);
   }
 
   async function choose(id) {
     if (id === "history") return openHistory();
+    if (id === "card") return openCard();
     if (id === "dictionary") {
       menu.close();
       return enterWords();
@@ -502,6 +519,20 @@ export function createController(context) {
         if (menu.selected < 0) return void close();
         menu.confirm();
       } else if (command.type === "cancel") void close();
+      return;
+    }
+    if (mode === "card") {
+      if (command.type === "cancel") return cardPanel.inThreads ? cardPanel.back() : void close();
+      if (command.type === "confirm") return void cardPanel.activate();
+      if (command.type === "dir") return void cardPanel.direction(command.dir);
+      return;
+    }
+    if (mode === "place") {
+      if (command.type === "aim") return void steerWith("left", command.x, command.y);
+      if (command.type === "rstick") return void steerWith("right", command.x, command.y);
+      if (command.type === "dir" && command.source !== "stick") return void nudge(command.dir);
+      // Kept either way, as every change in the panel is kept the moment it is made.
+      if (command.type === "confirm" || command.type === "cancel") return void finishPlace(true);
       return;
     }
     if (mode === "history") {
@@ -598,6 +629,170 @@ export function createController(context) {
         if (!context.popupControl({ focus: "audio" })) bumpHud();
       }
     }
+  }
+
+  // --- the Text Hooker card's panel, and placing the card -----------------------------
+
+  const cardPanel = new ControllerCard(host, {
+    rows: () => cardRows(),
+    threads: () => threadChoices(context.card.hook?.()),
+    onPick: (key) => {
+      context.log({ check: "controller-card-thread", key: key ?? "auto" });
+      void context.card.selectThread?.(key);
+    },
+    onActivate: (id) => void cardActivate(id),
+    onChange: (id, step) => void cardChange(id, step),
+    onClose: () => void close(),
+  });
+  /** Placing the card: its box as steered, each stick's lean, and the frame moving it. */
+  const place = { box: null, moved: false, left: { x: 0, y: 0 }, right: { x: 0, y: 0 }, frame: null, at: 0, bar: null };
+
+  function cardRows() {
+    const card = context.card.state();
+    const look = CARD_LOOKS.find((l) => l.value === card.look) ?? CARD_LOOKS[0];
+    const hook = hookSummary(context.card.hook?.());
+    return [
+      { id: "hook", label: "Hooked text", kind: "hook", value: hook.enabled ? "›" : "", enabled: hook.enabled, hook, detail: hook.how },
+      {
+        id: "shown",
+        label: "Show card",
+        kind: "toggle",
+        on: card.shown,
+        detail: card.shown ? undefined : "Hidden over the game. Read along still shows the line while you read.",
+      },
+      { id: "place", label: "Move and resize", kind: "action", value: "›", detail: card.autoAlign ? "Turns Auto align off." : undefined },
+      {
+        id: "align",
+        label: "Auto align",
+        kind: "toggle",
+        on: card.autoAlign,
+        detail: card.autoAlign ? "The card sits on the game's own text." : undefined,
+      },
+      { id: "size", label: "Text size", kind: "step", value: card.fontPx ? `${Math.round(card.fontPx)} px` : "—" },
+      { id: "opacity", label: "Background", kind: "step", value: `${Math.round(card.opacity * 100)}%` },
+      { id: "look", label: "Look", kind: "step", value: look.label },
+    ];
+  }
+
+  /** A setting changed: the panel shows it once the overlay has it (the setting round-trips). */
+  async function cardSettled(change) {
+    try {
+      await change;
+    } finally {
+      cardPanel.render();
+      setTimeout(() => mode === "card" && cardPanel.render(), 120);
+    }
+  }
+
+  async function cardActivate(id) {
+    const card = context.card.state();
+    if (id === "shown") return cardSettled(context.card.setShown(!card.shown));
+    if (id === "align") return cardSettled(context.card.setAutoAlign(!card.autoAlign));
+    if (id === "place") return enterPlace();
+  }
+
+  async function cardChange(id, step) {
+    const card = context.card.state();
+    if (id === "shown" || id === "align") return cardActivate(id);
+    if (id === "size") return cardSettled(context.card.textSize(step));
+    if (id === "opacity") {
+      const levels = [...context.card.opacities].sort((a, b) => a - b);
+      return cardSettled(context.card.setOpacity(stepValue(levels, card.opacity, step)));
+    }
+    if (id === "look") return cardSettled(context.card.setLook(nextLook(card.look, step)));
+  }
+
+  async function openCard() {
+    menu.close();
+    setMode("card");
+    controls.reset();
+    // Held up while the panel is open, shown or not, so what changes can be seen.
+    context.redraw?.();
+    cardPanel.show(context.card.state().box);
+    context.log({ check: "controller-card", open: true });
+  }
+
+  function enterPlace() {
+    const box = context.card.state().box;
+    if (!box) return cardPanel.refuse();
+    place.box = context.card.steer(box) ?? box;
+    place.left = { x: 0, y: 0 };
+    place.right = { x: 0, y: 0 };
+    cardPanel.hide();
+    setMode("place");
+    controls.reset();
+    place.bar = document.createElement("div");
+    place.bar.className = "cm-hud cm-place-bar";
+    place.bar.innerHTML =
+      `<span class="cm-hint"><kbd class="cm-glyph">L</kbd>Move</span>` +
+      `<span class="cm-hint"><kbd class="cm-glyph">R</kbd>Resize</span>` +
+      `<span class="cm-hint"><kbd class="cm-glyph">✥</kbd>Nudge</span>` +
+      `<span class="cm-hint"><kbd class="cm-glyph cm-confirm">A</kbd>Done</span>`;
+    host.append(place.bar);
+    context.log({ check: "controller-card-place", active: true });
+  }
+
+  /** A stick leaned: the card moves (left) or resizes (right) for as long as it is. */
+  function steerWith(stick, x, y) {
+    place[stick] = { x, y };
+    if (place.frame === null) {
+      place.at = performance.now();
+      place.frame = requestAnimationFrame(tickPlace);
+    }
+  }
+
+  function tickPlace(now) {
+    place.frame = null;
+    if (mode !== "place" || !place.box) return;
+    const seconds = Math.min(0.05, (now - place.at) / 1000);
+    place.at = now;
+    const { left, right } = place;
+    // y is up on the sticks, down on the screen. The right stick drags the bottom-right corner.
+    const next = {
+      x: place.box.x + stickTravel(left.x, seconds),
+      y: place.box.y - stickTravel(left.y, seconds),
+      width: place.box.width + stickTravel(right.x, seconds),
+      height: place.box.height - stickTravel(right.y, seconds),
+    };
+    const moving = [left.x, left.y, right.x, right.y].some((v) => stickTravel(v, 1) !== 0);
+    if (moving) place.moved = true;
+    place.box = context.card.steer(next) ?? next;
+    if (moving) place.frame = requestAnimationFrame(tickPlace);
+  }
+
+  /** The D-pad nudges the card a few points at a time. */
+  function nudge(dir) {
+    if (!place.box) return;
+    const step = 4;
+    const [dx, dy] = { up: [0, -step], down: [0, step], left: [-step, 0], right: [step, 0] }[dir] ?? [0, 0];
+    place.moved = true;
+    place.box = context.card.steer({ ...place.box, x: place.box.x + dx, y: place.box.y + dy }) ?? place.box;
+  }
+
+  /**
+   * Out of placing: the card kept where it is (`commit`; only if it moved, as a move by hand turns
+   * Auto align off) or put back.
+   */
+  function leavePlace(commit) {
+    if (place.frame !== null) cancelAnimationFrame(place.frame);
+    place.frame = null;
+    place.bar?.remove();
+    place.bar = null;
+    if (!place.box) return;
+    const moved = place.moved;
+    place.box = null;
+    place.moved = false;
+    context.card?.release(commit && moved);
+    context.log({ check: "controller-card-place", active: false, kept: commit });
+  }
+
+  function finishPlace(commit) {
+    leavePlace(commit);
+    setMode("card");
+    controls.reset();
+    context.redraw?.();
+    cardPanel.reveal();
+    setTimeout(() => mode === "card" && cardPanel.render(), 150);
   }
 
   // --- the pop-up's buttons, and the list of controls ------------------------------
@@ -1552,6 +1747,14 @@ export function createController(context) {
     get holdsText() {
       return (mode === "words" || mode === "dictionary") && !historical;
     },
+    /** The hook's status or line changed: the Text Hooker panel, if open, shows it now. */
+    hookChanged() {
+      if (mode === "card") cardPanel.render();
+    },
+    /** True while the card's panel is open or the card is being placed: the card stays shown. */
+    get holdsCard() {
+      return mode === "card" || mode === "place";
+    },
     /** True while the controller, not the mouse, is reading: the pointer must not drive lookups. */
     get drivesLookups() {
       return (mode === "words" && driver === "controller") || mode === "dictionary";
@@ -1612,7 +1815,7 @@ export function createController(context) {
     hitRects() {
       const bounds = menu.bounds();
       const historyBounds = history.bounds();
-      return [bounds, historyBounds, fullView?.bounds()].filter(Boolean);
+      return [bounds, historyBounds, cardPanel.bounds(), fullView?.bounds()].filter(Boolean);
     },
     /** A new scan was applied: in word mode, carry on over the new text from its first word. */
     scanChanged() {

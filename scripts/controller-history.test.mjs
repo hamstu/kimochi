@@ -263,6 +263,9 @@ function controllerHarness(t, history, overrides = {}) {
     setDictionary(api) {
       dictionary = api;
     },
+    send(payload) {
+      listeners.get("controller-nav")({ payload });
+    },
     async press(button) {
       listeners.get("controller-nav")({
         payload: {
@@ -518,4 +521,160 @@ test("read along falls back to the pointer-style lookup for an engine without a 
   await h.press(0);
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(h.lookups, ["猫 犬"]);
+});
+
+test("Text Hooker: the menu starts on Read along, and offers the Text Hooker panel and the app's settings", async (t) => {
+  const card = fakeCard();
+  const h = controllerHarness(t, async () => [], {
+    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
+    card,
+  });
+  await h.controller.toggle();
+  const found = [];
+  const walk = (element) => {
+    if (element.className === "cm-label") found.push(element.value);
+    element.children.forEach(walk);
+  };
+  walk(h.host);
+  const labels = found;
+  assert.deepEqual(labels, ["Read along", "Text Hooker", "Recent text", "Kimochi", "App settings"]);
+});
+
+test("Text Hooker: Card's panel switches the card, and the sticks place it until A keeps it", async (t) => {
+  const card = fakeCard();
+  const frames = [];
+  const savedFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = (fn) => frames.push(fn);
+  globalThis.cancelAnimationFrame = () => {};
+  t.after(() => {
+    globalThis.requestAnimationFrame = savedFrame;
+  });
+  const h = controllerHarness(t, async () => [], {
+    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
+    card,
+  });
+  await h.controller.toggle();
+  await h.press(15); // right: Read along → Card
+  await h.press(0);
+  assert.equal(h.controller.mode, "card");
+  assert.ok(h.controller.holdsCard, "the card stays up while its panel is open");
+  await h.press(0);
+  assert.deepEqual(card.calls, [], "the press that opened the panel presses nothing in it");
+  await settle();
+  await h.press(0);
+  assert.deepEqual(card.calls, [], "the hooked text cannot be opened while nothing is hooked");
+  await h.press(13); // down: Show card
+  await h.press(0); // Show card: off
+  assert.deepEqual(card.calls.at(-1), ["setShown", false]);
+  await h.press(13); // down: Move and resize
+  await h.press(0);
+  assert.equal(h.controller.mode, "place");
+  assert.deepEqual(card.calls.at(-1), ["steer", { x: 100, y: 500, width: 400, height: 60 }]);
+  // Left stick right and up: the card moves right and up; right stick right: wider.
+  h.send({ pressed: [], released: [], held: [], stick: { x: 1, y: 1 }, rstick: { x: 1, y: 0 } });
+  let at = performance.now();
+  for (let i = 0; i < 5 && frames.length; i++) frames.shift()((at += 40));
+  const moved = card.calls.filter(([name]) => name === "steer").at(-1)[1];
+  assert.ok(moved.x > 100 && moved.y < 500 && moved.width > 400 && moved.height === 60, JSON.stringify(moved));
+  h.send({ pressed: [], released: [], held: [], stick: { x: 0, y: 0 }, rstick: { x: 0, y: 0 } });
+  await h.press(1); // B: kept too, as every change in the panel is
+  assert.deepEqual(card.calls.at(-1), ["release", true]);
+  assert.equal(h.controller.mode, "card");
+  // A on a row with a value to step does nothing; left and right step it.
+  await h.press(13);
+  await h.press(13); // Text size
+  const before = card.calls.length;
+  await h.press(0);
+  assert.equal(card.calls.length, before, "A does not change the text size");
+  await h.press(15);
+  assert.deepEqual(card.calls.at(-1), ["textSize", 1]);
+  await h.press(1); // B: close
+  assert.equal(h.controller.mode, "idle");
+  assert.ok(!card.calls.some(([name, on]) => name === "setAutoAlign" && on === false), "Auto align was never turned off");
+});
+
+test("Text Hooker: leaving Move and resize without moving the card leaves it as it was", async (t) => {
+  const card = fakeCard();
+  const h = controllerHarness(t, async () => [], {
+    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
+    card,
+  });
+  await h.controller.toggle();
+  await h.press(15);
+  await h.press(0);
+  await settle();
+  await h.press(13);
+  await h.press(13);
+  await h.press(0);
+  assert.equal(h.controller.mode, "place");
+  await h.press(1);
+  assert.deepEqual(card.calls.at(-1), ["release", false], "nothing moved, so Auto align is left alone");
+  assert.equal(h.controller.mode, "card");
+});
+
+/** Past the moment after opening the Card panel when it takes no press. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 320));
+
+function fakeCard() {
+  const calls = [];
+  const state = { shown: true, autoAlign: true, opacity: 1, fontPx: 24, look: "app", box: { x: 100, y: 500, width: 400, height: 60 } };
+  return {
+    calls,
+    opacities: [1, 0.85, 0.7, 0.55, 0.4],
+    state: () => ({ ...state }),
+    setShown: async (on) => {
+      calls.push(["setShown", on]);
+      state.shown = on;
+    },
+    setAutoAlign: async (on) => calls.push(["setAutoAlign", on]),
+    textSize: async (step) => calls.push(["textSize", step]),
+    setOpacity: async (value) => calls.push(["setOpacity", value]),
+    setLook: async (value) => calls.push(["setLook", value]),
+    steer: (box) => {
+      calls.push(["steer", box]);
+      return box;
+    },
+    release: (commit) => calls.push(["release", commit]),
+    status: null,
+    hook() {
+      return this.status;
+    },
+    selectThread: async (key) => calls.push(["selectThread", key]),
+  };
+}
+
+test("Text Hooker: the panel's hooked text opens the threads, and A uses the one chosen", async (t) => {
+  const card = fakeCard();
+  card.status = {
+    phase: "hooked",
+    selectedBy: "auto",
+    threads: [
+      { key: "a", name: "TextRender", preview: "わたしは見守る。", selected: true },
+      { key: "b", name: "KiriKiriZ", preview: "わわわたし", selected: false },
+    ],
+  };
+  const h = controllerHarness(t, async () => [], {
+    status: () => ({ hasText: true, hooked: true, autoOcr: false, autoAvailable: true, textVisible: true, center: { x: 640, y: 400 }, area: null, origin: null }),
+    card,
+  });
+  await h.controller.toggle();
+  await h.press(15);
+  await h.press(0);
+  await settle();
+  assert.ok(h.host.textContent.includes("わたしは見守る。"), "the line in use is shown");
+  assert.ok(h.host.textContent.includes("Matched to the screen"));
+  await h.press(0);
+  assert.ok(h.host.textContent.includes("Choose automatically"));
+  await h.press(13);
+  await h.press(13); // the second thread
+  await h.press(0);
+  assert.deepEqual(card.calls.at(-1), ["selectThread", "b"]);
+  assert.ok(!h.host.textContent.includes("Choose automatically"), "back to the settings");
+  await h.press(0);
+  await h.press(1); // B: back from the threads, not out of the panel
+  assert.equal(h.controller.mode, "card");
+  // Live: the status changing redraws the open panel.
+  card.status = { phase: "attaching", threads: [] };
+  h.controller.hookChanged();
+  assert.ok(h.host.textContent.includes("Hooking…"));
 });

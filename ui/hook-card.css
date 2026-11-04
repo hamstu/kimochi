@@ -263,3 +263,34 @@
   margin: 0;
   pointer-events: none;
 }
+
+/* Steam Deck Gaming Mode: nothing points at the card, so it is the text alone; the game menu's
+   Card panel (ui/controller-card.js) does what the bar, the buttons and the menu do. */
+.hook-card[data-bare] :is(.hook-card-bar, .hook-card-controls, .hook-card-resize, .hook-card-menu) {
+  display: none;
+}
+/* Being placed with the sticks: outlined in the controller's accent. */
+.hook-card[data-steering]::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--hook-card-radius) + 3px);
+  border: 2px solid #5472e4;
+  box-shadow: 0 0 0 4px rgb(17 68 255 / 0.2);
+  pointer-events: none;
+}
+/* An example, while the game menu's Text Hooker panel is open before any line has come: the
+   reader's own settings, its text marked as an example in faded English ahead of it. */
+.hook-card[data-example] .hook-card-text::before {
+  content: 'Example';
+  margin-right: 0.6em;
+  font-family: system-ui, sans-serif;
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  vertical-align: 0.15em;
+  opacity: 0.5;
+}
+.hook-card[data-example] .hook-card-text {
+  opacity: 0.85;
+}

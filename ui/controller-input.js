@@ -20,6 +20,7 @@
  *   help     show every control: View / Select
  *   menu     the controller menu's own button combination, pressed again
  *   scroll   the right stick's vertical deflection, for scrolling a dictionary popup
+ *   rstick   the right stick's position, `{x, y}` with y up (sizing the Text Hooker card)
  *
  * Pure apart from the timers it is given, so it can be driven from a test.
  */
@@ -111,6 +112,8 @@ export class ControllerInput {
     this.stick = ZERO
     this.stickDir = null
     this.scroll = 0
+    this.rstickX = 0
+    this.rstickY = 0
     /** The direction currently repeating, and what is holding it. */
     this.repeating = null
     this.timer = null
@@ -153,6 +156,8 @@ export class ControllerInput {
     this.stick = ZERO
     this.stickDir = null
     this.scroll = 0
+    this.rstickX = 0
+    this.rstickY = 0
   }
 
   /** A `controller-nav` payload. */
@@ -200,6 +205,12 @@ export class ControllerInput {
     if (scroll !== this.scroll) {
       this.scroll = scroll
       this.emit({ type: 'scroll', y: scroll })
+    }
+    const rx = payload?.rstick?.x ?? 0
+    if (rx !== this.rstickX || scroll !== this.rstickY) {
+      this.rstickX = rx
+      this.rstickY = scroll
+      this.emit({ type: 'rstick', x: rx, y: scroll })
     }
   }
 

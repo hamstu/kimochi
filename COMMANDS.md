@@ -606,6 +606,7 @@ without a CFRunLoop has not been tested in-app.
 | `history_add` | `({text}) -> entry` |
 | `history_delete` | `({id}) -> ()` |
 | `history_clear` | `() -> ()` |
+| `log_recent` | `({limit?}) -> [{id, text, timestamp, source}]` — the Log's newest lines (open session's `lines.json`, newest first, default 50), whatever their source; the controller's Recent text |
 | `ext_relay` | `({target \| null, payload}) -> ()` |
 | `yomitan_request` | `({url, body}) -> Value` |
 | `tts_speak` | `({text, voiceId}) -> ArrayBuffer` (audio) |
@@ -1589,16 +1590,26 @@ path refuses with the same reason: `ocr_frame` and `scan` fail with
 `"<Engine> is not ready: <reason>"`, and the observer as above. Switching to an engine whose
 models are ready scans at once.
 
-## Text Hooker (Windows)
+## Text Hooker (Windows; Linux through Proton or Wine)
 
 The `inputSource` `"hook"`: the game behind a chosen window is hooked and its text read from
 inside it. Implementation: `src-tauri/src/text_hook/` (session, process resolution, thread
-choice, download store) and the `kimochi-hookd` sidecar (`hookd/`). Elsewhere the commands
+choice, download store) and the `kimochi-hookd` sidecar (`hookd/`). On macOS the commands
 answer `supported: false` or refuse.
+
+On Linux a window is hookable when its process is a Wine loader running a Windows game
+(`text_hook/wine.rs`): Proton (including Steam Deck Gaming Mode's `gamescope:window:{appid}:{pid}`
+sources) or any Wine. The same Windows sidecar runs with the game's own `wine`, in its prefix
+(`WINEPREFIX`, the sync mode and Wine's library path copied from the game's environment), which
+reaches the game's wineserver from outside Proton's runtime container. Its paths are passed on
+the prefix's `Z:` drive. Process ids in the protocol are then the prefix's, found by running
+`kimochi-hookd processes` there and matching the game's Windows image path; `exe` is the game's
+Linux path (through the prefix's drive links), which keys what is remembered per game. Linux x64
+bundles ship the sidecar (cross-built with MinGW); Linux ARM64 bundles do not.
 
 | Command | Signature |
 | --- | --- |
-| `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi) |
+| `texthook_targets` | `({sourceIds}) -> {[sourceId]: {hookable, bits?, exe?, reason?}}` — which windows can be hooked; `reason` says why not (Windows' own apps, Store apps, protected or elevated processes, native ARM64 processes, Kimochi; on Linux, anything not a Windows game under Proton or Wine) |
 | `texthook_start` | `({sourceId, observerEngine?}) -> HookStatus` — hooks the window's process and its launcher children (`.bin`/`.log`/`.dat`); replaces any session. `observerEngine` is the local OCR the thread choice reads the window with (the Auto OCR watcher) |
 | `texthook_stop` | `() -> HookStatus` — detaches and stops the sidecar |
 | `texthook_status` | `() -> HookStatus` |
@@ -1710,6 +1721,26 @@ game's page in Settings → Text Hooker, through `textHookerSettingsGame`). Any 
 - Gaming Mode: with the Text Hooker as the source the radial menu has no Scan or Auto OCR, and
   starts on Read along, which steps through the card's text (`extraUnits`) or, as the full-screen
   dictionary, shows the hooked line across the top (`sections`). The card stays up while it does.
+  Its items are Read along, **Text Hooker**, Recent text, Kimochi and **App settings** (Settings →
+  Text Hooker, at the hooked game's page). Text Hooker opens `ui/controller-card.js`: first the
+  hooked text as the sidebar's select shows it (`hookSummary`, live from `texthook-status`: the
+  phases with a spinner, the line in use and how it was chosen), whose A opens the threads
+  (`threadChoices`: Choose automatically, then each thread; A calls `texthook_select`, B goes back);
+  then Show card, Move and resize (left stick
+  moves the text box's top-left, right stick drags its bottom-right, the D-pad nudges 4 pt; A or B
+  keeps it as a move does, turning Auto align off, if it moved), Auto align, Text size (the −/+ step),
+  Background (the opacities) and Look (`overlayStyle.appearance`: app, light, dark, blend). Every
+  change is saved as it is made; A does nothing on a stepped row (left/right step it), and no press
+  counts in the panel's first 300 ms (the press that chose Card). The card
+  stays up while the panel is open or it is being placed (`holdsCard`); before any line has come,
+  as an example (`HOOK_EXAMPLE`, marked "Example", `data-example`) in the reader's settings,
+  replaced live by the first line. In Gaming Mode the card is
+  drawn bare (`data-bare`: no bar, −/+, ⋯ or corner), since nothing can point at them.
+- `textHookerShowCard` (default true; Settings → Text Hooker → Card, and the panel above): off,
+  the card is not drawn except while Read along or the panel holds it, and Auto align's background
+  OCR does not run. Lines still reach the Log.
+- The controller's Recent text lists the Log's newest lines (`log_recent`), whatever their source,
+  falling back to `scannedTextHistory` when the Log has no open session.
 
 Per game, `textHookerGames[<exe path, lowercased>]` (`ui/overlay.js`):
 
@@ -1725,8 +1756,11 @@ Per game, `textHookerGames[<exe path, lowercased>]` (`ui/overlay.js`):
   (`SceneScanner.refresh`) and again at 0.3, 0.7, 1.2 and 2 s while no reading has found it whole,
   the later reads looking again at text already read (`Scene.lookAgain`: it may have been read
   while fading in), and logs `hook-line-chase` `{placed, reads, ms}` (with OCR's blocks when it
-  never was). Turning it back on for a game in Settings forgets `text`, `leading`, `ocrBox` and
-  `surface`, so it aligns afresh.
+  never was). Turning it back on (Settings, or the game menu's Text Hooker panel) forgets `text` and
+  `leading` (a size set by hand) but keeps `ocrBox` and `surface`, so the card goes straight back to
+  where it last found the game's text; the overlay then forgets which line it placed and reads at
+  once (`realignHookCard`, logged `hook-card-realign`), so the line is measured again and the card
+  follows if the text has moved.
 - `text`, `leading`: the text's size (a fraction of the window's height) and line pitch (in ems).
   Auto align sets them from the first whole reading (recall ≥ 0.9, precision ≥ 0.8: the size from a
   line's ink width over its characters, the hooked line's when OCR read exactly it on one line) and
@@ -1776,6 +1810,9 @@ each burst of the chosen thread is logged as `texthook-burst` (`{text, lines, ca
 JSON event per line on stdout; closing stdin detaches every process and exits.
 `kimochi-hookd-{x64,x86}.exe inject --pid N --dll <path>` injects one DLL
 (`CreateRemoteThread(LoadLibraryW)`); the x64 sidecar runs the x86 build for 32-bit games.
+`kimochi-hookd-x64.exe processes` writes one `process` event per running process
+(`pid`, `parent`, `name`, `path` or null, `bits` 32/64 or null) and exits; on Linux the app runs
+it in a Wine game's prefix to learn the game's id there.
 
 | Command | Fields |
 | --- | --- |

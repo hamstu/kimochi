@@ -1,6 +1,16 @@
 /* eslint @typescript-eslint/explicit-function-return-type: "off" -- Plain JS runtime glue. */
-/** A read-only view of durable scan history. Opening old text never republishes OCR. */
+/** A read-only view of the Log's newest lines (or, before the Log has any, the scan history).
+ * Opening old text never republishes it. */
 import { logSections } from "./log-sections.js";
+
+/** How a Log line's source is named beside it. */
+const SOURCE_NAMES = {
+  ocr: "OCR",
+  hook: "Text Hooker",
+  clipboard: "Clipboard",
+  websocket: "WebSocket",
+  webhook: "Webhook",
+};
 export function historyEntries(value) {
   const seen = new Set();
   return (Array.isArray(value) ? value : [])
@@ -73,16 +83,18 @@ export class ControllerHistory {
     this.hints.textContent = "D-pad / stick: choose · A: read words · B: back";
     if (!this.entries.length) {
       const empty = document.createElement("p");
-      empty.textContent = "No recent text yet. Scan some Japanese text first.";
+      empty.textContent = "Nothing in the Log yet.";
       this.content.append(empty);
     }
     this.rows = this.entries.map((entry, index) => {
       const row = document.createElement("button");
       row.className = "cm-history-entry";
       const detail = document.createElement("small");
+      // A Log line names where it came from; an older scan-history entry, its app.
       const name =
-        entry.source?.appName ??
-        entry.source?.name;
+        typeof entry.source === "string"
+          ? SOURCE_NAMES[entry.source]
+          : (entry.source?.appName ?? entry.source?.name);
       const time = Number.isFinite(entry.timestamp)
         ? new Date(entry.timestamp).toLocaleTimeString([], {
             hour: "2-digit",
