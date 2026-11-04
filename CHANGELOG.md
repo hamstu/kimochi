@@ -22,6 +22,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Linux (Wayland): Hachidori looks words up over the game.** Holding Shift over scanned text now opens Hachidori's pop-up, as it already did for Yomitan.
 - **Linux (Wayland): 10ten looks words up over the game.** Holding Shift over scanned text did nothing with 10ten; its pop-up now opens as with the other dictionaries.
 - **Manga OCR reads a game's long horizontal lines whole.** A dialogue line could come back with a stray character or a repeated one where the line was cut, or with its halves swapped.
+- **Linux (Hyprland): a shared window is named after its app**, with its icon, instead of "Shared window", and each game keeps its own crop area. Before, every window you shared on Hyprland used the last one's crop.
 - **Linux AppImage: Kimochi's sounds play again.** The AppImage was missing two audio components, so its sounds failed to load.
 
 ## [0.5.0] - 2026-11-03
