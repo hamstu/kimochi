@@ -37,7 +37,7 @@ import { activeAccount } from '@ui/account'
 import { useAccount } from '../bridge/account'
 import { AccountBar } from './AccountBar'
 
-export type MainView = 'log' | 'notebook' | 'anki' | 'settings'
+export type MainView = 'source' | 'log' | 'notebook' | 'anki' | 'settings'
 
 /** Narrowest and widest the sidebar can be dragged, in CSS pixels. */
 const MIN_WIDTH = 200
@@ -206,7 +206,8 @@ export function MainSidebar({
   onOpenSourceSettings: () => void
   settingsTab: SettingsTabName
   onSettingsTab: (tab: SettingsTabName) => void
-  onBack: () => void
+  /** Back out of Settings; none where Settings is a tab (Gaming Mode). */
+  onBack?: () => void
   /** Bumped to open the source menu on its window grid. */
   chooseRequest: number
   mini?: boolean
@@ -235,9 +236,11 @@ export function MainSidebar({
     return (
       <aside className="main-sidebar" aria-label="Settings" style={style}>
         <div className="sb-scroll">
-          <Row icon={<ArrowLeft />} className="sb-back" onClick={onBack}>
-            Back
-          </Row>
+          {onBack && (
+            <Row icon={<ArrowLeft />} className="sb-back" onClick={onBack}>
+              Back
+            </Row>
+          )}
           <nav className="sb-nav" aria-label="Settings pages">
             {settingsNavFor(os).map((item) => (
               <Row

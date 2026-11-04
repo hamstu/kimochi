@@ -59,7 +59,19 @@ export function writeCache(prefs: Prefs): void {
 export const resolveAppearance = (appearance: Appearance): ResolvedAppearance =>
   appearance === 'system' ? (media.matches ? 'dark' : 'light') : appearance
 
-export const scaleFactor = (scale: InterfaceScale): number => INTERFACE_SCALES[scale]?.factor ?? 1
+/**
+ * Steam Deck Gaming Mode draws the interface a quarter larger again, on top of the chosen scale: a
+ * 7-inch screen at arm's length, used by touch (`__KIMOCHI_PLATFORM__.gamescope`, set before any
+ * page runs).
+ */
+export const GAMING_MODE_SCALE = 1.25
+
+const gamingMode = (): boolean =>
+  typeof window !== 'undefined' &&
+  Boolean((window as { __KIMOCHI_PLATFORM__?: { gamescope?: boolean } }).__KIMOCHI_PLATFORM__?.gamescope)
+
+export const scaleFactor = (scale: InterfaceScale): number =>
+  (INTERFACE_SCALES[scale]?.factor ?? 1) * (gamingMode() ? GAMING_MODE_SCALE : 1)
 
 export function applyToDocument(resolved: ResolvedAppearance, scale: InterfaceScale): void {
   const root = document.documentElement
