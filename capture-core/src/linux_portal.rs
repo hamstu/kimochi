@@ -245,6 +245,34 @@ pub(crate) fn crop_region(width: u32, height: u32, crop: Option<(i32, i32, u32, 
     }
 }
 
+/// Where `region`'s first pixel starts in a plane of `len` bytes, and the plane's row stride;
+/// `None` when the region or the stride does not fit the plane.
+pub(crate) fn plane_layout(
+    len: usize,
+    offset: usize,
+    stride: i32,
+    width: u32,
+    height: u32,
+    region: [u32; 4],
+) -> Option<(usize, usize)> {
+    let [x, y, w, h] = region;
+    if w == 0 || h == 0 || x.checked_add(w)? > width || y.checked_add(h)? > height {
+        return None;
+    }
+    let row_bytes = width as usize * 4;
+    let stride = match stride {
+        0 => row_bytes,
+        s if s < 0 => return None,
+        s => s as usize,
+    };
+    if stride < row_bytes {
+        return None;
+    }
+    let first = offset.checked_add(y as usize * stride + x as usize * 4)?;
+    let end = first.checked_add((h as usize - 1) * stride + w as usize * 4)?;
+    (end <= len).then_some((first, stride))
+}
+
 /// Copy `region` of one 32-bit plane into tightly packed RGBA8.
 ///
 /// `data` is the mapped plane, `offset` the chunk offset to the first row and `stride`
@@ -261,25 +289,9 @@ pub(crate) fn plane_to_rgba(
     region: [u32; 4],
     order: PixelOrder,
 ) -> Option<Vec<u8>> {
-    let [x, y, w, h] = region;
-    if w == 0 || h == 0 || x.checked_add(w)? > width || y.checked_add(h)? > height {
-        return None;
-    }
-    let row_bytes = width as usize * 4;
-    let stride = match stride {
-        0 => row_bytes,
-        s if s < 0 => return None,
-        s => s as usize,
-    };
-    if stride < row_bytes {
-        return None;
-    }
+    let (first, stride) = plane_layout(data.len(), offset, stride, width, height, region)?;
+    let [_, _, w, h] = region;
     let out_row = w as usize * 4;
-    let first = offset.checked_add(y as usize * stride + x as usize * 4)?;
-    let end = first.checked_add((h as usize - 1) * stride + out_row)?;
-    if end > data.len() {
-        return None;
-    }
     let mut out = vec![0u8; out_row * h as usize];
     let swap = order.swaps_red_blue();
     let opaque = !order.has_alpha();
@@ -290,12 +302,9 @@ pub(crate) fn plane_to_rgba(
             target.copy_from_slice(line);
             continue;
         }
-        for (p, q) in line.chunks_exact(4).zip(target.chunks_exact_mut(4)) {
+        for (p, q) in line.as_chunks::<4>().0.iter().zip(target.as_chunks_mut::<4>().0) {
             let (r, b) = if swap { (p[2], p[0]) } else { (p[0], p[2]) };
-            q[0] = r;
-            q[1] = p[1];
-            q[2] = b;
-            q[3] = if opaque { 255 } else { p[3] };
+            *q = [r, p[1], b, if opaque { 255 } else { p[3] }];
         }
     }
     Some(out)
@@ -306,7 +315,7 @@ pub(crate) fn plane_to_rgba(
 #[cfg(target_os = "linux")]
 pub(crate) mod backend {
     use super::{
-        crop_region, frame_scale, parse_stream_id, plane_to_rgba, store_token, stored_token,
+        crop_region, frame_scale, parse_stream_id, plane_layout, plane_to_rgba, store_token, stored_token,
         PixelOrder, PortalStream, StreamKind, PICKER_TIMEOUT,
     };
     use crate::pixels::{box_downscale, crop_pixels, fit_within, unpremultiply};
@@ -356,16 +365,31 @@ pub(crate) mod backend {
 
     /// One frame, already converted to tightly packed RGBA.
     struct LatestFrame {
-        received: Instant,
         pixels: Vec<u8>,
         width: u32,
         height: u32,
     }
 
+    /// The newest buffer as PipeWire delivered it, copied into memory the slot keeps and reuses.
+    /// It becomes RGBA only when a capture asks for it: a game animates (the ▼ that says the line
+    /// is done), so frames arrive at the stream's rate while captures want one every second or so.
+    struct RawFrame {
+        received: Instant,
+        bytes: Vec<u8>,
+        offset: usize,
+        stride: i32,
+        width: u32,
+        height: u32,
+        region: [u32; 4],
+        order: PixelOrder,
+    }
+
     /// What one stream's PipeWire callbacks share with captures.
     #[derive(Default)]
     struct Slot {
-        latest: Mutex<Option<Arc<LatestFrame>>>,
+        raw: Mutex<Option<RawFrame>>,
+        /// `raw` as RGBA, and the generation it was made from.
+        converted: Mutex<Option<(u64, Arc<LatestFrame>)>>,
         arrived: Condvar,
         generation: AtomicU64,
         /// The stream has stopped: nothing more comes.
@@ -373,15 +397,32 @@ pub(crate) mod backend {
     }
 
     impl Slot {
-        fn publish(&self, pixels: Vec<u8>, width: u32, height: u32) {
+        /// Keep `data` (a mapped buffer's valid bytes) as the newest frame, in the slot's own
+        /// memory: no allocation once the size is steady, and no per-pixel work.
+        #[allow(clippy::too_many_arguments)]
+        fn publish_raw(
+            &self,
+            data: &[u8],
+            offset: usize,
+            stride: i32,
+            width: u32,
+            height: u32,
+            region: [u32; 4],
+            order: PixelOrder,
+        ) {
+            let mut raw = self.raw.lock().unwrap();
+            let mut bytes = raw.take().map(|r| r.bytes).unwrap_or_default();
+            bytes.clear();
+            bytes.extend_from_slice(data);
+            *raw = Some(RawFrame { received: Instant::now(), bytes, offset, stride, width, height, region, order });
             self.generation.fetch_add(1, Ordering::SeqCst);
-            *self.latest.lock().unwrap() = Some(Arc::new(LatestFrame {
-                received: Instant::now(),
-                pixels,
-                width,
-                height,
-            }));
+            drop(raw);
             self.arrived.notify_all();
+        }
+        #[cfg(test)]
+        fn publish(&self, pixels: Vec<u8>, width: u32, height: u32) {
+            let stride = width as i32 * 4;
+            self.publish_raw(&pixels, 0, stride, width, height, [0, 0, width, height], PixelOrder::Rgba);
         }
         fn end(&self) {
             self.ended.store(true, Ordering::SeqCst);
@@ -389,14 +430,28 @@ pub(crate) mod backend {
         }
         /// The newest frame, waiting up to `limit` for the first one.
         fn frame(&self, limit: Duration, after: Option<Instant>) -> Option<Arc<LatestFrame>> {
-            let latest = self.latest.lock().unwrap();
-            let (latest, _) = self
+            let raw = self.raw.lock().unwrap();
+            let (raw, _) = self
                 .arrived
-                .wait_timeout_while(latest, limit, |frame| {
+                .wait_timeout_while(raw, limit, |frame| {
                     frame.as_ref().is_none_or(|frame| after.is_some_and(|after| frame.received < after)) && !self.ended.load(Ordering::SeqCst)
                 })
                 .unwrap();
-            latest.clone().filter(|frame| after.is_none_or(|after| frame.received >= after))
+            let frame = raw.as_ref().filter(|frame| after.is_none_or(|after| frame.received >= after))?;
+            // Read under `raw`'s lock, which publishing holds while it bumps it.
+            let generation = self.generation.load(Ordering::SeqCst);
+            let mut converted = self.converted.lock().unwrap();
+            if let Some((_, latest)) = converted.as_ref().filter(|(made, _)| *made == generation) {
+                return Some(latest.clone());
+            }
+            let pixels = plane_to_rgba(&frame.bytes, frame.offset, frame.stride, frame.width, frame.height, frame.region, frame.order)?;
+            let latest = Arc::new(LatestFrame {
+                pixels,
+                width: frame.region[2],
+                height: frame.region[3],
+            });
+            *converted = Some((generation, latest.clone()));
+            Some(latest)
         }
     }
 
@@ -904,10 +959,8 @@ pub(crate) mod backend {
                         return;
                     }
                     let region = crop_region(w, h, crop);
-                    if let Some(pixels) =
-                        plane_to_rgba(valid, offset, stride, w, h, region, format.order)
-                    {
-                        data.slot.publish(pixels, region[2], region[3]);
+                    if plane_layout(valid.len(), offset, stride, w, h, region).is_some() {
+                        data.slot.publish_raw(valid, offset, stride, w, h, region, format.order);
                     }
                 })
                 .register()
