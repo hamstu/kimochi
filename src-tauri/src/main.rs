@@ -3675,7 +3675,7 @@ fn finish_setup(
     // menu, which reaches every window and the test fixtures.
     #[cfg(target_os = "macos")]
     {
-        let menu = tauri::menu::Menu::default(app.handle())?;
+        let menu = tauri::menu::Menu::default(app)?;
         if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) = menu.items()?.first() {
             // The default menu's first item is the system about panel.
             app_menu.remove_at(0)?;
