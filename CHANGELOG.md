@@ -20,6 +20,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Linux (Wayland): scanned text shows over the game again after Kimochi starts or you switch dictionaries.** The overlay could stay hidden, with nothing to hover or look up, until you opened the crop editor.
 - **Linux (Wayland): Hachidori looks words up over the game.** Holding Shift over scanned text now opens Hachidori's pop-up, as it already did for Yomitan.
+- **Linux (Wayland): 10ten looks words up over the game.** Holding Shift over scanned text did nothing with 10ten; its pop-up now opens as with the other dictionaries.
 - **Linux AppImage: Kimochi's sounds play again.** The AppImage was missing two audio components, so its sounds failed to load.
 
 ## [0.5.0] - 2026-11-03
