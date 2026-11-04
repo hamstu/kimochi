@@ -65,6 +65,30 @@
   color: #fff;
   background: rgb(255 255 255 / 0.14);
 }
+/* Gaming Mode: the overlay is drawn at 1× on a 7-inch 1280×800 screen held at arm's length, so
+   twice the desktop size, with a × big enough to tap. */
+.overlay-hints-gaming {
+  /* Its own width, not what is left right of the centre it is placed at (that wrapped the ×). */
+  width: max-content;
+  gap: 8px 24px;
+  padding: 12px 12px 12px 28px;
+  font-size: 24px;
+  max-width: calc(100vw - 48px);
+  bottom: 24px;
+}
+.overlay-hints-gaming .overlay-hint-key {
+  padding: 3px 12px;
+  border-radius: 9px;
+  font-size: 22px;
+}
+.overlay-hints-gaming .overlay-hints-close {
+  width: 44px;
+  height: 44px;
+}
+.overlay-hints-gaming .overlay-hints-close svg {
+  width: 24px;
+  height: 24px;
+}
 @keyframes overlay-hints-in {
   from {
     opacity: 0;

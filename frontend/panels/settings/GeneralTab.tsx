@@ -175,7 +175,7 @@ export function GeneralTab(): ReactNode {
         </SettingsRow>
         <SettingsRow
           label="Overlay hints"
-          description="The bar under the text on the overlay that explains Shift. Closed with its ×."
+          description="The bar under the text on the overlay that says how to look words up. Closed with its ×."
         >
           <Button size="sm" disabled={!hintsDismissed} onClick={() => void setHintsDismissed(false)}>
             {hintsDismissed ? 'Show again' : 'Showing'}

@@ -20,6 +20,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **Steam Deck Gaming Mode: the hint under the text tells you how to read it.** It used to say to hold Shift, which a Deck doesn't have, in text too small to read; it now names the button that opens the game menu, at a size you can read on the Deck, and goes away once you've opened the menu.
 - **Steam Deck Gaming Mode: Kimochi follows the game you switch to.** With two games running, switching between them through Steam left Kimochi reading the first one, so Scan and Auto OCR showed the other game's text over the one you were playing. It now reads the game in front, with that game's own crop area.
 - **Kimochi no longer crashes as it quits while Auto OCR is reading the screen.** Quitting at the moment Auto OCR was reading a line could end in a crash report instead of a clean exit (seen on Steam Deck); Kimochi now lets that read finish first.
 - **Auto OCR works with Google Lens and Manga OCR on Windows and Linux again.** It was trying to watch the screen with Apple Live Text, which only exists on a Mac, and said "Auto-scan unavailable"; it now watches with PaddleOCR, MeikiOCR or OneOCR, whichever you have.

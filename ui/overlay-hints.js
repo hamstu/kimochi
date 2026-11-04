@@ -12,6 +12,10 @@
  *
  * The overlay never has the pointer, so the × lights from `pointer(x, y)` (`data-hover`), as the
  * hook card's controls do.
+ *
+ * In Steam Deck Gaming Mode there is no Shift and no mouse: words are read with the controller
+ * from the game menu (the radial). There the bar says which button opens that menu instead
+ * (`gaming`), at a size readable on a handheld (`overlay-hints-gaming`).
  */
 
 export const HINTS_DISMISSED = 'overlayHintsDismissed'
@@ -41,7 +45,8 @@ export function createOverlayHints(parent, hooks) {
   // One line: Hold [Shift] to … (what Shift does depends on click-through, `sync`).
   const line = make('span', 'overlay-hint')
   const rest = document.createTextNode('')
-  line.append(document.createTextNode('Hold '), make('kbd', 'overlay-hint-key', shiftKey()), rest)
+  const shiftLine = [document.createTextNode('Hold '), make('kbd', 'overlay-hint-key', shiftKey()), rest]
+  line.append(...shiftLine)
   bar.append(line)
   const close = make('button', 'overlay-hints-close')
   close.type = 'button'
@@ -58,13 +63,38 @@ export function createOverlayHints(parent, hooks) {
   parent.append(bar)
 
   let gatedNow = null
+  /** Gaming Mode's menu buttons by name, or null off Gaming Mode (`gaming`). */
+  let menuButtons = null
   return {
+    /**
+     * Gaming Mode, with the names of the buttons that open the game menu (empty: none bound), or
+     * null for the Shift hint.
+     * @param {string[] | null} buttons
+     */
+    gaming(buttons) {
+      menuButtons = buttons
+      bar.classList.toggle('overlay-hints-gaming', buttons !== null)
+      if (buttons === null) {
+        line.replaceChildren(...shiftLine)
+        gatedNow = null
+        return
+      }
+      const parts = buttons.flatMap((name, index) => [
+        ...(index > 0 ? [document.createTextNode(' + ')] : []),
+        make('kbd', 'overlay-hint-key', name)
+      ])
+      line.replaceChildren(
+        ...(parts.length
+          ? [document.createTextNode('Press '), ...parts, document.createTextNode(' for the game menu to read words')]
+          : [document.createTextNode('Choose a button for the game menu in Kimochi’s Settings to read words')])
+      )
+    },
     /**
      * Show the bar or not; whether it is shown. `gated`: clicks on text go to the game unless
      * Shift is held (`overlayClickThrough`), so Shift is what makes text clickable too.
      */
     sync(shown, gated = true) {
-      if (gated !== gatedNow) {
+      if (menuButtons === null && gated !== gatedNow) {
         gatedNow = gated
         rest.textContent = gated ? ' to look up words and click text' : ' over a word to look it up'
       }

@@ -307,6 +307,21 @@ const hints = createOverlayHints(document.body, {
   }
 })
 
+/**
+ * Gaming Mode's hint names the buttons that open the game menu (the radial), as the main
+ * window's Gaming Mode notice does; there is no Shift there.
+ */
+async function syncGamingHints() {
+  if (!(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope)) return hints.gaming(null)
+  const binding = (await native.hotkeysLoad?.())?.openControllerMenu
+  const buttons =
+    binding?.enabled === false
+      ? []
+      : (binding?.gamepadButtons ?? (Number.isInteger(binding?.gamepadButton) ? [binding.gamepadButton] : []))
+  hints.gaming(buttons.map(buttonName).filter(Boolean))
+  syncHints()
+}
+
 /** Show the hint bar while there is text to point at and nothing else is using the overlay. */
 function syncHints() {
   const shown =
@@ -2146,6 +2161,11 @@ async function onAction(name) {
       if (scanner.isRunning) forceRescan()
       return performScan()
     case 'openControllerMenu':
+      // Gaming Mode's hint is how to open this menu: whoever has opened it has learned it.
+      if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && native.getSetting(HINTS_DISMISSED) !== true) {
+        void native.setSetting(HINTS_DISMISSED, true)
+        syncHints()
+      }
       if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope && controller.mode === 'idle') {
         // A never-mapped Gamescope overlay has a zero-sized WebKit viewport.
         // Native bounds are logical pixels and available immediately after mapping.
@@ -4044,6 +4064,7 @@ applyOverlayStyle()
 systemDark.addEventListener('change', applyOverlayStyle)
 
 await native.watchSettings((key) => {
+  if (key === 'hotkeys' || key.startsWith('hotkeys.')) void syncGamingHints()
   // The selected engine decides the watcher too (`autoWatcher`).
   if (
     key === 'autoOCRSettings' ||
@@ -4082,6 +4103,7 @@ await native.watchCapabilities(async (caps) => {
   ocrEngines = caps.ocrEngines ?? {}
   syncAutoScanner()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
+  void syncGamingHints()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') shiftGated = caps.session?.backend !== 'wayland'
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true
