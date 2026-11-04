@@ -1,6 +1,6 @@
 ---
 title: Sources and crop
-description: Choose the window or screen Kimochi reads, crop it to the dialogue, or switch to Quick Shot, the clipboard or a WebSocket.
+description: Choose the window or screen Kimochi reads, crop it to the dialogue, or switch to the Text Hooker, Quick Shot, the clipboard or a WebSocket.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -20,6 +20,7 @@ Open **Change source** (or **Choose a source** when none is set) to switch:
 | Source | What it reads |
 | --- | --- |
 | **Window or screen** | An app window or a whole display, with OCR. |
+| **Text Hooker** | A game's text from inside the game, with no OCR. Windows only; see [Text Hooker](/reading/text-hooker/). |
 | **Quick Shot** | No source to choose: the Scan shortcut asks you to draw an area anywhere, then reads it. |
 | **Clipboard** | Text copied to the clipboard, for example by a text hooker. |
 | **WebSocket** | Lines from a text source on your network. |
@@ -29,6 +30,9 @@ Open **Change source** (or **Choose a source** when none is set) to switch:
 <Screenshot id="source-empty" alt="The sidebar before a source is chosen, with a Choose a source button." width={720} />
 
 <Screenshot id="source-menu" alt="The source menu: Window or screen, Quick Shot, Clipboard and WebSocket, then Clear source." width={720} />
+
+On Windows the menu also has **Text Hooker**, under **Window or screen**; point at it to choose the
+game to hook.
 
 ## Choosing a window or screen
 
