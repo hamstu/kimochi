@@ -11,8 +11,7 @@
  *   Kimochi_<ver>_x64-setup.exe, Kimochi_<ver>_arm64-setup.exe  Windows
  *   kimochi_<ver>_amd64.deb, kimochi_<ver>_arm64.deb           Linux
  *   kimochi_<ver>_amd64.AppImage, kimochi_<ver>_aarch64.AppImage
- * The rolling `nightly` pre-release drops `_<ver>` (Kimochi_aarch64.app.zip, Kimochi_x64-setup.exe,
- * ...). A build from the Arch Linux runner adds `-arch` before the extension
+ * A build from the Arch Linux runner adds `-arch` before the extension
  * (kimochi_<ver>_aarch64-arch.AppImage) and is ranked after every generic build.
  * Matching is by extension plus architecture tokens anywhere in the name, so older
  * `<rust-target>-<bundle>` names and a future .dmg also work.

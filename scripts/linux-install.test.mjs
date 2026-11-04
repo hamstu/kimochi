@@ -150,30 +150,33 @@ test("picks the aarch64 build on ARM64", posix, async (t) => {
   assert.ok(installed.includes(Buffer.from("Kimochi_0.2.0_aarch64.AppImage")));
 });
 
-test("falls back to the nightly pre-release until a tagged release exists", posix, async (t) => {
+test("without a tagged release it says so, and never looks for a nightly", posix, async (t) => {
   const f = await fixture(t);
-  await f.publish("nightly", ["Kimochi_amd64.AppImage", "Kimochi_aarch64.AppImage"], { latest: false });
+  await f.publish("nightly", ["Kimochi_amd64.AppImage"], { latest: false });
   const result = f.run();
-  assert.equal(result.status, 0, result.stderr);
-  assert.ok((await readFile(f.appimage)).includes(Buffer.from("Kimochi_amd64.AppImage")));
-  assert.match(result.stdout, /nightly/);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /No Kimochi release was found/);
+  assert.equal(await exists(f.appimage), false);
   const requests = await f.requests();
-  assert.ok(requests[0].endsWith("/releases/latest"));
-  assert.ok(requests[1].endsWith("/releases/tags/nightly"));
+  assert.ok(requests.every((r) => !r.includes("/tags/")), requests.join("\n"));
 });
 
-test("--nightly skips the tagged release", posix, async (t) => {
+test("--nightly and KIMOCHI_CHANNEL=nightly stop with an explanation", posix, async (t) => {
   const f = await fixture(t);
   await f.publish("v0.2.0", names("0.2.0"));
-  await f.publish("nightly", ["Kimochi_amd64.AppImage"], { latest: false });
-  const result = f.run(["--nightly"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.ok((await readFile(f.appimage)).includes(Buffer.from("Kimochi_amd64.AppImage")));
+  for (const [args, env] of [[["--nightly"], {}], [[], { KIMOCHI_CHANNEL: "nightly" }]]) {
+    const result = f.run(args, env);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /no longer has nightly builds/);
+  }
+  assert.equal(await exists(f.appimage), false);
+  // The old default value still installs the release.
+  assert.equal(f.run([], { KIMOCHI_CHANNEL: "stable" }).status, 0);
 });
 
 test("a rate-limited API is reported, not mistaken for a missing release", posix, async (t) => {
   const f = await fixture(t);
-  await f.publish("nightly", ["Kimochi_amd64.AppImage"], { latest: false });
+  await f.publish("v0.2.0", names("0.2.0"));
   await f.status(`https://api.github.com/repos/${REPO}/releases/latest`, 403);
   const result = f.run();
   assert.equal(result.status, 1);

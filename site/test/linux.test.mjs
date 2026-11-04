@@ -85,7 +85,7 @@ test('linuxAsset picks the generic build for the CPU, x64 when unknown', () => {
     pick('AppImage', 'arm64', [a('kimochi_0.2.0_aarch64-arch.AppImage')]),
     'kimochi_0.2.0_aarch64-arch.AppImage'
   )
-  // The nightly's names.
+  // Names without a version.
   assert.equal(pick('deb', 'x64', [a('Kimochi_arm64.deb'), a('Kimochi_amd64.deb')]), 'Kimochi_amd64.deb')
   assert.equal(pick('deb', 'x64', [a('Kimochi_arm64.deb')]), null)
   assert.equal(pick('deb', 'x64', []), null)

@@ -123,18 +123,15 @@ fixed URL (favicon, robots.txt, a future `og.png`) go in `public/`. Give images 
 
 **Downloads.** `<DownloadButton align?="start|center" showAll?={true} className? />` fetches
 `https://api.github.com/repos/hamstu/kimochi/releases/latest` (unauthenticated, cached in
-sessionStorage for 10 minutes); when that 404s (no tagged release published yet) it falls back to
-`releases/tags/nightly`, the rolling pre-release CI refreshes on every push to main, and labels it
-"Development build" with its date. It detects the OS and CPU (User-Agent Client Hints
+sessionStorage for 10 minutes). It detects the OS and CPU (User-Agent Client Hints
 `getHighEntropyValues(['architecture', 'bitness'])` in Chromium, else user-agent heuristics;
 Safari on a Mac is assumed Apple silicon), and picks an installer with `pickAsset(assets,
 platform)` from `src/lib/assets.js`. Asset names are tauri's (`Kimochi_<ver>_aarch64.app.zip`,
 `Kimochi_<ver>_x64-setup.exe`, `kimochi_<ver>_amd64.deb`, `kimochi_<ver>_aarch64.AppImage`, …;
-the nightly drops `_<ver>`; an `-arch` suffix before the extension marks the Arch Linux build).
-Preference: macOS `.dmg` then `.app.zip`; Windows `-setup.exe` then `.msi`; Linux `.AppImage`
-then `.deb` then `.rpm`, with every generic build before the `-arch` one. It shows the version
-(or "Development build"), platform and size, plus an "Other platforms" disclosure. On a rate
-limit, network error, no published build, a phone, or no build for the platform, it links to
+an `-arch` suffix before the extension marks the Arch Linux build). Preference: macOS `.dmg` then
+`.app.zip`; Windows `-setup.exe` then `.msi`; Linux `.AppImage` then `.deb` then `.rpm`, with
+every generic build before the `-arch` one. It shows the version, platform and size, plus an
+"Other platforms" disclosure. On a rate limit, network error, no published build, a phone, or no build for the platform, it links to
 https://github.com/hamstu/kimochi/releases instead. The API only answers for a public
 repository; drafts are invisible to it.
 

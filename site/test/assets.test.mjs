@@ -27,26 +27,12 @@ const TAGGED = [
   a('latest.json')
 ]
 
-// The rolling `nightly` pre-release: the same names without `_<ver>`. The first five are the assets
-// it carried on 2026-10-09; the x64 Linux and Arch ones are what those runners would add.
-const NIGHTLY = [
-  a('Kimochi_aarch64.app.zip'),
-  a('Kimochi_aarch64.AppImage'),
-  a('Kimochi_arm64-setup.exe'),
-  a('Kimochi_arm64.deb'),
-  a('Kimochi_x64-setup.exe'),
-  a('Kimochi_amd64.deb'),
-  a('Kimochi_amd64.AppImage'),
-  a('Kimochi_aarch64-arch.AppImage')
-]
-
 const pick = (os, arch, assets = TAGGED) => pickAsset(assets, { os, arch })?.name ?? null
 
 test('macOS picks the Apple silicon app zip, whatever the detected arch', () => {
   assert.equal(pick('macos', 'arm64'), 'Kimochi_0.2.0_aarch64.app.zip')
   assert.equal(pick('macos', 'unknown'), 'Kimochi_0.2.0_aarch64.app.zip')
   assert.equal(pick('macos', 'x64'), null, 'no Intel build')
-  assert.equal(pick('macos', 'unknown', NIGHTLY), 'Kimochi_aarch64.app.zip')
 })
 
 test('macOS prefers a dmg over the app zip when both exist', () => {
@@ -64,16 +50,12 @@ test('Windows picks the setup exe for the arch, x64 when unknown', () => {
   assert.equal(pick('windows', 'x64'), 'Kimochi_0.2.0_x64-setup.exe')
   assert.equal(pick('windows', 'arm64'), 'Kimochi_0.2.0_arm64-setup.exe')
   assert.equal(pick('windows', 'unknown'), 'Kimochi_0.2.0_x64-setup.exe')
-  assert.equal(pick('windows', 'x64', NIGHTLY), 'Kimochi_x64-setup.exe')
-  assert.equal(pick('windows', 'arm64', NIGHTLY), 'Kimochi_arm64-setup.exe')
 })
 
 test('Linux prefers the generic AppImage over deb', () => {
   assert.equal(pick('linux', 'x64'), 'kimochi_0.2.0_amd64.AppImage')
   assert.equal(pick('linux', 'arm64'), 'kimochi_0.2.0_aarch64.AppImage')
   assert.equal(pick('linux', 'unknown'), 'kimochi_0.2.0_amd64.AppImage')
-  assert.equal(pick('linux', 'arm64', NIGHTLY), 'Kimochi_aarch64.AppImage')
-  assert.equal(pick('linux', 'x64', NIGHTLY), 'Kimochi_amd64.AppImage')
 })
 
 test('the Arch Linux build ranks after every generic build, even a deb', () => {

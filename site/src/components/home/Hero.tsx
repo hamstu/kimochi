@@ -3,7 +3,7 @@ import { KanaRain } from './KanaRain'
 import { useEffect, useState } from 'react'
 import { fetchLatestRelease, versionLabel } from '../../lib/releases'
 
-/** The version on offer beside the wordmark ("v0.2.0", or "Nightly"); nothing until it is known. */
+/** The version on offer beside the wordmark ("v0.2.0"); nothing until it is known. */
 function HeroVersion() {
   const [version, setVersion] = useState<string | null>(null)
   useEffect(() => {

@@ -64,7 +64,7 @@ function decodeURIComponentSafe(s) {
  * `window.location.origin` at runtime, so the command is right on any domain.
  * @param {string} origin  e.g. "https://kimochi.app"
  * The script's flags (site/public/install.sh): --uninstall (keeps settings and dictionaries),
- * --no-launch (or KIMOCHI_NO_LAUNCH=1), --nightly, --appimage <file>, --help.
+ * --no-launch (or KIMOCHI_NO_LAUNCH=1), --appimage <file>, --help.
  * @param {{ uninstall?: boolean, noLaunch?: boolean }} [options]
  */
 export function installCommand(origin, options = {}) {
