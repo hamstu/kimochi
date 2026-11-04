@@ -333,6 +333,18 @@ jobs:
         if: runner.os == 'Windows'
         run: rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc i686-pc-windows-msvc
 
+      # Linux x64 ships the text hook helper too (Windows games under Proton/Wine), cross-built
+      # with MinGW (scripts/prepare-hookd.mjs).
+      - name: Install text hook helper Rust targets and MinGW
+        if: runner.os == 'Linux' && runner.arch == 'X64'
+        run: |
+          rustup target add x86_64-pc-windows-gnu i686-pc-windows-gnu
+          if command -v apt-get >/dev/null; then
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
+          elif command -v pacman >/dev/null; then
+            command -v x86_64-w64-mingw32-gcc >/dev/null || sudo pacman -S --needed --noconfirm mingw-w64-gcc
+          fi
+
       - name: Ensure ARM64 C++ tools for OneOCR helper
         if: runner.os == 'Windows'
         shell: powershell

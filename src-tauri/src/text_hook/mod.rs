@@ -13,10 +13,14 @@
 //! the source panel. Only the chosen thread's sentences reach the Log, as `texthook-line`
 //! events taken in by the texthooker like clipboard or WebSocket text, after `clean.rs` has
 //! taken out markup and applied the game's settings (Settings → Text Hooker).
+//!
+//! On Linux the same Windows helper and hookers hook Windows games running through Proton or
+//! Wine: they run with the game's Wine, in its prefix (`wine.rs`).
 pub mod clean;
 pub mod pick;
 pub mod process;
 pub mod store;
+pub mod wine;
 
 use crate::state::Shared;
 use pick::{Candidate, OcrLine, Signature};
@@ -70,6 +74,8 @@ struct Session {
     generation: u64,
     source_id: String,
     exe: Option<PathBuf>,
+    /// The game's processes, as found when hooking started.
+    targets: Vec<process::Target>,
     pids: Vec<u32>,
     engine: Option<&'static str>,
     phase: &'static str,
@@ -173,7 +179,7 @@ fn status_of(session: &Session) -> Value {
     threads.sort_by_key(|t| (pick::is_generic_api_hook(&t.hookcode), std::cmp::Reverse(t.last_at)));
     let manifest = store::manifest();
     json!({
-        "supported": cfg!(windows),
+        "supported": cfg!(any(windows, target_os = "linux")),
         "phase": session.phase,
         "detail": session.detail,
         "sourceId": session.source_id,
@@ -289,6 +295,13 @@ fn launch(hook: &'static Hook, generation: u64, engine: &'static str, dir: &std:
     let exe = hookd_path(&hook.app)?;
     let mut command = Command::new(&exe);
     command.arg(engine).arg("--dir").arg(dir);
+    // Under Wine the helper runs in the game's prefix, so it sees the game as Windows would, and
+    // takes the hooker's folder as a Windows path.
+    #[cfg(target_os = "linux")]
+    if let Some(wine) = targets.first().and_then(|t| t.wine.as_ref()) {
+        command = wine::command(wine, &exe);
+        command.arg(engine).arg("--dir").arg(wine::windows_path(dir));
+    }
     if engine == "luna" {
         let flush_ms = hook.config(&hook.lock()).flush_ms;
         command.args(["--flush-ms", &flush_ms.to_string()]);
@@ -630,7 +643,7 @@ fn run(hook: &'static Hook, generation: u64, engine: &'static str) {
         if session.generation != generation {
             return;
         }
-        session.pids.iter().filter_map(|p| process::target(*p).ok()).collect()
+        session.targets.clone()
     };
     let result = (|| {
         let root = hook.root()?;
@@ -692,20 +705,27 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
 #[tauri::command]
 pub async fn texthook_start(source_id: String, observer_engine: Option<String>) -> Result<Value, String> {
     let hook = hook().ok_or("text hooking is not available")?;
-    if !cfg!(windows) {
-        return Err("Text Hooker works on Windows.".into());
+    if !cfg!(any(windows, target_os = "linux")) {
+        return Err("Text Hooker works on Windows and Linux.".into());
     }
     let pid = kimochi_capture::SourceId::parse(&source_id)
         .filter(|s| s.is_window())
         .and_then(|s| s.pid())
         .ok_or("Choose an app window to hook.")?;
+    #[cfg(target_os = "linux")]
+    let helper = hookd_path(&hook.app);
     let targets = tauri::async_runtime::spawn_blocking(move || {
         let found = process::game_processes(pid);
         if found.is_empty() {
-            Err(process::target(pid).err().unwrap_or_else(|| "This app cannot be hooked.".into()))
-        } else {
-            Ok(found)
+            return Err(process::target(pid).err().unwrap_or_else(|| "This app cannot be hooked.".into()));
         }
+        // Under Wine the hooker addresses the game by the prefix's process id, which only a
+        // program inside the prefix can see.
+        #[cfg(target_os = "linux")]
+        if found[0].wine.is_some() {
+            return wine::windows_targets(&helper?, &found[0]);
+        }
+        Ok(found)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -718,6 +738,7 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
             source_id,
             exe: targets.first().map(|t| t.exe.clone()),
             pids: targets.iter().map(|t| t.pid).collect(),
+            targets: targets.clone(),
             phase: "starting",
             observer_engine,
             ..Default::default()
@@ -726,7 +747,8 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
         generation
     };
     if let Some(target) = targets.first() {
-        let (pid, exe) = (target.pid, target.exe.clone());
+        // The window's own process: under Wine the target's id is the prefix's.
+        let exe = target.exe.clone();
         std::thread::spawn(move || save_icon(hook, pid, &exe));
     }
     std::thread::spawn(move || run(hook, generation, ENGINES[0]));

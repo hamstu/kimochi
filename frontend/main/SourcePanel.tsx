@@ -140,7 +140,7 @@ const TYPES = [
   }
 ] as const satisfies readonly { mode: Mode; label: string; icon: ReactNode; detail: string }[]
 
-/** Text Hooker: a window, read from inside its game rather than off its pixels (Windows only). */
+/** Text Hooker: a window, read from inside its game rather than off its pixels (Windows games, also through Proton or Wine on Linux). */
 const HOOK_TYPE = {
   mode: 'hook',
   label: 'Text Hooker',
@@ -753,7 +753,8 @@ export function SourcePanel({
   // A window or screen that has not been picked yet reads as no source at all.
   const empty = windowMode && !source
   const hook = useHookStatus()
-  const hookAvailable = capabilities.os === 'windows' && !isGamingMode(capabilities)
+  // Windows games, natively or (on Linux) through Proton or Wine.
+  const hookAvailable = capabilities.os === 'windows' || capabilities.os === 'linux'
   // The OCR that matches hooked text to the screen: the Auto OCR watcher, else the best one here.
   const [ocrMode] = useSetting<OcrMode>('ocrMode', 'googlelens')
   const [autoOcr] = useSetting<AutoOCRSettings | null>('autoOCRSettings', null)

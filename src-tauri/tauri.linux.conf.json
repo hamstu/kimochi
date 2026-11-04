@@ -1,6 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
+    "resources": {
+      "resources/hookd/": "hookd/"
+    },
     "category": "Education",
     "shortDescription": "Read and play in Japanese with on-screen OCR, pop-up dictionaries and a reading log",
     "targets": [
