@@ -77,6 +77,7 @@ export default defineConfig({
           label: 'Reading',
           items: [
             { label: 'Sources and crop', slug: 'reading/sources' },
+            { label: 'Text Hooker (Windows)', slug: 'reading/text-hooker' },
             { label: 'OCR engines', slug: 'reading/ocr-engines' },
             { label: 'Auto OCR', slug: 'reading/auto-ocr' },
             { label: 'The overlay', slug: 'reading/overlay' },
