@@ -150,3 +150,17 @@ test('returning to a reader with Shift already held accepts fresh native pointer
   f.win.document.hasFocus=()=>true; f.listeners.get('focus')()
   assert.equal(f.move(true),false)
 })
+test('an engine that reads mousemove (Hachidori) gets the Shift scan and glide as mousemove', async () => {
+  const f = fixture()
+  class MouseEvent { constructor(type, init) { this.type = type; Object.assign(this, init) } }
+  f.win.MouseEvent = MouseEvent
+  f.win.__kimochiExtensionHost = { descriptor: { pointerEvents: ['mousemove'] } }
+  await installLinuxScanInput(f.win, { passive: true }); f.move(false)
+  f.send(true)
+  assert.deepEqual(f.received.map(e => [e.type, e.shiftKey]), [['mousemove', true]])
+  let blocked = false
+  f.listeners.get('mousemove')({ target: f.target, clientX: 18, clientY: 23, shiftKey: false,
+    stopImmediatePropagation() { blocked = true } })
+  assert.equal(blocked, true, 'the real move without Shift does not reach the engine')
+  assert.deepEqual([f.received.at(-1).type, f.received.at(-1).shiftKey, f.received.at(-1).clientX], ['mousemove', true, 18])
+})
