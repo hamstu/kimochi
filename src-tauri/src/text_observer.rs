@@ -779,6 +779,8 @@ struct Slot<I, O> {
     running: Option<Running>,
     done: Option<Done<O>>,
     closed: bool,
+    /// The worker thread has returned and dropped its engine.
+    exited: bool,
 }
 
 struct Channel<I, O> {
@@ -789,6 +791,53 @@ struct Channel<I, O> {
 impl<I, O> Channel<I, O> {
     fn lock(&self) -> MutexGuard<'_, Slot<I, O>> {
         self.slot.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+/// A worker as `shutdown` sees it, whatever it reads.
+trait Stop: Send + Sync {
+    fn close(&self);
+    fn exited(&self) -> bool;
+}
+
+impl<I: Send, O: Send> Stop for Channel<I, O> {
+    fn close(&self) {
+        self.lock().closed = true;
+        self.changed.notify_all();
+    }
+    fn exited(&self) -> bool {
+        self.lock().exited
+    }
+}
+
+/// Every worker started, so the app can stop them before it exits.
+static WORKERS: Mutex<Vec<std::sync::Weak<dyn Stop>>> = Mutex::new(Vec::new());
+
+/// Stop every observer worker and wait, at most `timeout`, for each to finish the read it is
+/// in and drop its engine. Called as the app exits: process exit tears down the engines'
+/// runtime (ONNX Runtime's globals) underneath a read still running on a worker, which
+/// crashed Kimochi on quit while Auto OCR was watching. Returns how many were still running
+/// when the time ran out (each is then left to the exit, as before).
+pub fn shutdown(timeout: Duration) -> usize {
+    let workers: Vec<_> = {
+        let mut list = WORKERS.lock().unwrap_or_else(|p| p.into_inner());
+        list.retain(|w| w.strong_count() > 0);
+        list.iter().filter_map(|w| w.upgrade()).collect()
+    };
+    stop_all(&workers, timeout)
+}
+
+fn stop_all(workers: &[Arc<dyn Stop>], timeout: Duration) -> usize {
+    for worker in workers {
+        worker.close();
+    }
+    let deadline = Instant::now() + timeout;
+    loop {
+        let running = workers.iter().filter(|w| !w.exited()).count();
+        if running == 0 || Instant::now() >= deadline {
+            return running;
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -808,40 +857,49 @@ impl<I: Send + 'static, O: Clone + Send + 'static> LatestWorker<I, O> {
                 running: None,
                 done: None,
                 closed: false,
+                exited: false,
             }),
             changed: Condvar::new(),
         });
         let shared = channel.clone();
         let thread = std::thread::Builder::new()
             .name(name.into())
-            .spawn(move || loop {
-                let job = {
+            .spawn(move || {
+                'serve: loop {
+                    let job = {
+                        let mut slot = shared.lock();
+                        loop {
+                            if slot.closed {
+                                break 'serve;
+                            }
+                            if let Some(job) = slot.pending.take() {
+                                slot.running = Some(Running {
+                                    generation: job.generation,
+                                    key: job.key,
+                                    started: Instant::now(),
+                                });
+                                break job;
+                            }
+                            slot = shared.changed.wait(slot).unwrap_or_else(|p| p.into_inner());
+                        }
+                    };
+                    let output = run(job.input);
                     let mut slot = shared.lock();
-                    loop {
-                        if slot.closed {
-                            return;
-                        }
-                        if let Some(job) = slot.pending.take() {
-                            slot.running = Some(Running {
-                                generation: job.generation,
-                                key: job.key,
-                                started: Instant::now(),
-                            });
-                            break job;
-                        }
-                        slot = shared.changed.wait(slot).unwrap_or_else(|p| p.into_inner());
-                    }
-                };
-                let output = run(job.input);
-                let mut slot = shared.lock();
-                slot.running = None;
-                slot.done = Some(Done {
-                    generation: job.generation,
-                    key: job.key,
-                    output,
-                });
+                    slot.running = None;
+                    slot.done = Some(Done {
+                        generation: job.generation,
+                        key: job.key,
+                        output,
+                    });
+                    shared.changed.notify_all();
+                }
+                // The engine goes with `run`, here on the worker, before saying so.
+                drop(run);
+                shared.lock().exited = true;
                 shared.changed.notify_all();
             })?;
+        let stop: Arc<dyn Stop> = channel.clone();
+        WORKERS.lock().unwrap_or_else(|p| p.into_inner()).push(Arc::downgrade(&stop));
         Ok(Self {
             channel,
             generation: 0,
@@ -1040,6 +1098,51 @@ mod tests {
         assert_eq!(reads, 4);
         recent.clear();
         assert!(recent.reads.is_empty() && recent.scope.is_none());
+    }
+
+    #[test]
+    fn stopping_waits_for_the_read_in_progress_and_the_engine_to_go() {
+        struct Engine(Arc<AtomicUsize>);
+        impl Drop for Engine {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let engine = Engine(dropped.clone());
+        let (started_tx, started_rx) = mpsc::channel();
+        let mut worker = LatestWorker::spawn("test-stop", move |input: u32| {
+            let _engine = &engine;
+            started_tx.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(150));
+            input
+        })
+        .unwrap();
+        let _ = worker.submit(1, 1, Duration::ZERO);
+        started_rx.recv().unwrap();
+        let stop: Arc<dyn Stop> = worker.channel.clone();
+        assert_eq!(stop_all(&[stop.clone()], Duration::from_secs(5)), 0);
+        assert!(stop.exited());
+        assert_eq!(dropped.load(Ordering::SeqCst), 1, "the engine is dropped before exit proceeds");
+    }
+
+    #[test]
+    fn stopping_gives_up_on_a_wedged_read_after_the_timeout() {
+        let (release_tx, release_rx) = mpsc::channel::<()>();
+        let (started_tx, started_rx) = mpsc::channel();
+        let mut worker = LatestWorker::spawn("test-wedged", move |input: u32| {
+            started_tx.send(()).unwrap();
+            let _ = release_rx.recv();
+            input
+        })
+        .unwrap();
+        let _ = worker.submit(1, 1, Duration::ZERO);
+        started_rx.recv().unwrap();
+        let stop: Arc<dyn Stop> = worker.channel.clone();
+        let clock = Instant::now();
+        assert_eq!(stop_all(&[stop.clone()], Duration::from_millis(50)), 1);
+        assert!(clock.elapsed() < Duration::from_secs(2));
+        release_tx.send(()).unwrap();
     }
 
     #[test]

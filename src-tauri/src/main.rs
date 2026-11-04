@@ -3487,6 +3487,12 @@ fn main() {
             // Every quit path (tray, menu, main window, app_quit) ends here: pause model
             // downloads so their partial files are kept and resumed next launch.
             if let tauri::RunEvent::Exit = event {
+                // Let an observer read in progress finish before exit tears down its engine's
+                // runtime under it (Auto OCR watching at quit crashed in ONNX Runtime).
+                let running = text_observer::shutdown(std::time::Duration::from_millis(1500));
+                if running > 0 {
+                    eprintln!("kimochi: {running} text observer(s) still reading at exit");
+                }
                 model_store::shutdown(app);
                 text_hook::shutdown();
                 extension_store::shutdown(app);
