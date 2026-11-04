@@ -44,7 +44,13 @@
         marks.html = performance.now()
         var root = document.documentElement
         try {
-          var appearance = JSON.parse(localStorage.getItem('kimochi.appearance.v1') || '{}')
+          // Native's stored values first (`appearance_prelude` in panels.rs), the cache otherwise.
+          var cached = JSON.parse(localStorage.getItem('kimochi.appearance.v1') || '{}')
+          var stored = window.__kimochiAppearance || {}
+          var appearance = {
+            appearance: stored.appearance || cached.appearance,
+            interfaceScale: stored.interfaceScale || cached.interfaceScale
+          }
           var mode = appearance.appearance || 'system'
           var dark = mode === 'dark' || (mode === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
           root.classList.add(dark ? 'dark' : 'light')

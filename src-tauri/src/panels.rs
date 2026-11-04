@@ -538,6 +538,19 @@ pub fn close_extension_windows(app: &tauri::AppHandle, keep: Option<&str>) -> Ve
     closed
 }
 
+/// The stored appearance and interface scale, for `panel.html`'s first frame: what it would
+/// otherwise take from the last values a window cached, which a change made elsewhere (another
+/// device through Sync, an edit to the store) leaves stale for one launch.
+fn appearance_prelude(settings: &Settings) -> String {
+    let read = |key: &str| settings.get(key).ok().flatten().filter(Value::is_string).unwrap_or(Value::Null);
+    format!(
+        ";(function(){{try{{window.__kimochiAppearance={{appearance:{},interfaceScale:{}}};}}catch(e){{}}}})();
+",
+        read("appearance"),
+        read("interfaceScale")
+    )
+}
+
 /// A panel's window colour for `theme`: `--color-background` of the slate scale.
 fn theme_background(theme: Option<tauri::Theme>) -> tauri::window::Color {
     match theme {
@@ -590,7 +603,8 @@ fn ensure(
             .maximizable(spec.resizable)
             .always_on_top(pinned)
             .visible(false)
-            .initialization_script_for_all_frames(platform::platform_prelude());
+            .initialization_script_for_all_frames(platform::platform_prelude())
+            .initialization_script(appearance_prelude(settings));
     #[cfg(target_os = "linux")]
     if matches!(spec.label, "crop-host" | "controller-host") {
         if !crate::platform::gnome::eligible_popup_session() {
