@@ -50,6 +50,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Linux (Hyprland): a shared window is named after its app**, with its icon, instead of "Shared window", and each game keeps its own crop area. Before, every window you shared on Hyprland used the last one's crop.
 - **Linux AppImage: Kimochi's sounds play again.** The AppImage was missing two audio components, so its sounds failed to load.
 
+### Fixed
+
+- **Sentence audio no longer disappears from a line you stayed on**: a line whose audio was found could lose it when you read the next line more than half a minute later, and its card then got no audio. The line keeps its clip.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added

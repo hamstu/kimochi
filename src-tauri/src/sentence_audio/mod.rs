@@ -550,16 +550,15 @@ impl SentenceAudio {
         let line = match &decision.outcome {
             Outcome::Voiced(voice) => match clips::render(&ears.ring, voice) {
                 Ok(rendered) => match lock(&self.store).put(&decision.uid, &decision.text, voice, &rendered) {
-                    Ok(info) => LineAudio {
-                        uid: decision.uid.clone(),
-                        state: "voiced",
-                        duration_ms: Some(info.duration_ms),
-                        how: Some(info.how),
-                        message: None,
-                    },
+                    Ok(info) => voiced(&decision.uid, info),
                     Err(e) => missed(&decision.uid, format!("The clip could not be saved: {e}")),
                 },
-                Err(e) => missed(&decision.uid, e),
+                // Decided again once its audio has left the recording (a provisional match
+                // confirmed by a line read long after): the clip already cut stays the line's.
+                Err(e) => match lock(&self.store).get(&decision.uid) {
+                    Some(info) => voiced(&decision.uid, info.clone()),
+                    None => missed(&decision.uid, e),
+                },
             },
             Outcome::Silent => {
                 lock(&self.store).remove(&decision.uid);
@@ -752,6 +751,10 @@ impl SentenceAudio {
 }
 
 const SILENT: &str = "No voice was detected for the card's line, so no audio was added.";
+
+fn voiced(uid: &str, info: clips::ClipInfo) -> LineAudio {
+    LineAudio { uid: uid.to_string(), state: "voiced", duration_ms: Some(info.duration_ms), how: Some(info.how), message: None }
+}
 
 fn missed(uid: &str, message: String) -> LineAudio {
     LineAudio { uid: uid.to_string(), state: "missed", duration_ms: None, how: None, message: Some(message) }
@@ -1167,6 +1170,38 @@ mod tests {
         assert_eq!(made.mp3, b"ID3 kept");
         let other = vec![("Sentence".to_string(), "知らない台詞です。".to_string())];
         assert!(service.make(&other, Vec::new(), false).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A provisional match confirmed once the next line comes, long after its audio left the
+    /// recording: the clip already cut stays the line's, rather than the line losing its audio.
+    #[test]
+    fn a_line_decided_again_after_its_audio_is_gone_keeps_its_clip() {
+        use kimochi_speech::listener::{How, Voice};
+        let dir = std::env::temp_dir().join(format!("kimochi-sentence-audio-again-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let clips = dir.join("clips");
+        std::fs::create_dir_all(&clips).unwrap();
+        std::fs::write(clips.join("clip-1.mp3"), b"ID3 kept").unwrap();
+        let info = json!({ "uid": "a", "text": "こんにちは", "file": "clip-1.mp3", "durationMs": 900.0, "how": "matched", "startMs": 0.0 });
+        std::fs::write(clips.join("clips.json"), serde_json::to_vec(&json!([info])).unwrap()).unwrap();
+        let emitted = Arc::new(Mutex::new(Vec::<LineAudio>::new()));
+        let seen = emitted.clone();
+        let host = Host {
+            runtime: Box::new(|| Err("no runtime in tests".into())),
+            model_dir: Box::new(|| None),
+            fetch_model: Box::new(|| {}),
+            emit: Box::new(move |line| seen.lock().unwrap().push(line.clone())),
+        };
+        let service = SentenceAudio::with_host(Arc::new(Settings::load(dir.join("settings.json"))), host, clips);
+        // An empty recording: whatever the lines' voices were, they are no longer held.
+        let ears = Ears { listener: Listener::new(None, None), ring: AudioRing::new(48_000, 30.0), cursor: None, model: None, model_checked: None };
+        let voice = || Outcome::Voiced(Voice { from_ms: 1_000.0, to_ms: 2_000.0, how: How::Timed });
+        service.keep(&ears, &Decision { uid: "a".into(), text: "こんにちは".into(), outcome: voice(), provisional: false });
+        service.keep(&ears, &Decision { uid: "b".into(), text: "猫が好きです。".into(), outcome: voice(), provisional: false });
+        let states: Vec<(String, &str)> = emitted.lock().unwrap().iter().map(|l| (l.uid.clone(), l.state)).collect();
+        assert_eq!(states, vec![("a".to_string(), "voiced"), ("b".to_string(), "missed")]);
+        assert_eq!(service.make(&[("Sentence".into(), "こんにちは".into())], Vec::new(), false).map(|m| m.mp3).ok(), Some(b"ID3 kept".to_vec()));
         let _ = std::fs::remove_dir_all(dir);
     }
 
