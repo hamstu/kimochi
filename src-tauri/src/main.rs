@@ -252,7 +252,45 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
             model_store::on_engine_selected(app, mode);
         }
         manga_ocr::prewarm(app);
+        release_scan_engines(app);
     }
+}
+
+/// Whether `engine` is the selected scan engine (`ocrMode`; "local" is MeikiOCR's old name).
+pub(crate) fn scans_with(app: &tauri::AppHandle, engine: &str) -> bool {
+    app.try_state::<Shared>().is_some_and(|service| {
+        let mode = service.settings.get_or::<String>("ocrMode", String::new());
+        mode == engine || engine == "meikiocr" && mode == "local"
+    })
+}
+
+/// Unload the local scan engines the selected one replaced. Each keeps its model in memory once
+/// it has scanned (Manga OCR's can pass 2 GB), and choosing another engine never needs it
+/// again; choosing it back loads it again on the first scan. PaddleOCR stays while it is what
+/// Auto OCR watches with. Off the caller's thread: an unload waits for a scan in progress.
+fn release_scan_engines(app: &tauri::AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if !scans_with(&app, "mangaocr") {
+            manga_ocr::unload(&app);
+        }
+        if !scans_with(&app, "meikiocr") {
+            meiki_ocr::unload(&app);
+        }
+        let watching = app.try_state::<Shared>().and_then(|service| {
+            service.observer.lock().unwrap_or_else(std::sync::PoisonError::into_inner).watching()
+        });
+        if !scans_with(&app, "ppocr") && watching != Some("ppocr") {
+            pp_ocr::unload(&app);
+        }
+        // glibc keeps what the engines freed in its arenas; give it back to the system
+        // (Manga OCR's own unload already does, for its other callers).
+        #[cfg(target_os = "linux")]
+        // SAFETY: malloc_trim only returns free heap pages; it touches no live allocation.
+        unsafe {
+            libc::malloc_trim(0);
+        }
+    });
 }
 
 /// Kimochi's Appearance setting, applied to the app itself rather than to each page: every
@@ -930,13 +968,26 @@ async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operati
                     window.hide().map_err(|e| e.to_string())?;
                 } else {
                     let rect: Rect = serde_json::from_value(result["rect"].clone()).map_err(|e|e.to_string())?;
-                    platform::desktop_place(&window, rect)?;
+                    let hidden = !window.is_visible().unwrap_or(false);
+                    // The overlay asks again every second. Only a new place, or a hidden window,
+                    // is placed: placing resets the surface's input region to the whole window
+                    // (GTK), and until the poll put it back the overlay took every click on the
+                    // desktop, over the Log too.
+                    let moved = service.view.lock().unwrap().origin.is_none_or(|o| {
+                        [o.x, o.y, o.width, o.height] != [rect.x, rect.y, rect.width, rect.height]
+                    });
+                    if moved || hidden {
+                        platform::desktop_place(&window, rect)?;
+                        reshape_soon();
+                    }
                     service.view.lock().unwrap().origin = Some(rect);
-                    if !platform::capture::suppressed() && !window.is_visible().unwrap_or(false) {
+                    if !platform::capture::suppressed() && hidden {
                         // The native empty region is committed before mapping.
                         window.set_ignore_cursor_events(false).map_err(|e| e.to_string())?;
                         platform::set_input_regions(&window, Some(&[]))?;
                         window.show().map_err(|e| e.to_string())?;
+                        // The poll still thinks the words' regions are applied.
+                        reshape_soon();
                     }
                 }
             }
@@ -1605,7 +1656,7 @@ const OBSERVE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// so the sequence is gone rather than fixed.
 /// A Display source never reads Kimochi's own windows: they are blanked in the frame before
 /// anything looks at it (`cover::blank_own_windows`).
-fn blank_own_windows(source_id: &str, frame: &mut kimochi_capture::Frame) {
+fn blank_own_windows(app: &tauri::AppHandle, source_id: &str, frame: &mut kimochi_capture::Frame) {
     if !kimochi_capture::SourceId::parse(source_id).is_some_and(|id| id.is_display()) {
         return;
     }
@@ -1617,7 +1668,15 @@ fn blank_own_windows(source_id: &str, frame: &mut kimochi_capture::Frame) {
         return;
     };
     let (width, height, full, crop) = (info.width, info.height, (info.full_width, info.full_height), info.crop_pixels);
-    cover::blank_own_windows(&mut frame.pixels, width, height, &bounds, full, crop, &cover::own_rects());
+    // On GNOME the Shell knows where the windows are; the cache only has what GTK was told.
+    #[cfg(target_os = "linux")]
+    let own = platform::gnome::own_frames(app, cover::COVERING).unwrap_or_else(cover::own_rects);
+    #[cfg(not(target_os = "linux"))]
+    let own = {
+        let _ = app;
+        cover::own_rects()
+    };
+    cover::blank_own_windows(&mut frame.pixels, width, height, &bounds, full, crop, &own);
 }
 
 #[tauri::command]
@@ -1652,7 +1711,7 @@ async fn capture_frame(
         // up the next capture, and the frame owns its own pixels from here.
         drop(backend);
         let mut frame = frame;
-        blank_own_windows(&request.source_id, &mut frame);
+        blank_own_windows(&app, &request.source_id, &mut frame);
 
         let mut observation = Value::Null;
         let mut observer_error = Value::Null;
@@ -2349,7 +2408,7 @@ async fn scan(
             // which take far longer than the capture, so previews are not held up.
             drop(backend);
             let mut frame = frame;
-            blank_own_windows(&request.source_id, &mut frame);
+            blank_own_windows(&a, &request.source_id, &mut frame);
             let info = serde_json::to_value(platform::desktop_frame_info(&frame.info))
                 .map_err(|e| e.to_string())?;
             // Pixels are kept (encoded lazily, on the first PNG read): an engine that
@@ -3616,7 +3675,7 @@ fn finish_setup(
     // menu, which reaches every window and the test fixtures.
     #[cfg(target_os = "macos")]
     {
-        let menu = tauri::menu::Menu::default(app.handle())?;
+        let menu = tauri::menu::Menu::default(app)?;
         if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) = menu.items()?.first() {
             // The default menu's first item is the system about panel.
             app_menu.remove_at(0)?;
@@ -3957,7 +4016,26 @@ enum InputShape {
         applied: Option<Vec<[f64; 4]>>,
         /// The last attempt failed (already logged once).
         failing: bool,
+        /// The window's bounds, when they were read, and the regions they were read for. On
+        /// GNOME a read is a call into the Shell, which answers on its compositor thread: read
+        /// again for new regions and every [`BOUNDS_TTL`], never every tick.
+        bounds: Option<(Rect, Instant, Vec<[f64; 4]>)>,
     },
+}
+
+/// How long a native-region window's bounds are trusted while its regions stay the same; a
+/// window that moves on its own is reshaped within this.
+const BOUNDS_TTL: Duration = Duration::from_millis(250);
+
+/// Until when the poll rewrites the native input shapes every few ticks (`reshape_soon`).
+static RESHAPE_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// A native-region window was just placed or shown: rewrite the shapes for the next second.
+/// Resizing a Wayland window resets its input region to the whole window (GTK), and when the
+/// reset lands is GTK's business, so one rewrite might come too early.
+#[cfg(target_os = "linux")]
+fn reshape_soon() {
+    *RESHAPE_UNTIL.lock().unwrap() = Some(Instant::now() + Duration::from_secs(1));
 }
 
 /// Bring every native-region window's input shape up to date with what its window
@@ -3995,6 +4073,7 @@ fn sync_input_shapes(
                 Ok(true) => InputShape::Native {
                     applied: None,
                     failing: false,
+                    bounds: None,
                 },
                 Ok(false) => InputShape::Polled,
                 Err(e) => {
@@ -4003,7 +4082,7 @@ fn sync_input_shapes(
                 }
             };
         }
-        let InputShape::Native { applied, failing } = state else {
+        let InputShape::Native { applied, failing, bounds } = state else {
             continue;
         };
         let wanted: Vec<Region> = {
@@ -4015,9 +4094,21 @@ fn sync_input_shapes(
             }
         };
         // Regions are desktop points; the shape is window-local CSS pixels, which are
-        // the same size as desktop points.
-        let Ok(bounds) = platform::desktop_bounds(&window) else {
-            continue;
+        // the same size as desktop points. Without regions the bounds do not matter.
+        let read_for: Vec<[f64; 4]> = wanted.iter().map(|r| [r.x, r.y, r.width, r.height]).collect();
+        let known = bounds.as_ref().filter(|(_, at, regions)| {
+            read_for.is_empty() || !refresh && at.elapsed() < BOUNDS_TTL && *regions == read_for
+        });
+        let bounds = match known {
+            Some((rect, ..)) => *rect,
+            None if read_for.is_empty() => Rect { x: 0., y: 0., width: 0., height: 0. },
+            None => {
+                let Ok(rect) = platform::desktop_bounds(&window) else {
+                    continue;
+                };
+                *bounds = Some((rect, Instant::now(), read_for));
+                rect
+            }
         };
         let local: Vec<Rect> = wanted
             .iter()
@@ -4169,8 +4260,10 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             platform::update_mouse_guard(&handle, &service);
             #[cfg(target_os = "windows")]
             sync_capture_protection(&handle, &service, &mut protection);
-            // About every two seconds, rewrite native shapes even when unchanged.
-            let refresh = ticks.is_multiple_of(125);
+            // About every two seconds, rewrite native shapes even when unchanged; every few
+            // ticks for a second after a window was placed (`reshape_soon`).
+            let reshaping = RESHAPE_UNTIL.lock().unwrap().is_some_and(|until| Instant::now() < until);
+            let refresh = ticks.is_multiple_of(125) || reshaping && ticks.is_multiple_of(4);
             for label in sync_input_shapes(&handle, &service, &mut shapes, refresh) {
                 // Handed back to the poll: click-through until a verdict says otherwise,
                 // and no history, so the next interactive verdict counts as a change.

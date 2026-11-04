@@ -55,7 +55,8 @@ export async function bundleLinuxAudio(appdir, env) {
     return result.stdout.trim()
   }
   const plugins = variable('pluginsdir')
-  const names = ['coreelements', 'app', 'playback', 'typefindfunctions', 'audioconvert', 'audioresample', 'volume', 'audiofx', 'debugutilsbad', 'autodetect', 'pulseaudio', 'audioparsers', 'id3demux', 'mpg123', 'wavparse']
+  // `gio` and `interleave`: giostreamsrc and deinterleave, WebKit's Web Audio decodeAudioData pipeline.
+  const names = ['coreelements', 'app', 'playback', 'typefindfunctions', 'audioconvert', 'audioresample', 'volume', 'audiofx', 'debugutilsbad', 'autodetect', 'pulseaudio', 'audioparsers', 'id3demux', 'mpg123', 'wavparse', 'gio', 'interleave']
   const destination = path.join(appdir, 'usr/lib/gstreamer-1.0')
   await mkdir(destination, { recursive: true })
   for (const name of names) {

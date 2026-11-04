@@ -3957,6 +3957,11 @@ function syncOverlayText() {
  */
 let publishing = false
 let republish = false
+// What was last published, and when: an unchanged set is sent again only once a second (native
+// may have shown or hidden the surface meanwhile), not on every tick of the region loop.
+let publishedSignature = null
+let publishedAt = 0
+const REPUBLISH_MS = 1000
 
 async function publishRegions() {
   if (publishing) {
@@ -3969,7 +3974,12 @@ async function publishRegions() {
   try {
     do {
       republish = false
-      await native.setRegions(hitRects())
+      const rects = hitRects()
+      const signature = JSON.stringify([rects, state.flags.overlayVisible, state.regionSelecting])
+      if (signature === publishedSignature && performance.now() - publishedAt < REPUBLISH_MS) continue
+      await native.setRegions(rects)
+      publishedSignature = signature
+      publishedAt = performance.now()
     } while (republish)
   } catch (error) {
     log({ check: 'overlay-regions-error', error: String(error?.message ?? error) })
@@ -3984,6 +3994,9 @@ function startRegionLoop() {
 
 async function refreshLayerPointer() {
   if (!hyprlandPointer || !layerPointerExit || layerPointerPolling || !state.origin) return
+  // Nothing on the overlay takes the mouse, and the last sample already said so: there is
+  // nothing for the pointer to be inside until something is drawn.
+  if (layerPointerExit.outside() && hitRects().length === 0) return
   layerPointerPolling = true
   try {
     const point = await native.invoke('linux_window_geometry', {

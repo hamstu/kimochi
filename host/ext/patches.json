@@ -30,6 +30,18 @@
         "let pendingCandidateLookup",
         "globalThis.HDReaderReady"
       ]
+    },
+    {
+      "id": "tenten-modifier-move",
+      "engine": "tenten",
+      "file": "10ten-ja-content.js",
+      "why": "10ten ignores a pointer move with a modifier held at the same point as the last one, in Safari (isSafari(), which WebKitGTK's user agent also matches), to dodge a WebKit bug fixed in May 2023 (WebKit/WebKit#14221). Every WebKit Kimochi runs on has the fix. Kimochi's Shift scan sends exactly such a move: on Wayland the overlay has no keyboard, so pressing Shift over a stationary pointer re-sends the move at the same point with shiftKey set (host/linux-scan-input.js), and 10ten dropped it, never looking the word up.",
+      "find": "isSafari()) {\n            if ((event.shiftKey",
+      "replace": "false && isSafari()) {\n            if ((event.shiftKey",
+      "requires": [
+        "_lastPointerMoveScreenPoint",
+        "_ignoreNextPointerMove"
+      ]
     }
   ]
 }

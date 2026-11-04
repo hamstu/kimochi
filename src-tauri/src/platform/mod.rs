@@ -1109,6 +1109,8 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
         "meikiocr": engine(dynamic.meikiocr, &accelerators["meikiocr"]),
         "mangaocr": engine(dynamic.mangaocr, &accelerators["mangaocr"]),
         "ppocr": engine(dynamic.ppocr, &accelerators["ppocr"]),
+        // Replaced on macOS (main.rs); said here so no default can offer it elsewhere.
+        "livetext": {"available": false, "reason": "Apple Live Text is available on macOS only."},
     });
     payload["observer"] = dynamic.observer;
     payload["ownPids"] = json!([std::process::id()]);

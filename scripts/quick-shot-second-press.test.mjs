@@ -30,5 +30,19 @@ test('GNOME forwards the press to the crop host, which hands it to its editor', 
   const crop = await read('ui/gnome-crop.js')
   assert.match(crop, /onStart\?\.\(\{shortcutPressed:\(\)=>\{void window\.__TAURI__\.event\.emit\('gnome-crop-press',\{id\}\)/)
   const host = await read('ui/gnome-crop-host.js')
-  assert.match(host, /listen\('gnome-crop-press',\(\{payload\}\)=>\{\s*if\(active\?\.id===payload\?\.id\)active\.selector\.shortcutPressed\(\)/)
+  assert.match(host, /listen\('gnome-crop-press',\(\{payload\}\)=>\{\s*if\(active\?\.id===payload\?\.id\)active\.selector\?\.shortcutPressed\(\)/)
+})
+
+test('the GNOME crop host builds one editor per selection, however often the opener repeats', async () => {
+  // gnome-crop.js repeats gnome-crop-open every 150 ms until the editor is up.
+  assert.match(await read('ui/gnome-crop.js'), /setInterval\(\(\)=>void window\.__TAURI__\.event\.emit\('gnome-crop-open'/)
+  const host = await read('ui/gnome-crop-host.js')
+  const open = host.match(/listen\('gnome-crop-open',async \(\{payload\}\)=>\{([\s\S]*?)\n {2}\}\)/)[1]
+  // The repeat is turned away by `active`, so the session is claimed before anything is awaited.
+  assert.match(open, /^\s*if\(active\?\.id===payload\.id\)return/)
+  const claimed = open.indexOf('active=session')
+  assert.ok(claimed >= 0, 'the session is claimed')
+  assert.doesNotMatch(open.slice(0, claimed), /await /)
+  // A newer selection that arrives while this one waits for the Shell supersedes it.
+  assert.match(open, /await request\(\{operation:'editor',id:payload\.id\}\)\s*if\(active!==session\)return/)
 })

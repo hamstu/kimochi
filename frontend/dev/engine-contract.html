@@ -156,10 +156,13 @@
             const top = [...(await yomitanPopups)].find((popup) => (popup.depth ?? 0) === 0 && popup.isVisibleSync?.())
             const frame = top?.getFrameRect?.()
             if (!top || !frame?.valid) return { visible: false, rect: null, text: null }
+            // Without the furigana: innerText would read 食<rt>た</rt>べる as 食たべる.
+            const entries = top._frame?.contentDocument?.getElementById('dictionary-entries')?.cloneNode(true)
+            entries?.querySelectorAll('rt, rp').forEach((reading) => reading.remove())
             return {
               visible: true,
               rect: { x: frame.left, y: frame.top, width: frame.right - frame.left, height: frame.bottom - frame.top },
-              text: top._frame?.contentDocument?.getElementById('dictionary-entries')?.innerText ?? null
+              text: entries?.textContent ?? null
             }
           },
           async place(rect) {

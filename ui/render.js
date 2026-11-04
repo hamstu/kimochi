@@ -27,6 +27,7 @@ import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
 import { layoutParts, characterCells } from './text-layout.js'
 import { hexToRgbTriplet, highlightStrength } from './settings.js'
+import { shownForHits } from './hit-visible.js'
 
 const LOOKAHEAD = 10
 const PROXIMITY_MAX_DISTANCE = 300
@@ -634,8 +635,7 @@ export class TextOverlayRenderer {
     return [...this.container.children]
       .filter((element) => {
         if (this.leaving.has(element)) return false
-        const style = getComputedStyle(element)
-        return style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0'
+        return shownForHits(getComputedStyle(element), element.getAnimations?.() ?? [])
       })
       .map((element) => element.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0)

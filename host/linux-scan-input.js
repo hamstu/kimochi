@@ -15,6 +15,12 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
   let held = state.portalHeld || state.keys.size > 0
   let forwarding = false
   const editable = target => target?.closest?.('input,textarea,[contenteditable="true"]')
+  // Each engine listens for its own move: Yomitan and 10ten `pointermove`, Hachidori `mousemove`
+  // (the extension descriptor says which, as in ui/overlay.js).
+  const moveTypes = () => host.__kimochiExtensionHost?.descriptor?.pointerEvents ?? ['pointermove']
+  const move = (type, init) => type === 'mousemove'
+    ? new win.MouseEvent(type, init)
+    : new win.PointerEvent(type, { ...init, pointerType: 'mouse', isPrimary: true })
   const scan = () => {
     if (passive && host.__linuxLayerPointerInside === false) return
     if (!passive && !host.document.hasFocus()) return
@@ -23,9 +29,9 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
     if (!target || editable(target)) return
     forwarding = true
     try {
-      target.dispatchEvent(new win.PointerEvent('pointermove', {
-        ...point, bubbles: true, cancelable: true, pointerType: 'mouse', isPrimary: true, shiftKey: true
-      }))
+      for (const type of moveTypes()) {
+        target.dispatchEvent(move(type, { ...point, bubbles: true, cancelable: true, shiftKey: true }))
+      }
     } finally { forwarding = false }
   }
   const update = () => {
@@ -48,6 +54,19 @@ export async function installLinuxScanInput(win = window, { passive = false } = 
       forwarding = true
       try { e.target.dispatchEvent(new win.PointerEvent('pointermove', {
         ...point, bubbles: true, cancelable: true, pointerType: 'mouse', isPrimary: true, shiftKey: held
+      })) } finally { forwarding = false }
+    }
+  }, true)
+  // The same correction for an engine that reads `mousemove` (Hachidori).
+  win.addEventListener('mousemove', e => {
+    if (forwarding || !moveTypes().includes('mousemove')) return
+    if (passive && host.__linuxLayerPointerInside === false) return
+    if (state.known && e.shiftKey !== held) {
+      e.stopImmediatePropagation()
+      forwarding = true
+      try { e.target.dispatchEvent(move('mousemove', {
+        clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY, buttons: e.buttons,
+        ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey, bubbles: true, cancelable: true, shiftKey: held
       })) } finally { forwarding = false }
     }
   }, true)
