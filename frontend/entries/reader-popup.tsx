@@ -1,6 +1,5 @@
 import "@ui/install-pointer-dedupe";
 import { createRoot } from "react-dom/client";
-import "@radix-ui/themes/styles.css";
 import "../kit/kit.css";
 import "../texthooker/App.css";
 import "../texthooker/popover.css";

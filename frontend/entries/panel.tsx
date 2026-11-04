@@ -11,7 +11,6 @@ import { StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { reportError, reportUncaughtErrors } from "./reportErrors";
-import "@radix-ui/themes/styles.css";
 import "../kit/kit.css";
 import "../texthooker/App.css";
 import "../shell/panel.css";
