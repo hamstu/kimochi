@@ -1649,7 +1649,7 @@ const OBSERVE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// so the sequence is gone rather than fixed.
 /// A Display source never reads Kimochi's own windows: they are blanked in the frame before
 /// anything looks at it (`cover::blank_own_windows`).
-fn blank_own_windows(source_id: &str, frame: &mut kimochi_capture::Frame) {
+fn blank_own_windows(app: &tauri::AppHandle, source_id: &str, frame: &mut kimochi_capture::Frame) {
     if !kimochi_capture::SourceId::parse(source_id).is_some_and(|id| id.is_display()) {
         return;
     }
@@ -1661,7 +1661,15 @@ fn blank_own_windows(source_id: &str, frame: &mut kimochi_capture::Frame) {
         return;
     };
     let (width, height, full, crop) = (info.width, info.height, (info.full_width, info.full_height), info.crop_pixels);
-    cover::blank_own_windows(&mut frame.pixels, width, height, &bounds, full, crop, &cover::own_rects());
+    // On GNOME the Shell knows where the windows are; the cache only has what GTK was told.
+    #[cfg(target_os = "linux")]
+    let own = platform::gnome::own_frames(app, cover::COVERING).unwrap_or_else(cover::own_rects);
+    #[cfg(not(target_os = "linux"))]
+    let own = {
+        let _ = app;
+        cover::own_rects()
+    };
+    cover::blank_own_windows(&mut frame.pixels, width, height, &bounds, full, crop, &own);
 }
 
 #[tauri::command]
@@ -1696,7 +1704,7 @@ async fn capture_frame(
         // up the next capture, and the frame owns its own pixels from here.
         drop(backend);
         let mut frame = frame;
-        blank_own_windows(&request.source_id, &mut frame);
+        blank_own_windows(&app, &request.source_id, &mut frame);
 
         let mut observation = Value::Null;
         let mut observer_error = Value::Null;
@@ -2393,7 +2401,7 @@ async fn scan(
             // which take far longer than the capture, so previews are not held up.
             drop(backend);
             let mut frame = frame;
-            blank_own_windows(&request.source_id, &mut frame);
+            blank_own_windows(&a, &request.source_id, &mut frame);
             let info = serde_json::to_value(platform::desktop_frame_info(&frame.info))
                 .map_err(|e| e.to_string())?;
             // Pixels are kept (encoded lazily, on the first PNG read): an engine that
