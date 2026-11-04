@@ -13,10 +13,10 @@ type Tab = 'desktop' | 'gaming'
 export function DemoShowcase() {
   const [tab, setTab] = useState<Tab>('desktop')
   const desktop = useGuessedPlatform()
-  const mark = desktop === 'windows' ? <WindowsMark className="size-4" /> : desktop === 'linux' ? <LinuxMark className="size-4" /> : <AppleMark className="size-4" />
+  const mark = desktop === 'windows' ? <WindowsMark className="size-5" /> : desktop === 'linux' ? <LinuxMark className="size-5" /> : <AppleMark className="size-5" />
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'desktop', label: 'Desktop', icon: mark },
-    { id: 'gaming', label: 'Handheld-Mode', icon: <DeckMark className="size-4" /> }
+    { id: 'gaming', label: 'Handheld mode', icon: <DeckMark className="size-5" /> }
   ]
   return (
     <section id="demo" aria-labelledby="demo-heading">

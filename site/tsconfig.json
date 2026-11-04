@@ -16,7 +16,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "types": ["vite/client"],
-    "paths": { "@kimochi/demo-content": ["../frontend/dev/demo-content.ts"] }
+    "paths": {
+      "@kimochi/demo-content": ["../frontend/dev/demo-content.ts"],
+      "@kimochi/credits/*": ["../frontend/credits/*"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }

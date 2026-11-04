@@ -323,3 +323,14 @@
   --scene-chip: rgb(0 0 0 / 0.45);
   --scene-chip-ink: rgb(255 255 255 / 0.8);
 }
+
+/* The thank-you note above the credits (OpenSource.tsx): a yellow sticky note with a strip of
+   tape, the same pale paper in light and dark so it stands out on both. */
+.credits-note {
+  background: oklch(0.94 0.1 98);
+  color: oklch(0.3 0.04 85);
+}
+.credits-note-tape {
+  background: oklch(1 0 0 / 0.55);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}

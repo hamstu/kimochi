@@ -91,7 +91,7 @@ export function DownloadButton({ align = 'start', className = '' }: DownloadButt
     'inline-flex h-14 items-center gap-3 rounded-l-xl pr-5 pl-6 text-[1.0625rem] font-semibold no-underline transition-colors duration-100 hover:bg-white/10'
   const mainContent = (
     <>
-      <OsMark os={platform.os} className="size-5" />
+      <OsMark os={platform.os} className="size-6" />
       <span>Download Kimochi</span>
       {release && (
         <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-[0.8125rem] font-medium tnum">
@@ -161,7 +161,7 @@ export function DownloadButton({ align = 'start', className = '' }: DownloadButt
                   const label = (
                     <>
                       <span className="text-ink-3">
-                        <OsMark os={os} className="size-4" />
+                        <OsMark os={os} className="size-5" />
                       </span>
                       Download for {osLabel(os)}
                     </>

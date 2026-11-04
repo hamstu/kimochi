@@ -9,8 +9,8 @@ const STEPS = [
   },
   {
     n: '二',
-    title: 'Scan',
-    body: "Press Scan, or turn on Auto OCR. Turn on the overlay if you're feeling funky. 😉"
+    title: 'Scan / Read',
+    body: "Press Scan, or turn on Auto OCR. Using the Text Hooker? It just works. Turn on the overlay if you're feeling funky. 😉"
   },
   {
     n: '三',

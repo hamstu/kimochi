@@ -60,6 +60,9 @@
   margin-top: var(--k-space-4);
 }
 .about-credits-title {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-2);
   margin: 0 0 var(--k-space-1-5);
   color: var(--k-text-2);
   font-size: var(--k-text-xs);
@@ -67,6 +70,26 @@
   font-weight: var(--k-weight-medium);
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+.about-credits-title svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--k-text-3);
+}
+/* The single-pixel rule from the group's name to the end of the row. */
+.about-credits-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--k-line);
+}
+.about-credit-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+.about-credit-tile {
+  --credit-tile: 22px;
 }
 .about-license {
   margin-left: var(--k-space-2);

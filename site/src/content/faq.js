@@ -47,7 +47,7 @@ export const FAQ = [
       'Yes, Kimochi is free forever, with no account and no limits on the core app: the overlay, Auto OCR, on-device and online OCR engines, the Log, Sessions, the Notebook, dictionaries, one-click Anki cards and Gaming Mode.',
       'Kimochi Cloud is optional and, as of October 2026, costs US$6 a month, US$60 a year (two months free, so $5 a month), or US$125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial. A free account on its own doesn’t include any of these.'
     ],
-    links: [{ href: '/#open-source', label: 'Plans on the home page' }]
+    links: [{ href: '/#cloud', label: 'Plans on the home page' }]
   },
   {
     id: 'platforms',

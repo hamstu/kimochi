@@ -9,6 +9,8 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
 
 // The live demo's example game, shared with the app's preview harness (see README, "Demo").
 const DEMO_CONTENT = here('../frontend/dev/demo-content.ts')
+// The open-source credits (list, logos, tile styles), shared with the app's Settings → About.
+const CREDITS = here('../frontend/credits')
 
 /**
  * `vite preview` like production: a path with no file in dist/ (`/x` → x, x.html or x/index.html)
@@ -47,10 +49,10 @@ function previewNotFound(): Plugin {
 export default defineConfig({
   plugins: [react(), tailwindcss(), previewNotFound()],
   base: '/',
-  resolve: { alias: { '@kimochi/demo-content': DEMO_CONTENT } },
+  resolve: { alias: { '@kimochi/demo-content': DEMO_CONTENT, '@kimochi/credits': CREDITS } },
   server: {
     // The dev server only serves files under site/ by default; allow the one shared module.
-    fs: { allow: [here('.'), DEMO_CONTENT] },
+    fs: { allow: [here('.'), DEMO_CONTENT, CREDITS] },
     // Account pages call the API on the same origin. In dev, forward /api to the server's local
     // Kimochi server (`wrangler dev`, PUBLIC_URL=http://127.0.0.1:1450). No changeOrigin: the
     // Host and Origin headers must stay 127.0.0.1:1450 so the server's Origin check passes and

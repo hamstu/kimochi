@@ -1,5 +1,6 @@
 import { DownloadButton } from '../DownloadButton'
-import { KanaRain } from './KanaRain'
+import { DiscordButton } from '../DiscordButton'
+import { KanaGlow } from './KanaGlow'
 import { useEffect, useState } from 'react'
 import { fetchLatestRelease, versionLabel } from '../../lib/releases'
 
@@ -18,13 +19,13 @@ function HeroVersion() {
 }
 
 /**
- * The home hero: the app icon, wordmark, promise, lede and the download button, centred, over a
- * kana rain.
+ * The home hero: the app icon, wordmark, promise, lede, the download button and a quieter Discord
+ * link, centred, over a glow of kana.
  */
-// Fades the rain out towards the bottom and thins it behind the centred text.
-const RAIN_MASK = {
+// Fades the glow out towards the bottom and thins it behind the headline and lede.
+const GLOW_MASK = {
   maskImage:
-    'radial-gradient(ellipse 38% 55% at 50% 50%, rgb(0 0 0 / 0.3), black 100%), linear-gradient(to bottom, black 30%, transparent 95%)',
+    'radial-gradient(ellipse 40% 22% at 50% 52%, rgb(0 0 0 / 0.22), black 100%), linear-gradient(to bottom, black 45%, transparent 96%)',
   maskComposite: 'intersect'
 } as const
 
@@ -32,9 +33,9 @@ export function Hero() {
   return (
     // z-10 and no overflow clip here: the download button's menu hangs below the hero, over the demo.
     <section className="relative isolate z-10">
-      {/* Kana rain behind the top of the hero, fading out before the headline and lede. */}
+      {/* A glow of kana behind the top of the hero, fading out before the headline and lede. */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <KanaRain className="absolute inset-x-0 top-0 h-[34rem] w-full opacity-75 md:h-[40rem]" style={RAIN_MASK} />
+        <KanaGlow className="absolute inset-x-0 top-0 h-[52rem] w-full md:h-[64rem]" style={GLOW_MASK} />
       </div>
 
       <div className="container-page flex flex-col items-center pt-16 pb-16 text-center md:pt-24 md:pb-24">
@@ -58,6 +59,11 @@ export function Hero() {
         {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
         <div id="get-kimochi" className="mt-10 scroll-mt-24">
           <DownloadButton align="center" />
+        </div>
+        {/* The community, a step quieter than the download, under a short rule. */}
+        <div className="mt-8 flex flex-col items-center gap-6">
+          <span aria-hidden className="h-px w-24 bg-hairline" />
+          <DiscordButton variant="secondary" />
         </div>
       </div>
     </section>

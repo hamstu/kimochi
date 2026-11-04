@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { Link, Outlet, useLocation, useNavigationType } from 'react-router'
 import { Menu, X } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
 import { AccountNavLink } from './AccountNavLink'
@@ -19,7 +19,8 @@ export const NAV_LINKS: { label: string; to: string }[] = [
   { label: 'Demo', to: '/#demo' },
   { label: 'Features', to: '/#features' },
   { label: 'How it works', to: '/#how' },
-  { label: 'Pricing', to: '/#open-source' },
+  { label: 'Open source', to: '/#open-source' },
+  { label: 'Cloud', to: '/#cloud' },
   { label: 'About', to: '/#about' },
   { label: 'FAQ', to: '/#faq' },
   { label: 'Download', to: '/#download' }
@@ -36,18 +37,81 @@ const MORE_LINKS: { label: string; to: string }[] = [
   { label: 'Source on GitHub', to: GITHUB_URL }
 ]
 
-/** Scroll to the hash target after navigation, or to the top on a plain route change. */
+const SCROLL_KEY = 'kimochi:scroll'
+
+function readPositions(): Record<string, number> {
+  try {
+    return JSON.parse(sessionStorage.getItem(SCROLL_KEY) ?? '{}') as Record<string, number>
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Scroll after an in-app navigation, and nothing else:
+ * - The first render (a load or a reload) leaves the scroll alone, so the browser keeps the
+ *   visitor where they were (or at the URL's #hash on a fresh load).
+ * - A link click (PUSH/REPLACE) goes to its #hash target, or to the top of a new page.
+ * - Back and Forward (POP) return to where the visitor was on that entry, once it has rendered.
+ * Positions are kept per history entry (location.key) in sessionStorage, so they survive a reload.
+ * Every jump is instant (the page's CSS scroll-behavior is smooth), except a #hash link to a
+ * section of the page already showing, which glides there.
+ */
 function useScrollOnNavigate() {
-  const { pathname, hash } = useLocation()
+  const location = useLocation()
+  const navType = useNavigationType()
+  const first = useRef(true)
+  const lastPath = useRef(location.pathname)
+  const key = useRef(location.key)
+  key.current = location.key
+
+  // Remember this entry's position as the visitor scrolls.
   useEffect(() => {
-    if (hash) {
-      const id = decodeURIComponent(hash.slice(1))
-      // Wait a frame so the target page has rendered.
-      const raf = requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView())
-      return () => cancelAnimationFrame(raf)
+    let raf = 0
+    const save = (): void => {
+      raf = 0
+      const positions = readPositions()
+      positions[key.current] = window.scrollY
+      try {
+        sessionStorage.setItem(SCROLL_KEY, JSON.stringify(positions))
+      } catch {
+        // Storage unavailable: Back still works, just without a remembered position.
+      }
     }
-    window.scrollTo(0, 0)
-  }, [pathname, hash])
+    const onScroll = (): void => {
+      if (!raf) raf = requestAnimationFrame(save)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(raf)
+    }
+  }, [])
+
+  useEffect(() => {
+    const samePage = lastPath.current === location.pathname
+    lastPath.current = location.pathname
+    if (first.current) {
+      first.current = false
+      return
+    }
+    // Wait a frame so the page being shown has rendered.
+    const raf = requestAnimationFrame(() => {
+      if (navType === 'POP') {
+        const y = readPositions()[location.key]
+        if (y !== undefined) window.scrollTo({ top: y, behavior: 'instant' })
+        return
+      }
+      if (location.hash) {
+        document
+          .getElementById(decodeURIComponent(location.hash.slice(1)))
+          ?.scrollIntoView({ behavior: samePage ? 'smooth' : 'instant' })
+        return
+      }
+      window.scrollTo({ top: 0, behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [location.key, location.pathname, location.hash, navType])
 }
 
 function Wordmark() {
