@@ -4,6 +4,10 @@
  * top, or Settings. The title
  * bar carries the sidebar toggle and the app's name.
  *
+ * Steam Deck Gaming Mode has no sidebar, mini mode or sidebar toggle: the window is a full-screen
+ * app used by touch. What the sidebar holds is the Source tab instead (GamingSourceView), the
+ * first view, and Settings is a tab of its own; Settings' page list is the only sidebar left.
+ *
  * The Log stays mounted under the other views: it owns line intake (clipboard, WebSocket, OCR),
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
@@ -15,7 +19,7 @@ import { ReaderHost, Transcript } from '@texthooker/App'
 import { TitleBarPortal } from '../shell/TitleBarPortal'
 import KimochiLogo from '../components/KimochiLogo'
 import { useSetting } from '../bridge/useSetting'
-import { useCapabilities } from '../bridge/capabilities'
+import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 import { isPrimaryModifier } from '../panels/settings/accelerator'
 import type { SettingsTabName } from '../bridge/tauri'
 import { ReaderSettingsProvider } from '../panels/settings/ReaderSettingsProvider'
@@ -29,7 +33,8 @@ import { DEFAULT_WIDTH, MainSidebar, type MainView } from './MainSidebar'
 import { WhatsNewDialog } from './WhatsNewDialog'
 import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
-import { GamingModeNotice } from './GamingModeNotice'
+import { GamingSourceView } from './GamingSourceView'
+import { useBehindGame } from './useBehindGame'
 import { panel } from '../bridge/tauri'
 import { demoStops } from '../bridge/demo'
 import './main.css'
@@ -40,15 +45,25 @@ const Notebook = lazy(() =>
 )
 const AnkiCards = lazy(() => import('./AnkiPanel').then((m) => ({ default: m.AnkiPanel })))
 
+/** Gaming Mode, as native says before the first frame (platform::platform_prelude). */
+const gamingAtBoot = (): boolean =>
+  Boolean((window as { __KIMOCHI_PLATFORM__?: { gamescope?: boolean } }).__KIMOCHI_PLATFORM__?.gamescope)
+
 function initialView(): MainView {
   const view = new URLSearchParams(location.search).get('view')
   if (view === 'notebook' || view === 'anki' || view === 'settings') return view
+  if (view === 'source' && gamingAtBoot()) return view
   // Reloaded by a dictionary-engine switch made in Settings: open on that page, not the Log.
-  return engineSwitchRecord()?.view ?? 'log'
+  const switched = engineSwitchRecord()?.view
+  if (switched && (switched !== 'source' || gamingAtBoot())) return switched
+  // Gaming Mode starts where a reader sets up: the Source view.
+  return gamingAtBoot() ? 'source' : 'log'
 }
 
 export default function MainPanel(): JSX.Element {
   const capabilities = useCapabilities()
+  const gaming = isGamingMode(capabilities) || gamingAtBoot()
+  useBehindGame(gaming)
   const [sidebar, setSidebar] = useSetting<boolean>('mainSidebarOpen', true)
   const [sidebarWidth, setSidebarWidth] = useSetting<number>('mainSidebarWidth', DEFAULT_WIDTH)
   // The next launch's first frame (panel.html) draws the sidebar where it will be.
@@ -86,7 +101,7 @@ export default function MainPanel(): JSX.Element {
   const settingsTab = settingsTabOf(storedTab)
   const [editing, setEditing] = useState<string | null>(null)
   // Where Back returns to from Settings.
-  const lastView = useRef<Exclude<MainView, 'settings'>>(engineSwitchRecord()?.back ?? 'log')
+  const lastView = useRef<Exclude<MainView, 'settings'>>(engineSwitchRecord()?.back ?? (gamingAtBoot() ? 'source' : 'log'))
   const settingsScroll = useRef<HTMLDivElement>(null)
   const { props: controller, error, dismissError } = useController()
   // What's new opens on its own once, on the first launch of a new version.
@@ -105,15 +120,6 @@ export default function MainPanel(): JSX.Element {
     setView('notebook')
     if (entryId) setEditing(entryId)
   }
-
-  useEffect(() => {
-    const back = (event: Event): void => {
-      if (editing !== null) { setEditing(null); event.preventDefault() }
-      else if (view === 'settings') { setViewState(lastView.current); event.preventDefault() }
-    }
-    document.addEventListener('kimochi:controller-back', back)
-    return () => document.removeEventListener('kimochi:controller-back', back)
-  }, [view, editing])
 
   // A switch of dictionary engine reloads this window; it records where Settings was first.
   const tabNow = useRef(settingsTab)
@@ -162,13 +168,17 @@ export default function MainPanel(): JSX.Element {
   const [chooseRequest, setChooseRequest] = useState(0)
   useEffect(() => {
     const pending = listen('main:choose-source', () => {
-      void changeMini(false)
-      void setSidebar(true)
-      setViewState((current) => (current === 'settings' ? lastView.current : current))
+      if (gaming) {
+        setViewState('source')
+      } else {
+        void changeMini(false)
+        void setSidebar(true)
+        setViewState((current) => (current === 'settings' ? lastView.current : current))
+      }
       setChooseRequest((count) => count + 1)
     })
     return () => void pending.then((stop) => stop())
-  }, [setSidebar, changeMini])
+  }, [setSidebar, changeMini, gaming])
 
   // ⌘1, ⌘2, ⌘3 and ⌘, switch views (Ctrl+1, Ctrl+2, Ctrl+3 and Ctrl+, off macOS).
   useEffect(() => {
@@ -189,7 +199,7 @@ export default function MainPanel(): JSX.Element {
     <ReaderHost>
       <LogActionsProvider>
         <TitleBarPortal>
-          {!mini &&
+          {!mini && !gaming &&
           <Tooltip content={sidebar ? 'Hide sidebar' : 'Show sidebar'}>
             <IconButton
               label={sidebar ? 'Hide sidebar' : 'Show sidebar'}
@@ -201,7 +211,7 @@ export default function MainPanel(): JSX.Element {
               <PanelLeft />
             </IconButton>
           </Tooltip>}
-          {<IconButton
+          {!gaming && <IconButton
             label={mini ? 'Expand Kimochi' : 'Mini mode'} size="sm"
             onClick={() => void changeMini(!mini)}>
             {mini ? <Maximize2 /> : <Minimize2 />}
@@ -213,7 +223,6 @@ export default function MainPanel(): JSX.Element {
         </TitleBarPortal>
         {miniError && <div role="alert" className="native-panel-error" onClick={() => setMiniError(null)}>{miniError}</div>}
         <div className="main-frame">
-          <GamingModeNotice />
           {error && (
             <div
               className="native-panel-error"
@@ -224,13 +233,15 @@ export default function MainPanel(): JSX.Element {
               {error}
             </div>
           )}
+          {/* Gaming Mode: the tabs span the window, with Settings' page list under them. */}
+          {gaming && <ViewTabs view={view} onView={setView} gaming />}
           <div className="main-layout">
-            {(sidebar || mini) && (
+            {(gaming ? view === 'settings' : sidebar || mini) && (
               <MainSidebar
                 width={sidebarWidth}
                 onResize={setSidebarWidth}
-                view={mini ? 'log' : view}
-                mini={mini}
+                view={mini && !gaming ? 'log' : view}
+                mini={mini && !gaming}
                 onChooseSource={() => {
                   void changeMini(false).then(() => {
                     void setSidebar(true)
@@ -243,11 +254,15 @@ export default function MainPanel(): JSX.Element {
                 chooseRequest={chooseRequest}
                 settingsTab={settingsTab}
                 onSettingsTab={(tab) => { void changeMini(false).then(() => openSettings(tab)) }}
-                onBack={() => setView(lastView.current)}
+                // Gaming Mode: Settings is a tab, so there is nothing to go back to.
+                onBack={gaming ? undefined : () => setView(lastView.current)}
               />
             )}
-            <div className="main-view" style={mini ? { display: 'none' } : undefined}>
-              {view !== 'settings' && <ViewTabs view={view} onView={setView} />}
+            <div className="main-view" style={mini && !gaming ? { display: 'none' } : undefined}>
+              {!gaming && view !== 'settings' && <ViewTabs view={view} onView={setView} />}
+              {gaming && view === 'source' && (
+                <GamingSourceView controller={controller} onOpenSettings={openSettings} chooseRequest={chooseRequest} />
+              )}
               <Transcript visible={view === 'log'} onOpenNotebook={openNotebook} />
               {view === 'notebook' && (
                 <Suspense fallback={<div role="status">Loading notebook…</div>}>

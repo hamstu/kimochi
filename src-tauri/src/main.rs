@@ -3487,6 +3487,12 @@ fn main() {
             // Every quit path (tray, menu, main window, app_quit) ends here: pause model
             // downloads so their partial files are kept and resumed next launch.
             if let tauri::RunEvent::Exit = event {
+                // Let an observer read in progress finish before exit tears down its engine's
+                // runtime under it (Auto OCR watching at quit crashed in ONNX Runtime).
+                let running = text_observer::shutdown(std::time::Duration::from_millis(1500));
+                if running > 0 {
+                    eprintln!("kimochi: {running} text observer(s) still reading at exit");
+                }
                 model_store::shutdown(app);
                 text_hook::shutdown();
                 extension_store::shutdown(app);
@@ -3737,6 +3743,8 @@ fn finish_setup(
     );
     #[cfg(target_os = "linux")]
     platform::gamescope::start();
+    #[cfg(target_os = "linux")]
+    platform::gamescope::watch_shown(&handle);
     gamepad::start(&handle, &service);
 
     {
@@ -3878,6 +3886,7 @@ fn spawn_source_restore(service: Shared) {
                 service.set_status(format!("Reading · {}", source.name));
                 service.log(json!({"check":"gaming-mode-source-select","status":"selected","sourceId":source.id}));
             }
+            platform::gaming_sources::follow(service.clone());
             return;
         }
         let Some(saved) = saved else {
@@ -4515,16 +4524,23 @@ fn spawn_focus_watch(handle: tauri::AppHandle, service: Shared) {
                 .as_deref()
                 .and_then(SourceId::parse)
                 .filter(|id| id.is_window() && id.is_local());
-            let bounds = watched.as_ref().and_then(platform::window_bounds);
-            let current = source_focus(
-                watching.as_deref(),
-                platform::front_window(),
-                own_pid,
-                gamepad::panel_focused(),
-                cover::covered_now(),
-                bounds,
-                previous.unwrap_or_default(),
-            );
+            // Gaming Mode answers from what Gamescope draws in front (gaming_sources::source_focus).
+            #[cfg(target_os = "linux")]
+            let gaming = platform::gaming_sources::source_focus(service.selection.lock().unwrap().clone().as_deref());
+            #[cfg(not(target_os = "linux"))]
+            let gaming: Option<SourceFocus> = None;
+            let current = gaming.unwrap_or_else(|| {
+                let bounds = watched.as_ref().and_then(platform::window_bounds);
+                source_focus(
+                    watching.as_deref(),
+                    platform::front_window(),
+                    own_pid,
+                    gamepad::panel_focused(),
+                    cover::covered_now(),
+                    bounds,
+                    previous.unwrap_or_default(),
+                )
+            });
             if previous != Some(current) {
                 previous = Some(current);
                 service.view.lock().unwrap().source_focus = current;

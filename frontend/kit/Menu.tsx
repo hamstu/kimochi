@@ -49,33 +49,64 @@ export function Menu({
   )
 }
 
+/** How far a finger may drift and how long a tap's own late `click` can trail it. */
+const TAP_PX = 24
+const TAP_CLICK_MS = 700
+
 /**
- * Radix opens a menu on the press, which suits a mouse. A touch opens it on the tap's click
- * instead, once the finger is up: on WebKitGTK (the Steam Deck) the rest of a tap (its emulated
- * mouse press, a doubled touch) otherwise lands after the menu has opened and closes it again.
- * See ui/pointer-dedupe.ts, which drops those as well.
+ * Swallows the next `click` within `TAP_CLICK_MS` near (`x`, `y`): the tap's own click, which
+ * WebKitGTK sometimes still sends after the menu has opened under the finger.
+ */
+function swallowTapClick(x: number, y: number): void {
+  const until = performance.now() + TAP_CLICK_MS
+  const onClick = (event: MouseEvent): void => {
+    window.removeEventListener('click', onClick, true)
+    if (performance.now() > until || Math.abs(event.clientX - x) > TAP_PX || Math.abs(event.clientY - y) > TAP_PX) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  }
+  window.addEventListener('click', onClick, true)
+  setTimeout(() => window.removeEventListener('click', onClick, true), TAP_CLICK_MS)
+}
+
+/**
+ * Radix opens a menu on the press, which suits a mouse. A touch opens it when the finger lifts
+ * over the trigger instead: on WebKitGTK (the Steam Deck) the rest of a tap (its emulated mouse
+ * press, a doubled touch) otherwise lands after the menu has opened and closes it again, and a
+ * touch press the page cancels (as this one must be, so Radix does not toggle on it) sometimes
+ * gets no `click` at all, which left these menus opening on some taps and not others. The tap's
+ * click, when it does come, is swallowed. See ui/pointer-dedupe.ts, which drops the doubles too.
  */
 export const MenuTrigger = forwardRef<
   ElementRef<typeof MenuPrimitive.Trigger>,
   ComponentPropsWithoutRef<typeof MenuPrimitive.Trigger>
->(function MenuTrigger({ onPointerDown, onClick, ...props }, ref) {
+>(function MenuTrigger({ onPointerDown, onPointerUp, onPointerCancel, ...props }, ref) {
   const toggle = useContext(MenuToggle)
-  const touched = useRef(false)
+  const press = useRef<{ id: number; x: number; y: number } | null>(null)
   return (
     <MenuPrimitive.Trigger
       ref={ref}
       {...props}
       onPointerDown={(event) => {
         onPointerDown?.(event)
-        touched.current = event.pointerType === 'touch'
+        press.current = null
+        if (event.pointerType !== 'touch' || !toggle || event.defaultPrevented) return
+        press.current = { id: event.pointerId, x: event.clientX, y: event.clientY }
         // Cancelling the press keeps Radix from toggling on it (Radix cancels it itself on opening).
-        if (touched.current && toggle && !event.defaultPrevented) event.preventDefault()
+        event.preventDefault()
       }}
-      onClick={(event) => {
-        onClick?.(event)
-        if (!touched.current || !toggle || event.defaultPrevented || props.disabled) return
-        touched.current = false
+      onPointerUp={(event) => {
+        onPointerUp?.(event)
+        const down = press.current
+        press.current = null
+        if (!down || !toggle || props.disabled || event.pointerId !== down.id) return
+        if (Math.abs(event.clientX - down.x) > TAP_PX || Math.abs(event.clientY - down.y) > TAP_PX) return
+        swallowTapClick(event.clientX, event.clientY)
         toggle()
+      }}
+      onPointerCancel={(event) => {
+        onPointerCancel?.(event)
+        press.current = null
       }}
     />
   )

@@ -25,7 +25,7 @@ export type { EngineSwitchRecord }
 
 interface MainRoute {
   tab: string
-  back: 'log' | 'notebook' | 'anki'
+  back: 'source' | 'log' | 'notebook' | 'anki'
   scrollTop: number
 }
 

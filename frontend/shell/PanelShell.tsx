@@ -17,13 +17,13 @@ import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } fr
 import { Minus, Pin, PinOff, Volume2, VolumeX, X } from 'lucide-react'
 import { nativeError, panel, panelContentHeight, onEvent, quitApp } from '../bridge/tauri'
 import type { PanelStateEvent } from '../bridge/types'
-import { usePanelController } from './usePanelController'
+import { useGamingControls } from './useGamingControls'
 import { useNativeHover } from './useNativeHover'
 import { TitleBarSlotContext } from './titleBarSlot'
 import { useSetting } from '../bridge/useSetting'
 import { recordingAudio } from '@ui/sounds'
 import { installPointerDiagnostics } from '@ui/pointer-diagnostics.js'
-import { useCapabilities } from '../bridge/capabilities'
+import { isGamingMode, useCapabilities } from '../bridge/capabilities'
 
 interface PanelShellProps {
   label: string
@@ -57,7 +57,16 @@ export default function PanelShell({
   // itself, so the bridge only adds a second highlight, and a wrong one whenever the system cursor
   // and the page's last pointer differ (a pen tablet in range is a pointer of its own).
   useNativeHover(capabilities.os !== 'windows')
-  usePanelController(label)
+  const controllerNote = useGamingControls(label)
+  const gaming = isGamingMode(capabilities)
+  // Gaming Mode: a long press is a right-click, and WebKitGTK's context menu (Back, Reload…) takes a
+  // grab Gamescope never lets go of, leaving every Kimochi window untappable. Nothing here needs it.
+  useEffect(() => {
+    if (!gaming) return
+    const block = (event: Event): void => event.preventDefault()
+    document.addEventListener('contextmenu', block, true)
+    return () => document.removeEventListener('contextmenu', block, true)
+  }, [gaming])
   useEffect(() => installPointerDiagnostics(`panel:${label}`, { label }), [label])
 
   useEffect(() => {
@@ -160,23 +169,26 @@ export default function PanelShell({
               {soundOn ? <Volume2 /> : <VolumeX />}
             </button>
           )}
-          <button
-            title={pinned ? 'Unpin window' : 'Keep on top'}
-            aria-label={pinned ? 'Unpin window' : 'Keep on top'}
-            aria-pressed={pinned}
-            onClick={() => run(pinned ? 'unpin' : 'pin')}
-          >
-            {pinned ? <Pin /> : <PinOff />}
-          </button>
-          <button aria-label="Minimize window" title="Minimize" onClick={() => run('minimize')}>
-            <Minus />
-          </button>
+          {/* Gaming Mode windows fill the screen on their own: nothing to keep on top or minimize. */}
+          {!gaming && (
+            <button
+              title={pinned ? 'Unpin window' : 'Keep on top'}
+              aria-label={pinned ? 'Unpin window' : 'Keep on top'}
+              aria-pressed={pinned}
+              onClick={() => run(pinned ? 'unpin' : 'pin')}
+            >
+              {pinned ? <Pin /> : <PinOff />}
+            </button>
+          )}
+          {!gaming && (
+            <button aria-label="Minimize window" title="Minimize" onClick={() => run('minimize')}>
+              <Minus />
+            </button>
+          )}
           {/* The main window is the app: closing it quits. Every other window just hides. */}
           <button
             aria-label={label === 'log' ? 'Quit Kimochi' : 'Close window'}
             title={label === 'log' ? 'Quit Kimochi' : 'Close'}
-            // Quitting is never one controller press away (ui/panel-controller.js).
-            data-controller-skip={label === 'log' ? '' : undefined}
             onClick={() =>
               label === 'log'
                 ? void quitApp().catch((caught) => setError(nativeError(caught).message))
@@ -190,6 +202,11 @@ export default function PanelShell({
       {error && (
         <div className="native-panel-error" role="status">
           {error}
+        </div>
+      )}
+      {controllerNote && (
+        <div className="native-panel-note" role="status">
+          {controllerNote}
         </div>
       )}
       <main className="native-content">
