@@ -16,6 +16,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Kimochi opens faster**, and opens cleanly: the main window appears sooner, already in your theme's colours and laid out like the app (no more blank grey window), and your Log is there as soon as it's loaded instead of after a "Loading the log…" screen. The overlay, the dictionary pop-up and the tray follow a moment later, without holding up the window.
 - **The Linux installer no longer offers nightly builds**, which no longer exist: `--nightly` (or `KIMOCHI_CHANNEL=nightly`) now stops with a message instead of installing an old development build. Run it without the option to get the latest release.
 
+### Fixed
+
+- **Linux (Wayland): scanned text shows over the game again after Kimochi starts or you switch dictionaries.** The overlay could stay hidden, with nothing to hover or look up, until you opened the crop editor.
+- **Linux (Wayland): Hachidori looks words up over the game.** Holding Shift over scanned text now opens Hachidori's pop-up, as it already did for Yomitan.
+- **Linux AppImage: Kimochi's sounds play again.** The AppImage was missing two audio components, so its sounds failed to load.
+
 ## [0.5.0] - 2026-11-03
 
 ### Added
