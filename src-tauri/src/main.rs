@@ -4033,6 +4033,7 @@ static RESHAPE_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
 /// A native-region window was just placed or shown: rewrite the shapes for the next second.
 /// Resizing a Wayland window resets its input region to the whole window (GTK), and when the
 /// reset lands is GTK's business, so one rewrite might come too early.
+#[cfg(target_os = "linux")]
 fn reshape_soon() {
     *RESHAPE_UNTIL.lock().unwrap() = Some(Instant::now() + Duration::from_secs(1));
 }
