@@ -946,7 +946,9 @@ pub fn platform_prelude() -> String {
     let info = json!({
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
-        "debug": cfg!(debug_assertions)
+        "debug": cfg!(debug_assertions),
+        // Process start, so a page can time itself from launch (boot.rs).
+        "bootAt": crate::boot::epoch_ms()
     });
     let prelude = format!(";(function(){{try{{window.__KIMOCHI_PLATFORM__={info};}}catch(e){{}}}})();\n");
     // Windows: keep each webview's CSS pixel at the window's DPI scale (webview_scale.rs).

@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod reader;
 mod evidence;
+mod boot;
 use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
@@ -381,7 +382,8 @@ fn current_crop(service: &Service) -> Option<Crop> {
 // ---------------------------------------------------------------- view state
 
 #[tauri::command]
-fn report(app: tauri::AppHandle, state: State<Shared>, value: Value) {
+fn report(app: tauri::AppHandle, state: State<Shared>, mut value: Value) {
+    boot::complete(&mut value);
     record(&app, &state, value);
 }
 
@@ -2840,6 +2842,19 @@ fn open_screen_capture_preferences() -> Reply<()> {
 }
 
 fn main() {
+    boot::start();
+    // A development build's pages come from the Vite dev server over plain HTTP, and WebView2
+    // looks for a proxy (WPAD) before its first HTTP request: ~800 ms on every `npm run dev`
+    // launch before the main window received a byte. A bundle's pages are on the custom protocol
+    // and never wait for it, and keep the system proxy for what the engines fetch from the web.
+    // Wry's own defaults are repeated, because the variable takes the place of its arguments.
+    #[cfg(all(dev, target_os = "windows"))]
+    if std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server",
+        );
+    }
     #[cfg(target_os = "linux")]
     if platform::steam_input::run_watchdog() { return; }
     #[cfg(target_os = "linux")]
@@ -2894,6 +2909,12 @@ fn main() {
         // 10ten page and lookups outside the overlay never started. Each page registers
         // afresh if it uses one.
         .on_page_load(|webview, payload| {
+            if webview.label() == panels::MAIN {
+                boot::mark(match payload.event() {
+                    tauri::webview::PageLoadEvent::Started => "main-page-started",
+                    tauri::webview::PageLoadEvent::Finished => "main-page-finished",
+                });
+            }
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 if let Some(service) = webview.try_state::<Shared>() {
                     let previous = service.relay_channels.lock().unwrap().remove(webview.label());
@@ -3193,6 +3214,7 @@ fn main() {
             commands(invoke)
         })
         .setup(move |app| {
+            boot::mark("setup-start");
             #[cfg(target_os = "linux")]
             platform::initialize_wayland_overlay();
             let handle = app.handle().clone();
@@ -3342,19 +3364,25 @@ fn main() {
             app.manage(pp_ocr::PpState::default());
             manga_ocr::prewarm(&handle);
 
-            let reader_popup = reader::popover::build_window(&handle, 0)?;
-            make_panel(&handle, &service, &reader_popup);
-            // Opt-in native regression: only the API popup, no source restore or OCR.
-            #[cfg(debug_assertions)]
-            if std::env::var_os("KIMOCHI_READER_POPUP_SMOKE").is_some() {
-                let smoke_app = handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    let result = reader::popover::smoke(smoke_app.clone()).await;
-                    eprintln!("reader-popup-smoke: {result:?}");
-                    smoke_app.exit(if result.is_ok() { 0 } else { 1 });
-                });
-                return Ok(());
-            }
+            boot::mark("setup-state-ready");
+            // The main window first, and shown: it is what the reader is waiting for. Every other
+            // window (the reader popup, the overlay, the popup host, an engine's window) and the
+            // tray, shortcuts and watchers follow in `finish_setup`, once the main window has
+            // painted (boot.rs), so none of them competes with its first frame for the main thread.
+            panels::create_eager(&handle, &store)?;
+            boot::mark("main-built");
+            // Shared first-run omission: every platform previously ignored the persisted flag.
+            let initial_panel = onboarding_panel(store.get("hasCompletedOnboarding")?.as_ref());
+            panels::with_panel(&handle, initial_panel, {
+                let store = store.clone();
+                let initial_panel = initial_panel.to_string();
+                move |app, turn| {
+                    // Kimochi opens in front and focused, like any app the reader just launched;
+                    // shown inactive it sat behind everything, last in the app switcher.
+                    let _ = panels::act(turn, app, &store, &initial_panel, "show", None);
+                    boot::mark("main-shown");
+                }
+            });
 
             let logger = {
                 let service = service.clone();
@@ -3372,281 +3400,27 @@ fn main() {
 
             spawn_source_restore(service.clone());
 
-            panels::create_eager(&handle, &store)?;
-            // Shared first-run omission: every platform previously ignored the persisted flag.
-            let initial_panel = onboarding_panel(store.get("hasCompletedOnboarding")?.as_ref());
-            panels::with_panel(&handle, initial_panel, {
-                let store = store.clone();
-                let initial_panel = initial_panel.to_string();
-                move |app, turn| {
-                    // Kimochi opens in front and focused, like any app the reader just launched;
-                    // shown inactive it sat behind everything, last in the app switcher.
-                    let _ = panels::act(turn, app, &store, &initial_panel, "show", None);
-                }
-            });
-
-            // The overlay's Yomitan host, bundled from host/yomitan/ by scripts/prepare.mjs
-            // (DICTIONARY_ENGINES.md §11.4) and read through the asset resolver like the panel
-            // shim and the generic host, rather than compiled in: a host edit is a `dist/`
-            // rebuild, and a bundle without it fails here, loudly, instead of starting an overlay
-            // with no dictionary backend.
-            let overlay_shim = extensions::init_script(&handle, OVERLAY, "/spike/shim.js")
-                .map_err(std::io::Error::other)?
-                .unwrap_or_default();
-            let overlay_builder = tauri::WebviewWindowBuilder::new(
-                app,
-                OVERLAY,
-                tauri::WebviewUrl::App("ui/overlay.html".into()),
-            )
-            .title("Kimochi OCR Overlay")
-            // This WebView owns the automatic observer and dictionary backend even
-            // when the reader is in another app. macOS 14+ supports this policy.
-            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
-            .decorations(false)
-            .transparent(true)
-            .accept_first_mouse(true)
-            .resizable(false)
-            .shadow(false)
-            .always_on_top(true)
-            .content_protected(settings::exclude_from_capture(&store))
-            .focused(false)
-            .inner_size(1728., 1117.)
-            // Only the overlay hosts the Yomitan backend. Panels get the relay shim
-            // instead, so there is never a second writer on the same IndexedDB. The
-            // generic extension host follows; exactly one of the two installs. The label
-            // prelude names the window but leaves it outside the frame bands (base 0).
-            .initialization_script_for_all_frames(platform::platform_prelude())
-            .initialization_script_for_all_frames(panels::label_prelude(OVERLAY, &extensions::dictionary_engine(&store)))
-            .initialization_script_for_all_frames(overlay_shim)
-            .on_navigation({
-                // `tauri dev` loads every page from `build.devUrl` (the Vite dev server in
-                // `vite.dev.config.ts`) rather than the `tauri://` protocol, so a dev build must
-                // also accept that origin or the overlay's own page is blocked and the
-                // dictionary backend never starts.
-                // Bundles (custom-protocol) stay locked to the app origin
-                // (`tauri://localhost` on macOS; see `platform::app_origin`).
-                let dev_origin = if cfg!(dev) {
-                    app.config().build.dev_url.as_ref().map(|u| u.origin())
-                } else {
-                    None
-                };
-                // The extension engines' background and offscreen documents are iframes on
-                // their own origins, and WebKit asks this policy about subframes too.
-                move |u| {
-                    u.as_str() == "about:blank"
-                        || platform::is_app_url(u)
-                        || platform::is_extension_url(u)
-                        || dev_origin
-                            .as_ref()
-                            .is_some_and(|origin| &u.origin() == origin)
-                }
-            });
-            // After the Yomitan shim, in the same all-frames list.
-            let overlay_builder = match extensions::init_script(&handle, OVERLAY, extensions::EXT_HOST)
-                .map_err(std::io::Error::other)?
+            boot::mark("services-started");
             {
-                Some(script) => overlay_builder.initialization_script_for_all_frames(script),
-                None => overlay_builder,
-            };
-            #[cfg(target_os = "linux")]
-            let overlay_builder = {
-                let overlay_builder = overlay_builder.focusable(false);
-                if platform::wayland_layer_overlay() {
-                    overlay_builder.visible(false).resizable(true).inner_size(1., 1.)
-                } else {
-                    // Unsupported Wayland keeps only the hidden OCR host, never a detached reader.
-                    overlay_builder.visible(false)
-                }
-            };
-            let overlay = overlay_builder.build()?;
-            #[cfg(target_os = "linux")]
-            let ignore_cursor_events = !platform::wayland_overlay_unavailable();
-            #[cfg(not(target_os = "linux"))]
-            let ignore_cursor_events = true;
-            #[cfg(target_os = "linux")]
-            if !platform::wayland_layer_overlay() {
-                overlay.set_ignore_cursor_events(ignore_cursor_events)?;
-            }
-            #[cfg(not(target_os = "linux"))]
-            overlay.set_ignore_cursor_events(ignore_cursor_events)?;
-            // Pointing at a word must not rearrange the reader's desktop, and clicking
-            // one must not take the keyboard out of their game. See `platform::make_panel`.
-            make_panel(&handle, &service, &overlay);
-
-            // The dictionary popup's own window. Small, borderless and always on top,
-            // so the original popup renders as a floating native window instead of an
-            // iframe clipped to whichever panel happened to own the scanned text.
-            //
-            // It is a real window and takes the mouse normally — there is no invisible
-            // surface over the desktop to get wrong. It never takes focus on its own:
-            // the reader is pointing at a word in another window.
-            {
-                let script = |asset| {
-                    extensions::init_script(&handle, POPUP_HOST, asset).map_err(std::io::Error::other)
-                };
-                let shim = script("/spike/panel-shim.js")?.unwrap_or_default();
-                let ext_host = script(extensions::EXT_HOST)?;
-                let window_builder = tauri::WebviewWindowBuilder::new(
-                    app,
-                    POPUP_HOST,
-                    tauri::WebviewUrl::App("ui/popup-host.html".into()),
-                )
-                .title("Dictionary")
-                .decorations(false)
-                .transparent(true)
-                .accept_first_mouse(true)
-                .resizable(false)
-                .shadow(false)
-                .always_on_top(true)
-                .skip_taskbar(true)
-                .focused(false)
-                .visible(false)
-                .inner_size(400., 250.)
-                .initialization_script_for_all_frames(platform::platform_prelude())
-                .initialization_script_for_all_frames(
-                    panels::label_prelude(POPUP_HOST, &extensions::dictionary_engine(&store)) + &shim,
-                );
-                let window_builder = match ext_host {
-                    Some(script) => window_builder.initialization_script_for_all_frames(script),
-                    None => window_builder,
-                };
-                #[cfg(target_os = "linux")]
-                let window_builder = window_builder.focusable(platform::wayland_overlay_unavailable());
-                let window = window_builder.build()?;
-                let _ = window.set_content_protected(settings::exclude_from_capture(&store));
-                // The dictionary is hovered and clicked while the reader stays in their
-                // game; a panel is what lets it be used without activating this app.
-                make_panel(&handle, &service, &window);
-            }
-
-            // The active extension engine's hidden window (DICTIONARY_ENGINES.md §5.4), where
-            // its background and offscreen documents keep first-party, persistent storage.
-            // Yomitan (and the Yomitan API) need none. A failure is recorded, not fatal: the
-            // overlay's hub asks again when it starts and reports why the engine is down.
-            {
-                let engine = extensions::dictionary_engine(&store);
-                if extensions::IDS.contains(&engine.as_str()) {
-                    let result = panels::in_setup(&handle, |app, turn| panels::extension_window(turn, app, &engine, false));
-                    let _ = record_extension_window(&handle, &engine, "startup", result);
-                }
-            }
-
-            // The app menu belongs in the macOS menu bar. Elsewhere a window menu would be
-            // attached to every window, including the transparent overlay. A release build
-            // has the standard menus, with About Kimochi opening Settings → About in place of
-            // the system's about panel, and Settings… (⌘,); a debug build keeps the Panels
-            // menu, which reaches every window and the test fixtures.
-            #[cfg(target_os = "macos")]
-            {
-                let menu = tauri::menu::Menu::default(app.handle())?;
-                if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) = menu.items()?.first() {
-                    // The default menu's first item is the system about panel.
-                    app_menu.remove_at(0)?;
-                    let about = tauri::menu::MenuItemBuilder::with_id("app-about", "About Kimochi")
-                        .build(app)?;
-                    app_menu.insert(&about, 0)?;
-                    let settings = tauri::menu::MenuItemBuilder::with_id("app-settings", "Settings…")
-                        .accelerator("CmdOrCtrl+,")
-                        .build(app)?;
-                    // After About and its separator.
-                    app_menu.insert_items(
-                        &[&settings, &tauri::menu::PredefinedMenuItem::separator(app)?],
-                        2,
-                    )?;
-                }
-                app.set_menu(menu)?;
-            }
-            #[cfg(all(target_os = "macos", debug_assertions))]
-            {
-                let menu = app.menu().ok_or("the app menu is set above")?;
-                let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
-                    .text("log", "Kimochi")
-                    .text("choose-source", "Select Source")
-                    .text("settings", "Settings")
-                    .text("dictionary", "Dictionary")
-                    .text("diagnostics", "Diagnostics")
-                    .text("fixture", "Japanese Fixture")
-                    .text("fixture-chunks", "Split-Word Fixture")
-                    .build()?;
-                menu.append(&panel_menu)?;
-            }
-            {
-                let store = store.clone();
-                app.on_menu_event(move |app, event| {
-                    let label = event.id().as_ref();
-                    if label == "app-about" {
-                        let _ = tray::open_settings(app, Some("about"));
-                    } else if label == "app-settings" {
-                        let _ = tray::open_settings(app, None);
-                    } else if label == "choose-source" {
-                        let _ = choose_source(app, &store);
-                    } else if panels::spec(label).is_some() {
-                        // A lazy panel is built in a later main-thread turn, never inside
-                        // this callback; an existing one is shown at once, as before.
-                        let (store, target) = (store.clone(), label.to_string());
-                        panels::with_panel(app, label, move |app, turn| {
-                            let _ = panels::act(turn, app, &store, &target, "show", None);
-                        });
-                    }
+                let (service, store) = (service.clone(), store.clone());
+                boot::after_main_ready(&handle, move |app| {
+                    panels::later(app, move |app, turn| {
+                        if let Err(error) = finish_setup(turn, app, &service, &store) {
+                            eprintln!("kimochi: startup failed: {error}");
+                            record(app, &service, json!({ "check": "startup-failed", "error": error.to_string() }));
+                        }
+                    });
                 });
             }
-
-            tray::setup(&handle).map_err(std::io::Error::other)?;
-            let shortcuts = hotkeys::apply(&handle, &store);
-            record(
-                &handle,
-                &service,
-                json!({ "check": "hotkeys-applied", "result": shortcuts }),
-            );
-            #[cfg(target_os = "linux")]
-            platform::gamescope::start();
-            gamepad::start(&handle, &service);
-
-            {
-                // Sleep and wake: the macOS equivalent of Electron's powerMonitor.
-                let sleep_handle = handle.clone();
-                let wake_handle = handle.clone();
-                let activate_handle = handle.clone();
-                let activate_service = service.clone();
-                platform::observe_workspace(
-                    move || {
-                        let _ = sleep_handle.emit("system-suspend", json!({}));
-                    },
-                    move || {
-                        let _ = wake_handle.emit("system-resume", json!({}));
-                    },
-                    move |name| {
-                        activate_service.view.lock().unwrap().frontmost_app = Some(name.clone());
-                        let _ = activate_handle.emit(
-                            "frontmost-app",
-                            json!({ "appName": name, "pid": platform::frontmost_pid_for(&name) }),
-                        );
-                    },
-                );
-            }
-
-            spawn_state_broadcast(handle.clone(), service.clone());
-            #[cfg(target_os = "windows")]
-            match platform::start_mouse_guard(&handle) {
-                Ok(()) => service.log(json!({"check": "overlay-click-guard", "installed": true})),
-                Err(error) => service.log(json!({"check": "overlay-click-guard", "error": error})),
-            }
-            spawn_cursor_poll(handle.clone(), service.clone());
-            spawn_source_watch(handle.clone(), service.clone());
-            spawn_focus_watch(handle.clone(), service.clone());
-            #[cfg(target_os = "windows")]
-            platform::start_fullscreen_watch(&handle, service.clone());
-            spawn_display_watch(handle.clone(), store.clone());
-            // No download starts at launch: a local engine selected before its models were
-            // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
-            // user starts it from Settings → OCR, where the button names the size.
-            spawn_capabilities_watch(handle.clone(), service.clone());
-            setup_deep_links(&handle);
+            boot::mark("setup-end");
             Ok(())
         })
         .build(context())
         .expect("Kimochi runtime")
         .run(|app, event| {
+            if let tauri::RunEvent::Ready = event {
+                boot::mark("event-loop-ready");
+            }
             #[cfg(target_os = "linux")]
             if let tauri::RunEvent::ExitRequested { api, code, .. } = &event {
                 if platform::gamescope::prepare_exit(app, code.unwrap_or(0)) { api.prevent_exit(); }
@@ -3659,6 +3433,295 @@ fn main() {
                 extension_store::shutdown(app);
             }
         });
+}
+
+/// Everything `setup` leaves until the main window has painted (`boot::after_main_ready`): the
+/// other windows, in the order they were always built, then the menu, tray, shortcuts and
+/// watchers. Runs once, in a main-thread turn of its own.
+fn finish_setup(
+    _turn: &panels::MainTurn,
+    app: &tauri::AppHandle,
+    service: &Shared,
+    store: &Arc<Settings>,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let handle = app.clone();
+    let (service, store) = (service.clone(), store.clone());
+    let reader_popup = reader::popover::build_window(&handle, 0)?;
+    boot::mark("reader-popup-built");
+    make_panel(&handle, &service, &reader_popup);
+    // Opt-in native regression: only the API popup, no source restore or OCR.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("KIMOCHI_READER_POPUP_SMOKE").is_some() {
+        let smoke_app = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            let result = reader::popover::smoke(smoke_app.clone()).await;
+            eprintln!("reader-popup-smoke: {result:?}");
+            smoke_app.exit(if result.is_ok() { 0 } else { 1 });
+        });
+        return Ok(());
+    }
+
+    // The overlay's Yomitan host, bundled from host/yomitan/ by scripts/prepare.mjs
+    // (DICTIONARY_ENGINES.md §11.4) and read through the asset resolver like the panel
+    // shim and the generic host, rather than compiled in: a host edit is a `dist/`
+    // rebuild, and a bundle without it fails here, loudly, instead of starting an overlay
+    // with no dictionary backend.
+    let overlay_shim = extensions::init_script(&handle, OVERLAY, "/spike/shim.js")
+        .map_err(std::io::Error::other)?
+        .unwrap_or_default();
+    let overlay_builder = tauri::WebviewWindowBuilder::new(
+        app,
+        OVERLAY,
+        tauri::WebviewUrl::App("ui/overlay.html".into()),
+    )
+    .title("Kimochi OCR Overlay")
+    // This WebView owns the automatic observer and dictionary backend even
+    // when the reader is in another app. macOS 14+ supports this policy.
+    .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+    .decorations(false)
+    .transparent(true)
+    .accept_first_mouse(true)
+    .resizable(false)
+    .shadow(false)
+    .always_on_top(true)
+    .content_protected(settings::exclude_from_capture(&store))
+    .focused(false)
+    .inner_size(1728., 1117.)
+    // Only the overlay hosts the Yomitan backend. Panels get the relay shim
+    // instead, so there is never a second writer on the same IndexedDB. The
+    // generic extension host follows; exactly one of the two installs. The label
+    // prelude names the window but leaves it outside the frame bands (base 0).
+    .initialization_script_for_all_frames(platform::platform_prelude())
+    .initialization_script_for_all_frames(panels::label_prelude(OVERLAY, &extensions::dictionary_engine(&store)))
+    .initialization_script_for_all_frames(overlay_shim)
+    .on_navigation({
+        // `tauri dev` loads every page from `build.devUrl` (the Vite dev server in
+        // `vite.dev.config.ts`) rather than the `tauri://` protocol, so a dev build must
+        // also accept that origin or the overlay's own page is blocked and the
+        // dictionary backend never starts.
+        // Bundles (custom-protocol) stay locked to the app origin
+        // (`tauri://localhost` on macOS; see `platform::app_origin`).
+        let dev_origin = if cfg!(dev) {
+            app.config().build.dev_url.as_ref().map(|u| u.origin())
+        } else {
+            None
+        };
+        // The extension engines' background and offscreen documents are iframes on
+        // their own origins, and WebKit asks this policy about subframes too.
+        move |u| {
+            u.as_str() == "about:blank"
+                || platform::is_app_url(u)
+                || platform::is_extension_url(u)
+                || dev_origin
+                    .as_ref()
+                    .is_some_and(|origin| &u.origin() == origin)
+        }
+    });
+    // After the Yomitan shim, in the same all-frames list.
+    let overlay_builder = match extensions::init_script(&handle, OVERLAY, extensions::EXT_HOST)
+        .map_err(std::io::Error::other)?
+    {
+        Some(script) => overlay_builder.initialization_script_for_all_frames(script),
+        None => overlay_builder,
+    };
+    #[cfg(target_os = "linux")]
+    let overlay_builder = {
+        let overlay_builder = overlay_builder.focusable(false);
+        if platform::wayland_layer_overlay() {
+            overlay_builder.visible(false).resizable(true).inner_size(1., 1.)
+        } else {
+            // Unsupported Wayland keeps only the hidden OCR host, never a detached reader.
+            overlay_builder.visible(false)
+        }
+    };
+    let overlay = overlay_builder.build()?;
+    boot::mark("overlay-built");
+    #[cfg(target_os = "linux")]
+    let ignore_cursor_events = !platform::wayland_overlay_unavailable();
+    #[cfg(not(target_os = "linux"))]
+    let ignore_cursor_events = true;
+    #[cfg(target_os = "linux")]
+    if !platform::wayland_layer_overlay() {
+        overlay.set_ignore_cursor_events(ignore_cursor_events)?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    overlay.set_ignore_cursor_events(ignore_cursor_events)?;
+    // Pointing at a word must not rearrange the reader's desktop, and clicking
+    // one must not take the keyboard out of their game. See `platform::make_panel`.
+    make_panel(&handle, &service, &overlay);
+
+    // The dictionary popup's own window. Small, borderless and always on top,
+    // so the original popup renders as a floating native window instead of an
+    // iframe clipped to whichever panel happened to own the scanned text.
+    //
+    // It is a real window and takes the mouse normally — there is no invisible
+    // surface over the desktop to get wrong. It never takes focus on its own:
+    // the reader is pointing at a word in another window.
+    {
+        let script = |asset| {
+            extensions::init_script(&handle, POPUP_HOST, asset).map_err(std::io::Error::other)
+        };
+        let shim = script("/spike/panel-shim.js")?.unwrap_or_default();
+        let ext_host = script(extensions::EXT_HOST)?;
+        let window_builder = tauri::WebviewWindowBuilder::new(
+            app,
+            POPUP_HOST,
+            tauri::WebviewUrl::App("ui/popup-host.html".into()),
+        )
+        .title("Dictionary")
+        .decorations(false)
+        .transparent(true)
+        .accept_first_mouse(true)
+        .resizable(false)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .inner_size(400., 250.)
+        .initialization_script_for_all_frames(platform::platform_prelude())
+        .initialization_script_for_all_frames(
+            panels::label_prelude(POPUP_HOST, &extensions::dictionary_engine(&store)) + &shim,
+        );
+        let window_builder = match ext_host {
+            Some(script) => window_builder.initialization_script_for_all_frames(script),
+            None => window_builder,
+        };
+        #[cfg(target_os = "linux")]
+        let window_builder = window_builder.focusable(platform::wayland_overlay_unavailable());
+        let window = window_builder.build()?;
+        boot::mark("popup-host-built");
+        let _ = window.set_content_protected(settings::exclude_from_capture(&store));
+        // The dictionary is hovered and clicked while the reader stays in their
+        // game; a panel is what lets it be used without activating this app.
+        make_panel(&handle, &service, &window);
+    }
+
+    // The active extension engine's hidden window (DICTIONARY_ENGINES.md §5.4), where
+    // its background and offscreen documents keep first-party, persistent storage.
+    // Yomitan (and the Yomitan API) need none. A failure is recorded, not fatal: the
+    // overlay's hub asks again when it starts and reports why the engine is down.
+    {
+        let engine = extensions::dictionary_engine(&store);
+        if extensions::IDS.contains(&engine.as_str()) {
+            let result = panels::in_setup(&handle, |app, turn| panels::extension_window(turn, app, &engine, false));
+            let _ = record_extension_window(&handle, &engine, "startup", result);
+        }
+    }
+
+    // The app menu belongs in the macOS menu bar. Elsewhere a window menu would be
+    // attached to every window, including the transparent overlay. A release build
+    // has the standard menus, with About Kimochi opening Settings → About in place of
+    // the system's about panel, and Settings… (⌘,); a debug build keeps the Panels
+    // menu, which reaches every window and the test fixtures.
+    #[cfg(target_os = "macos")]
+    {
+        let menu = tauri::menu::Menu::default(app.handle())?;
+        if let Some(tauri::menu::MenuItemKind::Submenu(app_menu)) = menu.items()?.first() {
+            // The default menu's first item is the system about panel.
+            app_menu.remove_at(0)?;
+            let about = tauri::menu::MenuItemBuilder::with_id("app-about", "About Kimochi")
+                .build(app)?;
+            app_menu.insert(&about, 0)?;
+            let settings = tauri::menu::MenuItemBuilder::with_id("app-settings", "Settings…")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+            // After About and its separator.
+            app_menu.insert_items(
+                &[&settings, &tauri::menu::PredefinedMenuItem::separator(app)?],
+                2,
+            )?;
+        }
+        app.set_menu(menu)?;
+    }
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    {
+        let menu = app.menu().ok_or("the app menu is set above")?;
+        let panel_menu = tauri::menu::SubmenuBuilder::new(app, "Panels")
+            .text("log", "Kimochi")
+            .text("choose-source", "Select Source")
+            .text("settings", "Settings")
+            .text("dictionary", "Dictionary")
+            .text("diagnostics", "Diagnostics")
+            .text("fixture", "Japanese Fixture")
+            .text("fixture-chunks", "Split-Word Fixture")
+            .build()?;
+        menu.append(&panel_menu)?;
+    }
+    {
+        let store = store.clone();
+        app.on_menu_event(move |app, event| {
+            let label = event.id().as_ref();
+            if label == "app-about" {
+                let _ = tray::open_settings(app, Some("about"));
+            } else if label == "app-settings" {
+                let _ = tray::open_settings(app, None);
+            } else if label == "choose-source" {
+                let _ = choose_source(app, &store);
+            } else if panels::spec(label).is_some() {
+                // A lazy panel is built in a later main-thread turn, never inside
+                // this callback; an existing one is shown at once, as before.
+                let (store, target) = (store.clone(), label.to_string());
+                panels::with_panel(app, label, move |app, turn| {
+                    let _ = panels::act(turn, app, &store, &target, "show", None);
+                });
+            }
+        });
+    }
+
+    tray::setup(&handle).map_err(std::io::Error::other)?;
+    let shortcuts = hotkeys::apply(&handle, &store);
+    record(
+        &handle,
+        &service,
+        json!({ "check": "hotkeys-applied", "result": shortcuts }),
+    );
+    #[cfg(target_os = "linux")]
+    platform::gamescope::start();
+    gamepad::start(&handle, &service);
+
+    {
+        // Sleep and wake: the macOS equivalent of Electron's powerMonitor.
+        let sleep_handle = handle.clone();
+        let wake_handle = handle.clone();
+        let activate_handle = handle.clone();
+        let activate_service = service.clone();
+        platform::observe_workspace(
+            move || {
+                let _ = sleep_handle.emit("system-suspend", json!({}));
+            },
+            move || {
+                let _ = wake_handle.emit("system-resume", json!({}));
+            },
+            move |name| {
+                activate_service.view.lock().unwrap().frontmost_app = Some(name.clone());
+                let _ = activate_handle.emit(
+                    "frontmost-app",
+                    json!({ "appName": name, "pid": platform::frontmost_pid_for(&name) }),
+                );
+            },
+        );
+    }
+
+    spawn_state_broadcast(handle.clone(), service.clone());
+    #[cfg(target_os = "windows")]
+    match platform::start_mouse_guard(&handle) {
+        Ok(()) => service.log(json!({"check": "overlay-click-guard", "installed": true})),
+        Err(error) => service.log(json!({"check": "overlay-click-guard", "error": error})),
+    }
+    spawn_cursor_poll(handle.clone(), service.clone());
+    spawn_source_watch(handle.clone(), service.clone());
+    spawn_focus_watch(handle.clone(), service.clone());
+    #[cfg(target_os = "windows")]
+    platform::start_fullscreen_watch(&handle, service.clone());
+    spawn_display_watch(handle.clone(), store.clone());
+    // No download starts at launch: a local engine selected before its models were
+    // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
+    // user starts it from Settings → OCR, where the button names the size.
+    spawn_capabilities_watch(handle.clone(), service.clone());
+    setup_deep_links(&handle);
+    boot::mark("deferred-setup-end");
+    Ok(())
 }
 
 /// The generated context with the dictionary engines layered over the embedded `dist/`: Yomitan's

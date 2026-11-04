@@ -538,6 +538,14 @@ pub fn close_extension_windows(app: &tauri::AppHandle, keep: Option<&str>) -> Ve
     closed
 }
 
+/// A panel's window colour for `theme`: `--color-background` of the slate scale.
+fn theme_background(theme: Option<tauri::Theme>) -> tauri::window::Color {
+    match theme {
+        Some(tauri::Theme::Light) => tauri::window::Color(0xff, 0xff, 0xff, 0xff),
+        _ => tauri::window::Color(0x11, 0x11, 0x13, 0xff),
+    }
+}
+
 /// Builds the panels marked `eager`. For `setup` only, which runs before the event loop and
 /// outside any command or callback.
 pub fn create_eager(app: &tauri::AppHandle, settings: &Arc<Settings>) -> Result<(), String> {
@@ -574,7 +582,7 @@ fn ensure(
             .inner_size(spec.width, spec.height)
             .min_inner_size(spec.min_width, spec.min_height)
             .decorations(spec.decorated)
-            .background_color(tauri::window::Color(0x19, 0x19, 0x19, 0xff))
+            .background_color(theme_background(None))
             // Deliver the activating click to the WKWebView too, including the header
             // mousedown that starts a native window drag.
             .accept_first_mouse(true)
@@ -607,6 +615,17 @@ fn ensure(
         }
     }
     let window = builder.build().map_err(|e| format!("native: {e}"))?;
+    // The ground of the theme the page will draw, so the window is never a different colour before
+    // its first frame (the slate background of kit/tokens.css; `NATIVE_BACKGROUND` in
+    // kit/appearance-state.ts sets the same once the page runs). The appearance is already applied
+    // to the app (`apply_appearance`), so the window's theme is the one the page resolves.
+    #[cfg(target_os = "linux")]
+    let opaque = !matches!(spec.label, "crop-host" | "controller-host");
+    #[cfg(not(target_os = "linux"))]
+    let opaque = true;
+    if opaque {
+        let _ = window.set_background_color(Some(theme_background(window.theme().ok())));
+    }
     // Only what is drawn over the source is kept out of captures (the same mechanism as
     // Electron's setContentProtection): the Linux crop and controller hosts here, and the OCR
     // overlay, the pop-ups and the hidden engine windows where they are built. Kimochi's
