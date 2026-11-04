@@ -93,7 +93,7 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. On Windows, Kimochi’s built-in Text Hooker can read a game’s text straight from the game, with no OCR. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
