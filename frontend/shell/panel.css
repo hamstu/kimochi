@@ -127,6 +127,16 @@ body,
 .native-content > div {
   height: 100%;
 }
+/* Gaming Mode: a controller press in a Kimochi window says to tap instead (useGamingControls). */
+.native-panel-note {
+  flex-shrink: 0;
+  padding: var(--k-space-2) var(--k-space-3);
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-accent-text);
+  background: var(--k-accent-soft);
+  text-align: center;
+}
 /* Native window-action failures are shown rather than swallowed. */
 .native-panel-error {
   flex-shrink: 0;

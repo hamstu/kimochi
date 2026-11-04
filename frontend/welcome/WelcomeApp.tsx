@@ -429,18 +429,6 @@ export default function WelcomeApp(): JSX.Element {
     }
   }, [navigate])
 
-  // The controller's B goes back a step rather than closing the window.
-  useEffect(() => {
-    const cancel = (event: Event): void => {
-      if (back) {
-        event.preventDefault()
-        void navigate(back)
-      }
-    }
-    document.addEventListener('kimochi:controller-back', cancel)
-    return () => document.removeEventListener('kimochi:controller-back', cancel)
-  }, [back, navigate])
-
   return (
     <StepActionsSlot.Provider value={slot}>
       <div className={style.window}>

@@ -13,6 +13,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- **Kimochi's windows no longer move focus with a controller.** Use touch, a mouse or the keyboard; on a Steam Deck, a controller press in Kimochi's window says to tap instead. The game menu and reading with the controller over a game are unchanged.
 - **Kimochi opens faster**, and opens cleanly: the main window appears sooner, already in your theme's colours and laid out like the app (no more blank grey window), and your Log is there as soon as it's loaded instead of after a "Loading the log…" screen. The overlay, the dictionary pop-up and the tray follow a moment later, without holding up the window.
 - **The Linux installer no longer offers nightly builds**, which no longer exist: `--nightly` (or `KIMOCHI_CHANNEL=nightly`) now stops with a message instead of installing an old development build. Run it without the option to get the latest release.
 - **Steam Deck Gaming Mode: Kimochi uses about half the CPU while you play.** Kimochi's window kept animating behind the game (the source preview's loading shimmer and the Auto OCR dot) as if you could see it; those animations now pause until you open Kimochi again.
