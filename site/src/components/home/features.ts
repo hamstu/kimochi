@@ -9,6 +9,8 @@ import { MiniModeVisual } from './visuals/MiniModeVisual'
 import { NotebookVisual } from './visuals/NotebookVisual'
 import { OverlayVisual } from './visuals/OverlayVisual'
 import { SessionsVisual } from './visuals/SessionsVisual'
+import { SyncVisual } from './visuals/SyncVisual'
+import { TextHookerVisual } from './visuals/TextHookerVisual'
 
 export interface Feature {
   /** Stable key (also usable as an anchor). */
@@ -20,6 +22,10 @@ export interface Feature {
   Visual: ComponentType
   /** The docs page that explains it (a path on docs.kimochiapp.com, see src/lib/docs.js). */
   docs?: string
+  /** Marks a Kimochi Cloud (paid) feature: a "Cloud" tag beside the title. */
+  cloud?: boolean
+  /** A link on this site instead of the docs link, e.g. to the plans. */
+  link?: { to: string; label: string }
 }
 
 /**
@@ -92,10 +98,25 @@ export const features: Feature[] = [
     docs: '/reading/texthookers/'
   },
   {
+    id: 'text-hooker',
+    title: 'Text Hooker (Windows)',
+    body: "On Windows, Kimochi can read a game's text straight from the game, no OCR needed. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game, ready to look up.",
+    Visual: TextHookerVisual,
+    docs: '/reading/text-hooker/'
+  },
+  {
     id: 'controller',
     title: 'Gaming Mode',
     body: "In Gaming Mode you can activate Kimochi's shortcut (Click both sticks) to scan. Then pick a word with the D-pad for quick look-ups. Hit B and you’re back in the game. This works great on something like a Steam Deck!",
     Visual: ControllerVisual,
     docs: '/controller/gaming-mode/'
+  },
+  {
+    id: 'cloud-sync',
+    title: 'Sync across computers',
+    body: "With Kimochi Cloud, your sessions, Notebook and preferences stay in step between your computers, in the background, even after time offline. Changed something in two places at once? The other version is kept for you to restore, and you can export everything any time.",
+    Visual: SyncVisual,
+    cloud: true,
+    link: { to: '/#open-source', label: 'See Kimochi Cloud plans' }
   }
 ]
