@@ -958,7 +958,7 @@ pub fn platform_prelude() -> String {
         // Process start, so a page can time itself from launch (boot.rs).
         "bootAt": crate::boot::epoch_ms(),
         // Steam Deck Gaming Mode, known before a page's first frame (its layout and scale differ).
-        "gamescope": cfg!(target_os = "linux") && gaming_mode()
+        "gamescope": gaming_mode()
     });
     let prelude = format!(";(function(){{try{{window.__KIMOCHI_PLATFORM__={info};}}catch(e){{}}}})();\n");
     // Windows: keep each webview's CSS pixel at the window's DPI scale (webview_scale.rs).
