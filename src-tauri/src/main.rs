@@ -930,13 +930,26 @@ async fn gnome_overlay(app: tauri::AppHandle, state: State<'_ , Shared>, operati
                     window.hide().map_err(|e| e.to_string())?;
                 } else {
                     let rect: Rect = serde_json::from_value(result["rect"].clone()).map_err(|e|e.to_string())?;
-                    platform::desktop_place(&window, rect)?;
+                    let hidden = !window.is_visible().unwrap_or(false);
+                    // The overlay asks again every second. Only a new place, or a hidden window,
+                    // is placed: placing resets the surface's input region to the whole window
+                    // (GTK), and until the poll put it back the overlay took every click on the
+                    // desktop, over the Log too.
+                    let moved = service.view.lock().unwrap().origin.is_none_or(|o| {
+                        [o.x, o.y, o.width, o.height] != [rect.x, rect.y, rect.width, rect.height]
+                    });
+                    if moved || hidden {
+                        platform::desktop_place(&window, rect)?;
+                        reshape_soon();
+                    }
                     service.view.lock().unwrap().origin = Some(rect);
-                    if !platform::capture::suppressed() && !window.is_visible().unwrap_or(false) {
+                    if !platform::capture::suppressed() && hidden {
                         // The native empty region is committed before mapping.
                         window.set_ignore_cursor_events(false).map_err(|e| e.to_string())?;
                         platform::set_input_regions(&window, Some(&[]))?;
                         window.show().map_err(|e| e.to_string())?;
+                        // The poll still thinks the words' regions are applied.
+                        reshape_soon();
                     }
                 }
             }
@@ -3957,7 +3970,25 @@ enum InputShape {
         applied: Option<Vec<[f64; 4]>>,
         /// The last attempt failed (already logged once).
         failing: bool,
+        /// The window's bounds, when they were read, and the regions they were read for. On
+        /// GNOME a read is a call into the Shell, which answers on its compositor thread: read
+        /// again for new regions and every [`BOUNDS_TTL`], never every tick.
+        bounds: Option<(Rect, Instant, Vec<[f64; 4]>)>,
     },
+}
+
+/// How long a native-region window's bounds are trusted while its regions stay the same; a
+/// window that moves on its own is reshaped within this.
+const BOUNDS_TTL: Duration = Duration::from_millis(250);
+
+/// Until when the poll rewrites the native input shapes every few ticks (`reshape_soon`).
+static RESHAPE_UNTIL: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// A native-region window was just placed or shown: rewrite the shapes for the next second.
+/// Resizing a Wayland window resets its input region to the whole window (GTK), and when the
+/// reset lands is GTK's business, so one rewrite might come too early.
+fn reshape_soon() {
+    *RESHAPE_UNTIL.lock().unwrap() = Some(Instant::now() + Duration::from_secs(1));
 }
 
 /// Bring every native-region window's input shape up to date with what its window
@@ -3995,6 +4026,7 @@ fn sync_input_shapes(
                 Ok(true) => InputShape::Native {
                     applied: None,
                     failing: false,
+                    bounds: None,
                 },
                 Ok(false) => InputShape::Polled,
                 Err(e) => {
@@ -4003,7 +4035,7 @@ fn sync_input_shapes(
                 }
             };
         }
-        let InputShape::Native { applied, failing } = state else {
+        let InputShape::Native { applied, failing, bounds } = state else {
             continue;
         };
         let wanted: Vec<Region> = {
@@ -4015,9 +4047,21 @@ fn sync_input_shapes(
             }
         };
         // Regions are desktop points; the shape is window-local CSS pixels, which are
-        // the same size as desktop points.
-        let Ok(bounds) = platform::desktop_bounds(&window) else {
-            continue;
+        // the same size as desktop points. Without regions the bounds do not matter.
+        let read_for: Vec<[f64; 4]> = wanted.iter().map(|r| [r.x, r.y, r.width, r.height]).collect();
+        let known = bounds.as_ref().filter(|(_, at, regions)| {
+            read_for.is_empty() || !refresh && at.elapsed() < BOUNDS_TTL && *regions == read_for
+        });
+        let bounds = match known {
+            Some((rect, ..)) => *rect,
+            None if read_for.is_empty() => Rect { x: 0., y: 0., width: 0., height: 0. },
+            None => {
+                let Ok(rect) = platform::desktop_bounds(&window) else {
+                    continue;
+                };
+                *bounds = Some((rect, Instant::now(), read_for));
+                rect
+            }
         };
         let local: Vec<Rect> = wanted
             .iter()
@@ -4169,8 +4213,10 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             platform::update_mouse_guard(&handle, &service);
             #[cfg(target_os = "windows")]
             sync_capture_protection(&handle, &service, &mut protection);
-            // About every two seconds, rewrite native shapes even when unchanged.
-            let refresh = ticks.is_multiple_of(125);
+            // About every two seconds, rewrite native shapes even when unchanged; every few
+            // ticks for a second after a window was placed (`reshape_soon`).
+            let reshaping = RESHAPE_UNTIL.lock().unwrap().is_some_and(|until| Instant::now() < until);
+            let refresh = ticks.is_multiple_of(125) || reshaping && ticks.is_multiple_of(4);
             for label in sync_input_shapes(&handle, &service, &mut shapes, refresh) {
                 // Handed back to the poll: click-through until a verdict says otherwise,
                 // and no history, so the next interactive verdict counts as a change.

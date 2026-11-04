@@ -19,6 +19,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - **Auto OCR works with Google Lens and Manga OCR on Windows and Linux again.** It was trying to watch the screen with Apple Live Text, which only exists on a Mac, and said "Auto-scan unavailable"; it now watches with PaddleOCR, MeikiOCR or OneOCR, whichever you have.
+- **On Linux with GNOME, Kimochi's windows take clicks again after you look a word up.** The overlay over the game kept taking every click on the screen for a few seconds at a time, so tabs and buttons in the Log, or anything else on the desktop, often did nothing.
 - **Settings → About → Copy debug info works on Linux.** It showed "The request is not allowed by the user agent…" instead of copying the report.
 
 ## [0.5.0] - 2026-11-03
