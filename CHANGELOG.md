@@ -21,6 +21,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Auto OCR works with Google Lens and Manga OCR on Windows and Linux again.** It was trying to watch the screen with Apple Live Text, which only exists on a Mac, and said "Auto-scan unavailable"; it now watches with PaddleOCR, MeikiOCR or OneOCR, whichever you have.
 - **On Linux with GNOME, Kimochi's windows take clicks again after you look a word up.** The overlay over the game kept taking every click on the screen for a few seconds at a time, so tabs and buttons in the Log, or anything else on the desktop, often did nothing.
+- **On Linux with GNOME, a new crop area is the one that's saved.** The crop editor could open twice on top of itself, and pressing Enter then sometimes saved your old crop instead of the one you'd just drawn.
 - On Linux, Yomitan's pop-up uses Kimochi's fonts unless you chose one in Yomitan's settings, as it was meant to.
 - **Settings → About → Copy debug info works on Linux.** It showed "The request is not allowed by the user agent…" instead of copying the report.
 
