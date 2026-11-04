@@ -148,18 +148,16 @@ pub static PANELS: &[PanelSpec] = &[
     // The POC's `ui/sources.html` is deliberately NOT registered: sources are chosen in the
     // main window's sidebar, and offering the old screen as a second, stale path would be
     // worse than removing it.
-    PanelSpec {
-        // A hidden WebView2 fixture can leave an opaque composition surface on
-        // Windows. Build this diagnostic window only when it is requested there.
-        eager: !cfg!(target_os = "windows"),
-        ..panel(
-            "fixture",
-            "Kimochi Japanese Fixture",
-            "ui/fixture.html",
-            640.,
-            400.,
-        )
-    },
+    // A diagnostic window, built only when it is asked for: kept ready it cost every launch a
+    // web process (about 50 MB on Linux), and a hidden WebView2 fixture can leave an opaque
+    // composition surface on Windows.
+    panel(
+        "fixture",
+        "Kimochi Japanese Fixture",
+        "ui/fixture.html",
+        640.,
+        400.,
+    ),
     // Japanese with a small gap between each stem and its ending, so cloud OCR returns
     // the halves of a word as separate chunks: the source for checking that a lookup
     // in ungrouped words mode still runs on into the next chunk. Opened from the menu.
