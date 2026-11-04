@@ -33,6 +33,7 @@ import { GamingModeNotice } from './GamingModeNotice'
 import { panel } from '../bridge/tauri'
 import { demoStops } from '../bridge/demo'
 import './main.css'
+import { BootReady, rememberBootShape } from '../entries/boot'
 
 const Notebook = lazy(() =>
   import('@texthooker/components/NotebookPanel').then((m) => ({ default: m.NotebookPanel }))
@@ -50,6 +51,8 @@ export default function MainPanel(): JSX.Element {
   const capabilities = useCapabilities()
   const [sidebar, setSidebar] = useSetting<boolean>('mainSidebarOpen', true)
   const [sidebarWidth, setSidebarWidth] = useSetting<number>('mainSidebarWidth', DEFAULT_WIDTH)
+  // The next launch's first frame (panel.html) draws the sidebar where it will be.
+  useEffect(() => rememberBootShape({ sidebar, sidebarWidth }), [sidebar, sidebarWidth])
   // `?view=` picks the first view (used by the UI preview pages).
   const [view, setViewState] = useState<MainView>(initialView)
   const [mini, setMini] = useState(false)
@@ -271,6 +274,7 @@ export default function MainPanel(): JSX.Element {
           </div>
         </div>
         <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
+        <BootReady label="log" />
       </LogActionsProvider>
     </ReaderHost>
   )

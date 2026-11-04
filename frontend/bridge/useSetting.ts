@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSetting, onSettingsChange, setSetting } from './settings'
+import { SETTINGS_DEFAULTS, withDefaults, type Settings } from '@ui/settings'
 
 /**
  * The last value seen for each key in this window, from a load, a write or another window's
@@ -14,6 +15,18 @@ import { getSetting, onSettingsChange, setSetting } from './settings'
  * the real value on its first frame rather than the default for one frame and the real one next.
  */
 const known = new Map<string, unknown>()
+
+/**
+ * Seeds the first-render values from a whole-store read taken as the window loaded (`settings_all`,
+ * started by `panel.html`), shaped as `getSetting` shapes a stored value. Keys with nothing stored
+ * keep each hook's own default. Hooks still load their key, so nothing is cached past this.
+ */
+export function seedSettings(all: Record<string, unknown>): void {
+  for (const [key, stored] of Object.entries(all)) {
+    if (stored === null || stored === undefined || known.has(key)) continue
+    known.set(key, key in SETTINGS_DEFAULTS ? withDefaults(key as keyof Settings, stored) : stored)
+  }
+}
 
 function remember<T>(key: string, value: T): T {
   known.set(key, value)
