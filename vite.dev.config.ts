@@ -336,6 +336,9 @@ export default mergeConfig(appConfig, {
     port,
     strictPort: true,
     open: false,
+    // Transformed as the server starts, while `tauri dev` is still building the app, rather than
+    // module by module as the main window first asks for them.
+    warmup: { clientFiles: ['./entries/panel.tsx', './entries/welcome.tsx', './entries/reader-popup.tsx'] },
     // `src-tauri/` is `tauri dev`'s to watch; the dev server only serves frontend files.
     watch: { ignored: ['**/src-tauri/**', '**/dist/**'] }
   },
