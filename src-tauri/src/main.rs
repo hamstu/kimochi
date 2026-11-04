@@ -252,7 +252,38 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
             model_store::on_engine_selected(app, mode);
         }
         manga_ocr::prewarm(app);
+        release_scan_engines(app);
     }
+}
+
+/// Whether `engine` is the selected scan engine (`ocrMode`; "local" is MeikiOCR's old name).
+pub(crate) fn scans_with(app: &tauri::AppHandle, engine: &str) -> bool {
+    app.try_state::<Shared>().is_some_and(|service| {
+        let mode = service.settings.get_or::<String>("ocrMode", String::new());
+        mode == engine || engine == "meikiocr" && mode == "local"
+    })
+}
+
+/// Unload the local scan engines the selected one replaced. Each keeps its model in memory once
+/// it has scanned (Manga OCR's are over 500 MB), and choosing another engine never needs it
+/// again; choosing it back loads it again on the first scan. PaddleOCR stays while it is what
+/// Auto OCR watches with. Off the caller's thread: an unload waits for a scan in progress.
+fn release_scan_engines(app: &tauri::AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if !scans_with(&app, "mangaocr") {
+            manga_ocr::unload(&app);
+        }
+        if !scans_with(&app, "meikiocr") {
+            meiki_ocr::unload(&app);
+        }
+        let watching = app.try_state::<Shared>().and_then(|service| {
+            service.observer.lock().unwrap_or_else(std::sync::PoisonError::into_inner).watching()
+        });
+        if !scans_with(&app, "ppocr") && watching != Some("ppocr") {
+            pp_ocr::unload(&app);
+        }
+    });
 }
 
 /// Kimochi's Appearance setting, applied to the app itself rather than to each page: every
