@@ -3884,6 +3884,7 @@ fn spawn_source_restore(service: Shared) {
                 service.set_status(format!("Reading · {}", source.name));
                 service.log(json!({"check":"gaming-mode-source-select","status":"selected","sourceId":source.id}));
             }
+            platform::gaming_sources::follow(service.clone());
             return;
         }
         let Some(saved) = saved else {

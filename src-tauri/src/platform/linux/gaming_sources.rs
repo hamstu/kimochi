@@ -71,6 +71,58 @@ pub fn default_source() -> Option<Source> {
         .cloned()
 }
 
+/// Whether the reader should move to `game`, just brought to the front, from the source
+/// `selected` (a Gamescope source id, or none). Only from another game's window: the screen
+/// already shows whatever is in front, and a source the player is already reading stays.
+fn follows(selected: Option<&str>, game: u32) -> bool {
+    match selected.map(linux_gamescope::app_of) {
+        None => true,
+        Some(Some(0)) => false,
+        Some(Some(app)) => app != game,
+        // Not a Gamescope source (a portal stream, clipboard…): the player chose it.
+        Some(None) => false,
+    }
+}
+
+/// Keep the source on the game being played. Switching games through Steam (its library,
+/// the Steam button, Quick Access) brings another app to the front; when the reader was on
+/// a different game's window, select the one now in front, with the crop saved for it, as
+/// choosing it in Change source would. Polls the game the handoff last saw in front.
+pub fn follow(service: crate::state::Shared) {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !active() || STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let spawned = std::thread::Builder::new().name("kimochi-game-follow".into()).spawn(move || {
+        let mut seen = super::gamescope_handoff::last_game();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            let game = super::gamescope_handoff::last_game();
+            if game == 0 || game == seen {
+                continue;
+            }
+            seen = game;
+            let selected = service.selection.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            if !follows(selected.as_deref(), game) {
+                continue;
+            }
+            let Some(source) = sources().into_iter().find(|s| linux_gamescope::app_of(&s.id) == Some(game)) else {
+                continue;
+            };
+            match crate::sources::select_keeping_crop(&service, &source.id) {
+                Ok(_) => {
+                    service.set_status(format!("Reading · {}", source.name));
+                    service.log(serde_json::json!({"check": "gaming-mode-source-follow", "sourceId": source.id, "from": selected}));
+                }
+                Err(error) => eprintln!("Gaming Mode: could not follow {}: {error}", source.name),
+            }
+        }
+    });
+    if let Err(error) = spawned {
+        eprintln!("Gaming Mode: game follower not started: {error}");
+    }
+}
+
 /// "Bring to front" for a Gaming Mode source: switch to that app (the screen: back to
 /// the game), handing input back to Steam as the Return to game button does.
 pub fn activate(app: &tauri::AppHandle, source_id: &str) -> Result<(), String> {
@@ -84,5 +136,23 @@ pub fn activate(app: &tauri::AppHandle, source_id: &str) -> Result<(), String> {
             Ok(())
         }
         None => Err("invalid: not a Gaming Mode source".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::follows;
+
+    #[test]
+    fn the_reader_moves_to_the_game_brought_to_the_front() {
+        assert!(follows(Some("gamescope:window:3280396386:384924"), 3456462794));
+        assert!(follows(None, 3456462794));
+    }
+
+    #[test]
+    fn the_same_game_the_screen_and_other_sources_stay() {
+        assert!(!follows(Some("gamescope:window:3456462794:389160"), 3456462794));
+        assert!(!follows(Some("gamescope:display:0"), 3456462794));
+        assert!(!follows(Some("portal:display:80"), 3456462794));
     }
 }
