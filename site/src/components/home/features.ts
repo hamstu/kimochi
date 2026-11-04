@@ -1,5 +1,4 @@
 import type { ComponentType } from 'react'
-import { ClickThroughVisual } from './visuals/ClickThroughVisual'
 import { ControllerVisual } from './visuals/ControllerVisual'
 import { DictionariesVisual } from './visuals/DictionariesVisual'
 import { DictionaryVisual } from './visuals/DictionaryVisual'
@@ -10,6 +9,7 @@ import { MiniModeVisual } from './visuals/MiniModeVisual'
 import { NotebookVisual } from './visuals/NotebookVisual'
 import { OverlayVisual } from './visuals/OverlayVisual'
 import { SessionsVisual } from './visuals/SessionsVisual'
+import { SyncVisual } from './visuals/SyncVisual'
 import { TextHookerVisual } from './visuals/TextHookerVisual'
 
 export interface Feature {
@@ -22,6 +22,10 @@ export interface Feature {
   Visual: ComponentType
   /** The docs page that explains it (a path on docs.kimochiapp.com, see src/lib/docs.js). */
   docs?: string
+  /** Marks a Kimochi Cloud (paid) feature: a "Cloud" tag beside the title. */
+  cloud?: boolean
+  /** A link on this site instead of the docs link, e.g. to the plans. */
+  link?: { to: string; label: string }
 }
 
 /**
@@ -101,17 +105,18 @@ export const features: Feature[] = [
     docs: '/reading/text-hooker/'
   },
   {
-    id: 'click-through',
-    title: 'Clicks go through to the game',
-    body: "Overlay text sitting on your game's buttons? It won't get in the way: clicks on it go straight to the game. Hold Shift when you want to look a word up or click the text. Prefer the old way? Switch it off in Settings. (On Linux with Wayland, the overlay keeps the old behaviour.)",
-    Visual: ClickThroughVisual,
-    docs: '/reading/overlay/#clicking-through-to-the-game'
-  },
-  {
     id: 'controller',
     title: 'Gaming Mode',
     body: "In Gaming Mode you can activate Kimochi's shortcut (Click both sticks) to scan. Then pick a word with the D-pad for quick look-ups. Hit B and you’re back in the game. This works great on something like a Steam Deck!",
     Visual: ControllerVisual,
     docs: '/controller/gaming-mode/'
+  },
+  {
+    id: 'cloud-sync',
+    title: 'Sync across computers',
+    body: "With Kimochi Cloud, your sessions, Notebook and preferences stay in step between your computers, in the background, even after time offline. Changed something in two places at once? The other version is kept for you to restore, and you can export everything any time.",
+    Visual: SyncVisual,
+    cloud: true,
+    link: { to: '/#open-source', label: 'See Kimochi Cloud plans' }
   }
 ]
