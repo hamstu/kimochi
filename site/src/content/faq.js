@@ -97,6 +97,7 @@ export const FAQ = [
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
+      { href: docsUrl('/reading/text-hooker/'), label: 'Text Hooker (Windows)' },
       { href: docsUrl('/reading/texthookers/'), label: 'Texthookers' }
     ]
   },

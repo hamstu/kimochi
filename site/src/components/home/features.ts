@@ -97,13 +97,15 @@ export const features: Feature[] = [
     id: 'text-hooker',
     title: 'Text Hooker (Windows)',
     body: "On Windows, Kimochi can read a game's text straight from the game, no OCR needed. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game, ready to look up.",
-    Visual: TextHookerVisual
+    Visual: TextHookerVisual,
+    docs: '/reading/text-hooker/'
   },
   {
     id: 'click-through',
     title: 'Clicks go through to the game',
     body: "Overlay text sitting on your game's buttons? It won't get in the way: clicks on it go straight to the game. Hold Shift when you want to look a word up or click the text. Prefer the old way? Switch it off in Settings. (On Linux with Wayland, the overlay keeps the old behaviour.)",
-    Visual: ClickThroughVisual
+    Visual: ClickThroughVisual,
+    docs: '/reading/overlay/#clicking-through-to-the-game'
   },
   {
     id: 'controller',
