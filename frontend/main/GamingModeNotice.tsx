@@ -1,5 +1,6 @@
-import { useState, type JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { Button, Callout, Kbd } from '@kit'
 import { useCapabilities } from '../bridge/capabilities'
 import { useHotkeys } from '../bridge/useHotkeys'
@@ -11,7 +12,20 @@ export function GamingModeNotice(): JSX.Element | null {
   const capabilities = useCapabilities()
   const [hotkeys] = useHotkeys()
   const [error, setError] = useState<string | null>(null)
-  if (capabilities.os !== 'linux' || capabilities.session?.compositor?.toLowerCase() !== 'gamescope') return null
+  const gamescope = capabilities.os === 'linux' && capabilities.session?.compositor?.toLowerCase() === 'gamescope'
+  // Behind the game this window stays mapped, so WebKit keeps painting its animations (the
+  // preview's shimmer, the Auto dot) at the display's rate for nobody: pause them meanwhile
+  // (`gamescope-shown`, main.css `[data-behind-game]`).
+  useEffect(() => {
+    if (!gamescope) return
+    const root = document.documentElement
+    const stop = listen<boolean>('gamescope-shown', ({ payload }) => root.toggleAttribute('data-behind-game', payload === false))
+    return () => {
+      root.removeAttribute('data-behind-game')
+      void stop.then((unlisten) => unlisten())
+    }
+  }, [gamescope])
+  if (!gamescope) return null
   const binding = hotkeys.openControllerMenu
   const enabled = binding?.enabled !== false
   const buttons = enabled ? (binding?.gamepadButtons ?? (Number.isInteger(binding?.gamepadButton) ? [binding.gamepadButton as number] : [])) : []

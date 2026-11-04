@@ -753,6 +753,12 @@ html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-l
   0% { transform: scale(1); opacity: 1; }
   70%, 100% { transform: scale(2.6); opacity: 0; }
 }
+/* Gaming Mode, while the game is in front (GamingModeNotice.tsx): nobody sees this window. */
+[data-behind-game] *,
+[data-behind-game] *::before,
+[data-behind-game] *::after {
+  animation-play-state: paused !important;
+}
 @media (prefers-reduced-motion: reduce) {
   .src-live-dot::after,
   .src-shot-wait { animation: none; }

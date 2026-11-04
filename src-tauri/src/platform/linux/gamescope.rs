@@ -75,6 +75,29 @@ pub(super) fn prepare_control(window: &tauri::WebviewWindow) -> Result<(),String
     Ok(())
 }
 pub fn start() { super::gamescope_handoff::start(); }
+/// Tell the windows whether Gamescope is showing Kimochi (`gamescope-shown`, a bool): at once
+/// on every change, and again every few seconds for a window that has (re)loaded since. A
+/// managed main window stays mapped behind the game, so WebKit calls it visible and keeps
+/// painting its animations at the display's rate; the main window pauses them while false.
+pub fn watch_shown(app: &tauri::AppHandle) {
+    if !active() { return; }
+    let app = app.clone();
+    let spawned = std::thread::Builder::new().name("kimochi-gamescope-shown".into()).spawn(move || {
+        let mut last = None;
+        let mut since = 0u32;
+        loop {
+            let now = shown();
+            since += 1;
+            if last != Some(now) || since >= 20 {
+                last = Some(now);
+                since = 0;
+                let _ = app.emit("gamescope-shown", now);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+    });
+    if let Err(error) = spawned { eprintln!("Gamescope shown watcher: {error}"); }
+}
 pub fn controls_routed() -> bool {
     managed() && !crate::gamepad::navigating()
         && CONTROL_OWNER.lock().unwrap_or_else(|e|e.into_inner()).is_some()

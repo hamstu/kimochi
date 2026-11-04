@@ -3743,6 +3743,8 @@ fn finish_setup(
     );
     #[cfg(target_os = "linux")]
     platform::gamescope::start();
+    #[cfg(target_os = "linux")]
+    platform::gamescope::watch_shown(&handle);
     gamepad::start(&handle, &service);
 
     {
