@@ -1,22 +1,6 @@
 import { DownloadButton } from '../DownloadButton'
 import { DiscordButton } from '../DiscordButton'
 import { KanaGlow } from './KanaGlow'
-import { useEffect, useState } from 'react'
-import { fetchLatestRelease, versionLabel } from '../../lib/releases'
-
-/** The version on offer beside the wordmark ("v0.2.0"); nothing until it is known. */
-function HeroVersion() {
-  const [version, setVersion] = useState<string | null>(null)
-  useEffect(() => {
-    const ctrl = new AbortController()
-    fetchLatestRelease(ctrl.signal)
-      .then((release) => setVersion(versionLabel(release)))
-      .catch(() => undefined)
-    return () => ctrl.abort()
-  }, [])
-  if (!version) return null
-  return <span className="text-small font-normal tracking-normal text-ink-3 tnum">{version}</span>
-}
 
 /**
  * The home hero: the app icon, wordmark, promise, lede, the download button and a quieter Discord
@@ -46,10 +30,7 @@ export function Hero() {
           height={168}
           className="size-32 drop-shadow-[0_22px_34px_color-mix(in_oklab,var(--k-accent)_32%,transparent)] md:size-40"
         />
-        <p className="mt-7 flex items-baseline gap-2.5 text-[1.375rem] font-semibold tracking-[-0.015em] text-ink">
-          Kimochi
-          <HeroVersion />
-        </p>
+        <p className="mt-7 text-[1.375rem] font-semibold tracking-[-0.015em] text-ink">Kimochi</p>
         <h1 className="mt-5 max-w-[18ch] text-display text-ink">Read and play in Japanese.</h1>
         <p className="mt-6 max-w-[44rem] text-lede text-ink-2">
           Kimochi is a free, open-source desktop app for Japanese learners. It reads the Japanese in
