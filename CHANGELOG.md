@@ -18,6 +18,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
+- **Mini mode's title bar fits again.** The Help and sound buttons are hidden in mini mode, so the Kimochi name no longer runs into the buttons.
 
 ## [0.6.1] - 2026-11-05
 
