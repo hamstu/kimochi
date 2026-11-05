@@ -16,6 +16,8 @@ interface GameScreenProps {
   onUserCursor: (index: number | null) => void
   /** Kimochi's overlay is on (Show overlay): without it, no scan sweep, word boxes or pop-ups. */
   overlay?: boolean
+  /** The Text Hooker: Kimochi's card over the game's text instead of word boxes, and no scan. */
+  hook?: boolean
   children?: ReactNode
 }
 
@@ -44,7 +46,7 @@ function useLeaving<T>(value: T | null, ms: number): [T | null, boolean] {
  * the dictionary popup, and (handheld) Gaming Mode: the controller menu, and Read along's outline
  * and hint bar.
  */
-export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, overlay = true, children }: GameScreenProps) {
+export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, overlay = true, hook = false, children }: GameScreenProps) {
   const line = PLAY_LINES[frame.line]
   const deck = variant === 'deck'
   const user = userCursor !== null && overlay
@@ -67,6 +69,21 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
     [layer, loading, at, stops.length]
   )
   const [hud, hudLeaving] = useLeaving(hudNow, 200)
+
+  // On the desktop a mouse looks a word up as the app does: over it with Shift held (pressed while
+  // over it, or held on the way in). A touch has no Shift: a tap does it. The handheld taps too.
+  const needShift = !deck
+  const hovered = useRef<number | null>(null)
+  const pick = useRef(onUserCursor)
+  pick.current = onUserCursor
+  useEffect(() => {
+    if (!needShift) return
+    const down = (event: KeyboardEvent): void => {
+      if (event.key === 'Shift' && !event.repeat && hovered.current !== null) pick.current(hovered.current)
+    }
+    addEventListener('keydown', down)
+    return () => removeEventListener('keydown', down)
+  }, [needShift])
 
   const screenRef = useRef<HTMLDivElement>(null)
   const popupRef = useRef<HTMLDivElement>(null)
@@ -134,9 +151,9 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
     return () => observer.disconnect()
   }, [cursor, outlined, frame.line])
 
-  // Each word's underline strength (--p), as the app's proximityStyle: 1 at the word under the
-  // pointer, fading to 0 a third of the screen's width away (the app's 300 px on a game window).
-  // With no pointer, every scanned word shows a faint underline.
+  // How near each word's box is to the word being looked up (--p), as render.js sets --ocr-near: 1
+  // at that word, fading to 0 a third of the screen's width away (the app's 300 px on a game
+  // window). With no word looked up, every box rests at its faintest.
   useLayoutEffect(() => {
     const screen = screenRef.current
     if (!screen) return
@@ -149,10 +166,10 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
     const a = anchor ? centre(anchor) : null
     for (const el of tokenRefs.current) {
       if (!el) continue
-      let p = 0.35
+      let p = 0
       if (a) {
         const b = centre(el)
-        p = Math.max(0.12, 1 - Math.hypot(b.x - a.x, b.y - a.y) / reach)
+        p = Math.max(0, 1 - Math.hypot(b.x - a.x, b.y - a.y) / reach)
       }
       el.style.setProperty('--p', p.toFixed(2))
     }
@@ -178,7 +195,7 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
 
       <div
         key={`box-${frame.line}`}
-        className={`kd-box ${text === 'typing' ? 'kd-typing' : ''} ${boxes ? 'kd-boxes' : ''}`}
+        className={`kd-box ${text === 'typing' ? 'kd-typing' : ''} ${boxes ? (hook ? 'kd-hooked' : 'kd-boxes') : ''}`}
       >
         {line.speaker && (
           <div className="kd-speaker" lang="ja">
@@ -204,21 +221,32 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
                 data-token={i}
                 className={`kd-word ${known ? 'kd-known' : 'kd-plain'} ${cursor === i && !reading ? 'kd-current' : ''} ${showPopup && cursor === i && !reading ? 'kd-selected' : ''}`}
                 style={{ ['--w' as string]: w }}
-                onPointerEnter={known ? (e) => e.pointerType === 'mouse' && onUserCursor(i) : undefined}
-                onClick={known ? () => onUserCursor(userCursor === i ? null : i) : undefined}
+                onPointerEnter={
+                  known
+                    ? (e) => {
+                        if (e.pointerType !== 'mouse') return
+                        hovered.current = i
+                        if (!needShift || e.shiftKey) onUserCursor(i)
+                      }
+                    : undefined
+                }
+                onPointerMove={known && needShift ? (e) => e.pointerType === 'mouse' && e.shiftKey && userCursor !== i && onUserCursor(i) : undefined}
+                onPointerLeave={known ? () => (hovered.current = hovered.current === i ? null : hovered.current) : undefined}
+                onPointerUp={known && needShift ? (e) => e.pointerType !== 'mouse' && onUserCursor(userCursor === i ? null : i) : undefined}
+                onClick={known && !needShift ? () => onUserCursor(userCursor === i ? null : i) : undefined}
               >
                 {chars}
               </span>
             )
           })}
         </p>
-        {overlay && frame.scan && !user && <div className="kd-shimmer" />}
+        {overlay && frame.scan && !user && !hook && <div className="kd-shimmer" />}
         <svg className="kd-advance" viewBox="0 0 12 10" aria-hidden="true">
           <path d="M1 1h10L6 9z" fill="currentColor" />
         </svg>
       </div>
 
-      {overlay && frame.scan && !user && <div key={`scan-${frame.line}`} className="kd-sweep" />}
+      {overlay && frame.scan && !user && !hook && <div key={`scan-${frame.line}`} className="kd-sweep" />}
 
       {outlined && <WordOutline ref={outlineRef} />}
 

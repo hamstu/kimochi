@@ -52,10 +52,10 @@ function Controls({ side, frame }: { side: 'left' | 'right'; frame: Frame }) {
   )
 }
 
-const GLYPH: Record<Button, string> = { L3: 'L3', R3: 'R3', up: '▲', right: '▶', A: 'A', B: 'B' }
+const GLYPH: Record<Button, string> = { L3: 'L3', R3: 'R3', R4: 'R4', up: '▲', right: '▶', A: 'A', B: 'B' }
 
 const HINT_KEYS: Record<string, Button[]> = {
-  Kimochi: ['L3', 'R3']
+  Kimochi: ['R4']
 }
 
 /**

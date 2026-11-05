@@ -7,6 +7,8 @@ const LOG_URL = '/demo/panel.html'
 export type LogMessage =
   | { type: 'scan' }
   | { type: 'line'; text: string }
+  /** A hooked game's line (the Text Hooker): it reaches the Log with no scan. */
+  | { type: 'hook-line'; text: string }
   | { type: 'theme'; value: 'light' | 'dark' }
   | { type: 'interactive'; value: boolean }
   | { type: 'sidebar'; value: boolean }
@@ -26,7 +28,7 @@ export interface LogDrag {
 /** What the embedded Log tells the demo (the harness's `tellEmbedder`). */
 export type LogEvent =
   | ({ type: 'drag' } & LogDrag)
-  | { type: 'state'; sourceId: string | null; autoOcr: boolean; overlay: boolean }
+  | { type: 'state'; sourceId: string | null; autoOcr: boolean; overlay: boolean; input?: string }
   | { type: 'window'; action: 'mini' | 'expand' | 'minimize' | 'hide' | 'close' }
   | { type: 'activate'; sourceId: string | null }
   | { type: 'interact' }

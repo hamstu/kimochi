@@ -5,7 +5,8 @@
  * Nothing chosen yet is a dashed card. The menu's "Window or screen" opens a submenu of every
  * window and display, as thumbnails, to choose from. Once one is chosen the card shows it live (a
  * fresh frame every few seconds, crossfaded in) with its region marked; clicking the picture brings
- * a window to the front, and the card's foot holds Crop area and Change source. The scan, Auto OCR
+ * a window to the front, and the card's foot holds Crop area (Anki crop for the Text Hooker, while
+ * cards get a screenshot) and Change source. The scan, Auto OCR
  * and overlay controls sit underneath. Quick Shot keeps a scan button and the overlay but has
  * nothing to watch; Clipboard and WebSocket need no controls at all.
  *
@@ -145,8 +146,33 @@ const HOOK_TYPE = {
   mode: 'hook',
   label: 'Text Hooker',
   icon: <Plug />,
-  detail: "Hook a game's text from inside it, with no OCR."
+  detail: 'Read text from a game directly.'
 } as const
+
+/**
+ * The card's foot under a Text Hooker source: the hooked text is read from the game, so there is
+ * no OCR area to crop, only the Anki crop (the part of the game a card's screenshot shows), set
+ * straight away. Shown only while cards get a screenshot (Enhance Anki cards); otherwise Change
+ * source takes the whole foot.
+ */
+function HookAnkiCropAction({ set, disabled, onEdit }: { set: boolean; disabled: boolean; onEdit: () => void }): ReactNode {
+  const [stored] = useSetting<CardScreenshotSettings>('cardScreenshot', SETTINGS_DEFAULTS.cardScreenshot)
+  if (!{ ...SETTINGS_DEFAULTS.cardScreenshot, ...stored }.enabled) return null
+  return (
+    <button
+      type="button"
+      className="src-action"
+      aria-label="Anki crop"
+      title={set ? 'Change Anki crop area' : 'Set Anki crop area'}
+      data-on={set ? '' : undefined}
+      disabled={disabled}
+      onClick={onEdit}
+    >
+      <ImageIcon />
+      <span className="src-action-label">Anki crop</span>
+    </button>
+  )
+}
 
 function useInputSource(): [Mode, (next: Mode) => void] {
   const [input, setInput] = useState<InputSource>(() => getSettings().inputSource)
@@ -1012,6 +1038,9 @@ export function SourcePanel({
           </button>
         )}
         <div className="src-actions">
+          {mode === 'hook' ? (
+            <HookAnkiCropAction set={ankiCrop} disabled={!controller.hasSource} onEdit={() => controller.onEditAnkiCropArea()} />
+          ) : (
           <Menu>
             <MenuTrigger asChild>
               <button type="button" className="src-action" aria-label="Crop area" data-on={crop || ankiCrop ? '' : undefined}>
@@ -1048,6 +1077,7 @@ export function SourcePanel({
               )}
             </MenuContent>
           </Menu>
+          )}
           <Menu open={open} onOpenChange={onMenuOpen}>
             <MenuTrigger asChild>
               <button type="button" className="src-action" aria-label="Change source">

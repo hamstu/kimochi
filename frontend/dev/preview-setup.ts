@@ -456,7 +456,13 @@ let pageLabel = 'log'
 function pushState(): void {
   live.revision += 1
   void emit('state', viewState(pageLabel))
-  tellEmbedder({ type: 'state', sourceId: live.source?.id ?? null, autoOcr: live.autoOcr, overlay: live.textOverlayVisible })
+  tellEmbedderState()
+}
+
+/** Embedded: the view the site's demo follows: the source, its switches and the Log's input. */
+function tellEmbedderState(): void {
+  const input = (settings.superTexthooker as { inputSource?: string } | undefined)?.inputSource ?? 'ocr'
+  tellEmbedder({ type: 'state', sourceId: live.source?.id ?? null, autoOcr: live.autoOcr, overlay: live.textOverlayVisible, input })
 }
 
 /** Embedded: tell the site's demo something (`{kimochiDemoEvent: 1, type, …}`). */
@@ -731,6 +737,7 @@ const HANDLERS: Record<string, Handler> = {
   reader_settings_patch: (a) => {
     const current = (settings.superTexthooker as Record<string, unknown>) ?? {}
     publish('superTexthooker', { ...current, ...((a?.patch as object) ?? {}) })
+    tellEmbedderState()
   },
 
   // state
@@ -796,12 +803,13 @@ const HANDLERS: Record<string, Handler> = {
       bounds: s.bounds,
       on_screen: s.on_screen
     })),
-  // Text Hooker (src-tauri/src/text_hook): every window but the first can be hooked.
+  // Text Hooker (src-tauri/src/text_hook): every window but the first can be hooked (embedded in
+  // the site's demo, every one: its game may be the only window offered).
   texthook_targets: (a) =>
     Object.fromEntries(
       ((a?.sourceIds as string[] | undefined) ?? []).map((id, i) => [
         id,
-        i === 0 ? { hookable: false, reason: 'this is part of Windows' } : { hookable: true, bits: 32 }
+        i === 0 && !EMBED ? { hookable: false, reason: 'this is part of Windows' } : { hookable: true, bits: 32 }
       ])
     ),
   texthook_status: () => HOOK_STATUS,
@@ -809,7 +817,15 @@ const HANDLERS: Record<string, Handler> = {
   texthook_game_icon: (a) => appIcon(String(a?.exe ?? '').split(/[\\/]/).pop()!.replace(/\.exe$/i, '')),
   texthook_forget: () => null,
   texthook_insert: () => null,
-  texthook_start: () => HOOK_STATUS,
+  texthook_start: (a) => {
+    // Hooking another window (the site's demo hooks its own game): that window's game.
+    const source = ALL_SOURCES.find((s) => s.id === a?.sourceId)
+    if (source && source.id !== HOOK_STATUS.sourceId) {
+      HOOK_STATUS.sourceId = source.id
+      HOOK_STATUS.exe = `C:/Games/${source.app}/${source.app.replace(/[^\w]+/g, '')}.exe`
+    }
+    return HOOK_STATUS
+  },
   texthook_stop: () => ({ supported: true, phase: 'idle', threads: [] }),
   texthook_select: (a) => {
     const key = (a?.key as string | null) ?? null
@@ -1113,6 +1129,7 @@ function playActivity(): void {
 type EmbedMessage =
   | { kimochiDemo: 1; type: 'scan'; engine?: string }
   | { kimochiDemo: 1; type: 'line'; text: string; engine?: string }
+  | { kimochiDemo: 1; type: 'hook-line'; text: string }
   | { kimochiDemo: 1; type: 'theme'; value: 'light' | 'dark' }
   | { kimochiDemo: 1; type: 'interactive'; value: boolean }
   | { kimochiDemo: 1; type: 'sidebar'; value: boolean }
@@ -1238,6 +1255,10 @@ function listenToEmbedder(): void {
       void emit('activity', { text: 'Added 1 line', tone: 'ok', key: 'scan', at: Date.now() })
       // An automatic scan's lines: the chime the overlay plays for them (`outcomeSound`).
       embedSound('scan-done', { auto: true })
+    } else if (message.type === 'hook-line') {
+      // A hooked game's line, as native sends it (src-tauri/src/text_hook): no scan, it just arrives.
+      scriptStopped = true
+      void emit('texthook-line', { text: message.text, key: HOOK_STATUS.selected, at: Date.now(), id: `embed-hook-${++embedScan}` })
     } else if (message.type === 'theme') {
       publish('appearance', message.value)
     } else if (message.type === 'interactive') {
@@ -1505,7 +1526,7 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
     const style = document.createElement('style')
     style.textContent = 'button[aria-label="Keep on top"], button[aria-label="Unpin window"] { display: none !important; }'
     document.head.append(style)
-    tellEmbedder({ type: 'state', sourceId: live.source?.id ?? null, autoOcr: live.autoOcr, overlay: live.textOverlayVisible })
+    tellEmbedderState()
   }
   syncDictionaryEngine()
   if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed })

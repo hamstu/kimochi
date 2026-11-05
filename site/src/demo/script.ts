@@ -6,7 +6,8 @@
 import { useEffect, useState } from 'react'
 import { PLAY_LINES } from './content'
 
-export type Button = 'L3' | 'R3' | 'up' | 'right' | 'A' | 'B'
+/** R4 is a back button: shown in the HUD's echo, not on the drawn controls. */
+export type Button = 'L3' | 'R3' | 'R4' | 'up' | 'right' | 'A' | 'B'
 
 /** Read along (the app's controller `words` mode): stepping the text, or in the pop-up's buttons. */
 export interface Reading {
@@ -36,8 +37,8 @@ export interface Frame {
   pressed: Button[]
   /** Handheld: the demo's own caption, beside the buttons held (not part of the app). */
   hint: string
-  /** Sent to the embedded Log when the frame starts. */
-  emit?: 'scan' | 'line'
+  /** Sent to the embedded Log when the frame starts: a scan, its line, or a hooked game's line. */
+  emit?: 'scan' | 'line' | 'hook'
 }
 
 const TYPE_MS = 42
@@ -66,6 +67,24 @@ export function desktopFrames(): Frame[] {
   })
 }
 
+/**
+ * Text Hooker: the game's own text, hooked from inside it, so nothing is scanned. Each line reaches
+ * the Log as the game draws it; once it is shown, Kimochi's card sits over the game's text (Auto
+ * align) and its words are looked up there, with Shift held.
+ */
+export function hookFrames(): Frame[] {
+  return PLAY_LINES.flatMap((line, i): Frame[] => {
+    const b = base(i)
+    return [
+      { ...b, ms: typing(i), text: 'typing', emit: 'hook' },
+      { ...b, ms: 700, boxes: true },
+      { ...b, ms: 3000, boxes: true, cursor: line.focus, popup: line.focus >= 0 },
+      { ...b, ms: 700, boxes: true },
+      { ...b, ms: 300 }
+    ]
+  })
+}
+
 /** Index of Scan in the radial menu (the app's `menuItems()`; see RadialMenu.tsx). */
 export const SCAN_ITEM = 0
 
@@ -79,7 +98,7 @@ export function wordStops(line: number): number[] {
 }
 
 /**
- * Handheld (the app's Gaming Mode, ui/controller.js): both sticks open the menu → ▲ picks Scan →
+ * Handheld (the app's Gaming Mode, ui/controller.js): R4, the Deck's default shortcut, opens the menu → ▲ picks Scan →
  * A → the scan runs and Read along starts on the first word, its pop-up open → ▶ steps word to
  * word, the pop-up following → A moves into the pop-up → B back to the text → B back to the game.
  */
@@ -95,7 +114,7 @@ export function deckFrames(): Frame[] {
     const frames: Frame[] = [
       { ...b, ms: typing(i), text: 'typing' },
       { ...b, ms: 700, hint: 'Kimochi' },
-      { ...menu(-1), ms: 380, pressed: ['L3', 'R3'], hint: 'Kimochi' },
+      { ...menu(-1), ms: 380, pressed: ['R4'], hint: 'Kimochi' },
       { ...menu(-1), ms: 700 },
       { ...menu(SCAN_ITEM), ms: 260, pressed: ['up'] },
       { ...menu(SCAN_ITEM), ms: 520 },

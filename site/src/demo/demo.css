@@ -123,52 +123,107 @@
 }
 
 /* ---------------------------------------------------------------- overlay word boxes */
-/* Kimochi's overlay as the app draws it (proximityStyle and updateProximity in ui/render.js, the
-   ::selection rule in ui/overlay.html): every scanned word gets a blue underline that is stronger
-   the nearer the pointer is (--p, 0 to 1, set by GameScreen); the word under the pointer becomes a
-   near-black box with its text in white; and the text the dictionary matched is selected, in
-   light blue with dark text (.kd-selected). */
+/* Kimochi's overlay as the app draws it (ui/overlay-text.css, per-word mode, Dark look, the default
+   blue highlight): every scanned word gets a faint tinted box with a thin ring, a little outside
+   its glyphs, which brightens the nearer the pointer is (--p, 0 to 1, set by GameScreen, as
+   render.js sets --ocr-near); the word under the pointer becomes an opaque card in the look of
+   Kimochi's panels with its text over it; and the text the dictionary matched is selected in the
+   highlight colour (.kd-selected). */
+.kd-screen {
+  --kd-hl: 62 99 221;
+  --kd-card: #1b1c1f;
+  --kd-card-ink: #edeef0;
+}
 .kd-word {
   position: relative;
   isolation: isolate;
   white-space: nowrap;
 }
+.kd-word::before,
 .kd-word::after {
   content: '';
   position: absolute;
-  inset: -0.06em -0.04em;
   z-index: -1;
-  border-radius: 0.5cqw 0.5cqw 0 0;
-  border-bottom: max(2px, 0.28cqw) solid hsl(210 100% calc(30% + var(--p, 0.4) * 50%) / var(--p, 0.4));
   opacity: 0;
   pointer-events: none;
+}
+/* At rest: the tint and ring. */
+.kd-word::after {
+  inset: -0.12cqw -0.08cqw;
+  border-radius: 0.32cqw;
+  background: rgb(var(--kd-hl) / calc(0.1 + 0.12 * var(--p, 0)));
+  box-shadow: inset 0 0 0 max(1px, 0.08cqw) rgb(var(--kd-hl) / calc(0.32 + 0.4 * var(--p, 0)));
   transition:
-    opacity 0.18s ease,
-    background-color 0.1s ease-in-out,
-    border-color 0.1s ease-in-out;
+    opacity 0.18s ease-out,
+    background-color 0.12s ease-out,
+    box-shadow 0.12s ease-out;
   transition-delay: calc(var(--w) * 35ms);
+}
+/* Hovered: the card, padded out from the box. */
+.kd-word::before {
+  inset: -0.45cqw -0.5cqw;
+  border-radius: 0.62cqw;
+  background: var(--kd-card);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.11),
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 0.8cqw 2.2cqw -0.5cqw rgb(0 0 0 / 0.6);
+  transition: opacity 0.18s ease-out;
 }
 .kd-boxes .kd-word::after {
   opacity: 1;
 }
 .kd-word.kd-known {
-  cursor: pointer;
+  cursor: default;
 }
 .kd-word.kd-current {
-  color: #fff;
+  z-index: 2;
+  color: var(--kd-card-ink);
   text-shadow: none;
 }
-.kd-word.kd-current::after {
+.kd-word.kd-current::before {
   opacity: 1;
+}
+.kd-word.kd-current::after {
+  opacity: 0;
   transition-delay: 0s;
-  border-radius: 0.5cqw;
-  border-bottom-color: transparent;
-  background: rgb(0 0 0 / 0.9);
 }
 .kd-word.kd-selected .kd-char,
 .kd-word.kd-selected:not(:has(.kd-char)) {
-  background: #85b2ff99;
-  color: #132113;
+  background: rgb(var(--kd-hl) / 0.35);
+  color: var(--kd-card-ink);
+}
+
+/* The Text Hooker's card (ui/hook-card.css, Dark look): Kimochi's own copy of the hooked line, set
+   over the game's text by Auto align, in the look of a hovered text card. Its words are real text,
+   looked up where they are: the matched text is selected; no word boxes. */
+.kd-line {
+  position: relative;
+}
+.kd-line::before {
+  content: '';
+  position: absolute;
+  inset: -1.2cqw -1.1cqw -1.3cqw;
+  z-index: -1;
+  border-radius: 0.4cqw;
+  background: var(--kd-card);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.11),
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 0.8cqw 2.2cqw -0.5cqw rgb(0 0 0 / 0.6);
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+  pointer-events: none;
+}
+.kd-hooked .kd-line {
+  isolation: isolate;
+  color: var(--kd-card-ink);
+}
+.kd-hooked .kd-line::before {
+  opacity: 1;
+}
+.kd-hooked .kd-word.kd-current::before {
+  opacity: 0;
 }
 
 /* ---------------------------------------------------------------- scan sweep */
@@ -927,5 +982,69 @@
   .kd-try-scrim,
   .kd-try {
     animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- the scripted Shift key */
+/* Bottom left of the desk while the scripted pointer looks words up: a keycap that goes down
+   while Shift is held (the app looks up what is under the pointer while Shift is held). */
+.kd-shift {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0.55;
+  transition: opacity 160ms ease-out;
+}
+.kd-shift-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px 2px;
+  border-radius: 8px;
+  font: 600 13px/1 var(--k-font-ui);
+  color: #1c2024;
+  background: linear-gradient(to bottom, #ffffff, #eceef2);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.14),
+    0 3px 0 rgb(0 0 0 / 0.18),
+    0 6px 16px -6px rgb(0 0 0 / 0.4);
+  transition:
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out,
+    background 90ms ease-out,
+    color 90ms ease-out;
+}
+.kd-shift-label {
+  font: 500 12px/1 var(--k-font-ui);
+  color: #fff;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.45);
+  opacity: 0;
+  translate: -4px 0;
+  transition: opacity 160ms ease-out, translate 160ms ease-out;
+}
+.kd-shift-down {
+  opacity: 1;
+}
+.kd-shift-down .kd-shift-cap {
+  transform: translateY(3px);
+  color: #fff;
+  background: linear-gradient(to bottom, #5a7ce6, #3e63dd);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.2),
+    0 0 0 rgb(0 0 0 / 0.18),
+    0 0 0 4px rgb(62 99 221 / 0.25);
+}
+.kd-shift-down .kd-shift-label {
+  opacity: 1;
+  translate: 0 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kd-shift,
+  .kd-shift-cap,
+  .kd-shift-label {
+    transition: none;
   }
 }

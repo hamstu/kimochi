@@ -4,18 +4,20 @@ import { useGuessedPlatform } from '../../demo/env'
 import { AppleMark, DeckMark, LinuxMark, WindowsMark } from '../PlatformMarks'
 import { PlatformStrip } from './PlatformStrip'
 
-type Tab = 'desktop' | 'gaming'
+type Tab = 'desktop' | 'hook' | 'gaming'
 
 /**
- * "Runs on", then the live preview: a Desktop tab dressed as the visitor's own OS, and Gaming mode
- * (a handheld in Steam Deck's Gaming Mode). `id="demo"` is the header nav's anchor.
+ * "Runs on", then the live preview: OCR (a desktop dressed as the visitor's own OS, Auto OCR reading
+ * the game), Text Hooker (a Windows desktop, the game hooked), and Handheld mode (Steam Deck's
+ * Gaming Mode). `id="demo"` is the header nav's anchor.
  */
 export function DemoShowcase() {
   const [tab, setTab] = useState<Tab>('desktop')
   const desktop = useGuessedPlatform()
   const mark = desktop === 'windows' ? <WindowsMark className="size-5" /> : desktop === 'linux' ? <LinuxMark className="size-5" /> : <AppleMark className="size-5" />
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
-    { id: 'desktop', label: 'Desktop', icon: mark },
+    { id: 'desktop', label: 'OCR', icon: mark },
+    { id: 'hook', label: 'Text Hooker', icon: <WindowsMark className="size-5" /> },
     { id: 'gaming', label: 'Handheld mode', icon: <DeckMark className="size-5" /> }
   ]
   return (
@@ -53,7 +55,7 @@ export function DemoShowcase() {
           </div>
         </header>
         <div id="demo-stage" role="tabpanel" aria-labelledby={`demo-tab-${tab}`}>
-          <LiveDemo platform={tab === 'gaming' ? 'deck' : desktop} />
+          <LiveDemo platform={tab === 'gaming' ? 'deck' : tab === 'hook' ? 'windows' : desktop} input={tab === 'hook' ? 'hook' : 'ocr'} />
         </div>
       </div>
     </section>

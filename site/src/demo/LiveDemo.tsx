@@ -22,8 +22,12 @@
  * shows only with Show overlay on. An Easter egg in the corner opens a small app that can be read
  * too. Narrower screens, and reduced motion, get the two windows stacked, already set up.
  *
- * The platform comes in as a prop: the visitor's OS for the Desktop tab, `deck` for Gaming mode.
- * Steam Deck: one handheld screen and the controller flow (both sticks → radial menu → Scan → D-pad
+ * The platform comes in as a prop: the visitor's OS for the OCR tab, Windows for the Text Hooker
+ * tab (`input="hook"`: the game is hooked from the source menu's Text Hooker, its lines arrive with
+ * no scan, and Kimochi's card sits over its text), `deck` for Handheld mode. On the desk, words are
+ * looked up as in the app, with Shift held: the scripted session shows the key held (bottom left)
+ * for each lookup, and a visitor's own mouse needs it too (a tap does it on a touch screen).
+ * Steam Deck: one handheld screen and the controller flow (R4 → radial menu → Scan → D-pad
  * word to word → A reads → B back), playing on its own.
  *
  * The example game comes from frontend/dev/demo-content.ts (shared with the harness). The run pauses
@@ -44,7 +48,7 @@ import { Maximize2, Play, RotateCcw, X } from 'lucide-react'
 import { useMediaQuery } from '../lib/client'
 import { GAME } from './content'
 import { useGuessedPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
-import { deckFrames, desktopFrames, usePlayer, type Frame } from './script'
+import { deckFrames, desktopFrames, hookFrames, usePlayer, type Frame } from './script'
 import { GameScreen } from './GameScreen'
 import { DeckBody, DeckHud } from './DeckStage'
 import { LogFrame, type LogEvent, type PostToLog } from './LogFrame'
@@ -58,10 +62,16 @@ export interface LiveDemoProps {
   className?: string
   /** The platform to show: the visitor's OS for the Desktop tab, `deck` for Gaming mode. */
   platform?: Platform
+  /**
+   * How Kimochi reads the game on the desktop: `ocr` (a window, Auto OCR) or `hook` (the Text
+   * Hooker: the game's own text, no scanning; a Windows desktop).
+   */
+  input?: 'ocr' | 'hook'
 }
 
 const DESKTOP_FRAMES = desktopFrames()
 const DECK_FRAMES = deckFrames()
+const HOOK_FRAMES = hookFrames()
 
 /** The harness's source ids for the site's own windows (preview-setup.ts). */
 const GAME_SOURCE = 'window:101'
@@ -129,7 +139,7 @@ interface Pointer {
 
 type Phase = 'idle' | 'intro' | 'running'
 
-export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
+export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: LiveDemoProps) {
   const detected = useGuessedPlatform()
   const platform = chosen ?? detected
   const theme = useResolvedTheme()
@@ -161,11 +171,13 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   // The visitor took over: the virtual pointer is gone until the demo is played again.
   const [retired, setRetired] = useState(false)
   const [logReady, setLogReady] = useState(false)
-  const [logState, setLogState] = useState<{ sourceId: string | null; autoOcr: boolean; overlay: boolean }>({
+  const [logState, setLogState] = useState<{ sourceId: string | null; autoOcr: boolean; overlay: boolean; input: string }>({
     sourceId: null,
     autoOcr: false,
-    overlay: false
+    overlay: false,
+    input: 'ocr'
   })
+  const hook = !deck && input === 'hook'
 
   // A new platform, or a different kind of stage, starts over.
   useEffect(() => {
@@ -174,10 +186,10 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     setQuit(false)
     setRetired(false)
     setPointer((p) => ({ ...p, shown: false }))
-  }, [platform, flow])
+  }, [platform, flow, input])
 
   const [userCursor, setUserCursor] = useState<number | null>(null)
-  const frames = deck ? DECK_FRAMES : DESKTOP_FRAMES
+  const frames = deck ? DECK_FRAMES : hook ? HOOK_FRAMES : DESKTOP_FRAMES
   const postRef = useRef<PostToLog | null>(null)
   // No sound from a demo the visitor cannot see: scrolled away, or another tab.
   useEffect(() => {
@@ -188,14 +200,17 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   const onEnter = useCallback((frame: Frame) => {
     if (frame.emit === 'scan') postRef.current?.({ type: 'scan' })
     if (frame.emit === 'line') postRef.current?.({ type: 'line', text: PLAY_LINES[frame.line].text })
+    if (frame.emit === 'hook') postRef.current?.({ type: 'hook-line', text: PLAY_LINES[frame.line].text })
   }, [])
 
   // Kimochi is reading a window: it is running (not quit), and that window is its source with Auto
-  // OCR on. Off the desk the windows are always open.
-  const watching = (id: WindowId, source: string): boolean =>
-    (!free || (open[id] && !quit)) && logState.sourceId === source && logState.autoOcr
+  // OCR on, or (the Text Hooker) hooked. Off the desk the windows are always open.
+  const watching = (id: WindowId, source: string, how: 'ocr' | 'hook' = 'ocr'): boolean =>
+    (!free || (open[id] && !quit)) &&
+    logState.sourceId === source &&
+    (how === 'hook' ? logState.input === 'hook' : logState.input !== 'hook' && logState.autoOcr)
   const started = deck || phase !== 'idle'
-  const reading = deck || (started && watching('game', GAME_SOURCE))
+  const reading = deck || (started && watching('game', GAME_SOURCE, hook ? 'hook' : 'ocr'))
   const running = onScreen && !reduced && userCursor === null && reading
   const playing = usePlayer(frames, running, onEnter, `${platform}:${run}`)
   const frame = reduced ? stillFrame(frames) : playing
@@ -322,7 +337,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
   phaseRef.current = phase
   const onLogEvent = (event: LogEvent): void => {
     if (event.type === 'state') {
-      setLogState({ sourceId: event.sourceId, autoOcr: event.autoOcr, overlay: event.overlay })
+      setLogState({ sourceId: event.sourceId, autoOcr: event.autoOcr, overlay: event.overlay, input: event.input ?? 'ocr' })
     } else if (event.type === 'unavailable') {
       setUnavailable(event.feature)
     } else if (event.type === 'interact') {
@@ -402,6 +417,8 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     return { x: r.left - dr.left + r.width * fx, y: r.top - dr.top + r.height * fy }
   }
 
+  const hookRef = useRef(hook)
+  hookRef.current = hook
   const steps = useRef({ pointInLog, pointOnDesk, front })
   steps.current = { pointInLog, pointOnDesk, front }
 
@@ -448,6 +465,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       } else el.click()
     }
     const windowEl = (id: WindowId): Element | null => deskRef.current?.querySelector(`[data-window="${id}"]`) ?? null
+    const hookFlow = hookRef.current
 
     void (async () => {
       const el = deskRef.current
@@ -473,7 +491,8 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       await press()
       tap(card.el, 'pointer')
       await wait(500)
-      const type = await findInLog('.src-type')
+      // OCR reads a window; the Text Hooker hooks one (its own submenu of the same windows).
+      const type = await findInLog('.src-type', (e) => /Text Hooker/.test(e.textContent ?? '') === hookFlow)
       await moveTo(type, 500)
       await press()
       tap(type.el, 'click')
@@ -483,12 +502,14 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       await press()
       tap(tile.el, 'click')
       await wait(900)
-      // 4. Auto OCR on.
-      const auto = await findInLog('button[role="switch"]', (e) => /Auto OCR/.test(e.textContent ?? ''))
-      await moveTo(auto, 750)
-      await press()
-      tap(auto.el, 'click')
-      await wait(600)
+      if (!hookFlow) {
+        // 4. Auto OCR on (the Text Hooker needs no switch: hooked, the game's lines just arrive).
+        const auto = await findInLog('button[role="switch"]', (e) => /Auto OCR/.test(e.getAttribute('aria-label') ?? e.textContent ?? ''))
+        await moveTo(auto, 750)
+        await press()
+        tap(auto.el, 'click')
+        await wait(600)
+      } else await wait(500)
       // 5. Back to the game: click its uncovered side to bring it forward, and read.
       await moveTo(onDesk(windowEl('game'), 0.22, 0.55), 800)
       await press(1, true)
@@ -501,7 +522,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
       setPhase('running')
     })
     return () => ctrl.abort()
-  }, [flow, phase, run])
+  }, [flow, phase, run, hook])
 
   // While the session plays, the pointer follows the word being looked up, else rests by the box.
   // A scripted lookup opens only once the pointer has reached its word (`arrived`).
@@ -566,11 +587,12 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
         userCursor={userCursor}
         onUserCursor={setUserCursor}
         overlay={overlay}
+        hook={hook}
       >
         {deck && <DeckHud frame={frame} />}
       </GameScreen>
     ),
-    [frame, shownFrame, deck, onScreen, userCursor, overlay]
+    [frame, shownFrame, deck, onScreen, userCursor, overlay, hook]
   )
 
   const placed = (id: WindowId): CSSProperties | undefined => {
@@ -601,7 +623,10 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
     front(id)
   }
   const close = (id: WindowId) => (free ? () => setOpen((o) => ({ ...o, [id]: false })) : undefined)
-  const logParams: Record<string, string> = flow ? { nosource: '1', auto: '0', sidebar: '1' } : { sidebar: free ? '1' : '0' }
+  // `demo` only tells the tabs apart, so switching between them loads the Log afresh.
+  const logParams: Record<string, string> = flow
+    ? { nosource: '1', auto: '0', sidebar: '1', demo: input }
+    : { sidebar: free ? '1' : '0', demo: input, ...(hook ? { input: 'hook' } : {}) }
   const showPlay = !deck && !reduced && phase === 'idle'
 
   return (
@@ -729,6 +754,7 @@ export function LiveDemo({ className = '', platform: chosen }: LiveDemoProps) {
                   {corner('egg')}
                 </div>
               )}
+              {flow && phase === 'running' && !retired && <ShiftKey down={shownFrame.popup && shownFrame.cursor !== null} />}
               {flow && (
                 <svg
                   aria-hidden="true"
@@ -786,6 +812,24 @@ function DesktopIcon({ id, label, icon, onOpen }: { id: string; label: string; i
         {label}
       </span>
     </button>
+  )
+}
+
+/**
+ * The scripted session's Shift key, bottom left: the app looks words up while Shift is held over
+ * them, so the demo shows it held for each lookup. Gone once the visitor takes over.
+ */
+function ShiftKey({ down }: { down: boolean }) {
+  return (
+    <div aria-hidden="true" className={`kd-shift pointer-events-none absolute bottom-4 left-5 z-[65] ${down ? 'kd-shift-down' : ''}`}>
+      <span className="kd-shift-cap">
+        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+          <path d="M9 18v-6H5l7-7 7 7h-4v6H9z" />
+        </svg>
+        Shift
+      </span>
+      <span className="kd-shift-label">Held to look up</span>
+    </div>
   )
 }
 

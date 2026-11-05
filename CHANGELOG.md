@@ -19,6 +19,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
+- **A Text Hooker source's card has an Anki crop button instead of Crop area.** The Text Hooker reads the game's text directly, so there's no OCR area to crop: **Anki crop** sets the part of the game your cards' screenshots show, straight away. It's there while Enhance Anki cards adds screenshots; otherwise Change source takes the card's whole width.
 - **Steam Deck Gaming Mode has a layout of its own.** Kimochi opens on a new Source tab that sets you up in three steps: choose your game and its crop area, check how it's read (Scan, Auto OCR, the OCR model and dictionary), then see how to switch back to your game and open the game menu. Settings is a tab too, everything is a quarter larger, and the sidebar, mini mode, keep-on-top, minimize and the Gaming Mode bar are gone. Kimochi no longer tries to switch to your game itself: Steam's own button does that properly.
 - **The overlay always shows in Steam Deck Gaming Mode, and only over your game.** Its highlight boxes disappear while Kimochi, Steam's menus or another game is in front, and come back when you return to the game; the Show overlay setting is gone there.
 - **Kimochi's windows no longer move focus with a controller.** Use touch, a mouse or the keyboard; on a Steam Deck, a controller press in Kimochi's window says to tap instead. The game menu and reading with the controller over a game are unchanged.
