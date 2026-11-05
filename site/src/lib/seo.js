@@ -46,7 +46,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-09',
-    updated: '2026-11-03'
+    updated: '2026-11-05'
   },
   {
     path: '/faq',
@@ -56,7 +56,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-21',
-    updated: '2026-11-03'
+    updated: '2026-11-05'
   },
   {
     path: '/compare',
@@ -76,7 +76,7 @@ export const ROUTES = [
     index: true,
     render: 'full',
     published: '2026-10-20',
-    updated: '2026-10-22'
+    updated: '2026-11-05'
   },
   {
     path: '/privacy',

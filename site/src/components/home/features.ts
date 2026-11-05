@@ -24,7 +24,7 @@ export interface Feature {
   docs?: string
   /**
    * A chip beside the title: `cloud` marks a Kimochi Cloud (paid) feature in the accent; `windows`
-   * and `deck` are quiet grey chips for a feature that is only on, or made for, that platform.
+   * ("Windows games") and `deck` are quiet grey chips for a feature made for that platform.
    */
   tag?: 'cloud' | 'windows' | 'deck'
   /** A link on this site instead of the docs link, e.g. to the plans. */
@@ -54,7 +54,7 @@ export const features: Feature[] = [
   {
     id: 'text-hooker',
     title: 'Text Hooker',
-    body: "Kimochi can read a game's text directly from the game. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game, ready to look up.",
+    body: "Kimochi can read a game's text directly from the game. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game, ready to look up. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
     Visual: TextHookerVisual,
     docs: '/reading/text-hooker/',
     tag: 'windows'

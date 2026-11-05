@@ -53,7 +53,7 @@ export const FAQ = [
     id: 'platforms',
     q: 'Which platforms does Kimochi run on?',
     a: [
-      'As of October 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature, and Steam Deck Gaming Mode is in early testing. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
+      'As of November 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck, with a layout made for the Deck’s screen and reading by controller over your game. macOS support is the most mature. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
     ],
     links: [
       { href: '/download/linux', label: 'Installing on Linux and Steam Deck' },
@@ -93,11 +93,11 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. On Windows, Kimochi’s built-in Text Hooker can read a game’s text straight from the game. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. Kimochi’s built-in Text Hooker can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
-      { href: docsUrl('/reading/text-hooker/'), label: 'Text Hooker (Windows)' },
+      { href: docsUrl('/reading/text-hooker/'), label: 'Text Hooker' },
       { href: docsUrl('/reading/texthookers/'), label: 'Texthookers' }
     ]
   },
@@ -120,7 +120,7 @@ export const FAQ = [
     id: 'controller',
     q: 'Can I use Kimochi with a controller or on the Steam Deck?',
     a: [
-      'Yes, though Steam Deck support is early. In Gaming Mode, click both sticks (L3 + R3) to scan, step to a word with the D-pad to see its dictionary entry, and press B to go back to the game. The dictionary can also fill the screen, which is easier to read on a TV or handheld.'
+      'Yes. In Steam Deck Gaming Mode, press R4 (the upper right back button) to open Kimochi’s controller menu and scan, step to a word with the D-pad to see its dictionary entry, and press B to go back to the game. With another controller, click both sticks (L3 + R3) to open the menu. The dictionary can also fill the screen, which is easier to read on a TV or handheld.'
     ],
     links: [{ href: docsUrl('/controller/'), label: 'Controller and Gaming Mode' }]
   },

@@ -385,7 +385,7 @@ export function DownloadLinux() {
               <p>
                 You can keep using Kimochi in Desktop Mode. Or double-click{' '}
                 <strong className="font-medium text-ink">Return to Gaming Mode</strong> on the desktop and launch
-                Kimochi from your library. It runs alongside your game: click both sticks to open its radial menu.
+                Kimochi from your library. It runs alongside your game: press R4 (the upper right back button) to open its radial menu.
               </p>
             </Step>
           </Steps>

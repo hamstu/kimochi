@@ -54,7 +54,7 @@ function FeatureTag({ tag }: { tag: NonNullable<Feature['tag']> }) {
   return (
     <span className={`${CHIP} bg-hover text-ink-2`}>
       {tag === 'windows' ? <WindowsMark className="size-3" /> : <DeckMark className="size-3.5" />}
-      {tag === 'windows' ? 'Windows only' : 'Steam Deck'}
+      {tag === 'windows' ? 'Windows games' : 'Steam Deck'}
     </span>
   )
 }
