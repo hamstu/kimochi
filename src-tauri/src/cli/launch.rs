@@ -11,7 +11,28 @@ pub fn app_executable() -> Option<PathBuf> {
         return Some(image);
     }
     let exe = std::env::current_exe().ok()?;
-    Some(std::fs::canonicalize(&exe).unwrap_or(exe))
+    Some(plain(std::fs::canonicalize(&exe).unwrap_or(exe)))
+}
+
+/// Windows' `canonicalize` gives `\\?\C:\…` paths; the shim, the shell and the reader want
+/// `C:\…`. A UNC path (`\\?\UNC\…`) is left as it is.
+fn plain(path: PathBuf) -> PathBuf {
+    match path.to_str().and_then(|p| p.strip_prefix(r"\\?\")) {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => path,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verbatim_drive_paths_become_plain() {
+        assert_eq!(plain(PathBuf::from(r"\\?\C:\Kimochi\kimochi.exe")), PathBuf::from(r"C:\Kimochi\kimochi.exe"));
+        assert_eq!(plain(PathBuf::from(r"\\?\UNC\server\share\k.exe")), PathBuf::from(r"\\?\UNC\server\share\k.exe"));
+        assert_eq!(plain(PathBuf::from("/usr/bin/kimochi")), PathBuf::from("/usr/bin/kimochi"));
+    }
 }
 
 /// The `.app` bundle this executable is inside, if any (a development build has none).

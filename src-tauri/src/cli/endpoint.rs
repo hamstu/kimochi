@@ -34,6 +34,7 @@ fn file_name(flavor: &str) -> &'static str {
 
 /// The app's data folder, as Tauri's `app_data_dir()` names it, without an app to ask.
 pub fn data_dir() -> Option<PathBuf> {
+    #[cfg(not(target_os = "windows"))]
     let home = || std::env::var_os("HOME").map(PathBuf::from);
     #[cfg(target_os = "macos")]
     let base = home().map(|h| h.join("Library/Application Support"));

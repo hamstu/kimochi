@@ -289,15 +289,15 @@ pub fn status() -> Result<Status, String> {
     let text = std::fs::read_to_string(&file).ok();
     let present = text.as_deref().is_some_and(|t| t.contains(SHIM_MARK));
     let current = text.as_deref() == Some(shim(&target).as_str());
-    let on_path = path_has(&user_path(), &dir);
-    let installed = current && on_path;
+    let on_user_path = path_has(&user_path(), &dir);
+    let installed = current && on_user_path;
     // This process's PATH predates the install, as an open terminal's does.
     let note = if installed && !on_path(&dir) {
         Some("Open a new terminal to use it: one that was already open still has the old PATH.".to_string())
     } else {
         None
     };
-    Ok(Status { installed, built_in: false, stale: present && !installed, path: Some(file), target: Some(target), on_path, note })
+    Ok(Status { installed, built_in: false, stale: present && !installed, path: Some(file), target: Some(target), on_path: on_user_path, note })
 }
 
 #[cfg(windows)]
