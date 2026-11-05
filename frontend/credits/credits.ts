@@ -86,14 +86,14 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
       {
         id: '10ten-japanese-reader',
         name: '10ten Japanese Reader',
-        role: 'Pop-up dictionary, run unmodified from its own release',
+        role: 'Simple and clean pop-up dictionary',
         license: 'GPL-3.0',
         url: 'https://github.com/birchill/10ten-ja-reader'
       },
       {
         id: 'jitendex',
         name: 'Jitendex',
-        role: 'The dictionary the setup offers for Yomitan',
+        role: 'The initial dictionary we offer for Yomitan in the app.',
         license: 'CC BY-SA 4.0',
         url: 'https://jitendex.org'
       },
@@ -141,7 +141,7 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
       {
         id: 'owocr',
         name: 'owocr',
-        role: 'The Google Lens engine is ported from it',
+        role: 'Our Google Lens engine is ported from it',
         license: 'GPL-3.0',
         url: 'https://github.com/AuroraWright/owocr'
       },
@@ -161,14 +161,14 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
       {
         id: 'lunahook',
         name: 'LunaHook',
-        role: 'The Text Hooker, from LunaTranslator: downloaded on first use, run unmodified',
+        role: 'The Text Hooker, from LunaTranslator.',
         license: 'GPL-3.0',
         url: 'https://github.com/HIllya51/LunaTranslator'
       },
       {
         id: 'textractor',
         name: 'Textractor',
-        role: 'The Text Hooker’s fallback, downloaded on first use, run unmodified',
+        role: 'The Text Hooker’s fallback',
         license: 'GPL-3.0',
         url: 'https://github.com/Artikash/Textractor'
       }
@@ -222,7 +222,7 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
       {
         id: 'gamesentenceminer',
         name: 'GameSentenceMiner',
-        role: 'Automatic OCR, reading games with a controller, and sentence audio',
+        role: 'An incredibly full-featured app for all things Japanese learning/mining/OCR and more.',
         license: 'GPL-3.0',
         url: 'https://github.com/bpwhelan/GameSentenceMiner'
       },
@@ -242,21 +242,21 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
       {
         id: 'tauri',
         name: 'Tauri',
-        role: 'The native shell: windows, menus, tray and updates',
+        role: "The app's foundation: windows, menus, tray and updates",
         license: 'MIT / Apache-2.0',
         url: 'https://tauri.app'
       },
       {
         id: 'rust',
         name: 'Rust',
-        role: 'Capture, OCR and everything native, with many crates from crates.io',
+        role: 'The engine. Handles capture, OCR and everything native.',
         license: 'MIT / Apache-2.0',
         url: 'https://www.rust-lang.org'
       },
       {
         id: 'react',
         name: 'React',
-        role: 'Every window’s interface',
+        role: "The main app's interface.",
         license: 'MIT',
         url: 'https://react.dev'
       },
