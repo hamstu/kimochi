@@ -24,9 +24,9 @@ export function AboutMe() {
             Hey, I’m Hamish.
           </h2>
           <div className="mt-8 flex flex-col gap-4 text-lede text-white/85">
-            <p>I’m just a dude with a family, a day job, and a long-time love of Japanese that I chip away at on the side, mostly through Anime, Manga, and Games. 🎮</p>
-            <p>Kimochi started as the tool I wanted for myself: something clean and simple that reads the game for me, gets out of the way, and lets me look up the word I’m stuck on without breaking the flow.</p>
-            <p>It’s made out of love. If it helps you read a little more Japanese, that’s the whole point. 頑張って!</p>
+            <p>I’m just a dude with a family, a day job, and a long-time love of Japanese that I chip away at on the side, mostly through anime, manga, and games. 🎮</p>
+            <p>Kimochi started as the tool I wanted for myself: something clean and simple that would let me game easily in Japanese, while still being able to use the awesome browser dictionary tools, like Yomitan, to look up words.</p>
+            <p>It’s made out of love. I hope it helps you read a little more Japanese, since, well, that’s the whole point. 頑張って!</p>
           </div>
           <a
             href={DISCORD_URL}
