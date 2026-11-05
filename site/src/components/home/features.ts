@@ -38,6 +38,13 @@ export interface Feature {
  */
 export const features: Feature[] = [
   {
+    id: 'engines',
+    title: 'Lightning fast OCR',
+    body: "Fast, with plenty of options. Pick the OCR engine that suits what you're reading: quick on-device models like MeikiOCR and PaddleOCR, Manga OCR for manga, the ones built into Windows and macOS, or Google Lens online.",
+    Visual: EnginesVisual,
+    docs: '/reading/ocr-engines/'
+  },
+  {
     id: 'overlay',
     title: 'Cross Platform Overlay',
     body: "When the overlay is on, you'll be able to hover directly over the words in your game, app, YouTube video, manga, or anything else on your screen.",
@@ -47,7 +54,7 @@ export const features: Feature[] = [
   {
     id: 'text-hooker',
     title: 'Text Hooker',
-    body: "Kimochi can read a game's text straight from the game, no OCR needed. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game, ready to look up.",
+    body: "Kimochi can read a game's text directly from the game. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game, ready to look up.",
     Visual: TextHookerVisual,
     docs: '/reading/text-hooker/',
     tag: 'windows'
@@ -86,13 +93,6 @@ export const features: Feature[] = [
     body: 'I built this one for myself, especially! Select some text from the log to add characters, places or terms to a shared notebook. Link images and notes, too. Kimochi then highlights it as clickable in your log for easy remembering.',
     Visual: NotebookVisual,
     docs: '/log/notebook/'
-  },
-  {
-    id: 'engines',
-    title: 'OCR engines',
-    body: "Kimochi gives you complete control over choosing the OCR engine and provides several options depending on what you're doing (e.g., if you prefer Cloud vs. Local).",
-    Visual: EnginesVisual,
-    docs: '/reading/ocr-engines/'
   },
   {
     id: 'texthookers',
