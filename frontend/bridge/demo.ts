@@ -7,3 +7,11 @@ export function demoStops(feature: string): boolean {
   const stop = (window as { __kimochiDemoStop?: (feature: string) => boolean }).__kimochiDemoStop
   return stop?.(feature) ?? false
 }
+
+/**
+ * Whether this is the marketing site's live demo, for what it should not show at all (such as
+ * Help, whose forms would send real messages). Set up before the app renders. Always false in the app.
+ */
+export function inDemo(): boolean {
+  return typeof (window as { __kimochiDemoStop?: unknown }).__kimochiDemoStop === 'function'
+}

@@ -37,7 +37,7 @@ import '../panels/settings-panel.css'
 import { GamingSourceView } from './GamingSourceView'
 import { useBehindGame } from './useBehindGame'
 import { panel } from '../bridge/tauri'
-import { demoStops } from '../bridge/demo'
+import { demoStops, inDemo } from '../bridge/demo'
 import './main.css'
 import { BootReady, rememberBootShape } from '../entries/boot'
 
@@ -222,11 +222,12 @@ export default function MainPanel(): JSX.Element {
             <KimochiLogo size={16} />
             <span>Kimochi</span>
           </span>
-          <Tooltip content="Help">
+          {/* Not on the site's demo: its forms would send real reports. */}
+          {!inDemo() && <Tooltip content="Help">
             <IconButton label="Help" size="sm" className="main-help" onClick={() => setHelp(true)}>
               <CircleHelp />
             </IconButton>
-          </Tooltip>
+          </Tooltip>}
         </TitleBarPortal>
         {miniError && <div role="alert" className="native-panel-error" onClick={() => setMiniError(null)}>{miniError}</div>}
         <div className="main-frame">
@@ -296,7 +297,7 @@ export default function MainPanel(): JSX.Element {
           </div>
         </div>
         <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
-        <HelpDialog open={help} onOpenChange={setHelp} />
+        {!inDemo() && <HelpDialog open={help} onOpenChange={setHelp} />}
         <BootReady label="log" />
       </LogActionsProvider>
     </ReaderHost>
