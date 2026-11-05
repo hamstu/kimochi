@@ -13,49 +13,38 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- ⭐ **Text Hooker on Linux and Steam Deck.** Windows games running through Proton or Wine can now be hooked on Linux, including in Steam Deck Gaming Mode: choose **Text Hooker** and pick the game, and Kimochi reads its text from inside the game as it does on Windows (LunaHook downloads the first time). Native Linux games can't be hooked; keep using OCR for those.
-- **The Text Hooker's settings are in the controller menu.** While you're hooking a game, the menu has a **Text Hooker** item: pick which of the game's text is the dialogue (as in the sidebar, with what the hook is doing while it works), show or hide the card, move and resize it with the sticks, and change Auto align, its text size, its background's opacity and its look (light, dark or blend) without going back to Kimochi. Before the first line arrives, the card shows an example so you can set it up. In Steam Deck Gaming Mode the card is just the text, without the bar and buttons you can't reach there.
-- **You can hide the Text Hooker card.** Turn off **Show the card over the game** in Settings → Text Hooker (or from the controller menu's **Card**): lines still reach the Log, Read along still shows the line while you read, and Auto align stops reading the screen in the background.
+- ⭐ **Text Hooker on Linux and Steam Deck.** Windows games running through Proton or Wine can now be hooked, in Gaming Mode too, just as on Windows. Native Linux games still use OCR.
+- **Text Hooker settings in the controller menu.** Choose the dialogue text, and show, move, resize and style the card without leaving the game.
+- **Hide the Text Hooker card** with **Show the card over the game** in Settings → Text Hooker. Lines still reach the Log.
 
 ### Changed
 
-- **A Text Hooker source's card has an Anki crop button instead of Crop area.** The Text Hooker reads the game's text directly, so there's no OCR area to crop: **Anki crop** sets the part of the game your cards' screenshots show, straight away. It's there while Enhance Anki cards adds screenshots; otherwise Change source takes the card's whole width.
-- **Steam Deck Gaming Mode has a layout of its own.** Kimochi opens on a new Source tab that sets you up in three steps: choose your game and its crop area, check how it's read (Scan, Auto OCR, the OCR model and dictionary), then see how to switch back to your game and open the game menu. Settings is a tab too, everything is a quarter larger, and the sidebar, mini mode, keep-on-top, minimize and the Gaming Mode bar are gone. Kimochi no longer tries to switch to your game itself: Steam's own button does that properly.
-- **The overlay always shows in Steam Deck Gaming Mode, and only over your game.** Its highlight boxes disappear while Kimochi, Steam's menus or another game is in front, and come back when you return to the game; the Show overlay setting is gone there.
-- **Kimochi's windows no longer move focus with a controller.** Use touch, a mouse or the keyboard; on a Steam Deck, a controller press in Kimochi's window says to tap instead. The game menu and reading with the controller over a game are unchanged.
-- **Kimochi opens faster**, and opens cleanly: the main window appears sooner, already in your theme's colours and laid out like the app (no more blank grey window), and your Log is there as soon as it's loaded instead of after a "Loading the log…" screen. The overlay, the dictionary pop-up and the tray follow a moment later, without holding up the window.
-- **Hachidori and 10ten look words up much faster**, in the Log and over the game: an entry now shows a few milliseconds after you hover a word, instead of a few dozen, so sweeping across a line with Shift held keeps up with the mouse. Hachidori's pop-up no longer flashes nearly empty between words: it shows a word's first few entries in full straight away. On the overlay, the pointer is also followed twice as often while Shift is held.
-- **The Yomitan API pop-up opens sooner**: a word's entries are fetched as soon as Kimochi finds the word under the pointer, and the next word along the line is fetched ahead, so moving along a sentence opens each word without waiting; going back to a word shows it at once. Built-in Yomitan's lookups in the Log also reach the dictionary and its pop-up faster.
-- **The Linux installer no longer offers nightly builds**, which no longer exist: `--nightly` (or `KIMOCHI_CHANNEL=nightly`) now stops with a message instead of installing an old development build. Run it without the option to get the latest release.
-- **Steam Deck Gaming Mode: Kimochi uses about half the CPU while you play.** Kimochi's window kept animating behind the game (the source preview's loading shimmer and the Auto OCR dot) as if you could see it; those animations now pause until you open Kimochi again.
-- **Auto OCR uses far less CPU while you read a line.** A blinking ▼ or cursor next to the dialogue made it re-read the same text about twice a second for as long as the line stayed up; it now remembers what it read on each blink state, so a still line costs almost nothing. This applies on every platform; on a Steam Deck, Kimochi's CPU use while you read a line dropped from over half a CPU core to about a tenth of one.
-- **Kimochi uses much less memory after you change OCR engine.** The engines you switched away from (Manga OCR's alone can take over 2 GB) stayed loaded until you quit; now only the ones you use stay, and one you choose again loads on its first scan.
-- **Settings → About now credits LunaHook and Textractor**, the text hookers behind the Text Hooker, and every project in the acknowledgements shows its logo (or a fitting emoji).
+- **Faster startup.** The main window appears sooner, already in your theme, with your Log ready.
+- **Faster dictionary lookups.** Hachidori, 10ten and the Yomitan API pop-ups load quicker.
+- **Less CPU and memory.** Auto OCR no longer keeps re-reading a line with a blinking ▼ or cursor, and OCR engines you switch away from are unloaded.
+- **Anki crop on the Text Hooker card**, in place of Crop area, to set what your cards' screenshots show.
+- **No controller navigation in Kimochi's windows.** Use touch, a mouse or the keyboard; reading over a game with the controller is unchanged.
+- **Settings → About** now credits LunaHook and Textractor, with a logo for every project.
+- **Steam Deck Gaming Mode**
+  - Steam Deck gets an adjusted UI; a new Source tab sets you up in three steps (choose your game, check how it's read, get back to playing). The UI is scaled up for readability.
+  - Kimochi uses much less CPU while you play.
 
 ### Fixed
 
-- **The controller menu opens over the Text Hooker card** instead of underneath it.
-- **Recent text in the controller menu matches the Log.** It lists the Log's newest lines, whatever they came from (the Text Hooker, the clipboard, a WebSocket or OCR), instead of only scans.
-- **Steam Deck: menus open on every tap.** The session picker and the ⋯ menu under the Log often ignored a tap; they now open as soon as your finger lifts. A long press no longer opens a right-click menu that left Kimochi untappable.
-- **Steam Deck Gaming Mode: the hint under the text tells you how to read it.** It used to say to hold Shift, which a Deck doesn't have, in text too small to read; it now names the button that opens the game menu, at a size you can read on the Deck, and goes away once you've opened the menu.
-- **Steam Deck Gaming Mode: Kimochi follows the game you switch to.** With two games running, switching between them through Steam left Kimochi reading the first one, so Scan and Auto OCR showed the other game's text over the one you were playing. It now reads the game in front, with that game's own crop area.
-- **Kimochi no longer crashes as it quits while Auto OCR is reading the screen.** Quitting at the moment Auto OCR was reading a line could end in a crash report instead of a clean exit (seen on Steam Deck); Kimochi now lets that read finish first.
-- **Auto OCR works with Google Lens and Manga OCR on Windows and Linux again.** It was trying to watch the screen with Apple Live Text, which only exists on a Mac, and said "Auto-scan unavailable"; it now watches with PaddleOCR, MeikiOCR or OneOCR, whichever you have.
-- **On Linux with GNOME, Kimochi's windows take clicks again after you look a word up.** The overlay over the game kept taking every click on the screen for a few seconds at a time, so tabs and buttons in the Log, or anything else on the desktop, often did nothing.
-- **On Linux with GNOME, scanning your whole screen no longer reads Kimochi itself.** Lines from the Log (and Settings) came back as new lines in the Log; Kimochi's windows are now left out of the picture wherever they are on screen.
-- **On Linux with GNOME, a new crop area is the one that's saved.** The crop editor could open twice on top of itself, and pressing Enter then sometimes saved your old crop instead of the one you'd just drawn.
-- On Linux, Yomitan's pop-up uses Kimochi's fonts unless you chose one in Yomitan's settings, as it was meant to.
-- **Settings → About → Copy debug info works on Linux.** It showed "The request is not allowed by the user agent…" instead of copying the report.
-- **Linux (Wayland): scanned text shows over the game again after Kimochi starts or you switch dictionaries.** The overlay could stay hidden, with nothing to hover or look up, until you opened the crop editor.
-- **Linux (Wayland): Hachidori looks words up over the game.** Holding Shift over scanned text now opens Hachidori's pop-up, as it already did for Yomitan.
-- **Linux (Wayland): 10ten looks words up over the game.** Holding Shift over scanned text did nothing with 10ten; its pop-up now opens as with the other dictionaries.
-- **Manga OCR reads a game's long horizontal lines whole.** A dialogue line could come back with a stray character or a repeated one where the line was cut, or with its halves swapped.
-- **Linux (Hyprland): a shared window is named after its app**, with its icon, instead of "Shared window", and each game keeps its own crop area. Before, every window you shared on Hyprland used the last one's crop.
-- **Linux AppImage: Kimochi's sounds play again.** The AppImage was missing two audio components, so its sounds failed to load.
-
-### Fixed
-
-- **Sentence audio no longer disappears from a line you stayed on**: a line whose audio was found could lose it when you read the next line more than half a minute later, and its card then got no audio. The line keeps its clip.
+- **Sentence audio** no longer goes missing from a line later on.
+- **No crash on quit** while Auto OCR is reading the screen.
+- **Manga OCR** reads a game's long horizontal lines whole.
+- **The controller menu** opens above the Text Hooker card, and its Recent text matches the Log.
+- **Windows and Linux**
+  - Auto OCR works with Google Lens and Manga OCR again.
+- **Linux**
+  - Wayland: scanned text shows over the game reliably, and Hachidori and 10ten look words up there.
+  - GNOME: the overlay no longer blocks clicks on the desktop, scanning the whole screen no longer reads Kimochi itself, and the crop editor saves the crop you just drew.
+  - Hyprland: a shared window shows its app's name and icon, and each game keeps its own crop.
+  - The AppImage plays sounds again, Copy debug info works, and Yomitan's pop-up uses Kimochi's fonts.
+- **Steam Deck Gaming Mode**
+  - Kimochi follows the game you switch to, with that game's own crop.
+  - Other misc. fixes and improvements.
 
 ## [0.5.0] - 2026-11-03
 
