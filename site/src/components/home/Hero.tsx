@@ -53,7 +53,7 @@ export function Hero() {
         <h1 className="mt-5 max-w-[18ch] text-display text-ink">Read and play in Japanese.</h1>
         <p className="mt-6 max-w-[44rem] text-lede text-ink-2">
           Kimochi is a free, open-source desktop app for Japanese learners. It reads the Japanese in
-          your games, visual novels, manga and videos with OCR, so you can hover any word to look it
+          your games, visual novels, manga and videos directly, or with OCR, so you can hover any word to look it
           up in your favorite dictionary and make flash cards for Anki.
         </p>
         {/* The demo's Easter egg scrolls back here (#get-kimochi). */}
