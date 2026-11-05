@@ -1,4 +1,4 @@
-/** Help → Report a bug: the form's checks before it sends (ui/bug-report.ts). */
+/** Help → Report a bug / Request a feature: the forms' checks before they send (ui/bug-report.ts). */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
@@ -19,6 +19,13 @@ test('each missing or wrong field is named, first one first', () => {
   assert.match(draftProblem({ ...good, description: ' broken   ' }), /more detail/)
   assert.match(draftProblem({ ...good, description: 'x'.repeat(5001) }), /5,000/)
   assert.match(draftProblem({ ...EMPTY_DRAFT }), /name/)
+})
+
+test('a feature request checks its own text, not the bug description', () => {
+  const idea = { ...good, description: '', idea: 'Vertical text in the overlay, please.' }
+  assert.equal(draftProblem(idea, 'feature'), null)
+  assert.match(draftProblem(idea, 'bug'), /the problem/)
+  assert.match(draftProblem({ ...idea, idea: 'short' }, 'feature'), /your idea/)
 })
 
 test('debug data is attached unless turned off', () => {

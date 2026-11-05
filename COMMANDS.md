@@ -1201,21 +1201,23 @@ Every `evidence.jsonl` record carries `at` (Unix ms), and the file is rotated to
 
 ## Bug reports
 
-Help (the ? in the main window's title bar, `frontend/main/HelpDialog.tsx`) → Report a bug
-(`src-tauri/src/bug_report.rs`).
+Help (the ? in the main window's title bar, `frontend/main/HelpDialog.tsx`) → Report a bug or
+Request a feature (`src-tauri/src/bug_report.rs`).
 
 | Command | Signature |
 | --- | --- |
-| `bug_report_send` | `(report: {name, email, description, debugMarkdown?}) -> {id}` |
+| `bug_report_send` | `(report: {kind?, name, email, description, debugMarkdown?}) -> {id}` |
 
 Posts `multipart/form-data` to `<server>/api/v1/bug-reports` (kimochi-server `API.md` → Bug
-reports): `name`, `email`, `description`, `appVersion`, `platform` (`<os> <arch>`, plus
+reports): `kind` (`bug`, the default, or `feature`), `name`, `email`, `description`, `appVersion`, `platform` (`<os> <arch>`, plus
 `(Steam Deck Gaming Mode)` there) and, when `debugMarkdown` is given, `debug`: the same zip as
-`debug_bundle_save` (`debug_report::bundle`), built in memory. The active account's token goes
+`debug_bundle_save` (`debug_report::bundle`), built in memory (bugs only; a feature request
+never sends one). The active account's token goes
 along when there is one, so the report names the account; none is needed. The server emails the
 report to the maintainer with Reply-To the reporter, and answers `{id}` (a reference like
-`KB-7F3K2Q`). A refusal (a field, the rate limit, a debug zip it can't verify) or no connection
+`KB-7F3K2Q`, `KF-` for a feature request). A refusal (a field, the rate limit, a debug zip it can't verify) or no connection
 rejects with a sentence for the reporter, the server's own `message` when it sent one.
+
 ## Yomitan API setup
 
 The Yomitan API engine (`popupType: 'custom-api'`) looks words up through the Yomitan in the

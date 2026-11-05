@@ -13,7 +13,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **Help button.** The ? in the title bar takes you to the Discord, or lets you report a bug from inside Kimochi, with debug data attached so it's easier to fix.
+- **Help button.** The ? in the title bar takes you to the Discord, lets you request a feature, or lets you report a bug from inside Kimochi, with debug data attached so it's easier to fix.
 
 ## [0.6.0] - 2026-11-04
 

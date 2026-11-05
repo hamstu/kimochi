@@ -1,4 +1,4 @@
-/* Help (HelpDialog.tsx): the choice of Discord or a bug report, the report form, the thank-you. */
+/* Help (HelpDialog.tsx): the choice of Discord, a bug report or a feature request, the forms, the thank-you. */
 .help.k-dialog {
   width: min(32rem, calc(100vw - 2rem));
   max-width: none;
@@ -12,7 +12,7 @@
   margin-left: calc(-1 * var(--k-space-2));
 }
 
-/* The two ways to get help: rows you press, each with an icon tile and where it goes. */
+/* The ways to get help: rows you press, each with an icon tile and where it goes. */
 .help-choices {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
-//! Help → Submit a bug report: sends the reporter's name, email and description, and the debug
-//! bundle when they leave "Attach debug data" on, to the Kimochi server
+//! Help → Report a bug / Request a feature: sends the reporter's name, email and description, and
+//! (bugs only) the debug bundle when they leave "Attach debug data" on, to the Kimochi server
 //! (`POST /api/v1/bug-reports`, kimochi-server API.md → Bug reports), which emails it to the
 //! maintainer with Reply-To the reporter. No account needed; a signed-in account's token goes
 //! along so the report names the account.
@@ -15,6 +15,8 @@ const MAX_BUNDLE: usize = 5 * 1024 * 1024;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BugReport {
+    /// `bug` (the default) or `feature`; the server refuses anything else.
+    kind: Option<String>,
     name: String,
     email: String,
     description: String,
@@ -47,13 +49,15 @@ fn platform() -> String {
 fn send(app: &tauri::AppHandle, service: &Shared, report: BugReport) -> Result<Value, String> {
     use reqwest::blocking::multipart::{Form, Part};
     let base = crate::account::base()?;
+    let kind = report.kind.unwrap_or_else(|| "bug".into());
     let mut form = Form::new()
+        .text("kind", kind.clone())
         .text("name", report.name.trim().to_string())
         .text("email", report.email.trim().to_string())
         .text("description", report.description.trim().to_string())
         .text("appVersion", app.package_info().version.to_string())
         .text("platform", platform());
-    if let Some(markdown) = report.debug_markdown {
+    if let Some(markdown) = report.debug_markdown.filter(|_| kind == "bug") {
         let zip = crate::debug_report::bundle(app, service, &markdown)?;
         if zip.len() > MAX_BUNDLE {
             return Err("native: The debug data is too large to send. Turn off Attach debug data and send the report without it.".into());

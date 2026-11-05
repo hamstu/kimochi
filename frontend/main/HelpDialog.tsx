@@ -1,23 +1,54 @@
 /**
- * Help: the title bar's ? button opens this. Two ways to get help: the Discord, or a bug report
- * sent from here (`sendBugReport`; native posts it with the debug bundle to the Kimochi server,
- * which emails it to the maintainer). Three steps in one dialog: the choice, the form (with Back),
- * and a thank-you whose Done returns to the choice. The form keeps what was typed until it is
- * sent, so Back or closing the dialog loses nothing.
+ * Help: the title bar's ? button opens this. Three ways to get help: the Discord, a bug report or
+ * a feature request sent from here (`sendBugReport`; native posts it, a bug with the debug bundle,
+ * to the Kimochi server, which emails it to the maintainer). Three steps in one dialog: the
+ * choice, a form (with Back), and a thank-you whose Done returns to the choice. The forms keep
+ * what was typed until it is sent, so Back or closing the dialog loses nothing.
  */
 import { useEffect, useId, useState, type Dispatch, type FormEvent, type JSX, type ReactNode, type SetStateAction } from 'react'
-import { ArrowLeft, Bug, ChevronRight, CircleCheck, ExternalLink, MessagesSquare } from 'lucide-react'
+import { ArrowLeft, Bug, ChevronRight, CircleCheck, ExternalLink, Lightbulb, MessagesSquare } from 'lucide-react'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { Button, Callout, Checkbox, Dialog, DialogClose, DialogContent, IconButton, Input, Spinner, Textarea } from '@kit'
 import { debugMarkdown } from '@ui/debug-report'
-import { DISCORD_URL, EMPTY_DRAFT, MAX_DESCRIPTION, draftProblem, type BugReportDraft as Draft } from '@ui/bug-report'
+import {
+  DISCORD_URL,
+  EMPTY_DRAFT,
+  MAX_DESCRIPTION,
+  draftProblem,
+  draftText,
+  type BugReportDraft as Draft,
+  type ReportKind
+} from '@ui/bug-report'
 import { useAccount } from '../bridge/account'
 import { debugReport } from '../bridge/debugReport'
 import { sendBugReport } from '../bridge/bugReport'
 import { nativeError } from '../bridge/tauri'
 import './help.css'
 
-type Step = 'menu' | 'report' | 'sent'
+type Step = 'menu' | ReportKind | 'sent'
+
+/** What differs between the two forms. */
+const FORMS: Record<
+  ReportKind,
+  { title: string; label: string; placeholder: string; send: string; sent: string; text: 'description' | 'idea' }
+> = {
+  bug: {
+    title: 'Report a bug',
+    label: 'What happened?',
+    placeholder: 'What were you doing, what did you expect, and what happened instead?',
+    send: 'Send report',
+    sent: 'Report sent',
+    text: 'description'
+  },
+  feature: {
+    title: 'Request a feature',
+    label: 'What would you like?',
+    placeholder: 'What would you like Kimochi to do, and how would it help you?',
+    send: 'Send request',
+    sent: 'Request sent',
+    text: 'idea'
+  }
+}
 
 function Choice({
   icon,
@@ -55,17 +86,20 @@ function Field({ label, hint, children, id }: { label: string; hint?: string; ch
 }
 
 function ReportForm({
+  kind,
   draft,
   onDraft,
   onBack,
   onSent
 }: {
+  kind: ReportKind
   draft: Draft
   onDraft: (draft: Draft) => void
   onBack: () => void
   onSent: (id: string | null) => void
 }): JSX.Element {
   const ids = useId()
+  const form = FORMS[kind]
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The first empty field takes focus as the form appears (it replaces the choice in an open dialog).
@@ -82,7 +116,7 @@ function ReportForm({
   const submit = async (event?: FormEvent): Promise<void> => {
     event?.preventDefault()
     if (busy) return
-    const problem = draftProblem(draft)
+    const problem = draftProblem(draft, kind)
     if (problem) {
       setError(problem)
       return
@@ -90,11 +124,12 @@ function ReportForm({
     setBusy(true)
     setError(null)
     try {
-      const markdown = draft.attachDebug ? debugMarkdown(await debugReport()) : undefined
+      const markdown = kind === 'bug' && draft.attachDebug ? debugMarkdown(await debugReport()) : undefined
       const { id } = await sendBugReport({
+        kind,
         name: draft.name.trim(),
         email: draft.email.trim(),
-        description: draft.description.trim(),
+        description: draftText(draft, kind).trim(),
         debugMarkdown: markdown
       })
       onSent(id)
@@ -113,7 +148,7 @@ function ReportForm({
           <IconButton label="Back" size="sm" onClick={onBack} disabled={busy}>
             <ArrowLeft />
           </IconButton>
-          Report a bug
+          {form.title}
         </span>
       }
       // Sending can't be cancelled; keep the dialog until it answers.
@@ -122,7 +157,7 @@ function ReportForm({
       footer={
         <Button variant="primary" onClick={() => void submit()} disabled={busy}>
           {busy ? <Spinner label="Sending" /> : null}
-          {busy ? 'Sending…' : 'Send report'}
+          {busy ? 'Sending…' : form.send}
         </Button>
       }
     >
@@ -150,32 +185,34 @@ function ReportForm({
             />
           </Field>
         </div>
-        <Field label="What happened?" id={`${ids}-description`}>
+        <Field label={form.label} id={`${ids}-description`}>
           <Textarea
             id={`${ids}-description`}
             className="help-description"
-            value={draft.description}
-            onChange={(event) => set({ description: event.target.value })}
-            placeholder="What were you doing, what did you expect, and what happened instead?"
+            value={draftText(draft, kind)}
+            onChange={(event) => set({ [form.text]: event.target.value })}
+            placeholder={form.placeholder}
             maxLength={MAX_DESCRIPTION}
             spellCheck
             disabled={busy}
           />
         </Field>
-        <label className="help-attach">
-          <Checkbox
-            checked={draft.attachDebug}
-            onCheckedChange={(checked) => set({ attachDebug: checked === true })}
-            disabled={busy}
-          />
-          <span className="help-attach-text">
-            <span className="help-attach-title">Attach debug data</span>
-            <span className="help-hint">
-              Your Kimochi version, system, settings and recent logs, with personal details removed. It makes the
-              problem much easier to track down.
+        {kind === 'bug' && (
+          <label className="help-attach">
+            <Checkbox
+              checked={draft.attachDebug}
+              onCheckedChange={(checked) => set({ attachDebug: checked === true })}
+              disabled={busy}
+            />
+            <span className="help-attach-text">
+              <span className="help-attach-title">Attach debug data</span>
+              <span className="help-hint">
+                Your Kimochi version, system, settings and recent logs, with personal details removed. It makes the
+                problem much easier to track down.
+              </span>
             </span>
-          </span>
-        </label>
+          </label>
+        )}
         {error && <Callout tone="danger">{error}</Callout>}
       </form>
     </DialogContent>
@@ -193,7 +230,7 @@ function HelpContent({
 }): JSX.Element {
   const account = useAccount()
   const [step, setStep] = useState<Step>('menu')
-  const [sent, setSent] = useState<{ id: string | null; email: string } | null>(null)
+  const [sent, setSent] = useState<{ id: string | null; email: string; kind: ReportKind } | null>(null)
 
   // A signed-in account fills in who's reporting; anything already typed stays.
   useEffect(() => {
@@ -206,16 +243,19 @@ function HelpContent({
     }))
   }, [account.user, setDraft])
 
-  if (step === 'report') {
+  if (step === 'bug' || step === 'feature') {
+    const kind = step
     return (
       <ReportForm
+        key={kind}
+        kind={kind}
         draft={draft}
         onDraft={setDraft}
         onBack={() => setStep('menu')}
         onSent={(id) => {
-          setSent({ id, email: draft.email.trim() })
-          // Name and email stay for the next report; the description doesn't.
-          setDraft({ ...draft, description: '', attachDebug: true })
+          setSent({ id, email: draft.email.trim(), kind })
+          // Name and email stay for the next one; the text just sent doesn't.
+          setDraft(kind === 'bug' ? { ...draft, description: '', attachDebug: true } : { ...draft, idea: '' })
           setStep('sent')
         }}
       />
@@ -226,7 +266,7 @@ function HelpContent({
     return (
       <DialogContent
         className="help"
-        title="Report sent"
+        title={FORMS[sent?.kind ?? 'bug'].sent}
         footer={
           <Button variant="primary" onClick={() => setStep('menu')}>
             Done
@@ -237,7 +277,7 @@ function HelpContent({
           <CircleCheck className="help-sent-icon" aria-hidden="true" />
           <p className="help-sent-title">Thank you!</p>
           <p className="help-sent-detail">
-            Your report is on its way{sent?.id ? <> (reference <span className="k-num">{sent.id}</span>)</> : null}. If we
+            Your {sent?.kind === 'feature' ? 'request' : 'report'} is on its way{sent?.id ? <> (reference <span className="k-num">{sent.id}</span>)</> : null}. If we
             need anything else, we’ll reply to {sent?.email || 'your email'}.
           </p>
         </div>
@@ -249,7 +289,7 @@ function HelpContent({
     <DialogContent
       className="help"
       title="Help"
-      description="Stuck, or something not working? Here’s how to reach us."
+      description="Stuck, something not working, or have an idea? Here’s how to reach us."
       footer={
         <DialogClose asChild>
           <Button variant="primary">Close</Button>
@@ -272,7 +312,14 @@ function HelpContent({
           title="Report a bug"
           detail="Tell us what went wrong. Every report is read."
           trailing={<ChevronRight />}
-          onClick={() => setStep('report')}
+          onClick={() => setStep('bug')}
+        />
+        <Choice
+          icon={<Lightbulb />}
+          title="Request a feature"
+          detail="Something you wish Kimochi did? We’d love to hear it."
+          trailing={<ChevronRight />}
+          onClick={() => setStep('feature')}
         />
       </div>
     </DialogContent>
