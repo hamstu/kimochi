@@ -734,9 +734,9 @@ fn log_add(args: &Args, text: &[&str]) -> Outcome {
             if text.is_empty() && std::io::stdin().is_terminal() {
                 return Err(Exit::Usage("give the text, or pipe it in: echo 猫 | kimochi log add".into()));
             }
-            let mut input = String::new();
-            std::io::stdin().read_to_string(&mut input).map_err(|e| Exit::Failed(format!("reading stdin: {e}")))?;
-            input
+            let mut bytes = Vec::new();
+            std::io::stdin().read_to_end(&mut bytes).map_err(|e| Exit::Failed(format!("reading stdin: {e}")))?;
+            decode_input(bytes)?
         }
         words => words.join(" "),
     };
@@ -753,6 +753,45 @@ fn log_add(args: &Args, text: &[&str]) -> Outcome {
         ));
     }
     Ok(())
+}
+
+/// Piped-in text: UTF-8 (with or without a BOM), or on Windows the console's own code page, which
+/// is what cmd.exe pipes in (932, Shift JIS, on a Japanese system).
+fn decode_input(bytes: Vec<u8>) -> Result<String, Exit> {
+    let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).map(<[u8]>::to_vec).unwrap_or(bytes);
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
+        Err(error) => {
+            #[cfg(windows)]
+            if let Some(text) = console_code_page_text(error.as_bytes()) {
+                return Ok(text);
+            }
+            Err(Exit::Failed(format!(
+                "the text piped in isn't UTF-8 ({}). On Windows, `chcp 65001` first.",
+                error.utf8_error()
+            )))
+        }
+    }
+}
+
+#[cfg(windows)]
+fn console_code_page_text(bytes: &[u8]) -> Option<String> {
+    use windows::Win32::Globalization::{GetACP, MultiByteToWideChar, MULTI_BYTE_TO_WIDE_CHAR_FLAGS};
+    use windows::Win32::System::Console::GetConsoleOutputCP;
+    // SAFETY: plain Win32 calls on buffers that live across them.
+    unsafe {
+        let page = match GetConsoleOutputCP() {
+            0 => GetACP(),
+            page => page,
+        };
+        let length = MultiByteToWideChar(page, MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0), bytes, None);
+        if length <= 0 {
+            return None;
+        }
+        let mut wide = vec![0u16; length as usize];
+        let written = MultiByteToWideChar(page, MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0), bytes, Some(&mut wide));
+        (written > 0).then(|| String::from_utf16_lossy(&wide[..written as usize]))
+    }
 }
 
 fn session_now(args: &Args) -> Outcome {

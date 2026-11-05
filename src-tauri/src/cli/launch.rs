@@ -81,6 +81,16 @@ pub fn start_app() -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        // Out of the terminal's job: Windows Terminal, Herdr and SSH sessions put their processes
+        // in a job that is killed when the terminal closes, which took the app with it.
+        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+        command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB);
+        if let Ok(child) = command.spawn() {
+            drop(child);
+            return Ok(());
+        }
+        // A job that doesn't allow breaking away refuses the flag (access denied): start the app
+        // inside it, as before.
         command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
     }
     command.spawn().map(|_| ()).map_err(|e| format!("{}: {e}", exe.display()))
