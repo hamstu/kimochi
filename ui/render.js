@@ -457,7 +457,13 @@ export class TextOverlayRenderer {
     /** Boxes fading out, each with the timer that removes it; see `retire`. */
     this.leaving = new Map()
 
-    this.onMouseMove = (event) => this.setPointer(event.clientX, event.clientY)
+    // Real moves only. The overlay also dispatches synthetic `mousemove`s at the dictionary engine
+    // (Hachidori listens for them, overlay.js) wherever the pointer is, including where words must
+    // stay unlit (click-through without Shift): taking those too relit the box right after the
+    // native feed had cleared it, so its fade reversed on every sample and stuttered.
+    this.onMouseMove = (event) => {
+      if (event.isTrusted) this.setPointer(event.clientX, event.clientY)
+    }
     this.onSelectionChange = () => this.updateSelectionHighlight()
     window.addEventListener('mousemove', this.onMouseMove)
     document.addEventListener('selectionchange', this.onSelectionChange)
