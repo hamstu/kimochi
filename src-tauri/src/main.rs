@@ -457,7 +457,20 @@ const EVIDENCE_MAX_BYTES: u64 = 8 * 1024 * 1024;
 #[tauri::command]
 fn storage_load(app: tauri::AppHandle, state: State<Shared>, extension: Option<String>) -> Reply<Value> {
     let file = extensions::storage_file(extension.as_deref())?;
-    let loaded = chrome_storage::load(&data_dir(&app)?, &file, now_ms()).inspect_err(|e| {
+    let dir = data_dir(&app)?;
+    // A dev build with a store of its own starts from the installed app's settings once; what
+    // the list says of dictionaries its store lacks is then reset in its own copy only.
+    if extensions::SEPARATE_EXTENSION_STORAGE {
+        if let Some(id) = extension.as_deref() {
+            let shared = format!("chrome-local-{id}.json");
+            let own = dir.join(&file);
+            let prev = dir.join(chrome_storage::prev_name(&file));
+            if !own.exists() && !prev.exists() && dir.join(&shared).exists() {
+                let _ = std::fs::copy(dir.join(&shared), &own);
+            }
+        }
+    }
+    let loaded = chrome_storage::load(&dir, &file, now_ms()).inspect_err(|e| {
         record(&app, &state, json!({ "check": "storage-load-failed", "file": file, "error": e }));
     })?;
     if let Some(recovered) = loaded.recovered {

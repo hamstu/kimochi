@@ -714,7 +714,11 @@ their data is ready: settings work during setup, while overlay/transcript lookup
 `storage_load` / `storage_save` persist `chrome.storage`. Without `extension` they read and
 write Yomitan's `chrome-local.json`, exactly as before; with an engine id they use
 `chrome-local-<id>.json` beside it. The id must match `[a-z0-9-]{1,32}` or the call fails
-with `invalid:`, so it can never name a path (`src-tauri/src/chrome_storage.rs`):
+with `invalid:`, so it can never name a path (`src-tauri/src/chrome_storage.rs`). The macOS dev
+build (`tauri dev`, unbundled) has a WebKit store of its own, so its engines use
+`chrome-local-<id>.dev.json` instead, seeded once from the shared file
+(`extensions::SEPARATE_EXTENSION_STORAGE`): a shared list always described the other build's
+dictionaries, and each launch's reconcile emptied it for the other.
 
 - `storage_save` writes a temp file unique to the write, flushes it to disk and renames it over
   the file, after keeping the replaced version as `<file>.prev` (a hard link). A crash or a
