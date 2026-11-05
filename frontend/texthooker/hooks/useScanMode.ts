@@ -36,6 +36,8 @@ export function useScanMode(enabled = true) {
           baseUrl: getSettings().yomitanApiUrl,
           body: { text, scan_length: scanLength },
         }),
+      prefetch: (term) =>
+        void invoke("yomitan_prefetch", { baseUrl: getSettings().yomitanApiUrl, term }).catch(() => {}),
       show: ({ term, sentence, anchor, point }) => {
         const settings = getSettings();
         invoke("show_popover", {

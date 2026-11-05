@@ -3093,6 +3093,7 @@ fn main() {
             reader::vndb::vndb_characters_by_vn,
             reader::vndb::vndb_fetch_image,
             reader::yomitan::yomitan_tokenize,
+            reader::yomitan::yomitan_prefetch,
             reader::yomitan::yomitan_ankifields,
             reader::yomitan::yomitan_probe,
             reader::translate::deepl_translate,

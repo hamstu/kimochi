@@ -113,6 +113,7 @@ export async function installApiLookup({ embedded = true, onVisibilityChange = (
     },
     tokenize: (text, scanLength) =>
       invoke('yomitan_tokenize', { baseUrl: baseUrl(), body: { text, scan_length: scanLength } }),
+    prefetch: (term) => void invoke('yomitan_prefetch', { baseUrl: baseUrl(), term }).catch(() => {}),
     show: ({ term, sentence, anchor, point }) =>
       void open({ term, cursorX: point.screenX, cursorY: point.screenY, anchor, sentence, focus: false })
   })

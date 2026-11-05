@@ -12,11 +12,16 @@
 
 /** Characters read from the pointer onwards; the longest word Yomitan can match. */
 export const SCAN_WINDOW = 16
-/** How often the pointer is looked at while it moves. */
-const THROTTLE_MS = 25
-/** How long the pointer rests on a new word before it is shown. Short: a lookup takes tens of
-    milliseconds and a newer one supersedes it, so this only skips the words a fast glide crosses. */
-const DWELL_MS = 40
+/** How often the pointer is looked at while it moves: about a frame. A word already found (`cache`)
+    costs nothing to find again, and one lookup at a time keeps a fast glide from piling up. */
+const THROTTLE_MS = 10
+/** How long the pointer rests on a new word before it is shown: only skips the words a fast glide
+    crosses. The word's entries are already being fetched meanwhile (`prefetch`), so it costs
+    little or nothing. */
+const DWELL_MS = 20
+/** Characters past the pointer whose words are found ahead of it, while it rests, so moving on
+    along the line finds them at once (`readAhead`). */
+const AHEAD = 8
 
 export interface ScanPoint {
   /** In the document's viewport. */
@@ -47,6 +52,9 @@ export interface ScannerOptions {
   tokenize: (text: string, scanLength: number) => Promise<unknown>
   /** Open the pop-up. */
   show: (hit: ScanHit) => void
+  /** A word the pop-up may soon open on (the one under the pointer, the next along the line):
+      start fetching its entries now. */
+  prefetch?: (term: string) => void
 }
 
 interface CaretHit {
@@ -205,25 +213,55 @@ export function createScanner(options: ScannerOptions): Scanner {
   let shown: string | null = null
   let selected: Range | null = null
   const cache = new Map<string, string>()
+  /** Words being found, by their window: the pointer and `readAhead` share one request. */
+  const finding = new Map<string, Promise<string | null>>()
+  let aheadRun = 0
+  /** Where the last lookup read from, for `readAhead`. */
+  let lastHit: { node: Text; offset: number; block: Element | null; term: string | null } | null = null
 
   const cancelPending = (): void => {
     if (pending) clearTimeout(pending.timer)
     pending = null
   }
 
-  async function wordAt(windowText: string): Promise<string | null> {
+  function wordAt(windowText: string): Promise<string | null> {
     const cached = cache.get(windowText)
-    if (cached !== undefined) return cached || null
-    let word: string | null = null
-    try {
-      word = wordAtStart(await options.tokenize(windowText, windowText.length), windowText)
-    } catch (error) {
-      console.warn('[scan] tokenize failed', error)
-      return null // not cached: the API may be back on the next try
+    if (cached !== undefined) return Promise.resolve(cached || null)
+    const already = finding.get(windowText)
+    if (already) return already
+    const found = (async (): Promise<string | null> => {
+      try {
+        const word = wordAtStart(await options.tokenize(windowText, windowText.length), windowText)
+        if (cache.size > 2000) cache.clear()
+        cache.set(windowText, word ?? '')
+        return word
+      } catch (error) {
+        console.warn('[scan] tokenize failed', error)
+        return null // not cached: the API may be back on the next try
+      } finally {
+        finding.delete(windowText)
+      }
+    })()
+    finding.set(windowText, found)
+    return found
+  }
+
+  /**
+   * The words starting at the next few characters past (node, offset), found while the pointer
+   * rests, one at a time and never while the pointer's own lookup runs; the next word's entries
+   * are fetched too. Moving on along the line then finds its word, and its entries, waiting.
+   */
+  async function readAhead(node: Text, offset: number, block: Element | null, term: string | null): Promise<void> {
+    const run = ++aheadRun
+    const text = readForward(node, offset, SCAN_WINDOW + AHEAD, block)
+    const next = term ? term.length : 1
+    for (let i = 1; i <= AHEAD && i < text.length; i++) {
+      if (run !== aheadRun || !active || inFlight) return
+      const windowText = text.slice(i, i + SCAN_WINDOW)
+      if (!windowText.trim()) continue
+      const word = await wordAt(windowText)
+      if (word && i === next && run === aheadRun && active) options.prefetch?.(word)
     }
-    if (cache.size > 2000) cache.clear()
-    cache.set(windowText, word ?? '')
-    return word
   }
 
   function select(range: Range): void {
@@ -244,6 +282,7 @@ export function createScanner(options: ScannerOptions): Scanner {
     if (!windowText.trim()) return
     const term = await wordAt(windowText)
     if (!active) return
+    lastHit = { node: hit.node, offset: hit.offset, block, term }
     if (!term) {
       // Off any word: whatever was about to open is not wanted. The pop-up already open stays.
       cancelPending()
@@ -270,6 +309,8 @@ export function createScanner(options: ScannerOptions): Scanner {
     }
     if (pending?.key === key) return
     cancelPending()
+    // Its entries are fetched while the pointer rests, rather than once the pop-up asks.
+    options.prefetch?.(term)
     const timer = setTimeout(() => {
       pending = null
       if (!active) return
@@ -289,6 +330,7 @@ export function createScanner(options: ScannerOptions): Scanner {
     }
     inFlight = true
     lastTick = performance.now()
+    lastHit = null
     try {
       await look()
     } finally {
@@ -296,6 +338,9 @@ export function createScanner(options: ScannerOptions): Scanner {
       if (rerun) {
         rerun = false
         if (active) void tick()
+      } else if (lastHit && active) {
+        const { node, offset, block, term } = lastHit
+        void readAhead(node, offset, block, term)
       }
     }
   }
@@ -313,6 +358,7 @@ export function createScanner(options: ScannerOptions): Scanner {
       active = false
       shown = null
       rerun = false
+      aheadRun++
       cancelPending()
       if (tickTimer) clearTimeout(tickTimer)
       tickTimer = null

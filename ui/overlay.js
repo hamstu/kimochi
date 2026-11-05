@@ -71,6 +71,7 @@ import {
 import { popupHitRects } from './regions.js'
 import { Generation, PipelineLock } from './pipeline.js'
 import * as scanActivity from './scan-activity.js'
+import { openAppLane } from './app-lane.js'
 import { createSoundPlayer, outcomeSound, soundKind, soundKindOn } from './sounds.js'
 import * as native from './native.js'
 
@@ -3149,6 +3150,8 @@ async function playLatest() {
 // ---------------------------------------------------------------------------
 
 const relayTargets = new Set()
+/** The fast lane to the other windows (ui/app-lane.js), for built-in Yomitan's requests. */
+const appLane = openAppLane(window, 'overlay')
 let forwardingBackendBroadcasts = false
 function forwardBackendBroadcasts() {
   if (forwardingBackendBroadcasts) return
@@ -3211,7 +3214,7 @@ async function whenBackendReady() {
   if (!state.yomitan.ready && !gnomeBackendReady) throw Error(state.yomitan.error ?? 'Dictionary backend is not ready')
 }
 
-async function handleRelay(from, payload) {
+async function handleRelay(from, payload, overLane = false) {
   // Hachidori and 10ten: the extension host's hub listens to `ext-relay` itself and answers its
   // own relays. Answering here too would double-answer `hello` with a Yomitan backend's status.
   if (extensionHosted) return
@@ -3227,6 +3230,8 @@ async function handleRelay(from, payload) {
   }
   if (payload.kind !== 'request') return
   relayTargets.add(from)
+  // Answered the way it came (ui/app-lane.js): a request from the lane goes back on it.
+  const answer = (message) => (overLane && appLane.send(from, message) ? undefined : native.relay(from, message))
   try {
     await whenBackendReady()
     const result =
@@ -3239,9 +3244,9 @@ async function handleRelay(from, payload) {
             [...hub.contexts.values()].filter((c) => c.background),
             payload.message
           )
-    await native.relay(from, { kind: 'response', id: payload.id, result })
+    await answer({ kind: 'response', id: payload.id, result })
   } catch (error) {
-    await native.relay(from, {
+    await answer({
       kind: 'response',
       id: payload.id,
       error: String(error?.message ?? error)
@@ -4360,6 +4365,8 @@ const receiveExtensionRelay = ({ payload }) => {
   void handleRelay(payload.from, payload.payload)
 }
 await Promise.all(['ext-relay', 'ext-relay:overlay'].map((event) => native.listen(event, receiveExtensionRelay)))
+// Built-in Yomitan's requests from the other windows, over the fast lane where they are on it.
+appLane.listen((payload, from) => void handleRelay(from, payload, true))
 
 /** For a devtools inspector: what the overlay holds and why its text shows or not. */
 window.__kimochiOverlayState = () => ({

@@ -1213,6 +1213,7 @@ normally means the browser is closed, the setting is off, or the browser suspend
 | `yomitan_api_check` | `({url}) -> ApiStatus` |
 | `install_yomitan_native_host` | `() -> string` (the installer's output) |
 | `yomitan_probe` | `({baseUrl}) -> latencyMs` (the Log's reader: a `/tokenize` round trip) |
+| `yomitan_prefetch` | the API pop-up's Shift-scan, as soon as it knows the word under the pointer: `yomitan_prefetch({baseUrl, term})` starts fetching the word's entries (without media), and `show_popover` opens on that answer rather than asking again. Entries are kept for a minute (`reader/yomitan.rs` `ENTRIES_KEPT`); a request still on its way is shared |
 | `yomitan_tokenize`, `yomitan_ankifields` | the API pop-up's Shift-scan, in the Log and the overlay (`ui/scan-text.ts`), and its entries. `yomitan_ankifields({baseUrl, text, includeMedia?, maxEntries?})`: `maxEntries` (1–32, default 32) returns only the first entries. With media, Yomitan fetches every returned entry's audio, trying its audio sources in turn (online ones too), which takes seconds for a common word; the pop-up asks for the first entry's media alone (`maxEntries: 1`, tens of milliseconds) so its audio plays at once, and every entry's in the background |
 
 `yomitan_host_status` only reads. It looks for `yomitan_api.json` in every browser's

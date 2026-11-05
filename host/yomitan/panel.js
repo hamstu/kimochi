@@ -45,6 +45,7 @@
  * and `popup-host`. Also imported as a module by `ui/panel-yomitan.js`.
  */
 import { clone, listenRelay, platformInfo as sharedPlatformInfo, runListeners, tabIdFor } from '../ext/primitives.js'
+import { openAppLane } from '../../ui/app-lane.js'
 import {
   apiForms,
   assetUrl,
@@ -115,6 +116,9 @@ function install() {
      */
     const label = root.__kimochiPanelLabel ?? location.pathname
     const tabId = tabIdFor(label)
+    // The fast lane to the other windows (ui/app-lane.js): backend requests and cross-window
+    // ports go that way when the window at the other end is on it, `ext_relay` otherwise.
+    const lane = openAppLane(root, root.__kimochiPanelLabel ?? null)
 
     const hub = {
       contexts: new Map(),
@@ -142,10 +146,9 @@ function install() {
         if (!tauri?.core) throw Error('Tauri core API unavailable; cannot reach the backend')
         const id = ++nextRequest
         const answer = new Promise((resolve, reject) => pending.set(id, { resolve, reject }))
-        await tauri.core.invoke('ext_relay', {
-          target: OVERLAY,
-          payload: { kind: 'request', id, message: clone(message) }
-        })
+        const payload = { kind: 'request', id, message: clone(message) }
+        // Answered the way it went (ui/overlay.js handleRelay).
+        if (!lane.send(OVERLAY, payload)) await tauri.core.invoke('ext_relay', { target: OVERLAY, payload })
         return Promise.race([
           answer,
           new Promise((_, reject) =>
@@ -203,10 +206,16 @@ function install() {
        * is relayed as JSON over the same `ext_relay` command everything else uses,
        * and `CrossFrameAPIPort` cannot tell the difference.
        */
-      relayPort({ channel, name, target, owner, sender }) {
+      relayPort({ channel, name, target, owner, sender, overLane = lane.reachable(target) }) {
         const onMessage = event()
         const onDisconnect = event()
         let closed = false
+        // One road for the port's whole life, the one it opened on: the two keep no order
+        // between them, and `port-open` must arrive before the first message.
+        const relay = (payload) =>
+          overLane && lane.send(target, payload)
+            ? Promise.resolve()
+            : (tauri?.core?.invoke('ext_relay', { target, payload }) ?? Promise.resolve())
         const port = {
           name,
           sender,
@@ -214,22 +223,17 @@ function install() {
           onDisconnect,
           postMessage(message) {
             if (closed) throw Error('Disconnected port')
-            void tauri?.core
-              ?.invoke('ext_relay', {
-                target,
-                payload: { kind: 'port-message', channel, message: clone(message) }
-              })
-              .catch(() => port.disconnect())
+            void relay({ kind: 'port-message', channel, message: clone(message) }).catch(() => port.disconnect())
           },
           disconnect() {
             if (closed) return
             closed = true
             relayPorts.delete(channel)
-            void tauri?.core
-              ?.invoke('ext_relay', { target, payload: { kind: 'port-close', channel } })
-              .catch(() => {})
+            void relay({ kind: 'port-close', channel }).catch(() => {})
             onDisconnect.emit(port)
           },
+          /** Send this port's `port-open` the way the port will carry its messages. */
+          open: (payload) => relay(payload),
           /** Called when the other window hangs up, so nothing is relayed back. */
           remoteClosed() {
             if (closed) return
@@ -328,7 +332,7 @@ function install() {
       awaitNetwork(win) {
         awaitingNetwork.add(win)
       },
-      settle(payload, from) {
+      settle(payload, from, overLane = false) {
         if (payload.kind === 'response') {
           const entry = pending.get(payload.id)
           if (!entry) return
@@ -356,6 +360,8 @@ function install() {
               otherFrameId: payload.fromFrameId
             }),
             target: payload.fromWindow,
+            // Answered the way it opened.
+            overLane,
             owner: target,
             sender: { frameId: payload.fromFrameId, tab: { id: payload.fromTabId } }
           })
@@ -431,6 +437,7 @@ function install() {
         // exactly-once, and a cross-frame port is not idempotent: a redelivered
         // acknowledgement fails the whole invocation with "already acknowledged", and
         // a redelivered backend broadcast fires every listener twice.
+        lane.listen((payload, from) => hub.settle(payload, from, true))
         await listenRelay(tauri, hub.label, (payload, from) => hub.settle(payload, from), (from, seq) =>
           hub.log({ check: 'relay-duplicate', from, seq })
         )
@@ -529,27 +536,23 @@ function install() {
         const remote = windowForFrame(targetFrameId)
         if (!remote || remote === hub.label) throw Error(`Unknown frame ${targetFrameId}`)
         const channel = hub.nextChannel(ctx.id)
-        ctx.events.onConnect.emit(
-          hub.relayPort({
-            channel,
-            name: named(targetTabId, targetFrameId),
-            target: remote,
-            owner: ctx,
-            sender: { frameId: targetFrameId, tab: { id: targetTabId } }
-          })
-        )
-        // Ordered after the local end, and before any message can be sent on it,
-        // because `ext_relay` delivers in order and the caller has not returned yet.
-        await tauri?.core?.invoke('ext_relay', {
+        const port = hub.relayPort({
+          channel,
+          name: named(targetTabId, targetFrameId),
           target: remote,
-          payload: {
-            kind: 'port-open',
-            channel,
-            toFrameId: targetFrameId,
-            fromTabId: hub.tabId,
-            fromFrameId: ctx.id,
-            fromWindow: hub.label
-          }
+          owner: ctx,
+          sender: { frameId: targetFrameId, tab: { id: targetTabId } }
+        })
+        ctx.events.onConnect.emit(port)
+        // Ordered after the local end, and before any message can be sent on it, because each
+        // road delivers in order (the port keeps to one) and the caller has not returned yet.
+        await port.open({
+          kind: 'port-open',
+          channel,
+          toFrameId: targetFrameId,
+          fromTabId: hub.tabId,
+          fromFrameId: ctx.id,
+          fromWindow: hub.label
         })
         return true
       }

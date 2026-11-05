@@ -77,6 +77,7 @@ export function usePopupScan(level: number, lookup: PopupLookup | null): void {
         node.parentElement?.closest(SCAN_BLOCK_SELECTOR)?.textContent?.trim() ?? null,
       tokenize: (text, scanLength) =>
         invoke("yomitan_tokenize", { baseUrl, body: { text, scan_length: scanLength } }),
+      prefetch: (term) => void invoke("yomitan_prefetch", { baseUrl, term }).catch(() => {}),
       show: ({ term, sentence, anchor, point }) => {
         const current = lookupRef.current;
         if (!current) return;
