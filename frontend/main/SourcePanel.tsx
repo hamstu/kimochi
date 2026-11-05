@@ -1039,7 +1039,7 @@ export function SourcePanel({
         )}
         <div className="src-actions">
           {mode === 'hook' ? (
-            <HookAnkiCropAction set={ankiCrop} disabled={!controller.hasSource} onEdit={() => controller.onEditAnkiCropArea()} />
+            <HookAnkiCropAction set={ankiCrop != null} disabled={!controller.hasSource} onEdit={() => controller.onEditAnkiCropArea()} />
           ) : (
           <Menu>
             <MenuTrigger asChild>

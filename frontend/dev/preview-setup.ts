@@ -822,7 +822,8 @@ const HANDLERS: Record<string, Handler> = {
     const source = ALL_SOURCES.find((s) => s.id === a?.sourceId)
     if (source && source.id !== HOOK_STATUS.sourceId) {
       HOOK_STATUS.sourceId = source.id
-      HOOK_STATUS.exe = `C:/Games/${source.app}/${source.app.replace(/[^\w]+/g, '')}.exe`
+      const app = source.app ?? source.name
+      HOOK_STATUS.exe = `C:/Games/${app}/${app.replace(/[^\w]+/g, '')}.exe`
     }
     return HOOK_STATUS
   },
