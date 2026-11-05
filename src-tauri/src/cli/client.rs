@@ -128,7 +128,7 @@ The Log
                                   Show, list, switch, start or rename sessions
 
 The app
-  open [log|settings [<page>]|sources|mini|dictionary]
+  open [log|notebook|anki|settings [<page>]|sources|mini|dictionary]
                                   Start Kimochi or bring a window forward
   quit                            Quit Kimochi
   settings [get <key>|set <key> <value>|list|path]
@@ -177,7 +177,8 @@ googlelens, cloud, meikiocr, mangaocr, ppocr, livetext (macOS) or oneocr (Window
 local engine whose model isn't downloaded yet starts the download.",
         "source" => "\
 Usage: kimochi source                 The source Kimochi reads
-       kimochi source list            Every window and display it could read
+       kimochi source list            Every window and display it could read (not where only the
+                                      system's picker can choose: Wayland, Gaming Mode)
        kimochi source set <name|id>   Read a window or display: by id, or by its title or app
                                       (exact, or the only one containing <name>); its saved crop
                                       comes back with it
@@ -202,10 +203,10 @@ Usage: kimochi session                   The open session
 
 Names match exactly, or as the only session containing the words, ignoring case.",
         "open" => "\
-Usage: kimochi open [log|settings [<page>]|sources|mini|dictionary]
+Usage: kimochi open [log|notebook|anki|settings [<page>]|sources|mini|dictionary]
 
-Start Kimochi if it isn't running, and bring a window forward: the main window (log, the
-default), Settings (optionally on a page: general, sources, ocr, log, dictionary, anki, assist,
+Start Kimochi if it isn't running, and bring a window forward: the main window (as it was, by
+default; on the Log, the Notebook or the Anki tab when named), Settings (optionally on a page: general, sources, ocr, log, dictionary, anki, assist,
 controls, gamemode, account, cli, about), the source picker, Mini mode, or the dictionary's own
 settings.",
         "quit" => "Usage: kimochi quit\n\nQuit Kimochi, as Quit Kimochi in the tray menu does. Nothing happens when it isn't running.",
@@ -282,7 +283,7 @@ pub fn run(raw: Vec<String>) -> Exit {
         ["session", "switch", query @ ..] if !query.is_empty() => session_switch(&args, &query.join(" ")),
         ["session", "new", name @ ..] => session_new(&args, &name.join(" ")),
         ["session", "rename", name @ ..] if !name.is_empty() => session_rename(&args, &name.join(" ")),
-        ["open"] => open(&args, "log", None),
+        ["open"] => open(&args, "main", None),
         ["open", "settings", page] => open(&args, "settings", Some(page)),
         ["open", view] => open(&args, view, None),
         ["quit"] => quit(&args),
@@ -476,7 +477,7 @@ fn offline_status() -> Value {
     let manifest = sessions_manifest();
     json!({
         "running": false,
-        "source": get("lastSelectedSource"),
+        "source": super::server::without_icon(&get("lastSelectedSource")),
         "ocrEngine": get("ocrMode"),
         "input": input,
         "dictionary": get("yomitanSettings")["popupType"],
@@ -602,7 +603,13 @@ fn ocr_list(args: &Args) -> Outcome {
     Ok(())
 }
 
+/// Every `ocrMode` there is; which of them this computer has is the app's to say.
+const ENGINES: &[&str] = &["googlelens", "cloud", "meikiocr", "local", "mangaocr", "ppocr", "livetext", "oneocr"];
+
 fn ocr_set(args: &Args, engine: &str) -> Outcome {
+    if !ENGINES.contains(&engine) {
+        return Err(Exit::Usage(format!("no OCR engine called {engine:?}; see `kimochi help ocr`")));
+    }
     let result = ask(args, "ocr.set", json!({ "engine": engine }))?;
     if args.json {
         print_json(&result);

@@ -228,7 +228,7 @@ fn status(app: &tauri::AppHandle, service: &Shared) -> Value {
         "running": true,
         "pid": std::process::id(),
         "version": app.package_info().version.to_string(),
-        "source": snapshot["source"],
+        "source": without_icon(&snapshot["source"]),
         "cropEnabled": snapshot["cropEnabled"],
         "ocrEngine": settings.get_or::<String>("ocrMode", String::new()),
         "input": input,
@@ -258,7 +258,16 @@ fn scan_text(scan: &Value) -> Value {
 
 fn source_now(service: &Shared) -> Value {
     let snapshot = crate::snapshot_value(service);
-    json!({ "source": snapshot["source"], "cropEnabled": snapshot["cropEnabled"] })
+    json!({ "source": without_icon(&snapshot["source"]), "cropEnabled": snapshot["cropEnabled"] })
+}
+
+/// A source descriptor without its app icon (a data URL of a few KB that no script wants).
+pub fn without_icon(source: &Value) -> Value {
+    let mut source = source.clone();
+    if let Some(map) = source.as_object_mut() {
+        map.remove("icon");
+    }
+    source
 }
 
 // ------------------------------------------------------------------------------ view toggles
@@ -287,7 +296,7 @@ fn toggle(app: &tauri::AppHandle, service: &Shared, flag: &str, to: &str) -> Res
         other => return Err(format!("invalid: {other:?}; use on, off or toggle")),
     };
     if flag == "autoOcr" && want && service.selection.lock().unwrap().is_none() {
-        return Err("invalid: no source is selected. Choose one first (`kimochi source set <name>`).".into());
+        return Err(format!("invalid: no source is selected. Choose one first: {}", choose_hint(service)));
     }
     if want != before {
         crate::actions::dispatch(app, service, action);
@@ -307,7 +316,7 @@ fn toggle(app: &tauri::AppHandle, service: &Shared, flag: &str, to: &str) -> Res
 
 fn scan(app: &tauri::AppHandle, service: &Shared, params: &Value) -> Result<Value, String> {
     if service.selection.lock().unwrap().is_none() && !texthooking(service) {
-        return Err("invalid: no source is selected. Choose one first (`kimochi source set <name>`).".into());
+        return Err(format!("invalid: no source is selected. Choose one first: {}", choose_hint(service)));
     }
     let before = service.view.lock().unwrap().revision;
     crate::actions::dispatch(app, service, "triggerScan");
@@ -334,6 +343,20 @@ fn scan(app: &tauri::AppHandle, service: &Shared, params: &Value) -> Result<Valu
             return Err(format!("timeout: no scan result yet ({status})"));
         }
         std::thread::sleep(Duration::from_millis(80));
+    }
+}
+
+/// How to choose a source here: by name, or where the system's own picker is the only way
+/// (Wayland, Gaming Mode), in Kimochi.
+fn choose_hint(service: &Shared) -> &'static str {
+    let picker_only = service
+        .backend
+        .lock()
+        .is_ok_and(|backend| backend.capabilities().system_picker_required);
+    if picker_only {
+        "`kimochi source choose`, or in Kimochi."
+    } else {
+        "`kimochi source set <name>`, or `kimochi source choose`."
     }
 }
 
@@ -399,7 +422,10 @@ fn open(app: &tauri::AppHandle, service: &Shared, view: &str, page: Option<&str>
     let settings = &service.settings;
     let main = crate::panels::MAIN;
     match view {
-        "log" | "main" | "app" => crate::panels::act_existing(app, settings, main, "show", None).map(|_| ()),
+        "main" | "app" => crate::panels::act_existing(app, settings, main, "show", None).map(|_| ()),
+        "log" | "notebook" | "anki" => crate::panels::act_existing(app, settings, main, "show", None).map(|_| {
+            let _ = app.emit("main:show-view", json!({ "view": view }));
+        }),
         "settings" => crate::tray::open_settings(app, page),
         "sources" | "source-picker" => crate::choose_source(app, settings).map(|_| ()),
         "mini" => crate::panels::act_existing(app, settings, main, "mini", None)
@@ -413,7 +439,7 @@ fn open(app: &tauri::AppHandle, service: &Shared, view: &str, page: Option<&str>
             });
             Ok(())
         }
-        other => Err(format!("invalid: unknown view {other:?}; use log, settings, sources, mini or dictionary")),
+        other => Err(format!("invalid: unknown view {other:?}; use log, notebook, anki, settings, sources, mini or dictionary")),
     }?;
     crate::tray::sync_mini(app);
     Ok(json!({ "opened": view }))
@@ -538,7 +564,7 @@ fn watch(app: &tauri::AppHandle, stream: &TcpStream, params: &Value) {
                 }));
             }
             if source && now.source != last.source {
-                let _ = tx.send(json!({ "event": "source", "source": snapshot["source"] }));
+                let _ = tx.send(json!({ "event": "source", "source": without_icon(&snapshot["source"]) }));
             }
             if state && now.flags != last.flags {
                 let _ = tx.send(json!({

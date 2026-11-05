@@ -66,7 +66,7 @@ kimochi version
 | `kimochi ocr` | Lists this computer's [OCR engines](/reading/ocr-engines/), with the selected one marked. |
 | `kimochi ocr <engine>` | Switches engine: `googlelens`, `cloud`, `meikiocr`, `mangaocr`, `ppocr`, `livetext` (macOS) or `oneocr` (Windows). A local engine whose model isn't downloaded yet starts downloading. |
 | `kimochi source` | The source Kimochi reads. |
-| `kimochi source list` | Every window and display it could read, with their ids. |
+| `kimochi source list` | Every window and display it could read, with their ids. Not on Linux with Wayland or in Gaming Mode, where only the system's own picker can choose: use `kimochi source choose`. |
 | `kimochi source set <name>` | Reads a window or display: by id, or by its title or app name (exactly, or the only one containing the words). Its saved crop comes back with it. |
 | `kimochi source clear` | Reads nothing. |
 | `kimochi source choose` | Opens the source picker in the main window. |
@@ -92,6 +92,7 @@ ignoring case: `kimochi session switch chrono` finds **Chrono Trigger**.
 | Command | What it does |
 | --- | --- |
 | `kimochi open` | Starts Kimochi if needed and brings the main window forward. |
+| `kimochi open log` | The main window on the Log, leaving Settings if it was showing. Also `notebook` and `anki`. |
 | `kimochi open settings [<page>]` | Opens Settings, on a page if you name one: `general`, `sources`, `ocr`, `log`, `dictionary`, `anki`, `assist`, `controls`, `gamemode`, `account`, `cli` or `about`. |
 | `kimochi open sources` | The source picker. Also `mini` ([Mini mode](/reading/mini-mode/)) and `dictionary` (the dictionary's own settings). |
 | `kimochi quit` | Quits Kimochi and waits until it has. |
@@ -129,7 +130,7 @@ milliseconds).
 | `scan` | A scan finished. | `text`, `engine`, `id` |
 | `line` | The Log took in a line, from any input. | `id`, `text`, `source` (`ocr`, `hook`, `clipboard`, `websocket`, `cli`, …), `timestamp`, `session` |
 | `source` | Another source was chosen, or none. | `source` (`sourceId`, `type`, `name`, `appName`) |
-| `state` | Auto OCR, the overlay or the scanned text was turned on or off. | `autoOcr`, `overlay`, `textOverlay`, `scanning` |
+| `state` | Auto OCR, the overlay or the scanned text was turned on or off. A switch turned off and straight back on (within a tenth of a second or so) may show no change; `action` reports every press. | `autoOcr`, `overlay`, `textOverlay`, `scanning` |
 | `session` | Another session was opened. | `id`, `name` |
 | `action` | A shortcut, button or `kimochi action` fired. | `name` |
 

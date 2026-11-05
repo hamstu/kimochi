@@ -166,6 +166,17 @@ export default function MainPanel(): JSX.Element {
     return () => void pending.then((stop) => stop())
   }, [changeMini])
 
+  // ...and for one of the main views (`kimochi open log|notebook|anki`, cli/server.rs), which also
+  // leaves Settings.
+  useEffect(() => {
+    const pending = listen<{ view?: string }>('main:show-view', ({ payload }) => {
+      const next = payload?.view
+      if (next !== 'log' && next !== 'notebook' && next !== 'anki') return
+      void changeMini(false).then(() => setViewState(next))
+    })
+    return () => void pending.then((stop) => stop())
+  }, [changeMini])
+
   // ...and for a new source: the sidebar's Change source menu, opened on its window grid.
   const [chooseRequest, setChooseRequest] = useState(0)
   useEffect(() => {

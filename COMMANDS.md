@@ -1974,7 +1974,7 @@ executable detached elsewhere) and waits for `ping`.
 | `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}` |
 | `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts) |
 | `source.list` / `source.set` / `source.clear` / `source.choose` | — / `{query}` / — / — | `sources::catalog`; `select_keeping_crop` on the source matched by id, title or app; `sources::clear`; `choose_source` |
-| `open` | `{view: log\|settings\|sources\|mini\|expand\|dictionary, page?}` | `{opened}` |
+| `open` | `{view: main\|log\|notebook\|anki\|settings\|sources\|mini\|expand\|dictionary, page?}` | `{opened}`; `log`, `notebook` and `anki` emit `main:show-view` `{view}`, which leaves Settings |
 | `quit` | — | replies, then quits as `app_quit` |
 | `log.recent` | `{limit?}` | `log_lines::recent` |
 | `log.add` | `{text}` | the Log's `host.ingest` with source `cli` |
