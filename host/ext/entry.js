@@ -12,6 +12,7 @@
 import { installApp } from './app.js'
 import { ENGINES } from './engines.js'
 import { installFrame } from './frame.js'
+import { LANE_PATH, installLaneFrame } from './lane.js'
 import { engineForExtensionOrigin, extensionOrigin, resolveEngine } from './util.js'
 import { installFrameCursorResponder } from '../../frontend/shell/nativeCursor.ts'
 
@@ -40,6 +41,12 @@ try {
 })()
 
 function install(win) {
+  // The fast lane's frame is Kimochi's, not the extension's: no `chrome`, no context of its own
+  // (and the guard stays set, so the page's own copy of this script stands down too).
+  if (win.location.pathname === LANE_PATH) {
+    installLaneFrame(win)
+    return
+  }
   // An extension-origin document cannot read the app origin's localStorage mirror, so its engine
   // comes from its own origin (and native's prelude, which names it for such frames). A child frame
   // that is cross-origin to its top document is treated as a candidate extension document too:

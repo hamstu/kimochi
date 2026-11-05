@@ -25,6 +25,9 @@ export const ENGINES = {
     // dictionary request to it, and `ensureChromeOffscreen` only creates one when getContexts
     // finds none, so a document that is already up is simply adopted.
     offscreen: 'offscreen.html',
+    // Messages the hub reads as they pass (readiness.js: dictionary setup progress), so its hidden
+    // window never delivers them itself (links.js `deliverLocally`).
+    hubObserves: (message) => message?.target === 'hachidori-setup-events',
     contentScripts: hachidoriManifest.content_scripts[0].js,
     contentCss: hachidoriManifest.content_scripts[0].css ?? [],
     // content.js `HOST_TAG`: a zero-sized fixed anchor whose open shadow root holds one

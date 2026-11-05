@@ -238,7 +238,22 @@ export class Hub {
     this.contexts.set(id, rec)
     link.owns.add(id)
     this.wake()
+    if (EXTENSION_KINDS.has(kind)) this.announceExtensionContexts()
     return { ctx: id, tabId: rec.tabId, frameId: rec.frameId, documentId: rec.documentId }
+  }
+
+  /**
+   * Tell each window that holds extension contexts which ones exist anywhere (links.js
+   * `Router#deliverLocally`): a window that holds all of them (the engine's hidden window, with
+   * its background and offscreen documents) delivers their messages to each other itself, as
+   * Chrome would, instead of sending each one here and back over the relay.
+   */
+  announceExtensionContexts() {
+    const extension = [...this.contexts.values()].filter((rec) => EXTENSION_KINDS.has(rec.kind))
+    const ids = extension.map((rec) => rec.id)
+    const links = new Map()
+    for (const rec of extension) if (!links.has(rec.link)) links.set(rec.link, rec.id)
+    for (const [link, ctx] of links) link.send(ctx, { type: 'extension-contexts', ids })
   }
 
   unregister(id) {
@@ -257,6 +272,7 @@ export class Hub {
       this.report({ check: 'ext-host-context-gone', kind: rec.kind, url: rec.url })
     }
     this.wake()
+    if (EXTENSION_KINDS.has(rec.kind)) this.announceExtensionContexts()
   }
 
   /** Every context a link registered goes when its window or frame does. */

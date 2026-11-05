@@ -42,6 +42,30 @@
         "_lastPointerMoveScreenPoint",
         "_ignoreNextPointerMove"
       ]
+    },
+    {
+      "id": "hachidori-first-view-count",
+      "engine": "hachidori",
+      "file": "content.js",
+      "why": "Moving from word to word, a pop-up drawn with only its first entry, then filled a frame or two later, flashes nearly empty when that entry is short (a name, a particle): the pop-up keeps its size, so the frame between two full ones is mostly blank. The renderer takes how many entries to draw before the first paint (render/popup.js `initialResultCount`, 1 unless given); three fill what the pop-up shows in one frame, and the rest still follow as before. It adds a few milliseconds to a lookup that already shows in single digits.",
+      "find": "highlightName: HIGHLIGHT_NAME,",
+      "replace": "highlightName: HIGHLIGHT_NAME, initialResultCount: 3,",
+      "requires": [
+        "const HIGHLIGHT_NAME",
+        "window.HDPopup"
+      ]
+    },
+    {
+      "id": "hachidori-first-view-glossaries",
+      "engine": "hachidori",
+      "file": "render/popup.js",
+      "why": "With hachidori-first-view-count: the entries drawn before the first paint get their glossaries then too, rather than an entry header over an empty body for a frame. Hachidori fills only the first entry at once and the rest on the next task, since only the first used to be drawn.",
+      "find": "if (resultIndex === 0) {\n              fillContent();\n            }",
+      "replace": "if (resultIndex === 0) {\n              fillContent();\n            } else if (resultIndex < initialResultCount) {\n              fillContent();\n            }",
+      "requires": [
+        "const initialResultCount = Number.isInteger(options.initialResultCount)",
+        "deferredGlossaryFills.push(fillContent);"
+      ]
     }
   ]
 }

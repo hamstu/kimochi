@@ -1,0 +1,16 @@
+<!doctype html>
+<!--
+  The fast lane's frame (host/ext/lane.js), served at <extension origin>/__kimochi/lane.html and
+  framed, hidden, by the app windows that host a dictionary extension (the overlay, the Log, the
+  dictionary panel): on the extension's origin it can open the BroadcastChannels the engine's
+  windows talk over, which their own origin cannot. The extension host it loads (native injects it
+  too) sees this path and installs the lane, not an extension context.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Kimochi lane</title>
+    <script src="/__kimochi/ext-host.js"></script>
+  </head>
+  <body></body>
+</html>

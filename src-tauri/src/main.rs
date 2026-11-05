@@ -4242,8 +4242,11 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         #[cfg(target_os = "windows")]
         let mut protection: Option<(bool, usize)> = None;
         let mut gate = state::ShiftGate::default();
+        // Shift held at the last sample: a lookup can follow the pointer, so it is read twice as
+        // often and every move is sent (below). Reading words feels as quick as the samples are.
+        let mut scanning = false;
         loop {
-            std::thread::sleep(Duration::from_millis(16));
+            std::thread::sleep(Duration::from_millis(if scanning { 8 } else { 16 }));
             ticks = ticks.wrapping_add(1);
             if handle.get_webview_window(OVERLAY).is_none() {
                 break;
@@ -4251,6 +4254,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             // Read first: Shift opens the gate on the overlay's words and the hook card, and
             // the mouse guard and native shapes below must already follow it this tick.
             let sample = platform::desktop_cursor();
+            scanning = sample.as_ref().is_some_and(|s| s.modifiers.shift);
             let gate_open = {
                 let mut v = service.view.lock().unwrap();
                 // No global pointer (Wayland): Shift cannot be read, so everything takes the
@@ -4376,13 +4380,15 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 //
                 // Bounded rather than streamed: only while the overlay has something
                 // to light up, only over the display it covers, and at half the poll's
-                // rate while merely moving. A modifier or a button going up or down is
+                // rate while merely moving (every sample while Shift is held: a lookup is
+                // following the pointer). A modifier or a button going up or down is
                 // sent at once — holding Shift without moving is how a reader asks for
                 // the word already under the pointer.
                 // While the overlay drags something (the Text Hooker's card), every move is sent, so
                 // what is dragged keeps up with the pointer.
                 unsent_move |= moved;
-                let due = (unsent_move && (ticks.is_multiple_of(2) || OVERLAY_DRAG.load(std::sync::atomic::Ordering::Relaxed)))
+                let due = (unsent_move
+                    && (ticks.is_multiple_of(2) || scanning || OVERLAY_DRAG.load(std::sync::atomic::Ordering::Relaxed)))
                     || modifiers != last_modifiers
                     || down != last_buttons;
                 if due {

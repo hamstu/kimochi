@@ -44,7 +44,9 @@ test('a file the find is missing from, or repeated in, is served as it is', () =
   const [patch] = PATCHES
   const missing = applyPatches(patch.engine, patch.file, 'start();')
   assert.equal(missing.text, 'start();')
-  assert.deepEqual(missing.skipped, [patch.id])
+  // Every patch to that file is skipped, each on its own.
+  const sameFile = PATCHES.filter((other) => other.engine === patch.engine && other.file === patch.file)
+  assert.deepEqual(missing.skipped, sameFile.map((other) => other.id))
   const twice = `${patch.find}\n${patch.find}`
   assert.equal(applyPatches(patch.engine, patch.file, twice).text, twice)
   assert.equal(applyPatches(patch.engine, 'other.js', patch.find).text, patch.find)

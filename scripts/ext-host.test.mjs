@@ -1149,6 +1149,52 @@ test('runtime.sendMessage follows Chrome: other extension contexts only, first a
   assert.equal(result(page, 'pageSaw.length'), 1)
 })
 
+/** What the extension window sent the hub of `ops` since `from` (an index into `world.invoked`). */
+const relayedFromWindow = (world, from, ops) =>
+  world.invoked.slice(from).filter((i) => i.label === 'ext-hachidori' && i.command === 'ext_relay' && ops.includes(i.args.payload.op))
+
+test('the extension window delivers its background and offscreen messages itself while nothing else could hear them', async () => {
+  const { world, background, offscreen } = await hachidoriSession()
+  await waitFor(() => result(offscreen, 'early') !== undefined, 'offscreen asked the background at load')
+  const before = world.invoked.length
+  // Chrome's answers, senders and "nobody answered", with no trip to the hub and back.
+  const fromBackground = await result(background, 'chrome.runtime.sendMessage({ case: "bgsender" })')
+  assert.equal(fromBackground.url, 'hachidori://localhost/background.js')
+  assert.equal(fromBackground.origin, 'hachidori://localhost')
+  assert.equal(await result(offscreen, 'chrome.runtime.sendMessage({ case: "promise" })'), 'from-promise')
+  assert.equal(await result(offscreen, 'chrome.runtime.sendMessage({ case: "sender" })').then((s) => s.url), 'hachidori://localhost/offscreen.html')
+  assert.equal(await result(background, 'chrome.runtime.sendMessage({ case: "nobody-answers" })'), undefined)
+  assert.ok(result(offscreen, 'offscreenSeen.some((m) => m.case === "nobody-answers")'))
+  assert.deepEqual(relayedFromWindow(world, before, ['sendMessage', 'delivered']), [])
+  // Dictionary setup progress still passes the hub, which watches it (readiness.js).
+  await result(offscreen, 'chrome.runtime.sendMessage({ target: "hachidori-setup-events", type: "hd_setup_progress", runId: "r", sequence: 1 }).catch(() => null)')
+  assert.equal(relayedFromWindow(world, before, ['sendMessage']).length, 1)
+
+  // A settings page open in another window hears them too, as in Chrome: through the hub again.
+  const dictionary = world.load(world.window({ href: `${APP}/app/panel.html`, label: 'dictionary', mirror: 'hachidori', tauri: true }))
+  const page = world.frame(dictionary, 'hachidori://localhost/settings.html')
+  await waitFor(() => world.reports.some((r) => r.check === 'ext-host-frame-linked' && r.window === 'dictionary'), 'settings page linked')
+  result(page, 'globalThis.pageSaw = []; chrome.runtime.onMessage.addListener((m) => { pageSaw.push(m) })')
+  await sleep(50)
+  await result(background, 'chrome.runtime.sendMessage({ case: "nobody-answers", again: true })')
+  await waitFor(() => result(page, 'pageSaw.length'), 'the settings page heard the background')
+  assert.ok(result(offscreen, 'offscreenSeen.some((m) => m.again)'))
+})
+
+test("of two answers from the extension window to one message, only the first carries its value", async () => {
+  const { world, overlay } = await hachidoriSession()
+  const before = world.invoked.length
+  // A content script's message reaches the background and the offscreen document; both answer.
+  assert.equal(await result(overlay, 'chrome.runtime.sendMessage({ case: "race" })'), 'fast-offscreen')
+  await sleep(600)
+  const answers = relayedFromWindow(world, before, ['delivered']).map((i) => i.args.payload.args)
+  const responses = answers.filter((a) => a.status === 'response')
+  assert.equal(responses.length, 1)
+  assert.equal(responses[0].value, 'fast-offscreen')
+  // The background's later answer goes as answered, without the copy.
+  assert.ok(answers.some((a) => a.id === responses[0].id && a.status === 'unanswered'))
+})
+
 test('no listener anywhere rejects with Chrome\'s exact "Receiving end does not exist."', async () => {
   const { background } = await tentenSession()
   // 10ten has no offscreen document; with no extension page open there is nobody to receive.

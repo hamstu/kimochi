@@ -4,8 +4,12 @@
  *
  *   extension iframe ──postMessage + MessagePort──▶ its parent's Router
  *   Router (overlay / harness) ──direct calls──▶ Hub
- *   Router (log, dictionary panel, welcome) ──Tauri ext_relay──▶ Hub's relay server
- *   Router (extension window: background + its offscreen iframe) ──Tauri ext_relay──▶ Hub
+ *   Router (log, dictionary panel, welcome) ──fast lane, or Tauri ext_relay──▶ Hub's relay server
+ *   Router (extension window: background + its offscreen iframe) ──fast lane, or ext_relay──▶ Hub
+ *
+ * The fast lane (lane.js) is BroadcastChannels between the windows, inside the browser: a window
+ * uses it when the hub answers its hello there, and `ext_relay` otherwise. Messages between the
+ * extension window's own background and offscreen documents never leave it (`deliverLocally`).
  *
  * Every app top document that hosts an engine has one Router, and so does the top document of an
  * engine's hidden extension window (`ext-<id>`, DICTIONARY_ENGINES.md §5.4), whose background
@@ -34,10 +38,23 @@
  * can never overtake its first `postMessage`.
  */
 import { extTauri, listenRelay as listenSharedRelay } from './primitives.js'
-import { describe, json, randomId, sleep, within } from './util.js'
+import { openLane } from './lane.js'
+import { NO_RECEIVER, PORT_CLOSED, describe, json, originOf, randomId, sleep, within } from './util.js'
 
 const CHILD_WELCOME_MS = 30000
 const LOG_BUDGET_PER_MINUTE = 120
+/** The contexts `runtime.sendMessage` from an extension context goes to (hub.js). */
+const EXTENSION_KINDS = new Set(['background', 'offscreen', 'page'])
+/** Contexts that say `ready` once their scripts have run (hub.js `register`). */
+const STARTING_KINDS = new Set(['background', 'offscreen'])
+/** As hub.js: a target that never says whether it has listeners is taken to have none. */
+const DELIVERY_ACK_MS = 10000
+const ANSWERED_KEPT = 500
+/** How long a hello over the fast lane waits before the relay is asked instead (lane.js). */
+const LANE_HELLO_MS = 1000
+/** A window on the relay tries the lane again this often, this many times (`connectRelay`). */
+const LANE_UPGRADE_MS = 3000
+const LANE_UPGRADE_TRIES = 10
 
 /** One serialised `ext_relay` sender per document. */
 function relaySender(tauri) {
@@ -75,6 +92,13 @@ export class Router {
     this.endpoints = new Map()
     this.byHub = new Map()
     this.nextLocal = 0
+    /** Every extension context the hub has, by its id, once it says (`deliverLocally`). */
+    this.extensionIds = null
+    /** Messages delivered within this document (`deliverLocally`), by their (negative) id. */
+    this.localDeliveries = new Map()
+    this.nextDelivery = 0
+    /** The hub's deliveries this document already answered (`firstAnswer`). */
+    this.answered = new Map()
     this.upstream = null
     let resolveUpstream
     this.upstreamReady = new Promise((resolve) => (resolveUpstream = resolve))
@@ -90,6 +114,8 @@ export class Router {
     // First time: registrations already waiting on `upstreamReady` go ahead by themselves.
     this.upstreamReady = Promise.resolve(upstream)
     this.byHub.clear()
+    this.extensionIds = null
+    this.answered.clear()
     for (const endpoint of this.endpoints.values()) {
       endpoint.hubCtx = null
       endpoint.registered = this.register(endpoint)
@@ -120,6 +146,14 @@ export class Router {
     endpoint.registered = this.register(endpoint)
     endpoint.registered.catch(() => {})
     const call = async (op, args = {}) => {
+      if (op === 'sendMessage') {
+        const local = this.deliverLocally(endpoint, args.message)
+        if (local) return local
+      }
+      if (op === 'delivered') {
+        if (typeof args.id === 'number' && args.id < 0) return this.localDelivered(endpoint.local, args)
+        args = this.firstAnswer(args)
+      }
       for (let attempt = 0; ; attempt += 1) {
         await endpoint.registered
         const upstream = this.upstream
@@ -143,6 +177,9 @@ export class Router {
       info: () => endpoint.info,
       detach: () => {
         if (!this.endpoints.delete(endpoint.local)) return
+        for (const [id, d] of this.localDeliveries) {
+          if (d.initial.delete(endpoint.local) || (d.pending.delete(endpoint.local) && (d.closed = true))) this.settleLocal(id, d)
+        }
         if (endpoint.hubCtx !== null) {
           this.byHub.delete(endpoint.hubCtx)
           void this.upstream?.call('unregister', { ctx: endpoint.hubCtx }).catch(() => {})
@@ -152,8 +189,119 @@ export class Router {
   }
 
   dispatch(hubCtx, event) {
+    if (event?.type === 'extension-contexts') {
+      this.extensionIds = new Set(event.ids)
+      return
+    }
     const endpoint = this.endpoints.get(this.byHub.get(hubCtx))
     if (endpoint) endpoint.onEvent(event)
+  }
+
+  // ------------------------------------------------------------ delivery within this document
+
+  /**
+   * `runtime.sendMessage` from an extension context of this document, delivered here when every
+   * extension context there is lives here too (the engine's hidden window: its background and
+   * offscreen documents) — exactly the contexts the hub would deliver to, without the trip to the
+   * hub and back over the relay for each message and each answer. Chrome passes these within one
+   * process; Hachidori sends many (each lookup is relayed from its background to its offscreen
+   * document, and each Anki check sends every entry's fields), so through the hub they cost
+   * megabytes of native round trips per lookup. Anything else, or anything not yet settled (a
+   * context still starting, a page open elsewhere, a message the hub watches), goes to the hub.
+   * Answers a promise like the hub's `deliver`, or null.
+   */
+  deliverLocally(from, message) {
+    if (!EXTENSION_KINDS.has(from.registration.kind) || !this.extensionIds || from.hubCtx === null) return null
+    if (this.descriptor?.hubObserves?.(message)) return null
+    const ours = new Set()
+    for (const endpoint of this.endpoints.values()) if (endpoint.hubCtx !== null) ours.add(endpoint.hubCtx)
+    for (const id of this.extensionIds) if (!ours.has(id)) return null
+    const targets = [...this.endpoints.values()].filter((e) => e !== from && EXTENSION_KINDS.has(e.registration.kind))
+    if (targets.length === 0) return null
+    for (const target of targets) {
+      if (!this.extensionIds.has(target.hubCtx)) return null
+      // The hub delivers only once the background (and, to a page, the offscreen document) has
+      // run its scripts (hub.js `backgroundAwake`); a context still starting goes through it.
+      if (STARTING_KINDS.has(target.registration.kind) && target.registration.ready !== true) return null
+    }
+    const id = -++this.nextDelivery
+    const sender = this.senderFor(from)
+    return new Promise((resolve, reject) => {
+      const d = { resolve, reject, initial: new Set(targets.map((t) => t.local)), pending: new Set(), sawListener: false, closed: false }
+      d.timer = setTimeout(() => {
+        if (d.initial.size === 0) return
+        this.report({ check: 'ext-host-delivery-unacknowledged', local: true })
+        d.initial.clear()
+        this.settleLocal(id, d)
+      }, DELIVERY_ACK_MS)
+      this.localDeliveries.set(id, d)
+      // Each its own copy, as the relay would give it: a listener may change what it gets.
+      for (const target of targets) {
+        const event = { type: 'deliver', id, message: json(message), sender }
+        queueMicrotask(() => target.onEvent(event))
+      }
+    })
+  }
+
+  /** A local context's answer to a message delivered by `deliverLocally` (hub.js `delivered`). */
+  localDelivered(local, { id, status, value, error }) {
+    const d = this.localDeliveries.get(id)
+    if (!d) return undefined
+    if (status === 'response') return this.finishLocal(id, d, () => d.resolve(json(value)))
+    if (status === 'error') return this.finishLocal(id, d, () => d.reject(Error(error)))
+    if (status === 'pending') {
+      d.initial.delete(local)
+      d.pending.add(local)
+      d.sawListener = true
+    } else if (status === 'unanswered') {
+      d.initial.delete(local)
+      d.sawListener = true
+    } else if (status === 'none') d.initial.delete(local)
+    this.settleLocal(id, d)
+    return undefined
+  }
+
+  settleLocal(id, d) {
+    if (d.initial.size > 0 || d.pending.size > 0) return
+    if (!d.sawListener) this.finishLocal(id, d, () => d.reject(Error(NO_RECEIVER)))
+    else if (d.closed) this.finishLocal(id, d, () => d.reject(Error(PORT_CLOSED)))
+    else this.finishLocal(id, d, () => d.resolve(undefined))
+  }
+
+  finishLocal(id, d, settle) {
+    clearTimeout(d.timer)
+    this.localDeliveries.delete(id)
+    settle()
+    return undefined
+  }
+
+  /** The sender a message from `endpoint` carries (hub.js `senderFor`, for extension contexts). */
+  senderFor(endpoint) {
+    const url = endpoint.registration.url
+    const sender = { id: `kimochi-${this.engine}`, url, origin: originOf(url) }
+    if (endpoint.registration.kind === 'background') {
+      sender.url = `${this.origin}/${this.descriptor.background.script}`
+      sender.origin = this.origin
+      return sender
+    }
+    sender.documentId = endpoint.info?.documentId
+    sender.documentLifecycle = 'active'
+    sender.frameId = endpoint.info?.frameId ?? 0
+    return sender
+  }
+
+  /**
+   * The hub takes the first answer to a message and drops the rest, so a second full answer from
+   * this document is only weight on the relay: Hachidori's background answers a content script's
+   * lookup with the same result its offscreen document already sent (it relays engine requests),
+   * each a copy of the whole entry list. Later ones go as "answered elsewhere".
+   */
+  firstAnswer(args) {
+    if (args.status !== 'response' && args.status !== 'error') return args
+    if (this.answered.has(args.id)) return { id: args.id, status: 'unanswered' }
+    this.answered.set(args.id, true)
+    if (this.answered.size > ANSWERED_KEPT) this.answered.delete(this.answered.keys().next().value)
+    return args
   }
 
   /** The kind of a child frame, from its URL rather than its own claim. */
@@ -273,30 +421,50 @@ export function localUpstream(hub, router) {
 
 // ---------------------------------------------------------------- relay, hub side
 
-/** Answer other windows' routers over `ext_relay`. */
+/**
+ * Answer other windows' routers over `ext_relay`, and over the fast lane (lane.js) for those that
+ * reach the hub that way: each is answered, and sent its events, the way its own calls arrive.
+ */
 export async function serveRelay(hub, { tauri, label, engine, report }) {
   if (!tauri?.core?.invoke) return { broadcast: async () => {} }
   const send = relaySender(tauri)
+  const lane = openLane(hub.win, { engine, origin: hub.origin, label })
+  // Windows whose calls come over the lane (their transport is settled at hello, links.js
+  // `connectRelay`); their answers and events go back the same way.
+  const viaLane = new Set()
+  const post = (to, payload, overLane = viaLane.has(to)) =>
+    overLane && lane.send(to, payload) ? Promise.resolve() : send(to, payload)
   const links = new Map()
   const linkFor = (from) => {
     let link = links.get(from)
     if (!link) {
-      link = { label: from, owns: new Set(), send: (ctx, event) => void send(from, { kind: 'ext', engine, type: 'event', ctx, event }).catch(() => {}) }
+      link = { label: from, owns: new Set(), send: (ctx, event) => void post(from, { kind: 'ext', engine, type: 'event', ctx, event }).catch(() => {}) }
       links.set(from, link)
     }
     return link
   }
-  await listenRelay(tauri, label, (payload, from) => {
+  const onCall = (payload, from, overLane) => {
     if (payload.kind !== 'ext' || payload.type !== 'call' || typeof from !== 'string') return
     if (payload.engine !== engine) {
       report({ check: 'ext-host-relay-engine-mismatch', from, engine: payload.engine })
       return
     }
+    // A hello may come either way while the window finds out which works; anything else says
+    // how the window talks to the hub now.
+    if (payload.op !== 'hello') {
+      if (overLane) viaLane.add(from)
+      else viaLane.delete(from)
+    }
     hub.handle(linkFor(from), payload.op, payload.args ?? {}).then(
-      (value) => send(from, { kind: 'ext', engine, type: 'reply', id: payload.id, ok: true, value: json(value) }),
-      (error) => send(from, { kind: 'ext', engine, type: 'reply', id: payload.id, ok: false, error: describe(error) })
+      (value) => post(from, { kind: 'ext', engine, type: 'reply', id: payload.id, ok: true, value: json(value) }, overLane),
+      (error) => post(from, { kind: 'ext', engine, type: 'reply', id: payload.id, ok: false, error: describe(error) }, overLane)
     ).catch(() => {})
-  }, report)
+  }
+  lane.listen((payload, from) => onCall(payload, from, true))
+  // Answer nothing until the lane is open (or known not to be), so a window saying hello finds the
+  // lane if there is one, instead of settling on the relay for as long as this hub runs.
+  await lane.ready.catch(() => false)
+  await listenRelay(tauri, label, (payload, from) => onCall(payload, from, false), report)
   return {
     broadcast: (payload) => send(null, { kind: 'ext', engine, ...payload }).catch(() => {})
   }
@@ -311,29 +479,57 @@ export async function serveRelay(hub, { tauri, label, engine, report }) {
  */
 export function connectRelay(router, { tauri, label, engine, report, onNavigate, onSetup }) {
   const send = relaySender(tauri)
+  const lane = openLane(router.win, { engine, origin: router.origin, label })
+  // Whether calls go over the fast lane (lane.js): settled at each hello, by which way the hub
+  // answered, and kept until the next one, so one window's calls never take two roads at once.
+  let useLane = false
   const node = randomId('N')
   const pending = new Map()
   let nextId = 0
   let hubInstance = null
   let helloLoop = null
-  const status = { hub: null, ready: false, error: null }
+  const status = { hub: null, ready: false, error: null, lane: false }
 
-  const rawCall = (op, args, timeoutMs) => {
+  const rawCall = (op, args, timeoutMs, overLane = useLane) => {
     const id = ++nextId
     const answer = new Promise((resolve, reject) => pending.set(id, { resolve, reject, op }))
-    void send('overlay', { kind: 'ext', engine, type: 'call', id, op, args: json(args) }).catch((error) => {
-      pending.get(id)?.reject(error)
-      pending.delete(id)
-    })
+    const payload = { kind: 'ext', engine, type: 'call', id, op, args: json(args) }
+    if (!(overLane && lane.send('overlay', payload))) {
+      void send('overlay', payload).catch((error) => {
+        pending.get(id)?.reject(error)
+        pending.delete(id)
+      })
+    }
     if (!timeoutMs) return answer
     return within(answer, timeoutMs, 'The overlay did not answer').finally(() => pending.delete(id))
   }
 
-  const adopt = (reply) => {
+  /** Say hello over the lane, where there is one, then over `ext_relay`; the first answer says which. */
+  const helloOnce = async (timeoutMs) => {
+    if (await lane.ready.catch(() => false)) {
+      try {
+        return { reply: await rawCall('hello', { node }, Math.min(LANE_HELLO_MS, timeoutMs), true), overLane: true }
+      } catch (error) {
+        // No hub on the lane (yet, or this webview keeps windows apart): the relay decides.
+        report({ check: 'ext-host-lane-hello', window: label, ok: false, error: describe(error) })
+      }
+    }
+    return { reply: await rawCall('hello', { node }, timeoutMs, false), overLane: false }
+  }
+
+  const adopt = ({ reply, overLane }) => {
     status.ready = reply.ready
     status.error = reply.error
     if (reply.setup) onSetup?.(reply.setup)
     if (reply.navigate) onNavigate?.(reply.navigate)
+    // A hub the lane already reached keeps it: a relay answer from it only means a hello on the
+    // lane was lost while it started (two hellos can be under way at once: the loop's and a probe's).
+    const keepLane = useLane && !overLane && reply.hub === hubInstance
+    if (overLane !== useLane && !keepLane) {
+      useLane = overLane
+      status.lane = overLane
+      report({ check: 'ext-host-lane', window: label, lane: overLane })
+    }
     if (reply.hub === hubInstance) return
     const restarted = hubInstance !== null
     hubInstance = reply.hub
@@ -345,13 +541,38 @@ export function connectRelay(router, { tauri, label, engine, report, onNavigate,
     }
     router.setUpstream({ instance: reply.hub, call: (op, args) => rawCall(op, args) })
     if (restarted) report({ check: 'ext-host-relay-rebound', hub: reply.hub })
+    if (!useLane) upgrade()
+  }
+
+  /**
+   * Settled on the relay while this window's own lane is open: the hub's was not yet (it opens
+   * its frame as it starts, and a busy start can take seconds). Try the lane again a few times,
+   * each only while no call waits on the relay, so nothing sent there is overtaken.
+   */
+  let upgrading = null
+  const upgrade = () => {
+    upgrading ??= (async () => {
+      if (!(await lane.ready.catch(() => false))) return
+      for (let attempt = 0; attempt < LANE_UPGRADE_TRIES && !useLane; attempt += 1) {
+        await sleep(LANE_UPGRADE_MS)
+        if (useLane || [...pending.values()].some((entry) => entry.op !== 'hello')) continue
+        try {
+          const reply = await rawCall('hello', { node }, LANE_HELLO_MS, true)
+          // A hub that changed meanwhile is the hello loop's to adopt.
+          if (reply.hub === hubInstance) adopt({ reply, overLane: true })
+          return
+        } catch {
+          // Not yet: try again later.
+        }
+      }
+    })().finally(() => (upgrading = null))
   }
 
   const hello = () => {
     helloLoop ??= (async () => {
       for (let attempt = 0; ; attempt += 1) {
         try {
-          adopt(await rawCall('hello', { node }, 1500))
+          adopt(await helloOnce(1500))
           return
         } catch {
           await sleep(Math.min(250 * 2 ** attempt, 5000))
@@ -361,6 +582,20 @@ export function connectRelay(router, { tauri, label, engine, report, onNavigate,
     return helloLoop
   }
 
+  const onReply = (payload) => {
+    const entry = pending.get(payload.id)
+    if (!entry) return
+    pending.delete(payload.id)
+    if (payload.ok) entry.resolve(payload.value)
+    else entry.reject(Error(payload.error))
+  }
+  // From the hub over the lane: answers and events only (broadcasts and pages stay on the relay).
+  lane.listen((payload, from) => {
+    if (from !== 'overlay' || payload.kind !== 'ext' || payload.engine !== engine) return
+    if (payload.type === 'reply') onReply(payload)
+    else if (payload.type === 'event') router.dispatch(payload.ctx, payload.event)
+  })
+
   void listenRelay(tauri, label, (payload, from) => {
     if (payload.kind === 'navigate' && from === 'overlay' && typeof payload.url === 'string') {
       onNavigate?.(payload.url)
@@ -368,11 +603,7 @@ export function connectRelay(router, { tauri, label, engine, report, onNavigate,
     }
     if (payload.kind !== 'ext' || payload.engine !== engine) return
     if (payload.type === 'reply') {
-      const entry = pending.get(payload.id)
-      if (!entry) return
-      pending.delete(payload.id)
-      if (payload.ok) entry.resolve(payload.value)
-      else entry.reject(Error(payload.error))
+      onReply(payload)
     } else if (payload.type === 'event') {
       router.dispatch(payload.ctx, payload.event)
     } else if (payload.type === 'setup') {
@@ -391,9 +622,9 @@ export function connectRelay(router, { tauri, label, engine, report, onNavigate,
     hello,
     /** Ask the hub whether the engine is up (and adopt it if it is a new hub). */
     async probe(timeoutMs = 1500) {
-      const reply = await rawCall('hello', { node }, timeoutMs)
-      adopt(reply)
-      return reply
+      const answer = await helloOnce(timeoutMs)
+      adopt(answer)
+      return answer.reply
     }
   }
 }
