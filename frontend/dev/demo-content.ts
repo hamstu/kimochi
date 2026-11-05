@@ -1,6 +1,6 @@
 /**
  * The example game every demo surface shows: the dev preview harness (`demo-data.ts` seeds the
- * Log's "Steins;Gate" session from `lines`) and the marketing site's live demo
+ * Log's "My VN" session from `lines`) and the marketing site's live demo
  * (`site/src/demo/`, which plays the `play` lines in a synthetic visual novel, segments them with
  * `tokens`, and looks words up in `vocab`).
  *
@@ -73,9 +73,9 @@ export interface DemoContent {
 }
 
 export const DEMO_CONTENT: DemoContent = {
-  title: 'Steins;Gate',
-  subtitle: 'Chapter 3 — the phone microwave (name subject to change).',
-  app: 'STEINS;GATE',
+  title: 'My VN',
+  subtitle: 'A little visual novel to read with Kimochi.',
+  app: 'My VN',
   scene: {
     sky: ['#1b1838', '#5b2f5e', '#e0875a'],
     skyline: '#120f22',

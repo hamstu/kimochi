@@ -33,8 +33,8 @@ export const manifest: SessionsManifest = {
   sessions: [
     {
       id: SESSION_IDS.steinsGate,
-      name: 'Steins;Gate',
-      description: 'Chapter 3 — the phone microwave (name subject to change).',
+      name: DEMO_CONTENT.title,
+      description: DEMO_CONTENT.subtitle,
       createdAt: NOW - 12 * DAY,
       updatedAt: NOW - 5 * 60_000
     },
@@ -369,7 +369,7 @@ export interface DemoSource {
 export const SOURCES: DemoSource[] = [
   { id: 'display:1', kind: 'display', name: 'Built-in Retina Display', hue: 215, on_screen: true, bounds: { x: 0, y: 0, width: 1512, height: 982 } },
   { id: 'display:2', kind: 'display', name: 'LG UltraFine', hue: 160, on_screen: true, bounds: { x: 1512, y: 0, width: 2560, height: 1440 } },
-  { id: 'window:101', kind: 'window', name: 'Steins;Gate', app: 'STEINS;GATE', hue: 350, on_screen: true, bounds: { x: 120, y: 80, width: 1280, height: 720 } },
+  { id: 'window:101', kind: 'window', name: DEMO_CONTENT.title, app: DEMO_CONTENT.app, hue: 330, on_screen: true, bounds: { x: 120, y: 80, width: 1280, height: 720 } },
   { id: 'window:102', kind: 'window', name: '逆転裁判123 成歩堂セレクション', app: 'Ace Attorney Trilogy', hue: 30, on_screen: true, bounds: { x: 200, y: 120, width: 1280, height: 720 } },
   { id: 'window:103', kind: 'window', name: 'YouTube — Google Chrome', app: 'Google Chrome', hue: 5, on_screen: true, bounds: { x: 0, y: 25, width: 1440, height: 900 } },
   { id: 'window:104', kind: 'window', name: 'mpv — 葬送のフリーレン 第12話.mkv', app: 'mpv', hue: 280, on_screen: true, bounds: { x: 300, y: 100, width: 1280, height: 720 } },
@@ -384,7 +384,7 @@ export const SOURCES: DemoSource[] = [
 export const THUMBNAIL_EDGE = 320
 
 const APP_GLYPHS: Record<string, [string, number]> = {
-  'STEINS;GATE': ['S', 350],
+  [DEMO_CONTENT.app]: ['🌸', 330],
   'Ace Attorney Trilogy': ['逆', 30],
   'Google Chrome': ['C', 5],
   mpv: ['▶', 280],

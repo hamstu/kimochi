@@ -113,6 +113,8 @@ import { STEAM_HANDLERS } from './preview-steam'
 import { SENTENCE_AUDIO_HANDLERS, demoLineAdded } from './preview-sentence-audio'
 import { SCREENSHOT_HANDLERS, SCREENSHOTS_ON, shotOf } from './preview-screenshots'
 import { ANKI_CARDS_HANDLERS } from './preview-anki-cards'
+import { DEMO_CONTENT } from './demo-content'
+import { HOOK_DEFAULTS, gameKey, hookSettings, type HookGames } from '../../ui/hook-games'
 import { studioJson } from './studio/bridge'
 import type { ExtensionHost } from '../bridge/dictionaryEngine'
 
@@ -167,10 +169,15 @@ function demoCapture(): unknown {
 // ---------------------------------------------------------------- text hooker
 
 const HOOK_THREADS = [
-  { key: '1:1:503a:0', name: 'KiriKiri', hookcode: 'HS-8@1A2B3:Game.exe', preview: '今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。', count: 12, generic: false, selected: true },
+  { key: '1:1:503a:0', name: 'KiriKiri', hookcode: 'HS-8@1A2B3:Game.exe',
+    // Embedded in the site's demo, the game's own first line.
+    preview: EMBED ? (DEMO_CONTENT.lines.find((l) => l.play)?.text ?? '') : '今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。',
+    count: 12, generic: false, selected: true },
   { key: '1:2:4f2b:0', name: 'DrawTextW', hookcode: 'HQ-24@0:user32.dll:DrawTextW', preview: 'ミサキ', count: 12, generic: true, selected: false },
   { key: '1:3:5164:0', name: 'DrawTextExW', hookcode: 'HQ-24@0:user32.dll:DrawTextExW', preview: 'オート　スキップ　セーブ', count: 3, generic: true, selected: false }
 ]
+/** Embedded: the site's demo has hooked its game once (see `texthook_start`). */
+let embedHooked = false
 const HOOK_STATUS: Record<string, unknown> & { threads: typeof HOOK_THREADS } = {
   supported: true,
   phase: 'hooked',
@@ -196,7 +203,7 @@ const settings: Record<string, unknown> = {
     ...(params.get('anki') === 'wrongport' ? { ankiConnectUrl: 'http://127.0.0.1:8770' } : {})
   },
   nativeWindowPinned: { log: true },
-  texthookerSourceSessions: { 'steins;gate': SESSION_IDS.steinsGate },
+  texthookerSourceSessions: { [DEMO_CONTENT.app.toLowerCase()]: SESSION_IDS.steinsGate },
   // Settings → Text Hooker: the hooked game, with a few settings of its own, and one hooked before.
   textHookerGames: {
     'c:/games/moonlit harbor/game.exe': {
@@ -449,7 +456,8 @@ const live = {
   revision: 1,
   source: params.get('nosource') === '1' ? null : CURRENT_SOURCE,
   autoOcr: params.get('auto') !== '0',
-  textOverlayVisible: true
+  // `?overlay=0`: Show overlay off (the site's guided demo has the visitor turn it on).
+  textOverlayVisible: params.get('overlay') !== '0'
 }
 let pageLabel = 'log'
 
@@ -462,7 +470,24 @@ function pushState(): void {
 /** Embedded: the view the site's demo follows: the source, its switches and the Log's input. */
 function tellEmbedderState(): void {
   const input = (settings.superTexthooker as { inputSource?: string } | undefined)?.inputSource ?? 'ocr'
-  tellEmbedder({ type: 'state', sourceId: live.source?.id ?? null, autoOcr: live.autoOcr, overlay: live.textOverlayVisible, input })
+  const games = (settings.textHookerGames as HookGames | undefined) ?? {}
+  const exe = String(HOOK_STATUS.exe ?? '')
+  const autoAlign = hookSettings(HOOK_DEFAULTS, games[gameKey(exe)] ?? null).autoAlign
+  tellEmbedder({
+    type: 'state',
+    sourceId: live.source?.id ?? null,
+    autoOcr: live.autoOcr,
+    overlay: live.textOverlayVisible,
+    input,
+    hookPhase: HOOK_STATUS.phase,
+    autoAlign
+  })
+}
+
+/** The hook's status, to the page (the Log follows `texthook-status`) and to the site's demo. */
+function pushHookStatus(): void {
+  void emit('texthook-status', { ...HOOK_STATUS })
+  tellEmbedderState()
 }
 
 /** Embedded: tell the site's demo something (`{kimochiDemoEvent: 1, type, …}`). */
@@ -631,7 +656,9 @@ const DEMO_SETTINGS = new Set([
   'settingsActiveTab',
   'superTexthooker',
   'texthookerSourceSessions',
-  'texthookerIngestedHistory'
+  'texthookerIngestedHistory',
+  // Auto align, and the Text Hooker's other per-game switches in the source panel.
+  'textHookerGames'
 ])
 
 /** What a stopped setting is called on the site, for the ones the demo's own controls reach. */
@@ -731,6 +758,7 @@ const HANDLERS: Record<string, Handler> = {
       throw 'io: the settings file is read-only (preview)'
     publish(String(a?.key), a?.value)
     onModelSettingSet(String(a?.key), a?.value)
+    if (a?.key === 'textHookerGames') tellEmbedderState()
     return null
   },
   settings_all: () => ({ ...settings }),
@@ -824,12 +852,30 @@ const HANDLERS: Record<string, Handler> = {
   texthook_start: (a) => {
     // Hooking another window (the site's demo hooks its own game): that window's game.
     const source = ALL_SOURCES.find((s) => s.id === a?.sourceId)
-    if (source && source.id !== HOOK_STATUS.sourceId) {
+    // Embedded, the first hook is always a new one (the preset status already names the game's window).
+    if (source && (source.id !== HOOK_STATUS.sourceId || (EMBED && !embedHooked))) {
+      embedHooked = true
       HOOK_STATUS.sourceId = source.id
       const app = source.app ?? source.name
       HOOK_STATUS.exe = `C:/Games/${app}/${app.replace(/[^\w]+/g, '')}.exe`
+      if (EMBED) {
+        // The site's demo: the game is new to Kimochi, with Auto align off for the visitor to turn
+        // on, and hooking takes a moment (attaching, then the threads), as it does for real.
+        const exe = String(HOOK_STATUS.exe)
+        const games = { ...((settings.textHookerGames as HookGames | undefined) ?? {}) }
+        games[gameKey(exe)] = { exe, name: app, sessionId: SESSION_IDS.steinsGate, addedAt: Date.now(), hookedAt: Date.now(), autoAlign: false }
+        publish('textHookerGames', games)
+        HOOK_STATUS.phase = 'attaching'
+        HOOK_STATUS.threads = []
+        setTimeout(() => {
+          HOOK_STATUS.phase = 'hooked'
+          HOOK_STATUS.threads = HOOK_THREADS.map((t) => ({ ...t, selected: t.key === HOOK_STATUS.selected }))
+          pushHookStatus()
+        }, 1800)
+      }
     }
-    return HOOK_STATUS
+    setTimeout(tellEmbedderState, 0)
+    return { ...HOOK_STATUS }
   },
   texthook_stop: () => ({ supported: true, phase: 'idle', threads: [] }),
   texthook_select: (a) => {
@@ -1264,6 +1310,9 @@ function listenToEmbedder(): void {
       // A hooked game's line, as native sends it (src-tauri/src/text_hook): no scan, it just arrives.
       scriptStopped = true
       void emit('texthook-line', { text: message.text, key: HOOK_STATUS.selected, at: Date.now(), id: `embed-hook-${++embedScan}` })
+      // The thread's preview is the line it just read (the source panel's Text Hooker picker).
+      HOOK_STATUS.threads = HOOK_STATUS.threads.map((t) => (t.key === HOOK_STATUS.selected ? { ...t, preview: message.text, count: t.count + 1 } : t))
+      pushHookStatus()
     } else if (message.type === 'theme') {
       publish('appearance', message.value)
     } else if (message.type === 'interactive') {
