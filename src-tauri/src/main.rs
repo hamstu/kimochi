@@ -20,6 +20,7 @@ mod chrome_storage;
 mod cloud;
 mod compact;
 mod cover;
+mod bug_report;
 mod debug_report;
 mod dictionary_runtime;
 mod engine_probe;
@@ -3137,6 +3138,7 @@ fn main() {
             debug_report::debug_report,
             debug_report::debug_bundle_save,
             debug_report::debug_verbose_set,
+            bug_report::bug_report_send,
             webview_scale::webview_scale_sync,
             storage_load,
             storage_save,

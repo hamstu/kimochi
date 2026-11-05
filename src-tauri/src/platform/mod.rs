@@ -943,7 +943,7 @@ fn has_origin(url: &tauri::Url, origin: &str) -> bool {
 /// true in a debug build (`tauri dev` or `npm run bundle`): a debug bundle loads a `vite build`,
 /// so this, not `import.meta.env.DEV`, is how its pages tell a local build from a release.
 /// Steam Deck Gaming Mode (Gamescope), on Linux only.
-fn gaming_mode() -> bool {
+pub fn gaming_mode() -> bool {
     #[cfg(target_os = "linux")]
     return gamescope::active();
     #[cfg(not(target_os = "linux"))]

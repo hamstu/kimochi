@@ -12,7 +12,7 @@
  * scan mode and the built-in Yomitan lookups, none of which may stop because of a view.
  */
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
-import { Maximize2, Minimize2, PanelLeft } from 'lucide-react'
+import { CircleHelp, Maximize2, Minimize2, PanelLeft } from 'lucide-react'
 import { listen } from '@tauri-apps/api/event'
 import { IconButton, Tooltip } from '@kit'
 import { ReaderHost, Transcript } from '@texthooker/App'
@@ -31,6 +31,7 @@ import { LogActionsProvider } from './LogActionsProvider'
 import { engineSwitchRecord, registerMainRoute } from './engineSwitch'
 import { DEFAULT_WIDTH, MainSidebar, type MainView } from './MainSidebar'
 import { WhatsNewDialog } from './WhatsNewDialog'
+import { HelpDialog } from './HelpDialog'
 import { useWhatsNewOnLaunch } from './whatsNewOnLaunch'
 import '../panels/settings-panel.css'
 import { GamingSourceView } from './GamingSourceView'
@@ -106,6 +107,7 @@ export default function MainPanel(): JSX.Element {
   const { props: controller, error, dismissError } = useController()
   // What's new opens on its own once, on the first launch of a new version.
   const [whatsNew, setWhatsNew] = useWhatsNewOnLaunch()
+  const [help, setHelp] = useState(false)
 
   const setView = (next: MainView): void => {
     if (next === 'settings' && demoStops('Settings')) return
@@ -220,6 +222,11 @@ export default function MainPanel(): JSX.Element {
             <KimochiLogo size={16} />
             <span>Kimochi</span>
           </span>
+          <Tooltip content="Help">
+            <IconButton label="Help" size="sm" className="main-help" onClick={() => setHelp(true)}>
+              <CircleHelp />
+            </IconButton>
+          </Tooltip>
         </TitleBarPortal>
         {miniError && <div role="alert" className="native-panel-error" onClick={() => setMiniError(null)}>{miniError}</div>}
         <div className="main-frame">
@@ -289,6 +296,7 @@ export default function MainPanel(): JSX.Element {
           </div>
         </div>
         <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
+        <HelpDialog open={help} onOpenChange={setHelp} />
         <BootReady label="log" />
       </LogActionsProvider>
     </ReaderHost>
