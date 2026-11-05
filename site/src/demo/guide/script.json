@@ -155,6 +155,11 @@
       "say": "There it is: everything you noted about them, right where you’re reading."
     },
     {
+      "face": "wink",
+      "say": "By the way, you can add things to your Notebook right from the Log: select some text in a line, then right-click it.",
+      "point": { "log": ".log-lines .line:last-child" }
+    },
+    {
       "face": "thinking",
       "say": "One more trick! With the Text Hooker, Kimochi can read a game’s text straight out of the game, with no scanning at all. Want to see?",
       "choices": [
