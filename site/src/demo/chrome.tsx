@@ -3,7 +3,7 @@
  * title bar on every OS), so the Log frame only changes shape; the game is an ordinary decorated
  * window, so it gets the platform's real title bar.
  */
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { Platform } from './env'
 
 export type DesktopPlatform = Exclude<Platform, 'deck'>
@@ -123,10 +123,40 @@ export function DesktopBar({ platform, replay = false }: { platform: DesktopPlat
   return null
 }
 
-/** Windows 11 taskbar along the bottom. */
-export function Taskbar() {
+/** A running app on the taskbar or dock. */
+export interface RunningApp {
+  id: string
+  label: string
+  icon: ReactNode
+  /** Its window is in front. */
+  active: boolean
+}
+
+/** Keeps a closed app a moment longer, so it can slide out (`leaving`). */
+function useLive(apps: RunningApp[], ms = 220): (RunningApp & { leaving: boolean })[] {
+  const [shown, setShown] = useState<(RunningApp & { leaving: boolean })[]>(() => apps.map((a) => ({ ...a, leaving: false })))
+  const key = apps.map((a) => `${a.id}:${a.active}`).join(',')
+  useEffect(() => {
+    setShown((cur) => {
+      const out = cur.map((c) => {
+        const now = apps.find((x) => x.id === c.id)
+        return now ? { ...now, leaving: false } : { ...c, leaving: true }
+      })
+      for (const x of apps) if (!cur.some((c) => c.id === x.id)) out.push({ ...x, leaving: false })
+      return out
+    })
+    const t = setTimeout(() => setShown((cur) => cur.filter((a) => !a.leaving)), ms)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, ms])
+  return shown
+}
+
+/** Windows 11 taskbar along the bottom: Start, then the apps that are running, sliding in and out. */
+export function Taskbar({ apps }: { apps: RunningApp[] }) {
+  const live = useLive(apps)
   return (
-    <div className="flex h-8 shrink-0 items-center justify-center gap-1.5 border-t border-hairline bg-bar/85 backdrop-blur" aria-hidden="true">
+    <div className="flex h-8 shrink-0 items-center justify-center gap-1 border-t border-hairline bg-bar/85 backdrop-blur" aria-hidden="true">
       <span className="grid size-6 place-items-center">
         <svg width="14" height="14" viewBox="0 0 16 16" className="text-accent-ink" fill="currentColor">
           <rect width="7.4" height="7.4" />
@@ -135,15 +165,32 @@ export function Taskbar() {
           <rect x="8.6" y="8.6" width="7.4" height="7.4" />
         </svg>
       </span>
-      <span className="size-6 rounded-sm bg-hover" />
-      <span className="relative grid size-6 place-items-center rounded-sm bg-hover">
-        <span className="size-3 rounded-[3px] kd-game-icon" />
-        <span className="absolute -bottom-0.5 h-0.5 w-2 rounded-full bg-accent" />
-      </span>
-      <span className="relative grid size-6 place-items-center rounded-sm bg-hover">
-        <span className="size-3 rounded-full bg-accent" />
-        <span className="absolute -bottom-0.5 h-0.5 w-2 rounded-full bg-accent" />
-      </span>
+      {live.map((a) => (
+        <span key={a.id} className={`kd-task ${a.leaving ? 'kd-task-out' : ''}`} title={a.label}>
+          <span className={`relative grid size-6 place-items-center rounded-sm ${a.active ? 'bg-hover' : ''}`}>
+            {a.icon}
+            <span className={`absolute -bottom-0.5 h-0.5 rounded-full bg-accent transition-[width] duration-200 ${a.active ? 'w-3' : 'w-1.5 opacity-60'}`} />
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** macOS: a small dock along the bottom, with the running apps (a dot under each). */
+export function Dock({ apps }: { apps: RunningApp[] }) {
+  const live = useLive(apps)
+  if (live.length === 0) return null
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-2 z-[64] flex justify-center" aria-hidden="true">
+      <div className="kd-dock flex items-end gap-1 rounded-2xl px-1.5 pt-1.5 pb-1">
+        {live.map((a) => (
+          <span key={a.id} className={`kd-task flex flex-col items-center gap-0.5 ${a.leaving ? 'kd-task-out' : ''}`}>
+            <span className="grid size-8 place-items-center">{a.icon}</span>
+            <span className="size-1 rounded-full bg-ink-2" />
+          </span>
+        ))}
+      </div>
     </div>
   )
 }

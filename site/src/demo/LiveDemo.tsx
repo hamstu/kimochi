@@ -6,11 +6,12 @@
  * from the preview harness (vite.demo.config.ts → /demo/panel.html) with the Tauri runtime mocked,
  * embedded in an iframe and driven by postMessage, so each line the game shows arrives in the Log.
  *
- * From `lg` up the desktop is a small desktop of its own, paused behind a play button. Play runs a
- * session from the start with a virtual pointer: open the game from its desktop icon, open Kimochi,
- * choose the game as the source (the real Change source menu, inside the iframe), turn on Auto OCR,
- * click back on the game, and from then on the pointer follows the words being looked up. The
- * visitor's first click of their own retires the virtual pointer for good.
+ * From `lg` up the desktop is a small desktop of its own, paused (and not interactive) behind a
+ * play button. Play starts the guided tour (guide/Guide.tsx, scripted in guide/script.json): Mochiko,
+ * in a visual-novel dialogue box, asks the visitor to open Kimochi and the game, choose the game as
+ * the source (the real Change source menu, inside the iframe), turn on Auto OCR, look a word up,
+ * add it to Anki, and optionally try the Text Hooker (a Windows desk, on other platforms). The game
+ * waits on each line for a click, like a visual novel.
  *
  * The windows behave like windows, through a few light shims (frontend/dev/preview-setup.ts):
  * drag them by their title bars (the Log's drag is reported from its iframe), resize them from the
@@ -19,8 +20,7 @@
  * stage to fill the browser (Esc or the button restores it) scales everything with it. The Log is
  * told which windows are open, so its source menu offers only those; it reports its source and
  * switches back, so the game is read only while Kimochi watches it with Auto OCR on, and the overlay
- * shows only with Show overlay on. An Easter egg in the corner opens a small app that can be read
- * too. Narrower screens, and reduced motion, get the two windows stacked, already set up.
+ * shows only with Show overlay on. Narrower screens, and reduced motion, get the two windows stacked, already set up.
  *
  * The platform comes in as a prop: the visitor's OS for the OCR tab, Windows for the Text Hooker
  * tab (`input="hook"`: the game is hooked from the source menu's Text Hooker, its lines arrive with
@@ -44,7 +44,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react'
-import { Maximize2, Play, RotateCcw, X } from 'lucide-react'
+import { Maximize2, Play, RotateCcw, Square, X } from 'lucide-react'
 import { useMediaQuery } from '../lib/client'
 import { GAME } from './content'
 import { useGuessedPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
@@ -52,10 +52,11 @@ import { deckFrames, desktopFrames, hookFrames, usePlayer, type Frame } from './
 import { GameScreen } from './GameScreen'
 import { DeckBody, DeckHud } from './DeckStage'
 import { LogFrame, type LogEvent, type PostToLog } from './LogFrame'
-import { DesktopBar, Taskbar, TitleBar, WINDOW_SHAPE } from './chrome'
-import { EGG_LINE, EggApp } from './EggApp'
+import { DesktopBar, Dock, Taskbar, TitleBar, WINDOW_SHAPE, type RunningApp } from './chrome'
 import { TryRealThing } from './TryRealThing'
 import { PLAY_LINES } from './content'
+import { Guide, preloadFaces, type GuideFacts } from './guide/Guide'
+import type { AnkiState } from './WordPopup'
 import './demo.css'
 
 export interface LiveDemoProps {
@@ -75,9 +76,8 @@ const HOOK_FRAMES = hookFrames()
 
 /** The harness's source ids for the site's own windows (preview-setup.ts). */
 const GAME_SOURCE = 'window:101'
-const EGG_SOURCE = 'window:900'
 
-type WindowId = 'game' | 'log' | 'egg'
+type WindowId = 'game' | 'log'
 /** A window's place as fractions of the desk; the game's height follows its width (16:10 + title). */
 interface Placement {
   x: number
@@ -98,14 +98,20 @@ const MIN = { width: 300, height: 260 }
 
 const gameHeight = (w: number, desk: Size): number => (w * desk.width) / 1.6 + TITLE
 
-/** Where the windows open: Kimochi large on the right (about five-eighths), the game bottom-left. */
+/**
+ * Where the windows open: Kimochi large on the right (about five-eighths), the game on the left,
+ * both above the guide's dialogue box (the lower quarter or so of the desk).
+ */
 function initialLayout(desk: Size): Layout {
-  let gw = 0.42
-  if (gameHeight(gw, desk) > desk.height * 0.62) gw = ((desk.height * 0.62 - TITLE) * 1.6) / desk.width
+  const floor = desk.height - Math.min(190, desk.height * 0.3)
+  // The game large on the left, over Kimochi's left edge (the guide brings forward the window it
+  // points into); Kimochi on the right.
+  let gw = 0.5
+  const room = floor - desk.height * 0.2
+  if (gameHeight(gw, desk) > room) gw = ((room - TITLE) * 1.6) / desk.width
   return {
-    log: { x: 0.32, y: 0.06, w: 0.64, h: 0.8 },
-    game: { x: 0.035, y: 1 - 0.05 - gameHeight(gw, desk) / desk.height, w: gw, h: 0 },
-    egg: { x: 0.3, y: 0.18, w: 0.36, h: 0.46 }
+    log: { x: 0.43, y: 0.03, w: 0.545, h: floor / desk.height - 0.05 },
+    game: { x: 0.09, y: (floor - gameHeight(gw, desk)) / desk.height - 0.02, w: gw, h: 0 },
   }
 }
 
@@ -119,29 +125,25 @@ function useWide(): boolean {
   return useMediaQuery('(min-width: 1024px)')
 }
 
-const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
-  new Promise((resolve, reject) => {
-    const t = setTimeout(resolve, ms)
-    signal.addEventListener('abort', () => {
-      clearTimeout(t)
-      reject(new DOMException('stopped', 'AbortError'))
-    })
-  })
+type Phase = 'idle' | 'running'
 
-/** The virtual pointer: where it is on the desk, how long its move takes, and whether it is pressed. */
-interface Pointer {
-  x: number
-  y: number
-  ms: number
-  down: boolean
-  shown: boolean
+/** What Kimochi's window last reported (its `state` event). */
+interface LogState {
+  sourceId: string | null
+  autoOcr: boolean
+  overlay: boolean
+  input: string
+  /** The Text Hooker's phase (attaching, hooked…), or null when not reported. */
+  hookPhase: string | null
+  /** Auto align for the hooked game. */
+  autoAlign: boolean
 }
-
-type Phase = 'idle' | 'intro' | 'running'
 
 export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: LiveDemoProps) {
   const detected = useGuessedPlatform()
-  const platform = chosen ?? detected
+  // The guide can move the desk to Windows for the Text Hooker (it works on Windows and Linux).
+  const [override, setOverride] = useState<Platform | null>(null)
+  const platform = override ?? chosen ?? detected
   const theme = useResolvedTheme()
   const reduced = useReducedMotion()
   const wide = useWide()
@@ -150,7 +152,10 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const near = useOnScreen(stageRef, '600px')
   const [loadLog, setLoadLog] = useState(false)
   useEffect(() => {
-    if (near) setLoadLog(true)
+    if (near) {
+      setLoadLog(true)
+      preloadFaces()
+    }
   }, [near])
 
   const deck = platform === 'deck'
@@ -159,34 +164,51 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const [unavailable, setUnavailable] = useState<string | null>(null)
   // Free windows on a desk: from lg up, or maximised.
   const free = !deck && (wide || max)
-  // The scripted session: on the desk, without reduced motion.
+  // The guided tour: on the desk, without reduced motion.
   const flow = free && !reduced
   const [phase, setPhase] = useState<Phase>('idle')
   const [run, setRun] = useState(0)
-  const [open, setOpen] = useState<Record<WindowId, boolean>>({ game: false, log: false, egg: false })
+  const [guideOn, setGuideOn] = useState(false)
+  const [open, setOpen] = useState<Record<WindowId, boolean>>({ game: false, log: false })
   // Kimochi's Quit, as opposed to its window being hidden or minimised: nothing is read until it is
   // opened again.
   const [quit, setQuit] = useState(false)
-  const [pointer, setPointer] = useState<Pointer>({ x: 0, y: 0, ms: 0, down: false, shown: false })
-  // The visitor took over: the virtual pointer is gone until the demo is played again.
-  const [retired, setRetired] = useState(false)
   const [logReady, setLogReady] = useState(false)
-  const [logState, setLogState] = useState<{ sourceId: string | null; autoOcr: boolean; overlay: boolean; input: string }>({
-    sourceId: null,
-    autoOcr: false,
-    overlay: false,
-    input: 'ocr'
-  })
-  const hook = !deck && input === 'hook'
+  const NO_STATE: LogState = { sourceId: null, autoOcr: false, overlay: false, input: 'ocr', hookPhase: null, autoAlign: true }
+  const [logState, setLogState] = useState<LogState>(NO_STATE)
+  // On the guided desk the visitor chooses how Kimochi reads the game, in its source menu.
+  const hook = !deck && (flow ? logState.input === 'hook' : input === 'hook')
+
+  // What the visitor has done, for the guide: lines read, words looked up, cards made.
+  const [linesIn, setLinesIn] = useState(0)
+  const [hookLines, setHookLines] = useState(0)
+  const [lineSeq, setLineSeq] = useState(0)
+  const [lookups, setLookups] = useState<Record<string, number>>({})
+  const [anki, setAnki] = useState<Record<string, AnkiState>>({})
+  const [ankiToast, setAnkiToast] = useState<string | null>(null)
+  const [shiftWanted, setShiftWanted] = useState(false)
+  const [shiftHeld, setShiftHeld] = useState(false)
+  const [hover, setHover] = useState(false)
+
+  const resetDesk = (): void => {
+    setOpen({ game: false, log: false })
+    setQuit(false)
+    setOverride(null)
+    setLogState(NO_STATE)
+    setLinesIn(0)
+    setHookLines(0)
+    setLookups({})
+    setAnki({})
+    setAnkiToast(null)
+  }
 
   // A new platform, or a different kind of stage, starts over.
   useEffect(() => {
     setPhase('idle')
-    setOpen({ game: false, log: false, egg: false })
-    setQuit(false)
-    setRetired(false)
-    setPointer((p) => ({ ...p, shown: false }))
-  }, [platform, flow, input])
+    setGuideOn(false)
+    resetDesk()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen, detected, flow, input])
 
   const [userCursor, setUserCursor] = useState<number | null>(null)
   const frames = deck ? DECK_FRAMES : hook ? HOOK_FRAMES : DESKTOP_FRAMES
@@ -197,46 +219,83 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   }, [onScreen, logReady])
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
+  /** Kimochi's Log to its newest line, as the app keeps it (in a small window too). */
+  const scrollLog = useCallback((): void => {
+    const doc = iframeRef.current?.contentDocument
+    if (!doc) return
+    for (const el of doc.querySelectorAll<HTMLElement>('.log-transcript-frame, .log-transcript, .log-lines, .log-root')) {
+      if (el.scrollHeight > el.clientHeight + 2) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    }
+  }, [])
+
   const onEnter = useCallback((frame: Frame) => {
     if (frame.emit === 'scan') postRef.current?.({ type: 'scan' })
-    if (frame.emit === 'line') postRef.current?.({ type: 'line', text: PLAY_LINES[frame.line].text })
-    if (frame.emit === 'hook') postRef.current?.({ type: 'hook-line', text: PLAY_LINES[frame.line].text })
-  }, [])
+    if (frame.emit === 'line' || frame.emit === 'hook') setTimeout(scrollLog, 350)
+    if (frame.emit === 'line') {
+      postRef.current?.({ type: 'line', text: PLAY_LINES[frame.line].text })
+      setLinesIn((n) => n + 1)
+    }
+    if (frame.emit === 'hook') {
+      postRef.current?.({ type: 'hook-line', text: PLAY_LINES[frame.line].text })
+      setHookLines((n) => n + 1)
+    }
+  }, [scrollLog])
 
   // Kimochi is reading a window: it is running (not quit), and that window is its source with Auto
   // OCR on, or (the Text Hooker) hooked. Off the desk the windows are always open.
   const watching = (id: WindowId, source: string, how: 'ocr' | 'hook' = 'ocr'): boolean =>
     (!free || (open[id] && !quit)) &&
     logState.sourceId === source &&
-    (how === 'hook' ? logState.input === 'hook' : logState.input !== 'hook' && logState.autoOcr)
+    (how === 'hook'
+      ? logState.input === 'hook' && (logState.hookPhase === null || logState.hookPhase === 'hooked')
+      : logState.input !== 'hook' && logState.autoOcr)
   const started = deck || phase !== 'idle'
   const reading = deck || (started && watching('game', GAME_SOURCE, hook ? 'hook' : 'ocr'))
   const running = onScreen && !reduced && userCursor === null && reading
-  const playing = usePlayer(frames, running, onEnter, `${platform}:${run}`)
+  const [playing, nextLine] = usePlayer(frames, running, onEnter, `${platform}:${run}:${hook}`, flow)
   const frame = reduced ? stillFrame(frames) : playing
   const overlay = deck || reduced || ((!free || (open.game && !quit)) && logState.sourceId === GAME_SOURCE && logState.overlay)
 
   // A visitor's pick belongs to the line it was made on.
   useEffect(() => setUserCursor(null), [frame.line, platform])
+  useEffect(() => setLineSeq((n) => n + 1), [frame.line])
 
-  // The Easter egg's app is read once each time Kimochi starts watching it.
-  // Once read, its words take the overlay's boxes, until Kimochi stops watching it.
-  const eggRead = started && watching('egg', EGG_SOURCE)
-  const [eggScanned, setEggScanned] = useState(false)
+  // Each word the visitor opens counts as a lookup (the pop-up's "Looked up N times").
   useEffect(() => {
-    setEggScanned(false)
-    if (!eggRead || !onScreen) return
-    const scan = setTimeout(() => postRef.current?.({ type: 'scan' }), 700)
-    const line = setTimeout(() => {
-      postRef.current?.({ type: 'line', text: EGG_LINE })
-      setEggScanned(true)
-    }, 1600)
+    if (userCursor === null || !overlay) return
+    const word = PLAY_LINES[frame.line].tokens[userCursor]?.word
+    if (word) setLookups((l) => ({ ...l, [word]: (l[word] ?? 0) + 1 }))
+  }, [userCursor, frame.line, overlay])
+
+  const addToAnki = useCallback((word: string): void => {
+    setAnki((a) => ({ ...a, [word]: 'adding' }))
+    setTimeout(() => {
+      setAnki((a) => ({ ...a, [word]: 'added' }))
+      setAnkiToast(word)
+      // The card is made: the pop-up closes, so the note about it can be read.
+      setUserCursor(null)
+    }, 650)
+  }, [])
+  useEffect(() => {
+    if (!ankiToast) return
+    const t = setTimeout(() => setAnkiToast(null), 5200)
+    return () => clearTimeout(t)
+  }, [ankiToast])
+
+  // The Shift key the guide shows lights up while the visitor holds it.
+  useEffect(() => {
+    if (!shiftWanted) return setShiftHeld(false)
+    const on = (e: KeyboardEvent): void => setShiftHeld(e.shiftKey)
+    const off = (): void => setShiftHeld(false)
+    addEventListener('keydown', on)
+    addEventListener('keyup', on)
+    addEventListener('blur', off)
     return () => {
-      clearTimeout(scan)
-      clearTimeout(line)
+      removeEventListener('keydown', on)
+      removeEventListener('keyup', on)
+      removeEventListener('blur', off)
     }
-  }, [eggRead, onScreen])
-  const eggBoxes = eggScanned && eggRead && logState.overlay
+  }, [shiftWanted])
 
   // ---------------------------------------------------------------- desk and windows
   const deskRef = useRef<HTMLDivElement>(null)
@@ -246,7 +305,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   layoutRef.current = layout
   const deskSize = useRef(desk)
   deskSize.current = desk
-  const [order, setOrder] = useState<WindowId[]>(['egg', 'game', 'log'])
+  const [order, setOrder] = useState<WindowId[]>(['log', 'game'])
   // While the page drags or resizes a window, a shield over the Log keeps its iframe from taking
   // the pointer.
   const [busy, setBusy] = useState(false)
@@ -255,6 +314,24 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
     []
   )
   const beforeMini = useRef<Placement | null>(null)
+
+  // The taskbar's (and dock's) apps, in the order they were opened.
+  const [launched, setLaunched] = useState<WindowId[]>([])
+  useEffect(() => {
+    setLaunched((l) => {
+      const ids: WindowId[] = ['game', 'log']
+      const kept = l.filter((id) => open[id])
+      const added = ids.filter((id) => open[id] && !kept.includes(id))
+      return [...kept, ...added]
+    })
+  }, [open])
+  const frontmost = order.filter((id) => open[id]).at(-1)
+  const apps: RunningApp[] = launched.map((id) => ({
+    id,
+    label: id === 'game' ? GAME.app : 'Kimochi',
+    icon: id === 'game' ? <GameIcon size="sm" /> : <img src="/icon.svg" alt="" className="size-4.5" />,
+    active: id === frontmost
+  }))
 
   useLayoutEffect(() => {
     const el = deskRef.current
@@ -275,7 +352,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
     const d = deskSize.current
     if (!d) return setLayout(null)
     setLayout((l) => l ?? initialLayout(d))
-  }, [hasDesk, platform, run])
+  }, [hasDesk, run])
 
   useEffect(() => {
     if (!max) return
@@ -305,7 +382,6 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
     if (kind === 'move' && (event.target as Element).closest('button, a')) return
     event.preventDefault()
     event.stopPropagation()
-    if (phase === 'running') setRetired(true)
     front(id)
     const start = { x: event.clientX, y: event.clientY, place: layout[id] }
     const target = event.currentTarget
@@ -333,19 +409,22 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
 
   // ---------------------------------------------------------------- what the Log reports
   const logDrag = useRef<{ x: number; y: number; place: Placement } | null>(null)
-  const phaseRef = useRef(phase)
-  phaseRef.current = phase
   const onLogEvent = (event: LogEvent): void => {
     if (event.type === 'state') {
-      setLogState({ sourceId: event.sourceId, autoOcr: event.autoOcr, overlay: event.overlay, input: event.input ?? 'ocr' })
+      setLogState({
+        sourceId: event.sourceId,
+        autoOcr: event.autoOcr,
+        overlay: event.overlay,
+        input: event.input ?? 'ocr',
+        hookPhase: event.hookPhase ?? null,
+        autoAlign: event.autoAlign ?? true
+      })
     } else if (event.type === 'unavailable') {
       setUnavailable(event.feature)
     } else if (event.type === 'interact') {
       front('log')
-      if (phaseRef.current === 'running') setRetired(true)
     } else if (event.type === 'activate') {
       if (event.sourceId === GAME_SOURCE) front('game')
-      if (event.sourceId === EGG_SOURCE) front('egg')
     } else if (event.type === 'window') {
       const action = event.action
       if (action === 'close' || action === 'hide' || action === 'minimize') {
@@ -386,189 +465,33 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   }
 
   // The Log offers only the site's windows that are open.
-  const openSources = [open.game && GAME_SOURCE, open.egg && EGG_SOURCE].filter(Boolean).join(',')
+  const openSources = open.game ? GAME_SOURCE : ''
   useEffect(() => {
     if (!free || !logReady) return
     postRef.current?.({ type: 'sources', open: openSources ? openSources.split(',') : [] })
   }, [free, logReady, openSources])
 
-  // ---------------------------------------------------------------- the scripted session
-
-  /** A point on the desk for an element inside the Log's iframe (its centre), or null. */
-  const pointInLog = (selector: string, match?: (el: Element) => boolean): { x: number; y: number; el: HTMLElement } | null => {
-    const iframe = iframeRef.current
-    const deskEl = deskRef.current
-    const doc = iframe?.contentDocument
-    if (!iframe || !deskEl || !doc) return null
-    const el = [...doc.querySelectorAll<HTMLElement>(selector)].find((e) => (match ? match(e) : true) && e.getClientRects().length > 0)
-    if (!el) return null
-    const f = iframe.getBoundingClientRect()
-    const d = deskEl.getBoundingClientRect()
-    const r = el.getBoundingClientRect()
-    return { x: f.left - d.left + r.left + r.width / 2, y: f.top - d.top + r.top + r.height / 2, el }
-  }
-
-  /** A point on the desk inside an element of the page itself (`fx`, `fy` of the way across it). */
-  const pointOnDesk = (el: Element | null, fx = 0.5, fy = 0.5): { x: number; y: number } | null => {
-    const d = deskRef.current
-    if (!el || !d) return null
-    const dr = d.getBoundingClientRect()
-    const r = el.getBoundingClientRect()
-    return { x: r.left - dr.left + r.width * fx, y: r.top - dr.top + r.height * fy }
-  }
-
-  const hookRef = useRef(hook)
-  hookRef.current = hook
-  const steps = useRef({ pointInLog, pointOnDesk, front })
-  steps.current = { pointInLog, pointOnDesk, front }
-
-  useEffect(() => {
-    if (!flow || phase !== 'intro') return
-    const { pointInLog: inLog, pointOnDesk: onDesk, front: raise } = steps.current
-    const ctrl = new AbortController()
-    const { signal } = ctrl
-    const wait = (ms: number): Promise<void> => sleep(ms, signal)
-    const moveTo = async (p: { x: number; y: number } | null, ms = 700): Promise<void> => {
-      if (!p) throw new Error('target missing')
-      setPointer((c) => ({ ...c, x: p.x, y: p.y, ms, shown: true }))
-      await wait(ms + 80)
-    }
-    // `sound`: a click on the demo's own desktop (an icon, a window), which has no sound of its
-    // own. Clicks inside Kimochi are not given one: its controls already sound. A double-click
-    // sounds once, like an app's sound effect, not twice like a mouse.
-    const press = async (times = 1, sound = false): Promise<void> => {
-      for (let i = 0; i < times; i++) {
-        if (sound && i === 0) postRef.current?.({ type: 'sound', name: 'click' })
-        setPointer((c) => ({ ...c, down: true }))
-        await wait(110)
-        setPointer((c) => ({ ...c, down: false }))
-        await wait(110)
-      }
-    }
-    /** Waits for an element inside the Log, polling, up to `ms`. */
-    const findInLog = async (selector: string, match?: (el: Element) => boolean, ms = 4000) => {
-      for (let t = 0; t < ms; t += 100) {
-        const hit = inLog(selector, match)
-        if (hit) return hit
-        await wait(100)
-      }
-      throw new Error(`not found: ${selector}`)
-    }
-    const tap = (el: HTMLElement, kind: 'pointer' | 'click'): void => {
-      const win = el.ownerDocument.defaultView
-      if (!win) return
-      if (kind === 'pointer') {
-        const r = el.getBoundingClientRect()
-        const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerType: 'mouse', clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
-        el.dispatchEvent(new win.PointerEvent('pointerdown', init))
-        el.dispatchEvent(new win.PointerEvent('pointerup', { ...init, buttons: 0 }))
-      } else el.click()
-    }
-    const windowEl = (id: WindowId): Element | null => deskRef.current?.querySelector(`[data-window="${id}"]`) ?? null
-    const hookFlow = hookRef.current
-
-    void (async () => {
-      const el = deskRef.current
-      if (!el) return
-      setPointer({ x: el.clientWidth * 0.5, y: el.clientHeight * 0.62, ms: 0, down: false, shown: true })
-      await wait(350)
-      // 1. Open the game from its desktop icon.
-      await moveTo(onDesk(el.querySelector('[data-icon="game"]')), 900)
-      await press(2, true)
-      setOpen((o) => ({ ...o, game: true }))
-      raise('game')
-      await wait(1100)
-      // 2. Open Kimochi.
-      await moveTo(onDesk(el.querySelector('[data-icon="kimochi"]')), 900)
-      await press(2, true)
-      setOpen((o) => ({ ...o, log: true }))
-      setQuit(false)
-      raise('log')
-      await wait(1100)
-      // 3. Choose a source → Window or screen → the game.
-      const card = await findInLog('.src-empty')
-      await moveTo(card, 800)
-      await press()
-      tap(card.el, 'pointer')
-      await wait(500)
-      // OCR reads a window; the Text Hooker hooks one (its own submenu of the same windows).
-      const type = await findInLog('.src-type', (e) => /Text Hooker/.test(e.textContent ?? '') === hookFlow)
-      await moveTo(type, 500)
-      await press()
-      tap(type.el, 'click')
-      await wait(700)
-      const tile = await findInLog('.sg-tile', (e) => /steins/i.test(e.getAttribute('title') ?? ''))
-      await moveTo(tile, 750)
-      await press()
-      tap(tile.el, 'click')
-      await wait(900)
-      if (!hookFlow) {
-        // 4. Auto OCR on (the Text Hooker needs no switch: hooked, the game's lines just arrive).
-        const auto = await findInLog('button[role="switch"]', (e) => /Auto OCR/.test(e.getAttribute('aria-label') ?? e.textContent ?? ''))
-        await moveTo(auto, 750)
-        await press()
-        tap(auto.el, 'click')
-        await wait(600)
-      } else await wait(500)
-      // 5. Back to the game: click its uncovered side to bring it forward, and read.
-      await moveTo(onDesk(windowEl('game'), 0.22, 0.55), 800)
-      await press(1, true)
-      raise('game')
-      setPhase('running')
-    })().catch((error: unknown) => {
-      if ((error as Error)?.name === 'AbortError') return
-      // Something inside the Log did not show up as expected: skip ahead rather than stall.
-      setOpen((o) => ({ ...o, game: true, log: true }))
-      setPhase('running')
-    })
-    return () => ctrl.abort()
-  }, [flow, phase, run, hook])
-
-  // While the session plays, the pointer follows the word being looked up, else rests by the box.
-  // A scripted lookup opens only once the pointer has reached its word (`arrived`).
-  const [arrived, setArrived] = useState<Frame | null>(null)
-  useEffect(() => {
-    if (!flow || phase !== 'running' || retired) return
-    const deskEl = deskRef.current
-    if (!deskEl) return
-    const MOVE = 650
-    let landed: ReturnType<typeof setTimeout> | undefined
-    const t = setTimeout(() => {
-      const { pointOnDesk: onDesk } = steps.current
-      const word = frame.cursor !== null ? deskEl.querySelector(`[data-window="game"] [data-token="${frame.cursor}"]`) : null
-      const box = deskEl.querySelector('[data-window="game"] .kd-box')
-      const target = word ? onDesk(word) : box ? onDesk(box, 0.7, 0.8) : null
-      if (!target) return
-      const offset = word ? { x: 4, y: 10 } : { x: 0, y: 0 }
-      setPointer((c) => ({ ...c, x: target.x + offset.x, y: target.y + offset.y, ms: MOVE, shown: true }))
-      landed = setTimeout(() => setArrived(frame), MOVE)
-    }, 60)
-    return () => {
-      clearTimeout(t)
-      clearTimeout(landed)
-    }
-  }, [flow, phase, frame, retired])
-  // On the scripted desk, a frame's lookup waits for the pointer, and stops for good once the
-  // visitor has taken over (their own hovering still opens words).
-  const scripted = flow && phase === 'running'
-  const shownFrame: Frame =
-    scripted && (retired || arrived !== frame) ? { ...frame, cursor: null, popup: false } : frame
-
-  /** The visitor's own click on the desk, once the session is under way, retires the pointer. */
-  const onDeskDown = (event: ReactPointerEvent): void => {
-    if (event.isTrusted && phase === 'running') setRetired(true)
-  }
+  // ---------------------------------------------------------------- the guided tour
+  // On the guided desk the game's own lookups are the visitor's: the script never opens one.
+  const shownFrame: Frame = flow ? { ...frame, cursor: null, popup: false } : frame
 
   const play = (): void => {
     setUserCursor(null)
-    setRetired(false)
     if (!flow) return setPhase('running')
-    setOpen({ game: false, log: false, egg: false })
-    setQuit(false)
+    resetDesk()
     setLayout(null)
     setLogReady(false)
     setRun((r) => r + 1)
-    setPhase('intro')
+    setPhase('running')
+    setGuideOn(true)
+  }
+  const stop = (): void => {
+    resetDesk()
+    setLayout(null)
+    setLogReady(false)
+    setRun((r) => r + 1)
+    setGuideOn(false)
+    setPhase('idle')
   }
 
   // Out of the maximised demo first, once the page can scroll again.
@@ -577,6 +500,49 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
     setMax(false)
     setTimeout(() => document.getElementById('get-kimochi')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
   }
+
+  const onAction = (name: string): void => {
+    if (name === 'maximise') setMax(true)
+    // Download leaves the demo for the page's download button.
+    if (name === 'download') {
+      stop()
+      toDownload()
+    }
+    if (name === 'windowsDesk') {
+      // A Windows PC for the Text Hooker: Kimochi's window loads again, as on that PC, with both
+      // windows open.
+      setOverride('windows')
+      setLogReady(false)
+      setLogState(NO_STATE)
+      setOpen((o) => ({ ...o, game: true, log: true }))
+      setQuit(false)
+    }
+  }
+
+  const facts: GuideFacts = {
+    kimochiOpen: open.log && !quit,
+    gameOpen: open.game,
+    gameSource: logState.sourceId === GAME_SOURCE,
+    autoOcr: logState.autoOcr,
+    hookStarted: logState.sourceId === GAME_SOURCE && logState.input === 'hook',
+    hooked: logState.sourceId === GAME_SOURCE && logState.input === 'hook' && logState.hookPhase === 'hooked',
+    autoAlign: logState.autoAlign,
+    overlay: logState.overlay,
+    notMax: !max,
+    lineRead: linesIn > 0,
+    hookLine: hookLines > 0,
+    lookedUp: Object.keys(lookups).length > 0,
+    ankiAdded: Object.values(anki).includes('added'),
+    lineSeq,
+    nextLine: false,
+    notHookPlatform: platform !== 'windows' && platform !== 'linux'
+  }
+  const focusToken = PLAY_LINES[frame.line]?.focus ?? null
+  // A click on the game closes its pop-up and moves its text on.
+  const advanceGame = useCallback((): void => {
+    setUserCursor(null)
+    nextLine()
+  }, [nextLine])
 
   const screen = useMemo(
     () => (
@@ -588,11 +554,16 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
         onUserCursor={setUserCursor}
         overlay={overlay}
         hook={hook}
+        aligned={!hook || !flow || logState.autoAlign}
+        anki={flow ? anki : undefined}
+        onAnki={flow ? addToAnki : undefined}
+        onAdvance={flow ? advanceGame : undefined}
+        sticky={flow}
       >
         {deck && <DeckHud frame={frame} />}
       </GameScreen>
     ),
-    [frame, shownFrame, deck, onScreen, userCursor, overlay, hook]
+    [frame, shownFrame, deck, onScreen, userCursor, overlay, hook, flow, logState.autoAlign, anki, addToAnki, advanceGame]
   )
 
   const placed = (id: WindowId): CSSProperties | undefined => {
@@ -625,9 +596,15 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const close = (id: WindowId) => (free ? () => setOpen((o) => ({ ...o, [id]: false })) : undefined)
   // `demo` only tells the tabs apart, so switching between them loads the Log afresh.
   const logParams: Record<string, string> = flow
-    ? { nosource: '1', auto: '0', sidebar: '1', demo: input }
+    ? // Show overlay starts off for the visitor to turn on; on the Text Hooker's Windows desk they
+      // already have.
+      { nosource: '1', auto: '0', overlay: override ? '1' : '0', sidebar: '1', demo: input }
     : { sidebar: free ? '1' : '0', demo: input, ...(hook ? { input: 'hook' } : {}) }
   const showPlay = !deck && !reduced && phase === 'idle'
+  // Before Play, the desk is a picture: nothing on it can be clicked or focused.
+  const idle = flow && phase === 'idle'
+  const inert = idle || undefined
+  const tour = flow && phase === 'running'
 
   return (
     <div className={`w-full ${className}`}>
@@ -636,6 +613,8 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
         role={max ? 'dialog' : undefined}
         aria-modal={max || undefined}
         aria-label={max ? 'Kimochi demo, maximised' : undefined}
+        onPointerEnter={() => setHover(true)}
+        onPointerLeave={() => setHover(false)}
         className={
           max
             ? 'kd-stage fixed inset-0 z-[70] flex flex-col overflow-hidden'
@@ -645,16 +624,27 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
         <div
           className={`absolute right-0 z-[80] flex items-center gap-1 ${max ? 'top-[env(safe-area-inset-top)] p-2' : 'top-0 p-0.5'}`}
         >
-          {flow && phase === 'running' && (
-            <button
-              type="button"
-              onClick={play}
-              aria-label="Play the demo again"
-              title="Play again"
-              className={`kd-max grid place-items-center ${max ? 'size-11 rounded-full md:size-9' : 'size-5 rounded-md'}`}
-            >
-              <RotateCcw size={max ? 16 : 12} aria-hidden />
-            </button>
+          {tour && (
+            <>
+              <button
+                type="button"
+                onClick={play}
+                aria-label="Start the demo again"
+                title="Start again"
+                className={`kd-max grid place-items-center ${max ? 'size-11 rounded-full md:size-9' : 'size-5 rounded-md'}`}
+              >
+                <RotateCcw size={max ? 16 : 12} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={stop}
+                aria-label="Stop the demo"
+                title="Stop"
+                className={`kd-max grid place-items-center ${max ? 'size-11 rounded-full md:size-9' : 'size-5 rounded-md'}`}
+              >
+                <Square size={max ? 14 : 10} aria-hidden fill="currentColor" />
+              </button>
+            </>
           )}
           {max ? (
             // Out of the maximised demo: big enough to hit with a thumb.
@@ -685,42 +675,35 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
           </div>
         ) : (
           <>
-            <DesktopBar platform={platform} replay={flow && phase === 'running'} />
-            <div
-              ref={deskRef}
-              onPointerDown={onDeskDown}
-              className={free ? 'relative min-h-[560px] flex-1' : 'relative grid min-h-0 flex-1 gap-4 p-3 sm:p-5'}
-            >
+            <DesktopBar platform={platform} replay={tour} />
+            <div ref={deskRef} className={free ? 'relative min-h-[560px] flex-1' : 'relative grid min-h-0 flex-1 gap-4 p-3 sm:p-5'}>
               {free && (
                 <>
-                  <div className="absolute top-4 left-5 flex flex-col gap-4">
-                    <DesktopIcon id="game" label={GAME.app} icon={<span className="kd-game-icon block size-9 rounded-lg" />} onOpen={() => openWindow('game')} />
+                  <div className="absolute top-4 left-5 flex flex-col gap-4" inert={inert}>
                     <DesktopIcon id="kimochi" label="Kimochi" icon={<img src="/icon.svg" alt="" className="size-10" />} onOpen={() => openWindow('log')} />
-                  </div>
-                  <div className="absolute right-5 bottom-4">
-                    <DesktopIcon id="egg" label="おまけ" icon={<EggMark />} onOpen={() => openWindow('egg')} />
+                    <DesktopIcon id="game" label={GAME.app} icon={<GameIcon />} onOpen={() => openWindow('game')} />
                   </div>
                 </>
               )}
               <div
                 data-window="game"
-                className={`min-w-0 overflow-hidden ${WINDOW_SHAPE[platform]} ${shown('game') ? 'kd-win-open' : 'kd-win-closed'}`}
+                inert={inert}
+                className={`min-w-0 overflow-hidden ${WINDOW_SHAPE[platform]} ${shown('game') ? 'kd-win-open' : 'kd-win-closed'} ${flow ? 'kd-vn' : ''}`}
                 style={placed('game')}
                 onPointerDown={free ? () => front('game') : undefined}
               >
                 <div onPointerDown={free ? track('game', 'move') : undefined}>
-                  <TitleBar
-                    platform={platform}
-                    title={GAME.app}
-                    icon={<span className="kd-game-icon block size-3.5 rounded-[3px]" aria-hidden="true" />}
-                    onClose={close('game')}
-                  />
+                  <TitleBar platform={platform} title={GAME.app} icon={<GameIcon size="xs" />} onClose={close('game')} />
                 </div>
-                {screen}
+                <div className="relative">
+                  {screen}
+                  {ankiToast && <AnkiToast word={ankiToast} />}
+                </div>
                 {corner('game')}
               </div>
               <div
                 data-window="log"
+                inert={inert}
                 className={`${free ? '' : 'relative h-[440px] min-h-0'} ${shown('log') ? 'kd-win-open' : 'kd-win-closed'}`}
                 style={placed('log')}
                 onPointerDown={free ? () => front('log') : undefined}
@@ -740,44 +723,34 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
                 {busy && <span className="absolute inset-0 z-10" aria-hidden="true" />}
                 {corner('log')}
               </div>
-              {free && (
-                <div
-                  data-window="egg"
-                  className={`flex flex-col overflow-hidden bg-raised ${WINDOW_SHAPE[platform]} ${open.egg ? 'kd-win-open' : 'kd-win-closed'}`}
-                  style={placed('egg')}
-                  onPointerDown={() => front('egg')}
-                >
-                  <div onPointerDown={track('egg', 'move')}>
-                    <TitleBar platform={platform} title="おまけ" icon={<EggMark small />} onClose={close('egg')} />
-                  </div>
-                  <EggApp boxes={eggBoxes} onDownload={toDownload} />
-                  {corner('egg')}
-                </div>
-              )}
-              {flow && phase === 'running' && !retired && <ShiftKey down={shownFrame.popup && shownFrame.cursor !== null} />}
-              {flow && (
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 20 24"
-                  className={`kd-pointer pointer-events-none absolute top-0 left-0 z-[60] ${pointer.down ? 'kd-pointer-down' : ''}`}
-                  style={{
-                    transform: `translate(${pointer.x}px, ${pointer.y}px)`,
-                    transitionDuration: `${pointer.ms}ms`,
-                    opacity: pointer.shown && !retired ? 1 : 0
+                            {tour && guideOn && (
+                <Guide
+                  key={run}
+                  facts={facts}
+                  deskRef={deskRef}
+                  iframeRef={iframeRef}
+                  focusToken={focusToken}
+                  keys={hover || max}
+                  silent={!onScreen}
+                  onAction={onAction}
+                  onShift={setShiftWanted}
+                  shift={shiftWanted ? <ShiftKey down={shiftHeld} /> : null}
+                  onPoint={(where) => {
+                    front(where)
+                    if (where === 'log') setTimeout(scrollLog, 100)
                   }}
-                >
-                  <path d="M2 1.5v18.2l4.6-4.4 3 6.8 3.1-1.4-3-6.6h6.4z" />
-                </svg>
+                  inset={platform === 'macos' ? 64 : 16}
+                  onEnd={() => {
+                    setGuideOn(false)
+                    setShiftWanted(false)
+                  }}
+                />
               )}
+              {free && platform === 'macos' && <Dock apps={apps} />}
               {showPlay && (
                 <button
                   type="button"
-                  // On a large screen, playing fills it for the full effect (Esc or the corner X
-                  // restores it); a phone plays in place.
-                  onClick={() => {
-                    if (wide) setMax(true)
-                    play()
-                  }}
+                  onClick={play}
                   disabled={flow && loadLog && !logReady}
                   aria-label="Play the demo"
                   className="kd-play absolute top-1/2 left-1/2 z-[70] grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"
@@ -786,7 +759,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
                 </button>
               )}
             </div>
-            {platform === 'windows' && <Taskbar />}
+            {platform === 'windows' && <Taskbar apps={free ? apps : []} />}
           </>
         )}
         {unavailable && !deck && (
@@ -797,7 +770,39 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   )
 }
 
-/** A desktop icon: picture over a label; a double-click opens it (the virtual pointer's way too). */
+/** The demo game's icon: a pastel tile with a cute emoji in it. */
+function GameIcon({ size = 'md' }: { size?: 'xs' | 'sm' | 'md' }) {
+  const box = size === 'xs' ? 'size-3.5 rounded-[3px] text-[9px]' : size === 'sm' ? 'size-4.5 rounded-[4px] text-[11px]' : 'size-10 rounded-[10px] text-[22px]'
+  return (
+    <span className={`kd-game-icon grid place-items-center leading-none ${box}`} aria-hidden="true">
+      🌸
+    </span>
+  )
+}
+
+/** "Added to Anki": what Kimochi put on the card, in the game's corner for a few seconds. */
+function AnkiToast({ word }: { word: string }) {
+  return (
+    <div className="kd-anki-toast absolute top-3 right-3 z-[8]" role="status">
+      <div className="flex items-center gap-2 font-semibold">
+        <span className="grid size-5 place-items-center rounded-full bg-[#3fb950] text-[11px] text-white">✓</span>
+        Added to Anki
+        <span className="font-jp font-normal text-white/70" lang="ja">
+          {word}
+        </span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {['Sentence', 'Sentence audio', 'Screenshot', 'Reading', 'Meaning'].map((f) => (
+          <span key={f} className="kd-anki-field">
+            {f}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** A desktop icon: picture over a label; a double-click opens it. */
 function DesktopIcon({ id, label, icon, onOpen }: { id: string; label: string; icon: ReactNode; onOpen: () => void }) {
   return (
     <button
@@ -816,12 +821,12 @@ function DesktopIcon({ id, label, icon, onOpen }: { id: string; label: string; i
 }
 
 /**
- * The scripted session's Shift key, bottom left: the app looks words up while Shift is held over
- * them, so the demo shows it held for each lookup. Gone once the visitor takes over.
+ * The Shift key, bottom left, while the guide asks for a lookup: the app looks words up while Shift
+ * is held over them, and the key lights up while the visitor holds it.
  */
 function ShiftKey({ down }: { down: boolean }) {
   return (
-    <div aria-hidden="true" className={`kd-shift pointer-events-none absolute bottom-4 left-5 z-[65] ${down ? 'kd-shift-down' : ''}`}>
+    <div aria-hidden="true" className={`kd-shift kd-shift-sm pointer-events-none ${down ? 'kd-shift-down' : ''}`}>
       <span className="kd-shift-cap">
         <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
           <path d="M9 18v-6H5l7-7 7 7h-4v6H9z" />
@@ -830,18 +835,5 @@ function ShiftKey({ down }: { down: boolean }) {
       </span>
       <span className="kd-shift-label">Held to look up</span>
     </div>
-  )
-}
-
-/** The Easter egg: a speckled egg. */
-function EggMark({ small = false }: { small?: boolean }) {
-  return (
-    <svg viewBox="0 0 32 40" className={small ? 'size-3.5' : 'h-10 w-8'} aria-hidden="true">
-      <path d="M16 1.5C8.5 1.5 2.5 15 2.5 25a13.5 13.5 0 0 0 27 0C29.5 15 23.5 1.5 16 1.5z" fill="#fff4dc" stroke="#e8c98a" strokeWidth="1.5" />
-      <circle cx="11" cy="20" r="1.8" fill="#e6a8a0" />
-      <circle cx="20" cy="15" r="1.4" fill="#9fc6e8" />
-      <circle cx="19" cy="27" r="2" fill="#b9dca2" />
-      <circle cx="10" cy="30" r="1.2" fill="#f2c45f" />
-    </svg>
   )
 }

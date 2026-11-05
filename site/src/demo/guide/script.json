@@ -1,0 +1,221 @@
+{
+  "$comment": "The demo's guided tour, read top to bottom. Every field is described at the top of guide/Guide.tsx. A step without `until` waits for a click (or Space/Enter); a step with `until` waits for the visitor to do something, then moves on by itself.",
+  "character": {
+    "name": "もちこ",
+    "romaji": "Mochiko",
+    "portrait": "/guide/{face}.webp"
+  },
+  "steps": [
+    { "face": "excited", "say": "Hi there! I’m Mochiko, and I’m going to show you how Kimochi works. Click here, or press Space, to go on." },
+    {
+      "face": "happy",
+      "say": "Everything on this little desktop is pretend, except Kimochi. That’s the real app’s window, running right in your browser! (Well, mostly: just enough of it to work in this demo.)"
+    },
+    {
+      "face": "thinking",
+      "say": "Want a bit more room? I can make the demo fill your screen. You can always change it with the button in the top right corner.",
+      "if": "notMax",
+      "choices": [
+        { "label": "Full screen, please", "do": "maximise", "goto": "start" },
+        { "label": "No thanks", "goto": "start" }
+      ]
+    },
+    {
+      "id": "start",
+      "face": "happy",
+      "say": "First, open Kimochi. Double-click its icon, up here on the left.",
+      "point": { "desk": "[data-icon=kimochi]" },
+      "until": "kimochiOpen"
+    },
+    {
+      "face": "excited",
+      "say": "Now let’s start a game. Double-click My VN.",
+      "point": { "desk": "[data-icon=game]" },
+      "until": "gameOpen"
+    },
+    {
+      "face": "proud",
+      "say": "That’s my visual novel! It’s all in Japanese, so Kimochi is going to help us read it.",
+      "point": { "desk": "[data-window=game] .kd-screen" }
+    },
+    {
+      "face": "thinking",
+      "say": "Kimochi needs to know what to read. In its window, click Choose a source.",
+      "point": [{ "log": ".src-empty" }, { "log": ".src-card" }],
+      "until": [{ "logVisible": ".src-type" }, "gameSource"]
+    },
+    {
+      "face": "thinking",
+      "say": "Pick Window or screen…",
+      "point": { "log": ".src-type", "text": "Window" },
+      "until": [{ "logVisible": ".sg-tile" }, "gameSource"]
+    },
+    {
+      "face": "happy",
+      "say": "…and then My VN.",
+      "point": { "log": ".sg-tile", "text": "My VN" },
+      "until": "gameSource"
+    },
+    {
+      "face": "excited",
+      "say": "Now turn on Auto OCR. Kimochi will read the game every time its text changes.",
+      "point": { "log": "button[role=switch]", "text": "Auto OCR" },
+      "until": "autoOcr"
+    },
+    {
+      "face": "surprised",
+      "say": "Here comes a line. Watch the game!",
+      "point": { "desk": "[data-window=game] .kd-box" },
+      "until": "lineRead",
+      "delay": 2200
+    },
+    {
+      "face": "happy",
+      "say": "Kimochi read it, and the line went into its Log, so you can always scroll back to it later.",
+      "point": { "log": ".log-lines .line:last-child" }
+    },
+    {
+      "face": "thinking",
+      "say": "To look words up right in the game, turn on Show overlay. It’s optional, so you can keep it off when you only want the Log.",
+      "point": { "log": "button[role=switch]", "text": "overlay" },
+      "until": "overlay"
+    },
+    {
+      "face": "excited",
+      "say": "See the boxes around the words? That’s Kimochi’s overlay, drawn right over the game.",
+      "point": { "desk": "[data-window=game] .kd-box" }
+    },
+    {
+      "id": "lookup",
+      "face": "thinking",
+      "say": "Now let’s look a word up. Hold Shift and move your mouse over a word in the game. Try the one I’m pointing at!",
+      "point": [{ "word": "focus" }, { "desk": "[data-window=game] .kd-box" }],
+      "until": "lookedUp",
+      "shift": true
+    },
+    {
+      "face": "surprised",
+      "say": "Ta-da! That’s the dictionary pop-up, with the word’s reading and meanings. This one is pretend, just for the demo: the real one depends on the dictionary you choose.",
+      "point": { "desk": ".kd-popup" },
+      "links": [
+        { "label": "Yomitan", "href": "https://github.com/yomidevs/yomitan", "icon": "/guide/dict/yomitan.svg" },
+        { "label": "Hachidori", "href": "https://github.com/bee-san/hachidori", "icon": "/guide/dict/hachidori.png" },
+        { "label": "10ten", "href": "https://github.com/birchill/10ten-ja-reader", "icon": "/guide/dict/tenten.svg" }
+      ],
+      "linksAfter": "Okay, let’s continue!"
+    },
+    {
+      "face": "happy",
+      "say": "With a compatible dictionary, you can add words to Anki with the + button.",
+      "point": { "desk": ".kd-popup [data-anki]" }
+    },
+    {
+      "face": "wink",
+      "say": "Let’s pretend it’s all set up. Click + now to try it!",
+      "point": [{ "desk": ".kd-popup [data-anki]" }, { "word": "focus" }],
+      "until": "ankiAdded",
+      "shift": true
+    },
+    {
+      "face": "proud",
+      "say": "Done! The card has the word and the sentence it came from. Turn on Enhance Anki cards, as it is here, and Kimochi also adds the audio your computer played for that line, and a screenshot of the game.",
+      "point": { "log": "button[role=switch]", "text": "Enhance Anki" }
+    },
+    {
+      "face": "wink",
+      "say": "Click the game whenever you’re ready for the next line, just like a real visual novel.",
+      "point": { "desk": "[data-window=game] .kd-box" },
+      "until": "nextLine"
+    },
+    {
+      "face": "happy",
+      "say": "Now the Notebook. Click Notebook in Kimochi’s window.",
+      "point": { "log": ".main-tab", "text": "Notebook" },
+      "until": { "logVisible": ".nb-list" }
+    },
+    {
+      "face": "excited",
+      "say": "This is where the characters, places and words you add from the Log live. You can edit them, add pictures and notes, and Kimochi finds them in every line you read.",
+      "point": { "log": ".nb-list" }
+    },
+    {
+      "face": "happy",
+      "say": "Let’s see that. Click Log to go back.",
+      "point": { "log": ".main-tab", "text": "^\\s*Log" },
+      "until": { "logVisible": ".notebook-chip" }
+    },
+    {
+      "face": "thinking",
+      "say": "Names from your Notebook are highlighted in the Log. Click one, like the one I’m pointing at, to see its details.",
+      "point": { "log": ".notebook-chip" },
+      "until": { "logVisible": "iframe[title='Notebook entry']" }
+    },
+    {
+      "face": "proud",
+      "say": "There it is: everything you noted about them, right where you’re reading."
+    },
+    {
+      "face": "thinking",
+      "say": "One more trick! With the Text Hooker, Kimochi can read a game’s text straight out of the game, with no scanning at all. Want to see?",
+      "choices": [
+        { "label": "Show me!", "goto": "hook" },
+        { "label": "Maybe later", "goto": "outro" }
+      ]
+    },
+    {
+      "id": "hook",
+      "face": "wink",
+      "say": "The Text Hooker works on Windows and Linux, so let’s pretend this is a Windows PC for a moment.",
+      "if": "notHookPlatform",
+      "do": "windowsDesk"
+    },
+    {
+      "face": "happy",
+      "say": "Open Kimochi’s source menu again.",
+      "point": [{ "log": ".src-empty" }, { "log": ".src-card" }],
+      "until": [{ "logVisible": ".src-type" }, "hookStarted"]
+    },
+    {
+      "face": "excited",
+      "say": "This time, pick Text Hooker…",
+      "point": { "log": ".src-type", "text": "Text Hooker" },
+      "until": [{ "logVisible": ".sg-tile" }, "hookStarted"]
+    },
+    {
+      "face": "happy",
+      "say": "…and My VN again.",
+      "point": { "log": ".sg-tile", "text": "My VN" },
+      "until": "hookStarted"
+    },
+    {
+      "face": "thinking",
+      "say": "Kimochi is hooking into the game. It takes a moment the first time…",
+      "until": "hooked"
+    },
+    {
+      "face": "surprised",
+      "say": "Hooked! Kimochi found the game’s text, and each line now comes straight from the game as it’s written. That’s it here, under Text Hooker.",
+      "point": [{ "log": ".k-select-trigger:not(.sb-engine-select)" }, { "log": ".src-panel" }]
+    },
+    {
+      "face": "thinking",
+      "say": "Kimochi shows each hooked line on a card over the game. Right now it’s not in the right place. Turn on Auto align…",
+      "point": { "log": "button[role=switch]", "text": "Auto align" },
+      "until": "autoAlign"
+    },
+    {
+      "face": "excited",
+      "say": "…and the card moves right over the game’s text! Auto align uses OCR to find where the text is. Everything else works just like before: hold Shift and hover to look words up.",
+      "point": { "desk": "[data-window=game] .kd-box" }
+    },
+    {
+      "id": "outro",
+      "face": "wink",
+      "say": "That’s the tour! Play around as long as you like. Kimochi is free, so download it whenever you’re ready.",
+      "choices": [
+        { "label": "Download Kimochi", "do": "download" },
+        { "label": "Keep playing", "end": true }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { GAME, PLAY_LINES, lookup } from './content'
 import { SceneArt } from './SceneArt'
-import { WordPopup } from './WordPopup'
+import { WordPopup, type AnkiState } from './WordPopup'
 import { RadialMenu } from './RadialMenu'
 import { HintBar, WordOutline } from './GamingMode'
 import { wordStops, type Frame } from './script'
@@ -18,6 +18,18 @@ interface GameScreenProps {
   overlay?: boolean
   /** The Text Hooker: Kimochi's card over the game's text instead of word boxes, and no scan. */
   hook?: boolean
+  /**
+   * The Text Hooker's card is over the game's text (Auto align). Off, the card sits elsewhere on
+   * the game, and glides over the text when it comes on.
+   */
+  aligned?: boolean
+  /** Add to Anki per word, when the pop-up's + works (the guided desk). */
+  anki?: Record<string, AnkiState>
+  onAnki?: (word: string) => void
+  /** The pop-up stays open when the pointer leaves the game (until another word, or a click). */
+  sticky?: boolean
+  /** A click on the game: on to its next line, as in a visual novel. */
+  onAdvance?: () => void
   children?: ReactNode
 }
 
@@ -46,7 +58,21 @@ function useLeaving<T>(value: T | null, ms: number): [T | null, boolean] {
  * the dictionary popup, and (handheld) Gaming Mode: the controller menu, and Read along's outline
  * and hint bar.
  */
-export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, overlay = true, hook = false, children }: GameScreenProps) {
+export function GameScreen({
+  frame,
+  variant,
+  paused,
+  userCursor,
+  onUserCursor,
+  overlay = true,
+  hook = false,
+  aligned = true,
+  anki,
+  onAnki,
+  onAdvance,
+  sticky = false,
+  children
+}: GameScreenProps) {
   const line = PLAY_LINES[frame.line]
   const deck = variant === 'deck'
   const user = userCursor !== null && overlay
@@ -59,6 +85,33 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
   // Read along quiets the overlay's word boxes (the app's `quietText`): the outline marks the word.
   const boxes = overlay && !reading && (user || frame.boxes)
   const outlined = reading !== null && !reading.loading && cursor !== null
+
+  // The hooked line's card away from the text (Auto align off), then gliding over it once it is on:
+  // a copy of the card, drawn where the line is, moved up until it settles.
+  const [settled, setSettled] = useState(aligned)
+  useEffect(() => {
+    if (!aligned) return setSettled(false)
+    const t = setTimeout(() => setSettled(true), 650)
+    return () => clearTimeout(t)
+  }, [aligned])
+  const floating = hook && boxes && !settled
+  const lineRef = useRef<HTMLParagraphElement>(null)
+  const [lineBox, setLineBox] = useState<{ left: number; top: number; width: number } | null>(null)
+  useLayoutEffect(() => {
+    const screen = screenRef.current
+    const el = lineRef.current
+    if (!floating || !screen || !el) return
+    const place = (): void => {
+      const s = screen.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      const scale = s.width / screen.offsetWidth || 1
+      setLineBox({ left: (r.left - s.left) / scale, top: (r.top - s.top) / scale, width: r.width / scale })
+    }
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(screen)
+    return () => observer.disconnect()
+  }, [floating, frame.line])
 
   const stops = useMemo(() => wordStops(frame.line), [frame.line])
   const at = cursor !== null && stops.includes(cursor) ? stops.indexOf(cursor) : null
@@ -187,22 +240,23 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
       ref={screenRef}
       className={`kd-screen ${variant === 'deck' ? 'kd-deck' : ''} ${paused ? 'kd-paused' : ''}`}
       style={style}
+      onClick={onAdvance}
       onPointerLeave={(e) => {
-        if (e.pointerType === 'mouse') onUserCursor(null)
+        if (e.pointerType === 'mouse' && !sticky) onUserCursor(null)
       }}
     >
       <SceneArt />
 
       <div
         key={`box-${frame.line}`}
-        className={`kd-box ${text === 'typing' ? 'kd-typing' : ''} ${boxes ? (hook ? 'kd-hooked' : 'kd-boxes') : ''}`}
+        className={`kd-box ${text === 'typing' ? 'kd-typing' : ''} ${boxes ? (hook ? (floating ? '' : 'kd-hooked') : 'kd-boxes') : ''}`}
       >
         {line.speaker && (
           <div className="kd-speaker" lang="ja">
             {line.speaker}
           </div>
         )}
-        <p className="kd-line" lang="ja" aria-label={line.text}>
+        <p ref={lineRef} className="kd-line" lang="ja" aria-label={line.text}>
           {line.tokens.map((t, i) => {
             const chars = Array.from(t.text).map((c) => (
               <span key={charIndex} className="kd-char" style={{ ['--c' as string]: charIndex++ }}>
@@ -248,6 +302,18 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
 
       {overlay && frame.scan && !user && !hook && <div key={`scan-${frame.line}`} className="kd-sweep" />}
 
+      {floating && lineBox && (
+        <div
+          aria-hidden="true"
+          className={`kd-hooked kd-hookcard ${aligned ? 'kd-hookcard-in' : ''}`}
+          style={{ left: lineBox.left, top: lineBox.top, width: lineBox.width }}
+        >
+          <p className="kd-line" lang="ja">
+            {line.text}
+          </p>
+        </div>
+      )}
+
       {outlined && <WordOutline ref={outlineRef} />}
 
       {showPopup && token && entry && (
@@ -258,6 +324,8 @@ export function GameScreen({ frame, variant, paused, userCursor, onUserCursor, o
           entry={entry}
           surface={token.text}
           focused={reading?.layer === 'popup'}
+          anki={anki?.[token.word!]}
+          onAnki={onAnki ? () => onAnki(token.word!) : undefined}
         />
       )}
 

@@ -3,7 +3,7 @@
  * `ms` milliseconds; the player steps through them in a loop. Desktop and Steam Deck share the game
  * screen, so they share the frame shape.
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PLAY_LINES } from './content'
 
 /** R4 is a back button: shown in the HUD's echo, not on the drawn controls. */
@@ -39,6 +39,8 @@ export interface Frame {
   hint: string
   /** Sent to the embedded Log when the frame starts: a scan, its line, or a hooked game's line. */
   emit?: 'scan' | 'line' | 'hook'
+  /** The line is read and shown: a manual player (the guided desk) waits here for a click. */
+  hold?: boolean
 }
 
 const TYPE_MS = 42
@@ -60,7 +62,7 @@ export function desktopFrames(): Frame[] {
       { ...b, ms: 650 },
       { ...b, ms: 950, scan: true, emit: 'scan' },
       { ...b, ms: 900, boxes: true, emit: 'line' },
-      { ...b, ms: 3000, boxes: true, cursor: line.focus, popup: line.focus >= 0 },
+      { ...b, ms: 3000, boxes: true, cursor: line.focus, popup: line.focus >= 0, hold: true },
       { ...b, ms: 450, boxes: true },
       { ...b, ms: 350 }
     ]
@@ -78,7 +80,7 @@ export function hookFrames(): Frame[] {
     return [
       { ...b, ms: typing(i), text: 'typing', emit: 'hook' },
       { ...b, ms: 700, boxes: true },
-      { ...b, ms: 3000, boxes: true, cursor: line.focus, popup: line.focus >= 0 },
+      { ...b, ms: 3000, boxes: true, cursor: line.focus, popup: line.focus >= 0, hold: true },
       { ...b, ms: 700, boxes: true },
       { ...b, ms: 300 }
     ]
@@ -140,15 +142,16 @@ export function deckFrames(): Frame[] {
 
 /**
  * Steps through `frames` while `running`. A paused run resumes the current frame from its start.
- * `onEnter` runs once per frame entry (not on resume).
+ * `onEnter` runs once per frame entry (not on resume). `manual`: a `hold` frame waits for `next()`.
  */
 export function usePlayer(
   frames: Frame[],
   running: boolean,
   onEnter?: (frame: Frame) => void,
   /** Restart from the first frame when this changes (e.g. the platform). */
-  resetKey?: unknown
-): Frame {
+  resetKey?: unknown,
+  manual = false
+): [Frame, () => void] {
   const [index, setIndex] = useState(0)
   const frame = frames[index % frames.length]
 
@@ -157,10 +160,10 @@ export function usePlayer(
   }, [frames, resetKey])
 
   useEffect(() => {
-    if (!running) return
+    if (!running || (manual && frame.hold)) return
     const timer = setTimeout(() => setIndex((i) => (i + 1) % frames.length), frame.ms)
     return () => clearTimeout(timer)
-  }, [frame, frames.length, running])
+  }, [frame, frames.length, running, manual])
 
   useEffect(() => {
     if (running) onEnter?.(frame)
@@ -168,5 +171,14 @@ export function usePlayer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frame])
 
-  return frame
+  // A click moves on from a held line, or finishes the line being typed (as a visual novel does).
+  const next = useCallback(
+    () =>
+      setIndex((i) => {
+        const f = frames[i % frames.length]
+        return f.hold || f.text === 'typing' ? (i + 1) % frames.length : i
+      }),
+    [frames]
+  )
+  return [frame, next]
 }

@@ -28,7 +28,7 @@ export interface LogDrag {
 /** What the embedded Log tells the demo (the harness's `tellEmbedder`). */
 export type LogEvent =
   | ({ type: 'drag' } & LogDrag)
-  | { type: 'state'; sourceId: string | null; autoOcr: boolean; overlay: boolean; input?: string }
+  | { type: 'state'; sourceId: string | null; autoOcr: boolean; overlay: boolean; input?: string; hookPhase?: string; autoAlign?: boolean }
   | { type: 'window'; action: 'mini' | 'expand' | 'minimize' | 'hide' | 'close' }
   | { type: 'activate'; sourceId: string | null }
   | { type: 'interact' }

@@ -1,5 +1,8 @@
 import { forwardRef } from 'react'
+import { Check, Plus, Volume2 } from 'lucide-react'
 import type { DemoVocab } from '@kimochi/demo-content'
+
+export type AnkiState = 'none' | 'adding' | 'added'
 
 interface WordPopupProps {
   word: string
@@ -8,46 +11,88 @@ interface WordPopupProps {
   surface: string
   /** Gaming Mode moved into the pop-up's buttons (A): the focus is on its first, Add to Anki. */
   focused?: boolean
+  /** The + button's state; without `onAnki` it is decoration. */
+  anki?: AnkiState
+  onAnki?: () => void
 }
 
-/** A Yomitan-style result card: term with its reading, part of speech, numbered glosses. */
-export const WordPopup = forwardRef<HTMLDivElement, WordPopupProps>(function WordPopup({ word, entry, surface, focused = false }, ref) {
+/** A made-up but steady frequency rank per word, for the badge. */
+function rank(word: string): number {
+  let h = 7
+  for (const c of word) h = (h * 31 + c.charCodeAt(0)) % 9973
+  return 300 + (h % 9000)
+}
+
+/**
+ * A simulated dictionary result, Hachidori-style: the term with its reading over it and its
+ * meanings beside it, the deinflection it came from, a frequency badge, the JMdict senses, and the
+ * audio and Add to Anki buttons.
+ */
+export const WordPopup = forwardRef<HTMLDivElement, WordPopupProps>(function WordPopup(
+  { word, entry, surface, focused = false, anki = 'none', onAnki },
+  ref
+) {
   return (
     <div
       ref={ref}
       role="dialog"
       aria-label={`${word}: ${entry.meanings.join('; ')}`}
-      className="kd-popup overflow-hidden rounded-lg border border-hairline bg-raised text-left text-ink shadow-pop"
+      className="kd-popup kd-hd overflow-hidden text-left"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
-      <div className="kd-popup-pad">
-        <div className="flex items-end justify-between gap-3">
-          <ruby lang="ja" className="kd-popup-term font-jp font-semibold leading-tight [ruby-position:over]">
-            {word}
-            <rt className="kd-popup-reading pb-0.5 font-normal tracking-wide text-ink-2">{entry.reading}</rt>
-          </ruby>
-          {entry.pos && (
-            <span className="mb-1 shrink-0 rounded-sm bg-accent-soft px-1.5 py-px text-[0.85em] font-medium text-accent-ink">{entry.pos}</span>
+      <div className="kd-hd-head">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-end gap-x-[0.7em] gap-y-0.5">
+            <ruby lang="ja" className="kd-popup-term kd-hd-term font-jp [ruby-position:over]">
+              {word}
+              <rt className="kd-popup-reading kd-hd-reading">{entry.reading}</rt>
+            </ruby>
+            <span className="kd-hd-gloss mb-[0.3em]">{entry.meanings.slice(0, 2).join(' · ')}</span>
+          </div>
+          {surface !== word && (
+            <p className="kd-hd-deinflect" lang="ja">
+              ▸ {surface} → {word}
+            </p>
+          )}
+          <span className="kd-hd-freq tnum">{rank(word)}</span>
+        </div>
+        <div className="flex shrink-0 gap-[0.4em] self-center">
+          <span className="kd-hd-btn" aria-hidden="true">
+            <Volume2 className="size-[1.1em]" />
+          </span>
+          {onAnki ? (
+            <button
+              type="button"
+              data-anki={anki}
+              aria-label={anki === 'added' ? 'In Anki' : 'Add to Anki'}
+              title={anki === 'added' ? 'In Anki' : 'Add to Anki'}
+              disabled={anki !== 'none'}
+              onClick={onAnki}
+              className={`kd-hd-btn kd-hd-anki ${anki === 'added' ? 'kd-hd-added' : ''} ${anki === 'adding' ? 'kd-hd-adding' : ''}`}
+            >
+              {anki === 'added' ? <Check className="size-[1.1em]" /> : <Plus className="size-[1.1em]" />}
+            </button>
+          ) : (
+            <span aria-hidden="true" className={`kd-hd-btn kd-popup-button ${focused ? 'kd-focused' : ''}`}>
+              <Plus className="size-[1.1em]" />
+            </span>
           )}
         </div>
-        {surface !== word && (
-          <p className="mt-0.5 text-[0.85em] text-ink-3">
-            from <span lang="ja">{surface}</span>
-          </p>
-        )}
-        <ol className="mt-1.5 list-none space-y-0.5 p-0 leading-snug">
+      </div>
+      <div className="kd-hd-dict">
+        <div className="kd-hd-dict-name">JMdict</div>
+        <ol className="m-0 list-none space-y-[0.25em] p-0">
           {entry.meanings.map((meaning, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="tnum w-[0.8em] shrink-0 text-right text-ink-3">{i + 1}</span>
-              <span>{meaning}</span>
+            <li key={i} className="flex items-baseline gap-[0.5em]">
+              <span className="kd-hd-num tnum">{i + 1}.</span>
+              <span>
+                {i === 0 && entry.pos && <span className="kd-hd-pos">{entry.pos}</span>}
+                {meaning}
+              </span>
             </li>
           ))}
         </ol>
-      </div>
-      <div className="flex items-center justify-between border-t border-hairline bg-bar px-[1.1em] py-[0.35em] text-[0.85em] text-ink-3">
-        <span>Demo dictionary</span>
-        <span aria-hidden="true" className={`kd-popup-button ${focused ? 'kd-focused' : ''}`}>
-          + Anki
-        </span>
       </div>
     </div>
   )
