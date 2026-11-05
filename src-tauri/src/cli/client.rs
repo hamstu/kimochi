@@ -743,7 +743,16 @@ fn log_add(args: &Args, text: &[&str]) -> Outcome {
     if text.trim().is_empty() {
         return Err(Exit::Usage("nothing to add".into()));
     }
-    simple(args, "log.add", json!({ "text": text }), "")
+    let result = ask(args, "log.add", json!({ "text": text }))?;
+    if args.json {
+        print_json(&result);
+    }
+    if result["added"] == json!(false) {
+        return Err(Exit::Failed(
+            "the Log didn't take it: with Japanese only on it skips other text, and it skips a repeat of a recent line".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn session_now(args: &Args) -> Outcome {

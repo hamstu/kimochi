@@ -181,10 +181,13 @@ fn handle(app: &tauri::AppHandle, method: &str, params: &Value) -> Result<Value,
             if text.trim().is_empty() {
                 return Err("invalid: nothing to add".into());
             }
-            log_ready(app)?;
+            let before = log_tail(&log_ready(app)?);
             let ingest = format!("cli-{}", token()?.get(..16).unwrap_or_default());
             reader_call(app, "host", "ingest", json!([text, "cli", crate::now_ms() as u64, ingest]), None, LOG_REPLY)?;
-            Ok(json!({ "added": true }))
+            // The Log's own filters may drop it (Japanese only, a repeat, nothing left after the
+            // replacements); `ingest` doesn't say, so compare its end before and after.
+            let after = log_tail(&reader_call(app, "host", "snapshot", json!([]), None, LOG_REPLY)?);
+            Ok(json!({ "added": after != before }))
         }
         "session.list" => Ok(sessions_now()),
         "session.switch" => {
@@ -478,6 +481,12 @@ pub fn find_session(manifest: &Value, query: &str) -> Result<Value, String> {
             many.iter().map(|s| format!("{:?}", s["name"].as_str().unwrap_or_default())).collect::<Vec<_>>().join(", ")
         )),
     }
+}
+
+/// The Log's end: how many lines it has and the last one's text (a merge changes only the text).
+fn log_tail(snapshot: &Value) -> (usize, Value) {
+    let lines = snapshot["lines"].as_array();
+    (lines.map_or(0, Vec::len), lines.and_then(|l| l.last()).map_or(Value::Null, |l| l["text"].clone()))
 }
 
 /// Wait until the Log window answers, and return its snapshot (sessions, lines, stats).

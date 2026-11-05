@@ -6,9 +6,11 @@
 //!   is shown when it isn't writable.
 //! - **Linux**: a symlink in `~/.local/bin` to the AppImage or the executable. The `.deb`'s
 //!   `/usr/bin/kimochi` is already the command, so there is nothing to install.
-//! - **Windows**: a `kimochi.cmd` in `%LOCALAPPDATA%\dev.kimochi.app\bin`, added to the user's
-//!   PATH. Kimochi is a GUI program, which the shells don't wait for and give no console; run
-//!   from a batch file it is waited for, and it attaches to that console (cli/console.rs).
+//! - **Windows**: `kimochi.exe` in `%LOCALAPPDATA%\dev.kimochi.app\bin`, added to the user's
+//!   PATH. Kimochi is a GUI program, which the shells don't wait for and give no standard handles
+//!   (so no redirects or pipes); that `kimochi.exe` is the small console launcher from
+//!   cli-launcher/, which runs the app's executable (named in `kimochi.target` beside it) with
+//!   its own handles. A `kimochi.cmd` from an earlier build of this page is removed.
 //!
 //! Only what this installed is ever removed: a link or shim that points at a Kimochi.
 use serde::Serialize;
@@ -82,7 +84,7 @@ fn built_in() -> Option<PathBuf> {
 }
 
 #[cfg(unix)]
-pub fn status() -> Result<Status, String> {
+pub fn status(_launcher: Option<&Path>) -> Result<Status, String> {
     let target = exe()?;
     #[cfg(target_os = "linux")]
     if let Some(command) = built_in() {
@@ -128,8 +130,8 @@ fn writable(dir: &Path) -> bool {
 }
 
 #[cfg(unix)]
-pub fn install() -> Result<Status, String> {
-    let before = status()?;
+pub fn install(_launcher: Option<&Path>) -> Result<Status, String> {
+    let before = status(None)?;
     if before.built_in || before.installed {
         return Ok(before);
     }
@@ -148,12 +150,12 @@ pub fn install() -> Result<Status, String> {
     } else {
         privileged(&format!("mkdir -p {} && ln -sfn {} {}", sh(dir), sh(&target), sh(&link)))?;
     }
-    status()
+    status(None)
 }
 
 #[cfg(unix)]
-pub fn uninstall() -> Result<Status, String> {
-    let before = status()?;
+pub fn uninstall(_launcher: Option<&Path>) -> Result<Status, String> {
+    let before = status(None)?;
     let Some(link) = before.path.clone().filter(|_| !before.built_in) else { return Ok(before) };
     if std::fs::symlink_metadata(&link).is_err() {
         return Ok(before);
@@ -167,7 +169,7 @@ pub fn uninstall() -> Result<Status, String> {
     } else {
         privileged(&format!("rm -f {}", sh(&link)))?;
     }
-    status()
+    status(None)
 }
 
 /// A shell word: single-quoted, with any single quote closed, escaped and reopened.
@@ -210,15 +212,16 @@ fn bin_dir() -> Option<PathBuf> {
     super::endpoint::local_dir().map(|dir| dir.join("bin"))
 }
 
+/// The installed launcher and the file naming the executable it runs.
 #[cfg(windows)]
-const SHIM_MARK: &str = "rem kimochi-cli";
+fn installed_files(dir: &Path) -> (PathBuf, PathBuf) {
+    (dir.join("kimochi.exe"), dir.join("kimochi.target"))
+}
 
-/// The batch file: runs the app's executable with the same arguments and passes its exit code on.
+/// Whether two files have the same bytes (the installed launcher is the bundled one).
 #[cfg(windows)]
-fn shim(exe: &Path) -> String {
-    // `%` is the only character a batch file treats specially inside quotes.
-    let exe = exe.display().to_string().replace('%', "%%");
-    format!("@echo off\r\n{SHIM_MARK}: Kimochi's command line (Settings > Command line)\r\n\"{exe}\" %*\r\nexit /b %ERRORLEVEL%\r\n")
+fn same_bytes(a: &Path, b: &Path) -> bool {
+    matches!((std::fs::read(a), std::fs::read(b)), (Ok(a), Ok(b)) if a == b)
 }
 
 /// The user's own PATH, as stored (not this process's, which predates an install).
@@ -282,13 +285,15 @@ $key.Close()
 }
 
 #[cfg(windows)]
-pub fn status() -> Result<Status, String> {
+pub fn status(launcher: Option<&Path>) -> Result<Status, String> {
     let target = exe()?;
     let dir = bin_dir().ok_or("native: no local data folder")?;
-    let file = dir.join("kimochi.cmd");
-    let text = std::fs::read_to_string(&file).ok();
-    let present = text.as_deref().is_some_and(|t| t.contains(SHIM_MARK));
-    let current = text.as_deref() == Some(shim(&target).as_str());
+    let (file, target_file) = installed_files(&dir);
+    let named = std::fs::read_to_string(&target_file).ok().map(|t| t.trim().to_string());
+    let present = file.is_file() && named.is_some();
+    let current = present
+        && named.as_deref() == Some(target.to_string_lossy().as_ref())
+        && launcher.is_none_or(|bundled| same_bytes(bundled, &file));
     let on_user_path = path_has(&user_path(), &dir);
     let installed = current && on_user_path;
     // This process's PATH predates the install, as an open terminal's does.
@@ -301,62 +306,89 @@ pub fn status() -> Result<Status, String> {
 }
 
 #[cfg(windows)]
-pub fn install() -> Result<Status, String> {
+pub fn install(launcher: Option<&Path>) -> Result<Status, String> {
+    let launcher = launcher
+        .filter(|path| path.is_file())
+        .ok_or("native: this build has no command-line launcher (scripts/prepare-cli-launcher.mjs builds it)")?;
     let target = exe()?;
     let dir = bin_dir().ok_or("native: no local data folder")?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("native: {}: {e}", dir.display()))?;
-    std::fs::write(dir.join("kimochi.cmd"), shim(&target)).map_err(|e| format!("native: {e}"))?;
+    let (file, target_file) = installed_files(&dir);
+    std::fs::copy(launcher, &file).map_err(|e| format!("native: {}: {e}", file.display()))?;
+    std::fs::write(&target_file, target.to_string_lossy().as_bytes()).map_err(|e| format!("native: {e}"))?;
+    // The batch file an earlier build of this page wrote; `kimochi` would find it first.
+    let _ = std::fs::remove_file(dir.join("kimochi.cmd"));
     if !path_has(&user_path(), &dir) {
         set_user_path(&dir, true)?;
     }
-    status()
+    status(Some(launcher))
 }
 
 #[cfg(windows)]
-pub fn uninstall() -> Result<Status, String> {
+pub fn uninstall(launcher: Option<&Path>) -> Result<Status, String> {
     let dir = bin_dir().ok_or("native: no local data folder")?;
-    let file = dir.join("kimochi.cmd");
-    if std::fs::read_to_string(&file).is_ok_and(|t| t.contains(SHIM_MARK)) {
-        std::fs::remove_file(&file).map_err(|e| format!("native: {e}"))?;
+    let (file, target_file) = installed_files(&dir);
+    // Only what install put there: the launcher beside its target file, and the old batch file.
+    if target_file.is_file() {
+        let _ = std::fs::remove_file(&file);
+        std::fs::remove_file(&target_file).map_err(|e| format!("native: {e}"))?;
     }
+    let _ = std::fs::remove_file(dir.join("kimochi.cmd"));
     if path_has(&user_path(), &dir) {
         set_user_path(&dir, false)?;
     }
     let _ = std::fs::remove_dir(&dir);
-    status()
+    status(launcher)
 }
 
 #[cfg(not(any(unix, windows)))]
-pub fn status() -> Result<Status, String> {
+pub fn status(_launcher: Option<&Path>) -> Result<Status, String> {
     Err("native: not on this system".into())
 }
 #[cfg(not(any(unix, windows)))]
-pub fn install() -> Result<Status, String> {
-    status()
+pub fn install(launcher: Option<&Path>) -> Result<Status, String> {
+    status(launcher)
 }
 #[cfg(not(any(unix, windows)))]
-pub fn uninstall() -> Result<Status, String> {
-    status()
+pub fn uninstall(launcher: Option<&Path>) -> Result<Status, String> {
+    status(launcher)
 }
 
 // ------------------------------------------------------------------------------ commands
 
+/// The bundled Windows launcher (cli-launcher/, staged by scripts/prepare-cli-launcher.mjs), or
+/// `None` elsewhere. A development build reads it from the source tree, as the Text Hooker's
+/// helpers are (text_hook/mod.rs).
+fn launcher(app: &tauri::AppHandle) -> Option<PathBuf> {
+    if !cfg!(windows) {
+        return None;
+    }
+    use tauri::Manager;
+    let bundled = app.path().resource_dir().ok().map(|dir| dir.join("cli").join("kimochi-cli.exe"));
+    let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/cli/kimochi-cli.exe");
+    bundled.filter(|path| path.is_file()).or(Some(development))
+}
+
+async fn blocking(app: tauri::AppHandle, work: fn(Option<&Path>) -> Result<Status, String>) -> Result<Status, String> {
+    tauri::async_runtime::spawn_blocking(move || work(launcher(&app).as_deref())).await.map_err(|e| e.to_string())?
+}
+
 /// Whether the `kimochi` command is installed, and where.
 #[tauri::command]
-pub async fn cli_status() -> Result<Status, String> {
-    tauri::async_runtime::spawn_blocking(status).await.map_err(|e| e.to_string())?
+pub async fn cli_status(app: tauri::AppHandle) -> Result<Status, String> {
+    blocking(app, status).await
 }
 
 /// Install the `kimochi` command (macOS may show the system's administrator prompt).
 #[tauri::command]
-pub async fn cli_install() -> Result<Status, String> {
-    tauri::async_runtime::spawn_blocking(install).await.map_err(|e| e.to_string())?
+pub async fn cli_install(app: tauri::AppHandle) -> Result<Status, String> {
+    blocking(app, install).await
 }
 
 /// Remove the `kimochi` command, if it is Kimochi's.
 #[tauri::command]
-pub async fn cli_uninstall() -> Result<Status, String> {
-    tauri::async_runtime::spawn_blocking(uninstall).await.map_err(|e| e.to_string())?
+pub async fn cli_uninstall(app: tauri::AppHandle) -> Result<Status, String> {
+    blocking(app, uninstall).await
 }
 
 #[cfg(test)]

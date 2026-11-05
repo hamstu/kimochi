@@ -746,7 +746,7 @@ const cliCommand = (installed: boolean): Record<string, unknown> => ({
   installed,
   builtIn: false,
   stale: false,
-  path: CAPABILITIES.os === 'windows' ? 'C:\\Users\\you\\AppData\\Local\\dev.kimochi.app\\bin\\kimochi.cmd' : '/usr/local/bin/kimochi',
+  path: CAPABILITIES.os === 'windows' ? 'C:\\Users\\you\\AppData\\Local\\dev.kimochi.app\\bin\\kimochi.exe' : '/usr/local/bin/kimochi',
   target: '/Applications/Kimochi.app/Contents/MacOS/kimochi',
   onPath: true,
   note: null

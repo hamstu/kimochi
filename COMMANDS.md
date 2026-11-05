@@ -1948,10 +1948,16 @@ command lives, `target` what it runs, `builtIn` the Linux `.deb`'s own `/usr/bin
 `stale` a Kimochi command that runs another copy (a moved app), `note` a sentence for the page.
 macOS links `/usr/local/bin/kimochi` (privileged through `osascript … with administrator
 privileges` when the folder isn't writable); Linux links `~/.local/bin/kimochi` to `$APPIMAGE` or
-the executable; Windows writes `%LOCALAPPDATA%\dev.kimochi.app\bin\kimochi.cmd` and adds that
-folder to the user's PATH (PowerShell, keeping `%VARIABLES%` unexpanded, then a
-`WM_SETTINGCHANGE`). A release build on Windows is a GUI program: the shim makes the shell wait
-for it, and `cli/console.rs` attaches it to the shim's console.
+the executable; Windows copies the console launcher (`cli-launcher/`, staged into the bundle's
+`cli/kimochi-cli.exe` by `scripts/prepare-cli-launcher.mjs`) to
+`%LOCALAPPDATA%\dev.kimochi.app\bin\kimochi.exe`, writes the app's executable path beside it as
+`kimochi.target`, and adds that folder to the user's PATH (PowerShell, keeping `%VARIABLES%`
+unexpanded, then a `WM_SETTINGCHANGE`). A release build on Windows is a GUI program, which a shell
+neither waits for nor hands its standard handles (so no redirect or pipe would reach it); the
+launcher is a console program, runs the app's executable with its own handles and exit code, and
+`cli/console.rs` attaches the app's executable to the launcher's console (Ctrl+C reaches both). The
+installed launcher counts as out of date when it differs from the bundled one or names another
+executable.
 
 **The wire.** At startup the app binds `127.0.0.1:0` and writes `cli-endpoint.json`
 (`cli-endpoint-dev.json` for a development build) to its data folder, 0600:
@@ -1977,7 +1983,7 @@ executable detached elsewhere) and waits for `ping`.
 | `open` | `{view: main\|log\|notebook\|anki\|settings\|sources\|mini\|expand\|dictionary, page?}` | `{opened}`; `log`, `notebook` and `anki` emit `main:show-view` `{view}`, which leaves Settings |
 | `quit` | — | replies, then quits as `app_quit` |
 | `log.recent` | `{limit?}` | `log_lines::recent` |
-| `log.add` | `{text}` | the Log's `host.ingest` with source `cli` |
+| `log.add` | `{text}` | `{added}`: the Log's `host.ingest` with source `cli`; `added` is false when the Log's filters dropped it (its line count and last text are unchanged) |
 | `session.list` / `session.switch` / `session.new` / `session.rename` | — / `{query}` / `{name?}` / `{name, query?}` | the manifest; the Log's `sessions` module |
 | `watch` | `{events?}` | a first reply, then one JSON line per event until the client closes: `scan`, `line`, `source`, `state`, `session`, `action` |
 

@@ -1,7 +1,8 @@
 //! Windows: a release build is a GUI program (`windows_subsystem = "windows"`), started without
-//! a console. Run as `kimochi` from a terminal (through the `kimochi.cmd` shim, which waits for
-//! it), it attaches to that terminal's console so what it prints shows up there. Output already
-//! redirected to a file or pipe arrives as inherited handles and is left alone.
+//! a console. Run as `kimochi` (through the console launcher, cli-launcher/), it is handed the
+//! launcher's standard handles (a file, a pipe or the console), and attaches to the launcher's
+//! console so Ctrl+C reaches it too. Started some other way with no handles at all (directly from
+//! cmd.exe), it falls back to writing to the parent's console.
 #[cfg(windows)]
 pub fn attach() {
     use std::os::windows::io::IntoRawHandle;

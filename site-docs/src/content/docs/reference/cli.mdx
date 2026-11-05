@@ -24,10 +24,10 @@ Open **Settings → Command line** and click **Install**.
     date**: click **Install again**.
   </TabItem>
   <TabItem label="Windows">
-    Adds `kimochi.cmd` to a folder in Kimochi's data (`%LOCALAPPDATA%\dev.kimochi.app\bin`) and puts
-    that folder on your user PATH. No administrator is needed. **Open a new terminal** afterwards:
-    one that was already open keeps its old PATH. It works in PowerShell, Command Prompt and
-    Windows Terminal.
+    Adds a small `kimochi.exe` to a folder in Kimochi's data (`%LOCALAPPDATA%\dev.kimochi.app\bin`)
+    and puts that folder on your user PATH. No administrator is needed. **Open a new terminal**
+    afterwards: one that was already open keeps its old PATH. It works in PowerShell, Command
+    Prompt, Windows Terminal and Git Bash, with redirects and pipes.
   </TabItem>
   <TabItem label="Linux">
     With the `.deb`, `kimochi` is already installed (`/usr/bin/kimochi`), and the page says so. With
@@ -67,7 +67,7 @@ kimochi version
 | `kimochi ocr <engine>` | Switches engine: `googlelens`, `cloud`, `meikiocr`, `mangaocr`, `ppocr`, `livetext` (macOS) or `oneocr` (Windows). A local engine whose model isn't downloaded yet starts downloading. |
 | `kimochi source` | The source Kimochi reads. |
 | `kimochi source list` | Every window and display it could read, with their ids. Not on Linux with Wayland or in Gaming Mode, where only the system's own picker can choose: use `kimochi source choose`. |
-| `kimochi source set <name>` | Reads a window or display: by id, or by its title or app name (exactly, or the only one containing the words). Its saved crop comes back with it. |
+| `kimochi source set <name>` | Reads a window or display: by id, or by its title or app name (exactly, or the only one containing the words). Its saved crop comes back with it, and with **Switch session by window name** on, the Log opens that window's [session](/log/sessions/) too. |
 | `kimochi source clear` | Reads nothing. |
 | `kimochi source choose` | Opens the source picker in the main window. |
 
@@ -77,7 +77,7 @@ kimochi version
 | --- | --- |
 | `kimochi log` | The open session's newest 20 lines, oldest first. `-n <count>` for more or fewer, `--all` for every line, `--session <name>` for another session. |
 | `kimochi log --follow` | Prints each new line as the Log takes it in, until you press <kbd>Ctrl+C</kbd>. |
-| `kimochi log add <text>` | Adds a line to the Log, whatever **Input** is set to. With `-`, or with text piped in, it reads standard input. |
+| `kimochi log add <text>` | Adds a line to the Log, whatever **Input** is set to. With `-`, or with text piped in, it reads standard input. The line goes through the Log's own rules ([replacements](/log/the-log/), **Japanese only**, skipping a repeat): if they drop it, the command says so and exits 1. |
 | `kimochi session` | The open session's name. |
 | `kimochi session list` | Every [session](/log/sessions/), the open one marked `*`. |
 | `kimochi session switch <name>` | Opens another session. |
@@ -177,6 +177,7 @@ kimochi auto-ocr on
     ```powershell
     Get-Clipboard | kimochi log add
     ```
+    In Windows PowerShell 5.1, first see [the note on encoding](#good-to-know).
   </TabItem>
   <TabItem label="Linux">
     ```sh
@@ -201,11 +202,13 @@ done
 
 ## Good to know
 
-- **Windows:** use `kimochi` (the installed command), not `kimochi.exe` from Kimochi's folder.
-  Kimochi is a windowed program, so a terminal doesn't wait for it when it's started directly, and
-  its output arrives after the prompt. The installed command waits for it.
-- **Git Bash and WSL** on Windows don't run `.cmd` files by name; call `kimochi.cmd`, or
-  `cmd.exe /c kimochi …`.
+- **Windows:** use `kimochi` (the installed command), not the `kimochi.exe` in Kimochi's own folder.
+  That one is the windowed app: a terminal doesn't wait for it, and its output can't be redirected or
+  piped. The installed command is a small console program that runs it for you.
+- **Windows PowerShell 5.1** (the blue one built into Windows) sends piped text to programs as
+  ASCII, so `Get-Clipboard | kimochi log add` arrives as `???`. Run this first, or put it in your
+  profile: `$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()`. PowerShell 7
+  needs nothing.
 - **Development builds** (`npm run dev`) answer `kimochi` too, so the command is handy while
   working on Kimochi: `src-tauri/target/debug/kimochi status`.
 - **Security:** the command talks to Kimochi over a connection only your user account can open. A
