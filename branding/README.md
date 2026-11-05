@@ -8,10 +8,10 @@ The brackets are set by `RETICLE` in `compose.mjs`, as fractions of the tile wid
 
 | File | What it is | Used for |
 | --- | --- | --- |
-| `icon.svg` | Squircle filling the 1024 canvas, no margin or shadow | Website hero (`site/public/icon.svg`), OG image |
+| `icon.svg` | Squircle filling the 1024 canvas, no margin or shadow | Website hero and tab icon (`site/public/icon.svg`, and `favicon.ico` from it), OG image |
 | `icon-macos.svg` | 824px squircle centred in the 1024 canvas (100px margin) with a soft drop shadow | `src-tauri/icons/icon.icns` |
 | `icon-square.svg` | Full-bleed square. Glyph and brackets scale with the full 1024 width, so they are ~24% larger than on the macOS tile | `icon.ico`, Linux PNGs, `Square*Logo.png`, `StoreLogo.png`, apple-touch-icon |
-| `favicon.svg` | Bare キ, no brackets (at 16px they would squeeze the glyph to ~7px). Uses `currentColor`. Standalone it uses indigo `#3e63dd` in light mode and `#9eb1ff` in dark mode. If you inline it in HTML, delete its `<style>` so it inherits colour from the page | `site/public/favicon.svg` |
+| `favicon.svg` | Bare キ, no brackets (at 16px they would squeeze the glyph to ~7px). Uses `currentColor`. Standalone it uses indigo `#3e63dd` in light mode and `#9eb1ff` in dark mode. If you inline it in HTML, delete its `<style>` so it inherits colour from the page | `site/public/favicon.svg` (the site header's mark beside the name) |
 | `tray-template.svg` | 18pt black brackets and キ for the macOS menu bar: the icon without its tile or colour, with longer bracket arms and strokes on whole pixels at 1x and 2x | `tray-template.png`, `tray-template@2x.png`, `resources/tray-template@2x.png` (embedded by the app) |
 | `sketches/*.svg` | `0-final-macos` and `0-final-square` are copies of the shipped design. The rest are the alternatives that were considered (vertical gradient without brackets, diagonal gradient, dark ground, bare glyph). Each has a `.png` preview, and `contact-sheet.png` shows them all | Previews only |
 | `steam/*.svg`, `steam-library.mjs` | Steam library artwork: portrait capsule (600×900), wide capsule (920×430), hero (1920×620, no text) and transparent logo, built from `icon.svg` plus the Figtree / Noto Sans JP wordmark as outlines (OFL, LICENSE-OFL.txt). `steam-library.mjs` writes the SVGs | `resources/steam-library/*.png` (installed into Steam's grid folder by Add to Steam) and the welcome step's `frontend/welcome/assets/steam-capsule.png`, via `npm run icons` (or `npm run icons -- --steam` for these alone) |

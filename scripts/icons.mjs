@@ -152,7 +152,8 @@ console.log(`  ${rel(join(sitePublic, "favicon.svg"))}`);
 write(join(sitePublic, "apple-touch-icon.png"), render(join(branding, "icon-square.svg"), 180));
 write(join(sitePublic, "og-icon.png"), render(join(branding, "icon.svg"), 512));
 write(join(sitePublic, "icon-192.png"), render(join(branding, "icon.svg"), 192));
-write(join(sitePublic, "favicon.ico"), ico([16, 32, 48].map((size) => ({ size, png: render(join(branding, "favicon.svg"), size) }))));
+// The tab icon is the app icon itself (index.html links icon.svg; this is its .ico fallback).
+write(join(sitePublic, "favicon.ico"), ico([16, 32, 48].map((size) => ({ size, png: render(join(branding, "icon.svg"), size) }))));
 
 console.log("Sketch previews");
 const previews = [];
