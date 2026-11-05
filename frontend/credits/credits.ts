@@ -72,21 +72,21 @@ export const ACKNOWLEDGEMENTS: readonly AcknowledgementGroup[] = [
       {
         id: 'yomitan',
         name: 'Yomitan',
-        role: 'Pop-up dictionary, run unmodified from its own release',
+        role: 'The classic pop-up dictionary. You know it, you love it. We also support using the Yomitan API to read your own dictionaries from an existing setup.',
         license: 'GPL-3.0',
         url: 'https://github.com/yomidevs/yomitan'
       },
       {
         id: 'hachidori',
         name: 'Hachidori',
-        role: 'Pop-up dictionary, run unmodified from its own release',
+        role: 'The new kid on the block. It comes with some great features and super fast lookups. Bee-san cooked with this one. ✨',
         license: 'GPL-3.0',
         url: 'https://github.com/bee-san/hachidori'
       },
       {
         id: '10ten-japanese-reader',
         name: '10ten Japanese Reader',
-        role: 'Simple and clean pop-up dictionary',
+        role: 'Simple and clean pop-up dictionary.',
         license: 'GPL-3.0',
         url: 'https://github.com/birchill/10ten-ja-reader'
       },
