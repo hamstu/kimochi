@@ -43,6 +43,7 @@ uniform float uScale;   // device pixels per CSS pixel
 uniform float uCell;    // grid cell, CSS pixels
 uniform float uFade;    // 0..1, the mount fade-in
 uniform float uGain;    // peak opacity
+uniform float uCeil;    // the most any glyph shows: it stays in the background
 uniform vec2 uOrb;      // orb centre, CSS pixels from the top left
 uniform vec2 uRadius;   // orb radii, CSS pixels
 uniform sampler2D uAtlas;
@@ -123,10 +124,11 @@ void main() {
 
   float a = pow(smoothstep(0.03, 1.0, I), 1.4) * present * reveal * uGain;
   float coreAmt = smoothstep(0.55, 1.1, I);
-  float ink = g.r + g.g * 0.35 * coreAmt;
-  float alpha = clamp(ink * a, 0.0, 1.0);
+  float ink = g.r + g.g * 0.2 * coreAmt;
+  // A soft ceiling, so the brightest patches level off instead of flaring.
+  float alpha = uCeil * (1.0 - exp(-ink * a * 2.2 / uCeil));
   vec3 rgb = mix(uEdge, uInk, smoothstep(0.08, 0.5, I));
-  rgb = mix(rgb, uCore, coreAmt * 0.6);
+  rgb = mix(rgb, uCore, coreAmt * 0.7);
   outColor = vec4(rgb * alpha, alpha); // premultiplied
 }`
 
@@ -242,7 +244,7 @@ export function KanaGlow({ className = '', style }: { className?: string; style?
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
     const u = (n: string) => gl.getUniformLocation(prog, n)
     const uRes = u('uRes'), uTime = u('uTime'), uScale = u('uScale'), uCell = u('uCell'), uFade = u('uFade')
-    const uGain = u('uGain')
+    const uGain = u('uGain'), uCeil = u('uCeil')
     const uOrb = u('uOrb'), uRadius = u('uRadius'), uEdge = u('uEdge'), uInk = u('uInk'), uCore = u('uCore')
 
     const tex = gl.createTexture()
@@ -253,10 +255,16 @@ export function KanaGlow({ className = '', style }: { className?: string; style?
       const token = (name: string, fallback: string): [number, number, number] =>
         cssColor(root.getPropertyValue(name).trim() || fallback)
       const dark = root.colorScheme.includes('dark')
-      gl.uniform3fv(uEdge, token('--k-text-3', '#80838d'))
-      gl.uniform3fv(uInk, token('--k-accent-text', '#3a5bc7'))
-      // The core leans pale in dark mode (ink) and toward the accent's own strength in light.
-      gl.uniform3fv(uCore, dark ? token('--k-text', '#edeef0') : token('--k-accent', '#3e63dd'))
+      const mix = (a: number[], b: number[], t: number): number[] => a.map((v, i) => v + (b[i] - v) * t)
+      const accent = token('--k-accent', '#3e63dd')
+      const accentText = token('--k-accent-text', '#3a5bc7')
+      const quiet = token('--k-text-3', '#80838d')
+      // Blue all the way through, never white: a muted blue at the rim, the accent in the body,
+      // and at the core the accent's light text tone in dark mode (its full strength in light).
+      gl.uniform3fv(uEdge, mix(quiet, accent, 0.55))
+      gl.uniform3fv(uInk, dark ? accent : accentText)
+      gl.uniform3fv(uCore, dark ? mix(accentText, accent, 0.25) : accent)
+      gl.uniform1f(uCeil, dark ? 0.42 : 0.5)
     }
 
     const draw = (now: number): boolean => {
@@ -277,7 +285,7 @@ export function KanaGlow({ className = '', style }: { className?: string; style?
       gl.uniform1f(uCell, narrow ? 15 : 18)
       gl.uniform2f(uOrb, cw / 2, narrow ? 70 : 110)
       gl.uniform2f(uRadius, narrow ? cw * 0.8 : Math.min(cw * 0.66, 1000), narrow ? 330 : 560)
-      gl.uniform1f(uGain, narrow ? 0.5 : 0.85) // a phone shows the orb larger, so dimmer
+      gl.uniform1f(uGain, narrow ? 0.45 : 0.7) // a phone shows the orb larger, so dimmer
       gl.uniform1f(uFade, fadeT * fadeT * (3 - 2 * fadeT)) // ease in and out
       gl.uniform1f(uTime, (now - start) / 1000)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
