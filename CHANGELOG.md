@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
+
 ## [0.6.1] - 2026-11-05
 
 ### Added
