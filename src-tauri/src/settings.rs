@@ -91,6 +91,9 @@ pub fn defaults() -> Value {
         // Card enhancement's screenshot (screenshots.rs).
         "cardScreenshot": { "enabled": true, "field": "Picture", "kept": 50 },
         "screenshotAnnotations": true,
+        // The browser extension's connection (browser_bridge.rs): on unless turned off in
+        // Settings → Sources, so the extension works as soon as it is installed.
+        "browserExtension": { "enabled": true },
         // New installs only: `load` keeps an existing settings file on the engine it had.
         "ocrMode": "googlelens"
         // `endpoint` is intentionally absent: an unset endpoint follows

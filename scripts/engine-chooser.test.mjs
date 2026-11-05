@@ -104,7 +104,8 @@ test('"Use <name>" is the only way to choose, and it is the panel\'s', async () 
 })
 
 test('every engine has a picture, and every picture file exists', async () => {
-  const source = await read('frontend/components/EngineIcon.tsx')
+  // The OCR engines' pictures have their own module (shared with the browser extension's menu).
+  const source = (await read('frontend/components/EngineIcon.tsx')) + (await read('frontend/components/enginePictures.tsx'))
   for (const mode of Object.keys(OCR_MODES)) {
     assert.match(source, new RegExp(`\\n  ${mode}: \\{`), `OCR engine ${mode} has no picture`)
   }

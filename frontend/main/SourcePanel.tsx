@@ -26,6 +26,7 @@ import {
   Clipboard,
   Crop,
   Eye,
+  Globe,
   ImageIcon,
   Info,
   Monitor,
@@ -41,6 +42,7 @@ import {
   X
 } from 'lucide-react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
+import { browserRescan, useBrowserBridge, type BrowserBridgeStatus } from '../bridge/browserBridge'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   Button,
@@ -138,6 +140,12 @@ const TYPES = [
     label: 'WebSocket',
     icon: <Radio />,
     detail: 'Receive lines from a text source on your network.'
+  },
+  {
+    mode: 'browser',
+    label: 'Browser',
+    icon: <Globe />,
+    detail: 'Read pictures on web pages with the Kimochi extension.'
   }
 ] as const satisfies readonly { mode: Mode; label: string; icon: ReactNode; detail: string }[]
 
@@ -148,6 +156,15 @@ const HOOK_TYPE = {
   icon: <Plug />,
   detail: 'Read text from a game directly.'
 } as const
+
+/** The Browser card's line: the page being read, or what is missing. */
+function browserDetail(status: BrowserBridgeStatus): string {
+  if (!status.enabled) return 'Turned off in Settings → Sources'
+  if (status.error) return 'Can’t listen for the extension'
+  if (!status.connected) return 'Waiting for the extension'
+  if (status.page?.title) return status.page.title
+  return `Connected to ${status.browsers?.[0] ?? 'your browser'}: pick a picture`
+}
 
 /**
  * The card's foot under a Text Hooker source: the hooked text is read from the game, so there is
@@ -769,6 +786,7 @@ export function SourcePanel({
     chooseRef.current('ocr')
   }, [systemPick.seq])
   const { state } = useViewState()
+  const browser = useBrowserBridge()
   const [websocketUrl, setWebsocketUrl] = useState(() => getSettings().websocketUrl)
   useEffect(() => onSettingsChange((next) => setWebsocketUrl(next.websocketUrl)), [])
 
@@ -1100,7 +1118,9 @@ export function SourcePanel({
           : 'Draw an area to read it'
         : mode === 'clipboard'
           ? 'Watching for copied text'
-          : websocketUrl
+          : mode === 'browser'
+            ? browserDetail(browser)
+            : websocketUrl
     card = (
       <button
         type="button"
@@ -1250,6 +1270,26 @@ export function SourcePanel({
                 onSettings={() => void openTextHookerSettings(hook.exe)}
               />
             )}
+            <EnhanceCardsRow />
+          </div>
+        </div>
+      )}
+      {mode === 'browser' && (
+        <div className="src-controls">
+          <Button
+            variant="primary"
+            className="src-scan"
+            data-sound="none"
+            disabled={!browser.connected || browser.reading}
+            title={browser.connected ? 'Read the picture on the page again' : 'Pick a picture with the Kimochi extension first'}
+            onClick={() => void browserRescan().catch(() => undefined)}
+          >
+            {browser.reading ? <Spinner /> : <ScanText />}
+            <span className="src-scan-label">{browser.reading ? 'Reading…' : 'Read again'}</span>
+            {scanKey && !browser.reading && <kbd className="src-scan-key">{scanKey}</kbd>}
+          </Button>
+          <div className="src-rows">
+            {/* Auto (reading the picture again when it changes) is the extension's own switch. */}
             <EnhanceCardsRow />
           </div>
         </div>

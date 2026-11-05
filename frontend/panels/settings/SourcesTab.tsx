@@ -3,7 +3,7 @@
  * OCR scans are also sent. The same input choice is the main window's source menu.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Aperture, Camera, Check, Clipboard, ExternalLink, Plug, Radio } from 'lucide-react'
+import { Aperture, Camera, Check, Clipboard, ExternalLink, FolderOpen, Globe, Plug, Radio } from 'lucide-react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import {
   Button,
@@ -18,6 +18,7 @@ import {
 import { updateSettings } from '@texthooker/lib/settings'
 import type { Settings } from '@texthooker/lib/types'
 import { useSetting } from '../../bridge/useSetting'
+import { browserExtensionFolder, useBrowserBridge } from '../../bridge/browserBridge'
 import { accessibilityStatus, openScreenCapturePreferences, requestAccessibility } from '../../bridge/tauri'
 import { useCapabilities } from '../../bridge/capabilities'
 import { useHasScreenRecordingPermission } from '../../welcome/useHasScreenRecordingPermission'
@@ -59,6 +60,12 @@ const INPUT_SOURCES = [
     label: 'Text Hooker',
     icon: <Plug />,
     detail: "Hooks a game's text from inside it. Choose the game in the source menu. (Windows)"
+  },
+  {
+    value: 'browser',
+    label: 'Browser',
+    icon: <Globe />,
+    detail: 'Reads pictures you pick on web pages with the Kimochi browser extension.'
   }
 ] as const satisfies readonly {
   value: Mode
@@ -136,6 +143,62 @@ function MacPermissionsSection(): ReactNode {
           onAllow={() => void requestAccessibility().catch(() => undefined)}
         />
       </SettingsRow>
+    </SettingsSection>
+  )
+}
+
+/**
+ * The Kimochi browser extension: its connection (src-tauri/src/browser_bridge.rs) and how to
+ * install it. Until it is in the browsers' stores, it is loaded from its folder.
+ */
+function BrowserExtensionSection(): ReactNode {
+  const [enabled, setEnabled] = useSetting<boolean>('browserExtension.enabled', true)
+  const status = useBrowserBridge()
+  const [folderError, setFolderError] = useState<string | null>(null)
+  const connected = status.connected ?? 0
+  const state = !enabled
+    ? { tone: 'neutral' as const, text: 'Off' }
+    : status.error
+      ? { tone: 'danger' as const, text: status.error }
+      : connected
+        ? { tone: 'ok' as const, text: `Connected: ${[...new Set(status.browsers ?? [])].join(', ') || 'your browser'}` }
+        : { tone: 'neutral' as const, text: 'Waiting for the extension' }
+  return (
+    <SettingsSection title="Browser extension">
+      <SettingsRow
+        label="Connect to the browser extension"
+        controlId="browser-extension-enabled"
+        description="Pick a picture on any web page (a manga page, a screenshot) and Kimochi reads it with your OCR engine. The text lands on top of the picture in the page, for your browser's own dictionary pop-up (Yomitan, 10ten and the like), and in the Log."
+      >
+        <Switch id="browser-extension-enabled" checked={enabled} onCheckedChange={(value) => void setEnabled(value)} />
+      </SettingsRow>
+      {enabled ? (
+        <>
+          <SettingsRow label="Status">
+            <span className="settings-status">
+              <StatusDot tone={state.tone} />
+              {state.text}
+            </span>
+          </SettingsRow>
+          <SettingsRow
+            label="Install the extension"
+            description="In Chrome, Edge or Brave: open the extensions page (chrome://extensions), turn on Developer mode, choose Load unpacked, and pick this folder. Then click Kimochi in the toolbar (or press Alt+K) and click a picture."
+          >
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setFolderError(null)
+                void browserExtensionFolder().catch((error: unknown) => setFolderError(String(error)))
+              }}
+            >
+              <FolderOpen />
+              Show folder
+            </Button>
+          </SettingsRow>
+          {folderError ? <p className="settings-note">{folderError}</p> : null}
+        </>
+      ) : null}
     </SettingsSection>
   )
 }
@@ -248,6 +311,7 @@ export function SourcesTab(): ReactNode {
           )
         }}
       </WithReaderSettings>
+      <BrowserExtensionSection />
       <MacPermissionsSection />
       <OutputSections />
     </SettingsPage>

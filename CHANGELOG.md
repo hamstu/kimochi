@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- ⭐ **Browser extension (early preview).** Read Japanese in pictures on any web page, such as a manga page or a game screenshot: click Kimochi in your browser's toolbar and pick the picture. Kimochi reads it with your OCR engine and filters, its text goes to the Log, and the lines appear over the picture in your overlay's look, for your browser's own dictionary pop-up (Yomitan, 10ten and the like). Hold Shift to read, as over a game. With the toolbar's **Auto** on, the picture is read again when it changes, even when the next page is a whole new page, as in a gallery. Pick the OCR model from the toolbar too. Each page sends its lines to a session of its own, remembered for that site (a new one named for the day at first), and you can pick or rename it from the extension's toolbar; Kimochi opens that session when the lines arrive. Choose **Browser** as the source, and install the extension from **Settings → Sources → Browser extension** (Chrome, Edge and Brave for now).
+
 ### Fixed
 
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.

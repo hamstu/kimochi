@@ -39,6 +39,9 @@ test("input migration preserves clipboard preference and never enables multiple 
       );
     }
   }
+  // The browser extension's pictures are scans: OCR lines, and nothing else.
+  for (const source of ["ocr", "clipboard", "websocket", "webhook", "hook"])
+    assert.equal(acceptsInput({ inputSource: "browser" }, source), source === "ocr");
 });
 test("WebSocket parser accepts text envelopes and ignores control/malformed/binary messages", () => {
   for (const text of ["猫", '"猫"', '{"text":"猫"}', '{"sentence":"猫"}'])

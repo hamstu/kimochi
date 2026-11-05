@@ -35,6 +35,11 @@ export default tseslint.config(
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   {
+    // The browser extension (an MV3 extension: page script and service worker).
+    files: ['browser-extension/**/*.js'],
+    languageOptions: { globals: { ...globals.browser, ...globals.serviceworker, chrome: 'readonly' } }
+  },
+  {
     files: ['host/**/*.js'],
     languageOptions: { globals: { ...globals.browser } },
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }

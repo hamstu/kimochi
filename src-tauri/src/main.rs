@@ -3,6 +3,7 @@
 mod reader;
 mod evidence;
 mod boot;
+mod browser_bridge;
 use base64::Engine;
 use capture_unavailable::UnavailableBackend;
 
@@ -153,6 +154,7 @@ fn reader_settings_patch(app: tauri::AppHandle, state: State<Shared>, patch: Val
     )
     .map_err(|e| e.to_string())?;
     sync::local_changed();
+    browser_bridge::on_setting("superTexthooker");
     if let Some(pinned) = patch.get("alwaysOnTop").and_then(Value::as_bool) {
         panels::act_existing(
             &app,
@@ -223,6 +225,7 @@ fn settings_set(
 /// What a settings write sets in motion beyond `settings:changed`: shared by `settings_set` and
 /// by Sync putting another computer's preferences (or another account's) in place.
 pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settings>, key: &str, value: &Value) {
+    browser_bridge::on_setting(key);
     if key.starts_with("texthookerSettings") {
         if let Some(texthooker) = app.try_state::<Arc<texthooker::Texthooker>>() {
             texthooker.settings_changed();
@@ -876,6 +879,8 @@ fn view_flags(state: State<Shared>, flags: HashMap<String, bool>) {
             _ => {}
         }
     }
+    drop(v);
+    browser_bridge::on_view_flags();
 }
 
 #[tauri::command]
@@ -2603,6 +2608,7 @@ fn history_add(
     engine: Option<String>,
     merge: Option<bool>,
     frame: Option<u64>,
+    session: Option<String>,
 ) -> Reply<Value> {
     if text.trim().is_empty() {
         return Err("invalid: history entries cannot be empty".into());
@@ -2627,6 +2633,11 @@ fn history_add(
     // line can show that frame while the image store still holds it (`capture_frame_source`).
     if let Some(frame) = frame {
         entry["frame"] = json!(frame);
+    }
+    // The Log session these lines go to, when the reader chose one (the browser extension's
+    // tabs): the Log switches to it before adding them (frontend/texthooker/host.ts).
+    if let Some(session) = session.filter(|s| !s.is_empty()) {
+        entry["session"] = json!(session);
     }
     // Merging is decided inside the history lock, against the list as it is now; see
     // history_merge.rs. A replaced entry is named on the new one so the reader's log can
@@ -2657,10 +2668,14 @@ fn history_add(
         entry["skipped"] = json!(true);
     } else {
         // The scan's frame is cropped to the OCR crop area: its screenshot is the source, whole.
-        let info = {
+        let image = {
             let images = state.images.lock().map_err(|e| e.to_string())?;
-            images.mining_frame(frame).and_then(|(id, _)| images.frame(id)).map(|image| image.info.clone())
+            images.mining_frame(frame).and_then(|(id, _)| images.frame(id)).map(|image| state::Image::clone(image))
         };
+        let info = image.as_ref().map(|image| image.info.clone());
+        // A picture from the browser extension is the whole of what was read: it is the
+        // screenshot, not a new capture of whatever window was last chosen.
+        let picture = image.filter(|image| image.info["source"] == json!("browser"));
         screenshots::taken(
             &app,
             screenshots::Scan {
@@ -2669,6 +2684,7 @@ fn history_add(
                 groups: shot_groups,
                 info,
                 detached: detached.unwrap_or(false),
+                picture,
             },
         );
     }
@@ -3217,6 +3233,13 @@ fn main() {
             hotkeys_suspend,
             trigger_action,
             texthooker_send,
+            browser_bridge::browser_bridge_status,
+            browser_bridge::browser_scan_result,
+            browser_bridge::browser_rescan,
+            browser_bridge::browser_extension_folder,
+            browser_bridge::browser_sessions,
+            browser_bridge::browser_engines,
+            browser_bridge::browser_session_reply,
             history_add,
             history_delete,
             history_clear,
@@ -3468,6 +3491,7 @@ fn main() {
             let hooker = Arc::new(texthooker::Texthooker::new(store.clone(), logger));
             hooker.start();
             app.manage(hooker);
+            browser_bridge::install(&handle);
 
             anki_cards::install(&handle);
             let sentence_audio = sentence_audio::SentenceAudio::new(handle.clone(), store.clone());
