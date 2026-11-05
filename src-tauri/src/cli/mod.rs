@@ -44,6 +44,13 @@ pub fn run_if_invoked() {
     if !is_cli_args(&args) {
         return;
     }
+    // Rust ignores SIGPIPE, so a reader that stops early (`kimochi status | head -1`) made the
+    // next print panic. As a command, end quietly the way other Unix tools do.
+    // SAFETY: restoring a signal's default disposition before any other thread exists.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     console::attach();
     let exit = client::run(args[1..].to_vec());
     match &exit {
