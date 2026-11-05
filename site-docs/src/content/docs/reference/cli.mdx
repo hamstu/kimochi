@@ -1,0 +1,211 @@
+---
+title: Command line
+description: Drive Kimochi from a terminal, scripts and your own tools with the kimochi command, on macOS, Windows and Linux.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components'
+
+The `kimochi` command lets you control Kimochi from a terminal: scan, switch sessions, follow the
+Log as it fills, change the OCR engine or any setting. It's for building your own setup around
+Kimochi: a script bound to a key or a Stream Deck button, a reading pipeline that sends each new
+line somewhere else, a game launcher that picks the right source and session.
+
+It's Kimochi's own program, run as a command: there is nothing extra to download, and it is always
+the same version as the app.
+
+## Installing
+
+Open **Settings → Command line** and click **Install**.
+
+<Tabs syncKey="os">
+  <TabItem label="macOS">
+    Adds a link to Kimochi at `/usr/local/bin/kimochi`. macOS asks for an administrator's password,
+    because that folder belongs to the system. If you move Kimochi.app, the page says **Out of
+    date**: click **Install again**.
+  </TabItem>
+  <TabItem label="Windows">
+    Adds `kimochi.cmd` to a folder in Kimochi's data (`%LOCALAPPDATA%\dev.kimochi.app\bin`) and puts
+    that folder on your user PATH. No administrator is needed. **Open a new terminal** afterwards:
+    one that was already open keeps its old PATH. It works in PowerShell, Command Prompt and
+    Windows Terminal.
+  </TabItem>
+  <TabItem label="Linux">
+    With the `.deb`, `kimochi` is already installed (`/usr/bin/kimochi`), and the page says so. With
+    the AppImage, **Install** adds a link at `~/.local/bin/kimochi`. If that folder isn't on your
+    PATH (the page tells you), add it in your shell's profile:
+    `export PATH="$HOME/.local/bin:$PATH"`.
+  </TabItem>
+</Tabs>
+
+**Remove** on the same page takes it away again. Check it works with:
+
+```sh
+kimochi version
+```
+
+## How it works
+
+- **Kimochi doesn't have to be running.** A command that needs the app starts it and waits for it.
+  Add `--no-start` to fail instead (exit code 3). Reading the Log, sessions and settings works from
+  their files while Kimochi is closed.
+- **It never opens a second Kimochi.** Commands go to the one that's running.
+- **Every command takes `--json`** for output a script can read, and `--help`.
+- **Exit codes:** `0` done, `1` failed, `2` wrong usage, `3` Kimochi not running (with
+  `--no-start`), `4` timed out.
+
+## Reading
+
+| Command | What it does |
+| --- | --- |
+| `kimochi status` | What Kimochi reads (source and crop), the input, the OCR engine, Auto OCR, the overlay, the open session and the last scan's text. |
+| `kimochi scan` | Scans the source now, like the **Scan** shortcut. |
+| `kimochi scan --wait` | Scans, waits for the result and prints the text. With [Quick Shot](/reading/sources/) on, after you draw the box. `--timeout <seconds>` (30 by default). |
+| `kimochi auto-ocr [on\|off\|toggle]` | Shows or sets [Auto OCR](/reading/auto-ocr/). Turning it on needs a source. |
+| `kimochi overlay [show\|hide\|toggle]` | Shows or hides [the overlay](/reading/overlay/). |
+| `kimochi overlay text [show\|hide\|toggle]` | Only the scanned text drawn over the source. |
+| `kimochi ocr` | Lists this computer's [OCR engines](/reading/ocr-engines/), with the selected one marked. |
+| `kimochi ocr <engine>` | Switches engine: `googlelens`, `cloud`, `meikiocr`, `mangaocr`, `ppocr`, `livetext` (macOS) or `oneocr` (Windows). A local engine whose model isn't downloaded yet starts downloading. |
+| `kimochi source` | The source Kimochi reads. |
+| `kimochi source list` | Every window and display it could read, with their ids. |
+| `kimochi source set <name>` | Reads a window or display: by id, or by its title or app name (exactly, or the only one containing the words). Its saved crop comes back with it. |
+| `kimochi source clear` | Reads nothing. |
+| `kimochi source choose` | Opens the source picker in the main window. |
+
+## The Log and sessions
+
+| Command | What it does |
+| --- | --- |
+| `kimochi log` | The open session's newest 20 lines, oldest first. `-n <count>` for more or fewer, `--all` for every line, `--session <name>` for another session. |
+| `kimochi log --follow` | Prints each new line as the Log takes it in, until you press <kbd>Ctrl+C</kbd>. |
+| `kimochi log add <text>` | Adds a line to the Log, whatever **Input** is set to. With `-`, or with text piped in, it reads standard input. |
+| `kimochi session` | The open session's name. |
+| `kimochi session list` | Every [session](/log/sessions/), the open one marked `*`. |
+| `kimochi session switch <name>` | Opens another session. |
+| `kimochi session new [<name>]` | Starts a new session and opens it. |
+| `kimochi session rename <name>` | Renames the open session (or the one named with `--session`). |
+
+A session name matches exactly or, if no name is exact, as the only one containing the words,
+ignoring case: `kimochi session switch chrono` finds **Chrono Trigger**.
+
+## The app and settings
+
+| Command | What it does |
+| --- | --- |
+| `kimochi open` | Starts Kimochi if needed and brings the main window forward. |
+| `kimochi open settings [<page>]` | Opens Settings, on a page if you name one: `general`, `sources`, `ocr`, `log`, `dictionary`, `anki`, `assist`, `controls`, `gamemode`, `account`, `cli` or `about`. |
+| `kimochi open sources` | The source picker. Also `mini` ([Mini mode](/reading/mini-mode/)) and `dictionary` (the dictionary's own settings). |
+| `kimochi quit` | Quits Kimochi and waits until it has. |
+| `kimochi settings list` | Every setting, as `key = value` lines. |
+| `kimochi settings get <key>` | One setting. Keys are dotted paths: `overlayOpacity`, `autoOCRSettings.pollInterval`. |
+| `kimochi settings set <key> <value>` | Changes a setting. The value is read as JSON when it is valid JSON (`60`, `true`, `{"enabled":true}`) and as text otherwise; quote text that looks like JSON: `'"123"'`. |
+| `kimochi settings path` | Where the settings file is. |
+| `kimochi action <name>` | Fires an action as a shortcut or button would: `triggerScan`, `toggleOverlay`, `setCropArea`, `setAnkiCropArea`, `playAudio`, `selectAndScan`, `openControllerMenu`, `toggleAutoOcr`, `toggleTextOverlay`, `toggleDebugOverlay`. `kimochi action --list` lists them. |
+| `kimochi paths` | Kimochi's folders: data, your profile, settings, sessions, the event log, and the app itself. See [Files and data](/reference/data/). |
+| `kimochi version` | The command's version, and the running app's. |
+
+While Kimochi runs, a setting changes at once, exactly as if you had changed it in Settings.
+While it's closed, the file is changed and Kimochi uses it when it starts. Settings that have their
+own page in Settings are easier to get right there: `settings set` doesn't check a value beyond it
+being JSON.
+
+## Watching events
+
+`kimochi watch` streams what happens as JSON, one event per line, until you stop it:
+
+```sh
+kimochi watch scan line
+```
+
+```json
+{"event":"scan","text":"ここはリーネ広場。","engine":"meikiocr","id":412,"at":1762300000000}
+{"event":"line","id":"l3f1c…","text":"ここはリーネ広場。","source":"ocr","timestamp":1762300000012,"session":"9b2…","at":1762300000210}
+```
+
+Name the events you want, or none for all of them. Every event has `event` and `at` (Unix
+milliseconds).
+
+| Event | When | Fields |
+| --- | --- | --- |
+| `scan` | A scan finished. | `text`, `engine`, `id` |
+| `line` | The Log took in a line, from any input. | `id`, `text`, `source` (`ocr`, `hook`, `clipboard`, `websocket`, `cli`, …), `timestamp`, `session` |
+| `source` | Another source was chosen, or none. | `source` (`sourceId`, `type`, `name`, `appName`) |
+| `state` | Auto OCR, the overlay or the scanned text was turned on or off. | `autoOcr`, `overlay`, `textOverlay`, `scanning` |
+| `session` | Another session was opened. | `id`, `name` |
+| `action` | A shortcut, button or `kimochi action` fired. | `name` |
+
+## Recipes
+
+**Scan with a key of your own** (a Stream Deck, a mouse button, Hammerspoon, AutoHotkey), and get
+the text back:
+
+```sh
+kimochi scan --wait --json
+```
+
+**Send every new line somewhere else**: here, to a translation script.
+
+```sh
+kimochi log --follow | while IFS= read -r line; do
+  ./translate.sh "$line"
+done
+```
+
+`log --follow` prints a line's text as it is, so a line with a line break in it arrives as two.
+With `--json`, each Log line is exactly one JSON line; read its `text` with
+[jq](https://jqlang.org): `kimochi log --follow --json | jq -r .text`.
+
+**Get a game ready from its launcher**: pick the window, its session and the engine, then start
+reading.
+
+```sh
+kimochi source set "FINAL FANTASY"
+kimochi session switch "FF7"
+kimochi ocr meikiocr
+kimochi auto-ocr on
+```
+
+**Feed the Log from your own tool** (another OCR, a subtitle extractor, the clipboard):
+
+<Tabs syncKey="os">
+  <TabItem label="macOS">
+    ```sh
+    pbpaste | kimochi log add
+    ```
+  </TabItem>
+  <TabItem label="Windows">
+    ```powershell
+    Get-Clipboard | kimochi log add
+    ```
+  </TabItem>
+  <TabItem label="Linux">
+    ```sh
+    wl-paste | kimochi log add    # or: xclip -o -selection clipboard | kimochi log add
+    ```
+  </TabItem>
+</Tabs>
+
+**Export a session's whole Log** to a text file:
+
+```sh
+kimochi log --session "Chrono Trigger" --all > chrono-trigger.txt
+```
+
+**Wait for a scan, then mine the newest line** with your own Anki tooling:
+
+```sh
+kimochi watch scan | while IFS= read -r event; do
+  echo "$event" | jq -r .text | ./my-anki-script.sh
+done
+```
+
+## Good to know
+
+- **Windows:** use `kimochi` (the installed command), not `kimochi.exe` from Kimochi's folder.
+  Kimochi is a windowed program, so a terminal doesn't wait for it when it's started directly, and
+  its output arrives after the prompt. The installed command waits for it.
+- **Git Bash and WSL** on Windows don't run `.cmd` files by name; call `kimochi.cmd`, or
+  `cmd.exe /c kimochi …`.
+- **Development builds** (`npm run dev`) answer `kimochi` too, so the command is handy while
+  working on Kimochi: `src-tauri/target/debug/kimochi status`.
+- **Security:** the command talks to Kimochi over a connection only your user account can open. A
+  web page can't use it.

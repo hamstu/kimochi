@@ -14,6 +14,8 @@ export function acceptsInput(
   settings: Partial<Settings>,
   source: LineSource,
 ): boolean {
+  // `kimochi log add` is an explicit request, whichever input the Log is reading.
+  if (source === "cli") return true;
   return inputSourceOf(settings) === source;
 }
 

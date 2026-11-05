@@ -127,7 +127,7 @@ fn read_token(data_dir: &Path, key: &str) -> Option<String> {
 }
 
 /// Write a private file (mode 600 on Unix) through a temp file; `None` removes it.
-fn write_private(file: &Path, bytes: Option<&[u8]>) -> Result<(), String> {
+pub(crate) fn write_private(file: &Path, bytes: Option<&[u8]>) -> Result<(), String> {
     let Some(bytes) = bytes else {
         return match std::fs::remove_file(file) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
@@ -296,6 +296,13 @@ pub fn active_entry() -> Option<Entry> {
     let account = ACCOUNT.get()?;
     let key = lock(&account.index).active.clone()?;
     entry_for(&key)
+}
+
+/// The profile folder in use, read from `accounts.json` without the app: for the command line
+/// while Kimochi isn't running (cli/endpoint.rs).
+pub fn profile_dir_offline(data_dir: &Path, local_dir: &Path) -> PathBuf {
+    let key = load_index(data_dir).and_then(|index| index.active);
+    profile::profile_dir(local_dir, key.as_deref())
 }
 
 /// The active profile's key (`None`: the Local profile).

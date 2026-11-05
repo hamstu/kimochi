@@ -40,6 +40,10 @@ test("input migration preserves clipboard preference and never enables multiple 
     }
   }
 });
+test("lines added with `kimochi log add` are taken whatever the input is", () => {
+  for (const inputSource of ["ocr", "clipboard", "websocket", "hook"])
+    assert.equal(acceptsInput({ inputSource }, "cli"), true);
+});
 test("WebSocket parser accepts text envelopes and ignores control/malformed/binary messages", () => {
   for (const text of ["猫", '"猫"', '{"text":"猫"}', '{"sentence":"猫"}'])
     assert.equal(socketText(text), "猫");

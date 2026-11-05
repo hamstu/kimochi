@@ -741,6 +741,18 @@ function listenForPopover(): void {
 }
 
 /** Every command the React windows call, with a plausible response. */
+/** Settings → Command line: not installed until Install is clicked. */
+const cliCommand = (installed: boolean): Record<string, unknown> => ({
+  installed,
+  builtIn: false,
+  stale: false,
+  path: CAPABILITIES.os === 'windows' ? 'C:\\Users\\you\\AppData\\Local\\dev.kimochi.app\\bin\\kimochi.cmd' : '/usr/local/bin/kimochi',
+  target: '/Applications/Kimochi.app/Contents/MacOS/kimochi',
+  onPath: true,
+  note: null
+})
+let cliInstalled = false
+
 const HANDLERS: Record<string, Handler> = {
   ...MODEL_HANDLERS,
   ...EXTENSION_HANDLERS,
@@ -774,6 +786,9 @@ const HANDLERS: Record<string, Handler> = {
   desktop: () => DISPLAYS.map((d) => d.bounds),
   displays: () => DISPLAYS,
   platform_capabilities: () => CAPABILITIES,
+  cli_status: () => cliCommand(cliInstalled),
+  cli_install: () => cliCommand((cliInstalled = true)),
+  cli_uninstall: () => cliCommand((cliInstalled = false)),
   tts_speak: () => {
     if (!CAPABILITIES.cloudAccess)
       throw 'native: Read aloud runs on Kimochi cloud. Sign in from Settings → Account to use it.'

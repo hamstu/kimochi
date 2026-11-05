@@ -1,6 +1,7 @@
 // A release build on Windows is a GUI app: no console window behind it.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod reader;
+mod cli;
 mod evidence;
 mod boot;
 use base64::Engine;
@@ -213,9 +214,15 @@ fn settings_set(
     key: String,
     value: Value,
 ) -> Reply<()> {
-    state.settings.set(&key, value.clone())?;
+    apply_setting(&app, &state.settings, &key, value)
+}
+
+/// One settings write as a window makes it: stored, announced (`settings:changed`), its side
+/// effects set in motion, and Sync told. Shared with the command line (cli/server.rs).
+pub(crate) fn apply_setting(app: &tauri::AppHandle, settings: &Arc<Settings>, key: &str, value: Value) -> Reply<()> {
+    settings.set(key, value.clone())?;
     let _ = app.emit("settings:changed", json!({ "key": key, "value": value }));
-    setting_side_effects(&app, &state.settings, &key, &value);
+    setting_side_effects(app, settings, key, &value);
     sync::local_changed();
     Ok(())
 }
@@ -2916,6 +2923,9 @@ fn open_screen_capture_preferences() -> Reply<()> {
 }
 
 fn main() {
+    // `kimochi status`, `kimochi scan --wait`, …: the command line runs instead of the app, before
+    // anything below could claim the single instance or quit the running app (cli/mod.rs).
+    cli::run_if_invoked();
     boot::start();
     // A development build's pages come from the Vite dev server over plain HTTP, and WebView2
     // looks for a proxy (WPAD) before its first HTTP request: ~800 ms on every `npm run dev`
@@ -3221,6 +3231,9 @@ fn main() {
             history_delete,
             history_clear,
             log_lines::log_recent,
+            cli::install::cli_status,
+            cli::install::cli_install,
+            cli::install::cli_uninstall,
             history_merge_reset,
             ext_relay,
             ext_relay_listen,
@@ -3477,6 +3490,12 @@ fn main() {
 
             spawn_source_restore(service.clone());
 
+            // The `kimochi` command's way in (cli/server.rs).
+            match cli::server::start(&handle) {
+                Ok(listening) => record(&handle, &service, listening),
+                Err(error) => record(&handle, &service, json!({ "check": "cli-listener-failed", "error": error })),
+            }
+
             boot::mark("services-started");
             {
                 let (service, store) = (service.clone(), store.clone());
@@ -3513,6 +3532,7 @@ fn main() {
                 }
                 model_store::shutdown(app);
                 text_hook::shutdown();
+                cli::server::stop();
                 extension_store::shutdown(app);
             }
         });

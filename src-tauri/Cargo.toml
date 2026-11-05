@@ -58,6 +58,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-deep-link = "2"
 # Formats the offered release's date for the panels. Already in the lock file via the updater.
 time = { version = "0.3", features = ["formatting"] }
+# The command line's token (cli/server.rs). Already in the lock file via Tauri.
+getrandom = "0.2"
 # Redacts secrets from the debug report and its log tails (debug_report.rs). Already in the lock
 # file via Tauri.
 regex = "1"
@@ -80,6 +82,7 @@ windows = { version = "0.61", features = [
   "Win32_Graphics_Gdi",
   "Win32_Storage_FileSystem",
   "Win32_System_Com",
+  "Win32_System_Console",
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_LibraryLoader",
   "Win32_System_Power",

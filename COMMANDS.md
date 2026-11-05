@@ -1924,6 +1924,73 @@ announced; when it is unset (a fresh install, or the first build that has the se
 set silently, and when it differs from `currentVersion` the dialog opens and the setting is
 updated.
 
+## Command line
+
+The `kimochi` command (`src-tauri/src/cli/`; the user's guide is
+`site-docs/src/content/docs/reference/cli.mdx`). It is the app's own executable: `main` calls
+`cli::run_if_invoked()` before anything else, and a first argument that is a bare word (or
+`-h`, `--help`, `-V`, `--version`) runs the client and exits instead of the app. The app is only
+ever launched with no arguments, a `kimochi://` URL or an internal `--flag`, none of them a bare
+word (`cli::is_cli_args`); a typo is an unknown command, never a launch. Because it returns before
+`platform::instance::take_over` and the single-instance plugin, a command never quits the running
+app (macOS) or exits for it (elsewhere). macOS's take-over sweep reads each `kimochi` process's
+arguments (`KERN_PROCARGS2`) and leaves command-line processes alone, so starting the app does not
+kill a `kimochi watch`.
+
+| Command | Signature |
+| --- | --- |
+| `cli_status` | `() -> CliStatus` |
+| `cli_install` | `() -> CliStatus` — macOS may show the system's administrator prompt; `invalid: cancelled` when it is dismissed |
+| `cli_uninstall` | `() -> CliStatus` — removes only a link or shim that is Kimochi's |
+
+`CliStatus` is `{installed, builtIn, stale, path, target, onPath, note}`: `path` is where the
+command lives, `target` what it runs, `builtIn` the Linux `.deb`'s own `/usr/bin/kimochi`,
+`stale` a Kimochi command that runs another copy (a moved app), `note` a sentence for the page.
+macOS links `/usr/local/bin/kimochi` (privileged through `osascript … with administrator
+privileges` when the folder isn't writable); Linux links `~/.local/bin/kimochi` to `$APPIMAGE` or
+the executable; Windows writes `%LOCALAPPDATA%\dev.kimochi.app\bin\kimochi.cmd` and adds that
+folder to the user's PATH (PowerShell, keeping `%VARIABLES%` unexpanded, then a
+`WM_SETTINGCHANGE`). A release build on Windows is a GUI program: the shim makes the shell wait
+for it, and `cli/console.rs` attaches it to the shim's console.
+
+**The wire.** At startup the app binds `127.0.0.1:0` and writes `cli-endpoint.json`
+(`cli-endpoint-dev.json` for a development build) to its data folder, 0600:
+`{port, token, pid, version, flavor, protocol}`; it removes the file at exit when it is still its
+own. Each connection carries one request line `{token, method, params}` and gets one reply line,
+`{ok: true, result}` or `{ok: false, error}` with the usual error prefixes (`timeout:` too).
+A wrong token is refused. It is not HTTP, so no web page can drive it. The client tries its own
+flavor's file, then the other's, and treats an endpoint that does not answer `ping` as not running;
+a command that needs the app then starts it (`open` on the bundle on macOS, the AppImage or the
+executable detached elsewhere) and waits for `ping`.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `ping` | — | `{version, pid}` |
+| `status` | — | `{running, pid, version, source, cropEnabled, ocrEngine, input, dictionary, autoOcr, scanning, overlay, textOverlay, status, lastScan, session, profileDir}` |
+| `settings.get` | `{key?}` | the value (defaults merged), or every setting |
+| `settings.set` | `{key, value}` | the stored value; through `apply_setting`, as `settings_set` |
+| `action` / `actions` | `{name}` / — | `actions::dispatch`; `ACTIONS` |
+| `toggle` | `{flag: autoOcr\|overlay\|textOverlay, to: on\|off\|toggle}` | `{<flag>: bool}`, after the overlay has written the new state back (`view_flags`) |
+| `scan` | `{wait?, timeout?}` | dispatches `triggerScan`; with `wait`, the next published scan's `{text, engine, id}` |
+| `ocr.engines` / `ocr.set` | — / `{engine}` | `{selected, engines}` from `platform_capabilities`; an engine held back only by its model may be chosen (its download starts) |
+| `source.list` / `source.set` / `source.clear` / `source.choose` | — / `{query}` / — / — | `sources::catalog`; `select_keeping_crop` on the source matched by id, title or app; `sources::clear`; `choose_source` |
+| `open` | `{view: log\|settings\|sources\|mini\|expand\|dictionary, page?}` | `{opened}` |
+| `quit` | — | replies, then quits as `app_quit` |
+| `log.recent` | `{limit?}` | `log_lines::recent` |
+| `log.add` | `{text}` | the Log's `host.ingest` with source `cli` |
+| `session.list` / `session.switch` / `session.new` / `session.rename` | — / `{query}` / `{name?}` / `{name, query?}` | the manifest; the Log's `sessions` module |
+| `watch` | `{events?}` | a first reply, then one JSON line per event until the client closes: `scan`, `line`, `source`, `state`, `session`, `action` |
+
+**The Log owns its files**, so session changes and `log.add` go through its request channel:
+native emits `reader:request` `{id, module, method, args}` and waits for the `reader:response` with
+that `id` (frontend/texthooker/host.ts), after a `host.snapshot` has answered (the Log window may
+still be loading on a cold start). Reads (`session list`, `log`) come from the files, which the Log
+writes a moment after each change, and work while the app is closed (`account::profile_dir_offline`
+finds the profile in `accounts.json`). A line with source `cli` is taken whatever the Log's input is
+(`acceptsInput`). `watch` follows `state` for scans, sources and switches, `reader:snapshot` for
+lines and sessions (only lines newer than the last one it saw, never history), and `hotkey` for
+actions.
+
 ## Capabilities
 
 `capabilities/core.json` grants `core:event:default` plus a few read-only window

@@ -1,0 +1,16 @@
+/* Settings → Command line (CliTab.tsx). */
+
+/* An example command: the row's label, in the code face, selectable to copy by hand too. */
+.cli-command {
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+  font-weight: var(--k-weight-medium);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.cli-inline {
+  font-family: var(--k-font-mono);
+  font-size: 0.95em;
+}

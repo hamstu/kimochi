@@ -10,6 +10,7 @@ import {
   ScanText,
   ScrollText,
   SlidersHorizontal,
+  SquareTerminal,
   UserRound,
   Waypoints
 } from 'lucide-react'
@@ -28,6 +29,7 @@ export const SETTINGS_NAV: readonly (SettingsNavItem & { value: SettingsTabName 
   { value: 'controls', label: 'Shortcuts & Controls', icon: <Gamepad2 /> },
   { value: 'gamemode', label: 'Game Mode', icon: <Joystick /> },
   { value: 'account', label: 'Account', icon: <UserRound /> },
+  { value: 'cli', label: 'Command line', icon: <SquareTerminal /> },
   { value: 'about', label: 'About', icon: <Info /> }
 ]
 

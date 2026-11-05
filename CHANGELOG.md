@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- ⭐ **Kimochi on the command line.** Install the `kimochi` command from **Settings → Command line** to drive Kimochi from a terminal and your own scripts: scan and print the text, follow the Log as it fills, add lines to it, switch sessions, sources and OCR engines, change settings, and stream events as JSON. It starts Kimochi when it isn't running and never opens a second one.
+
 ### Fixed
 
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
