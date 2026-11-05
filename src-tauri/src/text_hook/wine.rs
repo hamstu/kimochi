@@ -96,14 +96,20 @@ pub fn unix_path(prefix: &Path, windows: &str, read_link: impl Fn(&Path) -> Opti
     if !drive.is_ascii_alphabetic() || chars.next()? != ':' {
         return None;
     }
-    let devices = prefix.join("dosdevices");
-    let link = devices.join(format!("{drive}:"));
-    let target = read_link(&link)?;
-    let mut path = if target.is_absolute() { target } else { devices.join(target) };
+    // Linux paths whatever the host, so the tests mean the same on every platform: `/`-joined by
+    // hand, where `Path::join` would use the host's separator (and, on Windows, call `/home/…`
+    // relative).
+    let devices = format!("{}/dosdevices", prefix.to_string_lossy().trim_end_matches('/'));
+    let target = read_link(Path::new(&format!("{devices}/{drive}:")))?;
+    let target = target.to_string_lossy();
+    let mut path = if target.starts_with('/') { target.into_owned() } else { format!("{devices}/{target}") };
     for part in windows[2..].split(['\\', '/']).filter(|p| !p.is_empty()) {
-        path.push(part);
+        if !path.ends_with('/') {
+            path.push('/');
+        }
+        path.push_str(part);
     }
-    Some(path)
+    Some(PathBuf::from(path))
 }
 
 /// A Linux path as Wine sees it, on the `Z:` drive every prefix maps to `/`.
