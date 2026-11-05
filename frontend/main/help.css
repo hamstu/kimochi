@@ -1,0 +1,171 @@
+/* Help (HelpDialog.tsx): the choice of Discord, a bug report or a feature request, the forms, the thank-you. */
+.help.k-dialog {
+  width: min(32rem, calc(100vw - 2rem));
+  max-width: none;
+}
+
+.help-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  /* The back arrow sits in the header's margin, so the title lines up with the body's text. */
+  margin-left: calc(-1 * var(--k-space-2));
+}
+
+/* The ways to get help: rows you press, each with an icon tile and where it goes. */
+.help-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  padding-bottom: var(--k-space-1);
+}
+.help-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+  width: 100%;
+  padding: var(--k-space-3);
+  border: 0;
+  border-radius: var(--k-radius-lg);
+  background: var(--k-field);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+  color: var(--k-text);
+  text-align: left;
+  cursor: default;
+  transition-property: background-color, box-shadow;
+  transition-duration: var(--k-fast);
+}
+.help-choice:hover {
+  background: var(--k-hover);
+  box-shadow: inset 0 0 0 1px var(--k-line-strong);
+}
+.help-choice:focus-visible {
+  outline: 2px solid var(--k-accent);
+  outline-offset: 2px;
+}
+.help-choice-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--k-radius-md);
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+}
+.help-choice-icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.help-choice-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.help-choice-title {
+  font-size: var(--k-text-md);
+  font-weight: var(--k-weight-semibold);
+}
+.help-choice-detail {
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: 1.45;
+}
+.help-choice-trailing {
+  display: grid;
+  flex: none;
+  color: var(--k-text-3);
+}
+.help-choice-trailing svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+
+/* The report form. */
+.help-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-4);
+  padding-bottom: var(--k-space-1);
+}
+.help-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--k-space-3);
+}
+@media (max-width: 30rem) {
+  .help-row {
+    grid-template-columns: 1fr;
+  }
+}
+.help-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+  min-width: 0;
+}
+.help-label,
+.help-attach-title {
+  color: var(--k-text);
+  font-size: var(--k-text-sm);
+  font-weight: var(--k-weight-medium);
+}
+.help-hint {
+  color: var(--k-text-2);
+  font-size: var(--k-text-xs);
+  line-height: 1.45;
+}
+.help-description.k-field {
+  min-height: 8rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+.help-attach {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+}
+.help-attach .k-checkbox {
+  flex: none;
+  margin-top: 0.125rem;
+}
+.help-attach-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+/* The thank-you. */
+.help-sent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--k-space-2);
+  padding: var(--k-space-4) var(--k-space-2) var(--k-space-5);
+  text-align: center;
+}
+.help-sent-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--k-accent);
+}
+.help-sent-title {
+  margin: 0;
+  color: var(--k-text);
+  font-size: var(--k-text-lg);
+  font-weight: var(--k-weight-semibold);
+}
+.help-sent-detail {
+  max-width: 24rem;
+  margin: 0;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  line-height: 1.5;
+}
+
+/* The title bar's ? button: at the bar's end, beside the window buttons. */
+.main-help {
+  margin-left: auto;
+}

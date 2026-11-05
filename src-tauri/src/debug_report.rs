@@ -125,26 +125,33 @@ pub async fn debug_bundle_save(
     let path = path.into_path().map_err(|e| format!("native: {e}"))?;
     let target = path.clone();
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let report = collect(&app, &service);
-        let mut files = vec![
-            ("report.md".to_string(), redact_text(&markdown).into_bytes()),
-            (
-                "report.json".to_string(),
-                serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?,
-            ),
-        ];
-        let directory = crate::data_dir(&app)?;
-        for name in LOGS {
-            if let Some(tail) = log_tail(&directory.join(name), TAIL_BYTES) {
-                files.push((format!("logs/{name}"), tail.into_bytes()));
-            }
-        }
-        let zip = zip(&files)?;
+        let zip = bundle(&app, &service, &markdown)?;
         std::fs::write(&target, zip).map_err(|e| format!("native: could not write {}: {e}", target.display()))
     })
     .await
     .map_err(|e| e.to_string())??;
     Ok(json!({ "saved": true, "path": path.to_string_lossy() }))
+}
+
+/// The debug bundle as zip bytes: `report.md` (the page's Markdown, redacted again here),
+/// `report.json` and the tail of each log in `LOGS`. Saved by `debug_bundle_save`, sent by
+/// `bug_report_send`. Blocking: call it off the async runtime.
+pub fn bundle(app: &tauri::AppHandle, service: &Shared, markdown: &str) -> Result<Vec<u8>, String> {
+    let report = collect(app, service);
+    let mut files = vec![
+        ("report.md".to_string(), redact_text(markdown).into_bytes()),
+        (
+            "report.json".to_string(),
+            serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?,
+        ),
+    ];
+    let directory = crate::data_dir(app)?;
+    for name in LOGS {
+        if let Some(tail) = log_tail(&directory.join(name), TAIL_BYTES) {
+            files.push((format!("logs/{name}"), tail.into_bytes()));
+        }
+    }
+    zip(&files)
 }
 
 // ---------------------------------------------------------------- the report

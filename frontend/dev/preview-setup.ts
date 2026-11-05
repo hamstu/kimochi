@@ -788,6 +788,10 @@ const HANDLERS: Record<string, Handler> = {
     return previewVerbose
   },
   debug_bundle_save: () => ({ saved: true, path: '~/Downloads/kimochi-debug-preview.zip' }),
+  bug_report_send: async (a) => {
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    return { id: (a?.report as { kind?: string } | undefined)?.kind === 'feature' ? 'KF-PREV1EW' : 'KB-PREV1EW' }
+  },
   panel_pointer: () => null,
   panel_cursor: ok,
   view_flags: ok,

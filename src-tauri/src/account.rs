@@ -433,7 +433,7 @@ fn announce_capabilities() {
     }
 }
 
-fn base() -> Result<String, String> {
+pub fn base() -> Result<String, String> {
     let account = account()?;
     let service = account
         .app
