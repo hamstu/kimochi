@@ -3799,6 +3799,20 @@ fn finish_setup(
     spawn_focus_watch(handle.clone(), service.clone());
     #[cfg(target_os = "windows")]
     platform::start_fullscreen_watch(&handle, service.clone());
+    // Magpie puts its scaled picture of a game over everything each time the game comes to the
+    // front; its broadcast is the moment to put the overlay and pop-ups back over it. Where text
+    // is drawn follows by itself (`platform::scaler`).
+    #[cfg(target_os = "windows")]
+    {
+        let scaler_handle = handle.clone();
+        let scaler_service = service.clone();
+        platform::watch_scaler(move |change| {
+            if change == platform::ScalerChange::Front {
+                platform::raise_over_fullscreen(&scaler_handle, &scaler_service);
+            }
+            record(&scaler_handle, &scaler_service, json!({ "check": "magpie", "change": change.name(), "session": platform::scaler_report() }));
+        });
+    }
     spawn_display_watch(handle.clone(), store.clone());
     // No download starts at launch: a local engine selected before its models were
     // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
@@ -4663,9 +4677,15 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             if previous.is_some_and(|p| !p.differs(&state)) {
                 continue;
             }
-            let was_fullscreen = service.source_fullscreen.swap(state.fullscreen, Ordering::Relaxed);
+            // The window's own shape: a game Magpie shows full screen is still the window it was,
+            // read with the same crop, and the text on screen still belongs to it.
+            let shape_fullscreen = state.fullscreen && !state.scaled;
+            let was_fullscreen = service.source_fullscreen.swap(shape_fullscreen, Ordering::Relaxed);
             compact::observe_source(&handle, &service, &source_id, &state);
-            if previous.is_some() && was_fullscreen != state.fullscreen {
+            if previous.is_some_and(|p| p.scaled != state.scaled) {
+                record(&handle, &service, json!({ "check": "source-scaled", "scaled": state.scaled, "bounds": state.bounds }));
+            }
+            if previous.is_some() && was_fullscreen != shape_fullscreen {
                 let mut view = service.view.lock().unwrap();
                 view.scan = None;
                 view.regions.clear();
@@ -4692,6 +4712,7 @@ fn source_state_payload(source_id: &str, state: &platform::WindowState) -> Value
         "fullscreen": state.fullscreen,
         "settling": state.settling,
         "display": state.display,
+        "scaled": state.scaled,
     })
 }
 

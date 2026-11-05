@@ -34,6 +34,15 @@ public static class Native {
  /// The foreground thread's GUI state: flags 0x4 is GUI_INMENUMODE (a window's menu loop is running).
  public static object GuiInfo(){uint pid;var fg=GetForegroundWindow();var info=new GUITHREADINFO{size=Marshal.SizeOf(typeof(GUITHREADINFO))};GetGUIThreadInfo(GetWindowThreadProcessId(fg,out pid),ref info);return new{foreground=fg.ToInt64(),pid,flags=info.flags,menuOwner=info.menuOwner.ToInt64(),capture=info.capture.ToInt64(),focus=info.focus.ToInt64()};}
  [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr h);
+ // Magpie (a window scaler) publishes its session on its scaling window, as its docs describe: the scaled
+ // window, the scaled part of it (Src) and where the picture is drawn (Dest), in physical pixels. While the
+ // game has the mouse the scaling window is WS_EX_TRANSPARENT and the cursor is over the game itself.
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowW(string cls,string title);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] public static extern IntPtr GetPropW(IntPtr h,string name);
+ [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h,int index);
+ [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+ [StructLayout(LayoutKind.Sequential)] public struct POINT{public int x,y;}
+ public static object Magpie(){var h=FindWindowW("Window_Magpie_967EB565-6F73-4E94-AE53-00CC42592A22",null);if(h==IntPtr.Zero||!IsWindowVisible(h))return null;Func<string,int>p=n=>(int)GetPropW(h,"Magpie."+n).ToInt64();int ex=GetWindowLong(h,-20);RECT r;GetWindowRect(h,out r);POINT c;GetCursorPos(out c);return new{hwnd=h.ToInt64(),source=GetPropW(h,"Magpie.SrcHWND").ToInt64(),windowed=p("Windowed")!=0,src=new{left=p("SrcLeft"),top=p("SrcTop"),right=p("SrcRight"),bottom=p("SrcBottom")},dest=new{left=p("DestLeft"),top=p("DestTop"),right=p("DestRight"),bottom=p("DestBottom")},surface=new{left=r.left,top=r.top,right=r.right,bottom=r.bottom},captured=(ex&0x20)!=0,topmost=(ex&0x8)!=0,cursor=new{x=c.x,y=c.y}};}
  // GDI text calls, so a text hooker's generic API hooks see the game's text (the "hookable" game).
  [DllImport("gdi32.dll",CharSet=CharSet.Unicode)] public static extern IntPtr CreateFontW(int h,int w,int esc,int orient,int weight,uint italic,uint underline,uint strike,uint charset,uint outPrecision,uint clipPrecision,uint quality,uint pitch,string face);
  [DllImport("gdi32.dll")] public static extern IntPtr SelectObject(IntPtr dc,IntPtr o);
@@ -117,6 +126,8 @@ public class Game : Form {
   else if(cmd=="restore"){WindowState=FormWindowState.Normal;Native.SetForegroundWindow(Handle);Invalidate();}
   else if(cmd=="borderless"){saved=Bounds;FormBorderStyle=FormBorderStyle.None;Bounds=Screen.FromHandle(Handle).Bounds;mode=cmd;Invalidate();}
   else if(cmd=="windowed"){FormBorderStyle=FormBorderStyle.Sizable;Bounds=saved.Width>0?saved:new Rectangle(130,90,1017,740);mode=cmd;Invalidate();}
+  // "center": the window in the middle of its screen (Magpie scales a window in place, centred on it).
+  else if(cmd=="center"){var sc=Screen.FromHandle(Handle).Bounds;Location=new Point(sc.X+(sc.Width-Width)/2,sc.Y+(sc.Height-Height)/2);Invalidate();}
   else if(cmd.StartsWith("move ")){var a=cmd.Split(' ');Bounds=new Rectangle(int.Parse(a[1]),int.Parse(a[2]),int.Parse(a[3]),int.Parse(a[4]));Invalidate();}
  }
  protected override void OnPaintBackground(PaintEventArgs e){base.OnPaintBackground(e);}
@@ -179,9 +190,10 @@ public class Game : Form {
 public class Program {
  [STAThread] public static void Main(string[] args){
   Native.SetProcessDpiAwarenessContext(new IntPtr(-4));
-  if(args.Length==0)throw new Exception("game <directory> [title] [hookable] | windows | guiinfo | key <vk> <down|up> | chord <vk...> | mouse <x> <y> [click|down|up] | focus <hwnd> | show <hwnd> <n> | move <hwnd> <x> <y> <w> <h> | screenshot <path>");
+  if(args.Length==0)throw new Exception("game <directory> [title] [hookable] | windows | magpie | guiinfo | key <vk> <down|up> | chord <vk...> | mouse <x> <y> [click|down|up] | focus <hwnd> | show <hwnd> <n> | move <hwnd> <x> <y> <w> <h> | screenshot <path>");
   if(args[0]=="game"){Application.EnableVisualStyles();Application.Run(new Game(args[1],args.Length>2&&args[2]!=""?args[2]:null){hookable=args.Contains("hookable")});}
   else if(args[0]=="guiinfo") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.GuiInfo()));
+  else if(args[0]=="magpie") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.Magpie()));
   else if(args[0]=="windows") Console.WriteLine(new JavaScriptSerializer().Serialize(Native.Windows()));
   else if(args[0]=="key") Native.Key(int.Parse(args[1]),args[2]=="up");
   else if(args[0]=="chord"){var k=args.Skip(1).Select(int.Parse).ToArray();foreach(int v in k){Native.Key(v,false);Thread.Sleep(60);}Thread.Sleep(100);foreach(int v in k.Reverse()){Native.Key(v,true);Thread.Sleep(40);}}

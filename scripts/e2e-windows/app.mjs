@@ -24,11 +24,41 @@ export async function verifyIsolation(p) {
   assertIsolatedPaths(roaming, local);
   return { roaming, local };
 }
-export function desktop(...args) {
+function helper(args) {
   return execFileSync(path.join(root, "Desktop.exe"), args.map(String), {
     encoding: "utf8",
     windowsHide: true,
   }).trim();
+}
+export function desktop(...args) {
+  if (args[0] === "mouse" && process.env.KIMOCHI_E2E_MAGPIE) return magpieMouse(...args.slice(1));
+  return helper(args);
+}
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+/** Magpie's ScalingToSrc: the game pixel under a point of its picture. */
+function gamePoint(s, x, y) {
+  const axis = (p, lo, hi, srcLo, srcHi) =>
+    p >= hi ? srcHi + p - hi : p < lo ? srcLo + p - lo : srcLo + Math.round(((p - lo) / (hi - lo - 1)) * (srcHi - srcLo - 1));
+  return [axis(x, s.dest.left, s.dest.right, s.src.left, s.src.right), axis(y, s.dest.top, s.dest.bottom, s.src.top, s.src.bottom)];
+}
+/**
+ * The pointer to where the reader sees (x, y), with Magpie scaling a game (KIMOCHI_E2E_MAGPIE set).
+ * While Magpie hands the mouse to the game it keeps the cursor on the game's real window, clipped to
+ * it, so an absolute jump elsewhere goes nowhere. A real mouse moves relatively, and Magpie follows
+ * where that lands on its picture: onto the game, or, where one of Kimochi's windows covers that
+ * point, out to that window, letting go of the cursor. Same here: first to the game pixel under the
+ * point; if Magpie then lets go, on to the point itself.
+ */
+function magpieMouse(x, y, ...rest) {
+  let session = JSON.parse(helper(["magpie"]) || "null");
+  if (session?.captured) {
+    const [gx, gy] = gamePoint(session, Number(x), Number(y));
+    helper(["mouse", gx, gy]);
+    pause(120);
+    session = JSON.parse(helper(["magpie"]) || "null");
+    if (session?.captured) return helper(["mouse", gx, gy, ...rest]);
+  }
+  return helper(["mouse", x, y, ...rest]);
 }
 export async function targets() {
   return await (

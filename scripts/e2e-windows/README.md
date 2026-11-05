@@ -108,6 +108,26 @@ and any extra test patches in your handoff.
 For GPU comparison, quit first, set `KIMOCHI_E2E_DISABLE_GPU=1`, then launch with run.mjs again.
 Remove that environment variable and restart to return to normal GPU use.
 
+### Magpie
+
+`scan` and `hover` also run with the game scaled by [Magpie](https://github.com/Blinue/Magpie)
+(the portable zip, unpacked anywhere, with its default shortcuts): mode `magpie` scales it full
+screen, `magpie-windowed` in Magpie's own window.
+
+```powershell
+$env:KIMOCHI_E2E_MAGPIE="$env:LOCALAPPDATA\Programs\Magpie\Magpie.exe"
+node scripts/e2e-windows/run.mjs scan window gdi magpie
+node scripts/e2e-windows/run.mjs hover window gdi magpie
+node scripts/e2e-windows/run.mjs hover window gdi magpie-windowed
+```
+
+The runner starts Magpie if needed and scales the fake game with Alt+Shift+A (or Alt+Shift+Q), then checks
+that Kimochi follows the session and scores alignment against the game's truth **as Magpie draws it**
+(`Desktop.exe magpie` prints the session: Src, Dest, and whether Magpie has the cursor). While Magpie
+hands the mouse to the game it clips the cursor to the game's real window, so pointer moves go to the
+game pixel under the intended point, as a real mouse's relative motion would. Magpie is left scaling
+afterwards, like the game is left open; Alt+Shift+A (or Q) with the game in front stops it.
+
 ### What each scenario guards
 
 | Scenario | Checks | Guards |

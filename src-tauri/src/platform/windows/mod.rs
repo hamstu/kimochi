@@ -48,6 +48,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 mod cli;
 mod desktops;
 mod icon;
+mod magpie;
 mod mouseguard;
 mod rules;
 mod sources;
@@ -56,15 +57,16 @@ mod workspace;
 
 pub use cli::run_cli;
 pub use icon::app_icon_png;
+pub use magpie::{report as scaler_report, watch as watch_scaler, Change as ScalerChange};
 pub use mouseguard::{start_mouse_guard, stop_mouse_guard, update_mouse_guard};
 pub use mouseguard::{set_keyboard_guard, sync_mouse_buttons};
 pub use sources::{
-    front_window, frontmost_app, frontmost_pid, picker_sources, source_spaces, window_bounds,
-    window_fullscreen,
+    front_window, frontmost_app, frontmost_pid, picker_sources, scaled_full_screen, shown_frame_info,
+    source_spaces, window_bounds, window_fullscreen,
 };
 pub use window::{
     activate_process, activate_self, activate_window, bounds, ignore_key_menu, inspect, make_panel, order_front, panel_cursor,
-    panel_pointer, place, promote_to_key, start_fullscreen_watch,
+    panel_pointer, place, promote_to_key, raise_over_fullscreen, start_fullscreen_watch,
 };
 pub use workspace::observe_workspace;
 
@@ -113,6 +115,8 @@ pub fn set_input_regions(
 pub fn cursor() -> Option<PointerSample> {
     let mut p = POINT::default();
     unsafe { GetCursorPos(&mut p) }.ok()?;
+    // Over a game Magpie is scaling: where the reader sees the cursor (`magpie::shown_cursor`).
+    let (x, y) = magpie::shown_cursor((f64::from(p.x), f64::from(p.y)));
     let held =
         |vk: VIRTUAL_KEY| mouseguard::modifier_down(vk.0)
             || (unsafe { GetAsyncKeyState(i32::from(vk.0)) } as u16) & 0x8000 != 0;
@@ -122,8 +126,8 @@ pub fn cursor() -> Option<PointerSample> {
         VK_LBUTTON
     };
     Some(PointerSample {
-        x: f64::from(p.x),
-        y: f64::from(p.y),
+        x,
+        y,
         down: mouseguard::primary_down().unwrap_or_else(|| held(primary)),
         modifiers: Modifiers {
             shift: held(VK_SHIFT),

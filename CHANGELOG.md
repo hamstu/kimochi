@@ -11,6 +11,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Magpie support.** Games you scale with Magpie work with Kimochi as they do without it: the overlay, OCR text, hover lookups and dictionary pop-ups sit on the scaled picture, stay above it when you switch back to the game, and clicks on Kimochi still reach Kimochi. Nothing to set up.
+
 ### Fixed
 
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
