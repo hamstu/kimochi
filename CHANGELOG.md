@@ -11,6 +11,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-04
+
 ### Added
 
 - ⭐ **Text Hooker on Linux and Steam Deck.** Windows games running through Proton or Wine can now be hooked, in Gaming Mode too, just as on Windows. Native Linux games still use OCR.
