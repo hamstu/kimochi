@@ -113,11 +113,23 @@ fn engine_for(popup_type: Option<&Value>) -> String {
     }
 }
 
+/// Whether this build keeps its own copy of the extension engines' storage files.
+///
+/// On macOS the unbundled `tauri dev` executable gets a WebKit store of its own
+/// (`~/Library/WebKit/kimochi`, not the bundle's `dev.kimochi.app`), so its dictionaries live in
+/// different IndexedDB databases than the installed app's, while both share the app data
+/// directory. One shared list then always describes the other store's data, and each launch's
+/// reconcile (DICTIONARY_ENGINES.md §5.4.1) emptied it for the other build. Elsewhere both
+/// builds share the webview's store too, so they share the file.
+pub const SEPARATE_EXTENSION_STORAGE: bool = cfg!(all(dev, target_os = "macos"));
+
 /// `chrome.storage` persistence file: Yomitan keeps today's `chrome-local.json`, an
-/// extension engine gets `chrome-local-<id>.json`.
+/// extension engine gets `chrome-local-<id>.json` (`chrome-local-<id>.dev.json` where the dev
+/// build has a WebKit store of its own, [`SEPARATE_EXTENSION_STORAGE`]).
 pub fn storage_file(extension: Option<&str>) -> Result<String, String> {
     match extension {
         None => Ok("chrome-local.json".into()),
+        Some(id) if valid_extension_id(id) && SEPARATE_EXTENSION_STORAGE => Ok(format!("chrome-local-{id}.dev.json")),
         Some(id) if valid_extension_id(id) => Ok(format!("chrome-local-{id}.json")),
         Some(id) => Err(format!("invalid: extension id {id:?} must match [a-z0-9-]{{1,32}}")),
     }
@@ -816,13 +828,11 @@ mod tests {
 
     #[test]
     fn storage_is_namespaced_per_extension() {
+        let ext = if SEPARATE_EXTENSION_STORAGE { ".dev.json" } else { ".json" };
         assert_eq!(storage_file(None).unwrap(), "chrome-local.json");
-        assert_eq!(
-            storage_file(Some("hachidori")).unwrap(),
-            "chrome-local-hachidori.json"
-        );
-        assert_eq!(storage_file(Some("tenten")).unwrap(), "chrome-local-tenten.json");
-        assert_eq!(storage_file(Some("a-1")).unwrap(), "chrome-local-a-1.json");
+        assert_eq!(storage_file(Some("hachidori")).unwrap(), format!("chrome-local-hachidori{ext}"));
+        assert_eq!(storage_file(Some("tenten")).unwrap(), format!("chrome-local-tenten{ext}"));
+        assert_eq!(storage_file(Some("a-1")).unwrap(), format!("chrome-local-a-1{ext}"));
         let long = "a".repeat(33);
         for bad in ["", "Tenten", "../x", "a/b", "a.b", "a b", "é", long.as_str()] {
             assert!(
@@ -835,11 +845,12 @@ mod tests {
 
     #[test]
     fn backups_are_named_beside_the_extension_file_and_never_for_yomitan() {
+        let ext = if SEPARATE_EXTENSION_STORAGE { ".dev.json" } else { ".json" };
         assert_eq!(
             backup_file("hachidori", 1791823478169).unwrap(),
-            "chrome-local-hachidori.json.bak-1791823478169"
+            format!("chrome-local-hachidori{ext}.bak-1791823478169")
         );
-        assert_eq!(backup_file("tenten", 1).unwrap(), "chrome-local-tenten.json.bak-1");
+        assert_eq!(backup_file("tenten", 1).unwrap(), format!("chrome-local-tenten{ext}.bak-1"));
         for bad in ["", "../x", "a/b", "Tenten"] {
             assert!(backup_file(bad, 1).unwrap_err().starts_with("invalid:"), "{bad:?}");
         }
