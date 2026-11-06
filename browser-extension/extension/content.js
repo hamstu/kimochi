@@ -113,6 +113,9 @@
   @keyframes pulse{50%{opacity:.4}}
   .msg{padding:0 8px 0 6px;color:var(--ink2);font-weight:520;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:260px;font-variant-numeric:tabular-nums}
   .msg[data-tone=danger]{color:var(--danger)}
+  .get{position:relative;margin:0 8px 0 -2px;padding:3px 10px;border-radius:999px;background:var(--accent);color:#fff;font-weight:600;text-decoration:none;white-space:nowrap;pointer-events:auto}
+  .get:hover{filter:brightness(1.08)}
+  .get[hidden]{display:none}
   .sep{width:1px;height:20px;background:var(--line);flex:none;margin:0 4px}
   button{all:unset;box-sizing:border-box;cursor:pointer;position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--ink);border-radius:8px;font:inherit;font-weight:520}
   button:hover{background:var(--hover)}
@@ -171,6 +174,7 @@
   <div class="bar panel" role="toolbar" aria-label="Kimochi">
     <span class="logo"><img alt="Kimochi"><span class="pip"></span></span>
     <span class="msg" role="status"></span>
+    <a class="get" href="https://kimochiapp.com" target="_blank" rel="noopener" data-tip="This extension works with the free Kimochi desktop app" hidden>Get the app</a>
     <button class="toggle" role="switch" data-act="auto" aria-checked="true">Auto<span class="track"></span></button>
     <span class="sep"></span>
     <button class="session engine" data-act="engine" aria-haspopup="menu" data-tip="Choose the OCR model" hidden><span class="eicon"></span><span class="name"></span><svg class="chev" viewBox="0 0 24 24">${ICONS.chevrons}</svg></button>
@@ -189,6 +193,7 @@
   const hud = shadow.querySelector('.bar')
   const hudPip = shadow.querySelector('.pip')
   const hudMsg = shadow.querySelector('.msg')
+  const getApp = shadow.querySelector('.get')
   const autoToggle = shadow.querySelector('.toggle')
   const engineButton = shadow.querySelector('.engine')
   const menu = shadow.querySelector('.menu')
@@ -1882,6 +1887,8 @@
     else if (!text) text = lines ? `${lines} line${lines === 1 ? '' : 's'} found` : pics.size ? 'No text found' : 'No picture in view'
     hudMsg.dataset.tone = tone === 'danger' ? 'danger' : ''
     hudMsg.textContent = text
+    // Without the app nothing works: say where to get it.
+    getApp.hidden = !(status === 'offline' && !opening)
     const current = sessionById(session)
     sessionName.textContent = current ? current.name : 'New session'
     sessionName.toggleAttribute('data-new', !current)

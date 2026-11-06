@@ -192,6 +192,49 @@ export function Privacy() {
         control.
       </p>
 
+      <h2 id="browser-extension">The browser extension</h2>
+      <p>
+        The Kimochi browser extension (for Chrome, Edge, Arc, Brave and other
+        Chromium browsers) lets the Kimochi app read Japanese in pictures on
+        web pages. It works only together with the app on your own computer,
+        and it never talks to any server itself.
+      </p>
+      <ul>
+        <li>
+          <strong>What it reads.</strong> Only pictures on pages where you turn
+          it on (with its toolbar button or shortcut) and pick an area. With
+          Auto on, it keeps reading the pictures in that area as they change,
+          on that tab, until you turn it off. It does not read the text of the
+          page, your form fields or your browsing history.
+        </li>
+        <li>
+          <strong>Where it sends them.</strong> To the Kimochi app on the same
+          computer, over a local connection to <code>127.0.0.1</code>. To get a
+          picture it downloads the image from its address the way the page
+          does, or takes a screenshot of the visible tab and crops it to the
+          picture. The app then reads it with the OCR engine you chose, as
+          described above (an on-device engine, or Google Lens or cloud OCR if
+          you picked one of those), and adds the text to your Log.
+        </li>
+        <li>
+          <strong>Page address and title.</strong> The extension tells the app
+          the address and title of the page you are reading, so the app can put
+          its lines in the right session and remember which session goes with
+          which site. The app keeps that list (up to 300 pages) in its settings
+          on your computer.
+        </li>
+        <li>
+          <strong>Stored in your browser.</strong> Whether Auto is on, and, for
+          the open tab only, where on the page you picked, so it can carry on
+          after the page loads again. Nothing else.
+        </li>
+        <li>
+          No analytics, tracking, advertising or remote code, and no data is
+          sold or shared. Removing the extension removes what it stored in your
+          browser.
+        </li>
+      </ul>
+
       <h2 id="accounts">Accounts</h2>
       <p>
         You can use Kimochi without an account. With a Kimochi Cloud plan (or

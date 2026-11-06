@@ -3,8 +3,8 @@
   "name": "Kimochi",
   "short_name": "Kimochi",
   "version": "0.1.0",
-  "description": "Read Japanese in images on any page: pick an image, Kimochi reads it, and the text lands on top of it for your dictionary pop-up.",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4Bz0zEv4JGxl9rE6FE5y1ImQfoThpxwGlgv91A0abiN5GCTf5ThEl+bW3qlK3MyBzJaffg35g97yRBBuKfNaP3TKB61Fh/Hx5Tq9+5Ao9qqU1ANe26RWwqYN8P4zvuRVjlqNqKRYpwdOGxT0mHD7iST8jX4JXWbh+RdtBamDvK7lqpyy3pvx3EOdtI5GDkXYxnKUDPe6erTYk5g2gA6sPkaHEnE+2cIG8TnU1GmNXO0RMHkClTg3c4dSSbZPTfi84KxlbeYMDAYuk1BjHdUVbdTvK2fe2dUIcJlS7s95TPXvmb5oJVqNMxMu5fvui6lzSVKP8tdg5wtWR2KxMugxpQIDAQAB",
+  "description": "Read Japanese in pictures on any page, with your dictionary pop-up. Needs the free Kimochi desktop app for Mac, Windows or Linux.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoP04r5wBRl6iAP3sZS+ALqIlRZGWuJoA2vMcxAc2d60rC4WLY61JWw8TdHkEeOeIQyXzOyPRCNjD/kD6/xjcUH7w/lpYnb6OCbx85XAf7HqHtEZUHsUnxgvwmbLEAER/ZeAZFEd3G6ZM39/MWu0nFvtvOGHhCHS8ig33YLARsNfyj3pvIX5nu2SjAzvXcdr/Y4Kefafpl7dSpQ8EWnMAGbSTru/60Wy2LU5qxFctLIJFpwgzjOogz1fQqp73dQp7YkaxTcWgWB41i5J+RybViq7sJyvpFObtbHOB58x0xMQ4wzQDNvF/QOR8Nj+jQ6qgeOQyZC36F2NfQDOIPUCo2QIDAQAB",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon-16.png",
@@ -26,8 +26,7 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "storage",
-    "alarms"
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"

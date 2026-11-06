@@ -37,9 +37,9 @@ use tungstenite::{Message, WebSocket};
 pub const PORT: u16 = if cfg!(dev) { 27641 } else { 27640 };
 /// The path the extension connects to.
 const PATH: &str = "/kimochi-browser";
-/// The extension's origins: the id its manifest key gives an unpacked copy. A store listing gets
-/// its own id, added here when it exists.
-pub const ORIGINS: &[&str] = &["chrome-extension://njmbcglmnbcahkianbcjhgacoghfjibi"];
+/// The extension's origins: its Chrome Web Store id, which the manifest's `key` (the store's
+/// public key) also gives an unpacked copy.
+pub const ORIGINS: &[&str] = &["chrome-extension://aciakombihkdppgjigibggnmoninegjm"];
 /// The setting that turns the bridge on (Settings → Browser).
 pub const ENABLED_KEY: &str = "browserExtension.enabled";
 /// The input source the Log and the overlay know this mode by.
@@ -945,8 +945,8 @@ mod tests {
 
     #[test]
     fn only_the_extension_origin_is_allowed() {
-        assert!(origin_allowed("chrome-extension://njmbcglmnbcahkianbcjhgacoghfjibi"));
-        assert!(origin_allowed("chrome-extension://njmbcglmnbcahkianbcjhgacoghfjibi/"));
+        assert!(origin_allowed("chrome-extension://aciakombihkdppgjigibggnmoninegjm"));
+        assert!(origin_allowed("chrome-extension://aciakombihkdppgjigibggnmoninegjm/"));
         assert!(!origin_allowed("https://example.com"));
         assert!(!origin_allowed("chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
         assert!(!origin_allowed(""));

@@ -39,9 +39,10 @@ Other Chromium browsers load it the same way, from the same folder:
 
 Firefox isn't supported yet.
 
-The manifest's `key` gives the unpacked extension a fixed id, `njmbcglmnbcahkianbcjhgacoghfjibi`,
-which is the only origin the app accepts. A store listing gets its own id, which has to be added to
-`ORIGINS` in `browser_bridge.rs`.
+The manifest's `key` is the Chrome Web Store listing's public key, so an unpacked copy gets the
+store's id, `aciakombihkdppgjigibggnmoninegjm`, the only origin the app accepts (`ORIGINS` in
+`browser_bridge.rs`). Another store (Edge Add-ons) gives its own id, which has to be added there.
+`node browser-extension/pack.mjs` builds the zip the stores take, without the `key`.
 
 ## What is read
 

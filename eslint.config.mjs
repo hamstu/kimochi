@@ -45,7 +45,7 @@ export default tseslint.config(
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   {
-    files: ['scripts/**/*.mjs', 'branding/**/*.mjs', 'vite.config.ts', 'vite.dev.config.ts', 'vite.demo.config.ts', 'vite.preview.config.ts', 'eslint.config.mjs'],
+    files: ['scripts/**/*.mjs', 'branding/**/*.mjs', 'browser-extension/*.mjs', 'vite.config.ts', 'vite.dev.config.ts', 'vite.demo.config.ts', 'vite.preview.config.ts', 'eslint.config.mjs'],
     languageOptions: { globals: { ...globals.node } }
   }
 )

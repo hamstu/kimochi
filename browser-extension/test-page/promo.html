@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kimochi · store promo tile</title>
+<!-- The Chrome Web Store / Edge Add-ons small promo tile: the 440x280 box at the top left. -->
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;650;750&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; background: #ddd; }
+  .tile { width: 440px; height: 280px; box-sizing: border-box; padding: 34px 34px 0; position: relative; overflow: hidden;
+    font-family: Figtree, system-ui, sans-serif; color: #fff; -webkit-font-smoothing: antialiased;
+    background: radial-gradient(120% 90% at 100% 0%, #5c7cea 0%, #3e63dd 45%, #2f4fbf 100%); }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 750; letter-spacing: -0.01em; }
+  .brand img { width: 44px; height: 44px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.25)); }
+  h1 { margin: 26px 0 0; font-size: 31px; line-height: 1.12; font-weight: 750; letter-spacing: -0.02em; max-width: 300px; }
+  .needs { position: absolute; left: 34px; bottom: 26px; font-size: 15px; font-weight: 600; padding: 7px 12px; border-radius: 999px;
+    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28); }
+  .ja { position: absolute; right: -6px; top: 70px; writing-mode: vertical-rl; font-size: 54px; font-weight: 800; line-height: 1.05;
+    font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; color: rgba(255,255,255,.14); letter-spacing: .02em; }
+</style>
+</head>
+<body>
+  <div class="tile" id="tile">
+    <div class="ja">気持ち</div>
+    <div class="brand"><img src="icon.svg" alt="">Kimochi</div>
+    <h1>Read the Japanese in any picture on the web</h1>
+    <div class="needs">Needs the free Kimochi desktop app</div>
+  </div>
+</body>
+</html>
