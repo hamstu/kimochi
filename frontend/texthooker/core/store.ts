@@ -14,7 +14,7 @@ import type { Line, LineSource } from "../lib/types";
 const DIR = BaseDirectory.AppLocalData;
 const DEBOUNCE_MS = 2000;
 /** The deletions `lines.json` remembers for Sync (oldest dropped first). */
-const MAX_DELETED = 5000;
+export const MAX_DELETED = 5000;
 
 function maxLinesNow(): number {
   const v = getSettings().maxLines;

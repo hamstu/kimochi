@@ -20,7 +20,7 @@ export function SessionManagerModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title="Manage sessions"
-        description="Drag a handle to reorder, or focus it, press Space and use the arrow keys. Click a name to rename it."
+        description="Click a name to rename it, or a handle to drag it into order. Tick sessions (Shift-click for a run) to clear or delete them together."
         footer={
           <>
             <span className="log-footer-count k-num">
@@ -33,7 +33,11 @@ export function SessionManagerModal({
         }
       >
         {/* Mounted only while open, so each opening starts from the saved names and order. */}
-        <SessionList activeId={activeId} sessions={sessions} />
+        <SessionList
+          activeId={activeId}
+          sessions={sessions}
+          onOpenSettings={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
