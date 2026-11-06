@@ -1,22 +1,39 @@
 /*
  * The session list (SessionList.tsx): the Log's "Manage sessions" dialog and Settings → Log &
  * sessions. The list bleeds to the dialog's edges; `.settings-sessions` fills a settings group.
+ * Columns: tick, handle, name, time · lines, Active/Switch, delete, details.
  */
-.log-sessions {
+.log-sessions-wrap {
   display: flex;
   flex-direction: column;
   margin: 0 calc(var(--k-space-4) * -1);
 }
-.log-session-row {
-  position: relative;
+.log-sessions {
+  display: flex;
+  flex-direction: column;
+}
+.log-sessions-head {
   display: flex;
   align-items: center;
   gap: var(--k-space-1);
-  min-height: var(--k-row-h);
-  padding: var(--k-space-0-5) var(--k-space-3) var(--k-space-0-5) var(--k-space-2);
-  transition: opacity var(--k-fast), background-color var(--k-fast);
+  padding: 0 var(--k-space-3) var(--k-space-1) var(--k-space-3);
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
 }
-.log-session-row + .log-session-row::after {
+.log-sessions-head-name {
+  flex: 1;
+  /* Past the handle column, in line with the names. */
+  padding-left: calc(var(--k-row-h) - var(--k-space-1));
+}
+.log-sessions-head-stats {
+  /* Ends where the stats column does: before Active/Switch, delete and details. */
+  margin-right: calc(4.5rem + 2 * var(--k-row-h) + var(--k-space-2));
+}
+.log-session-item {
+  position: relative;
+  transition: opacity var(--k-fast);
+}
+.log-session-item + .log-session-item::after {
   content: "";
   position: absolute;
   top: 0;
@@ -25,8 +42,132 @@
   height: 1px;
   background: var(--k-line);
 }
-.log-session-row:hover {
+.log-session-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  min-height: var(--k-row-h);
+  padding: var(--k-space-0-5) var(--k-space-3) var(--k-space-0-5) var(--k-space-3);
+  transition: opacity var(--k-fast), background-color var(--k-fast);
+}
+.log-session-item:hover > .log-session-row {
   background: var(--k-hover);
+}
+.log-session-item[data-selected] > .log-session-row {
+  background: var(--k-accent-soft);
+}
+.log-session-check,
+.log-session-check-space {
+  flex: none;
+  margin-right: var(--k-space-0-5);
+}
+.log-session-check-space { width: 1rem; }
+.log-session-stats {
+  display: inline-flex;
+  flex: none;
+  gap: var(--k-space-1);
+  justify-content: flex-end;
+  min-width: 7.5rem;
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  white-space: nowrap;
+}
+.log-session-stats-sep { color: var(--k-text-3); }
+/* Active and Switch share one column, so the buttons after them line up. */
+.log-session-state {
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  width: 4.5rem;
+}
+.log-session-expand.k-button svg {
+  transition: transform var(--k-fast);
+}
+.log-session-expand[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+/* Details under an open row: the description, then the newest lines in an inset well. */
+.log-session-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+  padding: var(--k-space-1) var(--k-space-4) var(--k-space-3) calc(var(--k-space-3) + 1rem + var(--k-row-h));
+}
+.log-session-description.k-field {
+  min-height: 0;
+  resize: vertical;
+  font-size: var(--k-text-sm);
+}
+.log-session-recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.log-session-recent-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.log-session-recent-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+  margin: 0;
+  padding: var(--k-space-2) var(--k-space-3);
+  border-radius: var(--k-radius-md);
+  background: var(--k-sunken);
+  box-shadow: inset 0 0 0 1px var(--k-line);
+  color: var(--k-text-2);
+  font-size: var(--k-text-sm);
+  list-style: none;
+}
+.log-session-recent-lines li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-session-recent-empty {
+  margin: 0;
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+}
+/* The bar for selected sessions: stays in view at the bottom while the list scrolls. */
+.log-sessions-bulk {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-1);
+  margin: var(--k-space-2) var(--k-space-3) 0;
+  padding: var(--k-space-1) var(--k-space-1) var(--k-space-1) var(--k-space-3);
+  border-radius: var(--k-radius-md);
+  background: var(--k-raised);
+  box-shadow: var(--k-shadow-pop), inset 0 0 0 1px var(--gray-a5);
+}
+.log-sessions-bulk-count {
+  flex: 1;
+  color: var(--k-text);
+  font-size: var(--k-text-sm);
+}
+.log-sessions-bulk-delete.k-button:not(:disabled):hover {
+  color: var(--k-danger-text);
+  background: var(--k-danger-soft);
+}
+.log-sessions-export {
+  margin: var(--k-space-3) var(--k-space-4) 0;
+  color: var(--k-text-3);
+  font-size: var(--k-text-sm);
+}
+.log-sessions-export .k-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
 }
 /* Dragging (dnd-kit): the row's place stays as a faint gap the others slide around, and a picture
    of the row follows the pointer above them. Text never selects or drags natively here. */
@@ -38,10 +179,10 @@
   -webkit-user-select: text;
   user-select: text;
 }
-.log-sessions[data-sorting] .log-session-row:hover {
+.log-sessions[data-sorting] .log-session-item:hover > .log-session-row {
   background: transparent;
 }
-.log-session-row[data-dragging] {
+.log-session-item[data-dragging] {
   opacity: 0.3;
 }
 .log-session-lifted {
@@ -93,10 +234,12 @@ body:has(.log-session-lifted) { cursor: grabbing; }
   margin-top: var(--k-space-3);
 }
 
-/* In Settings: the rows fill a settings group, Switch sits before the bin. */
-.log-sessions.settings-sessions {
+/* In Settings: the rows fill a settings group. */
+.log-sessions-wrap.settings-sessions {
   margin: 0;
 }
+.settings-sessions .log-sessions-head { padding-top: var(--k-space-2); }
+.settings-sessions .log-sessions-export { margin-bottom: var(--k-space-3); }
 .log-session-switch.k-button {
   color: var(--k-text-2);
 }

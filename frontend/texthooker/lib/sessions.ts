@@ -20,6 +20,18 @@ export const deleteSession = (
   ...args: Parameters<typeof Core.deleteSession>
 ): Promise<Awaited<ReturnType<typeof Core.deleteSession>>> =>
   call("sessions", "deleteSession", args);
+export const deleteSessions = (
+  ...args: Parameters<typeof Core.deleteSessions>
+): Promise<Awaited<ReturnType<typeof Core.deleteSessions>>> =>
+  call("sessions", "deleteSessions", args);
+export const clearSessions = (
+  ...args: Parameters<typeof Core.clearSessions>
+): Promise<Awaited<ReturnType<typeof Core.clearSessions>>> =>
+  call("sessions", "clearSessions", args);
+export const sessionSummaries = (
+  ...args: Parameters<typeof Core.sessionSummaries>
+): Promise<Awaited<ReturnType<typeof Core.sessionSummaries>>> =>
+  call("sessions", "sessionSummaries", args);
 export const updateSessionDescription = (
   ...args: Parameters<typeof Core.updateSessionDescription>
 ): Promise<Awaited<ReturnType<typeof Core.updateSessionDescription>>> =>

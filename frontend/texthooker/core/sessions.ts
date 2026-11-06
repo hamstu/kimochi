@@ -12,15 +12,24 @@ import {
 import {
   defaultSessionName,
   NOTEBOOK_EMPTY,
+  type Line,
   type NotebookFile,
   type SessionMeta,
   type SessionsManifest,
 } from "../lib/types";
+import { summarizeLines, type SessionSummary } from "../lib/sessionSummary";
+import { getSettings } from "../lib/settings";
+import { forgetLines } from "../lib/sentenceAudio";
 import {
+  clearLines as clearLinesInStore,
+  derivedLineUid,
   flushLines as flushLinesInStore,
+  MAX_DELETED,
   onActiveSessionChanged as onStoreSessionChanged,
+  snapshotLines,
 } from "./store";
 import {
+  clearNotebook,
   flushNotebook,
   onActiveSessionChanged as onNotebookSessionChanged,
 } from "./notebook";
@@ -391,6 +400,105 @@ export async function deleteSession(id: string): Promise<void> {
     // safer than restoring a session whose files may only be partly removed.
     console.warn(`delete session directory ${id} failed`, err);
   }
+}
+
+/** Delete several sessions at once; at least one session always remains. */
+export async function deleteSessions(ids: string[]): Promise<void> {
+  if (!manifest) throw new Error("sessions not loaded");
+  const doomed = new Set(ids);
+  const known = manifest.sessions.filter((session) => doomed.has(session.id));
+  if (known.length === 0) return;
+  if (known.length >= manifest.sessions.length) {
+    throw new Error("Keep at least one session: deselect one and try again.");
+  }
+  for (const session of known) await deleteSession(session.id);
+}
+
+/** What the session list shows about each session (`SessionSummary`), in the manifest's order. */
+export async function sessionSummaries(): Promise<SessionSummary[]> {
+  if (!manifest) throw new Error("sessions not loaded");
+  const idleMs = Math.max(10, getSettings().afkThresholdSec) * 1000;
+  const result: SessionSummary[] = [];
+  for (const session of manifest.sessions) {
+    let lines: Line[] = [];
+    if (session.id === manifest.activeId) {
+      lines = snapshotLines();
+    } else {
+      try {
+        lines = (await readSessionLines(session.id))?.lines ?? [];
+      } catch {
+        lines = [];
+      }
+    }
+    result.push(summarizeLines(session.id, lines, idleMs));
+  }
+  return result;
+}
+
+async function readSessionLines(
+  sid: string,
+): Promise<{ lines: Line[]; deleted: { uid: string; at: number }[] } | null> {
+  const path = sessionLinesPath(sid);
+  if (!(await exists(path, { baseDir: DIR }))) return null;
+  const parsed = JSON.parse(await readTextFile(path, { baseDir: DIR })) as {
+    lines?: Line[];
+    deleted?: { uid: string; at: number }[];
+  };
+  if (!parsed || !Array.isArray(parsed.lines)) {
+    throw new Error("Invalid session transcript; it was left as it is");
+  }
+  return {
+    lines: parsed.lines.filter((l) => l && typeof l.text === "string"),
+    deleted: Array.isArray(parsed.deleted)
+      ? parsed.deleted.filter((d) => d && typeof d.uid === "string")
+      : [],
+  };
+}
+
+/**
+ * Empty sessions but keep them: their lines (remembered as deleted, so Sync removes them on your
+ * other computers too), their notebook and its pictures. Names, descriptions and order stay.
+ */
+export async function clearSessions(ids: string[]): Promise<void> {
+  if (!manifest) throw new Error("sessions not loaded");
+  if (writesPaused()) {
+    throw new Error("Sync is updating your sessions. Try again in a moment.");
+  }
+  const wanted = new Set(ids);
+  for (const session of manifest.sessions.slice()) {
+    if (!wanted.has(session.id)) continue;
+    if (session.id === manifest.activeId) {
+      clearLinesInStore();
+      await flushLinesInStore();
+      await clearNotebook();
+      continue;
+    }
+    const sid = session.id;
+    const file = await readSessionLines(sid);
+    if (file && file.lines.length > 0) {
+      const at = Date.now();
+      const gone = file.lines.map((line) => ({
+        ...line,
+        uid: line.uid || derivedLineUid(sid, line),
+      }));
+      const deleted = [...file.deleted, ...gone.map((line) => ({ uid: line.uid, at }))];
+      if (deleted.length > MAX_DELETED) deleted.splice(0, deleted.length - MAX_DELETED);
+      await writeTextFile(
+        sessionLinesPath(sid),
+        JSON.stringify({ version: 1, lines: [], deleted }),
+        { baseDir: DIR },
+      );
+      forgetLines(gone);
+    }
+    await writeEmptyNotebook(sid);
+    try {
+      await remove(inProfile(`sessions/${sid}/images`), { baseDir: DIR, recursive: true });
+    } catch {
+      // Nothing there yet.
+    }
+    await ensureSessionDirs(sid);
+  }
+  emit();
 }
 
 export async function updateSessionDescription(

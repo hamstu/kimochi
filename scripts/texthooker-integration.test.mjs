@@ -111,8 +111,11 @@ async function harness(initial = {}, persistedFiles = new Map(), options = {}) {
     async writeFile(path, bytes) {
       files.set(path, bytes);
     },
-    async remove(path) {
+    async remove(path, options) {
       files.delete(path);
+      if (options?.recursive)
+        for (const key of [...files.keys()])
+          if (key.startsWith(`${path}/`)) files.delete(key);
     },
     async rename(from, to) {
       files.set(to, files.get(from));
@@ -521,4 +524,111 @@ test("a hooked line that carries on the last one replaces it, and only that one"
   assert.deepEqual(lines.map((l) => l.text), ["「はぁっ、もうだめよぉ、んーーっ」", "「何よ……！」", "「何よ……！　私を」"]);
   assert.deepEqual(lines[0].ingestIds, ["hook-1", "hook-2"]);
   await h.call("stats", "resetStats");
+});
+
+test("the session list's summaries count each session's lines and reading time, live for the open one", async () => {
+  const files = new Map([
+    [
+      "sessions.json",
+      JSON.stringify({
+        version: 1,
+        activeId: "s1",
+        sessions: [
+          { id: "s1", name: "Open", description: "", createdAt: 1, updatedAt: 1 },
+          { id: "s2", name: "Other", description: "", createdAt: 1, updatedAt: 1 },
+        ],
+      }),
+    ],
+    ["sessions/s1/lines.json", JSON.stringify({ version: 1, lines: [] })],
+    [
+      "sessions/s2/lines.json",
+      JSON.stringify({
+        version: 1,
+        lines: [
+          { id: 1, text: "一", source: "ocr", ts: 0 },
+          { id: 2, text: "二", source: "ocr", ts: 30_000 },
+          // A pause past the idle threshold (60s by default) is not reading time.
+          { id: 3, text: "三", source: "ocr", ts: 600_000 },
+          { id: 4, text: "四", source: "ocr", ts: 610_000 },
+        ],
+      }),
+    ],
+  ]);
+  const h = await harness({ superTexthooker: { inputSource: "ocr" } }, files);
+  const [open, other] = await h.call("sessions", "sessionSummaries");
+  assert.deepEqual(open, { id: "s1", lines: 0, readingMs: 0, recent: [] });
+  assert.deepEqual(other, { id: "s2", lines: 4, readingMs: 40_000, recent: ["一", "二", "三", "四"] });
+  await h.setSetting("scannedTextHistory", [{ id: "n1", text: "猫", timestamp: 2 }]);
+  await h.drain();
+  const [after] = await h.call("sessions", "sessionSummaries");
+  assert.equal(after.lines, 1);
+  assert.deepEqual(after.recent, ["猫"]);
+});
+
+test("clearing sessions empties their lines, notebook and images but keeps them, and Sync learns of the deletes", async () => {
+  const files = new Map([
+    [
+      "sessions.json",
+      JSON.stringify({
+        version: 1,
+        activeId: "s1",
+        sessions: [
+          { id: "s1", name: "Open", description: "Mine", createdAt: 1, updatedAt: 1 },
+          { id: "s2", name: "Closed", description: "Kept", createdAt: 1, updatedAt: 1 },
+        ],
+      }),
+    ],
+    ["sessions/s1/lines.json", JSON.stringify({ version: 1, lines: [{ id: 1, uid: "u-open", text: "猫", source: "ocr", ts: 5 }] })],
+    [
+      "sessions/s1/notebook.json",
+      JSON.stringify({
+        version: 2,
+        cacheVersion: 0,
+        entries: [{ id: "e1", kind: "thing", name: "猫", aliases: [], images: [{ id: "i1", path: "sessions/s1/images/a.png", addedAt: 1 }], notes: [], createdAt: 1, updatedAt: 1 }],
+      }),
+    ],
+    ["sessions/s1/images/a.png", "png"],
+    [
+      "sessions/s2/lines.json",
+      JSON.stringify({ version: 1, lines: [{ id: 7, text: "猫", source: "ocr", ts: 1700000000000 }], deleted: [{ uid: "old", at: 1 }] }),
+    ],
+    ["sessions/s2/notebook.json", JSON.stringify({ version: 2, cacheVersion: 3, entries: [{ id: "e2" }] })],
+    ["sessions/s2/images/b.png", "png"],
+  ]);
+  const h = await harness({ superTexthooker: { inputSource: "ocr" } }, files);
+  await h.call("sessions", "clearSessions", [["s1", "s2"]]);
+  await h.drain();
+  assert.deepEqual(h.snapshot().lines, []);
+  assert.deepEqual(h.snapshot().notebook.entries, []);
+  assert.deepEqual(
+    h.snapshot().sessions.sessions.map((s) => [s.id, s.description]),
+    [["s1", "Mine"], ["s2", "Kept"]],
+    "the sessions stay, with their descriptions",
+  );
+  assert.deepEqual(linesFile(h, "s1").deleted.map((d) => d.uid), ["u-open"]);
+  // A line from before uids is remembered under the uid Rust derives for it.
+  const [kept, derived] = linesFile(h, "s2").deleted.map((d) => d.uid);
+  assert.equal(kept, "old");
+  assert.match(derived, /^l[0-9a-f]{16}$/);
+  assert.deepEqual(linesFile(h, "s2").lines, []);
+  assert.deepEqual(JSON.parse(h.files.get("sessions/s1/notebook.json")).entries, []);
+  assert.deepEqual(JSON.parse(h.files.get("sessions/s2/notebook.json")).entries, []);
+  assert.ok(!h.files.has("sessions/s1/images/a.png"), "the open session's pictures are gone");
+  assert.ok(!h.files.has("sessions/s2/images/b.png"), "a closed session's pictures are gone");
+});
+
+test("deleting several sessions at once keeps at least one", async () => {
+  const h = await harness();
+  const first = h.snapshot().sessions.activeId;
+  const b = await h.call("sessions", "createSession", ["B"]);
+  const c = await h.call("sessions", "createSession", ["C"]);
+  await assert.rejects(
+    h.call("sessions", "deleteSessions", [[first, b.id, c.id]]),
+    /Keep at least one session/,
+  );
+  assert.equal(h.snapshot().sessions.sessions.length, 3);
+  await h.call("sessions", "deleteSessions", [[b.id, c.id]]);
+  assert.deepEqual(h.snapshot().sessions.sessions.map((s) => s.id), [first]);
+  assert.equal(h.snapshot().sessions.activeId, first, "the active session moved off the deleted ones");
+  assert.ok(![...h.files.keys()].some((path) => path.startsWith(`sessions/${b.id}`)));
 });
