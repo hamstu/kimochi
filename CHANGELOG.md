@@ -14,10 +14,12 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - ⭐ **Kimochi on the command line.** Install the `kimochi` command from **Settings → Command line** to drive Kimochi from a terminal and your own scripts: scan and print the text, follow the Log as it fills, add lines to it, switch sessions, sources and OCR engines, change settings, and stream events as JSON. It starts Kimochi when it isn't running and never opens a second one.
+- **Magpie support.** Games you scale with Magpie work with Kimochi as they do without it: the overlay, OCR text, hover lookups and dictionary pop-ups sit on the scaled picture, stay above it when you switch back to the game, and clicks on Kimochi still reach Kimochi. Nothing to set up.
 
 ### Fixed
 
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
+- **Mini mode's title bar fits again.** The Help and sound buttons are hidden in mini mode, so the Kimochi name no longer runs into the buttons.
 
 ## [0.6.1] - 2026-11-05
 

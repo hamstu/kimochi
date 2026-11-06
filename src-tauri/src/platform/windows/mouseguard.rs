@@ -477,10 +477,13 @@ mod tests {
 
 fn target_at(point: POINT) -> Option<Target> {
     let root = unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) };
+    // Where the reader sees the cursor, over a game Magpie scales (as in `mouse_proc`).
+    let (x, y) = super::magpie::shown_press((f64::from(point.x), f64::from(point.y)))
+        .unwrap_or((f64::from(point.x), f64::from(point.y)));
     TARGETS.try_lock().ok()?.iter().find(|target| {
         let r = target.rect;
-        f64::from(point.x) >= r.x && f64::from(point.x) < r.x + r.width
-            && f64::from(point.y) >= r.y && f64::from(point.y) < r.y + r.height
+        x >= r.x && x < r.x + r.width
+            && y >= r.y && y < r.y + r.height
             && unsafe { IsWindowVisible(HWND(target.window as *mut _)) }.as_bool()
             && (root.0 as usize == target.window || root.0 as usize == target.source)
     }).copied()
@@ -558,16 +561,21 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                 } else {
                     2
                 };
+                // While Magpie hands the mouse to the game it scales, the press is at the game's
+                // real (hidden) window; the reader pressed where the cursor is shown, on the picture
+                // the regions are placed over. Which window gets the press is still `info.pt`'s.
+                let (x, y) = super::magpie::shown_press((f64::from(info.pt.x), f64::from(info.pt.y)))
+                    .map_or((info.pt.x, info.pt.y), |(x, y)| (x as i32, y as i32));
                 if down {
                     let target = TARGETS.try_lock().ok().and_then(|targets| {
                         targets
                             .iter()
                             .find(|target| {
                                 let r = target.rect;
-                                let hit = f64::from(info.pt.x) >= r.x
-                                    && f64::from(info.pt.x) < r.x + r.width
-                                    && f64::from(info.pt.y) >= r.y
-                                    && f64::from(info.pt.y) < r.y + r.height;
+                                let hit = f64::from(x) >= r.x
+                                    && f64::from(x) < r.x + r.width
+                                    && f64::from(y) >= r.y
+                                    && f64::from(y) < r.y + r.height;
                                 if !hit {
                                     return false;
                                 }
@@ -588,8 +596,8 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                     if let Some(target) = target {
                         let press = Press {
                             target,
-                            x: info.pt.x,
-                            y: info.pt.y,
+                            x,
+                            y,
                             button,
                             down,
                             flags: info.flags,
@@ -606,8 +614,8 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
                 } else if let Some(target) = hook.owners[physical].take() {
                     let _ = hook.sender.try_send(Press {
                         target,
-                        x: info.pt.x,
-                        y: info.pt.y,
+                        x,
+                        y,
                         button,
                         down,
                         flags: info.flags,

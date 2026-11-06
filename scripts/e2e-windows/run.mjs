@@ -42,7 +42,14 @@ assert(
 );
 // The hook scenario runs the game as a real x64 (default) or x86 process: KIMOCHI_E2E_HOOK_BITS.
 const hookBits = process.env.KIMOCHI_E2E_HOOK_BITS === "32" ? "x86" : "x64";
-if (renderer !== "gdi" || !["windowed", "borderless"].includes(mode))
+// "magpie" and "magpie-windowed": the windowed game, scaled by Magpie full screen or in a window of
+// its own (KIMOCHI_E2E_MAGPIE is Magpie.exe; its default Alt+Shift+A / Alt+Shift+Q shortcuts).
+const magpie = mode.startsWith("magpie");
+assert(
+  !magpie || ["scan", "hover"].includes(scenario),
+  "Magpie modes run the scan and hover scenarios",
+);
+if (renderer !== "gdi" || !["windowed", "borderless", "magpie", "magpie-windowed"].includes(mode))
   throw Error(
     "This harness currently supports GDI windowed/borderless only; DXGI prototype remains external",
   );
@@ -90,8 +97,64 @@ const command = async (text) => {
   await writeFile(path.join(root, "game/command.txt"), text);
   await sleep(350);
 };
-const truth = async () =>
+/** What the game drew, where it drew it: physical pixels over its own window. */
+const gameTruth = async () =>
   JSON.parse(await readFile(path.join(root, "game/truth.json"), "utf8"));
+/** Magpie's session (Desktop.cs `magpie`), or null while it scales nothing. */
+const magpieSession = () => JSON.parse(desktop("magpie") || "null");
+/** A rectangle of the game where Magpie draws it: Src stretched onto Dest. */
+function shownByMagpie(s, r) {
+  const sx = (s.dest.right - s.dest.left) / (s.src.right - s.src.left);
+  const sy = (s.dest.bottom - s.dest.top) / (s.src.bottom - s.src.top);
+  const out = { ...r, x: s.dest.left + (r.x - s.src.left) * sx, y: s.dest.top + (r.y - s.src.top) * sy };
+  for (const [key, scale] of [["w", sx], ["width", sx], ["h", sy], ["height", sy], ["size", sy]])
+    if (typeof r[key] === "number") out[key] = r[key] * scale;
+  return out;
+}
+/** The truth where the reader sees it: on Magpie's picture while it scales the game. */
+const truth = async () => {
+  const t = await gameTruth();
+  const s = magpie ? magpieSession() : null;
+  if (!s || s.source !== t.hwnd) return t;
+  return {
+    ...t,
+    client: shownByMagpie(s, t.client),
+    words: t.words.map((w) => shownByMagpie(s, w)),
+    lines: t.lines.map((l) => ({ ...shownByMagpie(s, l), glyphs: l.glyphs.map((g) => shownByMagpie(s, g)) })),
+  };
+};
+async function startMagpie() {
+  const exe = process.env.KIMOCHI_E2E_MAGPIE;
+  // Also what makes app.mjs's pointer moves Magpie-aware (`desktop("mouse")`).
+  assert(exe, "set KIMOCHI_E2E_MAGPIE to Magpie.exe");
+  const t = await gameTruth();
+  let s = magpieSession();
+  assert(!s || s.source === t.hwnd, "Magpie is scaling another window; stop it first");
+  if (s && s.windowed !== (mode === "magpie-windowed")) {
+    desktop("focus", t.hwnd);
+    desktop("chord", 18, 16, s.windowed ? 81 : 65);
+    await until(async () => !magpieSession(), 5000);
+    s = null;
+  }
+  if (!s) {
+    if (!JSON.parse(desktop("windows")).some((w) => w.title === "Magpie")) {
+      spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
+      await sleep(3000);
+    }
+    // Magpie draws a windowed session centred on the game, larger: from the corner the game
+    // starts in, half of it would be off screen.
+    if (mode === "magpie-windowed") await command("center");
+    desktop("focus", t.hwnd);
+    await sleep(200);
+    desktop("chord", 18, 16, mode === "magpie-windowed" ? 81 : 65);
+    s = await until(async () => {
+      const v = magpieSession();
+      return v?.source === t.hwnd && v;
+    }, 10000);
+  }
+  // Kimochi follows the session: its window state says scaled (full screen only).
+  return s;
+}
 const state = () => invoke(overlay, "snapshot");
 async function clearUiSource(p) {
   const r = await p.eval(
@@ -201,7 +264,7 @@ async function scan() {
     p.close();
   }
   await focusGame();
-  if (mode !== "windowed") {
+  if (mode === "borderless") {
     await command(mode);
     await focusGame();
   }
@@ -219,7 +282,8 @@ async function focusGame() {
   if (g.iconic) desktop("show", t.hwnd, 9);
   desktop("focus", t.hwnd);
   await sleep(100);
-  desktop("mouse", t.client.x + 300, t.client.y + 220, "click");
+  // Under Magpie the click would land on its picture (or a black bar beside it): focus alone.
+  if (!magpie) desktop("mouse", t.client.x + 300, t.client.y + 220, "click");
   await sleep(180);
   const w = JSON.parse(desktop("windows")).find((w) => w.hwnd === t.hwnd);
   assert(w.foreground, "game is foreground");
@@ -785,8 +849,31 @@ try {
     await command("windowed");
     return await truth();
   });
+  if (magpie) await check("magpie-scaling", startMagpie);
+  // A Magpie run leaves the game scaled; every other mode reads the game unscaled.
+  else if (process.env.KIMOCHI_E2E_MAGPIE && magpieSession())
+    await check("magpie-stopped", async () => {
+      const t = await gameTruth();
+      desktop("focus", t.hwnd);
+      desktop("chord", 18, 16, magpieSession().windowed ? 81 : 65);
+      await until(async () => !magpieSession(), 5000);
+      return true;
+    });
   if (scenario === "hook") await hookScenario();
   else await check("pick-source-in-real-ui", chooseSource);
+  if (magpie)
+    await check("magpie-followed", async () => {
+      const p = await page("panel.html");
+      try {
+        const window = await until(async () => {
+          const w = await invoke(p, "source_window_state");
+          return w?.scaled === (mode === "magpie") && w;
+        }, 5000);
+        return window;
+      } finally {
+        p.close();
+      }
+    });
   if (
     scenario === "scan" ||
     scenario === "hover" ||
@@ -853,9 +940,9 @@ try {
         // opened 10ten only one time in four on the Arcade PC (the replayed and the real move
         // then reach it within the same instant); a short second move, which a real approach
         // ends with anyway, opened it every time.
-        desktop("mouse", wx - 2, wy - 1);
+        desktop("mouse",  wx - 2, wy - 1);
         await sleep(120);
-        desktop("mouse", wx, wy);
+        desktop("mouse",  wx, wy);
         const pop = await until(popupState, 5000);
         assert(
           pop.text.includes("回想") ||
@@ -883,14 +970,12 @@ try {
           const p = await popupState();
           return p && !p.ghost;
         }, 3000);
-        desktop(
-          "mouse",
+        desktop("mouse", 
           Math.round((popup.x + popup.rect.x + 18) * popup.dpr),
           Math.round((popup.y + popup.rect.y + 8) * popup.dpr),
         );
         await sleep(80);
-        desktop(
-          "mouse",
+        desktop("mouse", 
           Math.round(
             (popup.x + popup.rect.x + popup.rect.width / 2) * popup.dpr,
           ),
@@ -904,8 +989,7 @@ try {
       });
       await check("leave-clears-popup", async () => {
         // Shift is already up. Clear of the pop-up and the word, wherever they are at this scale.
-        desktop(
-          "mouse",
+        desktop("mouse", 
           Math.round((popup.x + popup.rect.right) * popup.dpr + 200),
           Math.round((popup.y + popup.rect.top) * popup.dpr),
         );

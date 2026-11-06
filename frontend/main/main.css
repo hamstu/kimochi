@@ -1,6 +1,11 @@
 /* Main window: sidebar + view, below the app-drawn title bar. */
 .main-sidebar[data-mini] { flex: 1; width: 100%; border-right: none; }
-html[data-mini] button[aria-label="Unpin window"], html[data-mini] button[aria-label="Keep on top"] { display: none; }
+/* Mini mode's title bar is too narrow for everything: keep the toggles that matter there. */
+html[data-mini] button[aria-label="Unpin window"],
+html[data-mini] button[aria-label="Keep on top"],
+html[data-mini] button[aria-label="Mute sound effects"],
+html[data-mini] button[aria-label="Turn on sound effects"],
+html[data-mini] .main-help { display: none; }
 .main-frame {
   --main-foot-pad: var(--k-space-1);
   --main-foot-h: calc(var(--k-row-h) + var(--main-foot-pad) + 1px);

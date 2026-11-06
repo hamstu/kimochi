@@ -412,9 +412,11 @@ read.
 panels can render those toggles without each keeping its own copy.
 
 `watch_source` emits `source-bounds` `{sourceId, bounds, onScreen, fullscreen, settling,
-display}` when the tracked window moves, resizes, changes on-screen state or goes in or out
+display, scaled}` when the tracked window moves, resizes, changes on-screen state or goes in or out
 of full screen, and once whenever it is called (a reloaded page asking again gets the window's
-bounds without waiting for it to change). While the Text Hooker is the input, the overlay watches
+bounds without waiting for it to change). On Windows, while Magpie scales the tracked window, `bounds` (and a
+frame's `source_bounds`) are where Magpie draws it, `fullscreen` is true when Magpie scales it full
+screen and `scaled` says so; the window's own shape, and so its crop, is unchanged (`platform::scaler`). While the Text Hooker is the input, the overlay watches
 the hooked game's window, whatever source was last picked for OCR. It polls `CGWindowListCopyWindowInfo` for one window id ten times a second
 rather than re-running a full `SCShareableContent` enumeration per tick, which would be far
 too expensive at this cadence, and needs no Screen Recording permission because it reads
