@@ -29,7 +29,7 @@ export function Home() {
         divider
         eyebrow="主な機能"
         heading="Features"
-        lede="Screen capture, OCR, an overlay on your game, dictionaries, a reading log and Anki cards, all in one clean, simple app."
+        lede="Screen capture, OCR, an overlay on your game, dictionaries, a reading log and Anki cards, in one app."
       >
         <FeatureGrid />
       </Section>
@@ -53,7 +53,7 @@ export function Home() {
         divider
         eyebrow="クラウド"
         heading="Kimochi Cloud"
-        lede="An optional plan for the extras that cost money to run: translation, AI explanations, voices, cloud OCR and sync. It keeps those running and supports Kimochi’s development. Everything else stays free."
+        lede="An optional plan for the extras that cost money to run: translation, AI explanations, voices, cloud OCR and sync. It also supports Kimochi’s development."
       >
         <Cloud />
       </Section>

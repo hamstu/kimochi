@@ -96,7 +96,7 @@ function ChoosePlan({ user }: { user: User }) {
         <span className="ml-1 text-small text-ink-3">· {price.note}</span>
       </p>
       <p className="mt-3 text-small text-ink-2">
-        Cloud OCR, read aloud, translation, AI explanations and Sync across your computers, right in the app.
+        Cloud OCR, read aloud, translation, AI explanations and Sync across your computers, in the app.
       </p>
       <div className="mt-4 grid gap-2">
         <StripeButton go={() => goToCheckout(choice, 'account')} busyLabel="Opening checkout…">
@@ -117,7 +117,7 @@ export function PlanSection({ user }: { user: User }) {
     <AccountSection
       id="plan"
       title="Plan"
-      description="Kimochi itself is free. Kimochi Cloud adds the online services, each with a generous monthly allowance."
+      description="Kimochi itself is free. Kimochi Cloud adds the online services, each with a monthly allowance."
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-heading text-ink">{status.title}</span>

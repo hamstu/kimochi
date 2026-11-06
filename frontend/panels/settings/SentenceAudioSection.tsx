@@ -184,8 +184,8 @@ export function SentenceAudioSection(): ReactNode {
           {!modelReady && (
             <div className="settings-note">
               <p className="k-description">
-                Sentence audio needs this model to hear each line&apos;s words. It runs on this computer,
-                and recording starts once it&apos;s downloaded.
+                Sentence audio needs this model to hear each line&apos;s words. Recording starts once
+                it&apos;s downloaded.
               </p>
             </div>
           )}
@@ -299,7 +299,7 @@ export function SentenceAudioSection(): ReactNode {
                 <SettingsRow
                   label="Clips kept"
                   controlId="sentence-audio-clips"
-                  description="The newest lines' clips stay on this computer, to play from the Log and to add to cards you make later."
+                  description="Kept for the newest lines, to play from the Log and to add to cards you make later."
                 >
                   <NumberField
                     id="sentence-audio-clips"

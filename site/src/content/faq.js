@@ -22,21 +22,21 @@ export const FAQ = [
     id: 'what-is-kimochi',
     q: 'What is Kimochi?',
     a: [
-      'Kimochi is a free, open-source desktop app that helps you read Japanese in games, visual novels, manga and more. It captures the Japanese text on your screen with OCR, can draw that text back over whatever you’re reading as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki. It works on games, visual novels, manga, YouTube videos and anything else on your screen.'
+      'Kimochi is a free, open-source desktop app that helps you read Japanese in games, visual novels, manga and more. It captures the Japanese text on your screen with OCR, can draw that text back over whatever you’re reading as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki.'
     ]
   },
   {
     id: 'who-is-it-for',
     q: 'Who is Kimochi for?',
     a: [
-      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy, from total beginners to advanced readers. Every word is a hover away from its reading and meaning, so you can start on real Japanese from day one. It started as the tool its maker, Hamish Macpherson, wanted: something that reads the screen for you, gets out of the way, and lets you look up the word you’re stuck on without breaking the flow.'
+      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy, from total beginners to advanced readers. Every word is a hover away from its reading and meaning, so you can start on real Japanese from day one. It started as the tool its maker, Hamish Macpherson, wanted for his own games and manga.'
     ]
   },
   {
     id: 'how-does-it-work',
     q: 'How does Kimochi work?',
     a: [
-      'There are four steps. Pick a window or screen (a game, a manga reader, a video player), and crop it if you like. Press Scan, or turn on Auto OCR. The text shows up in Kimochi’s Log, and right over the window if the overlay is on. Then hover a word to look it up, hear it, or save it. Every line is kept in a Log you can scroll back through, with a separate session for each game, book or series.'
+      'There are four steps. Pick a window or screen (a game, a manga reader, a video player), and crop it if you like. Press Scan, or turn on Auto OCR. The text shows up in Kimochi’s Log, and over the window if the overlay is on. Then hover a word to look it up, hear it, or save it. Every line is kept in a Log you can scroll back through, with a separate session for each game, book or series.'
     ],
     links: [{ href: docsUrl('/quick-start/'), label: 'Quick start in the docs' }]
   },
@@ -73,7 +73,7 @@ export const FAQ = [
     id: 'account',
     q: 'Do I need an account?',
     a: [
-      'No. Kimochi works fully without an account. You only need one for Kimochi Cloud: cloud OCR, read aloud, translation, AI explanations and sync. You can sign up with email, Google or Discord, and you can download or delete everything from your account page at any time.'
+      'No. Kimochi works fully without an account. You only need one for Kimochi Cloud: cloud OCR, read aloud, translation, AI explanations and sync. You can sign up with email, Google or Discord, and you can download or delete everything from your account page.'
     ],
     links: [{ href: docsUrl('/cloud/'), label: 'Accounts and plans' }]
   },
@@ -93,7 +93,7 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. Kimochi’s built-in Text Hooker can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. Kimochi’s built-in Text Hooker can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
@@ -141,7 +141,7 @@ export const FAQ = [
     id: 'discord',
     q: 'Is there a Kimochi community?',
     a: [
-      'Yes, Kimochi has a Discord server. Come share what you’re reading, swap setups and dictionaries, ask for help, suggest features and hear about new releases first. Hamish is there too.'
+      'Yes, Kimochi has a Discord server. Come share what you’re reading, ask for help, suggest features and hear about new releases first. Hamish is there too.'
     ],
     links: [{ href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' }]
   },
@@ -149,7 +149,7 @@ export const FAQ = [
     id: 'feedback',
     q: 'How do I report a bug or give feedback?',
     a: [
-      'Ask in Kimochi’s Discord, where Hamish and other readers can help, or open an issue on Kimochi’s GitHub repository. Bug reports, ideas and questions are all welcome in both.'
+      'Ask in Kimochi’s Discord, where Hamish and other readers can help, or open an issue on Kimochi’s GitHub repository.'
     ],
     links: [
       { href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' },

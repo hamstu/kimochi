@@ -162,7 +162,7 @@ export function RemoveModelDialog({
       title={shown ? `Remove the ${shown.name} model?` : ''}
       description={
         shown
-          ? `This frees ${formatBytes(shown.overallTotal)}. You can download it again from here at any time.`
+          ? `This frees ${formatBytes(shown.overallTotal)}. You can download it again from here.`
           : undefined
       }
       confirmLabel="Remove"

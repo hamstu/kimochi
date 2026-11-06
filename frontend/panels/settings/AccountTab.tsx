@@ -167,7 +167,7 @@ function SignedOut(): ReactNode {
     <SettingsSection title="Kimochi account">
       <SettingsRow
         label="Kimochi cloud"
-        description="An account is where Kimochi Cloud lives: cloud OCR, read aloud, translation, AI explanations, and your sessions, notebook and preferences in sync across your computers. Try it free for 14 days."
+        description="Kimochi Cloud needs an account. It adds cloud OCR, read aloud, translation, AI explanations and Sync. Try it free for 14 days."
       >
         <Button variant="primary" size="sm" disabled={busy} onClick={start}>
           Sign in or create an account
@@ -199,7 +199,7 @@ function Linking({ code }: { code: string }): ReactNode {
             Waiting for confirmation…
           </span>
         }
-        description="The browser didn't open, or you closed it? Open it again."
+        description="If the browser didn't open, or you closed it, open it again."
       >
         <Button
           size="sm"
@@ -550,7 +550,7 @@ function SyncSection(): ReactNode {
   return (
     <SettingsSection
       title="Sync"
-      description="Your sessions, notebook, presets and preferences stay on this computer and sync in the background with your other computers signed in to this account, even after time offline. Your DeepL key, other secrets and this computer's own settings never leave it."
+      description="Your sessions, notebook, presets and preferences sync in the background with your other computers signed in to this account. Your DeepL key, other secrets and this computer's own settings are not synced."
     >
       <SettingsRow label="Sync now" description={<span className="k-num">{syncStateLine(sync, now)}</span>}>
         {syncing && <Spinner label="Syncing" />}

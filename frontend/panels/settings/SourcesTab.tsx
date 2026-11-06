@@ -41,7 +41,7 @@ const INPUT_SOURCES = [
     value: 'quickshot',
     label: 'Quick Shot',
     icon: <Aperture />,
-    detail: 'No source, just hit the button or shortcut to grab and scan.'
+    detail: 'No source: press the button or shortcut to grab and scan.'
   },
   {
     value: 'clipboard',
@@ -252,7 +252,7 @@ export function SourcesTab(): ReactNode {
                 <SettingsRow
                   label="Auto switch sessions by window name"
                   controlId="sources-auto-match"
-                  description="Kimochi will try to auto-load a session based on the source window name."
+                  description="Loads the session that matches the source window's name."
                 >
                   <Switch
                     id="sources-auto-match"

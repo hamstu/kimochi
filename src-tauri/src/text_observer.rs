@@ -523,7 +523,7 @@ impl TextObserver for EngineObserver {
             detail: match reason {
                 Some(reason) => unavailable_detail(self.name, reason),
                 None => format!(
-                    "Automatic scanning reads each changed frame with {} on this computer; nothing leaves it until the text settles.",
+                    "Automatic scanning reads each changed frame with {}.",
                     self.name
                 ),
             },

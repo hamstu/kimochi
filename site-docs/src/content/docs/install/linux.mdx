@@ -19,8 +19,7 @@ Kimochi has Linux builds for **x64** and **ARM64**, as an **AppImage** (any dist
     ```
 
     It installs the newest Kimochi AppImage for your CPU in your home folder, adds Kimochi to your
-    app menu (under Education) and opens it. No administrator password is needed, and nothing outside
-    your home folder is touched. Run it again at any time to update in place; your settings,
+    app menu (under Education) and opens it. No administrator password is needed. Run it again to update in place; your settings,
     dictionaries and history are kept.
 
     Options, after `sh -s --`:
@@ -120,7 +119,7 @@ Kimochi asks for your password before each update.
   curl -fsSL https://kimochiapp.com/install.sh | sh -s -- --uninstall
   ```
 
-  Your settings and dictionaries are kept in case you come back. To delete them too:
+  Your settings and dictionaries are kept. To delete them too:
 
   ```sh
   rm -rf ~/.local/share/dev.kimochi.app ~/.config/dev.kimochi.app ~/.cache/dev.kimochi.app
@@ -131,7 +130,7 @@ Kimochi asks for your password before each update.
 ## If Kimochi won't start
 
 The AppImage needs **FUSE 3**, which desktop installs usually come with (the Steam Deck does). The
-one-line installer checks for it and, if it's missing, sets Kimochi up to run without it; it just
+one-line installer checks for it and, if it's missing, sets Kimochi up to run without it; it
 starts a little slower. If you downloaded the AppImage yourself and it doesn't open, install FUSE 3
 and try again:
 

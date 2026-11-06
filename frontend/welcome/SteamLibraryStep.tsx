@@ -89,8 +89,8 @@ function SteamLibraryScreen(): JSX.Element {
             <Outcome result={outcome} />
           ) : (
             <p className={style.text}>
-              Kimochi adds itself as a non-Steam game, with its own library artwork. Nothing else
-              in Steam changes, and you can remove it from Steam like any other game.
+              Kimochi adds itself as a non-Steam game, with its own library artwork. You can remove
+              it from Steam like any other game.
             </p>
           )}
         </div>

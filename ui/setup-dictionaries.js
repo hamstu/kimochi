@@ -6,7 +6,7 @@ export const RECOMMENDED_DICTIONARIES = [
     title: "Jitendex",
     titlePrefix: "Jitendex.org",
     description:
-      "Japanese–English definitions. Downloads on demand; nothing is installed without your choice.",
+      "Japanese–English definitions.",
     url: "https://github.com/stephenmk/stephenmk.github.io/releases/latest/download/jitendex-yomitan.zip",
   },
 ];

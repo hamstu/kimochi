@@ -184,7 +184,7 @@ export function downloadPrompt(status: ModelStatus): { title: string; descriptio
   const size = status.overallTotal > 0 ? `about ${formatBytes(status.overallTotal)}` : 'large'
   return {
     title: `Download ${status.name}?`,
-    description: `${status.name} needs its model, which is ${size}. It will be downloaded now and kept on this computer; scans with ${status.name} start once it finishes.`
+    description: `${status.name} needs its model, which is ${size}. It will be downloaded now; scans with ${status.name} start once it finishes.`
   }
 }
 

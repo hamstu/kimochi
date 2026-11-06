@@ -7,11 +7,10 @@ import Screenshot from '../../../components/Screenshot.astro'
 
 Cards reach [Anki](https://apps.ankiweb.net/) through the
 [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, so Anki has to be running with
-AnkiConnect installed. **Settings → Anki** shows how cards are made with the dictionary you use.
+AnkiConnect installed.
 
-You don't need to change AnkiConnect's `webCorsOriginList` for any of them. Kimochi sends every
-AnkiConnect request from the app itself, not from a web page, and AnkiConnect accepts those with
-its default settings.
+You don't need to change AnkiConnect's `webCorsOriginList`: Kimochi's requests come from the app,
+not a web page.
 
 ## Who makes the card
 
@@ -32,14 +31,14 @@ included: set those there, as you would in the browser.
 
 **Settings → Anki → AnkiConnect** shows whether Kimochi can reach AnkiConnect, whatever dictionary
 you use: the Anki tab, sentence audio and the Yomitan API pop-up all use this connection. The
-defaults are AnkiConnect's own, so it usually works untouched. It checks again every few seconds
+defaults are AnkiConnect's own. It checks again every few seconds
 while the tab is open; **Check** asks at once. (Yomitan and Hachidori add their cards
 with their own AnkiConnect address, set in their Anki settings under **Mining**.)
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | **Address** | `http://127.0.0.1:8765` | Where AnkiConnect listens. Change it if you changed AnkiConnect's `webBindPort`; a port number on its own (`8770`) is enough. |
-| **API key** | None | Only if AnkiConnect's config sets an `apiKey`. Kept on this computer and never synced. |
+| **API key** | None | Only if AnkiConnect's config sets an `apiKey`. Not synced. |
 
 | Status | What to do |
 | --- | --- |
@@ -101,7 +100,7 @@ only some are, an amber dot on its info mark says which are off.
 
 Turn on **Enhance with sentence audio** in **Settings → Anki → Card enhancement** (or the sidebar's
 **Enhance Anki cards**) and Kimochi records what your computer plays, finds the audio of each
-line you read, and adds it to the new cards you make in Anki automatically. It works with
+line you read, and adds it to the new cards you make in Anki. It works with
 Yomitan, Hachidori and the Yomitan API pop-up. It is experimental: a clip may not always
 be the right line, and the [Anki tab](#the-anki-tab) shows which cards got audio.
 
@@ -111,7 +110,7 @@ last **Seconds kept** of audio are held (30 by default), so a later shot finds n
 line. An amber dot on the info mark says so; raise **Seconds kept** under **Advanced** if you need
 longer.
 
-Turning it on downloads the speech model (240 MB, run on your computer), which listens for each
+Turning it on downloads the speech model (240 MB), which listens for each
 line's words to find where it was said. Recording starts once the model is downloaded; the section
 shows the download's progress until then. After that it stays quiet unless something is wrong (no
 permission, no audio device), and says so. Audio is only kept in memory: nothing is saved but the
@@ -127,7 +126,7 @@ changes: Lapis and Kiku call it `SentenceAudio`, Senren `sentenceAudio`. You can
 | --- | --- | --- |
 | **Start offset** / **End offset** | 0 ms | Milliseconds added to the clip's start or end; negative moves it earlier. |
 | **Seconds kept** | 30 | A card gets audio only for a line whose audio is still held (10–120). |
-| **Clips kept** | 15 | The newest lines' clips kept on your computer, to play from the Log and add to later cards. |
+| **Clips kept** | 15 | The newest lines' clips, kept to play from the Log and add to later cards. |
 
 In the Log, a line with audio has a chip with its length (**4.2s**) at the end of the row: click it
 to play the clip, which fills the chip as it plays, and again to stop.
@@ -158,7 +157,7 @@ Cards get the whole source. To send only part of it (the scene without the dialo
 the source's [Anki crop area](/reading/sources/#anki-crop-area), the green box: **Crop area → Set
 Anki crop area…** in the main window.
 
-**Screenshots kept** (50) is how many of the newest scans keep theirs on your computer, for the Log
+**Screenshots kept** (50) is how many of the newest scans keep theirs, for the Log
 and for cards you make later; older ones are deleted.
 
 ## Tags

@@ -90,9 +90,9 @@ function autoOcrDescription(ocrMode: OcrMode, watcher: Watcher): string {
     return `Reads the screen again whenever its text changes. ${reader} watches for new text and reads it.`
   }
   if (watcher.kind === 'image') {
-    return `Reads the screen again whenever it changes. With no local text engine here, Kimochi watches for the picture changing, then ${reader} reads it. Download PaddleOCR in the engine list above for smarter watching.`
+    return `Reads the screen again whenever it changes. With no local text engine here, Kimochi watches for the picture changing, then ${reader} reads it. Download PaddleOCR in the engine list above to watch for text instead.`
   }
-  return `Reads the screen again whenever its text changes. ${watcherName(watcher)} watches for new text on this computer, then ${reader} reads it once it settles.`
+  return `Reads the screen again whenever its text changes. ${watcherName(watcher)} watches for new text, then ${reader} reads it once it settles.`
 }
 
 export function OcrTab(): ReactNode {

@@ -19,8 +19,7 @@ does not update, or an engine that stopped answering.
 
 ## How it decides when to scan
 
-Auto OCR watches the screen with a local OCR engine several times a second (nothing is sent anywhere
-for this) and only hands a capture to your OCR engine once the text stops changing: by default, two
+Auto OCR watches the screen with a local OCR engine several times a second and only hands a capture to your OCR engine once the text stops changing: by default, two
 identical readings in a row. Text that never stops animating is read anyway after a while, and
 requests are spaced out so a fast-moving scene doesn't flood the engine; only the newest frame is
 kept.
@@ -30,11 +29,10 @@ Which engine watches depends on the one you read with:
 - **A local engine** (PaddleOCR, MeikiOCR, Apple Live Text or OneOCR) watches for itself, so what
   the overlay shows between scans always matches what it read.
 - **An online engine or Manga OCR** gets the best watcher already on your computer: PaddleOCR on a
-  graphics card, then Apple Live Text or OneOCR, then PaddleOCR on the CPU, then MeikiOCR. Nothing
-  is downloaded just to watch.
+  graphics card, then Apple Live Text or OneOCR, then PaddleOCR on the CPU, then MeikiOCR.
 - **With none of those** (for example a fresh Linux install), Kimochi compares pictures instead of
   text, so a moving background can also set it off. Download PaddleOCR in
-  [OCR engines](/reading/ocr-engines/#paddleocr) for smarter watching.
+  [OCR engines](/reading/ocr-engines/#paddleocr) to watch the text instead.
 
 **Settings → OCR & Overlay → Auto OCR** names the watcher under the switch. When the watcher is slow
 (PaddleOCR on a CPU, say), Auto OCR looks less often, leaving more of the processor to your game.

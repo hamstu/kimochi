@@ -66,7 +66,7 @@ const ENGINE_SETUP: Record<OtherEngine, string> = {
   hachidori:
     'Hachidori offers a set of recommended dictionaries the first time its settings open, and imports Yomitan dictionaries and MDict files you already have.',
   tenten:
-    '10ten works straight away with its bundled word dictionary, and downloads the full JMdict, kanji and names dictionaries in the background. There is nothing to import.'
+    '10ten works straight away with its bundled word dictionary, and downloads the full JMdict, kanji and names dictionaries in the background.'
 }
 
 /** The Yomitan API: its setup wizard, whose buttons go in the bar. Skippable at every step. */
@@ -219,8 +219,8 @@ function YomitanSetup(): JSX.Element {
       title={offer || installed === null ? 'Set up Yomitan' : 'Your dictionaries are ready'}
       lede={
         offer || installed === null
-          ? 'Yomitan needs at least one dictionary before it can show you what words mean. Pick how you’d like to add one.'
-          : 'Yomitan already has dictionaries to look words up with, so there is nothing to set up. You can add or change them any time in Settings → Dictionary.'
+          ? 'Yomitan needs at least one dictionary. Choose how to add one.'
+          : 'Yomitan already has dictionaries. You can add or change them in Settings → Dictionary.'
       }
     >
       {installed === null && !error && (
@@ -279,7 +279,7 @@ function YomitanSetup(): JSX.Element {
                       ? `Installing ${item.title}…`
                       : `Install ${item.title}`
                 }
-                detail="Japanese–English definitions, downloaded and set up for you."
+                detail="Japanese–English definitions, downloaded and imported."
                 badge={!thisJob && <Badge tone="accent">Recommended</Badge>}
               />
             )
@@ -296,7 +296,7 @@ function YomitanSetup(): JSX.Element {
             onSelect={() => setChoice(LATER)}
             icon={<Clock />}
             title="Do it later"
-            detail="Add a dictionary any time in Settings → Dictionary."
+            detail="Add a dictionary later in Settings → Dictionary."
           />
         </div>
       )}

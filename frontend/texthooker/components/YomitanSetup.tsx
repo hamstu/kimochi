@@ -103,7 +103,7 @@ export function YomitanSetup({ yomitanUrl }: Props) {
             label="2. Install native messaging host"
             description={
               <>
-                The host bridges the Yomitan browser extension to apps on your computer.
+                The host connects the Yomitan browser extension to other apps.
                 Auto-installs from{" "}
                 <span className="k-mono">hamstu/go-yomitan-native-messaging-host</span>.
               </>

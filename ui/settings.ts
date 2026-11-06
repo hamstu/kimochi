@@ -402,7 +402,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'online',
     description:
-      'Sends each capture to Google Lens. The most accurate choice for most people, on games and manga alike, if you are happy for captures to go to Google. Free: no account and no API key.',
+      'Sends each capture to Google Lens. The most accurate choice for most people, on games and manga alike. Free.',
     strengths: [
       'Accurate on game text, manga and busy backgrounds',
       'Reads vertical and horizontal text, with line positions for the overlay',
@@ -413,77 +413,74 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
   cloud: {
     label: 'Cloud OCR',
     name: 'Cloud OCR',
-    tagline: 'Online, via Google Vision',
+    tagline: 'Online, via the Kimochi server',
     geometry: true,
     runs: 'online',
     description:
-      'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision and returns the text with the position of every word. Dependable on almost any Japanese text, at the cost of a round trip over the network. Part of Kimochi Cloud, so it needs a Kimochi account, not an API key of your own.',
+      'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision. Part of Kimochi Cloud: it needs a Kimochi account, not an API key of your own.',
     strengths: [
       'Accurate across fonts, sizes and busy backgrounds',
       'Word positions, so text can be hovered and looked up in place',
       'Nothing to download, and the same on every computer'
     ],
     requirements:
-      'Needs an internet connection and a Kimochi account with Kimochi Cloud (a free trial is available in Settings → Account). Each capture is sent to the Kimochi server to be read.'
+      'Needs an internet connection and Kimochi Cloud (a free trial is available in Settings → Account).'
   },
   meikiocr: {
     label: 'Local (MeikiOCR)',
     name: 'MeikiOCR',
-    tagline: 'Offline, for game text',
+    tagline: 'For game text',
     geometry: true,
     runs: 'local',
     description:
-      "A small, fast OCR model that runs on your computer. It's tuned for Japanese video game text: dialogue boxes, menus and subtitles, horizontal or vertical. The best offline pick for games; for manga, choose Manga OCR.",
+      "A small OCR model tuned for Japanese video game text: dialogue boxes, menus and subtitles. The best offline pick for games; for manga, choose Manga OCR.",
     strengths: [
       'Fast: a scan takes a fraction of a second',
-      'Works offline; captures never leave this computer',
-      'A one-time model download, then nothing else to set up'
-    ]
+      'Reads both horizontal and vertical text'
+    ],
+    requirements: 'A one-time model download.'
   },
   mangaocr: {
     label: 'Local (Manga OCR)',
     name: 'Manga OCR',
-    tagline: 'Offline, for manga',
+    tagline: 'For manga',
     geometry: true,
     runs: 'local',
     description:
-      'A model trained specifically on manga. The best offline choice for manga and printed vertical text; slower than MeikiOCR on game dialogue.',
+      'A model trained on manga. The best offline choice for manga and printed vertical text; slower than MeikiOCR on game dialogue.',
     strengths: [
       'Excellent on vertical text and hand-lettered dialogue',
-      'Reads text set over busy artwork',
-      'Works offline; captures never leave this computer'
+      'Reads text set over busy artwork'
     ],
     requirements:
-      'This model uses the GPU where it can (Metal on macOS, DirectML on Windows) and the CPU otherwise.'
+      'Uses the GPU if there is one (Metal on macOS, DirectML on Windows), else the CPU.'
   },
   ppocr: {
     label: 'Local (PaddleOCR)',
     name: 'PaddleOCR',
-    tagline: 'Offline, fast and accurate',
+    tagline: 'Fast and accurate',
     geometry: true,
     runs: 'local',
     description:
-      "PaddleOCR's PP-OCRv6 model, running on your computer. Reads game dialogue, menus and vertical text accurately, keeps full-width characters as they appear on screen, and is quickest on a graphics card.",
+      "PaddleOCR's PP-OCRv6 model. Reads game dialogue, menus and vertical text, and keeps full-width characters as they appear on screen.",
     strengths: [
       'Fast on a graphics card (Core ML on a Mac, DirectML on Windows)',
-      'Accurate on horizontal and vertical text',
-      'Works offline; captures never leave this computer'
+      'Accurate on horizontal and vertical text'
     ],
     requirements:
-      'A one-time model download of about 30 MB. Uses the GPU where it can and the CPU otherwise. On a Mac, the first start takes a few seconds while macOS prepares the model; later starts take about two.'
+      'A one-time model download of about 30 MB. Uses the GPU if there is one, else the CPU. On a Mac, the first start takes a few seconds while macOS prepares the model; later starts take about two.'
   },
   livetext: {
     label: 'Local (Apple Live Text)',
     name: 'Apple Live Text',
-    tagline: 'Offline, built into macOS',
+    tagline: 'Built into macOS',
     geometry: true,
     runs: 'local',
     description:
-      "Uses macOS's Live Text, the same recognition macOS uses when you select text in a screenshot. A good all-round offline choice on a Mac, with nothing to download.",
+      "Uses macOS's Live Text. A good all-round offline choice on a Mac.",
     strengths: [
       'Nothing to download: part of macOS',
       'Fast, with no model to load',
-      'Works offline; captures never leave this computer',
       'Handles vertical and horizontal text'
     ],
     requirements:
@@ -492,18 +489,17 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
   oneocr: {
     label: 'Local (OneOCR)',
     name: 'OneOCR',
-    tagline: 'Offline, via Snipping Tool',
+    tagline: 'Via Snipping Tool',
     geometry: true,
     runs: 'local',
     description:
-      'Reads text on your computer with the OCR engine in Microsoft Snipping Tool. A good all-round offline choice on Windows, with nothing extra to download; on stylised game fonts MeikiOCR can do better, and on manga Manga OCR.',
+      'Uses the OCR engine in Microsoft Snipping Tool. A good all-round offline choice on Windows; on stylised game fonts MeikiOCR can do better, and on manga Manga OCR.',
     strengths: [
-      'Works offline; captures never leave this computer',
       'Word positions for overlay lookups',
       'Uses the Snipping Tool runtime already installed on Windows 11'
     ],
     requirements:
-      'Windows only. On Windows 11, install or update Microsoft Snipping Tool. No Python or OCR server is needed.'
+      'Windows only. On Windows 11, install or update Microsoft Snipping Tool.'
   }
 }
 
@@ -539,11 +535,10 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: 'Yomitan',
     tagline: 'Runs inside Kimochi',
     description:
-      'Yomitan running inside Kimochi, with its own dictionaries and settings (separate from any Yomitan in your browser). Word audio and Anki mining are built in.',
+      'Yomitan, with its own dictionaries and settings, separate from any Yomitan in your browser.',
     strengths: [
       'Imports any Yomitan dictionary or settings backup',
-      'Word audio and Anki mining',
-      'Works offline'
+      'Word audio and Anki mining'
     ],
     requirements:
       'Downloaded when you choose it (about 15 MB). Needs at least one dictionary.',
@@ -575,7 +570,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: '10ten',
     tagline: 'Lightweight, works straight away',
     description:
-      '10ten Japanese Reader: a lightweight reader that looks words up the moment it is chosen.',
+      '10ten Japanese Reader, with a bundled word dictionary.',
     strengths: [
       'Nothing to import',
       'Kanji and name lookups',
@@ -593,14 +588,14 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: 'Yomitan API',
     tagline: 'The Yomitan in your browser',
     description:
-      'Looks words up through the Yomitan in your browser, using its dictionaries and settings as they are.',
+      'Looks words up through the Yomitan in your browser, with its dictionaries and settings.',
     strengths: [
       'Nothing to import again',
       'Shift-hover lookups in the Log and over your source',
       'Anki card builder in Kimochi'
     ],
     requirements:
-      'Needs Yomitan in your browser with its API on, and a small helper Kimochi installs for you.',
+      'Needs Yomitan in your browser with its API on, and a small helper that Kimochi installs.',
     licence: 'Part of Kimochi',
     upstream: 'https://github.com/yomidevs/yomitan-api',
     upstreamLabel: 'Yomitan API',

@@ -54,7 +54,7 @@ export default function EngineSetup(): JSX.Element {
   return (
     <Step
       title="Choose a pop-up dictionary"
-      lede="Kimochi looks words up with a pop-up dictionary engine. Choose one and Kimochi downloads it from its official release. You can switch at any time in Settings → Dictionary."
+      lede="Kimochi looks words up with a pop-up dictionary engine. Choose one and Kimochi downloads it from its official release. You can switch later in Settings → Dictionary."
     >
       <DictionaryChooser
         active={active}

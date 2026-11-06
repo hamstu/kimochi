@@ -9,11 +9,11 @@
     { "face": "excited", "say": "Hi there! I’m Mochiko, and I’m going to show you how Kimochi works. Click here, or press Space, to go on." },
     {
       "face": "happy",
-      "say": "Everything on this little desktop is pretend, except Kimochi. That’s the real app’s window, running right in your browser! (Well, mostly: just enough of it to work in this demo.)"
+      "say": "Everything on this little desktop is pretend, except Kimochi. That’s the real app’s window, running in your browser! (Well, enough of it for this demo.)"
     },
     {
       "face": "thinking",
-      "say": "Want a bit more room? I can make the demo fill your screen. You can always change it with the button in the top right corner.",
+      "say": "Want more room? I can make the demo fill your screen. The button in the top right corner switches it back.",
       "if": "notMax",
       "choices": [
         { "label": "Full screen, please", "do": "maximise", "goto": "start" },
@@ -71,18 +71,18 @@
     },
     {
       "face": "happy",
-      "say": "Kimochi read it, and the line went into its Log, so you can always scroll back to it later.",
+      "say": "Kimochi read it, and the line went into its Log, so you can scroll back to it later.",
       "point": { "log": ".log-lines .line:last-child" }
     },
     {
       "face": "thinking",
-      "say": "To look words up right in the game, turn on Show overlay. It’s optional, so you can keep it off when you only want the Log.",
+      "say": "To look words up in the game, turn on Show overlay. Leave it off when you only want the Log.",
       "point": { "log": "button[role=switch]", "text": "overlay" },
       "until": "overlay"
     },
     {
       "face": "excited",
-      "say": "See the boxes around the words? That’s Kimochi’s overlay, drawn right over the game.",
+      "say": "See the boxes around the words? That’s Kimochi’s overlay, drawn over the game.",
       "point": { "desk": "[data-window=game] .kd-box" }
     },
     {
@@ -95,7 +95,7 @@
     },
     {
       "face": "surprised",
-      "say": "Ta-da! That’s the dictionary pop-up, with the word’s reading and meanings. This one is pretend, just for the demo: the real one depends on the dictionary you choose.",
+      "say": "Ta-da! That’s the dictionary pop-up, with the word’s reading and meanings. This one is pretend; the real one depends on the dictionary you choose.",
       "point": { "desk": ".kd-popup" },
       "links": [
         { "label": "Yomitan", "href": "https://github.com/yomidevs/yomitan", "icon": "/guide/dict/yomitan.svg" },
@@ -123,7 +123,7 @@
     },
     {
       "face": "wink",
-      "say": "Click the game whenever you’re ready for the next line, just like a real visual novel.",
+      "say": "Click the game for the next line, like a real visual novel.",
       "point": { "desk": "[data-window=game] .kd-box" },
       "until": "nextLine"
     },
@@ -152,11 +152,11 @@
     },
     {
       "face": "proud",
-      "say": "There it is: everything you noted about them, right where you’re reading."
+      "say": "There it is: everything you noted about them, without leaving the Log."
     },
     {
       "face": "wink",
-      "say": "By the way, you can add things to your Notebook right from the Log: select some text in a line, then right-click it.",
+      "say": "By the way, you can add things to your Notebook from the Log: select some text in a line, then right-click it.",
       "point": { "log": ".log-lines .line:last-child" }
     },
     {
@@ -210,13 +210,13 @@
     },
     {
       "face": "excited",
-      "say": "…and the card moves right over the game’s text! Auto align uses OCR to find where the text is. Everything else works just like before: hold Shift and hover to look words up.",
+      "say": "…and the card moves over the game’s text! Auto align uses OCR to find where the text is. Lookups work as before: hold Shift and hover.",
       "point": { "desk": "[data-window=game] .kd-box" }
     },
     {
       "id": "outro",
       "face": "wink",
-      "say": "That’s the tour! Play around as long as you like. Kimochi is free, so download it whenever you’re ready.",
+      "say": "That’s the tour! Play around as long as you like. Kimochi is free to download.",
       "choices": [
         { "label": "Download Kimochi", "do": "download" },
         { "label": "Keep playing", "end": true }

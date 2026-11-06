@@ -10,17 +10,17 @@ const STEPS = [
   {
     n: '二',
     title: 'Scan / Read',
-    body: "Press Scan, or turn on Auto OCR. Using the Text Hooker? It just works. Turn on the overlay if you're feeling funky. 😉"
+    body: "Press Scan, or turn on Auto OCR. With the Text Hooker, lines come in by themselves. Turn on the overlay if you're feeling funky."
   },
   {
     n: '三',
     title: 'Read',
-    body: 'The text shows up right over your game, manga or video (when the overlay is enabled), and in the Log.'
+    body: 'The text shows up in the Log, and over your game, manga or video when the overlay is on.'
   },
   {
     n: '四',
     title: 'Look stuff up',
-    body: 'Hover a word. Hear it, save it, keep going. 🤘'
+    body: 'Hover a word. Hear it, save it, keep going.'
   }
 ]
 

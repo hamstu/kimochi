@@ -39,22 +39,22 @@ export interface Feature {
 export const features: Feature[] = [
   {
     id: 'engines',
-    title: 'Lightning fast OCR',
-    body: "Fast, with plenty of options. Pick the OCR engine that suits what you're reading: quick on-device models like MeikiOCR and PaddleOCR, Manga OCR for manga, the ones built into Windows and macOS, or Google Lens online.",
+    title: 'Fast OCR',
+    body: "Pick the OCR engine that suits what you're reading: quick on-device models like MeikiOCR and PaddleOCR, Manga OCR for manga, the ones built into Windows and macOS, or Google Lens online.",
     Visual: EnginesVisual,
     docs: '/reading/ocr-engines/'
   },
   {
     id: 'overlay',
     title: 'Cross Platform Overlay',
-    body: "When the overlay is on, you'll be able to hover directly over the words in your game, app, YouTube video, manga, or anything else on your screen.",
+    body: "With the overlay on, you can hover the words directly in your game, a video, manga or anything else on screen.",
     Visual: OverlayVisual,
     docs: '/reading/overlay/'
   },
   {
     id: 'text-hooker',
     title: 'Text Hooker',
-    body: "Kimochi can read a game's text directly from the game. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game, ready to look up. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
+    body: "Kimochi can read a game's text directly from the game. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
     Visual: TextHookerVisual,
     docs: '/reading/text-hooker/',
     tag: 'windows'
@@ -62,49 +62,49 @@ export const features: Feature[] = [
   {
     id: 'log',
     title: 'Log',
-    body: 'Skipped a line too fast? Scroll back. Pick up tomorrow where you left off. Kimochi always remembers. No need for external texthooker pages. 👌',
+    body: 'Every line Kimochi reads goes into the Log. Scroll back, or pick up tomorrow where you left off. It does the job of a texthooker page.',
     Visual: LogVisual,
     docs: '/log/the-log/'
   },
   {
     id: 'dictionaries',
     title: 'Dictionary extensions',
-    body: 'Pick the dictionary you like: Kimochi supports an embedded copy of Yomitan, Hachidori, 10ten, or you can point at your own Yomitan and existing dictionaries through the Yomitan API. ✨',
+    body: 'Use a built-in copy of Yomitan, Hachidori or 10ten, or point Kimochi at your own Yomitan and its dictionaries through the Yomitan API.',
     Visual: DictionariesVisual,
     docs: '/lookups/dictionaries/'
   },
   {
     id: 'dictionary',
     title: 'Look up and save',
-    body: "Whether it's in the overlay or in the log, you'll be able to easily look up definitions with your favorite dictionary tool.",
+    body: 'Look up words from the overlay or the Log with your favorite dictionary.',
     Visual: DictionaryVisual,
     docs: '/lookups/looking-up/'
   },
   {
     id: 'sessions',
     title: 'Sessions',
-    body: 'Keep a separate log for every game, visual novel or manga, each with its own lines and reading stats. Kimochi can switch sessions for you by window name, and you can rename, reorder or clear them any time.',
+    body: 'Keep a separate log for every game, visual novel or manga, each with its own lines and reading stats. Kimochi can switch sessions by window name, and you can rename, reorder or clear them.',
     Visual: SessionsVisual,
     docs: '/log/sessions/'
   },
   {
     id: 'notebook',
     title: 'Notebook',
-    body: 'I built this one for myself, especially! Select some text from the log to add characters, places or terms to a shared notebook. Link images and notes, too. Kimochi then highlights it as clickable in your log for easy remembering.',
+    body: 'I built this one for myself, especially! Select some text from the log to add characters, places or terms to a shared notebook. Link images and notes, too. Kimochi then highlights them in the Log, so you can click one when you forget who someone is.',
     Visual: NotebookVisual,
     docs: '/log/notebook/'
   },
   {
     id: 'texthookers',
     title: 'Any source',
-    body: 'Hooking a visual novel with your own setup? Point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats.',
+    body: 'If you hook visual novels with your own setup, point Kimochi at your texthooker over WebSocket, or copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats.',
     Visual: InputsVisual,
     docs: '/reading/texthookers/'
   },
   {
     id: 'controller',
     title: 'Gaming Mode',
-    body: "Kimochi runs right beside your game in Gaming Mode. Open its menu over the game with an easy shortcut, scan, then step through the words with the D-pad for quick look-ups. Hit B and you're back in the game.",
+    body: "Kimochi runs beside your game in Gaming Mode. Press R4 to open its menu over the game, scan, then step through the words with the D-pad. Hit B and you're back in the game.",
     Visual: ControllerVisual,
     docs: '/controller/gaming-mode/',
     tag: 'deck'
@@ -112,14 +112,14 @@ export const features: Feature[] = [
   {
     id: 'mini-mode',
     title: 'Mini mode',
-    body: 'Shrink Kimochi down to just its controls: your source, Auto OCR, the overlay, your OCR model and dictionary, in a slim window that sits beside your game, video or manga. Expand it again whenever you want the Log.',
+    body: 'Shrink Kimochi down to just its controls: your source, Auto OCR, the overlay, your OCR model and dictionary, in a slim window that sits beside your game, video or manga. Expand it again when you want the Log.',
     Visual: MiniModeVisual,
     docs: '/reading/mini-mode/'
   },
   {
     id: 'cloud-sync',
     title: 'Sync across computers',
-    body: "With Kimochi Cloud, your sessions, Notebook and preferences stay in step between your computers, in the background, even after time offline. Changed something in two places at once? The other version is kept for you to restore, and you can export everything any time.",
+    body: 'With Kimochi Cloud, your sessions, Notebook and preferences stay in step between your computers, even after time offline. If you change something in two places at once, the other version is kept so you can restore it.',
     Visual: SyncVisual,
     tag: 'cloud',
     link: { to: '/#cloud', label: 'See Kimochi Cloud plans' }

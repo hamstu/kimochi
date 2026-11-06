@@ -157,7 +157,7 @@ export function AboutTab(): ReactNode {
 
       <SettingsSection
         title="Acknowledgements"
-        description="Kimochi stands on the shoulders of giants. Thank you to everyone who made and shares these."
+        description="Thank you to everyone who made and shares these."
         grouped={false}
         footnote={
           <>

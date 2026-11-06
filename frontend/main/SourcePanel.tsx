@@ -1228,7 +1228,7 @@ export function SourcePanel({
               icon={<ScanSearch aria-hidden />}
               label="Auto OCR"
               checked={controller.isAutoOCREnabled}
-              info="Scans on its own whenever the text on your source changes, so new lines reach the Log without pressing Scan."
+              info="Scans on its own whenever the text on your source changes."
               settingsLabel="Auto OCR settings"
               onToggle={() => controller.onToggleAutoOCR()}
               onSettings={() => openSettingsTab('ocr')}

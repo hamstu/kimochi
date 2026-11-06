@@ -6,11 +6,7 @@ description: Drive Kimochi from a terminal, scripts and your own tools with the 
 import { Tabs, TabItem } from '@astrojs/starlight/components'
 
 The `kimochi` command lets you control Kimochi from a terminal: scan, switch sessions, follow the
-Log as it fills, change the OCR engine or any setting. It's for building your own setup around
-Kimochi: a script bound to a key or a Stream Deck button, a reading pipeline that sends each new
-line somewhere else, a game launcher that picks the right source and session.
-
-It's Kimochi's own program, run as a command: there is nothing extra to download, and it is always
+Log as it fills, change the OCR engine or any setting. It's Kimochi's own program, so it is always
 the same version as the app.
 
 ## Installing
@@ -204,12 +200,12 @@ done
 
 - **Windows:** use `kimochi` (the installed command), not the `kimochi.exe` in Kimochi's own folder.
   That one is the windowed app: a terminal doesn't wait for it, and its output can't be redirected or
-  piped. The installed command is a small console program that runs it for you.
+  piped. The installed command is a small console program that runs it.
 - **Windows PowerShell 5.1** (the blue one built into Windows) sends piped text to programs as
   ASCII, so `Get-Clipboard | kimochi log add` arrives as `???`. Run this first, or put it in your
   profile: `$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()`. PowerShell 7
   needs nothing.
-- **Development builds** (`npm run dev`) answer `kimochi` too, so the command is handy while
-  working on Kimochi: `src-tauri/target/debug/kimochi status`.
+- **Development builds** (`npm run dev`) answer `kimochi` too:
+  `src-tauri/target/debug/kimochi status`.
 - **Security:** the command talks to Kimochi over a connection only your user account can open. A
   web page can't use it.

@@ -168,7 +168,7 @@ export function extensionDownloadPrompt(status: ExtensionStatus): { title: strin
   const size = status.overallTotal > 0 ? `${formatBytes(status.overallTotal)} ` : ''
   return {
     title: `Download ${status.name}?`,
-    description: `Kimochi downloads ${status.name} ${status.version}, ${size}from its official release on github.com, checks every file, and keeps it on this computer. Your current dictionary stays in use until the download is ready.`
+    description: `Kimochi downloads ${status.name} ${status.version}, ${size}from its official release on github.com and checks every file. Your current dictionary stays in use until the download is ready.`
   }
 }
 

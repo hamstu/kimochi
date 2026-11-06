@@ -7,7 +7,7 @@ export function Privacy() {
   return (
     <Prose
       title="Privacy"
-      lede="Kimochi is a desktop app with no analytics, and accounts are optional. Most of what it does happens on your computer. This page lists exactly what leaves it, and when."
+      lede="Kimochi has no analytics, and accounts are optional. This page lists exactly what leaves your computer, and when."
       page="/privacy"
     >
       <h2 id="summary">The short version</h2>
@@ -19,7 +19,6 @@ export function Privacy() {
         </li>
         <li>
           The app has no analytics, telemetry, crash reporting or advertising.
-          It does not report how you use it.
         </li>
         <li>
           Your captures, log, notebook, statistics and settings are stored on
@@ -109,8 +108,7 @@ export function Privacy() {
       <p>
         If you would rather nothing leave your machine, choose an on-device
         engine in Settings &rarr; OCR &amp; Overlay: Apple Live Text (macOS),
-        MeikiOCR, Manga OCR or OneOCR (Windows). These run entirely on your
-        computer.
+        MeikiOCR, Manga OCR or OneOCR (Windows).
       </p>
 
       <h3>Text to speech</h3>
@@ -273,7 +271,7 @@ export function Privacy() {
       </p>
       <p>
         You can download everything synced, delete it, or delete your whole account, from the{" "}
-        <Link to="/account">account page</Link> at any time. Deleting the
+        <Link to="/account">account page</Link>. Deleting the
         account removes everything listed above straight away, including
         everything synced, and signs out every linked app.
       </p>

@@ -146,7 +146,7 @@ function HelperStep({
     return (
       <p className="yomitan-setup-status" role="status">
         <Spinner label="Checking" />
-        Looking for a Yomitan API helper on this computer…
+        Looking for a Yomitan API helper…
       </p>
     )
   }
@@ -175,7 +175,7 @@ function HelperStep({
           <p className="yomitan-setup-text">
             {host.method === 'kimochi'
               ? 'Nothing more to install.'
-              : 'Kimochi uses it as it is: there is nothing to replace.'}
+              : 'Kimochi uses it as it is.'}
           </p>
           {host.method === 'kimochi' && (
             <p className="yomitan-setup-aside">

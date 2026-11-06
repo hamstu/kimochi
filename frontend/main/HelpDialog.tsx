@@ -207,8 +207,7 @@ function ReportForm({
             <span className="help-attach-text">
               <span className="help-attach-title">Attach debug data</span>
               <span className="help-hint">
-                Your Kimochi version, system, settings and recent logs, with personal details removed. It makes the
-                problem much easier to track down.
+                Your Kimochi version, system, settings and recent logs, with personal details removed.
               </span>
             </span>
           </label>
@@ -289,7 +288,6 @@ function HelpContent({
     <DialogContent
       className="help"
       title="Help"
-      description="Stuck, something not working, or have an idea? Here’s how to reach us."
       footer={
         <DialogClose asChild>
           <Button variant="primary">Close</Button>
@@ -310,14 +308,14 @@ function HelpContent({
         <Choice
           icon={<Bug />}
           title="Report a bug"
-          detail="Tell us what went wrong. Every report is read."
+          detail="Tell us what went wrong."
           trailing={<ChevronRight />}
           onClick={() => setStep('bug')}
         />
         <Choice
           icon={<Lightbulb />}
           title="Request a feature"
-          detail="Something you wish Kimochi did? We’d love to hear it."
+          detail="Tell us what you’d like Kimochi to do."
           trailing={<ChevronRight />}
           onClick={() => setStep('feature')}
         />

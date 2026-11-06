@@ -15,8 +15,7 @@ yourself ([Texthookers and clipboard](/reading/texthookers/)).
 :::
 
 The **Text Hooker** reads a game's text from inside the game instead of off the screen. Lines reach
-the Log exactly as the game wrote them, so there are no OCR misreads, and nothing is sent
-anywhere to be recognised. It works best with visual novels and other PC games that draw their
+the Log exactly as the game wrote them, so there are no OCR misreads. It works best with visual novels and other PC games that draw their
 text themselves.
 
 Kimochi uses [LunaHook](https://github.com/HIllya51/LunaTranslator), and falls back to
@@ -52,8 +51,7 @@ apps that are protected or running as administrator, and apps built for ARM64 (t
 
 On Linux, Kimochi hooks Windows games that run through **Proton** (Steam's compatibility layer,
 which every Windows game on a Steam Deck uses) or **Wine** (Lutris, Bottles, Heroic and the like).
-It runs LunaHook with the game's own Proton or Wine, inside the game's prefix, so there is nothing
-to install or set up: start the game, then choose **Text Hooker** and pick it as you would on
+It runs LunaHook with the game's own Proton or Wine, inside the game's prefix. Start the game, then choose **Text Hooker** and pick it as you would on
 Windows. In Steam Deck Gaming Mode, choose the game in Kimochi's **Source** tab the same way.
 
 Games that run natively on Linux are dimmed in the grid: only Windows games can be hooked. If a
@@ -64,7 +62,7 @@ Linux on ARM64 computers can't hook games.
 ## Choosing the dialogue
 
 A hooked game sends Kimochi several streams of text, called threads: the dialogue, the speaker's
-name, menus and other bits of the engine. Kimochi chooses the dialogue for you, by the thread it
+name, menus and other bits of the engine. Kimochi chooses the dialogue by the thread it
 remembered for the game or, the first time, by reading the game's window with a local OCR engine
 and matching each thread's text against what's on screen.
 
@@ -89,7 +87,7 @@ overlay: hold <kbd>Shift</kbd> and hover a word. With a controller, **Read along
 [controller menu](/controller/#the-controller-menu) steps through the card's words.
 
 - **Auto align** (on by default) finds the line on screen with OCR in the background and puts the
-  card right over the game's own text, at the same size, breaking lines where the game does. It
+  card over the game's own text, at the same size, breaking lines where the game does. It
   uses the OCR model in the sidebar, which is why the sidebar keeps showing it. The **Auto align**
   switch under **Show overlay** in the sidebar is for this game only.
 - **Speaker names apart** (on by default) leaves a speaker's name on the game's nameplate; the card
@@ -103,7 +101,7 @@ overlay: hold <kbd>Shift</kbd> and hover a word. With a controller, **Read along
 Without <kbd>Shift</kbd>, clicks go through the card to the game, as they do through the rest of the
 overlay; see [Clicking through to the game](/reading/overlay/#clicking-through-to-the-game).
 
-Don't want the card at all? Turn off **Show the card over the game** at the top of
+To hide the card, turn off **Show the card over the game** at the top of
 [Settings → Text Hooker](#settings). Lines still reach the Log, **Read along** still shows the line
 while you read it, and Auto align stops reading the screen, which saves battery on a handheld.
 
