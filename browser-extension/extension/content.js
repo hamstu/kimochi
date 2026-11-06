@@ -16,7 +16,8 @@
   if (window.__kimochiExtension) return
   window.__kimochiExtension = true
 
-  const Z = 2147483646
+  // One below the pop-up dictionaries' 2147483647 (the toolbar is Z + 1), so their popups are on top.
+  const Z = 2147483645
   const PROXIMITY = 300
   const MIN_SIZE = 24
   const POLL_MS = 1500
@@ -51,7 +52,7 @@
   // the click-through gate (the overlay does it natively, `Region::shift`).
   const OWN_CSS = `
 @font-face{font-family:"Kimochi Figtree";src:url("${chrome.runtime.getURL('fonts/figtree.woff2')}") format("woff2");font-weight:300 900;font-display:swap;}
-#kimochi-ext-boxes{position:fixed;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;z-index:${Z};pointer-events:none;}
+#kimochi-ext-boxes{all:initial;display:block;position:fixed!important;inset:0 auto auto 0!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;overflow:visible!important;z-index:${Z}!important;pointer-events:none!important;}
 #kimochi-ext-boxes .kx-pic{position:fixed;margin:0;padding:0;border:0;pointer-events:none;}
 #kimochi-ext-boxes .kx-pic[hidden]{display:none!important;}
 #kimochi-ext-boxes[hidden]{display:none!important;}
@@ -81,7 +82,7 @@
 
   const uiHost = document.createElement('div')
   uiHost.id = 'kimochi-ext-ui'
-  uiHost.style.cssText = `position:fixed;inset:0;z-index:${Z + 1};pointer-events:none;`
+  uiHost.style.cssText = `position:fixed!important;inset:0!important;width:auto!important;height:auto!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;overflow:visible!important;z-index:${Z + 1}!important;pointer-events:none!important;display:block!important;`
   const shadow = uiHost.attachShadow({ mode: 'closed' })
   shadow.innerHTML = `
 <style>
@@ -449,9 +450,142 @@
 
   function mount() {
     if (!sheet.isConnected) (document.head || document.documentElement).append(sheet)
-    if (!boxLayer.isConnected) document.documentElement.append(boxLayer)
-    if (!uiHost.isConnected) document.documentElement.append(uiHost)
+    raise(true)
     applyLook()
+    startRaising()
+  }
+
+  // ------------------------------------------------------------------ staying on top
+
+  // The pop-up dictionaries must always be above the boxes. Yomitan and Hachidori use
+  // `z-index: 2147483647` in the page; 10ten puts its popup in the browser's top layer and shows it
+  // again each time, so it lands last. So the boxes and the toolbar sit one z-index below theirs.
+  //
+  // A page's lightbox or viewer can sit above any z-index: a modal <dialog>, a big popover or a
+  // fullscreen element is in the top layer. Only while one is open do the boxes and the toolbar
+  // join the top layer too (shown again, so they're last). A modal dialog also makes everything
+  // outside it inert (no clicks, no hover lookups), so while one is open both layers live inside it.
+  const POPOVERS = typeof HTMLElement.prototype.showPopover === 'function'
+  const LAYERS = [boxLayer, uiHost]
+
+  /** The open modal dialog the page shows last (on top), else the page itself. */
+  let modals = []
+  function layerParent() {
+    const open = [...document.querySelectorAll('dialog')].filter((d) => d.isConnected && d.matches(':modal'))
+    modals = modals.filter((d) => open.includes(d))
+    for (const d of open) if (!modals.includes(d)) modals.push(d)
+    return modals.at(-1) ?? document.documentElement
+  }
+
+  // Another extension's overlay (a dictionary's popup or puck), never the page's own lightbox.
+  const DICTIONARIES = /^(tenten-|hachidori|yomitan|gsm-hoshidicts)/i
+  function foreignOverlay(el) {
+    if (DICTIONARIES.test(el.id) || DICTIONARIES.test(el.localName) || [...el.classList].some((c) => DICTIONARIES.test(c))) return true
+    // Overlay containers that let the pointer through (10ten's is the whole viewport) aren't viewers.
+    return getComputedStyle(el).pointerEvents === 'none'
+  }
+
+  /** Something of the page's in the top layer that would cover the boxes or the toolbar. */
+  function covers(el) {
+    if (!(el instanceof Element) || LAYERS.includes(el) || !el.isConnected) return false
+    if (el === document.fullscreenElement) return true
+    if (el.localName === 'dialog' && el.matches(':modal')) return true
+    if (!el.matches(':popover-open') || foreignOverlay(el)) return false
+    // Small popovers (the page's menus) stay above the boxes.
+    const r = el.getBoundingClientRect()
+    return r.width * r.height >= innerWidth * innerHeight * 0.4
+  }
+
+  function needTop() {
+    if (!POPOVERS) return false
+    if (layerParent() !== document.documentElement || document.fullscreenElement) return true
+    return [...document.querySelectorAll(':popover-open')].some(covers)
+  }
+
+  /** Put the layers where they belong; `again` re-shows them in the top layer to land on top. */
+  let onTop = false
+  function raise(again = false) {
+    const parent = layerParent()
+    for (const el of LAYERS) if (el.parentNode !== parent) parent.append(el)
+    const top = needTop()
+    for (const el of LAYERS) {
+      try {
+        if (top) {
+          if (!el.matches(':popover-open')) {
+            el.popover = 'manual'
+            el.showPopover()
+          } else if (again) {
+            el.hidePopover()
+            el.showPopover()
+          }
+        } else if (el.hasAttribute('popover')) {
+          if (el.matches(':popover-open')) el.hidePopover()
+          el.removeAttribute('popover')
+        }
+      } catch {
+        // Not connected, or the page is mid-change; the next check puts it right.
+      }
+    }
+    onTop = top
+  }
+
+  let raiseTimer = 0
+  let raiseQueued = false
+  let raiseAgain = false
+  let lastRaise = 0
+  function raiseSoon(again) {
+    raiseAgain ||= again
+    if (!active || raiseQueued) return
+    raiseQueued = true
+    // At most a few times a second, so a page doing the same can't ping-pong with us.
+    const wait = Math.max(0, lastRaise + 250 - performance.now())
+    setTimeout(() => {
+      raiseQueued = false
+      if (!active) return
+      lastRaise = performance.now()
+      const again = raiseAgain
+      raiseAgain = false
+      raise(again)
+    }, wait)
+  }
+
+  function onToggle(event) {
+    const el = event.target
+    if (!(el instanceof Element) || LAYERS.includes(el)) return
+    if (event.type === 'toggle' && event.newState === 'open') {
+      if (covers(el)) raiseSoon(true)
+    } else if (el.localName === 'dialog' || el.matches('[popover]')) raiseSoon(false)
+  }
+  function onFullscreen() {
+    raiseSoon(true)
+  }
+  const dialogWatch = new MutationObserver((records) => {
+    if (records.some((r) => r.target.localName === 'dialog')) raiseSoon(true)
+  })
+
+  function startRaising() {
+    if (raiseTimer) return
+    window.addEventListener('toggle', onToggle, true)
+    window.addEventListener('close', onToggle, true)
+    document.addEventListener('fullscreenchange', onFullscreen, true)
+    dialogWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['open'], subtree: true })
+    // A dialog removed with us inside it, or one opened or closed without an event we see.
+    raiseTimer = setInterval(() => {
+      if (!active) return
+      const parent = layerParent()
+      if (LAYERS.some((el) => el.parentNode !== parent) || needTop() !== onTop || (onTop && LAYERS.some((el) => !el.matches(':popover-open')))) raise()
+    }, 700)
+  }
+
+  function stopRaising() {
+    clearInterval(raiseTimer)
+    raiseTimer = 0
+    window.removeEventListener('toggle', onToggle, true)
+    window.removeEventListener('close', onToggle, true)
+    document.removeEventListener('fullscreenchange', onFullscreen, true)
+    dialogWatch.disconnect()
+    modals = []
+    onTop = false
   }
 
   // ------------------------------------------------------------------ connection
@@ -1666,7 +1800,10 @@
       refresh('auto')
     }, 500)
     watchers.push(() => clearInterval(poll))
-    const mutations = new MutationObserver((records) => {
+    const mutations = new MutationObserver((all) => {
+      // Our own layers live inside the page's modal dialog while one is open: not the page's changes.
+      const records = all.filter((r) => !isOurs(r.target) && !(r.type === 'childList' && [...r.addedNodes, ...r.removedNodes].every((n) => LAYERS.includes(n))))
+      if (!records.length) return
       scheduleLayout()
       // A new picture (a source, or content put in): at once, so its old boxes never show over it.
       if (records.some((r) => r.type === 'childList' || r.attributeName === 'src' || r.attributeName === 'srcset')) refresh('auto')
@@ -1781,6 +1918,7 @@
     pageAsked = false
     closeMenu()
     setMessage('', 'neutral')
+    stopRaising()
     boxLayer.remove()
     uiHost.remove()
     sheet.remove()
