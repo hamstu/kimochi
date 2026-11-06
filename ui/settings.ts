@@ -417,7 +417,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'online',
     description:
-      'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision. Part of Kimochi Cloud: it needs a Kimochi account, not an API key of your own.',
+      'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision. Part of Kimochi Cloud.',
     strengths: [
       'Accurate across fonts, sizes and busy backgrounds',
       'Word positions, so text can be hovered and looked up in place',

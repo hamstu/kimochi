@@ -103,7 +103,7 @@ export default function EngineSetup(): JSX.Element {
         open={askSkip}
         onOpenChange={setAskSkip}
         title="Continue without a dictionary?"
-        description="Nothing will look words up until you choose and download a dictionary in Settings → Dictionary. Scanning and the Log still work."
+        description="You can choose one later in Settings → Dictionary."
         confirmLabel="Skip"
         tone="danger"
         onConfirm={() => {

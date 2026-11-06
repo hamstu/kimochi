@@ -48,7 +48,7 @@ export function GeneralTab(): ReactNode {
           description={
             appearance === 'system'
               ? 'Follows your system setting.'
-              : `Always ${appearance}, whatever the system uses.`
+              : `Always ${appearance}.`
           }
         >
           <Segmented

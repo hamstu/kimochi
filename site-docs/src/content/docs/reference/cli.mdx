@@ -73,7 +73,7 @@ kimochi version
 | --- | --- |
 | `kimochi log` | The open session's newest 20 lines, oldest first. `-n <count>` for more or fewer, `--all` for every line, `--session <name>` for another session. |
 | `kimochi log --follow` | Prints each new line as the Log takes it in, until you press <kbd>Ctrl+C</kbd>. |
-| `kimochi log add <text>` | Adds a line to the Log, whatever **Input** is set to. With `-`, or with text piped in, it reads standard input. The line goes through the Log's own rules ([replacements](/log/the-log/), **Japanese only**, skipping a repeat): if they drop it, the command says so and exits 1. |
+| `kimochi log add <text>` | Adds a line to the Log. With `-`, or with text piped in, it reads standard input. The line goes through the Log's own rules ([replacements](/log/the-log/), **Japanese only**, skipping a repeat): if they drop it, the command says so and exits 1. |
 | `kimochi session` | The open session's name. |
 | `kimochi session list` | Every [session](/log/sessions/), the open one marked `*`. |
 | `kimochi session switch <name>` | Opens another session. |

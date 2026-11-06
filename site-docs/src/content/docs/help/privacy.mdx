@@ -26,7 +26,7 @@ Kimochi has **no analytics, telemetry, crash reporting or advertising**, and acc
 | --- | --- | --- |
 | **Google Lens** (the default OCR engine) | The captured region | Straight to Google's Lens service; not through Kimochi's servers. |
 | **Kimochi cloud OCR** (signed in) | The captured region | Kimochi's server, then Google Cloud Vision. Not stored; counted towards your month. |
-| **Read aloud** (Kimochi Cloud) | The line's text and voice | Kimochi's server, then ElevenLabs. The audio is cached by a fingerprint of voice and text, not by who asked. |
+| **Read aloud** (Kimochi Cloud) | The line's text and voice | Kimochi's server, then ElevenLabs. |
 | **Translation and explanations** (Kimochi Cloud) | The line, and the lines before it for explanations | Kimochi's server, then DeepL or an AI provider (Anthropic or OpenAI) through Cloudflare AI Gateway, which keeps request logs tagged with your account id. |
 | **Translation with your DeepL key** | The line | DeepL, with your key. |
 | **Explain with Codex CLI or Claude CLI** | The prompt | Whatever that tool on your computer sends. |
