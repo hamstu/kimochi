@@ -53,7 +53,7 @@ export function AccountSignUp() {
       setUser(u)
       navigate(returnTo, {
         replace: true,
-        state: { notice: `Welcome to Kimochi. We sent a link to ${u.email ?? 'your email'} to confirm the address.` }
+        state: { notice: `Welcome to Kimochi. Check ${u.email ?? 'your email'} for a link to confirm the address.` }
       })
     } catch (err) {
       setBusy(false)

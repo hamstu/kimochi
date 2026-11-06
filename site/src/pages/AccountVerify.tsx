@@ -74,7 +74,7 @@ export function AccountVerify() {
   }
 
   return (
-    <AuthShell title="We couldn’t confirm your email">
+    <AuthShell title="Couldn’t confirm your email">
       <Notice tone="danger">{state.message}</Notice>
       <div className="mt-6">
         {status === 'signed-in' ? (

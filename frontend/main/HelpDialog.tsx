@@ -276,8 +276,8 @@ function HelpContent({
           <CircleCheck className="help-sent-icon" aria-hidden="true" />
           <p className="help-sent-title">Thank you!</p>
           <p className="help-sent-detail">
-            Your {sent?.kind === 'feature' ? 'request' : 'report'} is on its way{sent?.id ? <> (reference <span className="k-num">{sent.id}</span>)</> : null}. If we
-            need anything else, we’ll reply to {sent?.email || 'your email'}.
+            Your {sent?.kind === 'feature' ? 'request' : 'report'} is on its way{sent?.id ? <> (reference <span className="k-num">{sent.id}</span>)</> : null}. If I
+            need anything else, I’ll reply to {sent?.email || 'your email'}.
           </p>
         </div>
       </DialogContent>
@@ -308,14 +308,14 @@ function HelpContent({
         <Choice
           icon={<Bug />}
           title="Report a bug"
-          detail="Tell us what went wrong."
+          detail="Tell me what went wrong."
           trailing={<ChevronRight />}
           onClick={() => setStep('bug')}
         />
         <Choice
           icon={<Lightbulb />}
           title="Request a feature"
-          detail="Tell us what you’d like Kimochi to do."
+          detail="Tell me what you’d like Kimochi to do."
           trailing={<ChevronRight />}
           onClick={() => setStep('feature')}
         />

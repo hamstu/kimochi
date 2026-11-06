@@ -516,7 +516,7 @@ export function DownloadLinux() {
                 <a href={`${GITHUB_URL}/issues`} className={inlineLink}>
                   Open an issue on GitHub
                 </a>{' '}
-                with your distribution and what you see, and we&rsquo;ll help.
+                with your distribution and what you see, and I&rsquo;ll help.
               </p>
             </div>
           </section>

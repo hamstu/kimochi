@@ -64,8 +64,8 @@ export const FAQ = [
     id: 'privacy',
     q: 'Does Kimochi send my screen to the cloud? Is it private?',
     a: [
-      'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads. Your captures, log, notebook, statistics and settings stay on your computer, unless you turn on Sync with Kimochi Cloud, which keeps them in step between your computers.',
-      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. If you’d rather nothing leave your machine, pick an on-device engine: PaddleOCR, Apple Live Text (macOS), MeikiOCR, Manga OCR or OneOCR (Windows). The privacy policy lists exactly what each feature sends and when.'
+      'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads.',
+      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. The other engines run locally. The privacy policy lists what each feature sends.'
     ],
     links: [{ href: '/privacy', label: 'Privacy policy' }]
   },

@@ -38,8 +38,8 @@ export function ScreenRecordingWhy({ restartAfterGrant }: { restartAfterGrant: b
       </p>
       <p>
         Kimochi captures only the window or screen you choose as your source, and only to scan
-        it. An online OCR engine sends the pictures over the internet to be read. Kimochi never
-        records audio.
+        it. An online OCR engine sends the pictures over the internet to be read. Kimochi records
+        system audio only when you turn on Enhance with sentence audio, for Anki cards.
       </p>
       <p>
         To allow it, open System Settings → Privacy &amp; Security → Screen &amp; System Audio

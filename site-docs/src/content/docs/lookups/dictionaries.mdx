@@ -29,17 +29,13 @@ the first time.
 ## How engines are downloaded
 
 Kimochi itself carries no dictionary engine. Each engine is pinned to one upstream GitHub release:
-Kimochi downloads it when you choose it, checks the download and every file in it against pinned
-SHA-256 hashes, and runs it unmodified. Downloads resume if interrupted; quitting pauses one.
+Kimochi downloads it when you choose it, and checks every file before running it.
 
-Switching engines asks to download the new one if needed (**Download …?**), then reloads the reader
-windows: **Now using … The reader windows reloaded with it.** Until an engine is downloaded, the
-sidebar and Settings say so, and its settings button appears once it is downloaded and running.
+Switching engines downloads the new one if needed and reloads the reader windows.
 
 When a Kimochi update brings a new version of an engine you've downloaded, it updates in the
 background and the current version keeps working until the new one is ready and checked. Progress
-shows in **Settings → Dictionary**. Your dictionaries and settings are kept, and engines you never
-downloaded stay that way.
+shows in **Settings → Dictionary**.
 
 ## Yomitan
 
