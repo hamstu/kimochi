@@ -12,6 +12,8 @@
 import { Bridge } from './bridge.js'
 
 const MAX_SIDE = 4096
+/** No more than this many pixels go to Kimochi, however the picture is shaped (a long strip). */
+const MAX_PIXELS = 12_000_000
 
 /** tabId -> { port, busy, queued, lastHash } */
 const tabs = new Map()
@@ -129,7 +131,7 @@ async function runScan(tab, request) {
   }
   const hash = fingerprint(bitmap)
   // Auto updates only reach Kimochi when the pixels changed.
-  if (request.reason === 'auto' && hash === tab.lastHash) {
+  if (request.reason === 'auto' && !request.fresh && hash === tab.lastHash) {
     bitmap.close()
     tab.port.postMessage({ type: 'unchanged', id: request.id })
     return
@@ -207,7 +209,7 @@ function fingerprint(bitmap) {
 
 async function encode(bitmap) {
   const longest = Math.max(bitmap.width, bitmap.height)
-  const scale = longest > MAX_SIDE ? MAX_SIDE / longest : 1
+  const scale = Math.min(1, MAX_SIDE / longest, Math.sqrt(MAX_PIXELS / (bitmap.width * bitmap.height)))
   const width = Math.max(1, Math.round(bitmap.width * scale))
   const height = Math.max(1, Math.round(bitmap.height * scale))
   const canvas = new OffscreenCanvas(width, height)

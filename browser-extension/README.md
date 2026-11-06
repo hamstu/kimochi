@@ -43,6 +43,23 @@ The manifest's `key` gives the unpacked extension a fixed id, `njmbcglmnbcahkian
 which is the only origin the app accepts. A store listing gets its own id, which has to be added to
 `ORIGINS` in `browser_bridge.rs`.
 
+## What is read
+
+What you pick is a scope:
+
+- **A picture.** The scope is just that picture. When it slides out of view and another picture
+  of about the same size is in its place (a slider's next page), that picture is read instead.
+- **A container.** Press ↑ while picking to widen the pick, and ↓ to narrow it again. Each
+  picture inside that is mostly in view is read, at most 4 at a time, right to left as manga
+  pages run. "In view" accounts for the window, the boxes that clip or scroll around the
+  picture, and hidden pictures.
+
+Each picture gets its own boxes, attached to it and clipped to the part that shows. Its reading is
+kept, so a picture slid back into view shows its boxes at once, without being read again. Pictures
+are read one at a time. A reading that never comes back is given up after 75 s. No picture goes to
+Kimochi larger than 4096 px on its long side or 12 megapixels. The picker also finds pictures that
+don't take the pointer, as readers that hide their pages under a cover do.
+
 ## How a picture is read
 
 - **Images:** the worker fetches the image's own bytes at full resolution (any origin, with the

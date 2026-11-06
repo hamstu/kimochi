@@ -19,7 +19,6 @@
   const Z = 2147483646
   const PROXIMITY = 300
   const MIN_SIZE = 24
-  const AUTO_DEBOUNCE_MS = 450
   const POLL_MS = 1500
 
   /** @type {chrome.runtime.Port|null} */
@@ -30,26 +29,17 @@
   let active = false
   let picking = false
   let candidate = null
+  /** The smaller picks ↑ widened from, for ↓ to go back to. */
+  let widened = []
+  /** What the reader picked: a picture, or a container of pictures (see `refresh`). */
   let target = null
-  /** The picture's last reading: lines in fractions of the target's content box. */
-  let lines = []
-  let region = null
   let scanSeq = 0
-  let latestScan = 0
-  let reading = false
   let message = ''
   let messageTone = 'neutral'
-  let fetchFailed = false
   let shift = false
   /** The layer stays open after Shift is let go while the pointer is on a lit box. */
   let held = false
   let pointer = { x: -1, y: -1 }
-  let layoutFrame = 0
-  let lastSize = ''
-  let watchers = []
-  let mutationTimer = 0
-  /** The boxes cleared when the picture changed, until the new reading says whether it did. */
-  let stashed = null
 
   // ------------------------------------------------------------------ elements
 
@@ -61,7 +51,9 @@
   // the click-through gate (the overlay does it natively, `Region::shift`).
   const OWN_CSS = `
 @font-face{font-family:"Kimochi Figtree";src:url("${chrome.runtime.getURL('fonts/figtree.woff2')}") format("woff2");font-weight:300 900;font-display:swap;}
-#kimochi-ext-boxes{position:fixed;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;z-index:${Z};pointer-events:none;contain:layout style;}
+#kimochi-ext-boxes{position:fixed;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;z-index:${Z};pointer-events:none;}
+#kimochi-ext-boxes .kx-pic{position:fixed;margin:0;padding:0;border:0;pointer-events:none;}
+#kimochi-ext-boxes .kx-pic[hidden]{display:none!important;}
 #kimochi-ext-boxes[hidden]{display:none!important;}
 #kimochi-ext-boxes .ocr-word,#kimochi-ext-boxes .ocr-group{box-sizing:border-box;margin:0;padding:0;line-height:1;pointer-events:none;transform-origin:center center;}
 #kimochi-ext-boxes[data-open] .ocr-word{pointer-events:auto;}
@@ -174,7 +166,7 @@
 </style>
 <div class="ui">
   <div class="pick"></div>
-  <div class="banner panel" role="status"><strong>Click a picture for Kimochi to read</strong><span class="hint"><kbd>↑</kbd> bigger area</span><span class="hint"><kbd>Esc</kbd> cancel</span></div>
+  <div class="banner panel" role="status"><strong>Click a picture for Kimochi to read</strong><span class="hint"><kbd>↑</kbd><kbd>↓</kbd> bigger or smaller area</span><span class="hint"><kbd>Esc</kbd> cancel</span></div>
   <div class="bar panel" role="toolbar" aria-label="Kimochi">
     <span class="logo"><img alt="Kimochi"><span class="pip"></span></span>
     <span class="msg" role="status"></span>
@@ -205,7 +197,7 @@
   hud.addEventListener('click', (event) => {
     const action = event.target.closest?.('button')?.dataset.act
     if (action === 'open') openKimochi()
-    else if (action === 'read') scan('rescan')
+    else if (action === 'read') rescanAll()
     else if (action === 'pick') startPicking()
     else if (action === 'stop') stop()
     else if (action === 'session') toggleMenu('list')
@@ -452,7 +444,7 @@
     syncWatch()
     rememberTarget()
     render()
-    if (on && target && lines.length === 0 && !reading) scan('auto')
+    if (on) refresh('auto')
   }
 
   function mount() {
@@ -492,10 +484,14 @@
         if (status === 'connected') askPage()
         else pageAsked = false
         // Picked (or found after a page load) before Kimochi answered: read it now.
-        if (status === 'connected' && target && !lines.length && !reading) {
-          reading = true
-          setMessage('', 'busy')
-          scan(lastReason)
+        if (status === 'connected') {
+          if (target && !pics.size) refresh(lastReason)
+          pump()
+        } else if (inflight) {
+          // Kimochi went away mid-reading: that reading isn't coming. Read it again on reconnect.
+          clearTimeout(inflight.timer)
+          queue.unshift(inflight.p)
+          inflight = null
         }
         render()
         break
@@ -535,54 +531,51 @@
       case 'ended':
         if (active) {
           clearBoxes()
+          queue = []
           setMessage('Kimochi switched to another source', 'warn')
           render()
         }
         break
       case 'rescan':
-        if (target) scan('rescan')
+        rescanAll()
         break
       case 'captured':
         boxLayer.removeAttribute('data-hide')
         uiHost.style.visibility = ''
         break
       case 'reading':
-        if (msg.id === latestScan) {
-          reading = true
-          render()
-        }
         break
       case 'unchanged':
-        if (msg.id === latestScan) {
-          reading = false
-          // The same pixels after all: the boxes cleared for the reading were right.
-          if (stashed && !lines.length) {
-            lines = stashed.lines
-            region = stashed.region
-            lastSize = ''
-            layout()
-          }
-          stashed = null
-          render()
-        }
+        finish(msg.id, (p) => {
+          // The same pixels after all: the boxes kept aside for the reading were right.
+          if (p.stashed) setLines(p, p.stashed.lines, p.stashed.region)
+          p.stashed = null
+          p.state = 'done'
+          layout()
+        })
         break
       case 'result':
-        if (msg.id === latestScan) {
-          if (msg.result?.session || msg.session) session = msg.result?.session ?? msg.session
+        if (inflight?.id === msg.id) {
+          if (msg.result?.session) session = msg.result.session
           applyResult(msg)
           rememberTarget()
         }
         break
       case 'error':
-        if (msg.id !== latestScan) break
-        reading = false
-        stashed = null
-        if (msg.message === 'fetch-failed' && !fetchFailed) {
+        if (inflight?.id !== msg.id) break
+        if (msg.message === 'fetch-failed') {
           // The picture's own bytes couldn't be had: read it off the screen instead.
-          fetchFailed = true
-          scan(lastReason)
+          const p = inflight.p
+          finish(msg.id, () => {
+            p.fetchFailed = true
+            enqueue(p, p.reason)
+          })
           break
         }
+        finish(msg.id, (p) => {
+          p.state = 'error'
+          p.stashed = null
+        })
         setMessage(msg.message, 'danger')
         render()
         break
@@ -647,6 +640,7 @@
   function stopPicking() {
     picking = false
     candidate = null
+    widened = []
     pickBox.removeAttribute('data-on')
     banner.removeAttribute('data-on')
     boxLayer.removeAttribute('hidden')
@@ -669,10 +663,26 @@
     const stack = document.elementsFromPoint(x, y).filter((el) => !isOurs(el))
     return (
       stack.find((el) => isPicture(el) && sized(el)) ??
+      pictureUnder(stack, x, y) ??
       stack.find((el) => hasBackground(el) && sized(el) && el !== document.body && el !== document.documentElement) ??
       stack.find((el) => sized(el) && el !== document.body && el !== document.documentElement) ??
       null
     )
+  }
+
+  /**
+   * A picture at the point that doesn't take the pointer (`pointer-events: none`, or under a
+   * transparent cover, as readers do to stop saving): found among the pointed elements' own.
+   */
+  function pictureUnder(stack, x, y) {
+    for (const el of stack.slice(0, 6)) {
+      if (el === document.body || el === document.documentElement) continue
+      for (const pic of el.querySelectorAll('img, canvas, video')) {
+        const r = pic.getBoundingClientRect()
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom && sized(pic) && visibleRect(pic)) return pic
+      }
+    }
+    return null
   }
 
   function showCandidate() {
@@ -716,13 +726,16 @@
       pointer = { x: event.clientX, y: event.clientY }
       if (picking) {
         const next = pictureAt(event.clientX, event.clientY)
+        // A pick widened with ↑ stays while the pointer stays inside it.
+        if (widened.length && candidate?.contains(next)) return
+        widened = []
         if (next !== candidate) {
           candidate = next
           showCandidate()
         }
         return
       }
-      if (lines.length) scheduleProximity()
+      if (pics.size) scheduleProximity()
     },
     { capture: true, passive: true }
   )
@@ -737,9 +750,14 @@
           stopPicking()
           if (!target) stop()
           else render()
-        } else if (event.key === 'ArrowUp' && candidate?.parentElement && candidate.parentElement !== document.documentElement) {
+        } else if (event.key === 'ArrowUp' && candidate?.parentElement && candidate.parentElement !== document.body && candidate.parentElement !== document.documentElement) {
           event.preventDefault()
+          widened.push(candidate)
           candidate = candidate.parentElement
+          showCandidate()
+        } else if (event.key === 'ArrowDown' && widened.length) {
+          event.preventDefault()
+          candidate = widened.pop()
           showCandidate()
         }
         return
@@ -833,16 +851,428 @@
 
   // ------------------------------------------------------------------ reading
 
+  /**
+   * What the reader picked (`target`) is a scope: a picture, or a container whose pictures are
+   * read one by one, as many as are in view (a reader's two-page spread, a slider's current
+   * slide). Each picture in view is a `Pic`, with its own layer of boxes over it; a picture that
+   * leaves view loses its layer, one that comes into view is read, and a reading is kept by the
+   * picture (`cache`) so sliding back shows its boxes at once. Pictures are read one at a time.
+   */
+  const MAX_PICS = 4
+  const MAX_CACHE = 80
+  const READ_TIMEOUT_MS = 75_000
+  /** el -> Pic: `{id, el, key, layer, lines, region, state, fetchFailed, stashed, size}` */
+  const pics = new Map()
+  /** A picture's key (its source and size) -> its reading `{lines, region}`. */
+  const cache = new Map()
+  let picSeq = 0
+  /** Pics waiting to be read, in reading order; the one being read. */
+  let queue = []
+  let inflight = null
+  /** A reading is on its way though no picture is known yet (a page change, a page load). */
+  let waiting = false
+  let lastReason = 'select'
+
+  const busy = () => waiting || Boolean(inflight) || queue.length > 0
+  const lineCount = () => [...pics.values()].reduce((n, p) => n + p.lines.length, 0)
+
   function choose(element, reason = 'select') {
     if (target !== element) {
       unwatch()
+      dropAll()
       target = element
-      fetchFailed = false
-      clearBoxes()
     }
+    lastReason = reason
+    // Where it is now: a newly picked (or replaced) scope's place, until it settles somewhere else.
+    if (inView(element)) lastSpot = element.getBoundingClientRect()
+    lastLook = null
     syncWatch()
     rememberTarget()
-    scan(reason)
+    refresh(reason)
+  }
+
+  /** The part of `el` that can be seen: inside the window and every scrolling or clipping box around it. */
+  function visibleRect(el) {
+    if (!el.isConnected) return null
+    if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null
+    const r = el.getBoundingClientRect()
+    let left = Math.max(0, r.left)
+    let top = Math.max(0, r.top)
+    let right = Math.min(innerWidth, r.right)
+    let bottom = Math.min(innerHeight, r.bottom)
+    for (let a = el.parentElement; a && a !== document.documentElement && right > left && bottom > top; a = a.parentElement) {
+      const cs = getComputedStyle(a)
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible' && cs.clipPath === 'none') continue
+      const b = a.getBoundingClientRect()
+      left = Math.max(left, b.left)
+      top = Math.max(top, b.top)
+      right = Math.min(right, b.right)
+      bottom = Math.min(bottom, b.bottom)
+    }
+    if (right - left < 4 || bottom - top < 4) return null
+    return { left, top, right, bottom, width: right - left, height: bottom - top, full: r }
+  }
+
+  /** Enough of it shows to be what the reader is looking at. */
+  function inView(el, loose = false) {
+    const v = visibleRect(el)
+    if (!v) return false
+    if (loose) return true
+    const area = v.width * v.height
+    const whole = Math.max(1, v.full.width * v.full.height)
+    return area / whole >= 0.5 || area >= 0.25 * innerWidth * innerHeight
+  }
+
+  /** The pictures the scope holds that are in view, in reading order (right to left, as manga pages). */
+  function picturesIn(scope) {
+    if (isPicture(scope)) return inView(scope, true) ? [scope] : []
+    const found = [...scope.querySelectorAll('img, canvas, video')].filter((el) => !isOurs(el) && sized(el) && inView(el))
+    if (!found.length) return inView(scope, true) ? [scope] : []
+    return found
+      .map((el) => ({ el, v: visibleRect(el) }))
+      .sort((a, b) => b.v.width * b.v.height - a.v.width * a.v.height)
+      .slice(0, MAX_PICS)
+      .sort((a, b) => (Math.abs(a.v.top - b.v.top) > 40 ? a.v.top - b.v.top : b.v.left - a.v.left))
+      .map(({ el }) => el)
+  }
+
+  /** A picture's identity for the cache: its source and size, once loaded; none for what changes in place. */
+  function keyOf(el) {
+    if (el instanceof HTMLImageElement) {
+      if (!el.complete || !el.naturalWidth) return 'loading'
+      const src = el.currentSrc || el.src
+      // By its pixels where the page lets them be read: readers hand out a new blob: address for
+      // the same page each time its slide comes back.
+      if (!fingerprints.has(src)) {
+        fingerprints.set(src, fingerprintOf(el))
+        if (fingerprints.size > 300) fingerprints.delete(fingerprints.keys().next().value)
+      }
+      return `${fingerprints.get(src) ?? src}|${el.naturalWidth}x${el.naturalHeight}`
+    }
+    return null
+  }
+
+  /** src -> a picture's fingerprint (or null where another site's pixels can't be read). */
+  const fingerprints = new Map()
+  const printCanvas = document.createElement('canvas')
+  printCanvas.width = printCanvas.height = 12
+  function fingerprintOf(img) {
+    try {
+      const context = printCanvas.getContext('2d', { willReadFrequently: true })
+      context.drawImage(img, 0, 0, 12, 12)
+      const { data } = context.getImageData(0, 0, 12, 12)
+      let print = 'px:'
+      for (let i = 0; i < data.length; i += 4) print += ((data[i] * 3 + data[i + 1] * 6 + data[i + 2]) / 160 | 0).toString(16)
+      return print
+    } catch {
+      return null
+    }
+  }
+
+  let refreshTimer = 0
+  /** Look again soon (a scroll, a slide, a change in the scope); at most a few times a second, never put off forever. */
+  function scheduleRefresh() {
+    if (refreshTimer) return
+    refreshTimer = setTimeout(() => {
+      refreshTimer = 0
+      refresh('auto')
+    }, 150)
+  }
+
+  /** Bring the pictures in view and their boxes up to date. */
+  function refresh(reason) {
+    if (!active || !target || picking) return
+    // Taken off the page (readers keep only the slides near the current one): what took its place.
+    if (!target.isConnected && lastSpot) {
+      const next = replacementAt(lastSpot, target)
+      if (next) {
+        choose(next, 'auto')
+        return
+      }
+    }
+    if (!target.isConnected && !reacquire()) {
+      dropAll()
+      waiting = false
+      setMessage('The picture is gone from the page', 'warn')
+      render()
+      return
+    }
+    // What was picked slid out of view (a slider's page turn, a carousel), and something like it
+    // is now where it was: that is what the reader is looking at, so it becomes the scope.
+    if (lastSpot && !inView(target, true)) {
+      const next = replacementAt(lastSpot, target)
+      if (next) {
+        choose(next, 'auto')
+        return
+      }
+    }
+    const wanted = picturesIn(target)
+    for (const [el, p] of pics) if (!wanted.includes(el)) dropPic(p)
+    for (const el of wanted) {
+      const key = keyOf(el)
+      const p = pics.get(el)
+      if (!p) addPic(el, key, reason)
+      else if (key !== p.key) changedPic(p, key)
+    }
+    // Only once it has settled in view (the same place on two looks), never as it slides away.
+    const now = target.getBoundingClientRect()
+    const still = lastLook && Math.abs(lastLook.left - now.left) < 1 && Math.abs(lastLook.top - now.top) < 1
+    if (still && inView(target)) lastSpot = now
+    lastLook = now
+    layout()
+    pump()
+    render()
+  }
+
+  /** Where the scope last showed, to find what took its place when it slides away. */
+  let lastSpot = null
+  let lastLook = null
+
+  /**
+   * The element now where `old` showed (`spot`) and like it: the same kind of element, about the
+   * same size, in view, and (for a container) mostly the same classes. Looked for among what is at
+   * the spot's centre and the elements around the picture there.
+   */
+  function replacementAt(spot, old) {
+    const x = spot.left + spot.width / 2
+    const y = spot.top + spot.height / 2
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return null
+    const stack = document.elementsFromPoint(x, y).filter((el) => !isOurs(el))
+    const found = new Set(stack)
+    const picture = stack.find((el) => isPicture(el)) ?? pictureUnder(stack, x, y)
+    for (let a = picture; a && a !== document.body; a = a.parentElement) found.add(a)
+    const classes = stableClasses(old)
+    const shared = (a, b) => (a.length || b.length ? a.filter((c) => b.includes(c)).length / new Set([...a, ...b]).size : 1)
+    let best = null
+    let bestLike = 0
+    for (const el of found) {
+      if (el === old || el.tagName !== old.tagName || el.contains(old) || old.contains(el)) continue
+      if (!isPicture(old) && shared(stableClasses(el), classes) < 0.5) continue
+      if (!inView(el, true)) continue
+      const like = similarSize(el.getBoundingClientRect(), spot)
+      if (like > 0.5 && like > bestLike) {
+        best = el
+        bestLike = like
+      }
+    }
+    return best
+  }
+  const similarSize = (a, b) =>
+    !a.width || !b.width ? 0 : Math.min(a.width / b.width, b.width / a.width) * Math.min(a.height / b.height, b.height / a.height)
+
+  function addPic(el, key, reason) {
+    const layer = document.createElement('div')
+    layer.className = 'kx-pic'
+    boxLayer.append(layer)
+    const p = { id: ++picSeq, el, key, layer, lines: [], region: null, state: 'new', fetchFailed: false, stashed: null, size: '' }
+    pics.set(el, p)
+    place(p, reason)
+  }
+
+  /** Show what is known about the picture, else read it (always when picked; with Auto on otherwise). */
+  function place(p, reason) {
+    const known = p.key && p.key !== 'loading' ? cache.get(p.key) : null
+    if (known) {
+      setLines(p, known.lines, known.region)
+      p.state = 'done'
+      waiting = false
+      return
+    }
+    if (p.key === 'loading') {
+      p.state = 'loading'
+      return
+    }
+    if (reason !== 'auto' || autoOn()) enqueue(p, reason)
+    else {
+      p.state = 'stale'
+      setMessage('The picture changed: read it again', 'neutral')
+    }
+  }
+
+  /** The picture's source changed (a reader's next page in the same element). */
+  function changedPic(p, key) {
+    // The old boxes never show over the new picture; kept aside in case the pixels are the same.
+    if (p.lines.length) p.stashed = { lines: p.lines, region: p.region }
+    setLines(p, [], null)
+    p.key = key
+    queue = queue.filter((q) => q !== p)
+    place(p, 'auto')
+  }
+
+  function dropPic(p) {
+    queue = queue.filter((q) => q !== p)
+    p.layer.remove()
+    pics.delete(p.el)
+  }
+
+  function dropAll() {
+    for (const p of [...pics.values()]) dropPic(p)
+    queue = []
+    inflight = null
+  }
+
+  function enqueue(p, reason) {
+    if (!queue.includes(p) && inflight?.p !== p) queue.push(p)
+    p.reason = reason
+    p.state = 'queued'
+    pump()
+  }
+
+  /** Read the next picture in line, if nothing is being read. */
+  async function pump() {
+    if (inflight || status !== 'connected') return
+    let p = queue.shift()
+    while (p && !pics.has(p.el)) p = queue.shift()
+    if (!p) {
+      render()
+      return
+    }
+    waiting = false
+    const plan = capturePlan(p)
+    if (!plan) {
+      p.state = 'error'
+      if (p.reason !== 'auto') setMessage('Scroll the picture into view to read it', 'warn')
+      pump()
+      return
+    }
+    const id = ++scanSeq
+    inflight = { id, p, plan }
+    p.state = 'reading'
+    render()
+    // A reading that never comes back (Kimochi stopped mid-way) mustn't hold up the rest.
+    inflight.timer = setTimeout(() => {
+      if (inflight?.id !== id) return
+      finish(id, () => {
+        p.state = 'error'
+        setMessage('Kimochi took too long to read that', 'danger')
+      })
+    }, READ_TIMEOUT_MS)
+    if (plan.rect) {
+      // A screenshot mustn't contain our own boxes or toolbar; they come back on `captured`.
+      boxLayer.setAttribute('data-hide', '')
+      uiHost.style.visibility = 'hidden'
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    }
+    post({
+      type: 'scan',
+      id,
+      reason: p.reason ?? 'auto',
+      // Nothing on screen to fall back on: the worker reads it even if it looks the same as before.
+      fresh: !p.stashed,
+      src: plan.src ?? null,
+      rect: plan.rect ?? null,
+      viewport: plan.viewport ?? null,
+      region: plan.region,
+      page: { title: document.title, url: location.href },
+      session,
+    })
+  }
+
+  /** The reading `id` is over: `apply` it, then read the next picture. */
+  function finish(id, apply) {
+    if (inflight?.id !== id) return
+    clearTimeout(inflight.timer)
+    const p = inflight.p
+    inflight = null
+    if (pics.has(p.el)) apply(p)
+    pump()
+    render()
+  }
+
+  function setLines(p, lines, region) {
+    p.lines = lines
+    p.region = region
+    p.size = ''
+  }
+
+  function applyResult(msg) {
+    finish(msg.id, (p) => {
+      const result = msg.result ?? {}
+      const r = msg.region ?? { x: 0, y: 0, w: 1, h: 1 }
+      const lines = (result.lines ?? []).map((line) => ({
+        ...line,
+        points: line.points.map(([x, y]) => [r.x + x * r.w, r.y + y * r.h]),
+      }))
+      setLines(p, lines, r)
+      p.stashed = null
+      p.state = 'done'
+      if (p.key && p.key !== 'loading') {
+        cache.set(p.key, { lines, region: r })
+        if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value)
+      }
+      if (result.geometry === false) setMessage(`Kimochi's engine (${result.engine}) reads text without places: it's in the Log`, 'warn')
+      else setMessage('', 'ok')
+      layout()
+    })
+  }
+
+  /** How to get a picture: its own bytes (an image, a canvas, a video frame), else a cut of a screenshot. */
+  function capturePlan(p) {
+    const el = p.el
+    const whole = { x: 0, y: 0, w: 1, h: 1 }
+    if (!p.fetchFailed) {
+      if (el instanceof HTMLImageElement && el.complete && el.naturalWidth) {
+        const src = el.currentSrc || el.src
+        if (/^(https?|data):/i.test(src)) return { src, region: whole }
+        // blob: and the like belong to the page: draw it here.
+        const drawn = drawToData(el, el.naturalWidth, el.naturalHeight)
+        if (drawn) return { src: drawn, region: whole }
+      }
+      if (el instanceof HTMLCanvasElement) {
+        const drawn = drawToData(el, el.width, el.height)
+        if (drawn) return { src: drawn, region: whole }
+      }
+      if (el instanceof HTMLVideoElement && el.videoWidth) {
+        const drawn = drawToData(el, el.videoWidth, el.videoHeight)
+        if (drawn) return { src: drawn, region: whole }
+      }
+    }
+    // Only what can be seen: the window and every clipping box around it.
+    const content = contentRect(el)
+    const v = visibleRect(el)
+    if (!v) return null
+    const left = Math.max(v.left, content.left)
+    const top = Math.max(v.top, content.top)
+    const right = Math.min(v.right, content.left + content.width)
+    const bottom = Math.min(v.bottom, content.top + content.height)
+    if (right - left < 8 || bottom - top < 8) return null
+    return {
+      rect: { x: left, y: top, width: right - left, height: bottom - top },
+      viewport: { width: innerWidth, height: innerHeight },
+      region: {
+        x: (left - content.left) / content.width,
+        y: (top - content.top) / content.height,
+        w: (right - left) / content.width,
+        h: (bottom - top) / content.height,
+      },
+    }
+  }
+
+  /** The picture as a PNG data URL, no larger than Kimochi will read (4096 on its long side). */
+  function drawToData(source, width, height) {
+    if (!width || !height) return null
+    const scale = Math.min(1, 4096 / Math.max(width, height))
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(width * scale)
+      canvas.height = Math.round(height * scale)
+      canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL('image/png')
+    } catch {
+      // Another site's pixels (a tainted canvas): the screenshot can still read it.
+      return null
+    }
+  }
+
+  /** Read every picture in view again (Read again, or Kimochi's scan button). */
+  function rescanAll() {
+    if (!target) return
+    refresh('rescan')
+    for (const p of pics.values()) {
+      if (p.key) cache.delete(p.key)
+      p.stashed = p.lines.length ? { lines: p.lines, region: p.region } : null
+      enqueue(p, 'rescan')
+    }
   }
 
   // ------------------------------------------------------------------ the same picture on the next page
@@ -878,40 +1308,36 @@
       const classes = stableClasses(node).slice(0, 3)
       if (classes.length) part += classes.map((c) => `.${CSS.escape(c)}`).join('')
       const same = node.parentElement ? [...node.parentElement.children].filter((c) => c.tagName === node.tagName) : []
-      if (same.length > 1) part += `:nth-of-type(${[...node.parentElement.children].filter((c) => c.tagName === node.tagName).indexOf(node) + 1})`
+      if (same.length > 1) part += `:nth-of-type(${same.indexOf(node) + 1})`
       parts.unshift(part)
     }
     return parts.join(' > ')
   }
 
   /**
-   * The picture on this page most like the remembered one: at the same path if it is about the
+   * The element on this page most like the remembered one: at the same path if it is about the
    * same size, else the element of the same kind closest to where it was and of a similar size,
    * its classes a tiebreak. None when nothing is close enough.
    */
   function findLike(signature) {
     const ready = (el) => !(el instanceof HTMLImageElement) || (el.complete && el.naturalWidth > 0)
-    const sizeLike = (r) => {
-      const { w, h } = signature.rect
-      if (!r.width || !r.height || !w || !h) return 0
-      return Math.min(r.width / w, w / r.width) * Math.min(r.height / h, h / r.height)
-    }
+    const want = { width: signature.rect.w, height: signature.rect.h }
     try {
       const at = document.querySelector(signature.path)
-      if (at && !isOurs(at) && sizeLike(at.getBoundingClientRect()) > 0.3) return ready(at) ? at : 'wait'
+      if (at && !isOurs(at) && similarSize(at.getBoundingClientRect(), want) > 0.3) return ready(at) ? at : 'wait'
     } catch {
       // A path this page can't parse.
     }
-    const want = signature.rect
-    const reach = Math.max(200, 0.6 * Math.max(want.w, want.h))
+    const spot = signature.rect
+    const reach = Math.max(200, 0.6 * Math.max(spot.w, spot.h))
     let best = null
     let bestScore = -Infinity
     for (const el of document.querySelectorAll(signature.tag)) {
       if (isOurs(el)) continue
       const r = el.getBoundingClientRect()
-      const like = sizeLike(r)
+      const like = similarSize(r, want)
       if (like < 0.3) continue
-      const distance = Math.hypot(r.left + scrollX + r.width / 2 - (want.x + want.w / 2), r.top + scrollY + r.height / 2 - (want.y + want.h / 2))
+      const distance = Math.hypot(r.left + scrollX + r.width / 2 - (spot.x + spot.w / 2), r.top + scrollY + r.height / 2 - (spot.y + spot.h / 2))
       if (distance > reach) continue
       const shared = (a, b) => (a.length || b.length ? a.filter((c) => b.includes(c)).length / new Set([...a, ...b]).size : 0)
       const score = like * 2 + shared(stableClasses(el), signature.classes) + shared(el.parentElement ? stableClasses(el.parentElement) : [], signature.parentClasses) - distance / reach
@@ -936,7 +1362,8 @@
     activate()
     lastSignature = signature
     if (signature.session) session = signature.session
-    setMessage('Looking for the picture…', 'busy')
+    waiting = true
+    setMessage('', 'busy')
     render()
     lookFor(signature)
   }
@@ -952,15 +1379,13 @@
       if (!active || token !== lookToken) return
       const found = findLike(signature)
       if (found && found !== 'wait') {
-        // Straight to reading: nothing from the last page is shown meanwhile.
-        reading = true
-        setMessage('', 'busy')
         choose(found, 'auto')
         return
       }
       // Pages build themselves and pictures load late: keep looking a little while.
       if (Date.now() - started < 12_000) setTimeout(look, 400)
       else {
+        waiting = false
         setMessage('No picture like the last one here: pick one', 'neutral')
         render()
       }
@@ -968,28 +1393,24 @@
     look()
   }
 
-  let lastReason = 'select'
-
   // ------------------------------------------------------------------ a page change without a page load
 
   /**
    * Most galleries and readers change pages without loading a new document: they swap the content
    * and the URL. To the reader that is a new page, so it is treated as one: the boxes go the
    * moment the navigation starts (a full page load too, which keeps the old page on screen until
-   * the new one paints), the toolbar says a reading is coming, and once the new content is in the
-   * picture in the same place on it is found again and read.
+   * the new one paints), the toolbar says a reading is coming, and once the new content is in,
+   * the picture in the same place on it is found again and read.
    */
   let lastHref = location.href
   let navTimer = 0
 
   function leavingPage() {
     if (!active || (!target && !lastSignature)) return
-    clearTimeout(mutationTimer)
-    stashed = null
-    clearBoxes()
-    lastSize = ''
+    for (const p of pics.values()) setLines(p, [], null)
+    layout()
     if (autoOn()) {
-      reading = true
+      waiting = true
       setMessage('', 'busy')
     } else setMessage('The page changed: read the picture again', 'neutral')
     render()
@@ -1006,8 +1427,9 @@
     clearTimeout(navTimer)
     // Its own content is put in place just after the URL changes; give it a moment.
     navTimer = setTimeout(() => {
-      target = null
       unwatch()
+      dropAll()
+      target = null
       lookFor(signature)
     }, 250)
   }
@@ -1017,16 +1439,12 @@
   window.navigation?.addEventListener('navigatesuccess', () => pageChanged())
   window.addEventListener('popstate', () => pageChanged())
   // Leaving for another document: nothing stale stays up while the old page is still shown.
-  window.addEventListener('pagehide', () => {
-    boxLayer.setAttribute('hidden', '')
-  })
-  // Back from the back/forward cache: the page as it was, read again in case it changed.
+  window.addEventListener('pagehide', () => boxLayer.setAttribute('hidden', ''))
+  // Back from the back/forward cache: the page as it was, looked at again in case it changed.
   window.addEventListener('pageshow', (event) => {
     if (!event.persisted || !active) return
     boxLayer.removeAttribute('hidden')
-    lastSize = ''
-    layout()
-    if (autoOn() && target) scan('auto')
+    refresh('auto')
   })
 
   /** Where the picture's own pixels sit on screen: the element's content box, as object-fit draws an image in it. */
@@ -1053,135 +1471,14 @@
     return { left, top, width, height }
   }
 
-  /** How to get the picture: its own bytes (an image, a canvas, a video frame), else a cut of a screenshot. */
-  function capturePlan() {
-    const whole = { x: 0, y: 0, w: 1, h: 1 }
-    if (!fetchFailed) {
-      if (target instanceof HTMLImageElement && target.complete && target.naturalWidth) {
-        const src = target.currentSrc || target.src
-        if (/^(https?|data):/i.test(src)) return { src, region: whole }
-        const drawn = drawToData(target, target.naturalWidth, target.naturalHeight)
-        if (drawn) return { src: drawn, region: whole }
-      }
-      if (target instanceof HTMLCanvasElement) {
-        try {
-          return { src: target.toDataURL('image/png'), region: whole }
-        } catch {
-          // A canvas holding another site's pictures can't be read: the screenshot can.
-        }
-      }
-      if (target instanceof HTMLVideoElement && target.videoWidth) {
-        const drawn = drawToData(target, target.videoWidth, target.videoHeight)
-        if (drawn) return { src: drawn, region: whole }
-      }
-    }
-    const content = contentRect(target)
-    const left = Math.max(0, content.left)
-    const top = Math.max(0, content.top)
-    const right = Math.min(innerWidth, content.left + content.width)
-    const bottom = Math.min(innerHeight, content.top + content.height)
-    if (right - left < 8 || bottom - top < 8) return null
-    return {
-      rect: { x: left, y: top, width: right - left, height: bottom - top },
-      viewport: { width: innerWidth, height: innerHeight },
-      region: {
-        x: (left - content.left) / content.width,
-        y: (top - content.top) / content.height,
-        w: (right - left) / content.width,
-        h: (bottom - top) / content.height,
-      },
-    }
-  }
-
-  function drawToData(source, width, height) {
-    try {
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      canvas.getContext('2d').drawImage(source, 0, 0, width, height)
-      return canvas.toDataURL('image/png')
-    } catch {
-      return null
-    }
-  }
-
-  async function scan(reason) {
-    if (!target) return
-    lastReason = reason
-    // A reading that can't start isn't on its way.
-    const notReading = () => {
-      reading = false
-      stashed = null
-    }
-    if (!target.isConnected && !reacquire()) {
-      notReading()
-      setMessage('The picture is gone from the page', 'warn')
-      clearBoxes()
-      render()
-      return
-    }
-    if (status !== 'connected') {
-      notReading()
-      render()
-      return
-    }
-    const plan = capturePlan()
-    if (!plan) {
-      notReading()
-      if (reason !== 'auto') setMessage('Scroll the picture into view to read it', 'warn')
-      render()
-      return
-    }
-    const id = ++scanSeq
-    latestScan = id
-    if (reason !== 'auto') {
-      reading = true
-      setMessage('', 'busy')
-      render()
-    }
-    if (plan.rect) {
-      // A screenshot mustn't contain our own boxes or toolbar; they come back on `captured`.
-      boxLayer.setAttribute('data-hide', '')
-      uiHost.style.visibility = 'hidden'
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-    }
-    post({
-      type: 'scan',
-      id,
-      reason,
-      src: plan.src ?? null,
-      rect: plan.rect ?? null,
-      viewport: plan.viewport ?? null,
-      region: plan.region,
-      page: { title: document.title, url: location.href },
-      session,
-    })
-  }
-
-  function applyResult(msg) {
-    reading = false
-    const result = msg.result ?? {}
-    const r = msg.region ?? { x: 0, y: 0, w: 1, h: 1 }
-    region = r
-    lines = (result.lines ?? []).map((line) => ({
-      ...line,
-      points: line.points.map(([x, y]) => [r.x + x * r.w, r.y + y * r.h]),
-    }))
-    if (result.geometry === false) setMessage(`Kimochi's engine (${result.engine}) reads text without places: it's in the Log`, 'warn')
-    else setMessage('', 'ok')
-    lastSize = ''
-    layout()
-    render()
-  }
-
   // ------------------------------------------------------------------ drawing
 
   function clearBoxes() {
-    lines = []
-    region = null
-    boxLayer.replaceChildren()
+    for (const p of pics.values()) setLines(p, [], null)
+    layout()
   }
 
+  let layoutFrame = 0
   function scheduleLayout() {
     if (layoutFrame || !target) return
     layoutFrame = requestAnimationFrame(() => {
@@ -1190,39 +1487,42 @@
     })
   }
 
-  /** Put the layer over the picture; rebuild the boxes when its size changed. */
+  /** Put each picture's layer over it, clipped to what of it can be seen; redraw a layer whose size changed. */
   function layout() {
-    if (!target || picking) return
-    if (!target.isConnected) {
-      boxLayer.setAttribute('hidden', '')
-      return
+    if (picking) return
+    for (const p of pics.values()) {
+      const v = p.lines.length ? visibleRect(p.el) : null
+      const c = v ? contentRect(p.el) : null
+      if (!v || c.width < 2 || c.height < 2) {
+        p.layer.hidden = true
+        continue
+      }
+      p.layer.hidden = false
+      Object.assign(p.layer.style, { left: `${c.left}px`, top: `${c.top}px`, width: `${c.width}px`, height: `${c.height}px` })
+      // Boxes stop where the picture stops showing (a slider's frame, a scrolling box).
+      const clip = [v.top - c.top, c.left + c.width - v.right, c.top + c.height - v.bottom, v.left - c.left].map((n) => `${Math.max(0, n)}px`)
+      p.layer.style.clipPath = `inset(${clip.join(' ')})`
+      const size = `${Math.round(c.width)}x${Math.round(c.height)}:${p.lines.length}:${settings?.grouping}`
+      if (size === p.size) continue
+      p.size = size
+      drawBoxes(p, c.width, c.height)
     }
-    const c = contentRect(target)
-    if (c.width < 2 || c.height < 2) {
-      boxLayer.setAttribute('hidden', '')
-      return
-    }
-    boxLayer.removeAttribute('hidden')
-    Object.assign(boxLayer.style, { left: `${c.left}px`, top: `${c.top}px`, width: `${c.width}px`, height: `${c.height}px` })
-    const size = `${Math.round(c.width)}x${Math.round(c.height)}:${lines.length}:${settings?.grouping}`
-    if (size === lastSize) return
-    lastSize = size
-    drawBoxes(c.width, c.height)
     gate()
   }
 
-  function drawBoxes(width, height) {
+  function drawBoxes(p, width, height) {
     const fragment = document.createDocumentFragment()
     const grouped = settings?.grouping === true
     const groups = new Map()
-    for (const line of lines) {
+    p.lines.forEach((line, index) => {
       const pts = line.points.map(([x, y]) => [x * width, y * height])
-      if (pts.length < 4) continue
+      if (pts.length < 4) return
       const box = geometry(pts, line.vertical)
-      const key = String(grouped ? line.group : `${line.group}:${groups.size}:${Math.random()}`)
+      // Unique across pictures: lighting a group never lights another picture's.
+      const key = grouped ? `p${p.id}g${line.group}` : `p${p.id}w${index}`
       const el = document.createElement('div')
       el.className = `ocr-word${line.vertical ? ' ocr-vertical' : ''}${grouped ? ' kx-grouped' : ''}`
-      el.dataset.group = grouped ? key : `w${fragment.childNodes.length}`
+      el.dataset.group = key
       const thickness = line.vertical ? box.w : box.h
       const length = line.vertical ? box.h : box.w
       const count = Math.max(1, [...line.text].length)
@@ -1253,14 +1553,14 @@
       el.append(text)
       fragment.append(el)
       if (grouped) {
-        const g = groups.get(key) ?? { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity, surface: line.surface, vertical: line.vertical }
+        const g = groups.get(key) ?? { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity, surface: line.surface }
         g.left = Math.min(g.left, box.cx - box.w / 2)
         g.top = Math.min(g.top, box.cy - box.h / 2)
         g.right = Math.max(g.right, box.cx + box.w / 2)
         g.bottom = Math.max(g.bottom, box.cy + box.h / 2)
         groups.set(key, g)
       }
-    }
+    })
     // Grouped (Group text into regions): one shared highlight and card per cluster, under its lines.
     const backs = document.createDocumentFragment()
     for (const [key, g] of groups) {
@@ -1282,7 +1582,7 @@
       }
       backs.append(el)
     }
-    boxLayer.replaceChildren(backs, fragment)
+    p.layer.replaceChildren(backs, fragment)
     scheduleProximity()
   }
 
@@ -1292,8 +1592,8 @@
     let angle = Math.atan2(b[1] - a[1], b[0] - a[0])
     let w = Math.hypot(b[0] - a[0], b[1] - a[1])
     let h = Math.hypot(d[0] - a[0], d[1] - a[1])
-    const xs = pts.map((p) => p[0])
-    const ys = pts.map((p) => p[1])
+    const xs = pts.map((pt) => pt[0])
+    const ys = pts.map((pt) => pt[1])
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2
     // Upright text, or corners in an order this doesn't expect: the plain bounding box.
@@ -1307,100 +1607,105 @@
 
   // ------------------------------------------------------------------ following the page
 
-  window.addEventListener('scroll', () => scheduleLayout(), { capture: true, passive: true })
-  window.addEventListener('resize', () => scheduleLayout(), { passive: true })
+  // Scrolling, sliding and resizing move pictures in and out of view: the layers follow every
+  // frame, and which pictures are in view is looked at again shortly after.
+  for (const type of ['scroll', 'transitionend', 'animationend']) {
+    window.addEventListener(
+      type,
+      () => {
+        scheduleLayout()
+        scheduleRefresh()
+      },
+      { capture: true, passive: true }
+    )
+  }
+  window.addEventListener('resize', () => {
+    scheduleLayout()
+    scheduleRefresh()
+  }, { passive: true })
+  // A picture in the scope finished loading (a slider's next page, a lazy image).
+  document.addEventListener('load', (event) => {
+    if (target && event.target instanceof HTMLImageElement && (target === event.target || target.contains(event.target))) scheduleRefresh()
+  }, true)
 
   let scrollTimer = 0
   window.addEventListener(
     'scroll',
     () => {
       // A picture read off the screen while partly out of view: read the rest once it's in view.
-      if (!autoOn() || !region || (region.w > 0.98 && region.h > 0.98)) return
+      if (!autoOn()) return
       clearTimeout(scrollTimer)
-      scrollTimer = setTimeout(() => scan('auto'), 500)
+      scrollTimer = setTimeout(() => {
+        for (const p of pics.values()) {
+          if (p.key === null && p.region && (p.region.w < 0.98 || p.region.h < 0.98)) {
+            p.stashed = { lines: p.lines, region: p.region }
+            enqueue(p, 'auto')
+          }
+        }
+      }, 500)
     },
     { capture: true, passive: true }
   )
 
   const autoOn = () => active && autoMode && settings?.active !== false
 
-  /** Watching the picture for changes: always to keep the boxes in place, and with Auto OCR on to read it again. */
+  /** Watching the scope: always to keep the boxes in place, and with Auto on to read what changes. */
+  let watchers = []
   function syncWatch() {
     unwatch()
     if (!target) return
-    const resize = new ResizeObserver(() => scheduleLayout())
+    const resize = new ResizeObserver(() => {
+      scheduleLayout()
+      scheduleRefresh()
+    })
     resize.observe(target)
     watchers.push(() => resize.disconnect())
+    // Also catches what moves without an event (CSS animations) and a page that changes its URL.
     const poll = setInterval(() => {
       pageChanged()
-      scheduleLayout()
-      if (target && !target.isConnected && reacquire()) changed()
+      refresh('auto')
     }, 500)
     watchers.push(() => clearInterval(poll))
-    // A new picture (its source, or what is inside the element) is read again; a new style or
-    // class (a hover effect, a resize) only moves the boxes.
     const mutations = new MutationObserver((records) => {
-      if (records.some((r) => r.type !== 'attributes' || r.attributeName === 'src' || r.attributeName === 'srcset')) changed()
-      else scheduleLayout()
+      scheduleLayout()
+      // A new picture (a source, or content put in): at once, so its old boxes never show over it.
+      if (records.some((r) => r.type === 'childList' || r.attributeName === 'src' || r.attributeName === 'srcset')) refresh('auto')
+      else scheduleRefresh()
     })
     mutations.observe(target, { attributes: true, attributeFilter: ['src', 'srcset', 'style', 'class'], childList: true, subtree: true, characterData: true })
     watchers.push(() => mutations.disconnect())
-    const onLoad = () => changed()
-    target.addEventListener('load', onLoad)
-    watchers.push(() => target?.removeEventListener('load', onLoad))
-    if (autoOn() && (target instanceof HTMLCanvasElement || target instanceof HTMLVideoElement)) {
-      // A canvas or video changes without telling the DOM: look again now and then (the worker
-      // compares a small fingerprint and only bothers Kimochi when the pixels changed).
-      const timer = setInterval(() => !reading && scan('auto'), POLL_MS)
-      watchers.push(() => clearInterval(timer))
-    }
+    // A canvas or video changes without telling the DOM: look again now and then (the worker
+    // compares a small fingerprint and only bothers Kimochi when the pixels changed).
+    const timer = setInterval(() => {
+      if (!autoOn() || busy()) return
+      for (const p of pics.values()) {
+        if (p.el instanceof HTMLCanvasElement || p.el instanceof HTMLVideoElement) {
+          p.stashed = { lines: p.lines, region: p.region }
+          enqueue(p, 'auto')
+        }
+      }
+    }, POLL_MS)
+    watchers.push(() => clearInterval(timer))
   }
 
   function unwatch() {
-    for (const stop of watchers) stop()
+    for (const stopWatching of watchers) stopWatching()
     watchers = []
-  }
-
-  /** The picture changed (a new page in a reader): read it again with Auto OCR, else drop the stale boxes. */
-  function changed() {
-    clearTimeout(mutationTimer)
-    if (autoOn()) {
-      // The old picture's boxes never show over the new one: they go now, and the toolbar says a
-      // reading is on its way. If the pixels turn out the same, they come back (`unchanged`).
-      if (lines.length) {
-        stashed = { lines, region }
-        clearBoxes()
-        lastSize = ''
-      }
-      reading = true
-      setMessage('', 'busy')
-      render()
-    }
-    mutationTimer = setTimeout(() => {
-      lastSize = ''
-      if (autoOn()) scan('auto')
-      else if (lines.length && target instanceof HTMLImageElement) {
-        clearBoxes()
-        post({ type: 'forget' })
-        setMessage('The picture changed: read it again', 'neutral')
-        render()
-      }
-    }, AUTO_DEBOUNCE_MS)
   }
 
   /** A reader that swaps the whole element for the next page: take the one now in its place. */
   function reacquire() {
-    const rect = boxLayer.getBoundingClientRect()
-    let next = rect.width ? pictureAt(rect.left + rect.width / 2, rect.top + rect.height / 2) : null
-    if (next && next.tagName !== target.tagName) next = null
-    // A reader that rebuilt its page: the picture in the same place in it.
+    let next = lastSpot ? pictureAt(lastSpot.left + lastSpot.width / 2, lastSpot.top + lastSpot.height / 2) : null
+    if (next && target && next.tagName !== target.tagName) next = null
+    // A reader that rebuilt its page: the element in the same place in it.
     if (!next && lastSignature) {
       const like = findLike(lastSignature)
       if (like && like !== 'wait') next = like
     }
     if (!next) return false
+    unwatch()
+    dropAll()
     target = next
-    fetchFailed = false
     syncWatch()
     return true
   }
@@ -1420,6 +1725,8 @@
       : 'Auto is off: read the picture again yourself'
     const connected = status === 'connected'
     const opening = message === 'Opening Kimochi…'
+    const reading = busy()
+    const lines = lineCount()
     buttons.read.disabled = !target || !connected || reading
     buttons.session.disabled = !connected
     engineButton.disabled = !connected
@@ -1435,7 +1742,7 @@
     } else if (picking) text = 'Pick a picture'
     else if (reading) text = 'Reading…'
     else if (!target) text = 'Pick a picture to read'
-    else if (!text) text = lines.length ? `${lines.length} line${lines.length === 1 ? '' : 's'} found` : 'No text found'
+    else if (!text) text = lines ? `${lines} line${lines === 1 ? '' : 's'} found` : pics.size ? 'No text found' : 'No picture in view'
     hudMsg.dataset.tone = tone === 'danger' ? 'danger' : ''
     hudMsg.textContent = text
     const current = sessionById(session)
@@ -1457,7 +1764,8 @@
     active = false
     stopPicking()
     unwatch()
-    clearBoxes()
+    dropAll()
+    waiting = false
     target = null
     lastSignature = null
     try {
@@ -1469,7 +1777,6 @@
     }
     port = null
     status = 'idle'
-    reading = false
     session = null
     pageAsked = false
     closeMenu()
