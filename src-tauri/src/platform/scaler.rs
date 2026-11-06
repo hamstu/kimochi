@@ -11,6 +11,8 @@
 //! scaler reports (physical pixels on Windows). The OS adapter reads the geometry
 //! (`platform::windows::magpie`); nothing here touches the window server, so it is tested
 //! everywhere.
+// Only the Windows adapter (Magpie) uses this yet; the tests run everywhere.
+#![cfg_attr(not(target_os = "windows"), allow(dead_code))]
 use kimochi_capture::Rect;
 
 /// One scaling session, as the scaler publishes it.

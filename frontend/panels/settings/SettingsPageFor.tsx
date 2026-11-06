@@ -27,6 +27,7 @@ const PAGES: Record<SettingsTabName, ComponentType> = {
   controls: page('controls'),
   gamemode: page('gamemode'),
   account: page('account'),
+  cli: page('cli'),
   about: page('about')
 }
 

@@ -13,6 +13,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- ⭐ **Kimochi on the command line.** Install the `kimochi` command from **Settings → Command line** to drive Kimochi from a terminal and your own scripts: scan and print the text, follow the Log as it fills, add lines to it, switch sessions, sources and OCR engines, change settings, and stream events as JSON. It starts Kimochi when it isn't running and never opens a second one.
 - **Magpie support.** Games you scale with Magpie work with Kimochi as they do without it: the overlay, OCR text, hover lookups and dictionary pop-ups sit on the scaled picture, stay above it when you switch back to the game, and clicks on Kimochi still reach Kimochi. Nothing to set up.
 
 ### Fixed

@@ -12,6 +12,7 @@ src-tauri/resources/meikiocr/
 src-tauri/resources/mangaocr/
 src-tauri/resources/oneocr/
 src-tauri/resources/hookd/
+src-tauri/resources/cli/
 
 # Vendored dictionary-extension trees (64 MB of upstream bytes). Only the pins and hash records
 # (`extensions/<id>.source.json`, `.sha256.json`) are committed; `node scripts/sync-extension.mjs
@@ -19,6 +20,7 @@ src-tauri/resources/hookd/
 extensions/*/
 oneocr-worker/target/
 hookd/target/
+cli-launcher/target/
 
 # Static build of the preview harness for the site demo (npm run demo:build)
 site/public/demo/

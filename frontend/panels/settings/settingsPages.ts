@@ -20,6 +20,7 @@ const LOADERS: Record<SettingsTabName, () => PageModule> = {
   controls: () => import('./ControlsTab').then((m) => ({ default: m.ControlsTab })),
   gamemode: () => import('./GameModeTab').then((m) => ({ default: m.GameModeTab })),
   account: () => import('./AccountTab').then((m) => ({ default: m.AccountTab })),
+  cli: () => import('./CliTab').then((m) => ({ default: m.CliTab })),
   about: () => import('./AboutTab').then((m) => ({ default: m.AboutTab }))
 }
 

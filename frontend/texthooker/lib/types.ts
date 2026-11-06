@@ -5,7 +5,8 @@ import { DEFAULT_JAPANESE_FILTER, type JapaneseFilterMode } from "../../../ui/ja
 
 export type { TranslationProvider };
 
-export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket" | "hook";
+/** Where a line came from. `cli` is `kimochi log add` (src-tauri/src/cli/), taken whatever the input is. */
+export type LineSource = "webhook" | "clipboard" | "ocr" | "websocket" | "hook" | "cli";
 
 export interface Line {
   ocr?: { scanId: string; groupId: string; groupIndex: number; groupCount: number; engine?: string; orientation: "horizontal" | "vertical" };
