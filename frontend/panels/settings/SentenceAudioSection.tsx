@@ -83,7 +83,7 @@ function problem(status: SentenceAudioStatus | null): { tone: Tone; title: strin
 
 /** What turning it on does. */
 const SWITCH_DESCRIPTION =
-  'Kimochi records system audio and tries to match the audio of each line it scans, which it adds to the new cards you make in Anki automatically.'
+  "Records system audio and adds each scanned line's clip to the new cards you make."
 
 /** The speech model's state once downloaded, when there is something to say. */
 function recogniserNote(status: SentenceAudioStatus | null): string | null {
@@ -172,7 +172,7 @@ export function SentenceAudioSection(): ReactNode {
         <>
           <div className="settings-note">
             <Callout tone="warn" icon={<FlaskConical />}>
-              Sentence audio is experimental, so a clip may not always be correct. Check the Anki tab in
+              Sentence audio is experimental; a clip can be wrong. Check the Anki tab in
               the main window to see which cards get enhanced.
             </Callout>
           </div>

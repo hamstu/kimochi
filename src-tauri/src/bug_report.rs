@@ -93,7 +93,7 @@ fn refusal(status: u16, body: &Value) -> String {
     match status {
         429 => "You've sent several reports in a short time. Please wait a while and try again.".into(),
         400 | 413 => "The report couldn't be accepted. Check the fields and try again.".into(),
-        _ => format!("The report couldn't be sent (the server answered {status}). Please try again later, or tell us on Discord."),
+        _ => format!("The report couldn't be sent (the server answered {status}). Try again later, or tell me on Discord."),
     }
 }
 

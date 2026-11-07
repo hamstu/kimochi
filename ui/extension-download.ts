@@ -168,7 +168,7 @@ export function extensionDownloadPrompt(status: ExtensionStatus): { title: strin
   const size = status.overallTotal > 0 ? `${formatBytes(status.overallTotal)} ` : ''
   return {
     title: `Download ${status.name}?`,
-    description: `Kimochi downloads ${status.name} ${status.version}, ${size}from its official release on github.com and checks every file. Your current dictionary stays in use until the download is ready.`
+    description: `Kimochi downloads ${status.name} ${status.version}, ${size}from its official release on github.com.`
   }
 }
 
@@ -180,7 +180,7 @@ export const canRemoveExtension = (status: ExtensionStatus | null): boolean =>
 export function removePrompt(status: ExtensionStatus): { title: string; description: string } {
   return {
     title: `Remove ${status.name}?`,
-    description: `This frees ${formatBytes(status.overallTotal)} of program files. The dictionaries you imported into ${status.name} and its settings are kept, so downloading it again later brings them back.`
+    description: `This frees ${formatBytes(status.overallTotal)} of program files. Your imported dictionaries and its settings are kept.`
   }
 }
 

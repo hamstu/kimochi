@@ -37,7 +37,7 @@ export function SmallTextFilter({
       <SettingsRow
         label="Filter out furigana and small text"
         controlId="ocr-filter-small"
-        description="Removes text much smaller than the main text, such as reading aids above kanji."
+        description="Removes text much smaller than the main text."
       >
         {enabled && (
           <IconButton

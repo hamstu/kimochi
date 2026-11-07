@@ -17,8 +17,6 @@ Choose the input in the sidebar's **Change source** menu or in **Settings → So
 
 <Screenshot id="settings-sources" alt="Settings, Sources: the Input list (Screen, Quick Shot, Clipboard, WebSocket), Sessions and Output." width={760} />
 
-On Windows and Linux the **Input** list also has **Text Hooker**; with it chosen, **Text Hooker settings → Open** opens Settings → Text Hooker.
-
 ## Clipboard
 
 Picks up text copied to the clipboard, for example by a text hooker that copies each line. Kimochi
@@ -30,7 +28,7 @@ ignores its own copies.
 ## WebSocket
 
 Receives plain-text messages from a text source on your network. Kimochi connects to the
-**WebSocket URL** you set (default `ws://localhost:6677`) and reconnects on its own if the
+**WebSocket URL** you set (default `ws://localhost:6677`) and reconnects if the
 connection drops. A status line at the top of the Log shows whether it is connecting, connected or
 retrying.
 

@@ -9,11 +9,11 @@ import { useSteamLibrary } from '../../bridge/steamLibrary'
 
 function description(added: boolean, artwork: boolean, gamingMode: boolean): string {
   if (added && !artwork)
-    return 'Kimochi is in your Steam library. Its artwork appears once Steam restarts, as it does when you switch to Gaming Mode.'
+    return 'Kimochi is in your Steam library. Its artwork appears once Steam restarts.'
   if (added) return 'Kimochi is in your Steam library. Start it there in Gaming Mode, then your game.'
   if (gamingMode)
     return 'Adds Kimochi as a non-Steam game with its own artwork. Steam shows it after you next return to the library.'
-  return 'Adds Kimochi as a non-Steam game with its own artwork, so it is there in Gaming Mode.'
+  return 'Adds Kimochi as a non-Steam game with its own artwork, for Gaming Mode.'
 }
 
 export function SteamLibrarySection(): ReactNode {

@@ -250,7 +250,7 @@ function ConnectionSection({
 
   return (
     <SettingsSection
-      description="Kimochi's connection to Anki, through the AnkiConnect add-on. The Anki tab in the main window, sentence audio and the Yomitan API pop-up use it. The usual address works unless you changed AnkiConnect's."
+      description="Kimochi's connection to Anki, through the AnkiConnect add-on."
       footnote={
         ANKI_ROUTE[engine] === 'engine'
           ? `${name} adds its cards with its own AnkiConnect address, set in its Anki settings under Mining.`
@@ -284,7 +284,7 @@ function ConnectionSection({
         controlId="anki-url"
         description={
           isLocalAddress(saved)
-            ? 'The AnkiConnect address.'
+            ? undefined
             : "Another computer's AnkiConnect must listen on your network: set its webBindAddress, and allow its port through that computer's firewall."
         }
       >
@@ -354,7 +354,7 @@ function CardsSection({
           settings={settings}
           connection={connection}
           title={`Adding cards with the ${name}`}
-          description="Kimochi's own pop-up adds the card. The Yomitan in your browser keeps its own Anki settings for the cards it adds there."
+          description="Kimochi's own pop-up adds the card."
         />
       </div>
     )

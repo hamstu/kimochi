@@ -402,13 +402,12 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'online',
     description:
-      'Sends each capture to Google Lens. The most accurate choice for most people, on games and manga alike. Free.',
+      'Sends each capture to Google Lens. The most accurate choice for games and manga. Free.',
     strengths: [
       'Accurate on game text, manga and busy backgrounds',
-      'Reads vertical and horizontal text, with line positions for the overlay',
-      'Nothing to download, and the same on every computer'
+      'Reads vertical and horizontal text, with line positions for the overlay'
     ],
-    requirements: 'Needs an internet connection. No account or API key.'
+    requirements: 'Needs an internet connection.'
   },
   cloud: {
     label: 'Cloud OCR',
@@ -420,11 +419,10 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
       'Sends each capture to the Kimochi server, which reads it with Google Cloud Vision. Part of Kimochi Cloud.',
     strengths: [
       'Accurate across fonts, sizes and busy backgrounds',
-      'Word positions, so text can be hovered and looked up in place',
-      'Nothing to download, and the same on every computer'
+      'Word positions for overlay lookups'
     ],
     requirements:
-      'Needs an internet connection and Kimochi Cloud (a free trial is available in Settings → Account).'
+      'Needs an internet connection and Kimochi Cloud (free trial in Settings → Account).'
   },
   meikiocr: {
     label: 'Local (MeikiOCR)',
@@ -433,9 +431,9 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'local',
     description:
-      "A small OCR model tuned for Japanese video game text: dialogue boxes, menus and subtitles. The best offline pick for games; for manga, choose Manga OCR.",
+      "A small OCR model tuned for Japanese game text. The best offline pick for games; for manga, choose Manga OCR.",
     strengths: [
-      'Fast: a scan takes a fraction of a second',
+      'A scan takes a fraction of a second',
       'Reads both horizontal and vertical text'
     ],
     requirements: 'A one-time model download.'
@@ -479,7 +477,6 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     description:
       "Uses macOS's Live Text. A good all-round offline choice on a Mac.",
     strengths: [
-      'Nothing to download: part of macOS',
       'Fast, with no model to load',
       'Handles vertical and horizontal text'
     ],
@@ -493,7 +490,7 @@ export const OCR_MODES: Record<OcrMode, OcrModeInfo> = {
     geometry: true,
     runs: 'local',
     description:
-      'Uses the OCR engine in Microsoft Snipping Tool. A good all-round offline choice on Windows; on stylised game fonts MeikiOCR can do better, and on manga Manga OCR.',
+      'Uses the OCR engine in Microsoft Snipping Tool. A good all-round offline choice on Windows.',
     strengths: [
       'Word positions for overlay lookups',
       'Uses the Snipping Tool runtime already installed on Windows 11'
@@ -552,7 +549,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
     name: 'Hachidori',
     tagline: 'Fast, with native dictionary indexes',
     description:
-      'A fast engine that keeps dictionaries in native indexes. Imports Yomitan dictionaries and MDict.',
+      'Imports Yomitan dictionaries and MDict.',
     strengths: [
       'Quick, even with many large dictionaries',
       'Recommended dictionaries on first run',
@@ -573,8 +570,7 @@ export const DICTIONARY_ENGINES: Record<DictionaryEngine, DictionaryEngineInfo> 
       '10ten Japanese Reader, with a bundled word dictionary.',
     strengths: [
       'Nothing to import',
-      'Kanji and name lookups',
-      'Small and quick to start'
+      'Kanji and name lookups'
     ],
     requirements:
       'Downloaded when you choose it (about 18 MB), then fetches its full dictionaries in the background. No Anki mining.',

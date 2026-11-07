@@ -154,7 +154,7 @@ export function OcrTab(): ReactNode {
           <SettingsRow
             label="Overlay mode"
             controlId="ocr-live-overlay"
-            description="Hover scanned text on your source to see its definition. Look for the faint highlights."
+            description="Hover scanned text on your source to see its definition."
           >
             <Switch
               id="ocr-live-overlay"
@@ -224,7 +224,6 @@ export function OcrTab(): ReactNode {
         <SettingsRow
           label="Scan after a button press"
           controlId="ocr-autoscan"
-          description="Scans automatically after you press a chosen gamepad button."
         >
           <Switch
             id="ocr-autoscan"
@@ -234,7 +233,7 @@ export function OcrTab(): ReactNode {
         </SettingsRow>
         {autoScanSettings.enabled && (
           <SettingsSubgroup>
-            <SettingsRow label="Scan delay" description="Wait after the button press before scanning.">
+            <SettingsRow label="Scan delay">
               <Select
                 aria-label="Scan delay"
                 value={autoScanSettings.scanDelay.toString()}
@@ -288,7 +287,7 @@ export function OcrTab(): ReactNode {
               {watcherChoiceApplies(ocrMode, engines) && (
                 <SettingsRow
                   label="Watch the screen with"
-                  description="The local engine that notices new text before the selected engine reads it. Automatic picks the best one on this computer."
+                  description="The local engine that notices new text before the selected engine reads it. Automatic picks the best one."
                 >
                   <Select
                     aria-label="Watch the screen with"

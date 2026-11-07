@@ -145,7 +145,7 @@ export function autoScanStatus(state: string, message: string): ActivityPost | n
       return { text: 'Auto-scan off', tone: 'info', key: AUTO_KEY }
     case 'suspended':
       return {
-        text: 'Auto-scan paused: it failed several times in a row (manual scans still work)',
+        text: 'Auto-scan paused after failing several times in a row',
         tone: 'warn',
         key: AUTO_KEY
       }

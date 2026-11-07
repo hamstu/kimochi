@@ -76,7 +76,7 @@ export function AccountTab(): ReactNode {
   return (
     <SettingsPage
       title="Account"
-      description="Optional. Everything else in Kimochi works without one."
+      description="Optional."
     >
       {DEV_BUILD && <ServerSection account={account} />}
       {account.linking && <Linking code={account.linking.code} />}
@@ -184,7 +184,7 @@ function Linking({ code }: { code: string }): ReactNode {
   return (
     <SettingsSection
       title="Finish signing in in your browser"
-      description="Check that the browser shows this code, then confirm it there. Kimochi comes back here once you have."
+      description="Check that the browser shows this code, then confirm it there."
     >
       <div className="account-code">
         <span className="k-description">Your code</span>
@@ -234,7 +234,7 @@ function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
   return (
     <SettingsSection
       title="Accounts on this computer"
-      description="Each account keeps its own sessions, notebook, presets and preferences, synced with your other computers. Switching swaps them; nothing is merged or deleted."
+      description="Each account keeps its own sessions, notebook, presets and preferences."
       actions={
         <Button size="sm" variant="ghost" disabled={disabled || Boolean(account.linking)} onClick={() => run(accountLinkStart)}>
           <UserPlus />
@@ -315,7 +315,7 @@ function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Remove ${accountName(removing?.user)} from this computer?`}
-        description="Signs out and deletes this account's sessions, notebook and preferences from this computer. What has synced stays in your account, and comes back if you sign in again; anything not synced yet is lost."
+        description="Signs out and deletes this account's sessions, notebook and preferences from this computer. What has synced stays in your account; anything not synced yet is lost."
         confirmLabel="Remove"
         tone="danger"
         busy={busy}
@@ -335,7 +335,7 @@ function NeedsSignIn({ summary }: { summary: AccountSummary }): ReactNode {
     <SettingsSection title="Signed out">
       <SettingsRow
         label={`Sign in to ${accountName(summary.user)} again`}
-        description="This computer is no longer signed in to this account (its sign-in was revoked or expired). Your data is still here; Sync and Kimochi cloud resume once you sign in."
+        description="The sign-in was revoked or expired. Your data is still here; Sync and Kimochi cloud resume once you sign in again."
       >
         <Button
           variant="primary"
@@ -399,7 +399,7 @@ function SignedIn({ account }: { account: AccountStatus }): ReactNode {
         </SettingsRow>
         {user?.status === 'suspended' && (
           <Callout tone="warn">
-            This account is suspended, so Kimochi cloud services are unavailable. Your data still syncs; see
+            This account is suspended, so Kimochi cloud services are unavailable. See
             Manage account for details.
           </Callout>
         )}
@@ -550,7 +550,7 @@ function SyncSection(): ReactNode {
   return (
     <SettingsSection
       title="Sync"
-      description="Your sessions, notebook, presets and preferences sync in the background with your other computers signed in to this account. Your DeepL key, other secrets and this computer's own settings are not synced."
+      description="Your sessions, notebook, presets and preferences sync with your other computers on this account. Keys and this computer's own settings don't."
     >
       <SettingsRow label="Sync now" description={<span className="k-num">{syncStateLine(sync, now)}</span>}>
         {syncing && <Spinner label="Syncing" />}
@@ -588,8 +588,8 @@ function SyncSection(): ReactNode {
         badge={sync.conflicts.length > 0 ? <Badge tone="warn">{sync.conflicts.length}</Badge> : undefined}
         description={
           sync.conflicts.length > 0
-            ? 'Changed on two computers at once. The newer change was kept everywhere; the other is below. Restore it to make it current again, or dismiss it.'
-            : 'None. When something changes on two computers at once, the newer change wins and the other is kept here.'
+            ? 'Changed on two computers at once. The newer change was kept; restore the other or dismiss it.'
+            : 'None.'
         }
       />
       {sync.conflicts.map((conflict) => (

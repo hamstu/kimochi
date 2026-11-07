@@ -20,8 +20,7 @@ text themselves.
 
 Kimochi uses [LunaHook](https://github.com/HIllya51/LunaTranslator), and falls back to
 [Textractor](https://github.com/Artikash/Textractor) if LunaHook can't hook the game. Neither comes
-with Kimochi: the first time you hook a game, Kimochi downloads LunaHook (about 6 MB) from its
-official GitHub release (or Kimochi's copy of it), checks every file against pinned SHA-256 hashes, and keeps it for next time.
+with Kimochi: the first time you hook a game, Kimochi downloads LunaHook (about 6 MB).
 
 ## Hooking a game
 
@@ -34,8 +33,7 @@ official GitHub release (or Kimochi's copy of it), checks every file against pin
 
    <Screenshot id="hook-source-menu" alt="The source menu with Text Hooker highlighted and, beside it, the Apps to hook grid of window thumbnails." width={720} />
 
-3. Pick the game's window. The sidebar shows **Downloading LunaHook…** the first time, then
-   **Hooking…** and **Finding the dialogue…** while Kimochi works out which of the game's text is
+3. Pick the game's window. Kimochi works out which of the game's text is
    the dialogue.
 
 4. Play. Each new line lands in the Log, and with **Show overlay** on it also appears in a
@@ -45,7 +43,7 @@ official GitHub release (or Kimochi's copy of it), checks every file against pin
 
 Windows Kimochi can't hook stay in the grid, dimmed, with the reason: Windows' own apps,
 apps that are protected or running as administrator, and apps built for ARM64 (the game must be a
-32- or 64-bit x86 program). Kimochi itself can't be hooked either.
+32- or 64-bit x86 program).
 
 ## Linux and Steam Deck
 
@@ -70,8 +68,7 @@ and matching each thread's text against what's on screen.
 
 Under the source card, **Text hooker** shows the latest line of the chosen thread. Click it to see
 every thread with its latest text, and pick another one if Kimochi got it wrong; your choice is
-remembered for the game. **Choose automatically** goes back to letting Kimochi decide, and says how
-it chose: **Remembered for this game** or **Matched to the screen**.
+remembered for the game. **Choose automatically** goes back to letting Kimochi decide.
 
 <Screenshot id="hook-thread-menu" alt="The Text hooker menu: Choose automatically (Matched to the screen), then three threads, the dialogue, a speaker's name and a menu, each with its latest text and hook name." width={720} />
 
@@ -88,7 +85,7 @@ overlay: hold <kbd>Shift</kbd> and hover a word. With a controller, **Read along
 
 - **Auto align** (on by default) finds the line on screen with OCR in the background and puts the
   card over the game's own text, at the same size, breaking lines where the game does. It
-  uses the OCR model in the sidebar, which is why the sidebar keeps showing it. The **Auto align**
+  uses the OCR model in the sidebar. The **Auto align**
   switch under **Show overlay** in the sidebar is for this game only.
 - **Speaker names apart** (on by default) leaves a speaker's name on the game's nameplate; the card
   shows what they say.
@@ -102,28 +99,23 @@ Without <kbd>Shift</kbd>, clicks go through the card to the game, as they do thr
 overlay; see [Clicking through to the game](/reading/overlay/#clicking-through-to-the-game).
 
 To hide the card, turn off **Show the card over the game** at the top of
-[Settings → Text Hooker](#settings). Lines still reach the Log, **Read along** still shows the line
-while you read it, and Auto align stops reading the screen, which saves battery on a handheld.
+[Settings → Text Hooker](#settings). Lines still reach the Log, and Auto align stops reading the screen, which saves battery on a handheld.
 
 ### With a controller (Steam Deck)
 
 With a controller, the [controller menu](/controller/#the-controller-menu) starts on **Read along**
 while you're hooking a game, and has a **Text Hooker** item for its settings. In Steam Deck Gaming
 Mode, where nothing can point at the sidebar or the card, the card is just the text, and **Text
-Hooker** is where you change things. Until the first line arrives, the card shows an example so you
-can see where it will be and how it will look.
+Hooker** is where you change things.
 
 - **Hooked text** shows the line in use, or what Kimochi is doing (hooking, waiting for text,
   finding the dialogue), as the sidebar does. Press **A** to see every thread and pick the dialogue
   yourself, or **Choose automatically**; **B** goes back.
 - **Show card** turns the card on or off.
 - **Move and resize**: the left stick moves the card, the right stick resizes it, and the D-pad
-  nudges it. **A** or **B** leaves it there (moving it turns Auto align off, as moving it by hand
-  does).
+  nudges it. **A** or **B** leaves it there (moving it turns Auto align off).
 - **Auto align**, **Text size**, **Background** (its opacity) and **Look** (like Kimochi, Light,
   Dark or Blend). Left and right on the D-pad change a setting.
-
-Every change is saved as you make it, so **B** just closes the panel.
 
 **Recent text** in the same menu lists the Log's newest lines, hooked ones included.
 
@@ -145,20 +137,16 @@ Once you have hooked a game, Kimochi hooks it again whenever it starts
 (**Hook automatically**). Starting another game you've
 hooked before switches the hook over to it: Kimochi hooks one game at a time.
 
-**Clear source** stops hooking, and Kimochi doesn't hook anything on its own again until you choose
+**Clear source** stops hooking until you choose
 a game in the source menu or restart Kimochi.
 
 ## Settings
 
 **Settings → Text Hooker** has the defaults for every game and a page for each game you've hooked.
-Open it from **Manage** beside **Text hooker** in the sidebar (which opens the hooked game's page),
-from **Text Hooker settings…** in the card's ⋯ menu, or from **Settings → Sources → Text Hooker
-settings**.
 
 <Screenshot id="settings-texthooker" alt="Settings, Text Hooker: the Games list with two games, then Defaults: Hook automatically, Line delay, Speaker names apart and Repeated characters." width={760} />
 
-The **Games** list shows each game with its icon, when it was last hooked and how many settings it
-changes. Under **Defaults**:
+Under **Defaults**:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -174,8 +162,7 @@ Text replacements for every source are in **Settings → Log & Sessions**; a gam
 
 ### A game's page
 
-Click a game to open its page. Its name is also its session's name: rename it here and the session
-follows. **Delete** forgets the game's settings and what Kimochi learned about it (and, if you tick
+Click a game to open its page. **Delete** forgets the game's settings and what Kimochi learned about it (and, if you tick
 it, its session); hook it again and it starts from the defaults.
 
 <Screenshot id="settings-texthooker-game" alt="A game's page in Settings, Text Hooker: its icon, name and path, Hooked now, its Session, and Hooking with Line delay marked Changed, the Dialogue thread and Hook codes." width={760} />
@@ -198,8 +185,6 @@ reset button beside them. It also has what only a game has:
   app, the game runs natively rather than through Proton or Wine.
 - **"Kimochi reached the game but couldn't hook some of its text"**: restart the game while
   Kimochi is open; it often works on the next try.
-- **"LunaHook could not hook this game … Using Textractor."**: Kimochi switched hookers by itself.
-  Nothing to do unless the text doesn't come through either.
 - **The wrong text comes through**: pick the dialogue in the **Text hooker** select, or **Forget**
   the dialogue thread on the game's page.
 - **Lines arrive in pieces**: raise **Line delay** for the game, then hook it again.

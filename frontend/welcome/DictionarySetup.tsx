@@ -101,7 +101,7 @@ function OtherEngineSetup({ engine }: { engine: OtherEngine }): JSX.Element {
   return (
     <Step
       title={`Set up ${name}`}
-      lede={`Kimochi looks words up with ${name}. You can switch dictionary engines later in Settings → Dictionary.`}
+      lede={`Kimochi looks words up with ${name}.`}
     >
       <div className={style.block}>
         <p className={style.text}>{ENGINE_SETUP[engine]}</p>
@@ -390,7 +390,7 @@ function YomitanPractice(): JSX.Element {
       const found = await request<{ text: string; matches: number }>({ command: 'practice' })
       setResult(
         found.matches > 0
-          ? { ok: true, text: `${found.text}: ${found.matches} dictionary results found. Your dictionary is ready.` }
+          ? { ok: true, text: `${found.text}: ${found.matches} dictionary results found.` }
           : {
               ok: false,
               text: 'No definitions found yet. Finish importing and enable a Japanese dictionary in dictionary settings.'

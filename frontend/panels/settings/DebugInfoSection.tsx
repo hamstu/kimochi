@@ -47,7 +47,7 @@ export function DebugInfoSection(): ReactNode {
       // WebKitGTK then refuses navigator.clipboard ("not allowed by the user agent").
       await writeTextSelf(debugMarkdown(await debugReport()))
       setCopied(true)
-      setOutcome({ tone: 'ok', text: 'Copied. Paste it into Discord or your GitHub issue.' })
+      setOutcome({ tone: 'ok', text: 'Copied.' })
     } catch (error) {
       fail(error)
     } finally {

@@ -6,7 +6,7 @@ description: Draw the recognised text over your game, manga or video and look wo
 import Screenshot from '../../../components/Screenshot.astro'
 
 The overlay draws each scan's text back over the source (a game, a manga page, a video), so you can hover a word where it appears on
-screen instead of in the Log. Look for the faint highlights on scanned text: hovering one turns it into a card with the text on it.
+screen instead of in the Log.
 
 <Screenshot id="overlay-demo" alt="Kimochi's overlay over a visual novel: each word of the dialogue boxed, the hovered one highlighted, with its dictionary entry above." width={560} />
 
@@ -39,19 +39,16 @@ choice, a menu. So clicks go **through** the overlay's text to the game, unless 
   reach the game. The pop-up itself, and the Text Hooker card's ⋯ menu once it is open, stay
   clickable without Shift.
 
-For the old way, where scanned text lights up as you hover it and takes your clicks, turn off
+To have scanned text take your clicks instead, turn off
 **Click through text to the game** in **Settings → OCR & Overlay**. You still hold <kbd>Shift</kbd>
 to look words up.
 
 On **Linux with Wayland**, Kimochi can't see Shift while another app is in front, so there the
-overlay's text always takes your clicks, as it did before.
+overlay's text always takes your clicks.
 
 ### The hint bar
 
-While there is text on the overlay, a small bar just below it says what Shift does: **Hold Shift to
-look up words and click text** (or, with click-through off, **Hold Shift over a word to look it
-up**). It sits just below the crop area or the game's window, or at the bottom of the screen for a
-full-screen game. Clicks go through the bar too, except on its **×**, which closes it for good.
+While there is text on the overlay, a small bar below it says what Shift does. Clicks go through the bar too, except on its **×**, which closes it for good.
 **Settings → General → Help → Overlay hints → Show again** brings it back. On Linux with
 Wayland, where Shift doesn't gate clicks, the bar isn't shown.
 

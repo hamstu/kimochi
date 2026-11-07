@@ -6,9 +6,7 @@ description: Every page of Kimochi's Settings, with each option's default and wh
 import { Tabs, TabItem } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
 
-Open Settings from the sidebar's **Settings** row, with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd>,
-or from the tray icon's menu (**Settings…**). On a Mac it is also in the Kimochi menu. It has
-twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
+Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settings** row.
 
 <Tabs>
   <TabItem label="General">
@@ -75,12 +73,12 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     | **Overlay mode** | Off |
     | **Group text into regions** | Off |
     | **Filter out furigana and small text** | On, strength Balanced |
-    | **Drop lines** | No Japanese; the same setting as the Log's |
+    | **Drop lines** | No Japanese |
     | **Click through text to the game** | On |
     | **Exclude overlay from screen recording** | On |
     | **Overlay look**: **Highlight colour** / **Highlight opacity** / **Cards** | Indigo / 40% / Same as Kimochi |
     | **Scan after a button press** | Off; **Scan delay** 500 ms, **Gamepad trigger** none |
-    | **Auto OCR** | Off; the same switch as the main window's |
+    | **Auto OCR** | Off |
     | ↳ **Advanced options**: **Watch the screen with** (online engines and Manga OCR) | Automatic |
     | ↳ **Adaptive polling** | On |
     | ↳ **Settle after** | 2 readings |
@@ -142,7 +140,7 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
 
     | Setting | Default |
     | --- | --- |
-    | **Translate with** | **Kimochi cloud** (with Kimochi Cloud) or **Your DeepL key**; Kimochi cloud if you have Kimochi Cloud, otherwise your DeepL key |
+    | **Translate with** | **Kimochi cloud** with Kimochi Cloud, otherwise **Your DeepL key** |
     | **DeepL API key** (Your DeepL key) | Empty; not synced |
     | **Explain with AI → Configure…** | Codex CLI, its default model, the default prompt |
   </TabItem>
@@ -159,7 +157,7 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     | **Reading**: **Word or character** / **Play audio** / **Previous definition** / **Next definition** / **Show all controls** | Y / X / LB / RB / View |
     | **Connected gamepads** / **Button test** | — |
 
-    Two actions on the same button are pointed out. Scan and Controller menu can also be a middle,
+    Scan and Controller menu can also be a middle,
     back or forward mouse button; see [Mouse buttons](/reference/shortcuts/#mouse-buttons).
   </TabItem>
   <TabItem label="Game Mode">
@@ -186,8 +184,7 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     The page also has a few examples to copy, and a link to the full guide.
   </TabItem>
   <TabItem label="About">
-    Your version and its updates, links and credits. **About Kimochi** in the macOS menu and in the
-    tray menu opens it.
+    Your version and its updates, links and credits.
 
     | Section | What it has |
     | --- | --- |

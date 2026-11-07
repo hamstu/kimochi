@@ -335,7 +335,7 @@ export function DownloadLinux() {
         </p>
         <h1 className="text-title text-ink">Install Kimochi on Linux</h1>
         <p className="mt-4 text-lede text-ink-2">
-          There are a few ways to install Kimochi on Linux, and the best one depends on your system. Pick yours below.
+          Pick your system below.
         </p>
       </header>
 
@@ -482,7 +482,7 @@ export function DownloadLinux() {
             <div className="mt-3 flex flex-col gap-3 text-body text-ink-2">
               <p>
                 If you used the one-line installer (including on a Steam Deck), run it with <code>--uninstall</code>.
-                Your settings and dictionaries are kept, in case you come back.
+                Your settings and dictionaries are kept.
               </p>
               <CopyCommand command={installCommand(origin, { uninstall: true })} label="Copy the uninstall command" />
               <p>If you installed the .deb:</p>

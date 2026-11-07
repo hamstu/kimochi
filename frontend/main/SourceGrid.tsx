@@ -209,11 +209,11 @@ export function SystemPickerButton({ message = null }: { message?: string | null
         {waiting ? <Spinner label="Waiting for the system picker" /> : <ScreenShare />}
         {waiting ? 'Waiting for the system picker…' : linuxPortal ? 'Choose New Source…' : 'Choose in system picker'}
       </Button>
-      <span style={{ color: 'var(--k-text-2)', fontSize: 'var(--k-text-sm)' }}>
-        {waiting
-          ? 'Choose a screen or window in the dialog your desktop opened.'
-          : 'Your desktop opens its own dialog to choose the screen or window Kimochi reads.'}
-      </span>
+      {waiting && (
+        <span style={{ color: 'var(--k-text-2)', fontSize: 'var(--k-text-sm)' }}>
+          Choose a screen or window in the dialog your desktop opened.
+        </span>
+      )}
     </div>
   )
 }
@@ -259,7 +259,7 @@ function GrantCaptureItem({ os }: { os: string }): ReactNode {
         </span>
         <span className="sg-caption-detail">
           {os === 'macos'
-            ? 'Kimochi needs it to see your windows. Opens System Settings: turn on Kimochi, and reopen Kimochi if macOS asks.'
+            ? 'Kimochi needs it to see your windows. Opens System Settings.'
             : 'Kimochi needs it to see your windows. Opens your system settings.'}
         </span>
       </span>

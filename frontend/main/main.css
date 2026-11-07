@@ -1108,15 +1108,6 @@ html[data-mini] .main-help { display: none; }
 .src-info-caution {
   color: var(--k-warn-text);
 }
-.src-info-more {
-  color: var(--k-text-3);
-  font-size: var(--k-text-xs);
-}
-.src-info-more > svg {
-  width: 0.95em;
-  height: 0.95em;
-  vertical-align: -0.12em;
-}
 
 /* The Change source menu: one row per source type, with what it does. "Window or screen" opens
    the grid of windows and displays. */

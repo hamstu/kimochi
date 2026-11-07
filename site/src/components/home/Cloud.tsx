@@ -22,7 +22,7 @@ const FREE = [
 const CLOUD = [
   'Translation of any line, in the app',
   'On-demand AI Explanations',
-  'Read aloud in high-quality ElevenLabs voices',
+  'Read aloud in ElevenLabs voices',
   'Cloud OCR with Google Vision',
   'Sync of your logs and notebook across devices'
 ]
@@ -47,7 +47,7 @@ const CLOUD_FEATURES: { icon: ReactNode; title: string; body: string; docs: stri
   {
     icon: <AudioLines size={18} aria-hidden />,
     title: 'Read aloud',
-    body: 'Hear any line in a high-quality ElevenLabs voice.',
+    body: 'Hear any line in an ElevenLabs voice.',
     docs: '/lookups/translation-and-ai/#read-aloud'
   },
   {

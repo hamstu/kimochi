@@ -71,12 +71,12 @@
     },
     {
       "face": "happy",
-      "say": "Kimochi read it, and the line went into its Log, so you can scroll back to it later.",
+      "say": "Kimochi read it, and the line went into its Log.",
       "point": { "log": ".log-lines .line:last-child" }
     },
     {
       "face": "thinking",
-      "say": "To look words up in the game, turn on Show overlay. Leave it off when you only want the Log.",
+      "say": "To look words up in the game, turn on Show overlay.",
       "point": { "log": "button[role=switch]", "text": "overlay" },
       "until": "overlay"
     },
@@ -152,7 +152,7 @@
     },
     {
       "face": "proud",
-      "say": "There it is: everything you noted about them, without leaving the Log."
+      "say": "There it is."
     },
     {
       "face": "wink",
@@ -199,7 +199,7 @@
     },
     {
       "face": "surprised",
-      "say": "Hooked! Kimochi found the game’s text, and each line now comes straight from the game as it’s written. That’s it here, under Text Hooker.",
+      "say": "Hooked! Each line now comes straight from the game. It’s here, under Text Hooker.",
       "point": [{ "log": ".k-select-trigger:not(.sb-engine-select)" }, { "log": ".src-panel" }]
     },
     {
@@ -210,7 +210,7 @@
     },
     {
       "face": "excited",
-      "say": "…and the card moves over the game’s text! Auto align uses OCR to find where the text is. Lookups work as before: hold Shift and hover.",
+      "say": "…and the card moves over the game’s text! Hold Shift and hover to look words up.",
       "point": { "desk": "[data-window=game] .kd-box" }
     },
     {

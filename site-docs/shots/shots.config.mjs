@@ -259,12 +259,6 @@ export const SHOTS = [
     actions: [{ click: 'button[aria-label="Dictionary"]', after: 500 }]
   },
   {
-    id: 'log-empty',
-    page: 'panel.html?window=log&empty=1',
-    size: MAIN,
-    ready: '.log-empty'
-  },
-  {
     id: 'line-actions',
     page: 'panel.html?window=log',
     size: MAIN,

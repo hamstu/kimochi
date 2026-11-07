@@ -50,7 +50,7 @@ function Outcome({ result }: { result: SteamAddResult }): JSX.Element {
     return (
       <p className={style.status} role="status">
         <StatusDot tone="ok" />
-        Kimochi is in your Steam library. Its artwork appears when you return to Gaming Mode.
+        Kimochi is in your Steam library.
       </p>
     )
   const tone = result.state === 'pending' || result.state === 'steamNotRunning' ? 'warn' : 'danger'
@@ -75,7 +75,7 @@ function SteamLibraryScreen(): JSX.Element {
   return (
     <Step
       title="Add Kimochi to your Steam library"
-      lede="So it’s waiting in Gaming Mode: start Kimochi from your library, then your game, and Kimochi reads alongside it."
+      lede="Start Kimochi from your library in Gaming Mode, then your game."
     >
       <div className={style.steamShowcase}>
         <SteamTilePreview />
@@ -89,8 +89,7 @@ function SteamLibraryScreen(): JSX.Element {
             <Outcome result={outcome} />
           ) : (
             <p className={style.text}>
-              Kimochi adds itself as a non-Steam game, with its own library artwork. You can remove
-              it from Steam like any other game.
+              Kimochi adds itself as a non-Steam game.
             </p>
           )}
         </div>

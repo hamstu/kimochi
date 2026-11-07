@@ -31,7 +31,7 @@ export const MAX_DESCRIPTION = 5000
 export function draftProblem(draft: BugReportDraft, kind: ReportKind = 'bug'): string | null {
   if (!draft.name.trim()) return 'Please enter your name.'
   const email = draft.email.trim()
-  if (!email) return 'Please enter your email, so we can reply.'
+  if (!email) return 'Enter your email so I can reply.'
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return 'That email address doesn’t look right.'
   const description = draftText(draft, kind).trim()
   if (description.length < MIN_DESCRIPTION) {

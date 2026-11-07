@@ -223,7 +223,7 @@ export function AnkiPanel(): JSX.Element {
           </>
         }
       >
-        {describeAnkiStatus(status).detail} The cards made in this session show here once Anki answers.
+        {describeAnkiStatus(status).detail}
       </EmptyState>
     )
   } else if (loaded && cards.length === 0) {
@@ -235,7 +235,7 @@ export function AnkiPanel(): JSX.Element {
         actions={<Button onClick={openAnkiConnectSettings}>Anki settings</Button>}
       >
         {error ??
-          'Cards you add to Anki while reading, from Kimochi’s pop-up or your dictionary’s, are listed here with the session.'}
+          'Cards you add to Anki during this session show up here.'}
       </EmptyState>
     )
   } else {

@@ -161,7 +161,7 @@ export function DictionaryTab(): ReactNode {
               <span role="status">Reloading the reader windows…</span>
             ) : switchedTo && switchedTo === active ? (
               <Callout tone="ok" className="dictionary-chooser-switched">
-                Now using {DICTIONARY_ENGINES[switchedTo].name}. The reader windows reloaded with it.
+                Now using {DICTIONARY_ENGINES[switchedTo].name}.
               </Callout>
             ) : null
           }
@@ -344,10 +344,10 @@ function TentenPopupSize(): ReactNode {
 function AnkiLink({ engine }: { engine?: DictionaryEngine }): ReactNode {
   const description =
     engine === 'tenten'
-      ? '10ten does not add Anki cards; Settings → Anki says which dictionaries do.'
+      ? '10ten does not add Anki cards.'
       : engine
         ? `How ${DICTIONARY_ENGINES[engine].name} adds Anki cards is in Settings → Anki.`
-        : 'The AnkiConnect connection, and the deck, note type and fields of the cards this pop-up adds, are in Settings → Anki.'
+        : 'Deck, note type and fields are in Settings → Anki.'
   const open = (): void => {
     setSetting('settingsActiveTab', 'anki').catch((error) =>
       console.error('Open Settings → Anki failed:', nativeError(error).message)

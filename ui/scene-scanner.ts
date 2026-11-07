@@ -544,7 +544,7 @@ export class SceneScanner<Frame = unknown> {
       this.unavailable = true
       this.unavailableReason =
         sample.observerError ??
-        'Automatic scanning needs a local text observer, which this platform does not have yet. Manual scanning still works.'
+        "Automatic scanning isn't available on this platform yet."
       this.stopTimer()
       this.emit({ type: 'status', state: 'unavailable', message: this.unavailableReason })
       return 'unavailable'
@@ -849,7 +849,7 @@ export class SceneScanner<Frame = unknown> {
     this.emit({ type: 'error', stage, message, backoffMs: backoff })
     if (this.errorStreak >= this.settings.maxConsecutiveErrors) {
       this.suspended = true
-      this.unavailableReason = `Automatic scanning suspended after ${this.errorStreak} consecutive failures (${stage}). Manual scanning still works.`
+      this.unavailableReason = `Automatic scanning suspended after ${this.errorStreak} consecutive failures (${stage}).`
       this.stopTimer()
       this.emit({ type: 'status', state: 'suspended', message: this.unavailableReason })
     }

@@ -48,6 +48,6 @@ export function GnomeWindowLink({sourceId}: {sourceId?: string}): React.JSX.Elem
   }
   return <ConfirmDialog open={open} onOpenChange={setOpen}
     title="Choose the shared window"
-    description={error?'Window selection could not start. Please try again.':'To place the overlay, click OK, then click the same window you selected for sharing. You only need to do this for the current share.'}
+    description={error?'Window selection could not start. Please try again.':'To place the overlay, click OK, then click the same window you selected for sharing.'}
     confirmLabel="OK" onConfirm={()=>void link()} />
 }

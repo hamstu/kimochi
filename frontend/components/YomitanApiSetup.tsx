@@ -172,11 +172,6 @@ function HelperStep({
             <StatusDot tone="ok" />
             {describeHost(host)}
           </p>
-          <p className="yomitan-setup-text">
-            {host.method === 'kimochi'
-              ? 'Nothing more to install.'
-              : 'Kimochi uses it as it is.'}
-          </p>
           {host.method === 'kimochi' && (
             <p className="yomitan-setup-aside">
               Reinstalling fetches its latest version; restart your browser afterwards so it runs.{' '}
@@ -187,8 +182,7 @@ function HelperStep({
           )}
           {host.method !== 'kimochi' && (
             <p className="yomitan-setup-aside">
-              Kimochi&apos;s helper is a single program with no Python to keep installed. Installing
-              it replaces this helper&apos;s registration in every browser.{' '}
+              Installing Kimochi&apos;s helper replaces this one in every browser.{' '}
               <button type="button" className="k-link" disabled={install.state === 'installing'} onClick={onInstall}>
                 Use Kimochi&apos;s helper instead
               </button>
@@ -236,8 +230,7 @@ function EnableStep({ host, api }: { host: HostStatus | null; api: ApiStatus | n
         </li>
       </ol>
       <p className="yomitan-setup-aside">
-        Already on? Quit and reopen your browser, so it starts the helper (a newly installed one is
-        only found after a restart).
+        Already on? Quit and reopen your browser.
       </p>
       <ConnectionLine host={host} api={api} />
     </div>
@@ -249,19 +242,14 @@ function ConnectStep({ url, host, api }: { url: string; host: HostStatus | null;
   return (
     <div className="yomitan-setup-body">
       <ConnectionLine host={host} api={api} />
-      {state === 'ready' ? (
-        <p className="yomitan-setup-text">
-          Kimochi looks words up through the Yomitan in your browser, with the dictionaries and
-          settings you already have there.
-        </p>
-      ) : state === 'yomitan-silent' ? (
+      {state === 'ready' ? null : state === 'yomitan-silent' ? (
         <ul className="yomitan-setup-list">
           <li>Yomitan may still be starting: give it a few seconds.</li>
           <li>If it stays like this, open Yomitan&apos;s settings once, or restart the browser.</li>
         </ul>
       ) : (
         <ul className="yomitan-setup-list">
-          <li>Open your browser. It starts the helper; Kimochi cannot.</li>
+          <li>Open your browser; it starts the helper.</li>
           <li>
             After installing the helper, quit the browser completely and open it again (closing the
             window is not always enough).

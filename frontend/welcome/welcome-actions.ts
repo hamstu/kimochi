@@ -29,7 +29,7 @@ export async function completeOnboarding(): Promise<void> {
   } catch (error) {
     report('Complete onboarding')(error)
     throw new Error(
-      `Could not save your setup: ${nativeError(error).message}. Nothing has been lost — try again.`
+      `Couldn't save your setup: ${nativeError(error).message}. Try again.`
     )
   }
   await panel('log', 'show').catch(report('Show Kimochi'))

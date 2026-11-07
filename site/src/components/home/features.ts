@@ -54,7 +54,7 @@ export const features: Feature[] = [
   {
     id: 'text-hooker',
     title: 'Text Hooker',
-    body: "Kimochi can read a game's text directly from the game. It fetches a text hooker the first time (LunaHook, or Textractor as a fallback), picks out the dialogue by matching it to what's on screen, and shows each line in a card over the game. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
+    body: "Kimochi can read a game's text directly from the game and show each line in a card over the game. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
     Visual: TextHookerVisual,
     docs: '/reading/text-hooker/',
     tag: 'windows'
@@ -83,7 +83,7 @@ export const features: Feature[] = [
   {
     id: 'sessions',
     title: 'Sessions',
-    body: 'Keep a separate log for every game, visual novel or manga, each with its own lines and reading stats. Kimochi can switch sessions by window name, and you can rename, reorder or clear them.',
+    body: 'Keep a separate log for every game, visual novel or manga, each with its own lines and reading stats. Kimochi can switch sessions by window name.',
     Visual: SessionsVisual,
     docs: '/log/sessions/'
   },
@@ -112,14 +112,14 @@ export const features: Feature[] = [
   {
     id: 'mini-mode',
     title: 'Mini mode',
-    body: 'Shrink Kimochi down to just its controls: your source, Auto OCR, the overlay, your OCR model and dictionary, in a slim window that sits beside your game, video or manga. Expand it again when you want the Log.',
+    body: 'Shrink Kimochi down to its controls, in a slim window that sits beside your game, video or manga.',
     Visual: MiniModeVisual,
     docs: '/reading/mini-mode/'
   },
   {
     id: 'cloud-sync',
     title: 'Sync across computers',
-    body: 'With Kimochi Cloud, your sessions, Notebook and preferences stay in step between your computers, even after time offline. If you change something in two places at once, the other version is kept so you can restore it.',
+    body: 'With Kimochi Cloud, your sessions, Notebook and preferences stay in step between your computers.',
     Visual: SyncVisual,
     tag: 'cloud',
     link: { to: '/#cloud', label: 'See Kimochi Cloud plans' }

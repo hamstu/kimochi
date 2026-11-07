@@ -163,7 +163,7 @@ fn build(app: &tauri::AppHandle, engine: &'static str) -> Box<dyn TextObserver> 
         #[cfg(target_os = "windows")]
         "oneocr" => Box::new(EngineObserver::oneocr(app.clone())),
         _ => unsupported(format!(
-            "Automatic scanning cannot watch with {engine} on this computer. Manual scanning works normally."
+            "Automatic scanning can't watch with {engine}."
         )),
     };
     Box::new(CachedObserver::new(inner))
@@ -187,7 +187,7 @@ fn announce_verified_capabilities(app: &tauri::AppHandle) {
 }
 
 fn unavailable_detail(engine: &str, reason: &str) -> String {
-    format!("Automatic scanning cannot watch with {engine}: {reason} Manual scanning works normally.")
+    format!("Automatic scanning can't watch with {engine}: {reason}")
 }
 
 /// How long one inference may run before the observer is reported stalled.
@@ -637,7 +637,7 @@ fn busy_error(name: &str, running_for: Option<Duration>) -> CaptureError {
         Some(running) if running >= STALL_AFTER => CaptureError::new(
             "stalled",
             format!(
-                "The local {name} observer has been reading one frame for {} s and has not answered; restart Kimochi to use automatic scanning again. Manual scanning works normally.",
+                "The local {name} observer has been reading one frame for {} s and has not answered; restart Kimochi to use automatic scanning again.",
                 running.as_secs()
             ),
         ),

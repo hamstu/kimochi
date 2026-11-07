@@ -1,6 +1,6 @@
 ---
 title: Auto OCR
-description: Let Kimochi read the source on its own whenever the text changes, and tune how quickly it reacts.
+description: Scan the source whenever the text changes, and tune how quickly it reacts.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -33,13 +33,11 @@ Which engine watches depends on the one you read with:
 **Settings → OCR & Overlay → Auto OCR** names the watcher under the switch. When the watcher is slow
 (PaddleOCR on a CPU, say), Auto OCR looks less often, leaving more of the processor to your game.
 
-The Log's activity ticker (bottom of the Log) says what happened: **Screen settled, scanning…**,
-**Added 1 line**, **Same text as before, not added**, **No new text**. Click it for the recent history.
+The Log's activity ticker says what each scan did; click it for the recent history.
 
 <Screenshot id="activity" alt="The Log with the activity ticker opened, listing Auto-scan on and Added 2 lines." width={720} />
 
-If scans fail several times in a row, Auto OCR pauses (**Auto-scan paused: it failed several times
-in a row**); manual scans still work.
+If scans fail several times in a row, Auto OCR pauses.
 
 ## Settings
 

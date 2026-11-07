@@ -9,8 +9,7 @@ Cards reach [Anki](https://apps.ankiweb.net/) through the
 [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, so Anki has to be running with
 AnkiConnect installed.
 
-You don't need to change AnkiConnect's `webCorsOriginList`: Kimochi's requests come from the app,
-not a web page.
+You don't need to change AnkiConnect's `webCorsOriginList`.
 
 ## Who makes the card
 
@@ -29,11 +28,9 @@ included: set those there, as you would in the browser.
 
 ## The AnkiConnect connection
 
-**Settings → Anki → AnkiConnect** shows whether Kimochi can reach AnkiConnect, whatever dictionary
-you use: the Anki tab, sentence audio and the Yomitan API pop-up all use this connection. The
+**Settings → Anki → AnkiConnect** shows whether Kimochi can reach AnkiConnect: the Anki tab, sentence audio and the Yomitan API pop-up all use this connection. The
 defaults are AnkiConnect's own. It checks again every few seconds
-while the tab is open; **Check** asks at once. (Yomitan and Hachidori add their cards
-with their own AnkiConnect address, set in their Anki settings under **Mining**.)
+while the tab is open; **Check** asks at once.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -92,9 +89,8 @@ The tab needs Anki running: when AnkiConnect doesn't answer, the tab says why, w
 ## Enhance Anki cards
 
 The sidebar's **Enhance Anki cards** switch turns every card enhancement on or off at once: sentence
-audio, the screenshot and tags. Each has its own switch in **Settings → Anki → Card enhancement**
-(the cog beside the sidebar switch opens it). The sidebar switch is on while any of them is; when
-only some are, an amber dot on its info mark says which are off.
+audio, the screenshot and tags. Each has its own switch in **Settings → Anki → Card enhancement**.
+The sidebar switch is on while any of them is.
 
 ## Sentence audio
 
@@ -106,14 +102,12 @@ be the right line, and the [Anki tab](#the-anki-tab) shows which cards got audio
 
 With Quick Shot, take the shot soon after the line is said: only the
 last **Seconds kept** of audio are held (30 by default), so a later shot finds no audio for its
-line. An amber dot on the info mark says so; raise **Seconds kept** under **Advanced** if you need
+line. Raise **Seconds kept** under **Advanced** if you need
 longer.
 
 Turning it on downloads the speech model (240 MB), which listens for each
 line's words to find where it was said. Recording starts once the model is downloaded; the section
-shows the download's progress until then. After that it stays quiet unless something is wrong (no
-permission, no audio device), and says so. Audio is only kept in memory: nothing is saved but the
-clips of the newest lines and the clip in your card.
+shows the download's progress until then.
 
 **Audio field** is the field in your note that gets the line's audio. Kimochi finds it in Anki
 when you turn the feature on, and again when the AnkiConnect address or the Yomitan API's note type
@@ -128,7 +122,7 @@ changes: Lapis and Kiku call it `SentenceAudio`, Senren `sentenceAudio`. You can
 | **Clips kept** | 15 | The newest lines' clips, kept to play from the Log and add to later cards. |
 
 In the Log, a line with audio has a chip with its length (**4.2s**) at the end of the row: click it
-to play the clip, which fills the chip as it plays, and again to stop.
+to play the clip, and again to stop.
 
 - **macOS** records system audio under the **Screen Recording** permission, and leaves Kimochi's
   own sounds out. macOS shows its screen-recording indicator while it is on.
@@ -143,14 +137,12 @@ or for a Quick Shot the display it was taken on. Each Log line shows its scan's 
 small chip at the end of the row, beside the chip of its audio; every line of one scan shows the
 same one. Click it to see it full size: **◀ ▶** (or the arrow keys) step through your scans, oldest to
 newest, and the boxes show where OCR read text, with what it read when you point at one. The crop
-area is drawn with the rest of the source faded. The eye at the top hides or shows all of that, and
-stays as you leave it. Lines from the clipboard or a WebSocket have no screenshot.
+area is drawn with the rest of the source faded. The eye at the top hides or shows all of that. Lines from the clipboard or a WebSocket have no screenshot.
 
 With **Enhance with screenshot** on (the default), every new card you make gets the screenshot of
 the scan its sentence was read in, whichever dictionary made it, in its **Picture field**
 (`Picture` in Lapis and Kiku; Kimochi finds it in Anki when you turn it on). A field that is
-already filled is left as it is, so Hachidori's own picture stays; Hachidori's screenshot is the
-same whole source now, not the scanned area.
+already filled is left as it is, so Hachidori's own picture stays.
 
 Cards get the whole source. To send only part of it (the scene without the dialogue box, say), set
 the source's [Anki crop area](/reading/sources/#anki-crop-area), the green box: **Crop area → Set
@@ -169,4 +161,4 @@ of their own).
 **Tags** is a comma-separated list, `kimochi, {{session-name}}` by default.
 `{{session-name}}` becomes the name of the session you're reading, with `_` for its spaces (Anki
 tags can't hold spaces), so a card mined in **Chrono Trigger** is tagged `kimochi` and
-`Chrono_Trigger`. Below the field, Kimochi shows the tags a card made now would get.
+`Chrono_Trigger`.

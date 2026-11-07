@@ -251,8 +251,7 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
                 </Button>
               }
             >
-              Lines from your source appear here. Choose the screen, the
-              clipboard or a WebSocket with the source menu in the sidebar.
+              Choose a source in the sidebar.
             </EmptyState>
           )}
           {snap.lines.length > shown && (

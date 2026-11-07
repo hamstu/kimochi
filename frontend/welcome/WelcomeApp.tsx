@@ -247,7 +247,7 @@ function OcrScreen(): JSX.Element {
   return (
     <Step
       title="How should Kimochi read text?"
-      lede="None of these needs an API key. Online engines send each capture over the internet; the others read it on this computer. Results vary by game, so you can try another later in Settings."
+      lede="Online engines send each capture over the internet. Results vary by game."
     >
       <EngineChooser />
       <StepActions>
@@ -324,14 +324,13 @@ function DoneScreen(): JSX.Element {
           You&apos;re ready to read
         </span>
       }
-      lede="You can change any of this in Settings."
     >
       <NoDictionaryWarning />
       <ol className={style.loop}>
         <li>
           <strong>Choose and crop.</strong>{' '}
           {gaming
-            ? 'Gaming Mode shares the game screen on its own. Set a crop around the dialogue to skip menus and other text.'
+            ? 'Set a crop around the dialogue to skip menus and other text.'
             : 'Pick a window or screen in the sidebar, then crop the area with the text.'}
         </li>
         <li>

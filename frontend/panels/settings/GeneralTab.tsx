@@ -41,7 +41,7 @@ export function GeneralTab(): ReactNode {
   const grantsCapture = capture.authorization === 'granted' || capture.authorization === 'denied'
 
   return (
-    <SettingsPage title="General" description="How Kimochi looks on this computer.">
+    <SettingsPage title="General" description="How Kimochi looks.">
       <SettingsSection title="Appearance">
         <SettingsRow
           label="Theme"
@@ -77,7 +77,7 @@ export function GeneralTab(): ReactNode {
           description={
             autoMini
               ? 'When the game you read goes full screen on Kimochi’s screen, Kimochi shrinks to mini mode in a corner.'
-              : 'Off: when the game goes full screen on Kimochi’s screen, Kimochi stays its size and is kept on top of the game. On another screen, nothing changes.'
+              : 'Off: when the game goes full screen on Kimochi’s screen, Kimochi stays its size and on top of the game.'
           }
         >
           <Switch id="general-auto-mini" checked={autoMini} onCheckedChange={(checked) => void setAutoMini(checked)} />
@@ -90,7 +90,7 @@ export function GeneralTab(): ReactNode {
           description={
             recording
               ? 'Off while Sentence Audio records (Settings → Anki), so they stay out of its clips.'
-              : 'Turns every sound on or off. The speaker in each title bar does the same.'
+              : 'Turns every sound on or off.'
           }
         >
           <Switch
@@ -124,7 +124,7 @@ export function GeneralTab(): ReactNode {
                 onCheckedChange={(checked) => void setClickSounds(checked)}
               />
             </SettingsRow>
-            <SettingsRow label="Volume" description="For every sound effect.">
+            <SettingsRow label="Volume">
               <div className="settings-slider">
                 <Slider
                   aria-label="Sound effects volume"
@@ -175,7 +175,7 @@ export function GeneralTab(): ReactNode {
         </SettingsRow>
         <SettingsRow
           label="Overlay hints"
-          description="The bar under the text on the overlay that says how to look words up. Closed with its ×."
+          description="The bar under the overlay's text that says how to look words up."
         >
           <Button size="sm" disabled={!hintsDismissed} onClick={() => void setHintsDismissed(false)}>
             {hintsDismissed ? 'Show again' : 'Showing'}

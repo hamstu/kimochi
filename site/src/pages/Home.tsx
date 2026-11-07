@@ -43,7 +43,7 @@ export function Home() {
         divider
         eyebrow="オープンソース"
         heading="Free and open source"
-        lede="Kimochi is free, and all of its code is open source under the GPL-3.0 licence. Download it, read the code, change it, share it."
+        lede="Kimochi is free, and all of its code is open source under the GPL-3.0 licence."
       >
         <OpenSource />
       </Section>

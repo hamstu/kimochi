@@ -27,8 +27,7 @@ The OCR engine turns each capture into text. Choose it in the sidebar's **OCR mo
 ## Google Lens
 
 Sends each capture to Google Lens, the image recognition behind Lens in Chrome, and returns the text
-with the position of every line. It is very accurate on Japanese, horizontal or vertical. The image
-goes straight to Google, not through Kimochi's servers.
+with the position of every line. It is very accurate on Japanese, horizontal or vertical.
 
 Kimochi uses the service Chrome's Lens uses, which is not a published API, so Google could change or
 stop it without notice.
@@ -37,7 +36,7 @@ stop it without notice.
 
 Sends each capture to the Kimochi server, which reads it with Google Cloud Vision and returns the
 position of every word. It needs a signed-in account with Kimochi Cloud; each scan counts towards the
-month's cloud OCR allowance. The server doesn't store the images or the text.
+month's cloud OCR allowance.
 
 ## PaddleOCR
 
@@ -81,7 +80,7 @@ Windows 11 Snipping Tool package; see [Install on Windows](/install/windows/#one
 ## Model downloads
 
 PaddleOCR, MeikiOCR and Manga OCR download their models the first time you choose them (from Hugging Face),
-once. Each file is checked against a pinned hash before it is used. The model row shows progress and
+once. The model row shows progress and
 lets you **Pause**, **Resume**, **Cancel** or **Retry**; **Remove downloaded model…** in the engine's
 menu frees the space again.
 

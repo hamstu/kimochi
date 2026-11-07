@@ -59,7 +59,7 @@ function Choice({
 }: {
   icon: ReactNode
   title: string
-  detail: string
+  detail?: string
   trailing: ReactNode
   onClick: () => void
 }): JSX.Element {
@@ -68,7 +68,7 @@ function Choice({
       <span className="help-choice-icon" aria-hidden="true">{icon}</span>
       <span className="help-choice-text">
         <span className="help-choice-title">{title}</span>
-        <span className="help-choice-detail">{detail}</span>
+        {detail && <span className="help-choice-detail">{detail}</span>}
       </span>
       <span className="help-choice-trailing" aria-hidden="true">{trailing}</span>
     </button>
@@ -308,14 +308,12 @@ function HelpContent({
         <Choice
           icon={<Bug />}
           title="Report a bug"
-          detail="Tell me what went wrong."
           trailing={<ChevronRight />}
           onClick={() => setStep('bug')}
         />
         <Choice
           icon={<Lightbulb />}
           title="Request a feature"
-          detail="Tell me what you’d like Kimochi to do."
           trailing={<ChevronRight />}
           onClick={() => setStep('feature')}
         />

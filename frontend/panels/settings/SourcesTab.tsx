@@ -47,7 +47,7 @@ const INPUT_SOURCES = [
     value: 'clipboard',
     label: 'Clipboard',
     icon: <Clipboard />,
-    detail: 'Picks up text copied to the clipboard. (E.g., from a text hooker.)'
+    detail: 'Picks up text copied to the clipboard, e.g. by a text hooker.'
   },
   {
     value: 'websocket',
@@ -231,7 +231,6 @@ export function SourcesTab(): ReactNode {
                   <SettingsRow
                     label="WebSocket URL"
                     controlId="sources-ws-url"
-                    description="The address of the text source."
                   >
                     <Input
                       id="sources-ws-url"

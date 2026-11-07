@@ -223,7 +223,7 @@ function EngineDetail({
       </ul>
       {(info.requirements || runsOn) && (
         <p className="k-description">
-          {[info.requirements, runsOn && `On this computer it runs on ${runsOn}.`].filter(Boolean).join(' ')}
+          {[info.requirements, runsOn && `Runs on ${runsOn} here.`].filter(Boolean).join(' ')}
         </p>
       )}
       {!selectable && (
