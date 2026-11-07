@@ -20,3 +20,4 @@ else createRoot(root).render(app)
 
 // Dev only: the in-place copy editor (src/dev/CopyEditor.tsx). Never part of a production build.
 if (import.meta.env.DEV) void import('./dev/CopyEditor').then((m) => m.mountCopyEditor())
+if (import.meta.env.DEV) void import('./dev/ArtSwitcher').then((m) => m.mountArtSwitcher())

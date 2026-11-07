@@ -342,7 +342,7 @@ function WindowGrid({
   )
 
   return (
-    <div className="sg-scroll" ref={setRoot}>
+    <div className="sg-scroll" ref={setRoot} data-grid={hookable ? 'hook' : 'capture'}>
       {error &&
         (error.kind === 'permission' && capabilities.capture.canOpenSettings ? (
           <GrantCaptureItem os={capabilities.os} />

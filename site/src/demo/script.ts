@@ -3,7 +3,7 @@
  * `ms` milliseconds; the player steps through them in a loop. Desktop and Steam Deck share the game
  * screen, so they share the frame shape.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { PLAY_LINES } from './content'
 
 /** R4 is a back button: shown in the HUD's echo, not on the drawn controls. */
@@ -142,6 +142,7 @@ export function deckFrames(): Frame[] {
 
 /**
  * Steps through `frames` while `running`. A paused run resumes the current frame from its start.
+ * New `frames` start at the line the old ones were on.
  * `onEnter` runs once per frame entry (not on resume). `manual`: a `hold` frame waits for `next()`.
  */
 export function usePlayer(
@@ -155,9 +156,18 @@ export function usePlayer(
   const [index, setIndex] = useState(0)
   const frame = frames[index % frames.length]
 
+  // Other frames (the Text Hooker's) carry on from the line the game is on; a new run starts over.
+  const lineRef = useRef(frame.line)
+  useEffect(() => {
+    const at = frames.findIndex((f) => f.line === lineRef.current)
+    setIndex(at < 0 ? 0 : at)
+  }, [frames])
   useEffect(() => {
     setIndex(0)
-  }, [frames, resetKey])
+  }, [resetKey])
+  useEffect(() => {
+    lineRef.current = frame.line
+  }, [frame])
 
   useEffect(() => {
     if (!running || (manual && frame.hold)) return

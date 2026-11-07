@@ -1100,6 +1100,35 @@
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
   text-wrap: pretty;
 }
+/* The box's text column follows its content's height, overshooting a little each way. */
+.kd-guide-body {
+  overflow: hidden;
+  transition: height 520ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* Each letter is already in place (no word jumps to the next line); typing shows it. */
+.kd-ch {
+  opacity: 0;
+}
+.kd-ch-on {
+  opacity: 1;
+}
+/* The choices are laid out with the line, and pop in once it has been read out. */
+.kd-guide-choices .kd-guide-choice {
+  opacity: 0;
+  scale: 0.8;
+  pointer-events: none;
+  transition:
+    opacity 220ms ease-out,
+    scale 420ms cubic-bezier(0.34, 1.7, 0.64, 1),
+    background-color 120ms,
+    box-shadow 120ms,
+    translate 120ms;
+}
+.kd-guide-choices[data-shown] .kd-guide-choice {
+  opacity: 1;
+  scale: 1;
+  pointer-events: auto;
+}
 .kd-guide-icon,
 .kd-guide-skip {
   display: grid;
@@ -1230,6 +1259,10 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .kd-guide,
+  .kd-guide-body,
+  .kd-guide-choices .kd-guide-choice {
+    transition: none;
+  }
   .kd-guide-face,
   .kd-ring,
   .kd-ring-arrow,

@@ -245,9 +245,10 @@ function sgNotebook(images: Record<string, string>): NotebookFile {
 /**
  * Writes every file the texthooker core loads. Idempotent per page load. `omitPlayed` leaves the
  * lines the site's demo plays (`play: true` in demo-content.ts) out of the Steins;Gate session, so
- * they arrive fresh when the embedding page sends them (`?embed=1`).
+ * they arrive fresh when the embedding page sends them (`?embed=1`). `noLines` starts it with none
+ * at all (its Notebook is still there).
  */
-export async function seedFilesystem({ omitPlayed = false }: { omitPlayed?: boolean } = {}): Promise<void> {
+export async function seedFilesystem({ omitPlayed = false, noLines = false }: { omitPlayed?: boolean; noLines?: boolean } = {}): Promise<void> {
   previewFs.put('sessions.json', JSON.stringify(manifest))
   const images: Record<string, string> = {}
   const specs: Record<string, ImageSpec> = {
@@ -266,7 +267,7 @@ export async function seedFilesystem({ omitPlayed = false }: { omitPlayed?: bool
   }
   previewFs.put(
     `sessions/${SESSION_IDS.steinsGate}/lines.json`,
-    JSON.stringify({ version: 1, lines: sgLines(omitPlayed) })
+    JSON.stringify({ version: 1, lines: noLines ? [] : sgLines(omitPlayed) })
   )
   previewFs.put(`sessions/${SESSION_IDS.steinsGate}/notebook.json`, JSON.stringify(sgNotebook(images)))
   for (const [sid, texts] of Object.entries(otherLines)) {

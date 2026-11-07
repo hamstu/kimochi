@@ -24,6 +24,10 @@ cli-launcher/target/
 
 # Static build of the preview harness for the site demo (npm run demo:build)
 site/public/demo/
+# The guide's character art beyond the faces the site ships: the Sutemo PSD's exported layers (for
+# the dev-only Guide art switcher) and the first, AI-made faces. Kept locally, never published.
+site/public/guide/sutemo/
+site/public/guide/original/
 
 # Agent worktrees and local tool state
 .claude/

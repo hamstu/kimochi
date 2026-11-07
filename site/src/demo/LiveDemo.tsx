@@ -46,7 +46,7 @@ import {
 } from 'react'
 import { Maximize2, Play, RotateCcw, Square, X } from 'lucide-react'
 import { useMediaQuery } from '../lib/client'
-import { GAME } from './content'
+import { GAME, lookup } from './content'
 import { useGuessedPlatform, useOnScreen, useReducedMotion, useResolvedTheme, type Platform } from './env'
 import { deckFrames, desktopFrames, hookFrames, usePlayer, type Frame } from './script'
 import { GameScreen } from './GameScreen'
@@ -252,7 +252,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const started = deck || phase !== 'idle'
   const reading = deck || (started && watching('game', GAME_SOURCE, hook ? 'hook' : 'ocr'))
   const running = onScreen && !reduced && userCursor === null && reading
-  const [playing, nextLine] = usePlayer(frames, running, onEnter, `${platform}:${run}:${hook}`, flow)
+  const [playing, nextLine] = usePlayer(frames, running, onEnter, `${platform}:${run}`, flow)
   const frame = reduced ? stillFrame(frames) : playing
   const overlay = deck || reduced || ((!free || (open.game && !quit)) && logState.sourceId === GAME_SOURCE && logState.overlay)
 
@@ -272,6 +272,8 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
     setTimeout(() => {
       setAnki((a) => ({ ...a, [word]: 'added' }))
       setAnkiToast(word)
+      // The new card shows in Kimochi's Anki tab, as in the app.
+      postRef.current?.({ type: 'anki-card', term: word, reading: lookup(word)?.reading ?? null })
       // The card is made: the pop-up closes, so the note about it can be read.
       setUserCursor(null)
     }, 650)
@@ -598,7 +600,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const logParams: Record<string, string> = flow
     ? // Show overlay starts off for the visitor to turn on; on the Text Hooker's Windows desk they
       // already have.
-      { nosource: '1', auto: '0', overlay: override ? '1' : '0', sidebar: '1', demo: input }
+      { nosource: '1', auto: '0', overlay: override ? '1' : '0', sidebar: '1', lines: '0', demo: input }
     : { sidebar: free ? '1' : '0', demo: input, ...(hook ? { input: 'hook' } : {}) }
   const showPlay = !deck && !reduced && phase === 'idle'
   // Before Play, the desk is a picture: nothing on it can be clicked or focused.
@@ -738,6 +740,9 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
                   onPoint={(where) => {
                     front(where)
                     if (where === 'log') setTimeout(scrollLog, 100)
+                  }}
+                  onPopup={(keep) => {
+                    if (!keep) setUserCursor(null)
                   }}
                   inset={platform === 'macos' ? 64 : 16}
                   onEnd={() => {

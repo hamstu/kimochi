@@ -46,8 +46,36 @@ function demoCards(): unknown[] {
   ]
 }
 
+/** Cards the site's demo made (`addDemoCard`), newest first; the session the tab last listed. */
+let made: unknown[] = []
+let listed: string | null = null
+
+/**
+ * The site's demo added `term` to Anki from its pop-up: the card joins the tab's list, as native's
+ * `anki-cards:changed` would add it. Returns the event to emit, or null before the tab has listed.
+ */
+export function addDemoCard(term: string, reading: string | null): { sessionId: string; card: unknown } | null {
+  const now = Date.now()
+  const card = {
+    noteId: 1730000100000 + made.length,
+    term,
+    ...(reading ? { reading } : {}),
+    deck: 'Mining',
+    addedAt: now,
+    via: 'extension',
+    engine: 'hachidori',
+    enhanced: ['sentenceAudio', 'screenshot'],
+    updatedAt: now
+  }
+  made = [card, ...made]
+  return listed ? { sessionId: listed, card } : null
+}
+
 export const ANKI_CARDS_HANDLERS: Record<string, (args: Record<string, unknown> | undefined) => unknown> = {
-  anki_cards_list: () => (CARDS === 'none' ? [] : demoCards()),
+  anki_cards_list: (args) => {
+    listed = typeof args?.sessionId === 'string' ? args.sessionId : listed
+    return [...made, ...(CARDS === 'none' ? [] : demoCards())]
+  },
   anki_cards_delete: () => null,
   sentence_audio_add_to_note: () => null
 }

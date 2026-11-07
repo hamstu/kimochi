@@ -17,6 +17,8 @@ export type LogMessage =
   | { type: 'sound'; name: string }
   /** Silence every sound in the Log's page (the demo is out of sight), or bring them back. */
   | { type: 'muted'; value: boolean }
+  /** The visitor added a word to Anki from the game's pop-up: it joins the Anki tab. */
+  | { type: 'anki-card'; term: string; reading: string | null }
 
 /** A title-bar drag inside the Log, in screen coordinates (the harness's `embedDrag`). */
 export interface LogDrag {

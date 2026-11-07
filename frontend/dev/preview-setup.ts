@@ -25,6 +25,7 @@
  *   ?ankiCrop=1      main window: the chosen source has an Anki crop (the green outline)
  *   ?source=<id>     main window: the chosen demo source (e.g. window:106, a tall one)
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
+ *   ?lines=0         the Steins;Gate session starts with no lines (its Notebook is kept)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
  *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
@@ -113,7 +114,7 @@ import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
 import { STEAM_HANDLERS } from './preview-steam'
 import { SENTENCE_AUDIO_HANDLERS, demoLineAdded } from './preview-sentence-audio'
 import { SCREENSHOT_HANDLERS, SCREENSHOTS_ON, shotOf } from './preview-screenshots'
-import { ANKI_CARDS_HANDLERS } from './preview-anki-cards'
+import { ANKI_CARDS_HANDLERS, addDemoCard } from './preview-anki-cards'
 import { DEMO_CONTENT } from './demo-content'
 import { HOOK_DEFAULTS, gameKey, hookSettings, type HookGames } from '../../ui/hook-games'
 import { studioJson } from './studio/bridge'
@@ -1207,6 +1208,7 @@ type EmbedMessage =
   | { kimochiDemo: 1; type: 'sources'; open: string[] }
   | { kimochiDemo: 1; type: 'sound'; name: string }
   | { kimochiDemo: 1; type: 'muted'; value: boolean }
+  | { kimochiDemo: 1; type: 'anki-card'; term: string; reading: string | null }
 
 let embedScan = 0
 
@@ -1343,6 +1345,9 @@ function listenToEmbedder(): void {
       setOpenWindows(message.open)
     } else if (message.type === 'muted') {
       embedMuted = message.value
+    } else if (message.type === 'anki-card') {
+      const changed = addDemoCard(message.term, message.reading)
+      if (changed) void emit('anki-cards:changed', changed)
     } else if (message.type === 'sound') {
       if ((SOUND_NAMES as readonly string[]).includes(message.name)) embedSound(message.name as SoundName)
     }
@@ -1603,7 +1608,7 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
     tellEmbedderState()
   }
   syncDictionaryEngine()
-  if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed })
+  if (params.get('empty') !== '1') await seedFilesystem({ omitPlayed: embed, noLines: params.get('lines') === '0' })
   if (params.get('activity') === '1') playActivity()
 
   // The Log window is the texthooker host (sole owner of session files). Every other window that
