@@ -1,9 +1,6 @@
 # Changelog
 
-What changed in each release of Kimochi, newest first. Written for the people who use the app:
-what they can now do, what behaves differently, what was fixed. The app shows this file in
-**What's new** (and once, on its own, after it has updated), and the version's section becomes
-the GitHub release's notes, so keep it readable.
+What changed in each release of Kimochi, newest first. The app shows this in **What's new**.
 
 Add lines under **Unreleased** as you merge work; `npm run release -- <version>` moves them under
 the new version with the date. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
@@ -13,22 +10,21 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- ⭐ **Browser extension (early preview).** Read Japanese in pictures on web pages, like manga pages or game screenshots. Click Kimochi in the browser toolbar and pick a picture: Kimochi reads it, adds the text to the Log and draws the lines over the picture for your browser's dictionary pop-up (Yomitan, 10ten). With **Auto** on, it reads the picture again when it changes. Each site gets its own session. Choose **Browser** as the source, and install the extension from **Settings → Browser Extension** (Chrome, Edge, Brave or Arc).
+- ⭐ **Browser extension (early preview).** Read Japanese in pictures on web pages, like manga pages or game screenshots. Click Kimochi in the browser toolbar and pick a picture: Kimochi reads it, adds the text to the Log and draws the text over the picture for your browser's dictionary pop-up (Yomitan, 10ten). With **Auto** on, it reads the picture again when it changes. Each site gets its own session. Choose **Browser** as the source, and install the extension from **Settings → Browser Extension** (Chrome, Edge, Brave, etc).
 - ⭐ **Kimochi on the command line.** Install the `kimochi` command from **Settings → Command line** to drive Kimochi from a terminal or a script: scan and print the text, follow the Log, add lines, switch sessions, sources and OCR engines, change settings, and stream events as JSON.
-- **Magpie support.** The overlay, hover lookups and dictionary pop-ups line up with games scaled by Magpie and stay above them.
+- **Magpie support.** The overlay, hover lookups and dictionary pop-ups line up with games scaled by Magpie and correctly stay above them.
 - **A fuller session manager** in the Log's **Manage sessions** and in **Settings → Log & Sessions**: each session's reading time and line count, its description and last five lines, and clearing or deleting several at once (Shift-click ticks a run).
 
 ### Changed
 
-- **A tidier sidebar.** A downloading or starting OCR model or dictionary now fills its own box like a progress bar, with one percentage for the whole setup, instead of adding notes and bars under it. When something needs you (not downloaded, a failed setup), a short notice eases in with a link straight to the right settings. The links beside each heading now say **Settings**, and the title bar's buttons and the footers line up evenly.
+- **A tidier sidebar.** Just made some nice tidy and polished CSS changes to the sidebar ✨
 
 ### Fixed
 
 - **The overlay works on more Linux desktops.** On Wayland desktops such as Hyprland, Sway and KDE Plasma, the installed app no longer says the overlay isn't supported.
-- **Text Hooker: whole lines from games that send their text a row at a time.** Some engines, SiglusEngine among them, send each row of the text box on its own, so the card and the Log showed only the last row. A row that carries on an unfinished sentence now joins the line before it. Turn off **Join split lines** in Settings → Text Hooker for a game where it joins lines it shouldn't.
-- **Text Hooker: no more script codes in lines.** Asset and label names some engines leave in their text (such as `chr01chr02`, `$fx_shake_fa`) are taken out, and lines that were nothing but codes are dropped. **Remove script codes** in Settings → Text Hooker turns it off.
+- **Text Hooker: improved text processing.** Some engines send each row of the text box on its own, so the card and the Log showed only the last line. This should be fixed now. We also filter out VN script codes better in the output.
 - **Smoother hover cards with Click through text to the game on.** With Hachidori, hover cards no longer flicker as they fade in, and text lights up only while you hold Shift.
-- **Mini mode's title bar fits again.** The Help and sound buttons are hidden in mini mode.
+- **Mini mode's title bar clean up.** That's it. That's the change :)
 
 ## [0.6.1] - 2026-11-05
 
