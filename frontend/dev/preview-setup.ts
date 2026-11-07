@@ -794,6 +794,8 @@ const HANDLERS: Record<string, Handler> = {
   cli_status: () => cliCommand(cliInstalled),
   cli_install: () => cliCommand((cliInstalled = true)),
   cli_uninstall: () => cliCommand((cliInstalled = false)),
+  // The browser extension's connection (Settings → Sources): listening, no browser connected.
+  browser_bridge_status: () => ({ enabled: true, listening: true, port: 27640, connected: 0, browsers: [], page: null, lastScan: null }),
   tts_speak: () => {
     if (!CAPABILITIES.cloudAccess)
       throw 'native: Read aloud runs on Kimochi cloud. Sign in from Settings → Account to use it.'

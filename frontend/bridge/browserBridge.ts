@@ -36,7 +36,7 @@ export function useBrowserBridge(): BrowserBridgeStatus {
   useEffect(() => {
     let alive = true
     void browserBridgeStatus()
-      .then((next) => alive && setStatus(next))
+      .then((next) => alive && setStatus(next ?? OFF))
       .catch(() => undefined)
     const stop = listen<BrowserBridgeStatus>('browser-bridge', ({ payload }) => alive && setStatus(payload))
     return () => {

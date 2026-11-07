@@ -562,31 +562,20 @@ export const SHOTS = [
   // ------------------------------------------------------------------ the marketing site's demo
   {
     id: 'overlay-demo',
-    server: 'site',
-    page: '',
-    size: [1280, 900],
-    ready: '.kd-screen .kd-word',
+    // The overlay over a visual novel (the overlay stage): every word boxed, the first one looked up.
+    page: 'stage.html?scene=overlay-words&furigana=0&fragments=1&lookup=1',
+    size: [960, 600],
+    ready: '.stage-popup:not([hidden])',
     settle: 1500,
-    actions: [
-      // The windows' resize grips are for visitors to the live demo, not for a picture of the overlay.
-      { run: HIDE_GRIPS + `document.querySelector('#demo').scrollIntoView()`, after: 800 },
-      { doubleClick: { selector: '#demo button', text: 'STEINS' }, after: 2000 }
-    ],
-    clipTo: '.kd-screen',
-    marks: [{ type: 'cursor', target: { selector: '.kd-word', text: '容赦' }, fx: 0.55, fy: 0.75 }],
-    radius: 10
+    marks: [{ type: 'cursor', target: { selector: '.ocr-word', index: 0 }, fx: 0.55, fy: 0.7 }]
   },
   {
     id: 'overlay-demo-deck',
-    server: 'site',
-    page: '',
-    size: [1280, 900],
-    ready: '.kd-screen .kd-word',
-    actions: [
-      { run: `document.querySelector('#demo').scrollIntoView()` },
-      { click: { selector: '#demo [role="tab"]', text: 'Handheld' }, after: 1500 }
-    ],
-    clipTo: '.kd-screen',
+    // A Steam Deck's screen (1280×800): Read along on the first word.
+    page: 'stage.html?scene=controller-words&furigana=0&step=0',
+    size: [1280, 800],
+    ready: '.stage-popup:not([hidden])',
+    settle: 1500,
     radius: 10
   }
 ]
