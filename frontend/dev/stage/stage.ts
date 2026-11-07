@@ -24,6 +24,8 @@
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
  *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open);
  *                    hook-card: look up ?word= (default 天気) in the card
+ *   ?hints=1         overlay-words: the hint bar (ui/overlay-hints.js), under the game window
+ *                    with ?windowed=1, else along the bottom
  *   ?armed=1         hook-card: Shift held over the card (its bar, size buttons and corner show)
  *   ?theme=light|dark  the pop-up's, the region editor's and the controller's appearance (default:
  *                    the browser's)
@@ -70,6 +72,7 @@ import '@ui/overlay-text.css'
 import '@ui/controller.css'
 import '@ui/controller-variants.css'
 import '@ui/hook-card.css'
+import '@ui/overlay-hints.css'
 // The app bundles Figtree for the overlay as fonts/figtree.css (prepare.mjs); here, from the package.
 import '@fontsource-variable/figtree/wght.css'
 import '@fontsource/zen-kaku-gothic-antique/500.css'
@@ -78,6 +81,7 @@ import './stage.css'
 import { TextOverlayRenderer } from '@ui/render.js'
 import { createController } from '@ui/controller.js'
 import { createHookCard } from '@ui/hook-card.js'
+import { createOverlayHints } from '@ui/overlay-hints.js'
 import { BUTTON } from '@ui/controller-input.js'
 import { HoverOverlay } from '@ui/hover.js'
 import { RegionSelect } from '@ui/region-select.js'
@@ -532,6 +536,11 @@ async function play(): Promise<void> {
     case 'overlay-words': {
       const at = params.get('hover')?.split(',').map(Number)
       if (at?.length === 2) renderer.setPointer(at[0], at[1])
+      if (flag('hints')) {
+        const hints = createOverlayHints(document.body, { onDismiss: () => undefined })
+        hints.sync(true, true)
+        hints.place(flag('windowed') ? game.area : null)
+      }
       if (flag('lookup')) {
         const first = words.querySelector<HTMLElement>('.ocr-word, .ocr-group')
         const text = first?.textContent ?? ''

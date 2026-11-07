@@ -17,7 +17,10 @@
   <a href="https://kimochiapp.com"><b>Download Kimochi and learn more at kimochiapp.com →</b></a>
 </p>
 
-<!-- TODO(owner): add one screenshot here. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site-docs/src/assets/screenshots/main-window-dark.webp">
+  <img src="site-docs/src/assets/screenshots/main-window-light.webp" alt="Kimochi's main window: the source and its switches in the sidebar, and the Log of scanned lines.">
+</picture>
 
 ## What it is
 

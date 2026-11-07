@@ -20,6 +20,7 @@
  *                    selects it: the view state follows `commit_source`, `clear_source` and the
  *                    Auto OCR and Show overlay switches)
  *   ?auto=0          Auto OCR starts off (default: on)
+ *   ?overlay=1       Show overlay starts on (with input=hook, the Auto align switch shows under it)
  *   ?crop=1          main window: the chosen source has a crop region
  *   ?ankiCrop=1      main window: the chosen source has an Anki crop (the green outline)
  *   ?source=<id>     main window: the chosen demo source (e.g. window:106, a tall one)
@@ -247,6 +248,7 @@ const settings: Record<string, unknown> = {
   // The marketing demo reads as the app does on a desktop: MeikiOCR (what its Log lines say they
   // were read with) and the overlay on.
   ...(params.get('embed') === '1' ? { ocrMode: 'meikiocr', liveOverlayEnabled: true } : {}),
+  ...(params.get('overlay') === '1' ? { liveOverlayEnabled: true } : {}),
   // In the UI studio (frontend/dev/studio/): any stored setting, edited there as JSON.
   ...studioJson<Record<string, unknown>>('settings')
 }

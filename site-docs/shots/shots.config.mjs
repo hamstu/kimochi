@@ -221,10 +221,11 @@ export const SHOTS = [
   // Text Hooker (Windows only): a hooked game in the sidebar, and its submenu in the source menu.
   {
     id: 'hook-card',
-    page: 'panel.html?window=log&input=hook&platform=windows',
+    page: 'panel.html?window=log&input=hook&platform=windows&overlay=1',
     size: [900, 640],
-    crop: { x: 0, y: 0, width: 271, height: 640 },
-    ready: '.src-hook-select'
+    crop: { ...SIDEBAR, height: 640 },
+    ready: '.src-hook-select',
+    marks: [{ type: 'glow', target: switchRow('Auto align'), radius: 8 }]
   },
   {
     id: 'hook-source-menu',
@@ -235,6 +236,13 @@ export const SHOTS = [
       { click: sourceAction('Change source'), after: 500 },
       { hover: { selector: '.src-type', text: 'Text Hooker' }, after: 1200 }
     ]
+  },
+  {
+    id: 'overlay-hint-bar',
+    page: 'stage.html?scene=overlay-words&furigana=0&windowed=1&hints=1',
+    size: [960, 600],
+    ready: '.overlay-hints:not([hidden])',
+    settle: 1500
   },
   {
     id: 'hook-card-over-game',
