@@ -237,6 +237,13 @@ export const SHOTS = [
     ]
   },
   {
+    id: 'hook-card-over-game',
+    page: 'stage.html?scene=hook-card&furigana=0&lookup=1&armed=1',
+    size: [960, 600],
+    ready: '.hook-card:not([hidden])',
+    settle: 1500
+  },
+  {
     id: 'hook-thread-menu',
     page: 'panel.html?window=log&input=hook&platform=windows',
     size: [900, 640],

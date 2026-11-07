@@ -8,7 +8,7 @@
  *
  * URL parameters (all optional):
  *   ?scene=overlay-words (default) | overlay-hover | region-select | controller-menu |
- *          controller-words | controller-controls | controller-history
+ *          controller-words | controller-controls | controller-history | hook-card
  *   ?game=dialogue (default) | manga     a visual novel's dialogue box, or vertical speech bubbles
  *   ?windowed=1      the game is a window on a desktop (a Mac game), not the whole screen
  *   ?furigana=0      no readings over the kanji (default: drawn, and reported as OCR reports them)
@@ -22,7 +22,9 @@
  *   ?cards=light|dark|blend  the hovered cards' and grouped regions' appearance (default: the pop-up's,
  *                    `theme`, as "Same as Kimochi" does)
  *   ?hover=<x>,<y>   overlay-words: rest the pointer there (page points) so the proximity glow shows
- *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open)
+ *   ?lookup=1        overlay-words: look up the first word on load (the pop-up open);
+ *                    hook-card: look up ?word= (default 天気) in the card
+ *   ?armed=1         hook-card: Shift held over the card (its bar, size buttons and corner show)
  *   ?theme=light|dark  the pop-up's, the region editor's and the controller's appearance (default:
  *                    the browser's)
  *   ?popup=yomitan (default) | hachidori | tenten | custom-api   the dictionary in use: Yomitan and
@@ -67,6 +69,7 @@ import overlayHtml from '@ui/overlay.html?raw'
 import '@ui/overlay-text.css'
 import '@ui/controller.css'
 import '@ui/controller-variants.css'
+import '@ui/hook-card.css'
 // The app bundles Figtree for the overlay as fonts/figtree.css (prepare.mjs); here, from the package.
 import '@fontsource-variable/figtree/wght.css'
 import '@fontsource/zen-kaku-gothic-antique/500.css'
@@ -74,6 +77,7 @@ import '@fontsource/zen-kaku-gothic-antique/700.css'
 import './stage.css'
 import { TextOverlayRenderer } from '@ui/render.js'
 import { createController } from '@ui/controller.js'
+import { createHookCard } from '@ui/hook-card.js'
 import { BUTTON } from '@ui/controller-input.js'
 import { HoverOverlay } from '@ui/hover.js'
 import { RegionSelect } from '@ui/region-select.js'
@@ -83,7 +87,7 @@ import type { Annotation } from '@ui/annotations'
 import { logSections } from '@ui/log-sections.js'
 import { studioJson } from '../studio/bridge'
 import { drawGame, gamePicture, type Game, type GameKind } from './game'
-import { DEFAULT_HISTORY, DEFAULT_SCRIPT, lookupWord, type StageScript } from './script'
+import { DEFAULT_HISTORY, DEFAULT_SCRIPT, lookupWord, plainText, type StageScript } from './script'
 import '@ui/game-dictionary.css'
 import { apiEntries, apiTokenize } from './api-dictionary'
 
@@ -170,7 +174,8 @@ function toast(message: string): void {
 // --------------------------------------------------------------- the game and its text
 
 let game: Game = { area: { x: 0, y: 0, width: innerWidth, height: innerHeight }, annotations: [] }
-let textVisible = true
+// The Text Hooker shows its line in a card (hook-card scene), and draws nothing from OCR.
+let textVisible = scene !== 'hook-card'
 const renderer = new TextOverlayRenderer(words, {
   onLookupStart: () => undefined,
   onActivity: () => undefined
@@ -631,8 +636,61 @@ async function play(): Promise<void> {
         await send('a')
       }
       return
+    case 'hook-card':
+      return void (await hookCard())
     default:
       toast(`Unknown scene: ${scene}`)
+  }
+}
+
+/**
+ * The Text Hooker's card (ui/hook-card.js) over the dialogue, where Auto align puts it: over the
+ * game's own text, at its size, broken where the game breaks it.
+ */
+async function hookCard(): Promise<void> {
+  const lines = [...gameHost.querySelectorAll<HTMLElement>('.game-line')]
+  if (!lines.length) return toast('hook-card needs ?game=dialogue')
+  // The text's own extent (a line element is as wide as the dialogue box).
+  const rects = lines.map((line) => {
+    const range = document.createRange()
+    range.selectNodeContents(line)
+    return range.getBoundingClientRect()
+  })
+  const fontPx = parseFloat(getComputedStyle(lines[0]).fontSize)
+  const lineHeight = 1.5
+  const left = Math.min(...rects.map((r) => r.left))
+  const right = Math.max(...rects.map((r) => r.right))
+  // Each row's text centred where the game's is.
+  const top = rects[0].top + rects[0].height / 2 - (fontPx * lineHeight) / 2
+  const none = (): void => undefined
+  const card = createHookCard(document.body, { onMoved: none, onDrag: none, onTextSize: none, onOpacity: none, onSettings: none })
+  const cards = params.get('cards')
+  const look = cards === 'light' || cards === 'dark' || cards === 'blend' ? cards : theme
+  card.show({
+    text: script.lines.map(plainText).join('\n'),
+    x: left,
+    y: top,
+    width: right - left + fontPx * 0.6,
+    height: lines.length * fontPx * lineHeight,
+    fontPx,
+    lineHeight,
+    lines: lines.length,
+    theme: look,
+    surface: look === 'blend' ? stageSurface.surface : undefined,
+    opacity: 1
+  })
+  if (flag('armed')) card.pointer(left + 4, top + 4, false, true)
+  if (flag('lookup')) {
+    const word = params.get('word') ?? '天気'
+    const node = card.element.querySelector('.hook-card-text')?.firstChild
+    const at = node?.textContent?.indexOf(word) ?? -1
+    if (!node || at < 0) return toast(`No ${word} in the card`)
+    const range = document.createRange()
+    range.setStart(node, at)
+    range.setEnd(node, at + word.length)
+    getSelection()?.removeAllRanges()
+    getSelection()?.addRange(range)
+    await showPopup(node.textContent!.slice(at), range.getBoundingClientRect())
   }
 }
 
