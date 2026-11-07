@@ -151,6 +151,8 @@ Under **Defaults**:
 | **Line delay** | 300 ms | How long Kimochi waits for more text before a line counts as finished (100 ms – 1.2 s). Raise it if lines arrive in pieces. Takes effect the next time the game is hooked. |
 | **Speaker names apart** | On | Keeps the speaker's name on the game's nameplate; the card shows what they say. |
 | **Repeated characters** | Undo automatically | For games that send ここここ for こ: **Undo automatically**, **Leave as sent**, or **Each sent twice**, **3 times** or **4 times**. |
+| **Join split lines** | On | For games that send their text a row at a time (SiglusEngine, for one): a row that carries on an unfinished sentence joins the line before it. |
+| **Remove script codes** | On | Takes out asset and label names some engines leave in their text, such as `chr01chr02`. |
 | **Auto align** | On | Lines the card up with the game's text. |
 | **Text size** | Medium | The card's text size (Small, Medium, Large or Larger) until Auto align measures the game's, or with Auto align off. |
 | **Background opacity** | 100% | The card's background, from 100% down to 40%. |
@@ -185,6 +187,7 @@ reset button beside them. It also has what only a game has:
 - **The wrong text comes through**: pick the dialogue in the **Text hooker** select, or **Forget**
   the dialogue thread on the game's page.
 - **Lines arrive in pieces**: raise **Line delay** for the game, then hook it again.
+- **Lines joined that shouldn't be**: turn off **Join split lines** for the game.
 - **Doubled characters** (ここここ): set **Repeated characters** for the game.
 - **No text at all**: some games need a hook code. Look one up for your game and add it under
   **Hook codes** on its page. If the game still can't be hooked, read it with

@@ -105,7 +105,7 @@ export const FAQ = [
     id: 'obs-and-extensions',
     q: 'Do I need OBS or a browser extension?',
     a: [
-      'No. Kimochi has built-in screen and window capture with a crop region, and Yomitan is built in. You can still use the Yomitan in your browser through the Yomitan API.'
+      'No. Kimochi has built-in screen and window capture with a crop region, and Yomitan is built in. You can use the Yomitan in your browser through the Yomitan API. The Kimochi browser extension is only for reading pictures on web pages.'
     ]
   },
   {

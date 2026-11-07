@@ -82,7 +82,8 @@ export default defineConfig({
             { label: 'Auto OCR', slug: 'reading/auto-ocr' },
             { label: 'The overlay', slug: 'reading/overlay' },
             { label: 'Mini mode', slug: 'reading/mini-mode' },
-            { label: 'Texthookers and clipboard', slug: 'reading/texthookers' }
+            { label: 'Texthookers and clipboard', slug: 'reading/texthookers' },
+            { label: 'Browser extension', slug: 'reading/browser-extension' }
           ]
         },
         {

@@ -84,7 +84,8 @@ const SETTINGS_READY = {
   assist: '#assist-deepl',
   controls: '#gamepad-enabled',
   gamemode: '.read-along-views',
-  account: '.settings-page-scroll h2, .settings-page-scroll h3'
+  account: '.settings-page-scroll h2, .settings-page-scroll h3',
+  browser: '.browser-hero'
 }
 /** Settings → Account shows a Server section in development builds only (the harness is one). */
 const HIDE_DEV_SERVER = {
@@ -396,7 +397,8 @@ export const SHOTS = [
     ['assist', 'Translation & AI'],
     ['controls', 'Shortcuts & Controls'],
     ['gamemode', 'Game Mode'],
-    ['account', 'Account']
+    ['account', 'Account'],
+    ['browser', 'Browser Extension']
   ].map(([tab]) => ({
     id: `settings-${tab}`,
     page: settingsTab(tab),

@@ -1,0 +1,58 @@
+---
+title: Browser extension
+description: Read Japanese in pictures on web pages, such as manga pages and game screenshots, with the Kimochi browser extension.
+---
+
+import { Steps } from '@astrojs/starlight/components'
+import Screenshot from '../../../components/Screenshot.astro'
+
+The Kimochi extension reads Japanese in pictures on web pages: manga pages, game screenshots,
+comics. Kimochi reads the picture with your OCR engine, adds the lines to the Log, and draws the
+text over the picture so your browser's dictionary extension can look it up. Kimochi has to be
+running.
+
+It works in Chrome, Edge, Brave, Arc and other Chromium browsers. Firefox isn't supported yet.
+
+<Screenshot id="settings-browser" alt="Settings, Browser Extension: what the extension does, and the dictionary extensions it needs (Yomitan, Hachidori, 10ten)." width={760} />
+
+## Installing it
+
+Open **Settings → Browser Extension**. Until the extension is approved in the Chrome Web Store,
+install it by hand:
+
+<Steps>
+
+1. Open your browser's extensions page: `chrome://extensions` (Edge: `edge://extensions`, Brave:
+   `brave://extensions`).
+2. Turn on **Developer mode**.
+3. Choose **Load unpacked** and pick the folder shown in Settings (**Show folder** opens it).
+4. Pin Kimochi from the puzzle-piece menu.
+
+</Steps>
+
+After a Kimochi update, click the reload arrow on Kimochi's card on the extensions page.
+
+Your browser also needs a dictionary extension of its own, such as
+[Yomitan](https://yomitan.wiki/), [10ten](https://10ten.life/) or Hachidori. Kimochi's built-in
+dictionary doesn't reach web pages.
+
+## Reading a picture
+
+1. Click Kimochi in the toolbar, or press <kbd>Alt+K</kbd>.
+2. Click a picture. Press <kbd>↑</kbd> while picking to take a bigger area, such as a two-page
+   spread, and <kbd>↓</kbd> to narrow it again.
+3. Hold <kbd>Shift</kbd> over the text and look words up with your dictionary extension.
+
+The lines also go to the Log, with the picture.
+
+With **Auto** on (the extension's toolbar, on by default), Kimochi reads the picture again when it
+changes, including when a reader turns the page or loads the next one. The toolbar also picks the
+OCR model and the session.
+
+## Sessions
+
+Each site gets its own session, named for the day the first time. Pick, create or rename it from
+the extension's toolbar. Choose **Browser** as the [source](/reading/sources/) to read along in
+Kimochi as lines arrive.
+
+**Connect to the browser extension** in Settings turns the connection off.
