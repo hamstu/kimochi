@@ -19,6 +19,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- **The overlay works on more Linux desktops.** On Wayland desktops such as Hyprland, Sway and KDE Plasma, the installed app no longer says the overlay isn't supported. Kimochi now brings the library it needs, so there's nothing extra to install.
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
 - **Mini mode's title bar fits again.** The Help and sound buttons are hidden in mini mode, so the Kimochi name no longer runs into the buttons.
 

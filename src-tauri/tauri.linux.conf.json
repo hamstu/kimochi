@@ -28,6 +28,9 @@
           "gstreamer1.0-plugins-good",
           "gstreamer1.0-plugins-bad",
           "libavif16"
+        ],
+        "recommends": [
+          "libgtk-layer-shell0"
         ]
       }
     }
