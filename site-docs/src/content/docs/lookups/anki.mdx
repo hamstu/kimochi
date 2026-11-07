@@ -1,6 +1,6 @@
 ---
 title: Anki
-description: "Make Anki cards from the dictionary pop-up through AnkiConnect: your dictionary engine's own mining or Kimochi's card builder, with sentence audio from your source."
+description: "Make Anki cards from the dictionary pop-up through AnkiConnect: your dictionary engine's mining or Kimochi's card builder, with sentence audio from your source."
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -28,8 +28,7 @@ included: set those there, as you would in the browser.
 
 ## The AnkiConnect connection
 
-**Settings → Anki → AnkiConnect** shows whether Kimochi can reach AnkiConnect: the Anki tab, sentence audio and the Yomitan API pop-up all use this connection. The
-defaults are AnkiConnect's own. It checks again every few seconds
+**Settings → Anki → AnkiConnect** shows whether Kimochi can reach AnkiConnect: the Anki tab, sentence audio and the Yomitan API pop-up all use this connection. It checks again every few seconds
 while the tab is open; **Check** asks at once.
 
 | Setting | Default | What it does |
@@ -45,9 +44,9 @@ while the tab is open; **Check** asks at once.
 | **API key needed** / **Wrong API key** | AnkiConnect has an `apiKey`: enter the same key. |
 | **Not answering** | Anki is busy, for example with a dialog open. |
 
-## Kimochi's card builder (Yomitan API)
+## Card builder (Yomitan API)
 
-With the Yomitan API engine, Kimochi's own pop-up builds the cards. Below the connection in
+With the Yomitan API engine, Kimochi's pop-up builds the cards. Below the connection in
 **Settings → Anki → Mining**:
 
 | Setting | Default | What it does |
@@ -142,7 +141,7 @@ area is drawn with the rest of the source faded. The eye at the top hides or sho
 With **Enhance with screenshot** on (the default), every new card you make gets the screenshot of
 the scan its sentence was read in, whichever dictionary made it, in its **Picture field**
 (`Picture` in Lapis and Kiku; Kimochi finds it in Anki when you turn it on). A field that is
-already filled is left as it is, so Hachidori's own picture stays.
+already filled is left as it is, so Hachidori's picture stays.
 
 Cards get the whole source. To send only part of it (the scene without the dialogue box, say), set
 the source's [Anki crop area](/reading/sources/#anki-crop-area), the green box: **Crop area → Set

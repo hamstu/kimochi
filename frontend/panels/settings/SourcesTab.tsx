@@ -210,7 +210,7 @@ export function SourcesTab(): ReactNode {
                 {settings.inputSource === 'hook' ? (
                   <SettingsRow
                     label="Text Hooker settings"
-                    description="Defaults for every game, and each game's own."
+                    description="Defaults for every game, and per-game settings."
                   >
                     <Button size="sm" onClick={() => void openTextHookerSettings()}>
                       Open

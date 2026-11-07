@@ -291,7 +291,7 @@ function AccountsSection({ account }: { account: AccountStatus }): ReactNode {
           </span>
         }
         badge={localActive ? <Badge tone="accent">In use</Badge> : undefined}
-        description="This computer's own Log, without an account. Not synced."
+        description="The Log you had before signing in."
       >
         {!localActive && (
           <Button size="sm" disabled={disabled} onClick={() => run(() => accountSwitch(null))}>

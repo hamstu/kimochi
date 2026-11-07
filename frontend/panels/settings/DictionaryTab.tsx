@@ -116,7 +116,7 @@ export function DictionaryTab(): ReactNode {
     }
     return (
       <>
-        <SettingsSection title="Your browser's Yomitan" grouped>
+        <SettingsSection title="Yomitan in your browser" grouped>
           <YomitanApiStatusRows url={apiUrl} active={!setupOpen} onSetUp={() => setSetupOpen(true)} />
           <ApiAddressRow
             value={yomitanSettings.customApiUrl}
@@ -320,7 +320,7 @@ function TentenPopupSize(): ReactNode {
   const [size, setSize] = useSetting<TentenSize>('tentenPopupSize', 'compact')
   const description =
     size === 'large'
-      ? '10ten’s own size: up to 600 pixels wide and as tall as the screen allows.'
+      ? '10ten’s default size: up to 600 pixels wide and as tall as the screen allows.'
       : size === 'medium'
         ? 'Up to 480 × 400 pixels. Longer entries fade out; hover the pop-up to scroll.'
         : 'Up to 400 × 250 pixels, the size of Yomitan’s. Longer entries fade out; hover the pop-up to scroll.'

@@ -354,7 +354,7 @@ function CardsSection({
           settings={settings}
           connection={connection}
           title={`Adding cards with the ${name}`}
-          description="Kimochi's own pop-up adds the card."
+          description="Kimochi's pop-up adds the card."
         />
       </div>
     )

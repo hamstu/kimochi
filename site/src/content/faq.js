@@ -153,7 +153,7 @@ export const FAQ = [
     ],
     links: [
       { href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' },
-      { href: 'https://github.com/hamstu/kimochi/issues', label: 'Kimochi’s GitHub issues' },
+      { href: 'https://github.com/hamstu/kimochi/issues', label: 'GitHub issues' },
       { href: docsUrl('/help/troubleshooting/'), label: 'Troubleshooting' }
     ]
   }

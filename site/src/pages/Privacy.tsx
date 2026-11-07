@@ -93,7 +93,7 @@ export function Privacy() {
 
       <h3>Kimochi cloud OCR</h3>
       <p>
-        Kimochi&rsquo;s own cloud OCR is available when you are signed in to a
+        Kimochi&rsquo;s cloud OCR is available when you are signed in to a
         Kimochi account (see <a href="#accounts">Accounts</a>). When it is
         selected, each scan (manual or with Auto OCR) sends an
         image of the captured region to our server at{" "}

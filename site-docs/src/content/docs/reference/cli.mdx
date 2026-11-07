@@ -61,7 +61,7 @@ kimochi version
 | `kimochi ocr` | Lists this computer's [OCR engines](/reading/ocr-engines/), with the selected one marked. |
 | `kimochi ocr <engine>` | Switches engine: `googlelens`, `cloud`, `meikiocr`, `mangaocr`, `ppocr`, `livetext` (macOS) or `oneocr` (Windows). A local engine whose model isn't downloaded yet starts downloading. |
 | `kimochi source` | The source Kimochi reads. |
-| `kimochi source list` | Every window and display it could read, with their ids. Not on Linux with Wayland or in Gaming Mode, where only the system's own picker can choose: use `kimochi source choose`. |
+| `kimochi source list` | Every window and display it could read, with their ids. Not on Linux with Wayland or in Gaming Mode, where only the system's picker can choose: use `kimochi source choose`. |
 | `kimochi source set <name>` | Reads a window or display: by id, or by its title or app name (exactly, or the only one containing the words). Its saved crop comes back with it, and with **Switch session by window name** on, the Log opens that window's [session](/log/sessions/) too. |
 | `kimochi source clear` | Reads nothing. |
 | `kimochi source choose` | Opens the source picker in the main window. |
@@ -72,7 +72,7 @@ kimochi version
 | --- | --- |
 | `kimochi log` | The open session's newest 20 lines, oldest first. `-n <count>` for more or fewer, `--all` for every line, `--session <name>` for another session. |
 | `kimochi log --follow` | Prints each new line as the Log takes it in, until you press <kbd>Ctrl+C</kbd>. |
-| `kimochi log add <text>` | Adds a line to the Log. With `-`, or with text piped in, it reads standard input. The line goes through the Log's own rules ([replacements](/log/the-log/), **Japanese only**, skipping a repeat): if they drop it, the command says so and exits 1. |
+| `kimochi log add <text>` | Adds a line to the Log. With `-`, or with text piped in, it reads standard input. The line goes through the Log's rules ([replacements](/log/the-log/), **Japanese only**, skipping a repeat): if they drop it, the command says so and exits 1. |
 | `kimochi session` | The open session's name. |
 | `kimochi session list` | Every [session](/log/sessions/), the open one marked `*`. |
 | `kimochi session switch <name>` | Opens another session. |
@@ -89,7 +89,7 @@ ignoring case: `kimochi session switch chrono` finds **Chrono Trigger**.
 | `kimochi open` | Starts Kimochi if needed and brings the main window forward. |
 | `kimochi open log` | The main window on the Log, leaving Settings if it was showing. Also `notebook` and `anki`. |
 | `kimochi open settings [<page>]` | Opens Settings, on a page if you name one: `general`, `sources`, `ocr`, `log`, `dictionary`, `anki`, `assist`, `controls`, `gamemode`, `account`, `cli` or `about`. |
-| `kimochi open sources` | The source picker. Also `mini` ([Mini mode](/reading/mini-mode/)) and `dictionary` (the dictionary's own settings). |
+| `kimochi open sources` | The source picker. Also `mini` ([Mini mode](/reading/mini-mode/)) and `dictionary` (the dictionary's settings). |
 | `kimochi quit` | Quits Kimochi and waits until it has. |
 | `kimochi settings list` | Every setting, as `key = value` lines. |
 | `kimochi settings get <key>` | One setting. Keys are dotted paths: `overlayOpacity`, `autoOCRSettings.pollInterval`. |
@@ -197,7 +197,7 @@ done
 
 ## Good to know
 
-- **Windows:** use `kimochi` (the installed command), not the `kimochi.exe` in Kimochi's own folder.
+- **Windows:** use `kimochi` (the installed command), not the `kimochi.exe` in Kimochi's folder.
   That one is the windowed app: a terminal doesn't wait for it, and its output can't be redirected or
   piped. The installed command is a small console program that runs it.
 - **Windows PowerShell 5.1** (the blue one built into Windows) sends piped text to programs as

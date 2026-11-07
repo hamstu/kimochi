@@ -225,7 +225,7 @@ function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<
           label="Auto align"
           controlId={id('align')}
           badge={badge('autoAlign')}
-          description="Lines the card up with the game's own text."
+          description="Lines the card up with the game's text."
         >
           <Switch id={id('align')} checked={value.autoAlign} onCheckedChange={(on) => set('autoAlign', on)} />
         </SettingsRow>

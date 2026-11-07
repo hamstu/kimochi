@@ -75,7 +75,7 @@ function YomitanApiSetup(): JSX.Element {
   const [, settings] = useDictionaryEngine()
   return (
     <Step
-      title="Connect your browser's Yomitan"
+      title="Connect Yomitan in your browser"
       lede="Look words up with the Yomitan in your browser, using its dictionaries and settings."
     >
       <YomitanApiWizard
