@@ -6,7 +6,7 @@
  *
  * Read by the overlay (ui/overlay.js), the main window (the source panel, Settings → Text Hooker)
  * and natively (src-tauri/src/text_hook `GameConfig`, which reads `flushMs`, `repeats`,
- * `hookCodes` and `replacements`).
+ * `joinLines`, `stripCodes`, `hookCodes` and `replacements`).
  */
 
 /** How a game's repeated characters are undone: `ここここ` → `こ`. */
@@ -28,6 +28,10 @@ export interface HookSettings {
   /** How long a line may pause before it counts as finished, in ms. */
   flushMs: number;
   repeats: Repeats;
+  /** A line the game sends a row at a time is joined back up (text_hook/clean.rs `continues`). */
+  joinLines: boolean;
+  /** Script codes (asset and label names such as `chr00chr01`, `$fx_shake_fa`) are taken out. */
+  stripCodes: boolean;
   /** Speakers' names apart from what they say, on the game's nameplate (hook-match.ts). */
   speakerNames: boolean;
   /** The card follows the game's text, found by OCR. */
@@ -42,6 +46,8 @@ export const HOOK_DEFAULTS: HookSettings = {
   autoHook: true,
   flushMs: 300,
   repeats: "auto",
+  joinLines: true,
+  stripCodes: true,
   speakerNames: true,
   autoAlign: true,
   opacity: 1,
@@ -104,6 +110,8 @@ export function hookSettings(
     autoHook: own.autoHook ?? base.autoHook,
     flushMs: own.flushMs ?? base.flushMs,
     repeats: own.repeats ?? base.repeats,
+    joinLines: own.joinLines ?? base.joinLines,
+    stripCodes: own.stripCodes ?? base.stripCodes,
     speakerNames: own.speakerNames ?? base.speakerNames,
     autoAlign: autoAlign ?? base.autoAlign,
     opacity: own.opacity ?? base.opacity,

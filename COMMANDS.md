@@ -1731,6 +1731,14 @@ HookStatus = {
 Events: `texthook-status` (a `HookStatus`, on every change and every hooked sentence) and
 `texthook-line` (`{text, key, at, id, replaces}`: a sentence of the selected thread, consecutive
 repeats dropped; `replaces` is the id of the line it finishes, or null), which the texthooker ingests as source `"hook"` while `inputSource` is `"hook"`.
+A line is finished by the rest of a line still typing out when its burst ended, and, with the
+game's `joinLines` on, by a piece from the same thread that carries on the line
+(`clean::continues`: the line's 「 or 『 is still open and the piece does not open another 「, or
+the line does not end in `。！？`, a closing bracket, `…`, `～` or a dash) and comes within
+300 ms + 100 ms per character of the piece before it (the time that row takes to type out at ten
+characters a second; at most 5 s), where a line the reader clicked on to comes later.
+SiglusEngine sends its text box a row at a time, breaking at each line break and ruby. The joined
+line replaces the line before it.
 
 **Thread choice.** A thread is selected as soon as it speaks if it matches the one remembered
 for this exe (`<app local data>/texthook/games.json`: `hookcode`, `ctx & 0xFFFF`, `ctx2 & 0xFFFF`).
@@ -1739,9 +1747,15 @@ grouped into blocks, and each thread's latest sentence looked for in each block 
 normalising width, punctuation and whitespace (exact containment, never fuzzy). Matches in the
 largest block count double; a block found inside a longer sentence counts only for the share of
 the sentence it is; engine hooks beat the generic Windows API hooks, a thread repeating itself
-rapidly is halved, and of two copies of a line the one with fewer line breaks wins. Threads
+rapidly is halved, and of two copies of a line the one with fewer line breaks wins; a thread that
+has sent more pieces gains up to 1 (some hooks start a thread per line, which never speaks again),
+and one whose pieces held script codes (`clean::has_codes`) loses up to 3. Threads
 under 30 % kana and kanji are never chosen, and at least 6 effective matched characters are
-needed. A choice made this way or by hand is remembered for the game. The window is read with
+needed. A choice made this way or by hand is remembered for the game. A thread chosen
+automatically or remembered (never one chosen by hand) is replaced while the game runs when at
+least a fifth of its pieces (two or more) held script codes and another engine thread that has
+sent three pieces and never a code sends at least 70 % of its latest text, codes aside: the new
+thread is selected (`selectedBy: 'auto'`) and remembered, logged as `texthook-reselected`. The window is read with
 `observerEngine`, else the first local engine available (`oneocr`, `ppocr`, `meikiocr`,
 `livetext`).
 
@@ -1752,6 +1766,7 @@ game's record holds what the reader changed for it and what was learned about it
 
 ```ts
 HookSettings = { autoHook: true, flushMs: 300, repeats: 'auto' | 'off' | 2 | 3 | 4,
+                 joinLines: true, stripCodes: true,
                  speakerNames: true, autoAlign: true, opacity: 1, textSize: 0.034 }
 textHookerGames[exe] = Partial<HookSettings> (textSize is `text`) & {
   exe, name, sessionId, addedAt, hookedAt,            // the game, its Log session, when hooked
@@ -1764,7 +1779,10 @@ textHookerGames[exe] = Partial<HookSettings> (textSize is `text`) & {
 `flushMs` is LunaHook's `--flush-ms`, read when the sidecar starts. Each hooked line is cleaned
 natively before it is sent (`text_hook/clean.rs`): markup engines leave in their text is taken
 out, keeping the text it marks up (HTML-like tags, `<rt>` readings, `{漢字/かんじ}`, Ren'Py's
-`{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`); repeated characters are undone (`auto`: only when
+`{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`); with `stripCodes`, script codes are taken out (ASCII
+runs of letters, digits and `_ $ | -` with a `$`, a `_` beside a letter or digit, or letters and
+digits mixed over 5 characters or more: such as `chr00chr01`, `$fx_shake_fa`, `VOK_`),
+and a line that was nothing else is dropped; repeated characters are undone (`auto`: only when
 every run of a character in the line, three runs at least, is a multiple of the same count); the
 game's replacements apply; and a line over 300 characters (a backlog or skip sent at once) is
 dropped, logged as `texthook-dropped` with verbose logging on.

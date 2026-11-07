@@ -37,6 +37,10 @@ use tauri::{Emitter, Manager};
 const ENGINES: &[&str] = &["luna", "textractor"];
 /// How long after a burst the next can carry on its line (a typewriter paused for effect).
 const CARRY_ON: Duration = Duration::from_secs(5);
+/// How soon after a row of the text box the next row can join it: this, and the time the row
+/// takes to type out at ten characters a second.
+const JOIN_BASE: Duration = Duration::from_millis(300);
+const JOIN_PER_CHAR: Duration = Duration::from_millis(100);
 /// Local OCR engines the thread choice can read the window with, best first after the one asked
 /// for.
 const OBSERVERS: &[&str] = &["oneocr", "ppocr", "meikiocr", "livetext"];
@@ -56,6 +60,9 @@ struct Thread {
     ctx2: u64,
     text: String,
     count: u64,
+    /// Of those, pieces that held script codes (`clean::strip_codes`): a thread that mixes them in
+    /// with the dialogue is a worse choice than one that sends the dialogue alone.
+    noisy: u64,
     recent: VecDeque<Instant>,
     last_at: Option<Instant>,
 }
@@ -92,6 +99,12 @@ struct Session {
     last_line: Option<String>,
     /// The id the last line was sent with: a line carried on in the next burst replaces it.
     last_id: Option<String>,
+    /// The thread the last line came from, and when it was sent: a piece that carries on its
+    /// sentence soon after is joined to it.
+    last_key: Option<String>,
+    last_sent: Option<Instant>,
+    /// How long the last piece sent was (a row of the text box, when the game sends rows).
+    last_piece_chars: usize,
     /// Lines sent this session, for their ids.
     lines: u64,
     observer_engine: Option<String>,
@@ -136,18 +149,42 @@ impl Hook {
         clean::GameConfig::from_settings(&defaults, &game)
     }
     /// Sends a line. One that `carries_on` the last line (the rest of a line still typing out when
-    /// its burst ended) replaces it, in the Log and on the overlay.
+    /// its burst ended) replaces it, in the Log and on the overlay. So does a piece that carries on
+    /// the sentence the last line from this thread left unfinished, soon after it: games that send
+    /// their text box a row at a time (SiglusEngine, at each line break and ruby) are joined back
+    /// up, unless the game's settings say not to.
     fn line(&self, session: &mut Session, key: &str, text: &str, carries_on: bool) {
-        let Some(text) = self.config(session).clean(text) else {
+        let config = self.config(session);
+        let Some(mut text) = config.clean(text) else {
             if !text.trim().is_empty() {
                 crate::debug_report::trace(&self.app, json!({ "check": "texthook-dropped", "chars": text.chars().count() }));
             }
             return;
         };
-        let text = text.as_str();
-        if session.last_line.as_deref() == Some(text) {
+        if session.last_line.as_deref() == Some(text.as_str()) {
             return;
         }
+        let mut carries_on = carries_on;
+        // The next row comes once the row before has typed out: soon after a short row, later
+        // after a long one, even at a slow text speed (ten characters a second). A line the reader
+        // clicked on to comes later than that.
+        let window = (JOIN_BASE + JOIN_PER_CHAR * session.last_piece_chars as u32).min(CARRY_ON);
+        let recent = session.last_key.as_deref() == Some(key) && session.last_sent.is_some_and(|at| at.elapsed() < window);
+        let piece_chars = text.chars().count();
+        if !carries_on && config.join_lines && recent {
+            if let Some(before) = session.last_line.as_deref() {
+                let joined = format!("{before}{text}");
+                if clean::continues(before, &text) && !before.ends_with(&text) && joined.chars().count() <= clean::MAX_LINE_CHARS {
+                    crate::debug_report::trace(&self.app, json!({ "check": "texthook-joined", "before": before, "piece": text }));
+                    text = joined;
+                    carries_on = true;
+                }
+            }
+        }
+        let text = text.as_str();
+        session.last_key = Some(key.to_string());
+        session.last_sent = Some(Instant::now());
+        session.last_piece_chars = piece_chars;
         session.last_line = Some(text.to_string());
         let replaces = if carries_on { session.last_id.take() } else { None };
         let at = std::time::SystemTime::now()
@@ -403,6 +440,7 @@ fn read_events(
                         ctx2: hex("ctx2"),
                         text: String::new(),
                         count: 0,
+                        noisy: 0,
                         recent: VecDeque::new(),
                         last_at: None,
                     });
@@ -488,10 +526,30 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         let thread = &mut session.threads[index];
         thread.text = lines.last().cloned().unwrap_or_default();
         thread.count += 1;
+        thread.noisy += u64::from(clean::has_codes(text));
         thread.last_at = Some(Instant::now());
         thread.recent.push_back(Instant::now());
         while thread.recent.len() > 32 {
             thread.recent.pop_front();
+        }
+    }
+    if let Some(better) = cleaner_thread(session, index) {
+        crate::debug_report::trace(&hook.app, json!({ "check": "texthook-reselected", "from": session.selected, "to": better }));
+        let thread = session.threads.iter().find(|t| t.key == better).cloned();
+        if let Some(thread) = thread {
+            if let Some(exe) = session.exe.clone() {
+                remember(hook, &exe, Some(thread.signature()));
+            }
+            // The line already sent stays; the next rows of it come from the new thread.
+            if session.last_key == session.selected {
+                session.last_key = Some(better.clone());
+            }
+            session.selected = Some(better);
+            session.selected_by = Some("auto");
+            hook.publish(session);
+        }
+        if session.selected.as_deref() != Some(key) {
+            return;
         }
     }
     if session.selected.as_deref() == Some(key) {
@@ -523,6 +581,38 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     }
 }
 
+/// A thread to take over from the chosen one, now that thread `index` has spoken: the chosen one
+/// (picked automatically or remembered, never by hand) keeps mixing script codes in with its
+/// text, and another engine thread that has never sent one sends most of that same text.
+/// SiglusEngine sends its dialogue through several threads, one of them with the script's asset
+/// names, its speakers' names and its ruby readings in it; when the screen is read they show the
+/// same line, and which is chosen is down to chance.
+fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
+    let selected = session.selected.as_deref()?;
+    if session.selected_by == Some("manual") {
+        return None;
+    }
+    let chosen = session.threads.iter().find(|t| t.key == selected)?;
+    if chosen.noisy < 2 || chosen.noisy * 5 < chosen.count {
+        return None;
+    }
+    let shown = pick::normalize(&clean::strip_codes(&chosen.text));
+    let spoken = &session.threads[index];
+    let others: Vec<&Thread> = if spoken.key == selected { session.threads.iter().collect() } else { vec![spoken] };
+    others
+        .into_iter()
+        .filter(|t| t.key != selected && t.noisy == 0 && t.count >= 3 && !pick::is_generic_api_hook(&t.hookcode))
+        .find(|t| {
+            let text = pick::normalize(&t.text);
+            let length = text.chars().count();
+            length >= 4
+                && pick::japanese_ratio(&text) >= 0.3
+                && 10 * length >= 7 * shown.chars().count()
+                && shown.contains(&text)
+        })
+        .map(|t| t.key.clone())
+}
+
 /// Reads the window while no thread is chosen and threads keep producing text.
 fn pick_loop(hook: &'static Hook, generation: u64) {
     loop {
@@ -542,7 +632,7 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
         let outcome = read_screen(hook, &source_id, observer_engine.as_deref()).map(|blocks| {
             let list: Vec<Candidate> = candidates
                 .iter()
-                .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, text: &t.text, recent: t.recent_count() })
+                .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, text: &t.text, recent: t.recent_count(), count: t.count, noise: t.noisy as f64 / t.count.max(1) as f64 })
                 .collect();
             pick::score(&list, &blocks)
         });

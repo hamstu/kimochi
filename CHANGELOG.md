@@ -21,6 +21,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Fixed
 
 - **The overlay works on more Linux desktops.** On Wayland desktops such as Hyprland, Sway and KDE Plasma, the installed app no longer says the overlay isn't supported. Kimochi now brings the library it needs, so there's nothing extra to install.
+- **Text Hooker: whole lines from games that send their text a row at a time.** Some engines, SiglusEngine among them, send each row of the text box on its own, so the card and the Log showed only the last row. A row that carries on an unfinished sentence now joins the line before it. Turn off **Join split lines** in Settings → Text Hooker for a game where it joins lines it shouldn't.
+- **Text Hooker: no more script codes in lines.** Asset and label names some engines leave in their text (such as `chr01chr02`, `$fx_shake_fa`) are taken out, and lines that were nothing but codes are dropped. **Remove script codes** in Settings → Text Hooker turns it off.
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
 - **Mini mode's title bar fits again.** The Help and sound buttons are hidden in mini mode, so the Kimochi name no longer runs into the buttons.
 

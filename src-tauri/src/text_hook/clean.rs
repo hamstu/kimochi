@@ -5,8 +5,9 @@
 //! Always: markup some engines leave in their text (`<b>…</b>`, `{漢字/かんじ}` ruby, Ren'Py's
 //! `{w}`, Tyrano's `[r]`, `｜漢字《かんじ》`) is taken out, keeping the text it marks up; and a
 //! line far longer than a game says at once (a backlog opened, a skip through a scene, sent as
-//! one) is dropped. Per game: repeated characters undone (`ここここ` → `こ`), and the reader's
-//! own find-and-replace rules.
+//! one) is dropped. Per game: script codes taken out (unless turned off), repeated characters
+//! undone (`ここここ` → `こ`), and the reader's own find-and-replace rules; and whether a line the
+//! game sends in pieces (one call per row of its text box) is joined back up ([`continues`]).
 use regex::{NoExpand, Regex};
 use serde_json::Value;
 use std::sync::OnceLock;
@@ -35,13 +36,24 @@ pub struct Replacement {
 pub struct GameConfig {
     pub flush_ms: u32,
     pub repeats: Repeats,
+    /// A piece that carries on a sentence the line before left unfinished is joined to it.
+    pub join_lines: bool,
+    /// The script codes some engines leave in their text are taken out ([`strip_codes`]).
+    pub strip_codes: bool,
     pub hook_codes: Vec<String>,
     pub replacements: Vec<Replacement>,
 }
 
 impl Default for GameConfig {
     fn default() -> Self {
-        GameConfig { flush_ms: DEFAULT_FLUSH_MS, repeats: Repeats::Auto, hook_codes: Vec::new(), replacements: Vec::new() }
+        GameConfig {
+            flush_ms: DEFAULT_FLUSH_MS,
+            repeats: Repeats::Auto,
+            join_lines: true,
+            strip_codes: true,
+            hook_codes: Vec::new(),
+            replacements: Vec::new(),
+        }
     }
 }
 
@@ -55,6 +67,8 @@ impl GameConfig {
             Value::Number(n) => n.as_u64().filter(|n| (2..=8).contains(n)).map_or(Repeats::Auto, |n| Repeats::Fixed(n as usize)),
             _ => Repeats::Auto,
         };
+        let join_lines = pick("joinLines").as_bool().unwrap_or(true);
+        let strip_codes = pick("stripCodes").as_bool().unwrap_or(true);
         let hook_codes = game["hookCodes"]
             .as_array()
             .map(|codes| codes.iter().filter_map(|c| c.as_str()).map(str::trim).filter(|c| !c.is_empty()).map(String::from).collect())
@@ -78,12 +92,15 @@ impl GameConfig {
                     .collect()
             })
             .unwrap_or_default();
-        GameConfig { flush_ms, repeats, hook_codes, replacements }
+        GameConfig { flush_ms, repeats, join_lines, strip_codes, hook_codes, replacements }
     }
 
     /// The line as it is shown and logged; None when it is not one to show.
     pub fn clean(&self, text: &str) -> Option<String> {
         let mut line = strip_markup(text);
+        if self.strip_codes {
+            line = strip_codes(&line);
+        }
         line = collapse_repeats(&line, self.repeats);
         for rule in &self.replacements {
             line = if rule.regex {
@@ -134,6 +151,69 @@ pub fn strip_markup(text: &str) -> String {
     line
 }
 
+/// The line without the script codes some engines put in the text they draw: names of assets,
+/// labels and flags (such as `chr00chr01先生「…`, `20$fx_shake_fa`, `VOK_`, `spr_a01_smile`,
+/// `__ui_tag_room`, and markers such as `＃Ａ０１` inside the line). A code is
+/// a run of ASCII letters, digits and `_ $ | -` with a `_` and a letter or digit, or mixing
+/// letters and digits over five characters or more; or a `#` with letters then digits, in either
+/// width. No line a game shows says one, while words, numbers, prices, hashtags and short names
+/// (`OK`, `$100`, `#猫`, `PS5`, `3D`, `^_^`) are left as they are. A line that was codes and
+/// nothing else comes out empty.
+pub fn strip_codes(text: &str) -> String {
+    if !has_codes(text) {
+        return text.to_string();
+    }
+    let (run, mark) = code_rules();
+    let line = mark.replace_all(text, "");
+    let line = run.replace_all(&line, |caps: &regex::Captures| if is_code(&caps[0]) { String::new() } else { caps[0].to_string() });
+    // What codes leave around them (the ` | ` between two, a stray `_`) goes with them.
+    line.trim_matches(|c: char| c.is_whitespace() || "|_-".contains(c)).to_string()
+}
+
+/// Whether `text` holds a script code ([`strip_codes`]).
+pub fn has_codes(text: &str) -> bool {
+    let (run, mark) = code_rules();
+    mark.is_match(text) || run.find_iter(text).any(|m| is_code(m.as_str()))
+}
+
+/// A run of ASCII letters, digits and `_ $ | -`, and a `#` marker.
+fn code_rules() -> (&'static Regex, &'static Regex) {
+    static RUN: OnceLock<Regex> = OnceLock::new();
+    static MARK: OnceLock<Regex> = OnceLock::new();
+    (
+        RUN.get_or_init(|| Regex::new(r"[A-Za-z0-9_$|\-]+").expect("code rule")),
+        MARK.get_or_init(|| Regex::new(r"[#＃][A-Za-zＡ-Ｚａ-ｚ]+[0-9０-９]+").expect("marker rule")),
+    )
+}
+
+/// Whether a run of ASCII is a code: a `_` with a letter or digit, or letters and digits mixed
+/// over five characters or more.
+fn is_code(run: &str) -> bool {
+    let letters = run.chars().any(|c| c.is_ascii_alphabetic());
+    let digits = run.chars().any(|c| c.is_ascii_digit());
+    (run.contains('_') && (letters || digits)) || (letters && digits && run.len() >= 5)
+}
+
+/// Whether `after` carries on the line `before`, as a game that sends its text box one row at a
+/// time sends it (`「……って、なんだ田中くんか。先生に` then `何か用なの？」`): the
+/// speech `before` opened is still open (`「うわっ、本が全部落ちてる～！` then
+/// `よいしょ、よいしょ……」`) and `after` does not open another; or `before` does not end the way a
+/// sentence ends (`。！？`, a closing bracket, an ellipsis or a dash), whatever `after` starts with
+/// (`電話で叔母さんから` then `「よろしくね」と念を押されたことも`). How soon after is the
+/// caller's to judge.
+pub fn continues(before: &str, after: &str) -> bool {
+    const ENDS: &str = "。．.！!？?」』）)】〉》］]｝}…‥―─—～〜♪♡☆★";
+    let (Some(last), Some(first)) = (before.trim_end().chars().last(), after.trim_start().chars().next()) else {
+        return false;
+    };
+    let open = |c: char| before.chars().filter(|x| *x == c).count();
+    let speaking = open('「') > open('」') || open('『') > open('』');
+    if speaking {
+        return first != '「';
+    }
+    !ENDS.contains(last)
+}
+
 fn gcd(a: usize, b: usize) -> usize {
     if b == 0 { a } else { gcd(b, a % b) }
 }
@@ -179,6 +259,49 @@ mod tests {
         // Japanese brackets are text, not markup.
         assert_eq!(strip_markup("〈彼〉は【アキ】「……」"), "〈彼〉は【アキ】「……」");
         assert_eq!(strip_markup("a < b > c"), "a < b > c");
+    }
+
+    #[test]
+    fn script_codes_go_and_the_line_stays() {
+        // Shaped as a SiglusEngine hook sends them.
+        assert_eq!(strip_codes("chr00chr01chr02chr03chr11chr10先生「じゃあ、始めましょうか。"), "先生「じゃあ、始めましょうか。");
+        assert_eq!(strip_codes("20$fx_shake_fachr00chr01chr02chr03chr11chr10先生「いいのよ」"), "先生「いいのよ」");
+        assert_eq!(strip_codes("SND_se04SE00se04se04今日はいい天気だ。"), "今日はいい天気だ。");
+        assert_eq!(strip_codes("VOK_アキ「……ふぅ」"), "アキ「……ふぅ」");
+        assert_eq!(strip_codes("0_blink01 |  |  |  | chr01アキ「はい……」"), "アキ「はい……」");
+        assert_eq!(strip_codes("駅前__ui_tag_room$fx_tag_show_fa夕方__ui_tag_time$fx_tag_show_fa"), "駅前夕方");
+        // Codes and nothing else.
+        assert_eq!(strip_codes("2bg12_cc_fade02_fade02VOK_"), "");
+        assert_eq!(strip_codes("spr_aki1a|spr_aki1A_face_ef00|spr_aki1A_face_brow40"), "");
+        assert_eq!(strip_codes("chr10Xakichr24"), "");
+        assert_eq!(strip_codes("＃Ａ０１　よいしょ、よいしょ……＃Ａ０４」"), "よいしょ、よいしょ……」");
+        assert_eq!(strip_codes("＃Ａ０１」"), "」");
+        // Words, numbers and short names are text.
+        for line in ["ＰＳ５とPS5で3Dのゲーム", "OKです", "$100の時計", "＃拡散希望", "#1位", "１７時半、18時半下校", "顔文字^_^だよ", "e-mailを送る", "ああ、ああ", "………"] {
+            assert_eq!(strip_codes(line), line);
+        }
+        let off = GameConfig::from_settings(&json!({ "stripCodes": false }), &Value::Null);
+        assert_eq!(off.clean("VOK_アキ「……ふぅ」").as_deref(), Some("VOK_アキ「……ふぅ」"));
+        assert_eq!(GameConfig::default().clean("chr10Xakichr24"), None);
+    }
+
+    #[test]
+    fn a_piece_carries_on_a_sentence_left_unfinished() {
+        assert!(continues("「……って、なんだ田中くんか。先生に", "何か用なの？」"));
+        assert!(continues("友達というわけじゃなくて、", "ただの「クラスメイト」というだけだ。"));
+        assert!(continues("実は、今年の部長である", "山田さんは俺の幼なじみだったりする。"));
+        // A finished sentence or line of speech, or a piece that opens its own, is a line of its own.
+        assert!(!continues("「はい……、すみません」", "「いいの。ほら、続けて！」"));
+        assert!(!continues("それがみんなの意見だ。", "本人いわく、何事も本気であり"));
+        assert!(!continues("直接言ったこともあるのだけれど──", "──と返されてしまい"));
+        assert!(!continues("「あ、あの、先輩……", "「ここに田中くんが来てる"));
+        // Speech still open carries on past its ！, and a quote can carry on an unfinished line.
+        assert!(continues("「うわっ、本が全部落ちてる～！", "よいしょ、よいしょ……」"));
+        assert!(continues("「ふふっ。期待してますね、先輩っ", "」"));
+        assert!(continues("あとになって、電話で叔母さんから", "「よろしくね」と念を押されたことも"));
+        assert!(!continues("", "何か用なの？」"));
+        let off = GameConfig::from_settings(&Value::Null, &json!({ "joinLines": false }));
+        assert!(!off.join_lines && GameConfig::default().join_lines);
     }
 
     #[test]

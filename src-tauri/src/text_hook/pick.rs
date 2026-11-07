@@ -58,6 +58,10 @@ pub struct Candidate<'a> {
     pub text: &'a str,
     /// Sentences it produced in the last few seconds; a flood is engine noise, not dialogue.
     pub recent: usize,
+    /// Pieces of text it has sent since the game was hooked.
+    pub count: u64,
+    /// The share of those that held script codes (asset and label names mixed in with the text).
+    pub noise: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -220,6 +224,13 @@ pub fn score(candidates: &[Candidate], blocks: &[Block]) -> Vec<Scored> {
             if !is_generic_api_hook(candidate.hookcode) {
                 score += 3.0;
             }
+            // Of threads that show the same line, one that has spoken before: some hooks start a
+            // new thread for every line (SiglusEngine's, whose context counts up), and a thread
+            // chosen that way never speaks again.
+            score += 0.25 * (candidate.count.clamp(1, 5) - 1) as f64;
+            // And of those, one that sends the dialogue alone over one that mixes the script's
+            // codes in with it (SiglusEngine has both).
+            score -= 3.0 * candidate.noise;
             if candidate.recent > 6 {
                 score *= 0.5;
             }
@@ -679,8 +690,8 @@ mod tests {
         let set_text = collapse_typewriter(fixture["setText"].as_str().unwrap());
         let inequality = collapse_typewriter(fixture["opInequality"].as_str().unwrap());
         let candidates = [
-            Candidate { key: "inequality", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", text: &inequality, recent: 1 },
-            Candidate { key: "set_text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: &set_text, recent: 1 },
+            Candidate { key: "inequality", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", text: &inequality, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "set_text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: &set_text, recent: 1, count: 1, noise: 0.0 },
         ];
         let screen = [
             line("AUTO SKIP LOG", 1290.0, 820.0, 300.0, 24.0),
@@ -694,7 +705,7 @@ mod tests {
     #[test]
     fn a_path_that_shares_the_window_title_is_never_chosen() {
         let path = "C:\\Users\\me\\Games\\Sample Game\\Sample Game_Data\\StreamingAssets";
-        let candidates = [Candidate { key: "path", hookcode: "HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", text: path, recent: 1 }];
+        let candidates = [Candidate { key: "path", hookcode: "HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", text: path, recent: 1, count: 1, noise: 0.0 }];
         let screen = [
             line("Sample Game", 10.0, 5.0, 200.0, 20.0),
             line("「静かな港町に流れ着いた古い手紙により", 430.0, 880.0, 700.0, 32.0),
@@ -706,8 +717,8 @@ mod tests {
     fn of_a_text_and_its_shadow_the_unwrapped_copy_wins() {
         let screen = [line("「最後の答えは、少年の手に残されました」", 430.0, 880.0, 700.0, 32.0)];
         let candidates = [
-            Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: "「最\n後の答えは、\n少年の手に残されました」", recent: 1 },
-            Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: "「最後の答えは、少年の手に残されました」", recent: 1 },
+            Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: "「最\n後の答えは、\n少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: "「最後の答えは、少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
         ];
         assert_eq!(score(&candidates, &blocks(&screen))[0].key, "text");
     }
@@ -756,14 +767,16 @@ mod tests {
     #[test]
     fn the_dialogue_thread_beats_the_nameplate_hud_and_menu() {
         let candidates = [
-            Candidate { key: "name", hookcode: "HQ-24@0:user32.dll:DrawTextW", text: "ミサキ", recent: 1 },
-            Candidate { key: "hud", hookcode: "HQ-24@0:user32.dll:DrawTextExW", text: "オート　スキップ　セーブ", recent: 1 },
-            Candidate { key: "menu", hookcode: "HQ-24@0:gdiplus.dll:GdipDrawString", text: "回想音楽想回日本語の本を読むにほんご", recent: 1 },
+            Candidate { key: "name", hookcode: "HQ-24@0:user32.dll:DrawTextW", text: "ミサキ", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "hud", hookcode: "HQ-24@0:user32.dll:DrawTextExW", text: "オート　スキップ　セーブ", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "menu", hookcode: "HQ-24@0:gdiplus.dll:GdipDrawString", text: "回想音楽想回日本語の本を読むにほんご", recent: 1, count: 1, noise: 0.0 },
             Candidate {
                 key: "dialogue",
                 hookcode: "HQ-54@0:gdi32.dll:TextOutW",
                 text: "今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。",
                 recent: 1,
+                count: 1,
+                noise: 0.0,
             },
         ];
         let scored = score(&candidates, &blocks(&screen()));
@@ -780,6 +793,8 @@ mod tests {
             hookcode: "HQ-54@0:gdi32.dll:TextOutW",
             text: "明日は友達と日本語の本を読みます。青い空と静かな海が好きです。",
             recent: 1,
+            count: 1,
+            noise: 0.0,
         }];
         // Only the unchanged second line is on screen; it is inside the sentence, so it still
         // counts, but for its own length and never as the whole sentence.
@@ -792,12 +807,28 @@ mod tests {
         let blocks = vec![Block { text: normalize("今日は猫と一緒に学校へ行きます"), area: 100.0 }];
         let text = "今日は猫と一緒に学校へ行きます";
         let candidates = [
-            Candidate { key: "api", hookcode: "HQ-54@0:gdi32.dll:TextOutW", text, recent: 1 },
-            Candidate { key: "engine", hookcode: "HS-8@1A2B3:Game.exe", text, recent: 1 },
-            Candidate { key: "flood", hookcode: "HS-4@4C5D6:Game.exe", text, recent: 40 },
+            Candidate { key: "api", hookcode: "HQ-54@0:gdi32.dll:TextOutW", text, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "engine", hookcode: "HS-8@1A2B3:Game.exe", text, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "flood", hookcode: "HS-4@4C5D6:Game.exe", text, recent: 40, count: 1, noise: 0.0 },
         ];
         let scored = score(&candidates, &blocks);
         assert_eq!(scored.iter().map(|s| s.key.as_str()).collect::<Vec<_>>(), ["engine", "api", "flood"]);
+    }
+
+    #[test]
+    fn of_threads_showing_the_line_a_lasting_clean_one_wins() {
+        // SiglusEngine: one hook starts a thread per line (its context counts up), another keeps
+        // one thread for every line.
+        let blocks = vec![Block { text: normalize("「本当ですか？　助かります」"), area: 100.0 }];
+        let text = "「本当ですか？　助かります」";
+        let candidates = [
+            Candidate { key: "per-line", hookcode: "HWXN0@1A2B3:Game.exe", text, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "lasting", hookcode: "HW-4@4C5D6:Game.exe", text, recent: 1, count: 12, noise: 0.0 },
+            // The same hook in another context: the dialogue, mixed in with the script's codes.
+            Candidate { key: "mixed", hookcode: "HW-4@4C5D6:Game.exe", text, recent: 1, count: 40, noise: 0.6 },
+        ];
+        let order: Vec<String> = score(&candidates, &blocks).into_iter().map(|s| s.key).collect();
+        assert_eq!(order, ["lasting", "per-line", "mixed"]);
     }
 
     #[test]

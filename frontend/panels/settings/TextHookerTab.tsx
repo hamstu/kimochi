@@ -202,6 +202,22 @@ function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<
             options={REPEAT_OPTIONS}
           />
         </SettingsRow>
+        <SettingsRow
+          label="Join split lines"
+          controlId={id('join')}
+          badge={badge('joinLines')}
+          description="For games that send their text a row at a time: a row that carries on an unfinished sentence joins it."
+        >
+          <Switch id={id('join')} checked={value.joinLines} onCheckedChange={(on) => set('joinLines', on)} />
+        </SettingsRow>
+        <SettingsRow
+          label="Remove script codes"
+          controlId={id('codes')}
+          badge={badge('stripCodes')}
+          description="Asset and label names some engines leave in their text, such as chr01chr02 or $fx_shake."
+        >
+          <Switch id={id('codes')} checked={value.stripCodes} onCheckedChange={(on) => set('stripCodes', on)} />
+        </SettingsRow>
         {extra?.text}
       </SettingsSection>
       <SettingsSection title="Card">
