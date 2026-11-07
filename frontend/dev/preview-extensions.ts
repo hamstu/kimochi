@@ -15,6 +15,7 @@
  */
 import { emit } from '@tauri-apps/api/event'
 import type { ExtensionEngine, ExtensionStatus, ExtensionUpdate } from '@ui/extension-download'
+import type { ModelState } from '@ui/model-download'
 
 const ENGINES: Record<
   ExtensionEngine,
@@ -103,6 +104,9 @@ const states = new Map<ExtensionEngine, ExtensionStatus>(
   })
 )
 const timers = new Map<ExtensionEngine, ReturnType<typeof setInterval>>()
+/** A download the studio asked to fail: the fraction of it reached before it does. */
+const failAt = new Map<ExtensionEngine, number>()
+const FAILURE = 'network error: error sending request for url (https://github.com/…)'
 
 function publish(next: ExtensionStatus): ExtensionStatus {
   states.set(next.engine, next)
@@ -153,6 +157,13 @@ function start(engine: ExtensionEngine): ExtensionStatus {
     engine,
     setInterval(() => {
       received = Math.min(total, received + total / 20)
+      const failing = failAt.get(engine)
+      if (failing !== undefined && received >= total * failing) {
+        stop(engine)
+        failAt.delete(engine)
+        publish(status(engine, { state: 'failed', overallReceived: received, message: FAILURE }))
+        return
+      }
       if (received < total) {
         tick()
         return
@@ -199,5 +210,43 @@ export const EXTENSION_HANDLERS: Record<string, (args: Record<string, unknown> |
   dictionary_engine_effective: () => {
     const ready = Object.fromEntries([...states].map(([engine, s]) => [engine, s.state === 'ready']))
     return { selected: 'yomitan', effective: 'yomitan', ready }
+  }
+}
+
+/**
+ * The studio's handle on these downloads (`window.__kimochiPreview.extension`, preview-control.ts),
+ * the twin of `modelControl`.
+ */
+export const extensionControl = {
+  state: (engine: ExtensionEngine): ModelState => states.get(engine)!.state,
+  set(engine: ExtensionEngine, state: ModelState): void {
+    stop(engine)
+    const { total, file } = ENGINES[engine]
+    const part = Math.round(total * 0.38)
+    publish(
+      status(
+        engine,
+        state === 'ready'
+          ? { state, source: 'downloaded', overallReceived: total }
+          : state === 'absent'
+            ? {}
+            : state === 'failed'
+              ? { state, overallReceived: part, message: FAILURE }
+              : { state, overallReceived: state === 'verifying' ? total : part, file }
+      )
+    )
+  },
+  /** Pause where it is, as the Pause button does. */
+  pause(engine: ExtensionEngine): void {
+    stop(engine)
+    const current = states.get(engine)!
+    publish(status(engine, { state: 'paused', overallReceived: current.overallReceived }))
+  },
+  start(engine: ExtensionEngine, options: { failAt?: number; fresh?: boolean } = {}): void {
+    stop(engine)
+    if (options.fresh !== false) publish(status(engine, {}))
+    if (options.failAt !== undefined) failAt.set(engine, options.failAt)
+    else failAt.delete(engine)
+    start(engine)
   }
 }

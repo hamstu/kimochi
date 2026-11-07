@@ -11,13 +11,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Theme } from '@radix-ui/themes'
 import { TooltipProvider } from '@radix-ui/react-tooltip'
-import { Check, ExternalLink, Link2, Maximize, PencilLine, RotateCw, SlidersHorizontal } from 'lucide-react'
+import { BookMarked, Check, ExternalLink, Link2, Maximize, PencilLine, RotateCw, SlidersHorizontal } from 'lucide-react'
 import { IconButton, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Select, cn } from '@kit'
 import KimochiLogo from '../../components/KimochiLogo'
 import { APP_SURFACES, GLOBAL_CONTROLS } from './surfaces'
 import { activeAxes, controlValue, frameUrl, impliedParams, storedValue, type Values } from './params'
 import { Stage, type Placement } from './Stage'
 import { CopyPanel, StatePanel } from './Inspector'
+import { PresetsPanel } from './PresetsPanel'
+import type { PresetState } from './presets'
+import { previewControlOf } from '../preview-control'
 import { installCopyEdit, type CopyChange } from './copyEdit'
 import type { StudioState } from './bridge'
 import type { StudioContext, Surface } from './types'
@@ -41,7 +44,7 @@ interface Saved {
   contexts: Record<string, StudioContext>
   placements: Record<string, Placement>
   zoom: 'fit' | number
-  panel: 'state' | 'copy'
+  panel: 'state' | 'presets' | 'copy'
   copyEditing: boolean
   changes: CopyChange[]
 }
@@ -174,6 +177,21 @@ export function Studio(): ReactNode {
   const setContext = (param: string, value: string): void =>
     change((s) => ({ contexts: { ...s.contexts, [surface.id]: { ...(s.contexts[surface.id] ?? {}), [param]: value } } }))
   const chooseSurface = (id: string): void => change(() => ({ surface: id }))
+  /** A preset's whole state: it replaces the surface's values, JSON and place in it. */
+  const applyPreset = (state: PresetState): void =>
+    change((s) => ({
+      surface: state.surface,
+      values: { ...s.values, [state.surface]: { ...state.values } },
+      json: { ...s.json, [state.surface]: { ...state.json } },
+      contexts: { ...s.contexts, [state.surface]: { ...state.context } },
+      placements: (() => {
+        const placements = { ...s.placements }
+        if (state.size) placements[state.surface] = { x: 0, y: 0, ...state.size }
+        else delete placements[state.surface]
+        return placements
+      })(),
+      ...(state.globals ? { globals: { ...state.globals } } : {})
+    }))
   const placement = saved.placements[surface.id]
   const setPlacement = useCallback(
     (p: Placement) => update((s) => ({ placements: { ...s.placements, [s.surface]: p } })),
@@ -432,6 +450,14 @@ export function Studio(): ReactNode {
                 <button
                   type="button"
                   role="tab"
+                  aria-selected={saved.panel === 'presets'}
+                  onClick={() => update(() => ({ panel: 'presets' }))}
+                >
+                  <BookMarked aria-hidden /> Presets
+                </button>
+                <button
+                  type="button"
+                  role="tab"
                   aria-selected={saved.panel === 'copy'}
                   onClick={() => update(() => ({ panel: 'copy' }))}
                 >
@@ -457,6 +483,8 @@ export function Studio(): ReactNode {
                   json={json}
                   onJson={setJson}
                 />
+              ) : saved.panel === 'presets' ? (
+                <PresetsPanel apply={applyPreset} control={() => previewControlOf(frameRef.current?.contentWindow)} />
               ) : (
                 <CopyPanel
                   editing={saved.copyEditing}

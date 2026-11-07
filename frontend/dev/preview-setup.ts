@@ -26,6 +26,9 @@
  *   ?source=<id>     main window: the chosen demo source (e.g. window:106, a tall one)
  *   ?empty=1         skip demo transcript/notebook seeding (first-run look)
  *   ?lines=0         the Steins;Gate session starts with no lines (its Notebook is kept)
+ *   ?ocr=<mode>      the selected OCR engine (e.g. meikiocr, with ?model=downloading)
+ *   ?readiness=setup|failed|setup-needed  the dictionary engine plays its setup in steps, or is stuck
+ *                    (see previewReadiness)
  *   ?capture=<id>    diagnostics: serve a capture of that demo source (e.g. window:106, the tall
  *                    one, or window:107, the tiny one) to the Preview and Capture test views
  *   ?platform=windows|linux  `platform_capabilities` answers for that OS (default: macOS); on
@@ -106,8 +109,9 @@ import {
   thumbnailSvg,
   type DemoSource
 } from './demo-data'
-import { MODEL_HANDLERS, onModelSettingSet } from './preview-models'
-import { EXTENSION_HANDLERS, startSeededDownloads } from './preview-extensions'
+import { MODEL_HANDLERS, modelControl, onModelSettingSet } from './preview-models'
+import { installPreviewControl } from './preview-control'
+import { EXTENSION_HANDLERS, extensionControl, startSeededDownloads } from './preview-extensions'
 import { UPDATE_HANDLERS } from './preview-updates'
 import { YOMITAN_API_HANDLERS } from './preview-yomitan-api'
 import { ACCOUNT_HANDLERS, PREVIEW_SIGNED_IN } from './preview-account'
@@ -123,6 +127,72 @@ import type { ExtensionHost } from '../bridge/dictionaryEngine'
 export type PreviewPage = 'panel' | 'reader-popup' | 'welcome'
 
 const params = new URLSearchParams(location.search)
+
+/**
+ * ?readiness=setup         the dictionary engine sets up in steps once asked about (after its
+ *                          download, with ?ext=downloading): starting, its data downloading,
+ *                          installing, then ready, as `dictionary-readiness` events
+ * ?readiness=failed|setup-needed  stuck there, for the notices
+ */
+const READINESS = params.get('readiness')
+let readinessSeq = 0
+/** Each host engine's latest report, once anything other than "ready" has been said about it. */
+const readinessNow = new Map<string, Record<string, unknown>>()
+const readinessTimers = new Map<string, ReturnType<typeof setTimeout>[]>()
+
+function reportReadiness(engine: string, patch: Record<string, unknown>): Record<string, unknown> {
+  const next = { engine, settingsReady: true, message: '', ...patch, seq: ++readinessSeq }
+  readinessNow.set(engine, next)
+  void emit('dictionary-readiness', next)
+  return next
+}
+
+const READINESS_STUCK: Record<string, Record<string, unknown>> = {
+  failed: { phase: 'failed', settingsReady: false, message: 'The engine could not start: its background page did not answer.' },
+  'setup-needed': { phase: 'setup-needed', message: 'Open the engine settings to install or import a dictionary.' },
+  ready: { phase: 'ready', message: 'Ready.' }
+}
+
+/** Starting, the dictionary data downloading, installing, then `end` (failing on the way at `failAt`). */
+function playReadiness(
+  engine: string,
+  { end = 'ready', failAt, delay = 0 }: { end?: 'ready' | 'failed' | 'setup-needed'; failAt?: number; delay?: number } = {}
+): Record<string, unknown> {
+  for (const timer of readinessTimers.get(engine) ?? []) clearTimeout(timer)
+  const steps: [number, Record<string, unknown>][] = []
+  for (let p = 0; p <= 100; p += 5) {
+    if (failAt !== undefined && p >= failAt * 100) {
+      steps.push([1800 + p * 45, { ...READINESS_STUCK.failed, message: `Downloading dictionary data failed at ${p}%: the server closed the connection.` }])
+      break
+    }
+    steps.push([1800 + p * 45, { phase: 'downloading', progress: p, message: `Downloading dictionary data: ${p}%` }])
+  }
+  if (failAt === undefined) steps.push([6600, { phase: 'installing', message: 'Installing dictionaries…' }], [8200, READINESS_STUCK[end]])
+  readinessTimers.set(
+    engine,
+    steps.map(([at, patch]) => setTimeout(() => reportReadiness(engine, patch), delay + at))
+  )
+  return reportReadiness(engine, { phase: 'starting', settingsReady: false, message: 'Starting the dictionary…' })
+}
+
+function previewReadiness(engine: string): Record<string, unknown> {
+  const known = readinessNow.get(engine)
+  if (known) return known
+  if (READINESS === 'failed' || READINESS === 'setup-needed') return reportReadiness(engine, READINESS_STUCK[READINESS])
+  if (READINESS === 'setup') return playReadiness(engine, { delay: params.get('ext') === 'downloading' ? 5500 : 0 })
+  return { engine, phase: 'ready', settingsReady: true, message: 'Ready.', seq: readinessSeq }
+}
+
+/** The studio's handle on dictionary readiness (`window.__kimochiPreview.readiness`, preview-control.ts). */
+export const readinessControl = {
+  phase: (engine: string): string => String(previewReadiness(hostEngineOf(engine as never)).phase),
+  play: (engine: string, options?: Parameters<typeof playReadiness>[1]): void => void playReadiness(hostEngineOf(engine as never), options),
+  set(engine: string, phase: 'ready' | 'failed' | 'setup-needed'): void {
+    const host = hostEngineOf(engine as never)
+    for (const timer of readinessTimers.get(host) ?? []) clearTimeout(timer)
+    reportReadiness(host, READINESS_STUCK[phase])
+  }
+}
 
 const PAGE_LABELS: Record<Exclude<PreviewPage, 'panel'>, string> = {
   'reader-popup': 'reader-popup',
@@ -249,6 +319,7 @@ const settings: Record<string, unknown> = {
   // The marketing demo reads as the app does on a desktop: MeikiOCR (what its Log lines say they
   // were read with) and the overlay on.
   ...(params.get('embed') === '1' ? { ocrMode: 'meikiocr', liveOverlayEnabled: true } : {}),
+  ...(params.get('ocr') ? { ocrMode: params.get('ocr') } : {}),
   ...(params.get('overlay') === '1' ? { liveOverlayEnabled: true } : {}),
   // In the UI studio (frontend/dev/studio/): any stored setting, edited there as JSON.
   ...studioJson<Record<string, unknown>>('settings')
@@ -1087,13 +1158,9 @@ const HANDLERS: Record<string, Handler> = {
   }),
   // Native reloads the reader windows; there are none to reload in the preview.
   dictionary_engine_apply: () => note('dictionary_engine_apply', null),
-  // The preview's dictionary answers from these mocks, so whichever engine is asked about is up.
-  dictionary_runtime_status: (a) => ({
-    engine: (a?.engine as string) ?? 'yomitan',
-    phase: 'ready',
-    settingsReady: true,
-    message: 'Ready.'
-  }),
+  // The preview's dictionary answers from these mocks, so whichever engine is asked about is up,
+  // unless ?readiness= plays a setup (previewReadiness below).
+  dictionary_runtime_status: (a) => previewReadiness((a?.engine as string) ?? 'yomitan'),
 
   // anki
   anki_probe: () => 18,
@@ -1584,6 +1651,13 @@ export async function setupPreview(page: PreviewPage): Promise<string> {
   mockWindows(label, 'log', 'settings', 'diagnostics', 'sync-log')
   installIpc(label)
   startSeededDownloads()
+  installPreviewControl({
+    model: modelControl,
+    extension: extensionControl,
+    readiness: readinessControl,
+    setSetting: (key, value) => void HANDLERS.settings_set({ key, value }, label),
+    setting: (key) => settings[key]
+  })
   document.documentElement.dataset.preview = label
   // What native's platform prelude says before any page runs (platform::platform_prelude): Gaming
   // Mode's layout and its larger scale are decided from it at boot.

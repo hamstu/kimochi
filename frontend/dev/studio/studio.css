@@ -611,3 +611,125 @@ body {
 .studio-change-note {
   background: var(--k-sunken);
 }
+
+/* ---------------------------------------------------------------- Presets tab (PresetsPanel.tsx) */
+.studio-flow {
+  display: grid;
+  gap: var(--k-space-2);
+  margin: 0 calc(var(--k-space-2) * -1);
+  padding: var(--k-space-2);
+  border-radius: var(--k-radius-lg);
+}
+.studio-flow[data-active] {
+  background: var(--gray-a3);
+}
+.studio-flow-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+}
+.studio-flow-text,
+.studio-preset {
+  display: grid;
+  gap: var(--k-space-0-5);
+  min-width: 0;
+}
+.studio-flow-text {
+  flex: 1;
+}
+.studio-flow-text span,
+.studio-preset span {
+  font-weight: var(--k-weight-medium);
+}
+.studio-flow-text small,
+.studio-preset small {
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+  line-height: var(--k-leading-xs);
+}
+.studio-flow-actions {
+  display: flex;
+  flex: none;
+  gap: var(--k-space-0-5);
+}
+.studio-flow-steps {
+  display: grid;
+  gap: var(--k-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--k-text-sm);
+  line-height: var(--k-leading-sm);
+}
+.studio-flow-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--k-space-2);
+  color: var(--k-text-3);
+}
+.studio-flow-steps li[data-state='done'] {
+  color: var(--k-text-2);
+}
+.studio-flow-steps li[data-state='now'] {
+  color: var(--k-text);
+  font-weight: var(--k-weight-medium);
+}
+.studio-flow-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 0.0625rem;
+  border-radius: 999px;
+  background: var(--gray-a4);
+  font-size: var(--k-text-xs);
+}
+.studio-flow-steps li[data-state='done'] .studio-flow-mark {
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+}
+.studio-flow-mark svg,
+.studio-flow-mark .k-spinner {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
+.studio-flow-note {
+  margin: 0;
+  color: var(--k-text-3);
+  font-size: var(--k-text-xs);
+}
+.studio-flow-note[data-tone='danger'] {
+  color: var(--k-danger-text);
+}
+.studio-presets {
+  display: grid;
+  gap: var(--k-space-1);
+}
+.studio-preset {
+  margin: 0 calc(var(--k-space-2) * -1);
+  padding: var(--k-space-2);
+  border: 0;
+  border-radius: var(--k-radius-lg);
+  background: transparent;
+  color: var(--k-text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.studio-preset:hover {
+  background: var(--k-hover);
+}
+.studio-preset[data-active] {
+  background: var(--k-selected);
+}
+.studio-preset-reset span::before {
+  content: '↺ ';
+  color: var(--k-text-3);
+}
+.studio-presets-foot {
+  margin-top: var(--k-space-4);
+}
+.studio-presets-foot code {
+  font-size: var(--k-text-xs);
+}

@@ -9,7 +9,7 @@
  * Download saves `ocrMode`, which starts the simulated download (`onModelSettingSet`).
  */
 import { emit } from '@tauri-apps/api/event'
-import type { ModelEngine, ModelStatus } from '@ui/model-download'
+import type { ModelEngine, ModelState, ModelStatus } from '@ui/model-download'
 
 const FILES: Record<ModelEngine, { name: string; files: [string, number][] }> = {
   meikiocr: {
@@ -101,6 +101,9 @@ const states = new Map<ModelEngine, ModelStatus>(
   })
 )
 const timers = new Map<ModelEngine, ReturnType<typeof setInterval>>()
+/** A download the studio asked to fail: the fraction of it reached before it does. */
+const failAt = new Map<ModelEngine, number>()
+const FAILURE = 'the connection was interrupted while downloading'
 
 function publish(next: ModelStatus): ModelStatus {
   states.set(next.engine, next)
@@ -122,6 +125,13 @@ function start(engine: ModelEngine): ModelStatus {
     engine,
     setInterval(() => {
       received = Math.min(total(engine), received + step)
+      const failing = failAt.get(engine)
+      if (failing !== undefined && received >= total(engine) * failing) {
+        stop(engine)
+        failAt.delete(engine)
+        publish(status(engine, { state: 'failed', overallReceived: received, message: `${FAILURE} ${at(engine, received).file}` }))
+        return
+      }
       if (received >= total(engine)) {
         stop(engine)
         publish(
@@ -200,5 +210,44 @@ export const MODEL_HANDLERS: Record<
     const engine = engineOf(a)
     stop(engine)
     return publish(status(engine, {}))
+  }
+}
+
+/**
+ * The studio's handle on these downloads (`window.__kimochiPreview.model`, preview-control.ts):
+ * put an engine in a state at once, or start its download from nothing, optionally failing at a
+ * fraction of it.
+ */
+export const modelControl = {
+  state: (engine: ModelEngine): ModelState => states.get(engine)!.state,
+  set(engine: ModelEngine, state: ModelState): void {
+    stop(engine)
+    const t = total(engine)
+    const part = Math.round(t * 0.32)
+    publish(
+      status(
+        engine,
+        state === 'ready'
+          ? { state, source: 'downloaded', overallReceived: t }
+          : state === 'absent'
+            ? {}
+            : state === 'failed'
+              ? { state, overallReceived: part, message: `${FAILURE} ${at(engine, part).file}` }
+              : { state, overallReceived: state === 'verifying' ? t : part }
+      )
+    )
+  },
+  /** Pause where it is, as the Pause button does. */
+  pause(engine: ModelEngine): void {
+    stop(engine)
+    const current = states.get(engine)!
+    publish(status(engine, { state: 'paused', overallReceived: current.overallReceived }))
+  },
+  start(engine: ModelEngine, options: { failAt?: number; fresh?: boolean } = {}): void {
+    stop(engine)
+    if (options.fresh !== false) publish(status(engine, {}))
+    if (options.failAt !== undefined) failAt.set(engine, options.failAt)
+    else failAt.delete(engine)
+    start(engine)
   }
 }

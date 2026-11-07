@@ -160,6 +160,14 @@ const DOWNLOADS: ControlGroup = {
         ['failed', 'Failed'],
         ['ready', 'All installed']
       )
+    },
+    {
+      kind: 'select',
+      param: 'readiness',
+      label: 'Dictionary setup',
+      default: 'ready',
+      help: 'The engine in use, once downloaded: set up in steps, or stuck.',
+      options: opts(['ready', 'Ready'], ['setup', 'Sets up in steps'], ['failed', 'Failed'], ['setup-needed', 'Needs setting up'])
     }
   ]
 }
@@ -349,6 +357,20 @@ const MAIN: Surface = {
       title: 'Settings page',
       when: in_('view', 'settings'),
       controls: [ENGINE, YOMITAN_API, STEAM]
+    },
+    {
+      title: 'Engines',
+      when: (context) => context.view !== 'settings',
+      controls: [
+        {
+          kind: 'select',
+          param: 'ocr',
+          label: 'OCR model',
+          default: 'googlelens',
+          options: opts(['googlelens', 'Google Lens'], ['meikiocr', 'MeikiOCR'], ['mangaocr', 'Manga OCR'], ['ppocr', 'PaddleOCR'])
+        },
+        ENGINE
+      ]
     },
     UPDATES,
     ACCOUNT,
