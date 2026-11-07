@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-07
+
 ### Added
 
 - ⭐ **Browser extension (early preview).** Read Japanese in pictures on web pages, like manga pages or game screenshots. Click Kimochi in the browser toolbar and pick a picture: Kimochi reads it, adds the text to the Log and draws the text over the picture for your browser's dictionary pop-up (Yomitan, 10ten). With **Auto** on, it reads the picture again when it changes. Each site gets its own session. Choose **Browser** as the source, and install the extension from **Settings → Browser Extension** (Chrome, Edge, Brave, etc).
