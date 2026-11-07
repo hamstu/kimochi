@@ -104,9 +104,28 @@ export async function verifyDictionaryImages(appdir, run = spawnSync) {
   console.log(output)
 }
 
-// `node scripts/linux-appimage.mjs --check-avif`: CI's quick check, right after installing packages.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv[2] === '--check-avif') {
+/** Library names to paths from `ldconfig -p` output (later entries win, as before). */
+export function ldconfigLibraries(output) {
+  return new Map([...output.matchAll(/^\s*(\S+)\s+.*=>\s+(\S+)$/gm)].map((match) => [match[1], match[2]]))
+}
+
+/**
+ * The GTK 3 layer-shell library the AppImage carries, from the build machine. Native Wayland
+ * overlays (Hyprland, Sway, KDE...) load it at run time (src-tauri/src/platform/linux/layer.rs);
+ * without it in the bundle they stay off on every system that lacks its own copy, so a build
+ * without it fails. (libgtk4-layer-shell is a different library and does not count.)
+ */
+export function linuxLayerShellSource(libraries = ldconfigLibraries(spawnSync('ldconfig', ['-p'], { encoding: 'utf8' }).stdout ?? '')) {
+  const source = libraries.get('libgtk-layer-shell.so.0')
+  if (!source) throw new Error('libgtk-layer-shell.so.0 unavailable, which native Wayland overlays load; install libgtk-layer-shell0 (Arch: gtk-layer-shell)')
+  return source
+}
+
+// `node scripts/linux-appimage.mjs --check-deps` (or the older `--check-avif`): CI's quick check,
+// right after installing packages, for the libraries the AppImage must bundle.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && ['--check-deps', '--check-avif'].includes(process.argv[2])) {
   console.log(`AVIF dictionary images: libavif ${linuxAvifSource().version}`)
+  console.log(`Native Wayland overlays: ${linuxLayerShellSource()}`)
 }
 
 /** The SPA plugin directories the AppImage carries (see repairLinuxAppImages). */
@@ -119,8 +138,10 @@ export async function repairLinuxAppImages({ target, release, env }) {
   const images = entries.filter((name) => name.endsWith('.AppImage'))
   if (appdirs.length !== 1 || images.length !== 1) throw new Error(`Expected one AppDir and AppImage in ${directory}`)
   const appdir = path.join(directory, appdirs[0])
-  await bundleLinuxAudio(appdir, env)
+  // Fail before the slow steps when a library the bundle needs is missing.
   linuxAvifSource()
+  const layerShell = linuxLayerShellSource()
+  await bundleLinuxAudio(appdir, env)
   // PipeWire loads its SPA plugins dynamically. The compiled-in Ubuntu multiarch path is
   // absent on SteamOS/Arch, even when PipeWire is installed, and SPA_PLUGIN_DIR points at the
   // bundle alone: `support` for every client, `audioconvert` for an audio stream's adapter
@@ -167,8 +188,7 @@ export async function repairLinuxAppImages({ target, release, env }) {
       console.log(`Use host graphics stack: removed bundled ${name}.`)
     }
   }
-  const ldconfig = spawnSync('ldconfig', ['-p'], { encoding: 'utf8' })
-  const originals = new Map([...ldconfig.stdout.matchAll(/^\s*(\S+)\s+.*=>\s+(\S+)$/gm)].map((match) => [match[1], match[2]]))
+  const originals = ldconfigLibraries(spawnSync('ldconfig', ['-p'], { encoding: 'utf8' }).stdout)
   for (const name of await readdir(libraries)) {
     if (!name.includes('.so')) continue
     const destination = path.join(libraries, name)
@@ -181,11 +201,8 @@ export async function repairLinuxAppImages({ target, release, env }) {
     await copyFile(original, destination)
     console.log(`Restored ${name}: patchelf program headers overwrote its GNU hash table.`)
   }
-  const layer = originals.get('libgtk-layer-shell.so.0')
-  if (layer) {
-    await copyFile(layer, path.join(libraries, 'libgtk-layer-shell.so.0'))
-    console.log('Bundled optional GTK layer-shell runtime.')
-  }
+  await copyFile(layerShell, path.join(libraries, 'libgtk-layer-shell.so.0'))
+  console.log(`Bundled GTK layer-shell runtime from ${layerShell}.`)
   const hook = path.join(appdir, 'apprun-hooks/linuxdeploy-plugin-gtk.sh')
   const script = await readFile(hook, 'utf8')
   await writeFile(hook, script.replace(/^export GDK_BACKEND=x11.*$/m, `# Respect an explicit backend; prefer native Wayland in a Wayland login.\nif [ -z "\${GDK_BACKEND:-}" ]; then\n    if [ "\${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "\${WAYLAND_DISPLAY:-}" ]; then\n        GDK_BACKEND=wayland\n    else\n        GDK_BACKEND=x11\n    fi\nfi\nexport GDK_BACKEND`))

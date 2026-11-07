@@ -72,7 +72,7 @@ if [[ $DEPS == 1 ]]; then
         libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
         libpipewire-0.3-dev libspa-0.2-dev libudev-dev gh \
         libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-pulseaudio \
-        libavif-dev
+        libavif-dev libgtk-layer-shell0
       # The Text Hooker helper is cross-built for Windows on x64 (scripts/prepare-hookd.mjs).
       [[ $(uname -m) == x86_64 ]] && sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
     elif command -v pacman >/dev/null; then
@@ -83,7 +83,7 @@ if [[ $DEPS == 1 ]]; then
       sudo pacman -S --needed --noconfirm \
         curl wget file git base-devel pkgconf openssl clang patchelf \
         webkit2gtk-4.1 xdotool libayatana-appindicator librsvg pipewire gtk3 fuse2 github-cli \
-        gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad libavif
+        gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad libavif gtk-layer-shell
     else
       echo "no apt-get or pacman; install the Tauri Linux prerequisites by hand" >&2
     fi

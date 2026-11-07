@@ -195,6 +195,8 @@ jobs:
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
+          # libgtk-layer-shell0: the AppImage bundles it so native Wayland overlays (Hyprland,
+          # Sway, KDE) work without the user installing it.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
             build-essential \
@@ -216,7 +218,8 @@ jobs:
             gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad \
             gstreamer1.0-pulseaudio \
-            libavif-dev
+            libavif-dev \
+            libgtk-layer-shell0
 
       - uses: actions/setup-node@v4
         with:
@@ -293,6 +296,8 @@ jobs:
           # copies into the AppImage with the modules it names.
           # libavif-dev: the app links libavif to decode dictionary AVIF images (Jitendex), which
           # WebKitGTK cannot; the AppImage bundles it with its AV1 decoder.
+          # libgtk-layer-shell0: the AppImage bundles it so native Wayland overlays (Hyprland,
+          # Sway, KDE) work without the user installing it.
           # xdg-utils: tauri's AppImage step runs xdg-mime, which a minimal Ubuntu (WSL) lacks.
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
@@ -316,6 +321,7 @@ jobs:
             gstreamer1.0-plugins-bad \
             gstreamer1.0-pulseaudio \
             libavif-dev \
+            libgtk-layer-shell0 \
             xdg-utils
 
       - uses: actions/setup-node@v4
@@ -323,11 +329,12 @@ jobs:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
 
-      # Every Linux build links libavif for dictionary images (Jitendex): fail in seconds, naming
-      # the package, rather than at the end of the bundle. Arch runners install their own packages.
-      - name: Check AVIF support
+      # Every Linux build links libavif for dictionary images (Jitendex) and bundles GTK
+      # layer-shell for Wayland overlays: fail in seconds, naming the package, rather than at the
+      # end of the bundle. Arch runners install their own packages.
+      - name: Check bundled Linux libraries
         if: runner.os == 'Linux'
-        run: node scripts/linux-appimage.mjs --check-avif
+        run: node scripts/linux-appimage.mjs --check-deps
 
       - name: Install OneOCR and text hook helper Rust targets
         if: runner.os == 'Windows'
