@@ -122,11 +122,20 @@ body {
 
 /* Badges sit over the window but outside its clip, so one on the window's edge stays whole (the
    stage's padding leaves room for it). */
-#badges {
+/* Glows sit outside the window's clip too, so an outline on a target at the window's edge spreads
+   past it instead of being cut off. */
+#glows {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 4;
+}
+
+#badges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .badge {

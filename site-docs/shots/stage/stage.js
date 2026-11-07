@@ -22,6 +22,7 @@ const frame = document.getElementById('app')
 const marks = document.getElementById('marks')
 const notes = document.getElementById('notes')
 const badges = document.getElementById('badges')
+const glows = document.getElementById('glows')
 
 const [width, height] = shot.size ?? [900, 560]
 
@@ -172,7 +173,7 @@ function mark() {
         glow.className = 'glow'
         glow.style.setProperty('--r', radius)
         place(glow, b)
-        marks.append(glow)
+        glows.append(glow)
       }
     } else if (m.type === 'badge') {
       const badge = document.createElement('div')

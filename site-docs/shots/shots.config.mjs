@@ -71,8 +71,8 @@ const HIDE_GRIPS = `document.head.insertAdjacentHTML('beforeend', '<style>.kd-re
 const MAIN = [900, 560]
 const SETTINGS = [820, 700]
 const WELCOME = [720, 620]
-/** The main window's sidebar alone (its default width is 240px). */
-const SIDEBAR = { x: 0, y: 0, width: 240, height: 560 }
+/** The main window's sidebar alone, at its default width (DEFAULT_WIDTH in frontend/main/MainSidebar.tsx). */
+const SIDEBAR = { x: 0, y: 0, width: 272, height: 560 }
 
 /** Something on each Settings page that only renders once it has loaded. */
 const SETTINGS_READY = {
