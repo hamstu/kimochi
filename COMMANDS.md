@@ -605,7 +605,7 @@ without a CFRunLoop has not been tested in-app.
 | Command | Signature |
 | --- | --- |
 | `texthooker_send` | `({text}) -> ()` |
-| `history_add` | `({text}) -> entry` |
+| `history_add` | `({text, detached?, groups?, engine?, merge?, frame?, session?}) -> entry` — `session`: the Log session the lines go to (the Log opens it first) |
 | `history_delete` | `({id}) -> ()` |
 | `history_clear` | `() -> ()` |
 | `log_recent` | `({limit?}) -> [{id, text, timestamp, source}]` — the Log's newest lines (open session's `lines.json`, newest first, default 50), whatever their source; the controller's Recent text |
@@ -1093,6 +1093,71 @@ and to the `log` window `sync:hold` / `sync:release`.
 token. The `sync-log` panel (`app/panel.html`, 760 × 520, centred; opened with `panel('sync-log',
 'show')` from Settings → Account → Sync) shows it as monospaced lines with Copy all, Clear and
 Sync now.
+
+## Browser bridge
+
+The Kimochi browser extension (`browser-extension/extension/`, an MV3 extension for Chrome, Edge
+and Brave) picks a picture on a web page, Kimochi reads it, and the extension lays the lines over
+the picture for the browser's own dictionary pop-up. Native side: `src-tauri/src/browser_bridge.rs`.
+
+| Command | Signature |
+| --- | --- |
+| `browser_bridge_status` | `() -> {enabled, listening, port, error, connected, browsers, page: {title, url}?, lastScan: {lines, ms, at}?, reading}` |
+| `browser_scan_result` | `({request, result?, error?}) -> bool` — the overlay's answer to `browser-scan`; false when the request is unknown (expired, or its tab went away) |
+| `browser_rescan` | `() -> bool` — asks the tab read last to read its picture again; false with no browser connected |
+| `browser_extension_folder` | `({reveal?}) -> path` — the folder to Load unpacked, opened in the file manager unless `reveal: false`; a bundle copies its own into the app data directory first |
+| `browser_sessions` | `({sessions: [{id, name}], active}) -> ()` — the Log's sessions, sent by the Log host whenever they change; every tab's session menu follows them |
+| `browser_session_reply` | `({request, id?, error?}) -> ()` — the Log's answer to `browser-session` |
+| `browser_engines` | `({engines: [{id, name, tagline, runs, icon}], selected}) -> ()` — the OCR engines as the sidebar lists them, sent by the main window whenever they or the selection change (`frontend/main/BrowserEngines.tsx`); `icon` is `{image, tile}` (a data URL), `{svg}` or `{monogram, lang?}` |
+
+| Event | Payload |
+| --- | --- |
+| `browser-scan` | `{request, frame: {id, info}, reason, page: {title, url}}` — a picture is in the frame store; the overlay reads it (`onBrowserScan` in `ui/overlay.js`) |
+| `browser-bridge` | the status above, on every change |
+| `browser-session` | `{request, op: "create"\|"rename", id?, name?}` — the Log host makes (and opens) or renames a session and answers with `browser_session_reply` |
+| `browser-engine-choose` | `{mode}` — a tab picked an OCR model; the main window chooses it as the sidebar does (with the same download question) |
+
+**Auto** is the extension's own switch (on by default, kept in the browser): the picture is read
+again when it changes, and after a full page load on the same site the page script comes back and
+reads the picture in the same place on the new page (`findLike` in `content.js`). Kimochi's Auto OCR
+flag isn't used in this mode.
+
+**Sessions.** Each tab sends its lines to a Log session, and the Log opens that session when they
+arrive (`history_add` `session`, `ingestHistory` in `frontend/texthooker/host.ts`). A tab's session
+is the one chosen in its menu, else the one remembered for the page or a page like it
+(`browserExtension.pages`, newest first, at most 300: the same address or title with only numbers
+changed, or a title that is mostly the same, on the same site; `matched_session`), else a new one
+named for the day, made at the page's first reading. Any number of tabs and browsers may share a
+session.
+
+**Mode.** The input source `superTexthooker.inputSource = "browser"`. A scan that isn't automatic
+switches to it; an automatic one is refused under any other source. In this mode the overlay draws
+nothing, its screen watcher stays off, and the scan button and shortcut call `browser_rescan`. The
+picture's text goes through `publishOcrResult` (the same filters, `history_add` with `detached`),
+so the Log takes it as it takes a scan. Leaving the mode sends `ended` to the extension.
+
+**Transport.** A WebSocket at `ws://127.0.0.1:27640/kimochi-browser` (a development build:
+27641), on while `browserExtension.enabled` (default on). The handshake is refused unless its
+`Origin` is the extension's (`browser_bridge::ORIGINS`; a web page can't set its own `Origin`).
+Messages are JSON text:
+
+| Direction | Message |
+| --- | --- |
+| extension → | `{type: "hello", protocol: 1, version, browser}` |
+| ← Kimochi | `{type: "welcome", protocol, app: {name, version, dev}, settings, css}` — `css` is `ui/overlay-text.css`, which the page draws its boxes with |
+| ← Kimochi | `{type: "settings", settings}` — `{autoOcr, clickThrough, overlayStyle, appearance, grouping, active}`, sent again whenever any of them changes |
+| extension → | `{type: "scan", id, reason: "select"\|"rescan"\|"auto", page: {title, url}, session, width, height, png}` (`png` base64, 4096 px at most on its long side; `session` null for the page's own) |
+| ← Kimochi | `{type: "result", id, ms, session, lines: [{text, points: [[x, y] ×4], vertical, group, surface?}], width, height, engine, geometry, text}` — `points` in fractions of the picture |
+| ← Kimochi | `{type: "sessions", sessions: {sessions: [{id, name}], active}}` (also in `welcome`) |
+| extension → | `{type: "page", id, url, title}` / ← `{type: "page", id, session}` — the session remembered for this page, if any |
+| extension → | `{type: "assign", url, title, session}` — the reader chose a session for this page |
+| extension → | `{type: "createSession", id, name, url, title}` / ← `{type: "sessionCreated", id, session?, error?}` |
+| extension → | `{type: "renameSession", session, name}`; `{type: "show"}` (bring Kimochi forward) |
+| ← Kimochi | `{type: "engines", engines: {engines, selected}}` (also in `welcome`) |
+| extension → | `{type: "setEngine", id}` |
+| ← Kimochi | `{type: "error", id, message}` |
+| ← Kimochi | `{type: "rescan"}`, `{type: "ended"}` |
+| extension → | `{type: "ping"}` (every 20 s, keeps the service worker alive) / ← `{type: "pong"}`; `{type: "stop"}` |
 
 ## Activity feed
 

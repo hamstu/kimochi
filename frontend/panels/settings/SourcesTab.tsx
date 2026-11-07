@@ -3,7 +3,7 @@
  * OCR scans are also sent. The same input choice is the main window's source menu.
  */
 import { useEffect, useState, type ReactNode } from 'react'
-import { Aperture, Camera, Check, Clipboard, ExternalLink, Plug, Radio } from 'lucide-react'
+import { Aperture, Camera, Check, Clipboard, ExternalLink, Globe, Plug, Radio } from 'lucide-react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
 import {
   Button,
@@ -23,6 +23,7 @@ import { useCapabilities } from '../../bridge/capabilities'
 import { useHasScreenRecordingPermission } from '../../welcome/useHasScreenRecordingPermission'
 import { WithReaderSettings } from './ReaderSettingsProvider'
 import { OutputSections } from './OutputSections'
+import { showSettingsTab } from './showSettingsTab'
 import { openTextHookerSettings } from '../../main/hookGames'
 
 type InputSource = Settings['inputSource']
@@ -59,6 +60,12 @@ const INPUT_SOURCES = [
     label: 'Text Hooker',
     icon: <Plug />,
     detail: "Hooks a game's text from inside it. Choose the game in the source menu. (Windows)"
+  },
+  {
+    value: 'browser',
+    label: 'Browser',
+    icon: <Globe />,
+    detail: 'Reads pictures you pick on web pages with the Kimochi browser extension.'
   }
 ] as const satisfies readonly {
   value: Mode
@@ -206,6 +213,16 @@ export function SourcesTab(): ReactNode {
                     description="Defaults for every game, and each game's own."
                   >
                     <Button size="sm" onClick={() => void openTextHookerSettings()}>
+                      Open
+                    </Button>
+                  </SettingsRow>
+                ) : null}
+                {settings.inputSource === 'browser' ? (
+                  <SettingsRow
+                    label="Browser extension"
+                    description="Install it and check its connection."
+                  >
+                    <Button size="sm" onClick={() => showSettingsTab('browser')}>
                       Open
                     </Button>
                   </SettingsRow>

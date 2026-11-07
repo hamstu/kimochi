@@ -39,6 +39,9 @@ test("input migration preserves clipboard preference and never enables multiple 
       );
     }
   }
+  // The browser extension's pictures are scans: OCR lines, and nothing else.
+  for (const source of ["ocr", "clipboard", "websocket", "webhook", "hook"])
+    assert.equal(acceptsInput({ inputSource: "browser" }, source), source === "ocr");
 });
 test("lines added with `kimochi log add` are taken whatever the input is", () => {
   for (const inputSource of ["ocr", "clipboard", "websocket", "hook"])

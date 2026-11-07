@@ -15,48 +15,16 @@
  * The pictures are decorative: the engine's name always sits beside them.
  */
 import type { ReactNode } from 'react'
-import { Cloud, Monitor, ScanText } from 'lucide-react'
+import { Cloud, Monitor } from 'lucide-react'
 import { OCR_MODES, type OcrMode } from '../bridge/settings'
 import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
 import yomitan from '../assets/engine-icons/yomitan.svg'
 import yomitanApi from '../assets/engine-icons/yomitan-api.svg'
 import hachidori from '../assets/engine-icons/hachidori.png'
 import tenten from '../assets/engine-icons/tenten.svg'
-import googleLens from '../assets/engine-icons/google-lens.svg'
-import kimochiCloud from '../assets/engine-icons/kimochi-cloud.svg'
-import windows from '../assets/engine-icons/windows.svg'
+import { OCR_PICTURES, type Picture } from './enginePictures'
 import './engine-icon.css'
 
-/** `tile`: a bare mark drawn inside the neutral tile rather than filling the square itself. */
-type Picture = { src: string; tile?: boolean } | { glyph: ReactNode } | { monogram: string; lang?: string }
-
-/** A paddle, for PaddleOCR: lucide's grid and stroke, so it sits in the tile like `ScanText`. */
-function Paddle(): ReactNode {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12.5 11.5 5 19" />
-      <path d="m3 17 4 4" />
-      <rect x="9.6" y="4.6" width="13.4" height="5.6" rx="2.8" transform="rotate(-45 16.3 7.4)" />
-    </svg>
-  )
-}
-
-const OCR_PICTURES: Record<OcrMode, Picture> = {
-  googlelens: { src: googleLens, tile: true },
-  cloud: { src: kimochiCloud },
-  meikiocr: { monogram: 'M' },
-  mangaocr: { monogram: '漫', lang: 'ja' },
-  ppocr: { glyph: <Paddle /> },
-  livetext: { glyph: <ScanText /> },
-  oneocr: { src: windows, tile: true }
-}
 
 const DICTIONARY_PICTURES: Record<DictionaryEngine, Picture> = {
   yomitan: { src: yomitan },

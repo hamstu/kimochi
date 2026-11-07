@@ -171,6 +171,8 @@ interface ScanEntry {
   source?: SourceName | null;
   /** Earlier entries this fuller reading replaced in the history; see history_merge.rs. */
   replaces?: string[];
+  /** The session these lines go to (a browser extension tab's; src-tauri/src/browser_bridge.rs). */
+  session?: string;
 }
 /**
  * Does `texts` (one reading's lines) say again exactly what the Log's last reading says? The last
@@ -208,8 +210,19 @@ async function ingestHistory(entries: ScanEntry[]): Promise<void> {
       repeat = getSettings().dedupeDepth > 0 && repeatsLastReading(texts);
     }
     if (repeat) await flush();
-    else if (getSettings().inputSource === "ocr") {
+    // The browser extension's pictures are scans too (src-tauri/src/browser_bridge.rs).
+    else if (getSettings().inputSource === "ocr" || getSettings().inputSource === "browser") {
       if (entry.source) await selectSource(entry.source);
+      // A browser tab's lines go to its session: the Log opens it, so coming back to Kimochi
+      // shows them there, at the end of the Log.
+      if (
+        entry.session &&
+        entry.session !== sessions.getActiveSession().id &&
+        sessions.listSessions().some((session) => session.id === entry.session)
+      ) {
+        await sessions.switchSession(entry.session);
+        broadcast();
+      }
       if (groups?.length) {
         for (const [index, group] of groups.entries()) {
           await ingestText(group.text, "ocr", entry.timestamp, `${entry.id}:group:${group.id}`, {
@@ -307,6 +320,39 @@ export function startHost(): Promise<void> {
         getSetting<typeof seen>("texthookerIngestedHistory", []),
       ]);
       store.onLinesFlushed(pokeSync);
+      // The browser extension's session menus follow the sessions (browser_bridge.rs).
+      const tellBrowser = (manifest: ReturnType<typeof sessions.getManifest>): void => {
+        void invoke("browser_sessions", {
+          sessions: manifest.sessions.map(({ id, name }) => ({ id, name })),
+          active: manifest.activeId,
+        }).catch(() => undefined);
+      };
+      tellBrowser(sessions.getManifest());
+      sessions.subscribeSessions(tellBrowser);
+      // A tab asks for a session to be made (its first reading, or New session) or renamed.
+      await listen<{ request: number; op: "create" | "rename"; id?: string; name?: string | null }>(
+        "browser-session",
+        (e) => {
+          const { request, op, id, name } = e.payload;
+          void enqueue(async () => {
+            try {
+              let session: string;
+              if (op === "rename" && id && name) {
+                await sessions.renameSession(id, name);
+                session = id;
+              } else {
+                await flush();
+                session = (await sessions.createSession(name ?? undefined)).id;
+              }
+              pokeSync();
+              broadcast();
+              await invoke("browser_session_reply", { request, id: session, error: null });
+            } catch (error) {
+              await invoke("browser_session_reply", { request, id: null, error: String(error) });
+            }
+          }).catch(reportError);
+        },
+      );
       await listen<{ id: number; changed: SyncChanged }>("sync:release", (e) => {
         releases.get(e.payload.id)?.(e.payload.changed);
         releases.delete(e.payload.id);

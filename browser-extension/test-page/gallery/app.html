@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gallery app – picture 1</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #1d1d20; color: #eee; }
+  header { padding: 16px 24px; display: flex; gap: 16px; align-items: center; }
+  a { color: #9eb1ff; }
+  .viewer { display: flex; justify-content: center; padding: 12px; min-height: 80vh; }
+  .viewer img { max-height: 80vh; max-width: 92vw; background: #fff; }
+</style>
+</head>
+<body>
+<!-- Pages change without a page load, as in most gallery and reader sites: the URL changes
+     (pushState), then the content is swapped for the next picture a moment later. -->
+<header><a href="../index.html">← Test page</a><strong>Gallery app</strong><span id="count"></span><a href="#" id="prev">← Previous</a><a href="#" id="next">Next →</a></header>
+<main class="viewer"></main>
+<script>
+  const pics = ['manga.png', 'manga2.png', 'dialogue.png']
+  const page = () => Number(new URLSearchParams(location.search).get('p') || 1)
+  function show() {
+    const n = page()
+    document.title = `Gallery app – picture ${n}`
+    document.getElementById('count').textContent = `Picture ${n} of ${pics.length}`
+    // A whole new element each time, as a framework re-renders it.
+    document.querySelector('.viewer').innerHTML = `<img class="photo" src="../${pics[n - 1]}?app=${n}" alt="Picture ${n}">`
+  }
+  function go(delta) {
+    const n = ((page() - 1 + delta + pics.length) % pics.length) + 1
+    history.pushState({}, '', `?p=${n}`)
+    setTimeout(show, 300)
+  }
+  document.getElementById('next').onclick = (e) => { e.preventDefault(); go(1) }
+  document.getElementById('prev').onclick = (e) => { e.preventDefault(); go(-1) }
+  addEventListener('popstate', show)
+  show()
+</script>
+</body>
+</html>

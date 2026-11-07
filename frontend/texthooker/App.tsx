@@ -173,7 +173,14 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   useTextHookInput();
   useScanMode(apiMode);
   useLineHotkeys();
+  // Another session opened (chosen here, or switched to for a browser tab's lines): start at
+  // its newest line, wherever the last one was scrolled to.
+  const shownSession = useRef(snap.sessions.activeId);
   useLayoutEffect(() => {
+    if (shownSession.current !== snap.sessions.activeId) {
+      shownSession.current = snap.sessions.activeId;
+      follow.current = true;
+    }
     if (follow.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
   }, [snap.lines.length, snap.sessions.activeId, shown]);

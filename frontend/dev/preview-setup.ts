@@ -6,7 +6,7 @@
  *
  * URL parameters:
  *   ?window=<label>  panel window label (log, settings, diagnostics, yomitan)
- *   ?tab=<id>        settings tab (general, sources, texthooker, ocr, log, dictionary, anki, assist, controls,
+ *   ?tab=<id>        settings tab (general, sources, browser, texthooker, ocr, log, dictionary, anki, assist, controls,
  *                    account)
  *   ?view=notebook   main window: start on the Notebook view
  *   ?sidebar=0       main window: sidebar hidden
@@ -786,6 +786,9 @@ const HANDLERS: Record<string, Handler> = {
   desktop: () => DISPLAYS.map((d) => d.bounds),
   displays: () => DISPLAYS,
   platform_capabilities: () => CAPABILITIES,
+  // Settings → Browser Extension.
+  browser_bridge_status: () => ({ enabled: true, listening: true, port: 27640, connected: 1, browsers: ['Chrome'] }),
+  browser_extension_folder: () => '/Users/you/Library/Application Support/com.kimochi.app/browser-extension',
   cli_status: () => cliCommand(cliInstalled),
   cli_install: () => cliCommand((cliInstalled = true)),
   cli_uninstall: () => cliCommand((cliInstalled = false)),

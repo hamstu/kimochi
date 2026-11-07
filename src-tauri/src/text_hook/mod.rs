@@ -166,6 +166,7 @@ impl Hook {
                 groups: Vec::new(),
                 info: Some(json!({ "source_id": session.source_id, "capturedAt": at })),
                 detached: false,
+                picture: None,
             },
         );
         session.last_id = Some(id.clone());

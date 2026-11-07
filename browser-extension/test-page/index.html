@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kimochi extension test page</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #f6f3ee; color: #222; }
+  header { padding: 24px 32px; background: #222; color: #fff; }
+  header p { margin: 4px 0 0; color: #bbb; }
+  main { display: grid; grid-template-columns: 220px 1fr; gap: 32px; padding: 32px; max-width: 1400px; }
+  nav { position: sticky; top: 32px; align-self: start; background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px #0002; }
+  nav a { display: block; color: #555; padding: 4px 0; }
+  section { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 32px; box-shadow: 0 1px 3px #0002; }
+  h2 { margin-top: 0; }
+  .reader { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .reader img { width: min(560px, 100%); height: auto; border: 1px solid #ddd; }
+  .reader button { font-size: 15px; padding: 6px 14px; }
+  .scene { width: min(900px, 100%); aspect-ratio: 16 / 9; background: url(dialogue.png) center / cover; border-radius: 6px; }
+  canvas { max-width: 100%; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kimochi extension test page</h1>
+  <p>Click the Kimochi toolbar button (or press Alt+K), then click one of the pictures below.</p>
+</header>
+<main>
+  <nav>
+    <a href="#manga">Manga reader (&lt;img&gt;)</a>
+    <a href="#scene">Game scene (CSS background)</a>
+    <a href="#sign">Shop sign (&lt;canvas&gt;)</a>
+    <a href="gallery/1.html">Gallery (full page loads)</a>
+    <a href="gallery/app.html">Gallery app (pages change without a load)</a>
+  </nav>
+  <div>
+    <section id="manga">
+      <h2>Manga reader</h2>
+      <p>An &lt;img&gt;. “Next page” swaps its picture, which Auto OCR should pick up on its own.</p>
+      <div class="reader">
+        <img id="page" src="manga.png" alt="Manga page">
+        <div><button id="prev">← Previous page</button> <span id="count">1 / 2</span> <button id="next">Next page →</button></div>
+      </div>
+    </section>
+    <section id="scene">
+      <h2>Game scene</h2>
+      <p>A &lt;div&gt; with a CSS background: read from a screenshot of the tab.</p>
+      <div class="scene"></div>
+    </section>
+    <section id="sign">
+      <h2>Shop sign</h2>
+      <p>A &lt;canvas&gt; that redraws every few seconds between two signs.</p>
+      <canvas id="canvas" width="900" height="500"></canvas>
+      <p><label><input type="checkbox" id="cycle" checked> Change the sign every 5 seconds</label></p>
+    </section>
+  </div>
+</main>
+<script>
+  const pages = ['manga.png', 'manga2.png']
+  let index = 0
+  const img = document.getElementById('page')
+  const show = (i) => { index = (i + pages.length) % pages.length; img.src = pages[index]; document.getElementById('count').textContent = `${index + 1} / ${pages.length}` }
+  document.getElementById('next').onclick = () => show(index + 1)
+  document.getElementById('prev').onclick = () => show(index - 1)
+
+  const canvas = document.getElementById('canvas')
+  const context = canvas.getContext('2d')
+  const signs = [
+    { bg: '#c8102e', big: '営業中', small: 'ラーメン・餃子・チャーハン' },
+    { bg: '#1d4e89', big: '準備中', small: '午後五時から開店します' },
+  ]
+  let sign = 0
+  function draw() {
+    const s = signs[sign]
+    context.fillStyle = '#2b2b2b'; context.fillRect(0, 0, 900, 500)
+    context.fillStyle = s.bg; context.beginPath(); context.roundRect(170, 110, 560, 280, 12); context.fill()
+    context.fillStyle = '#fff'; context.textAlign = 'center'
+    context.font = '800 96px "Hiragino Sans", sans-serif'; context.fillText(s.big, 450, 245)
+    context.font = '36px "Hiragino Sans", sans-serif'; context.fillText(s.small, 450, 330)
+  }
+  draw()
+  setInterval(() => { if (document.getElementById('cycle').checked) { sign = (sign + 1) % signs.length; draw() } }, 5000)
+</script>
+</body>
+</html>

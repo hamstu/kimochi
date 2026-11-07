@@ -60,7 +60,7 @@ export const UI_SCALE_LABELS: Record<UiScale, string> = {
 };
 
 export interface Settings {
-  inputSource: "ocr" | "clipboard" | "websocket" | "hook";
+  inputSource: "ocr" | "clipboard" | "websocket" | "hook" | "browser";
   websocketUrl: string;
   dictionaryMode: "builtin" | "custom-api";
   autoMatchSource: boolean;

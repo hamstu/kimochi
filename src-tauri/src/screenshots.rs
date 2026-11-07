@@ -138,6 +138,9 @@ pub struct Scan {
     pub info: Option<Value>,
     /// A Quick Shot: its source is a display, and it has no crop key.
     pub detached: bool,
+    /// The picture itself, when there is no source to capture again: a picture the browser
+    /// extension sent (browser_bridge.rs) is the whole of what was read.
+    pub picture: Option<crate::state::Image>,
 }
 
 impl Screenshots {
@@ -345,9 +348,8 @@ pub fn taken(app: &tauri::AppHandle, scan: Scan) {
         .ok();
 }
 
-fn take(app: &tauri::AppHandle, scan: Scan) -> Result<(), String> {
-    let service = app.try_state::<Arc<Screenshots>>().ok_or("no store")?.inner().clone();
-    let state = app.try_state::<crate::state::Shared>().ok_or("no state")?;
+/// The scan's source, captured again whole (the scan's own frame is cropped to the OCR area).
+fn capture_source(state: &crate::state::Shared, scan: &Scan) -> Result<(image::RgbImage, (u32, u32)), String> {
     let source_id = scan
         .info
         .as_ref()
@@ -356,9 +358,22 @@ fn take(app: &tauri::AppHandle, scan: Scan) -> Result<(), String> {
         .map(str::to_string)
         .or_else(|| state.selection.lock().ok()?.clone())
         .ok_or("no source")?;
-    let frame = crate::sources::capture_whole(&state, &source_id)?;
+    let frame = crate::sources::capture_whole(state, &source_id)?;
     let picture = crate::text_observer::rgb_image(&frame).map_err(|e| e.message)?;
-    let full = (frame.info.width, frame.info.height);
+    Ok((picture, (frame.info.width, frame.info.height)))
+}
+
+fn take(app: &tauri::AppHandle, scan: Scan) -> Result<(), String> {
+    let service = app.try_state::<Arc<Screenshots>>().ok_or("no store")?.inner().clone();
+    let state = app.try_state::<crate::state::Shared>().ok_or("no state")?;
+    let (picture, full) = match &scan.picture {
+        Some(image) => {
+            let picture = image.rgb()?;
+            let full = picture.dimensions();
+            (picture, full)
+        }
+        None => capture_source(&state, &scan)?,
+    };
     let jpeg = encode(picture, KEEP_EDGE, KEEP_QUALITY)?;
     // The size it was kept at.
     let scale = (KEEP_EDGE as f64 / full.0.max(full.1) as f64).min(1.0);

@@ -32,7 +32,7 @@ import { PopupLeave } from './popup-leave.js'
 
 import { displayAfterLayout, mapAnnotations, sourceDisplay, toOverlayLocal } from './geometry.js'
 import { scanPointerInit } from './scan-input.js'
-import { visibleAnnotations } from './annotations.js'
+import { groupTextAnnotations, visibleAnnotations } from './annotations.js'
 import { japaneseFilterOf } from './japanese-text.js'
 import { AutoScanner } from './autoscan.js'
 import { resolveWatcher, observerModeOf } from './watcher.js'
@@ -275,6 +275,11 @@ const hook = {
  */
 const HOOK_EXAMPLE = '吾輩は猫である。名前はまだ無い。'
 const hookMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'hook'
+/**
+ * The browser extension is the source (src-tauri/src/browser_bridge.rs): its pictures are read
+ * here (`onBrowserScan`) but drawn by the extension over the page, never by this window.
+ */
+const browserMode = () => (setting('superTexthooker')?.inputSource ?? 'ocr') === 'browser'
 const hookKey = () => hook.exe?.toLowerCase() ?? null
 const hookGame = () => (hookKey() && setting('textHookerGames')?.[hookKey()]) || {}
 /** The game's settings, with the defaults (Settings → Text Hooker) where it has none (hook-games.ts). */
@@ -922,6 +927,7 @@ function draw() {
   const gamescopeFront = !(window.__KIMOCHI_PLATFORM__?.os === 'linux' && nativeGamescope) || state.sourceFocus?.focused !== false
   const visible =
     !settling &&
+    !browserMode() &&
     (controller.holdsText ||
     (overlayTextOn() &&
       ((waylandLayer && gamescopeFront) ||
@@ -2205,6 +2211,8 @@ function syncAutoScanner() {
   const wanted =
     (hookMode() ? hookOcrOn() : state.flags.autoOcrEnabled) &&
     !isQuickShot() &&
+    // The extension watches its page itself; there is no screen to watch.
+    !browserMode() &&
     !state.regionSelecting &&
     !state.regionCommitting
   if (wanted && !scanner.isRunning) {
@@ -2259,6 +2267,8 @@ async function onAction(name) {
         if(controllerHold)throw new Error('Close controller navigation before scanning')
       }
       if (isQuickShot()) return quickShot()
+      // The page reads its picture again and sends it (`onBrowserScan`).
+      if (browserMode()) return native.invoke('browser_rescan')
       // With Auto OCR on, the button and the shortcut are Force rescan: start over from nothing.
       if (scanner.isRunning) forceRescan()
       return performScan()
@@ -4060,6 +4070,110 @@ async function processView(view) {
  * the transition and a failure is reported on the status line like any other.
  */
 let overlayTextShown = null
+// ---------------------------------------------------------------------------
+// The browser extension (src-tauri/src/browser_bridge.rs, browser-extension/)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a picture the browser extension sent, as a scan of the selected engine, and answer with
+ * the lines to lay over it. Its text reaches the Log like any scan's (`publishOcrResult`, with the
+ * same filters); nothing is drawn here.
+ */
+async function onBrowserScan({ request, frame, reason, session }) {
+  const answer = (payload) =>
+    native.invoke('browser_scan_result', { request, result: null, error: null, ...payload }).catch((error) =>
+      log({ check: 'browser-scan-answer-failed', error: String(error?.message ?? error) })
+    )
+  const auto = reason === 'auto'
+  publish({ scanning: true, status: 'Reading the picture from your browser\u2026' })
+  if (!auto) activity(scanActivity.recognising(ocrModeNow()))
+  try {
+    const result = await recognize(frame, { ocrMode: ocrModeNow() })
+    if (!result) throw new Error('The OCR engine returned nothing')
+    const grouping = setting('textOverlayGrouping')
+    let publication = null
+    const published = await publishOcrResult(result, {
+      detached: true,
+      grouping,
+      // The same picture read again (Auto OCR, Rescan) does not add its text twice.
+      merge: true,
+      frame: frame.id,
+      // The tab's session: the Log switches to it for these lines.
+      session: session ?? null,
+      onPublication: (report) => {
+        publication = report
+      }
+    })
+    // The activity bubble hears how it went, as after any scan (it said "Recognising…").
+    reportOutcome(scanActivity.scanOutcome(publication, { auto }), { auto })
+    const lines = browserLines(result, grouping, frame.info)
+    publish({
+      scanning: false,
+      status: lines.length ? `Read ${lines.length} line${lines.length === 1 ? '' : 's'} from your browser` : 'No text in that picture'
+    })
+    log({ check: 'browser-scan', reason, lines: lines.length, published: published.length, engine: ocrModeNow() })
+    await answer({
+      result: {
+        lines,
+        width: frame.info.width,
+        height: frame.info.height,
+        engine: ocrModeNow(),
+        geometry: result.geometry !== false,
+        text: published
+      }
+    })
+  } catch (error) {
+    const message = String(error?.message ?? error)
+    publish({ scanning: false, status: `Couldn\u2019t read that picture: ${message}` })
+    log({ check: 'browser-scan-failed', reason, error: message })
+    reportOutcome(scanActivity.scanFailed(error, 'recognise', ocrModeNow()), { auto })
+    await answer({ error: message })
+  }
+}
+
+/**
+ * The visible lines of a reading (the overlay's own filters), in fractions of the picture, for the
+ * extension to draw: `{text, points: [[x, y] ×4], vertical, group, surface?}`. A block that knows
+ * its lines (Manga OCR's speech bubbles) gives each line, under the block's group; with Group text
+ * into regions on, lines near each other share a group as the overlay's boxes would.
+ */
+function browserLines(result, grouping, info) {
+  if (result.geometry === false) return []
+  const width = info?.width || 1
+  const height = info?.height || 1
+  const round = (value) => Math.round(value * 10000) / 10000
+  const at = (x, y) => [round((x ?? 0) / width), round((y ?? 0) / height)]
+  const visible = visibleAnnotations(result.textAnnotations ?? [], grouping)
+  const groupOf = new Map()
+  if (grouping?.enabled) {
+    groupTextAnnotations(visible, grouping.proximityThreshold).forEach((group, index) => {
+      for (const annotation of group.annotations) groupOf.set(annotation, index)
+    })
+  }
+  const lines = []
+  visible.forEach((annotation, index) => {
+    const vertical = annotation.isVertical === true || annotation.orientation === 'vertical'
+    const group = groupOf.get(annotation) ?? `a${index}`
+    const surface = annotation.surface
+    const texts = annotation.lineTexts
+    if (annotation.linePolygons?.length && texts?.length === annotation.linePolygons.length) {
+      annotation.linePolygons.forEach((polygon, line) => {
+        if (texts[line]?.trim()) lines.push({ text: texts[line], points: polygon.map(([x, y]) => at(x, y)), vertical, group, surface })
+      })
+      return
+    }
+    if (!annotation.description?.trim()) return
+    lines.push({
+      text: annotation.description,
+      points: annotation.boundingPoly.vertices.map((vertex) => at(vertex.x, vertex.y)),
+      vertical,
+      group,
+      surface
+    })
+  })
+  return lines
+}
+
 function syncOverlayText() {
   const shown = overlayTextOn()
   const was = overlayTextShown
@@ -4200,6 +4314,7 @@ await native.watchSettings((key) => {
 })
 
 await native.listen('texthook-line', ({ payload }) => onHookLine(payload))
+await native.listen('browser-scan', ({ payload }) => void onBrowserScan(payload))
 await native.listen('texthook-status', ({ payload }) => onHookStatus(payload))
 void native.optional('texthook_status').then((status) => status && onHookStatus(status))
 

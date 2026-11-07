@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Kimochi",
+  "short_name": "Kimochi",
+  "version": "0.1.0",
+  "description": "Read Japanese in pictures on any page, with your dictionary pop-up. Needs the free Kimochi desktop app for Mac, Windows or Linux.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoP04r5wBRl6iAP3sZS+ALqIlRZGWuJoA2vMcxAc2d60rC4WLY61JWw8TdHkEeOeIQyXzOyPRCNjD/kD6/xjcUH7w/lpYnb6OCbx85XAf7HqHtEZUHsUnxgvwmbLEAER/ZeAZFEd3G6ZM39/MWu0nFvtvOGHhCHS8ig33YLARsNfyj3pvIX5nu2SjAzvXcdr/Y4Kefafpl7dSpQ8EWnMAGbSTru/60Wy2LU5qxFctLIJFpwgzjOogz1fQqp73dQp7YkaxTcWgWB41i5J+RybViq7sJyvpFObtbHOB58x0xMQ4wzQDNvF/QOR8Nj+jQ6qgeOQyZC36F2NfQDOIPUCo2QIDAQAB",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Kimochi: pick an image to read",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+K"
+      },
+      "description": "Pick an image to read"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/logo.svg",
+        "fonts/figtree.woff2"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

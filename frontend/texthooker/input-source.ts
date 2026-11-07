@@ -1,10 +1,10 @@
 import type { LineSource, Settings } from "./lib/types";
 
-export type InputSource = "ocr" | "clipboard" | "websocket" | "hook";
+export type InputSource = "ocr" | "clipboard" | "websocket" | "hook" | "browser";
 
 /** Legacy clipboard users retain that choice; all other existing installs use OCR. */
 export function inputSourceOf(settings: Partial<Settings>): InputSource {
-  if (["ocr", "clipboard", "websocket", "hook"].includes(settings.inputSource || "")) {
+  if (["ocr", "clipboard", "websocket", "hook", "browser"].includes(settings.inputSource || "")) {
     return settings.inputSource as InputSource;
   }
   return settings.clipboardEnabled ? "clipboard" : "ocr";
@@ -16,7 +16,9 @@ export function acceptsInput(
 ): boolean {
   // `kimochi log add` is an explicit request, whichever input the Log is reading.
   if (source === "cli") return true;
-  return inputSourceOf(settings) === source;
+  const input = inputSourceOf(settings);
+  // The browser extension's pictures are OCR scans (src-tauri/src/browser_bridge.rs).
+  return input === source || (input === "browser" && source === "ocr");
 }
 
 /** Text-only input: raw messages, JSON strings, or common text/sentence envelopes. */

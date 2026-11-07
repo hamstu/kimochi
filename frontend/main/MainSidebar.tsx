@@ -30,6 +30,7 @@ import { preloadSettingsPage } from '../panels/settings/settingsPages'
 import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
+import { BrowserEngines } from './BrowserEngines'
 import { ManageLink } from './ManageLink'
 import { ModelStatusBadge } from './ModelStatusBadge'
 import { UpdateNotice } from './UpdateNotice'
@@ -175,15 +176,15 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
 }
 
 /**
- * The OCR model only matters while the Log reads the screen, or while OCR places the Text Hooker's
- * card on the game (Auto align, kept per game).
+ * The OCR model only matters while the Log reads the screen or the browser extension's pictures,
+ * or while OCR places the Text Hooker's card on the game (Auto align, kept per game).
  */
 function useReadsScreen(): boolean {
   const [input, setInput] = useState(() => getSettings().inputSource)
   useEffect(() => onSettingsChange((next) => setInput(next.inputSource)), [])
   const hook = useHookStatus()
   const placement = useHookPlacement(input === 'hook' ? hook.exe : null)
-  return input === 'ocr' || Boolean(placement?.on)
+  return input === 'ocr' || input === 'browser' || Boolean(placement?.on)
 }
 
 export function MainSidebar({
@@ -278,6 +279,7 @@ export function MainSidebar({
           />
         </div>
         {readsScreen && <OcrModel onOpenSettings={() => onSettingsTab('ocr')} />}
+        <BrowserEngines />
         <DictionaryPicker onOpenSettings={() => onSettingsTab('dictionary')} />
       </div>
       <UpdateNotice />
