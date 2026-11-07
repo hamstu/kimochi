@@ -175,6 +175,7 @@ export default function PanelShell({
               title={pinned ? 'Unpin window' : 'Keep on top'}
               aria-label={pinned ? 'Unpin window' : 'Keep on top'}
               aria-pressed={pinned}
+              className="native-pin"
               onClick={() => run(pinned ? 'unpin' : 'pin')}
             >
               {pinned ? <Pin /> : <PinOff />}

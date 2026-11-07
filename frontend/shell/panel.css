@@ -106,6 +106,11 @@ body,
   background: var(--k-hover);
   color: var(--k-text);
 }
+/* The pin fills its box corner to corner, so it reads larger than the other glyphs at one size. */
+.native-window-actions button.native-pin svg {
+  width: var(--k-icon-xs);
+  height: var(--k-icon-xs);
+}
 .native-window-actions button[aria-pressed="true"] {
   color: var(--k-accent-text);
 }

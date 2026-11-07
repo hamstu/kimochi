@@ -18,6 +18,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Magpie support.** The overlay, hover lookups and dictionary pop-ups line up with games scaled by Magpie and stay above them.
 - **A fuller session manager** in the Log's **Manage sessions** and in **Settings → Log & Sessions**: each session's reading time and line count, its description and last five lines, and clearing or deleting several at once (Shift-click ticks a run).
 
+### Changed
+
+- **A tidier sidebar.** A downloading or starting OCR model or dictionary now fills its own box like a progress bar, with one percentage for the whole setup, instead of adding notes and bars under it. When something needs you (not downloaded, a failed setup), a short notice eases in with a link straight to the right settings. The links beside each heading now say **Settings**, and the title bar's buttons and the footers line up evenly.
+
 ### Fixed
 
 - **The overlay works on more Linux desktops.** On Wayland desktops such as Hyprland, Sway and KDE Plasma, the installed app no longer says the overlay isn't supported.

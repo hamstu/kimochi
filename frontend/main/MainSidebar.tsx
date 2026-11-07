@@ -4,7 +4,7 @@
  * (Dictionary), each labelled, with Settings pinned to the bottom under the update notice (while
  * an account is in use, the account switcher takes its place, with Settings in its menu; mini mode
  * keeps Settings). OCR model and Dictionary carry a
- * "Manage" link on their label row, to their Settings pages. The session picker is in the Log's
+ * "Settings" link on their label row, to their Settings pages. The session picker is in the Log's
  * footer, beside its ⋯ menu. The views (Log, Notebook) are tabs
  * across the top of the content. In the Settings view the same column lists the settings pages,
  * with a way back. Resizable from its right edge.
@@ -23,7 +23,10 @@ import { DictionaryEngineIcon, DictionaryRunsIcon, OcrEngineIcon, OcrRunsIcon } 
 import { DICTIONARY_ENGINES, type DictionaryEngine } from '../bridge/dictionaryEngine'
 import { YomitanApiSetupDialog } from '../components/YomitanApiSetup'
 import { useDictionarySwitch } from '../panels/settings/useDictionarySwitch'
-import { DictionaryReadiness } from '../components/DictionaryReadiness'
+import { useDictionaryReadiness } from '../bridge/dictionaryReadiness'
+import { useExtensionStatus } from '../bridge/extensions'
+import { downloadEngineFor } from '@ui/extension-download'
+import { percent } from '@ui/model-download'
 import { settingsNavFor } from '../panels/settings/settingsNav'
 import { DownloadConfirmDialog } from '../panels/settings/DownloadConfirmDialog'
 import { preloadSettingsPage } from '../panels/settings/settingsPages'
@@ -31,8 +34,11 @@ import type { SettingsTabName } from '../bridge/tauri'
 import type { ControllerWiring } from '../panels/useController'
 import { SourcePanel } from './SourcePanel'
 import { BrowserEngines } from './BrowserEngines'
-import { ManageLink } from './ManageLink'
-import { ModelStatusBadge } from './ModelStatusBadge'
+import { SettingsLink } from './SettingsLink'
+import { useOcrModelState } from './modelState'
+import { EngineValue } from './EngineValue'
+import { progressProps, useSteadyProgress, type FieldProgress } from './fieldProgress'
+import { SidebarNotice } from './SidebarNotice'
 import { UpdateNotice } from './UpdateNotice'
 import { activeAccount } from '@ui/account'
 import { useAccount } from '../bridge/account'
@@ -48,13 +54,9 @@ export const DEFAULT_WIDTH = 272
 const OCR_MODE_LIST = Object.keys(OCR_MODES) as OcrMode[]
 
 /** An engine as Settings lists it: its picture, its name and where it runs. Also the closed select. */
-function OcrModeLabel({ mode }: { mode: OcrMode }): JSX.Element {
+function OcrModeLabel({ mode, busy = null }: { mode: OcrMode; busy?: FieldProgress | null }): JSX.Element {
   return (
-    <span className="sb-engine-option">
-      <OcrEngineIcon mode={mode} />
-      <span className="sb-engine-option-name">{OCR_MODES[mode].name}</span>
-      <OcrRunsIcon mode={mode} />
-    </span>
+    <EngineValue picture={<OcrEngineIcon mode={mode} />} name={OCR_MODES[mode].name} runs={<OcrRunsIcon mode={mode} />} busy={busy} />
   )
 }
 
@@ -65,19 +67,21 @@ function OcrModeLabel({ mode }: { mode: OcrMode }): JSX.Element {
 export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
   const { ocrMode, shown, choose, confirmation } = useEngineSelection()
   const capabilities = useCapabilities()
+  const model = useOcrModelState(ocrMode)
+  // Only the selected engine's model is followed; a pick still being confirmed shows plainly.
+  const busy = useSteadyProgress(shown === ocrMode ? model.busy : null, ocrMode)
   return (
     <div className="sb-group">
       <div className="sb-label sb-label-row">
-        <span>
-          <span id="sb-ocr-label">OCR model</span>
-          <ModelStatusBadge engine={ocrMode} onOpenSettings={onOpenSettings} />
-        </span>
-        <ManageLink label="Manage OCR settings" onClick={onOpenSettings} />
+        <span id="sb-ocr-label">OCR model</span>
+        <SettingsLink label="OCR settings" onClick={onOpenSettings} />
       </div>
       <div className="sb-field">
         <SelectRoot value={shown} onValueChange={(value) => choose(value as OcrMode)}>
-          <SelectTrigger aria-label="OCR model" className="sb-select sb-engine-select">
-            <SelectValue />
+          <SelectTrigger aria-label="OCR model" className="sb-select sb-engine-select" {...progressProps(busy)}>
+            <SelectValue>
+              <OcrModeLabel mode={shown} busy={busy} />
+            </SelectValue>
           </SelectTrigger>
           <SelectContent className="sb-engine-menu">
             {OCR_MODE_LIST.filter((mode) => engineListed(mode, capabilities, ocrMode)).map((mode) => (
@@ -94,6 +98,11 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
             ))}
           </SelectContent>
         </SelectRoot>
+        {model.notice && shown === ocrMode && (
+          <SidebarNotice action="Open OCR settings" onAction={onOpenSettings} title={model.notice.title}>
+            {model.notice.text}
+          </SidebarNotice>
+        )}
       </div>
       <DownloadConfirmDialog confirmation={confirmation} />
     </div>
@@ -103,42 +112,70 @@ export function OcrModel({ onOpenSettings }: { onOpenSettings: () => void }): JS
 const DICTIONARY_LIST = Object.keys(DICTIONARY_ENGINES) as DictionaryEngine[]
 
 /** A dictionary engine as Settings lists it: its picture, its name and where it runs. */
-function DictionaryLabel({ engine }: { engine: DictionaryEngine }): JSX.Element {
+function DictionaryLabel({ engine, busy = null }: { engine: DictionaryEngine; busy?: FieldProgress | null }): JSX.Element {
   return (
-    <span className="sb-engine-option">
-      <DictionaryEngineIcon engine={engine} />
-      <span className="sb-engine-option-name">{DICTIONARY_ENGINES[engine].name}</span>
-      <DictionaryRunsIcon engine={engine} />
-    </span>
+    <EngineValue
+      picture={<DictionaryEngineIcon engine={engine} />}
+      name={DICTIONARY_ENGINES[engine].name}
+      runs={<DictionaryRunsIcon engine={engine} />}
+      busy={busy}
+    />
   )
 }
 
 /**
  * A quick switch of dictionary engine, made exactly as Settings → Dictionary makes it (the same
- * download question, pending switch, reload and Yomitan API setup), with Manage for the rest.
+ * download question, pending switch, reload and Yomitan API setup), with Settings for the rest.
  */
 export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => void }): JSX.Element {
   const dictionary = useDictionarySwitch('sidebar')
   const { active, pending, prompt, reloading, applyError } = dictionary
-  const note = applyError
-    ? applyError
+  const readiness = useDictionaryReadiness(active)
+  // A switch waiting for its engine's download: that download is the first step of the new
+  // engine's setup, and the select shows the engine it is for.
+  const pendingDownload = useExtensionStatus(pending ? downloadEngineFor(pending) : null)
+  const shownEngine = pending ?? active
+  const raw: FieldProgress | null = pending
+    ? pendingDownload?.state === 'downloading'
+      ? (() => {
+          const value = percent(pendingDownload.overallReceived, pendingDownload.overallTotal) / 2
+          return { value, exact: true, short: `${Math.floor(value)}%`, title: `Downloading ${DICTIONARY_ENGINES[pending].name}` }
+        })()
+      : {
+          value: 50,
+          exact: false,
+          short: pendingDownload?.state === 'verifying' ? 'Verifying…' : pendingDownload?.state === 'ready' ? 'Switching…' : 'Waiting…',
+          title: `${DICTIONARY_ENGINES[pending].name} is used once it has downloaded`
+        }
     : reloading === 'self'
-      ? `Switching to ${DICTIONARY_ENGINES[active].name}…`
-      : pending
-        ? `${DICTIONARY_ENGINES[pending].name} is used once it has downloaded.`
-        : dictionary.verifyingApi
-          ? 'Checking the Yomitan API…'
+      ? { value: readiness.setup?.value ?? 0, exact: false, short: 'Switching…', title: `Switching to ${DICTIONARY_ENGINES[active].name}` }
+      : dictionary.verifyingApi
+        ? { value: 0, exact: false, short: 'Checking…', title: 'Checking the Yomitan API' }
+        : readiness.setup
+          ? {
+              ...readiness.setup,
+              short: readiness.setup.exact ? `${Math.floor(readiness.setup.value)}%` : readiness.view.short,
+              title: readiness.view.text
+            }
           : null
+  const busy = useSteadyProgress(raw, shownEngine)
+  const notice = applyError
+    ? { tone: 'danger' as const, text: 'Couldn’t switch dictionary.', title: applyError }
+    : !busy && readiness.view.show && readiness.view.notice
+      ? { tone: 'warn' as const, text: readiness.view.notice, title: readiness.view.text }
+      : null
   return (
     <div className="sb-group">
       <div className="sb-label sb-label-row">
         <span id="sb-dictionary-label">Dictionary</span>
-        <ManageLink label="Manage dictionary settings" onClick={onOpenSettings} />
+        <SettingsLink label="Dictionary settings" onClick={onOpenSettings} />
       </div>
       <div className="sb-field">
         <SelectRoot value={active} onValueChange={(value) => void dictionary.choose(value as DictionaryEngine)}>
-          <SelectTrigger aria-label="Dictionary" className="sb-select sb-engine-select">
-            <SelectValue />
+          <SelectTrigger aria-label="Dictionary" className="sb-select sb-engine-select" {...progressProps(busy)}>
+            <SelectValue>
+              <DictionaryLabel engine={shownEngine} busy={busy} />
+            </SelectValue>
           </SelectTrigger>
           <SelectContent className="sb-engine-menu">
             {DICTIONARY_LIST.map((engine) => (
@@ -148,11 +185,15 @@ export function DictionaryPicker({ onOpenSettings }: { onOpenSettings: () => voi
             ))}
           </SelectContent>
         </SelectRoot>
-        <DictionaryReadiness engine={active} />
-        {note && (
-          <span className="sb-note" data-tone={applyError ? 'danger' : undefined} role="status">
-            {note}
-          </span>
+        {notice && (
+          <SidebarNotice
+            tone={notice.tone}
+            action={readiness.download && readiness.download !== 'ready' ? 'Download in Settings' : 'Open dictionary settings'}
+            onAction={onOpenSettings}
+            title={notice.title}
+          >
+            {notice.text}
+          </SidebarNotice>
         )}
       </div>
       <ConfirmDialog

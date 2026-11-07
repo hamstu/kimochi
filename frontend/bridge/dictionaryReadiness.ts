@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { downloadEngineFor } from "@ui/extension-download";
-import { newerReadiness, readinessView, type DownloadState, type ReadinessView } from "@ui/dictionary-readiness";
+import { newerReadiness, readinessView, setupProgress, type DownloadState, type ReadinessView } from "@ui/dictionary-readiness";
+import { percent } from "@ui/model-download";
 import { onEvent } from "./tauri";
 import { DICTIONARY_ENGINES, hostEngineOf, type DictionaryEngine } from "./dictionaryEngine";
 import { useExtensionStatus } from "./extensions";
@@ -27,9 +28,32 @@ export interface DictionaryReadiness {
   download: DownloadState;
   /** What Settings, the sidebar and onboarding show for it (`ui/dictionary-readiness.ts`). */
   view: ReadinessView;
+  /** The whole setup as one bar (`setupProgress`), or null when nothing is under way. */
+  setup: { value: number; exact: boolean } | null;
 }
 
-type Reported = Omit<DictionaryReadiness, "download" | "view">;
+/**
+ * The engine whose setup began with its download, kept for the session: a switch reloads the
+ * main window between the download and the engine's start, and the one bar must not restart.
+ */
+const SETUP_KEY = "kimochi.setupWithDownload";
+const setupBeganWithDownload = (engine: string): boolean => {
+  try {
+    return sessionStorage.getItem(SETUP_KEY) === engine;
+  } catch {
+    return false;
+  }
+};
+const rememberSetup = (engine: string | null): void => {
+  try {
+    if (engine) sessionStorage.setItem(SETUP_KEY, engine);
+    else sessionStorage.removeItem(SETUP_KEY);
+  } catch {
+    /* Only the bar's continuity is lost. */
+  }
+};
+
+type Reported = Omit<DictionaryReadiness, "download" | "view" | "setup">;
 
 /**
  * The engine's readiness, with its extension archive's download: an engine that is not downloaded
@@ -74,5 +98,20 @@ export function useDictionaryReadiness(
         : { engine: host, phase: "starting", settingsReady: false, message: "Starting the dictionary…" };
   const download: DownloadState =
     engine !== "custom-api" && downloadStatus?.engine === engine ? downloadStatus.state : null;
-  return { ...reported, download, view: readinessView(reported, download, DICTIONARY_ENGINES[engine].name) };
+  const downloading = download === "downloading" || download === "verifying";
+  if (downloading && !setupBeganWithDownload(engine)) rememberSetup(engine);
+  const downloadPercent =
+    downloadStatus && download === "downloading"
+      ? percent(downloadStatus.overallReceived, downloadStatus.overallTotal)
+      : null;
+  const setup = setupProgress(reported, download, downloadPercent, downloading || setupBeganWithDownload(engine));
+  useEffect(() => {
+    if (reported.phase === "ready" && setupBeganWithDownload(engine)) rememberSetup(null);
+  }, [reported.phase, engine]);
+  return {
+    ...reported,
+    download,
+    view: readinessView(reported, download, DICTIONARY_ENGINES[engine].name),
+    setup,
+  };
 }

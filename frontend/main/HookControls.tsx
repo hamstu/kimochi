@@ -1,6 +1,6 @@
 /**
  * Under a Text Hooker source's card: the hooked text, as a select like the OCR model's and the
- * Dictionary's, labelled "Text hooker" with Manage (Settings → Text Hooker, on this game).
+ * Dictionary's, labelled "Text hooker" with a Settings link (Settings → Text Hooker, on this game).
  *
  * A hooked game produces several threads (the dialogue, a nameplate, menus, engine noise). The
  * dialogue is chosen automatically, by the thread remembered for this game or by matching each
@@ -23,7 +23,8 @@ import {
   Spinner
 } from '@kit'
 import { texthookSelect, type HookStatus, type HookThread } from '../bridge/textHook'
-import { ManageLink } from './ManageLink'
+import { SettingsLink } from './SettingsLink'
+import { SidebarNotice } from './SidebarNotice'
 
 const AUTO = '__auto__'
 
@@ -83,12 +84,12 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
     <div className="src-hook">
       <div className="sb-label sb-label-row src-hook-label">
         <span id="src-hook-label">Text hooker</span>
-        <ManageLink label="Text Hooker settings" onClick={onManage} />
+        <SettingsLink label="Text Hooker settings" onClick={onManage} />
       </div>
       {failed && status.detail && (
-        <Callout tone="warn" className="src-notice">
-          <span>{status.detail}</span>
-        </Callout>
+        <SidebarNotice action="Open Text Hooker settings" onAction={onManage}>
+          {status.detail}
+        </SidebarNotice>
       )}
       {couldNotHook(status) && (
         <Callout tone="warn" className="src-notice">

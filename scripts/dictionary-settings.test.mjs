@@ -32,7 +32,7 @@ async function bundle(entry, name, external = []) {
   return import(pathToFileURL(outfile).href)
 }
 
-const { readinessView, newerReadiness } = await bundle('../ui/dictionary-readiness.ts', 'readiness.mjs')
+const { readinessView, newerReadiness, setupProgress } = await bundle('../ui/dictionary-readiness.ts', 'readiness.mjs')
 const { buildAnkiConfigForPopover, ankiMiningGap } = await bundle('../frontend/texthooker/lib/ankiConfig.ts', 'anki-config.mjs')
 const { popupAnkiConfig } = await bundle('../ui/api-lookup.js', 'api-lookup.mjs', ['/spike/*'])
 
@@ -113,6 +113,35 @@ test("the note joins the engine's message as sentences, and tells the truth abou
   assert.equal(failed.badge.label, 'Needs attention')
   assert.equal(failed.text, 'Yomitan could not start. Choose another dictionary engine and switch back to retry.')
   assert.equal(readinessView({ phase: 'setup-needed', settingsReady: true, message: 'Open Hachidori settings to install or import a dictionary.' }, 'ready', 'Hachidori').settingsAvailable, true)
+})
+
+test('a setup in several steps is one bar that only reaches 100 when all of it is done', () => {
+  const at = (status, download, percent, withDownload) => setupProgress(status, download, percent, withDownload)
+  // Engine download, then start, then dictionary data, then install: each a share of one bar.
+  const steps = [
+    at(starting, 'downloading', 0, true),
+    at(starting, 'downloading', 100, true),
+    at(starting, 'verifying', null, true),
+    at(starting, 'ready', null, true),
+    at({ phase: 'downloading', settingsReady: true, message: '', progress: 50 }, 'ready', null, true),
+    at({ phase: 'installing', settingsReady: true, message: '' }, 'ready', null, true)
+  ].map((step) => step.value)
+  for (let i = 1; i < steps.length; i++) assert.ok(steps[i] >= steps[i - 1], `step ${i} does not go backwards`)
+  assert.ok(steps.every((value) => value < 100), 'nothing reads as done before the engine is ready')
+  // No download this time: the start and the data take the whole bar.
+  assert.equal(at({ phase: 'downloading', settingsReady: true, message: '', progress: 100 }, 'ready', null, false).value, 90)
+  // A step with no number of its own pulses where it starts.
+  assert.deepEqual(at(starting, 'ready', null, false), { value: 0, exact: false })
+  // Nothing under way, or something that needs the reader: no bar.
+  assert.equal(at({ phase: 'ready', settingsReady: true, message: '' }, 'ready', null, true), null)
+  assert.equal(at(starting, 'paused', null, true), null)
+  assert.equal(at({ phase: 'failed', settingsReady: false, message: 'x' }, 'ready', null, false), null)
+})
+
+test('the sidebar says a busy or stuck engine in a few words', () => {
+  assert.equal(readinessView(starting, 'absent', 'Hachidori').notice, 'Not downloaded yet.')
+  assert.equal(readinessView(starting, 'ready', 'Hachidori').short, 'Starting…')
+  assert.equal(readinessView({ phase: 'failed', settingsReady: false, message: 'Long reason.' }, 'ready', 'X').notice, 'Setup failed.')
 })
 
 const reader = {

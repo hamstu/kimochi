@@ -7,8 +7,8 @@ html[data-mini] button[aria-label="Mute sound effects"],
 html[data-mini] button[aria-label="Turn on sound effects"],
 html[data-mini] .main-help { display: none; }
 .main-frame {
-  --main-foot-pad: var(--k-space-1);
-  --main-foot-h: calc(var(--k-row-h) + var(--main-foot-pad) + 1px);
+  /* The footers are a bar and their top border, their controls centred in the bar. */
+  --main-foot-h: calc(var(--k-row-h) + 1px);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -63,6 +63,34 @@ html[data-mini] .main-help { display: none; }
 }
 .main-title > svg {
   flex: none;
+}
+
+/* The title bar's own buttons (sidebar, mini mode, help) are blocks as tall as the bar, side by
+   side with no gaps, styled exactly like the window buttons beside them (shell/panel.css), in
+   mini mode too. */
+.native-panel-log .native-titlebar-slot {
+  gap: 0;
+  padding: 0;
+}
+.native-panel-log .native-titlebar-slot .k-button-icon {
+  width: var(--k-bar-h);
+  height: 100%;
+  border-radius: 0;
+  background: transparent;
+  color: var(--k-text-3);
+}
+.native-panel-log .native-titlebar-slot .k-button-icon svg {
+  width: var(--k-icon-sm);
+  height: var(--k-icon-sm);
+}
+.native-panel-log .native-titlebar-slot .k-button-icon:hover,
+.native-panel-log .native-titlebar-slot .k-button-icon[data-native-hover] {
+  background: var(--k-hover);
+  color: var(--k-text);
+}
+.native-panel-log .native-titlebar-slot .k-button-icon:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: -3px;
 }
 
 /* View tabs: Log and Notebook across the top of the content, sharing its width. The strip is a
@@ -143,7 +171,9 @@ html[data-mini] .main-help { display: none; }
   flex-direction: column;
 }
 .sb-label {
-  padding: var(--k-space-3) var(--k-space-3) var(--k-space-1);
+  /* Inset like the fields under it, so the label starts at the select's left edge (and a
+     Settings link ends at its right edge). */
+  padding: var(--k-space-3) var(--k-space-2) var(--k-space-1);
   color: var(--k-text-3);
   font-size: var(--k-text-xs);
   font-weight: var(--k-weight-medium);
@@ -165,6 +195,10 @@ html[data-mini] .main-help { display: none; }
   overflow-y: auto;
   padding: var(--k-space-1) 0 var(--k-space-2);
 }
+/* The first label sits as far below the title bar as the fields sit from the sidebar's edge. */
+.sb-scroll > .sb-group:first-child > .sb-label:first-child {
+  padding-top: calc(var(--k-space-2) - var(--k-space-1));
+}
 .sb-nav {
   display: flex;
   flex-direction: column;
@@ -179,11 +213,10 @@ html[data-mini] .main-help { display: none; }
   height: var(--main-foot-h);
   border-top: 1px solid var(--k-line);
 }
-/* The row fills the foot down to the window's edge; its extra bottom padding keeps the label on
-   the same line as the Log footer's controls. */
+/* The row fills the foot down to the window's edge, its label centred like the Log footer's
+   controls. */
 .sb-footer > .k-row {
   flex: 1;
-  padding-bottom: calc(var(--k-space-1-5) + var(--main-foot-pad));
 }
 /* The Kimochi account switcher, in Settings' place in the foot while an account is in use: one
    line, avatar and name, the foot's height exactly. The avatar is a little larger than an icon
@@ -269,7 +302,6 @@ html[data-mini] .main-help { display: none; }
 .main-view .nb-foot.k-bar-bottom {
   box-sizing: border-box;
   height: var(--main-foot-h);
-  padding-bottom: var(--main-foot-pad);
 }
 
 /* A group's field: the select (or select-like trigger), full width. */
@@ -303,6 +335,10 @@ html[data-mini] .main-help { display: none; }
   white-space: nowrap;
   font-weight: var(--k-weight-medium);
 }
+.sb-engine-select > span:first-child {
+  display: flex;
+  flex: 1;
+}
 .sb-engine-select .sb-engine-option {
   flex: 1;
 }
@@ -310,14 +346,49 @@ html[data-mini] .main-help { display: none; }
   width: 1.125rem;
   height: 1.125rem;
 }
-/* A line under a field: a switch under way, or why it failed. */
-.sb-note {
-  color: var(--k-text-3);
-  font-size: var(--k-text-xs);
-  line-height: var(--k-leading-xs);
+/* A setup under way, inside its select: the select fills from the left like a progress bar, behind
+   its text, with the percentage (or the step) where "where it runs" was. One bar for the whole
+   setup (EngineValue.tsx). Within a step without a number of its own, the filled part pulses. */
+.sb-select[data-progress] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
 }
-.sb-note[data-tone="danger"] {
-  color: var(--k-danger-text);
+.sb-select[data-progress]::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: -1;
+  width: max(var(--sb-progress), 0.5rem);
+  background: var(--k-accent-soft);
+  transition: width 400ms var(--k-ease-out);
+}
+.sb-select[data-progress="step"]::before {
+  animation: sb-progress-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sb-progress-pulse {
+  50% { opacity: 0.45; }
+}
+.sb-engine-status {
+  flex: none;
+  margin-left: auto;
+  color: var(--k-accent-text);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-medium);
+}
+/* What needs the reader, under its field: a few words and a link, easing open. */
+.sb-notice {
+  width: 100%;
+  animation: sb-notice-in var(--k-base) var(--k-ease-out);
+}
+@keyframes sb-notice-in {
+  from { opacity: 0; transform: translateY(-0.25rem); max-height: 0; padding-block: 0; }
+  to { opacity: 1; transform: none; max-height: 6rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-notice,
+  .sb-select[data-progress="step"]::before { animation: none; }
+  .sb-select[data-progress]::before { transition: none; }
 }
 /* In the open list each engine is two tight lines, name (with where it runs) over tagline, beside
    a picture as tall as both: its top is the name line's top, its bottom the tagline's. With
@@ -372,7 +443,7 @@ html[data-mini] .main-help { display: none; }
   text-overflow: ellipsis;
   line-height: var(--sb-engine-tagline-leading);
 }
-/* A label with a quiet "Manage" link at its right, both on the label's baseline. The link has the
+/* A label with a quiet "Settings" link at its right, both on the label's baseline. The link has the
    label's type metrics and no vertical padding, so the row is exactly as tall as a bare label. */
 .sb-label-row {
   display: flex;
@@ -380,8 +451,9 @@ html[data-mini] .main-help { display: none; }
   justify-content: space-between;
   gap: var(--k-space-2);
 }
-.sb-manage {
+.sb-settings-link {
   flex: none;
+  /* The text's right edge is the label's (the select's): the padding only widens the focus ring. */
   padding: 0 var(--k-space-0-5);
   margin-right: calc(var(--k-space-0-5) * -1);
   border: 0;
@@ -397,11 +469,11 @@ html[data-mini] .main-help { display: none; }
   cursor: default;
   transition: color var(--k-fast);
 }
-.sb-manage:hover,
-.sb-manage[data-native-hover] {
+.sb-settings-link:hover,
+.sb-settings-link[data-native-hover] {
   color: var(--k-accent-text);
 }
-.sb-manage:focus-visible {
+.sb-settings-link:focus-visible {
   outline: 2px solid var(--k-focus);
   outline-offset: 1px;
 }
@@ -868,8 +940,9 @@ html[data-mini] .main-help { display: none; }
 /* The hooked text: a select like the OCR model's, with a spinner or warning in place of the
    thread's icon while there is nothing to show yet. */
 .src-hook-label {
-  padding-left: var(--k-space-1);
-  padding-right: var(--k-space-1);
+  /* Flush with the select's edges, like the OCR model's and the Dictionary's labels. */
+  padding-left: 0;
+  padding-right: 0;
   /* As close to its select as the OCR model's and the Dictionary's labels are. */
   padding-bottom: var(--k-space-1);
   margin-bottom: calc(var(--k-space-2) * -1);
