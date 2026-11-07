@@ -122,6 +122,7 @@ export default defineConfig({
             { label: 'Settings', slug: 'reference/settings' },
             { label: 'Keyboard shortcuts', slug: 'reference/shortcuts' },
             { label: 'Controller buttons', slug: 'reference/controller-buttons' },
+            { label: 'Command line', slug: 'reference/cli' },
             { label: 'Files and data', slug: 'reference/data' }
           ]
         },

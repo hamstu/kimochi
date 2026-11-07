@@ -208,7 +208,43 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
         rect.width,
         rect.height,
     );
-    Some((rect, shown))
+    Some((shown_rect(hwnd, rect), shown))
+}
+
+/// Where the reader sees `rect` of window `hwnd`: the rectangle itself, or, while Magpie scales the
+/// window, the part of Magpie's picture it is drawn in (`scaler::Scaling::show_rect`). Text, hover
+/// outlines and crops are all placed relative to this, so they land on the picture.
+pub(super) fn shown_rect(hwnd: HWND, rect: Rect) -> Rect {
+    super::magpie::scaling(hwnd).map_or(rect, |session| session.scaling.show_rect(rect))
+}
+
+/// The display a Magpie session scaling window source `id` fills, when it scales full screen. The
+/// window itself is not full screen (its crop stays its own), but the reader sees a full-screen game.
+pub fn scaled_full_screen(id: &SourceId) -> Option<Rect> {
+    let session = super::magpie::scaling(resolve(id)?)?;
+    session.scaling.fills(&super::displays())
+}
+
+/// A frame of window source `id`, described where the reader sees it: while Magpie scales the
+/// window, `source_bounds` is the picture (`shown_rect`) and `scale_factor` frame pixels per pixel
+/// of it. The pixels are the game's own and untouched.
+pub fn shown_frame_info(info: &kimochi_capture::FrameInfo) -> kimochi_capture::FrameInfo {
+    let mut out = info.clone();
+    let Some(raw) = info.source_bounds else {
+        return out;
+    };
+    let Some(hwnd) = SourceId::parse(&info.source_id).filter(SourceId::is_window).as_ref().and_then(resolve) else {
+        return out;
+    };
+    let Some(session) = super::magpie::scaling(hwnd) else {
+        return out;
+    };
+    let shown = session.scaling.show_rect(raw);
+    if shown.width > 0. {
+        out.source_bounds = Some(shown);
+        out.scale_factor = info.scale_factor * raw.width / shown.width;
+    }
+    out
 }
 
 /// Whether window source `id` is a borderless full-screen window: it covers the monitor it is

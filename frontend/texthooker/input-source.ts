@@ -14,6 +14,8 @@ export function acceptsInput(
   settings: Partial<Settings>,
   source: LineSource,
 ): boolean {
+  // `kimochi log add` is an explicit request, whichever input the Log is reading.
+  if (source === "cli") return true;
   const input = inputSourceOf(settings);
   // The browser extension's pictures are OCR scans (src-tauri/src/browser_bridge.rs).
   return input === source || (input === "browser" && source === "ocr");

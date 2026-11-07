@@ -8,7 +8,7 @@ import Screenshot from '../../../components/Screenshot.astro'
 
 Open Settings from the sidebar's **Settings** row, with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd>,
 or from the tray icon's menu (**Settings…**). On a Mac it is also in the Kimochi menu. It has
-eleven pages, and twelve on Windows and Linux, where **Text Hooker** is added.
+twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
 
 <Tabs>
   <TabItem label="General">
@@ -174,6 +174,16 @@ eleven pages, and twelve on Windows and Linux, where **Text Hooker** is added.
   <TabItem label="Account">
     Optional. Everything else in Kimochi works without one. See [Accounts and plans](/cloud/) and
     [Sync and backup](/cloud/sync/).
+  </TabItem>
+  <TabItem label="Command line">
+    The `kimochi` command, to control Kimochi from a terminal and scripts. See
+    [Command line](/reference/cli/).
+
+    | Setting | Default | Notes |
+    | --- | --- | --- |
+    | **kimochi** | Not installed | **Install** adds the command (macOS asks for an administrator's password; on Windows, open a new terminal afterwards); **Remove** takes it away. With the Linux `.deb` it is already installed. |
+
+    The page also has a few examples to copy, and a link to the full guide.
   </TabItem>
   <TabItem label="About">
     Your version and its updates, links and credits. **About Kimochi** in the macOS menu and in the

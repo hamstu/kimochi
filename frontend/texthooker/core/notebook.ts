@@ -312,6 +312,22 @@ export async function deleteEntry(id: string): Promise<void> {
   bumpAndScheduleSave();
 }
 
+/** Empty the open session's notebook and remove its pictures (Settings' "Clear" on sessions). */
+export async function clearNotebook(): Promise<void> {
+  for (const entry of state.entries) {
+    for (const img of entry.images) {
+      try {
+        await remove(inProfile(img.path), { baseDir: DIR });
+      } catch {
+        // best-effort
+      }
+    }
+  }
+  state = { ...state, entries: [] };
+  bumpAndScheduleSave();
+  await flushNotebook();
+}
+
 /* ── Notes ─────────────────────────────────────────────────────────────── */
 
 function patchNotes(

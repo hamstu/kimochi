@@ -1,6 +1,7 @@
 // A release build on Windows is a GUI app: no console window behind it.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod reader;
+mod cli;
 mod evidence;
 mod boot;
 mod browser_bridge;
@@ -215,9 +216,15 @@ fn settings_set(
     key: String,
     value: Value,
 ) -> Reply<()> {
-    state.settings.set(&key, value.clone())?;
+    apply_setting(&app, &state.settings, &key, value)
+}
+
+/// One settings write as a window makes it: stored, announced (`settings:changed`), its side
+/// effects set in motion, and Sync told. Shared with the command line (cli/server.rs).
+pub(crate) fn apply_setting(app: &tauri::AppHandle, settings: &Arc<Settings>, key: &str, value: Value) -> Reply<()> {
+    settings.set(key, value.clone())?;
     let _ = app.emit("settings:changed", json!({ "key": key, "value": value }));
-    setting_side_effects(&app, &state.settings, &key, &value);
+    setting_side_effects(app, settings, key, &value);
     sync::local_changed();
     Ok(())
 }
@@ -2932,6 +2939,9 @@ fn open_screen_capture_preferences() -> Reply<()> {
 }
 
 fn main() {
+    // `kimochi status`, `kimochi scan --wait`, …: the command line runs instead of the app, before
+    // anything below could claim the single instance or quit the running app (cli/mod.rs).
+    cli::run_if_invoked();
     boot::start();
     // A development build's pages come from the Vite dev server over plain HTTP, and WebView2
     // looks for a proxy (WPAD) before its first HTTP request: ~800 ms on every `npm run dev`
@@ -3244,6 +3254,9 @@ fn main() {
             history_delete,
             history_clear,
             log_lines::log_recent,
+            cli::install::cli_status,
+            cli::install::cli_install,
+            cli::install::cli_uninstall,
             history_merge_reset,
             ext_relay,
             ext_relay_listen,
@@ -3501,6 +3514,12 @@ fn main() {
 
             spawn_source_restore(service.clone());
 
+            // The `kimochi` command's way in (cli/server.rs).
+            match cli::server::start(&handle) {
+                Ok(listening) => record(&handle, &service, listening),
+                Err(error) => record(&handle, &service, json!({ "check": "cli-listener-failed", "error": error })),
+            }
+
             boot::mark("services-started");
             {
                 let (service, store) = (service.clone(), store.clone());
@@ -3537,6 +3556,7 @@ fn main() {
                 }
                 model_store::shutdown(app);
                 text_hook::shutdown();
+                cli::server::stop();
                 extension_store::shutdown(app);
             }
         });
@@ -3823,6 +3843,20 @@ fn finish_setup(
     spawn_focus_watch(handle.clone(), service.clone());
     #[cfg(target_os = "windows")]
     platform::start_fullscreen_watch(&handle, service.clone());
+    // Magpie puts its scaled picture of a game over everything each time the game comes to the
+    // front; its broadcast is the moment to put the overlay and pop-ups back over it. Where text
+    // is drawn follows by itself (`platform::scaler`).
+    #[cfg(target_os = "windows")]
+    {
+        let scaler_handle = handle.clone();
+        let scaler_service = service.clone();
+        platform::watch_scaler(move |change| {
+            if change == platform::ScalerChange::Front {
+                platform::raise_over_fullscreen(&scaler_handle, &scaler_service);
+            }
+            record(&scaler_handle, &scaler_service, json!({ "check": "magpie", "change": change.name(), "session": platform::scaler_report() }));
+        });
+    }
     spawn_display_watch(handle.clone(), store.clone());
     // No download starts at launch: a local engine selected before its models were
     // downloaded (an upgrade from a build that bundled them) reports `absent`, and the
@@ -4687,9 +4721,15 @@ fn spawn_source_watch(handle: tauri::AppHandle, service: Shared) {
             if previous.is_some_and(|p| !p.differs(&state)) {
                 continue;
             }
-            let was_fullscreen = service.source_fullscreen.swap(state.fullscreen, Ordering::Relaxed);
+            // The window's own shape: a game Magpie shows full screen is still the window it was,
+            // read with the same crop, and the text on screen still belongs to it.
+            let shape_fullscreen = state.fullscreen && !state.scaled;
+            let was_fullscreen = service.source_fullscreen.swap(shape_fullscreen, Ordering::Relaxed);
             compact::observe_source(&handle, &service, &source_id, &state);
-            if previous.is_some() && was_fullscreen != state.fullscreen {
+            if previous.is_some_and(|p| p.scaled != state.scaled) {
+                record(&handle, &service, json!({ "check": "source-scaled", "scaled": state.scaled, "bounds": state.bounds }));
+            }
+            if previous.is_some() && was_fullscreen != shape_fullscreen {
                 let mut view = service.view.lock().unwrap();
                 view.scan = None;
                 view.regions.clear();
@@ -4716,6 +4756,7 @@ fn source_state_payload(source_id: &str, state: &platform::WindowState) -> Value
         "fullscreen": state.fullscreen,
         "settling": state.settling,
         "display": state.display,
+        "scaled": state.scaled,
     })
 }
 

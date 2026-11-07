@@ -14,10 +14,15 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 ### Added
 
 - ⭐ **Browser extension (early preview).** Read Japanese in pictures on any web page, such as a manga page or a game screenshot: click Kimochi in your browser's toolbar and pick the picture. Kimochi reads it with your OCR engine and filters, its text goes to the Log, and the lines appear over the picture in your overlay's look, for your browser's own dictionary pop-up (Yomitan, 10ten and the like). Hold Shift to read, as over a game. With the toolbar's **Auto** on, the picture is read again when it changes, even when the next page is a whole new page, as in a gallery. Pick the OCR model from the toolbar too. Each page sends its lines to a session of its own, remembered for that site (a new one named for the day at first), and you can pick or rename it from the extension's toolbar; Kimochi opens that session when the lines arrive. Choose **Browser** as the source, and install it from **Settings → Browser Extension**, which walks you through loading it into Chrome, Edge, Brave or Arc until it is in the Chrome Web Store.
+- ⭐ **Kimochi on the command line.** Install the `kimochi` command from **Settings → Command line** to drive Kimochi from a terminal and your own scripts: scan and print the text, follow the Log as it fills, add lines to it, switch sessions, sources and OCR engines, change settings, and stream events as JSON. It starts Kimochi when it isn't running and never opens a second one.
+- **Magpie support.** Games you scale with Magpie work with Kimochi as they do without it: the overlay, OCR text, hover lookups and dictionary pop-ups sit on the scaled picture, stay above it when you switch back to the game, and clicks on Kimochi still reach Kimochi. Nothing to set up.
+- **A fuller session manager**, the same in the Log's **Manage sessions** and in **Settings → Log & Sessions**. Each session shows its reading time and line count. Open one with its arrow to edit its description and see its last five lines. Switch to any session from either place. Tick sessions (Shift-click ticks or unticks a run) to **Clear** them, which keeps the sessions but empties their lines, notebook and images, or to **Delete** them together. A link points to exporting your data in Settings → Account.
 
 ### Fixed
 
+- **The overlay works on more Linux desktops.** On Wayland desktops such as Hyprland, Sway and KDE Plasma, the installed app no longer says the overlay isn't supported. Kimochi now brings the library it needs, so there's nothing extra to install.
 - **Smoother hover cards with Click through text to the game on.** Hovering a line with Hachidori no longer makes its card flicker and stutter as it fades in, and text lights up only while you hold Shift, as the hint says.
+- **Mini mode's title bar fits again.** The Help and sound buttons are hidden in mini mode, so the Kimochi name no longer runs into the buttons.
 
 ## [0.6.1] - 2026-11-05
 

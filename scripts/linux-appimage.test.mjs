@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { hashOverlapsHeaders, spaPlugins, verifyDictionaryImages } from './linux-appimage.mjs'
+import { hashOverlapsHeaders, ldconfigLibraries, linuxLayerShellSource, spaPlugins, verifyDictionaryImages } from './linux-appimage.mjs'
 
 // Minimal ELF64 section metadata, using the real failed library's header/hash offsets.
 function elf(programHeaders, hashOffset = 0x1f0) {
@@ -62,4 +62,18 @@ test('the AppImage carries the PipeWire plugins an audio stream needs', () => {
   // Sentence audio's capture stream cannot be made without audioconvert (SPA_PLUGIN_DIR is the bundle's).
   assert.ok(spaPlugins.includes('support'))
   assert.ok(spaPlugins.includes('audioconvert'))
+})
+
+// `ldconfig -p` as Ubuntu prints it, with GTK 4's layer-shell (which does not count).
+const ldconfig = (lines) => `${lines.length} libs found in cache \`/etc/ld.so.cache'\n${lines.map((line) => `\t${line}\n`).join('')}`
+const gtk3Layer = 'libgtk-layer-shell.so.0 (libc6,x86-64) => /lib/x86_64-linux-gnu/libgtk-layer-shell.so.0'
+const gtk4Layer = 'libgtk4-layer-shell.so.0 (libc6,x86-64) => /usr/lib/libgtk4-layer-shell.so.0'
+
+test('the AppImage bundles GTK 3 layer-shell from the build machine', () => {
+  const libraries = ldconfigLibraries(ldconfig([gtk4Layer, gtk3Layer]))
+  assert.equal(linuxLayerShellSource(libraries), '/lib/x86_64-linux-gnu/libgtk-layer-shell.so.0')
+})
+
+test('a build machine without GTK 3 layer-shell fails the build, naming the package', () => {
+  assert.throws(() => linuxLayerShellSource(ldconfigLibraries(ldconfig([gtk4Layer]))), /install libgtk-layer-shell0 \(Arch: gtk-layer-shell\)/)
 })

@@ -178,6 +178,7 @@ export type SettingsTabName =
   | 'controls'
   | 'gamemode'
   | 'account'
+  | 'cli'
   | 'about'
 
 /** Shows Settings, on one page when given: a view of the main window. */

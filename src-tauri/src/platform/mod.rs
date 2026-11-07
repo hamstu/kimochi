@@ -61,6 +61,8 @@ use kimochi_capture::Rect;
 use serde::Serialize;
 use serde_json::{json, Value};
 
+pub mod scaler;
+
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
@@ -646,6 +648,9 @@ pub fn desktop_picker_sources() -> Result<Vec<kimochi_capture::Source>, String> 
 /// A capture frame's description for the UI (see
 /// [`DesktopGeometry::frame_info_to_desktop`]).
 pub fn desktop_frame_info(info: &kimochi_capture::FrameInfo) -> kimochi_capture::FrameInfo {
+    // A window Magpie scales is described where the reader sees it (`scaler`).
+    #[cfg(target_os = "windows")]
+    let info = &shown_frame_info(info);
     DesktopGeometry::current().frame_info_to_desktop(info)
 }
 
@@ -672,6 +677,10 @@ pub struct WindowState {
     pub settling: bool,
     /// The display the window fills, when it fills one.
     pub display: Option<Rect>,
+    /// Full screen only as a scaler shows it (Magpie, see `scaler`): the reader sees a full-screen
+    /// game, so Kimochi behaves as it does over one, but the window itself, and so its crop
+    /// (`state::shaped_crop_key`), is unchanged.
+    pub scaled: bool,
 }
 
 impl WindowState {
@@ -687,6 +696,7 @@ impl WindowState {
             || self.on_screen != other.on_screen
             || self.fullscreen != other.fullscreen
             || self.settling != other.settling
+            || self.scaled != other.scaled
     }
 }
 
@@ -748,6 +758,7 @@ pub fn window_state(
             fullscreen: true,
             settling: on_screen,
             display: previous.and_then(|p| p.display),
+            scaled: false,
         };
     }
     WindowState {
@@ -756,6 +767,7 @@ pub fn window_state(
         fullscreen: native || covered.is_some(),
         settling: false,
         display: if native { resting } else { covered },
+        scaled: false,
     }
 }
 
@@ -770,6 +782,16 @@ pub fn desktop_window_state(
     let state = window_state(bounds, on_screen, native, &displays, previous);
     #[cfg(target_os = "windows")]
     let state = windows_native_state(state, bounds, native, &displays);
+    #[cfg(target_os = "windows")]
+    let state = match scaled_full_screen(id) {
+        Some(display) => WindowState {
+            fullscreen: true,
+            scaled: true,
+            display: Some(DesktopGeometry::current().rect_to_desktop(display)),
+            ..state
+        },
+        None => state,
+    };
     Some(state)
 }
 

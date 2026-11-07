@@ -46,6 +46,7 @@ const SETTINGS_TABS = opts(
   ['controls', 'Shortcuts & Controls'],
   ['gamemode', 'Game Mode'],
   ['account', 'Account'],
+  ['cli', 'Command line'],
   ['about', 'About']
 )
 

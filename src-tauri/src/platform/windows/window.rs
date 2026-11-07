@@ -309,8 +309,12 @@ pub fn order_front(w: &tauri::WebviewWindow) -> Result<(), String> {
 }
 
 /// Fullscreen games can enter the topmost band ahead of an already-topmost
-/// overlay. Repair only that ordering, without showing hidden windows, pinning
+/// overlay, and so does Magpie's scaled picture of a game whenever the game comes to the
+/// front. Repair only that ordering, without showing hidden windows, pinning
 /// unpinned panels, changing our windows' relative order, or activating them.
+///
+/// Magpie announces each time it does so (`magpie::Change::Front`), and `main.rs` repairs at
+/// once from that; this watch is what catches a broadcast that never arrived.
 pub fn start_fullscreen_watch(app: &tauri::AppHandle, service: crate::state::Shared) {
     let app = app.clone();
     std::thread::spawn(move || {
@@ -320,7 +324,9 @@ pub fn start_fullscreen_watch(app: &tauri::AppHandle, service: crate::state::Sha
             if app.get_webview_window("overlay").is_none() {
                 break;
             }
-            if (!crate::compact::over_fullscreen() && fullscreen_foreground().is_none()) || pending.swap(true, Ordering::Relaxed) {
+            if (!crate::compact::over_fullscreen() && fullscreen_foreground().is_none() && scaler_on_top().is_none())
+                || pending.swap(true, Ordering::Relaxed)
+            {
                 continue;
             }
             let handle = app.clone();
@@ -328,7 +334,7 @@ pub fn start_fullscreen_watch(app: &tauri::AppHandle, service: crate::state::Sha
             let finished = pending.clone();
             if app
                 .run_on_main_thread(move || {
-                    repair_fullscreen_order(&handle, &service);
+                    raise_over_fullscreen(&handle, &service);
                     finished.store(false, Ordering::Relaxed);
                 })
                 .is_err()
@@ -357,7 +363,14 @@ fn fullscreen_foreground() -> Option<HWND> {
         .then_some(foreground)
 }
 
-fn repair_fullscreen_order(app: &tauri::AppHandle, service: &crate::state::Service) {
+/// Magpie's scaling window, while it is in the topmost band (the game it scales is in front).
+fn scaler_on_top() -> Option<HWND> {
+    super::magpie::session().filter(super::magpie::Session::topmost).map(|session| session.hwnd())
+}
+
+/// Put Kimochi's pinned windows back over a full-screen game or Magpie's picture, if either is
+/// over one of them. Main thread.
+pub fn raise_over_fullscreen(app: &tauri::AppHandle, service: &crate::state::Service) {
     let selected = || {
         if !crate::compact::over_fullscreen() || window_pid(unsafe { GetForegroundWindow() }) != std::process::id() { return None; }
         let source = service.watching.lock().unwrap().as_deref().and_then(kimochi_capture::SourceId::parse)?;
@@ -365,11 +378,14 @@ fn repair_fullscreen_order(app: &tauri::AppHandle, service: &crate::state::Servi
         if !super::window_bounds(&source)?.1 { return None; }
         super::sources::resolve(&source).filter(|hwnd| ex_style(*hwnd) & WS_EX_TOPMOST.0 != 0)
     };
-    let Some(foreground) = fullscreen_foreground().or_else(selected) else {
-        return;
-    };
     let order = super::sources::top_level_windows();
-    let Some(source_rank) = order.iter().position(|h| *h == foreground) else {
+    // Whichever is highest of a full-screen game and Magpie's picture is what to be above.
+    let Some((source_rank, foreground)) = [fullscreen_foreground().or_else(selected), scaler_on_top()]
+        .into_iter()
+        .flatten()
+        .filter_map(|hwnd| Some((order.iter().position(|h| *h == hwnd)?, hwnd)))
+        .min_by_key(|(rank, _)| *rank)
+    else {
         return;
     };
     let windows = app.webview_windows();

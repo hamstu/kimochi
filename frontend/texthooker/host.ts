@@ -249,6 +249,9 @@ const allowed: Record<string, string[]> = {
     "renameSession",
     "reorderSessions",
     "deleteSession",
+    "deleteSessions",
+    "clearSessions",
+    "sessionSummaries",
     "updateSessionDescription",
   ],
   store: [

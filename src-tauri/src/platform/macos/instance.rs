@@ -68,7 +68,40 @@ fn stop(pid: i32) -> &'static str {
     }
 }
 
-/// Other `kimochi` processes belonging to this user, by exact executable name.
+/// A process's arguments (`argv`), from the kernel. Empty when they can't be read.
+fn arguments(pid: i32) -> Vec<String> {
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
+    let mut size: libc::size_t = 0;
+    // SAFETY: the first call only asks for the buffer's size; the second fills a buffer of it.
+    if unsafe { libc::sysctl(mib.as_mut_ptr(), 3, std::ptr::null_mut(), &mut size, std::ptr::null_mut(), 0) } != 0 {
+        return Vec::new();
+    }
+    let mut buffer = vec![0u8; size];
+    if unsafe { libc::sysctl(mib.as_mut_ptr(), 3, buffer.as_mut_ptr().cast(), &mut size, std::ptr::null_mut(), 0) } != 0 {
+        return Vec::new();
+    }
+    buffer.truncate(size);
+    parse_procargs(&buffer)
+}
+
+/// `KERN_PROCARGS2`: argc (a C int), the executable path, NUL padding, then argc strings.
+fn parse_procargs(buffer: &[u8]) -> Vec<String> {
+    let Some(count) = buffer.get(..4).map(|b| i32::from_ne_bytes([b[0], b[1], b[2], b[3]]).max(0) as usize) else {
+        return Vec::new();
+    };
+    let rest = &buffer[4..];
+    let Some(path_end) = rest.iter().position(|&b| b == 0) else { return Vec::new() };
+    let start = rest[path_end..].iter().position(|&b| b != 0).map_or(rest.len(), |i| path_end + i);
+    rest[start..]
+        .split(|&b| b == 0)
+        .take(count)
+        .map(|arg| String::from_utf8_lossy(arg).into_owned())
+        .collect()
+}
+
+/// Other `kimochi` processes belonging to this user, by exact executable name. The `kimochi`
+/// command line (a terminal's `kimochi watch`, say) runs the same executable but is not an
+/// app, and is left alone.
 fn others() -> Vec<i32> {
     let own = std::process::id() as i32;
     let uid = unsafe { libc::getuid() };
@@ -82,6 +115,7 @@ fn others() -> Vec<i32> {
         .lines()
         .filter_map(|line| line.trim().parse::<i32>().ok())
         .filter(|&pid| pid != own)
+        .filter(|&pid| !crate::cli::is_cli_args(&arguments(pid)))
         .collect()
 }
 
@@ -152,4 +186,19 @@ pub fn take_over() {
 /// The startup report, for the app log.
 pub fn report() -> Option<serde_json::Value> {
     REPORT.get().cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn procargs_give_the_arguments_after_the_path() {
+        let mut buffer = 3i32.to_ne_bytes().to_vec();
+        buffer.extend_from_slice(b"/usr/local/bin/kimochi\0\0\0\0kimochi\0watch\0--json\0PATH=/bin\0");
+        assert_eq!(parse_procargs(&buffer), ["kimochi", "watch", "--json"]);
+        assert!(crate::cli::is_cli_args(&parse_procargs(&buffer)));
+        let own = arguments(std::process::id() as i32);
+        assert!(!own.is_empty(), "this test's own arguments are readable");
+    }
 }

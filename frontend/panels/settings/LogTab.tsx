@@ -188,7 +188,7 @@ export function LogTab(): ReactNode {
   )
 }
 
-/** Every session, in the Log's order: reorder, rename, switch, delete, or start a new one. */
+/** Every session, in the Log's order: reorder, rename, describe, switch, clear, delete, or start a new one. */
 function SessionsSection(): ReactNode {
   // Rendered inside WithReaderSettings, so the Log's snapshot (and its sessions) is here.
   const [manifest, setManifest] = useState(getManifest)
@@ -209,7 +209,7 @@ function SessionsSection(): ReactNode {
   return (
     <SettingsSection
       title="Sessions"
-      description="Drag to reorder. Click a name to rename it."
+      description="Click a name to rename it, or a handle to drag it into order. Tick sessions (Shift-click for a run) to clear or delete them together."
       actions={
         <Button variant="ghost" size="sm" onClick={() => void create()}>
           <Plus /> New session
@@ -220,7 +220,6 @@ function SessionsSection(): ReactNode {
       <SessionList
         activeId={manifest.activeId}
         sessions={manifest.sessions}
-        switchable
         className="settings-sessions"
       />
     </SettingsSection>

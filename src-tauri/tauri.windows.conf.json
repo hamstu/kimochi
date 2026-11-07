@@ -4,7 +4,8 @@
     "useLocalToolsDir": true,
     "resources": {
       "resources/oneocr/": "oneocr/",
-      "resources/hookd/": "hookd/"
+      "resources/hookd/": "hookd/",
+      "resources/cli/": "cli/"
     },
     "targets": [
       "nsis"
