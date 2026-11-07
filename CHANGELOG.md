@@ -48,6 +48,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - **Hovering a word on the overlay looks up the word you're pointing at after an ellipsis or a pair of brackets** (like `……` or `。」`). Before, the words after them could be up to a character and a half away from the text underneath, especially with Apple Live Text, and on Windows after closing brackets.
 - **The Yomitan API dictionary now looks words up on the overlay with the lookup key you chose** (Ctrl, Alt or Command), not only with Shift.
 - **Group text into regions:** a word that wraps onto the next line now looks up correctly when a region covers columns side by side, or blocks of vertical text one above the other (as on a manga page). Before, the lookup ran on into the other column or block.
+- **Updating on Windows finishes when Kimochi was started by a launcher or a terminal.** If whatever started Kimochi closed while the update installed, the installer could stop partway and leave Kimochi unable to start ("This app can't run on your PC") until it was reinstalled. The installer now runs on its own and always finishes.
 
 ## [0.9.0] - 2026-11-11
 
