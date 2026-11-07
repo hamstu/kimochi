@@ -191,8 +191,8 @@ export function checkedLine(status: UpdateStatus, nowMs: number): string {
           : `Download failed${status.message ? `: ${status.message}` : '.'}`
     case 'idle':
       return status.automatic
-        ? 'Kimochi checks for updates on its own and asks before installing one.'
-        : 'This development build does not check on its own.'
+        ? 'Kimochi checks for updates and asks before installing one.'
+        : "Development builds don't check for updates."
   }
 }
 

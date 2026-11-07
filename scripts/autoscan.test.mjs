@@ -642,7 +642,6 @@ test('a persistently failing observer suspends automatic scanning and says so', 
 
   assert.equal(h.scanner.state, 'suspended')
   assert.match(h.scanner.stateReason, /suspended after 3 consecutive failures/)
-  assert.match(h.scanner.stateReason, /Manual scanning still works/)
   const status = h.state.events.filter((e) => e.type === 'status' && e.state === 'suspended')
   assert.equal(status.length, 1)
 

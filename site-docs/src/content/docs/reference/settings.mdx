@@ -6,9 +6,7 @@ description: Every page of Kimochi's Settings, with each option's default and wh
 import { Tabs, TabItem } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
 
-Open Settings from the sidebar's **Settings** row, with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd>,
-or from the tray icon's menu (**Settings…**). On a Mac it is also in the Kimochi menu. It has
-twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
+Open Settings with <kbd>⌘,</kbd> / <kbd>Ctrl+,</kbd> or the sidebar's **Settings** row.
 
 <Tabs>
   <TabItem label="General">
@@ -57,12 +55,24 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     | **Line delay** | 300 ms |
     | **Speaker names apart** | On |
     | **Repeated characters** | Undo automatically |
+    | **Join split lines** | On |
+    | **Remove script codes** | On |
     | **Auto align** | On |
     | **Text size** | Medium |
     | **Background opacity** | 100% |
-    | A game's page: **Session**, **Dialogue thread**, **Hook codes**, **Replacements**, **Card position** | — |
+    | Per game: **Session**, **Dialogue thread**, **Hook codes**, **Replacements**, **Card position** | — |
 
     <Screenshot id="settings-texthooker" alt="Settings, Text Hooker: the Games list and the Defaults." width={760} />
+  </TabItem>
+  <TabItem label="Browser Extension">
+    The [browser extension](/reading/browser-extension/): the connection, its status, and how to
+    install it.
+
+    | Setting | Default |
+    | --- | --- |
+    | **Connect to the browser extension** | On |
+
+    <Screenshot id="settings-browser" alt="Settings, Browser Extension: what the extension does, and the dictionary extensions it needs." width={760} />
   </TabItem>
   <TabItem label="OCR & Overlay">
     Which engine reads the screen, and what is drawn over your source. See
@@ -75,12 +85,12 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     | **Overlay mode** | Off |
     | **Group text into regions** | Off |
     | **Filter out furigana and small text** | On, strength Balanced |
-    | **Drop lines** | No Japanese; the same setting as the Log's |
+    | **Drop lines** | No Japanese |
     | **Click through text to the game** | On |
     | **Exclude overlay from screen recording** | On |
     | **Overlay look**: **Highlight colour** / **Highlight opacity** / **Cards** | Indigo / 40% / Same as Kimochi |
     | **Scan after a button press** | Off; **Scan delay** 500 ms, **Gamepad trigger** none |
-    | **Auto OCR** | Off; the same switch as the main window's |
+    | **Auto OCR** | Off |
     | ↳ **Advanced options**: **Watch the screen with** (online engines and Manga OCR) | Automatic |
     | ↳ **Adaptive polling** | On |
     | ↳ **Settle after** | 2 readings |
@@ -110,7 +120,7 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     | Setting | Default |
     | --- | --- |
     | **Engine** | Yomitan |
-    | **Open … settings** | The engine's own settings page (Yomitan, Hachidori, 10ten). |
+    | **Open … settings** | The engine's settings page (Yomitan, Hachidori, 10ten). |
     | **Pop-up size** (10ten) | Compact (Medium and Large too) |
     | **API address** (Yomitan API) | `http://127.0.0.1:19633` |
     | **Pop-up size** (Yomitan API) | 480 × 360 |
@@ -118,13 +128,13 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     | **Anki cards** | A link to Settings → Anki. |
   </TabItem>
   <TabItem label="Anki">
-    Cards through AnkiConnect, whatever the dictionary engine. See [Anki](/lookups/anki/).
+    Cards through AnkiConnect. See [Anki](/lookups/anki/).
 
     | Setting | Default |
     | --- | --- |
     | **AnkiConnect** tab: status, **Address** | `http://127.0.0.1:8765` |
-    | ↳ **API key** | Empty; stored locally, never synced |
-    | **Mining** tab: **Open … Anki settings** (Yomitan, Hachidori) | The engine's own Anki settings, AnkiConnect address and key included |
+    | ↳ **API key** | Empty; not synced |
+    | **Mining** tab: **Open … Anki settings** (Yomitan, Hachidori) | The engine's Anki settings, AnkiConnect address and key included |
     | ↳ **Enable Mining** / **Deck** / **Note type** (Yomitan API) | Off / — / — |
     | ↳ **Detect from Anki** / **Import from Yomitan** / **Field mapping** (Yomitan API) | — |
     | **Card enhancement** tab: **Enhance with sentence audio** | Off (turning it on downloads the speech model) |
@@ -142,8 +152,8 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
 
     | Setting | Default |
     | --- | --- |
-    | **Translate with** | **Kimochi cloud** (with Kimochi Cloud) or **Your DeepL key**; Kimochi cloud if you have Kimochi Cloud, otherwise your DeepL key |
-    | **DeepL API key** (Your DeepL key) | Empty; stored locally, never synced |
+    | **Translate with** | **Kimochi cloud** with Kimochi Cloud, otherwise **Your DeepL key** |
+    | **DeepL API key** (Your DeepL key) | Empty; not synced |
     | **Explain with AI → Configure…** | Codex CLI, its default model, the default prompt |
   </TabItem>
   <TabItem label="Shortcuts & Controls">
@@ -159,7 +169,7 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     | **Reading**: **Word or character** / **Play audio** / **Previous definition** / **Next definition** / **Show all controls** | Y / X / LB / RB / View |
     | **Connected gamepads** / **Button test** | — |
 
-    Two actions on the same button are pointed out. Scan and Controller menu can also be a middle,
+    Scan and Controller menu can also be a middle,
     back or forward mouse button; see [Mouse buttons](/reference/shortcuts/#mouse-buttons).
   </TabItem>
   <TabItem label="Game Mode">
@@ -172,7 +182,7 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     The buttons Read along uses are in **Shortcuts & Controls**.
   </TabItem>
   <TabItem label="Account">
-    Optional. Everything else in Kimochi works without one. See [Accounts and plans](/cloud/) and
+    Optional. See [Accounts and plans](/cloud/) and
     [Sync and backup](/cloud/sync/).
   </TabItem>
   <TabItem label="Command line">
@@ -186,8 +196,7 @@ twelve pages, and thirteen on Windows and Linux, where **Text Hooker** is added.
     The page also has a few examples to copy, and a link to the full guide.
   </TabItem>
   <TabItem label="About">
-    Your version and its updates, links and credits. **About Kimochi** in the macOS menu and in the
-    tray menu opens it.
+    Your version and its updates, links and credits.
 
     | Section | What it has |
     | --- | --- |

@@ -23,10 +23,9 @@ Read Japanese in pictures on any page, with your dictionary pop-up. Needs the fr
 **Description:**
 
 ```
-Kimochi reads the Japanese in pictures on web pages (manga, game screenshots, signs, comics) and puts the text right on top of the picture, so your pop-up dictionary can look it up.
+Kimochi reads the Japanese in pictures on web pages (manga, game screenshots, signs, comics) and puts the text over the picture, so your pop-up dictionary can look it up.
 
-IMPORTANT: this extension needs the Kimochi desktop app.
-It does nothing on its own. Kimochi is a free app for Mac, Windows and Linux; the extension is its companion in your browser, and the app does the reading. Get it at https://kimochiapp.com, start it, then use the extension.
+IMPORTANT: this extension needs the Kimochi desktop app, which does the reading. Kimochi is free for Mac, Windows and Linux: get it at https://kimochiapp.com and start it before using the extension.
 
 HOW IT WORKS
 1. Click the Kimochi button in the toolbar (or press Alt+K) and click a picture. Use the arrow keys to pick a bigger or smaller area, such as a whole two-page spread.
@@ -42,7 +41,7 @@ FEATURES
 • Matches your Kimochi look: box colour, opacity and light or dark theme come from the app's settings.
 
 PRIVACY
-The extension talks only to the Kimochi app on your own computer (127.0.0.1). It has no analytics, tracking or ads, and sends nothing to any server itself. What the app does with a picture depends on the OCR model you choose: the on-device models never send it anywhere. Details: https://kimochiapp.com/privacy#browser-extension
+The extension talks only to the Kimochi app on your computer (127.0.0.1). It has no analytics, tracking or ads. What the app does with a picture depends on the OCR model you choose. Details: https://kimochiapp.com/privacy#browser-extension
 
 Kimochi is open source (GPL-3.0): https://github.com/hamstu/kimochi
 ```

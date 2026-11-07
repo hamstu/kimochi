@@ -41,13 +41,13 @@ const INPUT_SOURCES = [
     value: 'quickshot',
     label: 'Quick Shot',
     icon: <Aperture />,
-    detail: 'No source, just hit the button or shortcut to grab and scan.'
+    detail: 'No source: press the button or shortcut to grab and scan.'
   },
   {
     value: 'clipboard',
     label: 'Clipboard',
     icon: <Clipboard />,
-    detail: 'Picks up text copied to the clipboard. (E.g., from a text hooker.)'
+    detail: 'Picks up text copied to the clipboard, e.g. by a text hooker.'
   },
   {
     value: 'websocket',
@@ -210,7 +210,7 @@ export function SourcesTab(): ReactNode {
                 {settings.inputSource === 'hook' ? (
                   <SettingsRow
                     label="Text Hooker settings"
-                    description="Defaults for every game, and each game's own."
+                    description="Defaults for every game, and per-game settings."
                   >
                     <Button size="sm" onClick={() => void openTextHookerSettings()}>
                       Open
@@ -231,7 +231,6 @@ export function SourcesTab(): ReactNode {
                   <SettingsRow
                     label="WebSocket URL"
                     controlId="sources-ws-url"
-                    description="The address of the text source."
                   >
                     <Input
                       id="sources-ws-url"
@@ -252,7 +251,7 @@ export function SourcesTab(): ReactNode {
                 <SettingsRow
                   label="Auto switch sessions by window name"
                   controlId="sources-auto-match"
-                  description="Kimochi will try to auto-load a session based on the source window name."
+                  description="Loads the session that matches the source window's name."
                 >
                   <Switch
                     id="sources-auto-match"

@@ -1864,7 +1864,7 @@
     autoToggle.setAttribute('aria-checked', String(autoMode))
     autoToggle.dataset.tip = autoMode
       ? 'Auto is on: the picture is read again when it changes, and on the next page'
-      : 'Auto is off: read the picture again yourself'
+      : 'Auto is off'
     const connected = status === 'connected'
     const opening = message === 'Opening Kimochi…'
     const reading = busy()

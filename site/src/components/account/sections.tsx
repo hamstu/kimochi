@@ -346,7 +346,7 @@ export function SyncSection() {
     <AccountSection
       id="sync"
       title="Sync"
-      description="With Kimochi Cloud, Kimochi keeps your sessions, notebook, presets and preferences in sync between your computers. Everything also stays on each computer."
+      description="With Kimochi Cloud, Kimochi keeps your sessions, notebook, presets and preferences in sync between your computers."
     >
       {sync.loading && !data ? (
         <p className="text-small text-ink-3" role="status">

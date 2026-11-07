@@ -138,7 +138,7 @@ export function describeAnkiStatus(status: AnkiConnectStatus | null): StatusText
       return {
         tone: 'danger',
         title: 'Refused',
-        detail: `${status.url} refused Kimochi's request (HTTP ${status.status}). Kimochi's requests carry no browser origin, which AnkiConnect accepts whatever its webCorsOriginList says, so something else is refusing them: check that the address points straight at AnkiConnect, not at a proxy.`
+        detail: `${status.url} refused Kimochi's request (HTTP ${status.status}). Check that the address points straight at AnkiConnect, not at a proxy.`
       }
     case 'invalidUrl':
       return { tone: 'danger', title: 'Invalid address', detail: status.error }

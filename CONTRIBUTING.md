@@ -1,9 +1,8 @@
 # Contributing
 
-Kimochi is open source under the GPL, built mostly by one person for their own reading. The source
-is here so you can read it, build it, learn from it and fork it. Thoughtful contributions and good
-bug reports are welcome; that said, this is not a project that is building a team or taking
-feature requests, so please don't be surprised if an idea is declined or a PR sits for a while.
+Kimochi is open source under the GPL, built mostly by one person for their own reading. Bug reports
+and small fixes are welcome, but I'm not building a team or taking feature requests, so an idea may
+be declined or a PR may sit for a while.
 
 - **Bugs**: open an issue with your OS, the Kimochi version (Settings → General), the OCR engine
   and dictionary engine you use, and what you expected to happen.

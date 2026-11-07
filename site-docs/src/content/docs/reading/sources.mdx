@@ -8,7 +8,7 @@ import Screenshot from '../../../components/Screenshot.astro'
 The **source** is where the Log's lines come from. It sits at the top of the main window's sidebar:
 a live preview of the window or screen, its name, and **Crop area** and **Change source**.
 
-<Screenshot id="source-card" alt="The sidebar's source card for a game window, with its live preview, Crop area and Change source buttons, highlighted." width={240} />
+<Screenshot id="source-card" alt="The sidebar's source card for a game window, with its live preview, Crop area and Change source buttons, highlighted." width={272} />
 
 Clicking the card brings the source forward (**Bring to front**, or **Go to full screen** for a
 full-screen game). Hover it and the ✕ in the corner clears the source.
@@ -24,6 +24,7 @@ Open **Change source** (or **Choose a source** when none is set) to switch:
 | **Quick Shot** | No source to choose: the Scan shortcut asks you to draw an area anywhere, then reads it. |
 | **Clipboard** | Text copied to the clipboard, for example by a text hooker. |
 | **WebSocket** | Lines from a text source on your network. |
+| **Browser** | Pictures you pick on web pages, with the [browser extension](/reading/browser-extension/). |
 
 **Clear source** forgets the current one, and **Source settings** opens **Settings → Sources**.
 
@@ -37,14 +38,13 @@ game to hook.
 ## Choosing a window or screen
 
 **Window or screen** opens a grid of **Screens** and **App windows**, each with a live thumbnail.
-The current one is badged **Current**. Pick a window (a game, a manga reader, a browser, a video player) to read just that window wherever it
-is, or a screen to read everything on it.
+Pick a window to read just that window wherever it is, or a screen to read everything on it.
 
 <Screenshot id="source-grid" alt="The window and screen picker, with thumbnails of two screens and several app windows." width={720} />
 
 - **macOS** lists windows once Screen Recording is allowed; until then the grid shows
   **Allow Screen Recording…**. See [Install on macOS](/install/macos/#screen-recording).
-- **Linux on Wayland** uses your desktop's own dialog instead: **Choose New Source…** opens it,
+- **Linux on Wayland** uses your desktop's dialog instead: **Choose New Source…** opens it,
   **Use Current Source** keeps the last pick. See [Install on Linux](/install/linux/#choosing-what-to-read).
 - **Steam Deck Gaming Mode** lists your running games by name, with their Steam icons and live
   previews. See [Gaming Mode](/controller/gaming-mode/).
@@ -70,7 +70,7 @@ subtitles, so menus, HUDs and other text stay out of the Log.
    - On a touchscreen, drag with a finger to draw, move or resize it; the handles are bigger there.
    - With a controller (always on a Steam Deck in Gaming Mode), push a stick: the left stick moves
      the box's top-left corner and the right stick its bottom-right, each marked with crosshairs.
-     Press **A** to save it or **B** to cancel; the bar at the bottom says which, and you can tap it.
+     Press **A** to save it or **B** to cancel.
 3. The crop shows as a frame on the live preview, and every scan reads only what's inside it.
 
 **Clear OCR crop area**, in the same menu, removes it.
@@ -81,8 +81,7 @@ The Anki crop area is the part of the source that goes on your Anki cards as the
 as the game's scene without its dialogue box. Without one, cards get the whole source.
 
 Choose **Crop area → Set Anki crop area…** (**Change Anki crop area…** once there is one). The same
-editor opens, as a green box; **Save** keeps it. It doesn't change what's read, and nothing is
-scanned. It shows as a green frame on the live preview. **Clear Anki crop area** removes it.
+editor opens, as a green box; **Save** keeps it. It shows as a green frame on the live preview. **Clear Anki crop area** removes it.
 
 A [Text Hooker](/reading/text-hooker/) source has no OCR crop area, so its card has **Anki crop**
 instead of **Crop area**, which opens the editor straight away. It's there while **Enhance Anki
@@ -95,7 +94,7 @@ draw an area anywhere on the screen; Kimochi reads it once. Pressing the Scan sh
 what <kbd>Return</kbd> and <kbd>Esc</kbd> do: it scans the area you drew, or closes Quick Shot if you
 haven't drawn one yet. Auto OCR isn't available in Quick Shot.
 
-<Screenshot id="quickshot-card" alt="The sidebar with the Quick Shot source and a Draw and scan button." width={240} />
+<Screenshot id="quickshot-card" alt="The sidebar with the Quick Shot source and a Draw and scan button." width={272} />
 
 ## Clipboard and WebSocket
 

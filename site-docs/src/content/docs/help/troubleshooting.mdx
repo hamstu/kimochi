@@ -54,7 +54,6 @@ capture (**Preview**), the box positions (**Coordinates**) and a **Capture test*
 
 After several failed scans in a row Auto OCR pauses (**Auto-scan paused: it failed several times in a
 row**). Fix the cause (often the source or the connection), then turn Auto OCR off and on again.
-Manual scans still work meanwhile.
 
 ### Furigana or small text gets in the way
 
@@ -75,8 +74,7 @@ stop it at any time. Switch to another engine, such as PaddleOCR, in the meantim
   overlay yet. See [The overlay on Wayland](/install/linux/#the-overlay-on-wayland).
 - **Nothing happens when I hover**: hold <kbd>Shift</kbd> (see [Which key to hold](/lookups/looking-up/#which-key-to-hold)) and
   check that a dictionary is set up (next section).
-- **Clicking a word clicks the game instead**: that's on purpose, so text over the game's buttons
-  doesn't get in the way. Hold <kbd>Shift</kbd> to click text, or turn off **Click through text to
+- **Clicking a word clicks the game instead**: hold <kbd>Shift</kbd> to click text, or turn off **Click through text to
   the game** in **Settings → OCR & Overlay**. See
   [Clicking through to the game](/reading/overlay/#clicking-through-to-the-game).
 - **My click only closed the dictionary**: with a pop-up open, the next click outside it just closes
@@ -132,8 +130,8 @@ every few seconds while it's open:
 - **API key needed** or **Wrong API key**: AnkiConnect's config has an `apiKey`. Enter the same key
   under **API key**.
 - **Yomitan or Hachidori can't reach Anki**: check the AnkiConnect address (and API key, if you set
-  one in AnkiConnect) in the dictionary's own Anki settings: **Settings → Anki** has a button to
-  them. You don't need to add anything to AnkiConnect's `webCorsOriginList`.
+  one in AnkiConnect) in the dictionary's Anki settings: **Settings → Anki** has a button to
+  them.
 
 - **Cards have no sentence audio**: check that **Enhance Anki cards** is on and that **Settings →
   Anki → Card enhancement** shows no problem. On macOS it needs Screen Recording; on Linux it needs
@@ -165,7 +163,7 @@ See [Anki](/lookups/anki/#the-ankiconnect-connection).
 - **The code expired**: codes work for 10 minutes, once. Choose **Sign in** again in
   Settings → Account for a new one.
 - **"Sign in to … again"**: this computer's sign-in was revoked or expired. Your data is still here;
-  sign in again and Sync resumes.
+  sign in again.
 
 ## Still stuck?
 
@@ -180,5 +178,4 @@ expected to happen, and include Kimochi's debug info:
    attach. To catch more, turn on **Verbose logging** first, make the problem happen, then save the
    bundle. Verbose logging stays on until Kimochi quits.
 
-Tokens, keys, e-mail addresses and your user name are left out of both. Nothing is sent anywhere
-unless you send it.
+Tokens, keys, e-mail addresses and your user name are left out of both.

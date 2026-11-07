@@ -47,7 +47,7 @@ export function DebugInfoSection(): ReactNode {
       // WebKitGTK then refuses navigator.clipboard ("not allowed by the user agent").
       await writeTextSelf(debugMarkdown(await debugReport()))
       setCopied(true)
-      setOutcome({ tone: 'ok', text: 'Copied. Paste it into Discord or your GitHub issue.' })
+      setOutcome({ tone: 'ok', text: 'Copied.' })
     } catch (error) {
       fail(error)
     } finally {
@@ -79,7 +79,7 @@ export function DebugInfoSection(): ReactNode {
   return (
     <SettingsSection
       title="Debug info"
-      description="Reporting a problem? Include this, so it can be tracked down from afar. Tokens, keys, e-mail addresses and your user name are left out."
+      description="Include this when you report a problem. Tokens, keys, e-mail addresses and your user name are left out."
       footnote={
         outcome && (
           <span role="status" className={outcome.tone === 'danger' ? 'about-debug-error' : undefined}>

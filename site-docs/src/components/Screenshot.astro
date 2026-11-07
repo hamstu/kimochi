@@ -13,6 +13,10 @@
  * `width` caps the display width in CSS pixels (default: the window's own size, up to the column).
  * `src` takes another image folder's pair instead (e.g. the dictionary previews), as
  * { light, dark } imports, with `scale` their device pixel ratio.
+ *
+ * Clicking a screenshot shown smaller than its capture opens it at its own size in a lightbox
+ * (`data-full`: the capture itself, at `scale`), grown out of where it sat; a click or Escape puts
+ * it back.
  */
 import { Picture, getImage } from 'astro:assets'
 import type { ImageMetadata } from 'astro'
@@ -64,6 +68,12 @@ async function rendered(theme: 'light' | 'dark') {
 }
 const native = { light: await rendered('light'), dark: await rendered('dark') }
 const shownWidth = native.light?.width ?? display
+/** The capture itself, at its own size in CSS pixels, for the lightbox. */
+const full = (theme: 'light' | 'dark') => ({
+  'data-full': images[theme].src,
+  'data-full-w': Math.round(images[theme].width / scale),
+  'data-full-h': Math.round(images[theme].height / scale)
+})
 ---
 
 <figure class:list={['k-shot', { 'k-shot-plain': Boolean(src) }]} style={`--k-shot-w: ${shownWidth - FRAME}px`}>
@@ -76,7 +86,7 @@ const shownWidth = native.light?.width ?? display
         <picture>
           <source type="image/avif" srcset={n.avif.set} />
           <source type="image/webp" srcset={n.webp.set} />
-          <img src={n.webp.one} srcset={n.webp.set} alt={alt} width={n.width} height={n.height} loading={loading} decoding="async" />
+          <img src={n.webp.one} srcset={n.webp.set} alt={alt} width={n.width} height={n.height} loading={loading} decoding="async" {...full(theme)} />
         </picture>
       ) : (
       <Picture
@@ -90,6 +100,7 @@ const shownWidth = native.light?.width ?? display
         quality={82}
         loading={loading}
         decoding="async"
+        {...full(theme)}
       />
       )}
       </span>
@@ -98,6 +109,178 @@ const shownWidth = native.light?.width ?? display
   }
   {caption && <figcaption>{caption}</figcaption>}
 </figure>
+
+<script>
+  // The lightbox: a copy of the clicked picture, laid out at the capture's own size (fitted to the
+  // window) and transformed back onto the original, then animated to no transform, so it is drawn
+  // crisp the whole way; the capture itself replaces the copy's smaller file once it has loaded.
+  const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
+  const MARGIN = 24
+  const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  type Open = { thumb: HTMLImageElement; layer: HTMLDivElement; shade: HTMLDivElement; copy: HTMLImageElement; closing: boolean; scrollY: number }
+  let open: Open | null = null
+
+  const fullSize = (img: HTMLImageElement) => ({ w: Number(img.dataset.fullW), h: Number(img.dataset.fullH) })
+  /** Worth opening: shown noticeably smaller than its own size. */
+  const zoomable = (img: HTMLImageElement) => fullSize(img).w > img.getBoundingClientRect().width * 1.08
+
+  function target(img: HTMLImageElement) {
+    const { w, h } = fullSize(img)
+    const fit = Math.min(1, (innerWidth - MARGIN * 2) / w, (innerHeight - MARGIN * 2) / h)
+    const width = Math.round(w * fit)
+    const height = Math.round(h * fit)
+    return { left: Math.round((innerWidth - width) / 2), top: Math.round((innerHeight - height) / 2), width, height }
+  }
+
+  /** The transform that puts a copy laid out at `to` exactly over `from`. */
+  const onto = (from: DOMRect, to: { left: number; top: number; width: number }) =>
+    `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width})`
+
+  function show(thumb: HTMLImageElement) {
+    if (open) return
+    const at = target(thumb)
+    const layer = document.createElement('div')
+    layer.className = 'k-lightbox'
+    layer.setAttribute('role', 'dialog')
+    layer.setAttribute('aria-modal', 'true')
+    layer.setAttribute('aria-label', thumb.alt)
+    layer.tabIndex = -1
+    const shade = document.createElement('div')
+    shade.className = 'k-lightbox-shade'
+    const copy = document.createElement('img')
+    copy.className = 'k-lightbox-img'
+    copy.alt = thumb.alt
+    copy.src = thumb.currentSrc || thumb.src
+    Object.assign(copy.style, { left: `${at.left}px`, top: `${at.top}px`, width: `${at.width}px`, height: `${at.height}px` })
+    layer.append(shade, copy)
+    document.body.append(layer)
+    const sharp = new Image()
+    sharp.onload = () => {
+      if (open?.copy === copy) copy.src = sharp.src
+    }
+    sharp.src = thumb.dataset.full!
+    open = { thumb, layer, shade, copy, closing: false, scrollY }
+    thumb.style.visibility = 'hidden'
+    layer.focus({ preventScroll: true })
+    const from = thumb.getBoundingClientRect()
+    const time = still() ? 0 : 340
+    shade.animate([{ opacity: 0 }, { opacity: 1 }], { duration: still() ? 150 : 260, easing: 'ease-out', fill: 'both' })
+    copy.animate([{ transform: onto(from, at) }, { transform: 'none' }], { duration: time, easing: EASE, fill: 'both' })
+  }
+
+  function hide() {
+    if (!open || open.closing) return
+    const state = open
+    state.closing = true
+    const { thumb, layer, shade, copy } = state
+    const at = { left: parseFloat(copy.style.left), top: parseFloat(copy.style.top), width: parseFloat(copy.style.width) }
+    const back = thumb.getBoundingClientRect()
+    const time = still() ? 0 : 280
+    shade.animate([{ opacity: 1 }, { opacity: 0 }], { duration: still() ? 150 : 240, easing: 'ease-in', fill: 'both' })
+    const move = copy.animate([{ transform: 'none' }, { transform: onto(back, at) }], { duration: time, easing: EASE, fill: 'both' })
+    const done = () => {
+      thumb.style.visibility = ''
+      layer.remove()
+      if (open === state) open = null
+      thumb.focus({ preventScroll: true })
+    }
+    move.onfinish = move.oncancel = done
+  }
+
+  /** Marks each picture that can open: a zoom cursor and a button for the keyboard. */
+  function mark() {
+    for (const img of document.querySelectorAll<HTMLImageElement>('.k-shot img[data-full]')) {
+      const on = img.getBoundingClientRect().width > 0 && zoomable(img)
+      img.classList.toggle('k-shot-zoomable', on)
+      if (on) {
+        img.tabIndex = 0
+        img.setAttribute('role', 'button')
+        img.setAttribute('aria-label', `${img.alt} (enlarge)`)
+      } else if (img.getAttribute('role') === 'button') {
+        img.removeAttribute('tabindex')
+        img.removeAttribute('role')
+        img.removeAttribute('aria-label')
+      }
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    const el = event.target as HTMLElement
+    if (open) {
+      if (open.layer.contains(el)) hide()
+      return
+    }
+    const img = el.closest<HTMLImageElement>('.k-shot img.k-shot-zoomable')
+    if (img) show(img)
+  })
+  document.addEventListener('keydown', (event) => {
+    if (open && (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault()
+      return hide()
+    }
+    const img = (event.target as HTMLElement).closest('img.k-shot-zoomable') as HTMLImageElement | null
+    if (img && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault()
+      show(img)
+    }
+  })
+  // Fetch the capture as the pointer arrives, so it is usually there before the click.
+  document.addEventListener('pointerover', (event) => {
+    const img = (event.target as HTMLElement).closest('img.k-shot-zoomable') as HTMLImageElement | null
+    if (img && !img.dataset.warm) {
+      img.dataset.warm = '1'
+      new Image().src = img.dataset.full!
+    }
+  })
+  addEventListener('resize', () => {
+    if (open && !open.closing) {
+      const at = target(open.thumb)
+      Object.assign(open.copy.style, { left: `${at.left}px`, top: `${at.top}px`, width: `${at.width}px`, height: `${at.height}px` })
+    }
+    mark()
+  })
+  // Scrolling the page away closes it (a little momentum from the click does not).
+  addEventListener('scroll', () => open && Math.abs(scrollY - open.scrollY) > 48 && hide(), { passive: true })
+  mark()
+  // The theme switch shows the other picture, which had no size until now.
+  new MutationObserver(mark).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+</script>
+
+<style is:global>
+  .k-shot img.k-shot-zoomable {
+    cursor: zoom-in;
+  }
+  .k-shot img.k-shot-zoomable:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: -0.75rem;
+    border-radius: var(--k-radius-xl);
+  }
+  .k-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    cursor: zoom-out;
+    outline: none;
+  }
+  .k-lightbox-shade {
+    position: absolute;
+    inset: 0;
+    background: rgb(10 11 14 / 0.72);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  :root[data-theme='light'] .k-lightbox-shade {
+    background: rgb(245 246 248 / 0.82);
+  }
+  .k-lightbox-img {
+    position: fixed;
+    max-width: none;
+    transform-origin: 0 0;
+    will-change: transform;
+    user-select: none;
+  }
+</style>
 
 <style>
   /* --k-shot-w is the visible window: the image is that plus the tucked-in margin, so it is drawn

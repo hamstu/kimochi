@@ -116,7 +116,7 @@ export function DictionaryTab(): ReactNode {
     }
     return (
       <>
-        <SettingsSection title="Your browser's Yomitan" grouped>
+        <SettingsSection title="Yomitan in your browser" grouped>
           <YomitanApiStatusRows url={apiUrl} active={!setupOpen} onSetUp={() => setSetupOpen(true)} />
           <ApiAddressRow
             value={yomitanSettings.customApiUrl}
@@ -161,7 +161,7 @@ export function DictionaryTab(): ReactNode {
               <span role="status">Reloading the reader windows…</span>
             ) : switchedTo && switchedTo === active ? (
               <Callout tone="ok" className="dictionary-chooser-switched">
-                Now using {DICTIONARY_ENGINES[switchedTo].name}. The reader windows reloaded with it.
+                Now using {DICTIONARY_ENGINES[switchedTo].name}.
               </Callout>
             ) : null
           }
@@ -320,7 +320,7 @@ function TentenPopupSize(): ReactNode {
   const [size, setSize] = useSetting<TentenSize>('tentenPopupSize', 'compact')
   const description =
     size === 'large'
-      ? '10ten’s own size: up to 600 pixels wide and as tall as the screen allows.'
+      ? '10ten’s default size: up to 600 pixels wide and as tall as the screen allows.'
       : size === 'medium'
         ? 'Up to 480 × 400 pixels. Longer entries fade out; hover the pop-up to scroll.'
         : 'Up to 400 × 250 pixels, the size of Yomitan’s. Longer entries fade out; hover the pop-up to scroll.'
@@ -344,10 +344,10 @@ function TentenPopupSize(): ReactNode {
 function AnkiLink({ engine }: { engine?: DictionaryEngine }): ReactNode {
   const description =
     engine === 'tenten'
-      ? '10ten does not add Anki cards; Settings → Anki says which dictionaries do.'
+      ? '10ten does not add Anki cards.'
       : engine
         ? `How ${DICTIONARY_ENGINES[engine].name} adds Anki cards is in Settings → Anki.`
-        : 'The AnkiConnect connection, and the deck, note type and fields of the cards this pop-up adds, are in Settings → Anki.'
+        : 'Deck, note type and fields are in Settings → Anki.'
   const open = (): void => {
     setSetting('settingsActiveTab', 'anki').catch((error) =>
       console.error('Open Settings → Anki failed:', nativeError(error).message)

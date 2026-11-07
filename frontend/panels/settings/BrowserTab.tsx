@@ -96,8 +96,7 @@ export function BrowserTab(): ReactNode {
         <div className="browser-hero-text">
           <h2 className="browser-hero-title">Read Japanese in pictures on the web</h2>
           <p className="browser-hero-summary">
-            The Kimochi extension brings Kimochi&rsquo;s OCR to Chrome, Edge, Brave, Arc and other Chromium browsers. Kimochi
-            needs to be running for it to work.
+            Kimochi&rsquo;s OCR in Chrome, Edge, Brave, Arc and other Chromium browsers. Kimochi has to be running.
           </p>
         </div>
       </header>
@@ -111,8 +110,8 @@ export function BrowserTab(): ReactNode {
         <Callout tone="warn" className="browser-needs">
           <p className="browser-needs-title">Your browser needs its own pop-up dictionary</p>
           <p className="browser-needs-text">
-            The extension only turns pictures into text on the page. Looking words up is done by a dictionary extension
-            installed in your browser, separate from Kimochi&rsquo;s. Any of these works:
+            The extension turns pictures into text on the page, and a dictionary extension in your browser looks the words
+            up. Any of these works:
           </p>
           <span className="browser-needs-links">
             {DICTIONARIES.map((dictionary) => (
@@ -149,7 +148,7 @@ export function BrowserTab(): ReactNode {
           badge={STORE_LIVE ? undefined : <Badge tone="warn">Pending approval</Badge>}
           description={
             STORE_LIVE
-              ? 'One click, and it updates itself. Works in Chrome, Edge, Brave, Arc, Vivaldi and Opera.'
+              ? 'Updates itself. Works in Chrome, Edge, Brave, Arc, Vivaldi and Opera.'
               : 'The extension is waiting for Google to approve it. Until then, install it by hand below.'
           }
         >
@@ -173,7 +172,7 @@ export function BrowserTab(): ReactNode {
 
       <SettingsSection
         title="Install by hand"
-        description="Load the extension straight from Kimochi's folder. It takes a minute."
+        description="Load the extension from Kimochi's folder."
         grouped={false}
         footnote="Kimochi refreshes the folder when it updates. After an update, click the reload arrow on Kimochi's card on the extensions page."
       >

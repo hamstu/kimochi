@@ -37,9 +37,8 @@ export function ScreenRecordingWhy({ restartAfterGrant }: { restartAfterGrant: b
         which it calls Screen &amp; System Audio Recording.
       </p>
       <p>
-        Kimochi captures only the window or screen you choose as your source, and only to scan
-        it. The pictures stay on this computer unless you choose an online OCR engine, which sends
-        them to be read. Kimochi never records audio.
+        An online OCR engine sends the pictures over the internet to be read. Kimochi records
+        system audio only when you turn on Enhance with sentence audio, for Anki cards.
       </p>
       <p>
         To allow it, open System Settings → Privacy &amp; Security → Screen &amp; System Audio
@@ -59,8 +58,7 @@ export function AccessibilityWhy(): JSX.Element {
         Accessibility.
       </p>
       <p>
-        Kimochi uses it only to find and bring forward the window you read from. It is optional:
-        without it, Kimochi brings your source’s app forward instead, which may not be the window you
+        Without it, Kimochi brings your source’s app forward instead, which may not be the window you
         were reading.
       </p>
       <p>To allow it, open System Settings → Privacy &amp; Security → Accessibility and turn on Kimochi.</p>

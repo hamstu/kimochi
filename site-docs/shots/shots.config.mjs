@@ -71,8 +71,8 @@ const HIDE_GRIPS = `document.head.insertAdjacentHTML('beforeend', '<style>.kd-re
 const MAIN = [900, 560]
 const SETTINGS = [820, 700]
 const WELCOME = [720, 620]
-/** The main window's sidebar alone (its default width is 240px). */
-const SIDEBAR = { x: 0, y: 0, width: 240, height: 560 }
+/** The main window's sidebar alone, at its default width (DEFAULT_WIDTH in frontend/main/MainSidebar.tsx). */
+const SIDEBAR = { x: 0, y: 0, width: 272, height: 560 }
 
 /** Something on each Settings page that only renders once it has loaded. */
 const SETTINGS_READY = {
@@ -84,7 +84,8 @@ const SETTINGS_READY = {
   assist: '#assist-deepl',
   controls: '#gamepad-enabled',
   gamemode: '.read-along-views',
-  account: '.settings-page-scroll h2, .settings-page-scroll h3'
+  account: '.settings-page-scroll h2, .settings-page-scroll h3',
+  browser: '.browser-hero'
 }
 /** Settings → Account shows a Server section in development builds only (the harness is one). */
 const HIDE_DEV_SERVER = {
@@ -221,10 +222,11 @@ export const SHOTS = [
   // Text Hooker (Windows only): a hooked game in the sidebar, and its submenu in the source menu.
   {
     id: 'hook-card',
-    page: 'panel.html?window=log&input=hook&platform=windows',
+    page: 'panel.html?window=log&input=hook&platform=windows&overlay=1',
     size: [900, 640],
-    crop: { x: 0, y: 0, width: 271, height: 640 },
-    ready: '.src-hook-select'
+    crop: { ...SIDEBAR, height: 640 },
+    ready: '.src-hook-select',
+    marks: [{ type: 'glow', target: switchRow('Auto align'), radius: 8 }]
   },
   {
     id: 'hook-source-menu',
@@ -235,6 +237,20 @@ export const SHOTS = [
       { click: sourceAction('Change source'), after: 500 },
       { hover: { selector: '.src-type', text: 'Text Hooker' }, after: 1200 }
     ]
+  },
+  {
+    id: 'overlay-hint-bar',
+    page: 'stage.html?scene=overlay-words&furigana=0&windowed=1&hints=1',
+    size: [960, 600],
+    ready: '.overlay-hints:not([hidden])',
+    settle: 1500
+  },
+  {
+    id: 'hook-card-over-game',
+    page: 'stage.html?scene=hook-card&furigana=0&lookup=1&armed=1',
+    size: [960, 600],
+    ready: '.hook-card:not([hidden])',
+    settle: 1500
   },
   {
     id: 'hook-thread-menu',
@@ -257,12 +273,6 @@ export const SHOTS = [
     size: MAIN,
     ready: '.sb-engine-select',
     actions: [{ click: 'button[aria-label="Dictionary"]', after: 500 }]
-  },
-  {
-    id: 'log-empty',
-    page: 'panel.html?window=log&empty=1',
-    size: MAIN,
-    ready: '.log-empty'
   },
   {
     id: 'line-actions',
@@ -387,7 +397,8 @@ export const SHOTS = [
     ['assist', 'Translation & AI'],
     ['controls', 'Shortcuts & Controls'],
     ['gamemode', 'Game Mode'],
-    ['account', 'Account']
+    ['account', 'Account'],
+    ['browser', 'Browser Extension']
   ].map(([tab]) => ({
     id: `settings-${tab}`,
     page: settingsTab(tab),
@@ -553,31 +564,20 @@ export const SHOTS = [
   // ------------------------------------------------------------------ the marketing site's demo
   {
     id: 'overlay-demo',
-    server: 'site',
-    page: '',
-    size: [1280, 900],
-    ready: '.kd-screen .kd-word',
+    // The overlay over a visual novel (the overlay stage): every word boxed, the first one looked up.
+    page: 'stage.html?scene=overlay-words&furigana=0&fragments=1&lookup=1',
+    size: [960, 600],
+    ready: '.stage-popup:not([hidden])',
     settle: 1500,
-    actions: [
-      // The windows' resize grips are for visitors to the live demo, not for a picture of the overlay.
-      { run: HIDE_GRIPS + `document.querySelector('#demo').scrollIntoView()`, after: 800 },
-      { doubleClick: { selector: '#demo button', text: 'STEINS' }, after: 2000 }
-    ],
-    clipTo: '.kd-screen',
-    marks: [{ type: 'cursor', target: { selector: '.kd-word', text: '容赦' }, fx: 0.55, fy: 0.75 }],
-    radius: 10
+    marks: [{ type: 'cursor', target: { selector: '.ocr-word', index: 0 }, fx: 0.55, fy: 0.7 }]
   },
   {
     id: 'overlay-demo-deck',
-    server: 'site',
-    page: '',
-    size: [1280, 900],
-    ready: '.kd-screen .kd-word',
-    actions: [
-      { run: `document.querySelector('#demo').scrollIntoView()` },
-      { click: { selector: '#demo [role="tab"]', text: 'Handheld' }, after: 1500 }
-    ],
-    clipTo: '.kd-screen',
+    // A Steam Deck's screen (1280×800): Read along on the first word.
+    page: 'stage.html?scene=controller-words&furigana=0&step=0',
+    size: [1280, 800],
+    ready: '.stage-popup:not([hidden])',
+    settle: 1500,
     radius: 10
   }
 ]

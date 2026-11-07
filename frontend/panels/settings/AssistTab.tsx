@@ -86,7 +86,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
             description={
               settings.deeplApiKey.trim()
                 ? 'Enter your DeepL key'
-                : 'Stored locally in settings.json, never bundled or backed up.'
+                : 'Stored in settings.json.'
             }
           >
             <Input
@@ -110,7 +110,7 @@ function AssistSections({ settings }: { settings: Settings }): ReactNode {
       <SettingsSection title="Explain with AI">
         <SettingsRow
           label="Provider, model and prompt"
-          description={`${explainSummary}. Explain is in each line’s menu and on the E key.`}
+          description={`${explainSummary}. Also on the E key.`}
         >
           <Button size="sm" onClick={() => setExplainOpen(true)}>
             Configure…

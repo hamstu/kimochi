@@ -6,7 +6,7 @@ export const RECOMMENDED_DICTIONARIES = [
     title: "Jitendex",
     titlePrefix: "Jitendex.org",
     description:
-      "Japanese–English definitions. Downloads on demand; nothing is installed without your choice.",
+      "Japanese–English definitions.",
     url: "https://github.com/stephenmk/stephenmk.github.io/releases/latest/download/jitendex-yomitan.zip",
   },
 ];
@@ -39,7 +39,7 @@ export function createDictionarySetup({
           )
         )
           throw Error(
-            `An incomplete ${recommended.title} import already exists. Remove it in dictionary settings before retrying; existing data has been kept.`,
+            `An incomplete ${recommended.title} import already exists. Remove it in dictionary settings, then retry.`,
           );
         job.stage = "downloading";
         const response = await fetchArchive(recommended.url);
@@ -67,7 +67,7 @@ export function createDictionarySetup({
       );
       if (verified?.importSuccess !== true)
         throw Error(
-          "Dictionary import did not finish successfully. Existing data has been kept.",
+          "Dictionary import didn't finish.",
         );
       job.entries = await countEntries(title);
       if (!(job.entries > 0))

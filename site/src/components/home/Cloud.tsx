@@ -20,9 +20,9 @@ const FREE = [
 
 /** What an account's paid plan adds: the parts that cost money to run. */
 const CLOUD = [
-  'Translation of any line, right in the app',
-  'On-demand AI Explanations ✨',
-  'Read aloud in high-quality ElevenLabs voices',
+  'Translation of any line, in the app',
+  'On-demand AI Explanations',
+  'Read aloud in ElevenLabs voices',
   'Cloud OCR with Google Vision',
   'Sync of your logs and notebook across devices'
 ]
@@ -47,7 +47,7 @@ const CLOUD_FEATURES: { icon: ReactNode; title: string; body: string; docs: stri
   {
     icon: <AudioLines size={18} aria-hidden />,
     title: 'Read aloud',
-    body: 'Hear any line in a high-quality ElevenLabs voice.',
+    body: 'Hear any line in an ElevenLabs voice.',
     docs: '/lookups/translation-and-ai/#read-aloud'
   },
   {
@@ -200,7 +200,7 @@ export function Cloud() {
             <span className="text-[2.5rem] leading-none font-semibold tracking-[-0.02em] text-ink">Free</span>
             <span className="text-small text-ink-3">forever</span>
           </p>
-          <p className="mt-3 text-body text-ink-2">Everything you need to read your games, manga and more. No account, no limits.</p>
+          <p className="mt-3 text-body text-ink-2">Reads your games, manga and more. No account, no limits.</p>
           <ul className="mt-6 flex flex-col gap-2.5">
             {FREE.map((item) => (
               <li key={item} className="flex gap-2.5 text-body text-ink">

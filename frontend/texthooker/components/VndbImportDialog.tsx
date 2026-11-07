@@ -186,7 +186,7 @@ export function VndbImportDialog({ open, onOpenChange }: Props) {
     stage === "pick-vn"
       ? "Pick the visual novel you are reading. Its characters become notebook entries."
       : stage === "confirm"
-        ? "Re-importing is safe: existing characters are updated in place."
+        ? "Characters already in the notebook are updated in place."
         : undefined;
 
   let footer: ReactNode;
@@ -432,8 +432,7 @@ function PickVnStage({
             icon={<Search />}
             title="Find your visual novel"
           >
-            Results show the cover, title and release date. Pick one to review
-            its characters before importing.
+            Pick one to review its characters before importing.
           </EmptyState>
         ) : null}
       </div>

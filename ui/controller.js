@@ -666,7 +666,7 @@ export function createController(context) {
         label: "Auto align",
         kind: "toggle",
         on: card.autoAlign,
-        detail: card.autoAlign ? "The card sits on the game's own text." : undefined,
+        detail: card.autoAlign ? "The card sits on the game's text." : undefined,
       },
       { id: "size", label: "Text size", kind: "step", value: card.fontPx ? `${Math.round(card.fontPx)} px` : "—" },
       { id: "opacity", label: "Background", kind: "step", value: `${Math.round(card.opacity * 100)}%` },

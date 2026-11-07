@@ -53,7 +53,7 @@ export function ScreenshotSection(): ReactNode {
       <SettingsRow
         label="Enhance with screenshot"
         controlId="card-screenshot-enabled"
-        description="Kimochi adds a screenshot of your source, taken when the line was scanned, to every new card you make, with any dictionary."
+        description="Adds a screenshot of your source, taken when the line was scanned, to every new card you make."
       >
         <Switch
           id="card-screenshot-enabled"
@@ -102,7 +102,7 @@ export function ScreenshotSection(): ReactNode {
       <SettingsRow
         label="Screenshots kept"
         controlId="card-screenshot-kept"
-        description="The newest scans' screenshots stay on this computer, to see from the Log and to add to cards you make later."
+        description="Kept for the newest scans, to see from the Log and to add to cards you make later."
       >
         <NumberField
           id="card-screenshot-kept"

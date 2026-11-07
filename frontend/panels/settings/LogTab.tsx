@@ -56,7 +56,7 @@ export function LogTab(): ReactNode {
               <SettingsRow
                 label="Text size"
                 controlId="log-font-size"
-                description="In pixels, 12 to 48. Also A− and A+ in the Log's footer."
+                description="In pixels, 12 to 48."
               >
                 <NumberField
                   id="log-font-size"
@@ -69,7 +69,7 @@ export function LogTab(): ReactNode {
                 />
               </SettingsRow>
               {cloudAccess && (
-                <SettingsRow label="Read-aloud voice" description="The voice that reads lines aloud.">
+                <SettingsRow label="Read-aloud voice">
                   <Select
                     aria-label="Read-aloud voice"
                     value={audioSettings.voiceId}
@@ -209,7 +209,7 @@ function SessionsSection(): ReactNode {
   return (
     <SettingsSection
       title="Sessions"
-      description="Click a name to rename it, or a handle to drag it into order. Tick sessions (Shift-click for a run) to clear or delete them together."
+      description="Click a name to rename it; drag a handle to reorder. Tick sessions to clear or delete them together."
       actions={
         <Button variant="ghost" size="sm" onClick={() => void create()}>
           <Plus /> New session

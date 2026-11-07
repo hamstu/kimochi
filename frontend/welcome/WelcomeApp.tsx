@@ -247,7 +247,7 @@ function OcrScreen(): JSX.Element {
   return (
     <Step
       title="How should Kimochi read text?"
-      lede="None of these needs an API key. Local engines read on this computer and keep every scan here; online ones send each capture over the internet. Results vary by game, so try another any time in Settings."
+      lede="Online engines send each capture over the internet. Results vary by game."
     >
       <EngineChooser />
       <StepActions>
@@ -284,7 +284,7 @@ function NoDictionaryWarning(): JSX.Element | null {
   return (
     <Callout tone="warn">
       No dictionary is set up, so nothing will look words up yet. Choose and download one in
-      Settings → Dictionary whenever you are ready.
+      Settings → Dictionary.
     </Callout>
   )
 }
@@ -307,7 +307,7 @@ function DeckNextSteps(): JSX.Element | null {
   return (
     <p className={style.text}>
       You can use Kimochi here in Desktop Mode now. To read in Gaming Mode, add Kimochi to your
-      Steam library from Settings → General whenever you like.
+      Steam library from Settings → General.
     </p>
   )
 }
@@ -324,14 +324,13 @@ function DoneScreen(): JSX.Element {
           You&apos;re ready to read
         </span>
       }
-      lede="Here is the whole loop. Settings has everything you chose here, whenever you want to change it."
     >
       <NoDictionaryWarning />
       <ol className={style.loop}>
         <li>
           <strong>Choose and crop.</strong>{' '}
           {gaming
-            ? 'Gaming Mode shares the game screen on its own. Set a crop around the dialogue to skip menus and other text.'
+            ? 'Set a crop around the dialogue to skip menus and other text.'
             : 'Pick a window or screen in the sidebar, then crop the area with the text.'}
         </li>
         <li>

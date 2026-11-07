@@ -8,17 +8,6 @@ page with `<Todo>TODO(hamish): …</Todo>`, which shows as a dashed box in the d
 
 Nothing open. All questions were answered on 2026-10-22.
 
-## Screenshots the pipeline can't draw yet
-
-The preview harness has no overlay, so these are described in text with a "Screenshot to come"
-note on the page:
-
-- **The Text Hooker's card over a game** (`reading/text-hooker`), ideally with Auto align on and the
-  card's −, + and ⋯ controls showing.
-- **The overlay's hint bar** ("Hold Shift to look up words and click text", `reading/overlay`).
-- **The sidebar's Auto align switch** under Show overlay for a hooked game: the harness's `hook-card`
-  shot has the overlay off, so the switch isn't in it.
-
 ## Things the docs left out on purpose
 
 - **Custom OCR endpoint.** The app can read one from its settings file, but there is no setting for

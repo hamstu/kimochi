@@ -19,7 +19,7 @@ Kimochi runs on **Windows 10 22H2 or Windows 11**, on **x64** or **ARM64**.
 
 </Steps>
 
-Kimochi needs **Windows 10 22H2 or later**. Windows builds are signed, so Windows opens them without
+Windows builds are signed, so Windows opens them without
 a warning. Updates install from inside the app and relaunch it.
 
 ## OneOCR, the Windows OCR engine
@@ -27,7 +27,7 @@ a warning. Updates install from inside the app and relaunch it.
 Windows has an on-device OCR engine of its own, in the Snipping Tool, and Kimochi can use it:
 choose **OneOCR** in **Settings → OCR & Overlay**. See [OCR engines](/reading/ocr-engines/#oneocr).
 
-- **Windows 11:** install or update **Microsoft Snipping Tool** from the Microsoft Store. Nothing else is needed.
+- **Windows 11:** install or update **Microsoft Snipping Tool** from the Microsoft Store.
 - **Windows 10:** Snipping Tool doesn't include it, so OneOCR needs three files from a recent
   Windows 11 Snipping Tool package: `oneocr.dll`, `oneocr.onemodel` and `onnxruntime.dll`. Put a
   matching x64 or ARM64 set in your user folder under `.config\oneocr`. The

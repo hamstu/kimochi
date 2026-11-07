@@ -74,7 +74,7 @@ pub fn describe_failure(feature: Feature, status: u16, body: &str, account: bool
     let message = parsed.get("message").and_then(Value::as_str).map(str::trim).filter(|m| !m.is_empty());
     let code = parsed.get("error").and_then(Value::as_str).unwrap_or("");
     match status {
-        401 if account => "Kimochi signed out of your account on this computer because the server no longer accepts it. Sign in again from Settings → Account.".into(),
+        401 if account => "Signed out: the server no longer accepts this sign-in. Sign in again from Settings → Account.".into(),
         402 => quota_message(&parsed).unwrap_or_else(|| {
             message.map(str::to_string).unwrap_or_else(|| format!("You've used this month's {} allowance.", feature.name()))
         }),
@@ -99,7 +99,7 @@ fn quota_message(body: &Value) -> Option<String> {
     let limit = body.get("limit")?.as_f64()?;
     if metric == "storage" {
         return Some(format!(
-            "Your Kimochi sync storage is full ({}). Sync is paused until you free space under Manage account on the web; everything stays on this computer.",
+            "Your Kimochi sync storage is full ({}). Sync is paused until you free space under Manage account on the web.",
             bytes_label(limit)
         ));
     }

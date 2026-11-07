@@ -77,7 +77,7 @@ test('native error prefixes become plain sentences with the right tone', () => {
     'Kimochi cloud OCR needs a Kimochi account. Sign in from Settings → Account, or choose another OCR engine in Settings → OCR & Overlay.'
   assert.deepEqual(said(scanFailed(`native: ${signedOut}`, 'recognise', 'cloud')), [signedOut, 'warn'])
   const signedOutRemotely =
-    'Kimochi signed out of your account on this computer because the server no longer accepts it. Sign in again from Settings → Account.'
+    'Signed out: the server no longer accepts this sign-in. Sign in again from Settings → Account.'
   assert.deepEqual(said(scanFailed(`native: ${signedOutRemotely}`, 'recognise', 'cloud')), [signedOutRemotely, 'warn'])
   assert.deepEqual(said(scanFailed('native: capture failed', 'capture', 'cloud')), [
     'Capture failed: capture failed',

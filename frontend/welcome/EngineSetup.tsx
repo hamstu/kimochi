@@ -54,7 +54,7 @@ export default function EngineSetup(): JSX.Element {
   return (
     <Step
       title="Choose a pop-up dictionary"
-      lede="Kimochi looks words up with a pop-up dictionary engine. Choose one and Kimochi downloads it from its official release. You can switch at any time in Settings → Dictionary."
+      lede="Kimochi downloads the one you choose from its official release."
     >
       <DictionaryChooser
         active={active}
@@ -103,7 +103,7 @@ export default function EngineSetup(): JSX.Element {
         open={askSkip}
         onOpenChange={setAskSkip}
         title="Continue without a dictionary?"
-        description="Nothing will look words up until you choose and download a dictionary in Settings → Dictionary. Scanning and the Log still work."
+        description="You can choose one later in Settings → Dictionary."
         confirmLabel="Skip"
         tone="danger"
         onConfirm={() => {

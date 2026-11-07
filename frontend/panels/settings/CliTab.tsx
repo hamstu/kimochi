@@ -82,7 +82,7 @@ function describe(status: CliStatus | null, os: Os): string {
   if (status.installed) return `Installed at ${status.path}.`;
   if (status.stale) return `${status.path} runs another copy of Kimochi. Install it again to use this one.`;
   if (os === "macos") return "Adds a link at /usr/local/bin/kimochi. macOS asks for an administrator's password.";
-  if (os === "windows") return "Adds a kimochi command to your user PATH. No administrator needed.";
+  if (os === "windows") return "Adds a kimochi command to your user PATH.";
   return "Adds a link at ~/.local/bin/kimochi.";
 }
 
@@ -132,7 +132,7 @@ export function CliTab(): ReactNode {
   return (
     <SettingsPage
       title="Command line"
-      description="Drive Kimochi from a terminal, scripts and your own tools: scan, follow the Log, switch sessions, change the engine and settings. The command starts Kimochi when it isn't running."
+      description="Drive Kimochi from a terminal or a script. The command starts Kimochi when it isn't running."
     >
       <SettingsSection title="The kimochi command" grouped={false}>
         <div className="k-settings-group">
@@ -153,7 +153,7 @@ export function CliTab(): ReactNode {
         {error && <Callout tone="danger">{error}</Callout>}
         {status?.note && <Callout tone="warn">{status.note}</Callout>}
         {status?.installed && os === "windows" && !status.note && (
-          <Callout>Open a new terminal to use it: one already open keeps the PATH it started with.</Callout>
+          <Callout>Open a new terminal to use it.</Callout>
         )}
       </SettingsSection>
 

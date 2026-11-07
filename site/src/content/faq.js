@@ -22,21 +22,21 @@ export const FAQ = [
     id: 'what-is-kimochi',
     q: 'What is Kimochi?',
     a: [
-      'Kimochi is a free, open-source desktop app that helps you read Japanese in games, visual novels, manga and more. It captures the Japanese text on your screen with OCR, can draw that text back over whatever you’re reading as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki. It works on games, visual novels, manga, YouTube videos and anything else on your screen.'
+      'Kimochi is a free, open-source desktop app that helps you read Japanese in games, visual novels, manga and more. It captures the Japanese text on your screen with OCR, can draw that text back over whatever you’re reading as an overlay, and lets you hover any word to look it up in your favourite dictionary and save it to Anki.'
     ]
   },
   {
     id: 'who-is-it-for',
     q: 'Who is Kimochi for?',
     a: [
-      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy, from total beginners to advanced readers. Every word is a hover away from its reading and meaning, so you can start on real Japanese from day one. It started as the tool its maker, Hamish Macpherson, wanted: something that reads the screen for you, gets out of the way, and lets you look up the word you’re stuck on without breaking the flow.'
+      'Kimochi is for anyone learning Japanese by reading the games, visual novels and manga they enjoy. It started as the tool its maker, Hamish Macpherson, wanted for his own games and manga.'
     ]
   },
   {
     id: 'how-does-it-work',
     q: 'How does Kimochi work?',
     a: [
-      'There are four steps. Pick a window or screen (a game, a manga reader, a video player), and crop it if you like. Press Scan, or turn on Auto OCR. The text shows up in Kimochi’s Log, and right over the window if the overlay is on. Then hover a word to look it up, hear it, or save it. Every line is kept in a Log you can scroll back through, with a separate session for each game, book or series.'
+      'Pick a window or screen (a game, a manga reader, a video player), and crop it if you like. Press Scan, or turn on Auto OCR. The text shows up in Kimochi’s Log, and over the window if the overlay is on. Then hover a word to look it up, hear it, or save it. Every line is kept in a Log you can scroll back through, with a separate session for each game, book or series.'
     ],
     links: [{ href: docsUrl('/quick-start/'), label: 'Quick start in the docs' }]
   },
@@ -45,7 +45,7 @@ export const FAQ = [
     q: 'Is Kimochi free? What does Kimochi Cloud cost?',
     a: [
       'Yes, Kimochi is free forever, with no account and no limits on the core app: the overlay, Auto OCR, on-device and online OCR engines, the Log, Sessions, the Notebook, dictionaries, one-click Anki cards and Gaming Mode.',
-      'Kimochi Cloud is optional and, as of October 2026, costs US$6 a month, US$60 a year (two months free, so $5 a month), or US$125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial. A free account on its own doesn’t include any of these.'
+      'Kimochi Cloud is optional and, as of October 2026, costs US$6 a month, US$60 a year (two months free, so $5 a month), or US$125 once for lifetime. It adds in-app translation, AI explanations, ElevenLabs read-aloud, Google Vision cloud OCR and sync across devices, with a 14-day free trial.'
     ],
     links: [{ href: '/#cloud', label: 'Plans on the home page' }]
   },
@@ -53,7 +53,7 @@ export const FAQ = [
     id: 'platforms',
     q: 'Which platforms does Kimochi run on?',
     a: [
-      'As of November 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck, with a layout made for the Deck’s screen and reading by controller over your game. macOS support is the most mature. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
+      'As of November 2026, Kimochi runs on macOS 14 or later on Apple silicon (an Intel Mac build is planned), Windows 10 22H2 or later (x64 and ARM64) and Linux (x64 and ARM64), and has a Gaming Mode for the Steam Deck. macOS support is the most mature. On Linux, the overlay is tested on Hyprland (Omarchy) and on GNOME 46.'
     ],
     links: [
       { href: '/download/linux', label: 'Installing on Linux and Steam Deck' },
@@ -64,8 +64,8 @@ export const FAQ = [
     id: 'privacy',
     q: 'Does Kimochi send my screen to the cloud? Is it private?',
     a: [
-      'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads. Your captures, log, notebook, statistics and settings stay on your computer, unless you turn on Sync with Kimochi Cloud, which keeps them in step between your computers.',
-      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. If you’d rather nothing leave your machine, pick an on-device engine: PaddleOCR, Apple Live Text (macOS), MeikiOCR, Manga OCR or OneOCR (Windows). The privacy policy lists exactly what each feature sends and when.'
+      'Only if you choose an online OCR engine. Kimochi has no analytics, telemetry, crash reporting or ads.',
+      'Google Lens (the default engine) and Kimochi Cloud OCR send the captured region for recognition. The other engines run locally. The privacy policy lists what each feature sends.'
     ],
     links: [{ href: '/privacy', label: 'Privacy policy' }]
   },
@@ -73,7 +73,7 @@ export const FAQ = [
     id: 'account',
     q: 'Do I need an account?',
     a: [
-      'No. Kimochi works fully without an account. You only need one for Kimochi Cloud: cloud OCR, read aloud, translation, AI explanations and sync. You can sign up with email, Google or Discord, and you can download or delete everything from your account page at any time.'
+      'Only for Kimochi Cloud: cloud OCR, read aloud, translation, AI explanations and sync. You can sign up with email, Google or Discord, and you can download or delete everything from your account page.'
     ],
     links: [{ href: docsUrl('/cloud/'), label: 'Accounts and plans' }]
   },
@@ -93,7 +93,7 @@ export const FAQ = [
     id: 'anki-and-texthookers',
     q: 'Does Kimochi work with Anki and texthookers?',
     a: [
-      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. Kimochi’s built-in Text Hooker can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or just copy lines to the clipboard. They land in the same Log, with the same lookups, Notebook and stats. Any texthooker that sends text over WebSocket works, and Kimochi can also take owocr’s output.'
+      'Yes. Kimochi adds cards to Anki through the AnkiConnect add-on, and can attach the spoken audio of the line you mined, cut from what your computer was playing. Kimochi’s built-in Text Hooker can read a Windows game’s text straight from the game, on Windows and, through Proton or Wine, on Linux and the Steam Deck. If you already hook text out of a visual novel, point Kimochi at your texthooker over WebSocket, or copy lines to the clipboard. owocr’s output works too.'
     ],
     links: [
       { href: docsUrl('/lookups/anki/'), label: 'Anki' },
@@ -105,14 +105,14 @@ export const FAQ = [
     id: 'obs-and-extensions',
     q: 'Do I need OBS or a browser extension?',
     a: [
-      'No. Kimochi has built-in screen and window capture with a crop region, so OBS isn’t needed, and Yomitan is built in, so no browser tabs are required. You can still use the Yomitan in your browser through the Yomitan API if you prefer.'
+      'No. Kimochi has built-in screen and window capture with a crop region, and Yomitan is built in. You can use the Yomitan in your browser through the Yomitan API. The Kimochi browser extension is only for reading pictures on web pages.'
     ]
   },
   {
     id: 'alternatives',
     q: 'How is Kimochi different from GameSentenceMiner, owocr or YomiNinja?',
     a: [
-      'Kimochi puts capture, OCR, the overlay, a log, Yomitan, Anki and a notebook in one app, with no OBS and no browser tabs, and a controller works too. GameSentenceMiner is great, and it’s better if you want more advanced features and control. owocr is a nice CLI too if you prefer a more minimal setup. YomiNinja is a free, open-source overlay with Yomitan and 10ten built in, but it hasn’t been very actively developed.'
+      'Kimochi puts capture, OCR, the overlay, a log, Yomitan, Anki and a notebook in one app, and works with a controller. GameSentenceMiner is great, and it’s better if you want more advanced features and control. owocr is a nice CLI too if you prefer a more minimal setup. YomiNinja is a free, open-source overlay with Yomitan and 10ten built in, but it hasn’t been very actively developed.'
     ],
     links: [{ href: '/compare', label: 'How Kimochi compares' }]
   },
@@ -141,7 +141,7 @@ export const FAQ = [
     id: 'discord',
     q: 'Is there a Kimochi community?',
     a: [
-      'Yes, Kimochi has a Discord server. Come share what you’re reading, swap setups and dictionaries, ask for help, suggest features and hear about new releases first. Hamish is there too.'
+      'Yes, Kimochi has a Discord server. Come share what you’re reading, ask for help, suggest features and hear about new releases first. Hamish is there too.'
     ],
     links: [{ href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' }]
   },
@@ -149,11 +149,11 @@ export const FAQ = [
     id: 'feedback',
     q: 'How do I report a bug or give feedback?',
     a: [
-      'Ask in Kimochi’s Discord, where Hamish and other readers can help, or open an issue on Kimochi’s GitHub repository. Bug reports, ideas and questions are all welcome in both.'
+      'Ask in Kimochi’s Discord, where Hamish and other readers can help, or open an issue on Kimochi’s GitHub repository.'
     ],
     links: [
       { href: 'https://discord.gg/vdMge6TBZQ', label: 'Join the Discord' },
-      { href: 'https://github.com/hamstu/kimochi/issues', label: 'Kimochi’s GitHub issues' },
+      { href: 'https://github.com/hamstu/kimochi/issues', label: 'GitHub issues' },
       { href: docsUrl('/help/troubleshooting/'), label: 'Troubleshooting' }
     ]
   }

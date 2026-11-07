@@ -1,6 +1,6 @@
 ---
 title: Texthookers and clipboard
-description: Feed the Log from a texthooker over WebSocket or the clipboard, and send Kimochi's own scans to other tools.
+description: Feed the Log from a texthooker over WebSocket or the clipboard, and send Kimochi's scans to other tools.
 ---
 
 import Screenshot from '../../../components/Screenshot.astro'
@@ -17,27 +17,25 @@ Choose the input in the sidebar's **Change source** menu or in **Settings → So
 
 <Screenshot id="settings-sources" alt="Settings, Sources: the Input list (Screen, Quick Shot, Clipboard, WebSocket), Sessions and Output." width={760} />
 
-On Windows and Linux the **Input** list also has **Text Hooker**; with it chosen, **Text Hooker settings → Open** opens Settings → Text Hooker.
-
 ## Clipboard
 
 Picks up text copied to the clipboard, for example by a text hooker that copies each line. Kimochi
 checks the clipboard every 200 ms by default (**Poll interval**: 100 ms, 200 ms, 500 ms or 1 s) and
 ignores its own copies.
 
-<Screenshot id="clipboard-card" alt="The sidebar with the Clipboard source, Watching for copied text." width={240} />
+<Screenshot id="clipboard-card" alt="The sidebar with the Clipboard source, Watching for copied text." width={272} />
 
 ## WebSocket
 
 Receives plain-text messages from a text source on your network. Kimochi connects to the
-**WebSocket URL** you set (default `ws://localhost:6677`) and reconnects on its own if the
+**WebSocket URL** you set (default `ws://localhost:6677`) and reconnects if the
 connection drops. A status line at the top of the Log shows whether it is connecting, connected or
 retrying.
 
 Each message can be plain text, a JSON string, or a JSON object with a `text` or `sentence` field.
 Use a `ws://` or `wss://` address without credentials.
 
-<Screenshot id="websocket-card" alt="The sidebar with the WebSocket source and its URL." width={240} />
+<Screenshot id="websocket-card" alt="The sidebar with the WebSocket source and its URL." width={272} />
 
 Any texthooker that can send its text over a WebSocket works this way, as does owocr's output.
 

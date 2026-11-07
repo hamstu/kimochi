@@ -291,7 +291,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
 
   return (
     <>
-      <SettingsSection title={title ?? "Cards from Kimochi's pop-up"} description={description}>
+      <SettingsSection title={title ?? "Cards from the pop-up"} description={description}>
         <SettingsRow
           label="Enable Mining"
           controlId="anki-enabled"
@@ -336,7 +336,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
         </SettingsRow>
         <SettingsRow
           label="Detect from Anki"
-          description="Attempt to auto-detect your Anki mining setup and import it here."
+          description="Reads your Anki mining setup and fills in these settings."
         >
           <Button size="sm" onClick={() => void handleDetectClick()} disabled={detecting}>
             {detecting ? "Detecting…" : "Detect"}

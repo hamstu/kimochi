@@ -41,7 +41,7 @@ export function AccountForgot() {
   return (
     <AuthShell
       title="Reset your password"
-      lede={<p>Enter your email and we&rsquo;ll send you a link to choose a new password.</p>}
+      lede={<p>Enter your email to get a link to choose a new password.</p>}
       footer={
         <p>
           Remembered it?{' '}

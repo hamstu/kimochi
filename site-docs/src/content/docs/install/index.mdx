@@ -18,29 +18,18 @@ the right file for your computer; **Other platforms** lists every build. Builds 
   <PlatformCard platform="steam-deck" title="Steam Deck" href="/install/steam-deck/" description="Install in Desktop Mode, read in Gaming Mode." />
 </div>
 
-## Which file is which
-
-| Platform | File | Notes |
-| --- | --- | --- |
-| macOS, Apple silicon | `Kimochi_<version>_aarch64.app.zip` | Signed and notarised. |
-| Windows x64 | `Kimochi_<version>_x64-setup.exe` | Installs for the current user. |
-| Windows ARM64 | `Kimochi_<version>_arm64-setup.exe` | |
-| Linux x64 | `kimochi_<version>_amd64.AppImage` or `.deb` | The one-line installer uses the AppImage. |
-| Linux ARM64 | `kimochi_<version>_aarch64.AppImage` or `kimochi_<version>_arm64.deb` | |
-
 ## Updates
 
-Kimochi updates itself. In release builds it checks quietly shortly after launch and then every six
+Kimochi updates itself. In release builds it checks shortly after launch and then every six
 hours, and shows a notice in the sidebar when a new version is out. You start the download and you
-choose when to restart; nothing is installed behind your back. You can also check from
+choose when to restart. You can also check from
 **Settings → About → Updates**.
 
-<Screenshot id="update-notice" alt="The sidebar's update notice: Kimochi 0.2.0 is available, with a Download button." width={240} />
+<Screenshot id="update-notice" alt="The sidebar's update notice: Kimochi 0.2.0 is available, with a Download button." width={272} />
 
 <Screenshot id="settings-updates" alt="Settings, About, Updates: the current version, What's new and a Download button for the new version." width={760} />
 
-After an update, **What's new** opens once on its own with the release notes. It is always in
-**Settings → About → Updates → What's new**.
+After an update, **What's new** shows the release notes.
 
 Every update is checked against Kimochi's signing key before it is installed. Pre-releases and
 development builds are never offered as updates.

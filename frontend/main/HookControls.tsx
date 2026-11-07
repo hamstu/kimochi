@@ -94,7 +94,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
         <Callout tone="warn" className="src-notice">
           <span title={status.hookFailures?.join('\n')}>
             Kimochi reached the game but couldn&apos;t hook some of its text. If the dialogue doesn&apos;t
-            show up, restart the game while Kimochi is open; it often works on the next try.
+            show up, restart the game while Kimochi is open.
           </span>
         </Callout>
       )}

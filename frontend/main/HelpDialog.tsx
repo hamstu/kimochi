@@ -59,7 +59,7 @@ function Choice({
 }: {
   icon: ReactNode
   title: string
-  detail: string
+  detail?: string
   trailing: ReactNode
   onClick: () => void
 }): JSX.Element {
@@ -68,7 +68,7 @@ function Choice({
       <span className="help-choice-icon" aria-hidden="true">{icon}</span>
       <span className="help-choice-text">
         <span className="help-choice-title">{title}</span>
-        <span className="help-choice-detail">{detail}</span>
+        {detail && <span className="help-choice-detail">{detail}</span>}
       </span>
       <span className="help-choice-trailing" aria-hidden="true">{trailing}</span>
     </button>
@@ -207,8 +207,7 @@ function ReportForm({
             <span className="help-attach-text">
               <span className="help-attach-title">Attach debug data</span>
               <span className="help-hint">
-                Your Kimochi version, system, settings and recent logs, with personal details removed. It makes the
-                problem much easier to track down.
+                Your Kimochi version, system, settings and recent logs, with personal details removed.
               </span>
             </span>
           </label>
@@ -277,8 +276,8 @@ function HelpContent({
           <CircleCheck className="help-sent-icon" aria-hidden="true" />
           <p className="help-sent-title">Thank you!</p>
           <p className="help-sent-detail">
-            Your {sent?.kind === 'feature' ? 'request' : 'report'} is on its way{sent?.id ? <> (reference <span className="k-num">{sent.id}</span>)</> : null}. If we
-            need anything else, we’ll reply to {sent?.email || 'your email'}.
+            Your {sent?.kind === 'feature' ? 'request' : 'report'} is on its way{sent?.id ? <> (reference <span className="k-num">{sent.id}</span>)</> : null}. If I
+            need anything else, I’ll reply to {sent?.email || 'your email'}.
           </p>
         </div>
       </DialogContent>
@@ -289,7 +288,6 @@ function HelpContent({
     <DialogContent
       className="help"
       title="Help"
-      description="Stuck, something not working, or have an idea? Here’s how to reach us."
       footer={
         <DialogClose asChild>
           <Button variant="primary">Close</Button>
@@ -310,14 +308,12 @@ function HelpContent({
         <Choice
           icon={<Bug />}
           title="Report a bug"
-          detail="Tell us what went wrong. Every report is read."
           trailing={<ChevronRight />}
           onClick={() => setStep('bug')}
         />
         <Choice
           icon={<Lightbulb />}
           title="Request a feature"
-          detail="Something you wish Kimochi did? We’d love to hear it."
           trailing={<ChevronRight />}
           onClick={() => setStep('feature')}
         />

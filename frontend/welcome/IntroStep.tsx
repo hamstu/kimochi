@@ -45,8 +45,7 @@ export default function IntroStep({ next }: { next: string }): JSX.Element {
       </h1>
       <p className={style.tagline}>Read and play in Japanese.</p>
       <p className={style.introLede}>
-        Kimochi reads the text on your screen and puts every word a hover away from its meaning.
-        A few quick choices and you are ready.
+        Kimochi reads the text on your screen and shows the meaning of any word you hover.
       </p>
       <StepActions>
         <Button

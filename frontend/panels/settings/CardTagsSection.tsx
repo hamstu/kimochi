@@ -33,7 +33,7 @@ export function CardTagsSection(): ReactNode {
       <SettingsRow
         label="Add tags"
         controlId="card-tags-enabled"
-        description="Kimochi tags every new card you make, with any dictionary."
+        description="Tags every new card you make."
       >
         <Switch
           id="card-tags-enabled"

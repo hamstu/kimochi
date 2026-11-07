@@ -17,11 +17,14 @@
   <a href="https://kimochiapp.com"><b>Download Kimochi and learn more at kimochiapp.com →</b></a>
 </p>
 
-<!-- TODO(owner): add one screenshot here. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site-docs/src/assets/screenshots/main-window-dark.webp">
+  <img src="site-docs/src/assets/screenshots/main-window-light.webp" alt="Kimochi's main window: the source and its switches in the sidebar, and the Log of scanned lines.">
+</picture>
 
 ## What it is
 
-Kimochi is a free desktop companion for reading Japanese games and visual novels. It reads the
+Kimochi is a free desktop app for reading Japanese games and visual novels. It reads the
 text on screen, draws it back over the game so you can point at any word to look it up, and keeps
 a running log of every line with audio, Anki export and a notebook for names and places. It is a
 Tauri 2 app (Rust and React), built for macOS first, with Windows and Linux builds.
@@ -113,9 +116,8 @@ as a zip; turn on **Verbose logging** first to record more while you make the pr
 
 ## Contributing
 
-Kimochi is open source under the GPL and open to thoughtful contributions, but it is not
-actively looking for features or collaborators. See [CONTRIBUTING.md](CONTRIBUTING.md) before
-opening anything large.
+Kimochi is open source under the GPL, but it isn't looking for features or collaborators. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening anything large.
 
 ## License
 

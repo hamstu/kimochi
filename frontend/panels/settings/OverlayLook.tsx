@@ -32,8 +32,8 @@ const CARD_CHOICES: readonly {
   icon: ReactNode
 }[] = [
   { value: 'app', label: 'Same as Kimochi', detail: 'Follows Appearance in General.', icon: <Monitor /> },
-  { value: 'light', label: 'Light', detail: 'White cards, whatever the app uses.', icon: <Sun /> },
-  { value: 'dark', label: 'Dark', detail: 'Dark cards, whatever the app uses.', icon: <Moon /> },
+  { value: 'light', label: 'Light', detail: 'White cards.', icon: <Sun /> },
+  { value: 'dark', label: 'Dark', detail: 'Dark cards.', icon: <Moon /> },
   {
     value: 'blend',
     label: 'Blend',

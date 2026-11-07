@@ -21,7 +21,7 @@ export function Compare() {
         First of all, Kimochi was really inspired by all of these apps. So
         credit where credit is due! 🙏
       </p>
-      <p>So how do you decide? To be honest, it depends on what you want.</p>
+      <p>It depends on what you want.</p>
       <ul>
         <li>
           <a href="https://github.com/bpwhelan/GameSentenceMiner">
@@ -47,10 +47,10 @@ export function Compare() {
         </li>
         <li>
           <Link to="/#features">Kimochi</Link> is for you if you want a free,
-          simple app with clean design and UX: you can easily capture, OCR,
+          simple app with clean design and UX: you can capture, OCR,
           overlay, use any dictionary you like (Yomitan, Hachidori, 10ten), keep
           a reading log, and add and enhance your Anki cards. It also works well
-          on a Steam Deck! ⭐
+          on a Steam Deck!
         </li>
       </ul>
       <p>

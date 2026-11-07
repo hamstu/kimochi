@@ -55,7 +55,7 @@ export function HyprlandWindowLink({sourceId}: {sourceId?: string}): React.JSX.E
   }
   return <Dialog open={open} onOpenChange={value => {if (!busy) setOpen(value)}}>
     <DialogContent title="Link the shared window"
-      description="Choose the same window you selected in the system sharing picker. This lets annotations and crop selection follow it on the desktop."
+      description="Choose the same window you selected in the system sharing picker."
       footer={<><Button disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
         <Button variant="primary" disabled={!selected || busy} onClick={() => void link()}>{busy ? 'Linking…' : 'Link window'}</Button></>}>
       {error && <p role="alert">{error}</p>}

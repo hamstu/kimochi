@@ -335,8 +335,7 @@ export function DownloadLinux() {
         </p>
         <h1 className="text-title text-ink">Install Kimochi on Linux</h1>
         <p className="mt-4 text-lede text-ink-2">
-          There are a few ways to install Kimochi on Linux, and the best one depends on your system. Pick yours below
-          and follow along. It only takes a couple of minutes.
+          Pick your system below.
         </p>
       </header>
 
@@ -348,7 +347,7 @@ export function DownloadLinux() {
       <Panel id="steam-deck" active={section === 'steam-deck'}>
         <PanelHeader heading="Steam Deck">
           Install Kimochi once from Desktop Mode. After that it lives in your Steam library, and you can open it in
-          Gaming Mode right alongside your game.
+          Gaming Mode alongside your game.
         </PanelHeader>
         <div className="grid grid-cols-[minmax(0,1fr)] gap-12 md:grid-cols-[minmax(0,1fr)_auto] md:gap-14">
           <Steps>
@@ -398,7 +397,7 @@ export function DownloadLinux() {
       {/* Ubuntu, Debian, Mint, Pop!_OS */}
       <Panel id="debian" active={section === 'debian'}>
         <PanelHeader heading="Ubuntu, Debian, Mint and Pop!_OS">
-          Two good options. The one-line installer is the quickest, and Kimochi then updates itself quietly.
+          The one-line installer is the quickest, and Kimochi then updates itself quietly.
         </PanelHeader>
         {/* Why the installer is recommended over the .deb: both get in-app updates, but a .deb update asks for an
             admin password each time (pkexec dpkg -i), while the installer's AppImage updates silently. */}
@@ -483,7 +482,7 @@ export function DownloadLinux() {
             <div className="mt-3 flex flex-col gap-3 text-body text-ink-2">
               <p>
                 If you used the one-line installer (including on a Steam Deck), run it with <code>--uninstall</code>.
-                Your settings and dictionaries are kept, in case you come back.
+                Your settings and dictionaries are kept.
               </p>
               <CopyCommand command={installCommand(origin, { uninstall: true })} label="Copy the uninstall command" />
               <p>If you installed the .deb:</p>
@@ -498,7 +497,7 @@ export function DownloadLinux() {
             <div className="mt-3 flex flex-col gap-3 text-body text-ink-2">
               <p className="max-w-[65ch]">
                 The AppImage needs FUSE 3, which desktop installs usually come with (the Steam Deck does). The one-line
-                installer checks for it and, if it&rsquo;s missing, sets Kimochi up to run without it; it just starts a
+                installer checks for it and, if it&rsquo;s missing, sets Kimochi up to run without it; it starts a
                 little slower. If you downloaded the AppImage yourself and it doesn&rsquo;t open, install FUSE 3 and try
                 again:
               </p>
@@ -517,7 +516,7 @@ export function DownloadLinux() {
                 <a href={`${GITHUB_URL}/issues`} className={inlineLink}>
                   Open an issue on GitHub
                 </a>{' '}
-                with your distribution and what you see, and we&rsquo;ll help.
+                with your distribution and what you see, and I&rsquo;ll help.
               </p>
             </div>
           </section>

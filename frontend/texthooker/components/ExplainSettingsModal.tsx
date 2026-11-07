@@ -138,7 +138,7 @@ export function ExplainSettingsModal({ open, onOpenChange, settings }: Props) {
           <p className="k-description">
             <span className="k-mono">{"{{context}}"}</span> is replaced with the previous lines
             and <span className="k-mono">{"{{sentence}}"}</span> with the line being explained.
-            Saved when the field loses focus. Cached explanations keep their old text; use
+            Cached explanations keep their old text; use
             Regenerate in the Explain dialog after editing.
           </p>
         </div>

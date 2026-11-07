@@ -225,7 +225,7 @@ function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<
           label="Auto align"
           controlId={id('align')}
           badge={badge('autoAlign')}
-          description="Lines the card up with the game's own text."
+          description="Lines the card up with the game's text."
         >
           <Switch id={id('align')} checked={value.autoAlign} onCheckedChange={(on) => set('autoAlign', on)} />
         </SettingsRow>
@@ -564,7 +564,7 @@ function GamePage({ gameId, game, onBack }: { gameId: string; game: HookGame; on
         title={`Delete ${name}?`}
         description={
           <span className="th-delete-body">
-            <span>Its settings, and what Kimochi learned about it, are removed. It comes back with the defaults if you hook it again.</span>
+            <span>Its settings and what Kimochi learned about it are removed.</span>
             {session && !lastSession && (
               <label className="th-delete-session">
                 <Checkbox checked={withSession} onCheckedChange={(on) => setWithSession(on === true)} />
@@ -630,7 +630,7 @@ function ShowCard(): ReactNode {
       <SettingsRow
         label="Show the card over the game"
         controlId="th-show-card"
-        description="Off, each line still reaches the Log, and Read along shows it while you read. Auto align only reads the screen while the card is shown."
+        description="Auto align only reads the screen while the card is shown."
       >
         <Switch id="th-show-card" checked={shown !== false} onCheckedChange={(on) => void setShown(on)} />
       </SettingsRow>

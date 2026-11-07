@@ -6,8 +6,7 @@ description: Every line Kimochi reads, kept per session, with lookups, translati
 import Screenshot from '../../../components/Screenshot.astro'
 
 The **Log** is the main window's transcript: every line from your source, newest at the bottom, with
-the time it arrived. Skipped a line too fast? Scroll back. Pick up tomorrow where you left off. Each
-game or book has its own [session](/log/sessions/).
+the time it arrived. Each game or book has its own [session](/log/sessions/).
 
 <Screenshot id="main-window" alt="The Log with a session of Japanese lines, one translated into English, and names from the Notebook shown as chips." width={900} />
 
@@ -16,10 +15,6 @@ game or book has its own [session](/log/sessions/).
   things); click one for its card.
 - The Log shows the latest 100 lines; **Show earlier lines** loads 100 more.
 - A divider marks each new day when a session spans several.
-
-Before the first scan the Log says **No lines yet**, with a shortcut to **Source settings**.
-
-<Screenshot id="log-empty" alt="An empty Log: No lines yet, with a Source settings button." width={720} />
 
 ## Line actions
 
@@ -57,7 +52,7 @@ The footer shows this session's reading stats, the text size buttons and the ses
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| **Drop lines** | No Japanese | Skips lines that aren't Japanese, on a three-step scale. **No Japanese** drops lines without a single Japanese character; **Mostly not Japanese** also drops lines where more of the text isn't Japanese than is (spaces and punctuation aside), such as OCR junk or an English menu item; **Off** keeps everything. The overlay follows it too; it's also in **Settings → OCR & Overlay**. |
+| **Drop lines** | No Japanese | Skips lines that aren't Japanese, on a three-step scale. **No Japanese** drops lines without a single Japanese character; **Mostly not Japanese** also drops lines where more of the text isn't Japanese than is (spaces and punctuation aside), such as OCR junk or an English menu item; **Off** keeps everything. The overlay follows it too. |
 | **Skip repeats** | 1 | Drops a line that matches any of the last N lines. |
 | **Merge streamed lines** | Off | Joins lines that arrive a piece at a time, comparing the first **Characters to compare** (4). |
 | **Keep at most** | 5000 | Lines per session. |

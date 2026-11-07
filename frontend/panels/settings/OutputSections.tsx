@@ -14,7 +14,7 @@ export function OutputSections() {
   return (
     <SettingsSection
       title="Output"
-      description="Send OCR scans to other tools. These work independently of the input source."
+      description="Send OCR scans to other tools."
     >
       <SettingsRow label="Copy scans to clipboard" controlId="texthooker-out-clipboard">
         <Switch

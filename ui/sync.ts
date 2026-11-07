@@ -116,7 +116,7 @@ export function syncStateLine(status: SyncStatus, now: number): string {
     case 'syncing':
       return 'Syncing…'
     case 'offline':
-      return `Offline: everything stays on this computer and syncs when Kimochi cloud can be reached.${pending}`
+      return `Offline: changes sync when Kimochi cloud can be reached.${pending}`
     case 'signed-out':
       return 'Sign in again to keep this account in sync.'
     case 'error':

@@ -79,24 +79,24 @@ const MESSAGES = {
   oauth_cancelled: 'Sign-in was cancelled. Nothing was changed.',
   invalid_state: 'That sign-in attempt timed out or was started in another tab. Please try again.',
   state_mismatch: 'That sign-in attempt timed out or was started in another tab. Please try again.',
-  oauth_failed: 'We could not finish signing you in with that provider. Please try again.',
-  provider_error: 'We could not finish signing you in with that provider. Please try again.',
+  oauth_failed: 'Couldn’t finish signing in with that provider. Please try again.',
+  provider_error: 'Couldn’t finish signing in with that provider. Please try again.',
   already_linked: 'That account is already connected to a different Kimochi account.',
   identity_in_use: 'That account is already connected to a different Kimochi account.',
   email_unverified:
-    'That provider did not confirm your email address, so we could not match it to an account. Try another way to sign in.',
-  suspended: 'This account is suspended. Contact us if you think this is a mistake.',
+    'That provider did not confirm your email address, so it couldn’t be matched to an account. Try another way to sign in.',
+  suspended: 'This account is suspended. Get in touch if you think this is a mistake.',
   unauthorized: 'Please sign in to continue.',
   forbidden: 'That action was blocked. Reload the page and try again.',
-  not_found: 'We could not find that.',
+  not_found: 'Couldn’t find that.',
   invalid: 'Something in that request was not right. Check it and try again.',
   conflict: 'That conflicts with something that already exists.',
   rate_limited: 'Too many attempts. Wait a few minutes and try again.',
   quota_exceeded: 'You have used this month’s allowance for that.',
   not_configured: 'That service is not set up on this server yet.',
   upstream: 'A service Kimochi relies on did not answer. Please try again in a moment.',
-  internal: 'Something went wrong on our side. Please try again.',
-  network: 'We could not reach Kimochi’s server. Check your connection and try again.'
+  internal: 'Something went wrong on the server. Please try again.',
+  network: 'Couldn’t reach Kimochi’s server. Check your connection and try again.'
 }
 
 /**

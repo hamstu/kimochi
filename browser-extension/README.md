@@ -21,8 +21,8 @@ protocol is under "Browser bridge" in COMMANDS.md.
 ## Install for development
 
 1. Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick
-   `browser-extension/extension`. Settings → Sources → Browser extension → **Show folder** opens
-   the same folder.
+   `browser-extension/extension`. **Settings → Browser Extension** → **Show folder** opens the same
+   folder.
 2. Run Kimochi. A development build listens on port 27641, the app on 27640, and the extension
    tries both.
 3. Click Kimochi in the toolbar (or press Alt+K) and click a picture.

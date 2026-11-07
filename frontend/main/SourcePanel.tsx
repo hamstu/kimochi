@@ -269,9 +269,6 @@ function SourceRow({
           <>
             <p>{info}</p>
             {caution && <p className="src-info-caution">{caution}</p>}
-            <p className="src-info-more">
-              Click <Settings aria-label="the cog" /> to change its settings.
-            </p>
           </>
         }
       >
@@ -337,7 +334,7 @@ function EnhanceCardsRow({ quickShot }: { quickShot?: boolean }): ReactNode {
       icon={<Sparkles aria-hidden />}
       label="Enhance Anki cards"
       checked={anyOn}
-      info="Adds to the new cards you make in Anki: the audio of the line, recorded from what your computer plays; a screenshot of your source; and tags. While sentence audio is on, Kimochi's sound effects are off so they stay out of the recordings."
+      info="Adds the line's audio, a screenshot of your source and tags to new Anki cards. Sound effects are muted while sentence audio is on."
       caution={cautions.length > 0 ? cautions.join(' ') : undefined}
       settingsLabel="Card enhancement settings"
       onToggle={() => {
@@ -670,7 +667,7 @@ function SourceMenuContent({
             type={{
               ...windowType,
               icon: <ScreenShare />,
-              detail: 'Choose in system picker: your desktop shows its own dialog.'
+              detail: "Opens your desktop's picker."
             }}
             selected={mode === 'ocr'}
           />
@@ -1189,7 +1186,7 @@ export function SourcePanel({
       checked={!overlayUnavailable && overlayOn}
       disabled={overlayUnavailable}
       title={overlayUnavailable ? 'Native overlay is unavailable on this desktop.' : undefined}
-      info="Draws the scanned text over your source, so you can point at a word to look it up."
+      info="Draws the scanned text over your source; point at a word to look it up."
       settingsLabel="Overlay settings"
       onToggle={() => controller.onToggleTextOverlayVisibility()}
       onSettings={() => openSettingsTab('ocr')}
@@ -1228,7 +1225,7 @@ export function SourcePanel({
               icon={<ScanSearch aria-hidden />}
               label="Auto OCR"
               checked={controller.isAutoOCREnabled}
-              info="Scans on its own whenever the text on your source changes, so new lines reach the Log without pressing Scan."
+              info="Scans when the text on your source changes."
               settingsLabel="Auto OCR settings"
               onToggle={() => controller.onToggleAutoOCR()}
               onSettings={() => openSettingsTab('ocr')}
@@ -1264,7 +1261,7 @@ export function SourcePanel({
                 icon={<ScanSearch aria-hidden />}
                 label="Auto align"
                 checked={placement.on}
-                info="Lines the card up with the game's own text, found by OCR in the background (the OCR model is in the sidebar). Off, drag the card by its top edge and resize it by its corner. This switch is for this game; the default for every game is in Text Hooker settings."
+                info="Lines the card up with the game's text, found by OCR. Off, drag the card by its top edge and resize it by its corner."
                 settingsLabel="Text Hooker settings"
                 onToggle={placement.toggle}
                 onSettings={() => void openTextHookerSettings(hook.exe)}
