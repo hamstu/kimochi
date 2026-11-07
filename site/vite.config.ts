@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -42,12 +42,32 @@ function previewNotFound(): Plugin {
   }
 }
 
+/**
+ * Local-only art under public/ (git-ignored): the guide's Sutemo layers, for the dev server's Guide
+ * art switcher, and its first, AI-made faces. Vite copies all of public/ into the build; these are
+ * taken out again so they are never deployed.
+ */
+const LOCAL_ONLY = ['guide/sutemo', 'guide/original']
+function dropLocalOnly(): Plugin {
+  let outDir = ''
+  return {
+    name: 'kimochi-drop-local-only',
+    apply: 'build',
+    configResolved(config) {
+      outDir = isAbsolute(config.build.outDir) ? config.build.outDir : join(config.root, config.build.outDir)
+    },
+    closeBundle() {
+      for (const dir of LOCAL_ONLY) rmSync(join(outDir, dir), { recursive: true, force: true })
+    }
+  }
+}
+
 // Static marketing site for Kimochi. Output is plain files in site/dist, served from the domain
 // root: every route is a prerendered .html file (scripts/prerender.mjs) and unknown paths should
 // get dist/404.html with status 404. In production the kimochi-server Worker serves dist/ (see
 // SEO_TODO.md for its not_found_handling setting); public/_headers sets cache and robots headers.
 export default defineConfig({
-  plugins: [react(), tailwindcss(), previewNotFound()],
+  plugins: [react(), tailwindcss(), previewNotFound(), dropLocalOnly()],
   base: '/',
   resolve: { alias: { '@kimochi/demo-content': DEMO_CONTENT, '@kimochi/credits': CREDITS } },
   server: {
