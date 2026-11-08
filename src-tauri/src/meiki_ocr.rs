@@ -213,6 +213,8 @@ fn initialize_runtime(root: &Path) -> Result<(), String> {
             if !library.is_file() {
                 return Err(RUNTIME_MISSING.into());
             }
+            #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+            let _muted = windows_dll::MuteStderr::new();
             #[cfg(target_os = "windows")]
             windows_dll::prepare(runtime_dir, &library)
                 .map_err(|e| format!("{e} (runtime files: {})", files.join(", ")))?;
@@ -225,10 +227,27 @@ fn initialize_runtime(root: &Path) -> Result<(), String> {
                         files.join(", ")
                     )
                 })?
-                .map(|_| ())
-                .map_err(|e| format!("MeikiOCR runtime: {e}"))
+                .map_err(|e| format!("MeikiOCR runtime: {e}"))?;
+            quiet_runtime_log();
+            Ok(())
         })
         .clone()
+}
+
+/// ONNX Runtime's own log shows fatal errors only, unless `ORT_LOG` asks for more (`ort` reads it
+/// when it creates the environment). Its errors are the DirectML provider failing on an adapter
+/// that refuses it (Windows on ARM under virtualisation): one per session at every launch, for a
+/// fallback to the CPU that worked and that the engines already report (`backend_info`, the
+/// capability probe). Every other failure reaches Kimochi as the error the call returns.
+///
+/// Not a custom logger: `ort` 2.0.0-rc.10 hands ONNX Runtime a pointer to the logger before
+/// moving it, and the first message then crashes the process.
+fn quiet_runtime_log() {
+    if std::env::var_os("ORT_LOG").is_none() {
+        if let Ok(env) = ort::environment::get_environment() {
+            env.set_log_level(ort::logging::LogLevel::Fatal);
+        }
+    }
 }
 
 /// The bundled ONNX Runtime, initialised for the whole process, for another model that runs on
@@ -389,6 +408,42 @@ mod windows_dll {
     } else {
         &["vcruntime140.dll", "msvcp140.dll"]
     };
+
+    /// Points the process's stderr at `NUL` while ONNX Runtime loads. On Windows on ARM its copy
+    /// of cpuinfo prints "Error in cpuinfo: Unknown chip model name" straight to stderr for any
+    /// chip missing from its table (Apple silicon under virtualisation, new Snapdragons), at every
+    /// launch, through no API Kimochi can configure. It only means cpuinfo's per-chip tuning is
+    /// skipped; the runtime works. Rust's `eprintln!` looks the handle up on each write, so a line
+    /// another thread logs during the load is lost with it: the load takes milliseconds.
+    #[cfg(target_arch = "aarch64")]
+    pub struct MuteStderr {
+        previous: windows::Win32::Foundation::HANDLE,
+        _nul: std::fs::File,
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    impl MuteStderr {
+        pub fn new() -> Option<Self> {
+            use std::os::windows::io::AsRawHandle;
+            use windows::Win32::Foundation::HANDLE;
+            use windows::Win32::System::Console::{GetStdHandle, SetStdHandle, STD_ERROR_HANDLE};
+            let nul = std::fs::OpenOptions::new().write(true).open("NUL").ok()?;
+            unsafe {
+                let previous = GetStdHandle(STD_ERROR_HANDLE).ok()?;
+                SetStdHandle(STD_ERROR_HANDLE, HANDLE(nul.as_raw_handle())).ok()?;
+                Some(Self { previous, _nul: nul })
+            }
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    impl Drop for MuteStderr {
+        fn drop(&mut self) {
+            use windows::Win32::System::Console::{SetStdHandle, STD_ERROR_HANDLE};
+            // Restored before `_nul` closes, so stderr never names a closed handle.
+            let _ = unsafe { SetStdHandle(STD_ERROR_HANDLE, self.previous) };
+        }
+    }
 
     fn load(path: &HSTRING) -> windows::core::Result<()> {
         // Handles are intentionally kept: ORT loads these same modules next.
