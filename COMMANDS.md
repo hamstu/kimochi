@@ -866,8 +866,11 @@ Hachidori's origin (`platform::extension_origin`) once its storage lives there, 
 and Linux. 10ten keeps its scheme.
 
 - **Port.** Part of the origin, so chosen once and kept in `extension-origins.json` (app data
-  directory, per flavor: `release` prefers 27631, a dev build 27632, the next free one up to 24
-  above on a first run). Bound before any window is built. If the saved port is taken after the
+  directory, entry `release`, preferring 27631, the next free one up to 24 above on a first run).
+  A dev build uses the installed app's entry and port, since it shares the app's webview store
+  and `chrome-local-hachidori.json` (when there is no `release` entry yet, it adopts its old `dev`
+  one). The exception is the bare macOS dev executable, which has a WebKit store and storage file
+  of its own: it keeps entry `dev`, preferring 27632. Bound before any window is built. If the saved port is taken after the
   switch, Hachidori does not start (`extension_window_ensure` fails with `unavailable: …`) rather
   than show no dictionaries or load another program's pages; `{check: 'hachidori-origin'}` in the
   log says which session it is (`scheme`, `loopback`, `unavailable`) and why.

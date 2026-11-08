@@ -8,8 +8,14 @@
 //!
 //! **The port is part of the origin**, and the engine's dictionaries live in that origin's
 //! IndexedDB, so the port is chosen once and kept (`extension-origins.json` in the app data
-//! directory, one entry per build flavor: a dev build and a bundle can run side by side and keep
-//! separate WebKit stores anyway). The listener is bound before any window is built; when the
+//! directory). **A dev build and the installed app use the same port** wherever they share one
+//! webview store (Windows, Linux, a bundled macOS build): they share `chrome-local-hachidori.json`,
+//! so they must share the origin that file describes. With a port each, every switch between the
+//! two found the other's dictionaries missing and reset the list. They never run at once (the
+//! single-instance plugin, macOS `take_over`), so one port is never contended between them. Only
+//! the bare macOS dev executable, which has a WebKit store and a storage file of its own
+//! (`extensions::SEPARATE_EXTENSION_STORAGE`), keeps an entry and a port of its own. The
+//! listener is bound before any window is built; when the
 //! port cannot be had the session never names that origin, so another process holding it can
 //! never serve code into Kimochi's windows.
 //!
@@ -41,16 +47,27 @@ pub const MIGRATE_WINDOW: &str = "ext-migrate-hachidori";
 pub const MIGRATE_PAGE: &str = "/__kimochi/ext-migrate.html";
 const STATE_FILE: &str = "extension-origins.json";
 /// Below every OS's ephemeral range (macOS 49152+, Linux 32768+), so an outgoing connection
-/// never holds it. A dev build and a bundle each have their own.
-const PREFERRED_PORT: u16 = if cfg!(dev) { 27632 } else { 27631 };
+/// never holds it. Shared by a dev build and the installed app, except where the dev build has a
+/// store of its own.
+const PREFERRED_PORT: u16 = if OWN_STORE { 27632 } else { 27631 };
 /// Tried in turn when the preferred port is taken on the first run (before any data lives on it).
 const ALTERNATES: u16 = 24;
 /// A copy that has failed this often is not retried; the old origin keeps working.
 const MAX_ATTEMPTS: u32 = 3;
 /// How long the copy may take before it is abandoned.
 const MIGRATION_TIMEOUT_SECS: u64 = 20 * 60;
-/// The flavor key in the state file.
+/// The build flavor, for the log and the copy's staging directory.
 const FLAVOR: &str = if cfg!(dev) { "dev" } else { "release" };
+/// This build has a webview store of its own, not the installed app's (the bare macOS dev
+/// executable).
+const OWN_STORE: bool = crate::extensions::SEPARATE_EXTENSION_STORAGE;
+/// The state file's key for this build's store: `release` for every build that shares the
+/// installed app's store, `dev` for one with its own.
+const STORE_KEY: &str = if OWN_STORE { "dev" } else { "release" };
+/// Before the dev build shared the installed app's origin it kept its own entry under `dev`,
+/// even where both share a store. Read when there is no `release` entry yet, so a machine that
+/// only ever ran a dev build keeps the origin its dictionaries are on.
+const LEGACY_KEY: Option<&str> = if OWN_STORE { None } else { Some("dev") };
 
 /// This launch's origin for Hachidori.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -275,9 +292,15 @@ fn load_entry(path: &Path) -> Entry {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .and_then(|v| v.get(ENGINE)?.get(FLAVOR).cloned())
-        .and_then(|v| serde_json::from_value(v).ok())
+        .map(|all| entry_in(&all, STORE_KEY, LEGACY_KEY))
         .unwrap_or_default()
+}
+
+/// The entry under `key`, else (when there is none) under `legacy`.
+fn entry_in(all: &Value, key: &str, legacy: Option<&str>) -> Entry {
+    let engine = all.get(ENGINE);
+    let read = |key: &str| engine?.get(key).cloned().and_then(|v| serde_json::from_value::<Entry>(v).ok());
+    read(key).or_else(|| legacy.and_then(read)).unwrap_or_default()
 }
 
 fn save_entry(app: &tauri::AppHandle, entry: &Entry) {
@@ -290,7 +313,7 @@ fn save_entry(app: &tauri::AppHandle, entry: &Entry) {
     if !all.get(ENGINE).is_some_and(Value::is_object) {
         all[ENGINE] = json!({});
     }
-    all[ENGINE][FLAVOR] = serde_json::to_value(entry).unwrap_or(Value::Null);
+    all[ENGINE][STORE_KEY] = serde_json::to_value(entry).unwrap_or(Value::Null);
     let tmp = path.with_extension("json.tmp");
     if std::fs::write(&tmp, serde_json::to_vec_pretty(&all).unwrap_or_default()).is_ok() {
         let _ = std::fs::rename(&tmp, &path);
@@ -778,6 +801,24 @@ pub fn plugin_command_allowed(label: &str, command: &str) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dev_build_shares_the_installed_apps_entry_and_adopts_its_own_old_one_only_alone() {
+        let both = json!({ ENGINE: {
+            "release": { "port": 27631, "switched": true },
+            "dev": { "port": 27632, "switched": true },
+        }});
+        assert_eq!(entry_in(&both, "release", Some("dev")).port, Some(27631));
+        let dev_only = json!({ ENGINE: { "dev": { "port": 27632, "switched": true } } });
+        let adopted = entry_in(&dev_only, "release", Some("dev"));
+        assert_eq!((adopted.port, adopted.switched), (Some(27632), true));
+        // A build with a store of its own never reads another store's entry.
+        assert_eq!(entry_in(&json!({ ENGINE: { "release": { "port": 27631 } } }), "dev", None), Entry::default());
+        assert_eq!(entry_in(&json!({}), "release", Some("dev")), Entry::default());
+        if !OWN_STORE {
+            assert_eq!((STORE_KEY, PREFERRED_PORT), ("release", 27631));
+        }
+    }
 
     fn copied(port: u16, fingerprint: &str) -> Entry {
         Entry {
