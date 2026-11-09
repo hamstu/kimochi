@@ -8,8 +8,9 @@
 //!
 //! Matching is exact containment after normalising width, punctuation and whitespace, never
 //! fuzzy: a fuzzy match is easily fooled by a nameplate or HUD string that shares a few
-//! characters with the dialogue. Ties go to engine-named hooks over the generic Windows API
-//! hooks, to mostly-Japanese text, and away from threads that repeat themselves rapidly.
+//! characters with the dialogue. An engine's own hook is preferred to a generic one (on a Windows
+//! API, or on a script runtime's strings), even one that matches more of the screen; ties go to
+//! mostly-Japanese text, and away from threads that repeat themselves rapidly.
 //!
 //! A choice is remembered per game by `hookcode`, `ctx & 0xFFFF` and `ctx2 & 0xFFFF`
 //! ([`Signature`]), not by the hook address or the thread number: those change with every
@@ -54,6 +55,8 @@ pub struct Block {
 pub struct Candidate<'a> {
     pub key: &'a str,
     pub hookcode: &'a str,
+    /// The hook's name as the hooker gives it (`v8::String::Write`, `TextOutW`).
+    pub name: &'a str,
     /// The thread's most recent sentence.
     pub text: &'a str,
     /// Sentences it produced in the last few seconds; a flood is engine noise, not dialogue.
@@ -125,6 +128,14 @@ pub fn is_generic_api_hook(hookcode: &str) -> bool {
     ]
     .iter()
     .any(|module| lower.contains(module))
+}
+
+/// A generic hook: one on a Windows API ([`is_generic_api_hook`]), or one LunaHook puts on a
+/// script runtime's string functions, which every string the game's script handles passes
+/// through (`v8::String::Write` in an Electron or NW.js game), not its text box. Such a hook is in
+/// the game's own image, so only its name tells it apart.
+pub fn is_generic(hookcode: &str, name: &str) -> bool {
+    is_generic_api_hook(hookcode) || name.starts_with("v8::")
 }
 
 /// Groups OCR lines into blocks: a line joins the previous block when it starts within a line
@@ -221,7 +232,12 @@ pub fn score(candidates: &[Candidate], blocks: &[Block]) -> Vec<Scored> {
                 score *= 2.0;
             }
             score += 4.0 * japanese_ratio(&text);
-            if !is_generic_api_hook(candidate.hookcode) {
+            // An engine's own hook over a generic one, even where the generic one matches more:
+            // a generic hook sees every string the game handles, so it holds the line together
+            // with whatever was drawn or built beside it (a speaker's name, markup).
+            if is_generic(candidate.hookcode, candidate.name) {
+                score *= 0.6;
+            } else {
                 score += 3.0;
             }
             // Of threads that show the same line, one that has spoken before: some hooks start a
@@ -690,8 +706,8 @@ mod tests {
         let set_text = collapse_typewriter(fixture["setText"].as_str().unwrap());
         let inequality = collapse_typewriter(fixture["opInequality"].as_str().unwrap());
         let candidates = [
-            Candidate { key: "inequality", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", text: &inequality, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "set_text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: &set_text, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "inequality", hookcode: "HMF1@mscorlib:System:String:op_Inequality:2:JIT:UNITY", name: "", text: &inequality, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "set_text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: &set_text, recent: 1, count: 1, noise: 0.0 },
         ];
         let screen = [
             line("AUTO SKIP LOG", 1290.0, 820.0, 300.0, 24.0),
@@ -705,7 +721,7 @@ mod tests {
     #[test]
     fn a_path_that_shares_the_window_title_is_never_chosen() {
         let path = "C:\\Users\\me\\Games\\Sample Game\\Sample Game_Data\\StreamingAssets";
-        let candidates = [Candidate { key: "path", hookcode: "HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", text: path, recent: 1, count: 1, noise: 0.0 }];
+        let candidates = [Candidate { key: "path", hookcode: "HQXF1@mscorlib:System:String:Substring:2:JIT:UNITY", name: "", text: path, recent: 1, count: 1, noise: 0.0 }];
         let screen = [
             line("Sample Game", 10.0, 5.0, 200.0, 20.0),
             line("「静かな港町に流れ着いた古い手紙により", 430.0, 880.0, 700.0, 32.0),
@@ -717,8 +733,8 @@ mod tests {
     fn of_a_text_and_its_shadow_the_unwrapped_copy_wins() {
         let screen = [line("「最後の答えは、少年の手に残されました」", 430.0, 880.0, 700.0, 32.0)];
         let candidates = [
-            Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: "「最\n後の答えは、\n少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", text: "「最後の答えは、少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "shadow", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最\n後の答えは、\n少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "text", hookcode: "EHMF2@UnityEngine.UI:UnityEngine.UI:Text:set_text:1:JIT:UNITY", name: "", text: "「最後の答えは、少年の手に残されました」", recent: 1, count: 1, noise: 0.0 },
         ];
         assert_eq!(score(&candidates, &blocks(&screen))[0].key, "text");
     }
@@ -767,12 +783,13 @@ mod tests {
     #[test]
     fn the_dialogue_thread_beats_the_nameplate_hud_and_menu() {
         let candidates = [
-            Candidate { key: "name", hookcode: "HQ-24@0:user32.dll:DrawTextW", text: "ミサキ", recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "hud", hookcode: "HQ-24@0:user32.dll:DrawTextExW", text: "オート　スキップ　セーブ", recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "menu", hookcode: "HQ-24@0:gdiplus.dll:GdipDrawString", text: "回想音楽想回日本語の本を読むにほんご", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "name", hookcode: "HQ-24@0:user32.dll:DrawTextW", name: "", text: "ミサキ", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "hud", hookcode: "HQ-24@0:user32.dll:DrawTextExW", name: "", text: "オート　スキップ　セーブ", recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "menu", hookcode: "HQ-24@0:gdiplus.dll:GdipDrawString", name: "", text: "回想音楽想回日本語の本を読むにほんご", recent: 1, count: 1, noise: 0.0 },
             Candidate {
                 key: "dialogue",
                 hookcode: "HQ-54@0:gdi32.dll:TextOutW",
+                name: "",
                 text: "今日は猫と一緒に学校へ行きます。青い空と静かな海が好きです。",
                 recent: 1,
                 count: 1,
@@ -791,6 +808,7 @@ mod tests {
         let candidates = [Candidate {
             key: "dialogue",
             hookcode: "HQ-54@0:gdi32.dll:TextOutW",
+            name: "",
             text: "明日は友達と日本語の本を読みます。青い空と静かな海が好きです。",
             recent: 1,
             count: 1,
@@ -807,12 +825,27 @@ mod tests {
         let blocks = vec![Block { text: normalize("今日は猫と一緒に学校へ行きます"), area: 100.0 }];
         let text = "今日は猫と一緒に学校へ行きます";
         let candidates = [
-            Candidate { key: "api", hookcode: "HQ-54@0:gdi32.dll:TextOutW", text, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "engine", hookcode: "HS-8@1A2B3:Game.exe", text, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "flood", hookcode: "HS-4@4C5D6:Game.exe", text, recent: 40, count: 1, noise: 0.0 },
+            Candidate { key: "api", hookcode: "HQ-54@0:gdi32.dll:TextOutW", name: "", text, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "engine", hookcode: "HS-8@1A2B3:Game.exe", name: "", text, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "flood", hookcode: "HS-4@4C5D6:Game.exe", name: "", text, recent: 40, count: 1, noise: 0.0 },
         ];
         let scored = score(&candidates, &blocks);
         assert_eq!(scored.iter().map(|s| s.key.as_str()).collect::<Vec<_>>(), ["engine", "api", "flood"]);
+    }
+
+    #[test]
+    fn a_script_engines_own_hook_beats_its_runtimes_strings() {
+        // TyranoScript on Electron: LunaHook's tyranoscript hook sends the line; V8's string
+        // functions send it too, with the speaker's name drawn above it in the same box.
+        let screen = [line("お母さん", 120.0, 560.0, 120.0, 30.0), line("おはよう。今日は朝から雨だよ。早く梅雨明けしないもんかね。", 120.0, 600.0, 900.0, 30.0)];
+        let candidates = [
+            Candidate { key: "v8", hookcode: "HVX0@292530:game.exe", name: "v8::String::Write", text: "お母さんおはよう。今日は朝から雨だよ。早く梅雨明けしないもんかね。", recent: 1, count: 16, noise: 0.0 },
+            Candidate { key: "tyrano", hookcode: "EXHQXFN0@8CDC0:LunaHook64.dll", name: "tyranoscript", text: "おはよう。今日は朝から雨だよ。早く梅雨明けしないもんかね。\n", recent: 1, count: 9, noise: 0.0 },
+        ];
+        let scored = score(&candidates, &blocks(&screen));
+        assert_eq!(scored[0].key, "tyrano");
+        assert!(is_generic("HVX0@292530:game.exe", "v8::String::Length"));
+        assert!(!is_generic("EXHQXFN0@8CDC0:LunaHook64.dll", "tyranoscript"));
     }
 
     #[test]
@@ -822,10 +855,10 @@ mod tests {
         let blocks = vec![Block { text: normalize("「本当ですか？　助かります」"), area: 100.0 }];
         let text = "「本当ですか？　助かります」";
         let candidates = [
-            Candidate { key: "per-line", hookcode: "HWXN0@1A2B3:Game.exe", text, recent: 1, count: 1, noise: 0.0 },
-            Candidate { key: "lasting", hookcode: "HW-4@4C5D6:Game.exe", text, recent: 1, count: 12, noise: 0.0 },
+            Candidate { key: "per-line", hookcode: "HWXN0@1A2B3:Game.exe", name: "", text, recent: 1, count: 1, noise: 0.0 },
+            Candidate { key: "lasting", hookcode: "HW-4@4C5D6:Game.exe", name: "", text, recent: 1, count: 12, noise: 0.0 },
             // The same hook in another context: the dialogue, mixed in with the script's codes.
-            Candidate { key: "mixed", hookcode: "HW-4@4C5D6:Game.exe", text, recent: 1, count: 40, noise: 0.6 },
+            Candidate { key: "mixed", hookcode: "HW-4@4C5D6:Game.exe", name: "", text, recent: 1, count: 40, noise: 0.6 },
         ];
         let order: Vec<String> = score(&candidates, &blocks).into_iter().map(|s| s.key).collect();
         assert_eq!(order, ["lasting", "per-line", "mixed"]);

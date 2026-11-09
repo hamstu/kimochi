@@ -2,7 +2,8 @@
 //!
 //! - The window's owning process comes from its source id (`windows:window:<hwnd>:<pid>`).
 //! - A thin launcher's real engine runs as a child with another image extension
-//!   (`game.exe` starting `game.bin` or `game.log`); those children are hooked too.
+//!   (`game.exe` starting `game.bin` or `game.log`); those children are hooked too, and so are
+//!   children running the same program (an Electron or NW.js game's renderers).
 //! - Bitness comes from the image's PE header, corrected by what the process actually runs
 //!   as: a .NET "Any CPU" image says i386 in its header but runs 64-bit (or ARM64).
 //! - On Linux the window's process is a Wine loader running a Windows game (`wine.rs`); its
@@ -59,6 +60,13 @@ pub fn is_engine_child(exe: &Path) -> bool {
     exe.extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
         .is_some_and(|e| matches!(e.as_str(), "bin" | "log" | "dat"))
+}
+
+/// A child running the same program as its parent: a Chromium-based game's renderer (Electron,
+/// NW.js), where TyranoScript's and RPG Maker MV/MZ's script, and so their text, run.
+#[cfg(any(windows, test))]
+pub fn is_same_program(parent: Option<&str>, child: &str) -> bool {
+    parent.is_some_and(|parent| parent.eq_ignore_ascii_case(child))
 }
 
 #[cfg(windows)]
@@ -175,16 +183,18 @@ mod imp {
         out
     }
 
-    /// The window's process and its engine children (a launcher's `.bin`/`.log` process), each
-    /// that can be hooked.
+    /// The window's process and its engine children (a launcher's `.bin`/`.log` process, and the
+    /// renderer processes an Electron or NW.js game runs its script in), each that can be hooked.
     pub fn game_processes(pid: u32) -> Vec<Target> {
         let all = processes();
+        let name_of = |pid: u32| all.iter().find(|(p, _, _)| *p == pid).map(|(_, _, name)| name.as_str());
         let mut pids = vec![pid];
         let mut i = 0;
         while i < pids.len() {
             let parent = pids[i];
+            let parent_name = name_of(parent);
             for (child, ppid, name) in &all {
-                if *ppid == parent && !pids.contains(child) && is_engine_child(Path::new(name)) {
+                if *ppid == parent && !pids.contains(child) && (is_engine_child(Path::new(name)) || is_same_program(parent_name, name)) {
                     pids.push(*child);
                 }
             }
@@ -241,6 +251,15 @@ mod tests {
         assert!(is_engine_child(Path::new("C:\\Games\\VN\\game.bin")));
         assert!(is_engine_child(Path::new("Game.LOG")));
         assert!(!is_engine_child(Path::new("C:\\Games\\VN\\updater.exe")));
+    }
+
+    #[test]
+    fn a_chromium_games_renderers_are_hooked_with_it() {
+        // An Electron game's window belongs to its browser process; the script, and its text,
+        // run in its children of the same name.
+        assert!(is_same_program(Some("Game.exe"), "game.exe"));
+        assert!(!is_same_program(Some("Game.exe"), "crashpad_handler.exe"));
+        assert!(!is_same_program(None, "game.exe"));
     }
 
     #[test]

@@ -244,7 +244,7 @@ impl Hook {
 fn status_of(session: &Session) -> Value {
     let mut threads: Vec<&Thread> = session.threads.iter().filter(|t| !t.text.is_empty()).collect();
     // Engine hooks first, then the busiest: the order a person scans for the dialogue.
-    threads.sort_by_key(|t| (pick::is_generic_api_hook(&t.hookcode), std::cmp::Reverse(t.last_at)));
+    threads.sort_by_key(|t| (pick::is_generic(&t.hookcode, &t.name), std::cmp::Reverse(t.last_at)));
     let manifest = store::manifest();
     json!({
         "supported": cfg!(any(windows, target_os = "linux")),
@@ -267,7 +267,7 @@ fn status_of(session: &Session) -> Value {
             "hookcode": t.hookcode,
             "preview": t.text.chars().rev().take(160).collect::<Vec<_>>().into_iter().rev().collect::<String>(),
             "count": t.count,
-            "generic": pick::is_generic_api_hook(&t.hookcode),
+            "generic": pick::is_generic(&t.hookcode, &t.name),
             "selected": session.selected.as_deref() == Some(t.key.as_str()),
         })).collect::<Vec<_>>(),
     })
@@ -696,7 +696,7 @@ fn cleaner_thread(session: &Session, index: usize) -> Option<String> {
     let others: Vec<&Thread> = if spoken.key == selected { session.threads.iter().collect() } else { vec![spoken] };
     others
         .into_iter()
-        .filter(|t| t.key != selected && t.noisy == 0 && t.count >= 3 && !pick::is_generic_api_hook(&t.hookcode))
+        .filter(|t| t.key != selected && t.noisy == 0 && t.count >= 3 && !pick::is_generic(&t.hookcode, &t.name))
         .find(|t| {
             let text = pick::normalize(&t.text);
             let length = text.chars().count();
@@ -743,7 +743,7 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
         let outcome = read_screen(hook, &source_id, observer_engine.as_deref()).map(|blocks| {
             let list: Vec<Candidate> = candidates
                 .iter()
-                .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, text: &t.text, recent: t.recent_count(), count: t.count, noise: t.noisy as f64 / t.count.max(1) as f64 })
+                .map(|t| Candidate { key: &t.key, hookcode: &t.hookcode, name: &t.name, text: &t.text, recent: t.recent_count(), count: t.count, noise: t.noisy as f64 / t.count.max(1) as f64 })
                 .collect();
             pick::score(&list, &blocks)
         });
