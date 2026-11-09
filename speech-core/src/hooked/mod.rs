@@ -274,6 +274,38 @@ impl Hooked {
             _ => false,
         }
     }
+    /// Of clips that start as near `line` as each other (`tied`, indexes into `available`), the
+    /// line's: the one with clearly the most speech, else the one whose length clearly fits the
+    /// line's text best. None while one of them still plays, or when none stands out. Never one of
+    /// `taken` (another line's).
+    fn untie(&mut self, line: &Line, available: &[(PathBuf, HookClip)], tied: &[usize], taken: &[usize], now: f64) -> Option<usize> {
+        let tied: Vec<usize> = tied.iter().copied().filter(|j| !taken.contains(j)).collect();
+        if tied.len() == 1 {
+            return Some(tied[0]);
+        }
+        if tied.is_empty() || tied.iter().any(|&j| now < available[j].1.start + available[j].1.dur * 1000.0 + 150.0) {
+            return None;
+        }
+        let mut speech: Vec<(usize, f64)> = Vec::new();
+        for &j in &tied {
+            let (dir, clip) = &available[j];
+            let share = match (self.feeds[dir].decode(clip), self.speech.as_mut()) {
+                (Ok((samples, rate)), Some(vad)) if !samples.is_empty() => vad.speech_share(&samples, rate).ok(),
+                _ => None,
+            };
+            speech.push((j, share.unwrap_or(-1.0)));
+        }
+        speech.sort_by(|a, b| b.1.total_cmp(&a.1));
+        if speech[0].1 >= MIN_SPEECH_SHARE && speech[0].1 - speech[1].1 >= 0.2 {
+            return Some(speech[0].0);
+        }
+        // About a mora every 0.13 s once spoken, with half a second around it.
+        let spoken = line.text.chars().filter(|c| c.is_alphanumeric()).count() as f64;
+        let expected = 0.5 + 0.13 * spoken;
+        let mut fit: Vec<(usize, f64)> = tied.iter().map(|&j| (j, (available[j].1.dur - expected).abs())).collect();
+        fit.sort_by(|a, b| a.1.total_cmp(&b.1));
+        (fit[1].1 - fit[0].1 >= 0.6).then_some(fit[0].0)
+    }
     /// `line` with its anchor moved back by its typing time (`Report::typing_ms`).
     fn typed(&self, line: &Line) -> Line {
         typed(line, self.report.typing_ms)
@@ -408,21 +440,34 @@ impl Hooked {
         let refs: Vec<&HookClip> = available.iter().map(|(_, c)| c).collect();
         let open: Vec<(f64, String)> = self.feeds.values().flat_map(|f| f.open(now)).collect();
         let pairs = classify::pair(&pending, &refs, self.report.lead_ms, self.report.lag_ms);
+        // Clips the pairing gave to some line: a tie is never settled with another line's clip.
+        let pairs_taken: Vec<usize> = pairs.iter().flatten().map(|(i, _)| *i).collect();
         let mut out = Vec::new();
         for (line, pair) in pending.into_iter().zip(pairs) {
             let Some((i, _)) = pair else {
                 continue;
             };
-            let (dir, clip) = &available[i];
             let cost = |c: &HookClip| {
                 let d = c.start - line.anchor();
                 (if d < 0.0 { -2.0 * d } else { d }) + if c.dur < 0.8 { 700.0 } else { 0.0 }
             };
-            if available.iter().enumerate().any(|(j, (_, other))| {
-                j != i && other.start >= line.anchor() - classify::lead(&line, self.report.lead_ms) && other.start <= line.anchor() + self.report.lag_ms && (cost(other) - cost(clip)).abs() < 150.0
-            }) {
-                continue;
-            }
+            // Clips as near the line as this one (a voice and an effect started together): the one
+            // that is clearly the speech, or failing that clearly the line's length, else none yet.
+            let tied: Vec<usize> = std::iter::once(i)
+                .chain(available.iter().enumerate().filter(|(j, (_, other))| {
+                    *j != i && other.start >= line.anchor() - classify::lead(&line, self.report.lead_ms) && other.start <= line.anchor() + self.report.lag_ms && (cost(other) - cost(&available[i].1)).abs() < 150.0
+                }).map(|(j, _)| j))
+                .collect();
+            let i = if tied.len() > 1 {
+                let others: Vec<usize> = pairs_taken.iter().copied().filter(|&j| j != i).collect();
+                match self.untie(&line, &available, &tied, &others, now) {
+                    Some(j) => j,
+                    None => continue,
+                }
+            } else {
+                i
+            };
+            let (dir, clip) = &available[i];
             // A sound of the voice's own stream that started in the line's window is still playing
             // (a longer clip starting with a short one): it may be the better match, so wait for it.
             if open.iter().any(|(start, group)| {

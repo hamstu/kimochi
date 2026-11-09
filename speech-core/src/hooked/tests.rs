@@ -489,3 +489,18 @@ fn a_line_waits_for_a_whole_voice_file_still_playing() {
     assert!(!h.waiting("a", 7600.));
     assert!(h.established());
 }
+#[test]
+fn a_voice_and_an_effect_starting_together_go_by_the_lines_length() {
+    // Artemis: the line's voice (2.7 s) and an effect (1.3 s) in the voice's own format, started
+    // in the same instant.
+    let f = Fixture::new();
+    f.clip(1, 1000., Some("voice/a"), 1.3);
+    f.clip(2, 1005., Some("voice/b"), 2.7);
+    let mut h = f.hooked();
+    let mut l = line("a", 1300.);
+    l.text = "魔法使いの少女「後ろにもゴブリンが……きゃっ！」".into();
+    h.line(l);
+    let matched = h.tick(4500.);
+    assert_eq!(matched.len(), 1);
+    assert_eq!(matched[0].clip.seq, 2);
+}
