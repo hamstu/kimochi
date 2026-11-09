@@ -62,6 +62,8 @@ export interface PlatformCapabilities {
     icons: boolean
     followWindowBounds: boolean
     foregroundTracking: boolean
+    /** Whether a window source can be brought to the front; absent means it can (Linux says). */
+    activateWindow?: boolean
   }
   overlay: {
     passive: boolean

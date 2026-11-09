@@ -329,6 +329,9 @@ pub fn capabilities() -> Value {
             // A Gaming Mode app fills the output; nothing moves to follow.
             "followWindowBounds": !gaming && (!portal || tracking || hyprland::available()),
             "foregroundTracking": !gaming && !portal,
+            // Whether `activate_source` can bring a window source forward: a portal stream's
+            // window is anonymous, so only GNOME's Shell integration (or Gamescope) can.
+            "activateWindow": gaming || !portal || gnome::eligible_popup_session(),
         },
         "overlay": {
             "available": x11 || layer::available() || gnome,
