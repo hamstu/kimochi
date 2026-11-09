@@ -20,6 +20,7 @@ import { describe, randomId, within } from './util.js'
 import { extCommand } from './primitives.js'
 import { installPage } from './page.js'
 import { installBlobBridge } from './blob-bridge.js'
+import { installRelayLink } from './relay-link.js'
 
 export const BACKGROUND_PAGE = '/__kimochi/ext-background.html'
 
@@ -125,6 +126,8 @@ export function installFrame(win, { engine, descriptor }) {
     win.addEventListener('load', () => void upstream.call('ready').catch(() => {}))
   }
   if (kind === 'background') {
+    // Sharing → Link: the relay refuses this origin, so links go through Kimochi (relay-link.js).
+    if (engine === 'hachidori' && installRelayLink(win)) report({ check: 'ext-host-relay-link' })
     const start = async () => {
       if (windowLabel) {
         // Before any extension script runs here: is chrome.storage describing data that is not

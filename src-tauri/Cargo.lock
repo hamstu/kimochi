@@ -3142,6 +3142,8 @@ dependencies = [
  "getrandom 0.2.17",
  "gilrs",
  "glib",
+ "hyper",
+ "hyper-util",
  "image",
  "kimochi-capture",
  "kimochi-speech",
