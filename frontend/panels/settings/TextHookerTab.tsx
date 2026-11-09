@@ -167,7 +167,7 @@ function HookSettingsSections({ scope, extra }: { scope: Scope; extra?: Partial<
           label="Hook automatically"
           controlId={id('auto-hook')}
           badge={badge('autoHook')}
-          description="When the game starts, while Text Hooker is your source."
+          description="When the game starts, while Text hooking is on for it."
         >
           <Switch id={id('auto-hook')} checked={value.autoHook} onCheckedChange={(on) => set('autoHook', on)} />
         </SettingsRow>

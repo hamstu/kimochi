@@ -176,7 +176,7 @@ export function SentenceAudioSection(): ReactNode {
               the main window to see which cards get enhanced.
             </Callout>
           </div>
-          <SettingsRow label="Prefer clean game voices" controlId="sentence-audio-hook" description="On Windows, get individual voice clips from the Text Hooker game. If unavailable, use system audio automatically.">
+          <SettingsRow label="Audio hooking" controlId="sentence-audio-hook" description="On Windows, take each line's voice straight from a game with Text hooking on. Where it can't, system audio is recorded instead.">
             <Switch id="sentence-audio-hook" checked={config.voiceHook} onCheckedChange={(voiceHook) => update({ voiceHook })} />
           </SettingsRow>
           {model.status && !modelReady && (
