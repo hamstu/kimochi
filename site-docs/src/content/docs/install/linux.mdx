@@ -74,17 +74,35 @@ enables screen annotations, dictionary pop-ups and desktop region selection (one
 either, **Crop area → Set OCR crop area…** (or **Set Anki crop area…**) opens a crop editor inside
 Kimochi's window.
 
-The overlay is tested on **Hyprland** (on Omarchy) and on **GNOME 46** with the GNOME overlay
-extension. Other desktops with layer-shell support, such as KDE Plasma and Sway, should work but
+The overlay is tested on **KDE Plasma 6**, on **Hyprland** (on Omarchy) and on **GNOME 46** with
+the GNOME overlay extension. Other desktops with layer-shell support, such as Sway, should work but
 aren't tested yet. On those, Kimochi can't tell where a shared *window* is, so the overlay can't
 draw over it and the source card can't bring it to the front: share your whole screen instead. You
 can still look up words in the Log.
+
+### KDE Plasma
+
+On Plasma, share the game's **window** in the dialog (or a whole screen). Kimochi asks Plasma where
+that window is, so the overlay sits on the game, follows it when you move it or send it to another
+monitor, and hides while the game is minimised or on another desktop. **Bring to front** brings the
+game back. If two open windows are exactly the same size, Kimochi asks which one you shared:
+**Relink window overlay…** in the source menu asks again.
+
+Hold <kbd>Shift</kbd> over the overlay's text to look words up and to click it, as on Windows and
+macOS; without Shift, your clicks go through to the game. Kimochi sees Shift through Plasma's
+**Legacy X11 App Support** setting (in System Settings), which by default lets apps see the modifier
+keys whichever window is in front; the game still gets every key. If you set it to **Never**,
+Kimochi can't see Shift, and you look a word up by **hovering** it instead. The first time Kimochi starts, Plasma
+asks to confirm its global shortcuts (**Scan** and the **Controller menu**); change them any time in
+**System Settings → Keyboard → Shortcuts**.
 
 ### Global shortcuts on Hyprland
 
 Hyprland lists Kimochi's shortcuts but doesn't assign their keys, so bind them in your own config.
 The first two lines bind **Scan** and the **Controller menu** (use any keys you like); the last two
 let the dictionary see <kbd>Shift</kbd> for lookups over other apps, without taking it from them.
+Once Kimochi has seen Shift through them, the overlay's text lets your clicks through to the game
+until you hold Shift, as on Windows and macOS.
 
 With Hyprland 0.56's Lua config (`~/.config/hypr/bindings.lua`, as on Omarchy):
 

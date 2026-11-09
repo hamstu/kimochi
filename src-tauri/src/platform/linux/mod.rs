@@ -31,7 +31,7 @@ use super::{AppIdentity, DisplayInfo, PointerSample};
 use kimochi_capture::{Rect, SourceId};
 use serde_json::{json, Value};
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 pub mod dictionary_images;
 pub mod gnome;
@@ -45,6 +45,9 @@ mod input_guard;
 mod controller_neutral;
 pub mod deck_input;
 pub mod hyprland;
+pub mod kwin;
+pub mod tracking;
+pub mod shift;
 mod layer;
 pub mod shortcuts;
 pub mod icons;
@@ -88,14 +91,71 @@ pub(crate) fn x11_session() -> bool {
 
 // ---------------------------------------------------------------- pointer
 
-/// Pointer position, primary button and held modifiers from one `QueryPointer`.
-/// `None` on Wayland (no global pointer) and when the pointer is on another X screen.
+/// Pointer position, primary button and held modifiers: one `QueryPointer` on X11; on Wayland
+/// the compositor's pointer and a Shift source (`wayland_pointer_feed`). `None` where there is
+/// neither (then the overlay's text takes the mouse, Shift or not) and when the pointer is on
+/// another X screen.
 pub fn cursor() -> Option<PointerSample> {
     if on_x11() {
         x11::cursor()
     } else {
-        None
+        wayland_cursor()
     }
+}
+
+/// Whether the pointer poll needs positions without Shift held: its gate is still open (the
+/// reader glides along a line after letting go, `state::ShiftGate`). Without Shift and without
+/// it, the Wayland feed reports the modifiers alone and asks the compositor for nothing.
+static POINTER_DEMAND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub fn pointer_demand(on: bool) {
+    POINTER_DEMAND.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Wayland's stand-in for a global pointer: the compositor's cursor over a layer-shell overlay
+/// (KWin's script bridge, Hyprland's IPC) and Shift from `shift.rs`. With both, the overlay's
+/// words let clicks through until Shift is held, exactly as on macOS, Windows and X11.
+pub fn wayland_pointer_feed() -> Option<shift::Source> {
+    if on_x11() || !layer::available() || !tracking::available() {
+        return None;
+    }
+    shift::source()
+}
+
+/// Whether every modifier can be read, so `overlayLookupKey` may be other than Shift: X11 and
+/// XWayland (KDE Plasma) can; Hyprland's portal relays Shift alone. Elsewhere nothing is gated.
+pub fn lookup_keys_readable() -> bool {
+    on_x11() || wayland_pointer_feed() != Some(shift::Source::Portal)
+}
+
+/// Whether the feed's Shift needs relaying to the overlay's `linux-dictionary-modifier` listeners
+/// (the portal source already sends its own edges).
+pub fn relays_shift() -> bool {
+    wayland_pointer_feed() == Some(shift::Source::XWayland)
+}
+
+/// Positions are asked for at most this often (KWin answers on its compositor thread).
+const POINTER_EVERY: std::time::Duration = std::time::Duration::from_millis(12);
+
+fn wayland_cursor() -> Option<PointerSample> {
+    use std::time::Instant;
+    // Where the pointer was last seen: far off-screen until it has been, so nothing is "under" it.
+    static LAST: Mutex<Option<(f64, f64, Instant)>> = Mutex::new(None);
+    wayland_pointer_feed()?;
+    let (modifiers, down) = shift::read()?;
+    let mut last = LAST.lock().ok()?;
+    // Any modifier: the lookup key (`overlayLookupKey`) may be Ctrl, Alt or Meta.
+    let held = modifiers.shift || modifiers.ctrl || modifiers.alt || modifiers.meta;
+    let wanted = held || down || POINTER_DEMAND.load(std::sync::atomic::Ordering::Relaxed);
+    let stale = last.is_none_or(|(_, _, at)| at.elapsed() >= POINTER_EVERY);
+    if wanted && stale {
+        if let Some(point) = tracking::pointer() {
+            if let (Some(x), Some(y)) = (point["x"].as_f64(), point["y"].as_f64()) {
+                *last = Some((x, y, Instant::now()));
+            }
+        }
+    }
+    let (x, y) = last.map_or((-1e6, -1e6), |(x, y, _)| (x, y));
+    Some(PointerSample { x, y, down, modifiers })
 }
 
 // ---------------------------------------------------------------- displays
@@ -182,8 +242,8 @@ pub fn window_bounds(id: &SourceId) -> Option<(Rect, bool)> {
         let value = gnome::request("track", json!({"operation":"status","sourceId":id.to_string()})).ok()?;
         let rect = serde_json::from_value(value["bounds"].clone()).ok()?;
         Some((rect, value["visible"].as_bool().unwrap_or(false)))
-    } else if hyprland::available() {
-        hyprland::tracked(&id.to_string())
+    } else if tracking::available() {
+        tracking::tracked(&id.to_string())
     } else {
         None
     }
@@ -296,6 +356,7 @@ pub fn capabilities() -> Value {
     let gnome_status = gnome::status();
     let gnome = gnome_status["available"].as_bool().unwrap_or(false);
     let tracking = gnome && gnome_status["windowTracking"].as_bool().unwrap_or(false);
+    let feed = wayland_pointer_feed();
     json!({
         "os": "linux",
         "osVersion": os_version(),
@@ -327,11 +388,12 @@ pub fn capabilities() -> Value {
             "thumbnails": !portal,
             "icons": !portal || tracking,
             // A Gaming Mode app fills the output; nothing moves to follow.
-            "followWindowBounds": !gaming && (!portal || tracking || hyprland::available()),
+            "followWindowBounds": !gaming && (!portal || tracking || tracking::available()),
             "foregroundTracking": !gaming && !portal,
             // Whether `activate_source` can bring a window source forward: a portal stream's
-            // window is anonymous, so only GNOME's Shell integration (or Gamescope) can.
-            "activateWindow": gaming || !portal || gnome::eligible_popup_session(),
+            // window is anonymous, so only GNOME's Shell integration, KWin's script bridge (KDE
+            // Plasma) or Gamescope can.
+            "activateWindow": gaming || !portal || gnome::eligible_popup_session() || tracking::can_activate(),
         },
         "overlay": {
             "available": x11 || layer::available() || gnome,
@@ -350,6 +412,15 @@ pub fn capabilities() -> Value {
                 "poll"
             },
             "nonActivating": x11 || layer::available() || gnome,
+            // Whether the pointer poll reads Shift, so the words let clicks through until it is
+            // held (`View::live_regions`): always on X11; on Wayland where `shift.rs` has a source
+            // and the compositor reports the pointer (KDE Plasma, Hyprland).
+            "shiftGate": x11 || feed.is_some(),
+            "shiftSource": if x11 { Some("x11") } else { feed.map(shift::Source::as_str) },
+            // A layer overlay sees no Shift (keyboard NONE). Where nothing relays it on KDE Plasma
+            // (Legacy X11 App Support turned off), the overlay's text looks up on hover instead
+            // (host/linux-scan-input.js).
+            "lookupOnHover": !x11 && layer::available() && s.compositor.as_deref() == Some("KDE") && feed.is_none(),
             "nativeHoverWorkaround": false,
         },
         "input": {"globalShortcuts": x11 || shortcuts::available(), "globalShortcutBackend": if x11 { "x11" } else if shortcuts::report()["backend"] == "gnome-shell" { "gnome-shell" } else { "portal" }, "globalShortcutReport": if x11 { Value::Null } else { shortcuts::report() }, "globalShortcutRemediation": if !x11 && s.compositor.as_deref().unwrap_or("").to_ascii_lowercase().contains("hypr") { Some("On Hyprland, set key combinations in your compositor configuration. Changing a shortcut here does not update those desktop bindings.") } else { None }},

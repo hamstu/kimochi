@@ -1040,22 +1040,22 @@ async fn linux_window_geometry(state: State<'_, Shared>, operation: String, sour
     {
         let service = state.inner().clone();
         tauri::async_runtime::spawn_blocking(move || {
-            if operation == "pointer" { return Ok(platform::hyprland::pointer().unwrap_or(Value::Null)); }
+            if operation == "pointer" { return Ok(platform::tracking::pointer().unwrap_or(Value::Null)); }
             if !source_id.starts_with("portal:window:") || service.selection.lock().unwrap().as_deref() != Some(source_id.as_str()) {
                 return Err("The shared window changed. Choose its source again.".into());
             }
-            if operation == "status" { return Ok(platform::hyprland::status(&source_id)); }
+            if operation == "status" { return Ok(platform::tracking::status(&source_id)); }
             let frame = sources::hover_preview(&service, &source_id)?;
             let width = frame["width"].as_u64().ok_or("Missing shared frame width")? as u32;
             let height = frame["height"].as_u64().ok_or("Missing shared frame height")? as u32;
             match operation.as_str() {
-                "candidates" => platform::hyprland::candidates(width, height),
+                "candidates" => platform::tracking::candidates(width, height),
                 "link" => {
                     if service.selection.lock().unwrap().as_deref() != Some(source_id.as_str()) {
                         return Err("The shared window changed while linking. Try again.".into());
                     }
-                    platform::hyprland::link(&source_id, window_address.as_deref().ok_or("Choose the shared window")?, width, height)?;
-                    Ok(platform::hyprland::status(&source_id))
+                    platform::tracking::link(&source_id, window_address.as_deref().ok_or("Choose the shared window")?, width, height)?;
+                    Ok(platform::tracking::status(&source_id))
                 }
                 _ => Err("Unknown window geometry operation".into()),
             }
@@ -1150,6 +1150,15 @@ async fn activate_source(app: tauri::AppHandle, source_id: String) -> Reply<()> 
     #[cfg(target_os = "linux")]
     if source_id.starts_with("portal:window:") && platform::gnome::eligible_popup_session() {
         return platform::gnome::request("track", json!({"operation":"activate","sourceId":source_id})).map(|_| ());
+    }
+    // KDE Plasma: KWin raises the window the portal stream is linked to.
+    #[cfg(target_os = "linux")]
+    if source_id.starts_with("portal:window:") {
+        if let Some(result) = platform::tracking::activate(&source_id) {
+            let service = app.state::<Shared>().inner().clone();
+            record(&app, &service, json!({ "check": "activate-source", "sourceId": source_id, "backend": "kwin", "error": result.as_ref().err() }));
+            return result;
+        }
     }
     let window = SourceId::parse(&source_id)
         .filter(|id| id.is_window() && id.is_local() && id.pid().is_some_and(|pid| pid > 0))
@@ -1489,10 +1498,10 @@ async fn source_hover_preview(state: State<'_, Shared>, source_id: String) -> Re
         let value = {
             let mut value = value;
             let bounds = value["width"].as_u64().zip(value["height"].as_u64())
-                .and_then(|(width, height)| platform::hyprland::frame_bounds(&source_id, width as u32, height as u32));
+                .and_then(|(width, height)| platform::tracking::frame_bounds(&source_id, width as u32, height as u32));
             if let Some(bounds) = bounds {
                 value["desktopBounds"] = serde_json::to_value(bounds).map_err(|e| e.to_string())?;
-                value["desktopVisible"] = json!(platform::hyprland::tracked(&source_id).is_some_and(|(_, visible)| visible));
+                value["desktopVisible"] = json!(platform::tracking::tracked(&source_id).is_some_and(|(_, visible)| visible));
             }
             value
         };
@@ -4322,6 +4331,15 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         // Shift held at the last sample: a lookup can follow the pointer, so it is read twice as
         // often and every move is sent (below). Reading words feels as quick as the samples are.
         let mut scanning = false;
+        // Wayland: whether the pointer feed (`platform::wayland_pointer_feed`) was up, and the Shift
+        // last relayed to the overlay's `linux-dictionary-modifier` listeners.
+        #[cfg(target_os = "linux")]
+        let mut wayland_feed: Option<bool> = None;
+        #[cfg(target_os = "linux")]
+        let mut relayed_shift = false;
+        // Wayland: the overlay's layer surface is placed by the compositor, not `place_overlay`, so
+        // the view has no origin; its bounds stand in, re-read about once a second.
+        let mut surface_origin: Option<(Rect, Instant)> = None;
         loop {
             std::thread::sleep(Duration::from_millis(if scanning { 8 } else { 16 }));
             ticks = ticks.wrapping_add(1);
@@ -4332,6 +4350,11 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             // the mouse guard and native shapes below must already follow it this tick.
             if ticks % 16 == 1 {
                 lookup_key = service.settings.get_or("overlayLookupKey", String::from("shift"));
+                // Hyprland's portal relays Shift alone: a key chosen elsewhere (and synced) is Shift there.
+                #[cfg(target_os = "linux")]
+                if !platform::lookup_keys_readable() {
+                    lookup_key = String::from("shift");
+                }
             }
             let sample = platform::desktop_cursor();
             let key_held = |modifiers: &Modifiers| modifiers.holds(&lookup_key);
@@ -4352,6 +4375,23 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                 };
                 v.shift_gate
             };
+            #[cfg(target_os = "linux")]
+            {
+                // Positions while the gate stays open after Shift is let go (gliding along a line).
+                platform::pointer_demand(gate_open && sample.is_some());
+                let feed = platform::wayland_pointer_feed().is_some();
+                // Capabilities went out before the feed came up (XWayland, KWin's script), or it
+                // changed since: the overlay switches between gated and ungated words.
+                if wayland_feed != Some(feed) && (wayland_feed.is_some() || feed) {
+                    let _ = handle.emit("platform-capabilities", capabilities_value(&handle, &service));
+                }
+                wayland_feed = Some(feed);
+                let shift = sample.as_ref().is_some_and(|s| s.modifiers.shift);
+                if shift != relayed_shift && platform::relays_shift() {
+                    let _ = handle.emit("linux-dictionary-modifier", json!({ "shift": shift }));
+                }
+                relayed_shift = shift;
+            }
             #[cfg(target_os = "windows")]
             platform::update_mouse_guard(&handle, &service);
             #[cfg(target_os = "windows")]
@@ -4478,11 +4518,30 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     unsent_move = false;
                     last_modifiers = modifiers;
                     last_buttons = down;
+                    #[cfg(target_os = "linux")]
+                    let layer = platform::wayland_layer_overlay();
+                    #[cfg(not(target_os = "linux"))]
+                    let layer = false;
+                    // Copied out first: `desktop_bounds` waits on the main thread, which may be
+                    // waiting for this lock (a deadlock seen on Hyprland).
+                    let view_origin = service.view.lock().unwrap().origin;
+                    let origin = view_origin.or_else(|| {
+                        if !layer {
+                            return None;
+                        }
+                        if surface_origin.is_none_or(|(_, at)| at.elapsed() > Duration::from_secs(1)) {
+                            let bounds = handle
+                                .get_webview_window(OVERLAY)
+                                .and_then(|w| platform::desktop_bounds(&w).ok());
+                            surface_origin = bounds.map(|b| (b, Instant::now()));
+                        }
+                        surface_origin.map(|(b, _)| b)
+                    });
                     let (wanted, over, blocked) = {
                         let v = service.view.lock().unwrap();
                         (
                             v.regions.contains_key(OVERLAY) && v.overlay_visible,
-                            v.origin.is_some_and(|o| {
+                            origin.is_some_and(|o| {
                                 x >= o.x && y >= o.y && x < o.x + o.width && y < o.y + o.height
                             }),
                             // The dictionary floats above the overlay, so a point

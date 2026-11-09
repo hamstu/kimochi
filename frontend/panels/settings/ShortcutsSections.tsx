@@ -25,14 +25,17 @@ function lookupKeyOptions(mac: boolean): { value: string; label: string }[] {
  * The key held to look up through the overlay (`overlayLookupKey`). With click-through on, words
  * let clicks through to the game until it is held (native's lookup gate, main.rs); off, they take
  * the mouse anyway and the key does nothing, so the row fades and points at the switch. Only
- * modifiers: the pointer poll reads those globally. Wayland has no global pointer, so no row.
+ * modifiers: the pointer poll reads those globally. On Wayland only KDE Plasma's source reads them
+ * all (Hyprland relays Shift alone), so elsewhere there no row.
  */
 function LookupKeyRow(): ReactNode {
   const capabilities = useCapabilities()
   const mac = capabilities.os === 'macos'
   const [key, setKey] = useSetting<string>('overlayLookupKey', 'shift')
   const [clickThrough] = useSetting<boolean>('overlayClickThrough', true)
-  if (capabilities.os === 'linux' && capabilities.session?.backend === 'wayland') return null
+  // Wayland: only where the pointer poll reads every modifier (KDE Plasma, through XWayland).
+  if (capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' &&
+    capabilities.overlay.shiftSource !== 'xwayland') return null
   const options = lookupKeyOptions(mac)
   const chosen = options.find((option) => option.value === key) ?? options[0]
   return (

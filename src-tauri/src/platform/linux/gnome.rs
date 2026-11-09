@@ -390,13 +390,13 @@ pub fn tracked_frame_bounds(source_id: &str, width: u32, height: u32) -> Option<
 /// Enrich only the active paired portal source; keep its current crop when naming
 /// the formerly anonymous descriptor. Native live identity never survives closure.
 /// The window's identity comes from the Shell integration here, or on Hyprland from the
-/// window the portal stream is linked to (`hyprland::identity`).
+/// window the portal stream is linked to (`tracking::identity`: Hyprland or KWin).
 pub fn refresh_identity(service: &crate::state::Shared, source_id: &str) {
     if !source_id.starts_with("portal:window:") { return; }
     let identity = if eligible() {
         let Ok(identity)=request("track",json!({"operation":"status","sourceId":source_id})) else{return;};
         identity
-    } else if let Some(identity)=super::hyprland::identity(source_id) {
+    } else if let Some(identity)=super::tracking::identity(source_id) {
         identity
     } else { return; };
     let Ok(mut descriptor)=service.settings.get("lastSelectedSource").map(|v|v.unwrap_or(Value::Null)) else{return;};

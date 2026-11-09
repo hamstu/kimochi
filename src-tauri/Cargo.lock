@@ -3134,11 +3134,14 @@ name = "kimochi"
 version = "0.7.0"
 dependencies = [
  "arboard",
+ "async-channel",
+ "async-io",
  "axum",
  "base64 0.22.1",
  "block2",
  "crc32fast",
  "flate2",
+ "futures-lite",
  "getrandom 0.2.17",
  "gilrs",
  "glib",

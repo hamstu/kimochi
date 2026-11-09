@@ -1,0 +1,14 @@
+# Headless Plasma 6 (KWin virtual backend) for Kimochi's KDE tests. One layer: disk is tight.
+FROM registry.fedoraproject.org/fedora:43
+RUN dnf -y install --setopt=install_weak_deps=False \
+      kwin-wayland kwin plasma-workspace kglobalacceld xdg-desktop-portal xdg-desktop-portal-kde \
+      pipewire wireplumber pipewire-gstreamer dbus-daemon dbus-tools \
+      xorg-x11-server-Xwayland qt6-qtwayland mesa-dri-drivers mesa-libEGL mesa-libgbm \
+      webkit2gtk4.1 glib-networking gtk3 gtk-layer-shell libayatana-appindicator-gtk3 \
+      gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free \
+      google-noto-sans-cjk-fonts google-noto-sans-fonts \
+      python3-gobject gobject-introspection python3-dbus wayland-utils procps-ng psmisc libcap \
+      wayland-devel plasma-wayland-protocols-devel wayland-protocols-devel gcc pkgconf-pkg-config jq \
+    && dnf clean all && rm -rf /var/cache/* /usr/share/doc /usr/share/man \
+    # Rootless containers cannot grant file capabilities; KWin only wants CAP_SYS_NICE.
+    && setcap -r /usr/bin/kwin_wayland

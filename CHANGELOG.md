@@ -10,7 +10,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- ⭐ **The overlay on KDE Plasma (Wayland).** Share a game's window and Kimochi now draws its text right over the game and follows the window when you move it (also to another monitor). Hold <kbd>Shift</kbd> (or your **Lookup key**) over the text to look words up and to click it, as on Windows and macOS; without it, your clicks go through to the game. **Bring to front** works for a shared window too. Before, the overlay stayed empty on Plasma, and **Bring to front** said "only a window source can be brought to the front".
+- **Hyprland:** once you've bound Kimochi's two Shift shortcuts, the overlay's text lets your clicks through to the game until you hold <kbd>Shift</kbd>, as on Windows and macOS. Before, it took every click on it.
 - **Lookup key**: choose the key you hold to look up words on the overlay (Shift, Ctrl, Alt or, on a Mac, Command) in **Settings → Shortcuts & Controls**. Handy for visual novels that skip text with Shift.
+
 - **Hachidori sharing relays (experimental).** Hachidori in Kimochi can now link to a shared Hachidori through a relay (the Hachidori Anki add-on's, or hachidori-relay) from **Settings → Dictionary → Sharing**, and use its dictionaries and settings like any linked browser, on this computer or across your network. Before, linking failed with "No shared Hachidori answered".
 
 ### Changed
@@ -20,6 +23,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Linux (Wayland): the first time you open Kimochi from the AppImage, its global shortcuts now reach your desktop. Before, they failed with "App info not found" until the next start.
 - The Notebook, Anki and Settings views open at once, without a "Loading…" message first.
 - Linux (Wayland, e.g. KDE Plasma): no more "Bring to front" error for a shared window, and Kimochi now explains when the overlay can't follow one.
 - With Yomitan, the Log no longer shows "Acknowledgement timeout" errors.

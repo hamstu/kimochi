@@ -2140,20 +2140,61 @@ Real limitations, recorded rather than papered over.
 - **Transparent windows** use Tauri's macOS private API feature, which is unsuitable for
   a Mac App Store claim.
 
-## Optional Hyprland window geometry (Linux only)
+## Optional Wayland window geometry: Hyprland and KDE Plasma (Linux only)
 
 `linux_window_geometry({operation, sourceId, windowAddress?}) -> Value` operates on
-the current portal window share. `status` reports availability/link state;
-`candidates` lists native Wayland clients matching the real captured frame size;
-`link` explicitly associates the selected candidate for this app/share lifetime.
-`pointer` returns optional read-only compositor `{x,y}` coordinates without
-capturing a frame or claiming knowledge of buttons/modifiers. The Hyprland layer
-uses these to recover missed leave events and clear stale hover/reading holds.
-Unique matches are automatic; ambiguous matches use the source panel's
-**Relink window overlay…** dialog. Capture permission still comes from the portal.
-Only Hyprland with native layer-shell and one unrotated output at (0,0) is enabled.
-Missing/unsupported geometry retains the source-image crop fallback and does not
-place annotations at an invented origin. See `platform/linux/DEPS.md` for limits.
+the current portal window share, through `platform/linux/tracking.rs`: Hyprland's IPC socket
+(`hyprland.rs`) or, on KDE Plasma, a KWin script bridge (`kwin.rs`). `status` reports
+availability/link state (`{available, linked, bounds, visible}`); `candidates` lists windows
+matching the real captured frame size (`{address, title, app}`; on KDE `address` is KWin's
+window id); `link` explicitly associates the selected candidate for this app/share lifetime.
+`pointer` returns optional read-only compositor `{x,y}` coordinates (overlay-local) without
+capturing a frame or claiming knowledge of buttons/modifiers. The layer overlay uses these to
+recover missed leave events and clear stale hover/reading holds where Shift is not gated (with
+the gate, the native pointer feed below replaces that poll). Unique matches are automatic;
+ambiguous matches use the source panel's **Relink window overlay…** dialog. Capture permission
+still comes from the portal. Missing/unsupported geometry retains the source-image crop fallback
+and does not place annotations at an invented origin. See `platform/linux/DEPS.md` for limits.
+
+- **Hyprland:** native layer-shell and one unrotated output at (0,0); XWayland clients excluded.
+- **KDE Plasma (KWin 6; 5.27 best-effort):** Kimochi serves `dev.kimochi.KWinBridge` at
+  `/dev/kimochi/KWinBridge` on its own session-bus connection and loads a KWin script
+  (`org.kde.kwin.Scripting`, plugin `kimochi-bridge`) that pushes window snapshots on change
+  (`Push(s json)`) and long-polls commands (`Next() -> s`, answered by `Reply(i seq, s json)`:
+  `snapshot`, `pointer`, `activate`). Only KWin's own bus name may call it. KWin's window
+  streams are the whole frame (title bar included) at the output's scale, so the frame is
+  matched; native Wayland and XWayland windows, fractional scales and several outputs are
+  supported: Kimochi's layer surfaces move to the linked window's output
+  (`gtk_layer_set_monitor`) and bounds/pointer are relative to it. A linked window stream holds
+  only that window, so captures of it no longer hide the overlay (no flicker).
+  `activate_source` on a linked `portal:window:` source asks the script to restore, switch
+  desktop to and activate it. `KIMOCHI_KWIN_WINDOW_TRACKING=0` disables the bridge.
+
+### Wayland Shift gate
+
+A keyboard-NONE layer overlay sees no Shift, so the native pointer poll (`spawn_cursor_poll`) gets
+one from `platform/linux/shift.rs` and the pointer from `tracking::pointer()`; with both,
+`platform::cursor()` answers on Wayland as on X11 and the overlay's words are Shift-gated
+(`View::live_regions`, `state::ShiftGate`) exactly as on macOS/Windows.
+`capabilities().overlay.shiftGate` says so and `overlay.shiftSource` names the source (`x11`,
+`xwayland`, `portal`); without one both are off and the words take the mouse.
+
+- **KDE Plasma:** KWin hands XWayland the modifier keys whichever window has the keyboard while
+  `[Xwayland] XwaylandEavesdrops` (Legacy X11 App Support) is not `None` (Plasma 6 default:
+  `Combinations`), so a private X11 connection reads them from `QueryPointer`'s mask. The poll
+  relays Shift's edges as `linux-dictionary-modifier` for the overlay's DOM-event path. When the
+  setting is `None`, `overlay.lookupOnHover` is true instead and the overlay's text looks up on
+  hover (`host/linux-scan-input.js` `hover`).
+- **Hyprland:** the two `dictionaryShift*` portal bindings, once one has fired (Hyprland fires
+  only bindings its config names).
+
+The compositor is asked for positions (≤ ~80/s) only while Shift is held or the gate is still open
+(`platform::pointer_demand`); otherwise the poll reads the modifiers alone. Buttons are known only
+over an X11 window; over Wayland ones the overlay takes them from its own surface's DOM events.
+`KIMOCHI_WAYLAND_SHIFT=0` turns the gate off. The gate follows `overlayLookupKey` where every
+modifier is readable (X11, XWayland; `platform::lookup_keys_readable`); with Hyprland's portal it is
+always Shift, and Settings offers the Lookup key row on Wayland only for `shiftSource: "xwayland"`.
+On KDE `sources.activateWindow` is true while the KWin bridge is up (`tracking::can_activate`).
 
 ## Optional GNOME Shell overlay (Linux only)
 

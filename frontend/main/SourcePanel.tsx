@@ -915,7 +915,7 @@ export function SourcePanel({
       }}
       pickerRequired={pickerRequired}
       linuxPortal={capabilities.os === 'linux' && pickerRequired}
-      onLinkWindow={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && ['GNOME', 'Hyprland'].includes(capabilities.session.compositor ?? '') && capabilities.overlay.passive && mode === 'ocr' && source?.sourceId?.startsWith('portal:window:') ? () => {closeMenu();window.dispatchEvent(new Event('kimochi-link-window'))} : undefined}
+      onLinkWindow={window.__KIMOCHI_PLATFORM__?.os === 'linux' && capabilities.session?.backend === 'wayland' && ['GNOME', 'Hyprland', 'KDE'].includes(capabilities.session.compositor ?? '') && capabilities.overlay.passive && mode === 'ocr' && source?.sourceId?.startsWith('portal:window:') ? () => {closeMenu();window.dispatchEvent(new Event('kimochi-link-window'))} : undefined}
       onChooseSource={(sourceId) => {
         closeMenu()
         leaveHook()
