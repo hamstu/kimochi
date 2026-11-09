@@ -12,6 +12,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - The Text Hooker reads Unity games' dialogue more reliably on Windows: Kimochi reads the text box itself when the hooker can't (or can only through unrelated string functions), so you no longer need to restart the game and hook it again until it works.
 - Text hooking is now a switch under a game's window rather than a source of its own: choose the game's window, and where the game can be hooked, turn on Text hooking to read its text from inside the game. Turn it off to go back to OCR; the game stays hooked, so switching back is instant. The switch is remembered for each game.
 - Switching to Quick Shot, the clipboard, WebSocket or the browser no longer unhooks the game or forgets your window: the source menu takes you back to it, as it was.
+- Text hooking now reads TyranoScript and RPG Maker MV/MZ games, and picks their clean dialogue rather than text with the speaker's name and image paths mixed in.
+- Games whose window was missing from the source menu (KiriKiri 2 and other older games) are now listed.
+- Audio hooking now takes the voices from Unity games built on Unity's older Mono runtime too.
 
 ## [0.7.0] - 2026-11-07
 
