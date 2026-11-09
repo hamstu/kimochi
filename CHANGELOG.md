@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- **Faster Hachidori and 10ten lookups on macOS.** macOS no longer slows down the dictionary engine running in the background between lookups, so the first lookup after a pause stays as quick as the rest, even while your Mac is busy.
+
 ## [0.7.0] - 2026-11-07
 
 ### Added

@@ -448,8 +448,10 @@ impl ExtensionWindowAction {
 /// Makes sure the extension window of `engine` exists; `reload` reloads one that does.
 ///
 /// Never shown and never focused: no title bar, 1×1, off the taskbar, not focusable,
-/// content-protected, and nothing ever calls `show` on it (it is not a panel, so `panel`
-/// refuses its label). Background throttling is off like the overlay's, because it runs the
+/// not content-protected (#26), and nothing ever calls `show` on it. On macOS it is ordered in
+/// at alpha 0 behind everything all the same, so its web process keeps foreground priority
+/// (`platform::keep_engine_in_foreground`). It is not a panel, so `panel` refuses its label.
+/// Background throttling is off like the overlay's, because it runs the
 /// dictionary while the reader is in another app. It shares the one WKWebsiteDataStore with
 /// every other window (no data store identifier), so the engine's storage is the same
 /// partition the next launch opens. Init scripts for all frames: the platform prelude, the
@@ -514,7 +516,14 @@ pub fn extension_window(
     if let Some(script) = extensions::init_script(app, &spec.label, extensions::EXT_HOST)? {
         builder = builder.initialization_script_for_all_frames(script);
     }
-    builder.build().map_err(|e| format!("native: {e}"))?;
+    let window = builder.build().map_err(|e| format!("native: {e}"))?;
+    // Hidden, its web process would idle at background priority (`keep_engine_in_foreground`).
+    #[cfg(target_os = "macos")]
+    if let Err(error) = platform::keep_engine_in_foreground(&window) {
+        eprintln!("kimochi: {}", json!({ "check": "engine-window-foreground", "window": spec.label, "error": error }));
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
     Ok(ExtensionWindowAction::Created)
 }
 
