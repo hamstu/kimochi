@@ -903,7 +903,13 @@ pub async fn texthook_targets(source_ids: Vec<String>) -> Result<Value, String> 
     .map_err(|e| e.to_string())
 }
 
-/// Hooks the game behind window source `source_id`; replaces any earlier session.
+/// A session in this phase is hooking its game, or has: starting it again would only interrupt it.
+fn keeps_going(phase: &str) -> bool {
+    matches!(phase, "starting" | "downloading" | "attaching" | "hooked")
+}
+
+/// Hooks the game behind window source `source_id`; replaces any earlier session, unless it is
+/// one hooking the same game.
 #[tauri::command]
 pub async fn texthook_start(source_id: String, observer_engine: Option<String>) -> Result<Value, String> {
     let hook = hook().ok_or("text hooking is not available")?;
@@ -933,6 +939,14 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     .map_err(|e| e.to_string())??;
     let generation = {
         let mut session = hook.lock();
+        // The same game, already being hooked or hooked (the game started with Hook automatically
+        // on, and the reader turned Text hooking on too): that session goes on. Stopping it while
+        // it attaches leaves the hooker's DLL in the game with no host, which then never reconnects.
+        let pids: Vec<u32> = targets.iter().map(|t| t.pid).collect();
+        if session.source_id == source_id && session.pids == pids && keeps_going(session.phase) {
+            session.observer_engine = observer_engine.or(session.observer_engine.take());
+            return Ok(status_of(&session));
+        }
         stop_child(&mut session);
         let generation = session.generation + 1;
         *session = Session {
