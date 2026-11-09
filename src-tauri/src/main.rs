@@ -238,6 +238,10 @@ pub(crate) fn setting_side_effects(app: &tauri::AppHandle, settings: &Arc<Settin
             texthooker.settings_changed();
         }
     }
+    // Text hooking turned on or off (the Log's input): the voice hook follows it.
+    if key == "superTexthooker" {
+        text_hook::refresh_voice_hook();
+    }
     if key == "sentenceAudio" {
         if let Some(service) = app.try_state::<Arc<sentence_audio::SentenceAudio>>() {
             service.settings_changed();

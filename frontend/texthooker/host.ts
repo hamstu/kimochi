@@ -84,6 +84,8 @@ let bindings: Record<string, string> = {};
 let seen: string[] = [];
 /** The game whose session was last settled (`linkHookedGame`), until it is unhooked. */
 let linkedGame: string | null = null;
+/** The game hooked now, while Text hooking is off too (its session waits for it to come back on). */
+let hookedExe: string | null = null;
 export const enqueue = <T>(fn: () => Promise<T>): Promise<T> => {
   const result = queue.then(fn);
   queue = result.catch(() => undefined);
@@ -431,8 +433,10 @@ export function startHost(): Promise<void> {
         const { phase, exe } = e.payload;
         if (phase !== "hooked" || !exe) {
           linkedGame = null;
+          hookedExe = null;
           return;
         }
+        hookedExe = exe;
         if (linkedGame === gameKey(exe)) return;
         void enqueue(async () => {
           if (await linkHookedGame(exe)) broadcast();
@@ -449,6 +453,15 @@ export function startHost(): Promise<void> {
                 await selectSource(currentSource, true);
                 broadcast();
               }).catch(reportError);
+            // Text hooking back on, for a game that stayed hooked: its lines go to its session
+            // again, whatever was read in between.
+            if (nextInput === "hook" && hookedExe) {
+              const exe = hookedExe;
+              linkedGame = null;
+              void enqueue(async () => {
+                if (await linkHookedGame(exe)) broadcast();
+              }).catch(reportError);
+            }
           }
         }
         if (key === "scannedTextHistory")

@@ -75,6 +75,11 @@ export interface HookGame extends Partial<Omit<HookSettings, "textSize">> {
   /** When it was first and last hooked (ms since the epoch). */
   addedAt?: number;
   hookedAt?: number;
+  /**
+   * The reader's Text hooking switch for the game (under its card in the source panel): on, its
+   * window is read from inside the game; off, with OCR. Left out, a game hooked before is on.
+   */
+  textHook?: boolean;
   /** H-codes inserted each time the game is hooked. */
   hookCodes?: string[];
   replacements?: HookReplacement[];
@@ -97,6 +102,10 @@ export interface HookGame extends Partial<Omit<HookSettings, "textSize">> {
 export type HookGames = Record<string, HookGame>;
 
 export const gameKey = (exe: string): string => exe.toLowerCase();
+
+/** Whether Text hooking is on for a game: the reader's switch, else on for a game hooked before. */
+export const textHookOn = (game: HookGame | null | undefined): boolean =>
+  game?.textHook ?? Boolean(game?.hookedAt);
 
 /** A game's settings: its own where it has them, the defaults elsewhere. */
 export function hookSettings(

@@ -145,9 +145,9 @@ export default function SentenceAudioDebugPanel(): JSX.Element {
           </div>
         )}
         {debug?.hooked && <div className="sa-facts">
-          <span><b>voice hook</b> {debug.hooked.captures} captures ? {debug.hooked.clipsSeen} clips ? {debug.hooked.matched} lines matched ? lag {debug.hooked.lagMs.toFixed(0)}ms</span>
+          <span><b>voice hook</b> {debug.hooked.captures} captures · {debug.hooked.clipsSeen} clips · {debug.hooked.matched} lines matched · lag {debug.hooked.lagMs.toFixed(0)}ms</span>
           {(debug.hookError || debug.hooked.error) && <span className="sa-warn">{debug.hookError || debug.hooked.error}</span>}
-          {debug.hooked.groups.map((g) => <span key={g.group}><b>{Math.round(g.voice * 100)}%</b> {g.group} ? {g.reasons.join(', ')}</span>)}
+          {debug.hooked.groups.map((g) => <span key={g.group}><b>{Math.round(g.voice * 100)}%</b> {g.group} · {g.reasons.join(', ')}</span>)}
         </div>}
         {status && !listener && <div className="sa-muted">Not listening: turn on Sentence Audio in Settings → Anki.</div>}
         {listener && (

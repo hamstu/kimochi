@@ -50,7 +50,7 @@ export interface LineAudio {
   /** `voiced`: a clip to play. `silent`: no voice was found. `missed`: its audio was gone. */
   state: "voiced" | "silent" | "missed";
   durationMs?: number;
-  /** `matched` (found by its words) or `timed` (placed by timing). */
+  /** `matched` (found by its words), `timed` (placed by timing) or `hooked` (the game's own clip). Kept, not shown: every voice looks the same in the Log. */
   how?: "matched" | "timed" | "hooked";
   message?: string;
 }

@@ -924,6 +924,14 @@ html[data-mini] .main-help { display: none; }
   flex-direction: column;
   gap: var(--k-space-2);
 }
+/* Text hooking, under a game's card: a well like the switch rows', headed by its switch; while
+   it is on, the hooked text's select sits under the switch, then Audio hooking. */
+.src-hook-body {
+  padding: var(--k-space-0-5) var(--k-space-2-5) var(--k-space-1-5);
+}
+.src-hook-box[data-on] > .src-row:first-child {
+  padding-bottom: var(--k-space-1);
+}
 .src-hook-status {
   display: flex;
   align-items: center;

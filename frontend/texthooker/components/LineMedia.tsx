@@ -52,7 +52,7 @@ function VoiceChip({ uid }: { uid: string | undefined }) {
   if (!uid || audio?.state !== "voiced") return null;
   const seconds = ((audio.durationMs ?? 0) / 1000).toFixed(1);
   return (
-    <Tooltip content={playing ? "Stop" : audio.how === "hooked" ? "Play clean hooked voice" : "Play the line's voice"} delayDuration={400}>
+    <Tooltip content={playing ? "Stop" : "Play the line's voice"} delayDuration={400}>
       <button
         ref={chip}
         type="button"
@@ -67,7 +67,7 @@ function VoiceChip({ uid }: { uid: string | undefined }) {
         }}
       >
         <Volume2 aria-hidden />
-        <span className="line-chip-text">{audio.how === "hooked" && "hooked ? "}{seconds}s</span>
+        <span className="line-chip-text">{seconds}s</span>
       </button>
     </Tooltip>
   );

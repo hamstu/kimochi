@@ -136,6 +136,14 @@ pub fn install(app: &tauri::AppHandle) {
 }
 
 impl Hook {
+    /// Whether the Log takes the hooked text: the reader's Text hooking switch (the Log's input
+    /// is the hooked game). Off, the game stays hooked, so turning it back on is instant.
+    fn reading_text(&self) -> bool {
+        self.app.try_state::<Shared>().is_none_or(|service| {
+            service.settings.get_path(&["superTexthooker", "inputSource"]).ok().flatten().is_none_or(|value| value == json!("hook"))
+        })
+    }
+
     fn lock(&self) -> MutexGuard<'_, Session> {
         self.session.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -159,6 +167,15 @@ impl Hook {
     /// their text box a row at a time (SiglusEngine, at each line break and ruby) are joined back
     /// up, unless the game's settings say not to.
     fn line(&self, session: &mut Session, key: &str, text: &str, carries_on: bool) {
+        // Text hooking turned off for now: the game stays hooked, but its lines go nowhere, and
+        // the next line sent once it is back on starts afresh rather than carrying on one the Log
+        // never had.
+        if !self.reading_text() {
+            session.last_key = None;
+            session.last_line = None;
+            session.last_id = None;
+            return;
+        }
         let config = self.config(session);
         let Some(mut text) = config.clean(text) else {
             if !text.trim().is_empty() {
@@ -703,6 +720,10 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
                 }
                 return;
             }
+            // Text hooking off for now: the window is not read until it is back on.
+            if !hook.reading_text() {
+                continue;
+            }
             session.pick_pending = false;
             // A Unity text object that has said one thing only is likely a label (a button, a
             // menu): it says the same thing again and again, and is never sent twice.
@@ -1073,7 +1094,7 @@ pub fn refresh_voice_hook() {
         return;
     };
     let config = service.config();
-    let enabled = cfg!(windows) && config.enabled && config.voice_hook;
+    let enabled = cfg!(windows) && config.enabled && config.voice_hook && hook.reading_text();
     service.hook_targets(if enabled {
         targets.iter().map(|t| t.pid).collect()
     } else {

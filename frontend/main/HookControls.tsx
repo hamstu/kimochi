@@ -1,6 +1,6 @@
 /**
- * Under a Text Hooker source's card: the hooked text, as a select like the OCR model's and the
- * Dictionary's, labelled "Text hooker" with a Settings link (Settings → Text Hooker, on this game).
+ * Inside the Text hooking box under a game's card, while it is on: the hooked text, as a select
+ * like the OCR model's and the Dictionary's (the box's own switch row is its heading).
  *
  * A hooked game produces several threads (the dialogue, a nameplate, menus, engine noise). The
  * dialogue is chosen automatically, by the thread remembered for this game or by matching each
@@ -23,7 +23,6 @@ import {
   Spinner
 } from '@kit'
 import { texthookSelect, type HookStatus, type HookThread } from '../bridge/textHook'
-import { SettingsLink } from './SettingsLink'
 import { SidebarNotice } from './SidebarNotice'
 
 const AUTO = '__auto__'
@@ -83,10 +82,6 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
           : undefined
   return (
     <div className="src-hook">
-      <div className="sb-label sb-label-row src-hook-label">
-        <span id="src-hook-label">Text hooker</span>
-        <SettingsLink label="Text Hooker settings" onClick={onManage} />
-      </div>
       {failed && status.detail && (
         <SidebarNotice action="Open Text Hooker settings" onAction={onManage}>
           {status.detail}
@@ -114,7 +109,7 @@ export function HookControls({ status, onManage }: { status: HookStatus; onManag
             <button
               type="button"
               className="k-select-trigger sb-select src-hook-select"
-              aria-labelledby="src-hook-label"
+              aria-label="Hooked text"
               data-placeholder={selected ? undefined : ''}
               title={status.pickNote ?? undefined}
             >
