@@ -295,10 +295,11 @@ pub fn input_regions(
                     0,
                     0,
                 );
-                if matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session() {
-                    // GNOME/GTK can defer the Wayland input-region commit until a
-                    // paint. Without damage, a shadow click still reaches this
-                    // window despite the new shape. Queue once per shape change.
+                if available() || matches!(window.label(), "overlay" | "popup-host") && super::gnome::eligible_popup_session() {
+                    // GTK on Wayland commits a new input region with its next paint only.
+                    // Without damage the old shape stays: on a layer overlay whose Shift gate
+                    // just closed (nothing repaints), clicks on the words land on it and go
+                    // nowhere (seen on Hyprland). Queue once per shape change.
                     gtk_widget_queue_draw(gtk.as_ptr().cast());
                 }
                 if let Some(region) = region {

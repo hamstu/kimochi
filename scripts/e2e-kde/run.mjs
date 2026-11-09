@@ -211,6 +211,12 @@ if (eavesdrop) {
   rig.input('move', hx, hy + 200, 'sleep', 900)
   const gone = rig.sh('shot', join(out, '4c-shift-released.png'), '--pixel', ...probe)
   check('letting go of Shift and moving away puts the card away', brightness(gone) < brightness(after) - 40, { held: brightness(after), released: brightness(gone) })
+  // The gate closed with nothing repainting: the input region must still drop the words (GTK
+  // commits it on a paint), so a plain click on them reaches the game again.
+  await sleep(600)
+  const again = rig.targetClicks()
+  rig.input('move', hx, hy, 'sleep', 600, 'click', 'sleep', 600)
+  check('after Shift, a plain click on the text reaches the game again', rig.targetClicks() > again, { clicks: rig.targetClicks() - again })
 }
 if (flag('--dictionary')) {
   const popupShown = () => evaluate('overlay.html', 'window.__kimochiExtensionHost?.isPopupVisible?.() === true')

@@ -4522,7 +4522,10 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     let layer = platform::wayland_layer_overlay();
                     #[cfg(not(target_os = "linux"))]
                     let layer = false;
-                    let origin = service.view.lock().unwrap().origin.or_else(|| {
+                    // Copied out first: `desktop_bounds` waits on the main thread, which may be
+                    // waiting for this lock (a deadlock seen on Hyprland).
+                    let view_origin = service.view.lock().unwrap().origin;
+                    let origin = view_origin.or_else(|| {
                         if !layer {
                             return None;
                         }
