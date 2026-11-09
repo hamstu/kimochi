@@ -29,6 +29,7 @@ mod engine_probe;
 mod extension_store;
 mod extensions;
 mod loopback;
+mod relay_link;
 mod gamepad;
 mod google_lens;
 mod history_merge;

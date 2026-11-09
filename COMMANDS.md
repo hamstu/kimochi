@@ -878,6 +878,15 @@ and Linux. 10ten keeps its scheme.
   `Referer` must come from the loopback origin, the app origin or (dev) the dev server, else 403
   (`{check: 'hachidori-loopback-refused'}`). It serves only the public extension release and host
   scripts, never user data; the dictionaries stay in WebKit's storage.
+- **Sharing → Link** (`relay_link.rs`, `host/ext/relay-link.js`). A Hachidori relay admits
+  `/link` only from `chrome-extension://`, `moz-extension://` or `hoshi://hoshidicts` (403
+  otherwise), and a page cannot choose its WebSocket's `Origin`. So in the background page a
+  `ws://<host>:<port>/link` socket opens `ws://127.0.0.1:<port>/__kimochi/relay-link?to=<host>:<port>`
+  instead: only from the loopback origin itself, it repeats the upgrade to the relay's `/link`
+  (and nothing else) with `Origin: hoshi://hoshidicts`, answers with the relay's status (101, or
+  its 403/503; 502 when unreachable), then copies bytes both ways without parsing frames
+  (TCP_NODELAY on both legs). `{check: 'hachidori-relay-link', ok, to, ms | why | status}` per
+  attempt, a repeated failure only once. On the scheme origin linking is unchanged.
 - **IPC.** Tauri treats the page as remote, and remote pages never reach app commands, so the
   extension window's commands are also the inline plugin **`kimochi-ext`** (`main.rs`
   `ext_ipc_plugin`, permissions from `build.rs`): `plugin:kimochi-ext|ext_relay`,

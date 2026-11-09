@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Hachidori sharing relays (experimental).** Hachidori in Kimochi can now link to a shared Hachidori through a relay (the Hachidori Anki add-on's, or hachidori-relay) from **Settings → Dictionary → Sharing**, and use its dictionaries and settings like any linked browser, on this computer or across your network. Before, linking failed with "No shared Hachidori answered".
+
 ### Fixed
 
 - The Notebook, Anki and Settings views open at once, without a "Loading…" message first.
