@@ -120,6 +120,17 @@ futures-lite = "2"
 # `deep-link`: a second launch carrying a `kimochi://` URL hands it to the running copy.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
+# wry 0.55.1, the version Tauri already resolves, with one change on Linux: its WebKitGTK data
+# manager gets a larger per-site storage quota (`origin-storage-ratio`), so large Yomitan dictionary
+# imports stop failing with QuotaExceededError at WebKit's 1 GB default. The property is
+# construct-only and wry doesn't expose it; see `kimochi_storage_quota` in
+# patches/wry/src/webkitgtk/web_context.rs (its Cargo.toml also mutes wry's own deprecation
+# warnings). Remove this and patches/wry once wry lets the app set the quota. Until then a Tauri
+# update that moves wry past 0.55.1 needs the patch re-applied to that version: otherwise Cargo only
+# warns that the patch went unused, and Linux is back to 1 GB per site.
+[patch.crates-io]
+wry = { path = "patches/wry" }
+
 [features]
 mangaocr-cuda = ["mangaocr/cuda"]
 custom-protocol = ["tauri/custom-protocol"]
