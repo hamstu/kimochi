@@ -11,14 +11,15 @@ adapter per audio path, an NW.js page script for HTML5 engines, a shared capture
 | XAudio2 2.7/2.8/2.9 (vtables) | AdvHD, newer engines | per source voice: submitted PCM | an AdvHD game (x64), fixture |
 | winmm `waveOut*` (imports) | old engines that open a device per sound | per device: written PCM | fixture |
 | SDL_mixer (imports) | ONScripter builds with SDL2_mixer.dll, ports | per play: the chunk's decoded PCM + file name | fixture (SDL2_mixer 2.8.0) |
-| Unity Mono (internal calls) | Unity 2017-6000 Mono builds | per `AudioSource.Play*`: clip name + PCM (`GetData`) | Unity 6 (x64), 2019 (x86) and 2021.3 (x64) games |
+| Unity Mono (internal calls) | Unity 2017-6000 Mono builds | per `AudioSource.Play*`: clip name + PCM (`GetData`) | Unity 6 (x64), 2019 (x86), 2021.3 (x64) and legacy-Mono (x64) games |
+| Unity IL2CPP (internal calls) | Unity IL2CPP builds (`GameAssembly.dll`) | per `AudioSource.Play*`: clip name + PCM (`GetData`) | a Unity 2020.1 IL2CPP game (x64) |
 | Ren'Py (embedded Python) | Ren'Py 6/7/8 | per file started on a channel: the original file + channel | Ren'Py 8.5 (voiced) and 8.3 games, fixture |
 | Web (page script) | RPG Maker MV/MZ, TyranoScript (howler), `<audio>`, on NW.js or Electron | per play: the original file (RPG Maker audio decrypted) + URL | an RPG Maker MV game (NW.js), a TyranoScript game (Electron) |
 
 Voice clips from these games were checked with `speechcheck` (Kimochi's VAD + SenseVoice): each
 transcribes as one clean line, and BGM/SE clips come out at 0 speech.
 
-Not built: CRI ADX2, FMOD, Wwise, WASAPI used directly, Unity IL2CPP, Unity VideoPlayer audio
+Not built: CRI ADX2, FMOD, Wwise, WASAPI used directly, Unity 6 IL2CPP (`_Injected` calls), Unity VideoPlayer audio
 (voice baked into movies), SDL_mixer linked statically (ONScripter-EN), Electron pages without
 Node, native ARM64 games. The module census (below) says when a game needs one of them.
 
@@ -37,6 +38,10 @@ Node, native ARM64 games. The module census (below) says when a game needs one o
   Attached to a running game (registration has happened), each function is taken from Mono's
   table and the compiled wrapper that calls it is repointed. Mono's profiler API was tried
   first: it cannot give call arguments to an embedder in Unity's Mono builds.
+- **Unity IL2CPP**: UnityPlayer registers the same functions with IL2CPP by name; the game's generated code
+  looks each up on first use and caches its address. We resolve the AudioSource functions by name,
+  register our trampolines under those names, and repoint the copies already cached in GameAssembly's
+  writable data: pointer writes only. Clip data comes from the managed getters (`il2cpp_runtime_invoke`).
 - **Ren'Py**: from our thread, with the GIL, a few lines of Python wrap
   `renpy.audio.renpysound.play/queue/stop`; the wrapper reads the exact bytes handed to the mixer
   and passes them to `voicehook_emit` in the DLL via ctypes. Launch or attach.

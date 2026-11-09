@@ -14,6 +14,7 @@
 #![allow(clippy::missing_safety_doc)]
 mod census;
 mod ds;
+mod il2cpp;
 mod iat;
 mod renpy;
 mod sdl;
@@ -125,6 +126,7 @@ fn run() {
     waveout::register();
     sdl::register();
     iat::on_module("mono", unity::on_mono);
+    iat::on_module("gameassembly", il2cpp::on_il2cpp);
     iat::on_module("python", renpy::on_python);
     iat::rescan();
     census::scan();

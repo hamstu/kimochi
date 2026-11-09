@@ -1033,7 +1033,7 @@ unsafe fn read_pcm(a: &Mono, clip: P, n: usize) -> Result<Vec<u8>, &'static str>
     }
 }
 
-fn float_fmt(channels: u16, rate: u32) -> Vec<u8> {
+pub(crate) fn float_fmt(channels: u16, rate: u32) -> Vec<u8> {
     let mut w = vh_common::WAVEFORMATEX::pcm(channels, rate, 32);
     w.wFormatTag = vh_common::WAVE_FORMAT_IEEE_FLOAT;
     w.bytes()
