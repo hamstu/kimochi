@@ -185,6 +185,7 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
                 Outcome::Voiced(v) => {
                     let how = match &v.how {
                         How::Matched(m) => format!("matched {:.0}%<br><span class=muted>heard {}</span>", m.score * 100.0, escape(&m.heard)),
+                        How::Hooked => "hooked".into(),
                         How::Timed => "by timing".into(),
                     };
                     let player = match clip {
@@ -252,6 +253,7 @@ audio {{ height: 28px; width: 220px }} pre {{ white-space: pre-wrap }}
                 Some(Outcome::Voiced(v)) => {
                     let (how, s) = match &v.how {
                         How::Matched(m) => ("matched", Some(m.score)),
+                        How::Hooked => ("hooked", None),
                         How::Timed => ("timed", None),
                     };
                     ("voiced", Some(v.from_ms - t0), Some(v.to_ms - t0), Some(how), s)

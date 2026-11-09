@@ -91,6 +91,7 @@ impl ClipInfo {
     pub fn new(uid: &str, text: &str, file: String, voice: &Voice, rendered: &Rendered) -> Self {
         let (how, heard, score, char_ms) = match &voice.how {
             How::Matched(m) => ("matched", Some(m.heard.clone()), Some(m.score), Some(m.char_ms.clone())),
+            How::Hooked => ("hooked", None, None, None),
             How::Timed => ("timed", None, None, None),
         };
         Self {
@@ -160,6 +161,13 @@ impl ClipStore {
         self.prune();
         self.save();
         Ok(info)
+    }
+
+    /// Typewriter continuations change text without changing the clean clip.
+    pub fn update_hooked_text(&mut self, uid: &str, text: &str) {
+        if let Some(kept) = self.kept.iter_mut().find(|k| k.info.uid == uid && k.info.how == "hooked" && k.info.text != text) {
+            kept.info.text = text.to_owned(); self.save();
+        }
     }
 
     /// Forget `uid`'s clip, if it has one (its line was decided again).

@@ -206,6 +206,8 @@ impl Default for Cutting {
 /// How a voiced line's clip was found.
 #[derive(Debug, Clone, PartialEq)]
 pub enum How {
+    /// A clean clip obtained directly from the game.
+    Hooked,
     /// By its words.
     Matched(Match),
     /// By timing alone.
@@ -651,6 +653,7 @@ impl Listener {
                     None => ("waiting", None, None, None, None),
                     Some(Outcome::Voiced(v)) => match &v.how {
                         How::Matched(m) => ("voiced", Some("matched"), Some(m.score), Some(m.heard.clone()), Some((v.from_ms, v.to_ms))),
+                        How::Hooked => ("voiced", Some("hooked"), None, None, Some((v.from_ms, v.to_ms))),
                         How::Timed => ("voiced", Some("timed"), None, None, Some((v.from_ms, v.to_ms))),
                     },
                     Some(Outcome::Silent) => ("silent", None, None, None, None),
