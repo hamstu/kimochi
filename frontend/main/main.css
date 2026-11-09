@@ -1726,3 +1726,15 @@ html[data-mini] .main-help { display: none; }
   background: #23262e;
   box-shadow: inset 0 -1.5px 0 rgb(255 255 255 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.25);
 }
+
+/* A lazy view opened before its (preloaded) chunk arrived: a spinner, only once that's noticeable. */
+.main-view-loading {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--k-space-8);
+}
+.main-view-loading > .k-spinner {
+  animation:
+    k-fade-in var(--k-base) var(--k-ease-out) both,
+    k-spin 700ms linear infinite;
+}

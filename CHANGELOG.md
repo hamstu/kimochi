@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Fixed
+
+- The Notebook, Anki and Settings views open at once, without a "Loading…" message first.
+
 ## [0.7.0] - 2026-11-07
 
 ### Added

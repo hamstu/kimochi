@@ -1,7 +1,7 @@
 /**
- * The settings pages' chunks. Pages load when Settings first shows; once one has rendered, the
- * rest are fetched while the window is idle (and a page's chunk on hover over its nav row), so
- * later switches are instant. Nothing here runs at startup.
+ * The settings pages' chunks. They are fetched while the window is idle: the main window's once
+ * its first content is up, the Settings window's once its first page has rendered (and a page's
+ * chunk on hover over its nav row), so switches are instant. Nothing here runs during startup.
  */
 import type { ComponentType } from 'react'
 import type { SettingsTabName } from '../../bridge/tauri'
