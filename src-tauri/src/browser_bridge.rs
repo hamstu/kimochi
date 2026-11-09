@@ -552,6 +552,7 @@ impl Bridge {
         json!({
             "autoOcr": auto_ocr,
             "clickThrough": settings.get_or("overlayClickThrough", true),
+            "lookupKey": settings.get_or("overlayLookupKey", "shift".to_string()),
             "overlayStyle": settings.get("overlayStyle").ok().flatten().unwrap_or(Value::Null),
             "appearance": settings.get_or("appearance", "system".to_string()),
             "grouping": settings.get_or("textOverlayGrouping.enabled", false),

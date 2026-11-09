@@ -1,13 +1,78 @@
 /** Settings → Shortcuts & Controls, first half: global keyboard shortcuts and their gamepad chords. */
 import { useCallback, type ReactNode } from 'react'
-import { Callout, SettingsRow, SettingsSection, Switch } from '@kit'
+import { Callout, Select, SettingsRow, SettingsSection, Switch } from '@kit'
 import { useHotkeys } from '../../bridge/useHotkeys'
+import { useSetting } from '../../bridge/useSetting'
+import { showSettingsTab } from './showSettingsTab'
 import type { HotkeyName } from '../../bridge/types'
 import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { gamepadChord } from '../../vendor/shared-defaults'
 import { formatAccelerator, isMouseAccelerator, keyPlatformOf } from './accelerator'
 import { useCapabilities } from '../../bridge/capabilities'
 import { ShortcutRecorder } from './ShortcutRecorder'
+
+/** `overlayLookupKey` as the platform's keyboards name it; Command only on a Mac. */
+function lookupKeyOptions(mac: boolean): { value: string; label: string }[] {
+  return [
+    { value: 'shift', label: mac ? '⇧ Shift' : 'Shift' },
+    { value: 'ctrl', label: mac ? '⌃ Control' : 'Ctrl' },
+    { value: 'alt', label: mac ? '⌥ Option' : 'Alt' },
+    ...(mac ? [{ value: 'meta', label: '⌘ Command' }] : [])
+  ]
+}
+
+/**
+ * The key held to look up through the overlay (`overlayLookupKey`). With click-through on, words
+ * let clicks through to the game until it is held (native's lookup gate, main.rs); off, they take
+ * the mouse anyway and the key does nothing, so the row fades and points at the switch. Only
+ * modifiers: the pointer poll reads those globally. Wayland has no global pointer, so no row.
+ */
+function LookupKeyRow(): ReactNode {
+  const capabilities = useCapabilities()
+  const mac = capabilities.os === 'macos'
+  const [key, setKey] = useSetting<string>('overlayLookupKey', 'shift')
+  const [clickThrough] = useSetting<boolean>('overlayClickThrough', true)
+  if (capabilities.os === 'linux' && capabilities.session?.backend === 'wayland') return null
+  const options = lookupKeyOptions(mac)
+  const chosen = options.find((option) => option.value === key) ?? options[0]
+  return (
+    <>
+      <SettingsRow
+        label="Lookup key"
+        disabled={!clickThrough}
+        description={
+          clickThrough ? (
+            'Hold to look up words on the overlay.'
+          ) : (
+            <>
+              Not needed while{' '}
+              <button type="button" className="k-link" onClick={() => showSettingsTab('ocr')}>
+                Click through text to the game
+              </button>{' '}
+              is off.
+            </>
+          )
+        }
+      >
+        <Select
+          aria-label="Lookup key"
+          value={chosen.value}
+          disabled={!clickThrough}
+          onValueChange={(value) => void setKey(value)}
+          options={options}
+        />
+      </SettingsRow>
+      {clickThrough && chosen.value !== 'shift' && (
+        <div className="settings-note">
+          <Callout tone="warn">
+            Your dictionary looks words up with Shift by default. Set its lookup key to{' '}
+            {chosen.label.replace(/^\S+ /, '')} as well, in its own settings.
+          </Callout>
+        </div>
+      )}
+    </>
+  )
+}
 
 /** Display order. The native side returns the bindings keyed alphabetically. */
 const ORDER: HotkeyName[] = ['triggerScan', 'openControllerMenu']
@@ -87,6 +152,7 @@ export function ShortcutsSections(): ReactNode {
             />
           </SettingsRow>
         ))}
+        <LookupKeyRow />
       </SettingsSection>
     </>
   )

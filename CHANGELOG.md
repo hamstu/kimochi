@@ -10,6 +10,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
+- **Choose the key you hold to look up words on the overlay.** Some visual novels skip text while Shift is held; pick Ctrl, Alt (Option) or, on a Mac, Command in **Settings → Shortcuts & Controls → Lookup key**, and set the same key in your dictionary.
 - **Hachidori sharing relays (experimental).** Hachidori in Kimochi can now link to a shared Hachidori through a relay (the Hachidori Anki add-on's, or hachidori-relay) from **Settings → Dictionary → Sharing**, and use its dictionaries and settings like any linked browser, on this computer or across your network. Before, linking failed with "No shared Hachidori answered".
 
 ### Changed

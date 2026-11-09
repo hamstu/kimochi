@@ -4317,6 +4317,8 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
         #[cfg(target_os = "windows")]
         let mut protection: Option<(bool, usize)> = None;
         let mut gate = state::ShiftGate::default();
+        // `overlayLookupKey`, re-read now and then rather than every tick.
+        let mut lookup_key = String::from("shift");
         // Shift held at the last sample: a lookup can follow the pointer, so it is read twice as
         // often and every move is sent (below). Reading words feels as quick as the samples are.
         let mut scanning = false;
@@ -4328,8 +4330,12 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
             }
             // Read first: Shift opens the gate on the overlay's words and the hook card, and
             // the mouse guard and native shapes below must already follow it this tick.
+            if ticks % 16 == 1 {
+                lookup_key = service.settings.get_or("overlayLookupKey", String::from("shift"));
+            }
             let sample = platform::desktop_cursor();
-            scanning = sample.as_ref().is_some_and(|s| s.modifiers.shift);
+            let key_held = |modifiers: &Modifiers| modifiers.holds(&lookup_key);
+            scanning = sample.as_ref().is_some_and(|s| key_held(&s.modifiers));
             let gate_open = {
                 let mut v = service.view.lock().unwrap();
                 // No global pointer (Wayland): Shift cannot be read, so everything takes the
@@ -4341,7 +4347,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                             (label != OVERLAY || v.overlay_visible)
                                 && rects.iter().any(|r| r.shift && r.contains(s.x, s.y))
                         });
-                        gate.update(s.modifiers.shift, s.down, over, Instant::now())
+                        gate.update(key_held(&s.modifiers), s.down, over, Instant::now())
                     }
                 };
                 v.shift_gate
@@ -4373,10 +4379,12 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                     reader::popover::pointer_down(&handle, x, y);
                 }
                 let moved = last_point.is_none_or(|(px, py)| px != x || py != y);
-                if moved || modifiers.shift != last_popup_shift {
-                    reader::popover::pointer(&handle, x, y, modifiers.shift);
+                // `shift` there means the lookup key, which is Shift unless the reader chose another.
+                let held = key_held(&modifiers);
+                if moved || held != last_popup_shift {
+                    reader::popover::pointer(&handle, x, y, held);
                 }
-                last_popup_shift = modifiers.shift;
+                last_popup_shift = held;
                 last_point = Some((x, y));
                 let mut changed: Vec<(String, bool)> = Vec::new();
                 let mut focus: Vec<String> = Vec::new();

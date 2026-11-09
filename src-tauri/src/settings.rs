@@ -69,6 +69,9 @@ pub fn defaults() -> Value {
         // Clicks on the overlay's text and the hook card go to the game unless Shift is held
         // (`Region::shift`); off, they take the mouse as before.
         "overlayClickThrough": true,
+        // The key held to look up through the overlay while click-through is on: "shift", "ctrl",
+        // "alt" or "meta" (macOS only). Only modifiers: the pointer poll reads them globally.
+        "overlayLookupKey": "shift",
         // Mini mode when the watched game goes full screen on Kimochi's display (compact.rs).
         // Off: Kimochi is kept on top over the game instead, at its own size.
         "autoMiniMode": false,

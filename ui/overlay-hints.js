@@ -27,9 +27,17 @@ const make = (tag, className, text) => {
   return element
 }
 
-/** The Shift key as this platform's keyboards label it. */
-function shiftKey() {
-  return window.__KIMOCHI_PLATFORM__?.os === 'macos' ? '⇧ Shift' : 'Shift'
+/**
+ * A lookup key (`overlayLookupKey`: "shift", "ctrl", "alt", "meta") as this platform's keyboards
+ * label it.
+ * @param {string} [key]
+ */
+export function lookupKeyLabel(key = 'shift') {
+  const mac = window.__KIMOCHI_PLATFORM__?.os === 'macos'
+  if (key === 'ctrl') return mac ? '⌃ Control' : 'Ctrl'
+  if (key === 'alt') return mac ? '⌥ Option' : 'Alt'
+  if (key === 'meta') return mac ? '⌘ Command' : 'Super'
+  return mac ? '⇧ Shift' : 'Shift'
 }
 
 /**
@@ -45,7 +53,8 @@ export function createOverlayHints(parent, hooks) {
   // One line: Hold [Shift] to … (what Shift does depends on click-through, `sync`).
   const line = make('span', 'overlay-hint')
   const rest = document.createTextNode('')
-  const shiftLine = [document.createTextNode('Hold '), make('kbd', 'overlay-hint-key', shiftKey()), rest]
+  const keyName = make('kbd', 'overlay-hint-key', lookupKeyLabel())
+  const shiftLine = [document.createTextNode('Hold '), keyName, rest]
   line.append(...shiftLine)
   bar.append(line)
   const close = make('button', 'overlay-hints-close')
@@ -91,13 +100,16 @@ export function createOverlayHints(parent, hooks) {
     },
     /**
      * Show the bar or not; whether it is shown. `gated`: clicks on text go to the game unless
-     * Shift is held (`overlayClickThrough`), so Shift is what makes text clickable too.
+     * the lookup key (`key`, `overlayLookupKey`) is held (`overlayClickThrough`), so it is what
+     * makes text clickable too. Not gated, the dictionary's own key (Shift by default) looks up.
      */
-    sync(shown, gated = true) {
+    sync(shown, gated = true, key = 'shift') {
       if (menuButtons === null && gated !== gatedNow) {
         gatedNow = gated
         rest.textContent = gated ? ' to look up words and click text' : ' over a word to look it up'
       }
+      const label = lookupKeyLabel(gated ? key : 'shift')
+      if (keyName.textContent !== label) keyName.textContent = label
       if (bar.hidden === !shown) return shown
       bar.hidden = !shown
       if (!shown) close.removeAttribute('data-hover')

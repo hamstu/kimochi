@@ -351,7 +351,7 @@ function syncHints() {
     (controller?.mode ?? 'idle') === 'idle' &&
     Boolean(state.origin) &&
     (renderer.hitRects(state.origin).length > 0 || (hook.card?.rects().length ?? 0) > 0)
-  hints.sync(shown, clickThrough())
+  hints.sync(shown, clickThrough(), native.getSetting('overlayLookupKey') ?? 'shift')
   if (shown) hints.place(hintArea())
 }
 
