@@ -150,12 +150,23 @@ export function GamepadButtonCapture(props: GamepadButtonCaptureProps): JSX.Elem
   }
 
   if (!settings.enabled || !hasGamepad) {
+    // A saved binding stays visible (and clearable) while the controller is unplugged.
+    const showAssigned = settings.enabled && assigned.length > 0
     return (
       <span className="gamepad-capture">
-        <Button size={buttonSize} disabled>
+        <Button size={buttonSize} disabled title={showAssigned ? 'No gamepad connected' : undefined}>
           <Gamepad2 />
-          {!settings.enabled ? 'Disabled' : 'No gamepad'}
+          {!settings.enabled ? 'Disabled' : showAssigned ? formatChord(assigned) : 'No gamepad'}
         </Button>
+        {showAssigned && (
+          <IconButton
+            label={props.chord ? 'Clear gamepad buttons' : 'Clear gamepad button'}
+            size="sm"
+            onClick={handleClear}
+          >
+            <X />
+          </IconButton>
+        )}
       </span>
     )
   }

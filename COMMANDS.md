@@ -584,7 +584,12 @@ button cannot fire, it is reported in `failed` with the reason, and `platform_ca
 record one.
 
 **Auto-scan trigger.** The gamepad button in `autoScanSettings.gamepadButton` fires
-`triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`). Kimochi does not watch
+`triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`), set in Settings → Shortcuts &
+Controls. Not while one of Kimochi's windows has focus (the controller works the window there) or
+while `autoScanSettings.enabled` is off. With verbose logging on, every press is recorded as
+`{check: "gamepad-press", pressed, panelFocused, outcome}`, so a debug report says what it did and
+why no scan followed; a change in the connected controllers is always recorded as
+`{check: "gamepad", connected: [names]}`. Kimochi does not watch
 individual keyboard keys in other applications on any platform: a keyboard scan is a
 global shortcut (`hotkeys`), which needs no Accessibility or other input permission (a bound
 mouse button on macOS is the exception, above).

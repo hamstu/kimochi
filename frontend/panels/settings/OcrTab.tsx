@@ -1,6 +1,6 @@
 /**
  * Settings → OCR & Overlay: the engine chooser (`EngineChooser`: the engines, what each is good
- * for, its model or server), then overlay behaviour, auto-scan and Auto OCR (the main window's
+ * for, its model or server), then overlay behaviour and Auto OCR (the main window's
  * switch, with change detection's tuning behind an Advanced options disclosure). The page
  * keeps the `ocr` value, so deep links and `onSettingsTab('ocr')` still land here.
  */
@@ -28,27 +28,16 @@ import { OCR_MODES, type OcrMode } from '../../bridge/settings'
 import { isGamingMode, useCapabilities } from '../../bridge/capabilities'
 import type {
   AutoOCRSettings,
-  AutoScanSettings,
   TextOverlayGroupingSettings
 } from '../../vendor/shared-types'
 import { useSetting } from '../../bridge/useSetting'
 import { useViewState } from '../../bridge/state'
 import { triggerAction } from '../../bridge/tauri'
-import { GamepadButtonCapture } from '../../components/GamepadButtonCapture'
 import { JapaneseFilterRow } from './JapaneseFilterRow'
 import { EngineChooser } from './EngineChooser'
 import { OverlayLook } from './OverlayLook'
 import { SmallTextFilter } from './SmallTextFilter'
 import './ocr-tab.css'
-
-const SCAN_DELAYS = [
-  { value: '100', label: '100 ms' },
-  { value: '500', label: '500 ms' },
-  { value: '1000', label: '1 s' },
-  { value: '1500', label: '1.5 s' },
-  { value: '2000', label: '2 s' },
-  { value: '3000', label: '3 s' }
-]
 
 const SETTLE_OPTIONS = [
   { value: '2', label: '2 readings', detail: 'Default' },
@@ -101,10 +90,6 @@ export function OcrTab(): ReactNode {
   const gaming = isGamingMode(useCapabilities())
   const [excludeFromCapture, setExcludeFromCapture] = useSetting<boolean>('excludeOverlayFromCapture', true)
   const [clickThrough, setClickThrough] = useSetting<boolean>('overlayClickThrough', true)
-  const [autoScanSettings, setAutoScanSettings] = useSetting<AutoScanSettings>('autoScanSettings', {
-    enabled: false,
-    scanDelay: 500
-  })
   const [textOverlayGrouping, setTextOverlayGrouping] = useSetting<TextOverlayGroupingSettings>(
     'textOverlayGrouping',
     {
@@ -218,40 +203,6 @@ export function OcrTab(): ReactNode {
         description="How scanned text is marked on your source, and the card it turns into when you hover it."
       >
         <OverlayLook />
-      </SettingsSection>
-
-      <SettingsSection title="Auto-scan">
-        <SettingsRow
-          label="Scan after a button press"
-          controlId="ocr-autoscan"
-        >
-          <Switch
-            id="ocr-autoscan"
-            checked={autoScanSettings.enabled}
-            onCheckedChange={(enabled) => void setAutoScanSettings({ ...autoScanSettings, enabled })}
-          />
-        </SettingsRow>
-        {autoScanSettings.enabled && (
-          <SettingsSubgroup>
-            <SettingsRow label="Scan delay">
-              <Select
-                aria-label="Scan delay"
-                value={autoScanSettings.scanDelay.toString()}
-                onValueChange={(delay) =>
-                  void setAutoScanSettings({ ...autoScanSettings, scanDelay: parseInt(delay, 10) })
-                }
-                options={SCAN_DELAYS}
-              />
-            </SettingsRow>
-            <SettingsRow label="Gamepad trigger" description="A gamepad button that starts a scan.">
-              <GamepadButtonCapture
-                value={autoScanSettings.gamepadButton}
-                onChange={(btn) => void setAutoScanSettings({ ...autoScanSettings, gamepadButton: btn })}
-                size="1"
-              />
-            </SettingsRow>
-          </SettingsSubgroup>
-        )}
       </SettingsSection>
 
       <SettingsSection title="Auto OCR">
