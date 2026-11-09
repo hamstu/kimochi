@@ -165,6 +165,38 @@ x86_64 runtime and a real X11 session remain unverified. Remaining X11 checks in
 clicks not stealing focus; `GetImage` on windows of depth-32 visuals; GTK CSD windows'
 bounds versus the overlay.
 
+### KDE Plasma window geometry (2026-11-09)
+
+Verified in a headless Plasma 6.7 session (Fedora 43, KWin virtual backend, real
+`xdg-desktop-portal-kde` picker, PipeWire, kglobalacceld; `scripts/e2e-kde/`): window streams
+link to KWin windows by frame size; overlay boxes land on the text for native Wayland and
+XWayland windows at 100% and 150% scale, follow moves and a second output; Shift-gated lookups
+(10ten), Bring to front and the portal Shift+F8 shortcut work. KDE's ScreenCast Start response carries
+only `source_type` for a window, and its restore data names the window by app id and title,
+never position, so geometry needs KWin itself: `kwin.rs` (see COMMANDS.md). No new system
+dependency: the bridge uses zbus (already linked) and KWin's own scripting API. The overlay's
+10 Hz pointer poll costs KWin about 1 ms per call while text is shown; window snapshots are pushed
+on change only. Unverified: Plasma 5.27, rotated outputs, and a window spanning outputs (KWin
+names the output holding most of it).
+
+### Wayland Shift gate (2026-11-09)
+
+The overlay's words let clicks through until Shift is held on KDE Plasma and Hyprland, as on
+macOS/Windows/X11 (`shift.rs`, COMMANDS.md "Wayland Shift gate"). Plasma: KWin forwards the
+modifier keys to XWayland whatever has focus unless Legacy X11 App Support is **Never**
+(`XwaylandEavesdrops`, default `Combinations` in KWin 6's kcfg), so Kimochi opens its own X11
+connection (x11rb, already linked; it starts XWayland where KWin runs it on demand) and reads
+`QueryPointer`'s mask. Rejected: `org.freedesktop.a11y.KeyboardMonitor` (KWin admits screen
+readers only, by bus name), a KWin global shortcut on Shift (consumes the key), KWin's JS effects
+(see modifiers through `effects.mouseChanged` but have no D-Bus to report them) and evdev (needs
+the input group). Verified in the Plasma 6.7 rig, native Wayland and XWayland games, 100%/150%,
+two outputs, a real 10ten lookup on a resting Shift press; `--no-eavesdrop` keeps hover lookups.
+Debug-build cost in the rig: idle with the feed on vs off is within noise (Kimochi ~4-5% either
+way, XWayland +0.1-0.4%, KWin unchanged); holding Shift and sweeping the pointer at 60 Hz, KWin
+~5% (positions asked ≤ ~80/s only then). 10ten takes WebKitGTK for Safari and drops a modifier-only
+move at the last move's point, so a Shift press at rest is preceded by a plain move a pixel off.
+Hyprland's path (portal Shift bindings, once one fires) is built but not run on Hyprland yet.
+
 ### Native Wayland overlays (Linux bring-up)
 
 The bring-up user explicitly expanded the original reduced-tier scope to investigate native Wayland overlays. Native layers are enabled automatically when supported; `KIMOCHI_WAYLAND_OVERLAY=0` disables them for diagnostics. During GTK setup the Linux module dynamically loads optional `libgtk-layer-shell.so.0` and probes the actual Wayland protocol. Missing library/protocol disables the overlay and crop editor entirely; there is no detached reader fallback or link-time dependency. No crate/model versions change. `session.nativeLayerShell` reports whether this integration initialized, distinct from the historical compositor-name hint `session.layerShell`.

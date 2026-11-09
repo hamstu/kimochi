@@ -79,9 +79,18 @@ let waylandDisabled = false
 let waylandLayer = false
 /**
  * Whether native can read Shift, so the words and the hook card let clicks through without it
- * (`View::live_regions`). Wayland has no global pointer: there they take the mouse as before.
+ * (`View::live_regions`). On Wayland only where the compositor reports the pointer and something
+ * reports Shift (`overlay.shiftGate`: KDE Plasma, Hyprland); elsewhere they take the mouse.
  */
 let shiftGated = true
+/** KDE Plasma with nothing relaying Shift: the overlay's text looks up on hover instead. */
+let lookupOnHover = false
+/** Wayland: a button went down on this surface and has not come up. A layer surface keeps the
+ * pointer through a press, so its DOM events are the button's state; the compositor feed has no
+ * buttons over a Wayland window. */
+let surfaceButtonDown = false
+/** Whether the last move the native feed handed the engine carried Shift. */
+let lastScanShift = false
 /**
  * Whether clicks on the overlay's text and the hook card go to the game unless Shift is held
  * (`overlayClickThrough`, on unless turned off). Off, they take the mouse as before.
@@ -4233,7 +4242,8 @@ function startRegionLoop() {
 }
 
 async function refreshLayerPointer() {
-  if (!hyprlandPointer || !layerPointerExit || layerPointerPolling || !state.origin) return
+  // With Shift readable, native's pointer feed already follows the pointer over the text.
+  if (shiftGated || !hyprlandPointer || !layerPointerExit || layerPointerPolling || !state.origin) return
   // Nothing on the overlay takes the mouse, and the last sample already said so: there is
   // nothing for the pointer to be inside until something is drawn.
   if (layerPointerExit.outside() && hitRects().length === 0) return
@@ -4333,11 +4343,15 @@ await native.watchCapabilities(async (caps) => {
   syncAutoScanner()
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') nativeGamescope = !!caps.session.nativeGamescope
   void syncGamingHints()
-  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') shiftGated = caps.session?.backend !== 'wayland'
+  if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
+    shiftGated = caps.session?.backend !== 'wayland' || caps.overlay?.shiftGate === true
+    lookupOnHover = caps.overlay?.lookupOnHover === true
+  }
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux' && (caps.session.nativeLayerShell || caps.session.nativeGamescope) && !waylandLayer) {
     waylandLayer = true
     if (caps.session.backend === 'wayland' && caps.session.nativeLayerShell) {
-      hyprlandPointer = caps.session.compositor === 'Hyprland'
+      // Hyprland's IPC and KWin's script bridge both report the pointer over the game.
+      hyprlandPointer = ['Hyprland', 'KDE'].includes(caps.session.compositor)
       const { installWaylandPointerExit } = await import('./wayland-pointer-exit.js')
       const pointerExit = installWaylandPointerExit(window, {
         leave: () => { renderer.clearPointer(); syncReadingHold() },
@@ -4352,7 +4366,11 @@ await native.watchCapabilities(async (caps) => {
       })
     }
     const { installLinuxScanInput } = await import('/spike/linux-scan-input.js')
-    await installLinuxScanInput(window, { passive: true })
+    // Where nothing can report Shift to the overlay (KDE Plasma without Legacy X11 App Support),
+    // its text looks up on hover. Asked live: the Shift feed can come up after startup.
+    await installLinuxScanInput(window, { passive: true, hover: () => lookupOnHover })
+    window.addEventListener('pointerdown', () => { surfaceButtonDown = true }, true)
+    for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, () => { surfaceButtonDown = false }, true)
     window.addEventListener('resize', () => {
       state.origin = { x: 0, y: 0, width: innerWidth, height: innerHeight }
       draw()
@@ -4625,6 +4643,8 @@ installPointerDiagnostics('overlay', { label: 'overlay', active: () => state.reg
 
 await native.listen('pointer', ({ payload }) => {
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') gnomeOverlay?.pointer(payload)
+  // Wayland: the compositor feed has no buttons over a Wayland window; a press on this surface does.
+  if (waylandLayer && surfaceButtonDown && !payload?.down) payload = { ...payload, down: true }
   if (!state.origin || typeof payload?.x !== 'number') return
   const local = toOverlayLocal(payload, state.origin)
   // Words and the hook card are Shift-only: without Shift a click goes to the game (native
@@ -4666,12 +4686,19 @@ await native.listen('pointer', ({ payload }) => {
     // Each engine listens for its own event: Yomitan and 10ten for `pointermove`, Hachidori for
     // `mousemove` on the document (extensions/hachidori/content.js). The descriptor says which.
     const types = window.__kimochiExtensionHost?.descriptor?.pointerEvents ?? ['pointermove']
+    // Shift just went down with the pointer at rest: 10ten takes WebKitGTK for Safari and drops a
+    // move that only adds a modifier at the point of the last one (a Safari bug it works around).
+    // A plain move a pixel off first makes this one a move. Wayland only: there the last move the
+    // engine saw is often the surface's own, at this very point, as the words started taking it.
+    const prime = waylandLayer && init.shiftKey && !lastScanShift
+      ? { ...init, shiftKey: false, clientX: init.clientX + 1, screenX: init.screenX + 1, kimochiPrime: true } : null
     for (const type of types) {
-      target.dispatchEvent(
-        type === 'mousemove' ? new MouseEvent(type, init) : new PointerEvent(type, init)
-      )
+      const make = (options) => type === 'mousemove' ? new MouseEvent(type, options) : new PointerEvent(type, options)
+      if (prime) target.dispatchEvent(make(prime))
+      target.dispatchEvent(make(init))
     }
   }
+  lastScanShift = Boolean(init?.shiftKey)
   // Once each, then never again. Whether a modifier can be read at all from a window
   // that does not have the keyboard is the one thing this window cannot find out for
   // itself, and "Shift does nothing" has two completely different causes depending on

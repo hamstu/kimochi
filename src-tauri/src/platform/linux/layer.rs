@@ -14,6 +14,7 @@ struct Api {
     exclusive: unsafe extern "C" fn(*mut c_void, c_int),
     anchor: unsafe extern "C" fn(*mut c_void, c_int, c_int),
     margin: unsafe extern "C" fn(*mut c_void, c_int, c_int),
+    monitor: unsafe extern "C" fn(*mut c_void, *mut c_void),
 }
 static API: OnceLock<Option<Api>> = OnceLock::new();
 static REGION_EDITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -93,6 +94,10 @@ pub fn initialize() {
                     "gtk_layer_set_margin",
                     unsafe extern "C" fn(*mut c_void, c_int, c_int)
                 ),
+                monitor: symbol!(
+                    "gtk_layer_set_monitor",
+                    unsafe extern "C" fn(*mut c_void, *mut c_void)
+                ),
             };
             eprintln!("Wayland layer-shell enabled: keyboard=NONE; native input regions");
             Some(api)
@@ -119,6 +124,72 @@ unsafe extern "C" {
     fn cairo_region_create() -> *mut c_void;
     fn cairo_region_union_rectangle(region: *mut c_void, rectangle: *const CairoRect) -> c_int;
     fn cairo_region_destroy(region: *mut c_void);
+    fn gdk_display_get_default() -> *mut c_void;
+    fn gdk_display_get_n_monitors(display: *mut c_void) -> c_int;
+    fn gdk_display_get_monitor(display: *mut c_void, index: c_int) -> *mut c_void;
+    fn gdk_monitor_get_geometry(monitor: *mut c_void, geometry: *mut CairoRect);
+}
+
+/// Kimochi's layer surfaces, which share one output: the overlay (anchored to its edges) and the
+/// panels placed by margins in its coordinates (the dictionary pop-up, the hook card…).
+static LAYERS: std::sync::Mutex<Vec<tauri::WebviewWindow>> = std::sync::Mutex::new(Vec::new());
+/// The output (logical geometry) they were last moved to; `None` = the compositor's choice.
+static OUTPUT: std::sync::Mutex<Option<(i32, i32, i32, i32)>> = std::sync::Mutex::new(None);
+
+/// The output (logical geometry) the layer surfaces were last moved to.
+pub fn current_output() -> Option<Rect> {
+    OUTPUT.lock().ok().and_then(|o| *o).map(|(x, y, width, height)| Rect {
+        x: f64::from(x),
+        y: f64::from(y),
+        width: f64::from(width),
+        height: f64::from(height),
+    })
+}
+
+/// Put every layer surface on the output with this logical geometry (the one the source is on),
+/// unless they are there already. The overlay's surface then has that output's size, and its
+/// origin is that output's. Returns whether a move was requested.
+pub fn follow_output(geometry: Rect) -> bool {
+    let key = (geometry.x.round() as i32, geometry.y.round() as i32, geometry.width.round() as i32, geometry.height.round() as i32);
+    if API.get().and_then(Option::as_ref).is_none() || OUTPUT.lock().is_ok_and(|o| *o == Some(key)) {
+        return false;
+    }
+    let windows = LAYERS.lock().map(|w| w.clone()).unwrap_or_default();
+    let Some(first) = windows.first().cloned() else { return false };
+    if let Ok(mut output) = OUTPUT.lock() {
+        *output = Some(key);
+    }
+    let _ = first.run_on_main_thread(move || {
+        let Some(api) = API.get().and_then(Option::as_ref) else { return };
+        unsafe {
+            let display = gdk_display_get_default();
+            if display.is_null() {
+                return;
+            }
+            let monitor = (0..gdk_display_get_n_monitors(display))
+                .map(|i| gdk_display_get_monitor(display, i))
+                .find(|&m| {
+                    let mut r = CairoRect { x: 0, y: 0, width: 0, height: 0 };
+                    gdk_monitor_get_geometry(m, &mut r);
+                    (r.x, r.y, r.width, r.height) == key
+                });
+            let Some(monitor) = monitor else {
+                // Not moved after all: the next attempt (and `current_output`) must know.
+                eprintln!("Wayland layer-shell: no GDK monitor at {key:?}");
+                if let Ok(mut output) = OUTPUT.lock() {
+                    *output = None;
+                }
+                return;
+            };
+            for window in &windows {
+                if let Ok(gtk) = window.gtk_window() {
+                    (api.monitor)(gtk.as_ptr().cast(), monitor);
+                }
+            }
+            eprintln!("Wayland layer-shell: surfaces moved to the output at {key:?}");
+        }
+    });
+    true
 }
 #[repr(C)]
 struct CairoRect {
@@ -149,6 +220,10 @@ pub fn make_panel(window: &tauri::WebviewWindow) -> Result<bool, String> {
             let _ = entering.emit("wayland-layer-pointer", true);
             Some(false.to_value())
         });
+    }
+    if let Ok(mut layers) = LAYERS.lock() {
+        layers.retain(|w| w.label() != window.label());
+        layers.push(window.clone());
     }
     let pointer = gtk.as_ptr().cast();
     // Hidden Tauri windows must remain unrealized until their surface role is set.

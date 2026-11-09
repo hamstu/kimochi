@@ -141,7 +141,7 @@ impl CaptureBackend for Protected {
         self.inner.permission()
     }
     fn request_permission(&self) -> bool {
-        super::hyprland::clear();
+        super::tracking::clear();
         self.inner.request_permission()
     }
     fn enumerate(&mut self) -> Result<Vec<Source>> {
@@ -150,7 +150,7 @@ impl CaptureBackend for Protected {
         Ok(sources)
     }
     fn close(&mut self) {
-        super::hyprland::clear();
+        super::tracking::clear();
         self.inner.close();
     }
     fn capture(&mut self, request: &CaptureRequest) -> Result<Frame> {
@@ -170,7 +170,9 @@ impl CaptureBackend for Protected {
         // the desktop scene. Our separate annotation/popup windows cannot enter
         // it. Hiding them each observation only creates a visible blink.
         // Screen streams and unverified window shares retain full suppression.
-        let isolated_window = request.source_id.starts_with("portal:window:") && before.is_some();
+        // KWin's window stream renders that window alone as well, once it is linked.
+        let isolated_window = request.source_id.starts_with("portal:window:")
+            && (before.is_some() || super::tracking::isolated(&request.source_id));
         if super::region_editing() {
             return Err(CaptureError::new("busy", "Finish crop editing before capturing"));
         }
@@ -205,7 +207,7 @@ impl CaptureBackend for Protected {
             }
         }
         if result.is_ok(){if let Some(service)=self.app.try_state::<crate::state::Shared>(){super::gnome::refresh_identity(&service,&request.source_id);}}
-        if let Ok(frame) = result.as_mut() { super::hyprland::enrich(frame); }
+        if let Ok(frame) = result.as_mut() { super::tracking::enrich(frame); }
         drop(hidden);
         result
     }
@@ -213,7 +215,7 @@ impl CaptureBackend for Protected {
     // annotations, but must not disturb what the user is reading.
     fn preview(&mut self, request: &CaptureRequest) -> Result<Frame> {
         let mut frame = self.inner.capture(request)?;
-        super::hyprland::enrich(&mut frame);
+        super::tracking::enrich(&mut frame);
         Ok(frame)
     }
     fn thumbnail(&mut self, source_id: &str, edge: u32) -> Result<Frame> {

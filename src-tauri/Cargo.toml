@@ -110,6 +110,11 @@ raw-window-handle = "0.6"
 # Hidden-page timer throttling off in every webview (platform/linux/webkit_timers.rs); the
 # version wry already uses.
 webkit2gtk = "2.0"
+# The KWin bridge's long poll (platform/linux/kwin.rs): the channel and timer zbus itself runs on,
+# already in the lock file through it.
+async-channel = "2"
+async-io = "2"
+futures-lite = "2"
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 # macOS coordinates instances itself (platform/macos/instance.rs).
 # `deep-link`: a second launch carrying a `kimochi://` URL hands it to the running copy.

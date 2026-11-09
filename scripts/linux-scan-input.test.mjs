@@ -4,15 +4,16 @@ import assert from 'node:assert/strict'
 import { installLinuxScanInput } from '../host/linux-scan-input.js'
 
 function fixture(os = 'linux') {
-  const listeners = new Map(), received = []
+  const listeners = new Map(), received = [], primes = []
   const native = new Map()
   class PointerEvent { constructor(type, init) { this.type = type; Object.assign(this, init) } }
-  const target = { dispatchEvent: e => received.push(e), closest: () => null }
+  // A Shift scan is preceded by a plain move a pixel off (10ten's Safari workaround); kept apart.
+  const target = { dispatchEvent: e => (e.kimochiPrime ? primes : received).push(e), closest: () => null }
   const win = { __KIMOCHI_PLATFORM__: { os }, PointerEvent,
     document: { activeElement: target, elementFromPoint: () => target, hasFocus: () => true },
     addEventListener: (type, fn) => listeners.set(type, fn),
     __TAURI__: { event: { listen: async (name, fn) => { native.set(name, fn) } } } }
-  return { win, received, listeners, target,
+  return { win, received, primes, listeners, target,
     move: shiftKey => {
       let blocked=false
       listeners.get('pointermove')({ target, pointerType: 'mouse', isPrimary: true,
@@ -163,4 +164,35 @@ test('an engine that reads mousemove (Hachidori) gets the Shift scan and glide a
     stopImmediatePropagation() { blocked = true } })
   assert.equal(blocked, true, 'the real move without Shift does not reach the engine')
   assert.deepEqual([f.received.at(-1).type, f.received.at(-1).shiftKey, f.received.at(-1).clientX], ['mousemove', true, 18])
+})
+test('hover mode looks up without any Shift feed (KDE Plasma overlay)', async () => {
+  const f = fixture(); await installLinuxScanInput(f.win, { passive: true, hover: true })
+  const blocked = f.move(false)
+  assert.equal(blocked, true)
+  assert.equal(f.received.at(-1).shiftKey, true)
+  assert.deepEqual([f.received.at(-1).clientX, f.received.at(-1).clientY], [17, 23])
+  f.surface(false)
+  assert.equal(f.move(false), true, 'still corrected after the pointer comes back')
+})
+test('hover mode follows a live switch: once Shift is readable, the text waits for it', async () => {
+  let hover = true
+  const f = fixture(); await installLinuxScanInput(f.win, { passive: true, hover: () => hover })
+  f.move(false)
+  assert.equal(f.received.at(-1).shiftKey, true, 'hovering looks up while nothing reports Shift')
+  hover = false
+  f.send(false)
+  const blocked = f.move(false)
+  assert.equal(blocked, false, 'a plain move passes untouched once Shift is reported')
+  const before = f.received.length
+  f.send(true)
+  assert.equal(f.received.length, before + 1, 'pressing Shift looks up the word under the pointer')
+  assert.equal(f.received.at(-1).shiftKey, true)
+})
+test('a Shift scan is preceded by a plain move a pixel off, so 10ten does not drop it', async () => {
+  const f = fixture(); await installLinuxScanInput(f.win, { passive: true }); f.move(false)
+  f.send(true)
+  assert.equal(f.received.length, 1)
+  assert.equal(f.primes.length, 1)
+  assert.deepEqual([f.primes[0].clientX, f.primes[0].shiftKey], [18, false])
+  assert.deepEqual([f.received[0].clientX, f.received[0].shiftKey], [17, true])
 })
