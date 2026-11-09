@@ -20,6 +20,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - The Notebook, Anki and Settings views open at once, without a "Loading…" message first.
 - Linux (Wayland, other than GNOME and Hyprland): the source card no longer offers **Bring to front** for a shared window, which always failed, and Kimochi now says when the overlay can't follow a shared window, suggesting you share the whole screen instead.
+- With the Yomitan dictionary, the Log no longer shows errors like "Acknowledgement timeout (popupFactoryHide)": they came from Yomitan's own messaging and needed nothing from you.
 - AnkiConnect no longer drops out with "error sending request for url", which happened most often with an Anki on another computer or a custom address.
 - Hachidori and 10ten lookups on macOS stay quick after a pause, even while your Mac is busy: macOS no longer slows down the dictionary engine running in the background.
 
