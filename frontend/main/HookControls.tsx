@@ -38,10 +38,11 @@ function threadLabel(thread: HookThread): string {
 /**
  * The game took the hook, but the hooker could not patch some of the code its text may go through,
  * and no dialogue has been found since. Unlike a game that cannot be hooked at all (the session
- * fails), this is often a matter of the game's memory in this run: restarting the game helps.
+ * fails), this is often a matter of the game's memory in this run: restarting the game helps. Not
+ * for a Unity game whose text Kimochi reads itself: its threads come without the hooker.
  */
 function couldNotHook(status: HookStatus): boolean {
-  return status.phase === 'hooked' && !status.threads.some((t) => t.selected) && (status.hookFailures?.length ?? 0) > 0
+  return status.phase === 'hooked' && !status.unityText && !status.threads.some((t) => t.selected) && (status.hookFailures?.length ?? 0) > 0
 }
 
 /** What the select shows, and whether it is still working on it. */

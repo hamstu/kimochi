@@ -8,6 +8,9 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+- Sentence audio can now use each line's own clean voice from the game on Windows when you read with the Text Hooker (tested with AdvHD, SiglusEngine, KiriKiri, NScripter, Ren'Py and Unity games). Voices are matched to Log lines by timing, without speech recognition; Kimochi remembers how each game plays its voices, leaves unvoiced narration silent, and falls back to recording system audio when a game's voices can't be captured.
+- The Text Hooker reads Unity games' dialogue more reliably on Windows: Kimochi reads the text box itself when the hooker can't (or can only through unrelated string functions), so you no longer need to restart the game and hook it again until it works.
+
 ## [0.7.0] - 2026-11-07
 
 ### Added

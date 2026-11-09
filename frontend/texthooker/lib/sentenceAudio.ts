@@ -51,7 +51,7 @@ export interface LineAudio {
   state: "voiced" | "silent" | "missed";
   durationMs?: number;
   /** `matched` (found by its words) or `timed` (placed by timing). */
-  how?: "matched" | "timed";
+  how?: "matched" | "timed" | "hooked";
   message?: string;
 }
 

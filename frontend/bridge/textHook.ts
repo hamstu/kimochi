@@ -47,6 +47,8 @@ export interface HookStatus {
   fallback?: string | null
   /** Hook codes the hooker found in the game but could not insert. */
   hookFailures?: string[]
+  /** Kimochi reads this Unity game's text itself (the hooker's failures then matter less). */
+  unityText?: boolean
   threads: HookThread[]
 }
 

@@ -48,3 +48,6 @@ site/public/guide/original/
 
 # Local secrets (e.g. REACTBITS_LICENSE_KEY for the site)
 .env.local
+voicehook/target/
+voicehook/dist/
+voicehook/speechcheck/target/

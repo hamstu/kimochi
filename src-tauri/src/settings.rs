@@ -77,6 +77,7 @@ pub fn defaults() -> Value {
         "overlayStyle": { "color": "#3e63dd", "appearance": "app", "opacity": 40 },
         // Sentence audio (sentence_audio/): off until the user turns it on.
         "sentenceAudio": {
+            "voiceHook": true,
             "enabled": false,
             "seconds": 30,
             "field": "SentenceAudio",

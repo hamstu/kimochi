@@ -40,6 +40,12 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser, ...globals.serviceworker, chrome: 'readonly' } }
   },
   {
+    // The standalone web-game adapter runs in an NW.js / Electron game realm.
+    files: ['voicehook/cli/src/web.js'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node, nw: 'readonly', WebAudio: 'readonly', Howl: 'readonly' } },
+    rules: { 'no-empty': ['error', { allowEmptyCatch: true }] }
+  },
+  {
     files: ['host/**/*.js'],
     languageOptions: { globals: { ...globals.browser } },
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
