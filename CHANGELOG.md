@@ -10,20 +10,20 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Added
 
-- **Choose the key you hold to look up words on the overlay.** Some visual novels skip text while Shift is held; pick Ctrl, Alt (Option) or, on a Mac, Command in **Settings → Shortcuts & Controls → Lookup key**, and set the same key in your dictionary.
+- **Lookup key**: choose the key you hold to look up words on the overlay (Shift, Ctrl, Alt or, on a Mac, Command) in **Settings → Shortcuts & Controls**. Handy for visual novels that skip text with Shift.
 - **Hachidori sharing relays (experimental).** Hachidori in Kimochi can now link to a shared Hachidori through a relay (the Hachidori Anki add-on's, or hachidori-relay) from **Settings → Dictionary → Sharing**, and use its dictionaries and settings like any linked browser, on this computer or across your network. Before, linking failed with "No shared Hachidori answered".
 
 ### Changed
 
-- **Scan after a button press** moved to **Settings → Shortcuts & Controls**, next to your other controller settings. Choosing a button switches it on.
-- Controller buttons you've set always show in Settings, even with the controller unplugged or gamepad support turned off.
+- **Scan after a button press** moved to **Settings → Shortcuts & Controls**.
+- Controller buttons you've set stay visible in Settings, even with no controller connected.
 
 ### Fixed
 
 - The Notebook, Anki and Settings views open at once, without a "Loading…" message first.
-- Linux (Wayland, other than GNOME and Hyprland): the source card no longer offers **Bring to front** for a shared window, which always failed, and Kimochi now says when the overlay can't follow a shared window, suggesting you share the whole screen instead.
-- With the Yomitan dictionary, the Log no longer shows errors like "Acknowledgement timeout (popupFactoryHide)": they came from Yomitan's own messaging and needed nothing from you.
-- AnkiConnect no longer drops out with "error sending request for url", which happened most often with an Anki on another computer or a custom address.
+- Linux (Wayland, e.g. KDE Plasma): no more "Bring to front" error for a shared window, and Kimochi now explains when the overlay can't follow one.
+- With Yomitan, the Log no longer shows "Acknowledgement timeout" errors.
+- AnkiConnect no longer drops out with "error sending request for url".
 - Hachidori and 10ten lookups on macOS stay quick after a pause, even while your Mac is busy: macOS no longer slows down the dictionary engine running in the background.
 
 ## [0.7.0] - 2026-11-07
