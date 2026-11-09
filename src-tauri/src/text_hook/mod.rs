@@ -634,7 +634,7 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     }
     // A thread chosen for this game before is taken back as soon as it speaks.
     let saved = session.exe.as_deref().and_then(|exe| remembered(hook, exe));
-    if saved.as_ref() == Some(&session.threads[index].signature()) {
+    if unity::remembers_by_signature(&session.threads[index].hookcode) && saved.as_ref() == Some(&session.threads[index].signature()) {
         session.selected = Some(key.to_string());
         session.selected_by = Some("saved");
         session.pick_note = None;

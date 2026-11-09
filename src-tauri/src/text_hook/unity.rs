@@ -19,6 +19,13 @@ pub fn is_unity(hookcode: &str) -> bool {
     hookcode.starts_with(HOOKCODE)
 }
 
+/// Whether a thread can be known again in the next run by its signature. A Unity thread's context
+/// is its text object's address, which is new each run: a thread remembered by it would be some
+/// other text object next time (a menu label as often as the dialogue), so the screen chooses.
+pub fn remembers_by_signature(hookcode: &str) -> bool {
+    !is_unity(hookcode)
+}
+
 /// A text the DLL read: the object it was set on, the setter, the text, and when (Unix ms).
 #[derive(Debug, PartialEq)]
 pub struct Text {
@@ -277,6 +284,12 @@ pub fn follow(hook: &'static Hook, generation: u64, pid: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_unity_text_object_is_never_taken_back_by_its_address() {
+        assert!(!remembers_by_signature("UNITY:TMP_Text.set_text"));
+        assert!(remembers_by_signature("HS-8@0:game.exe"));
+    }
 
     #[test]
     fn only_the_hookers_unity_hooks_count() {
