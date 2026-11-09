@@ -504,8 +504,8 @@ pub fn make_panel(w: &tauri::WebviewWindow) -> Result<bool, String> {
 /// (efficiency cores, throttled I/O), and `background_throttling(Disabled)` does not prevent
 /// it. The first lookup after a pause then took 26 ms (worst 101 ms) on an M5 Max with other
 /// background work running, against 6 ms with this. So the window is ordered in, fully
-/// transparent, click-through, behind everything, on every Space and out of the window cycle
-/// and Mission Control, and WebKit is told not to treat it as covered (an alpha-0 window
+/// transparent, untitled, click-through, behind everything, on every Space and out of the
+/// window cycle and Mission Control, and WebKit is told not to treat it as covered (an alpha-0 window
 /// otherwise counts as occluded, and occluded counts as hidden). It never activates the app.
 /// Nothing is ordered in when this WebKit lacks the private switch. `KIMOCHI_NO_ENGINE_GHOST`
 /// keeps the window hidden, as before.
@@ -535,6 +535,8 @@ unsafe fn ghost_window(w: &tauri::WebviewWindow, view: *mut AnyObject) -> Result
     }
     let _: () = msg_send![view, _setWindowOcclusionDetectionEnabled: Bool::NO];
     let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
+    // Other apps' window pickers (recorders, screen sharing) skip untitled windows.
+    (*p).setTitle(ns_string!(""));
     (*p).setAlphaValue(0.);
     (*p).setIgnoresMouseEvents(true);
     (*p).setCollectionBehavior(
