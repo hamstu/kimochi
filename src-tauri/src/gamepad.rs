@@ -62,6 +62,8 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
         // every tick to every window.
         let mut broadcast: Option<(Value, Instant)> = None;
         let mut last_tick = Instant::now();
+        // The controllers last recorded as connected, so the diagnostics log names each change.
+        let mut logged_pads: Option<Vec<String>> = None;
         loop {
             // Wake as soon as input arrives rather than on a fixed frame, so a stick sweeping
             // the controller menu is reported the moment it moves. The timeout keeps hotplug
@@ -84,6 +86,11 @@ pub fn start(app: &tauri::AppHandle, service: &Shared) {
                 .settings
                 .get_or("gamepadSettings.preferredGamepadIndex", None);
             let pads: Vec<_> = gilrs.gamepads().collect();
+            let names: Vec<String> = pads.iter().filter(|(_, pad)| pad.is_connected()).map(|(_, pad)| pad.name().to_owned()).collect();
+            if logged_pads.as_ref() != Some(&names) {
+                service.log(json!({ "check": "gamepad", "connected": names }));
+                logged_pads = Some(names);
+            }
             let devices: Vec<_> = pads
                 .iter()
                 .enumerate()
@@ -555,31 +562,53 @@ fn dispatch_for_buttons(app: &tauri::AppHandle, service: &Shared, held: &[bool],
             Some((*name, crate::settings::gamepad_chord(definition)))
         })
         .collect();
+    let pressed: Vec<usize> = rising.iter().enumerate().filter(|(_, r)| **r).map(|(i, _)| i).collect();
+    // Verbose only: a debug report then says what each press did, and why a scan didn't follow.
+    let trace = |outcome: &str| {
+        crate::debug_report::trace(app, json!({
+            "check": "gamepad-press", "pressed": pressed, "panelFocused": focused, "outcome": outcome,
+        }));
+    };
     if let Some(name) = chord_to_fire(&bindings, held, rising) {
+        trace(name);
         actions::dispatch(app, service, name);
         return;
     }
-    if focused { return; }
-    // The Auto-scan switch gates the button; with it off a saved button does nothing.
-    if !service.settings.get_or("autoScanSettings.enabled", false) { return; }
+    let enabled = service.settings.get_or("autoScanSettings.enabled", false);
     let auto: Option<usize> = service
         .settings
         .get_or("autoScanSettings.gamepadButton", None);
-    if auto.is_some_and(|index| rising.get(index).copied().unwrap_or(false)) {
-        let delay = service
-            .settings
-            .get_or::<f64>("autoScanSettings.scanDelay", 500.0)
-            .clamp(0.0, 10_000.0);
-        let revision = PANEL_FOCUS_REVISION.load(Ordering::SeqCst);
-        let app = app.clone();
-        let service = service.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(delay as u64));
-            if !delayed_scan_allowed(revision, PANEL_FOCUS_REVISION.load(Ordering::SeqCst),
-                panel_focused(), navigating(), crate::hotkeys::suspended()) { return; }
-            actions::dispatch(&app, &service, "triggerScan");
-        });
-    }
+    let Some(index) = auto.filter(|index| rising.get(*index).copied().unwrap_or(false)) else {
+        trace("none");
+        return;
+    };
+    // The controller works Kimochi's own window while one is in front (usePanelController).
+    if focused { trace("auto-scan skipped: a Kimochi window has focus"); return; }
+    // The switch gates the button; with it off a saved button does nothing.
+    if !enabled { trace("auto-scan skipped: switched off"); return; }
+    let delay = service
+        .settings
+        .get_or::<f64>("autoScanSettings.scanDelay", 500.0)
+        .clamp(0.0, 10_000.0);
+    trace("auto-scan queued");
+    let revision = PANEL_FOCUS_REVISION.load(Ordering::SeqCst);
+    let app = app.clone();
+    let service = service.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(delay as u64));
+        let (current, focused, navigation, suspended) = (
+            PANEL_FOCUS_REVISION.load(Ordering::SeqCst), panel_focused(), navigating(), crate::hotkeys::suspended(),
+        );
+        if !delayed_scan_allowed(revision, current, focused, navigation, suspended) {
+            crate::debug_report::trace(&app, json!({
+                "check": "gamepad-press", "pressed": [index], "outcome": "auto-scan cancelled",
+                "focusChanged": revision != current, "panelFocused": focused,
+                "navigating": navigation, "suspended": suspended,
+            }));
+            return;
+        }
+        actions::dispatch(&app, &service, "triggerScan");
+    });
 }
 
 #[cfg(test)]

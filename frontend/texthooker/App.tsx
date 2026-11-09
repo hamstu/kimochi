@@ -53,6 +53,7 @@ import { usePanelDictionary } from "../shell/panelDictionary";
 import { openSettings } from "../bridge/tauri";
 import { useAccount } from "../bridge/account";
 import { translationAvailable } from "../../ui/account";
+import { isEngineRejection } from "../../ui/engine-rejection.js";
 
 /** Lines the Log shows at a time ("Show earlier lines" adds as many again). */
 const PAGE_LINES = 100;
@@ -64,8 +65,10 @@ export function ReaderHost({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
-    const fail = (event: PromiseRejectionEvent) =>
-      setError(String(event.reason));
+    const fail = (event: PromiseRejectionEvent) => {
+      // The dictionary engine's own hiccups are logged by its host, not shown (engine-rejection.js).
+      if (!isEngineRejection(event.reason)) setError(String(event.reason));
+    };
     window.addEventListener("unhandledrejection", fail);
     return () => window.removeEventListener("unhandledrejection", fail);
   }, []);
@@ -118,8 +121,10 @@ export function Transcript({ onOpenNotebook, visible }: TranscriptProps) {
   );
   const [error, setError] = useState("");
   useEffect(() => {
-    const fail = (event: PromiseRejectionEvent) =>
-      setError(String(event.reason));
+    const fail = (event: PromiseRejectionEvent) => {
+      // The dictionary engine's own hiccups are logged by its host, not shown (engine-rejection.js).
+      if (!isEngineRejection(event.reason)) setError(String(event.reason));
+    };
     window.addEventListener("unhandledrejection", fail);
     return () => window.removeEventListener("unhandledrejection", fail);
   }, []);

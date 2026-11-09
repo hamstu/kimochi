@@ -48,6 +48,10 @@ pub fn link(source: &str, window: &str, width: u32, height: u32) -> Result<(), S
 pub fn isolated(source: &str) -> bool {
     kde() && source.starts_with("portal:window:") && kwin::linked(source)
 }
+/// Whether [`activate`] can bring a linked window forward here (KWin's bridge).
+pub fn can_activate() -> bool {
+    kde() && kwin::available()
+}
 /// Bring the linked window forward. `None` when this compositor has no way to.
 pub fn activate(source: &str) -> Option<Result<(), String>> {
     (kde() && kwin::available()).then(|| kwin::activate(source))

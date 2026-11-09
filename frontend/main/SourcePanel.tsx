@@ -981,6 +981,8 @@ export function SourcePanel({
           : 'Window'
     // Gaming Mode shows one app at a time: while Kimochi is in front, its screen is Kimochi.
     const screenOnly = isScreen && isGamingMode(capabilities)
+    // A shared Wayland window outside GNOME is anonymous: nothing can bring it forward.
+    const activatable = !isScreen && capabilities.sources.activateWindow !== false
     const preview = screenOnly ? (
       <CardHead icon={<Monitor />} title={title} detail="Reads whatever is in front" chevron={false} />
     ) : (
@@ -995,7 +997,7 @@ export function SourcePanel({
           placeholder={isScreen ? <Monitor /> : <SourceIcon source={source} />}
           onStale={pickerRequired ? onStale : undefined}
           hint={
-            isScreen ? undefined : (
+            !activatable ? undefined : (
               <span className="src-front" aria-hidden>
                 <ArrowUpRight />
                 {isGamingMode(capabilities) ? 'Switch to it' : fullScreen ? 'Go to full screen' : 'Bring to front'}
@@ -1021,7 +1023,7 @@ export function SourcePanel({
             <CardHead icon={isScreen ? <Monitor /> : <SourceIcon source={source} />}
               title={title} />
           </button>
-        ) : isScreen || isGamingMode(capabilities) ? (
+        ) : !activatable || isGamingMode(capabilities) ? (
           // Gaming Mode: Gamescope only really hands the game input when Steam switches to it, so
           // the card does not pretend to; the Source view says how to switch instead.
           <div className="src-card-body">{preview}</div>
@@ -1178,6 +1180,20 @@ export function SourcePanel({
 
   const placement = useHookPlacement(mode === 'hook' ? hook.exe : null)
   const overlayUnavailable = capabilities.os === 'linux' && capabilities.session?.backend === 'wayland' && !capabilities.overlay.passive
+  // A shared Wayland window is anonymous: outside GNOME (its extension) and Hyprland nothing says
+  // where it is, so the overlay has nowhere to draw. A shared screen needs no tracking.
+  const windowUntracked =
+    mode === 'ocr' && overlayOn && !overlayUnavailable && !isGamingMode(capabilities) &&
+    !capabilities.sources.followWindowBounds && source?.type !== 'screen' &&
+    (source?.sourceId?.startsWith('portal:window:') ?? false)
+  const untrackedNotice = windowUntracked ? (
+    <Callout tone="warn" className="src-notice">
+      <span>
+        <strong>The overlay can&rsquo;t follow a shared window on this desktop.</strong> Try sharing your
+        whole screen instead. Words in the Log can still be looked up.
+      </span>
+    </Callout>
+  ) : null
   // Gaming Mode always draws the overlay (ui/overlay.js `overlayTextOn`): no switch for it.
   const overlayRow = isGamingMode(capabilities) ? null : (
     <SourceRow
@@ -1234,6 +1250,7 @@ export function SourcePanel({
             {overlayRow}
           </div>
           {gameModeNotice}
+          {untrackedNotice}
         </div>
       )}
 
@@ -1248,6 +1265,7 @@ export function SourcePanel({
             {overlayRow}
           </div>
           {gameModeNotice}
+          {untrackedNotice}
         </div>
       )}
       {mode === 'hook' && source && (

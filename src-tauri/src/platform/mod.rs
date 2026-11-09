@@ -129,6 +129,19 @@ pub struct Modifiers {
     pub meta: bool,
 }
 
+impl Modifiers {
+    /// Whether the overlay's lookup key (`overlayLookupKey`: "shift", "ctrl", "alt" or "meta")
+    /// is held. Anything else is Shift, the default.
+    pub fn holds(&self, key: &str) -> bool {
+        match key {
+            "ctrl" => self.ctrl,
+            "alt" => self.alt,
+            "meta" => self.meta,
+            _ => self.shift,
+        }
+    }
+}
+
 /// Where the pointer is (desktop coordinates), whether the primary button is down,
 /// and which modifiers are held, all from one sample.
 #[derive(Clone, Copy, Debug)]
@@ -1151,6 +1164,14 @@ pub fn capabilities_payload(dynamic: DynamicCapabilities) -> Value {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_lookup_key_is_the_chosen_modifier_and_shift_otherwise() {
+        let ctrl = super::Modifiers { ctrl: true, ..Default::default() };
+        let shift = super::Modifiers { shift: true, ..Default::default() };
+        assert!(ctrl.holds("ctrl") && !ctrl.holds("shift") && !ctrl.holds("alt"));
+        assert!(shift.holds("shift") && !shift.holds("ctrl"));
+        assert!(shift.holds("anything else"), "an unknown key is Shift");
+    }
     #[cfg(target_os = "windows")]
     #[test]
     fn windows_caption_rejection_and_oversized_fullscreen_are_not_space_transitions() {

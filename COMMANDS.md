@@ -73,7 +73,8 @@ Keys and defaults mirror `src/main/settings.ts`:
 `hasCompletedOnboarding`, `windowPositions.<id>`, `nativeWindowBounds.<label>`,
 `nativeWindowPinned.<label>`, `cropRegions.<appName>`, `cropScanEnabled.<appName>`,
 `ankiCropRegions.<appName>`, `textHookerGames.<exe path>`,
-`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `scannedTextFontSize` (14),
+`hotkeys.<name>.{accelerator,enabled,gamepadButton}`, `overlayLookupKey` (`shift`; or `ctrl`, `alt`,
+`meta`: the modifier that opens the overlay's click-through gate, main.rs cursor poll), `scannedTextFontSize` (14),
 `scannedTextHistory[]`, `audioSettings.voiceId`,
 `autoScanSettings.{enabled,scanDelay,gamepadButton}` (a `triggerKeys` left by an older version is ignored),
 `autoOCRSettings.{pollInterval,imageHashThreshold,localOCRSimilarityThreshold,localOCRGateEnabled,adaptivePollingEnabled,adaptivePollMin,adaptivePollMax}`,
@@ -584,7 +585,12 @@ button cannot fire, it is reported in `failed` with the reason, and `platform_ca
 record one.
 
 **Auto-scan trigger.** The gamepad button in `autoScanSettings.gamepadButton` fires
-`triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`). Kimochi does not watch
+`triggerScan` after `autoScanSettings.scanDelay` (see `gamepad.rs`), set in Settings → Shortcuts &
+Controls. Not while one of Kimochi's windows has focus (the controller works the window there) or
+while `autoScanSettings.enabled` is off. With verbose logging on, every press is recorded as
+`{check: "gamepad-press", pressed, panelFocused, outcome}`, so a debug report says what it did and
+why no scan followed; a change in the connected controllers is always recorded as
+`{check: "gamepad", connected: [names]}`. Kimochi does not watch
 individual keyboard keys in other applications on any platform: a keyboard scan is a
 global shortcut (`hotkeys`), which needs no Accessibility or other input permission (a bound
 mouse button on macOS is the exception, above).
@@ -2185,7 +2191,10 @@ one from `platform/linux/shift.rs` and the pointer from `tracking::pointer()`; w
 The compositor is asked for positions (≤ ~80/s) only while Shift is held or the gate is still open
 (`platform::pointer_demand`); otherwise the poll reads the modifiers alone. Buttons are known only
 over an X11 window; over Wayland ones the overlay takes them from its own surface's DOM events.
-`KIMOCHI_WAYLAND_SHIFT=0` turns the gate off.
+`KIMOCHI_WAYLAND_SHIFT=0` turns the gate off. The gate follows `overlayLookupKey` where every
+modifier is readable (X11, XWayland; `platform::lookup_keys_readable`); with Hyprland's portal it is
+always Shift, and Settings offers the Lookup key row on Wayland only for `shiftSource: "xwayland"`.
+On KDE `sources.activateWindow` is true while the KWin bridge is up (`tracking::can_activate`).
 
 ## Optional GNOME Shell overlay (Linux only)
 

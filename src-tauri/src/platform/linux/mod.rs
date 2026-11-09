@@ -121,6 +121,12 @@ pub fn wayland_pointer_feed() -> Option<shift::Source> {
     shift::source()
 }
 
+/// Whether every modifier can be read, so `overlayLookupKey` may be other than Shift: X11 and
+/// XWayland (KDE Plasma) can; Hyprland's portal relays Shift alone. Elsewhere nothing is gated.
+pub fn lookup_keys_readable() -> bool {
+    on_x11() || wayland_pointer_feed() != Some(shift::Source::Portal)
+}
+
 /// Whether the feed's Shift needs relaying to the overlay's `linux-dictionary-modifier` listeners
 /// (the portal source already sends its own edges).
 pub fn relays_shift() -> bool {
@@ -137,7 +143,9 @@ fn wayland_cursor() -> Option<PointerSample> {
     wayland_pointer_feed()?;
     let (modifiers, down) = shift::read()?;
     let mut last = LAST.lock().ok()?;
-    let wanted = modifiers.shift || down || POINTER_DEMAND.load(std::sync::atomic::Ordering::Relaxed);
+    // Any modifier: the lookup key (`overlayLookupKey`) may be Ctrl, Alt or Meta.
+    let held = modifiers.shift || modifiers.ctrl || modifiers.alt || modifiers.meta;
+    let wanted = held || down || POINTER_DEMAND.load(std::sync::atomic::Ordering::Relaxed);
     let stale = last.is_none_or(|(_, _, at)| at.elapsed() >= POINTER_EVERY);
     if wanted && stale {
         if let Some(point) = tracking::pointer() {
@@ -382,6 +390,10 @@ pub fn capabilities() -> Value {
             // A Gaming Mode app fills the output; nothing moves to follow.
             "followWindowBounds": !gaming && (!portal || tracking || tracking::available()),
             "foregroundTracking": !gaming && !portal,
+            // Whether `activate_source` can bring a window source forward: a portal stream's
+            // window is anonymous, so only GNOME's Shell integration, KWin's script bridge (KDE
+            // Plasma) or Gamescope can.
+            "activateWindow": gaming || !portal || gnome::eligible_popup_session() || tracking::can_activate(),
         },
         "overlay": {
             "available": x11 || layer::available() || gnome,
