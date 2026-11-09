@@ -14,7 +14,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Changed
 
-- **Scan after a button press** moved to **Settings → Shortcuts & Controls**, next to your other controller settings. Choosing a button switches it on, and a chosen button stays visible while the controller is unplugged.
+- **Scan after a button press** moved to **Settings → Shortcuts & Controls**, next to your other controller settings. Choosing a button switches it on.
+- Controller buttons you've set always show in Settings, even with the controller unplugged or gamepad support turned off.
 
 ### Fixed
 

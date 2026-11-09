@@ -223,9 +223,10 @@ export function GamepadSections(): ReactNode {
         )}
       </SettingsSection>
 
-      {enabled && <ScanAfterButtonSection />}
+      {/* Shown with gamepad support off too (the buttons disabled), so the bindings stay visible. */}
+      <ScanAfterButtonSection />
 
-      {enabled && <ControllerButtonSections />}
+      <ControllerButtonSections />
 
       {enabled && (
         <SettingsSection title="Connected gamepads">
