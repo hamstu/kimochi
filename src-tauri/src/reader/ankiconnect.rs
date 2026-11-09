@@ -39,6 +39,11 @@ fn client() -> &'static reqwest::Client {
             // AnkiConnect is on this computer (or the user's network): a system proxy can only
             // get in the way.
             .no_proxy()
+            // AnkiConnect closes the connection after every answer without saying so (no
+            // `Connection: close`), so a pooled connection is usually already dead: the next
+            // request on it failed with "error sending request", often on a LAN address. A new
+            // connection per request costs nothing at this rate.
+            .pool_max_idle_per_host(0)
             .build()
             .expect("reqwest client")
     })
@@ -124,8 +129,22 @@ fn transport(error: reqwest::Error) -> Failure {
     } else if error.is_connect() {
         Failure::Refused
     } else {
-        Failure::Other(error.to_string())
+        Failure::Other(with_causes(&error))
     }
+}
+
+/// reqwest's own message ("error sending request for url (…)") leaves out why; add the causes.
+fn with_causes(error: &dyn std::error::Error) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        let text = cause.to_string();
+        if !message.contains(&text) {
+            message = format!("{message}: {text}");
+        }
+        source = cause.source();
+    }
+    message
 }
 
 /// One classic-endpoint request; the envelope's `result`, or why there is none.
@@ -521,6 +540,39 @@ pub(crate) mod tests {
             }
         });
         (url, seen)
+    }
+
+    /// Like AnkiConnect's own server: it answers without `Connection: close`, then closes the
+    /// connection anyway (here a moment later, so a client reusing it always loses the race).
+    fn serve_closing_silently() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let (mut buf, mut chunk) = (Vec::new(), [0u8; 4096]);
+                // The whole request, as AnkiConnect reads it: unread bytes would make the close a reset.
+                while let Ok(n @ 1..) = stream.read(&mut chunk) {
+                    buf.extend_from_slice(&chunk[..n]);
+                    let text = String::from_utf8_lossy(&buf).to_string();
+                    let Some((head, body)) = text.split_once("\r\n\r\n") else { continue };
+                    let length = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                    if body.len() >= length { break; }
+                }
+                let answer = json!({ "result": 6, "error": null }).to_string();
+                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{answer}", answer.len());
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+        url
+    }
+
+    #[tokio::test]
+    async fn a_connection_ankiconnect_closed_is_never_reused() {
+        let url = serve_closing_silently();
+        for _ in 0..3 {
+            assert_eq!(action(&url, None, "version", json!({})).await, Ok(json!(6)));
+        }
     }
 
     /// AnkiConnect's classic endpoint as 26.10 answers it, with an optional apiKey.
