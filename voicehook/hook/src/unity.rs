@@ -608,6 +608,13 @@ unsafe fn dump(code: usize) -> String {
     std::slice::from_raw_parts(code as *const u8, readable(code, 96)).iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// `mono_array_length` where Mono does not export it (the legacy `mono.dll` of Unity 5 to 2018's
+/// old runtime): a `MonoArray` keeps its length after the object header (vtable, sync) and
+/// `bounds`, in every Mono Unity ships.
+unsafe extern "C" fn array_length_field(array: P) -> usize {
+    *(array as *const usize).add(3)
+}
+
 unsafe fn resolve(m: HMODULE) -> Option<Mono> {
     macro_rules! s {
         ($n:literal) => {
@@ -615,6 +622,13 @@ unsafe fn resolve(m: HMODULE) -> Option<Mono> {
                 0 => return None,
                 f => f,
             })
+        };
+        // The first of these that Mono exports, else `$fallback`.
+        ($n:literal, $alt:literal, $fallback:expr) => {
+            match (iat::real_gpa(m, $n), iat::real_gpa(m, $alt)) {
+                (0, 0) => $fallback,
+                (0, f) | (f, _) => std::mem::transmute::<usize, _>(f),
+            }
         };
     }
     Some(Mono {
@@ -629,11 +643,12 @@ unsafe fn resolve(m: HMODULE) -> Option<Mono> {
         field_get_value: s!(c"mono_field_get_value"),
         image_loaded: s!(c"mono_image_loaded"),
         array_new: s!(c"mono_array_new"),
-        array_length: s!(c"mono_array_length"),
+        array_length: s!(c"mono_array_length", c"mono_array_length", array_length_field as unsafe extern "C" fn(P) -> usize),
         get_single_class: s!(c"mono_get_single_class"),
         domain_get: s!(c"mono_domain_get"),
         string_to_utf8: s!(c"mono_string_to_utf8"),
-        free: s!(c"mono_free"),
+        // The legacy runtime frees what it allocates with glib's `g_free`.
+        free: s!(c"mono_free", c"g_free", return None),
         array_addr_with_size: s!(c"mono_array_addr_with_size"),
         method_desc_new: s!(c"mono_method_desc_new"),
         method_desc_search_in_class: s!(c"mono_method_desc_search_in_class"),
