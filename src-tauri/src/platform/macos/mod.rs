@@ -537,6 +537,8 @@ unsafe fn ghost_window(w: &tauri::WebviewWindow, view: *mut AnyObject) -> Result
     let p = w.ns_window().map_err(|e| e.to_string())? as *mut NSWindow;
     // Other apps' window pickers (recorders, screen sharing) skip untitled windows.
     (*p).setTitle(ns_string!(""));
+    // Window switchers (Raycast, AltTab) list what Accessibility lists.
+    let _: () = msg_send![p as *mut AnyObject, setAccessibilityElement: Bool::NO];
     (*p).setAlphaValue(0.);
     (*p).setIgnoresMouseEvents(true);
     (*p).setCollectionBehavior(
