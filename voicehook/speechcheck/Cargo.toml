@@ -1,0 +1,15 @@
+# Kept out of the voicehook workspace (it pulls in Kimochi's speech crate and ONNX Runtime) and
+# built for the host: `cargo run --release -- <capture dir>` (see src/main.rs).
+[package]
+name = "vh-speechcheck"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+kimochi-speech = { path = "../../speech-core" }
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "load-dynamic"] }
+serde_json = "1"
+lewton = "0.10"

@@ -1,0 +1,13 @@
+[package]
+name = "vh-cli"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "voicehook"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+windows-sys = { workspace = true }
