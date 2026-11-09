@@ -787,7 +787,11 @@ dictionaries and 10ten's `jpdict` database were gone after every relaunch. Nativ
 the window at startup when the active engine is an extension engine, and on a switch as
 above. The window is never shown and never focused: `visible(false)`, `focused(false)`,
 `focusable(false)`, `skip_taskbar`, no decorations, 1×1 (never shown, so not content-protected), background
-throttling off like the overlay's, and it is not a panel, so `panel` refuses its label. Its
+throttling off like the overlay's, and it is not a panel, so `panel` refuses its label. On macOS
+it is then ordered in behind everything, fully transparent and click-through, with WebKit's
+occlusion detection off (`platform::keep_engine_in_foreground`): hidden, its web process idled at
+background priority and the first lookup after a pause was slow. `KIMOCHI_NO_ENGINE_GHOST` keeps it
+hidden. Its
 document-start scripts, for all frames, are the platform prelude, the label prelude
 (label `ext-<id>`, no frame band, no popup host) and `ext-host.js`; never a Yomitan shim.
 Its navigation allowlist is the engine's own origin (and `about:blank`). It shares the one
