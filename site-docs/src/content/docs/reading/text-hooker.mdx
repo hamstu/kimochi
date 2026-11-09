@@ -1,5 +1,5 @@
 ---
-title: Text Hooker
+title: Text hooking
 description: Read a Windows game's text directly from the game, and show each line in a card over the game. On Windows, and on Linux and Steam Deck through Proton or Wine.
 ---
 
@@ -7,16 +7,19 @@ import { Steps } from '@astrojs/starlight/components'
 import Screenshot from '../../../components/Screenshot.astro'
 
 :::note[Windows games]
-The Text Hooker reads **Windows games**: on Windows, and on Linux and Steam Deck when the game
+Text hooking reads **Windows games**: on Windows, and on Linux and Steam Deck when the game
 runs through Proton or Wine (see [Linux and Steam Deck](#linux-and-steam-deck)). Native Linux
-games can't be hooked, and on macOS it isn't in the source menu or in Settings; read those with
-[a window source and OCR](/reading/sources/) instead, or feed Kimochi from a texthooker you run
+games can't be hooked, and on macOS there is no Text hooking; read those games
+[with OCR](/reading/sources/) instead, or feed Kimochi from a texthooker you run
 yourself ([Texthookers and clipboard](/reading/texthookers/)).
 :::
 
-The **Text Hooker** reads a game's text from inside the game instead of off the screen. Lines reach
-the Log exactly as the game wrote them, so there are no OCR misreads. It works best with visual novels and other PC games that draw their
-text themselves.
+**Text hooking** reads a game's text from inside the game instead of off the screen. Lines reach
+the Log exactly as the game wrote them, so there are no OCR misreads. It works best with visual
+novels and other PC games that draw their text themselves.
+
+There is no separate source for it. Choose the game's window as you would for OCR, and turn on
+**Text hooking** under its card.
 
 Kimochi uses [LunaHook](https://github.com/HIllya51/LunaTranslator), and falls back to
 [Textractor](https://github.com/Artikash/Textractor) if LunaHook can't hook the game. Neither comes
@@ -28,31 +31,42 @@ with Kimochi: the first time you hook a game, Kimochi downloads LunaHook (about 
 
 1. Start the game and get to a screen with text.
 
-2. In Kimochi's sidebar, open **Change source** (or **Choose a source**) and point at
-   **Text Hooker**. A grid of **Apps to hook** opens beside the menu.
+2. In Kimochi's sidebar, open **Change source** (or **Choose a source**) → **Window or screen**,
+   and pick the game's window.
 
-   <Screenshot id="hook-source-menu" alt="The source menu with Text Hooker highlighted and, beside it, the Apps to hook grid of window thumbnails." width={720} />
+3. If Kimochi can hook the game, a **Text hooking** box shows under the source card. Turn its
+   switch on.
 
-3. Pick the game's window. Kimochi works out which of the game's text is
-   the dialogue.
+   <Screenshot id="hook-switch" alt="The sidebar with a game's window chosen: the source card, then the Text hooking box with its switch off, its info mark and its settings button." width={272} />
 
-4. Play. Each new line lands in the Log, and with **Show overlay** on it also appears in a
+4. Kimochi hooks the game and works out which of its text is the dialogue.
+
+5. Play. Each new line lands in the Log, and with **Show overlay** on it also appears in a
    [card over the game](#the-card-over-the-game).
 
 </Steps>
 
-Windows Kimochi can't hook stay in the grid, dimmed, with the reason: Windows' own apps,
-apps that are protected or running as administrator, and apps built for ARM64 (the game must be a
-32- or 64-bit x86 program).
+The switch is kept for each game. A game you've hooked before has it on already, so choosing its
+window hooks it straight away. The cog beside the switch opens the game's page in
+[Settings → Text Hooker](#settings).
+
+Turn the switch off and Kimochi reads the window with OCR again. The game stays hooked, so turning
+the switch back on is instant. Switching to Quick Shot, Clipboard, WebSocket or Browser keeps the
+game hooked too: **Back to** at the top of the source menu returns to it, with Text hooking as it was.
+
+No **Text hooking** box shows for a window Kimochi can't hook: Windows' own apps, apps that are
+protected or running as administrator, and apps built for ARM64 (the game must be a 32- or 64-bit
+x86 program).
 
 ## Linux and Steam Deck
 
 On Linux, Kimochi hooks Windows games that run through **Proton** (Steam's compatibility layer,
 which every Windows game on a Steam Deck uses) or **Wine** (Lutris, Bottles, Heroic and the like).
-It runs LunaHook with the game's own Proton or Wine, inside the game's prefix. Start the game, then choose **Text Hooker** and pick it as you would on
-Windows. In Steam Deck Gaming Mode, choose the game in Kimochi's **Source** tab the same way.
+It runs LunaHook with the game's own Proton or Wine, inside the game's prefix. Start the game,
+choose its window and turn on **Text hooking**, as you would on Windows. In Steam Deck Gaming Mode,
+choose the game in Kimochi's **Source** tab the same way.
 
-Games that run natively on Linux are dimmed in the grid: only Windows games can be hooked. If a
+Games that run natively on Linux get no **Text hooking** box: only Windows games can be hooked. If a
 game has a native Linux version, you can make Steam run its Windows version instead (the game's
 **Properties → Compatibility → Force the use of a specific Steam Play compatibility tool**).
 Linux on ARM64 computers can't hook games.
@@ -64,17 +78,23 @@ name, menus and other bits of the engine. Kimochi chooses the dialogue by the th
 remembered for the game or, the first time, by reading the game's window with a local OCR engine
 and matching each thread's text against what's on screen.
 
-<Screenshot id="hook-card" alt="The sidebar with a hooked game: the source card, then Text hooker with the current dialogue line, Show overlay with the Auto align switch under it highlighted, Enhance Anki cards, OCR model and Dictionary." width={272} />
+<Screenshot id="hook-card" alt="The sidebar with a hooked game: the source card, then the Text hooking box with its switch on, the current dialogue line and Audio hooking, then Show overlay with the Auto align switch under it highlighted, Enhance Anki cards, OCR model and Dictionary." width={272} />
 
-Under the source card, **Text hooker** shows the latest line of the chosen thread. Click it to see
+With Text hooking on, the box shows the latest line of the chosen thread. Click it to see
 every thread with its latest text, and pick another one if Kimochi got it wrong; your choice is
 remembered for the game. **Choose automatically** goes back to letting Kimochi decide.
 
-<Screenshot id="hook-thread-menu" alt="The Text hooker menu: Choose automatically (Matched to the screen), then three threads, the dialogue, a speaker's name and a menu, each with its latest text and hook name." width={720} />
+<Screenshot id="hook-thread-menu" alt="The hooked text menu: Choose automatically (Matched to the screen), then three threads, the dialogue, a speaker's name and a menu, each with its latest text and hook name." width={720} />
 
 If nothing matches the screen yet, the select reads **Choose the text…**: open it and pick the
-thread that shows the dialogue. **Manage**, beside the **Text hooker** label, opens this game's page
-in [Settings → Text Hooker](#settings).
+thread that shows the dialogue.
+
+## Audio hooking
+
+With Text hooking on, the box also has **Audio hooking**. It takes each line's voice straight from
+the game for its [sentence audio](/lookups/anki/#sentence-audio), without the music or sound
+effects. Turning it on turns sentence audio on too. When it's off, or a line's voice can't be taken
+from the game, the voice is recorded from your speakers. Its cog opens the sentence audio settings.
 
 ## The card over the game
 
@@ -83,7 +103,7 @@ card stays visible while the game is in front, and its words are looked up like 
 overlay: hold <kbd>Shift</kbd> and hover a word. With a controller, **Read along** in the
 [controller menu](/controller/#the-controller-menu) steps through the card's words.
 
-<Screenshot id="hook-card-over-game" alt="A visual novel's dialogue box with the Text Hooker's card over its text: 今日はいい天気ですね。一緒に海まで散歩しませんか？, with 天気 looked up in the dictionary pop-up above it and the card's size and options buttons in its corner." width={720} />
+<Screenshot id="hook-card-over-game" alt="A visual novel's dialogue box with the hooked line's card over its text: 今日はいい天気ですね。一緒に海まで散歩しませんか？, with 天気 looked up in the dictionary pop-up above it and the card's size and options buttons in its corner." width={720} />
 
 - **Auto align** (on by default) finds the line on screen with OCR in the background and puts the
   card over the game's text, at the same size, breaking lines where the game does. It
@@ -130,12 +150,12 @@ a name: rename either one and the other follows.
 
 ## Hooking automatically
 
-Once you have hooked a game, Kimochi hooks it again whenever it starts
+While Text hooking is on, Kimochi hooks a game you've hooked before whenever it starts
 (**Hook automatically**). Starting another game you've
 hooked before switches the hook over to it: Kimochi hooks one game at a time.
 
-**Clear source** stops hooking until you choose
-a game in the source menu or restart Kimochi.
+A game whose **Text hooking** switch you turned off isn't hooked by itself. **Clear source** stops hooking until you choose
+a game with Text hooking on, or restart Kimochi.
 
 ## Settings
 
@@ -147,7 +167,7 @@ Under **Defaults**:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| **Hook automatically** | On | Hooks the game when it starts, while Text Hooker is your source. |
+| **Hook automatically** | On | Hooks the game when it starts, while Text hooking is on. |
 | **Line delay** | 300 ms | How long Kimochi waits for more text before a line counts as finished (100 ms – 1.2 s). Raise it if lines arrive in pieces. Takes effect the next time the game is hooked. |
 | **Speaker names apart** | On | Keeps the speaker's name on the game's nameplate; the card shows what they say. |
 | **Repeated characters** | Undo automatically | For games that send ここここ for こ: **Undo automatically**, **Leave as sent**, or **Each sent twice**, **3 times** or **4 times**. |
@@ -179,16 +199,16 @@ reset button beside them. It also has what only a game has:
 
 ## When it doesn't work
 
-- **The game is dimmed in the grid**: the reason is on its tile. If it says the app may be
-  running as administrator, start the game normally instead. On Linux, if it says it's a Linux
-  app, the game runs natively rather than through Proton or Wine.
+- **No Text hooking box under the game's card**: Kimochi can't hook that window. If the game runs
+  as administrator, start it normally instead. On Linux, check that the game runs through Proton or
+  Wine, not natively.
 - **"Kimochi reached the game but couldn't hook some of its text"**: restart the game while
   Kimochi is open; it often works on the next try.
-- **The wrong text comes through**: pick the dialogue in the **Text hooker** select, or **Forget**
+- **The wrong text comes through**: pick the dialogue in the **Text hooking** box, or **Forget**
   the dialogue thread on the game's page.
 - **Lines arrive in pieces**: raise **Line delay** for the game, then hook it again.
 - **Lines joined that shouldn't be**: turn off **Join split lines** for the game.
 - **Doubled characters** (ここここ): set **Repeated characters** for the game.
 - **No text at all**: some games need a hook code. Look one up for your game and add it under
-  **Hook codes** on its page. If the game still can't be hooked, read it with
+  **Hook codes** on its page. If the game still can't be hooked, turn **Text hooking** off and read it with
   [OCR](/reading/sources/#choosing-a-window-or-screen) instead.

@@ -84,7 +84,7 @@ export interface GuideFacts {
   /** Kimochi's source is the game (by OCR or hooked). */
   gameSource: boolean
   autoOcr: boolean
-  /** The game is hooked by the Text Hooker. */
+  /** The game is hooked, with Text hooking on. */
   hooked: boolean
   /** A line has reached the Log by OCR. */
   lineRead: boolean
@@ -96,13 +96,13 @@ export interface GuideFacts {
   /** Moved on to another line since the step began (a counter; see `nextLine`). */
   lineSeq: number
   nextLine: boolean
-  /** The desk is not Windows or Linux, where the Text Hooker works. */
+  /** The desk is not Windows or Linux, where Text hooking works. */
   notHookPlatform: boolean
   /** The demo is not maximised. */
   notMax: boolean
   /** Show overlay is on. */
   overlay: boolean
-  /** The visitor chose the game in the Text Hooker (it may still be hooking). */
+  /** The game is the source with its Text hooking switch on (it may still be hooking). */
   hookStarted: boolean
   /** Auto align is on for the hooked game. */
   autoAlign: boolean

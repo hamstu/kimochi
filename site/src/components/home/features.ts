@@ -53,8 +53,8 @@ export const features: Feature[] = [
   },
   {
     id: 'text-hooker',
-    title: 'Text Hooker',
-    body: "Kimochi can read a game's text directly from the game and show each line in a card over the game. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
+    title: 'Text hooking',
+    body: "Pick a game's window, turn on Text hooking, and Kimochi reads its text directly from the game, with each line in a card over the game. It hooks Windows games on Windows, and on Linux and Steam Deck through Proton or Wine.",
     Visual: TextHookerVisual,
     docs: '/reading/text-hooker/',
     tag: 'windows'

@@ -219,7 +219,8 @@ export const SHOTS = [
     crop: SIDEBAR,
     ready: '.src-card'
   },
-  // Text Hooker (Windows only): a hooked game in the sidebar, and its submenu in the source menu.
+  // Text hooking (Windows and Linux): a hooked game in the sidebar, and a game read with OCR, its
+  // Text hooking switch off.
   {
     id: 'hook-card',
     page: 'panel.html?window=log&input=hook&platform=windows&overlay=1',
@@ -229,14 +230,12 @@ export const SHOTS = [
     marks: [{ type: 'glow', target: switchRow('Auto align'), radius: 8 }]
   },
   {
-    id: 'hook-source-menu',
+    id: 'hook-switch',
     page: 'panel.html?window=log&platform=windows',
-    size: [900, 640],
-    ready: '.src-card-live',
-    actions: [
-      { click: sourceAction('Change source'), after: 500 },
-      { hover: { selector: '.src-type', text: 'Text Hooker' }, after: 1200 }
-    ]
+    size: MAIN,
+    crop: SIDEBAR,
+    ready: '.src-hook-box',
+    marks: [{ type: 'glow', target: switchRow('Text hooking'), radius: 8 }]
   },
   {
     id: 'overlay-hint-bar',

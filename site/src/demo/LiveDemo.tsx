@@ -10,7 +10,7 @@
  * play button. Play starts the guided tour (guide/Guide.tsx, scripted in guide/script.json): Mochiko,
  * in a visual-novel dialogue box, asks the visitor to open Kimochi and the game, choose the game as
  * the source (the real Change source menu, inside the iframe), turn on Auto OCR, look a word up,
- * add it to Anki, and optionally try the Text Hooker (a Windows desk, on other platforms). The game
+ * add it to Anki, and optionally turn on Text hooking for the game (a Windows desk, on other platforms). The game
  * waits on each line for a click, like a visual novel.
  *
  * The windows behave like windows, through a few light shims (frontend/dev/preview-setup.ts):
@@ -22,8 +22,8 @@
  * switches back, so the game is read only while Kimochi watches it with Auto OCR on, and the overlay
  * shows only with Show overlay on. Narrower screens, and reduced motion, get the two windows stacked, already set up.
  *
- * The platform comes in as a prop: the visitor's OS for the OCR tab, Windows for the Text Hooker
- * tab (`input="hook"`: the game is hooked from the source menu's Text Hooker, its lines arrive with
+ * The platform comes in as a prop: the visitor's OS for the OCR tab, Windows for the Text hooking
+ * tab (`input="hook"`: the game's window with its Text hooking switch on, its lines arrive with
  * no scan, and Kimochi's card sits over its text), `deck` for Handheld mode. On the desk, words are
  * looked up as in the app, with Shift held: the scripted session shows the key held (bottom left)
  * for each lookup, and a visitor's own mouse needs it too (a tap does it on a touch screen).
@@ -64,8 +64,8 @@ export interface LiveDemoProps {
   /** The platform to show: the visitor's OS for the Desktop tab, `deck` for Gaming mode. */
   platform?: Platform
   /**
-   * How Kimochi reads the game on the desktop: `ocr` (a window, Auto OCR) or `hook` (the Text
-   * Hooker: the game's own text, no scanning; a Windows desktop).
+   * How Kimochi reads the game on the desktop: `ocr` (a window, Auto OCR) or `hook` (its window with
+   * Text hooking on: the game's own text, no scanning; a Windows desktop).
    */
   input?: 'ocr' | 'hook'
 }
@@ -133,7 +133,7 @@ interface LogState {
   autoOcr: boolean
   overlay: boolean
   input: string
-  /** The Text Hooker's phase (attaching, hooked…), or null when not reported. */
+  /** The hook session's phase (attaching, hooked…), or null when not reported. */
   hookPhase: string | null
   /** Auto align for the hooked game. */
   autoAlign: boolean
@@ -141,7 +141,7 @@ interface LogState {
 
 export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: LiveDemoProps) {
   const detected = useGuessedPlatform()
-  // The guide can move the desk to Windows for the Text Hooker (it works on Windows and Linux).
+  // The guide can move the desk to Windows for Text hooking (it works on Windows and Linux).
   const [override, setOverride] = useState<Platform | null>(null)
   const platform = override ?? chosen ?? detected
   const theme = useResolvedTheme()
@@ -242,7 +242,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   }, [scrollLog])
 
   // Kimochi is reading a window: it is running (not quit), and that window is its source with Auto
-  // OCR on, or (the Text Hooker) hooked. Off the desk the windows are always open.
+  // OCR on, or (Text hooking on) hooked. Off the desk the windows are always open.
   const watching = (id: WindowId, source: string, how: 'ocr' | 'hook' = 'ocr'): boolean =>
     (!free || (open[id] && !quit)) &&
     logState.sourceId === source &&
@@ -511,7 +511,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
       toDownload()
     }
     if (name === 'windowsDesk') {
-      // A Windows PC for the Text Hooker: Kimochi's window loads again, as on that PC, with both
+      // A Windows PC for Text hooking: Kimochi's window loads again, as on that PC, with both
       // windows open.
       setOverride('windows')
       setLogReady(false)
@@ -598,7 +598,7 @@ export function LiveDemo({ className = '', platform: chosen, input = 'ocr' }: Li
   const close = (id: WindowId) => (free ? () => setOpen((o) => ({ ...o, [id]: false })) : undefined)
   // `demo` only tells the tabs apart, so switching between them loads the Log afresh.
   const logParams: Record<string, string> = flow
-    ? // Show overlay starts off for the visitor to turn on; on the Text Hooker's Windows desk they
+    ? // Show overlay starts off for the visitor to turn on; on the Text hooking Windows desk they
       // already have.
       { nosource: '1', auto: '0', overlay: override ? '1' : '0', sidebar: '1', lines: '0', demo: input }
     : { sidebar: free ? '1' : '0', demo: input, ...(hook ? { input: 'hook' } : {}) }
