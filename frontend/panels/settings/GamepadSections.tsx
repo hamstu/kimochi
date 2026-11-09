@@ -107,12 +107,12 @@ function ScanAfterButtonSection(): ReactNode {
   return (
     <SettingsSection
       title="Scan after a button press"
-      description="Scan a moment after you press the button that advances your game's text. The button still works in the game."
+      description="Automatically scan after you press a button on your gamepad."
     >
       <SettingsRow
         label="Button"
         controlId="autoscan-enabled"
-        description="Doesn't scan while one of Kimochi's windows is in front: the controller works Kimochi there."
+        description="Choose the button that triggers a scan."
       >
         <GamepadButtonCapture
           value={settings.gamepadButton}
@@ -129,7 +129,7 @@ function ScanAfterButtonSection(): ReactNode {
           onCheckedChange={(enabled) => update({ enabled })}
         />
       </SettingsRow>
-      <SettingsRow label="Delay" description="How long after the press to scan, for the next line to appear.">
+      <SettingsRow label="Delay" description="How long to wait before scanning.">
         <Select
           aria-label="Scan delay"
           value={settings.scanDelay.toString()}
