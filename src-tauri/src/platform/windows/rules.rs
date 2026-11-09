@@ -24,7 +24,7 @@ pub fn covers_display(window: kimochi_capture::Rect, display: kimochi_capture::R
 // Which windows are sources and how handles are spelled are capture-core's rules, shared
 // with the WGC backend so the picker and `enumerate` cannot disagree.
 pub use kimochi_capture::win_rules::{
-    hex_handle, is_shell_surface, is_tool_window, listable, parse_hex_handle, sized, WindowMeta,
+    hex_handle, is_shell_surface, is_tool_window, listable, owner_hides, parse_hex_handle, sized, WindowMeta,
 };
 
 /// On screen as far as a person is concerned: shown, not minimised, not cloaked by DWM

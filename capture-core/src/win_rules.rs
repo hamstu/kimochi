@@ -77,6 +77,14 @@ pub fn sized(width: f64, height: f64) -> bool {
     width.is_finite() && height.is_finite() && width >= MIN_WIDTH && height >= MIN_HEIGHT
 }
 
+/// Whether a window's owner makes it a dialog or popup of that owner, and so no source of its
+/// own: only an owner that is itself on screen does. A Delphi program's main window (KiriKiri 2,
+/// many older games) is owned by its application window, which is visible but has no size: the
+/// main window is then the program's window, as the taskbar shows it.
+pub fn owner_hides(owner_visible: bool, owner_width: f64, owner_height: f64) -> bool {
+    owner_visible && sized(owner_width, owner_height)
+}
+
 /// A shell surface rather than an application window.
 pub fn is_shell_surface(class_name: &str, title_nonempty: bool) -> bool {
     SHELL_CLASSES.contains(&class_name)
@@ -214,6 +222,15 @@ mod tests {
         }));
         assert!(is_shell_surface(APPLICATION_FRAME_CLASS, false));
         assert!(!is_shell_surface(APPLICATION_FRAME_CLASS, true));
+    }
+
+    #[test]
+    fn a_window_owned_by_a_sizeless_application_window_is_its_own() {
+        // Delphi: the visible application window has no size; the form it owns is the program.
+        assert!(!owner_hides(true, 0., 0.));
+        assert!(!owner_hides(false, 1280., 720.));
+        // A dialog over a window on screen.
+        assert!(owner_hides(true, 1280., 720.));
     }
 
     #[test]

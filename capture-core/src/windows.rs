@@ -97,7 +97,7 @@ pub(crate) fn visible_region(
 #[cfg(target_os = "windows")]
 mod wgc {
     use super::{image_stem, visible_region, PxRect};
-    use crate::win_rules::{hex_handle, listable, parse_hex_handle, WindowMeta};
+    use crate::win_rules::{hex_handle, listable, owner_hides, parse_hex_handle, WindowMeta};
     use crate::pixels::{bgra_crop_to_rgba, box_downscale, crop_pixels, fit_within, unpremultiply};
     use crate::{
         crop_rect, elapsed_ms, Capabilities, CaptureBackend, CaptureError, CaptureRequest, Crop,
@@ -233,8 +233,17 @@ mod wgc {
         .is_ok()
             && cloaked != 0
     }
+    /// Owned by a window on screen: a dialog or popup of it (`win_rules::owner_hides`).
     fn has_owner(h: HWND) -> bool {
-        unsafe { GetWindow(h, GW_OWNER) }.is_ok_and(|owner| !owner.is_invalid())
+        unsafe { GetWindow(h, GW_OWNER) }.is_ok_and(|owner| {
+            let size = visible_rect(owner).or_else(|| outer_rect(owner));
+            !owner.is_invalid()
+                && owner_hides(
+                    unsafe { IsWindowVisible(owner) }.as_bool(),
+                    size.map_or(0., |r| f64::from(r.width())),
+                    size.map_or(0., |r| f64::from(r.height())),
+                )
+        })
     }
     fn process_stem(pid: u32) -> Option<String> {
         let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
