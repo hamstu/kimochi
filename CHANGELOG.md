@@ -8,6 +8,10 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+### Added
+
+- **Audio hooking on Linux.** Windows games running through Proton or Wine now get each line's clean voice straight from the game too, the same way as on Windows.
+
 ### Fixed
 
 - Steam Deck Gaming Mode: Kimochi added to Steam by hand (the AppImage as a non-Steam game) now works like Kimochi added with **Add to Steam**. Before, it couldn't read the screen ("X11 error … GetImage"), Auto OCR stopped after a few tries, and no game could be chosen as a source.

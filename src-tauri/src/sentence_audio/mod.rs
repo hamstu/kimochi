@@ -663,10 +663,11 @@ impl SentenceAudio {
     }
 
     /// Select only processes belonging to the explicit text-hook source.
-    pub fn hook_targets(&self, pids: Vec<u32>) {
+    pub fn hook_targets(&self, pids: Vec<u32>, bases: Vec<std::path::PathBuf>) {
         let mut capture = lock(&self.capture);
-        if capture.pids != pids {
+        if capture.pids != pids || capture.bases != bases {
             capture.pids = pids;
+            capture.bases = bases;
             capture.generation += 1;
             capture.error = None;
             capture.attempted.clear();

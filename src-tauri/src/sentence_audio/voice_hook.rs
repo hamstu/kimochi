@@ -1,12 +1,77 @@
-//! Windows capture discovery for the explicitly selected text-hook game.
+//! Capture discovery for the explicitly selected text-hook game: on Windows, and for Windows
+//! games running through Wine or Proton on Linux.
 use kimochi_speech::hooked::Hooked;
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
-/// Where captures (and the injected DLL copies) live: `%LOCALAPPDATA%/kimochi-voicehook`.
+/// Where Kimochi's own voice hook data lives (what is remembered per game; on Windows also the
+/// captures and the injected DLL copies): `%LOCALAPPDATA%/kimochi-voicehook`, elsewhere
+/// `$XDG_DATA_HOME/kimochi-voicehook`.
 pub fn base_dir() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("kimochi-voicehook")
+    if cfg!(windows) {
+        return std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("kimochi-voicehook");
+    }
+    std::env::var_os("XDG_DATA_HOME")
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+        .unwrap_or_else(std::env::temp_dir)
+        .join("kimochi-voicehook")
+}
+
+/// The prefix's user folders (`drive_c/users/<user>`), `Public` aside, by name.
+fn prefix_users(prefix: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(prefix.join("drive_c").join("users"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| !n.eq_ignore_ascii_case("public"))
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+fn prefix_base(prefix: &Path, user: &str) -> PathBuf {
+    prefix.join("drive_c").join("users").join(user).join("AppData").join("Local").join("kimochi-voicehook")
+}
+
+/// Under Wine the DLL runs inside the game's prefix and writes its captures to the prefix's
+/// `%LOCALAPPDATA%\kimochi-voicehook`. Every user's: which one the game runs as (Proton's
+/// `steamuser`, else the Unix user's name) is the prefix's business.
+pub fn prefix_bases(prefix: &Path) -> Vec<PathBuf> {
+    prefix_users(prefix).iter().map(|u| prefix_base(prefix, u)).collect()
+}
+
+/// The prefix user's `kimochi-voicehook` folder to stage the DLL in, as a Linux path and as the
+/// game sees it (`C:\users\<user>\AppData\Local\kimochi-voicehook`). The game loads it from the
+/// prefix's own drive, which it sees even inside Steam's runtime container.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn prefix_home(prefix: &Path, unix_user: Option<&str>) -> Option<(PathBuf, String)> {
+    let users = prefix_users(prefix);
+    let user = ["steamuser"]
+        .into_iter()
+        .chain(unix_user)
+        .find(|u| users.iter().any(|n| n == u))
+        .map(str::to_owned)
+        .or_else(|| users.into_iter().next())?;
+    Some((prefix_base(prefix, &user), format!(r"C:\users\{user}\AppData\Local\kimochi-voicehook")))
+}
+
+/// `path` under `base` as a Windows path under `windows_base`.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn windows_under(path: &Path, base: &Path, windows_base: &str) -> Option<String> {
+    let rest = path.strip_prefix(base).ok()?;
+    let mut out = windows_base.trim_end_matches('\\').to_string();
+    for part in rest.components() {
+        out.push('\\');
+        out.push_str(&part.as_os_str().to_string_lossy());
+    }
+    Some(out)
 }
 
 /// A copy of `dll` under `<base>/bin/<content hash>/` to inject instead of the bundled file. A
@@ -43,6 +108,8 @@ pub fn staged_dll(dll: &std::path::Path, base: &std::path::Path) -> Result<PathB
 #[derive(Default)]
 pub struct Capture {
     pub pids: Vec<u32>,
+    /// The folders the hooked game's captures appear in: `base_dir()`, or under Wine the prefix's.
+    pub bases: Vec<PathBuf>,
     pub generation: u64,
     pub error: Option<String>,
     pub attempted: Vec<u32>,
@@ -132,22 +199,18 @@ impl Discovery {
             self.checked = None;
             self.looked_up = None;
         }
-        if cfg!(windows) && enabled && self.pruned.is_none_or(|t| t.elapsed() > PRUNE_EVERY) {
+        if enabled && !capture.bases.is_empty() && self.pruned.is_none_or(|t| t.elapsed() > PRUNE_EVERY) {
             self.pruned = Some(Instant::now());
-            prune_stale(&base_dir(), &capture.pids, STALE);
+            for base in &capture.bases {
+                prune_stale(base, &capture.pids, STALE);
+            }
         }
         if !enabled || capture.pids.is_empty() || self.checked.is_some_and(|t| t.elapsed() < Duration::from_secs(1)) {
             return;
         }
         self.checked = Some(Instant::now());
-        if !cfg!(windows) {
-            return;
-        }
-        let Ok(entries) = std::fs::read_dir(base_dir()) else {
-            return;
-        };
         let mut newest = std::collections::BTreeMap::<u32, (u64, PathBuf)>::new();
-        for e in entries.flatten() {
+        for e in capture.bases.iter().filter_map(|b| std::fs::read_dir(b).ok()).flat_map(|d| d.flatten()) {
             let name = e.file_name();
             let name = name.to_string_lossy();
             let Some((pid, time)) = name.split_once('-') else {
@@ -270,5 +333,40 @@ mod remembered_tests {
         std::fs::write(base.join("games.json"), r#"{"c:gamescsiglusengine.exe": "dsound | pcm16 1ch 44100Hz | "}"#).unwrap();
         assert_eq!(remembered(&base, r"C:GamesCSiglusEngine.exe"), Some(Remembered { group: "dsound | pcm16 1ch 44100Hz | ".into(), typing_ms: None }));
         let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
+#[cfg(test)]
+mod prefix_tests {
+    use super::{prefix_bases, prefix_home, windows_under};
+    use std::path::Path;
+
+    #[test]
+    fn under_wine_the_dll_is_staged_and_captures_found_in_the_prefix_users_local_app_data() {
+        let prefix = std::env::temp_dir().join(format!("kimochi-voice-prefix-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&prefix);
+        let users = prefix.join("drive_c").join("users");
+        for user in ["Public", "steamuser", "deck"] {
+            std::fs::create_dir_all(users.join(user)).unwrap();
+        }
+        let local = |u: &str| users.join(u).join("AppData").join("Local").join("kimochi-voicehook");
+        // Proton's user first, whatever the Unix user is called.
+        let (base, windows) = prefix_home(&prefix, Some("deck")).unwrap();
+        assert_eq!(base, local("steamuser"));
+        assert_eq!(windows, r"C:\users\steamuser\AppData\Local\kimochi-voicehook");
+        assert_eq!(prefix_bases(&prefix), vec![local("deck"), local("steamuser")]);
+        std::fs::remove_dir_all(users.join("steamuser")).unwrap();
+        assert_eq!(prefix_home(&prefix, Some("deck")).unwrap().0, local("deck"));
+        assert_eq!(prefix_home(&prefix, Some("nobody")).unwrap().0, local("deck"));
+        std::fs::remove_dir_all(users.join("deck")).unwrap();
+        assert_eq!(prefix_home(&prefix, Some("deck")), None);
+        let _ = std::fs::remove_dir_all(&prefix);
+
+        let base = Path::new("/pfx/u/kimochi-voicehook");
+        assert_eq!(
+            windows_under(&base.join("bin").join("00ff").join("kimochi-voicehook-x64.dll"), base, r"C:\users\u\kimochi-voicehook").as_deref(),
+            Some(r"C:\users\u\kimochi-voicehook\bin\00ff\kimochi-voicehook-x64.dll")
+        );
+        assert_eq!(windows_under(Path::new("/elsewhere/x.dll"), base, r"C:\x"), None);
     }
 }

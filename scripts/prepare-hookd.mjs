@@ -3,8 +3,11 @@
 // demand (src-tauri/src/text_hook/store.rs). The x64 build hosts LunaHook and injects 64-bit
 // games; the i686 build injects 32-bit ones. Both run emulated on Windows ARM64.
 //
-// Linux x64 builds ship the same two Windows programs, cross-built with MinGW: Kimochi runs them
-// with a Proton or Wine game's own Wine, inside its prefix (src-tauri/src/text_hook/wine.rs).
+// The voice hook DLL (voicehook/hook) is built beside each build, for Audio hooking.
+//
+// Linux x64 builds ship the same Windows programs and DLLs, cross-built with MinGW: Kimochi runs
+// the helper with a Proton or Wine game's own Wine, inside its prefix, and injects the DLL from
+// there (src-tauri/src/text_hook/wine.rs).
 // Linux ARM64 builds have no x86 games to hook and ship none.
 import { spawnSync } from 'node:child_process'
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
@@ -47,12 +50,10 @@ if (process.platform === 'win32' || process.platform === 'linux') {
       path.join(root, `hookd/target/${target}/release/kimochi-hookd.exe`),
       path.join(destination, `kimochi-hookd-${arch}.exe`)
     )
-    if (process.platform === 'win32') {
-      const voice = spawnSync('cargo', ['build', '--locked', '--release', '--manifest-path', path.join(root, 'voicehook/Cargo.toml'), '-p', 'vh-hook', '--target', target], { stdio: 'inherit' })
-      if (voice.error) throw voice.error
-      if (voice.status !== 0) throw new Error(`Voice hook ${arch} build failed (${voice.status}).`)
-      await copyFile(path.join(root, `voicehook/target/${target}/release/vhhook.dll`), path.join(destination, `kimochi-voicehook-${arch}.dll`))
-    }
+    const voice = spawnSync('cargo', ['build', '--locked', '--release', '--manifest-path', path.join(root, 'voicehook/Cargo.toml'), '-p', 'vh-hook', '--target', target], { stdio: 'inherit' })
+    if (voice.error) throw voice.error
+    if (voice.status !== 0) throw new Error(`Voice hook ${arch} build failed (${voice.status}). Install the ${target} Rust target and ${tools}.`)
+    await copyFile(path.join(root, `voicehook/target/${target}/release/vhhook.dll`), path.join(destination, `kimochi-voicehook-${arch}.dll`))
   }
-  console.log(builds.length ? 'Text hook helpers (x64, x86) staged.' : 'No text hook helpers for this target.')
+  console.log(builds.length ? 'Text hook helpers and voice hook DLLs (x64, x86) staged.' : 'No text hook helpers for this target.')
 }
