@@ -2967,6 +2967,10 @@ fn main() {
     // `kimochi status`, `kimochi scan --wait`, …: the command line runs instead of the app, before
     // anything below could claim the single instance or quit the running app (cli/mod.rs).
     cli::run_if_invoked();
+    // Added to Steam by hand and started in Gaming Mode: run again with the Gaming Mode
+    // launcher's environment, before anything starts (platform/linux/gaming_launch.rs).
+    #[cfg(target_os = "linux")]
+    platform::gaming_launch::relaunch_if_needed();
     boot::start();
     // A development build's pages come from the Vite dev server over plain HTTP, and WebView2
     // looks for a proxy (WPAD) before its first HTTP request: ~800 ms on every `npm run dev`

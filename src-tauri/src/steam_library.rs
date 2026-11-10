@@ -345,8 +345,39 @@ pub fn most_recent_user(loginusers: &str) -> Option<u32> {
         (Some((id, _)), _) => account(id),
         // Newer clients may leave MostRecent out when only one account has signed in.
         (None, [(id, _)]) => account(id),
-        _ => None,
+        // And with several: the one that signed in last, by its timestamp.
+        (None, users) => users
+            .iter()
+            .filter_map(|(id, user)| Some((user.get("Timestamp")?.as_str()?.parse::<u64>().ok()?, id)))
+            .max()
+            .and_then(|(_, id)| account(id)),
     }
+}
+
+/// The account Steam signs in, from `registry.vdf`, as a `userdata` folder name: older clients'
+/// `ActiveProcess/ActiveUser` (`0` when signed out), else today's `AutoLoginUser`, an account
+/// name that `loginusers.vdf` maps to its SteamID.
+pub fn signed_in_user(registry: &str, loginusers: &str) -> Option<u32> {
+    let root = text_vdf(registry);
+    let steam = ["Registry", "HKCU", "Software", "Valve", "Steam"].iter().try_fold(&root, |node, key| node.get(key))?;
+    let active = steam
+        .get("ActiveProcess")
+        .and_then(|p| p.get("ActiveUser"))
+        .and_then(vdf::Node::as_str)
+        .and_then(|id| id.parse::<u32>().ok())
+        .filter(|id| *id != 0);
+    if active.is_some() {
+        return active;
+    }
+    let name = steam.get("AutoLoginUser")?.as_str().filter(|name| !name.is_empty())?;
+    let users = text_vdf(loginusers);
+    let (id, _) = users
+        .get("users")?
+        .entries()
+        .iter()
+        .find(|(_, user)| user.get("AccountName").and_then(vdf::Node::as_str).is_some_and(|n| n.eq_ignore_ascii_case(name)))?;
+    let id: u64 = id.parse().ok()?;
+    (id > STEAM_ID64_BASE && id - STEAM_ID64_BASE <= u64::from(u32::MAX)).then(|| (id - STEAM_ID64_BASE) as u32)
 }
 
 // ---------------------------------------------------------------- running apps' names and icons
@@ -677,13 +708,17 @@ mod host {
         roots
     }
 
-    /// The signed-in (most recent) Steam user's `userdata` folder.
+    /// The signed-in (most recent) Steam user's `userdata` folder: the account the running client
+    /// has signed in (`registry.vdf`), else the one `loginusers.vdf` says signed in last, else the
+    /// only one, else the one whose settings Steam saved last.
     fn user_dir(root: &Path) -> Option<PathBuf> {
         let userdata = root.join("userdata");
-        if let Some(id) = std::fs::read_to_string(root.join("config/loginusers.vdf"))
-            .ok()
-            .and_then(|text| most_recent_user(&text))
-        {
+        let loginusers = std::fs::read_to_string(root.join("config/loginusers.vdf")).unwrap_or_default();
+        let registry = [root.join("registry.vdf")].into_iter().chain(home().map(|h| h.join(".steam/registry.vdf")));
+        let signed_in = registry
+            .filter_map(|p| std::fs::read_to_string(p).ok())
+            .find_map(|text| signed_in_user(&text, &loginusers));
+        for id in [signed_in, most_recent_user(&loginusers)].into_iter().flatten() {
             let dir = userdata.join(id.to_string());
             if dir.is_dir() {
                 return Some(dir);
@@ -700,7 +735,13 @@ mod host {
             })
             .map(|e| e.path())
             .collect();
-        (users.len() == 1).then(|| users[0].clone())
+        if users.len() == 1 {
+            return users.into_iter().next();
+        }
+        users.into_iter().max_by_key(|dir| {
+            std::fs::metadata(dir.join("config/localconfig.vdf")).and_then(|m| m.modified()).ok()
+        })
+        .filter(|dir| dir.join("config/localconfig.vdf").is_file())
     }
 
     /// Whether this user's Steam client is running (`pgrep -x steam`, as SteamOS's script checks).
@@ -1237,6 +1278,35 @@ mod tests {
             None
         );
         assert_eq!(most_recent_user("garbage {{{"), None);
+        // Several accounts and no MostRecent: the latest Timestamp.
+        assert_eq!(
+            most_recent_user(
+                r#""users" { "76561197960265729" { "Timestamp" "1700000000" } "76561197971758321" { "Timestamp" "1790000000" } }"#
+            ),
+            Some(11_492_593)
+        );
+    }
+
+    #[test]
+    fn reads_the_signed_in_user_from_the_registry() {
+        let loginusers = r#""users" {
+            "76561197960265729" { "AccountName" "someone" "timestamp" "1794268191" }
+            "76561197971758321" { "AccountName" "Deck_Owner" "timestamp" "1700000000" }
+        }"#;
+        // Older clients: the running client's account.
+        let older = r#""Registry" { "HKCU" { "Software" { "Valve" { "Steam" {
+            "AutoLoginUser" "someone"
+            "ActiveProcess" { "pid" "1234" "ActiveUser" "11492593" }
+        } } } } }"#;
+        assert_eq!(signed_in_user(older, loginusers), Some(11_492_593));
+        // Today's (a SteamOS 3.9 Deck): no ActiveUser, an account name to look up.
+        let today = r#""Registry" { "HKCU" { "Software" { "Valve" { "Steam" {
+            "AutoLoginUser" "deck_owner"
+        } } } } }"#;
+        assert_eq!(signed_in_user(today, loginusers), Some(11_492_593));
+        assert_eq!(signed_in_user(&older.replace("11492593", "0"), loginusers), Some(1));
+        assert_eq!(signed_in_user(&today.replace("deck_owner", "nobody"), loginusers), None);
+        assert_eq!(signed_in_user(r#""Registry" { }"#, loginusers), None);
     }
 
     #[test]

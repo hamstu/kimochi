@@ -91,6 +91,10 @@ pub fn complete(value: &mut Value) {
         object.insert("native".into(), marks());
         object.insert("build".into(), json!(if cfg!(debug_assertions) { "debug" } else { "release" }));
         object.insert("dev".into(), json!(cfg!(dev)));
+        // Restarted with the Gaming Mode launcher's settings (platform/linux/gaming_launch.rs).
+        if std::env::var("KIMOCHI_GAMING_RELAUNCHED").as_deref() == Ok("1") {
+            object.insert("gamingModeRelaunch".into(), json!(true));
+        }
     }
 }
 
