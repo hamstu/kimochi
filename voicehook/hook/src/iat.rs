@@ -237,6 +237,13 @@ pub fn rescan() {
                         if h.orig.load(Ordering::SeqCst) == current && write_slot(slot, h.hook) {
                             log(&format!("iat: {modname} -> {dll}!{} hooked", h.name));
                             n += 1;
+                        } else if h.orig.load(Ordering::SeqCst) != current {
+                            log(&format!(
+                                "iat: {modname} -> {dll}!{} left alone: it points at {:#x}, the hook calls {:#x}",
+                                h.name,
+                                current,
+                                h.orig.load(Ordering::SeqCst)
+                            ));
                         }
                     }
                 }

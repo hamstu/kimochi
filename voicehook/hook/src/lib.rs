@@ -14,6 +14,7 @@
 #![allow(clippy::missing_safety_doc)]
 mod census;
 mod ds;
+mod fileread;
 mod il2cpp;
 mod iat;
 mod renpy;
@@ -124,6 +125,7 @@ fn run() {
     // Export adapters: register their hooks, then patch every module's imports.
     unity::register();
     waveout::register();
+    fileread::register();
     sdl::register();
     iat::on_module("mono", unity::on_mono);
     iat::on_module("gameassembly", il2cpp::on_il2cpp);

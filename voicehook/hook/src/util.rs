@@ -55,3 +55,14 @@ pub fn guard(f: impl FnOnce()) {
 pub fn hex(p: usize) -> String {
     format!("{p:#x}")
 }
+
+/// Text in the system's ANSI code page (Shift-JIS on a Japanese system).
+pub fn from_ansi(bytes: &[u8]) -> String {
+    use windows_sys::Win32::Globalization::{MultiByteToWideChar, CP_ACP};
+    if bytes.is_empty() {
+        return String::new();
+    }
+    let mut out = vec![0u16; bytes.len()];
+    let n = unsafe { MultiByteToWideChar(CP_ACP, 0, bytes.as_ptr(), bytes.len() as i32, out.as_mut_ptr(), out.len() as i32) };
+    String::from_utf16_lossy(&out[..n.max(0) as usize])
+}

@@ -14,6 +14,7 @@ adapter per audio path, an NW.js page script for HTML5 engines, a shared capture
 | Unity Mono (internal calls) | Unity 2017-6000 Mono builds | per `AudioSource.Play*`: clip name + PCM (`GetData`) | Unity 6 (x64), 2019 (x86), 2021.3 (x64) and legacy-Mono (x64) games |
 | Unity IL2CPP (internal calls) | Unity IL2CPP builds (`GameAssembly.dll`) | per `AudioSource.Play*`: clip name + PCM (`GetData`) | a Unity 2020.1 IL2CPP game (x64) |
 | Ren'Py (embedded Python) | Ren'Py 6/7/8 | per file started on a channel: the original file + channel | Ren'Py 8.5 (voiced) and 8.3 games, fixture |
+| File reads (imports) | engines that mix every sound themselves into one stream (AliceSoft System4) | per voice file read from a voice-named archive or folder: the original Ogg/WAV file | an AliceSoft System4 game (x86) |
 | Web (page script) | RPG Maker MV/MZ, TyranoScript (howler), `<audio>`, on NW.js or Electron | per play: the original file (RPG Maker audio decrypted) + URL | an RPG Maker MV game (NW.js), a TyranoScript game (Electron) |
 
 Voice clips from these games were checked with `speechcheck` (Kimochi's VAD + SenseVoice): each
