@@ -48,6 +48,11 @@ pub fn is_mono_game(exe: &Path) -> bool {
         && dir.join(format!("{}_Data", stem.to_string_lossy())).join("Managed").join("UnityEngine.CoreModule.dll").is_file()
 }
 
+/// A Unity game built with IL2CPP: its scripts are compiled into GameAssembly.dll beside the exe.
+pub fn is_il2cpp_game(exe: &Path) -> bool {
+    exe.parent().is_some_and(|dir| dir.join("UnityPlayer.dll").is_file() && dir.join("GameAssembly.dll").is_file())
+}
+
 /// The request to the DLL, held for as long as the session wants the text.
 pub struct Request {
     #[cfg(windows)]

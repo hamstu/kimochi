@@ -166,6 +166,19 @@ mod imp {
         Ok(Target { pid, exe, bits, wine: None })
     }
 
+    /// How long the process has been running.
+    pub fn age(pid: u32) -> Option<std::time::Duration> {
+        use windows::Win32::Foundation::FILETIME;
+        use windows::Win32::System::SystemInformation::GetSystemTimeAsFileTime;
+        use windows::Win32::System::Threading::GetProcessTimes;
+        let process = Owned(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?);
+        let (mut created, mut exited, mut kernel, mut user) = (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
+        unsafe { GetProcessTimes(process.0, &mut created, &mut exited, &mut kernel, &mut user) }.ok()?;
+        let now = unsafe { GetSystemTimeAsFileTime() };
+        let ticks = |t: FILETIME| (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime);
+        Some(std::time::Duration::from_nanos(ticks(now).saturating_sub(ticks(created)) * 100))
+    }
+
     /// Every process with its parent and image name, from one snapshot.
     fn processes() -> Vec<(u32, u32, String)> {
         let Ok(snapshot) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }) else {
@@ -205,7 +218,13 @@ mod imp {
 }
 
 #[cfg(windows)]
-pub use imp::{game_processes, target};
+pub use imp::{age, game_processes, target};
+
+/// Not known off Windows.
+#[cfg(not(windows))]
+pub fn age(_pid: u32) -> Option<std::time::Duration> {
+    None
+}
 
 #[cfg(target_os = "linux")]
 pub use super::wine::target;

@@ -50,6 +50,8 @@ const PICK_DELAY: Duration = Duration::from_millis(700);
 /// The fewest matched characters (scaled by the share of the thread they are) an automatic
 /// choice accepts.
 const PICK_MIN_MATCH: usize = 6;
+/// How old an IL2CPP game must be before the hooker attaches to it.
+const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone)]
 struct Thread {
@@ -979,7 +981,22 @@ pub async fn texthook_start(source_id: String, observer_engine: Option<String>) 
     }
     // A Unity game's hooker starts once the DLL is watching its text (`read_unity_text`).
     if hook.lock().unity.is_empty() {
-        std::thread::spawn(move || run(hook, generation, ENGINES[0]));
+        // An IL2CPP game the hooker attaches to while it starts up hangs (LunaHook, live): a game
+        // started moments ago (Hook automatically) is given until `IL2CPP_STARTUP` to start first.
+        let starting = targets
+            .first()
+            .filter(|t| t.wine.is_none() && unity::is_il2cpp_game(&t.exe))
+            .and_then(|t| process::age(t.pid))
+            .and_then(|age| IL2CPP_STARTUP.checked_sub(age));
+        std::thread::spawn(move || {
+            if let Some(wait) = starting {
+                std::thread::sleep(wait);
+                if hook.lock().generation != generation {
+                    return;
+                }
+            }
+            run(hook, generation, ENGINES[0])
+        });
     }
     Ok(status_of(&hook.lock()))
 }
