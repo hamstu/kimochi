@@ -129,8 +129,13 @@ pub fn follow(service: crate::state::Shared) {
     }
     let spawned = std::thread::Builder::new().name("kimochi-game-follow".into()).spawn(move || {
         let mut seen = super::gamescope_handoff::last_game();
+        let mut ticks: u32 = 0;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(250));
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(8) {
+                rebind_restarted(&service);
+            }
             let game = super::gamescope_handoff::last_game();
             if game == 0 || game == seen {
                 continue;
@@ -157,6 +162,34 @@ pub fn follow(service: crate::state::Shared) {
     }
 }
 
+/// The live id of the game `selected` (a Gamescope window source) names, when that game is still
+/// running but under a new process: its id carries the pid, so a game restarted from Steam left the
+/// reader on a source that no longer exists ("that source has closed" from Crop and every scan).
+/// None while the selected id is live, or for the screen and anything not a Gamescope window.
+fn restarted<'a>(selected: Option<&str>, live: &'a [String]) -> Option<&'a String> {
+    let selected = selected?;
+    let app = linux_gamescope::app_of(selected).filter(|app| *app != 0)?;
+    if live.iter().any(|id| id == selected) {
+        return None;
+    }
+    live.iter().find(|id| linux_gamescope::app_of(id) == Some(app))
+}
+
+/// Move the selection to the same game's new window after the game restarted (`restarted`),
+/// keeping the crop saved for it.
+fn rebind_restarted(service: &crate::state::Shared) {
+    let selected = service.selection.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    if selected.as_deref().and_then(linux_gamescope::app_of).is_none_or(|app| app == 0) {
+        return;
+    }
+    let live: Vec<String> = sources().into_iter().map(|s| s.id).collect();
+    let Some(id) = restarted(selected.as_deref(), &live) else { return };
+    match crate::sources::select_keeping_crop(service, id) {
+        Ok(_) => service.log(serde_json::json!({"check": "gaming-mode-source-rebound", "sourceId": id, "from": selected})),
+        Err(error) => eprintln!("Gaming Mode: could not follow the restarted game to {id}: {error}"),
+    }
+}
+
 /// "Bring to front" for a Gaming Mode source: switch to that app (the screen: back to
 /// the game), handing input back to Steam as the Return to game button does.
 pub fn activate(app: &tauri::AppHandle, source_id: &str) -> Result<(), String> {
@@ -175,7 +208,23 @@ pub fn activate(app: &tauri::AppHandle, source_id: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{follows, source_in_front};
+    use super::{follows, restarted, source_in_front};
+
+    #[test]
+    fn a_restarted_game_is_found_again_by_its_app_id() {
+        let live = vec![
+            "gamescope:display:0".to_string(),
+            "gamescope:window:3311684016:529547".to_string(),
+        ];
+        // The game restarted: same app, new pid.
+        assert_eq!(restarted(Some("gamescope:window:3311684016:523473"), &live), Some(&live[1]));
+        // Still the live window, the screen, another game that quit, or nothing selected: stay.
+        assert_eq!(restarted(Some("gamescope:window:3311684016:529547"), &live), None);
+        assert_eq!(restarted(Some("gamescope:display:0"), &live), None);
+        assert_eq!(restarted(Some("gamescope:window:1263470:94460"), &live), None);
+        assert_eq!(restarted(Some("portal:window:12"), &live), None);
+        assert_eq!(restarted(None, &live), None);
+    }
 
     const OWN: Option<u32> = Some(3148519714);
 
