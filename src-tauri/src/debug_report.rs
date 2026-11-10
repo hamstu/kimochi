@@ -12,10 +12,13 @@
 //! dumped, and every value and log line goes through `redact` (tokens, keys, cookies, JWTs, URL
 //! query strings, long opaque strings, e-mail addresses, and the user's name in paths).
 //!
-//! Verbose logging (`debug_verbose_set`) is a switch for this run only: while on, `trace` adds
-//! window focus and visibility changes, every scan's outcome and pointer diagnostics to
-//! `evidence.jsonl`. Each change is announced as `verbose-logging` so open windows start or
-//! stop their own diagnostics (`ui/pointer-diagnostics.js`).
+//! Verbose logging (`debug_verbose_set`): while on, `trace` adds window focus and visibility
+//! changes, every scan's outcome and pointer diagnostics to `evidence.jsonl`, and `heartbeat`
+//! adds a `vitals` record every few seconds. It stays on across restarts for a day
+//! (`verbose-until` in the app data folder), so a report of the computer freezing, where the
+//! reader has to force a restart, still has the minutes before it. Each change is announced as
+//! `verbose-logging` so open windows start or stop their own diagnostics
+//! (`ui/pointer-diagnostics.js`). With it off, nothing here runs or writes.
 use crate::state::Shared;
 use regex::Regex;
 use serde_json::{json, Map, Value};
@@ -29,8 +32,14 @@ use std::{
 };
 use tauri::{Emitter, Manager};
 
-/// How much of the end of each log goes in a bundle.
-const TAIL_BYTES: u64 = 512 * 1024;
+/// How much of the end of each log goes in a bundle: an hour or two of verbose `vitals`.
+const TAIL_BYTES: u64 = 2 * 1024 * 1024;
+/// How long verbose logging stays on, across restarts, once switched on.
+const VERBOSE_FOR_MS: u64 = 24 * 60 * 60 * 1000;
+/// Where that deadline is kept, in the app data folder; only there while verbose logging is on.
+const VERBOSE_FILE: &str = "verbose-until";
+/// How often `heartbeat` records `vitals`.
+const HEARTBEAT: std::time::Duration = std::time::Duration::from_secs(5);
 /// The diagnostic events the report itself carries (the bundle has the whole tail).
 const RECENT_EVENTS: usize = 40;
 /// The logs a bundle includes, when they exist: the diagnostics record (and its rotated copy),
@@ -78,14 +87,140 @@ pub fn trace(app: &tauri::AppHandle, value: Value) {
     }
 }
 
-/// `debug_verbose_set(enabled?) -> bool`: turns verbose logging on or off until the app quits;
-/// without `enabled`, only answers whether it is on.
+static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+/// The last value each `trace_changed` key recorded, so a poll only logs what changed.
+static LAST: std::sync::Mutex<Option<std::collections::HashMap<&'static str, Value>>> = std::sync::Mutex::new(None);
+
+/// Lets code without an `AppHandle` (capture catalogs, pickers) record verbose diagnostics, and
+/// turns verbose logging back on when it was on when Kimochi last stopped, less than a day ago.
+pub fn install(app: &tauri::AppHandle) {
+    let _ = APP.set(app.clone());
+    let Some(file) = verbose_file(app) else { return };
+    let Some(until) = std::fs::read_to_string(&file).ok().and_then(|text| text.trim().parse::<u64>().ok()) else {
+        return;
+    };
+    if until > now_ms() {
+        VERBOSE.store(true, Ordering::Relaxed);
+        start_heartbeat(app, Some(until));
+    } else {
+        let _ = std::fs::remove_file(file);
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
+}
+
+fn verbose_file(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    Some(app.path().app_data_dir().ok()?.join(VERBOSE_FILE))
+}
+
+/// How many times each `count` key happened since the last heartbeat.
+static COUNTS: std::sync::Mutex<Option<std::collections::BTreeMap<&'static str, u64>>> = std::sync::Mutex::new(None);
+
+/// Counts one `key` event for the next `vitals` record, while verbose logging is on: for things
+/// that happen too often to log one by one, like the overlay switching click-through, where a
+/// flood is the finding.
+pub fn count(key: &'static str) {
+    if !verbose() {
+        return;
+    }
+    let mut counts = COUNTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    *counts.get_or_insert_with(Default::default).entry(key).or_default() += 1;
+}
+
+static HEARTBEAT_STARTED: std::sync::Once = std::sync::Once::new();
+
+/// Starts the `vitals` thread the first time verbose logging is on in this run. It records
+/// while verbose logging is on and only sleeps while it is off. `restored` is the deadline when
+/// verbose logging came back on from the previous run.
+fn start_heartbeat(app: &tauri::AppHandle, restored: Option<u64>) {
+    HEARTBEAT_STARTED.call_once(|| {
+        let app = app.clone();
+        let _ = std::thread::Builder::new()
+            .name("kimochi-vitals".into())
+            .spawn(move || heartbeat(&app, restored));
+    });
+}
+
+fn heartbeat(app: &tauri::AppHandle, mut restored: Option<u64>) {
+    let mut sampler = crate::vitals::Sampler::default();
+    let mut last: Option<std::time::Instant> = None;
+    loop {
+        std::thread::sleep(HEARTBEAT);
+        if !verbose() {
+            last = None;
+            continue;
+        }
+        if let Some(until) = restored.take() {
+            trace(app, json!({ "check": "verbose-logging", "enabled": true, "restored": true, "until": until }));
+        }
+        let now = std::time::Instant::now();
+        let counts = COUNTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take().unwrap_or_default();
+        let mut record = json!({
+            "check": "vitals",
+            // Late by more than a beat: this thread, or the whole machine, stalled.
+            "gapMs": last.map(|at| now.duration_since(at).as_millis() as u64),
+            "counts": counts,
+        });
+        if let (Some(object), Value::Object(sample)) = (record.as_object_mut(), sampler.sample()) {
+            object.extend(sample);
+        }
+        last = Some(now);
+        trace(app, record);
+        // On disk now, not when the kernel gets round to it: a forced restart loses what's cached.
+        if let Ok(dir) = app.path().app_data_dir() {
+            if let Ok(file) = std::fs::File::open(dir.join("evidence.jsonl")) {
+                let _ = file.sync_data();
+            }
+        }
+    }
+}
+
+/// [`trace`] from anywhere, once [`install`] ran.
+pub fn trace_now(value: Value) {
+    if let Some(app) = APP.get() {
+        trace(app, value);
+    }
+}
+
+/// [`trace_now`], but only when `value` differs from the last one recorded under `key`: for
+/// state a poll reads every few hundred milliseconds.
+pub fn trace_changed(key: &'static str, value: Value) {
+    if !verbose() {
+        return;
+    }
+    {
+        let mut last = LAST.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let last = last.get_or_insert_with(Default::default);
+        if last.get(key) == Some(&value) {
+            return;
+        }
+        last.insert(key, value.clone());
+    }
+    trace_now(value);
+}
+
+/// `debug_verbose_set(enabled?) -> bool`: turns verbose logging on, for a day and across
+/// restarts, or off; without `enabled`, only answers whether it is on.
 #[tauri::command]
 pub fn debug_verbose_set(app: tauri::AppHandle, state: tauri::State<Shared>, enabled: Option<bool>) -> bool {
     let Some(enabled) = enabled else { return verbose() };
     if VERBOSE.swap(enabled, Ordering::Relaxed) != enabled {
-        crate::record(&app, &state, json!({ "check": "verbose-logging", "enabled": enabled }));
+        let until = enabled.then(|| now_ms() + VERBOSE_FOR_MS);
+        if let Some(file) = verbose_file(&app) {
+            let _ = match until {
+                Some(until) => std::fs::write(file, until.to_string()),
+                None => std::fs::remove_file(file),
+            };
+        }
+        crate::record(&app, &state, json!({ "check": "verbose-logging", "enabled": enabled, "until": until }));
         let _ = app.emit("verbose-logging", enabled);
+        if enabled {
+            start_heartbeat(&app, None);
+        }
     }
     enabled
 }

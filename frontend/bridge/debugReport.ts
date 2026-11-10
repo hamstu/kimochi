@@ -14,6 +14,6 @@ export const debugReport = (): Promise<DebugReport> => invoke<DebugReport>('debu
 export const saveDebugBundle = (markdown: string): Promise<{ saved: boolean; path?: string }> =>
   invoke('debug_bundle_save', { markdown })
 
-/** Turns verbose logging on or off for this run; with no argument, whether it is on. */
+/** Turns verbose logging on (for a day, across restarts) or off; with no argument, whether it is on. */
 export const verboseLogging = (enabled?: boolean): Promise<boolean> =>
   invoke<boolean>('debug_verbose_set', enabled === undefined ? {} : { enabled })
