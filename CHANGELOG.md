@@ -15,6 +15,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Text hooking works in Desktop Mode on KDE Plasma (Wayland), on the Steam Deck too: the **Text hooking** switch now appears under a game you chose in the system picker, once Kimochi has found its window. Before, it never appeared there.
 - KDE Plasma (Wayland): the overlay now follows a Windows game played in a window through Proton or Wine. Before, Kimochi couldn't find the game's window ("No matching window is available"), so the overlay couldn't follow it.
 - The **Audio hooking** switch is only shown on Windows, the only place it works so far.
+- Windows: Kimochi now hides the yellow border Windows draws around a window it reads, when **Settings → Privacy & security → Screenshot borders** lets apps turn it off. If those switches are off, the welcome guide has a step that opens that page. Before, the border always showed.
 
 ## [0.8.0] - 2026-11-10
 

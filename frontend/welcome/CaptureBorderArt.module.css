@@ -1,0 +1,132 @@
+/* The capture border step's picture (CaptureBorderArt.tsx), in the Settings art's greys
+   (browser-tab.css). Amber stands in for the border Windows draws: the one colour in it. */
+.art {
+  --cb-frame: var(--gray-a8);
+  --cb-line: var(--gray-a7);
+  --cb-bar: var(--gray-a5);
+  --cb-chrome: var(--gray-2);
+  --cb-page: var(--k-bg);
+  --cb-fill: var(--gray-a3);
+  --cb-yellow: var(--amber-9);
+  display: block;
+  width: min(100%, 18rem);
+  height: auto;
+  align-self: center;
+  overflow: visible;
+}
+:global(.dark) .art {
+  --cb-chrome: var(--gray-3);
+  --cb-page: var(--gray-2);
+}
+.art * {
+  vector-effect: non-scaling-stroke;
+}
+
+.chrome {
+  fill: var(--cb-chrome);
+  filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0.07));
+}
+.frame {
+  stroke: var(--cb-frame);
+}
+.rule {
+  stroke: var(--cb-line);
+}
+.icon {
+  stroke: var(--gray-a9);
+}
+.bar {
+  fill: var(--cb-bar);
+}
+.glyph {
+  stroke: var(--gray-a9);
+  stroke-linecap: round;
+}
+
+.sky {
+  fill: var(--cb-page);
+}
+.sun {
+  fill: var(--cb-page);
+  stroke: var(--cb-line);
+}
+.cloud {
+  fill: var(--cb-page);
+  stroke: var(--cb-line);
+  stroke-linejoin: round;
+}
+.hillFar {
+  fill: var(--cb-fill);
+  stroke: var(--cb-line);
+  stroke-linejoin: round;
+}
+.castle {
+  stroke: var(--gray-a9);
+  stroke-linejoin: round;
+}
+.hill {
+  fill: var(--cb-page);
+  stroke: var(--cb-line);
+}
+.box {
+  fill: var(--cb-page);
+  stroke: var(--gray-a9);
+}
+.tag {
+  fill: var(--cb-page);
+  stroke: var(--gray-a9);
+}
+.name {
+  fill: var(--k-text-2);
+  font-family: var(--k-font-jp);
+}
+.ink {
+  fill: var(--gray-11);
+  font-family: var(--k-font-jp);
+}
+.more {
+  fill: var(--gray-a9);
+}
+
+/* The border: thick, bright and glowing while it shows; gone once captures hide it. */
+.border {
+  stroke: var(--cb-yellow);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--cb-yellow) 55%, transparent));
+  transition: opacity 400ms ease;
+}
+.art[data-border='hidden'] .border {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .border {
+    transition: none;
+  }
+}
+
+/* Settings → Screenshot borders, both switches on. */
+.settings {
+  width: min(100%, 28rem);
+}
+.row {
+  fill: var(--cb-chrome);
+  stroke: var(--cb-line);
+}
+.rowTitle {
+  fill: var(--k-text);
+  font-family: var(--k-font-ui);
+}
+/* A darker track with a lighter knob, in either theme. */
+.switch {
+  fill: var(--gray-a8);
+  stroke: var(--cb-line);
+}
+.knob {
+  fill: var(--gray-1);
+}
+:global(.dark) .switch {
+  fill: var(--gray-a6);
+}
+:global(.dark) .knob {
+  fill: var(--gray-11);
+}
