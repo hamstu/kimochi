@@ -259,6 +259,17 @@ pub fn score(candidates: &[Candidate], blocks: &[Block]) -> Vec<Scored> {
     scored
 }
 
+/// The thread to choose automatically from `score`'s list: the best that matched at least
+/// `min` characters, in the largest text on screen (the dialogue box) or, elsewhere, at least
+/// [`MIN_OFF_BOX`] of them. A speaker's nameplate is never the largest text, and a long name
+/// matched exactly while the line itself was misread would otherwise take the choice.
+pub fn chosen(scored: &[Scored], min: f64) -> Option<&Scored> {
+    scored.iter().find(|s| s.effective >= min && (s.in_largest || s.effective >= MIN_OFF_BOX))
+}
+
+/// The fewest characters a thread matched outside the largest text must have to be chosen.
+const MIN_OFF_BOX: f64 = 12.0;
+
 /// The sentences a typewriter effect leaves behind. A game that types its text out sets the
 /// whole text again on every frame ("「", "「旅", "「旅人", …), and the hooker joins those calls
 /// into one piece of text. A run of frames that never get shorter, each the start of the run's last
@@ -862,6 +873,17 @@ mod tests {
         // counts, but for its own length and never as the whole sentence.
         let scored = score(&candidates, &blocks(&screen()));
         assert!(scored.is_empty() || scored[0].matched < 20);
+    }
+
+    #[test]
+    fn a_name_matched_outside_the_dialogue_box_is_not_chosen() {
+        let s = |key: &str, effective: f64, in_largest: bool| Scored { key: key.into(), score: effective, matched: effective as usize, effective, in_largest };
+        // The nameplate matched exactly; the line, misread, did not match at all.
+        assert!(chosen(&[s("name", 10.0, false)], 6.0).is_none());
+        // The line in the dialogue box, behind a better-scored name.
+        assert_eq!(chosen(&[s("name", 10.0, false), s("line", 8.0, true)], 6.0).unwrap().key, "line");
+        // A long line outside the largest text (a game whose largest text is a menu) still counts.
+        assert_eq!(chosen(&[s("line", 20.0, false)], 6.0).unwrap().key, "line");
     }
 
     #[test]

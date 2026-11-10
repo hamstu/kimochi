@@ -755,8 +755,8 @@ fn pick_loop(hook: &'static Hook, generation: u64) {
             continue;
         }
         match outcome {
-            Ok(scored) => match scored.first() {
-                Some(best) if best.effective >= PICK_MIN_MATCH as f64 => {
+            Ok(scored) => match pick::chosen(&scored, PICK_MIN_MATCH as f64) {
+                Some(best) => {
                     let key = best.key.clone();
                     let thread = session.threads.iter().find(|t| t.key == key).cloned();
                     if let Some(thread) = thread {
