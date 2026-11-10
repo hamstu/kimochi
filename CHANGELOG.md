@@ -30,6 +30,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - AnkiConnect no longer drops out with "error sending request for url".
 - Hachidori and 10ten lookups on macOS stay quick after a pause, even while your Mac is busy: macOS no longer slows down the dictionary engine running in the background.
 - Linux (including the Steam Deck): importing large or many Yomitan dictionaries no longer stops with "not enough space" once they pass about 1 GB.
+- Steam Deck Gaming Mode: after you restart a game, Kimochi keeps reading it with its crop. Before, **Crop** and scans failed with "that source has closed" until you chose the game again.
+- The crop editor shows one hint in controller mode, the button bar, instead of a second "esc to cancel" hint beside it.
 
 ## [0.7.0] - 2026-11-07
 

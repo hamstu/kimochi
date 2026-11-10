@@ -1036,10 +1036,11 @@ export class RegionSelect {
   _drawBubble() {
     const els = this._els
     if (!els) return
-    const showing = this.idle && this._pointer !== null
+    // In controller mode the button bar already says how to start and how to cancel; a second,
+    // keyboard-only hint ("esc to cancel") following a touch or the trackpad read as two modes.
+    const showing = this.idle && this._pointer !== null && !this._pad
     els.hint.style.opacity = showing ? '1' : '0'
     els.hint.style.scale = showing ? '1' : '0.92'
-    els.message.textContent = this._pad ? 'Drag on the screen to select an area' : 'Drag to select an area'
     if (!showing) return
     if (!this._frame) this._frame = nextFrame(() => this._stepBubble())
   }
@@ -1278,6 +1279,7 @@ export class RegionSelect {
       willChange: 'transform'
     })
     const message = document.createElement('span')
+    message.textContent = 'Drag to select an area'
     const divider = assign(document.createElement('span'), {
       width: '1px',
       height: '12px',
