@@ -78,6 +78,39 @@ pub fn trace(app: &tauri::AppHandle, value: Value) {
     }
 }
 
+static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+/// The last value each `trace_changed` key recorded, so a poll only logs what changed.
+static LAST: std::sync::Mutex<Option<std::collections::HashMap<&'static str, Value>>> = std::sync::Mutex::new(None);
+
+/// Lets code without an `AppHandle` (capture catalogs, pickers) record verbose diagnostics.
+pub fn install(app: &tauri::AppHandle) {
+    let _ = APP.set(app.clone());
+}
+
+/// [`trace`] from anywhere, once [`install`] ran.
+pub fn trace_now(value: Value) {
+    if let Some(app) = APP.get() {
+        trace(app, value);
+    }
+}
+
+/// [`trace_now`], but only when `value` differs from the last one recorded under `key`: for
+/// state a poll reads every few hundred milliseconds.
+pub fn trace_changed(key: &'static str, value: Value) {
+    if !verbose() {
+        return;
+    }
+    {
+        let mut last = LAST.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let last = last.get_or_insert_with(Default::default);
+        if last.get(key) == Some(&value) {
+            return;
+        }
+        last.insert(key, value.clone());
+    }
+    trace_now(value);
+}
+
 /// `debug_verbose_set(enabled?) -> bool`: turns verbose logging on or off until the app quits;
 /// without `enabled`, only answers whether it is on.
 #[tauri::command]

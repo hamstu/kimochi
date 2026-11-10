@@ -392,6 +392,33 @@ pub fn commit(service: &Shared, source_id: &str, crop: Option<Crop>) -> Result<V
 }
 
 fn commit_with_key(service: &Shared, source_id: &str, crop: Option<Crop>, saved_key: Option<String>) -> Result<Value, String> {
+    let had_crop = crop.is_some();
+    let result = commit_with_key_inner(service, source_id, crop, saved_key);
+    if crate::debug_report::verbose() {
+        // On failure, what the backend does list, so a report shows a source that vanished
+        // or was never offered.
+        let listed: Option<Vec<String>> = result.is_err().then(|| {
+            service
+                .backend
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .enumerate()
+                .map(|sources| sources.into_iter().map(|s| s.id).collect())
+                .unwrap_or_default()
+        });
+        crate::debug_report::trace_now(json!({
+            "check": "source-select",
+            "sourceId": source_id,
+            "crop": had_crop,
+            "ok": result.is_ok(),
+            "error": result.as_ref().err(),
+            "listed": listed,
+        }));
+    }
+    result
+}
+
+fn commit_with_key_inner(service: &Shared, source_id: &str, crop: Option<Crop>, saved_key: Option<String>) -> Result<Value, String> {
     let source = {
         let mut backend = service
             .backend
@@ -668,6 +695,7 @@ pub fn pick_source(service: &Shared) -> Result<Value, String> {
         .is_some_and(|backend| backend.request_permission());
     drop(open);
     if !granted {
+        trace_pick("cancelled", &[]);
         return Ok(not_picked("cancelled", NOT_SHARED));
     }
     let sources = service
@@ -676,6 +704,14 @@ pub fn pick_source(service: &Shared) -> Result<Value, String> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .enumerate()
         .map_err(err)?;
+    trace_pick(
+        match pick_result(&sources) {
+            PickResult::One(_) => "picked",
+            PickResult::None => "none-listed",
+            PickResult::Several => "ambiguous",
+        },
+        &sources,
+    );
     match pick_result(&sources) {
         PickResult::One(source) => {
             // The same path as choosing a tile in the grid: keep a region saved for it.
@@ -689,6 +725,25 @@ pub fn pick_source(service: &Shared) -> Result<Value, String> {
             "The system picker shared more than one source; share a single screen or window.",
         )),
     }
+}
+
+/// Verbose logging only: what a system-picker round did (`portal-pick`). `result` is what
+/// `pick_source` makes of it; the portal's own record says what was asked for and returned.
+fn trace_pick(result: &str, sources: &[Source]) {
+    if !crate::debug_report::verbose() {
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    let (portal, error) = (kimochi_capture::last_portal_pick_info(), kimochi_capture::last_portal_pick_error());
+    #[cfg(not(target_os = "linux"))]
+    let (portal, error): (Option<()>, Option<String>) = (None, None);
+    crate::debug_report::trace_now(json!({
+        "check": "portal-pick",
+        "result": result,
+        "portal": portal,
+        "error": error,
+        "sources": sources.iter().map(|s| json!({"id": s.id, "kind": s.kind, "name": s.name})).collect::<Vec<_>>(),
+    }));
 }
 
 fn crop_differs(a: Option<&Crop>, b: Option<&Crop>) -> bool {

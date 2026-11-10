@@ -35,7 +35,56 @@ pub fn sources() -> Vec<Source> {
     for source in &mut sources {
         decorate(source);
     }
+    trace_catalog(&sources);
     sources
+}
+
+/// Where `name_of` found an app's name: Steam's library, the window title, or neither.
+fn name_origin(app: u32, title: &str) -> &'static str {
+    if crate::steam_library::app_info(app).is_some() {
+        "steam"
+    } else if !title.trim().is_empty() {
+        "title"
+    } else {
+        "number"
+    }
+}
+
+/// Verbose logging only, and only when it changed: what Gamescope listed, which apps became
+/// sources, and why the rest were left out (`gamescope-catalog`).
+fn trace_catalog(sources: &[Source]) {
+    if !crate::debug_report::verbose() {
+        return;
+    }
+    let catalog = linux_gamescope::catalog_debug();
+    let apps: Vec<serde_json::Value> = catalog
+        .apps
+        .iter()
+        .map(|(app, title, verdict)| {
+            serde_json::json!({
+                "appId": app,
+                "title": title,
+                "verdict": verdict,
+                "name": name_of(*app, title),
+                "nameFrom": name_origin(*app, title),
+            })
+        })
+        .collect();
+    crate::debug_report::trace_changed(
+        "gamescope-catalog",
+        serde_json::json!({
+            "check": "gamescope-catalog",
+            "connected": catalog.connected,
+            "captureActive": active(),
+            "pipewireNode": linux_gamescope::available(),
+            "focusableApps": catalog.focusable_apps,
+            "focusableWindows": catalog.focusable_windows,
+            "ownPid": catalog.own_pid,
+            "ownAppId": catalog.own_app_id,
+            "apps": apps,
+            "sources": sources.iter().map(|s| serde_json::json!({"id": s.id, "name": s.name})).collect::<Vec<_>>(),
+        }),
+    );
 }
 
 /// The running app `decorate` named `name`.
@@ -64,11 +113,19 @@ pub fn icon_png(name: &str, target: isize) -> Option<Vec<u8>> {
 pub fn default_source() -> Option<Source> {
     let sources = sources();
     let game = super::gamescope_handoff::game_id();
-    sources
+    let chosen = sources
         .iter()
         .find(|s| game.is_some() && linux_gamescope::app_of(&s.id) == game)
         .or_else(|| sources.first())
-        .cloned()
+        .cloned();
+    crate::debug_report::trace_now(serde_json::json!({
+        "check": "gaming-mode-default-source",
+        "game": game,
+        "ownAppId": super::gamescope_handoff::own_id(),
+        "chosen": chosen.as_ref().map(|s| &s.id),
+        "matchedGame": chosen.as_ref().is_some_and(|s| game.is_some() && linux_gamescope::app_of(&s.id) == game),
+    }));
+    chosen
 }
 
 /// Whether `source` (a Gamescope source id, or none) is what Gamescope shows while it draws `front`
@@ -142,10 +199,21 @@ pub fn follow(service: crate::state::Shared) {
             }
             seen = game;
             let selected = service.selection.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            if !follows(selected.as_deref(), game) {
-                continue;
-            }
-            let Some(source) = sources().into_iter().find(|s| linux_gamescope::app_of(&s.id) == Some(game)) else {
+            let follow = follows(selected.as_deref(), game);
+            let found = if follow {
+                sources().into_iter().find(|s| linux_gamescope::app_of(&s.id) == Some(game))
+            } else {
+                None
+            };
+            crate::debug_report::trace_now(serde_json::json!({
+                "check": "gaming-mode-front-game",
+                "game": game,
+                "selected": selected,
+                "follows": follow,
+                // A game in front that is not among the sources: see `gamescope-catalog` for why.
+                "listed": found.as_ref().map(|s| &s.id),
+            }));
+            let Some(source) = found else {
                 continue;
             };
             match crate::sources::select_keeping_crop(&service, &source.id) {

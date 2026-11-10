@@ -54,6 +54,58 @@ pub(crate) fn window_triples(values: &[u32]) -> Vec<(u32, u32, u32)> {
     values.chunks_exact(3).map(|c| (c[0], c[1], c[2])).collect()
 }
 
+/// Why [`running_apps`] left an app out (or `Kept`), for diagnostics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AppVerdict {
+    Kept,
+    /// App ID 0: no Steam app (Gamescope's own or an untagged window).
+    NoAppId,
+    /// Steam's own client UI.
+    SteamClient,
+    /// The app ID Kimochi itself was launched under (`KIMOCHI_STEAM_APP_ID`).
+    OwnAppId,
+    /// Its first window belongs to this process.
+    OwnProcess,
+    /// Already listed earlier in Gamescope's list.
+    Duplicate,
+}
+
+/// Every app ID in Gamescope's order with its verdict; kept ones carry their first window.
+pub(crate) fn classify_apps(
+    apps: &[u32],
+    windows: &[(u32, u32, u32)],
+    own_pid: u32,
+    own_app: Option<u32>,
+    title: impl Fn(u32) -> String,
+) -> Vec<(App, AppVerdict)> {
+    let mut out: Vec<(App, AppVerdict)> = Vec::new();
+    for &app_id in apps {
+        let window = windows.iter().find(|(_, app, _)| *app == app_id);
+        let app = App {
+            app_id,
+            pid: window.map(|w| w.2).filter(|pid| *pid != 0),
+            title: window.map(|w| title(w.0)).unwrap_or_default(),
+            window: window.map(|w| w.0),
+        };
+        let verdict = if app_id == 0 {
+            AppVerdict::NoAppId
+        } else if app_id == STEAM_CLIENT_APP {
+            AppVerdict::SteamClient
+        } else if Some(app_id) == own_app {
+            AppVerdict::OwnAppId
+        } else if out.iter().any(|(a, v)| *v == AppVerdict::Kept && a.app_id == app_id) {
+            AppVerdict::Duplicate
+        } else if window.is_some_and(|(_, _, pid)| *pid == own_pid) {
+            AppVerdict::OwnProcess
+        } else {
+            AppVerdict::Kept
+        };
+        out.push((app, verdict));
+    }
+    out
+}
+
 /// Apps in Gamescope's order, without Steam's client, app 0 and anything of `own_pid`
 /// or `own_app`. Each takes the first window listed for it.
 pub(crate) fn running_apps(
@@ -63,26 +115,28 @@ pub(crate) fn running_apps(
     own_app: Option<u32>,
     title: impl Fn(u32) -> String,
 ) -> Vec<App> {
-    let mut out: Vec<App> = Vec::new();
-    for &app_id in apps {
-        if app_id == 0 || app_id == STEAM_CLIENT_APP || Some(app_id) == own_app {
-            continue;
-        }
-        if out.iter().any(|a| a.app_id == app_id) {
-            continue;
-        }
-        let window = windows.iter().find(|(_, app, _)| *app == app_id);
-        if window.is_some_and(|(_, _, pid)| *pid == own_pid) {
-            continue;
-        }
-        out.push(App {
-            app_id,
-            pid: window.map(|w| w.2).filter(|pid| *pid != 0),
-            title: window.map(|w| title(w.0)).unwrap_or_default(),
-            window: window.map(|w| w.0),
-        });
-    }
-    out
+    classify_apps(apps, windows, own_pid, own_app, title)
+        .into_iter()
+        .filter(|(_, verdict)| *verdict == AppVerdict::Kept)
+        .map(|(app, _)| app)
+        .collect()
+}
+
+/// What Gamescope listed and what the catalog made of it, for diagnostics.
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogDebug {
+    /// Raw `GAMESCOPE_FOCUSABLE_APPS`.
+    pub focusable_apps: Vec<u32>,
+    /// Raw `GAMESCOPE_FOCUSABLE_WINDOWS` as (window, app ID, pid).
+    pub focusable_windows: Vec<(u32, u32, u32)>,
+    pub own_pid: u32,
+    /// `KIMOCHI_STEAM_APP_ID`, when set.
+    pub own_app_id: Option<u32>,
+    /// One entry per app ID: (app ID, first window's title, verdict).
+    pub apps: Vec<(u32, String, AppVerdict)>,
+    /// Whether the X connection to Gamescope's root worked.
+    pub connected: bool,
 }
 
 pub fn display_source_id() -> String {
@@ -124,7 +178,7 @@ fn own_app() -> Option<u32> {
 }
 
 #[cfg(target_os = "linux")]
-pub use backend::{available, running, sources, GamescopeCapture};
+pub use backend::{available, catalog_debug, running, sources, GamescopeCapture};
 
 #[cfg(target_os = "linux")]
 mod backend {
@@ -194,6 +248,20 @@ mod backend {
             return Vec::new();
         };
         d.property32(d.root, atom, AtomEnum::CARDINAL).unwrap_or_default()
+    }
+
+    /// What Gamescope lists, with the verdict on each app (see [`CatalogDebug`]).
+    pub fn catalog_debug() -> CatalogDebug {
+        let Some(d) = desktop() else { return CatalogDebug::default() };
+        let focusable_apps = root_values(d, b"GAMESCOPE_FOCUSABLE_APPS");
+        let focusable_windows = window_triples(&root_values(d, b"GAMESCOPE_FOCUSABLE_WINDOWS"));
+        let own_pid = std::process::id();
+        let own_app_id = own_app();
+        let apps = classify_apps(&focusable_apps, &focusable_windows, own_pid, own_app_id, |w| d.title(w))
+            .into_iter()
+            .map(|(app, verdict)| (app.app_id, app.title, verdict))
+            .collect();
+        CatalogDebug { focusable_apps, focusable_windows, own_pid, own_app_id, apps, connected: true }
     }
 
     /// What Gamescope says is running, without Steam's client and this app.
@@ -834,6 +902,29 @@ mod tests {
         );
         let none = running_apps(&[391540], &[], 1, Some(391540), |_| String::new());
         assert!(none.is_empty());
+    }
+
+    #[test]
+    fn every_left_out_app_says_why() {
+        // A game, Steam, an untagged window, Kimochi's own window (pid 500), a game started under
+        // Kimochi's own Steam app ID, and the first game listed again.
+        let windows = window_triples(&[11, 391540, 88, 12, 769, 76, 13, 0, 5, 14, 3148519714, 500, 15, 2999444207, 90]);
+        let verdicts: Vec<(u32, AppVerdict)> =
+            classify_apps(&[391540, 769, 0, 3148519714, 2999444207, 391540], &windows, 500, Some(2999444207), |w| format!("w{w}"))
+                .into_iter()
+                .map(|(app, verdict)| (app.app_id, verdict))
+                .collect();
+        assert_eq!(
+            verdicts,
+            vec![
+                (391540, AppVerdict::Kept),
+                (769, AppVerdict::SteamClient),
+                (0, AppVerdict::NoAppId),
+                (3148519714, AppVerdict::OwnProcess),
+                (2999444207, AppVerdict::OwnAppId),
+                (391540, AppVerdict::Duplicate),
+            ]
+        );
     }
 
     #[test]

@@ -20,6 +20,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 - **Scan after a button press** moved to **Settings → Shortcuts & Controls**.
 - Controller buttons you've set stay visible in Settings, even with no controller connected.
+- Linux and Steam Deck: with **Verbose logging** on (Settings → About), Kimochi's debug info now records which running games it offers as sources and why any are left out, so a game that can't be chosen is easier to sort out.
 
 ### Fixed
 

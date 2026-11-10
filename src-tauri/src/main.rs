@@ -1743,7 +1743,16 @@ async fn capture_frame(
             sources::stop_auto_if_gone(&service, &request.source_id, &error);
             service.images.lock().unwrap().capture_error = Some(error.clone());
             error
-        })?;
+        });
+        // Verbose logging: the first capture of a source, and each time its outcome changes.
+        debug_report::trace_changed("source-capture", json!({
+            "check": "source-capture",
+            "sourceId": request.source_id,
+            "ok": frame.is_ok(),
+            "error": frame.as_ref().err(),
+            "size": frame.as_ref().ok().map(|f| [f.info.full_width, f.info.full_height]),
+        }));
+        let frame = frame?;
         // Release the capture lock before observing: an observation must not hold
         // up the next capture, and the frame owns its own pixels from here.
         drop(backend);
@@ -3341,6 +3350,7 @@ fn main() {
             #[cfg(target_os = "linux")]
             platform::initialize_wayland_overlay();
             let handle = app.handle().clone();
+            debug_report::install(&handle);
             // Before any window loads: the WebView must never expire the dictionary engines'
             // website data (IndexedDB, OPFS), wherever it lives. Recorded once the log exists.
             let website_data = platform::keep_website_data();
