@@ -5,6 +5,8 @@
 //! Linux reads `/proc`: Kimochi's own CPU and memory, its child processes' (the web views, the
 //! OCR engines) by name, and the system's free memory, swap and memory pressure. Elsewhere a
 //! sample is empty and the heartbeat carries only its timing and counts.
+// The `/proc` parsers are used by Linux's `sample` only; elsewhere just the tests call them.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code, unused_imports))]
 use serde_json::{json, Map, Value};
 
 /// `utime + stime` (fields 14 and 15) and the parent pid (field 4) from `/proc/<pid>/stat`.

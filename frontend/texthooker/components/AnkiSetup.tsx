@@ -25,7 +25,7 @@ import { updateSettings } from "@texthooker/lib/settings";
 import { SETTINGS_DEFAULTS, type CardTagsSettings } from "@ui/settings";
 import { getSetting, setSetting } from "../../bridge/settings";
 import type { AnkiFieldMapping, Settings } from "@texthooker/lib/types";
-import { YOMITAN_MARKERS } from "@texthooker/lib/types";
+import { LOCAL_MARKERS, YOMITAN_MARKERS } from "@texthooker/lib/types";
 import {
   extractConfigFromCardFormat,
   findTermCardFormats,
@@ -283,7 +283,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
     if (trimmed === "(word audio)") {
       return { ankiField, mappingType: "wordAudio" };
     }
-    if ((YOMITAN_MARKERS as readonly string[]).includes(trimmed)) {
+    if ([...YOMITAN_MARKERS, ...LOCAL_MARKERS].includes(trimmed)) {
       return { ankiField, mappingType: "marker", marker: trimmed };
     }
     return { ankiField, mappingType: "literal", literal: value };
@@ -472,7 +472,7 @@ export function AnkiSetup({ settings, connection, title, description }: Props) {
             <option value="(sentence)" />
             <option value="(sentence audio)" />
             <option value="(word audio)" />
-            {YOMITAN_MARKERS.map((mk) => (
+            {[...YOMITAN_MARKERS, ...LOCAL_MARKERS].map((mk) => (
               <option key={mk} value={mk} />
             ))}
           </datalist>

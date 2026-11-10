@@ -58,6 +58,20 @@ pub struct TextLine {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+    /// The line's characters (or words) with their own boxes, in the same space, where the
+    /// engine gives them (Apple Live Text does): the overlay places its glyphs by them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<TextSegment>,
+}
+
+/// One character or word of a `TextLine`, boxed.
+#[derive(Debug, Clone, Serialize)]
+pub struct TextSegment {
+    pub text: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
 }
 
 /// What the observer read from one frame.
@@ -216,6 +230,7 @@ mod tests {
             y: 0.0,
             width: 1.0,
             height: 1.0,
+            segments: Vec::new(),
         }
     }
 

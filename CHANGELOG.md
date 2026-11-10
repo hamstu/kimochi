@@ -28,7 +28,11 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Linux (Wayland): the first time you open Kimochi from the AppImage, its global shortcuts now reach your desktop. Before, they failed with "App info not found" until the next start.
 - The Notebook, Anki and Settings views open at once, without a "Loading…" message first.
 - Linux (Wayland, e.g. KDE Plasma): no more "Bring to front" error for a shared window, and Kimochi now explains when the overlay can't follow one.
-- With Yomitan, the Log no longer shows "Acknowledgement timeout" errors.
+- With Yomitan, looking up words in the Log keeps working after a pause. Before, lookups there could stop with "Acknowledgement timeout" errors.
+- Yomitan's **Hide popup on cursor exit** now works on the overlay and in the Log: the pop-up closes when you move off it.
+- Hachidori: words inside a pop-up open their own pop-up on the overlay, and on older macOS versions in the Log too.
+- Text you select in a Hachidori pop-up now goes into Anki's `{popup-selection-text}` field, as in Yomitan. Kimochi's own pop-up (Yomitan API) fills that field from your selection too.
+- Apple Live Text: words on the overlay sit more exactly over the game's text, so the word under your pointer is the one looked up. Brackets and 、。 that a game sets in half a cell no longer push the rest of the line out of place.
 - AnkiConnect no longer drops out with "error sending request for url".
 - Hachidori and 10ten lookups on macOS stay quick after a pause, even while your Mac is busy: macOS no longer slows down the dictionary engine running in the background.
 - Linux (including the Steam Deck): importing large or many Yomitan dictionaries no longer stops with "not enough space" once they pass about 1 GB.

@@ -28,6 +28,7 @@ const { wordLayout } = await load('render.js')
 const { mapAnnotations } = await load('geometry.ts')
 const { visibleAnnotations, DEFAULT_GROUPING } = await load('annotations.ts')
 const { withInkMargins } = await load('ocr-result.ts')
+const { SQUEEZE } = await load('text-layout.js')
 
 /** The overlay font, from the metrics recorded in it: per character, as it draws (no kerning). */
 const recorded = JSON.parse(readFileSync(path.join(FIXTURES, 'glyphs.json'), 'utf8'))
@@ -67,8 +68,11 @@ function drawn(run) {
   const f = run.fontSize
   let before = 0
   ;[...run.text].forEach((c, i) => {
+    // A squeezed mark (text-layout.js SQUEEZE) is drawn with its blank half cut by margins.
+    const [cutBefore, cutAfter] = run.squeeze?.includes(c) ? SQUEEZE.get(c) : [0, 0]
+    before -= cutBefore
     const origin = (run.vertical ? run.rect.y : run.rect.x) + run.lead + f * before + run.spacing * i
-    before += advance(c)
+    before += advance(c) - cutAfter
     if (!c.trim()) return
     if (run.vertical) {
       out.push({ c, cx: run.rect.x + run.rect.width / 2 + run.shift, cy: origin + (f * advance(c)) / 2, ink: null, fontSize: f })

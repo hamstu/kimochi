@@ -180,6 +180,8 @@ export interface SendCardOpts {
   sentence: string | null;
   /** The OCR scan the sentence was read in, when known: its screenshot goes on the card. */
   scan?: string | null;
+  /** Text the reader selected in the pop-up, for the `popup-selection-text` marker (as Yomitan). */
+  popupSelectionText?: string;
 }
 
 export interface SendCardResult {
@@ -218,6 +220,19 @@ export async function noteExistsForTerm(
   const query = `"deck:${safeDeck}" "${safeField}:${safeValue}"`;
   const ids = await findNotesByQuery(url, query);
   return ids.length > 0 ? ids[0] : null;
+}
+
+/** Yomitan's marker for the text selected in the pop-up; Kimochi's pop-up fills it itself. */
+export const POPUP_SELECTION_MARKER = "popup-selection-text";
+
+/** The selection as a field's HTML, as Yomitan writes it: escaped, its line breaks kept. */
+export function selectionHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/\r?\n/g, "<br>\n");
 }
 
 function resolveFieldValue(
@@ -265,6 +280,11 @@ export async function sendCardForTerm(
     yomitan,
     sentence,
   } = opts;
+  // Not one of /ankiFields' markers: the selection is the pop-up's, read as the card was added.
+  const markers: YomitanAnkiFields = {
+    ...yomitan.fields,
+    [POPUP_SELECTION_MARKER]: selectionHtml(opts.popupSelectionText ?? ""),
+  };
 
   // 1. Store any media bundled with the term.
   for (const item of yomitan.audioMedia) {
@@ -280,7 +300,7 @@ export async function sendCardForTerm(
   for (const f of modelFields) {
     const m = mappingByField.get(f);
     if (m) {
-      fields[f] = resolveFieldValue(m, yomitan.fields, sentence);
+      fields[f] = resolveFieldValue(m, markers, sentence);
     } else {
       fields[f] = "";
     }
@@ -289,7 +309,7 @@ export async function sendCardForTerm(
   // 3. Add note. For duplicate recovery we use the first Anki field as the
   //    dedup key (Anki/AnkiConnect's default duplicate check looks there).
   const { name: expressionFieldName, value: expressionValue } =
-    resolveExpressionField(modelFields, mappings, yomitan.fields, sentence);
+    resolveExpressionField(modelFields, mappings, markers, sentence);
   const { id, duplicate } = await addNote(
     ankiUrl,
     deck,
