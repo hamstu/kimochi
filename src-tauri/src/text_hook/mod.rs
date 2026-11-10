@@ -651,6 +651,22 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
         }
         return;
     }
+    // A thread chosen automatically that has said one thing only and nothing since (a menu drawn
+    // once, the largest text on screen when it was read), while this one keeps speaking: the
+    // screen is read again.
+    if session.selected_by == Some("auto") && session.threads[index].count >= 3 {
+        let stale = session
+            .threads
+            .iter()
+            .find(|t| session.selected.as_deref() == Some(t.key.as_str()))
+            .is_some_and(|t| t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)));
+        if stale {
+            crate::debug_report::trace(&hook.app, json!({ "check": "texthook-repick", "from": session.selected }));
+            session.selected = None;
+            session.selected_by = None;
+            hook.publish(session);
+        }
+    }
     if session.selected.is_some() {
         return;
     }
