@@ -13,6 +13,9 @@
  */
 
 /** Draw one sample. Every glyph is placed by hand, so its cell is exact; nothing is kerned. */
+/** Marks whose blank half is the left one (their ink sits right, against what follows). */
+const OPENING = '「『（〔【〈《［｛'
+
 export async function generateSample(spec) {
   await document.fonts.ready
   const canvas = document.createElement('canvas')
@@ -52,8 +55,12 @@ export async function generateSample(spec) {
       const top = line.y / scale
       for (const c of line.text) {
         const m = g.measureText(c)
-        const advance = line.monospace ? (/[ -~]/.test(c) ? size / 2 : size) : m.width
-        const dx = line.monospace ? (advance - m.width) / 2 : 0
+        // `halfWidth`: these marks set in half a cell, as a font's half-width alternates (`halt`)
+        // and many games set them: an opening bracket's blank left half and a closing mark's blank
+        // right half cut away.
+        const half = line.halfWidth?.includes(c)
+        const advance = half ? size / 2 : line.monospace ? (/[ -~]/.test(c) ? size / 2 : size) : m.width
+        const dx = half ? (OPENING.includes(c) ? -size / 2 : 0) : line.monospace ? (advance - m.width) / 2 : 0
         g.fillText(c, x + dx, top + size)
         glyphs.push({
           c,
