@@ -1192,12 +1192,25 @@ pub fn refresh_voice_hook() {
         return;
     };
     let config = service.config();
-    let enabled = cfg!(windows) && config.enabled && config.voice_hook && hook.reading_text();
-    service.hook_targets(if enabled {
-        targets.iter().map(|t| t.pid).collect()
+    // Windows games, natively or (on Linux) through Wine or Proton.
+    let enabled = (cfg!(windows) || cfg!(target_os = "linux")) && config.enabled && config.voice_hook && hook.reading_text();
+    if enabled {
+        let mut bases: Vec<PathBuf> = Vec::new();
+        for target in &targets {
+            let found = match &target.wine {
+                Some(wine) => crate::sentence_audio::voice_hook::prefix_bases(&wine.prefix),
+                None => vec![crate::sentence_audio::voice_hook::base_dir()],
+            };
+            for base in found {
+                if !bases.contains(&base) {
+                    bases.push(base);
+                }
+            }
+        }
+        service.hook_targets(targets.iter().map(|t| t.pid).collect(), bases);
     } else {
-        Vec::new()
-    });
+        service.hook_targets(Vec::new(), Vec::new());
+    }
     if !enabled {
         return;
     }
@@ -1233,15 +1246,29 @@ fn inject_voice_dll(app: &tauri::AppHandle, target: &process::Target) -> Result<
             "The voice hook DLL is missing from this build; using system audio.".into(),
         );
     }
-    let dll = crate::sentence_audio::voice_hook::staged_dll(
-        &dll,
-        &crate::sentence_audio::voice_hook::base_dir(),
-    )
-    .map_err(|e| format!("The voice hook DLL could not be prepared; using system audio: {e}"))?;
-    let mut command = Command::new(helper);
-    command
-        .args(["inject", "--pid", &target.pid.to_string(), "--dll"])
-        .arg(dll);
+    let prepare = |e: String| format!("The voice hook DLL could not be prepared; using system audio: {e}");
+    // Under Wine the helper injects from inside the game's prefix, and the DLL is staged in the
+    // prefix so that the game (inside Steam's runtime container, for Proton) can load it.
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let wine = target.wine.as_ref().ok_or("Audio hooking reads Windows games running through Proton or Wine.")?;
+        let user = std::env::var("USER").ok();
+        let (base, windows_base) = crate::sentence_audio::voice_hook::prefix_home(&wine.prefix, user.as_deref())
+            .ok_or_else(|| prepare("the game's Wine prefix has no user folder".into()))?;
+        let staged = crate::sentence_audio::voice_hook::staged_dll(&dll, &base).map_err(prepare)?;
+        let path = crate::sentence_audio::voice_hook::windows_under(&staged, &base, &windows_base)
+            .ok_or_else(|| prepare("the staged copy is outside the prefix".into()))?;
+        let mut command = wine::command(wine, &helper);
+        command.args(["inject", "--pid", &target.pid.to_string(), "--dll", &path]);
+        command
+    };
+    #[cfg(not(target_os = "linux"))]
+    let mut command = {
+        let dll = crate::sentence_audio::voice_hook::staged_dll(&dll, &crate::sentence_audio::voice_hook::base_dir()).map_err(prepare)?;
+        let mut command = Command::new(helper);
+        command.args(["inject", "--pid", &target.pid.to_string(), "--dll"]).arg(dll);
+        command
+    };
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

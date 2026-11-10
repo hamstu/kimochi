@@ -420,7 +420,8 @@ function TextHookBox({
   onToggle: () => void
   onManage: () => void
 }): ReactNode {
-  const voiceHookable = useCapabilities().os === 'windows'
+  const os = useCapabilities().os
+  const voiceHookable = os === 'windows' || os === 'linux'
   return (
     <div className="src-rows src-hook-box" data-on={on ? '' : undefined}>
       <SourceRow

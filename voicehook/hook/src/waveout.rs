@@ -6,7 +6,7 @@
 //! Hooked through the callers' import tables / GetProcAddress (see `iat`).
 use crate::iat::{self, Hook};
 use crate::sink::{self, Ev};
-use crate::util::guard;
+use crate::util::{copy_in, guard};
 use serde_json::json;
 
 use std::ffi::c_void;
@@ -71,7 +71,7 @@ unsafe extern "system" fn open(out: *mut *mut c_void, dev: u32, fmt: *const WAVE
 unsafe extern "system" fn write(h: *mut c_void, hdr: *mut WaveHdr, size: u32) -> u32 {
     guard(|| unsafe {
         if !hdr.is_null() && !(*hdr).data.is_null() && (*hdr).buffer_length > 0 {
-            let bytes = std::slice::from_raw_parts((*hdr).data, (*hdr).buffer_length as usize).to_vec();
+            let bytes = copy_in((*hdr).data, (*hdr).buffer_length as usize, "waveout write");
             let looping = (*hdr).flags & WHDR_BEGINLOOP != 0 && (*hdr).loops > 1;
             sink::send(Ev::Data { key: key(h), bytes, eos: false, looping, region: None, info: json!({}) });
         }
