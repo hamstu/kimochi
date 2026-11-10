@@ -8,8 +8,6 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-11-10
-
 ### Added
 
 - ⭐ **Audio hooking (Windows).** Ok, so this feature is maybe kind of niche, but I think it's cool! Kimochi will now extract clean voice audio where possible directly from the game, instead of just cutting it out of the system audio. This means you get **clean sentence audio without background music or sound effects**, ready to add to Anki cards. This only works on Windows when you're hooking a game, and only when it _can_ be hooked, but engine support for VNs is pretty good.
