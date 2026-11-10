@@ -31,6 +31,7 @@ import {
 import { SETTINGS_DEFAULTS, type SentenceAudioSettings } from '@ui/settings'
 import { sentenceAudioStatus, type SentenceAudioStatus } from '@texthooker/lib/sentenceAudio'
 import { useSetting } from '../../bridge/useSetting'
+import { useCapabilities } from '../../bridge/capabilities'
 import { requestPermission } from '../../bridge/tauri'
 import { useModelControls } from '../../bridge/models'
 import { NumberField } from './fields'
@@ -139,6 +140,8 @@ export function FieldInput({
 }
 
 export function SentenceAudioSection(): ReactNode {
+  // Audio hooking takes voices from hooked Windows games' audio calls: Windows only for now.
+  const voiceHookable = useCapabilities().os === 'windows'
   const [stored, save] = useSetting<SentenceAudioSettings>('sentenceAudio', DEFAULTS)
   const config = { ...DEFAULTS, ...stored }
   const update = (patch: Partial<SentenceAudioSettings>): void => {
@@ -176,9 +179,11 @@ export function SentenceAudioSection(): ReactNode {
               the main window to see which cards get enhanced.
             </Callout>
           </div>
-          <SettingsRow label="Audio hooking" controlId="sentence-audio-hook" description="On Windows, take each line's voice straight from a game with Text hooking on. Where it can't, system audio is recorded instead.">
-            <Switch id="sentence-audio-hook" checked={config.voiceHook} onCheckedChange={(voiceHook) => update({ voiceHook })} />
-          </SettingsRow>
+          {voiceHookable && (
+            <SettingsRow label="Audio hooking" controlId="sentence-audio-hook" description="On Windows, take each line's voice straight from a game with Text hooking on. Where it can't, system audio is recorded instead.">
+              <Switch id="sentence-audio-hook" checked={config.voiceHook} onCheckedChange={(voiceHook) => update({ voiceHook })} />
+            </SettingsRow>
+          )}
           {model.status && !modelReady && (
             <div className="settings-note">
               <ModelDownload controls={model} emphasis label="Speech model" />

@@ -34,6 +34,10 @@ pub fn enrich(frame: &mut Frame) {
 pub fn identity(source: &str) -> Option<Value> {
     if kde() { kwin::identity(source) } else { hyprland::identity(source) }
 }
+/// The process of the window a portal stream is linked to, once it is.
+pub fn linked_pid(source: &str) -> Option<u32> {
+    if kde() { kwin::linked_pid(source) } else { hyprland::linked_pid(source) }
+}
 pub fn status(source: &str) -> Value {
     if kde() { kwin::status(source) } else { hyprland::status(source) }
 }
