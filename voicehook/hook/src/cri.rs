@@ -264,6 +264,17 @@ unsafe extern "C" fn start(player: P) -> u32 {
         drain();
         watch(player as usize);
         let cue = lock(&PLAYERS).get(&(player as usize)).and_then(|p| p.cue.clone());
+        // Its clips go with the shape of their cue's name (`Yuk_S00sky_000001`: `a_a9a_9`), else
+        // the cue sheet they come from: games play each voice line on a player, even a sheet, of
+        // its own, and name every voice cue alike.
+        let group = cue.as_deref().map(|c| format!("cue:{}", shape(c))).or_else(|| lock(&PLAYER_SHEETS).get(&(player as usize)).cloned());
+        if let Some(sheet) = group {
+            let changed = lock(&CHANNELS).insert(player as usize, sheet.clone()).as_deref() != Some(sheet.as_str());
+            if changed {
+                let rate = match MEASURED.load(Ordering::SeqCst) { 0 => RATE, r => r as u32 };
+                sink::send(Ev::Create { key: key(player as usize), api: "cri", fmt: crate::unity::float_fmt(2, rate), info: json!({"channel": sheet}) });
+            }
+        }
         sink::send(Ev::Source { key: key(player as usize), source: cue.clone() });
         sink::send(Ev::Play { key: key(player as usize), looping: false, info: json!({"cue": cue}) });
     });
@@ -301,26 +312,65 @@ fn set_cue(player: P, cue: String) {
 
 static PENDING_CUES: LazyLock<Mutex<HashMap<usize, String>>> = LazyLock::new(Default::default);
 static CHANNELS: LazyLock<Mutex<HashMap<usize, String>>> = LazyLock::new(Default::default);
+/// Cue sheets (ACB handles) in the order first seen, and the sheet each player's cue is from.
+static SHEETS: LazyLock<Mutex<HashMap<usize, String>>> = LazyLock::new(Default::default);
+static PLAYER_SHEETS: LazyLock<Mutex<HashMap<usize, String>>> = LazyLock::new(Default::default);
+
+/// A cue name's shape: each run of letters `a`, of digits `9`, other characters kept.
+fn shape(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        let class = if c.is_ascii_digit() { '9' } else if c.is_alphabetic() { 'a' } else { c };
+        if out.chars().last() != Some(class) || !(class == 'a' || class == '9') {
+            out.push(class);
+        }
+    }
+    out
+}
+
+fn set_sheet(player: P, acb: P) {
+    if acb.is_null() {
+        return;
+    }
+    let sheet = {
+        let mut sheets = lock(&SHEETS);
+        let n = sheets.len();
+        sheets.entry(acb as usize).or_insert_with(|| format!("sheet{n}")).clone()
+    };
+    lock(&PLAYER_SHEETS).insert(player as usize, sheet);
+}
 
 unsafe extern "C" fn set_cue_name(player: P, acb: P, name: *const c_char) {
     guard(|| unsafe {
         if !name.is_null() {
             set_cue(player, CStr::from_ptr(name).to_string_lossy().into_owned());
         }
+        set_sheet(player, acb);
     });
     let o: unsafe extern "C" fn(P, P, *const c_char) = std::mem::transmute(O_SET_CUE_NAME.load(Ordering::SeqCst));
     o(player, acb, name)
 }
 
 unsafe extern "C" fn set_cue_id(player: P, acb: P, id: i32) {
-    guard(|| set_cue(player, format!("cue#{id}")));
+    guard(|| {
+        set_cue(player, format!("cue#{id}"));
+        set_sheet(player, acb);
+    });
     let o: unsafe extern "C" fn(P, P, i32) = std::mem::transmute(O_SET_CUE_ID.load(Ordering::SeqCst));
     o(player, acb, id)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::standard_rate;
+    use super::{shape, standard_rate};
+
+    #[test]
+    fn voice_cues_share_a_shape_and_effects_do_not() {
+        assert_eq!(shape("Yuk_S00sky_000001"), "a_a9a_9");
+        assert_eq!(shape("Kan_S00sky_000124"), shape("Van_S01park_000003"));
+        assert_ne!(shape("Common_SE_NoticeWindow_Bye"), shape("Yuk_S00sky_000001"));
+        assert_ne!(shape("CharacterStep"), shape("Yuk_S00sky_000001"));
+    }
 
     #[test]
     fn only_a_player_that_played_throughout_gives_the_rate() {
