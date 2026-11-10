@@ -64,6 +64,9 @@ windows = { version = "0.62", features = [
   "Win32_Graphics_Direct3D11",
   "Win32_Graphics_Dxgi_Common",
   "Win32_System_Threading",
+  # Hiding the yellow capture border (src/windows.rs, capture_border).
+  "Graphics_Capture",
+  "Security_Authorization_AppCapabilityAccess",
 ] }
 # `#[implement]` (the process-loopback activation's completion handler) expands to windows_core
 # paths. The version `windows` 0.62 uses.

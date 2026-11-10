@@ -3,7 +3,7 @@
  * step at a time above a persistent action bar.
  *
  *   intro → Screen Recording permission (macOS) → Accessibility (macOS)
- *   → OCR engine → dictionary engine (choose + download) → that engine's setup
+ *   → capture border (Windows, when Settings keeps it on) → OCR engine → dictionary engine (choose + download) → that engine's setup
  *   → Steam library (a Steam Deck / SteamOS in Desktop Mode) → done
  *
  * Steps are hash routes, so a reload (switching dictionary engine reloads every reader window,
@@ -16,9 +16,12 @@ import { ChevronLeft, ExternalLink } from 'lucide-react'
 import { Button, Callout, StatusDot } from '@kit'
 import {
   accessibilityStatus,
+  captureBorderStatus,
   onEvent,
+  openCaptureBorderSettings,
   openScreenCapturePreferences,
-  requestAccessibility
+  requestAccessibility,
+  type CaptureBorder
 } from '../bridge/tauri'
 import type { PanelStateEvent } from '../bridge/types'
 import { useCapabilities } from '../bridge/capabilities'
@@ -28,6 +31,7 @@ import { offersSteamStep, useSteamLibrary } from '../bridge/steamLibrary'
 import DictionarySettingsPanel from '../panels/DictionarySettingsPanel'
 import { EngineChooser } from '../panels/settings/EngineChooser'
 import macOSScreenPerms from './assets/howto-screen-macos.png'
+import CaptureBorderArt, { BorderSettingsArt } from './CaptureBorderArt'
 import DictionarySetup, { DictionaryPractice } from './DictionarySetup'
 import EngineSetup from './EngineSetup'
 import IntroStep from './IntroStep'
@@ -46,6 +50,7 @@ type StepId =
   | 'intro'
   | 'capture'
   | 'accessibility'
+  | 'border'
   | 'ocr'
   | 'engine'
   | 'dictionaries'
@@ -56,6 +61,7 @@ const STEP_OF: Record<string, StepId> = {
   '/': 'intro',
   '/screen-recording-permission': 'capture',
   '/accessibility': 'accessibility',
+  '/capture-border': 'border',
   '/ocr': 'ocr',
   '/engine': 'engine',
   '/dictionaries': 'dictionaries',
@@ -100,15 +106,46 @@ function useAccessibility(watch: boolean): 'granted' | 'needed' | 'none' {
   return status === null ? 'none' : status ? 'granted' : 'needed'
 }
 
-/** The flow for this computer: the capture and Accessibility steps only where something needs doing. */
+/**
+ * The yellow border Windows draws around a captured window (Windows only, else null): `denied`
+ * while Settings → Privacy & security → Screenshot borders keeps it on for Kimochi. Polled while
+ * `watch`, so the step updates once the reader turns the switches on.
+ */
+function useCaptureBorder(watch: boolean): CaptureBorder | null {
+  const windows = useCapabilities().os === 'windows'
+  const [status, setStatus] = useState<CaptureBorder | null>(null)
+  useEffect(() => {
+    if (!windows) return
+    let alive = true
+    const check = (): void => {
+      void captureBorderStatus()
+        .then((next) => alive && setStatus(next))
+        .catch(() => alive && setStatus(null))
+    }
+    check()
+    const timer = watch ? setInterval(check, 2000) : undefined
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [windows, watch])
+  return windows ? status : null
+}
+
+/**
+ * The flow for this computer: the capture, Accessibility and capture border steps only where
+ * something needs doing.
+ */
 function useFlow(pathname: string): {
   steps: StepId[]
   captureRoute: string | null
   accessibilityRoute: string | null
+  borderRoute: string | null
   back: string | null
 } {
   const captureStep = useCaptureStep()
   const accessibility = useAccessibility(pathname === '/accessibility')
+  const border = useCaptureBorder(pathname === '/capture-border')
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
   const dictionaryReady = useDictionaryReady()
   const steam = useSteamLibrary().offered
@@ -117,10 +154,12 @@ function useFlow(pathname: string): {
   const captureRoute = !gaming && captureStep === 'permission' ? '/screen-recording-permission' : null
   const current = STEP_OF[pathname]
   const accessibilityRoute = !gaming && accessibility === 'needed' ? '/accessibility' : null
+  const borderRoute = border === 'denied' ? '/capture-border' : null
   const steps: StepId[] = [
     'intro',
     ...(captureRoute || current === 'capture' ? (['capture'] as const) : []),
     ...(accessibilityRoute || current === 'accessibility' ? (['accessibility'] as const) : []),
+    ...(borderRoute || current === 'border' ? (['border'] as const) : []),
     'ocr',
     'engine',
     'dictionaries',
@@ -130,7 +169,8 @@ function useFlow(pathname: string): {
   const BACK: Record<string, string> = {
     '/screen-recording-permission': '/',
     '/accessibility': captureRoute ?? '/',
-    '/ocr': accessibilityRoute ?? captureRoute ?? '/',
+    '/capture-border': accessibilityRoute ?? captureRoute ?? '/',
+    '/ocr': borderRoute ?? accessibilityRoute ?? captureRoute ?? '/',
     '/engine': '/ocr',
     '/dictionaries': '/engine',
     '/dictionary-settings': '/dictionaries',
@@ -139,7 +179,7 @@ function useFlow(pathname: string): {
     '/done': steam ? STEAM_ROUTE : dictionaryReady === false ? '/engine' : '/dictionaries',
     '/main': '/done'
   }
-  return { steps, captureRoute, accessibilityRoute, back: BACK[pathname] ?? null }
+  return { steps, captureRoute, accessibilityRoute, borderRoute, back: BACK[pathname] ?? null }
 }
 
 // ---------------------------------------------------------------- capture
@@ -195,7 +235,7 @@ function ScreenPermissionScreen({ next }: { next: string }): JSX.Element {
  * including a game in full screen on a Space of its own. Optional; without it Kimochi brings
  * the application forward instead.
  */
-function AccessibilityScreen(): JSX.Element {
+function AccessibilityScreen({ next }: { next: string }): JSX.Element {
   const granted = useAccessibility(true) === 'granted'
   return (
     <Step
@@ -223,12 +263,12 @@ function AccessibilityScreen(): JSX.Element {
       <StepActions>
         {granted ? (
           <Button variant="primary" asChild>
-            <Link to="/ocr">Continue</Link>
+            <Link to={next}>Continue</Link>
           </Button>
         ) : (
           <>
             <Button variant="ghost" asChild>
-              <Link to="/ocr">Skip for now</Link>
+              <Link to={next}>Skip for now</Link>
             </Button>
             <Button variant="primary" onClick={() => void requestAccessibility().catch(() => undefined)}>
               Open System Settings
@@ -236,6 +276,40 @@ function AccessibilityScreen(): JSX.Element {
             </Button>
           </>
         )}
+      </StepActions>
+    </Step>
+  )
+}
+
+/**
+ * The capture border (Windows): while Kimochi captures a window, Windows draws a yellow border
+ * around it unless Settings → Privacy & security → Screenshot borders lets apps turn it off.
+ * Optional; Kimochi reads the same either way.
+ */
+function CaptureBorderScreen(): JSX.Element {
+  const hidden = useCaptureBorder(true) === 'hidden'
+  return (
+    <Step
+      title="Hide the yellow border"
+      lede="This is optional. When Kimochi scans a window, Windows puts a yellow border around it."
+    >
+      <CaptureBorderArt hidden={hidden} />
+      <p className={style.lede}>
+        To turn it off,{' '}
+        <button
+          type="button"
+          className={`${style.link} ${style.inlineButton}`}
+          onClick={() => void openCaptureBorderSettings().catch(() => undefined)}
+        >
+          open Screenshot borders in Windows Settings
+        </button>{' '}
+        and turn on both switches.
+      </p>
+      <BorderSettingsArt />
+      <StepActions>
+        <Button variant="primary" asChild>
+          <Link to="/ocr">Continue</Link>
+        </Button>
       </StepActions>
     </Step>
   )
@@ -399,8 +473,9 @@ function StepDots({ steps, current }: { steps: StepId[]; current: StepId | undef
 export default function WelcomeApp(): JSX.Element {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { steps, captureRoute, accessibilityRoute, back } = useFlow(pathname)
-  const afterCapture = accessibilityRoute ?? '/ocr'
+  const { steps, captureRoute, accessibilityRoute, borderRoute, back } = useFlow(pathname)
+  const afterAccessibility = borderRoute ?? '/ocr'
+  const afterCapture = accessibilityRoute ?? afterAccessibility
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   const gaming = useCapabilities().session?.compositor?.toLowerCase() === 'gamescope'
 
@@ -436,7 +511,8 @@ export default function WelcomeApp(): JSX.Element {
             <Routes>
               <Route index element={<IntroStep next={gaming ? '/ocr' : (captureRoute ?? afterCapture)} />} />
               <Route path="/screen-recording-permission" element={<ScreenPermissionScreen next={afterCapture} />} />
-              <Route path="/accessibility" element={<AccessibilityScreen />} />
+              <Route path="/accessibility" element={<AccessibilityScreen next={afterAccessibility} />} />
+              <Route path="/capture-border" element={<CaptureBorderScreen />} />
               {/* The system picker step is gone: a reload there carries on to the OCR step. */}
               <Route path="/system-picker" element={<Navigate to="/ocr" replace />} />
               <Route path="/ocr" element={<OcrScreen />} />

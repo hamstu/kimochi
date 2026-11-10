@@ -17,10 +17,12 @@
 //! measures both rectangles and cuts the visible one out, so a frame (and every crop
 //! reference) is exactly the rectangle `Source.bounds` describes.
 //!
-//! Consent. WGC needs no OS permission for an unpackaged desktop app. Border removal
-//! does (`GraphicsCaptureAccess::RequestAccessAsync(Borderless)`), and is a separate,
-//! explicit opt-in; this backend never asks for it and leaves the border setting at
-//! the system default. Cursor capture is turned off where the OS allows it.
+//! Consent. WGC needs no OS permission for an unpackaged desktop app. Removing the
+//! yellow capture border does: `GraphicsCaptureAccess::RequestAccessAsync(Borderless)`,
+//! which shows no prompt and answers from Settings → Privacy & security → Screenshot
+//! borders. Each session asks, and drops the border when it is allowed
+//! ([`capture_border`] reports the answer to the app). Cursor capture is turned off
+//! where the OS allows it.
 //!
 //! The pure decisions compile on every platform, so they are tested on the macOS
 //! development machine too: which windows are listed and how handles are spelled live
@@ -29,7 +31,21 @@
 #![cfg_attr(not(target_os = "windows"), allow(dead_code))]
 
 #[cfg(target_os = "windows")]
-pub use wgc::WgcCapture;
+pub use wgc::{capture_border, WgcCapture};
+
+/// Whether Kimochi's captures can hide the yellow border Windows draws around a
+/// captured window or screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CaptureBorder {
+    /// Allowed: captures show no border.
+    Hidden,
+    /// Turned off in Settings → Privacy & security → Screenshot borders (for every app,
+    /// or for Kimochi), so the border shows.
+    Denied,
+    /// This Windows build cannot hide the border (Windows 10, early Windows 11).
+    Unsupported,
+}
 
 /// The file stem of a process image path: `C:\Games\vn.exe` -> `vn`.
 pub(crate) fn image_stem(path: &str) -> Option<String> {
@@ -109,7 +125,10 @@ mod wgc {
     use std::sync::{Arc, Condvar, Mutex};
     use std::time::{Duration, Instant};
 
+    use super::CaptureBorder;
     use ::windows::core::{Interface, BOOL, PWSTR};
+    use ::windows::Graphics::Capture::{GraphicsCaptureAccess, GraphicsCaptureAccessKind};
+    use ::windows::Security::Authorization::AppCapabilityAccess::AppCapabilityAccessStatus;
     use ::windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, RECT, TRUE};
     use ::windows::Win32::Graphics::Direct3D11::{
         ID3D11Device, ID3D11DeviceContext, ID3D11Multithread, ID3D11Texture2D,
@@ -686,13 +705,17 @@ mod wgc {
             } else {
                 MinimumUpdateIntervalSettings::Default
             };
-        // The border stays at the system default: turning it off needs the user's
-        // explicit Borderless consent, which is a separate opt-in (plan, Phase 2).
+        // Asked per session, so turning the setting on takes effect on the next one.
+        let border = if capture_border() == CaptureBorder::Hidden {
+            DrawBorderSettings::WithoutBorder
+        } else {
+            DrawBorderSettings::Default
+        };
         let control = match target {
             Target::Window { hwnd: raw, .. } => Handler::start_free_threaded(Settings::new(
                 Window::from_raw_hwnd(raw as *mut c_void),
                 cursor,
-                DrawBorderSettings::Default,
+                border,
                 SecondaryWindowSettings::Default,
                 interval,
                 DirtyRegionSettings::Default,
@@ -702,7 +725,7 @@ mod wgc {
             Target::Display { hmonitor } => Handler::start_free_threaded(Settings::new(
                 Monitor::from_raw_hmonitor(hmonitor as *mut c_void),
                 cursor,
-                DrawBorderSettings::Default,
+                border,
                 SecondaryWindowSettings::Default,
                 interval,
                 DirtyRegionSettings::Default,
@@ -929,6 +952,24 @@ mod wgc {
         }
     }
 
+    /// Whether captures can hide the yellow border. A query: Windows shows no prompt for
+    /// borderless access, it answers from the Screenshot borders settings page, so this is
+    /// safe to poll.
+    pub fn capture_border() -> CaptureBorder {
+        if !GraphicsCaptureApi::is_border_settings_supported().unwrap_or(false) {
+            return CaptureBorder::Unsupported;
+        }
+        let status = GraphicsCaptureAccess::RequestAccessAsync(GraphicsCaptureAccessKind::Borderless)
+            .and_then(|op| op.join());
+        match status {
+            Ok(AppCapabilityAccessStatus::Allowed) => CaptureBorder::Hidden,
+            Ok(_) => CaptureBorder::Denied,
+            // `GraphicsCaptureAccess` arrived with the border property; a build that has
+            // one without the other cannot hide it.
+            Err(_) => CaptureBorder::Unsupported,
+        }
+    }
+
     impl CaptureBackend for WgcCapture {
         fn capabilities(&self) -> Capabilities {
             Capabilities {
@@ -1110,4 +1151,12 @@ mod tests {
         let [x, y, w, h] = visible_region(1213, 726, outer, visible).unwrap();
         assert!(x + w <= 1213 && y + h <= 726);
     }
+}
+
+/// Prints what this machine answers. `cargo test --lib border_probe -- --ignored --nocapture`
+#[cfg(all(test, target_os = "windows"))]
+#[test]
+#[ignore]
+fn border_probe() {
+    eprintln!("capture border: {:?}", capture_border());
 }

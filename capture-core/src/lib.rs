@@ -11,8 +11,9 @@ pub use macos::MacCapture;
 // Compiled everywhere so its pure catalog logic is tested on every machine; the
 // WGC backend inside it is Windows-only. Inside, the `windows` crate is `::windows`.
 mod windows;
+pub use windows::CaptureBorder;
 #[cfg(target_os = "windows")]
-pub use windows::WgcCapture;
+pub use windows::{capture_border, WgcCapture};
 // Compiled everywhere for the same reason; the X11 backend and the shared X11 desktop
 // queries inside it are Linux-only.
 mod linux_x11;

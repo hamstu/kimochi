@@ -335,6 +335,15 @@ export const openDictionary = (open: boolean): Promise<void> => invoke('dictiona
 export const texthookerSend = (text: string): Promise<void> => invoke('texthooker_send', { text })
 export const openScreenCapturePreferences = (): Promise<void> =>
   invoke('open_screen_capture_preferences')
+/**
+ * Whether captures hide the yellow border Windows draws around a captured window: `denied` when
+ * Settings → Privacy & security → Screenshot borders turns that off for Kimochi. Never prompts.
+ */
+export type CaptureBorder = 'hidden' | 'denied' | 'unsupported'
+export const captureBorderStatus = (): Promise<CaptureBorder> =>
+  invoke<CaptureBorder>('capture_border_status')
+/** Opens Settings → Privacy & security → Screenshot borders (Windows). */
+export const openCaptureBorderSettings = (): Promise<void> => invoke('open_capture_border_settings')
 
 /** Session flags the owning window sets directly (see `view_flags` in the backend). */
 export const setViewFlags = (flags: Record<string, boolean>): Promise<void> =>
