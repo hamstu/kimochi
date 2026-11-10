@@ -138,13 +138,43 @@ unsafe fn rd<T: Copy>(base: usize, off: usize) -> T {
     std::ptr::read_unaligned((base + off) as *const T)
 }
 
-/// Calls `f(dll name, function name, IAT slot)` for every by-name import of `base`.
+/// Whether `[p, p + len)` is committed, readable memory.
+unsafe fn readable(p: usize, len: usize) -> bool {
+    use windows_sys::Win32::System::Memory::{VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS};
+    let mut at = p;
+    while at < p + len {
+        let mut info: MEMORY_BASIC_INFORMATION = std::mem::zeroed();
+        if VirtualQuery(at as *const c_void, &mut info, std::mem::size_of::<MEMORY_BASIC_INFORMATION>()) == 0
+            || info.State != MEM_COMMIT
+            || info.Protect & (PAGE_NOACCESS | PAGE_GUARD) != 0
+            || info.Protect == 0
+        {
+            return false;
+        }
+        at = info.BaseAddress as usize + info.RegionSize;
+    }
+    true
+}
+
+/// A NUL-terminated name at `p`, of at most 255 bytes, inside the image (`end`).
+unsafe fn name_at(p: usize, end: usize) -> Option<&'static [u8]> {
+    let max = 256.min(end.saturating_sub(p));
+    if max == 0 || !readable(p, max) {
+        return None;
+    }
+    let bytes = std::slice::from_raw_parts(p as *const u8, max);
+    bytes.iter().position(|&b| b == 0).map(|n| &bytes[..n])
+}
+
+/// Calls `f(dll name, function name, IAT slot)` for every by-name import of `base`. Every address
+/// is checked against the image and its memory: packed or protected games (QLIE's Delphi exes)
+/// carry import tables that do not hold up to being read as a linker writes them.
 unsafe fn walk_imports(base: usize, mut f: impl FnMut(&str, &[u8], *mut usize)) {
-    if rd::<u16>(base, 0) != 0x5A4D {
+    if !readable(base, 0x40) || rd::<u16>(base, 0) != 0x5A4D {
         return;
     }
     let nt = base + rd::<u32>(base, 0x3C) as usize;
-    if rd::<u32>(nt, 0) != 0x4550 {
+    if !readable(nt, 24 + 0x78) || rd::<u32>(nt, 0) != 0x4550 {
         return;
     }
     let opt = nt + 24;
@@ -154,35 +184,46 @@ unsafe fn walk_imports(base: usize, mut f: impl FnMut(&str, &[u8], *mut usize)) 
         0x10b => opt + 96,  // PE32
         _ => return,
     };
-    if (magic == 0x20b) != cfg!(target_pointer_width = "64") {
+    if (magic == 0x20b) != cfg!(target_pointer_width = "64") || !readable(dir, 16) {
         return;
     }
+    let image = rd::<u32>(opt, 56) as usize;
+    let end = base + image;
+    let inside = |rva: usize, len: usize| rva != 0 && rva.checked_add(len).is_some_and(|e| e <= image);
     let (imp_rva, imp_size) = (rd::<u32>(dir, 8) as usize, rd::<u32>(dir, 12) as usize);
-    if imp_rva == 0 || imp_size == 0 {
+    if imp_size == 0 || !inside(imp_rva, 20) {
         return;
     }
+    let w = std::mem::size_of::<usize>();
     let mut desc = base + imp_rva;
-    loop {
+    while desc + 20 <= end && readable(desc, 20) {
         let (oft, name_rva, ft) = (rd::<u32>(desc, 0) as usize, rd::<u32>(desc, 12) as usize, rd::<u32>(desc, 16) as usize);
         if name_rva == 0 || ft == 0 {
             break;
         }
-        let dll = CStr::from_ptr((base + name_rva) as *const i8).to_string_lossy().to_ascii_lowercase();
-        let names = if oft != 0 { oft } else { ft };
+        desc += 20;
+        // Without its name table (OriginalFirstThunk) a descriptor's names are unknown: its address
+        // table holds the resolved functions by now, not the names' addresses.
+        if !inside(name_rva, 1) || !inside(oft, w) || !inside(ft, w) {
+            continue;
+        }
+        let Some(dll) = name_at(base + name_rva, end) else { continue };
+        let dll = String::from_utf8_lossy(dll).to_ascii_lowercase();
         let mut i = 0usize;
-        loop {
-            let entry: usize = rd(base, names + i * std::mem::size_of::<usize>());
+        while inside(oft + i * w, w) && inside(ft + i * w, w) && readable(base + oft + i * w, w) {
+            let entry: usize = rd(base, oft + i * w);
             if entry == 0 {
                 break;
             }
             let by_ordinal = entry >> (usize::BITS - 1) == 1;
-            if !by_ordinal {
-                let fname = CStr::from_ptr((base + (entry & 0x7fff_ffff) + 2) as *const i8).to_bytes();
-                f(&dll, fname, (base + ft + i * std::mem::size_of::<usize>()) as *mut usize);
+            let rva = entry & 0x7fff_ffff;
+            if !by_ordinal && inside(rva, 3) {
+                if let Some(fname) = name_at(base + rva + 2, end) {
+                    f(&dll, fname, (base + ft + i * w) as *mut usize);
+                }
             }
             i += 1;
         }
-        desc += 20;
     }
 }
 

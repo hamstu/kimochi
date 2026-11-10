@@ -96,6 +96,16 @@ fn out_dir() -> PathBuf {
         .join(format!("{stem}_{}_{secs}", unsafe { GetCurrentProcessId() }))
 }
 
+static XAUDIO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// The adapters `skip.txt` names.
+fn skipped() -> Vec<String> {
+    let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    std::fs::read_to_string(base.join("kimochi-voicehook").join("skip.txt"))
+        .map(|t| t.lines().map(|l| l.trim().to_lowercase()).filter(|l| !l.is_empty()).collect())
+        .unwrap_or_default()
+}
+
 fn run() {
     let out = out_dir();
     let _ = std::fs::create_dir_all(out.join("clips"));
@@ -118,21 +128,56 @@ fn run() {
     })));
     unsafe { CoInitializeEx(std::ptr::null(), COINIT_MULTITHREADED as _) };
     census::scan();
-    match unsafe { ds::install() } {
-        Ok(n) => util::log(&format!("dsound: hooked ({n} vtables)")),
-        Err(e) => util::log(&format!("dsound: not hooked: {e}")),
+    // Adapters named in `skip.txt` beside the captures (`%LOCALAPPDATA%\kimochi-voicehook`), one per
+    // line, are left out: for finding which one a game does not get on with.
+    let skip = skipped();
+    let on = |name: &str| {
+        let off = skip.iter().any(|s| s == name);
+        if off {
+            util::log(&format!("{name}: skipped (skip.txt)"));
+        }
+        !off
+    };
+    if on("dsound") {
+        match unsafe { ds::install() } {
+            Ok(n) => util::log(&format!("dsound: hooked ({n} vtables)")),
+            Err(e) => util::log(&format!("dsound: not hooked: {e}")),
+        }
     }
-    unsafe { xa::install() };
+    let xaudio = on("xaudio");
+    if xaudio {
+        unsafe { xa::install() };
+    }
+    XAUDIO.store(xaudio, Ordering::SeqCst);
     // Export adapters: register their hooks, then patch every module's imports.
-    unity::register();
-    waveout::register();
-    fileread::register();
-    cri::register();
-    sdl::register();
-    iat::on_module("mono", unity::on_mono);
-    iat::on_module("gameassembly", il2cpp::on_il2cpp);
-    iat::on_module("cri_ware_unity", cri::on_cri);
-    iat::on_module("python", renpy::on_python);
+    if on("unity") {
+        unity::register();
+        iat::on_module("mono", unity::on_mono);
+    }
+    if on("waveout") {
+        waveout::register();
+    }
+    if on("fileread") {
+        fileread::register();
+    }
+    if on("cri") {
+        cri::register();
+        iat::on_module("cri_ware_unity", cri::on_cri);
+    }
+    if on("sdl") {
+        sdl::register();
+    }
+    if on("il2cpp") {
+        iat::on_module("gameassembly", il2cpp::on_il2cpp);
+    }
+    if on("renpy") {
+        iat::on_module("python", renpy::on_python);
+    }
+    if !on("iat") {
+        census::scan();
+        signal_ready();
+        return;
+    }
     iat::rescan();
     census::scan();
     signal_ready();
@@ -140,7 +185,9 @@ fn run() {
     loop {
         std::thread::sleep(std::time::Duration::from_millis(500));
         tick += 1;
-        unsafe { xa::install() };
+        if XAUDIO.load(Ordering::SeqCst) {
+            unsafe { xa::install() };
+        }
         iat::rescan();
         if tick < 60 || tick % 10 == 0 {
             census::scan();
