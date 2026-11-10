@@ -14,6 +14,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Switching to Quick Shot, the clipboard, WebSocket or the browser no longer unhooks the game or forgets your window: the source menu takes you back to it, as it was.
 - Text hooking now reads TyranoScript and RPG Maker MV/MZ games, and picks their clean dialogue rather than text with the speaker's name and image paths mixed in.
 - Lines from CatSystem2 games no longer reach the Log doubled up with the line before.
+- Audio hooking now also takes the voice from games that mix all their sound themselves (such as AliceSoft's), by catching each voice file as the game loads it.
+- Text hooking no longer picks a game's nameplate over its dialogue when a long name happens to match the screen first.
 - Games whose window was missing from the source menu (KiriKiri 2 and other older games) are now listed.
 - Audio hooking now takes the voices from Unity games built with IL2CPP, and from those on Unity's older Mono runtime.
 
