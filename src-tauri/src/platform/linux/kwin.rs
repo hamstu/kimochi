@@ -69,6 +69,7 @@ function snapshot() {
     windows.push({
       id: w.internalId.toString(), pid: w.pid, class: w.resourceClass || "", name: w.resourceName || "",
       desktopFile: w.desktopFileName || "", title: w.caption || "", frame: rect(w.frameGeometry),
+      client: w.clientGeometry ? rect(w.clientGeometry) : null,
       output: outputOf(w), minimized: !!w.minimized, hidden: !!w.hidden, onDesktop: desktopOk(w),
       normal: !!(w.normalWindow || w.dialog), layer: w.layer === undefined ? null : w.layer,
       fullScreen: !!w.fullScreen, active: w === active
@@ -127,6 +128,10 @@ struct Window {
     #[serde(default)]
     title: String,
     frame: Rect,
+    /// The window's own area, without KWin's title bar and borders: what KWin streams for an
+    /// XWayland window (a Proton game in a window), where a Wayland window's stream is its frame.
+    #[serde(default)]
+    client: Option<Rect>,
     output: Option<String>,
     minimized: bool,
     hidden: bool,
@@ -161,6 +166,8 @@ struct Binding {
     id: String,
     pid: u32,
     bounds: Rect,
+    /// The stream is the window's client area (see `Window::client`), not its frame.
+    client: bool,
 }
 
 struct Bridge {
@@ -383,15 +390,27 @@ fn output_of<'a>(snapshot: &'a Snapshot, window: &Window) -> Option<&'a Output> 
     snapshot.outputs.iter().find(|o| Some(&o.name) == window.output.as_ref())
 }
 
-/// A window stream's buffer is its frame at its output's scale (fractional scales round to
-/// whole pixels, so one pixel of slack).
-fn matches_frame(snapshot: &Snapshot, window: &Window, width: u32, height: u32) -> bool {
+/// Which of the window's areas a stream of this size shows: `Some(false)` its frame, `Some(true)`
+/// its client area (an XWayland window's stream has no title bar), `None` neither. A stream's
+/// buffer is that area at its output's scale (fractional scales round to whole pixels, so one
+/// pixel of slack).
+fn streamed_area(snapshot: &Snapshot, window: &Window, width: u32, height: u32) -> Option<bool> {
     let scale = output_of(snapshot, window).map_or(1., |o| o.scale);
-    let fits = |scale: f64| {
-        (window.frame.width * scale - f64::from(width)).abs() <= 1.
-            && (window.frame.height * scale - f64::from(height)).abs() <= 1.
+    let fits = |r: &Rect| {
+        let at = |scale: f64| {
+            (r.width * scale - f64::from(width)).abs() <= 1. && (r.height * scale - f64::from(height)).abs() <= 1.
+        };
+        r.width > 0. && r.height > 0. && (at(scale) || at(1.))
     };
-    window.frame.width > 0. && window.frame.height > 0. && (fits(scale) || fits(1.))
+    if fits(&window.frame) {
+        Some(false)
+    } else {
+        window.client.as_ref().is_some_and(fits).then_some(true)
+    }
+}
+
+fn matches_frame(snapshot: &Snapshot, window: &Window, width: u32, height: u32) -> bool {
+    streamed_area(snapshot, window, width, height).is_some()
 }
 
 fn shareable(window: &Window) -> bool {
@@ -399,25 +418,33 @@ fn shareable(window: &Window) -> bool {
 }
 
 fn unique_match(snapshot: &Snapshot, width: u32, height: u32) -> Option<&Window> {
-    let mut matches = snapshot.windows.iter().filter(|w| shareable(w) && matches_frame(snapshot, w, width, height));
-    let candidate = matches.next()?;
-    (matches.next().is_none() && !candidate.minimized && !candidate.hidden).then_some(candidate)
+    // Frames first: a client area counts only when no window's frame is the stream's size, so a
+    // stream that matched one frame before still does.
+    let unique = |client: bool| {
+        let mut matches = snapshot
+            .windows
+            .iter()
+            .filter(|w| shareable(w) && streamed_area(snapshot, w, width, height) == Some(client));
+        let candidate = matches.next()?;
+        Some((matches.next().is_none() && !candidate.minimized && !candidate.hidden).then_some(candidate))
+    };
+    unique(false).unwrap_or_else(|| unique(true).flatten())
 }
 
 fn resolve<'a>(snapshot: &'a Snapshot, binding: &Binding) -> Option<&'a Window> {
     snapshot.windows.iter().find(|w| w.id == binding.id && w.pid == binding.pid)
 }
 
-/// The window's frame relative to its output, which is where Kimochi's layer surfaces go (they
-/// are moved there, once, when they are elsewhere). With several outputs, a window KWin cannot
-/// place on one has no bounds.
-fn local(snapshot: &Snapshot, window: &Window) -> Option<Rect> {
+/// The window's frame (or with `client` its client area, what its stream shows) relative to its
+/// output, which is where Kimochi's layer surfaces go (they are moved there, once, when they are
+/// elsewhere). With several outputs, a window KWin cannot place on one has no bounds.
+fn local(snapshot: &Snapshot, window: &Window, client: bool) -> Option<Rect> {
     let output = output_of(snapshot, window).or_else(|| (snapshot.outputs.len() == 1).then(|| &snapshot.outputs[0]))?;
     if snapshot.outputs.len() > 1 && overlay_output(snapshot).is_none_or(|o| o.name != output.name) {
         super::layer::follow_output(output.geometry);
     }
     let origin = output.geometry;
-    let f = window.frame;
+    let f = if client { window.client.unwrap_or(window.frame) } else { window.frame };
     [f.x, f.y, f.width, f.height].iter().all(|v| v.is_finite()).then_some(Rect {
         x: f.x - origin.x,
         y: f.y - origin.y,
@@ -445,7 +472,7 @@ pub fn tracked(source: &str) -> Option<(Rect, bool)> {
     let Some(window) = resolve(&snapshot, &binding) else {
         return Some((binding.bounds, false));
     };
-    let rect = local(&snapshot, window)?;
+    let rect = local(&snapshot, window, binding.client)?;
     let output = overlay_output(&snapshot);
     let foreground = snapshot
         .windows
@@ -465,6 +492,12 @@ pub fn linked(source: &str) -> bool {
     BINDING.lock().ok().and_then(|b| b.clone()).is_some_and(|b| b.source == source)
 }
 
+/// The process of the window `source` is linked to: what Text hooking hooks, since a portal
+/// stream names no process of its own.
+pub fn linked_pid(source: &str) -> Option<u32> {
+    BINDING.lock().ok()?.as_ref().filter(|b| b.source == source).map(|b| b.pid)
+}
+
 pub fn frame_bounds(source: &str, width: u32, height: u32) -> Option<Rect> {
     if !source.starts_with("portal:window:") {
         return None;
@@ -473,18 +506,22 @@ pub fn frame_bounds(source: &str, width: u32, height: u32) -> Option<Rect> {
     let mut binding = BINDING.lock().ok()?;
     if binding.as_ref().is_none_or(|b| b.source != source) {
         let window = unique_match(&snapshot, width, height)?;
+        let client = streamed_area(&snapshot, window, width, height)?;
         *binding = Some(Binding {
             source: source.to_owned(),
             id: window.id.clone(),
             pid: window.pid,
-            bounds: local(&snapshot, window)?,
+            bounds: local(&snapshot, window, client)?,
+            client,
         });
         eprintln!("KWin portal window linked: source={source} pid={} frame={width}x{height}", window.pid);
     }
     let window = resolve(&snapshot, binding.as_ref()?)?;
-    (!window.minimized && !window.hidden && matches_frame(&snapshot, window, width, height))
-        .then(|| local(&snapshot, window))
-        .flatten()
+    if window.minimized || window.hidden {
+        return None;
+    }
+    let client = streamed_area(&snapshot, window, width, height)?;
+    local(&snapshot, window, client)
 }
 
 pub fn enrich(frame: &mut Frame) {
@@ -568,11 +605,13 @@ pub fn candidates(width: u32, height: u32) -> Result<Value, String> {
 pub fn link(source: &str, id: &str, width: u32, height: u32) -> Result<(), String> {
     let snapshot = snapshot().ok_or("KWin window geometry is unavailable")?;
     let window = explicit_match(&snapshot, id, width, height).ok_or("The chosen window no longer matches this shared frame. Try again.")?;
+    let client = streamed_area(&snapshot, window, width, height) == Some(true);
     *BINDING.lock().map_err(|e| e.to_string())? = Some(Binding {
         source: source.to_owned(),
         id: window.id.clone(),
         pid: window.pid,
-        bounds: local(&snapshot, window).ok_or("Invalid window bounds")?,
+        bounds: local(&snapshot, window, client).ok_or("Invalid window bounds")?,
+        client,
     });
     eprintln!("KWin portal window explicitly linked: source={source} pid={}", window.pid);
     Ok(())
@@ -599,6 +638,23 @@ mod tests {
         assert!(unique_match(&s, 1444, 864).is_none());
         assert!(unique_match(&s, 1440, 810).is_none(), "the client area alone is not the stream");
     }
+    /// KWin streams an XWayland window (a Proton game in a window) without its title bar.
+    #[test]
+    fn an_xwayland_stream_matches_the_client_area_and_bounds_follow_it() {
+        let mut s = sample();
+        s.windows[0].client = Some(Rect { x: 102., y: 70., width: 956., height: 544. });
+        let window = unique_match(&s, 1434, 816).expect("the client area at scale 1.5");
+        assert_eq!(streamed_area(&s, window, 1434, 816), Some(true));
+        assert_eq!(local(&s, window, true).map(|r| (r.x, r.y, r.width)), Some((102., 70., 956.)));
+        assert_eq!(streamed_area(&s, window, 1440, 864), Some(false));
+        // Another window's frame of that size wins over this client area.
+        let mut other = s.windows[0].clone();
+        other.id = "{b}".into();
+        other.client = None;
+        other.frame = Rect { x: 0., y: 0., width: 956., height: 544. };
+        s.windows.push(other);
+        assert_eq!(unique_match(&s, 1434, 816).unwrap().id, "{b}");
+    }
     #[test]
     fn equal_frames_are_ambiguous_even_when_one_is_minimized() {
         let mut s = sample();
@@ -623,20 +679,20 @@ mod tests {
     fn bounds_are_relative_to_the_windows_output() {
         let mut s = sample();
         s.outputs.push(Output { name: "HDMI-1".into(), geometry: Rect { x: 1920., y: 0., width: 2560., height: 1440. }, scale: 1. });
-        let r = local(&s, &s.windows[0]).unwrap();
+        let r = local(&s, &s.windows[0], false).unwrap();
         assert_eq!((r.x, r.y), (100., 40.));
         s.windows[0].output = Some("HDMI-1".into());
         s.windows[0].frame.x = 2020.;
-        let r = local(&s, &s.windows[0]).unwrap();
+        let r = local(&s, &s.windows[0], false).unwrap();
         assert_eq!((r.x, r.y, r.width), (100., 40., 960.));
         // Several outputs and none named: no origin to guess.
         s.windows[0].output = None;
-        assert!(local(&s, &s.windows[0]).is_none());
+        assert!(local(&s, &s.windows[0], false).is_none());
     }
     #[test]
     fn a_binding_follows_the_window_id_not_its_size() {
         let mut s = sample();
-        let binding = Binding { source: "portal:window:7".into(), id: "{a}".into(), pid: 42, bounds: s.windows[0].frame };
+        let binding = Binding { source: "portal:window:7".into(), id: "{a}".into(), pid: 42, bounds: s.windows[0].frame, client: false };
         s.windows[0].frame.x = -50.;
         assert_eq!(resolve(&s, &binding).unwrap().frame.x, -50.);
         s.windows[0].pid = 7;
