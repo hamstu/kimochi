@@ -7,7 +7,7 @@
 //! Hooked through the callers' import tables / GetProcAddress (see `iat`).
 use crate::iat::{self, Hook};
 use crate::sink::{self, Ev};
-use crate::util::{guard, lock};
+use crate::util::{copy_in, guard, lock};
 use serde_json::json;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_int, c_void, CStr};
@@ -163,7 +163,7 @@ unsafe fn played(ch: c_int, chunk: *mut MixChunk, loops: c_int, what: &str) {
         return;
     }
     let Some(fmt) = spec_fmt() else { return };
-    let bytes = std::slice::from_raw_parts((*chunk).abuf, (*chunk).alen as usize).to_vec();
+    let bytes = copy_in((*chunk).abuf, (*chunk).alen as usize, "sdl_mixer chunk");
     let name = lock(&NAMES).get(&(chunk as usize)).cloned();
     sink::send(Ev::Whole {
         key: (4, ch as usize),

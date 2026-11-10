@@ -6,7 +6,7 @@
 //! not anticipate are patched as they come out of the (hooked) CreateSoundBuffer /
 //! DuplicateSoundBuffer / QueryInterface.
 use crate::sink::{self, Ev, Key};
-use crate::util::{guard, hex, lock, log, wide};
+use crate::util::{copy_in, guard, hex, lock, log, wide};
 use crate::{internal, vt};
 use serde_json::json;
 use std::collections::HashMap;
@@ -236,10 +236,10 @@ unsafe extern "system" fn buf_unlock(this: *mut c_void, p1: *mut c_void, n1: u32
             }
             let mut bytes = Vec::with_capacity((n1 + n2) as usize);
             if !p1.is_null() && n1 > 0 {
-                bytes.extend_from_slice(std::slice::from_raw_parts(p1 as *const u8, n1 as usize));
+                bytes.extend(copy_in(p1 as *const u8, n1 as usize, "dsound unlock"));
             }
             if !p2.is_null() && n2 > 0 {
-                bytes.extend_from_slice(std::slice::from_raw_parts(p2 as *const u8, n2 as usize));
+                bytes.extend(copy_in(p2 as *const u8, n2 as usize, "dsound unlock"));
             }
             lock(&HAS_DATA).insert(this as usize);
             let off = lock(&LOCKS).get(&(this as usize)).filter(|l| l.1 == p1 as usize).map(|l| l.0);
@@ -287,7 +287,7 @@ unsafe fn snapshot(buf: *mut c_void) {
     if lock_fn(buf, 0, 0, &mut p1, &mut n1, &mut p2, &mut n2, DSBLOCK_ENTIREBUFFER) < 0 || p1.is_null() {
         return;
     }
-    let bytes = std::slice::from_raw_parts(p1 as *const u8, n1 as usize).to_vec();
+    let bytes = copy_in(p1 as *const u8, n1 as usize, "dsound snapshot");
     unlock_fn(buf, p1, n1, p2, n2);
     lock(&HAS_DATA).insert(buf as usize);
     sink::send(Ev::Data { key: key(buf), bytes, eos: false, looping: false, region: None, info: json!({"snapshot": true}) });

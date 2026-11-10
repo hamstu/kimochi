@@ -14,6 +14,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ### Fixed
 
+- Text hooking a Proton or Wine game no longer risks crashing the game when it is slow to accept the hook (for example while it is still starting its audio).
 - Steam Deck Gaming Mode: Kimochi added to Steam by hand (the AppImage as a non-Steam game) now works like Kimochi added with **Add to Steam**. Before, it couldn't read the screen ("X11 error … GetImage"), Auto OCR stopped after a few tries, and no game could be chosen as a source.
 - **Add to Steam** now finds your Steam account when more than one has signed in on the device. Before, it could fail with "Kimochi could not tell which Steam account is signed in".
 

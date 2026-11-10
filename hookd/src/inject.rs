@@ -48,6 +48,9 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), String> {
         if remote.is_null() {
             return Err(format!("could not allocate in process {pid} (error {})", GetLastError()));
         }
+        // Whether the loader thread is done with `remote`: it reads the path from there whenever it
+        // gets to run, so the buffer may only be freed once the thread has exited.
+        let (mut started, mut finished) = (false, false);
         let result = (|| {
             if WriteProcessMemory(process.0, remote, path.as_ptr().cast(), bytes, std::ptr::null_mut()) == 0 {
                 return Err(format!("could not write to process {pid} (error {})", GetLastError()));
@@ -60,10 +63,15 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), String> {
             if thread.is_null() {
                 return Err(format!("could not start a thread in process {pid} (error {})", GetLastError()));
             }
+            started = true;
             let thread = Handle(thread);
-            if WaitForSingleObject(thread.0, 15_000) != WAIT_OBJECT_0 {
-                return Err(format!("the loader thread in process {pid} did not finish"));
+            // Under Wine the thread can wait many seconds before it runs (seen with a game busy
+            // starting its audio). Freeing the path under it then crashed the game, so a thread
+            // that is still out keeps its buffer (one page, left allocated).
+            if WaitForSingleObject(thread.0, 60_000) != WAIT_OBJECT_0 {
+                return Err(format!("the loader thread in process {pid} did not finish (it may still load the DLL)"));
             }
+            finished = true;
             let mut code = 0u32;
             GetExitCodeThread(thread.0, &mut code);
             // The thread's exit code is the low half of the module handle LoadLibraryW returned.
@@ -72,7 +80,9 @@ pub fn inject(pid: u32, dll: &Path) -> Result<(), String> {
             }
             Ok(())
         })();
-        VirtualFreeEx(process.0, remote, 0, MEM_RELEASE);
+        if !started || finished {
+            VirtualFreeEx(process.0, remote, 0, MEM_RELEASE);
+        }
         result
     }
 }

@@ -9,7 +9,7 @@
 //! gives the source-voice vtable. Voices created before we got there are still hooked (shared
 //! vtable); their format is guessed from `GetVoiceDetails` as 16-bit PCM.
 use crate::sink::{self, Ev, Key};
-use crate::util::{guard, lock, log, wide};
+use crate::util::{copy_in, guard, lock, log, wide};
 use crate::{internal, vt};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -146,7 +146,7 @@ unsafe extern "system" fn submit_hook(this: *mut c_void, buffer: *const XAUDIO2_
             let (begin, len, count) = (b.PlayBegin, b.PlayLength, b.LoopCount);
             sink::send(Ev::Data {
                 key: key(this),
-                bytes: std::slice::from_raw_parts(p, n as usize).to_vec(),
+                bytes: copy_in(p, n as usize, "xaudio2 submit"),
                 eos: b.Flags & END_OF_STREAM != 0,
                 looping: count > 0,
                 region: (begin > 0 || len > 0).then_some((begin, len)),

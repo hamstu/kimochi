@@ -52,6 +52,41 @@ pub fn guard(f: impl FnOnce()) {
     }
 }
 
+/// How many of the `len` bytes at `p` are committed, readable memory, from `p` on.
+pub unsafe fn readable_len(p: usize, len: usize) -> usize {
+    use std::ffi::c_void;
+    use windows_sys::Win32::System::Memory::{VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, PAGE_GUARD, PAGE_NOACCESS};
+    let end = p.saturating_add(len);
+    let mut at = p;
+    while at < end {
+        let mut info: MEMORY_BASIC_INFORMATION = std::mem::zeroed();
+        if VirtualQuery(at as *const c_void, &mut info, std::mem::size_of::<MEMORY_BASIC_INFORMATION>()) == 0
+            || info.State != MEM_COMMIT
+            || info.Protect & (PAGE_NOACCESS | PAGE_GUARD) != 0
+            || info.Protect == 0
+        {
+            break;
+        }
+        at = info.BaseAddress as usize + info.RegionSize;
+    }
+    at.min(end) - p
+}
+
+/// A copy of the `len` bytes a game handed us at `p`. The pointer and length come from the game
+/// (or the audio API on its behalf) and are copied on the game's thread, so a stale or short
+/// buffer must cost a clip, not the game: whatever is not readable is left out and logged.
+/// One `VirtualQuery` per buffer.
+pub unsafe fn copy_in(p: *const u8, len: usize, what: &str) -> Vec<u8> {
+    if p.is_null() || len == 0 {
+        return Vec::new();
+    }
+    let ok = readable_len(p as usize, len);
+    if ok < len {
+        log(&format!("{what}: {len} bytes at {} but only {ok} readable; copied those", hex(p as usize)));
+    }
+    std::slice::from_raw_parts(p, ok).to_vec()
+}
+
 pub fn hex(p: usize) -> String {
     format!("{p:#x}")
 }

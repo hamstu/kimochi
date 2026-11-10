@@ -197,7 +197,7 @@ pub unsafe extern "C" fn voicehook_emit(meta: *const c_char, data: *const u8, le
                     }
                     last.insert(number, file.clone());
                 }
-                let bytes = if data.is_null() || len == 0 { Vec::new() } else { std::slice::from_raw_parts(data, len).to_vec() };
+                let bytes = crate::util::copy_in(data, len, "renpy sound");
                 let ext = sniff_ext(&bytes, &file);
                 let dur = audio_duration(&bytes);
                 sink::send(Ev::Whole {
