@@ -44,6 +44,8 @@ enum Kind {
 }
 
 static OPEN: LazyLock<Mutex<HashMap<usize, Open>>> = LazyLock::new(Default::default);
+/// Files and kinds of read already logged, once each.
+static LOGGED: LazyLock<Mutex<std::collections::HashSet<String>>> = LazyLock::new(Default::default);
 /// A clip larger than this is music or a whole archive read at once, not a voice.
 const MAX_CLIP_BYTES: usize = 8 << 20;
 
@@ -104,6 +106,9 @@ fn opened(h: *mut c_void, path: String) {
         return;
     }
     let name = path.rsplit(['\\', '/']).next().unwrap_or(&path).to_string();
+    if lock(&LOGGED).insert(name.clone()) {
+        crate::util::log(&format!("file: watching reads of {path}"));
+    }
     lock(&OPEN).insert(h as usize, Open { name, clip: None, clips: 0 });
 }
 
@@ -111,16 +116,38 @@ unsafe extern "system" fn read(h: *mut c_void, buf: *mut u8, n: u32, got: *mut u
     let o: unsafe extern "system" fn(*mut c_void, *mut u8, u32, *mut u32, *mut c_void) -> i32 = std::mem::transmute(O_READ.load(Ordering::SeqCst));
     let ok = o(h, buf, n, got, ov);
     // Overlapped reads complete later; only synchronous ones are looked at.
+    if !ov.is_null() && lock(&OPEN).contains_key(&(h as usize)) && lock(&LOGGED).insert("overlapped".into()) {
+        crate::util::log("file: a voice file is read asynchronously (overlapped); those reads are not looked at");
+    }
     if ok != 0 && ov.is_null() && !got.is_null() && *got > 0 {
+        guard(|| unsafe { known(h) });
         let len = *got as usize;
         guard(|| unsafe { on_read(h as usize, std::slice::from_raw_parts(buf, len)) });
     }
     ok
 }
 
+/// Handles read from that were opened before we were in: their path, looked up once each.
+static CHECKED: LazyLock<Mutex<std::collections::HashSet<usize>>> = LazyLock::new(Default::default);
+
+/// A handle the game opened before we attached (an archive opened at start): watched from its
+/// first read if its path names voices.
+unsafe fn known(h: *mut c_void) {
+    if lock(&OPEN).contains_key(&(h as usize)) || !lock(&CHECKED).insert(h as usize) {
+        return;
+    }
+    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+    let mut buf = [0u16; 1024];
+    let n = GetFinalPathNameByHandleW(h, buf.as_mut_ptr(), buf.len() as u32, 0) as usize;
+    if n > 0 && n < buf.len() {
+        opened(h, String::from_utf16_lossy(&buf[..n]));
+    }
+}
+
 unsafe extern "system" fn close(h: *mut c_void) -> i32 {
     let o: unsafe extern "system" fn(*mut c_void) -> i32 = std::mem::transmute(O_CLOSE.load(Ordering::SeqCst));
     guard(|| {
+        lock(&CHECKED).remove(&(h as usize));
         if let Some(mut f) = lock(&OPEN).remove(&(h as usize)) {
             finish(&mut f, false);
         }
@@ -136,7 +163,13 @@ fn on_read(h: usize, data: &[u8]) {
         finish(f, false);
         f.clip = Some(Partial { bytes: Vec::new(), at: crate::util::now_ms(), kind });
     }
-    let Some(p) = f.clip.as_mut() else { return };
+    let Some(p) = f.clip.as_mut() else {
+        if lock(&LOGGED).insert(format!("read:{}", f.name)) {
+            let head: Vec<String> = data.iter().take(8).map(|b| format!("{b:02x}")).collect();
+            crate::util::log(&format!("file: a read of {} ({} bytes) that starts no file: {}", f.name, data.len(), head.join(" ")));
+        }
+        return;
+    };
     p.bytes.extend_from_slice(data);
     let done = match p.kind {
         Kind::Ogg => ogg_end(&p.bytes).map(|end| p.bytes.truncate(end)).is_some(),
