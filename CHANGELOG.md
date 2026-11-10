@@ -17,6 +17,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Audio hooking now takes the voice from Unity games that use CRIWARE for their sound, which many Japanese games do.
 - Audio hooking now also takes the voice from games that mix all their sound themselves (such as AliceSoft's), by catching each voice file as the game loads it.
 - Text hooking no longer picks a game's nameplate over its dialogue when a long name happens to match the screen first.
+- Text hooking no longer gets stuck on a thread that stops after one line (as Majiro games start one per line): when other threads keep sending lines, it reads the screen again and picks the one that keeps going.
 - Games whose window was missing from the source menu (KiriKiri 2 and other older games) are now listed.
 - Audio hooking now takes the voices from Unity games built with IL2CPP, and from those on Unity's older Mono runtime.
 - Audio hooking now takes the voice from Unity games that decode their own voices and stream them to Unity (such as CatSystem's Unity games).

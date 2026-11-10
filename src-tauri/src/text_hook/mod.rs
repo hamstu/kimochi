@@ -54,6 +54,8 @@ const PICK_MIN_MATCH: usize = 6;
 const IL2CPP_STARTUP: Duration = Duration::from_secs(20);
 /// Pieces in a row of a glyph or two after which a chosen thread is taken as drawing glyphs.
 const GLYPHS: u32 = 3;
+/// Lines from other engine threads, with the chosen one silent, after which the screen is read again.
+const MISSED_LINES: u32 = 3;
 
 #[derive(Debug, Clone)]
 struct Thread {
@@ -99,6 +101,9 @@ struct Session {
     threads: Vec<Thread>,
     selected: Option<String>,
     selected_by: Option<&'static str>,
+    /// Lines other threads have sent since the chosen one last spoke, and the last of them.
+    missed: u32,
+    missed_text: String,
     pick_note: Option<String>,
     /// Why an earlier engine was given up for the one in use.
     fallback: Option<String>,
@@ -653,21 +658,34 @@ fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     }
     if session.selected.as_deref() == Some(key) {
         crate::debug_report::trace(&hook.app, json!({ "check": "texthook-burst", "text": text, "lines": lines, "carriesOn": carries_on }));
+        session.missed = 0;
         for (i, line) in lines.iter().enumerate() {
             hook.line(session, key, line, carries_on && i == 0);
         }
         return;
     }
+    // Another engine thread sending a line while the chosen one says nothing: each line once, however
+    // many threads send it and however many pieces it is typed out in.
+    {
+        let spoken = &session.threads[index];
+        let shown = pick::normalize(text);
+        if pick::another_line(&session.missed_text, &shown, PICK_MIN_MATCH) && !pick::is_generic(&spoken.hookcode, &spoken.name) {
+            session.missed = session.missed.saturating_add(1);
+            session.missed_text = shown;
+        }
+    }
     // A thread chosen automatically that has said one thing only and nothing since (a menu drawn
-    // once, the largest text on screen when it was read), while this one keeps speaking: the
-    // screen is read again.
-    if session.selected_by == Some("auto") && session.threads[index].count >= 3 {
+    // once, the largest text on screen when it was read), while this one keeps speaking; or one
+    // that has missed the last few lines other threads sent (a hook that starts a thread per line,
+    // as Majiro's does beside the one that keeps going): the screen is read again.
+    if session.selected_by == Some("auto") && (session.threads[index].count >= 3 || session.missed >= MISSED_LINES) {
         let stale = session
             .threads
             .iter()
             .find(|t| session.selected.as_deref() == Some(t.key.as_str()))
-            .is_some_and(|t| t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10)));
+            .is_some_and(|t| (t.count <= 1 && t.last_at.is_some_and(|at| at.elapsed() > Duration::from_secs(10))) || session.missed >= MISSED_LINES);
         if stale {
+            session.missed = 0;
             crate::debug_report::trace(&hook.app, json!({ "check": "texthook-repick", "from": session.selected }));
             session.selected = None;
             session.selected_by = None;

@@ -582,6 +582,13 @@ pub fn collapse_repeated_sentences(text: &str) -> String {
     out
 }
 
+/// Whether `shown` (normalized) is a line of dialogue other than `before`: Japanese, `min` characters
+/// or more, and not `before` typed further or the start of it.
+pub fn another_line(before: &str, shown: &str, min: usize) -> bool {
+    let fresh = before.is_empty() || !(shown.starts_with(before) || before.starts_with(shown));
+    fresh && shown.chars().count() >= min && japanese_ratio(shown) >= MIN_JAPANESE
+}
+
 /// The shortest sentence `collapse_repeated_sentences` takes as drawn twice.
 const MIN_REPEAT: usize = 6;
 /// The most times over `collapse_repeated_sentences` expects a line to be drawn.
@@ -748,6 +755,19 @@ mod tests {
         for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {
             assert_eq!(collapse_repeated_sentences(text), text);
         }
+    }
+
+    #[test]
+    fn a_line_typed_out_or_sent_twice_is_one_line() {
+        let line = "決して稼ぎの良い仕事ではない。";
+        assert!(another_line("", line, 6));
+        assert!(!another_line(line, line, 6));
+        assert!(!another_line("決して稼ぎの", line, 6));
+        assert!(!another_line(line, "決して稼ぎの", 6));
+        assert!(another_line(line, "周りの住人からは重宝されている。", 6));
+        // A nameplate or a code is not a line.
+        assert!(!another_line(line, "セリシア", 6));
+        assert!(!another_line(line, "se_21_140_voice", 6));
     }
 
     #[test]
