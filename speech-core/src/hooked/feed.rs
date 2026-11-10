@@ -181,19 +181,57 @@ impl Feed {
         decode(&self.clip_path(c.file.as_deref().ok_or("clip has no file")?)?)
     }
 }
+/// The pages of an Ogg file's first logical stream. Some games' encoder (Liar-soft's, through
+/// vorbis.acm) interleaves empty pages of a second stream; the decoder takes that stream's start
+/// for a new chain link and fails on its missing headers. Bytes that are not a clean run of pages
+/// are kept as they are.
+fn first_stream(bytes: Vec<u8>) -> Vec<u8> {
+    let page = |at: usize| -> Option<(u32, usize)> {
+        let head = bytes.get(at..at + 27)?;
+        if &head[..4] != b"OggS" {
+            return None;
+        }
+        let segments = usize::from(head[26]);
+        let body: usize = bytes.get(at + 27..at + 27 + segments)?.iter().map(|&b| usize::from(b)).sum();
+        let end = at + 27 + segments + body;
+        (end <= bytes.len()).then(|| (u32::from_le_bytes([head[14], head[15], head[16], head[17]]), end))
+    };
+    let Some((serial, _)) = page(0) else { return bytes };
+    let mut kept = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let Some((s, end)) = page(at) else {
+            kept.extend_from_slice(&bytes[at..]);
+            break;
+        };
+        if s == serial {
+            kept.extend_from_slice(&bytes[at..end]);
+        }
+        at = end;
+    }
+    kept
+}
+
 /// WAV PCM 8/16/24/32 or float, and Ogg Vorbis; average channels to mono.
 /// Requires hound = "3.5" and lewton = "0.10" in the consuming crate.
 pub fn decode(path: &Path) -> Result<(Vec<f32>, u32), String> {
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ogg")) {
-        let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
-        let mut r = lewton::inside_ogg::OggStreamReader::new(f).map_err(|e| e.to_string())?;
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let mut r = lewton::inside_ogg::OggStreamReader::new(std::io::Cursor::new(first_stream(bytes))).map_err(|e| e.to_string())?;
         let rate = r.ident_hdr.audio_sample_rate;
         let channels = usize::from(r.ident_hdr.audio_channels);
         if channels == 0 || rate == 0 {
             return Err("invalid Ogg format".into());
         }
         let mut mono = Vec::new();
-        while let Some(p) = r.read_dec_packet_itl().map_err(|e| e.to_string())? {
+        loop {
+            let p = match r.read_dec_packet_itl() {
+                Ok(Some(p)) => p,
+                Ok(None) => break,
+                // A file cut short (the game read only part of it): what decoded is the clip.
+                Err(_) if !mono.is_empty() => break,
+                Err(e) => return Err(e.to_string()),
+            };
             mono.extend(p.chunks_exact(channels).map(|f| f.iter().map(|s| *s as f32 / 32768.0).sum::<f32>() / channels as f32));
         }
         return Ok((mono, rate));
@@ -216,4 +254,31 @@ pub fn decode(path: &Path) -> Result<(Vec<f32>, u32), String> {
         return Err("incomplete WAV frame".into());
     }
     Ok((samples.chunks_exact(channels).map(|f| f.iter().sum::<f32>() / channels as f32).collect(), spec.sample_rate))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::first_stream;
+
+    fn page(serial: u32, body: &[u8]) -> Vec<u8> {
+        let mut p = b"OggS".to_vec();
+        p.extend_from_slice(&[0, 0]);
+        p.extend_from_slice(&[0; 8]);
+        p.extend_from_slice(&serial.to_le_bytes());
+        p.extend_from_slice(&[0; 8]);
+        p.push(1);
+        p.push(body.len() as u8);
+        p.extend_from_slice(body);
+        p
+    }
+
+    #[test]
+    fn empty_pages_of_another_stream_are_dropped() {
+        let (a, pad, b) = (page(0, b"one"), page(u32::MAX, b""), page(0, b"two"));
+        let file = [a.clone(), pad.clone(), b.clone(), pad].concat();
+        assert_eq!(first_stream(file), [a.clone(), b.clone()].concat());
+        // A file cut part way through a page keeps the cut page as it is.
+        let cut = [a.clone(), b[..10].to_vec()].concat();
+        assert_eq!(first_stream(cut.clone()), cut);
+    }
 }

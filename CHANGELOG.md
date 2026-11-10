@@ -23,6 +23,7 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 - Audio hooking now takes the voice from Unity games that decode their own voices and stream them to Unity (such as CatSystem's Unity games).
 - Text hooking no longer freezes Kimochi on games whose script passes very long strings through the hooker.
 - In Unity games, Text hooking now prefers the text box over the script's string functions, which see each line before it is shown and so threw off voice matching, and no longer follows a text object that draws one character at a time.
+- Audio hooking now takes the voice from games whose Ogg voice files carry padding the decoder used to reject (such as Liar-soft's), and from voice files the game reads only part of.
 - Audio hooking now takes the voice from BGI games, which load each voice and then restart it from the top.
 - Text hooking picks the dialogue even when OCR misreads a character or two of it (such as a long dash), rather than the speaker's name drawn just above the box.
 
