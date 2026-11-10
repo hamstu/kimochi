@@ -436,7 +436,7 @@ Popup.prototype.hide = function (changeFocus) {
 // The Display's own resize handle. Original code all the way down: the popup asks its
 // parent frame to resize it, which is this window.
 // Build the popup's frame ahead of the first lookup rather than during it.
-const { prewarmPopups, replayIntoPopup, stylePopupFrames } = await import('/spike/popup-bridge.js')
+const { prewarmPopups, replayIntoPopup, stylePopupFrames, trackPopupHover } = await import('/spike/popup-bridge.js')
 // This page is transparent, which Yomitan would read as a light site: each frame takes its
 // content's theme instead (the scanned window's), else Kimochi's appearance.
 stylePopupFrames(Popup, { fallbackTheme: resolvedTheme })
@@ -456,9 +456,28 @@ Popup.prototype.setFrameSize = async function (width, height) {
 // The pointer and modifiers over this window, from native (`spawn_cursor_poll`): this window never
 // has the keyboard, so it sees neither for itself. Handed to the popup under the pointer, whose
 // own scanner then opens Yomitan's nested popup for a word Shift-scanned inside it.
+/** The pop-up frame the pointer is over (`trackPopupHover`), and whether the Log was told it is. */
+let hovered = null
+let toldOver = false
 await window.__TAURI__?.event?.listen('popup-host:pointer', ({ payload }) => {
   const origin = windowOrigin()
   if (!origin || typeof payload?.x !== 'number') return
+  // Native sends one last sample with `over: false` as the pointer leaves this window.
+  const inside = payload.over !== false
+  hovered = trackPopupHover(
+    hovered,
+    placed.keys(),
+    inside ? payload.x - origin.x : null,
+    inside ? payload.y - origin.y : null
+  )
+  // The Log's frontend holds these pop-ups through a `PopupProxy`, which never hears the frames'
+  // mouse events, so "Hide popup on cursor exit" never fired there (#95): it is told instead
+  // (host/popup-bridge.js `useRemotePopup`).
+  if ((hovered !== null) !== toldOver) {
+    toldOver = hovered !== null
+    void invoke('ext_relay', { target: 'log', payload: { kind: 'popup-hover', over: toldOver } }).catch(() => {})
+  }
+  if (!inside) return
   replayIntoPopup(placed.keys(), payload.x - origin.x, payload.y - origin.y, {
     pointerType: 'mouse',
     isPrimary: true,

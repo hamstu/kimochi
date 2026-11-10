@@ -41,7 +41,7 @@ pub mod text;
 pub mod win_rules;
 pub use hash::{dhash_rgba, hamming};
 pub use ids::{Platform, SourceId};
-pub use text::{platform_observer, Observation, ObserverStatus, TextLine, TextObserver};
+pub use text::{platform_observer, Observation, ObserverStatus, TextLine, TextObserver, TextSegment};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CaptureError {

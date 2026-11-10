@@ -518,6 +518,102 @@ const thickness = (ink, vertical) => (vertical ? 1 - 2 * EDGE : ink.ascent + ink
  * `natural` is the size the run would have on its own.
  */
 export function fit(run, vertical, measure, size = null) {
+  const plain = fitWith(run, vertical, measure, size)
+  const candidates = vertical ? '' : squeezable(run.text, measure)
+  if (!candidates) return plain
+  // Only on the engine's own evidence. A line box that merely comes out short says nothing about
+  // why: guessing from it squeezed brackets in real Live Text lines that were set full-width, and
+  // put their glyphs further out (scripts/overlay-alignment.test.mjs).
+  const squeeze = squeezeEvidence(run, candidates)
+  if (!squeeze) return plain
+  return { ...fitWith(run, vertical, squeezed(measure, squeeze), size), squeeze }
+}
+
+/**
+ * Brackets and pauses a game may set in half a cell, as Japanese fonts' half-width alternates
+ * (OpenType `halt`) do: the blank half of the em cut, in ems, before and after the glyph. In the
+ * overlay's font they are full-width, so drawn as they are each one pushes everything after it half
+ * a glyph along, and the word under the pointer is not the one under the hitbox (#92). A squeezed
+ * mark is drawn with those margins (`squeezeMargins`), the same glyph in half its cell.
+ */
+export const SQUEEZE = new Map([
+  ...[...'「『（〔【〈《［｛'].map((c) => [c, [0.5, 0]]),
+  ...[...'」』）〕】〉》］｝、。，．'].map((c) => [c, [0, 0.5]]),
+  ...[...'・：；'].map((c) => [c, [0.25, 0.25]])
+])
+
+/** The marks of `text` that could be squeezed: full-width in the overlay's font, each once. */
+function squeezable(text, measure) {
+  const found = [...new Set(chars(text).filter((c) => SQUEEZE.has(c)))]
+  return found.filter((c) => measure(c) > 0.9).join('')
+}
+
+/**
+ * Which of `candidates` the engine's character boxes show set in half a cell: where a mark has a
+ * boxed character on each side, the two lie about two cells apart when it is full-width and one and
+ * a half when it is half-width, whether the engine boxes ink or cells. A mark at a run's start or end
+ * moves nothing else and is left alone. Null when the boxes cannot say.
+ */
+function squeezeEvidence(run, candidates) {
+  const all = chars(run.text)
+  const centre = new Map()
+  for (const segment of run.segments ?? []) {
+    if (chars(segment.text ?? '').length !== 1 || typeof segment.at !== 'number') continue
+    centre.set(segment.at, segment.x + segment.width / 2)
+  }
+  if (centre.size < 3) return null
+  const plain = (k) => !SQUEEZE.has(all[k])
+  const steps = []
+  for (const [k, x] of centre) {
+    if (centre.has(k + 1) && plain(k) && plain(k + 1)) steps.push(centre.get(k + 1) - x)
+  }
+  if (steps.length < 2) return null
+  const pitch = median(steps)
+  if (!(pitch > 0)) return null
+  const spans = new Map()
+  all.forEach((c, k) => {
+    if (!candidates.includes(c) || !centre.has(k - 1) || !centre.has(k + 1)) return
+    if (!plain(k - 1) || !plain(k + 1)) return
+    spans.set(c, [...(spans.get(c) ?? []), (centre.get(k + 1) - centre.get(k - 1)) / pitch])
+  })
+  if (!spans.size) return null
+  return [...spans].filter(([, ratios]) => median(ratios) < 1.75).map(([c]) => c).join('')
+}
+
+/**
+ * `measure` with the marks in `marks` set in half a cell (see SQUEEZE): their cut taken off the
+ * advance, and the ink moved by the cuts before it.
+ */
+export function squeezed(measure, marks) {
+  if (!marks) return measure
+  const cut = (text) => {
+    let total = 0
+    for (const c of text) if (marks.includes(c)) total += SQUEEZE.get(c)[0] + SQUEEZE.get(c)[1]
+    return total
+  }
+  const result = (text) => measure(text) - cut(text)
+  if (measure.ink) {
+    result.ink = (text) => {
+      const ink = measure.ink(text)
+      if (!ink) return null
+      const all = chars(text)
+      const lead = marks.includes(all[0]) ? SQUEEZE.get(all[0])[0] : 0
+      const tail = marks.includes(all.at(-1)) ? SQUEEZE.get(all.at(-1))[1] : 0
+      const total = cut(text)
+      return { ...ink, advance: ink.advance - total, start: ink.start - lead, end: ink.end - (total - tail) }
+    }
+  }
+  return result
+}
+
+/** The margins, in ems, a squeezed mark is drawn with, or null for a glyph drawn as it is. */
+export function squeezeMargins(character, marks) {
+  if (!marks || !marks.includes(character)) return null
+  const [before, after] = SQUEEZE.get(character)
+  return { before: -before, after: -after }
+}
+
+function fitWith(run, vertical, measure, size = null) {
   const { rect, text } = run
   const count = Math.max(1, chars(text).length)
   const along = vertical ? rect.height : rect.width
@@ -568,13 +664,26 @@ function bySegments(run, vertical, measure, fontSize, startMargin, endMargin) {
   if (!segments?.length) return null
   const all = chars(run.text)
   const points = []
+  const fromOf = (segment) => (vertical ? segment.y : segment.x)
+  const toOf = (segment) => fromOf(segment) + (vertical ? segment.height : segment.width)
+  // Boxes that meet edge to edge are the glyphs' cells, not their ink (Apple Live Text's
+  // characters): a cell's edges fall between glyphs wherever the engine split the space, so only
+  // its centre, the glyph's, is fitted.
+  const cells =
+    segments.length >= 3 &&
+    segments.slice(1).every((segment, i) => Math.abs(fromOf(segment) - toOf(segments[i])) <= 0.05 * fontSize)
   for (const segment of segments) {
     const count = chars(segment.text).length
     if (!count || segment.at + count > all.length) return null
     const before = measure(all.slice(0, segment.at).join(''))
+    const from = fromOf(segment)
+    const to = toOf(segment)
+    if (cells) {
+      // origin + spacing × the cell's middle glyph + its advance's middle = the cell's centre
+      points.push([segment.at + (count - 1) / 2, (from + to) / 2 - (before + measure(segment.text) / 2) * fontSize])
+      continue
+    }
     const ink = inkOf(segment.text, measure, vertical)
-    const from = vertical ? segment.y : segment.x
-    const to = from + (vertical ? segment.height : segment.width)
     // origin of the first glyph + spacing × glyphs before = where this edge says it is
     points.push([segment.at, from + (startMargin - before - ink.start) * fontSize])
     points.push([segment.at + count - 1, to - (endMargin + before + ink.end) * fontSize])
@@ -854,10 +963,11 @@ export function characterCells(text, runs, vertical, measure) {
   const queue = []
   runs.forEach((run, line) => {
     const start = vertical ? run.rect.y : run.rect.x
+    const measureRun = squeezed(measure, run.squeeze)
     let advance = 0
     chars(run.text).forEach((character, index) => {
       const before = run.lead + run.fontSize * advance + run.spacing * index
-      const size = run.fontSize * measure(character) + run.spacing
+      const size = run.fontSize * measureRun(character) + run.spacing
       const from = start + before - run.spacing / 2
       queue.push({
         character,
@@ -867,7 +977,7 @@ export function characterCells(text, runs, vertical, measure) {
         width: vertical ? run.rect.width : size,
         height: vertical ? size : run.rect.height
       })
-      advance += measure(character)
+      advance += measureRun(character)
     })
   })
   const cells = []

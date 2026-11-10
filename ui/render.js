@@ -25,7 +25,7 @@
 
 import { mapAnnotations, mapRect } from './geometry.js'
 import { visibleAnnotations, groupTextAnnotations, getBoundingBox } from './annotations.js'
-import { layoutParts, characterCells } from './text-layout.js'
+import { layoutParts, characterCells, chars, squeezeMargins } from './text-layout.js'
 import { hexToRgbTriplet, highlightStrength } from './settings.js'
 import { shownForHits } from './hit-visible.js'
 
@@ -207,8 +207,34 @@ function runElement(run, origin, vertical, inline) {
   const span = document.createElement('span')
   span.className = 'ocr-run'
   Object.assign(span.style, runStyle(run, origin, vertical, inline))
-  span.append(document.createTextNode(run.text))
+  appendRunText(span, run.text, run.squeeze)
   return span
+}
+
+/**
+ * A run's text, with each mark the layout squeezed (text-layout.js SQUEEZE) in a span of its own
+ * whose margins cut the blank half of its em, as a font's half-width alternate would. Plain inline
+ * spans, so the text stays one flow for the engines' scanners.
+ */
+function appendRunText(element, text, squeeze) {
+  if (!squeeze) return void element.append(document.createTextNode(text))
+  let plain = ''
+  for (const character of chars(text)) {
+    const margins = squeezeMargins(character, squeeze)
+    if (!margins) {
+      plain += character
+      continue
+    }
+    if (plain) element.append(document.createTextNode(plain))
+    plain = ''
+    const mark = document.createElement('span')
+    mark.className = 'ocr-squeezed'
+    mark.style.marginLeft = `${margins.before}em`
+    mark.style.marginRight = `${margins.after}em`
+    mark.textContent = character
+    element.append(mark)
+  }
+  if (plain) element.append(document.createTextNode(plain))
 }
 
 /**
@@ -252,7 +278,8 @@ function runSignature(runs) {
     run.text,
     ...[run.rect.x, run.rect.y, run.rect.width, run.rect.height].map(round),
     ...[run.fontSize, run.spacing, run.lead, run.shift].map(round),
-    run.weight
+    run.weight,
+    run.squeeze ?? ''
   ])
 }
 
@@ -876,7 +903,8 @@ export class TextOverlayRenderer {
           width: `${runs[0].rect.width}px`,
           height: `${runs[0].rect.height}px`
         })
-        current.textContent = box.text
+        if (runs[0].squeeze) appendRunText(current, box.text, runs[0].squeeze)
+        else current.textContent = box.text
       } else {
         for (const run of runs) current.append(runElement(run, flow, vertical, true))
       }

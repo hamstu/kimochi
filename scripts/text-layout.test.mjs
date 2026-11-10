@@ -530,3 +530,43 @@ test('per-line text that does not match the lines found is not used', () => {
   const [runs] = layoutParts([{ ...part, lineTexts: ['あいうえおかきく'] }], em)
   assert.equal(runs.length, 2)
 })
+
+// Half-width brackets (#92): a game that sets 「」 in half a cell, drawn by a font that sets them in
+// a whole one, pushed every glyph after each bracket half a glyph along.
+const squeezeLine = (cells) => {
+  const text = cells.map(([c]) => c).join('')
+  let x = 0
+  const segments = cells.map(([c, width], at) => {
+    const segment = { text: c, at, x, y: 0, width, height: 30.6 }
+    x += width
+    return segment
+  })
+  return { text, segments, rect: { x: 0, y: 0, width: x, height: 30.6 } }
+}
+
+test('brackets the engine boxed in half a cell are drawn in half a cell, and the rest keeps its place', () => {
+  const run = squeezeLine([['猫', 30], ['は', 30], ['「', 15], ['犬', 30], ['」', 15], ['だ', 30], ['よ', 30]])
+  const fitted = fit(run, false, em)
+  assert.equal(fitted.squeeze, '「」')
+  const cells = characterCells(run.text, [fitted], false, em)
+  // だ's cell starts where the game's だ does, not half a glyph or more to the right of it.
+  assert.ok(Math.abs(cells[5].x - 120) < 3, `だ at ${cells[5].x}`)
+  assert.ok(Math.abs(cells[3].x - 75) < 3, `犬 at ${cells[3].x}`)
+})
+
+test('full-width brackets in the engine boxes are left full-width', () => {
+  const run = squeezeLine([['猫', 30], ['は', 30], ['「', 30], ['犬', 30], ['」', 30], ['だ', 30], ['よ', 30]])
+  assert.equal(fit(run, false, em).squeeze, undefined)
+})
+
+test('without the engine boxing characters, brackets are never squeezed, even in a short line', () => {
+  const box = (width) => ({ text: '猫は「犬」だよ', rect: { x: 0, y: 0, width, height: 30.6 } })
+  assert.equal(fit(box(7 * 30 - 2 * EDGE * 30 + 2 * PAD * 30), false, em).squeeze, undefined)
+  assert.equal(fit(box(6 * 30 - 2 * EDGE * 30 + 2 * PAD * 30), false, em).squeeze, undefined)
+})
+
+test('brackets at the ends of a full-width line are left as they are', () => {
+  // Boxed around ink, as cloud engines box: 「's ink is the right half of its cell, 」's the left.
+  const run = squeezeLine([['「', 30], ['猫', 30], ['は', 30], ['犬', 30], ['だ', 30], ['」', 30]])
+  assert.equal(fit(run, false, em).squeeze, undefined)
+})

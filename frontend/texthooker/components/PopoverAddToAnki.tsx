@@ -1,5 +1,5 @@
 /* eslint react-hooks/set-state-in-effect: "off" -- Adapted editor drafts synchronize to session/setting changes and reset when dialogs close. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, Plus } from "lucide-react";
 import { IconButton, Spinner } from "@kit";
 import {
@@ -52,6 +52,10 @@ export function PopoverAddToAnki({
   triggerNonce,
 }: Props) {
   const [state, setState] = useState<State>({ kind: "checking" });
+  // The text the reader selected in the pop-up, for the `popup-selection-text` marker. Read as the
+  // button is pressed, before anything the click does can change the selection (#93).
+  const pressedSelection = useRef<string | null>(null);
+  const popupSelection = (): string => window.getSelection()?.toString() ?? "";
 
   // On term/lookup change, check whether the card is already in the deck before
   // offering to add. While checking we show a spinner; if found we show the
@@ -99,9 +103,12 @@ export function PopoverAddToAnki({
       }
       return;
     }
+    const popupSelectionText = pressedSelection.current ?? popupSelection();
+    pressedSelection.current = null;
     setState({ kind: "sending" });
     try {
       const r = await sendCardForTerm({
+        popupSelectionText,
         ankiUrl: config.ankiConnectUrl,
         deck: config.deck,
         model: config.model,
@@ -179,6 +186,9 @@ export function PopoverAddToAnki({
       size="sm"
       label={label}
       tooltipSide="left"
+      onPointerDown={() => {
+        pressedSelection.current = popupSelection();
+      }}
       onClick={() => void send()}
       aria-disabled={busy || undefined}
       className={`popover-action popover-anki ${tone}`}

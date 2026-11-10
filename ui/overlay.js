@@ -3551,6 +3551,9 @@ let livePopups = new Set()
 
 /** `replayIntoPopup` from host/popup-bridge.js, once Yomitan's popups are being observed. */
 let replayPopupPointer = null
+/** `trackPopupHover` from host/popup-bridge.js, and the popup frame the pointer is over. */
+let trackPopupHover = null
+let hoveredPopupFrame = null
 /** `setPopupTarget` from host/popup-bridge.js: where Yomitan's top-level popup opens, or null. */
 let setYomitanPopupTarget = null
 
@@ -3573,8 +3576,9 @@ function enginePopupShowing() {
 }
 
 async function capturePopups() {
-  const { observePopups, replayIntoPopup, setPopupTarget } = await import('/spike/popup-bridge.js')
+  const { observePopups, replayIntoPopup, setPopupTarget, trackPopupHover: track } = await import('/spike/popup-bridge.js')
   replayPopupPointer = replayIntoPopup
+  trackPopupHover = track
   setYomitanPopupTarget = setPopupTarget
   let remote = null
   if (window.__KIMOCHI_PLATFORM__?.os === 'linux') {
@@ -4614,6 +4618,17 @@ window.addEventListener(
   true
 )
 
+/** The element at a point, looking inside open shadow roots (an engine's pop-up) as a real event would. */
+function deepElementFromPoint(doc, x, y) {
+  let element = doc.elementFromPoint(x, y)
+  while (element?.shadowRoot) {
+    const inner = element.shadowRoot.elementFromPoint(x, y)
+    if (!inner || inner === element) break
+    element = inner
+  }
+  return element
+}
+
 let notedModifier = false
 let notedFeed = false
 function noteScanFeed(payload, dispatched) {
@@ -4656,6 +4671,12 @@ await native.listen('pointer', ({ payload }) => {
   // A drag of the Text Hooker's card follows the pointer and nothing else does meanwhile.
   if (local && hook.card?.pointer(local.x, local.y, Boolean(payload.down), armed)) return
   checkPopupLeave(payload.over === false || !local ? null : { x: payload.x, y: payload.y })
+  // Yomitan's popups hear the pointer enter and leave them, for "Hide popup on cursor exit" (#95).
+  // Not while the controller reads: the resting mouse is not the reader's.
+  if (trackPopupHover && !extensionHosted && !controller.drivesLookups) {
+    const inside = payload.over !== false && local
+    hoveredPopupFrame = trackPopupHover(hoveredPopupFrame, livePopups, inside ? local.x : null, inside ? local.y : null)
+  }
   if (payload.over === false || !local || !armed) {
     renderer.clearPointer()
     syncReadingHold()
@@ -4682,7 +4703,9 @@ await native.listen('pointer', ({ payload }) => {
     // Yomitan reads only the coordinates. The extension engines also look at the event's target,
     // so theirs is dispatched at the element under the point (it bubbles to window either way).
     if (extensionHosted) renderer.flushPointer()
-    const target = extensionHosted ? document.elementFromPoint(local.x, local.y) ?? window : window
+    // Into the engine's pop-up, too: Hachidori opens a nested lookup from a `mousemove` listener
+    // on its pop-up inside its shadow root, which an event at the shadow host never reaches (#94).
+    const target = extensionHosted ? deepElementFromPoint(document, local.x, local.y) ?? window : window
     // Each engine listens for its own event: Yomitan and 10ten for `pointermove`, Hachidori for
     // `mousemove` on the document (extensions/hachidori/content.js). The descriptor says which.
     const types = window.__kimochiExtensionHost?.descriptor?.pointerEvents ?? ['pointermove']
@@ -4693,7 +4716,10 @@ await native.listen('pointer', ({ payload }) => {
     const prime = waylandLayer && init.shiftKey && !lastScanShift
       ? { ...init, shiftKey: false, clientX: init.clientX + 1, screenX: init.screenX + 1, kimochiPrime: true } : null
     for (const type of types) {
-      const make = (options) => type === 'mousemove' ? new MouseEvent(type, options) : new PointerEvent(type, options)
+      // Composed, so a move dispatched inside a shadow root still reaches the document's listeners.
+      const make = (options) => type === 'mousemove'
+        ? new MouseEvent(type, { ...options, composed: true })
+        : new PointerEvent(type, { ...options, composed: true })
       if (prime) target.dispatchEvent(make(prime))
       target.dispatchEvent(make(init))
     }

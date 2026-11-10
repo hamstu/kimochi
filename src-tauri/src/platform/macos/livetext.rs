@@ -9,14 +9,17 @@
 //!
 //! Live Text answers with lines, not words, so the result carries one `groups`
 //! entry per line, which the overlay treats as authoritative (OCR.md): one lookup
-//! target with one font size per line, like OneOCR's semantic lines. Per-character
-//! boxes exist in the analysis but are not read; nothing downstream would use them.
+//! target with one font size per line, like OneOCR's semantic lines. Each line's
+//! characters come with it as `lineSegments` (Google Lens's shape), which the overlay
+//! places its glyphs by, so a word's hitbox stays on the word along the whole line (#92).
 //!
 //! Nothing is downloaded or bundled: the engine is part of macOS 13 and later.
 
 use crate::state::Image;
 use kimochi_capture::text::LiveTextObserver;
 use kimochi_capture::{Frame, FrameInfo, TextLine, TextObserver};
+#[cfg(test)]
+use kimochi_capture::TextSegment;
 use serde_json::{json, Value};
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -85,12 +88,17 @@ fn value_from_lines(lines: &[TextLine], width: u32, height: u32) -> Value {
             "horizontal"
         };
         let polygon = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
-        groups.push(json!({
+        let mut group = json!({
             "id": id, "text": text,
             "bbox": if positioned { Some([x1, y1, x2, y2]) } else { None },
             "orientation": orientation,
             "linePolygons": if positioned { json!([polygon]) } else { json!([]) },
-        }));
+        });
+        let characters = character_boxes(line, width, height);
+        if positioned && !characters.is_empty() {
+            group["lineSegments"] = json!([characters]);
+        }
+        groups.push(group);
         if positioned {
             annotations.push(json!({
                 "description": text,
@@ -109,6 +117,28 @@ fn value_from_lines(lines: &[TextLine], width: u32, height: u32) -> Value {
         }));
     }
     json!({"fullText": text, "textAnnotations": annotations, "groups": groups, "engine": "livetext"})
+}
+
+/// A line's characters as `{text, bbox: [x1, y1, x2, y2]}` in frame pixels, clamped to the
+/// frame; empty unless every one of them has a box and text (`ui/ocr-result.ts` places them
+/// on the line's text in order).
+fn character_boxes(line: &TextLine, width: u32, height: u32) -> Vec<Value> {
+    let (width, height) = (f64::from(width), f64::from(height));
+    let boxes: Vec<Value> = line
+        .segments
+        .iter()
+        .filter_map(|segment| {
+            let text = segment.text.trim();
+            let (x1, y1) = (segment.x.max(0.), segment.y.max(0.));
+            let (x2, y2) = ((segment.x + segment.width).min(width), (segment.y + segment.height).min(height));
+            (!text.is_empty() && x2 > x1 && y2 > y1).then(|| json!({"text": text, "bbox": [x1, y1, x2, y2]}))
+        })
+        .collect();
+    if boxes.len() == line.segments.len() {
+        boxes
+    } else {
+        Vec::new()
+    }
 }
 
 /// A frame from a PNG, for an image whose pixels were not retained. Only the
@@ -172,7 +202,37 @@ mod tests {
             y,
             width,
             height,
+            segments: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_lines_characters_go_with_it_as_segments() {
+        let mut boxed = line("「猫」", 10., 20., 90., 30.);
+        boxed.segments = ["「", "猫", "」"]
+            .iter()
+            .enumerate()
+            .map(|(i, text)| TextSegment {
+                text: (*text).into(),
+                x: 10. + 30. * i as f64,
+                y: 20.,
+                width: 30.,
+                height: 30.,
+            })
+            .collect();
+        let value = value_from_lines(&[boxed.clone()], 200, 100);
+        assert_eq!(
+            value["groups"][0]["lineSegments"],
+            json!([[
+                {"text": "「", "bbox": [10., 20., 40., 50.]},
+                {"text": "猫", "bbox": [40., 20., 70., 50.]},
+                {"text": "」", "bbox": [70., 20., 100., 50.]}
+            ]])
+        );
+        // One character without a box says nothing reliable about the rest: none are sent.
+        boxed.segments[1].width = 0.;
+        let value = value_from_lines(&[boxed], 200, 100);
+        assert!(value["groups"][0].get("lineSegments").is_none());
     }
 
     #[test]

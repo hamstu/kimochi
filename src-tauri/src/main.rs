@@ -3718,6 +3718,11 @@ fn finish_setup(
             tauri::WebviewUrl::App("ui/popup-host.html".into()),
         )
         .title("Dictionary")
+        // Hidden between pop-ups, and the Log's Yomitan frontend calls into it all the while
+        // (`popupFactoryHide`, `…ShowContent`) over a cross-frame port that gives up after 3 s
+        // without an acknowledgement. WebKit's default suspends a hidden view (macOS 14+), so
+        // after a pause every call timed out and Log lookups stopped (#97).
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .decorations(false)
         .transparent(true)
         .accept_first_mouse(true)
@@ -4325,6 +4330,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
     std::thread::spawn(move || {
         let mut history: HashMap<String, PointerHistory> = HashMap::new();
         let mut was_down = false;
+        let mut was_over_popup_host = false;
         let mut last_point: Option<(f64, f64)> = None;
         let mut was_over_overlay = false;
         let mut noted_focus: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -4576,13 +4582,16 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                         .regions
                         .get(POPUP_HOST)
                         .is_some_and(|rects| rects.iter().any(|r| r.contains(x, y)));
-                    if over_popup_host {
+                    // And once more as the pointer leaves it, so its pop-ups learn they were left
+                    // ("Hide popup on cursor exit", #95).
+                    if over_popup_host || was_over_popup_host {
                         let _ = handle.emit_to(
                             POPUP_HOST,
                             "popup-host:pointer",
                             json!({
                                 "x": x,
                                 "y": y,
+                                "over": over_popup_host,
                                 "down": down,
                                 "shift": modifiers.shift,
                                 "ctrl": modifiers.ctrl,
@@ -4591,6 +4600,7 @@ fn spawn_cursor_poll(handle: tauri::AppHandle, service: Shared) {
                             }),
                         );
                     }
+                    was_over_popup_host = over_popup_host;
                     if wanted && (over || was_over_overlay) {
                         let _ = handle.emit(
                             "pointer",

@@ -7,6 +7,8 @@
  * `window.__kimochiExtensionHost` — the API ui/overlay.js and the Log code against.
  */
 import { scanOf } from './capture.js'
+import { installCaretPosition } from './caret.js'
+import { installShadowSelection } from './selection.js'
 import { createExtensionContext } from './chrome-api.js'
 import { createDriver, injectContentScripts, installScope, observePopup as watchPopup, tentenPopupSize } from './content.js'
 import { Hub } from './hub.js'
@@ -230,6 +232,10 @@ export function installApp(win, { engine, descriptor }) {
     await ensureContentLink()
     context.setMessages(await loadMessages(origin, descriptor.manifest, win))
     if (driver) return
+    // Before the scope captures the native hit-tests: nested lookups on older WebKit (caret.js).
+    installCaretPosition(win)
+    // The pop-up's selection, for Anki's `popup-selection-text` (selection.js).
+    installShadowSelection(win)
     installScope(win, { origin, popupSelector: descriptor.popupSelector, state: scopeState })
     driver = createDriver(win, {
       descriptor,
