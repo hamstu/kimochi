@@ -549,22 +549,37 @@ impl Parse {
 /// Sentences the game drew more than once in a row, once: CatSystem2 draws each line three times
 /// (`「そ、そうだよな」「そ、そうだよな」「そ、そうだよな」` is `「そ、そうだよな」`). Only a run of
 /// at least `MIN_REPEAT` characters that ends a sentence counts: a word said twice
-/// (`ガタッ、ガタッ`) is the text.
+/// (`ガタッ、ガタッ`) is the text. Collapsed until nothing repeats: a speaker shown under another
+/// name comes as `名名「…」「…」名「…」`, which is `名「…」名「…」` once each part is once.
 pub fn collapse_repeated_sentences(text: &str) -> String {
-    let chars: Vec<char> = text.chars().collect();
     // Longer than a line drawn a few times over (a script interpreter's source going through
     // String functions: thousands of characters, every one of them a place to look): as it is.
-    if chars.len() > REPEATS_UP_TO * super::clean::MAX_LINE_CHARS {
+    if text.chars().count() > REPEATS_UP_TO * super::clean::MAX_LINE_CHARS {
         return text.to_string();
     }
+    let mut text = text.to_string();
+    loop {
+        let once = collapse_once(&text);
+        if once.len() == text.len() {
+            return text;
+        }
+        text = once;
+    }
+}
+
+fn collapse_once(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
     let ends = |c: char| "。！？!?」』）)…―～".contains(c);
     let mut out = String::with_capacity(text.len());
     let mut i = 0;
     while i < chars.len() {
         let longest = ((chars.len() - i) / 2).min(super::clean::MAX_LINE_CHARS);
-        let repeat = (MIN_REPEAT..=longest)
-            .rev()
-            .find(|&n| chars[i] == chars[i + n] && ends(chars[i + n - 1]) && chars[i..i + n] == chars[i + n..i + 2 * n]);
+        // The shortest sentence that repeats: drawn four times, the line twice over repeats too.
+        // A whole quote, however short (`「ん？」「ん？」「ん？」`), is a sentence too.
+        let quote = |n: usize| chars[i] == '「' && chars[i + n - 1] == '」';
+        let repeat = (3..=longest).find(|&n| {
+            (n >= MIN_REPEAT || quote(n)) && chars[i] == chars[i + n] && ends(chars[i + n - 1]) && chars[i..i + n] == chars[i + n..i + 2 * n]
+        });
         match repeat {
             Some(n) => {
                 out.extend(&chars[i..i + n]);
@@ -750,6 +765,12 @@ mod tests {
         let a = "「そ、そうだよな」";
         let b = "今さらやめろと言われても困る。";
         assert_eq!(collapse_repeated_sentences(&format!("{a}{a}{a}{b}{b}{b}")), format!("{a}{b}"));
+        // Four times over (a speaker shown under another name: `name＠shown「…」`).
+        let named = "りんか＠？？？「と、とんでもないところを見られた……」";
+        assert_eq!(collapse_repeated_sentences(&named.repeat(4)), named);
+        assert_eq!(collapse_repeated_sentences("「ん？」「ん？」「ん？」"), "「ん？」");
+        // Its name and line drawn apart: name, name, line, line, then the two together.
+        assert_eq!(collapse_repeated_sentences("りんか＠？？？りんか＠？？？「そこはご想像にお任せするよ」「そこはご想像にお任せするよ」りんか＠？？？「そこはご想像にお任せするよ」"), "りんか＠？？？「そこはご想像にお任せするよ」");
         assert_eq!(collapse_repeated_sentences(&format!("まあ、そういうことだ。涼太{a}涼太{a}")), format!("まあ、そういうことだ。涼太{a}"));
         // Words and short cries said twice are the text.
         for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {

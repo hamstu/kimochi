@@ -135,6 +135,9 @@ fn rules() -> &'static [(Regex, &'static str)] {
             // ｜漢字《かんじ》 and 漢字《かんじ》.
             (r"[|｜]([^|｜《》]+)《[^《》]*》", "$1"),
             (r"(\p{Han}+)《[^《》]*》", "$1"),
+            // A speaker as CatSystem2 sends one shown under another name (`りんか＠？？？「…」`):
+            // the name shown.
+            (r"^[^＠「『\s]{1,16}＠([^＠「『\s]{0,16}[「『])", "$1"),
             // A line break written out (`\n`) in the script's text: Unity CatSystem.
             (r"(?:\\n)+([^A-Za-z\\]|$)", "\n$1"),
         ]
@@ -264,6 +267,9 @@ mod tests {
         // Japanese brackets are text, not markup.
         assert_eq!(strip_markup("〈彼〉は【アキ】「……」"), "〈彼〉は【アキ】「……」");
         assert_eq!(strip_markup("a < b > c"), "a < b > c");
+        // A speaker shown under another name: the name shown.
+        assert_eq!(strip_markup("りんか＠？？？「所業って……」"), "？？？「所業って……」");
+        assert_eq!(strip_markup("連絡先は a＠b です「はい」"), "連絡先は a＠b です「はい」");
         // A line break written out is one.
         assert_eq!(strip_markup("名前\\n「行くぞ」\\n"), "名前\n「行くぞ」\n");
         assert_eq!(strip_markup("一行目\\n\\n二行目"), "一行目\n二行目");
