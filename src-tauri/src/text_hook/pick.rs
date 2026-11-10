@@ -534,6 +534,38 @@ impl Parse {
     }
 }
 
+/// Sentences the game drew more than once in a row, once: CatSystem2 draws each line three times
+/// (`「そ、そうだよな」「そ、そうだよな」「そ、そうだよな」` is `「そ、そうだよな」`). Only a run of
+/// at least `MIN_REPEAT` characters that ends a sentence counts: a word said twice
+/// (`ガタッ、ガタッ`) is the text.
+pub fn collapse_repeated_sentences(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let ends = |c: char| "。！？!?」』）)…―～".contains(c);
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let longest = (chars.len() - i) / 2;
+        let repeat = (MIN_REPEAT..=longest).rev().find(|&n| ends(chars[i + n - 1]) && chars[i..i + n] == chars[i + n..i + 2 * n]);
+        match repeat {
+            Some(n) => {
+                out.extend(&chars[i..i + n]);
+                i += n;
+                while i + n <= chars.len() && chars[i..i + n] == chars[i - n..i] {
+                    i += n;
+                }
+            }
+            None => {
+                out.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// The shortest sentence `collapse_repeated_sentences` takes as drawn twice.
+const MIN_REPEAT: usize = 6;
+
 /// The last sentence of `typewriter_lines`: what a thread is showing now.
 #[cfg(test)]
 pub fn collapse_typewriter(text: &str) -> String {
@@ -683,6 +715,18 @@ mod tests {
         assert_eq!(typewriter_lines_after(before, &frames("「何よ……！」", 1)), None);
         assert_eq!(typewriter_lines_after(before, before), None);
         assert_eq!(typewriter_lines_after(before, "テキスト速度のサンプルです。"), None);
+    }
+
+    #[test]
+    fn sentences_drawn_three_times_come_out_once() {
+        let a = "「そ、そうだよな」";
+        let b = "今さらやめろと言われても困る。";
+        assert_eq!(collapse_repeated_sentences(&format!("{a}{a}{a}{b}{b}{b}")), format!("{a}{b}"));
+        assert_eq!(collapse_repeated_sentences(&format!("まあ、そういうことだ。涼太{a}涼太{a}")), format!("まあ、そういうことだ。涼太{a}"));
+        // Words and short cries said twice are the text.
+        for text in ["さらに、ガタッ、ガタッ。そして、ガタッ、ガタッ。", "「うん、うん」", "あはは、あはは！", "今日は猫と一緒に学校へ行きます。"] {
+            assert_eq!(collapse_repeated_sentences(text), text);
+        }
     }
 
     #[test]

@@ -589,6 +589,9 @@ fn read_unity_text(hook: &'static Hook, session: &mut Session, then_hooker: bool
 
 fn on_text(hook: &'static Hook, session: &mut Session, key: &str, text: &str) {
     let Some(index) = session.threads.iter().position(|t| t.key == key) else { return };
+    // A line drawn several times over (CatSystem2) is the line once.
+    let collapsed = pick::collapse_repeated_sentences(text);
+    let text = collapsed.as_str();
     // A burst can hold more than one line typed out (clicking quickly): each is its own line. One
     // that pauses while typing for longer than the hooker waits comes in pieces: a piece that
     // carries on the line the last one ended on finishes that line.
