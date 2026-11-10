@@ -203,7 +203,7 @@ unsafe fn redirect(a: &Il2Cpp) -> Result<usize, String> {
 }
 
 /// The module's writable, non-executable sections: (start, length).
-unsafe fn writable_sections(module: usize) -> Vec<(usize, usize)> {
+pub(crate) unsafe fn writable_sections(module: usize) -> Vec<(usize, usize)> {
     const WRITE: u32 = 0x8000_0000;
     const EXECUTE: u32 = 0x2000_0000;
     let pe = module + *((module + 0x3c) as *const u32) as usize;
@@ -222,7 +222,7 @@ unsafe fn writable_sections(module: usize) -> Vec<(usize, usize)> {
 }
 
 /// Every pointer-aligned `from` in `[start, start + len)` becomes `to`. How many.
-unsafe fn repoint_all(start: usize, len: usize, from: usize, to: usize) -> usize {
+pub(crate) unsafe fn repoint_all(start: usize, len: usize, from: usize, to: usize) -> usize {
     let w = std::mem::size_of::<usize>();
     let mut n = 0;
     let mut p = (start + w - 1) / w * w;

@@ -13,6 +13,7 @@
 //!   still needs when neither API is used (FMOD, CRI, Wwise, WASAPI directly).
 #![allow(clippy::missing_safety_doc)]
 mod census;
+mod cri;
 mod ds;
 mod fileread;
 mod il2cpp;
@@ -126,9 +127,11 @@ fn run() {
     unity::register();
     waveout::register();
     fileread::register();
+    cri::register();
     sdl::register();
     iat::on_module("mono", unity::on_mono);
     iat::on_module("gameassembly", il2cpp::on_il2cpp);
+    iat::on_module("cri_ware_unity", cri::on_cri);
     iat::on_module("python", renpy::on_python);
     iat::rescan();
     census::scan();
