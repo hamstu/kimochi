@@ -8,6 +8,8 @@ Headings inside a version are optional: `### Added`, `### Changed`, `### Fixed`,
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-10
+
 ### Added
 
 - **Audio hooking on Linux/Steam Deck.** Windows games played through Proton or Wine now give you clean voice clips straight from the game, just like on Windows.
